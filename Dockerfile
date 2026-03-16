@@ -18,7 +18,7 @@ COPY backend/pyproject.toml backend/uv.lock ./backend/
 # 安装依赖（Node + Python）
 RUN npm ci \
   && npm ci --prefix frontend \
-  && cd backend && uv sync --frozen
+  && cd backend && uv sync
 
 # 复制项目源码
 COPY . .
