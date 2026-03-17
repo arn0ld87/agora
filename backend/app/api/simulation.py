@@ -292,12 +292,12 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         
         # If config_generated=True and files exist, consider preparation complete
         # The following statuses indicate preparation is complete：
-        # - ready: Preparation complete，Can run
-        # - preparing: If config_generated=True DescriptionCompleted
-        # - running: Running，DescriptionPrepare[x][x][x][x][x]
-        # - completed: Execution complete，DescriptionPrepare[x][x][x][x][x]
-        # - stopped: Stopped，DescriptionPrepare[x][x][x][x][x]
-        # - failed: Execution failed（ButPrepareIs[x][x][x]）
+        # - ready: Preparation complete, can run
+        # - preparing: If config_generated=True, description shows completed
+        # - running: Running, preparation already completed
+        # - completed: Execution complete, preparation already completed
+        # - stopped: Stopped, preparation already completed
+        # - failed: Execution failed (but preparation is not completed)
         prepared_statuses = ["ready", "preparing", "running", "completed", "stopped", "failed"]
         if status in prepared_statuses and config_generated:
             # Get file statistics
@@ -310,7 +310,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
                     profiles_data = json.load(f)
                     profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
             
-            # IfStatusIspreparingButFileCompleted，[x][x][update][new]Status[x]ready
+            # If status is "preparing" but files are completed, update status to "ready"
             if status == "preparing":
                 try:
                     state_data["status"] = "ready"
@@ -337,7 +337,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
         else:
             logger.warning(f"Simulation {simulation_id} Detection result: Has notPreparation complete (status={status}, config_generated={config_generated})")
             return False, {
-                "reason": f"Status not in prepared listOrconfig_generated[x]false: status={status}, config_generated={config_generated}",
+                "reason": f"Status not in prepared list or config_generated is false: status={status}, config_generated={config_generated}",
                 "status": status,
                 "config_generated": config_generated
             }
@@ -349,21 +349,21 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 @simulation_bp.route('/prepare', methods=['POST'])
 def prepare_simulation():
     """
-    Prepare simulation environment（Async task，LLMIntelligentGenerate[x]HasParameters）
-    
-    This is a time-consuming operation，The interface returns immediatelytask_id，
-    Use GET /api/simulation/prepare/status Query progress
-    
-    Features：
-    - Automatically detect completed preparations，Avoid duplicatesGenerate
-    - If already prepared，Return existing results directly
-    - Support forced regeneration（force_regenerate=true）
-    
-    Steps：
+    Prepare simulation environment (async task with LLM intelligent configuration generation).
+
+    This is a time-consuming operation. The interface returns immediately with a task_id.
+    Use GET /api/simulation/prepare/status to query progress.
+
+    Features:
+    - Automatically detect completed preparations to avoid duplicate generation
+    - If already prepared, return existing results directly
+    - Support forced regeneration (force_regenerate=true)
+
+    Steps:
     1. Check if preparation is already complete
     2. Read and filter entities from knowledge graph
-    3. Generate OASIS Agent Profile for each entity（With retry mechanism）
-    4. LLMIntelligently generate simulation configuration（With retry mechanism）
+    3. Generate OASIS Agent Profile for each entity (with retry mechanism)
+    4. LLM intelligently generates simulation configuration (with retry mechanism)
     5. Save configuration files and preset scripts
     
     Request (JSON):
@@ -371,7 +371,7 @@ def prepare_simulation():
             "simulation_id": "sim_xxxx",                   // Required，Simulation ID
             "entity_types": ["Student", "PublicFigure"],  // Optional，Specified entity type
             "use_llm_for_profiles": true,                 // Optional，IsOtherwise useLLMGeneratepersona
-            "parallel_profile_count": 5,                  // Optional，ParallelGeneratepersona[x][x]，Default5
+            "parallel_profile_count": 5,                  // Optional, number of personas to generate in parallel, default 5
             "force_regenerate": false                     // Optional，ForceGenerate，Defaultfalse
         }
     
@@ -421,7 +421,7 @@ def prepare_simulation():
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
             logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")
             if is_prepared:
-                logger.info(f"Simulation {simulation_id} HasPreparation complete，[x][x][x][x]Generate")
+                logger.info(f"Simulation {simulation_id} has preparation complete, no need to regenerate")
                 return jsonify({
                     "success": True,
                     "data": {
@@ -433,7 +433,7 @@ def prepare_simulation():
                     }
                 })
             else:
-                logger.info(f"Simulation {simulation_id} Has notPreparation complete，[x][x][x]Prepare[x][x]")
+                logger.info(f"Simulation {simulation_id} has no preparation complete, preparing now")
         
         # Get necessary information from project
         project = ProjectManager.get_project(state.project_id)
@@ -468,7 +468,7 @@ def prepare_simulation():
         try:
             logger.info(f"Synchronously get entity count: graph_id={state.graph_id}")
             reader = EntityReader(storage)
-            # Quickly read entities（No edge information，OnlyStatistics[x][x]）
+            # Quickly read entities (no edge information, only statistics required)
             filtered_preview = reader.filter_defined_entities(
                 graph_id=state.graph_id,
                 defined_entity_types=entity_types_list,
@@ -611,7 +611,7 @@ def prepare_simulation():
                 "status": "preparing",
                 "message": "Preparation task started，Please via /api/simulation/prepare/status Query progress",
                 "already_prepared": False,
-                "expected_entities_count": state.entities_count,  # ExpectedAgentTotal
+                "expected_entities_count": state.entities_count,  # Expected number of entities to process
                 "entity_types": state.entity_types  # Entity type list
             }
         })
@@ -636,13 +636,13 @@ def get_prepare_status():
     """
     Query preparation task progress
     
-    Support two query methods：
-    1. Query via task_idOngoing task progress
-    2. Check via simulation_idIsFalsePreparation already completed
+    Support two query methods:
+    1. Query via task_id to check ongoing task progress
+    2. Check via simulation_id to verify if preparation is already completed
     
     Request (JSON):
         {
-            "task_id": "task_xxxx",          // Optional，prepareReturn[x]task_id
+            "task_id": "task_xxxx",          // Optional, from previous /prepare call
             "simulation_id": "sim_xxxx"      // Optional，Simulation ID（For checking completedPrepare）
         }
     
@@ -667,7 +667,7 @@ def get_prepare_status():
         task_id = data.get('task_id')
         simulation_id = data.get('simulation_id')
         
-        # IfProvidedsimulation_id，[x][x][x]Is preparation complete
+        # If simulation_id is provided, check if preparation is complete
         if simulation_id:
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
             if is_prepared:
@@ -693,7 +693,7 @@ def get_prepare_status():
                         "simulation_id": simulation_id,
                         "status": "not_started",
                         "progress": 0,
-                        "message": "Preparation not started yet，Please call /api/simulation/prepare [x][x]",
+                        "message": "Preparation not started yet, please call /api/simulation/prepare",
                         "already_prepared": False
                     }
                 })
@@ -706,7 +706,7 @@ def get_prepare_status():
         task = task_manager.get_task(task_id)
         
         if not task:
-            # Task does not exist，ButIfHave simulation_id，[x][x]Is preparation complete
+            # Task does not exist, but if simulation_id is provided, check if preparation is complete
             if simulation_id:
                 is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
                 if is_prepared:
@@ -810,8 +810,8 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
     """
     Get simulation Corresponding latest report_id
     
-    Traverse reports Directory，[x][x] simulation_id [x][config][x] report，
-    If multiple, return latest（By created_at [x][x]）
+    Traverse reports directory and find the report matching the simulation_id.
+    If multiple exist, return the latest one (by created_at timestamp).
     
     Args:
         simulation_id: Simulation ID
@@ -861,7 +861,7 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
         return matching_reports[0].get("report_id")
         
     except Exception as e:
-        logger.warning(f"Find simulation {simulation_id} [x] report Failed: {e}")
+        logger.warning(f"Failed to find report for simulation {simulation_id}: {e}")
         return None
 
 
@@ -870,7 +870,7 @@ def get_simulation_history():
     """
     Get historical simulation list（With project details）
     
-    For homepage historical project display，ReturnInclude project name、[x][x]And so on[x][x][message][info][x]Simulation[x][x]
+    For homepage historical project display. Returns project name and other information about the simulation.
     
     Query parameters:
         limit: Return count limit（Default20）
@@ -927,7 +927,7 @@ def get_simulation_history():
                 sim_dict["total_simulation_hours"] = 0
                 recommended_rounds = 0
             
-            # Get running status（From run_state.json Read[x][x][x][place][x][real][x][x][x]）
+            # Get running status (from run_state.json)
             run_state = SimulationRunner.get_run_state(sim.simulation_id)
             if run_state:
                 sim_dict["current_round"] = run_state.current_round
@@ -1020,12 +1020,12 @@ def get_simulation_profiles(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/profiles/realtime', methods=['GET'])
 def get_simulation_profiles_realtime(simulation_id: str):
     """
-    Real-time get simulation'sAgent Profile（ForGenerate[x][x][x][real][x][x][x][x][x]）
-    
-    And /profiles Interface difference：
-    - Read file directly，Bypass SimulationManager
+    Real-time get simulation's Agent Profile (for viewing during generation).
+
+    Difference from /profiles endpoint:
+    - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
-    - Return additional metadata（Such as file modification time、Is generatingAnd so on）
+    - Returns additional metadata (such as file modification time, whether generation is in progress, etc.)
     
     Query parameters:
         platform: Platform type（reddit/twitter，Defaultreddit）
@@ -1086,10 +1086,10 @@ def get_simulation_profiles_realtime(simulation_id: str):
                         reader = csv.DictReader(f)
                         profiles = list(reader)
             except (json.JSONDecodeError, Exception) as e:
-                logger.warning(f"Read profiles FileFailed（[x][x][x][x][x][x][x]）: {e}")
+                logger.warning(f"Failed to read profiles file: {e}")
                 profiles = []
         
-        # Check if generating（Through state.json [x][x]）
+        # Check if generation is in progress (through state.json status field)
         is_generating = False
         total_expected = None
         
@@ -1130,13 +1130,13 @@ def get_simulation_profiles_realtime(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
 def get_simulation_config_realtime(simulation_id: str):
     """
-    Real-time get simulation configuration（ForGenerate[x][x][x][real][x][x][x][x][x]）
-    
-    And /config Interface difference：
-    - Read file directly，Bypass SimulationManager
+    Real-time get simulation configuration (for viewing during generation).
+
+    Difference from /config endpoint:
+    - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
-    - Return additional metadata（Such as file modification time、Is generatingAnd so on）
-    - Return partial information even if config not fully generated
+    - Returns additional metadata (such as file modification time, whether generation is in progress, etc.)
+    - Returns partial information even if config not fully generated
     
     Returns:
         {
@@ -1181,10 +1181,10 @@ def get_simulation_config_realtime(simulation_id: str):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
             except (json.JSONDecodeError, Exception) as e:
-                logger.warning(f"Read config FileFailed（[x][x][x][x][x][x][x]）: {e}")
+                logger.warning(f"Failed to read config file: {e}")
                 config = None
         
-        # Check if generating（Through state.json [x][x]）
+        # Check if generation is in progress (through state.json status field)
         is_generating = False
         generation_stage = None
         config_generated = False
@@ -1250,14 +1250,14 @@ def get_simulation_config_realtime(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/config', methods=['GET'])
 def get_simulation_config(simulation_id: str):
     """
-    Get simulation configuration（LLMIntelligentGenerate[x][x][x][config][place]）
-    
-    ReturnInclude：
-        - time_config: Time configuration（SimulationDuration、[x][x]、[x][x]/[x][x][x][x]）
-        - agent_configs: EachAgentActivity configuration（[x][x][x]、[x][x][x][x]、[x][x]And so on）
-        - event_config: Event configuration（Initial posts、[x][x][x][x]）
+    Get simulation configuration (generated with LLM intelligence).
+
+    Returns:
+        - time_config: Time configuration (simulation duration, start time, end time, etc.)
+        - agent_configs: Activity configuration for each agent (behavior patterns, interaction styles, etc.)
+        - event_config: Event configuration (initial posts, event sequences, etc.)
         - platform_configs: Platform configuration
-        - generation_reasoning: LLMConfiguration reasoning explanation
+        - generation_reasoning: LLM configuration reasoning explanation
     """
     try:
         manager = SimulationManager()
@@ -1266,7 +1266,7 @@ def get_simulation_config(simulation_id: str):
         if not config:
             return jsonify({
                 "success": False,
-                "error": f"Simulation configuration does not exist，Please call first /prepare [x][x]"
+                "error": f"Simulation configuration does not exist. Please call /prepare first"
             }), 404
         
         return jsonify({
@@ -1294,7 +1294,7 @@ def download_simulation_config(simulation_id: str):
         if not os.path.exists(config_path):
             return jsonify({
                 "success": False,
-                "error": "Configuration file does not exist，Please call first /prepare [x][x]"
+                "error": "Configuration file does not exist. Please call /prepare first"
             }), 404
         
         return send_file(
@@ -1315,7 +1315,7 @@ def download_simulation_config(simulation_id: str):
 @simulation_bp.route('/script/<script_name>/download', methods=['GET'])
 def download_simulation_script(script_name: str):
     """
-    Download simulation run script file（General scripts，[x][yu] backend/scripts/）
+    Download simulation run script file (general scripts from backend/scripts/)
     
     script_nameOptional values：
         - run_twitter_simulation.py
@@ -1452,22 +1452,22 @@ def start_simulation():
         {
             "simulation_id": "sim_xxxx",          // Required，Simulation ID
             "platform": "parallel",                // Optional: twitter / reddit / parallel (Default)
-            "max_rounds": 100,                     // Optional: MaxSimulation[x][x]，[x][yu][x][x][x][x][x]Simulation
-            "enable_graph_memory_update": false,   // Optional: IsOtherwiseAgent[x][x][x][x][update][new][x]Zep[x][x][record][memory]
-            "force": false                         // Optional: Force restart（[x]Stop runningSimulation[x]Clean[x][x]）
+            "max_rounds": 100,                     // Optional: Maximum simulation rounds, default unlimited
+            "enable_graph_memory_update": false,   // Optional: Whether to enable knowledge graph memory updates for agents
+            "force": false                         // Optional: Force restart (stop running simulation and clean runtime files)
         }
 
-    About force Parameters：
-        - After enabling，IfSimulationRunningOrCompleted，[x][x][x][x][x]Clean runtime logs
+    About force Parameters:
+        - After enabling, if simulation is running or completed, clean runtime logs
         - Cleanup includes：run_state.json, actions.jsonl, simulation.log And so on
         - Will not clean configuration files（simulation_config.json）And profile File
         - For scenarios that need to rerun simulation
 
-    About enable_graph_memory_update：
-        - After enabling，SimulationAll inAgent[x][x][x]（[x][x]、[x][x]、[x][x]And so on）[x][x][real][x][update][new][x]Zep[x][x]
-        - This can let knowledge graph"Remember"Simulation[x][x]，[x][yu][x][x][x][x]OrAI[x][x]
+    About enable_graph_memory_update:
+        - After enabling, all agents in the simulation will update the knowledge graph with their actions (posts, comments, follows, etc.)
+        - This allows the knowledge graph to "remember" the simulation, improving context understanding and AI decision-making
         - Requires associated project to have valid graph_id
-        - Use batch update mechanism，ReduceAPI[x][x][x][x]
+        - Uses batch update mechanism to reduce API overhead
 
     Returns:
         {
@@ -1495,7 +1495,7 @@ def start_simulation():
             }), 400
 
         platform = data.get('platform', 'parallel')
-        max_rounds = data.get('max_rounds')  # Optional：MaxSimulation[x][x]
+        max_rounds = data.get('max_rounds')  # Optional: Maximum simulation rounds
         enable_graph_memory_update = data.get('enable_graph_memory_update', False)  # Optional：IsFalseEnable knowledge graph memory update
         force = data.get('force', False)  # Optional：Force restart
 
@@ -1532,13 +1532,13 @@ def start_simulation():
 
         force_restarted = False
         
-        # Intelligently handle status：IfPrepareWork complete，[x][x][x][new][x][x]
+        # Intelligently handle status: if preparation work is complete, reset status to ready
         if state.status != SimulationStatus.READY:
             # Check if preparation is complete
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
 
             if is_prepared:
-                # PrepareWork complete，[x][x]IsFalseHasRunning[x][x][x]
+                # Preparation work complete, verify if simulation is not already running
                 if state.status == SimulationStatus.RUNNING:
                     # Check if simulation process is really running
                     run_state = SimulationRunner.get_run_state(simulation_id)
@@ -1554,26 +1554,26 @@ def start_simulation():
                         else:
                             return jsonify({
                                 "success": False,
-                                "error": f"Simulation is running，Please call first /stop [x][x][x][x]，OrUse force=true Force restart"
+                                "error": f"Simulation is running. Please call /stop first or use force=true to force restart."
                             }), 400
 
                 # If force mode，Clean runtime logs
                 if force:
-                    logger.info(f"Force mode：CleanSimulation[x][x] {simulation_id}")
+                    logger.info(f"Force mode: cleaning simulation runtime files for {simulation_id}")
                     cleanup_result = SimulationRunner.cleanup_simulation_logs(simulation_id)
                     if not cleanup_result.get("success"):
                         logger.warning(f"Warning when cleaning logs: {cleanup_result.get('errors')}")
                     force_restarted = True
 
                 # Process does not exist or has ended，Reset status to ready
-                logger.info(f"Simulation {simulation_id} PrepareWork complete，Reset status to ready（[x]Status: {state.status.value}）")
+                logger.info(f"Simulation {simulation_id} preparation complete, resetting status to ready (previous status: {state.status.value})")
                 state.status = SimulationStatus.READY
                 manager._save_simulation_state(state)
             else:
                 # Preparation not complete
                 return jsonify({
                     "success": False,
-                    "error": f"Simulation not ready，Current status: {state.status.value}，Please call first /prepare [x][x]"
+                    "error": f"Simulation not ready. Current status: {state.status.value}. Please call /prepare first"
                 }), 400
         
         # Get knowledge graphID（For knowledge graph memory update）
@@ -1955,7 +1955,7 @@ def get_agent_stats(simulation_id: str):
     """
     Get eachAgentStatistics
     
-    For frontend displayAgentActivity ranking、[x][x][x][x]And so on
+    For frontend display of agent activity ranking and statistics.
     """
     try:
         stats = SimulationRunner.get_agent_stats(simulation_id)
@@ -1969,7 +1969,7 @@ def get_agent_stats(simulation_id: str):
         })
         
     except Exception as e:
-        logger.error(f"GetAgentStatisticsFailed: {str(e)}")
+        logger.error(f"Failed to get agent statistics: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e),
@@ -1989,7 +1989,7 @@ def get_simulation_posts(simulation_id: str):
         limit: Return count（Default50）
         offset: Offset
     
-    Return post list（FromSQLite[x][x][x]Read）
+    Return post list (read from SQLite database)
     """
     try:
         platform = request.args.get('platform', 'reddit')
@@ -2139,7 +2139,7 @@ def interview_agent():
     """
     Interview individualAgent
 
-    Note：This feature requiresSimulation[x][x][x][yu][x][x]Status（[x][x]Simulation[x][x][x][x][x]Wait[x][x][x][form]）
+    Note: This feature requires simulation to be in a running or completed state (run the simulation and wait for it to progress).
 
     Request (JSON):
         {
@@ -2147,11 +2147,11 @@ def interview_agent():
             "agent_id": 0,                     // Required，Agent ID
             "prompt": "What do you think about this？",  // Required，Interview question
             "platform": "twitter",             // Optional，Specified platform（twitter/reddit）
-                                               // When not specified：Both platformsSimulation[x][x][x][x][x]items[x][x]
-            "timeout": 60                      // Optional，Timeout（[x]），Default60
+                                               // When not specified: Both platforms in dual-platform simulations
+            "timeout": 60                      // Optional, timeout in seconds, default 60
         }
 
-    Return（Not specifiedplatform，Both platforms[x][form]）：
+    Return (when platform not specified, returns results from both platforms):
         {
             "success": true,
             "data": {
@@ -2223,7 +2223,7 @@ def interview_agent():
         if not SimulationRunner.check_env_alive(simulation_id):
             return jsonify({
                 "success": False,
-                "error": "Simulation environment not running or closed。Please ensureSimulationCompleted[x][x][x]Wait[x][x][x][form]。"
+                "error": "Simulation environment not running or closed. Please ensure simulation is started and wait for it to progress."
             }), 400
         
         # Optimizeprompt，Add prefix to avoidAgent call tools
@@ -2268,7 +2268,7 @@ def interview_agents_batch():
     """
     Batch interview multipleAgent
 
-    Note：This feature requiresSimulation[x][x][x][yu][x][x]Status
+    Note: This feature requires simulation to be in a running or completed state.
 
     Request (JSON):
         {
@@ -2277,16 +2277,16 @@ def interview_agents_batch():
                 {
                     "agent_id": 0,
                     "prompt": "Your opinion onAWhat do you think？",
-                    "platform": "twitter"      // Optional，SpecifyAgent[x][x][x][x][x]
+                    "platform": "twitter"      // Optional, interview this agent on specified platform
                 },
                 {
                     "agent_id": 1,
                     "prompt": "Your opinion onBWhat do you think？"  // Not specifiedplatform[then]UseDefaultValue
                 }
             ],
-            "platform": "reddit",              // Optional，Default platform（[x][x]Itemplatform[x][x]）
-                                               // When not specified：Both platformsSimulationEachAgent[x][x][x][x][x]items[x][x]
-            "timeout": 120                     // Optional，Timeout（[x]），Default120
+            "platform": "reddit",              // Optional, Default platform (overridden by each item's platform)
+                                               // When not specified: Both platforms in dual-platform simulations, single platform in single-platform simulations
+            "timeout": 120                     // Optional, timeout in seconds, default 120
         }
 
     Returns:
@@ -2351,14 +2351,14 @@ def interview_agents_batch():
             if item_platform and item_platform not in ("twitter", "reddit"):
                 return jsonify({
                     "success": False,
-                    "error": f"Interview list item{i+1}ItemplatformOnly[x]Is 'twitter' Or 'reddit'"
+                    "error": f"Interview list item {i+1}: platform must be 'twitter' or 'reddit'"
                 }), 400
 
         # Check environment status
         if not SimulationRunner.check_env_alive(simulation_id):
             return jsonify({
                 "success": False,
-                "error": "Simulation environment not running or closed。Please ensureSimulationCompleted[x][x][x]Wait[x][x][x][form]。"
+                "error": "Simulation environment not running or closed. Please ensure simulation is started and wait for it to progress."
             }), 400
 
         # OptimizeEachInterview itemprompt，Add prefix to avoidAgent call tools
@@ -2406,15 +2406,15 @@ def interview_all_agents():
     """
     Global interview - UseInterview all with same questionAgent
 
-    Note：This feature requiresSimulation[x][x][x][yu][x][x]Status
+    Note: This feature requires simulation to be in a running or completed state.
 
     Request (JSON):
         {
             "simulation_id": "sim_xxxx",            // Required，Simulation ID
-            "prompt": "What is your overall view on this？",  // Required，Interview question（[x]HasAgentUse[x][x][x][x]）
-            "platform": "reddit",                   // Optional，Specified platform（twitter/reddit）
-                                                    // When not specified：Both platformsSimulationEachAgent[x][x][x][x][x]items[x][x]
-            "timeout": 180                          // Optional，Timeout（[x]），Default180
+            "prompt": "What is your overall view on this?",  // Required, interview question (avoid enabling agent to use tools)
+            "platform": "reddit",                   // Optional, Specified platform (twitter/reddit)
+                                                    // When not specified: Both platforms in dual-platform simulations, single platform in single-platform simulations
+            "timeout": 180                          // Optional, timeout in seconds, default 180
         }
 
     Returns:
@@ -2465,7 +2465,7 @@ def interview_all_agents():
         if not SimulationRunner.check_env_alive(simulation_id):
             return jsonify({
                 "success": False,
-                "error": "Simulation environment not running or closed。Please ensureSimulationCompleted[x][x][x]Wait[x][x][x][form]。"
+                "error": "Simulation environment not running or closed. Please ensure simulation is started and wait for it to progress."
             }), 400
 
         # Optimizeprompt，Add prefix to avoidAgent call tools
@@ -2516,7 +2516,7 @@ def get_interview_history():
             "simulation_id": "sim_xxxx",  // Required，Simulation ID
             "platform": "reddit",          // Optional，Platform type（reddit/twitter）
                                            // If not specified, return all history of both platforms
-            "agent_id": 0,                 // Optional，OnlyGetThisAgent[x][x][x]History
+            "agent_id": 0,                 // Optional, Get interview history for only this agent
             "limit": 100                   // Optional，Return count，Default100
         }
 
@@ -2568,7 +2568,7 @@ def get_interview_history():
         })
 
     except Exception as e:
-        logger.error(f"GetInterviewHistoryFailed: {str(e)}")
+        logger.error(f"Failed to get interview history: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e),
@@ -2581,7 +2581,7 @@ def get_env_status():
     """
     Get simulation environment status
 
-    Check if simulation environment is alive（Can receiveInterview[x][x]）
+    Check if simulation environment is alive (can receive interview requests).
 
     Request (JSON):
         {
@@ -2596,7 +2596,7 @@ def get_env_status():
                 "env_alive": true,
                 "twitter_available": true,
                 "reddit_available": true,
-                "message": "Environment running，Can receiveInterview[x][x]"
+                "message": "Environment running, ready to receive interview requests"
             }
         }
     """
@@ -2617,7 +2617,7 @@ def get_env_status():
         env_status = SimulationRunner.get_env_status_detail(simulation_id)
 
         if env_alive:
-            message = "Environment running，Can receiveInterview[x][x]"
+            message = "Environment running, ready to receive interview requests"
         else:
             message = "Environment not running or closed"
 
@@ -2646,15 +2646,15 @@ def close_simulation_env():
     """
     Close simulation environment
     
-    Send close environment command to simulation，Gracefully exitWait[x][x][x][form]。
-    
-    Note：This is different from /stop [x][x]，/stop [x][x][x][x][x][x][x]，
-    This interface lets simulation gracefully close environment and exit。
+    Send close environment command to simulation to gracefully exit and wait for completion.
+
+    Note: This is different from /stop. /stop terminates the simulation abruptly.
+    This interface lets the simulation gracefully close the environment and exit.
     
     Request (JSON):
         {
             "simulation_id": "sim_xxxx",  // Required，Simulation ID
-            "timeout": 30                  // Optional，Timeout（[x]），Default30
+            "timeout": 30                  // Optional, timeout in seconds, default 30
         }
     
     Returns:

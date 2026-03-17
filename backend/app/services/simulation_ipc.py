@@ -1,11 +1,10 @@
 """
-SimulationIPCpassbelievemodelChunk
-useinFlaskafterendandSimulationscriptoriginalofbetweensProcessbetweenpassbelieve
+Simulation inter-process communication module for Flask and simulation script communication.
 
-passthroughFilesystemstatisticsrealappearsimplesinglesCommand/Responsemodelformat：
-1. FlaskWriteCommandto commands/ Directory
-2. SimulationscriptoriginalroundqueryCommandDirectory，ExecuteCommandandWriteResponseto responses/ Directory
-3. FlaskroundqueryResponseDirectoryGetResult
+Communication uses a simple filesystem-based command/response model:
+1. Flask writes commands to the commands/ directory.
+2. The simulation script polls the commands directory, executes the command, and writes the response to the responses/ directory.
+3. Flask polls the responses directory and retrieves the result.
 """
 
 import os
@@ -94,9 +93,9 @@ class IPCResponse:
 
 class SimulationIPCClient:
     """
-    SimulationIPCclientuserend（Flaskendmakeuse）
-    
-    useintoSimulationProcessSendCommandandWaitResponse
+    Simulation IPC client for Flask side.
+
+    Used to send commands to the simulation process and wait for responses.
     """
     
     def __init__(self, simulation_dir: str):
@@ -160,8 +159,8 @@ class SimulationIPCClient:
                     with open(response_file, 'r', encoding='utf-8') as f:
                         response_data = json.load(f)
                     response = IPCResponse.from_dict(response_data)
-                    
-                    # CleanCommandandResponseFile
+
+                    # Clean up command and response files
                     try:
                         os.remove(command_file)
                         os.remove(response_file)
@@ -287,9 +286,9 @@ class SimulationIPCClient:
 
 class SimulationIPCServer:
     """
-    SimulationIPCserveservicedevice（Simulationscriptoriginalendmakeuse）
-    
-    roundqueryCommandDirectory，ExecuteCommandandReturnResponse
+    Simulation IPC server for the simulation script side.
+
+    Polls the command directory, executes commands, and returns responses.
     """
     
     def __init__(self, simulation_dir: str):

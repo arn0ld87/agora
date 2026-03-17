@@ -1,6 +1,5 @@
 """
-GraphrecordmemoryUpdateserveservice
-willSimulationinsAgentActivityactionstateUpdateto Neo4j Graphin
+Graph memory update service that processes agent activities and updates them to Neo4j Graph.
 
 Replaces zep_graph_memory_updater.py — Zep client replaced by GraphStorage.
 """
@@ -176,10 +175,10 @@ class AgentActivity:
 
 class GraphMemoryUpdater:
     """
-    GraphrecordmemoryUpdatedevice (via GraphStorage / Neo4j)
+    Graph memory update service (via GraphStorage / Neo4j)
 
-    monitorcontrolSimulationsactionsLogFile，willnewsagentActivityrealwhenUpdatetoGraphin。
-    byPlatformpartgroup，eachaccumulateaccumulateBATCH_SIZEActivityafterBatchSendtoGraph。
+    Monitors simulation action logs and sends agent activities to the graph in real-time.
+    Batches activities by platform, accumulating BATCH_SIZE activities before sending each batch.
     """
 
     BATCH_SIZE = 5
@@ -311,7 +310,7 @@ class GraphMemoryUpdater:
 
     def _send_batch_activities(self, activities: List[AgentActivity], platform: str):
         """
-        BatchSendActivitytoGraph（mergeandasaText，passthrough add_text triggersend NER）
+        Send batched activities to the graph by merging them as text and using add_text to trigger NER.
         """
         if not activities:
             return
@@ -381,9 +380,9 @@ class GraphMemoryUpdater:
 
 class GraphMemoryManager:
     """
-    managemanagemanySimulationsGraphrecordmemoryUpdatedevice
+    Manages graph memory updaters for multiple simulations.
 
-    eachSimulationcanwithhaveselfselfsUpdatedevicerealexample。
+    Each simulation can have its own independent updater instance.
     NOTE: create_updater() requires a GraphStorage instance — must be passed in.
     """
 
@@ -395,11 +394,11 @@ class GraphMemoryManager:
         cls, simulation_id: str, graph_id: str, storage: GraphStorage
     ) -> GraphMemoryUpdater:
         """
-        asSimulationCreateGraphrecordmemoryUpdatedevice
+        Create a graph memory updater for a simulation.
 
         Args:
-            simulation_id: SimulationID
-            graph_id: GraphID
+            simulation_id: Simulation ID
+            graph_id: Graph ID
             storage: GraphStorage instance
         """
         with cls._lock:

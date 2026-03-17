@@ -1,6 +1,6 @@
 """
-Graphconstructbuildserveservice
-makeuse GraphStorage (Neo4j) replacereplace Zep Cloud API
+Graph building service.
+Uses GraphStorage (Neo4j) to replace Zep Cloud API.
 """
 
 import time
@@ -57,15 +57,15 @@ class GraphBuilderService:
         Build graph asynchronously
 
         Args:
-            text: outputinputText
-            ontology: Ontologysetmeaning（comeselfconnectmouth1soutputoutput）
-            graph_name: Graphnamecall
-            chunk_size: TextChunklargesmall
-            chunk_overlap: Chunkheavyoverlaplargesmall
-            batch_size: eachbatchSendsChunknumberquantity
+            text: Input text to process
+            ontology: Ontology definition (from ontology generator output)
+            graph_name: Name for the graph
+            chunk_size: Text chunk size
+            chunk_overlap: Chunk overlap size
+            batch_size: Number of chunks to send per batch
 
         Returns:
-            anyserviceID
+            Task ID
         """
         # Create task
         task_id = self.task_manager.create_task(

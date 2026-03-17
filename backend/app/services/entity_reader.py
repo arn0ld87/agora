@@ -1,6 +1,6 @@
 """
-EntityReadandFilterserveservice
-from Neo4j GraphinReadNode，FilteroutputcharactermergepresetmeaningEntityTypesNode
+Entity reading and filtering service.
+Reads nodes from Neo4j graph, filters out meaningful entity type nodes.
 
 Replaces zep_entity_reader.py — all Zep Cloud calls replaced by GraphStorage.
 """
@@ -67,10 +67,10 @@ class EntityReader:
     """
     Entity reading and filtering service (via GraphStorage / Neo4j)
 
-    mainneedsuccesscan：
-    1. fromGraphReadallhaveNode
-    2. FilteroutputcharactermergepresetmeaningEntityTypesNode（LabelsnotonlyisEntitysNode）
-    3. GeteachEntitysrelatedrelatedEdgeandrelatedlinkNodeInformation
+    Main capabilities:
+    1. Read all nodes from the graph
+    2. Filter out meaningful entity type nodes (nodes whose labels are not just "Entity")
+    3. Get related edges and linked node information for each entity
     """
 
     def __init__(self, storage: GraphStorage):
@@ -78,13 +78,13 @@ class EntityReader:
 
     def get_all_nodes(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        GetGraphsallhaveNode
+        Get all nodes from the graph.
 
         Args:
-            graph_id: GraphID
+            graph_id: Graph ID
 
         Returns:
-            Nodelisttable
+            List of nodes.
         """
         logger.info(f"Getting all nodes in graph {graph_id}...")
         nodes = self.storage.get_all_nodes(graph_id)
@@ -93,13 +93,13 @@ class EntityReader:
 
     def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
         """
-        GetGraphsallhaveEdge
+        Get all edges from the graph.
 
         Args:
-            graph_id: GraphID
+            graph_id: Graph ID
 
         Returns:
-            Edgelisttable
+            List of edges.
         """
         logger.info(f"Getting all edges in graph {graph_id}...")
         edges = self.storage.get_all_edges(graph_id)
@@ -108,13 +108,13 @@ class EntityReader:
 
     def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
         """
-        GetspecifysetNodesallhaverelatedrelatedEdge
+        Get all related edges for a specified node.
 
         Args:
-            node_uuid: NodeUUID
+            node_uuid: Node UUID
 
         Returns:
-            Edgelisttable
+            List of edges.
         """
         try:
             return self.storage.get_node_edges(node_uuid)
@@ -129,19 +129,19 @@ class EntityReader:
         enrich_with_edges: bool = True
     ) -> FilteredEntities:
         """
-        FilteroutputcharactermergepresetmeaningEntityTypesNode
+        Filter and extract nodes with meaningful entity types.
 
-        Filterlogiclogic：
-        - suchresultNodesLabelsonlyhavea"Entity"，speakbrightthisEntitynotcharactermergewespresetmeaningsType，skipthrough
-        - suchresultNodesLabelsincludecontainexcept"Entity"and"Node"ofexceptsmarktag，speakbrightcharactermergepresetmeaningType，keepkeep
+        Filtering logic:
+        - If a node's labels only include "Entity", it has no meaningful type and is skipped.
+        - If a node's labels include labels other than "Entity" and "Node", it has a meaningful type and is kept.
 
         Args:
-            graph_id: GraphID
-            defined_entity_types: presetmeaningsEntityTypelisttable（canselect，suchresultprovideprovidethenonlykeepkeepthissomeType）
-            enrich_with_edges: isnoGeteachEntitysrelatedrelatedEdgeInformation
+            graph_id: Graph ID
+            defined_entity_types: Optional list of entity types to filter for. If provided, only entities matching one of these types are kept.
+            enrich_with_edges: Whether to fetch each entity's related edge information.
 
         Returns:
-            FilteredEntities: FilteraftersEntitycollectmerge
+            FilteredEntities: Filtered entity collection.
         """
         logger.info(f"Starting to filter entities in graph {graph_id}...")
 
@@ -180,7 +180,7 @@ class EntityReader:
 
             entity_types_found.add(entity_type)
 
-            # CreateEntityNodetoelement
+            # Create entity node object
             entity = EntityNode(
                 uuid=node["uuid"],
                 name=node["name"],
@@ -189,7 +189,7 @@ class EntityReader:
                 attributes=node.get("attributes", {}),
             )
 
-            # GetrelatedrelatedEdgeandNode
+            # Get related edges and nodes
             if enrich_with_edges:
                 related_edges = []
                 related_node_uuids: Set[str] = set()
@@ -214,7 +214,7 @@ class EntityReader:
 
                 entity.related_edges = related_edges
 
-                # GetrelatedlinkNodesbaseoriginalInformation
+                # Get related linked nodes with their information
                 related_nodes = []
                 for related_uuid in related_node_uuids:
                     if related_uuid in node_map:
@@ -246,17 +246,17 @@ class EntityReader:
         entity_uuid: str
     ) -> Optional[EntityNode]:
         """
-        GetSingleEntityanditscompletewholeondowntext（EdgeandrelatedlinkNode）
+        Get a single entity with its complete context (edges and related nodes).
 
         Optimized: uses get_node() + get_node_edges() instead of loading ALL nodes.
         Only fetches related nodes individually as needed.
 
         Args:
-            graph_id: GraphID
-            entity_uuid: EntityUUID
+            graph_id: Graph ID
+            entity_uuid: Entity UUID
 
         Returns:
-            EntityNodeorNone
+            EntityNode or None.
         """
         try:
             # Get the node directly by UUID (O(1) lookup)
@@ -322,15 +322,15 @@ class EntityReader:
         enrich_with_edges: bool = True
     ) -> List[EntityNode]:
         """
-        GetspecifysetTypesallhaveEntity
+        Get all entities of a specified type.
 
         Args:
-            graph_id: GraphID
-            entity_type: EntityType（such "Student", "PublicFigure" etc）
-            enrich_with_edges: isnoGetrelatedrelatedEdgeInformation
+            graph_id: Graph ID
+            entity_type: Entity type (e.g., "Student", "PublicFigure", etc.)
+            enrich_with_edges: Whether to fetch each entity's related edge information.
 
         Returns:
-            Entitylisttable
+            List of entities of the specified type.
         """
         result = self.filter_defined_entities(
             graph_id=graph_id,
