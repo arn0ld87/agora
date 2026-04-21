@@ -1,266 +1,758 @@
-<template>
-  <div class="home-container">
-    <!-- Top Navigation Bar -->
-    <nav class="navbar" :style="s.navbar">
-      <div class="nav-brand" :style="s.navBrand">MIROFISH OFFLINE</div>
-      <div class="nav-links" :style="s.navLinks">
-        <a href="https://github.com/nikmcfly/MiroFish-Offline" target="_blank" class="github-link" :style="s.githubLink">
-          Visit our Github <span>↗</span>
-        </a>
-      </div>
-    </nav>
-
-    <div class="main-content" :style="s.mainContent">
-      <!-- Hero Section -->
-      <section class="hero-section" :style="s.heroSection">
-        <div class="hero-left" :style="s.heroLeft">
-          <div class="tag-row" :style="s.tagRow">
-            <span class="orange-tag" :style="s.orangeTag">Offline Multi-Agent Simulation Engine</span>
-            <span class="version-text" :style="s.versionText">/ v0.1-preview</span>
-          </div>
-
-          <h1 class="main-title" :style="s.mainTitle">
-            Upload Any Document<br>
-            <span class="gradient-text" :style="s.gradientText">Predict What Happens Next</span>
-          </h1>
-
-          <div class="hero-desc" :style="s.heroDesc">
-            <p :style="s.heroDescP">
-              From a single document, <span :style="s.highlightBold">MiroFish Offline</span> extracts reality seeds and builds a parallel world of <span :style="s.highlightOrange">autonomous AI agents</span> — running entirely on your machine. Inject variables, observe emergent behavior, and find <span :style="s.highlightCode">"local optima"</span> in complex social dynamics.
-            </p>
-            <p class="slogan-text" :style="s.sloganText">
-              Your data never leaves your machine. The future is simulated locally<span :style="s.blinkingCursor">_</span>
-            </p>
-          </div>
-
-          <div class="decoration-square" :style="s.decorationSquare"></div>
-        </div>
-
-        <div class="hero-right" :style="s.heroRight">
-          <div class="logo-container" :style="s.logoContainer">
-            <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="MiroFish Logo" :style="s.heroLogo" />
-          </div>
-          <button :style="s.scrollDownBtn" @click="scrollToBottom">↓</button>
-        </div>
-      </section>
-
-      <!-- Dashboard: Two-Column Layout -->
-      <section class="dashboard-section" :style="s.dashboardSection">
-        <!-- Left Column: Status & Steps -->
-        <div class="left-panel" :style="s.leftPanel">
-          <div class="panel-header" :style="s.panelHeader">
-            <span :style="s.statusDot">■</span> System Status
-          </div>
-
-          <h2 class="section-title" :style="s.sectionTitle">Ready</h2>
-          <p class="section-desc" :style="s.sectionDesc">
-            Local prediction engine on standby. Upload unstructured data to initialize a simulation.
-          </p>
-
-          <div class="metrics-row" :style="s.metricsRow">
-            <div class="metric-card" :style="s.metricCard">
-              <div class="metric-value" :style="s.metricValue">Free</div>
-              <div class="metric-label" :style="s.metricLabel">Runs on your hardware</div>
-            </div>
-            <div class="metric-card" :style="s.metricCard">
-              <div class="metric-value" :style="s.metricValue">Private</div>
-              <div class="metric-label" :style="s.metricLabel">100% offline, no cloud</div>
-            </div>
-          </div>
-
-          <div class="steps-container" :style="s.stepsContainer">
-            <div class="steps-header" :style="s.stepsHeader">
-               <span :style="s.diamondIcon">◇</span> Workflow Sequence
-            </div>
-            <div :style="s.workflowList">
-              <div v-for="(step, i) in steps" :key="i" :style="s.workflowItem">
-                <span :style="s.stepNum">{{ step.num }}</span>
-                <div :style="s.stepInfo">
-                  <div :style="s.stepTitle">{{ step.title }}</div>
-                  <div :style="s.stepDesc">{{ step.desc }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Column: Interactive Console -->
-        <div class="right-panel" :style="s.rightPanel">
-          <div class="console-box" :style="s.consoleBox">
-            <div :style="s.consoleSection">
-              <div class="console-header" :style="s.consoleHeader">
-                <span>01 / Reality Seeds</span>
-                <span>Supported: PDF, MD, TXT</span>
-              </div>
-              <div
-                :style="s.uploadZone"
-                @dragover.prevent="handleDragOver"
-                @dragleave.prevent="handleDragLeave"
-                @drop.prevent="handleDrop"
-                @click="triggerFileInput"
-              >
-                <input ref="fileInput" type="file" multiple accept=".pdf,.md,.txt" @change="handleFileSelect" style="display: none" :disabled="loading" />
-                <div v-if="files.length === 0" :style="s.uploadPlaceholder">
-                  <div :style="s.uploadIcon">↑</div>
-                  <div :style="s.uploadTitle">Drag & drop files here</div>
-                  <div :style="s.uploadHint">or click to browse</div>
-                </div>
-                <div v-else :style="s.fileList">
-                  <div v-for="(file, index) in files" :key="index" :style="s.fileItem">
-                    <span>📄</span>
-                    <span :style="s.fileName">{{ file.name }}</span>
-                    <button @click.stop="removeFile(index)" :style="s.removeBtn">×</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div :style="s.consoleDivider"><span :style="s.consoleDividerText">Parameters</span></div>
-
-            <div :style="s.consoleSection">
-              <div class="console-header" :style="s.consoleHeader">
-                <span>>_ 02 / Simulation Prompt</span>
-              </div>
-              <div :style="s.inputWrapper">
-                <textarea v-model="formData.simulationRequirement" :style="s.codeInput" placeholder="// Describe your simulation or prediction goal in natural language" rows="6" :disabled="loading"></textarea>
-                <div :style="s.modelBadge">Engine: Ollama + Neo4j (local)</div>
-              </div>
-            </div>
-
-            <div :style="s.btnSection">
-              <button :style="s.startEngineBtn" @click="startSimulation" :disabled="!canSubmit || loading">
-                <span v-if="!loading">Start Engine</span>
-                <span v-else>Initializing...</span>
-                <span>→</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <HistoryDatabase />
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
+import AppFooter from '../components/AppFooter.vue'
+import Btn from '../components/ui/Btn.vue'
+import Badge from '../components/ui/Badge.vue'
+import Kicker from '../components/ui/Kicker.vue'
+import Select from '../components/ui/Select.vue'
+import Field from '../components/ui/Field.vue'
+import { getAvailableModels } from '../api/simulation.js'
 
-const mono = 'JetBrains Mono, monospace'
-const sans = 'Space Grotesk, Noto Sans SC, system-ui, sans-serif'
-
-const s = reactive({
-  navbar: { height: '60px', background: '#000', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px' },
-  navBrand: { fontFamily: mono, fontWeight: '800', letterSpacing: '1px', fontSize: '1.2rem' },
-  navLinks: { display: 'flex', alignItems: 'center' },
-  githubLink: { color: '#fff', textDecoration: 'none', fontFamily: mono, fontSize: '0.9rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px' },
-  mainContent: { maxWidth: '1400px', margin: '0 auto', padding: '60px 40px' },
-  heroSection: { display: 'flex', justifyContent: 'space-between', marginBottom: '80px', position: 'relative' },
-  heroLeft: { flex: '1', paddingRight: '60px' },
-  tagRow: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px', fontFamily: mono, fontSize: '0.8rem' },
-  orangeTag: { background: '#FF4500', color: '#fff', padding: '4px 10px', fontWeight: '700', letterSpacing: '1px', fontSize: '0.75rem' },
-  versionText: { color: '#999', fontWeight: '500', letterSpacing: '0.5px' },
-  mainTitle: { fontSize: '4.5rem', lineHeight: '1.2', fontWeight: '500', margin: '0 0 40px 0', letterSpacing: '-2px', color: '#000' },
-  gradientText: { background: 'linear-gradient(90deg, #000 0%, #444 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' },
-  heroDesc: { fontSize: '1.05rem', lineHeight: '1.8', color: '#666', maxWidth: '640px', marginBottom: '50px', fontWeight: '400', textAlign: 'justify' },
-  heroDescP: { marginBottom: '1.5rem' },
-  highlightBold: { color: '#000', fontWeight: '700' },
-  highlightOrange: { color: '#FF4500', fontWeight: '700', fontFamily: mono },
-  highlightCode: { background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: '2px', fontFamily: mono, fontSize: '0.9em', color: '#000', fontWeight: '600' },
-  sloganText: { fontSize: '1.2rem', fontWeight: '520', color: '#000', letterSpacing: '1px', borderLeft: '3px solid #FF4500', paddingLeft: '15px', marginTop: '20px' },
-  blinkingCursor: { color: '#FF4500', fontWeight: '700' },
-  decorationSquare: { width: '16px', height: '16px', background: '#FF4500' },
-  heroRight: { flex: '0.8', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'flex-end' },
-  logoContainer: { width: '100%', display: 'flex', justifyContent: 'flex-end', paddingRight: '40px' },
-  heroLogo: { maxWidth: '500px', width: '100%' },
-  scrollDownBtn: { width: '40px', height: '40px', border: '1px solid #E5E5E5', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FF4500', fontSize: '1.2rem' },
-  dashboardSection: { display: 'flex', gap: '60px', borderTop: '1px solid #E5E5E5', paddingTop: '60px', alignItems: 'flex-start' },
-  leftPanel: { flex: '0.8', display: 'flex', flexDirection: 'column' },
-  panelHeader: { fontFamily: mono, fontSize: '0.8rem', color: '#999', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' },
-  statusDot: { color: '#FF4500', fontSize: '0.8rem' },
-  sectionTitle: { fontSize: '2rem', fontWeight: '520', margin: '0 0 15px 0' },
-  sectionDesc: { color: '#666', marginBottom: '25px', lineHeight: '1.6' },
-  metricsRow: { display: 'flex', gap: '20px', marginBottom: '15px' },
-  metricCard: { border: '1px solid #E5E5E5', padding: '20px 30px', minWidth: '150px' },
-  metricValue: { fontFamily: mono, fontSize: '1.8rem', fontWeight: '520', marginBottom: '5px' },
-  metricLabel: { fontSize: '0.85rem', color: '#999' },
-  stepsContainer: { border: '1px solid #E5E5E5', padding: '30px', position: 'relative' },
-  stepsHeader: { fontFamily: mono, fontSize: '0.8rem', color: '#999', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '8px' },
-  diamondIcon: { fontSize: '1.2rem', lineHeight: '1' },
-  workflowList: { display: 'flex', flexDirection: 'column', gap: '20px' },
-  workflowItem: { display: 'flex', alignItems: 'flex-start', gap: '20px' },
-  stepNum: { fontFamily: mono, fontWeight: '700', color: '#000', opacity: '0.3' },
-  stepInfo: { flex: '1' },
-  stepTitle: { fontWeight: '520', fontSize: '1rem', marginBottom: '4px' },
-  stepDesc: { fontSize: '0.85rem', color: '#666' },
-  rightPanel: { flex: '1.2', display: 'flex', flexDirection: 'column' },
-  consoleBox: { border: '1px solid #CCC', padding: '8px' },
-  consoleSection: { padding: '20px' },
-  consoleHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontFamily: mono, fontSize: '0.75rem', color: '#666' },
-  uploadZone: { border: '1px dashed #CCC', height: '200px', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#FAFAFA' },
-  uploadPlaceholder: { textAlign: 'center' },
-  uploadIcon: { width: '40px', height: '40px', border: '1px solid #DDD', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', color: '#999' },
-  uploadTitle: { fontWeight: '500', fontSize: '0.9rem', marginBottom: '5px' },
-  uploadHint: { fontFamily: mono, fontSize: '0.75rem', color: '#999' },
-  fileList: { width: '100%', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' },
-  fileItem: { display: 'flex', alignItems: 'center', background: '#fff', padding: '8px 12px', border: '1px solid #EEE', fontFamily: mono, fontSize: '0.85rem' },
-  fileName: { flex: '1', margin: '0 10px' },
-  removeBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#999' },
-  consoleDivider: { display: 'flex', alignItems: 'center', margin: '10px 0', borderTop: '1px solid #EEE' },
-  consoleDividerText: { padding: '0 15px', fontFamily: mono, fontSize: '0.7rem', color: '#BBB', letterSpacing: '1px' },
-  inputWrapper: { position: 'relative', border: '1px solid #DDD', background: '#FAFAFA' },
-  codeInput: { width: '100%', border: 'none', background: 'transparent', padding: '20px', fontFamily: mono, fontSize: '0.9rem', lineHeight: '1.6', resize: 'vertical', outline: 'none', minHeight: '150px' },
-  modelBadge: { position: 'absolute', bottom: '10px', right: '15px', fontFamily: mono, fontSize: '0.7rem', color: '#AAA' },
-  btnSection: { padding: '0 20px 20px' },
-  startEngineBtn: { width: '100%', background: '#000', color: '#fff', border: 'none', padding: '20px', fontFamily: mono, fontWeight: '700', fontSize: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', letterSpacing: '1px' },
-})
-
-const steps = [
-  { num: '01', title: 'Graph Build', desc: 'Extract reality seeds from your document, build knowledge graph with Neo4j + GraphRAG' },
-  { num: '02', title: 'Env Setup', desc: 'Generate agent personas, configure simulation parameters via local Ollama LLM' },
-  { num: '03', title: 'Simulation', desc: 'Run multi-agent simulation locally with dynamic memory updates and emergent behavior' },
-  { num: '04', title: 'Report', desc: 'ReportAgent analyzes the simulation results and generates a detailed prediction report' },
-  { num: '05', title: 'Interaction', desc: 'Chat with any agent from the simulated world or discuss findings with ReportAgent' },
-]
-
+const { t, tm } = useI18n()
 const router = useRouter()
 
-const formData = ref({ simulationRequirement: '' })
+const simulationPrompt = ref('')
 const files = ref([])
 const loading = ref(false)
-const error = ref('')
 const isDragOver = ref(false)
 const fileInput = ref(null)
+const errorMsg = ref('')
 
-const canSubmit = computed(() => {
-  return formData.value.simulationRequirement.trim() !== '' && files.value.length > 0
+const ALLOWED = ['.pdf', '.md', '.txt', '.markdown']
+
+// ---- Model + language selection (persisted) ----
+const STORAGE_MODEL = 'agora.lastModel'
+const STORAGE_LANG = 'agora.agentLanguage'
+
+const ollamaModels = ref([])
+const presetModels = ref([])
+const defaultModel = ref('')
+const ollamaReachable = ref(false)
+const ollamaError = ref(null)
+const neo4jReachable = ref(false)
+const neo4jError = ref(null)
+const loadingModels = ref(true)
+const modelOption = ref(localStorage.getItem(STORAGE_MODEL) || 'default')
+const customModel = ref('')
+const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
+
+async function loadStatus() {
+  loadingModels.value = true
+  try {
+    const res = await getAvailableModels()
+    if (res?.success) {
+      ollamaModels.value = res.data?.ollama || []
+      presetModels.value = res.data?.presets || []
+      defaultModel.value = res.data?.current_default || ''
+      ollamaReachable.value = !!res.data?.ollama_reachable
+      ollamaError.value = res.data?.ollama_error || null
+      neo4jReachable.value = !!res.data?.neo4j_reachable
+      neo4jError.value = res.data?.neo4j_error || null
+      if (res.data?.default_language && !localStorage.getItem(STORAGE_LANG)) {
+        language.value = res.data.default_language
+      }
+    }
+  } catch (e) {
+    ollamaError.value = e.message
+    neo4jError.value = e.message
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+const modelOptions = computed(() => {
+  const opts = [{ value: 'default', label: `${t('step2.model.default')} — ${defaultModel.value || '?'}` }]
+  for (const p of presetModels.value) {
+    opts.push({ value: p.name, label: p.label || p.name })
+  }
+  for (const m of ollamaModels.value) {
+    if (presetModels.value.some(p => p.name === m.name)) continue
+    opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
+  }
+  opts.push({ value: 'custom', label: t('step2.model.customGroup') })
+  return opts
 })
 
-const triggerFileInput = () => { if (!loading.value) fileInput.value?.click() }
-const handleFileSelect = (event) => { addFiles(Array.from(event.target.files)) }
-const handleDragOver = (e) => { isDragOver.value = true }
-const handleDragLeave = (e) => { isDragOver.value = false }
-const handleDrop = (e) => { isDragOver.value = false; addFiles(Array.from(e.dataTransfer.files)) }
+const servicesReady = computed(() => neo4jReachable.value && (ollamaReachable.value || modelOption.value === 'custom'))
 
-const addFiles = (newFiles) => {
-  const allowed = ['.pdf', '.md', '.txt']
-  const valid = newFiles.filter(f => allowed.some(ext => f.name.toLowerCase().endsWith(ext)))
+const canSubmit = computed(() => {
+  return (
+    simulationPrompt.value.trim() !== '' &&
+    files.value.length > 0 &&
+    servicesReady.value &&
+    (modelOption.value !== 'custom' || customModel.value.trim() !== '')
+  )
+})
+
+const triggerFileInput = () => {
+  if (!loading.value) fileInput.value?.click()
+}
+
+function addFiles(newFiles) {
+  const valid = newFiles.filter((f) =>
+    ALLOWED.some((ext) => f.name.toLowerCase().endsWith(ext))
+  )
   files.value = [...files.value, ...valid]
 }
 
-const removeFile = (index) => { files.value.splice(index, 1) }
+const onFileSelect = (e) => addFiles(Array.from(e.target.files))
+const onDragOver = () => { isDragOver.value = true }
+const onDragLeave = () => { isDragOver.value = false }
+const onDrop = (e) => { isDragOver.value = false; addFiles(Array.from(e.dataTransfer.files)) }
+const removeFile = (i) => { files.value.splice(i, 1) }
 
-const scrollToBottom = () => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }) }
-
-const startSimulation = () => {
-  if (!canSubmit.value || loading.value) return
-  import('../store/pendingUpload.js').then(({ setPendingUpload }) => {
-    setPendingUpload(files.value, formData.value.simulationRequirement)
-    router.push({ name: 'Process', params: { projectId: 'new' } })
-  })
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
+
+async function startSimulation() {
+  if (!canSubmit.value || loading.value) return
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    // Persist selection so Step2 picks it up.
+    localStorage.setItem(STORAGE_MODEL, modelOption.value)
+    if (modelOption.value === 'custom') {
+      localStorage.setItem('agora.customModel', customModel.value.trim())
+    }
+    localStorage.setItem(STORAGE_LANG, language.value)
+
+    const { setPendingUpload } = await import('../store/pendingUpload.js')
+    setPendingUpload(files.value, simulationPrompt.value)
+    router.push({ name: 'Process', params: { projectId: 'new' } })
+  } catch (err) {
+    errorMsg.value = err.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadStatus()
+  const stored = localStorage.getItem('agora.customModel')
+  if (stored) customModel.value = stored
+})
+
+function scrollToConsole() {
+  document.getElementById('console')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+const steps = computed(() => tm('home.steps'))
 </script>
 
-<!-- Styles loaded from Home.css via import -->
+<template>
+  <div class="page">
+    <div class="shell">
+
+      <!-- Top nav -->
+      <header class="nav">
+        <div class="brand">
+          Ag<span class="n">o</span>ra
+        </div>
+        <nav class="nav-links">
+          <a href="#console">{{ t('home.console.uploadKicker') }}</a>
+          <a href="#workflow">{{ t('home.workflow.kicker') }}</a>
+          <a href="#history">{{ t('history.kicker') }}</a>
+        </nav>
+        <div class="nav-status">
+          <span class="dot"></span>
+          {{ t('nav.available') }}
+        </div>
+      </header>
+
+      <!-- Hero (editorial split) -->
+      <section class="hero">
+        <div class="hero-left">
+          <div class="edition">
+            <span>{{ t('home.edition') }}</span>
+            <span>{{ t('home.location') }}</span>
+          </div>
+          <h1 class="display">
+            {{ t('home.headline.line1') }}<br>
+            {{ t('home.headline.line2') }}
+            <span class="it">{{ t('home.headline.line3Italic') }}</span>
+          </h1>
+          <p class="lead">{{ t('home.lead') }}</p>
+          <div class="hero-tags">
+            <Badge variant="solid">{{ t('home.tags.engine') }}</Badge>
+            <Badge variant="ghost">{{ t('home.tags.version') }}</Badge>
+          </div>
+        </div>
+        <aside class="hero-right">
+          <div class="portrait">
+            <img src="../assets/logo/agora-logo.jpg" :alt="t('brand.name')" />
+          </div>
+          <div class="portrait-meta">
+            <span>{{ t('brand.name').toUpperCase() }}</span>
+            <span>{{ t('brand.tagline') }}</span>
+          </div>
+          <button class="scroll-down" @click="scrollToConsole" aria-label="↓">↓</button>
+        </aside>
+      </section>
+
+      <!-- System status section -->
+      <section class="section">
+        <div class="section-head">
+          <div class="left">
+            <div class="num">02</div>
+            <div class="k">{{ t('home.system.kicker') }}</div>
+          </div>
+          <div>
+            <h2>{{ t('home.system.title') }}</h2>
+            <p class="sub">{{ t('home.system.desc') }}</p>
+            <div class="metrics">
+              <article class="metric">
+                <div class="value">{{ t('home.metrics.free.value') }}</div>
+                <div class="label">{{ t('home.metrics.free.label') }}</div>
+              </article>
+              <article class="metric">
+                <div class="value">{{ t('home.metrics.private.value') }}</div>
+                <div class="label">{{ t('home.metrics.private.label') }}</div>
+              </article>
+              <article class="metric">
+                <div class="value">{{ t('home.metrics.openSource.value') }}</div>
+                <div class="label">{{ t('home.metrics.openSource.label') }}</div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workflow stepper (editorial numbered list) -->
+      <section id="workflow" class="section">
+        <div class="section-head">
+          <div class="left">
+            <div class="num">03</div>
+            <div class="k">{{ t('home.workflow.kicker') }}</div>
+          </div>
+          <div>
+            <ol class="workflow">
+              <li v-for="step in steps" :key="step.num">
+                <span class="step-num">{{ step.num }}</span>
+                <div class="step-body">
+                  <span class="step-title">{{ step.title }}</span>
+                  <span class="step-desc">{{ step.desc }}</span>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Console: upload + model + prompt + start -->
+      <section id="console" class="console">
+
+        <!-- Service status strip -->
+        <div class="status-strip">
+          <span class="status-pill" :class="{ ok: neo4jReachable, bad: !neo4jReachable && !loadingModels }">
+            <span class="status-dot" :class="neo4jReachable ? 'status-dot--done' : 'status-dot--error'" />
+            Neo4j {{ loadingModels ? '…' : (neo4jReachable ? 'verbunden' : 'aus') }}
+          </span>
+          <span class="status-pill" :class="{ ok: ollamaReachable, bad: !ollamaReachable && !loadingModels }">
+            <span class="status-dot" :class="ollamaReachable ? 'status-dot--done' : 'status-dot--error'" />
+            Ollama {{ loadingModels ? '…' : (ollamaReachable ? 'verbunden' : 'aus') }}
+          </span>
+          <button v-if="!loadingModels" class="status-refresh" @click="loadStatus" :title="t('common.refresh')">↻</button>
+        </div>
+        <div v-if="!loadingModels && !servicesReady" class="status-warn">
+          {{ neo4jReachable ? '' : 'Neo4j nicht erreichbar — starte: brew services start neo4j (oder docker compose up -d neo4j). ' }}
+          {{ ollamaReachable ? '' : 'Ollama nicht erreichbar — starte: ollama serve.' }}
+        </div>
+
+        <div class="console-head">
+          <Kicker num="04">{{ t('home.console.uploadKicker') }}</Kicker>
+          <span class="console-meta">{{ t('home.console.uploadAccepted') }}</span>
+        </div>
+
+        <div
+          class="dropzone"
+          :class="{ 'is-dragover': isDragOver, 'has-files': files.length }"
+          @dragover.prevent="onDragOver"
+          @dragleave.prevent="onDragLeave"
+          @drop.prevent="onDrop"
+          @click="triggerFileInput"
+        >
+          <input
+            ref="fileInput"
+            type="file"
+            multiple
+            accept=".pdf,.md,.markdown,.txt"
+            @change="onFileSelect"
+            hidden
+            :disabled="loading"
+          />
+          <div v-if="!files.length" class="dropzone-empty">
+            <div class="dropzone-arrow">↑</div>
+            <div class="dropzone-title">{{ t('home.console.uploadTitle') }}</div>
+            <div class="dropzone-hint">{{ t('home.console.uploadHint') }}</div>
+          </div>
+          <ul v-else class="file-list">
+            <li v-for="(f, i) in files" :key="i" class="file-row">
+              <span class="file-name">{{ f.name }}</span>
+              <span class="file-size">{{ formatBytes(f.size) }}</span>
+              <button class="file-remove" @click.stop="removeFile(i)" aria-label="×">×</button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Model + language picker -->
+        <div class="console-head">
+          <Kicker num="05">{{ t('step2.model.label') }}</Kicker>
+          <span class="console-meta">{{ t('step2.language.label') }}</span>
+        </div>
+        <div class="model-grid">
+          <div>
+            <Select
+              v-model="modelOption"
+              :label="t('step2.model.label')"
+              :options="modelOptions"
+            />
+            <p v-if="!ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
+              {{ t('step2.model.noOllama') }}
+            </p>
+          </div>
+          <div>
+            <Select
+              v-model="language"
+              :label="t('step2.language.label')"
+              :options="[
+                { value: 'de', label: t('step2.language.de') },
+                { value: 'en', label: t('step2.language.en') },
+              ]"
+            />
+            <p class="console-warning" style="margin-top: 4px;">
+              {{ t('step2.language.hint') }}
+            </p>
+          </div>
+        </div>
+        <Field
+          v-if="modelOption === 'custom'"
+          v-model="customModel"
+          :label="t('step2.model.customLabel')"
+          :placeholder="t('step2.model.customPlaceholder')"
+        />
+
+        <!-- Prompt -->
+        <div class="console-head">
+          <Kicker num="06" accent>{{ t('home.console.promptKicker') }}</Kicker>
+          <span class="console-meta">{{ t('home.console.engineLabel') }}</span>
+        </div>
+
+        <textarea
+          v-model="simulationPrompt"
+          class="prompt"
+          :placeholder="t('home.console.promptPlaceholder')"
+          rows="6"
+          :disabled="loading"
+        />
+
+        <div class="console-actions">
+          <Btn
+            variant="primary"
+            :disabled="!canSubmit"
+            :loading="loading"
+            arrow
+            @click="startSimulation"
+          >
+            {{ loading ? t('home.console.initializing') : t('home.console.startBtn') }}
+          </Btn>
+          <span v-if="!files.length" class="console-warning">
+            {{ t('home.console.needFiles') }}
+          </span>
+          <span v-else-if="!simulationPrompt.trim()" class="console-warning">
+            {{ t('home.console.needPrompt') }}
+          </span>
+          <span v-else-if="!servicesReady" class="console-warning">
+            Dienste nicht bereit (Neo4j/Ollama).
+          </span>
+        </div>
+        <p v-if="errorMsg" class="error-line">{{ errorMsg }}</p>
+      </section>
+
+      <!-- History section -->
+      <section id="history" class="section">
+        <HistoryDatabase />
+      </section>
+
+    </div>
+
+    <AppFooter />
+  </div>
+</template>
+
+<style scoped>
+.page {
+  background: transparent; /* body provides --bg-page (radial + cream highlight) */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Brand */
+.brand {
+  font-family: var(--ff-serif);
+  font-weight: 500;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  color: var(--ink-0);
+}
+.brand .n { color: var(--accent); font-style: italic; }
+
+/* Hero */
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--s-7);
+  padding: var(--s-9) 0 var(--s-7);
+  align-items: end;
+  border-bottom: 1px solid var(--ink-2);
+}
+.hero-left { display: flex; flex-direction: column; gap: var(--s-5); }
+.edition {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--ink-2);
+  padding-top: var(--s-3);
+  margin-bottom: var(--s-5);
+}
+.display {
+  font-family: var(--ff-serif);
+  font-weight: 300;
+  font-size: clamp(56px, 8vw, 132px);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: var(--ink-0);
+  margin: 0;
+}
+.display .it {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+.lead {
+  font-family: var(--ff-sans);
+  font-size: var(--fs-18);
+  line-height: 1.55;
+  color: var(--fg-body);
+  max-width: 56ch;
+  margin: var(--s-3) 0 0;
+}
+.hero-tags { display: flex; gap: var(--s-3); margin-top: var(--s-5); }
+
+.hero-right { display: flex; flex-direction: column; gap: var(--s-3); position: relative; }
+.portrait {
+  background: var(--paper-0);
+  aspect-ratio: 1/1;
+  overflow: hidden;
+  border-radius: var(--r-1);
+  border: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-5);
+}
+.portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.portrait-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--ink-2);
+  padding-top: var(--s-3);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.portrait-meta span:last-child { text-align: right; text-transform: none; letter-spacing: 0; font-family: var(--ff-sans); color: var(--fg-body); }
+.scroll-down {
+  position: absolute;
+  bottom: -48px;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid var(--ink-2);
+  color: var(--accent);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: var(--r-1);
+  transition: border-color 150ms ease;
+}
+.scroll-down:hover { border-color: var(--accent); }
+
+/* Section reused via global .section / .section-head */
+
+/* System metrics */
+.metrics {
+  margin-top: var(--s-7);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--rule);
+}
+.metric {
+  padding: var(--s-5) 0;
+  border-right: 1px solid var(--rule);
+  padding-right: var(--s-5);
+}
+.metric:last-child { border-right: none; }
+.metric .value {
+  font-family: var(--ff-serif);
+  font-weight: 400;
+  font-size: var(--fs-44);
+  line-height: 1.05;
+  color: var(--ink-0);
+}
+.metric .label {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-top: var(--s-2);
+}
+
+/* Workflow list */
+.workflow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.workflow li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--s-5);
+  padding: var(--s-5) 0;
+  border-top: 1px solid var(--rule);
+  align-items: baseline;
+}
+.workflow li:last-child { border-bottom: 1px solid var(--rule); }
+.step-num {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-12);
+  letter-spacing: var(--ls-mono);
+  color: var(--fg-muted);
+}
+.step-body { display: flex; flex-direction: column; gap: var(--s-2); }
+.step-title {
+  font-family: var(--ff-serif);
+  font-weight: 400;
+  font-size: var(--fs-32);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ink-0);
+}
+.step-desc {
+  font-family: var(--ff-sans);
+  font-size: var(--fs-16);
+  color: var(--fg-body);
+  max-width: 60ch;
+}
+
+/* Console */
+.console {
+  padding: var(--s-9) 0;
+  border-top: 1px solid var(--ink-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+.console-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: var(--s-3);
+}
+.console-meta {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.dropzone {
+  border: 1px dashed var(--ink-2);
+  background: var(--paper-1);
+  min-height: 180px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+  padding: var(--s-5);
+}
+.dropzone.is-dragover { background: var(--paper-2); border-color: var(--accent); }
+.dropzone.has-files { cursor: default; padding: 0; }
+.dropzone-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  height: 140px;
+  text-align: center;
+}
+.dropzone-arrow {
+  font-family: var(--ff-mono);
+  font-size: 24px;
+  color: var(--accent);
+}
+.dropzone-title {
+  font-family: var(--ff-serif);
+  font-size: var(--fs-24);
+  color: var(--ink-0);
+  font-weight: 400;
+}
+.dropzone-hint {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 1fr auto 32px;
+  gap: var(--s-4);
+  align-items: center;
+  padding: var(--s-3) var(--s-5);
+  border-bottom: 1px solid var(--paper-2);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-14);
+  color: var(--ink-0);
+}
+.file-row:last-child { border-bottom: none; }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { color: var(--fg-muted); font-size: 11px; }
+.file-remove {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+.file-remove:hover { color: var(--accent); }
+
+.prompt {
+  width: 100%;
+  background: var(--paper-1);
+  border: 1px solid var(--ink-2);
+  padding: var(--s-5);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-14);
+  line-height: 1.55;
+  color: var(--ink-0);
+  resize: vertical;
+  min-height: 160px;
+  outline: none;
+  border-radius: var(--r-1);
+}
+.prompt:focus { border-color: var(--accent); }
+.prompt::placeholder { color: var(--fg-meta); }
+
+.console-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+}
+.console-warning {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-meta);
+}
+
+.error-line {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-12);
+  color: #b00020;
+  background: var(--paper-1);
+  padding: var(--s-3);
+  border-left: 2px solid #b00020;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.status-strip {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+  flex-wrap: wrap;
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--rule);
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+}
+.status-pill.ok { color: var(--ink-0); border-color: var(--ink-2); }
+.status-pill.bad { color: #b00020; border-color: #b00020; }
+.status-refresh {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  font-family: var(--ff-mono);
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--fg-muted);
+}
+.status-refresh:hover { color: var(--accent); border-color: var(--accent); }
+.status-warn {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  color: #b00020;
+  margin: 0;
+}
+
+.model-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-5) var(--s-7);
+}
+@media (max-width: 720px) {
+  .model-grid { grid-template-columns: 1fr; }
+}
+
+/* Responsive */
+@media (max-width: 880px) {
+  .hero { grid-template-columns: 1fr; }
+  .section-head { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: 1fr; }
+  .metric { border-right: none; border-bottom: 1px solid var(--rule); }
+  .nav { grid-template-columns: 1fr; }
+  .nav-links { justify-self: start; }
+  .scroll-down { display: none; }
+}
+</style>
