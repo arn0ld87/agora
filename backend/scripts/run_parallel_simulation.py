@@ -174,6 +174,18 @@ except ImportError as e:
     sys.exit(1)
 
 
+# Import agent tools (optional — only loaded when enable_agent_tools is set)
+try:
+    from agent_tools import (
+        AgentToolRegistry,
+        ToolAwareActionLoop,
+        create_tool_aware_loop
+    )
+    AGENT_TOOLS_AVAILABLE = True
+except ImportError as _e:
+    AGENT_TOOLS_AVAILABLE = False
+
+
 # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
 TWITTER_ACTIONS = [
     ActionType.CREATE_POST,
@@ -1128,7 +1140,25 @@ async def run_twitter_simulation(
     
     # Twitter use common LLM configuration
     model = create_model(config, use_boost=False)
-    
+
+    # Initialize tool-aware action loop if enabled
+    tool_loop = None
+    enable_tools = config.get("enable_agent_tools", False)
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        log_info("Agent tools enabled — initializing tool registry...")
+        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
+        tool_loop = create_tool_aware_loop(
+            model=model,
+            config=config,
+            max_tool_calls=config.get("max_tool_calls_per_action", 2)
+        )
+        if tool_loop:
+            log_info("Tool registry ready")
+        else:
+            log_info("Tool registry initialization failed (check Neo4j credentials)")
+    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
     # OASIS Twitter uses CSV format
     profile_path = os.path.join(simulation_dir, "twitter_profiles.csv")
     if not os.path.exists(profile_path):
@@ -1250,7 +1280,35 @@ async def run_twitter_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
-        actions = {agent: LLMAction() for _, agent in active_agents}
+        # Build actions
+        if tool_loop and enable_tools:
+            actions = {}
+            for agent_id, agent in active_agents:
+                try:
+                    try:
+                        observation = result.env.get_observation(agent)
+                    except Exception:
+                        observation = "You are on Twitter. Check your timeline and decide what to do."
+
+                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                    agent_role = getattr(agent, 'profession', 'Unknown')
+                    agent_bio = getattr(agent, 'bio', '')
+
+                    action = await tool_loop.decide_action(
+                        agent=agent,
+                        observation=observation,
+                        available_actions=[a.value for a in TWITTER_ACTIONS],
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        agent_bio=agent_bio,
+                        language=config.get("language", "de")
+                    )
+                    actions[agent] = action
+                except Exception as e:
+                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
+                    actions[agent] = LLMAction()
+        else:
+            actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
         
         # Get actual executed actions from Database and log
@@ -1320,7 +1378,25 @@ async def run_reddit_simulation(
     
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
-    
+
+    # Initialize tool-aware action loop if enabled
+    tool_loop = None
+    enable_tools = config.get("enable_agent_tools", False)
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        log_info("Agent tools enabled — initializing tool registry...")
+        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
+        tool_loop = create_tool_aware_loop(
+            model=model,
+            config=config,
+            max_tool_calls=config.get("max_tool_calls_per_action", 2)
+        )
+        if tool_loop:
+            log_info("Tool registry ready")
+        else:
+            log_info("Tool registry initialization failed (check Neo4j credentials)")
+    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
     profile_path = os.path.join(simulation_dir, "reddit_profiles.json")
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
@@ -1449,7 +1525,35 @@ async def run_reddit_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
-        actions = {agent: LLMAction() for _, agent in active_agents}
+        # Build actions
+        if tool_loop and enable_tools:
+            actions = {}
+            for agent_id, agent in active_agents:
+                try:
+                    try:
+                        observation = result.env.get_observation(agent)
+                    except Exception:
+                        observation = "You are on Reddit. Check the feed and decide what to do."
+
+                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                    agent_role = getattr(agent, 'profession', 'Unknown')
+                    agent_bio = getattr(agent, 'bio', '')
+
+                    action = await tool_loop.decide_action(
+                        agent=agent,
+                        observation=observation,
+                        available_actions=[a.value for a in REDDIT_ACTIONS],
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        agent_bio=agent_bio,
+                        language=config.get("language", "de")
+                    )
+                    actions[agent] = action
+                except Exception as e:
+                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
+                    actions[agent] = LLMAction()
+        else:
+            actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
         
         # Get actual executed actions from Database and log

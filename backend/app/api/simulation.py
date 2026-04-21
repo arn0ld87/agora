@@ -16,7 +16,7 @@ from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..models.project import ProjectManager
 
-logger = get_logger('mirofish.api.simulation')
+logger = get_logger('agora.api.simulation')
 
 
 # Interview prompt optimization prefix
@@ -40,6 +40,77 @@ def optimize_interview_prompt(prompt: str) -> str:
     if prompt.startswith(INTERVIEW_PROMPT_PREFIX):
         return prompt
     return f"{INTERVIEW_PROMPT_PREFIX}{prompt}"
+
+
+# ============== Model listing (Phase 3 — UI dropdown) ==============
+
+@simulation_bp.route('/available-models', methods=['GET'])
+def get_available_models():
+    """
+    Return the curated LLM presets plus locally installed Ollama models.
+
+    Frontend uses this to populate the model selector in step 2.
+    Failure to reach Ollama is non-fatal — we still return the presets.
+    """
+    import requests
+
+    presets = list(Config.LLM_MODEL_PRESETS or [])
+    ollama_models = []
+    ollama_error = None
+
+    # Derive the Ollama base URL from the OpenAI-style LLM_BASE_URL
+    # ("http://host:11434/v1" → "http://host:11434"); fall back to env if odd.
+    base = (Config.LLM_BASE_URL or '').rstrip('/')
+    if base.endswith('/v1'):
+        base = base[:-3]
+    if not base:
+        base = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
+
+    try:
+        resp = requests.get(f"{base}/api/tags", timeout=2.5)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+        for m in payload.get('models', []) or []:
+            name = m.get('name')
+            if not name:
+                continue
+            details = m.get('details') or {}
+            ollama_models.append({
+                "name": name,
+                "label": name,
+                "size": m.get('size'),
+                "family": details.get('family'),
+                "parameter_size": details.get('parameter_size'),
+                "kind": "ollama",
+            })
+    except Exception as e:
+        ollama_error = str(e)
+        logger.info(f"Could not reach Ollama at {base}: {e}")
+
+    # Probe Neo4j too — backend can report its own health to the UI in one round-trip.
+    storage = current_app.extensions.get('neo4j_storage')
+    neo4j_reachable = storage is not None
+    neo4j_error = None
+    if storage is None:
+        neo4j_error = "Neo4j storage not initialised — check NEO4J_URI / NEO4J_PASSWORD and that Neo4j is running."
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "ollama": ollama_models,
+            "presets": presets,
+            "current_default": Config.LLM_MODEL_NAME,
+            "ollama_base_url": base,
+            "ollama_reachable": ollama_error is None,
+            "ollama_error": ollama_error,
+            "neo4j_reachable": neo4j_reachable,
+            "neo4j_error": neo4j_error,
+            "neo4j_uri": Config.NEO4J_URI,
+            "default_language": Config.AGENT_LANGUAGE,
+            "agent_tools_enabled": Config.ENABLE_AGENT_TOOLS,
+            "max_tool_calls_per_action": Config.MAX_TOOL_CALLS_PER_ACTION,
+        }
+    })
 
 
 # ============== Entity reading interface ==============
@@ -162,7 +233,7 @@ def create_simulation():
     Request (JSON):
         {
             "project_id": "proj_xxxx",      // Required
-            "graph_id": "mirofish_xxxx",    // Optional, if not provided, get from project
+            "graph_id": "agora_xxxx",    // Optional, if not provided, get from project
             "enable_twitter": true,          // Optional, default true
             "enable_reddit": true            // Optional, default true
         }
@@ -173,7 +244,7 @@ def create_simulation():
             "data": {
                 "simulation_id": "sim_xxxx",
                 "project_id": "proj_xxxx",
-                "graph_id": "mirofish_xxxx",
+                "graph_id": "agora_xxxx",
                 "status": "created",
                 "enable_twitter": true,
                 "enable_reddit": true,
@@ -457,6 +528,17 @@ def prepare_simulation():
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
         parallel_profile_count = data.get('parallel_profile_count', 5)
+        # Optional cap on number of agents (user-controlled in Step 2).
+        max_agents_raw = data.get('max_agents')
+        try:
+            max_agents = int(max_agents_raw) if max_agents_raw not in (None, '', 0) else None
+        except (TypeError, ValueError):
+            max_agents = None
+        # Per-simulation overrides (Phase 3 + 5)
+        llm_model_override = (data.get('llm_model') or '').strip() or None
+        agent_language_override = (data.get('language') or '').strip().lower() or None
+        if agent_language_override and agent_language_override not in ('de', 'en'):
+            agent_language_override = None
         
         # ========== Get GraphStorage（Capture reference before background task starts） ==========
         storage = current_app.extensions.get('neo4j_storage')
@@ -475,7 +557,11 @@ def prepare_simulation():
                 enrich_with_edges=False  # No edge information，Speed up
             )
             # Save entity count to status（For frontend to get immediately）
-            state.entities_count = filtered_preview.filtered_count
+            # Respect user-supplied max_agents cap so the preview matches reality.
+            preview_count = filtered_preview.filtered_count
+            if max_agents is not None and max_agents > 0:
+                preview_count = min(preview_count, max_agents)
+            state.entities_count = preview_count
             state.entity_types = list(filtered_preview.entity_types)
             logger.info(f"Expected entity count: {filtered_preview.filtered_count}, [type][model]: {filtered_preview.entity_types}")
         except Exception as e:
@@ -580,6 +666,9 @@ def prepare_simulation():
                     progress_callback=progress_callback,
                     parallel_profile_count=parallel_profile_count,
                     storage=storage,
+                    llm_model=llm_model_override,
+                    language=agent_language_override,
+                    max_agents=max_agents,
                 )
                 
                 # Task complete
@@ -1127,6 +1216,146 @@ def get_simulation_profiles_realtime(simulation_id: str):
         }), 500
 
 
+def _load_profiles_file(sim_dir: str, platform: str):
+    """Read reddit_profiles.json (returns list) or twitter_profiles.csv (returns list of dicts)."""
+    import json, csv
+    if platform == 'reddit':
+        path = os.path.join(sim_dir, 'reddit_profiles.json')
+        if not os.path.exists(path):
+            return path, []
+        with open(path, 'r', encoding='utf-8') as f:
+            try:
+                return path, json.load(f)
+            except json.JSONDecodeError:
+                return path, []
+    else:
+        path = os.path.join(sim_dir, 'twitter_profiles.csv')
+        if not os.path.exists(path):
+            return path, []
+        with open(path, 'r', encoding='utf-8') as f:
+            return path, list(csv.DictReader(f))
+
+
+def _save_profiles_file(path: str, profiles: list, platform: str):
+    import json, csv
+    if platform == 'reddit':
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(profiles, f, ensure_ascii=False, indent=2)
+    else:
+        if not profiles:
+            with open(path, 'w', encoding='utf-8', newline='') as f:
+                f.write('')
+            return
+        fieldnames = list(profiles[0].keys())
+        with open(path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(profiles)
+
+
+@simulation_bp.route('/<simulation_id>/profiles', methods=['POST'])
+def add_simulation_profile(simulation_id: str):
+    """
+    Append a manually authored persona to the simulation.
+
+    Request JSON (Reddit/default shape; any extra fields are preserved):
+        {
+            "platform": "reddit" | "twitter"  (optional, default "reddit"),
+            "username": "...",
+            "name": "...",
+            "bio": "...",
+            "persona": "...",
+            "profession": "...",
+            "age": 30, "gender": "other", "mbti": "INTJ",
+            "country": "DE",
+            "interested_topics": [...]
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        platform = data.get('platform', 'reddit')
+
+        sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+        if not os.path.exists(sim_dir):
+            return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
+
+        path, profiles = _load_profiles_file(sim_dir, platform)
+
+        # Assign a fresh user_id and ensure username is unique within the list.
+        existing_ids = [int(p.get('user_id', 0) or 0) for p in profiles]
+        next_id = (max(existing_ids) + 1) if existing_ids else 0
+        username = (data.get('username') or f'user_{next_id}').strip()
+        existing_names = {str(p.get('username', '')).lower() for p in profiles}
+        if username.lower() in existing_names:
+            base = username
+            i = 1
+            while f"{base}_{i}".lower() in existing_names:
+                i += 1
+            username = f"{base}_{i}"
+
+        new_profile = {
+            'user_id': next_id,
+            'username': username,
+            'name': data.get('name') or username,
+            'bio': data.get('bio', ''),
+            'persona': data.get('persona', ''),
+            'age': data.get('age'),
+            'gender': data.get('gender', 'other'),
+            'mbti': data.get('mbti', ''),
+            'country': data.get('country', 'DE'),
+            'profession': data.get('profession', ''),
+            'interested_topics': data.get('interested_topics', []),
+            'source_entity_uuid': data.get('source_entity_uuid'),
+            'source_entity_type': data.get('source_entity_type', 'manual'),
+            'is_manual': True,
+        }
+        # Carry over any additional keys the caller supplied.
+        for k, v in data.items():
+            if k in ('platform',) or k in new_profile:
+                continue
+            new_profile[k] = v
+
+        profiles.append(new_profile)
+        _save_profiles_file(path, profiles, platform)
+
+        return jsonify({"success": True, "data": {
+            "platform": platform,
+            "count": len(profiles),
+            "profile": new_profile,
+        }})
+
+    except Exception as e:
+        logger.error(f"Failed to add persona: {e}")
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@simulation_bp.route('/<simulation_id>/profiles/<username>', methods=['DELETE'])
+def delete_simulation_profile(simulation_id: str, username: str):
+    """Remove a persona from reddit_profiles.json / twitter_profiles.csv by username."""
+    try:
+        platform = request.args.get('platform', 'reddit')
+        sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+        if not os.path.exists(sim_dir):
+            return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
+
+        path, profiles = _load_profiles_file(sim_dir, platform)
+        before = len(profiles)
+        profiles = [p for p in profiles if str(p.get('username', '')) != username]
+        if len(profiles) == before:
+            return jsonify({"success": False, "error": f"Persona not found: {username}"}), 404
+
+        _save_profiles_file(path, profiles, platform)
+        return jsonify({"success": True, "data": {
+            "platform": platform,
+            "count": len(profiles),
+            "removed": username,
+        }})
+
+    except Exception as e:
+        logger.error(f"Failed to delete persona: {e}")
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
 def get_simulation_config_realtime(simulation_id: str):
     """
@@ -1373,7 +1602,7 @@ def generate_profiles():
     
     Request (JSON):
         {
-            "graph_id": "mirofish_xxxx",     // Required
+            "graph_id": "agora_xxxx",     // Required
             "entity_types": ["Student"],      // Optional
             "use_llm": true,                  // Optional
             "platform": "reddit"              // Optional
@@ -1695,7 +1924,61 @@ def stop_simulation():
         }), 500
 
 
+# ============== Pause / Resume (Phase 4 — soft-pause between rounds) ==============
+
+def _simulation_dir(simulation_id: str) -> str:
+    return os.path.join(SimulationRunner.RUN_STATE_DIR, simulation_id)
+
+
+@simulation_bp.route('/<simulation_id>/pause', methods=['POST'])
+def pause_simulation(simulation_id: str):
+    """Set the soft-pause flag — OASIS halts after the current round ends."""
+    from ..services.simulation_ipc import set_pause_state
+    sim_dir = _simulation_dir(simulation_id)
+    if not os.path.isdir(sim_dir):
+        return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
+    state = set_pause_state(sim_dir, True)
+    logger.info(f"Pause requested for {simulation_id}")
+    return jsonify({"success": True, "data": {"simulation_id": simulation_id, "control_state": state}})
+
+
+@simulation_bp.route('/<simulation_id>/resume', methods=['POST'])
+def resume_simulation(simulation_id: str):
+    """Clear the pause flag so the OASIS subprocess continues with the next round."""
+    from ..services.simulation_ipc import set_pause_state
+    sim_dir = _simulation_dir(simulation_id)
+    if not os.path.isdir(sim_dir):
+        return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
+    state = set_pause_state(sim_dir, False)
+    logger.info(f"Resume requested for {simulation_id}")
+    return jsonify({"success": True, "data": {"simulation_id": simulation_id, "control_state": state}})
+
+
 # ============== Real-time status monitoring interface ==============
+
+@simulation_bp.route('/<simulation_id>/console-log', methods=['GET'])
+def get_simulation_console_log(simulation_id: str):
+    """
+    Stream raw stdout/stderr of the OASIS subprocess for this simulation.
+
+    Query params:
+        from_line: skip lines before this index (for incremental polling)
+
+    Returns:
+        { "success": true, "data": { "lines": [...], "total_lines": N, "from_line": K, "next_line": N, "has_more": false } }
+    """
+    try:
+        from_line = request.args.get('from_line', 0, type=int)
+        data = SimulationRunner.get_console_log(simulation_id, from_line=from_line)
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        logger.error(f"Failed to read simulation console log: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }), 500
+
 
 @simulation_bp.route('/<simulation_id>/run-status', methods=['GET'])
 def get_run_status(simulation_id: str):
@@ -1724,8 +2007,10 @@ def get_run_status(simulation_id: str):
         }
     """
     try:
+        from ..services.simulation_ipc import read_control_state
         run_state = SimulationRunner.get_run_state(simulation_id)
-        
+        control = read_control_state(_simulation_dir(simulation_id))
+
         if not run_state:
             return jsonify({
                 "success": True,
@@ -1738,14 +2023,14 @@ def get_run_status(simulation_id: str):
                     "twitter_actions_count": 0,
                     "reddit_actions_count": 0,
                     "total_actions_count": 0,
+                    "paused": bool(control.get("paused")),
                 }
             })
-        
-        return jsonify({
-            "success": True,
-            "data": run_state.to_dict()
-        })
-        
+
+        data = run_state.to_dict()
+        data["paused"] = bool(control.get("paused"))
+        return jsonify({"success": True, "data": data})
+
     except Exception as e:
         logger.error(f"Failed to get running status: {str(e)}")
         return jsonify({

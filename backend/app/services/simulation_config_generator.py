@@ -22,25 +22,25 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 
-logger = get_logger('mirofish.simulation_config')
+logger = get_logger('agora.simulation_config')
 
-# Time zone configuration for Chinese work schedules (Beijing Time)
-CHINA_TIMEZONE_CONFIG = {
+# Default DACH social activity timing profile (Europe/Berlin).
+DACH_TIMEZONE_CONFIG = {
     # Dead hours (almost no activity)
     "dead_hours": [0, 1, 2, 3, 4, 5],
     # Morning hours (gradually waking up)
     "morning_hours": [6, 7, 8],
     # Work hours
-    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16],
     # Evening peak (most active)
-    "peak_hours": [19, 20, 21, 22],
+    "peak_hours": [18, 19, 20, 21, 22],
     # Night hours (activity decreases)
     "night_hours": [23],
     # Activity multipliers
     "activity_multipliers": {
         "dead": 0.05,      # Almost no one in early morning
         "morning": 0.4,    # Gradually active in morning
-        "work": 0.7,       # Medium activity during work hours
+        "work": 0.6,       # Lower activity during German office hours
         "peak": 1.5,       # Evening peak
         "night": 0.5       # Activity decreases at night
     }
@@ -81,7 +81,7 @@ class AgentActivityConfig:
 
 @dataclass
 class TimeSimulationConfig:
-    """Time simulation configuration (based on Chinese work schedule habits)"""
+    """Time simulation configuration (default profile: DACH / Europe-Berlin)"""
     # Total simulation time (simulation hours)
     total_simulation_hours: int = 72  # Default 72 hours (3 days)
 
@@ -92,8 +92,8 @@ class TimeSimulationConfig:
     agents_per_hour_min: int = 5
     agents_per_hour_max: int = 20
 
-    # Peak hours (evening 19-22, most active time for Chinese people)
-    peak_hours: List[int] = field(default_factory=lambda: [19, 20, 21, 22])
+    # Peak hours (evening after work)
+    peak_hours: List[int] = field(default_factory=lambda: [18, 19, 20, 21, 22])
     peak_activity_multiplier: float = 1.5
 
     # Off-peak hours (early morning 0-5, almost no activity)
@@ -105,8 +105,8 @@ class TimeSimulationConfig:
     morning_activity_multiplier: float = 0.4
 
     # Work hours
-    work_hours: List[int] = field(default_factory=lambda: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
-    work_activity_multiplier: float = 0.7
+    work_hours: List[int] = field(default_factory=lambda: [9, 10, 11, 12, 13, 14, 15, 16])
+    work_activity_multiplier: float = 0.6
 
 
 @dataclass
@@ -168,6 +168,15 @@ class SimulationParameters:
     llm_model: str = ""
     llm_base_url: str = ""
 
+    # Agent language ("de" or "en") — controls posts/replies language inside OASIS.
+    language: str = "de"
+
+    # Tool-use configuration (injected into subprocess for agent tool calling)
+    enable_agent_tools: bool = False
+    max_tool_calls_per_action: int = 2
+    neo4j_uri: str = ""
+    neo4j_user: str = "neo4j"
+
     # Generation metadata
     generated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     generation_reasoning: str = ""  # LLM reasoning explanation
@@ -187,6 +196,11 @@ class SimulationParameters:
             "reddit_config": asdict(self.reddit_config) if self.reddit_config else None,
             "llm_model": self.llm_model,
             "llm_base_url": self.llm_base_url,
+            "language": self.language,
+            "enable_agent_tools": self.enable_agent_tools,
+            "max_tool_calls_per_action": self.max_tool_calls_per_action,
+            "neo4j_uri": self.neo4j_uri,
+            "neo4j_user": self.neo4j_user,
             "generated_at": self.generated_at,
             "generation_reasoning": self.generation_reasoning,
         }
@@ -225,11 +239,14 @@ class SimulationConfigGenerator:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
+        language: Optional[str] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model_name = model_name or Config.LLM_MODEL_NAME
+        # Normalize language to two-letter code; defaults from Config.AGENT_LANGUAGE.
+        self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -238,7 +255,7 @@ class SimulationConfigGenerator:
             api_key=self.api_key,
             base_url=self.base_url
         )
-    
+
     def generate_config(
         self,
         simulation_id: str,
@@ -370,6 +387,11 @@ class SimulationConfigGenerator:
             reddit_config=reddit_config,
             llm_model=self.model_name,
             llm_base_url=self.base_url,
+            language=self.language,
+            enable_agent_tools=getattr(Config, 'ENABLE_AGENT_TOOLS', False),
+            max_tool_calls_per_action=getattr(Config, 'MAX_TOOL_CALLS_PER_ACTION', 2),
+            neo4j_uri=Config.NEO4J_URI,
+            neo4j_user=Config.NEO4J_USER,
             generation_reasoning=" | ".join(reasoning_parts)
         )
         
@@ -539,6 +561,8 @@ class SimulationConfigGenerator:
         # Calculate maximum allowed value (90% of agents)
         max_agents_allowed = max(1, int(num_entities * 0.9))
 
+        time_profile = getattr(Config, 'TIME_PROFILE', 'dach_default')
+
         prompt = f"""Based on the following simulation requirements, generate time simulation configuration.
 
 {context_truncated}
@@ -546,12 +570,12 @@ class SimulationConfigGenerator:
 ## Task
 Please generate time configuration JSON.
 
-### Basic principles (for reference only, adjust flexibly based on event nature and participant characteristics):
-- User base is Chinese people, must follow Beijing Time work schedule habits
+### Basic principles (profile: {time_profile}, Europe/Berlin)
+- Use DACH / German social media habits unless the scenario explicitly says otherwise
 - 0-5am almost no activity (activity coefficient 0.05)
 - 6-8am gradually active (activity coefficient 0.4)
-- 9-18 work time moderately active (activity coefficient 0.7)
-- 19-22 evening is peak period (activity coefficient 1.5)
+- 9-17 work time has reduced activity (activity coefficient 0.6)
+- 18-22 evening after-work period is peak activity (activity coefficient 1.5)
 - After 23 activity decreases (activity coefficient 0.5)
 - General rule: low activity early morning, gradually increasing morning, moderate work time, evening peak
 - **Important**: Example values below are for reference only, adjust specific time periods based on event nature and participant characteristics
@@ -566,10 +590,10 @@ Example:
     "minutes_per_round": 60,
     "agents_per_hour_min": 5,
     "agents_per_hour_max": 50,
-    "peak_hours": [19, 20, 21, 22],
+    "peak_hours": [18, 19, 20, 21, 22],
     "off_peak_hours": [0, 1, 2, 3, 4, 5],
     "morning_hours": [6, 7, 8],
-    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "work_hours": [9, 10, 11, 12, 13, 14, 15, 16],
     "reasoning": "Explanation of time configuration for this event"
 }}
 
@@ -584,7 +608,7 @@ Field description:
 - work_hours (int array): Work hours
 - reasoning (string): Brief explanation for this configuration"""
 
-        system_prompt = "You are a social media simulation expert. Return pure JSON format, time configuration must follow Chinese work schedule habits."
+        system_prompt = "You are a social media simulation expert. Return pure JSON. Use DACH / Europe-Berlin activity habits by default."
 
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
@@ -593,24 +617,64 @@ Field description:
             return self._get_default_time_config(num_entities)
     
     def _get_default_time_config(self, num_entities: int) -> Dict[str, Any]:
-        """Get default time configuration (Chinese work schedule)"""
+        """Get default time configuration (DACH / Europe-Berlin profile)"""
         return {
             "total_simulation_hours": 72,
             "minutes_per_round": 60,  # 1 hour per round, speed up time
             "agents_per_hour_min": max(1, num_entities // 15),
             "agents_per_hour_max": max(5, num_entities // 5),
-            "peak_hours": [19, 20, 21, 22],
+            "peak_hours": [18, 19, 20, 21, 22],
             "off_peak_hours": [0, 1, 2, 3, 4, 5],
             "morning_hours": [6, 7, 8],
-            "work_hours": [9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-            "reasoning": "Using default Chinese work schedule configuration (1 hour per round)"
+            "work_hours": [9, 10, 11, 12, 13, 14, 15, 16],
+            "reasoning": "Using default DACH / Europe-Berlin activity profile (1 hour per round)"
         }
+
+    @staticmethod
+    def _coerce_int(value: Any, default: int) -> int:
+        """Coerce LLM output to int. Some models (Gemma 4) return {"value": N, "reasoning": "..."} instead of N."""
+        if isinstance(value, dict):
+            for key in ("value", "val", "n", "amount", "count"):
+                if key in value:
+                    value = value[key]
+                    break
+            else:
+                return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _coerce_int_list(value: Any, default: List[int]) -> List[int]:
+        """Coerce LLM output to list of ints, tolerating nested dicts."""
+        if isinstance(value, dict):
+            for key in ("value", "hours", "list", "items"):
+                if key in value:
+                    value = value[key]
+                    break
+            else:
+                return default
+        if not isinstance(value, list):
+            return default
+        out: List[int] = []
+        for item in value:
+            if isinstance(item, dict):
+                for key in ("value", "hour", "n"):
+                    if key in item:
+                        item = item[key]
+                        break
+            try:
+                out.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return out or default
 
     def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
         """Parse time configuration result and verify agents_per_hour doesn't exceed total agents"""
-        # Get original values
-        agents_per_hour_min = result.get("agents_per_hour_min", max(1, num_entities // 15))
-        agents_per_hour_max = result.get("agents_per_hour_max", max(5, num_entities // 5))
+        # Get original values (defensive: some models wrap scalars in {"value": N, ...})
+        agents_per_hour_min = self._coerce_int(result.get("agents_per_hour_min"), max(1, num_entities // 15))
+        agents_per_hour_max = self._coerce_int(result.get("agents_per_hour_max"), max(5, num_entities // 5))
 
         # Verify and correct: ensure not exceeding total agents
         if agents_per_hour_min > num_entities:
@@ -627,16 +691,16 @@ Field description:
             logger.warning(f"agents_per_hour_min >= max, corrected to {agents_per_hour_min}")
 
         return TimeSimulationConfig(
-            total_simulation_hours=result.get("total_simulation_hours", 72),
-            minutes_per_round=result.get("minutes_per_round", 60),  # Default 1 hour per round
+            total_simulation_hours=self._coerce_int(result.get("total_simulation_hours"), 72),
+            minutes_per_round=self._coerce_int(result.get("minutes_per_round"), 60),
             agents_per_hour_min=agents_per_hour_min,
             agents_per_hour_max=agents_per_hour_max,
-            peak_hours=result.get("peak_hours", [19, 20, 21, 22]),
-            off_peak_hours=result.get("off_peak_hours", [0, 1, 2, 3, 4, 5]),
-            off_peak_activity_multiplier=0.05,  # Almost no one in early morning
-            morning_hours=result.get("morning_hours", [6, 7, 8]),
+            peak_hours=self._coerce_int_list(result.get("peak_hours"), [19, 20, 21, 22]),
+            off_peak_hours=self._coerce_int_list(result.get("off_peak_hours"), [0, 1, 2, 3, 4, 5]),
+            off_peak_activity_multiplier=0.05,
+            morning_hours=self._coerce_int_list(result.get("morning_hours"), [6, 7, 8]),
             morning_activity_multiplier=0.4,
-            work_hours=result.get("work_hours", list(range(9, 19))),
+            work_hours=self._coerce_int_list(result.get("work_hours"), list(range(9, 19))),
             work_activity_multiplier=0.7,
             peak_activity_multiplier=1.5
         )
@@ -838,7 +902,7 @@ Simulation Requirements: {simulation_requirement}
 
 ## Task
 Generate activity configuration for each entity, noting:
-- **Time follows Chinese work schedule**: Almost no activity 0-5am, most active 19-22
+- **Time follows DACH / Europe-Berlin habits**: Almost no activity 0-5am, strongest after-work activity 18-22
 - **Official institutions** (University/GovernmentAgency): Low activity (0.1-0.3), active during work hours (9-17), slow response (60-240 min), high influence (2.5-3.0)
 - **Media** (MediaOutlet): Medium activity (0.4-0.6), active all day (8-23), fast response (5-30 min), high influence (2.0-2.5)
 - **Individuals** (Student/Person/Alumni): High activity (0.6-0.9), mainly evening activity (18-23), fast response (1-15 min), low influence (0.8-1.2)
@@ -852,7 +916,7 @@ Return JSON format (no markdown):
             "activity_level": <0.0-1.0>,
             "posts_per_hour": <posting frequency>,
             "comments_per_hour": <comment frequency>,
-            "active_hours": [<active hours list, consider Chinese work schedule>],
+            "active_hours": [<active hours list, consider DACH / Europe-Berlin habits>],
             "response_delay_min": <minimum response delay minutes>,
             "response_delay_max": <maximum response delay minutes>,
             "sentiment_bias": <-1.0 to 1.0>,
@@ -863,7 +927,7 @@ Return JSON format (no markdown):
     ]
 }}"""
 
-        system_prompt = "You are a social media behavior analysis expert. Return pure JSON, configuration must follow Chinese work schedule habits."
+        system_prompt = "You are a social media behavior analysis expert. Return pure JSON and use DACH / Europe-Berlin activity habits by default."
 
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
@@ -902,7 +966,7 @@ Return JSON format (no markdown):
         return configs
     
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
-        """Generate single agent configuration based on rules (Chinese work schedule)"""
+        """Generate single agent configuration based on DACH timing rules."""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
 
         if entity_type in ["university", "governmentagency", "ngo"]:
@@ -984,4 +1048,3 @@ Return JSON format (no markdown):
                 "influence_weight": 1.0
             }
     
-
