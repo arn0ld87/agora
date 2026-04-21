@@ -466,7 +466,7 @@ class RedditSimulationRunner:
         
         # If not in .env, use config as fallback
         if not llm_model:
-            llm_model = self.config.get("llm_model", "gpt-4o-mini")
+            llm_model = self.config.get("llm_model", "qwen3-coder-next:cloud")
         
         # Set environment variables required by camel-ai
         if llm_api_key:
@@ -483,6 +483,13 @@ class RedditSimulationRunner:
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
+            model_config_dict={
+                "max_tokens": 8192,
+                "extra_body": {
+                    "think": os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes"),
+                    "options": {"num_ctx": int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))},
+                },
+            },
         )
     
     def _get_active_agents_for_round(

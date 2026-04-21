@@ -165,6 +165,31 @@ class OasisProfileGenerator:
         "Canada", "Australia", "Brazil", "India", "South Korea"
     ]
 
+    # DACH name pool used when the LLM fallback kicks in for individuals.
+    DACH_FIRST_NAMES = [
+        "Lena", "Marie", "Sophie", "Hannah", "Emma", "Laura", "Julia", "Katharina",
+        "Anna", "Sarah", "Lisa", "Nora", "Clara", "Mia", "Leonie",
+        "Jonas", "Leon", "Felix", "Maximilian", "Tim", "Lukas", "Paul", "Julian",
+        "Niklas", "Jan", "Philipp", "David", "Moritz", "Finn", "Tobias",
+        "Alex", "Kim", "Robin", "Sam",  # geschlechtsneutral / nonbinary-freundlich
+    ]
+    DACH_LAST_NAMES = [
+        "Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner",
+        "Becker", "Schulz", "Hoffmann", "Schäfer", "Koch", "Bauer", "Richter",
+        "Klein", "Wolf", "Neumann", "Schröder", "Zimmermann", "Braun", "Krüger",
+        "Hofmann", "Hartmann", "Lange", "Werner", "Krause", "Lehmann", "Schmitz",
+        "Maier", "König"
+    ]
+
+    @classmethod
+    def _pick_dach_name(cls) -> str:
+        return f"{random.choice(cls.DACH_FIRST_NAMES)} {random.choice(cls.DACH_LAST_NAMES)}"
+
+    @staticmethod
+    def _pick_individual_gender() -> str:
+        # ~47% male, ~47% female, ~6% nonbinary (statistisch grob realistisch, genug Varianz)
+        return random.choices(["male", "female", "nonbinary"], weights=[47, 47, 6], k=1)[0]
+
     # Individual type entities (need to generate specific personas)
     INDIVIDUAL_ENTITY_TYPES = [
         "student", "alumni", "professor", "person", "publicfigure",
@@ -223,7 +248,8 @@ class OasisProfileGenerator:
         """
         entity_type = entity.get_entity_type() or "Entity"
 
-        # Basic information
+        # Fallback-Basics: echter Entity-Name + abgeleiteter Username.
+        # Werden später überschrieben, wenn LLM/Rule-based display_name + handle liefern.
         name = entity.name
         user_name = self._generate_username(name)
 
@@ -248,6 +274,16 @@ class OasisProfileGenerator:
                 entity_attributes=entity.attributes
             )
         
+        # LLM/Rule-based darf display_name (echter Name) + handle (kurzes Social-Handle)
+        # überschreiben. So wird aus Entity "GraphRAG" z.B. Person "Lena Hoffmann" mit
+        # Handle "lena_hoffmann" oder Organisation "Docker Inc." mit "docker".
+        display_name = (profile_data.get("display_name") or "").strip()
+        if display_name:
+            name = display_name
+        handle = (profile_data.get("handle") or "").strip()
+        if handle:
+            user_name = self._generate_username(handle)
+
         return OasisAgentProfile(
             user_id=user_id,
             user_name=user_name,
@@ -657,8 +693,10 @@ Kontext:
 
 Antworte als JSON mit folgenden Feldern:
 
-1. bio: Social-Media-Bio, max. 200 Zeichen, auf Deutsch.
-2. persona: Ausführliche Personenbeschreibung (rund 1500–2000 Wörter, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
+1. display_name: Echter Vor- und Nachname einer Person im DACH-Raum (z. B. "Lena Hoffmann", "Marcel Schmitz"). WICHTIG: Nur dann den tatsächlichen Namen einer realen Person nehmen, wenn "{entity_name}" selbst bereits ein Personenname ist UND diese Person in der Realität so heißt. Bei Rollen ("IT-Umschüler"), Themen ("GraphRAG"), Produkten ("Agora") oder Berufsbezeichnungen IMMER einen anderen, frei gewählten DACH-Namen nehmen — nicht den Namen einer im Kontext erwähnten Person übernehmen. Jede Persona soll einen EIGENEN Namen haben.
+2. handle: Kurzes Social-Media-Handle in Kleinbuchstaben ohne Leerzeichen (z. B. "lena_hoffmann" oder "marcelschmitz"). Keine Zahlen anhängen — das passiert später.
+3. bio: Social-Media-Bio, max. 200 Zeichen, auf Deutsch.
+4. persona: Ausführliche Personenbeschreibung (rund 1500–2000 Wörter, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
    - Eckdaten (Alter, Beruf, Bildungsweg, Wohnort)
    - Hintergrund (prägende Erfahrungen, Bezug zu Ereignissen, soziales Umfeld)
    - Persönlichkeit (MBTI, Kernzüge, emotionaler Ausdruck)
@@ -666,18 +704,19 @@ Antworte als JSON mit folgenden Feldern:
    - Haltungen und Meinungen (zu zentralen Themen, was emotional triggert)
    - Eigenheiten (Sprachmarotten, besondere Erfahrungen, Hobbys)
    - Erinnerungen (Verbindung zu den Ereignissen, frühere Reaktionen)
-3. age: Alter als Ganzzahl (integer)
-4. gender: "male" oder "female" (englischsprachiger Wert, OASIS-Vorgabe)
-5. mbti: MBTI-Typ (z. B. INTJ, ENFP)
-6. country: ISO-Land in Englisch (z. B. "DE", "US")
-7. profession: Beruf (auf Deutsch)
-8. interested_topics: Array deutscher Themen-Strings
+5. age: Alter als Ganzzahl, frei gewählt im Bereich 18–75 — variiere bewusst, vermeide Standardalter wie 30/35/40.
+6. gender: Genau einer von "male", "female", "nonbinary". KEIN "other" — das ist Institutionen vorbehalten.
+7. mbti: MBTI-Typ (z. B. INTJ, ENFP)
+8. country: ISO-Land in Englisch (z. B. "DE", "US")
+9. profession: Beruf (auf Deutsch)
+10. interested_topics: Array deutscher Themen-Strings
 
 Wichtig:
 - Antworte ausschließlich mit JSON, keine zusätzlichen Erklärungen.
 - Alle Texte in bio und persona sind auf Deutsch.
 - Keine unescapten Zeilenumbrüche in Strings.
-- age muss eine Ganzzahl sein, gender entweder "male" oder "female".
+- age muss Ganzzahl, gender muss "male"/"female"/"nonbinary" sein.
+- display_name muss ein echter Personenname sein, nicht der abstrakte Entity-Begriff.
 """
 
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
@@ -692,8 +731,10 @@ Context Information:
 
 Please generate JSON containing the following fields:
 
-1. bio: Social media bio, 200 characters
-2. persona: Detailed persona description (2000 words of pure text), must include:
+1. display_name: Realistic first + last name of a person (culturally appropriate). IMPORTANT: Only use a real person's actual name if "{entity_name}" itself IS a personal name AND matches reality. For roles, topics, products, or job titles ALWAYS pick a different, freshly chosen name — do NOT reuse names of people mentioned in the context. Every persona must have its own unique name.
+2. handle: Short lowercase social handle without spaces (e.g. "lena_hoffmann"). Do not append digits.
+3. bio: Social media bio, 200 characters
+4. persona: Detailed persona description (2000 words of pure text), must include:
    - Basic information (age, profession, educational background, location)
    - Personal background (important experiences, event associations, social relationships)
    - Personality traits (MBTI type, core personality, emotional expression)
@@ -701,19 +742,19 @@ Please generate JSON containing the following fields:
    - Positions and views (attitudes toward topics, content that may provoke/touch emotions)
    - Unique features (catchphrases, special experiences, personal interests)
    - Personal memories (important part of persona, introduce this individual's association with events and their existing actions/reactions in events)
-3. age: Age as number (must be integer)
-4. gender: Gender, must be in English: "male" or "female"
-5. mbti: MBTI type (e.g., INTJ, ENFP)
-6. country: Country (use English, e.g., "US")
-7. profession: Profession
-8. interested_topics: Array of interested topics
+5. age: Age as integer, pick deliberately across 18–75 — vary it, avoid default ages like 30.
+6. gender: Exactly one of "male", "female", "nonbinary". Do NOT use "other" — that is reserved for institutions.
+7. mbti: MBTI type (e.g., INTJ, ENFP)
+8. country: Country (use English, e.g., "US")
+9. profession: Profession
+10. interested_topics: Array of interested topics
 
 Important:
 - All field values must be strings or numbers, do not use newlines
 - persona must be a coherent text description
 - Use English
-- Content must be consistent with entity information
-- age must be a valid integer, gender must be "male" or "female"
+- display_name must be a realistic personal name, not the abstract entity label.
+- age must be a valid integer, gender must be "male"/"female"/"nonbinary".
 """
 
     def _build_group_persona_prompt(
@@ -730,9 +771,9 @@ Important:
         context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
 
         if self.language == "de":
-            return f"""Erzeuge ein Social-Media-Account-Profil für die folgende Institution / Gruppe. Bleibe nah an der bekannten Realität.
+            return f"""Erzeuge einen realistischen **Menschen**, der als Repräsentantin/Repräsentant oder Mitarbeiter:in für die folgende Organisation / Gruppe auf Social Media spricht — keinen Institutions-Account. Bleibe nah an der bekannten Realität.
 
-Name: {entity_name}
+Organisation/Gruppe: {entity_name}
 Typ: {entity_type}
 Zusammenfassung: {entity_summary}
 Attribute: {attrs_str}
@@ -742,32 +783,36 @@ Kontext:
 
 Antworte als JSON mit folgenden Feldern:
 
-1. bio: Offizielle Account-Bio, max. 200 Zeichen, professionell, auf Deutsch.
-2. persona: Ausführliches Account-Profil (rund 1500–2000 Wörter, Fließtext, Deutsch). Enthalten:
-   - Institutionelle Eckdaten (offizieller Name, Rechtsform, Gründungsgeschichte, Aufgaben)
-   - Account-Positionierung (Account-Typ, Zielgruppe, Kernfunktion)
-   - Sprachstil (Wortwahl, übliche Formulierungen, Tabuthemen)
-   - Content-Profil (Inhaltstypen, Frequenz, aktive Zeiten)
-   - Haltung (offizielle Position zu Kernthemen, Umgang mit Kontroversen)
-   - Besonderheiten (vertretene Gruppen, operative Eigenheiten)
-   - Erinnerungen (Bezug zu Ereignissen, frühere Reaktionen)
-3. age: 30 (virtuelles Alter institutioneller Accounts)
-4. gender: "other"
-5. mbti: MBTI-Typ als Stilbeschreibung
-6. country: ISO-Land in Englisch (z. B. "DE")
-7. profession: Funktion der Institution (auf Deutsch)
-8. interested_topics: Array deutscher Themen-Strings
+1. display_name: Echter Vor- und Nachname einer Person aus dem DACH-Raum (z. B. "Lena Hoffmann", "Marcel Schmitz"). KEIN Organisationsname.
+2. handle: Kurzes Social-Media-Handle der Person in Kleinbuchstaben (z. B. "lena_hoffmann"). Keine Zahlen.
+3. bio: Social-Bio der Person, max. 200 Zeichen, Deutsch. Darf die Rolle in der Organisation erwähnen (z. B. "Senior Tech-Recruiter @TalentCore | Karriereberatung für Quereinsteiger").
+4. persona: Ausführliche Personen-Beschreibung (rund 1500–2000 Wörter, Fließtext, Deutsch). Enthalten:
+   - Eckdaten (Alter, Bildungsweg, Wohnort)
+   - Rolle in/Beziehung zur Organisation "{entity_name}" (Position, Dauer, Aufgaben)
+   - Persönlicher Hintergrund (wie kam sie/er dahin, prägende Erfahrungen)
+   - Persönlichkeit (MBTI, Kernzüge, emotionaler Ausdruck)
+   - Social-Media-Verhalten (Frequenz, Themen, Stil — offizielle Linie vs. persönliche Meinung)
+   - Haltungen (wo vertritt sie/er die Organisation, wo eigene Meinung)
+   - Eigenheiten (Sprachmarotten, Hobbys)
+   - Erinnerungen (Bezug zu Ereignissen im Kontext der Organisation)
+5. age: Ganzzahl 25–65 (arbeitsfähiges Alter einer:s Repräsentant:in). Variieren, nicht auf 30/40 festnageln.
+6. gender: Genau einer von "male", "female", "nonbinary". KEIN "other".
+7. mbti: MBTI-Typ (z. B. INTJ, ENFP)
+8. country: ISO-Land in Englisch (z. B. "DE")
+9. profession: Konkrete Rolle bei/Beziehung zu "{entity_name}" (z. B. "Senior Tech-Recruiter bei TalentCore GmbH", "Developer Advocate bei Docker Inc.", "Redakteur bei alexle135.de").
+10. interested_topics: Array deutscher Themen-Strings
 
 Wichtig:
 - Antworte ausschließlich mit JSON.
 - Texte auf Deutsch.
 - Keine unescapten Zeilenumbrüche.
-- age muss 30 sein, gender muss "other" sein.
+- display_name MUSS ein echter Personenname sein, NICHT der Name der Organisation.
+- gender MUSS "male"/"female"/"nonbinary" sein, age MUSS im Bereich 25–65 liegen.
 """
 
-        return f"""Generate detailed social media account profile for institutional/group entity, maximizing restoration of existing reality.
+        return f"""Generate a realistic **human person** who speaks FOR the following organization/group on social media — not an institutional account. The person can be an employee, advocate, official representative, or community member.
 
-Entity Name: {entity_name}
+Organization/Group: {entity_name}
 Entity Type: {entity_type}
 Entity Summary: {entity_summary}
 Entity Attributes: {attrs_str}
@@ -777,28 +822,31 @@ Context Information:
 
 Please generate JSON containing the following fields:
 
-1. bio: Official account bio, 200 characters, professional and appropriate
-2. persona: Detailed account profile description (2000 words of pure text), must include:
-   - Basic institutional information (official name, organizational nature, founding background, main functions)
-   - Account positioning (account type, target audience, core functions)
-   - Speaking style (language characteristics, common expressions, taboo topics)
-   - Content publishing characteristics (content types, publishing frequency, active time periods)
-   - Position and attitude (official stance on core topics, handling of controversies)
-   - Special notes (group profiles represented, operational habits)
-   - Institutional memories (important part of institutional persona, introduce this institution's association with events and their existing actions/reactions in events)
-3. age: Fixed at 30 (virtual age of institutional account)
-4. gender: Fixed at "other" (institutional account uses other to denote non-individual)
-5. mbti: MBTI type used to describe account style, e.g., ISTJ represents rigorous conservative
-6. country: Country (use English, e.g., "US")
-7. profession: Institutional function description
-8. interested_topics: Array of focus areas
+1. display_name: Realistic first + last name of a person (culturally appropriate — e.g. "Lena Hoffmann" for DE-context, "Emily Carter" for US-context). NOT the organization's name.
+2. handle: Short lowercase social handle of the person (e.g. "lena_hoffmann"). Do not append digits.
+3. bio: Personal social bio, 200 characters. May reference the role (e.g. "Senior Recruiter @TalentCore | hiring engineers").
+4. persona: Detailed person description (2000 words of pure text), must include:
+   - Basic information (age, education, location)
+   - Role in / relationship to "{entity_name}" (position, tenure, responsibilities)
+   - Personal background (how they got there, formative experiences)
+   - Personality traits (MBTI, core personality)
+   - Social media behavior (frequency, topics, style — official line vs. personal view)
+   - Positions (where they represent the org, where they share personal opinion)
+   - Unique features (catchphrases, hobbies)
+   - Memories (connection to events in the org's context)
+5. age: Integer 25–65 (working-age representative). Vary — do not pin to 30 or 40.
+6. gender: Exactly one of "male", "female", "nonbinary". NOT "other".
+7. mbti: MBTI type (e.g., INTJ, ENFP)
+8. country: Country (use English, e.g., "DE")
+9. profession: Concrete role at/relation to "{entity_name}" (e.g. "Senior Tech Recruiter at TalentCore GmbH", "Developer Advocate at Docker Inc.").
+10. interested_topics: Array of topics
 
 Important:
 - All field values must be strings or numbers, no null values allowed
-- persona must be a coherent text description, do not use newlines
-- Use English
-- age must be integer 30, gender must be string "other"
-- Institutional account speech must match its identity positioning"""
+- display_name MUST be a real personal name, NEVER the organization's name.
+- gender MUST be "male"/"female"/"nonbinary"; age MUST be in 25–65.
+- persona must be coherent, no newlines.
+- Use English."""
     
     def _generate_profile_rule_based(
         self,
@@ -812,65 +860,82 @@ Important:
         # Generate different personas based on entity type
         entity_type_lower = entity_type.lower()
 
+        # Personen-Fallback: echter DACH-Name + breite Altersstreuung + realistisches Gender.
         if entity_type_lower in ["student", "alumni"]:
+            dach = self._pick_dach_name()
             return {
+                "display_name": dach,
+                "handle": dach.lower().replace(" ", "_"),
                 "bio": f"{entity_type} with interests in academics and social issues.",
-                "persona": f"{entity_name} is a {entity_type.lower()} who is actively engaged in academic and social discussions. They enjoy sharing perspectives and connecting with peers.",
-                "age": random.randint(18, 30),
-                "gender": random.choice(["male", "female"]),
+                "persona": f"{dach} ist {entity_type.lower()} und aktiv in akademischen und sozialen Diskussionen. Teilt Perspektiven und vernetzt sich mit Peers.",
+                "age": random.randint(18, 32),
+                "gender": self._pick_individual_gender(),
                 "mbti": random.choice(self.MBTI_TYPES),
-                "country": random.choice(self.COUNTRIES),
+                "country": "DE",
                 "profession": "Student",
-                "interested_topics": ["Education", "Social Issues", "Technology"],
+                "interested_topics": ["Bildung", "Gesellschaft", "Technologie"],
             }
 
         elif entity_type_lower in ["publicfigure", "expert", "faculty"]:
+            dach = self._pick_dach_name()
             return {
-                "bio": f"Expert and thought leader in their field.",
-                "persona": f"{entity_name} is a recognized {entity_type.lower()} who shares insights and opinions on important matters. They are known for their expertise and influence in public discourse.",
-                "age": random.randint(35, 60),
-                "gender": random.choice(["male", "female"]),
+                "display_name": dach,
+                "handle": dach.lower().replace(" ", "_"),
+                "bio": "Expert and thought leader in their field.",
+                "persona": f"{dach} ist eine anerkannte Fachperson und teilt Einschätzungen zu relevanten Themen. Bekannt für Expertise und Einfluss im öffentlichen Diskurs.",
+                "age": random.randint(32, 68),
+                "gender": self._pick_individual_gender(),
                 "mbti": random.choice(["ENTJ", "INTJ", "ENTP", "INTP"]),
-                "country": random.choice(self.COUNTRIES),
-                "profession": entity_attributes.get("occupation", "Expert"),
-                "interested_topics": ["Politics", "Economics", "Culture & Society"],
+                "country": "DE",
+                "profession": entity_attributes.get("occupation", "Fachexpertin/Fachexperte"),
+                "interested_topics": ["Politik", "Wirtschaft", "Gesellschaft"],
             }
 
+        # Institutionen-Fallback: ECHTE PERSON als Repräsentant/in der Organisation.
         elif entity_type_lower in ["mediaoutlet", "socialmediaplatform"]:
+            dach = self._pick_dach_name()
             return {
-                "bio": f"Official account for {entity_name}. News and updates.",
-                "persona": f"{entity_name} is a media entity that reports news and facilitates public discourse. The account shares timely updates and engages with the audience on current events.",
-                "age": 30,  # Institutional virtual age
-                "gender": "other",  # Institutional uses other
-                "mbti": "ISTJ",  # Institutional style: rigorous conservative
-                "country": "US",
-                "profession": "Media",
-                "interested_topics": ["General News", "Current Events", "Public Affairs"],
+                "display_name": dach,
+                "handle": dach.lower().replace(" ", "_"),
+                "bio": f"Redaktion bei {entity_name} | Nachrichten, Analysen, Einordnung",
+                "persona": f"{dach} arbeitet als Redakteur:in bei {entity_name} und teilt berufliche Einschätzungen zu aktuellen Themen sowie gelegentlich persönliche Meinungen.",
+                "age": random.randint(28, 58),
+                "gender": self._pick_individual_gender(),
+                "mbti": random.choice(self.MBTI_TYPES),
+                "country": "DE",
+                "profession": f"Redakteur:in bei {entity_name}",
+                "interested_topics": ["Nachrichten", "Aktuelles", "Öffentlichkeit"],
             }
 
         elif entity_type_lower in ["university", "governmentagency", "ngo", "organization"]:
+            dach = self._pick_dach_name()
             return {
-                "bio": f"Official account of {entity_name}.",
-                "persona": f"{entity_name} is an institutional entity that communicates official positions, announcements, and engages with stakeholders on relevant matters.",
-                "age": 30,  # Institutional virtual age
-                "gender": "other",  # Institutional uses other
-                "mbti": "ISTJ",  # Institutional style: rigorous conservative
-                "country": "US",
-                "profession": entity_type,
-                "interested_topics": ["Public Policy", "Community", "Official Announcements"],
+                "display_name": dach,
+                "handle": dach.lower().replace(" ", "_"),
+                "bio": f"Mitarbeiter:in bei {entity_name} | spricht aus der Praxis",
+                "persona": f"{dach} ist bei {entity_name} beschäftigt und vertritt die Organisation öffentlich — mal mit offizieller Position, mal mit persönlicher Sicht aus dem Arbeitsalltag.",
+                "age": random.randint(25, 62),
+                "gender": self._pick_individual_gender(),
+                "mbti": random.choice(self.MBTI_TYPES),
+                "country": "DE",
+                "profession": f"Mitarbeiter:in bei {entity_name}",
+                "interested_topics": ["Politik", "Community", "Arbeit"],
             }
 
         else:
-            # Default persona
+            # Default: behandeln wir als Person mit breiter Streuung.
+            dach = self._pick_dach_name()
             return {
+                "display_name": dach,
+                "handle": dach.lower().replace(" ", "_"),
                 "bio": entity_summary[:150] if entity_summary else f"{entity_type}: {entity_name}",
-                "persona": entity_summary or f"{entity_name} is a {entity_type.lower()} participating in social discussions.",
-                "age": random.randint(25, 50),
-                "gender": random.choice(["male", "female"]),
+                "persona": entity_summary or f"{dach} nimmt aktiv an sozialen Diskussionen teil.",
+                "age": random.randint(20, 70),
+                "gender": self._pick_individual_gender(),
                 "mbti": random.choice(self.MBTI_TYPES),
-                "country": random.choice(self.COUNTRIES),
+                "country": "DE",
                 "profession": entity_type,
-                "interested_topics": ["General", "Social Issues"],
+                "interested_topics": ["Allgemein", "Gesellschaft"],
             }
     
     def set_graph_id(self, graph_id: str):
@@ -1032,10 +1097,39 @@ Important:
                     # Real-time file writing (even for fallback personas)
                     save_profiles_realtime()
 
+        # Dedup display_name und user_name: LLM neigt dazu, dieselbe reale Person
+        # mehrfach zu klonen wenn sie im Doc prominent ist. Bei Dubletten neuen
+        # DACH-Namen aus dem Pool ziehen, Handle entsprechend neu bauen.
+        seen_names: set = set()
+        seen_handles: set = set()
+        for p in profiles:
+            if p is None:
+                continue
+            norm_name = (p.name or "").strip().lower()
+            if norm_name and norm_name in seen_names:
+                new_name = self._pick_dach_name()
+                attempts = 0
+                while new_name.lower() in seen_names and attempts < 10:
+                    new_name = self._pick_dach_name()
+                    attempts += 1
+                p.name = new_name
+                p.user_name = self._generate_username(new_name)
+            seen_names.add((p.name or "").strip().lower())
+
+            norm_handle = (p.user_name or "").strip().lower()
+            if norm_handle and norm_handle in seen_handles:
+                # Handle steht schon; hänge Suffix-Rotation an.
+                base = norm_handle.rsplit("_", 1)[0] if "_" in norm_handle else norm_handle
+                p.user_name = self._generate_username(base)
+            seen_handles.add((p.user_name or "").strip().lower())
+
         print(f"\n{'='*60}")
         print(f"Persona generation complete! Generated {len([p for p in profiles if p])} agents")
         print(f"{'='*60}\n")
-        
+
+        # Re-save after dedup to keep realtime file in sync with final state.
+        save_profiles_realtime()
+
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):

@@ -458,7 +458,7 @@ class TwitterSimulationRunner:
         
         # If not in .env, use config as fallback
         if not llm_model:
-            llm_model = self.config.get("llm_model", "gpt-4o-mini")
+            llm_model = self.config.get("llm_model", "qwen3-coder-next:cloud")
         
         # Set environment variables required by camel-ai
         if llm_api_key:
@@ -472,9 +472,18 @@ class TwitterSimulationRunner:
         
         print(f"LLM configuration: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
         
+        think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
+        ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
+            model_config_dict={
+                "max_tokens": 8192,
+                "extra_body": {
+                    "think": think_on,
+                    "options": {"num_ctx": ctx_limit},
+                },
+            },
         )
     
     def _get_active_agents_for_round(
