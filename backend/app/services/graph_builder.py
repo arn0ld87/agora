@@ -6,6 +6,7 @@ Uses GraphStorage (Neo4j) to replace Zep Cloud API.
 import time
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 
@@ -14,7 +15,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..storage import GraphStorage
 from .text_processor import TextProcessor
 
-logger = logging.getLogger('mirofish.graph_builder')
+logger = logging.getLogger('agora.graph_builder')
 
 
 @dataclass
@@ -48,7 +49,7 @@ class GraphBuilderService:
         self,
         text: str,
         ontology: Dict[str, Any],
-        graph_name: str = "MiroFish Graph",
+        graph_name: str = "Agora Graph",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         batch_size: int = 3
@@ -169,7 +170,7 @@ class GraphBuilderService:
         """Create graph"""
         return self.storage.create_graph(
             name=name,
-            description="MiroFish Social Simulation Graph"
+            description="Agora Social Simulation Graph"
         )
 
     def set_ontology(self, graph_id: str, ontology: Dict[str, Any]):
@@ -189,51 +190,60 @@ class GraphBuilderService:
         batch_size: int = 3,
         progress_callback: Optional[Callable] = None
     ) -> List[str]:
-        """Add text in batches to graph, return uuid list of all episodes"""
-        episode_uuids = []
+        """Add text chunks to graph in parallel, return uuid list of all episodes.
+
+        Parallelism is controlled via Config.GRAPH_PARALLEL_CHUNKS (env GRAPH_PARALLEL_CHUNKS).
+        Neo4j driver sessions and the OpenAI SDK are thread-safe, so NER/embed/write
+        runs concurrently per chunk. batch_size is kept for API compatibility but unused.
+        """
         total_chunks = len(chunks)
-        total_batches = (total_chunks + batch_size - 1) // batch_size
+        if total_chunks == 0:
+            return []
 
-        logger.info(f"[graph_build] Starting: {total_chunks} chunks, {total_batches} batches (batch_size={batch_size})")
+        max_workers = max(1, min(Config.GRAPH_PARALLEL_CHUNKS, total_chunks))
+        logger.info(
+            f"[graph_build] Starting: {total_chunks} chunks, parallel workers={max_workers}"
+        )
 
-        for i in range(0, total_chunks, batch_size):
-            batch_chunks = chunks[i:i + batch_size]
-            batch_num = i // batch_size + 1
+        episode_uuids: List[Optional[str]] = [None] * total_chunks
 
-            if progress_callback:
-                progress = (i + len(batch_chunks)) / total_chunks
-                progress_callback(
-                    f"Processing batch {batch_num}/{total_batches} ({len(batch_chunks)} chunks)...",
-                    progress
-                )
-
-            for j, chunk in enumerate(batch_chunks):
-                chunk_idx = i + j + 1
-                chunk_preview = chunk[:80].replace('\n', ' ')
+        def _process(idx: int, chunk: str) -> str:
+            chunk_preview = chunk[:80].replace('\n', ' ')
+            logger.info(
+                f"[graph_build] Chunk {idx + 1}/{total_chunks} "
+                f"({len(chunk)} chars): \"{chunk_preview}...\""
+            )
+            t0 = time.time()
+            try:
+                episode_id = self.storage.add_text(graph_id, chunk)
+                elapsed = time.time() - t0
                 logger.info(
-                    f"[graph_build] Chunk {chunk_idx}/{total_chunks} "
-                    f"({len(chunk)} chars): \"{chunk_preview}...\""
+                    f"[graph_build] Chunk {idx + 1}/{total_chunks} done in {elapsed:.1f}s"
                 )
-                t0 = time.time()
-                try:
-                    episode_id = self.storage.add_text(graph_id, chunk)
-                    episode_uuids.append(episode_id)
-                    elapsed = time.time() - t0
-                    logger.info(
-                        f"[graph_build] Chunk {chunk_idx}/{total_chunks} done in {elapsed:.1f}s"
+                return episode_id
+            except Exception as e:
+                elapsed = time.time() - t0
+                logger.error(
+                    f"[graph_build] Chunk {idx + 1}/{total_chunks} FAILED "
+                    f"after {elapsed:.1f}s: {e}"
+                )
+                raise
+
+        completed = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
+            for future in as_completed(futures):
+                idx = futures[future]
+                episode_uuids[idx] = future.result()  # raises on first failed chunk
+                completed += 1
+                if progress_callback:
+                    progress_callback(
+                        f"Processed {completed}/{total_chunks} chunks...",
+                        completed / total_chunks,
                     )
-                except Exception as e:
-                    elapsed = time.time() - t0
-                    logger.error(
-                        f"[graph_build] Chunk {chunk_idx}/{total_chunks} FAILED "
-                        f"after {elapsed:.1f}s: {e}"
-                    )
-                    if progress_callback:
-                        progress_callback(f"Batch {batch_num} processing failed: {str(e)}", 0)
-                    raise
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")
-        return episode_uuids
+        return [uuid for uuid in episode_uuids if uuid is not None]
 
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """Get graph information"""

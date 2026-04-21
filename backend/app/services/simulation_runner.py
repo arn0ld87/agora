@@ -23,7 +23,7 @@ from ..utils.logger import get_logger
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
 
-logger = get_logger('mirofish.simulation_runner')
+logger = get_logger('agora.simulation_runner')
 
 # Flag whether cleanup function is registered
 _cleanup_registered = False
@@ -42,6 +42,7 @@ class RunnerStatus(str, Enum):
     STOPPED = "stopped"
     COMPLETED = "completed"
     FAILED = "failed"
+    READY = "ready"  # legacy alias for idle
 
 
 @dataclass
@@ -227,6 +228,53 @@ class SimulationRunner:
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
     
     @classmethod
+    def get_console_log(cls, simulation_id: str, from_line: int = 0) -> Dict[str, Any]:
+        """
+        Read raw stdout/stderr capture from the OASIS subprocess.
+
+        The subprocess in start_simulation pipes stdout+stderr to
+        `{sim_dir}/simulation.log`. This reader returns an incremental slice
+        for client-side polling (same shape as ReportManager.get_console_log).
+        """
+        log_path = os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log")
+
+        if not os.path.exists(log_path):
+            return {
+                "lines": [],
+                "total_lines": 0,
+                "from_line": from_line,
+                "next_line": from_line,
+                "has_more": False,
+            }
+
+        lines: List[str] = []
+        total_lines = 0
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                for i, line in enumerate(f):
+                    total_lines = i + 1
+                    if i >= from_line:
+                        lines.append(line.rstrip('\n\r'))
+        except Exception as exc:
+            logger.warning(f"Failed to read simulation.log for {simulation_id}: {exc}")
+            return {
+                "lines": [],
+                "total_lines": 0,
+                "from_line": from_line,
+                "next_line": from_line,
+                "has_more": False,
+                "error": str(exc),
+            }
+
+        return {
+            "lines": lines,
+            "total_lines": total_lines,
+            "from_line": from_line,
+            "next_line": total_lines,
+            "has_more": False,
+        }
+
+    @classmethod
     def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
         """Get run state"""
         if simulation_id in cls._run_states:
@@ -339,9 +387,17 @@ class SimulationRunner:
         # Load simulation config
         sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
         config_path = os.path.join(sim_dir, "simulation_config.json")
-        
+
         if not os.path.exists(config_path):
             raise ValueError(f"Simulation config does not exist, call /prepare endpoint first")
+
+        # Reset control_state.json so a previous paused/stop_requested flag from a
+        # killed run does not silently freeze the new subprocess on round 0.
+        try:
+            from .simulation_ipc import write_control_state
+            write_control_state(sim_dir, paused=False, stop_requested=False)
+        except Exception as ctrl_err:
+            logger.warning(f"Could not reset control_state.json before start: {ctrl_err}")
         
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)

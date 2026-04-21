@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 
 from ..utils.llm_client import LLMClient
 
-logger = logging.getLogger('mirofish.ner_extractor')
+logger = logging.getLogger('agora.ner_extractor')
 
 # System prompt template for NER/RE extraction
 _SYSTEM_PROMPT = """You are a Named Entity Recognition and Relation Extraction system.

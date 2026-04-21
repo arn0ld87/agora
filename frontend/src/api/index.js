@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // Create axios instance
 const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 300000, // 5 minute timeout (ontology generation may require longer time)
   headers: {
     'Content-Type': 'application/json'
@@ -34,18 +34,24 @@ service.interceptors.response.use(
     return res
   },
   error => {
-    console.error('Response error:', error)
+    // Surface the backend's actual `error` field if available — much more useful
+    // than "Request failed with status code 500".
+    const data = error?.response?.data
+    const backendMsg = data && (data.error || data.message)
+    if (backendMsg) {
+      const wrapped = new Error(backendMsg)
+      wrapped.status = error.response?.status
+      wrapped.original = error
+      console.error('Backend error:', wrapped.message)
+      return Promise.reject(wrapped)
+    }
 
-    // Handle timeout
-    if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
+    if (error.code === 'ECONNABORTED' && error.message?.includes('timeout')) {
       console.error('Request timeout')
     }
-
-    // Handle network error
     if (error.message === 'Network Error') {
-      console.error('Network error - please check your connection')
+      console.error('Network error – is the backend reachable?')
     }
-
     return Promise.reject(error)
   }
 )

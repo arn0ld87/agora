@@ -1,43 +1,240 @@
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import GraphPanel from '../components/GraphPanel.vue'
+import Step3Simulation from '../components/Step3Simulation.vue'
+import { getProject, getGraphData } from '../api/graph'
+import {
+  getSimulation,
+  getSimulationConfig,
+  stopSimulation,
+  closeSimulationEnv,
+  getEnvStatus,
+  getRunStatus,
+  pauseSimulation,
+  resumeSimulation
+} from '../api/simulation'
+
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
+
+defineProps({ simulationId: String })
+
+const viewMode = ref('split')
+const currentSimulationId = ref(route.params.simulationId)
+const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
+const minutesPerRound = ref(30)
+const projectData = ref(null)
+const graphData = ref(null)
+const graphLoading = ref(false)
+const systemLogs = ref([])
+const currentStatus = ref('processing')
+const isPaused = ref(false)
+const currentRound = ref(0)
+const totalRounds = ref(0)
+const isPauseToggling = ref(false)
+let statusTimer = null
+
+async function pollGlobalStatus() {
+  if (!currentSimulationId.value) return
+  try {
+    const res = await getRunStatus(currentSimulationId.value)
+    if (res?.success && res.data) {
+      isPaused.value = !!res.data.paused
+      currentRound.value = res.data.current_round || 0
+      totalRounds.value = res.data.total_rounds || 0
+      const rs = res.data.runner_status
+      if (rs === 'completed') currentStatus.value = 'completed'
+      else if (rs === 'failed') currentStatus.value = 'error'
+    }
+  } catch (e) { /* swallow */ }
+}
+
+async function togglePause() {
+  if (!currentSimulationId.value || isPauseToggling.value) return
+  isPauseToggling.value = true
+  try {
+    if (isPaused.value) {
+      const res = await resumeSimulation(currentSimulationId.value)
+      if (res?.success) { isPaused.value = false; addLog(t('step3.controls.resume')) }
+    } else {
+      const res = await pauseSimulation(currentSimulationId.value)
+      if (res?.success) { isPaused.value = true; addLog(t('step3.controls.pauseHint')) }
+    }
+  } catch (err) {
+    addLog(err.message)
+  } finally {
+    isPauseToggling.value = false
+  }
+}
+
+const leftPanelStyle = computed(() => {
+  if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
+  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0 }
+  return { width: '50%', opacity: 1 }
+})
+const rightPanelStyle = computed(() => {
+  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1 }
+  if (viewMode.value === 'graph') return { width: '0%', opacity: 0 }
+  return { width: '50%', opacity: 1 }
+})
+
+const statusKind = computed(() => {
+  if (currentStatus.value === 'error') return 'error'
+  if (currentStatus.value === 'completed') return 'done'
+  if (isPaused.value) return 'paused'
+  return 'running'
+})
+const statusText = computed(() => {
+  if (currentStatus.value === 'error') return t('common.error')
+  if (currentStatus.value === 'completed') return t('common.completed')
+  if (isPaused.value) {
+    return t('step3.status.paused', {
+      current: currentRound.value || 0,
+      total: totalRounds.value || maxRounds.value || '?'
+    })
+  }
+  return t('step3.status.running', {
+    current: currentRound.value || 0,
+    total: totalRounds.value || maxRounds.value || '?'
+  })
+})
+const isSimulating = computed(() => currentStatus.value === 'processing')
+
+function addLog(msg) {
+  const now = new Date()
+  const time = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0')
+  systemLogs.value.push({ time, msg })
+  if (systemLogs.value.length > 200) systemLogs.value.shift()
+}
+
+function updateStatus(s) { currentStatus.value = s }
+
+function toggleMaximize(target) {
+  viewMode.value = viewMode.value === target ? 'split' : target
+}
+
+async function handleGoBack() {
+  stopGraphRefresh()
+  try {
+    const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
+    if (envStatusRes.success && envStatusRes.data?.env_alive) {
+      try { await closeSimulationEnv({ simulation_id: currentSimulationId.value, timeout: 10 }) }
+      catch { await stopSimulation({ simulation_id: currentSimulationId.value }).catch(() => {}) }
+    } else if (isSimulating.value) {
+      try { await stopSimulation({ simulation_id: currentSimulationId.value }) } catch {}
+    }
+  } catch (err) {
+    addLog(err.message)
+  }
+  router.push({ name: 'Simulation', params: { simulationId: currentSimulationId.value } })
+}
+
+function handleNextStep() { /* Step3Simulation navigates to Report itself */ }
+
+async function loadSimulationData() {
+  try {
+    const simRes = await getSimulation(currentSimulationId.value)
+    if (simRes.success && simRes.data) {
+      try {
+        const configRes = await getSimulationConfig(currentSimulationId.value)
+        if (configRes.success && configRes.data?.time_config?.minutes_per_round) {
+          minutesPerRound.value = configRes.data.time_config.minutes_per_round
+        }
+      } catch (e) { /* non-fatal */ }
+      if (simRes.data.project_id) {
+        const projRes = await getProject(simRes.data.project_id)
+        if (projRes.success && projRes.data) {
+          projectData.value = projRes.data
+          if (projRes.data.graph_id) await loadGraph(projRes.data.graph_id)
+        }
+      }
+    }
+  } catch (err) {
+    addLog(err.message)
+  }
+}
+
+async function loadGraph(graphId) {
+  if (!isSimulating.value) graphLoading.value = true
+  try {
+    const res = await getGraphData(graphId)
+    if (res.success) graphData.value = res.data
+  } finally {
+    graphLoading.value = false
+  }
+}
+
+function refreshGraph() {
+  if (projectData.value?.graph_id) loadGraph(projectData.value.graph_id)
+}
+
+let graphRefreshTimer = null
+function startGraphRefresh() {
+  if (graphRefreshTimer) return
+  graphRefreshTimer = setInterval(refreshGraph, 30000)
+}
+function stopGraphRefresh() {
+  if (graphRefreshTimer) { clearInterval(graphRefreshTimer); graphRefreshTimer = null }
+}
+
+watch(isSimulating, (val) => val ? startGraphRefresh() : stopGraphRefresh(), { immediate: true })
+
+onMounted(() => {
+  if (maxRounds.value) addLog(`max_rounds = ${maxRounds.value}`)
+  loadSimulationData()
+  pollGlobalStatus()
+  statusTimer = setInterval(pollGlobalStatus, 3000)
+})
+onUnmounted(() => {
+  stopGraphRefresh()
+  if (statusTimer) clearInterval(statusTimer)
+})
+</script>
+
 <template>
   <div class="main-view">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH OFFLINE</div>
+    <header class="top-nav">
+      <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+      <div class="view-switcher">
+        <button
+          v-for="mode in ['graph', 'split', 'workbench']"
+          :key="mode"
+          class="switch-btn"
+          :class="{ active: viewMode === mode }"
+          @click="viewMode = mode"
+        >
+          {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
+        </button>
       </div>
-      
-      <div class="header-center">
-        <div class="view-switcher">
-          <button 
-            v-for="mode in ['graph', 'split', 'workbench']" 
-            :key="mode"
-            class="switch-btn"
-            :class="{ active: viewMode === mode }"
-            @click="viewMode = mode"
-          >
-            {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-          </button>
-        </div>
-      </div>
-
-      <div class="header-right">
-        <div class="workflow-step">
-          <span class="step-num">Step 3/5</span>
-          <span class="step-name">Simulation</span>
-        </div>
-        <div class="step-divider"></div>
-        <span class="status-indicator" :class="statusClass">
-          <span class="dot"></span>
+      <div class="step-status">
+        <span class="kicker-row">
+          <span class="step-counter">№ 03 / 05</span>
+          <span class="step-name">{{ t('process.stepper.step3') }}</span>
+        </span>
+        <span class="status-tag" :class="`status-${statusKind}`">
+          <span class="status-dot" :class="`status-dot--${statusKind}`" />
           {{ statusText }}
         </span>
+        <button
+          v-if="statusKind === 'running' || statusKind === 'paused'"
+          class="quick-pause"
+          :class="{ paused: isPaused }"
+          :disabled="isPauseToggling"
+          :title="isPaused ? t('step3.controls.resume') : t('step3.controls.pause')"
+          @click="togglePause"
+        >
+          <span v-if="isPaused">▶</span>
+          <span v-else>❚❚</span>
+          {{ isPaused ? t('step3.controls.resume') : t('step3.controls.pause') }}
+        </button>
       </div>
     </header>
-
-    <!-- Main Content Area -->
-    <main class="content-area">
-      <!-- Left Panel: Graph -->
-      <div class="panel-wrapper left" :style="leftPanelStyle">
-        <GraphPanel 
+    <main class="content">
+      <div class="panel left" :style="leftPanelStyle">
+        <GraphPanel
           :graphData="graphData"
           :loading="graphLoading"
           :currentPhase="3"
@@ -46,9 +243,7 @@
           @toggle-maximize="toggleMaximize('graph')"
         />
       </div>
-
-      <!-- Right Panel: Step3 Simulation -->
-      <div class="panel-wrapper right" :style="rightPanelStyle">
+      <div class="panel right" :style="rightPanelStyle">
         <Step3Simulation
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
@@ -66,382 +261,104 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import GraphPanel from '../components/GraphPanel.vue'
-import Step3Simulation from '../components/Step3Simulation.vue'
-import { getProject, getGraphData } from '../api/graph'
-import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
-
-const route = useRoute()
-const router = useRouter()
-
-// Props
-const props = defineProps({
-  simulationId: String
-})
-
-// Layout State
-const viewMode = ref('split')
-
-// Data State
-const currentSimulationId = ref(route.params.simulationId)
-// Get maxRounds from query param during init to ensure child components get value immediately
-const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
-const minutesPerRound = ref(30) // Default 30 minutes per round
-const projectData = ref(null)
-const graphData = ref(null)
-const graphLoading = ref(false)
-const systemLogs = ref([])
-const currentStatus = ref('processing') // processing | completed | error
-
-// --- Computed Layout Styles ---
-const leftPanelStyle = computed(() => {
-  if (viewMode.value === 'graph') return { width: '100%', opacity: 1, transform: 'translateX(0)' }
-  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0, transform: 'translateX(-20px)' }
-  return { width: '50%', opacity: 1, transform: 'translateX(0)' }
-})
-
-const rightPanelStyle = computed(() => {
-  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1, transform: 'translateX(0)' }
-  if (viewMode.value === 'graph') return { width: '0%', opacity: 0, transform: 'translateX(20px)' }
-  return { width: '50%', opacity: 1, transform: 'translateX(0)' }
-})
-
-// --- Status Computed ---
-const statusClass = computed(() => {
-  return currentStatus.value
-})
-
-const statusText = computed(() => {
-  if (currentStatus.value === 'error') return 'Error'
-  if (currentStatus.value === 'completed') return 'Completed'
-  return 'Running'
-})
-
-const isSimulating = computed(() => currentStatus.value === 'processing')
-
-// --- Helpers ---
-const addLog = (msg) => {
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 200) {
-    systemLogs.value.shift()
-  }
-}
-
-const updateStatus = (status) => {
-  currentStatus.value = status
-}
-
-// --- Layout Methods ---
-const toggleMaximize = (target) => {
-  if (viewMode.value === target) {
-    viewMode.value = 'split'
-  } else {
-    viewMode.value = target
-  }
-}
-
-const handleGoBack = async () => {
-  // Close running simulation before returning to Step 2
-  addLog('Returning to Step 2, closing simulation...')
-
-  // Stop polling
-  stopGraphRefresh()
-
-  try {
-    // First try gracefully closing the simulation environment
-    const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
-    
-    if (envStatusRes.success && envStatusRes.data?.env_alive) {
-      addLog('Closing simulation environment...')
-      try {
-        await closeSimulationEnv({
-          simulation_id: currentSimulationId.value,
-          timeout: 10
-        })
-        addLog('✓ Simulation environment closed')
-      } catch (closeErr) {
-        addLog(`Failed to close env, force stopping...`)
-        try {
-          await stopSimulation({ simulation_id: currentSimulationId.value })
-          addLog('✓ Simulation force stopped')
-        } catch (stopErr) {
-          addLog(`Force stop failed: ${stopErr.message}`)
-        }
-      }
-    } else {
-      // Environment not running, check if process needs to be stopped
-      if (isSimulating.value) {
-        addLog('Stopping simulation process...')
-        try {
-          await stopSimulation({ simulation_id: currentSimulationId.value })
-          addLog('✓ Simulation stopped')
-        } catch (err) {
-          addLog(`Stop simulation failed: ${err.message}`)
-        }
-      }
-    }
-  } catch (err) {
-    addLog(`Failed to check simulation status: ${err.message}`)
-  }
-
-  // Return to Step 2 (Env Setup)
-  router.push({ name: 'Simulation', params: { simulationId: currentSimulationId.value } })
-}
-
-const handleNextStep = () => {
-  // Step3Simulation component will handle report generation and routing
-  // This method is for backup only
-  addLog('Entering Step 4: Report')
-}
-
-// --- Data Logic ---
-const loadSimulationData = async () => {
-  try {
-    addLog(`Loading simulation data: ${currentSimulationId.value}`)
-
-    // Get simulation information
-    const simRes = await getSimulation(currentSimulationId.value)
-    if (simRes.success && simRes.data) {
-      const simData = simRes.data
-      
-      // Get simulation config to get minutes_per_round
-      try {
-        const configRes = await getSimulationConfig(currentSimulationId.value)
-        if (configRes.success && configRes.data?.time_config?.minutes_per_round) {
-          minutesPerRound.value = configRes.data.time_config.minutes_per_round
-          addLog(`Time config: ${minutesPerRound.value} min/round`)
-        }
-      } catch (configErr) {
-        addLog(`Failed to get time config, using default: ${minutesPerRound.value} min/round`)
-      }
-
-      // Get project information
-      if (simData.project_id) {
-        const projRes = await getProject(simData.project_id)
-        if (projRes.success && projRes.data) {
-          projectData.value = projRes.data
-          addLog(`Project loaded: ${projRes.data.project_id}`)
-
-          // Get graph data
-          if (projRes.data.graph_id) {
-            await loadGraph(projRes.data.graph_id)
-          }
-        }
-      }
-    } else {
-      addLog(`Failed to load simulation data: ${simRes.error || 'Unknown error'}`)
-    }
-  } catch (err) {
-    addLog(`Load error: ${err.message}`)
-  }
-}
-
-const loadGraph = async (graphId) => {
-  // Auto-refresh during simulation doesn't show fullscreen loading to avoid flickering
-  // Show loading for manual refresh or initial load
-  if (!isSimulating.value) {
-    graphLoading.value = true
-  }
-
-  try {
-    const res = await getGraphData(graphId)
-    if (res.success) {
-      graphData.value = res.data
-      if (!isSimulating.value) {
-        addLog('Graph data loaded successfully')
-      }
-    }
-  } catch (err) {
-    addLog(`Graph load failed: ${err.message}`)
-  } finally {
-    graphLoading.value = false
-  }
-}
-
-const refreshGraph = () => {
-  if (projectData.value?.graph_id) {
-    loadGraph(projectData.value.graph_id)
-  }
-}
-
-// --- Auto Refresh Logic ---
-let graphRefreshTimer = null
-
-const startGraphRefresh = () => {
-  if (graphRefreshTimer) return
-  addLog('Graph auto-refresh started (30s)')
-  // Refresh immediately, then every 30 seconds
-  graphRefreshTimer = setInterval(refreshGraph, 30000)
-}
-
-const stopGraphRefresh = () => {
-  if (graphRefreshTimer) {
-    clearInterval(graphRefreshTimer)
-    graphRefreshTimer = null
-    addLog('Graph auto-refresh stopped')
-  }
-}
-
-watch(isSimulating, (newValue) => {
-  if (newValue) {
-    startGraphRefresh()
-  } else {
-    stopGraphRefresh()
-  }
-}, { immediate: true })
-
-onMounted(() => {
-  addLog('SimulationRunView initialized')
-
-  // Log maxRounds config (value already retrieved from query param during init)
-  if (maxRounds.value) {
-    addLog(`Custom simulation rounds: ${maxRounds.value}`)
-  }
-  
-  loadSimulationData()
-})
-
-onUnmounted(() => {
-  stopGraphRefresh()
-})
-</script>
-
 <style scoped>
 .main-view {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #FFF;
+  background: var(--paper-0);
   overflow: hidden;
-  font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
 }
-
-/* Header */
-.app-header {
-  height: 60px;
-  border-bottom: 1px solid #EAEAEA;
-  display: flex;
+.top-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  background: #FFF;
-  z-index: 100;
-  position: relative;
+  gap: var(--s-7);
+  padding: var(--s-4) var(--s-6);
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-0);
+  z-index: 10;
 }
-
-.header-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.brand {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 1px;
-  cursor: pointer;
-}
-
-.view-switcher {
-  display: flex;
-  background: #F5F5F5;
-  padding: 4px;
-  border-radius: 6px;
-  gap: 4px;
-}
-
-.switch-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 16px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.switch-btn.active {
-  background: #FFF;
-  color: #000;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.workflow-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.step-num {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: #999;
-}
-
-.step-name {
-  font-weight: 700;
-  color: #000;
-}
-
-.step-divider {
-  width: 1px;
-  height: 14px;
-  background-color: #E0E0E0;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #666;
+.brand-link {
+  font-family: var(--ff-serif);
   font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  color: var(--ink-0);
 }
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #CCC;
+.brand-link:hover { color: var(--accent); }
+.view-switcher {
+  display: inline-flex;
+  justify-self: center;
+  gap: var(--s-2);
+  padding: 4px;
+  background: var(--paper-1);
+  border-radius: var(--r-1);
 }
-
-.status-indicator.processing .dot { background: #FF5722; animation: pulse 1s infinite; }
-.status-indicator.completed .dot { background: #4CAF50; }
-.status-indicator.error .dot { background: #F44336; }
-
-@keyframes pulse { 50% { opacity: 0.5; } }
-
-/* Content */
-.content-area {
-  flex: 1;
-  display: flex;
-  position: relative;
-  overflow: hidden;
+.switch-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 14px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border-radius: var(--r-1);
+  cursor: pointer;
 }
-
-.panel-wrapper {
-  height: 100%;
-  overflow: hidden;
-  transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease, transform 0.3s ease;
-  will-change: width, opacity, transform;
+.switch-btn:hover { color: var(--ink-0); }
+.switch-btn.active { background: var(--paper-0); color: var(--ink-0); border: 1px solid var(--rule); }
+.step-status { display: inline-flex; align-items: center; gap: var(--s-5); }
+.kicker-row { display: inline-flex; align-items: baseline; gap: var(--s-3); }
+.step-counter {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
 }
-
-.panel-wrapper.left {
-  border-right: 1px solid #EAEAEA;
+.step-name {
+  font-family: var(--ff-serif);
+  font-size: var(--fs-20);
+  color: var(--ink-0);
 }
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.status-tag.status-error { color: #b00020; }
+.status-tag.status-done { color: var(--ink-0); }
+.status-tag.status-running { color: var(--accent); }
+.status-tag.status-paused { color: var(--ink-3); }
+
+.quick-pause {
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--ink-0);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.quick-pause:hover { color: var(--accent); border-color: var(--accent); }
+.quick-pause.paused { color: var(--accent); border-color: var(--accent); }
+.quick-pause:disabled { opacity: 0.5; cursor: wait; }
+.content { flex: 1; display: flex; overflow: hidden; }
+.panel { height: 100%; overflow: hidden; transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease; }
+.panel.left { border-right: 1px solid var(--rule); }
 </style>
-

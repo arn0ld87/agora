@@ -20,6 +20,7 @@ from enum import Enum
 
 from ..config import Config
 from ..utils.llm_client import LLMClient
+from .web_tools import WebToolsService
 from ..utils.logger import get_logger
 from .graph_tools import (
     GraphToolsService,
@@ -29,7 +30,7 @@ from .graph_tools import (
     InterviewResult
 )
 
-logger = get_logger('mirofish.report_agent')
+logger = get_logger('agora.report_agent')
 
 
 class ReportLogger:
@@ -352,8 +353,8 @@ class ReportConsoleLogger:
 
         # Add to report_agent related loggers
         loggers_to_attach = [
-            'mirofish.report_agent',
-            'mirofish.graph_tools',
+            'agora.report_agent',
+            'agora.graph_tools',
         ]
 
         for logger_name in loggers_to_attach:
@@ -368,8 +369,8 @@ class ReportConsoleLogger:
 
         if self._file_handler:
             loggers_to_detach = [
-                'mirofish.report_agent',
-                'mirofish.graph_tools',
+                'agora.report_agent',
+                'agora.graph_tools',
             ]
 
             for logger_name in loggers_to_detach:
@@ -548,7 +549,7 @@ Function Flow:
 
 # ── Outline Planning Prompt ──
 
-PLAN_SYSTEM_PROMPT = """\
+PLAN_SYSTEM_PROMPT_TEMPLATE = """\
 You are an expert in writing "future prediction reports" with a "god's eye view" of the simulated world - you can gain insights into the behavior, statements, and interactions of every agent in the simulation.
 
 [Core Concept]
@@ -586,7 +587,7 @@ Please output the report outline in JSON format as follows:
 }
 
 Note: sections array must have at least 2 and at most 5 elements!
-IMPORTANT: The entire report outline (title, summary, section titles and descriptions) MUST be in English. Never use Chinese or other languages."""
+IMPORTANT: The entire report outline (title, summary, section titles and descriptions) MUST be written in {language}. Do not switch to any other language."""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
 [Prediction Scenario Settings]
@@ -652,13 +653,13 @@ Your task is to:
      > "Certain groups will state: original content..."
    - These quotes are core evidence of simulation predictions
 
-3. [Language Consistency - ALWAYS Write in English]
-   - The entire report MUST be written in English, regardless of source material language
-   - Tool-returned content may contain Chinese, mixed Chinese-English, or other languages
-   - When quoting tool-returned non-English content, ALWAYS translate it to fluent English before writing to report
+3. [Language Consistency - ALWAYS Write in {language}]
+   - The entire report MUST be written in {language}, regardless of source material language
+   - Tool-returned content may be in other languages (Chinese, English, etc.)
+   - When quoting tool-returned content in a different language, ALWAYS translate it into fluent {language} before writing to report
    - Keep original meaning unchanged during translation, ensure natural expression
    - This rule applies to both body text and quoted content (> format)
-   - NEVER switch to Chinese or any other language mid-report
+   - NEVER switch to any other language mid-report
 
 4. [Faithfully Present Prediction Results]
    - Report content must reflect simulation results that represent the future in the simulated world
@@ -714,6 +715,8 @@ This section analyzes...
 - panorama_search: Wide-angle panoramic search, understand complete event view, timeline, and evolution process
 - quick_search: Quick verification of specific information points
 - interview_agents: Interview simulated agents, get first-person perspectives and real reactions from different roles
+- web_search (if listed above): Live web search for CURRENT, time-sensitive facts the graph cannot have (news, recent statistics, official statements). Use whenever the topic references real-world developments beyond the simulated document.
+- fetch_url (if listed above): Read a specific URL found via web_search when a snippet is not enough.
 
 ═══════════════════════════════════════════════════════════════
 [Workflow]
@@ -854,7 +857,7 @@ Prediction Condition: {simulation_requirement}
 - Concise and direct, don't write lengthy passages
 - Use > format to quote key content
 - Give conclusions first, then explain reasons
-- ALWAYS respond in English, regardless of the language used in source material or report content"""
+- ALWAYS respond in {language}, regardless of the language used in source material or report content"""
 
 CHAT_OBSERVATION_SUFFIX = "\n\nPlease answer the question concisely."
 
@@ -889,7 +892,8 @@ class ReportAgent:
         simulation_id: str,
         simulation_requirement: str,
         llm_client: Optional[LLMClient] = None,
-        graph_tools: Optional[GraphToolsService] = None
+        graph_tools: Optional[GraphToolsService] = None,
+        model_name: Optional[str] = None,
     ):
         """
         Initialize Report Agent
@@ -898,14 +902,21 @@ class ReportAgent:
             graph_id: Graph ID
             simulation_id: Simulation ID
             simulation_requirement: Simulation requirement description
-            llm_client: LLM client (optional)
+            llm_client: LLM client (optional — overrides model_name if given)
             graph_tools: Graph tools service (optional, requires external GraphStorage injection)
+            model_name: per-report model override (e.g. "deepseek-v3.2:cloud")
         """
         self.graph_id = graph_id
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
 
-        self.llm = llm_client or LLMClient()
+        if llm_client is not None:
+            self.llm = llm_client
+        else:
+            self.llm = LLMClient(model=model_name) if model_name else LLMClient()
+
+        # Optional live-web tools (Tavily). Disabled silently when no API key.
+        self.web_tools = WebToolsService()
         if graph_tools is None:
             raise ValueError(
                 "graph_tools (GraphToolsService) is required. "
@@ -925,7 +936,7 @@ class ReportAgent:
     
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         """Define available tools"""
-        return {
+        tools: Dict[str, Dict[str, Any]] = {
             "insight_forge": {
                 "name": "insight_forge",
                 "description": TOOL_DESC_INSIGHT_FORGE,
@@ -959,6 +970,32 @@ class ReportAgent:
                 }
             }
         }
+
+        # Live-web tools (only exposed when Tavily key is configured).
+        if self.web_tools.is_available():
+            tools["web_search"] = {
+                "name": "web_search",
+                "description": (
+                    "Live web search via Tavily. Use for CURRENT, POST-SIMULATION facts "
+                    "(news, recent developments, statistics, official sources) that are NOT in the knowledge graph. "
+                    "Prefer this over guessing whenever the topic is time-sensitive or external."
+                ),
+                "parameters": {
+                    "query": "Search query in natural language (German or English)",
+                    "max_results": "Number of results (optional, default 5, max 10)"
+                }
+            }
+            tools["fetch_url"] = {
+                "name": "fetch_url",
+                "description": (
+                    "Fetch the main text of a specific URL found via web_search (or one you already know). "
+                    "Returns cleaned article content. Use when a search snippet is insufficient."
+                ),
+                "parameters": {
+                    "url": "Absolute URL starting with http(s)://"
+                }
+            }
+        return tools
     
     def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
         """
@@ -1026,6 +1063,20 @@ class ReportAgent:
                     max_agents=max_agents
                 )
                 return result.to_text()
+
+            elif tool_name == "web_search":
+                query = parameters.get("query", "")
+                max_results = parameters.get("max_results", 5)
+                if isinstance(max_results, str):
+                    try: max_results = int(max_results)
+                    except ValueError: max_results = 5
+                search_result = self.web_tools.web_search(query=query, max_results=max_results)
+                return self.web_tools.format_search_result(search_result)
+
+            elif tool_name == "fetch_url":
+                url = parameters.get("url", "")
+                extract_result = self.web_tools.fetch_url(url=url)
+                return self.web_tools.format_extract_result(extract_result)
             
             # ========== Backward Compatibility: Old Tools (Internal Redirect to New Tools) ==========
 
@@ -1170,7 +1221,7 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, "Generating report outline...")
         
-        system_prompt = PLAN_SYSTEM_PROMPT
+        system_prompt = PLAN_SYSTEM_PROMPT_TEMPLATE.replace("{language}", Config.REPORT_LANGUAGE)
         user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
             total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
@@ -1265,6 +1316,7 @@ class ReportAgent:
             simulation_requirement=self.simulation_requirement,
             section_title=section.title,
             tools_description=self._get_tools_description(),
+            language=Config.REPORT_LANGUAGE,
         )
 
         # Build user prompt - pass maximum 4000 characters for each completed section
@@ -1812,6 +1864,7 @@ class ReportAgent:
             simulation_requirement=self.simulation_requirement,
             report_content=report_content if report_content else "（nonereport）",
             tools_description=self._get_tools_description(),
+            language=Config.REPORT_LANGUAGE,
         )
 
         # Buildmessage

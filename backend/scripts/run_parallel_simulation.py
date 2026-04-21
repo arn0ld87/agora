@@ -174,6 +174,20 @@ except ImportError as e:
     sys.exit(1)
 
 
+# Import agent tools (optional — only loaded when enable_agent_tools is set)
+try:
+    from agent_tools import (
+        AgentToolRegistry,
+        ToolAwareActionLoop,
+        create_tool_aware_loop,
+        build_camel_function_tools,
+        attach_tools_to_agents,
+    )
+    AGENT_TOOLS_AVAILABLE = True
+except ImportError as _e:
+    AGENT_TOOLS_AVAILABLE = False
+
+
 # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
 TWITTER_ACTIONS = [
     ActionType.CREATE_POST,
@@ -1002,22 +1016,25 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     has_boost_config = bool(boost_api_key)
     
     # Choose which LLM to use based on parameters and configuration
+    # Model selection precedence: sim-config (UI choice) > .env > fallback.
+    # API key/base URL still come from .env (secrets stay out of sim-config).
+    config_model = config.get("llm_model", "") or ""
     if use_boost and has_boost_config:
         # Use acceleration configuration
         llm_api_key = boost_api_key
         llm_base_url = boost_base_url
-        llm_model = boost_model or os.environ.get("LLM_MODEL_NAME", "")
+        llm_model = config_model or boost_model or os.environ.get("LLM_MODEL_NAME", "")
         config_label = "[Acceleration LLM]"
     else:
         # useCommon configuration
         llm_api_key = os.environ.get("LLM_API_KEY", "")
         llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = os.environ.get("LLM_MODEL_NAME", "")
+        llm_model = config_model or os.environ.get("LLM_MODEL_NAME", "")
         config_label = "[Common LLM]"
-    
-    # If model name is not in .env, use config as fallback
+
+    # Final fallback if neither sim-config nor .env provided a model
     if not llm_model:
-        llm_model = config.get("llm_model", "gpt-4o-mini")
+        llm_model = "gpt-4o-mini"
     
     # Set environment variables required by camel-ai
     if llm_api_key:
@@ -1030,10 +1047,21 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         os.environ["OPENAI_API_BASE_URL"] = llm_base_url
     
     print(f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
-    
+
+    # Suppress reasoning output on Qwen3/Nemotron/DeepSeek/GPT-OSS etc.
+    # so that `content` isn't starved by `reasoning` tokens.
+    # max_tokens must be large enough to cover the tool-prompt system message
+    # (agent bio + tool definitions can reach ~3000 tokens on rich personas).
+    think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
+    model_cfg = {
+        "max_tokens": 8192,
+        "extra_body": {"think": think_on},
+    }
+
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=llm_model,
+        model_config_dict=model_cfg,
     )
 
 
@@ -1125,10 +1153,21 @@ async def run_twitter_simulation(
         print(f"[Twitter] {msg}")
     
     log_info("Initializing...")
-    
+
     # Twitter use common LLM configuration
     model = create_model(config, use_boost=False)
-    
+
+    # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
+    # Tools are attached to each SocialAgent after generation below; OASIS's
+    # built-in LLMAction() then drives them through OpenAI-compatible tool_calls.
+    tool_loop = None
+    enable_tools = config.get("enable_agent_tools", False)
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
+        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
+    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
     # OASIS Twitter uses CSV format
     profile_path = os.path.join(simulation_dir, "twitter_profiles.csv")
     if not os.path.exists(profile_path):
@@ -1140,14 +1179,25 @@ async def run_twitter_simulation(
         model=model,
         available_actions=TWITTER_ACTIONS,
     )
-    
+
+    # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
+    # to every SocialAgent. OASIS triggers these through its normal LLMAction()
+    # step — no ReACT prompt parsing required.
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        try:
+            fn_tools = build_camel_function_tools(config)
+            attached = attach_tools_to_agents(result.agent_graph, fn_tools)
+            log_info(f"Attached {len(fn_tools)} FunctionTools to Twitter agents ({attached} bindings)")
+        except Exception as e:
+            log_info(f"Failed to attach native FunctionTools: {e}")
+
     # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
     agent_names = get_agent_names_from_config(config)
     # If an agent is not in config, use OASIS default name
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "twitter_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
@@ -1250,7 +1300,35 @@ async def run_twitter_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
-        actions = {agent: LLMAction() for _, agent in active_agents}
+        # Build actions
+        if tool_loop and enable_tools:
+            actions = {}
+            for agent_id, agent in active_agents:
+                try:
+                    try:
+                        observation = result.env.get_observation(agent)
+                    except Exception:
+                        observation = "You are on Twitter. Check your timeline and decide what to do."
+
+                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                    agent_role = getattr(agent, 'profession', 'Unknown')
+                    agent_bio = getattr(agent, 'bio', '')
+
+                    action = await tool_loop.decide_action(
+                        agent=agent,
+                        observation=observation,
+                        available_actions=[a.value for a in TWITTER_ACTIONS],
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        agent_bio=agent_bio,
+                        language=config.get("language", "de")
+                    )
+                    actions[agent] = action
+                except Exception as e:
+                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
+                    actions[agent] = LLMAction()
+        else:
+            actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
         
         # Get actual executed actions from Database and log
@@ -1320,7 +1398,16 @@ async def run_reddit_simulation(
     
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
-    
+
+    # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
+    tool_loop = None
+    enable_tools = config.get("enable_agent_tools", False)
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
+        config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
+    elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+        log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
     profile_path = os.path.join(simulation_dir, "reddit_profiles.json")
     if not os.path.exists(profile_path):
         log_info(f"Error: Profile file does not exist: {profile_path}")
@@ -1331,14 +1418,23 @@ async def run_reddit_simulation(
         model=model,
         available_actions=REDDIT_ACTIONS,
     )
-    
+
+    # Native CAMEL function-calling for Reddit agents (see Twitter branch).
+    if enable_tools and AGENT_TOOLS_AVAILABLE:
+        try:
+            fn_tools = build_camel_function_tools(config)
+            attached = attach_tools_to_agents(result.agent_graph, fn_tools)
+            log_info(f"Attached {len(fn_tools)} FunctionTools to Reddit agents ({attached} bindings)")
+        except Exception as e:
+            log_info(f"Failed to attach native FunctionTools: {e}")
+
     # Get Agent real name mapping from config (use entity_name instead of default Agent_X)
     agent_names = get_agent_names_from_config(config)
     # If an agent is not in config, use OASIS default name
     for agent_id, agent in result.agent_graph.get_agents():
         if agent_id not in agent_names:
             agent_names[agent_id] = getattr(agent, 'name', f'Agent_{agent_id}')
-    
+
     db_path = os.path.join(simulation_dir, "reddit_simulation.db")
     if os.path.exists(db_path):
         os.remove(db_path)
@@ -1449,7 +1545,35 @@ async def run_reddit_simulation(
                 action_logger.log_round_end(round_num + 1, 0)
             continue
         
-        actions = {agent: LLMAction() for _, agent in active_agents}
+        # Build actions
+        if tool_loop and enable_tools:
+            actions = {}
+            for agent_id, agent in active_agents:
+                try:
+                    try:
+                        observation = result.env.get_observation(agent)
+                    except Exception:
+                        observation = "You are on Reddit. Check the feed and decide what to do."
+
+                    agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                    agent_role = getattr(agent, 'profession', 'Unknown')
+                    agent_bio = getattr(agent, 'bio', '')
+
+                    action = await tool_loop.decide_action(
+                        agent=agent,
+                        observation=observation,
+                        available_actions=[a.value for a in REDDIT_ACTIONS],
+                        agent_name=agent_name,
+                        agent_role=agent_role,
+                        agent_bio=agent_bio,
+                        language=config.get("language", "de")
+                    )
+                    actions[agent] = action
+                except Exception as e:
+                    log_info(f"Tool loop failed for agent {agent_id}: {e}, falling back to LLMAction")
+                    actions[agent] = LLMAction()
+        else:
+            actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
         
         # Get actual executed actions from Database and log

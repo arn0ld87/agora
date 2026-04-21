@@ -382,9 +382,21 @@ class IPCHandler:
             return True
 
 
+# Import agent tools (optional — only loaded when enable_agent_tools is set)
+try:
+    from agent_tools import (
+        AgentToolRegistry,
+        ToolAwareActionLoop,
+        create_tool_aware_loop
+    )
+    AGENT_TOOLS_AVAILABLE = True
+except ImportError as _e:
+    AGENT_TOOLS_AVAILABLE = False
+
+
 class RedditSimulationRunner:
     """Reddit simulation runner"""
-    
+
     # Reddit available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
     AVAILABLE_ACTIONS = [
         ActionType.LIKE_POST,
@@ -401,7 +413,13 @@ class RedditSimulationRunner:
         ActionType.FOLLOW,
         ActionType.MUTE,
     ]
-    
+
+    AVAILABLE_ACTION_NAMES = [
+        "LIKE_POST", "DISLIKE_POST", "CREATE_POST", "CREATE_COMMENT",
+        "LIKE_COMMENT", "DISLIKE_COMMENT", "SEARCH_POSTS", "SEARCH_USER",
+        "TREND", "REFRESH", "DO_NOTHING", "FOLLOW", "MUTE"
+    ]
+
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """
         Initialize simulation runner
@@ -417,6 +435,7 @@ class RedditSimulationRunner:
         self.env = None
         self.agent_graph = None
         self.ipc_handler = None
+        self.tool_loop = None
         
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration file"""
@@ -619,15 +638,41 @@ class RedditSimulationRunner:
                 await self.env.step(initial_actions)
                 print(f"  Published {len(initial_actions)} initial posts")
         
-        # Main simulation loop
         print("\nStart simulation loop...")
         start_time = datetime.now()
-        
+
+        # Initialize tool-aware action loop if enabled
+        enable_tools = self.config.get("enable_agent_tools", False)
+        if enable_tools and AGENT_TOOLS_AVAILABLE:
+            print("[ToolUse] Agent tools enabled — initializing tool registry...")
+            self.config["config_path"] = self.config_path
+            self.tool_loop = create_tool_aware_loop(
+                model=model,
+                config=self.config,
+                max_tool_calls=self.config.get("max_tool_calls_per_action", 2)
+            )
+            if self.tool_loop:
+                print("[ToolUse] Tool registry ready")
+            else:
+                print("[ToolUse] Tool registry initialization failed (check Neo4j credentials)")
+        elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+            print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
         for round_num in range(total_rounds):
+            # Honour pause flag from Flask (Phase 4 — soft-pause between rounds).
+            try:
+                from app.services.simulation_ipc import wait_while_paused, read_control_state
+                wait_while_paused(self.simulation_dir)
+                if read_control_state(self.simulation_dir).get("stop_requested"):
+                    print(f"  Stop requested via control_state.json — exiting after round {round_num}")
+                    break
+            except Exception:
+                pass
+
             simulated_minutes = round_num * minutes_per_round
             simulated_hour = (simulated_minutes // 60) % 24
             simulated_day = simulated_minutes // (60 * 24) + 1
-            
+
             active_agents = self._get_active_agents_for_round(
                 self.env, simulated_hour, round_num
             )
@@ -635,11 +680,39 @@ class RedditSimulationRunner:
             if not active_agents:
                 continue
             
-            actions = {
-                agent: LLMAction()
-                for _, agent in active_agents
-            }
-            
+            if self.tool_loop and enable_tools:
+                actions = {}
+                for agent_id, agent in active_agents:
+                    try:
+                        observation = ""
+                        if hasattr(self.env, 'get_observation'):
+                            observation = self.env.get_observation(agent)
+                        elif hasattr(agent, 'observation'):
+                            observation = str(agent.observation)
+
+                        agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                        agent_role = getattr(agent, 'profession', 'Unknown')
+                        agent_bio = getattr(agent, 'bio', '')
+
+                        action = await self.tool_loop.decide_action(
+                            agent=agent,
+                            observation=observation,
+                            available_actions=self.AVAILABLE_ACTION_NAMES,
+                            agent_name=agent_name,
+                            agent_role=agent_role,
+                            agent_bio=agent_bio,
+                            language=self.config.get("language", "de")
+                        )
+                        actions[agent] = action
+                    except Exception as e:
+                        print(f"  [ToolUse] Agent {agent_id} tool loop failed: {e}")
+                        actions[agent] = LLMAction()
+            else:
+                actions = {
+                    agent: LLMAction()
+                    for _, agent in active_agents
+                }
+
             await self.env.step(actions)
             
             if (round_num + 1) % 10 == 0 or round_num == 0:

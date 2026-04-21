@@ -17,7 +17,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
 from ..utils.logger import get_logger
 
-logger = get_logger('mirofish.api.report')
+logger = get_logger('agora.api.report')
 
 
 # ============== Report Generation Interface ==============
@@ -31,6 +31,7 @@ def generate_report():
             return jsonify({"success": False, "error": "Please provide simulation_id"}), 400
 
         force_regenerate = data.get('force_regenerate', False)
+        llm_model_override = (data.get('llm_model') or '').strip() or None
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         if not state:
@@ -82,7 +83,8 @@ def generate_report():
                     graph_id=graph_id,
                     simulation_id=simulation_id,
                     simulation_requirement=simulation_requirement,
-                    graph_tools=graph_tools
+                    graph_tools=graph_tools,
+                    model_name=llm_model_override,
                 )
                 def progress_callback(stage, progress, message):
                     task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
@@ -115,12 +117,73 @@ def generate_report():
 
 @report_bp.route('/generate/status', methods=['POST'])
 def get_generate_status():
+    """
+    Query report-generation progress.
+
+    Accepts any of: task_id, simulation_id, report_id (at least one required).
+    When report_id is given, the response is SPECIFIC to that run — no older
+    reports of the same simulation are returned as "completed" by accident.
+    """
     try:
         data = request.get_json() or {}
         task_id = data.get('task_id')
         simulation_id = data.get('simulation_id')
+        report_id = data.get('report_id')
+        task_manager = TaskManager()
 
-        if simulation_id:
+        # ── 1) Resolve task_id + simulation_id from report_id if needed ────
+        if report_id and not task_id:
+            existing_report = ReportManager.get_report(report_id)
+            if existing_report:
+                # Already persisted — use its definitive status.
+                sim_id = existing_report.simulation_id or simulation_id
+                if existing_report.status == ReportStatus.COMPLETED:
+                    return jsonify({"success": True, "data": {
+                        "simulation_id": sim_id,
+                        "report_id": report_id,
+                        "status": "completed",
+                        "progress": 100,
+                        "message": "Report generated",
+                        "already_completed": True,
+                    }})
+                if existing_report.status == ReportStatus.FAILED:
+                    return jsonify({"success": True, "data": {
+                        "simulation_id": sim_id,
+                        "report_id": report_id,
+                        "status": "failed",
+                        "progress": 0,
+                        "message": "Report generation failed",
+                        "error": getattr(existing_report, "error", "") or "",
+                    }})
+                simulation_id = sim_id
+            # Either way, try to find the live task by metadata.
+            try:
+                for t in task_manager.list_tasks(task_type="report_generate") or []:
+                    # list_tasks returns dicts, not Task objects.
+                    meta = (t.get("metadata") if isinstance(t, dict) else getattr(t, "metadata", {})) or {}
+                    if meta.get("report_id") == report_id:
+                        task_id = t.get("task_id") if isinstance(t, dict) else getattr(t, "task_id", None)
+                        if not simulation_id:
+                            simulation_id = meta.get("simulation_id")
+                        break
+            except Exception as lookup_exc:
+                logger.warning(f"report_id → task lookup failed: {lookup_exc}")
+
+        # ── 2) If we have a task, that's authoritative ─────────────────────
+        if task_id:
+            task = task_manager.get_task(task_id)
+            if task:
+                payload = task.to_dict()
+                if simulation_id and "simulation_id" not in payload:
+                    payload["simulation_id"] = simulation_id
+                if report_id:
+                    payload["report_id"] = report_id
+                return jsonify({"success": True, "data": payload})
+            # Task id was provided but stale (e.g. server restart) — fall through.
+            logger.info(f"task_id {task_id} not found, falling back")
+
+        # ── 3) Only simulation_id known — look up *any* completed report ───
+        if simulation_id and not report_id:
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
             if existing_report and existing_report.status == ReportStatus.COMPLETED:
                 return jsonify({"success": True, "data": {
@@ -132,15 +195,16 @@ def get_generate_status():
                     "already_completed": True
                 }})
 
-        if not task_id:
-            return jsonify({"success": False, "error": "Please provide task_id or simulation_id"}), 400
-
-        task_manager = TaskManager()
-        task = task_manager.get_task(task_id)
-        if not task:
-            return jsonify({"success": False, "error": f"Task does not exist: {task_id}"}), 404
-
-        return jsonify({"success": True, "data": task.to_dict()})
+        # ── 4) Fallback — caller keeps polling, we acknowledge ─────────────
+        if report_id or simulation_id:
+            return jsonify({"success": True, "data": {
+                "simulation_id": simulation_id,
+                "report_id": report_id,
+                "status": "generating",
+                "progress": 0,
+                "message": "Task handle unknown — waiting for report completion",
+            }})
+        return jsonify({"success": False, "error": "Please provide task_id, simulation_id or report_id"}), 400
 
     except Exception as e:
         logger.error(f"Failed to query task status: {str(e)}")
@@ -228,6 +292,7 @@ def chat_with_report_agent():
         simulation_id = data.get('simulation_id')
         message = data.get('message')
         chat_history = data.get('chat_history', [])
+        llm_model_override = (data.get('llm_model') or '').strip() or None
 
         if not simulation_id:
             return jsonify({"success": False, "error": "Please provide simulation_id"}), 400
@@ -258,7 +323,8 @@ def chat_with_report_agent():
             graph_id=graph_id,
             simulation_id=simulation_id,
             simulation_requirement=simulation_requirement,
-            graph_tools=graph_tools
+            graph_tools=graph_tools,
+            model_name=llm_model_override,
         )
 
         result = agent.chat(message=message, chat_history=chat_history)
