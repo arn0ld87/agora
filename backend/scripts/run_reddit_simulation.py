@@ -118,6 +118,16 @@ def setup_oasis_logging(log_dir: str):
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
+    # Monkey-Patch (analog zu run_parallel_simulation.py): heb CAMEL's
+    # ScoreBasedContextCreator-Default von 8192 auf LLM_CONTEXT_LIMIT hoch.
+    from camel.memories.context_creators.score_based import ScoreBasedContextCreator as _SBCC
+    _SBCC_ORIG_INIT = _SBCC.__init__
+    _CTX_LIMIT_OVERRIDE = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
+    def _sbcc_patched_init(self, token_counter, token_limit=None, *args, **kwargs):
+        effective = _CTX_LIMIT_OVERRIDE if (token_limit is None or token_limit < _CTX_LIMIT_OVERRIDE) else token_limit
+        return _SBCC_ORIG_INIT(self, token_counter, effective, *args, **kwargs)
+    _SBCC.__init__ = _sbcc_patched_init
+    print(f"[context-patch] token_limit floor = {_CTX_LIMIT_OVERRIDE}", flush=True)
     import oasis
     from oasis import (
         ActionType,
