@@ -2,7 +2,7 @@ import service, { requestWithRetry } from './index'
 
 /**
  * Start report generation
- * @param {Object} data - { simulation_id, force_regenerate? }
+ * @param {Object} data - { simulation_id, force_regenerate?, llm_model? }
  */
 export const generateReport = (data) => {
   return requestWithRetry(() => service.post('/api/report/generate', data), 3, 1000)
@@ -10,10 +10,15 @@ export const generateReport = (data) => {
 
 /**
  * Get report generation status
- * @param {string} reportId
+ * Backend accepts POST with { task_id } or { simulation_id } or { report_id }.
+ * @param {Object} params - { simulationId?, taskId?, reportId? }
  */
-export const getReportStatus = (reportId) => {
-  return service.get(`/api/report/generate/status`, { params: { report_id: reportId } })
+export const getReportStatus = ({ simulationId, taskId, reportId } = {}) => {
+  const body = {}
+  if (simulationId) body.simulation_id = simulationId
+  if (taskId) body.task_id = taskId
+  if (reportId) body.report_id = reportId
+  return service.post(`/api/report/generate/status`, body)
 }
 
 /**

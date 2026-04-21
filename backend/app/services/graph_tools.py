@@ -18,7 +18,7 @@ from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
 from ..storage import GraphStorage
 
-logger = get_logger('mirofish.graph_tools')
+logger = get_logger('agora.graph_tools')
 
 
 @dataclass
