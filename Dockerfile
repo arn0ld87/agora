@@ -23,7 +23,7 @@ RUN npm ci \
 # 复制项目源码
 COPY . .
 
-EXPOSE 3000 5001
+EXPOSE 5173 5001
 
 # 同时启动前后端（开发模式）
 CMD ["npm", "run", "dev"]

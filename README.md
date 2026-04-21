@@ -117,7 +117,7 @@ docker compose up -d
 
 Danach:
 
-- Frontend: <http://localhost:3000>
+- Frontend: <http://localhost:5173>
 - Backend Health: <http://localhost:5001/health>
 - Neo4j Browser: <http://localhost:7474>
 
@@ -280,7 +280,7 @@ docker compose up -d
 
 Open:
 
-- Frontend: <http://localhost:3000>
+- Frontend: <http://localhost:5173>
 - Backend health: <http://localhost:5001/health>
 - Neo4j Browser: <http://localhost:7474>
 

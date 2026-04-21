@@ -21,7 +21,7 @@ npm run dev
 
 # Individual processes
 npm run backend        # Flask on :5001
-npm run frontend       # Vite on :3000 (proxies /api → :5001)
+npm run frontend       # Vite on :5173 (proxies /api → :5001)
 npm run build          # Production frontend bundle
 
 # Backend tests (pytest, optional dev group)
