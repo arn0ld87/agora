@@ -1,0 +1,371 @@
+{
+  "brand": {
+    "name": "Agora",
+    "tagline": "Swarm intelligence, local."
+  },
+  "nav": {
+    "work": "Work",
+    "history": "History",
+    "github": "GitHub",
+    "available": "Ready",
+    "running": "Running",
+    "paused": "Paused",
+    "stopped": "Stopped",
+    "error": "Error"
+  },
+  "common": {
+    "start": "Start",
+    "stop": "Stop",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "next": "Next",
+    "back": "Back",
+    "retry": "Retry",
+    "loading": "Loading…",
+    "ready": "Ready",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "error": "Error",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "open": "Open",
+    "edit": "Edit",
+    "view": "View",
+    "download": "Download",
+    "upload": "Upload",
+    "browse": "Browse",
+    "select": "Select",
+    "confirm": "Confirm",
+    "refresh": "Refresh",
+    "copy": "Copy",
+    "copied": "Copied",
+    "send": "Send",
+    "thinking": "Thinking…",
+    "processing": "Processing…",
+    "preparing": "Preparing…",
+    "starting": "Starting…",
+    "stopping": "Stopping…",
+    "saving": "Saving…",
+    "language": "Language",
+    "model": "Model",
+    "more": "More",
+    "details": "Details",
+    "settings": "Settings",
+    "actions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "type": "Type",
+    "date": "Date",
+    "time": "Time",
+    "minutes": "minutes",
+    "seconds": "seconds",
+    "round": "Round",
+    "rounds": "Rounds",
+    "of": "of",
+    "and": "and",
+    "or": "or",
+    "all": "All",
+    "none": "None"
+  },
+  "home": {
+    "kicker": "STUDIO · LOCAL",
+    "edition": "№ 01 — EDITION",
+    "location": "OFFLINE · OPEN SOURCE",
+    "headline": {
+      "line1": "One document in.",
+      "line2": "A whole world",
+      "line3Italic": "out."
+    },
+    "lead": "Agora turns your text into a knowledge graph, populates it with hundreds of agents — each with their own biography, stance, bubble — and lets them debate, share, argue. You see in real time how narratives spread, where resistance forms, and which voices tip the discourse. Fully local. Your laptop, your Neo4j, your Ollama.",
+    "tags": {
+      "engine": "Swarm Engine",
+      "version": "v0.2-preview"
+    },
+    "system": {
+      "kicker": "№ 02 — SYSTEM",
+      "title": "Ready.",
+      "desc": "The engine runs on your hardware. No account, no signup. Drop a document, write the question — the simulation does the rest."
+    },
+    "metrics": {
+      "free": { "value": "Free", "label": "Runs on your hardware" },
+      "private": { "value": "Private", "label": "Nothing leaves this machine" },
+      "openSource": { "value": "Open", "label": "AGPL-3.0 licensed" }
+    },
+    "workflow": { "kicker": "№ 03 — WORKFLOW" },
+    "console": {
+      "uploadKicker": "01 / DOCUMENT",
+      "uploadTitle": "Drop your documents here.",
+      "uploadHint": "or click to browse",
+      "uploadAccepted": "PDF · MD · TXT — up to 50 MB",
+      "promptKicker": "02 / QUESTION",
+      "promptPlaceholder": "Briefly describe what to simulate. Example: 'How does Cologne city centre react to area-wide CCTV?'",
+      "engineLabel": "Engine: Ollama + Neo4j",
+      "startBtn": "Start engine",
+      "initializing": "Initializing…",
+      "needFiles": "Upload at least one document.",
+      "needPrompt": "Add a simulation description."
+    },
+    "steps": [
+      { "num": "01", "title": "Build graph", "desc": "Extract entities and relations from your document — knowledge graph in Neo4j." },
+      { "num": "02", "title": "Environment", "desc": "Generate hundreds of agent personas with personality, bias and reaction profile." },
+      { "num": "03", "title": "Simulation", "desc": "Agents post, reply, argue — round-based, local, observable in real time." },
+      { "num": "04", "title": "Report", "desc": "ReportAgent searches the result, interviews a focus group and writes the report." },
+      { "num": "05", "title": "Conversation", "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent." }
+    ],
+    "footer": {
+      "credit": "Agora — Swarm intelligence, local.",
+      "fork": "Fork of MiroFish",
+      "license": "AGPL-3.0",
+      "code": "Source on GitHub",
+      "by": "Built by",
+      "byName": "Alexander Schneider",
+      "bySite": "alexle135.de"
+    }
+  },
+  "history": {
+    "kicker": "№ 04 — HISTORY",
+    "title": "Recent simulations.",
+    "empty": "No runs yet. Start your first simulation above.",
+    "open": "Open →",
+    "delete": "Delete",
+    "confirmDelete": "Really delete this run?",
+    "lastRun": "Last: ",
+    "createdAt": "Created",
+    "documentCount": "{count} document | {count} documents",
+    "agentCount": "{count} agent | {count} agents",
+    "search": "Search…"
+  },
+  "process": {
+    "title": "Pipeline",
+    "back": "← back",
+    "stepper": {
+      "step1": "Graph",
+      "step2": "Environment",
+      "step3": "Simulation",
+      "step4": "Report",
+      "step5": "Conversation"
+    }
+  },
+  "step1": {
+    "kicker": "№ 01 — GRAPH",
+    "title": "Knowledge graph from document.",
+    "sub": "GraphRAG extracts entities and relations, writes embeddings to Neo4j. Once the graph is built, you can explore it below.",
+    "ontology": {
+      "title": "Ontology",
+      "desc": "Which entity types should the extractor expect? Auto-generated from your description.",
+      "generate": "Generate ontology",
+      "regenerate": "Regenerate",
+      "addType": "Add type",
+      "removeType": "Remove type",
+      "edit": "Edit",
+      "save": "Apply"
+    },
+    "build": {
+      "title": "Build graph",
+      "desc": "Chunks the document, calls the LLM per chunk for NER + RE, writes to Neo4j.",
+      "start": "Build graph",
+      "rebuild": "Rebuild",
+      "running": "Building graph…",
+      "completed": "Graph done.",
+      "chunks": "Chunks: {done} / {total}",
+      "elapsed": "Elapsed: {time}"
+    },
+    "graph": {
+      "title": "Explore graph",
+      "nodes": "Nodes",
+      "edges": "Edges",
+      "search": "Search the graph…",
+      "noResults": "No matches.",
+      "openInBrowser": "Open in Neo4j Browser"
+    },
+    "next": "Next: environment →"
+  },
+  "step2": {
+    "kicker": "№ 02 — ENVIRONMENT",
+    "title": "Generate personalities.",
+    "sub": "From the graph, hundreds of agent personas are generated. Each with their own bio, opinion, reaction speed, and influence.",
+    "platform": {
+      "label": "Platform",
+      "twitter": "Twitter / X",
+      "reddit": "Reddit",
+      "parallel": "Both in parallel"
+    },
+    "model": {
+      "label": "LLM model",
+      "presetGroup": "Recommended",
+      "ollamaGroup": "Locally available",
+      "customGroup": "Custom",
+      "customLabel": "Model name (free input)",
+      "customPlaceholder": "e.g. qwen3-coder-next:cloud",
+      "refresh": "Refresh list",
+      "loadingModels": "Loading available models…",
+      "noOllama": "No connection to Ollama. Use custom input or start Ollama.",
+      "default": "Default from .env"
+    },
+    "personas": {
+      "title": "Generate personas",
+      "count": "Number of agents",
+      "parallel": "Parallel generation",
+      "useGraph": "Derive personas from graph entities",
+      "generate": "Generate personas",
+      "regenerate": "Regenerate",
+      "running": "Generating {done} / {total} personas…",
+      "completed": "{count} personas generated.",
+      "preview": "Preview a persona",
+      "edit": "Edit"
+    },
+    "language": {
+      "label": "Agent language",
+      "de": "German",
+      "en": "English",
+      "hint": "Determines the language agents post and reply in."
+    },
+    "agentTools": {
+      "warning": "Experimental agent tool-use is enabled: agents may run up to {count} tool calls per action. This is slower and adds extra LLM calls."
+    },
+    "next": "Next: simulation →"
+  },
+  "step3": {
+    "kicker": "№ 03 — SIMULATION",
+    "title": "Run the world.",
+    "sub": "Agents interact round by round on the chosen platform. You watch the actions live.",
+    "config": {
+      "title": "Run parameters",
+      "rounds": "Number of rounds",
+      "graphMemory": "Update graph memory",
+      "graphMemoryHint": "Agent experiences flow back into the knowledge graph during the simulation."
+    },
+    "controls": {
+      "start": "Start simulation",
+      "starting": "Starting…",
+      "pause": "Pause",
+      "pauseHint": "Pauses after the current round ends.",
+      "resume": "Resume",
+      "stop": "Stop",
+      "stopConfirm": "Really abort the simulation? Existing data is preserved.",
+      "stopped": "Stopped.",
+      "completed": "Completed."
+    },
+    "status": {
+      "ready": "Ready",
+      "running": "Running — round {current} / {total}",
+      "paused": "Paused after round {current} / {total}",
+      "completed": "Completed — {total} rounds",
+      "failed": "Failed",
+      "elapsed": "Elapsed: {time}"
+    },
+    "feed": {
+      "title": "Live feed",
+      "actions": "Actions: {count}",
+      "posts": "Posts: {count}",
+      "replies": "Replies: {count}",
+      "filter": "Filter",
+      "all": "All",
+      "posts_only": "Posts only",
+      "replies_only": "Replies only",
+      "empty": "No activity yet."
+    },
+    "next": "Next: report →"
+  },
+  "step4": {
+    "kicker": "№ 04 — REPORT",
+    "title": "Generate report.",
+    "sub": "The ReportAgent searches the graph, interviews a cross-section of agents and writes the report.",
+    "config": {
+      "title": "Configure report",
+      "language": "Report language",
+      "focus": "Focus",
+      "audience": "Audience",
+      "tone": "Tone",
+      "length": "Length",
+      "lengthShort": "Short",
+      "lengthMedium": "Medium",
+      "lengthLong": "Long"
+    },
+    "generate": {
+      "start": "Generate report",
+      "regenerate": "Regenerate",
+      "running": "Writing report…",
+      "step": "Step: {step}",
+      "toolCall": "Tool: {tool}",
+      "completed": "Report ready."
+    },
+    "view": {
+      "summary": "Summary",
+      "sections": "Sections",
+      "sources": "Sources",
+      "agents": "Interviewed agents",
+      "tools": "Tool calls",
+      "raw": "Raw output",
+      "exportMd": "Export as Markdown",
+      "exportPdf": "Export as PDF"
+    },
+    "next": "Next: conversation →"
+  },
+  "step5": {
+    "kicker": "№ 05 — CONVERSATION",
+    "title": "Talk to the agents.",
+    "sub": "Ask a single agent directly — or the ReportAgent for the big picture. Personality and memory persist.",
+    "tabs": {
+      "chat": "1-on-1 chat",
+      "survey": "Survey"
+    },
+    "selectAgent": "Select agent",
+    "selectReport": "ReportAgent",
+    "search": "Search agent…",
+    "input": {
+      "placeholder": "Ask something… (Ctrl+Enter to send)",
+      "send": "Send"
+    },
+    "agent": {
+      "bio": "Bio",
+      "interests": "Interests",
+      "stance": "Stance",
+      "history": "History"
+    },
+    "empty": "Pick an agent on the left.",
+    "survey": {
+      "title": "Ask many agents the same thing.",
+      "sub": "Pick 2–50 agents, write one question, see the answers side by side.",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "selected": "Selected: {count}",
+      "question": "Your question",
+      "placeholder": "e.g. 'How do you react to area-wide CCTV in the city centre?'",
+      "ask": "Run survey",
+      "asking": "Asking {done} / {total} agents…",
+      "noResults": "No answers yet.",
+      "exportCsv": "Export as CSV"
+    }
+  },
+  "graph": {
+    "panel": "Graph",
+    "search": "Search nodes…",
+    "fit": "Fit",
+    "reset": "Reset",
+    "nodeCount": "{count} nodes",
+    "edgeCount": "{count} edges",
+    "selected": "Selected: {name}",
+    "noSelection": "Click a node to see details."
+  },
+  "errors": {
+    "network": "Network error. Is the server reachable?",
+    "backend": "Backend error.",
+    "noNeo4j": "Neo4j not reachable.",
+    "noLlm": "LLM not reachable.",
+    "noOllama": "Ollama not reachable at {url}.",
+    "uploadFailed": "Upload failed.",
+    "fileTooLarge": "File too large. Max 50 MB.",
+    "fileTypeNotAllowed": "File type not allowed. Allowed: PDF, MD, TXT.",
+    "graphBuildFailed": "Graph build failed.",
+    "personaGenFailed": "Persona generation failed.",
+    "simulationFailed": "Simulation failed.",
+    "reportFailed": "Report failed.",
+    "unknown": "Unknown error."
+  }
+}

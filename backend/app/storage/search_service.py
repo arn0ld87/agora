@@ -12,7 +12,7 @@ from neo4j import Session as Neo4jSession
 
 from .embedding_service import EmbeddingService
 
-logger = logging.getLogger('mirofish.search')
+logger = logging.getLogger('agora.search')
 
 # Cypher for vector search on edges (facts)
 _VECTOR_SEARCH_EDGES = """

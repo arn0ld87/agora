@@ -22,7 +22,7 @@ from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
 
-logger = get_logger('mirofish.oasis_profile')
+logger = get_logger('agora.oasis_profile')
 
 
 @dataclass
@@ -183,11 +183,14 @@ class OasisProfileGenerator:
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
         storage: Optional[GraphStorage] = None,
-        graph_id: Optional[str] = None
+        graph_id: Optional[str] = None,
+        language: Optional[str] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model_name = model_name or Config.LLM_MODEL_NAME
+        # Language for generated personas ("de" or "en"); affects prompts and bio language.
+        self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -614,10 +617,20 @@ class OasisProfileGenerator:
         }
     
     def _get_system_prompt(self, is_individual: bool) -> str:
-        """Get system prompt"""
-        base_prompt = "You are an expert in generating social media user profiles. Generate detailed, realistic personas for opinion simulation that maximize restoration of existing reality. Must return valid JSON format with all string values containing no unescaped newlines. Use English."
-        return base_prompt
-    
+        """Get system prompt — language-aware (de/en)."""
+        if self.language == "de":
+            return (
+                "Du erstellst realistische Social-Media-Personas für eine Meinungssimulation. "
+                "Ziel: möglichst nah an der bekannten Realität bleiben. "
+                "Antworte ausschließlich mit gültigem JSON ohne unescapte Zeilenumbrüche. "
+                "Alle Texte (insbesondere bio und persona) müssen auf Deutsch verfasst sein."
+            )
+        return (
+            "You are an expert in generating social media user profiles. Generate detailed, realistic "
+            "personas for opinion simulation that maximize restoration of existing reality. Must return "
+            "valid JSON format with all string values containing no unescaped newlines. Use English."
+        )
+
     def _build_individual_persona_prompt(
         self,
         entity_name: str,
@@ -626,10 +639,46 @@ class OasisProfileGenerator:
         entity_attributes: Dict[str, Any],
         context: str
     ) -> str:
-        """Build detailed persona prompt for individual entities"""
+        """Build detailed persona prompt for individual entities — language-aware."""
 
-        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "None"
-        context_str = context[:3000] if context else "No additional context"
+        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
+        context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
+
+        if self.language == "de":
+            return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
+
+Name der Entität: {entity_name}
+Typ: {entity_type}
+Zusammenfassung: {entity_summary}
+Attribute: {attrs_str}
+
+Kontext:
+{context_str}
+
+Antworte als JSON mit folgenden Feldern:
+
+1. bio: Social-Media-Bio, max. 200 Zeichen, auf Deutsch.
+2. persona: Ausführliche Personenbeschreibung (rund 1500–2000 Wörter, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
+   - Eckdaten (Alter, Beruf, Bildungsweg, Wohnort)
+   - Hintergrund (prägende Erfahrungen, Bezug zu Ereignissen, soziales Umfeld)
+   - Persönlichkeit (MBTI, Kernzüge, emotionaler Ausdruck)
+   - Social-Media-Verhalten (Posting-Frequenz, Themenpräferenzen, Stil, Sprache)
+   - Haltungen und Meinungen (zu zentralen Themen, was emotional triggert)
+   - Eigenheiten (Sprachmarotten, besondere Erfahrungen, Hobbys)
+   - Erinnerungen (Verbindung zu den Ereignissen, frühere Reaktionen)
+3. age: Alter als Ganzzahl (integer)
+4. gender: "male" oder "female" (englischsprachiger Wert, OASIS-Vorgabe)
+5. mbti: MBTI-Typ (z. B. INTJ, ENFP)
+6. country: ISO-Land in Englisch (z. B. "DE", "US")
+7. profession: Beruf (auf Deutsch)
+8. interested_topics: Array deutscher Themen-Strings
+
+Wichtig:
+- Antworte ausschließlich mit JSON, keine zusätzlichen Erklärungen.
+- Alle Texte in bio und persona sind auf Deutsch.
+- Keine unescapten Zeilenumbrüche in Strings.
+- age muss eine Ganzzahl sein, gender entweder "male" oder "female".
+"""
 
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
 
@@ -675,10 +724,46 @@ Important:
         entity_attributes: Dict[str, Any],
         context: str
     ) -> str:
-        """Build detailed persona prompt for group/institutional entities"""
+        """Build detailed persona prompt for group/institutional entities — language-aware."""
 
-        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "None"
-        context_str = context[:3000] if context else "No additional context"
+        attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
+        context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
+
+        if self.language == "de":
+            return f"""Erzeuge ein Social-Media-Account-Profil für die folgende Institution / Gruppe. Bleibe nah an der bekannten Realität.
+
+Name: {entity_name}
+Typ: {entity_type}
+Zusammenfassung: {entity_summary}
+Attribute: {attrs_str}
+
+Kontext:
+{context_str}
+
+Antworte als JSON mit folgenden Feldern:
+
+1. bio: Offizielle Account-Bio, max. 200 Zeichen, professionell, auf Deutsch.
+2. persona: Ausführliches Account-Profil (rund 1500–2000 Wörter, Fließtext, Deutsch). Enthalten:
+   - Institutionelle Eckdaten (offizieller Name, Rechtsform, Gründungsgeschichte, Aufgaben)
+   - Account-Positionierung (Account-Typ, Zielgruppe, Kernfunktion)
+   - Sprachstil (Wortwahl, übliche Formulierungen, Tabuthemen)
+   - Content-Profil (Inhaltstypen, Frequenz, aktive Zeiten)
+   - Haltung (offizielle Position zu Kernthemen, Umgang mit Kontroversen)
+   - Besonderheiten (vertretene Gruppen, operative Eigenheiten)
+   - Erinnerungen (Bezug zu Ereignissen, frühere Reaktionen)
+3. age: 30 (virtuelles Alter institutioneller Accounts)
+4. gender: "other"
+5. mbti: MBTI-Typ als Stilbeschreibung
+6. country: ISO-Land in Englisch (z. B. "DE")
+7. profession: Funktion der Institution (auf Deutsch)
+8. interested_topics: Array deutscher Themen-Strings
+
+Wichtig:
+- Antworte ausschließlich mit JSON.
+- Texte auf Deutsch.
+- Keine unescapten Zeilenumbrüche.
+- age muss 30 sein, gender muss "other" sein.
+"""
 
         return f"""Generate detailed social media account profile for institutional/group entity, maximizing restoration of existing reality.
 

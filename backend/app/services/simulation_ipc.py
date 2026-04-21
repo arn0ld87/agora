@@ -5,6 +5,10 @@ Communication uses a simple filesystem-based command/response model:
 1. Flask writes commands to the commands/ directory.
 2. The simulation script polls the commands directory, executes the command, and writes the response to the responses/ directory.
 3. Flask polls the responses directory and retrieves the result.
+
+In addition to request/response commands, a single ``control_state.json`` file is used
+for fire-and-forget control flags such as pause/resume. The OASIS subprocess polls this
+file between rounds; Flask writes it directly via :func:`set_pause_state`.
 """
 
 import os
@@ -18,7 +22,66 @@ from enum import Enum
 
 from ..utils.logger import get_logger
 
-logger = get_logger('mirofish.simulation_ipc')
+logger = get_logger('agora.simulation_ipc')
+
+
+# ----- Control state (pause/resume between rounds) -----
+
+CONTROL_STATE_FILENAME = "control_state.json"
+
+
+def _control_path(simulation_dir: str) -> str:
+    return os.path.join(simulation_dir, CONTROL_STATE_FILENAME)
+
+
+def read_control_state(simulation_dir: str) -> Dict[str, Any]:
+    """Return current control state for a simulation directory.
+
+    Defaults: ``{"paused": False, "stop_requested": False, "updated_at": None}``.
+    """
+    path = _control_path(simulation_dir)
+    if not os.path.exists(path):
+        return {"paused": False, "stop_requested": False, "updated_at": None}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # Defensive defaults
+        data.setdefault("paused", False)
+        data.setdefault("stop_requested", False)
+        return data
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to read control state at {path}: {e}")
+        return {"paused": False, "stop_requested": False, "updated_at": None}
+
+
+def write_control_state(simulation_dir: str, **changes) -> Dict[str, Any]:
+    """Merge ``changes`` into the existing control state and persist to disk."""
+    state = read_control_state(simulation_dir)
+    state.update(changes)
+    state["updated_at"] = datetime.now().isoformat()
+    os.makedirs(simulation_dir, exist_ok=True)
+    path = _control_path(simulation_dir)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    return state
+
+
+def set_pause_state(simulation_dir: str, paused: bool) -> Dict[str, Any]:
+    """Convenience wrapper used by the API to flip the pause flag."""
+    return write_control_state(simulation_dir, paused=bool(paused))
+
+
+def is_paused(simulation_dir: str) -> bool:
+    """True if the simulation has a pending pause flag."""
+    return bool(read_control_state(simulation_dir).get("paused"))
+
+
+def wait_while_paused(simulation_dir: str, poll_interval: float = 1.0) -> None:
+    """Block until ``paused`` flips back to False. Subprocess-side helper."""
+    while is_paused(simulation_dir):
+        time.sleep(poll_interval)
 
 
 class CommandType(str, Enum):

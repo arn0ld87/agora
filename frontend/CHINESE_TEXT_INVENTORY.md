@@ -1,7 +1,7 @@
-# MiroFish Frontend - Chinese Text Translation Inventory
+# Agora Frontend - Chinese Text Translation Inventory
 
 ## Overview
-Complete inventory of Chinese text found in the MiroFish frontend application that requires translation to English.
+Complete inventory of Chinese text found in the Agora frontend application that requires translation to English.
 
 **Scan Date:** 2026-03-15
 **Total Files with Chinese:** 20 files
@@ -362,8 +362,8 @@ Complete inventory of Chinese text found in the MiroFish frontend application th
 
 **Strings:**
 - `<html lang="zh-CN">` - Language attribute
-- `<meta name="description" content="MiroFish - 社交媒体舆论模拟系统" />` (MiroFish - Social Media Opinion Simulation System)
-- `<title>MiroFish - 预测万物</title>` (MiroFish - Predict Everything)
+- `<meta name="description" content="Agora - 社交媒体舆论模拟系统" />` (Agora - Social Media Opinion Simulation System)
+- `<title>Agora - 预测万物</title>` (Agora - Predict Everything)
 
 ---
 

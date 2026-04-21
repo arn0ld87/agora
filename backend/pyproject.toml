@@ -1,11 +1,11 @@
 [project]
-name = "mirofish-offline-backend"
+name = "agora-backend"
 version = "0.2.0"
-description = "MiroFish-Offline - Offline-first fork running on Neo4j + Ollama"
+description = "Agora - Offline-first fork running on Neo4j + Ollama"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0" }
 authors = [
-    { name = "MiroFish Team" }
+    { name = "Alexander Schneider", email = "schneider@alexle135.de" }
 ]
 
 dependencies = [
@@ -25,6 +25,10 @@ dependencies = [
     
     # 文件处理
     "PyMuPDF>=1.24.0",
+    # Image handling for PDF vision pipeline (downscale, format conversion)
+    "Pillow>=10.0.0",
+    # HTTP client for web tools (Tavily)
+    "requests>=2.28.0",
     # 编码检测（支持非UTF-8编码的文本文件）
     "charset-normalizer>=3.0.0",
     "chardet>=5.0.0",

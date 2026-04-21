@@ -18,7 +18,7 @@ from .entity_reader import EntityReader, FilteredEntities
 from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
 
-logger = get_logger('mirofish.simulation')
+logger = get_logger('agora.simulation')
 
 
 class SimulationStatus(str, Enum):
@@ -236,6 +236,9 @@ class SimulationManager:
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
         storage: 'GraphStorage' = None,
+        llm_model: Optional[str] = None,
+        language: Optional[str] = None,
+        max_agents: Optional[int] = None,
     ) -> SimulationState:
         """
         Prepare simulation environment (fully automated)
@@ -285,13 +288,25 @@ class SimulationManager:
                 defined_entity_types=defined_entity_types,
                 enrich_with_edges=True
             )
-            
+
+            # User-controlled cap on number of agents (optional).
+            # Truncates the entity list before persona generation. Entities are
+            # kept in reader order so the most relevant ones win if the reader
+            # already sorts by degree/importance.
+            if max_agents is not None and max_agents > 0 and len(filtered.entities) > max_agents:
+                logger.info(
+                    f"Capping agent count at {max_agents} "
+                    f"(originally {len(filtered.entities)} entities)"
+                )
+                filtered.entities = filtered.entities[:max_agents]
+                filtered.filtered_count = len(filtered.entities)
+
             state.entities_count = filtered.filtered_count
             state.entity_types = list(filtered.entity_types)
-            
+
             if progress_callback:
                 progress_callback(
-                    "reading", 100, 
+                    "reading", 100,
                     f"Completed, total {filtered.filtered_count} entities",
                     current=filtered.filtered_count,
                     total=filtered.filtered_count
@@ -314,8 +329,14 @@ class SimulationManager:
                     total=total_entities
                 )
             
-            # Pass graph_id to enable graph retrieval functionality, get richer context
-            generator = OasisProfileGenerator(storage=storage, graph_id=state.graph_id)
+            # Pass graph_id to enable graph retrieval functionality, get richer context.
+            # Per-simulation overrides for model + language come from API request.
+            generator = OasisProfileGenerator(
+                storage=storage,
+                graph_id=state.graph_id,
+                model_name=llm_model,
+                language=language,
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -392,7 +413,10 @@ class SimulationManager:
                     total=3
                 )
             
-            config_generator = SimulationConfigGenerator()
+            config_generator = SimulationConfigGenerator(
+                model_name=llm_model,
+                language=language,
+            )
             
             if progress_callback:
                 progress_callback(
@@ -522,7 +546,7 @@ class SimulationManager:
                 "parallel": f"python {scripts_dir}/run_parallel_simulation.py --config {config_path}",
             },
             "instructions": (
-                f"1. Activate conda environment: conda activate MiroFish\n"
+                f"1. Activate conda environment: conda activate Agora\n"
                 f"2. Run simulation (scripts located in {scripts_dir}):\n"
                 f"   - Run Twitter alone: python {scripts_dir}/run_twitter_simulation.py --config {config_path}\n"
                 f"   - Run Reddit alone: python {scripts_dir}/run_reddit_simulation.py --config {config_path}\n"

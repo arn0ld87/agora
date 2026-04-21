@@ -17,7 +17,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from ..storage import GraphStorage
 
-logger = get_logger('mirofish.graph_memory_updater')
+logger = get_logger('agora.graph_memory_updater')
 
 
 @dataclass
