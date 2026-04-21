@@ -60,7 +60,7 @@ const surveyFilteredProfiles = computed(() => {
 const targetLabel = computed(() => {
   if (selectedAgentId.value === null) return t('step5.selectReport')
   const p = profiles.value[selectedAgentId.value]
-  return p?.username || `agent_${selectedAgentId.value}`
+  return p?.name || p?.username || `agent_${selectedAgentId.value}`
 })
 
 const selectedProfile = computed(() => {
@@ -195,7 +195,7 @@ async function runSurvey() {
         const p = profiles.value[id]
         return {
           agent_id: id,
-          username: p?.username || `agent_${id}`,
+          username: p?.name || p?.username || `agent_${id}`,
           bio: p?.bio || '',
           answer: r.response || r.answer || r.result || JSON.stringify(r)
         }
@@ -274,7 +274,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
             @click="pickAgent(profiles.indexOf(p))"
           >
             <span class="dot" />
-            <span class="agent-name">{{ p.username || ('agent_' + i) }}</span>
+            <span class="agent-name">{{ p.name || p.username || ('agent_' + i) }}</span>
             <span class="agent-bio">{{ (p.bio || '').slice(0, 60) }}</span>
           </button>
         </div>
@@ -351,7 +351,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
               :checked="surveySelected.has(profiles.indexOf(p))"
               @change="toggleSurveyAgent(profiles.indexOf(p))"
             />
-            <span class="agent-name">{{ p.username || ('agent_' + profiles.indexOf(p)) }}</span>
+            <span class="agent-name">{{ p.name || p.username || ('agent_' + profiles.indexOf(p)) }}</span>
             <span class="agent-bio">{{ (p.bio || '').slice(0, 50) }}</span>
           </label>
         </div>

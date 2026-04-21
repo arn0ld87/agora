@@ -1032,9 +1032,10 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         llm_model = config_model or os.environ.get("LLM_MODEL_NAME", "")
         config_label = "[Common LLM]"
 
-    # Final fallback if neither sim-config nor .env provided a model
+    # Final fallback: qwen3-coder-next:cloud hat 256k context, nano-Varianten kippen bei
+    # großen Persona-Prompts (Context-Overflow).
     if not llm_model:
-        llm_model = "gpt-4o-mini"
+        llm_model = "qwen3-coder-next:cloud"
     
     # Set environment variables required by camel-ai
     if llm_api_key:
@@ -1052,10 +1053,16 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     # so that `content` isn't starved by `reasoning` tokens.
     # max_tokens must be large enough to cover the tool-prompt system message
     # (agent bio + tool definitions can reach ~3000 tokens on rich personas).
+    # num_ctx zwingt Ollama, das volle Context-Window zu allozieren (Default ist
+    # sonst oft 4k-8k, unabhängig davon, was das Modell kann).
     think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
+    ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
     model_cfg = {
         "max_tokens": 8192,
-        "extra_body": {"think": think_on},
+        "extra_body": {
+            "think": think_on,
+            "options": {"num_ctx": ctx_limit},
+        },
     }
 
     return ModelFactory.create(

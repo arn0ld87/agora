@@ -31,6 +31,9 @@ class Config:
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'http://localhost:11434/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen2.5:32b')
+    # Kontextfenster für OASIS/CAMEL. Ollama defaultet sonst auf 4k-8k egal
+    # was das Modell kann. Override pro Modell falls nötig.
+    LLM_CONTEXT_LIMIT = int(os.environ.get('LLM_CONTEXT_LIMIT', '262144'))
 
     # Neo4j configuration
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
@@ -41,9 +44,12 @@ class Config:
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
     MAX_TOOL_CALLS_PER_ACTION = int(os.environ.get('MAX_TOOL_CALLS_PER_ACTION', '2'))
 
-    # Embedding configuration
+    # Embedding configuration. VECTOR_DIM muss zur Ausgabe des EMBEDDING_MODEL passen
+    # (nomic-embed-text: 768, embeddinggemma:300m: 768, qwen3-embedding:4b: 2560,
+    # qwen3-embedding:8b: 4096). Falsche Dim → Neo4j-Index stream rejected.
     EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'nomic-embed-text')
     EMBEDDING_BASE_URL = os.environ.get('EMBEDDING_BASE_URL', 'http://localhost:11434')
+    VECTOR_DIM = int(os.environ.get('VECTOR_DIM', '768'))
 
     # File upload configuration
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB

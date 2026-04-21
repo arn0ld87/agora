@@ -943,6 +943,20 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
         except Exception as e:
             print(f"[attach_tools] agent {agent_id} max_iteration patch failed: {e}")
 
+        # Context-Limit am Memory-ContextCreator hochziehen. CAMEL's
+        # ScoreBasedContextCreator ignoriert den num_ctx-Hint an Ollama und nutzt
+        # sein eigenes token_limit (Default 8192 bei kleinen Modellen). Ohne
+        # diesen Patch wird bei 1500-Wort-Personas sofort truncated.
+        try:
+            ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
+            memory = getattr(agent, "memory", None)
+            if memory and hasattr(memory, "get_context_creator"):
+                creator = memory.get_context_creator()
+                if creator and hasattr(creator, "token_limit"):
+                    creator.token_limit = ctx_limit
+        except Exception as e:
+            print(f"[attach_tools] agent {agent_id} token_limit patch failed: {e}")
+
     # Sanity: dump the tool names on the first agent after patching.
     try:
         first_id, first_agent = next(iter(agent_graph.get_agents()))

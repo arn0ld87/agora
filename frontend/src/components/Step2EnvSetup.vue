@@ -509,7 +509,8 @@ onUnmounted(() => {
               @click="selectedProfile = p"
             >
               <span class="persona-name">
-                {{ p.username || p.name || 'agent_' + i }}
+                {{ p.name || p.username || 'agent_' + i }}
+                <span v-if="p.username && p.name && p.username !== p.name" class="persona-handle">@{{ p.username }}</span>
                 <span v-if="p.is_manual" class="persona-tag">manuell</span>
               </span>
               <span class="persona-bio">{{ (p.bio || '').slice(0, 90) }}{{ (p.bio || '').length > 90 ? '…' : '' }}</span>
@@ -593,7 +594,8 @@ onUnmounted(() => {
         <header class="modal-head">
           <div>
             <div class="kicker-mono">№ Persona</div>
-            <h3>{{ selectedProfile.username || selectedProfile.name }}</h3>
+            <h3>{{ selectedProfile.name || selectedProfile.username }}</h3>
+            <div v-if="selectedProfile.username && selectedProfile.name && selectedProfile.username !== selectedProfile.name" class="modal-handle">@{{ selectedProfile.username }}</div>
           </div>
           <button class="x" @click="selectedProfile = null" aria-label="×">×</button>
         </header>
