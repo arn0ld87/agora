@@ -1399,21 +1399,12 @@ async def run_reddit_simulation(
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
 
-    # Initialize tool-aware action loop if enabled
+    # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
     tool_loop = None
     enable_tools = config.get("enable_agent_tools", False)
     if enable_tools and AGENT_TOOLS_AVAILABLE:
-        log_info("Agent tools enabled — initializing tool registry...")
+        log_info("Agent tools enabled — will attach native FunctionTools after graph generation")
         config["config_path"] = os.path.join(simulation_dir, "simulation_config.json")
-        tool_loop = create_tool_aware_loop(
-            model=model,
-            config=config,
-            max_tool_calls=config.get("max_tool_calls_per_action", 2)
-        )
-        if tool_loop:
-            log_info("Tool registry ready")
-        else:
-            log_info("Tool registry initialization failed (check Neo4j credentials)")
     elif enable_tools and not AGENT_TOOLS_AVAILABLE:
         log_info("WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
 

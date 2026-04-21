@@ -832,7 +832,9 @@ def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
             JSON string with `results` list containing title, url and snippet
             for each hit.
         """
+        print(f"[FunctionTool] >>> web_search({query!r}, {num_results})", flush=True)
         data = registry.web_search(query=query, num_results=num_results)
+        print(f"[FunctionTool] <<< web_search returned {data.get('results_found','?')} results", flush=True)
         return json.dumps(data, ensure_ascii=False)
 
     def web_fetch(url: str, max_chars: int = 2000) -> str:
@@ -875,12 +877,25 @@ def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
     return tools
 
 
+TOOL_USE_INSTRUCTION = (
+    "\n\n## Research Tools\n"
+    "You have access to `web_search`, `web_fetch` and `search_graph` tools.\n"
+    "Before posting about any specific website, company, person or topic you\n"
+    "are not certain about, CALL web_search (and optionally web_fetch on a\n"
+    "relevant result) to gather real information first. Only skip research\n"
+    "for trivial actions like LIKE_POST or DO_NOTHING, or when you are simply\n"
+    "reacting to another agent's post."
+)
+
+
 def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
     """Inject the given FunctionTools into every SocialAgent in an AgentGraph.
 
     OASIS's `generate_*_agent_graph` does not expose a `tools` parameter,
     but the underlying CAMEL ChatAgent has `add_tool()`. This helper walks
-    the graph and attaches each tool to each agent.
+    the graph and attaches each tool to each agent, and extends the agent's
+    system_message with a Tool-Use instruction — otherwise the base persona
+    prompt doesn't mention the tools and the LLM skips them.
 
     Returns the number of (agent × tool) bindings successfully attached.
     """
@@ -900,4 +915,49 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
             except Exception as e:
                 print(f"[attach_tools] agent {agent_id} add_tool failed: {e}")
                 break
+        # Extend system_message so the persona actively uses the tools.
+        try:
+            sm = getattr(agent, "system_message", None)
+            if sm is not None and hasattr(sm, "content"):
+                if TOOL_USE_INSTRUCTION.strip() not in sm.content:
+                    sm.content = sm.content + TOOL_USE_INSTRUCTION
+                    # CAMEL serialized the original system message into memory
+                    # during ChatAgent.__init__ via init_messages(). Updating
+                    # only the live BaseMessage object is not enough because
+                    # ChatHistoryMemory stores dict snapshots, not references.
+                    original_sm = getattr(agent, "_original_system_message", None)
+                    if original_sm is not None and hasattr(original_sm, "content"):
+                        if TOOL_USE_INSTRUCTION.strip() not in original_sm.content:
+                            original_sm.content = original_sm.content + TOOL_USE_INSTRUCTION
+                    if hasattr(agent, "init_messages"):
+                        agent.init_messages()
+        except Exception as e:
+            print(f"[attach_tools] agent {agent_id} prompt patch failed: {e}")
+        # OASIS SocialAgent defaults to max_iteration=1 — meaning the LLM gets
+        # exactly one turn, so it can either call a research tool OR a social
+        # action, never both. Raise it so research → action can happen in one
+        # perform_action_by_llm() cycle.
+        try:
+            if hasattr(agent, "max_iteration"):
+                agent.max_iteration = max(getattr(agent, "max_iteration", 1) or 1, 4)
+        except Exception as e:
+            print(f"[attach_tools] agent {agent_id} max_iteration patch failed: {e}")
+
+    # Sanity: dump the tool names on the first agent after patching.
+    try:
+        first_id, first_agent = next(iter(agent_graph.get_agents()))
+        all_names = []
+        for attr in ("tools", "_tools", "_all_tools"):
+            tlist = getattr(first_agent, attr, None)
+            if tlist:
+                for t in tlist:
+                    n = getattr(t, "func", None)
+                    n = getattr(n, "__name__", None) if n else getattr(t, "__name__", str(t))
+                    all_names.append(n)
+                break
+        print(f"[attach_tools] sanity: agent {first_id} now has {len(all_names)} tools: {all_names}", flush=True)
+        print(f"[attach_tools] sanity: agent {first_id} max_iteration = {getattr(first_agent, 'max_iteration', '?')}", flush=True)
+    except Exception as e:
+        print(f"[attach_tools] sanity dump failed: {e}")
+
     return attached
