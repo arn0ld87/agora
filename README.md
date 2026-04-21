@@ -1,15 +1,15 @@
 <div align="center">
 
-<img src="./static/image/mirofish-offline-banner.png" alt="MiroFish Offline" width="100%"/>
+<img src="./static/image/agora-banner.png" alt="Agora" width="100%"/>
 
-# MiroFish-Offline
+# Agora
 
-**Fully local fork of [MiroFish](https://github.com/666ghj/MiroFish) — no cloud APIs required. English UI.**
+**Local-first, cloud-compatible multi-agent simulation engine. Built by [Alexander Schneider](https://alexle135.de) — fork of [MiroFish](https://github.com/666ghj/MiroFish).**
 
-*A multi-agent swarm intelligence engine that simulates public opinion, market sentiment, and social dynamics. Entirely on your hardware.*
+*A multi-agent swarm intelligence engine that simulates public opinion, market sentiment, and social dynamics. Runs locally by default, with optional OpenAI-compatible cloud model endpoints.*
 
-[![GitHub Stars](https://img.shields.io/github/stars/nikmcfly/MiroFish-Offline?style=flat-square&color=DAA520)](https://github.com/nikmcfly/MiroFish-Offline/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/nikmcfly/MiroFish-Offline?style=flat-square)](https://github.com/nikmcfly/MiroFish-Offline/network)
+[![GitHub Stars](https://img.shields.io/github/stars/nikmcfly/Agora?style=flat-square&color=DAA520)](https://github.com/nikmcfly/Agora/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/nikmcfly/Agora?style=flat-square)](https://github.com/nikmcfly/Agora/network)
 [![Docker](https://img.shields.io/badge/Docker-Build-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 
@@ -17,17 +17,17 @@
 
 ## What is this?
 
-MiroFish is a multi-agent simulation engine: upload any document (press release, policy draft, financial report), and it generates hundreds of AI agents with unique personalities that simulate the public reaction on social media. Posts, arguments, opinion shifts — hour by hour.
+Agora is a multi-agent simulation engine: upload any document (press release, policy draft, financial report), and it generates hundreds of AI agents with unique personalities that simulate the public reaction on social media. Posts, arguments, opinion shifts — hour by hour.
 
-The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Chinese market (Chinese UI, Zep Cloud for knowledge graphs, DashScope API). This fork makes it **fully local and fully English**:
+The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Chinese market (Chinese UI, Zep Cloud for knowledge graphs, DashScope API). This fork makes it **local-first, cloud-compatible, and fully translated**:
 
-| Original MiroFish | MiroFish-Offline |
+| Original MiroFish | Agora |
 |---|---|
 | Chinese UI | **English UI** (1,000+ strings translated) |
-| Zep Cloud (graph memory) | **Neo4j Community Edition 5.15** |
+| Zep Cloud (graph memory) | **Neo4j Community Edition 5.18+** |
 | DashScope / OpenAI API (LLM) | **Ollama** (qwen2.5, llama3, etc.) |
 | Zep Cloud embeddings | **nomic-embed-text** via Ollama |
-| Cloud API keys required | **Zero cloud dependencies** |
+| Cloud API keys required | **Local-first, cloud-compatible** |
 
 ## Workflow
 
@@ -40,7 +40,7 @@ The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Ch
 ## Screenshot
 
 <div align="center">
-<img src="./static/image/mirofish-offline-screenshot.jpg" alt="MiroFish Offline — English UI" width="100%"/>
+<img src="./static/image/agora-screenshot.jpg" alt="Agora — English UI" width="100%"/>
 </div>
 
 ## Quick Start
@@ -48,21 +48,21 @@ The [original MiroFish](https://github.com/666ghj/MiroFish) was built for the Ch
 ### Prerequisites
 
 - Docker & Docker Compose (recommended), **or**
-- Python 3.11+, Node.js 18+, Neo4j 5.15+, Ollama
+- Python 3.11+, Node.js 18+, Neo4j 5.18+, Ollama
 
 ### Option A: Docker (easiest)
 
 ```bash
-git clone https://github.com/nikmcfly/MiroFish-Offline.git
-cd MiroFish-Offline
+git clone https://github.com/nikmcfly/Agora.git
+cd Agora
 cp .env.example .env
 
-# Start all services (Neo4j, Ollama, MiroFish)
+# Start Agora and Neo4j. Ollama is expected on the host by default.
 docker compose up -d
 
-# Pull the required models into Ollama
-docker exec mirofish-ollama ollama pull qwen2.5:32b
-docker exec mirofish-ollama ollama pull nomic-embed-text
+# Pull the required models into host Ollama
+ollama pull qwen2.5:32b
+ollama pull nomic-embed-text
 ```
 
 Open `http://localhost:3000` — that's it.
@@ -74,8 +74,8 @@ Open `http://localhost:3000` — that's it.
 ```bash
 docker run -d --name neo4j \
   -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/mirofish \
-  neo4j:5.15-community
+  -e NEO4J_AUTH=neo4j/agora \
+  neo4j:5.18-community
 ```
 
 **2. Start Ollama & pull models**
@@ -120,7 +120,7 @@ LLM_MODEL_NAME=qwen2.5:32b
 # Neo4j
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=mirofish
+NEO4J_PASSWORD=agora
 
 # Embeddings
 EMBEDDING_MODEL=nomic-embed-text
@@ -160,7 +160,7 @@ This fork introduces a clean abstraction layer between the application and the g
                │
         ┌──────▼──────┐
         │  Neo4j CE   │
-        │  5.15       │
+        │  5.18+      │
         └─────────────┘
 ```
 
@@ -196,10 +196,17 @@ AGPL-3.0 — same as the original MiroFish project. See [LICENSE](./LICENSE).
 
 ## Credits & Attribution
 
-This is a modified fork of [MiroFish](https://github.com/666ghj/MiroFish) by [666ghj](https://github.com/666ghj), originally supported by [Shanda Group](https://www.shanda.com/). The simulation engine is powered by [OASIS](https://github.com/camel-ai/oasis) from the CAMEL-AI team.
+Agora is built and maintained by **[Alexander Schneider](https://alexle135.de)** — Cologne / NRW, Germany.
+
+It is a modified fork of [MiroFish](https://github.com/666ghj/MiroFish) by [666ghj](https://github.com/666ghj), originally supported by [Shanda Group](https://www.shanda.com/). The simulation engine is powered by [OASIS](https://github.com/camel-ai/oasis) from the CAMEL-AI team.
 
 **Modifications in this fork:**
-- Backend migrated from Zep Cloud to local Neo4j CE 5.15 + Ollama
-- Entire frontend translated from Chinese to English (20 files, 1,000+ strings)
-- All Zep references replaced with Neo4j across the UI
-- Rebranded to MiroFish Offline
+- Rebranded as Agora with a new editorial design system
+- Complete German UI (vue-i18n, DE default + EN fallback)
+- LLM model picker (local Ollama models + curated cloud presets)
+- Pause / Resume controls during a running simulation
+- German persona prompts so OASIS agents post and reply in German
+- DACH / Europe-Berlin activity timing defaults
+- Experimental agent tool-use is opt-in and disabled by default
+- Backend migrated from Zep Cloud to local Neo4j CE + Ollama
+- Source: [github.com/nikmcfly/Agora](https://github.com/nikmcfly/Agora) · Author: [alexle135.de](https://alexle135.de)

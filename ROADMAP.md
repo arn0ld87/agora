@@ -1,4 +1,4 @@
-# MiroFish-Offline Roadmap
+# Agora Roadmap
 
 ## Current State (v0.2.0)
 
@@ -57,7 +57,7 @@ Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies remove
 - [ ] Helm chart for Kubernetes deployment
 
 ### Beyond v1.0
-- [ ] Federation: connect multiple MiroFish instances to share entity knowledge
+- [ ] Federation: connect multiple Agora instances to share entity knowledge
 - [ ] Fine-tuned local models specifically trained for NER/RE on social simulation data
 - [ ] Voice-driven interaction: talk to simulation agents via local Whisper + TTS
 - [ ] Mobile companion app for monitoring running simulations
@@ -83,4 +83,4 @@ This project is AGPL-3.0 licensed. Contributions welcome — especially around:
 - Simulation quality improvements
 - Documentation and tutorials in English
 
-See [GitHub Issues](https://github.com/nikmcfly/MiroFish-Offline/issues) for current tasks.
+See [GitHub Issues](https://github.com/nikmcfly/Agora/issues) for current tasks.
