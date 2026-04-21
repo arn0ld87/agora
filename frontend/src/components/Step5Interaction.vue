@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { chatWithReport, getReport } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
@@ -111,7 +111,7 @@ async function send() {
       if (res?.success) {
         chatHistory.value.push({
           role: 'assistant',
-          content: res.data?.answer || res.data?.message || '',
+          content: res.data?.response || res.data?.answer || res.data?.message || '(no response)',
           ts: Date.now()
         })
       }
@@ -121,9 +121,13 @@ async function send() {
         interviews: [{ agent_id: selectedAgentId.value, prompt: msg }]
       })
       if (res?.success) {
-        const result = (res.data?.results || res.data || [])[0]
-        const answer = result?.answer || result?.response || result?.result || JSON.stringify(result)
-        chatHistory.value.push({ role: 'assistant', content: answer, ts: Date.now() })
+        // Backend returnt { result: { results: { "<platform>_<agent_id>": {...} } } }
+        // Bevorzugt reddit, fallback twitter, fallback erstes Feld.
+        const resultsDict = res.data?.result?.results || res.data?.results || {}
+        const entries = Object.values(resultsDict)
+        const pick = entries.find((r) => r?.platform === 'reddit') || entries[0]
+        const answer = pick?.response || pick?.answer || pick?.result || ''
+        chatHistory.value.push({ role: 'assistant', content: answer || '(no response)', ts: Date.now() })
       }
     }
   } catch (err) {
@@ -173,15 +177,27 @@ async function runSurvey() {
       interviews: ids.map((id) => ({ agent_id: id, prompt: q }))
     })
     if (res?.success) {
-      const arr = res.data?.results || res.data || []
-      surveyResults.value = arr.map((r, i) => {
-        const id = r.agent_id ?? ids[i]
+      // Backend: res.data.result.results ist ein Dict { "<platform>_<agent_id>": {...} }.
+      // Pro agent_id nur EINEN Eintrag behalten (reddit bevorzugt).
+      const resultsDict = res.data?.result?.results || res.data?.results || {}
+      const perAgent = new Map()
+      for (const r of Object.values(resultsDict)) {
+        const id = r?.agent_id
+        if (id === undefined) continue
+        const existing = perAgent.get(id)
+        if (!existing || (existing.platform !== 'reddit' && r.platform === 'reddit')) {
+          perAgent.set(id, r)
+        }
+      }
+      const arr = Array.from(perAgent.values())
+      surveyResults.value = arr.map((r) => {
+        const id = r.agent_id
         const p = profiles.value[id]
         return {
           agent_id: id,
           username: p?.username || `agent_${id}`,
           bio: p?.bio || '',
-          answer: r.answer || r.response || r.result || JSON.stringify(r)
+          answer: r.response || r.answer || r.result || JSON.stringify(r)
         }
       })
       surveyProgress.value = { done: arr.length, total: ids.length }
@@ -214,6 +230,11 @@ function exportCsv() {
 onMounted(async () => {
   await Promise.all([loadProfiles(), loadReport()])
 })
+
+// Parent reicht simulationId async nach (kommt erst nach getReport()).
+// Ohne Watcher würden profiles leer bleiben.
+watch(() => props.simulationId, (id) => { if (id) loadProfiles() })
+watch(() => props.reportId, (id) => { if (id) loadReport() })
 </script>
 
 <template>
