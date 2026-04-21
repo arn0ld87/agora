@@ -382,9 +382,21 @@ class IPCHandler:
             return True
 
 
+# Import agent tools (optional — only loaded when enable_agent_tools is set)
+try:
+    from agent_tools import (
+        AgentToolRegistry,
+        ToolAwareActionLoop,
+        create_tool_aware_loop
+    )
+    AGENT_TOOLS_AVAILABLE = True
+except ImportError as _e:
+    AGENT_TOOLS_AVAILABLE = False
+
+
 class TwitterSimulationRunner:
     """Twitter simulation runner"""
-    
+
     # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
     AVAILABLE_ACTIONS = [
         ActionType.CREATE_POST,
@@ -394,11 +406,16 @@ class TwitterSimulationRunner:
         ActionType.DO_NOTHING,
         ActionType.QUOTE_POST,
     ]
-    
+
+    # String names for prompts
+    AVAILABLE_ACTION_NAMES = [
+        "CREATE_POST", "LIKE_POST", "REPOST", "FOLLOW", "DO_NOTHING", "QUOTE_POST"
+    ]
+
     def __init__(self, config_path: str, wait_for_commands: bool = True):
         """
         Initialize simulation runner
-        
+
         Args:
             config_path: Configuration file path (simulation_config.json)
             wait_for_commands: Whether to wait for commands after simulation completes (default True)
@@ -410,6 +427,7 @@ class TwitterSimulationRunner:
         self.env = None
         self.agent_graph = None
         self.ipc_handler = None
+        self.tool_loop = None
         
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration file"""
@@ -626,16 +644,42 @@ class TwitterSimulationRunner:
                 await self.env.step(initial_actions)
                 print(f"  Published {len(initial_actions)} initial posts")
         
-        # Main simulation loop
         print("\nStart simulation loop...")
         start_time = datetime.now()
-        
+
+        # Initialize tool-aware action loop if enabled
+        enable_tools = self.config.get("enable_agent_tools", False)
+        if enable_tools and AGENT_TOOLS_AVAILABLE:
+            print("[ToolUse] Agent tools enabled — initializing tool registry...")
+            self.config["config_path"] = self.config_path
+            self.tool_loop = create_tool_aware_loop(
+                model=model,
+                config=self.config,
+                max_tool_calls=self.config.get("max_tool_calls_per_action", 2)
+            )
+            if self.tool_loop:
+                print("[ToolUse] Tool registry ready")
+            else:
+                print("[ToolUse] Tool registry initialization failed (check Neo4j credentials)")
+        elif enable_tools and not AGENT_TOOLS_AVAILABLE:
+            print("[ToolUse] WARNING: enable_agent_tools=true but agent_tools.py could not be imported")
+
         for round_num in range(total_rounds):
+            # Honour pause flag from Flask (Phase 4 — soft-pause between rounds).
+            try:
+                from app.services.simulation_ipc import wait_while_paused, read_control_state
+                wait_while_paused(self.simulation_dir)
+                if read_control_state(self.simulation_dir).get("stop_requested"):
+                    print(f"  Stop requested via control_state.json — exiting after round {round_num}")
+                    break
+            except Exception:
+                pass
+
             # Calculate current simulation time
             simulated_minutes = round_num * minutes_per_round
             simulated_hour = (simulated_minutes // 60) % 24
             simulated_day = simulated_minutes // (60 * 24) + 1
-            
+
             # Get Agents activated this round
             active_agents = self._get_active_agents_for_round(
                 self.env, simulated_hour, round_num
@@ -644,12 +688,44 @@ class TwitterSimulationRunner:
             if not active_agents:
                 continue
             
-            # Build action
-            actions = {
-                agent: LLMAction()
-                for _, agent in active_agents
-            }
-            
+            # Build actions
+            if self.tool_loop and enable_tools:
+                # Tool-aware action loop
+                actions = {}
+                for agent_id, agent in active_agents:
+                    try:
+                        # Get observation from OASIS environment
+                        observation = ""
+                        if hasattr(self.env, 'get_observation'):
+                            observation = self.env.get_observation(agent)
+                        elif hasattr(agent, 'observation'):
+                            observation = str(agent.observation)
+
+                        # Get agent profile info
+                        agent_name = getattr(agent, 'username', f"Agent_{agent_id}")
+                        agent_role = getattr(agent, 'profession', 'Unknown')
+                        agent_bio = getattr(agent, 'bio', '')
+
+                        action = await self.tool_loop.decide_action(
+                            agent=agent,
+                            observation=observation,
+                            available_actions=self.AVAILABLE_ACTION_NAMES,
+                            agent_name=agent_name,
+                            agent_role=agent_role,
+                            agent_bio=agent_bio,
+                            language=self.config.get("language", "de")
+                        )
+                        actions[agent] = action
+                    except Exception as e:
+                        print(f"  [ToolUse] Agent {agent_id} tool loop failed: {e}")
+                        actions[agent] = LLMAction()
+            else:
+                # Standard OASIS action
+                actions = {
+                    agent: LLMAction()
+                    for _, agent in active_agents
+                }
+
             # Execute action
             await self.env.step(actions)
             

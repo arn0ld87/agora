@@ -185,3 +185,56 @@ export const getSimulationHistory = (limit = 20) => {
   return service.get('/api/simulation/history', { params: { limit } })
 }
 
+/**
+ * List installed Ollama + curated LLM model presets for the model dropdown.
+ */
+export const getAvailableModels = () => {
+  return service.get('/api/simulation/available-models')
+}
+
+/**
+ * Pause a running simulation between rounds.
+ */
+export const pauseSimulation = (simulationId) => {
+  return service.post(`/api/simulation/${simulationId}/pause`)
+}
+
+/**
+ * Resume a paused simulation.
+ */
+export const resumeSimulation = (simulationId) => {
+  return service.post(`/api/simulation/${simulationId}/resume`)
+}
+
+/**
+ * Stream raw stdout/stderr of the OASIS subprocess (terminal view).
+ * @param {string} simulationId
+ * @param {number} fromLine - incremental polling cursor
+ */
+export const getSimulationConsoleLog = (simulationId, fromLine = 0) => {
+  return service.get(`/api/simulation/${simulationId}/console-log`, {
+    params: { from_line: fromLine }
+  })
+}
+
+/**
+ * Add a manually authored persona to the prepared simulation.
+ * @param {string} simulationId
+ * @param {Object} data - { platform?, username, name, bio, persona, ... }
+ */
+export const addSimulationProfile = (simulationId, data) => {
+  return service.post(`/api/simulation/${simulationId}/profiles`, data)
+}
+
+/**
+ * Delete a persona by username.
+ * @param {string} simulationId
+ * @param {string} username
+ * @param {string} platform
+ */
+export const deleteSimulationProfile = (simulationId, username, platform = 'reddit') => {
+  return service.delete(`/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}`, {
+    params: { platform }
+  })
+}
+
