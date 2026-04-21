@@ -8,6 +8,14 @@ Agora is a fully local fork of MiroFish: a multi-agent swarm-intelligence simula
 
 Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package managers: `uv` for backend, `npm` for frontend.
 
+## Expected tool usage (proactive — don't wait to be asked)
+
+- **context7** — whenever a task touches a library, framework, SDK, CLI, or cloud service (Flask, Vue, Vite, Neo4j driver, OASIS/CAMEL, Ollama, Pinia-replacement patterns, OpenAI-compatible APIs, pytest, uv, etc.), query context7 to verify current syntax/config before writing or changing code. Do this even for APIs you "already know" — training data lags.
+- **GitHub search** (WebFetch/WebSearch against github.com, or `gh`) — when debugging third-party behavior (OASIS quirks, Neo4j 5.18 vector search edge cases, Ollama tool-call payloads, etc.), check upstream issues/PRs for known fixes before designing a workaround.
+- **sequential-thinking** — engage automatically for multi-file refactors, pipeline-spanning changes (graph → env → simulation → report), debugging that crosses subprocess boundaries, or any task where the solution path isn't obvious after a single read. Don't require an explicit "think step by step" from the user.
+
+These three are defaults, not escalations. If skipping one, say why in-line.
+
 ## Commands
 
 All commands run from repo root unless stated otherwise.
@@ -48,6 +56,8 @@ All runtime config flows through `.env` at repo root, loaded by `backend/app/con
 - `LLM_DISABLE_JSON_MODE=true` — disables `response_format=json_object`; markdown fences are stripped in `chat_json()`.
 - `GRAPH_CHUNK_SIZE=1500`, `GRAPH_CHUNK_OVERLAP=150`, `GRAPH_PARALLEL_CHUNKS=4` — graph-build performance (sweet spot for Ollama Cloud).
 - `REPORT_LANGUAGE=German` — output language for ReportAgent.
+- `TIME_PROFILE=dach_default` — DACH / Europe-Berlin social activity timing defaults.
+- `ENABLE_AGENT_TOOLS=false` — experimental OASIS agent tool-use is opt-in; enabling it adds LLM calls and latency.
 
 ## Architecture
 
@@ -85,8 +95,10 @@ models/     dataclasses (Project, Task)
 - The OASIS subprocess inherits env from the Python process, so backend env updates take effect only after a backend restart, **not** a Flask reload.
 - File uploads land in `backend/uploads/`; simulations under `backend/uploads/simulations/<sim_id>/`. The Docker volume mounts only `backend/uploads`.
 - Backend allowed extensions: `pdf`, `md`, `txt`, `markdown`. `MAX_CONTENT_LENGTH = 50 MB`.
-- The codebase still contains some Chinese comments from the upstream fork — UI strings have been fully translated, comments have not.
+- Some upstream Chinese references may remain in attribution or migration inventories, but runtime prompts/defaults should not assume non-DACH user behavior.
 
 ## Reference
 
 `docs/graphrag-speedup.md` — concrete recipe for getting graph-build under one minute against Ollama Cloud (model choice, thinking-flag, JSON mode, chunk size/parallelism, plus Docker recreate footguns and the simulation-config patch trick). Read this before touching `graph_builder.py`, `llm_client.py`, or anything that calls Ollama.
+
+`docs/agent-tools-integration.md` — how OASIS agents are wired to `GraphToolsService` / `WebTools` when `ENABLE_AGENT_TOOLS=true`.
