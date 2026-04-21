@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from ..utils.logger import get_logger
 from ..storage import GraphStorage
 
-logger = get_logger('mirofish.entity_reader')
+logger = get_logger('agora.entity_reader')
 
 
 @dataclass

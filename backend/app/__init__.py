@@ -1,5 +1,5 @@
 """
-MiroFish Backend - Flask Application Factory
+Agora Backend - Flask Application Factory
 """
 
 import os
@@ -27,7 +27,7 @@ def create_app(config_class=Config):
         app.json.ensure_ascii = False
 
     # Setup logging
-    logger = setup_logger('mirofish')
+    logger = setup_logger('agora')
 
     # Only print startup info in reloader subprocess (avoid printing twice in debug mode)
     is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
@@ -36,7 +36,7 @@ def create_app(config_class=Config):
 
     if should_log_startup:
         logger.info("=" * 50)
-        logger.info("MiroFish-Offline Backend starting...")
+        logger.info("Agora Backend starting...")
         logger.info("=" * 50)
 
     # Enable CORS
@@ -63,14 +63,14 @@ def create_app(config_class=Config):
     # Request logging middleware
     @app.before_request
     def log_request():
-        logger = get_logger('mirofish.request')
+        logger = get_logger('agora.request')
         logger.debug(f"Request: {request.method} {request.path}")
         if request.content_type and 'json' in request.content_type:
             logger.debug(f"Request body: {request.get_json(silent=True)}")
 
     @app.after_request
     def log_response(response):
-        logger = get_logger('mirofish.request')
+        logger = get_logger('agora.request')
         logger.debug(f"Response: {response.status_code}")
         return response
 
@@ -83,10 +83,10 @@ def create_app(config_class=Config):
     # Health check
     @app.route('/health')
     def health():
-        return {'status': 'ok', 'service': 'MiroFish-Offline Backend'}
+        return {'status': 'ok', 'service': 'Agora Backend'}
 
     if should_log_startup:
-        logger.info("MiroFish-Offline Backend startup complete")
+        logger.info("Agora Backend startup complete")
 
     return app
 
