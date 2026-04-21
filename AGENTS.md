@@ -1,12 +1,22 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to Codex (and any other coding agent — Claude Code reads `CLAUDE.md`, which mirrors this) when working with code in this repository.
 
 ## Project
 
 Agora is a fully local fork of MiroFish: a multi-agent swarm-intelligence simulator. Upload a document → extract a knowledge graph → spawn hundreds of personality-driven agents → simulate social-media reactions → generate a report. The fork replaces Zep Cloud with Neo4j and DashScope/OpenAI with Ollama (or any OpenAI-compatible endpoint).
 
 Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package managers: `uv` for backend, `npm` for frontend.
+
+## Expected tool usage (proactive — don't wait to be asked)
+
+The owner of this repo expects agents to reach for verification tooling **without being prompted**:
+
+- **context7** — query current docs whenever touching a library/framework/SDK/CLI (Flask, Vue 3, Vite, Neo4j 5.18 driver, OASIS/CAMEL, Ollama, OpenAI-compatible chat/tool-call APIs, pytest, uv, etc.) before writing or editing code. Do it even for "well-known" APIs — model training data lags real releases.
+- **GitHub search** (via `gh`, WebFetch, or WebSearch scoped to `github.com`) — when a third-party dependency misbehaves (OASIS edge cases, Neo4j relationship vector search, Ollama tool-call quirks, Qwen/GPT-OSS reasoning-block handling), check upstream issues/PRs for an existing fix before rolling your own workaround.
+- **sequential-thinking** — engage automatically for: multi-file refactors, pipeline-spanning changes (graph → env → simulation → report), debugging across the Flask ↔ OASIS subprocess boundary, or any task where the solution isn't obvious after a first read. No need for the user to say "think step by step."
+
+Treat these as defaults. If skipping one, briefly note why.
 
 ## Commands
 
@@ -91,4 +101,5 @@ models/     dataclasses (Project, Task)
 
 ## Reference
 
-`docs/graphrag-speedup.md` — concrete recipe for getting graph-build under one minute against Ollama Cloud (model choice, thinking-flag, JSON mode, chunk size/parallelism, plus Docker recreate footguns and the simulation-config patch trick). Read this before touching `graph_builder.py`, `llm_client.py`, or anything that calls Ollama.
+- `docs/graphrag-speedup.md` — concrete recipe for getting graph-build under one minute against Ollama Cloud (model choice, thinking-flag, JSON mode, chunk size/parallelism, plus Docker recreate footguns and the simulation-config patch trick). Read this before touching `graph_builder.py`, `llm_client.py`, or anything that calls Ollama.
+- `docs/agent-tools-integration.md` — how OASIS agents are wired to `GraphToolsService` / `WebTools` when `ENABLE_AGENT_TOOLS=true`.
