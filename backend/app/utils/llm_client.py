@@ -39,6 +39,9 @@ class LLMClient:
         # Ollama context window size — prevents prompt truncation.
         # Read from env OLLAMA_NUM_CTX, default 8192 (Ollama default is only 2048).
         self._num_ctx = int(os.environ.get('OLLAMA_NUM_CTX', '8192'))
+        # Ollama thinking toggle (Gemma 4, Qwen3, DeepSeek-R1, GPT-OSS).
+        # Default false to keep latency low on long prompts.
+        self._think = os.environ.get('OLLAMA_THINKING', 'false').lower() in ('1', 'true', 'yes')
 
     def _is_ollama(self) -> bool:
         """Check if we're talking to an Ollama server."""
@@ -73,15 +76,63 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
 
-        # For Ollama: pass num_ctx via extra_body to prevent prompt truncation
-        if self._is_ollama() and self._num_ctx:
-            kwargs["extra_body"] = {
-                "options": {"num_ctx": self._num_ctx}
-            }
+        # For Ollama: pass num_ctx via extra_body to prevent prompt truncation,
+        # plus think flag to control reasoning output on capable models.
+        if self._is_ollama():
+            extra_body: Dict[str, Any] = {}
+            if self._num_ctx:
+                extra_body["options"] = {"num_ctx": self._num_ctx}
+            extra_body["think"] = self._think
+            kwargs["extra_body"] = extra_body
 
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         # Some models (like MiniMax M2.5) include <think>thinking content in response, need to remove
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        return content
+
+    def describe_image(
+        self,
+        image_b64: str,
+        prompt: str,
+        model: Optional[str] = None,
+        mime: str = "image/png",
+        temperature: float = 0.3,
+        max_tokens: int = 1024,
+    ) -> str:
+        """
+        Send a single image + prompt to a vision-capable model and return a
+        plain-text description.
+
+        Uses the OpenAI-compatible multimodal message shape:
+            {"role": "user", "content": [
+                {"type": "text", "text": ...},
+                {"type": "image_url", "image_url": {"url": "data:<mime>;base64,<b64>"}}
+            ]}
+
+        Works against Ollama Cloud vision models (e.g. gemini-3-flash-preview:cloud).
+        """
+        vision_model = model or os.environ.get('VISION_MODEL_NAME') or self.model
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+            ],
+        }]
+        kwargs: Dict[str, Any] = {
+            "model": vision_model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if self._is_ollama():
+            extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
+            extra_body["think"] = False  # never want reasoning noise in vision output
+            kwargs["extra_body"] = extra_body
+
+        response = self.client.chat.completions.create(**kwargs)
+        content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
         return content
 
@@ -102,11 +153,12 @@ class LLMClient:
         Returns:
             Parsed JSON object
         """
+        disable_json_mode = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
         response = self.chat(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format={"type": "json_object"}
+            response_format=None if disable_json_mode else {"type": "json_object"}
         )
         # Clean markdown code block markers
         cleaned_response = response.strip()

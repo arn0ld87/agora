@@ -19,7 +19,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 
 # Get logger
-logger = get_logger('mirofish.api')
+logger = get_logger('agora.api')
 
 
 def _get_storage():
@@ -333,7 +333,7 @@ def build_graph():
             project.error = None
 
         # Get configuration
-        graph_name = data.get('graph_name', project.name or 'MiroFish Graph')
+        graph_name = data.get('graph_name', project.name or 'Agora Graph')
         chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
         chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
 
@@ -372,7 +372,7 @@ def build_graph():
 
         # Start background task
         def build_task():
-            build_logger = get_logger('mirofish.build')
+            build_logger = get_logger('agora.build')
             try:
                 build_logger.info(f"[{task_id}] Starting graph build...")
                 task_manager.update_task(

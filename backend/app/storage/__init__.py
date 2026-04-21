@@ -1,5 +1,5 @@
 """
-MiroFish-Offline Storage Layer
+Agora Storage Layer
 
 Local graph storage replacing Zep Cloud:
 - Neo4j CE for graph persistence
