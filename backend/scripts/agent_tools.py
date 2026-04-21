@@ -14,10 +14,14 @@ Tools available:
 
 import json
 import os
+import re
 import sqlite3
 import sys
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
+
+import requests
+from bs4 import BeautifulSoup
 
 # Allow importing backend modules (run scripts already do sys.path.insert)
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -144,6 +148,28 @@ class AgentToolRegistry:
                 },
             ]
 
+        tools.append({
+            "name": "web_fetch",
+            "description": (
+                "Fetch and read the text content of a web page. "
+                "Use this to read websites, blog posts, or any URL relevant to the topic."
+            ),
+            "parameters": {
+                "url": "Full URL to fetch (e.g. 'https://alexle135.de/blog')",
+                "max_chars": "Maximum characters to return (default 2000, max 4000)"
+            }
+        })
+        tools.append({
+            "name": "web_search",
+            "description": (
+                "Search the web via DuckDuckGo. Returns titles, URLs, and snippets. "
+                "Use to find recent information about a topic or person."
+            ),
+            "parameters": {
+                "query": "Search query string",
+                "num_results": "Number of results to return (default 5, max 10)"
+            }
+        })
         tools.append({
             "name": "get_simulation_context",
             "description": "Get current simulation state: simulated time, active agents, recent events.",
@@ -354,6 +380,76 @@ class AgentToolRegistry:
         except Exception as e:
             return {"error": f"Related search failed: {e}"}
 
+    def web_fetch(self, url: str, max_chars: int = 2000) -> Dict[str, Any]:
+        """Fetch a web page and return its readable text content."""
+        max_chars = min(int(max_chars), 4000)
+        try:
+            resp = requests.get(
+                url,
+                timeout=10,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; AgoraAgent/1.0)"},
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" not in content_type and "text/plain" not in content_type:
+                return {"error": f"Unsupported content type: {content_type}"}
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
+            text = soup.get_text(separator="\n")
+            text = re.sub(r"\n{3,}", "\n\n", text).strip()
+            truncated = len(text) > max_chars
+            return {
+                "url": url,
+                "chars_returned": min(len(text), max_chars),
+                "truncated": truncated,
+                "content": text[:max_chars],
+            }
+        except requests.exceptions.Timeout:
+            return {"error": "Request timed out after 10 seconds"}
+        except requests.exceptions.RequestException as e:
+            return {"error": f"HTTP error: {e}"}
+        except Exception as e:
+            return {"error": f"Fetch failed: {e}"}
+
+    def web_search(self, query: str, num_results: int = 5) -> Dict[str, Any]:
+        """Search the web via Tavily API (optimized for LLM agents)."""
+        num_results = min(int(num_results), 10)
+        api_key = os.environ.get("TAVILY_API_KEY", "")
+        if not api_key:
+            return {"error": "TAVILY_API_KEY not set in environment"}
+        try:
+            resp = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": api_key,
+                    "query": query,
+                    "max_results": num_results,
+                    "search_depth": "basic",
+                    "include_answer": False,
+                    "include_raw_content": False,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results = [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "snippet": r.get("content", "")[:300],
+                    "score": round(r.get("score", 0), 3),
+                }
+                for r in data.get("results", [])
+            ]
+            return {"query": query, "results_found": len(results), "results": results}
+        except requests.exceptions.Timeout:
+            return {"error": "Tavily search timed out after 15 seconds"}
+        except Exception as e:
+            return {"error": f"Search failed: {e}"}
+
     def get_simulation_context(self) -> Dict[str, Any]:
         """Get current simulation state"""
         context = {
@@ -469,14 +565,18 @@ You can perform one of these actions: {action_names}
 
 {tools.tools_description_text}
 
-## Tool Usage Rules
-1. You MAY call tools BEFORE deciding your action to gather information.
-2. To call a tool, use EXACTLY this format:
+## Tool Usage Rules (IMPORTANT)
+1. You SHOULD call a tool FIRST to gather real information before posting.
+   Especially use `web_search` or `web_fetch` when the topic mentions
+   a specific website, blog, company, or person — never invent facts.
+   Only skip tools if the situation is a trivial LIKE_POST or DO_NOTHING.
+2. To call a tool, use EXACTLY this format (must appear on its own):
 <tool_call>
 {{"name": "tool_name", "parameters": {{"param": "value"}}}}
 </tool_call>
-3. You can call up to the configured tool-call limit in sequence. After each tool result, you will see the output.
-4. When you have enough information, output your FINAL ACTION as JSON:
+3. You can call up to the configured tool-call limit in sequence. After each
+   tool result, you will see the output and can call another tool or decide.
+4. Only AFTER you have gathered information, output your FINAL ACTION:
 <action>
 {{"action": "ACTION_NAME", "content": "Your post content or action details"}}
 </action>
@@ -620,12 +720,14 @@ class ToolAwareActionLoop:
             # Execute tool calls
             tool_results = []
             for call in tool_calls:
-                result = self.tools.execute(
-                    call.get("name", ""),
-                    call.get("parameters", {})
-                )
+                tool_name = call.get("name", "")
+                params = call.get("parameters", {})
+                print(f"[ToolUse] Agent calling {tool_name}({params})", flush=True)
+                result = self.tools.execute(tool_name, params)
+                status = "OK" if result.success else f"ERROR: {result.error}"
+                print(f"[ToolUse]   -> {status}", flush=True)
                 tool_results.append({
-                    "tool": call.get("name"),
+                    "tool": tool_name,
                     "result": result.to_text()
                 })
                 tool_calls_count += 1
@@ -691,3 +793,111 @@ def create_tool_aware_loop(model, config: Dict[str, Any], max_tool_calls: int = 
     if not registry.storage:
         return None
     return ToolAwareActionLoop(model=model, tools=registry, max_tool_calls=max_tool_calls)
+
+
+# ── Native CAMEL FunctionTools (preferred path) ──
+#
+# These build standalone callables with docstrings CAMEL/OASIS can introspect
+# into an OpenAI function schema. CAMEL then drives native function calling
+# through the model's /v1/chat/completions `tools` parameter — no ReACT
+# prompt-parsing needed.
+
+
+def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
+    """Return a list of FunctionTool instances bound to a shared AgentToolRegistry.
+
+    Uses closures over the registry so each tool call reuses the same Neo4j
+    connection and Tavily key, but presents itself to CAMEL as a plain
+    Python function (name + docstring + type hints → OpenAI function schema).
+    """
+    try:
+        from camel.toolkits import FunctionTool
+    except ImportError:
+        print("[agent_tools] camel.toolkits.FunctionTool not available")
+        return []
+
+    registry = AgentToolRegistry.from_config(config)
+
+    def web_search(query: str, num_results: int = 5) -> str:
+        """Search the web for current information using Tavily.
+
+        Use this to find up-to-date facts about websites, people, companies,
+        events, or any topic where real-world knowledge matters.
+
+        Args:
+            query: The search query string.
+            num_results: How many search results to return (default 5, max 10).
+
+        Returns:
+            JSON string with `results` list containing title, url and snippet
+            for each hit.
+        """
+        data = registry.web_search(query=query, num_results=num_results)
+        return json.dumps(data, ensure_ascii=False)
+
+    def web_fetch(url: str, max_chars: int = 2000) -> str:
+        """Fetch and read the text content of a web page.
+
+        Use this after `web_search` to read the full content of an interesting
+        result, or directly when you know the URL (blog post, profile page,
+        documentation).
+
+        Args:
+            url: The full URL to fetch (must start with http:// or https://).
+            max_chars: Maximum characters of body text to return (default 2000, max 4000).
+
+        Returns:
+            JSON string with `url`, `chars_returned`, `truncated` and `content` fields.
+        """
+        data = registry.web_fetch(url=url, max_chars=max_chars)
+        return json.dumps(data, ensure_ascii=False)
+
+    def search_graph(query: str, limit: int = 10) -> str:
+        """Search the internal knowledge graph (facts extracted from the
+        uploaded source document) via hybrid vector + BM25 scoring.
+
+        Use this for facts that were established in the source document —
+        prefer `web_search` for anything requiring fresh or external info.
+
+        Args:
+            query: Search query string.
+            limit: Maximum number of results (default 10, max 30).
+
+        Returns:
+            JSON string with matching facts, entities and relationships.
+        """
+        data = registry.search_graph(query=query, limit=limit)
+        return json.dumps(data, ensure_ascii=False)
+
+    tools = [FunctionTool(web_search), FunctionTool(web_fetch)]
+    if registry.storage:
+        tools.append(FunctionTool(search_graph))
+    return tools
+
+
+def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
+    """Inject the given FunctionTools into every SocialAgent in an AgentGraph.
+
+    OASIS's `generate_*_agent_graph` does not expose a `tools` parameter,
+    but the underlying CAMEL ChatAgent has `add_tool()`. This helper walks
+    the graph and attaches each tool to each agent.
+
+    Returns the number of (agent × tool) bindings successfully attached.
+    """
+    if not tools or agent_graph is None:
+        return 0
+    attached = 0
+    try:
+        agents_iter = agent_graph.get_agents()
+    except Exception as e:
+        print(f"[attach_tools] get_agents failed: {e}")
+        return 0
+    for agent_id, agent in agents_iter:
+        for tool in tools:
+            try:
+                agent.add_tool(tool)
+                attached += 1
+            except Exception as e:
+                print(f"[attach_tools] agent {agent_id} add_tool failed: {e}")
+                break
+    return attached
