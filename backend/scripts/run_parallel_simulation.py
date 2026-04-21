@@ -160,6 +160,19 @@ from action_logger import SimulationLogManager, PlatformActionLogger
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
+    # Monkey-Patch: CAMEL ChatAgent defaulted token_limit auf 8192 bei OpenAI-
+    # kompatiblen Backends. Wir wollen bei großen Cloud-Modellen das volle
+    # Window nutzen. Muss VOR dem Import von oasis passieren, sonst greift's
+    # nicht für SocialAgent-Instanzen.
+    from camel.memories.context_creators.score_based import ScoreBasedContextCreator as _SBCC
+    _SBCC_ORIG_INIT = _SBCC.__init__
+    _CTX_LIMIT_OVERRIDE = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
+    def _sbcc_patched_init(self, token_counter, token_limit=None, *args, **kwargs):
+        # Wenn explizit gesetzter Wert kleiner ist als unser Override, überschreiben.
+        effective = _CTX_LIMIT_OVERRIDE if (token_limit is None or token_limit < _CTX_LIMIT_OVERRIDE) else token_limit
+        return _SBCC_ORIG_INIT(self, token_counter, effective, *args, **kwargs)
+    _SBCC.__init__ = _sbcc_patched_init
+    print(f"[context-patch] ScoreBasedContextCreator token_limit floor = {_CTX_LIMIT_OVERRIDE}", flush=True)
     import oasis
     from oasis import (
         ActionType,
