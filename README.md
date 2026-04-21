@@ -78,10 +78,12 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
    Nach der Simulation kannst du mit Agenten oder dem ReportAgent weiterarbeiten.
 
-### Screenshot
+### Demo-Teaser
 
 <div align="center">
-<img src="./static/image/agora-screenshot.jpg" alt="Agora UI" width="100%"/>
+<video src="./static/media/agora-teaser.mp4" controls muted playsinline width="100%"></video>
+<br>
+<a href="./static/media/agora-teaser.mp4">Teaser als MP4 öffnen</a>
 </div>
 
 ### Schnellstart
