@@ -1,0 +1,382 @@
+{
+  "brand": {
+    "name": "Agora",
+    "tagline": "Schwarmintelligenz, lokal."
+  },
+  "nav": {
+    "work": "Arbeit",
+    "history": "Historie",
+    "github": "GitHub",
+    "available": "Bereit",
+    "running": "Läuft",
+    "paused": "Pausiert",
+    "stopped": "Gestoppt",
+    "error": "Fehler"
+  },
+  "common": {
+    "start": "Starten",
+    "stop": "Stoppen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "next": "Weiter",
+    "back": "Zurück",
+    "retry": "Erneut versuchen",
+    "loading": "Wird geladen…",
+    "ready": "Bereit",
+    "running": "Läuft",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "error": "Fehler",
+    "yes": "Ja",
+    "no": "Nein",
+    "close": "Schließen",
+    "open": "Öffnen",
+    "edit": "Bearbeiten",
+    "view": "Ansehen",
+    "download": "Herunterladen",
+    "upload": "Hochladen",
+    "browse": "Durchsuchen",
+    "select": "Auswählen",
+    "confirm": "Bestätigen",
+    "refresh": "Aktualisieren",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "send": "Senden",
+    "thinking": "Denkt nach…",
+    "processing": "Verarbeitet…",
+    "preparing": "Wird vorbereitet…",
+    "starting": "Startet…",
+    "stopping": "Stoppt…",
+    "saving": "Wird gespeichert…",
+    "language": "Sprache",
+    "model": "Modell",
+    "more": "Mehr",
+    "details": "Details",
+    "settings": "Einstellungen",
+    "actions": "Aktionen",
+    "status": "Status",
+    "name": "Name",
+    "type": "Typ",
+    "date": "Datum",
+    "time": "Zeit",
+    "minutes": "Minuten",
+    "seconds": "Sekunden",
+    "round": "Runde",
+    "rounds": "Runden",
+    "of": "von",
+    "and": "und",
+    "or": "oder",
+    "all": "Alle",
+    "none": "Keine"
+  },
+  "home": {
+    "kicker": "STUDIO · LOKAL",
+    "edition": "№ 01 — AUSGABE",
+    "location": "OFFLINE · OPEN SOURCE",
+    "headline": {
+      "line1": "Ein Dokument rein.",
+      "line2": "Eine Welt",
+      "line3Italic": "raus."
+    },
+    "lead": "Agora baut aus deinem Text einen Wissensgraphen, bevölkert ihn mit hunderten Agenten — jeder mit eigener Biografie, Haltung, Blase — und lässt sie diskutieren, teilen, streiten. Du siehst in Echtzeit, wie sich Narrative ausbreiten, wo Gegenwind entsteht und welche Stimmen den Diskurs kippen. Vollständig lokal. Dein Laptop, dein Neo4j, dein Ollama.",
+    "tags": {
+      "engine": "Schwarm-Engine",
+      "version": "v0.2-vorschau"
+    },
+    "system": {
+      "kicker": "№ 02 — SYSTEM",
+      "title": "Bereit.",
+      "desc": "Die Engine läuft auf deiner Hardware. Kein Account, keine Anmeldung. Lade ein Dokument hoch, formuliere die Frage — die Simulation übernimmt den Rest."
+    },
+    "metrics": {
+      "free": {
+        "value": "Frei",
+        "label": "Läuft auf deiner Hardware"
+      },
+      "private": {
+        "value": "Privat",
+        "label": "Nichts verlässt diesen Rechner"
+      },
+      "openSource": {
+        "value": "Offen",
+        "label": "AGPL-3.0 lizenziert"
+      }
+    },
+    "workflow": {
+      "kicker": "№ 03 — ABLAUF"
+    },
+    "console": {
+      "uploadKicker": "01 / DOKUMENT",
+      "uploadTitle": "Lege deine Dokumente hier ab.",
+      "uploadHint": "oder klicke, um zu wählen",
+      "uploadAccepted": "PDF · MD · TXT — bis 50 MB",
+      "promptKicker": "02 / FRAGESTELLUNG",
+      "promptPlaceholder": "Beschreibe knapp, was simuliert werden soll. Beispiel: „Wie reagiert die Kölner Innenstadt auf eine flächendeckende Videoüberwachung?\"",
+      "engineLabel": "Engine: Ollama + Neo4j",
+      "startBtn": "Engine starten",
+      "initializing": "Initialisiert…",
+      "needFiles": "Mindestens ein Dokument hochladen.",
+      "needPrompt": "Beschreibung der Simulation fehlt."
+    },
+    "steps": [
+      { "num": "01", "title": "Graph aufbauen", "desc": "Entitäten und Beziehungen aus deinem Dokument extrahieren — Wissensgraph in Neo4j." },
+      { "num": "02", "title": "Umgebung", "desc": "Hunderte Agenten-Personas mit Persönlichkeit, Bias und Reaktionsverhalten erzeugen." },
+      { "num": "03", "title": "Simulation", "desc": "Agenten posten, antworten, streiten — runden­basiert, lokal, beobachtbar in Echtzeit." },
+      { "num": "04", "title": "Report", "desc": "ReportAgent durchsucht das Ergebnis, befragt eine Fokusgruppe und schreibt den Bericht." },
+      { "num": "05", "title": "Gespräch", "desc": "Sprich direkt mit den Agenten der simulierten Welt — oder mit dem ReportAgent." }
+    ],
+    "footer": {
+      "credit": "Agora — Schwarmintelligenz lokal.",
+      "fork": "Fork von MiroFish",
+      "license": "AGPL-3.0",
+      "code": "Quellcode auf GitHub",
+      "by": "Entwickelt von",
+      "byName": "Alexander Schneider",
+      "bySite": "alexle135.de"
+    }
+  },
+  "history": {
+    "kicker": "№ 04 — HISTORIE",
+    "title": "Letzte Simulationen.",
+    "empty": "Noch keine Läufe. Starte oben deine erste Simulation.",
+    "open": "Öffnen →",
+    "delete": "Löschen",
+    "confirmDelete": "Diesen Lauf wirklich löschen?",
+    "lastRun": "Zuletzt: ",
+    "createdAt": "Erstellt",
+    "documentCount": "{count} Dokument | {count} Dokumente",
+    "agentCount": "{count} Agent | {count} Agenten",
+    "search": "Suche…"
+  },
+  "process": {
+    "title": "Pipeline",
+    "back": "← zurück",
+    "stepper": {
+      "step1": "Graph",
+      "step2": "Umgebung",
+      "step3": "Simulation",
+      "step4": "Report",
+      "step5": "Gespräch"
+    }
+  },
+  "step1": {
+    "kicker": "№ 01 — GRAPH",
+    "title": "Wissensgraph aus Dokument.",
+    "sub": "GraphRAG extrahiert Entitäten und Beziehungen, schreibt Embeddings nach Neo4j. Sobald der Graph steht, kannst du ihn unten erkunden.",
+    "ontology": {
+      "title": "Ontologie",
+      "desc": "Welche Entitätstypen erwartet der Extraktor? Wird automatisch aus deiner Beschreibung generiert.",
+      "generate": "Ontologie generieren",
+      "regenerate": "Neu generieren",
+      "addType": "Typ hinzufügen",
+      "removeType": "Typ entfernen",
+      "edit": "Bearbeiten",
+      "save": "Übernehmen"
+    },
+    "build": {
+      "title": "Graph aufbauen",
+      "desc": "Chunkt das Dokument, ruft pro Chunk das LLM für Named-Entity-Recognition + Relation-Extraction auf, schreibt nach Neo4j.",
+      "start": "Graph aufbauen",
+      "rebuild": "Neu aufbauen",
+      "running": "Baut Graph…",
+      "completed": "Graph fertig.",
+      "chunks": "Chunks: {done} / {total}",
+      "elapsed": "Dauer: {time}"
+    },
+    "graph": {
+      "title": "Graph erkunden",
+      "nodes": "Knoten",
+      "edges": "Kanten",
+      "search": "Suche im Graphen…",
+      "noResults": "Keine Treffer.",
+      "openInBrowser": "Im Neo4j Browser öffnen"
+    },
+    "next": "Weiter zur Umgebung →"
+  },
+  "step2": {
+    "kicker": "№ 02 — UMGEBUNG",
+    "title": "Persönlichkeiten erzeugen.",
+    "sub": "Aus dem Graphen werden hunderte Agenten-Personas generiert. Jede mit eigener Biografie, Meinung, Reaktionsgeschwindigkeit und Einfluss.",
+    "platform": {
+      "label": "Plattform",
+      "twitter": "Twitter / X",
+      "reddit": "Reddit",
+      "parallel": "Beide parallel"
+    },
+    "model": {
+      "label": "LLM-Modell",
+      "presetGroup": "Empfohlen",
+      "ollamaGroup": "Lokal verfügbar",
+      "customGroup": "Eigene Eingabe",
+      "customLabel": "Modellname (frei eingeben)",
+      "customPlaceholder": "z. B. qwen3-coder-next:cloud",
+      "refresh": "Liste aktualisieren",
+      "loadingModels": "Lade verfügbare Modelle…",
+      "noOllama": "Keine Verbindung zu Ollama. Custom-Eingabe nutzen oder Ollama starten.",
+      "default": "Standard aus .env"
+    },
+    "personas": {
+      "title": "Personas generieren",
+      "count": "Anzahl Agenten",
+      "parallel": "Parallele Generierung",
+      "useGraph": "Personas aus Graph-Entitäten ableiten",
+      "generate": "Personas generieren",
+      "regenerate": "Neu generieren",
+      "running": "Erzeugt {done} / {total} Personas…",
+      "completed": "{count} Personas erzeugt.",
+      "preview": "Beispiel-Persona ansehen",
+      "edit": "Bearbeiten"
+    },
+    "language": {
+      "label": "Agentensprache",
+      "de": "Deutsch",
+      "en": "Englisch",
+      "hint": "Bestimmt, in welcher Sprache die Agenten posten und antworten."
+    },
+    "agentTools": {
+      "warning": "Experimenteller Agent-Tool-Use ist aktiv: Agenten können pro Aktion bis zu {count} Tool-Aufrufe ausführen. Das ist langsamer und erzeugt zusätzliche LLM-Aufrufe."
+    },
+    "next": "Weiter zur Simulation →"
+  },
+  "step3": {
+    "kicker": "№ 03 — SIMULATION",
+    "title": "Lass die Welt laufen.",
+    "sub": "Agenten interagieren rundenbasiert auf der gewählten Plattform. Du beobachtest die Aktionen live.",
+    "config": {
+      "title": "Lauf-Parameter",
+      "rounds": "Anzahl Runden",
+      "graphMemory": "Graph-Memory aktualisieren",
+      "graphMemoryHint": "Agenten-Erfahrungen fließen während der Simulation in den Wissensgraphen zurück."
+    },
+    "controls": {
+      "start": "Simulation starten",
+      "starting": "Startet…",
+      "pause": "Pausieren",
+      "pauseHint": "Pausiert nach Ende der aktuellen Runde.",
+      "resume": "Fortsetzen",
+      "stop": "Stoppen",
+      "stopConfirm": "Simulation wirklich abbrechen? Bisherige Daten bleiben erhalten.",
+      "stopped": "Gestoppt.",
+      "completed": "Abgeschlossen."
+    },
+    "status": {
+      "ready": "Bereit",
+      "running": "Läuft — Runde {current} / {total}",
+      "paused": "Pausiert nach Runde {current} / {total}",
+      "completed": "Abgeschlossen — {total} Runden",
+      "failed": "Fehlgeschlagen",
+      "elapsed": "Dauer: {time}"
+    },
+    "feed": {
+      "title": "Live-Feed",
+      "actions": "Aktionen: {count}",
+      "posts": "Posts: {count}",
+      "replies": "Antworten: {count}",
+      "filter": "Filter",
+      "all": "Alle",
+      "posts_only": "Nur Posts",
+      "replies_only": "Nur Antworten",
+      "empty": "Noch keine Aktivität."
+    },
+    "next": "Weiter zum Report →"
+  },
+  "step4": {
+    "kicker": "№ 04 — REPORT",
+    "title": "Bericht erstellen.",
+    "sub": "Der ReportAgent durchsucht den Graphen, befragt einen Querschnitt der Agenten und stellt den Bericht zusammen.",
+    "config": {
+      "title": "Bericht konfigurieren",
+      "language": "Berichtssprache",
+      "focus": "Schwerpunkt",
+      "audience": "Zielgruppe",
+      "tone": "Tonalität",
+      "length": "Länge",
+      "lengthShort": "Kurz",
+      "lengthMedium": "Mittel",
+      "lengthLong": "Ausführlich"
+    },
+    "generate": {
+      "start": "Bericht erstellen",
+      "regenerate": "Neu erstellen",
+      "running": "Erstellt Bericht…",
+      "step": "Schritt: {step}",
+      "toolCall": "Werkzeug: {tool}",
+      "completed": "Bericht fertig."
+    },
+    "view": {
+      "summary": "Zusammenfassung",
+      "sections": "Abschnitte",
+      "sources": "Quellen",
+      "agents": "Befragte Agenten",
+      "tools": "Werkzeug-Aufrufe",
+      "raw": "Rohausgabe",
+      "exportMd": "Als Markdown exportieren",
+      "exportPdf": "Als PDF exportieren"
+    },
+    "next": "Weiter zum Gespräch →"
+  },
+  "step5": {
+    "kicker": "№ 05 — GESPRÄCH",
+    "title": "Sprich mit den Agenten.",
+    "sub": "Frage einzelne Agenten direkt — oder den ReportAgent zum Gesamtbild. Persönlichkeit und Erinnerung bleiben erhalten.",
+    "tabs": {
+      "chat": "1-zu-1 Gespräch",
+      "survey": "Umfrage"
+    },
+    "selectAgent": "Agent auswählen",
+    "selectReport": "ReportAgent",
+    "search": "Suche Agent…",
+    "input": {
+      "placeholder": "Frag etwas… (Strg+Enter zum Senden)",
+      "send": "Senden"
+    },
+    "agent": {
+      "bio": "Biografie",
+      "interests": "Interessen",
+      "stance": "Haltung",
+      "history": "Verlauf"
+    },
+    "empty": "Wähle links einen Agenten.",
+    "survey": {
+      "title": "Frag mehrere Agenten dasselbe.",
+      "sub": "Wähle 2–50 Agenten, formuliere eine Frage, sieh die Antworten nebeneinander.",
+      "selectAll": "Alle wählen",
+      "clear": "Auswahl leeren",
+      "selected": "Ausgewählt: {count}",
+      "question": "Deine Frage",
+      "placeholder": "z. B. „Wie reagierst du auf flächendeckende Videoüberwachung in der Innenstadt?\"",
+      "ask": "Umfrage starten",
+      "asking": "Frage {done} / {total} Agenten…",
+      "noResults": "Noch keine Antworten.",
+      "exportCsv": "Als CSV exportieren"
+    }
+  },
+  "graph": {
+    "panel": "Graph",
+    "search": "Knoten suchen…",
+    "fit": "Anpassen",
+    "reset": "Zurücksetzen",
+    "nodeCount": "{count} Knoten",
+    "edgeCount": "{count} Kanten",
+    "selected": "Ausgewählt: {name}",
+    "noSelection": "Klick auf einen Knoten, um Details zu sehen."
+  },
+  "errors": {
+    "network": "Netzwerkfehler. Server erreichbar?",
+    "backend": "Backend-Fehler.",
+    "noNeo4j": "Neo4j nicht erreichbar.",
+    "noLlm": "LLM nicht erreichbar.",
+    "noOllama": "Ollama nicht erreichbar unter {url}.",
+    "uploadFailed": "Upload fehlgeschlagen.",
+    "fileTooLarge": "Datei zu groß. Maximum: 50 MB.",
+    "fileTypeNotAllowed": "Dateityp nicht erlaubt. Erlaubt: PDF, MD, TXT.",
+    "graphBuildFailed": "Graph-Aufbau fehlgeschlagen.",
+    "personaGenFailed": "Persona-Generierung fehlgeschlagen.",
+    "simulationFailed": "Simulation fehlgeschlagen.",
+    "reportFailed": "Bericht fehlgeschlagen.",
+    "unknown": "Unbekannter Fehler."
+  }
+}
