@@ -81,7 +81,9 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 ### Demo-Teaser
 
 <div align="center">
-<video src="./static/media/agora-teaser.mp4" controls muted playsinline width="100%"></video>
+<a href="./static/media/agora-teaser.mp4">
+<img src="./static/media/agora-teaser-preview.gif" alt="Agora Demo-Teaser" width="100%"/>
+</a>
 <br>
 <a href="./static/media/agora-teaser.mp4">Teaser als MP4 öffnen</a>
 </div>
