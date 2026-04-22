@@ -25,7 +25,8 @@ COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
 # 安装依赖（Node + Python）
 RUN npm ci \
   && npm ci --prefix frontend \
-  && cd backend && uv sync
+  && cd backend && uv sync \
+  && chown -R agora:agora /app
 
 # 复制项目源码
 COPY --chown=agora:agora . .
