@@ -19,7 +19,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: frühes Alpha — bugbehaftet
+> ## ⚠️ Status: v0.3.0 Alpha — bugbehaftet
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
