@@ -226,7 +226,7 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 - `.env.example` enthält nur Beispielwerte.
 - Neo4j-Passwörter werden nicht in `simulation_config.json` oder andere persistierte Simulation-Artefakte geschrieben.
 - `backend/uploads/` ist nicht versioniert.
-- Siehe [`SECURITY_REVIEW_SUMMARY.md`](./SECURITY_REVIEW_SUMMARY.md) für bekannte, noch offene Punkte (CORS/Auth).
+- Siehe [`docs/security-hardening.md`](./docs/security-hardening.md) für die aktuelle Sicherheitsbaseline (Auth-Token, CORS-Whitelist, SSRF-Blocker, Vision- und Label-Caps) sowie [`docs/SECURITY_REVIEW_SUMMARY.md`](./docs/SECURITY_REVIEW_SUMMARY.md) für den historischen Review-Stand.
 
 ### Architektur
 

@@ -1,5 +1,10 @@
 # Security Review Summary: Agora Backend
 
+> **Stand 2026-04-22:** Teile dieses Dokuments sind durch die in
+> [`security-hardening.md`](./security-hardening.md) umgesetzten Phasen 1–3
+> überholt (insbesondere CORS/Auth aus Punkt 6). Diese Datei bleibt als
+> historischer Review-Snapshot erhalten.
+
 ## 1. SECRETS & CONFIG (P0)
 - **Status:** Partially remediated.
 - **Findings:** No hardcoded production API keys found in the code. `.env.example` contains default placeholders.

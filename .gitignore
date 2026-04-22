@@ -2,7 +2,7 @@
 .DS_Store
 Thumbs.db
 
-# 环境变量（保护敏感信息）
+# Environment variables (protects secrets)
 .env
 .env.local
 .env.*.local
@@ -36,28 +36,28 @@ yarn-error.log*
 *.swp
 *.swo
 
-# 测试
+# Tests
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Cursor
+# Agent tooling
 .cursor/
 .claude/
 .codex/
 .serena/
 
-# 文档与测试程序
+# Local docs and scratch dirs
 mydoc/
 mytest/
 
-# 日志文件
+# Log files
 backend/logs/
 *.log
 
-# 上传文件
+# Upload folder
 backend/uploads/
 
-# Docker 数据
+# Docker data
 data/backend/venv311/
 backend/venv311/
