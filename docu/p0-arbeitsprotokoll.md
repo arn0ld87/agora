@@ -382,6 +382,30 @@ Danach wurde zusätzlich der **Prepare-Block** herausgelöst:
   - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.6 Dritter Split-Schritt
+Danach wurden **Profile / Config / Branches** herausgelöst.
+
+**Neue Datei**
+- `backend/app/api/simulation_profiles.py`
+
+**Herausgelöste Logik**
+- `/<simulation_id>/branch`
+- `/<simulation_id>/branches`
+- `/<simulation_id>/profiles` (GET/POST/DELETE)
+- `/<simulation_id>/profiles/realtime`
+- `/<simulation_id>/config`
+- `/<simulation_id>/config/realtime`
+- `/<simulation_id>/config/download`
+- `/script/<script_name>/download`
+
+**Zusätzliche Verifikation**
+- `backend/tests/test_simulation_api_routes.py` wurde auf **8 API-Smoke-Tests** erweitert
+- `npm run check` lief erneut erfolgreich durch
+- Gesamtstand danach:
+  - **57 Backend-Tests bestanden**
+  - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

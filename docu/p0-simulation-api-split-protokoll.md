@@ -222,8 +222,53 @@ Ergebnis:
 - Frontend Lint → **0 Fehler, 23 Warnungen**
 - Frontend Build → **bestanden**
 
-### 5.7 Nächste sichere Split-Kandidaten
-Nach den ersten zwei Splits sind die nächsten sinnvollen Kandidaten:
-1. Profile-/Config-/Branch-Endpunkte
-2. Run-Control-Endpunkte
-3. Interview-/Artifact-Endpunkte
+### 5.7 Dritter umgesetzter Split-Schritt
+
+**Neue Datei**
+- `backend/app/api/simulation_profiles.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `backend/tests/test_simulation_api_routes.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Herausgelöste Logik**
+- Branch-Endpunkte
+- Profile-Endpunkte
+- Config-Endpunkte
+- Script-Download-Endpunkt
+- zugehörige Hilfsfunktionen für Profile-Dateien
+
+### 5.8 Verifikation für Split-Schritt 3
+
+#### Targeted API-Smoke-Tests
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **8/8 Tests bestanden**
+- zusätzlich verifiziert:
+  - Branch-Erstellung verlangt `branch_name`
+  - Config-Route behält ihren ID-Guard
+
+#### Voller Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **57 bestanden**
+- Frontend Lint → **0 Fehler, 23 Warnungen**
+- Frontend Build → **bestanden**
+
+### 5.9 Nächste sichere Split-Kandidaten
+Nach drei erfolgreichen Splits sind die nächsten sinnvollen Kandidaten:
+1. Run-Control-Endpunkte
+2. Interview-/Artifact-Endpunkte
+3. verbleibende History-/Utility-Helfer

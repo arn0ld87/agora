@@ -70,6 +70,30 @@ def test_prepare_status_requires_identifier():
     assert payload["error"] == "Please provide task_id Or simulation_id"
 
 
+def test_create_branch_requires_branch_name():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/sim_abcdef123456/branch", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "branch_name is required"
+
+
+def test_config_route_keeps_validation_guard():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.get("/api/simulation/not-a-sim-id/config")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Invalid simulation_id format"
+
+
 def test_list_simulations_route_is_registered():
     app = _build_test_app()
     client = app.test_client()
