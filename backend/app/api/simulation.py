@@ -1096,12 +1096,12 @@ def get_simulation_history():
 def get_simulation_profiles(simulation_id: str):
     """
     Get simulation'sAgent Profile
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Query parameters:
         platform: Platform type（reddit/twitter，Defaultreddit）
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         platform = request.args.get('platform', 'reddit')
         
