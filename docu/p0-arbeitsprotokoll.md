@@ -661,6 +661,25 @@ Anschließend wurde der nächste von außen identifizierte P0-Hebel umgesetzt: P
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.15 Root-Cleanup
+Zusätzlich wurde das Wurzelverzeichnis von alten Hilfsdateien und Notiz-Artefakten entlastet.
+
+**Neue Datei**
+- `docu/p0-root-cleanup-protokoll.md`
+
+**Verschobene Dateien**
+- `plan.md` → `docu/history/previous-agent-plan.md`
+- `SECURITY_REPORT.md` → `docu/history/security-review-report.md`
+- `fix_logs.py` → `scripts/logs/fix_logs.py`
+- `format_logs.py` → `scripts/logs/format_logs.py`
+
+**Begleitende Anpassung**
+- Log-Skripte wurden von `docs/logs/...` auf `docu/logs/...` umgestellt
+
+**Verifikation**
+- Pfad- und Dateiumzug geprüft
+- Log-Skripte zeigen nun auf die neue Dokumentationsablage
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
