@@ -43,6 +43,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pipreqs>=0.5.0",
+    "ruff>=0.8.0",
 ]
 
 [build-system]
@@ -53,7 +54,28 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
 ]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --tb=short"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".venv",
+    "uploads",
+    "log",
+    "logs",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

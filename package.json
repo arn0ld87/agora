@@ -11,7 +11,12 @@
     "dev": "concurrently --kill-others -n \"backend,frontend\" -c \"green,cyan\" \"npm run backend\" \"npm run frontend\"",
     "backend": "cd backend && uv run python run.py",
     "frontend": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && uv run ruff check app/models/project.py app/services/run_registry.py app/utils/validation.py tests/test_project_manager.py tests/test_run_registry.py tests/test_validation.py",
+    "test:backend": "cd backend && uv run pytest",
+    "check": "npm run lint:backend && npm run test:backend && npm run lint:frontend && npm run build:frontend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

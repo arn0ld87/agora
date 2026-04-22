@@ -125,7 +125,11 @@ async function checkAndStopRunningSimulation() {
 }
 
 async function forceStopSimulation() {
-  try { await stopSimulation({ simulation_id: currentSimulationId.value }) } catch {}
+  try {
+    await stopSimulation({ simulation_id: currentSimulationId.value })
+  } catch {
+    // Best-effort stop: the caller already handles degraded states.
+  }
 }
 
 async function loadSimulationData() {

@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 # Standard identifier regex: prefix_ followed by 12 hex characters
 # Based on uuid4().hex[:12] usage in the codebase

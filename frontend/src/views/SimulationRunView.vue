@@ -121,10 +121,17 @@ async function handleGoBack() {
   try {
     const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
     if (envStatusRes.success && envStatusRes.data?.env_alive) {
-      try { await closeSimulationEnv({ simulation_id: currentSimulationId.value, timeout: 10 }) }
-      catch { await stopSimulation({ simulation_id: currentSimulationId.value }).catch(() => {}) }
+      try {
+        await closeSimulationEnv({ simulation_id: currentSimulationId.value, timeout: 10 })
+      } catch {
+        await stopSimulation({ simulation_id: currentSimulationId.value }).catch(() => {})
+      }
     } else if (isSimulating.value) {
-      try { await stopSimulation({ simulation_id: currentSimulationId.value }) } catch {}
+      try {
+        await stopSimulation({ simulation_id: currentSimulationId.value })
+      } catch {
+        // Best-effort cleanup before navigating back.
+      }
     }
   } catch (err) {
     addLog(err.message)
