@@ -17,6 +17,8 @@ from . import simulation_entities  # noqa: E402, F401
 from . import simulation_prepare  # noqa: E402, F401
 from . import simulation_profiles  # noqa: E402, F401
 from . import simulation_run  # noqa: E402, F401
+from . import simulation_interviews  # noqa: E402, F401
+from . import simulation_history  # noqa: E402, F401
 from . import simulation  # noqa: E402, F401
 from . import report  # noqa: E402, F401
 from . import runs  # noqa: E402, F401

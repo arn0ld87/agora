@@ -434,6 +434,35 @@ Danach wurden **Run-Control / Run-Status / Env-Control** herausgelöst.
   - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.8 Fünfter Split-Schritt
+Danach wurden die **restlichen History-/Interview-/Standalone-Routen** herausgelöst.
+
+**Neue Dateien**
+- `backend/app/api/simulation_interviews.py`
+- `backend/app/api/simulation_history.py`
+
+**Herausgelöste Logik**
+- `/history`
+- `/generate-profiles`
+- `/<simulation_id>/posts`
+- `/<simulation_id>/comments`
+- `/interview`
+- `/interview/batch`
+- `/interview/all`
+- `/interview/history`
+
+**Wichtige Folgeentscheidung**
+- `backend/app/api/simulation.py` wurde danach auf einen **Kompatibilitäts-Shim** reduziert.
+- Die tatsächliche Routenregistrierung erfolgt nun vollständig in den gesplitteten Modulen.
+
+**Zusätzliche Verifikation**
+- `backend/tests/test_simulation_api_routes.py` wurde auf **14 API-Smoke-Tests** erweitert
+- `npm run check` lief erneut erfolgreich durch
+- Gesamtstand danach:
+  - **63 Backend-Tests bestanden**
+  - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

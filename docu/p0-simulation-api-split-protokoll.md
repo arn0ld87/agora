@@ -313,8 +313,71 @@ Ergebnis:
 - Frontend Lint → **0 Fehler, 23 Warnungen**
 - Frontend Build → **bestanden**
 
-### 5.11 Nächste sichere Split-Kandidaten
-Nach vier erfolgreichen Splits sind die nächsten sinnvollen Kandidaten:
-1. Interview-/Artifact-Endpunkte
-2. verbleibende Database-Query-Endpunkte (`posts`, `comments`)
-3. verbleibende History-/Standalone-Helfer
+### 5.11 Fünfter umgesetzter Split-Schritt
+
+**Neue Dateien**
+- `backend/app/api/simulation_interviews.py`
+- `backend/app/api/simulation_history.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `backend/tests/test_simulation_api_routes.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Herausgelöste Logik**
+- Interview-Endpunkte
+- Simulation-History
+- Standalone-Profile-Generierung
+- Database-Query-Endpunkte (`posts`, `comments`)
+- Report-Lookup-Helfer für History
+
+**Wichtige Detailentscheidung**
+- `backend/app/api/simulation.py` wurde nach diesem Schritt zu einem **bewussten Kompatibilitäts-Shim** reduziert.
+- Das vermeidet einen riskanten Routen-Mischzustand und hält alte Imports stabil, während die eigentliche Registrierung nun vollständig in den Split-Modulen liegt.
+
+### 5.12 Verifikation für Split-Schritt 5
+
+#### Targeted API-Smoke-Tests
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **14/14 Tests bestanden**
+- zusätzlich verifiziert:
+  - `/generate-profiles` verlangt `graph_id`
+  - `/interview` verlangt `prompt`
+  - `/<simulation_id>/posts` behält ID-Validation
+
+#### Voller Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **63 bestanden**
+- Frontend Lint → **0 Fehler, 23 Warnungen**
+- Frontend Build → **bestanden**
+
+### 5.13 Status nach fünf Splits
+Die ursprüngliche `backend/app/api/simulation.py` ist jetzt fachlich in folgende Module zerlegt:
+- `simulation_common.py`
+- `simulation_lifecycle.py`
+- `simulation_entities.py`
+- `simulation_prepare.py`
+- `simulation_profiles.py`
+- `simulation_run.py`
+- `simulation_interviews.py`
+- `simulation_history.py`
+
+### 5.14 Nächste sinnvolle Folgearbeiten
+Nach dem erfolgreichen API-Split sind die nächsten sinnvollen Schritte:
+1. scoped Ruff-Rollout auf weitere Backend-Module ausweiten
+2. Frontend-Warnungen abbauen
+3. `GraphPanel.vue` modularisieren
+4. Workspace-/View-Konsolidierung weiterziehen
