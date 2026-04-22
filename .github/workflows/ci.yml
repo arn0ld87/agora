@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Ruff (scoped rollout)
         working-directory: backend
-        run: uv run ruff check app/models/project.py app/services/run_registry.py app/utils/validation.py app/api/simulation_common.py app/api/simulation_entities.py app/api/simulation_lifecycle.py app/api/simulation_prepare.py app/api/simulation_profiles.py tests/test_project_manager.py tests/test_run_registry.py tests/test_validation.py tests/test_simulation_api_routes.py
+        run: uv run ruff check app/models/project.py app/services/run_registry.py app/utils/validation.py app/api/simulation_common.py app/api/simulation_entities.py app/api/simulation_lifecycle.py app/api/simulation_prepare.py app/api/simulation_profiles.py app/api/simulation_run.py tests/test_project_manager.py tests/test_run_registry.py tests/test_validation.py tests/test_simulation_api_routes.py
 
   frontend:
     name: Frontend build + lint

@@ -267,8 +267,54 @@ Ergebnis:
 - Frontend Lint → **0 Fehler, 23 Warnungen**
 - Frontend Build → **bestanden**
 
-### 5.9 Nächste sichere Split-Kandidaten
-Nach drei erfolgreichen Splits sind die nächsten sinnvollen Kandidaten:
-1. Run-Control-Endpunkte
-2. Interview-/Artifact-Endpunkte
-3. verbleibende History-/Utility-Helfer
+### 5.9 Vierter umgesetzter Split-Schritt
+
+**Neue Datei**
+- `backend/app/api/simulation_run.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `backend/tests/test_simulation_api_routes.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Herausgelöste Logik**
+- Start/Stop/Pause/Resume
+- Console-Log / Run-Status / Run-Detail
+- Actions / Timeline / Agent-Stats
+- Env-Status / Close-Env
+- gemeinsamer `_simulation_dir`-Helper
+
+### 5.10 Verifikation für Split-Schritt 4
+
+#### Targeted API-Smoke-Tests
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **11/11 Tests bestanden**
+- zusätzlich verifiziert:
+  - `/start` verlangt `simulation_id`
+  - `/<simulation_id>/pause` behält ID-Validation
+  - `/env-status` verlangt `simulation_id`
+
+#### Voller Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **60 bestanden**
+- Frontend Lint → **0 Fehler, 23 Warnungen**
+- Frontend Build → **bestanden**
+
+### 5.11 Nächste sichere Split-Kandidaten
+Nach vier erfolgreichen Splits sind die nächsten sinnvollen Kandidaten:
+1. Interview-/Artifact-Endpunkte
+2. verbleibende Database-Query-Endpunkte (`posts`, `comments`)
+3. verbleibende History-/Standalone-Helfer

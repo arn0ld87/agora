@@ -406,6 +406,34 @@ Danach wurden **Profile / Config / Branches** herausgelöst.
   - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.7 Vierter Split-Schritt
+Danach wurden **Run-Control / Run-Status / Env-Control** herausgelöst.
+
+**Neue Datei**
+- `backend/app/api/simulation_run.py`
+
+**Herausgelöste Logik**
+- `/start`
+- `/stop`
+- `/<simulation_id>/pause`
+- `/<simulation_id>/resume`
+- `/<simulation_id>/console-log`
+- `/<simulation_id>/run-status`
+- `/<simulation_id>/run-status/detail`
+- `/<simulation_id>/actions`
+- `/<simulation_id>/timeline`
+- `/<simulation_id>/agent-stats`
+- `/env-status`
+- `/close-env`
+
+**Zusätzliche Verifikation**
+- `backend/tests/test_simulation_api_routes.py` wurde auf **11 API-Smoke-Tests** erweitert
+- `npm run check` lief erneut erfolgreich durch
+- Gesamtstand danach:
+  - **60 Backend-Tests bestanden**
+  - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

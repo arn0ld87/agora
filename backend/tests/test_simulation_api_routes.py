@@ -94,6 +94,42 @@ def test_config_route_keeps_validation_guard():
     assert payload["error"] == "Invalid simulation_id format"
 
 
+def test_start_simulation_requires_simulation_id():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/start", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Please provide simulation_id"
+
+
+def test_pause_route_keeps_validation_guard():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/not-a-sim-id/pause")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Invalid simulation_id format"
+
+
+def test_env_status_requires_simulation_id():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/env-status", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Please provide simulation_id"
+
+
 def test_list_simulations_route_is_registered():
     app = _build_test_app()
     client = app.test_client()
