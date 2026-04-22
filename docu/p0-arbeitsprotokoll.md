@@ -463,16 +463,50 @@ Danach wurden die **restlichen History-/Interview-/Standalone-Routen** herausgel
   - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.9 Erster GraphPanel-Modularisierungsschritt
+Nach dem Abschluss des Backend-Splits wurde der nächste P0-Hotspot im Frontend begonnen: `frontend/src/components/GraphPanel.vue`.
+
+**Neue Dateien**
+- `frontend/src/components/graph/GraphDetailPanel.vue`
+- `frontend/src/components/graph/GraphLegend.vue`
+- `frontend/src/components/graph/graphPanelUtils.js`
+- zusätzliches Detailprotokoll: `docu/p0-graph-panel-modularisierung-protokoll.md`
+
+**Geänderte Datei**
+- `frontend/src/components/GraphPanel.vue`
+
+**Herausgelöste Logik**
+- komplette Node-/Edge-Detailansicht
+- Self-Loop-Detaildarstellung
+- Entity-Type-Legende
+- Hilfsfunktionen für Entity-Type-Berechnung und Datumsformatierung
+
+**Wichtige Designentscheidung**
+- Der D3-Renderer selbst wurde in diesem Schritt **noch nicht** zerlegt.
+- Zuerst wurde nur die statische bzw. UI-lastige Logik aus dem Monolithen herausgezogen, um Risiko zu minimieren.
+
+**Messbarer Effekt**
+- `GraphPanel.vue` wurde von **1433 auf 905 Zeilen** reduziert
+- Frontend-ESLint-Warnungen sanken von **23 auf 21**
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 21 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **63 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
 2. Frontend-Warnungen gezielt abbauen
-3. weitere Aufspaltung von `simulation.py`:
-   - `prepare`
-   - run control
-   - profiles/config
-   - interviews/artifacts/env
-4. `GraphPanel.vue`-Zerlegung nachziehen
+3. `GraphPanel.vue` weiter zerlegen:
+   - D3-Datenaufbereitung
+   - Force-Simulation / Renderer
+   - Toolbar-/Toggle-/Hint-Bereiche
+4. gemeinsames Frontend-Workspace-Layout einführen
 5. eventuelle `npm audit`-Nacharbeit separat priorisieren

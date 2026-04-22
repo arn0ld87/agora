@@ -48,156 +48,13 @@
           </button>
         </div>
         
-        <!-- Node/Edge Details Panel -->
-        <div v-if="selectedItem" class="detail-panel">
-          <div class="detail-panel-header">
-            <span class="detail-title">{{ selectedItem.type === 'node' ? 'Node Details' : 'Relationship' }}</span>
-            <span v-if="selectedItem.type === 'node'" class="detail-type-badge" :style="{ background: selectedItem.color, color: '#fff' }">
-              {{ selectedItem.entityType }}
-            </span>
-            <button class="detail-close" @click="closeDetailPanel">×</button>
-          </div>
-          
-          <!-- Node Details -->
-          <div v-if="selectedItem.type === 'node'" class="detail-content">
-            <div class="detail-row">
-              <span class="detail-label">Name:</span>
-              <span class="detail-value">{{ selectedItem.data.name }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">UUID:</span>
-              <span class="detail-value uuid-text">{{ selectedItem.data.uuid }}</span>
-            </div>
-            <div class="detail-row" v-if="selectedItem.data.created_at">
-              <span class="detail-label">Created:</span>
-              <span class="detail-value">{{ formatDateTime(selectedItem.data.created_at) }}</span>
-            </div>
-            
-            <!-- Properties -->
-            <div class="detail-section" v-if="selectedItem.data.attributes && Object.keys(selectedItem.data.attributes).length > 0">
-              <div class="section-title">Properties:</div>
-              <div class="properties-list">
-                <div v-for="(value, key) in selectedItem.data.attributes" :key="key" class="property-item">
-                  <span class="property-key">{{ key }}:</span>
-                  <span class="property-value">{{ value || 'None' }}</span>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Summary -->
-            <div class="detail-section" v-if="selectedItem.data.summary">
-              <div class="section-title">Summary:</div>
-              <div class="summary-text">{{ selectedItem.data.summary }}</div>
-            </div>
-            
-            <!-- Labels -->
-            <div class="detail-section" v-if="selectedItem.data.labels && selectedItem.data.labels.length > 0">
-              <div class="section-title">Labels:</div>
-              <div class="labels-list">
-                <span v-for="label in selectedItem.data.labels" :key="label" class="label-tag">
-                  {{ label }}
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Edge Details -->
-          <div v-else class="detail-content">
-            <!-- Self-Loop Group Details -->
-            <template v-if="selectedItem.data.isSelfLoopGroup">
-              <div class="edge-relation-header self-loop-header">
-                {{ selectedItem.data.source_name }} - Self Relations
-                <span class="self-loop-count">{{ selectedItem.data.selfLoopCount }} items</span>
-              </div>
-              
-              <div class="self-loop-list">
-                <div 
-                  v-for="(loop, idx) in selectedItem.data.selfLoopEdges" 
-                  :key="loop.uuid || idx" 
-                  class="self-loop-item"
-                  :class="{ expanded: expandedSelfLoops.has(loop.uuid || idx) }"
-                >
-                  <div 
-                    class="self-loop-item-header"
-                    @click="toggleSelfLoop(loop.uuid || idx)"
-                  >
-                    <span class="self-loop-index">#{{ idx + 1 }}</span>
-                    <span class="self-loop-name">{{ loop.name || loop.fact_type || 'RELATED' }}</span>
-                    <span class="self-loop-toggle">{{ expandedSelfLoops.has(loop.uuid || idx) ? '−' : '+' }}</span>
-                  </div>
-                  
-                  <div class="self-loop-item-content" v-show="expandedSelfLoops.has(loop.uuid || idx)">
-                    <div class="detail-row" v-if="loop.uuid">
-                      <span class="detail-label">UUID:</span>
-                      <span class="detail-value uuid-text">{{ loop.uuid }}</span>
-                    </div>
-                    <div class="detail-row" v-if="loop.fact">
-                      <span class="detail-label">Fact:</span>
-                      <span class="detail-value fact-text">{{ loop.fact }}</span>
-                    </div>
-                    <div class="detail-row" v-if="loop.fact_type">
-                      <span class="detail-label">Type:</span>
-                      <span class="detail-value">{{ loop.fact_type }}</span>
-                    </div>
-                    <div class="detail-row" v-if="loop.created_at">
-                      <span class="detail-label">Created:</span>
-                      <span class="detail-value">{{ formatDateTime(loop.created_at) }}</span>
-                    </div>
-                    <div v-if="loop.episodes && loop.episodes.length > 0" class="self-loop-episodes">
-                      <span class="detail-label">Episodes:</span>
-                      <div class="episodes-list compact">
-                        <span v-for="ep in loop.episodes" :key="ep" class="episode-tag small">{{ ep }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-            
-            <!-- Regular Edge Details -->
-            <template v-else>
-              <div class="edge-relation-header">
-                {{ selectedItem.data.source_name }} → {{ selectedItem.data.name || 'RELATED_TO' }} → {{ selectedItem.data.target_name }}
-              </div>
-              
-              <div class="detail-row">
-                <span class="detail-label">UUID:</span>
-                <span class="detail-value uuid-text">{{ selectedItem.data.uuid }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Label:</span>
-                <span class="detail-value">{{ selectedItem.data.name || 'RELATED_TO' }}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Type:</span>
-                <span class="detail-value">{{ selectedItem.data.fact_type || 'Unknown' }}</span>
-              </div>
-              <div class="detail-row" v-if="selectedItem.data.fact">
-                <span class="detail-label">Fact:</span>
-                <span class="detail-value fact-text">{{ selectedItem.data.fact }}</span>
-              </div>
-              
-              <!-- Episodes -->
-              <div class="detail-section" v-if="selectedItem.data.episodes && selectedItem.data.episodes.length > 0">
-                <div class="section-title">Episodes:</div>
-                <div class="episodes-list">
-                  <span v-for="ep in selectedItem.data.episodes" :key="ep" class="episode-tag">
-                    {{ ep }}
-                  </span>
-                </div>
-              </div>
-              
-              <div class="detail-row" v-if="selectedItem.data.created_at">
-                <span class="detail-label">Created:</span>
-                <span class="detail-value">{{ formatDateTime(selectedItem.data.created_at) }}</span>
-              </div>
-              <div class="detail-row" v-if="selectedItem.data.valid_at">
-                <span class="detail-label">Valid From:</span>
-                <span class="detail-value">{{ formatDateTime(selectedItem.data.valid_at) }}</span>
-              </div>
-            </template>
-          </div>
-        </div>
+        <GraphDetailPanel
+          v-if="selectedItem"
+          :item="selectedItem"
+          :expanded-self-loops="expandedSelfLoops"
+          @close="closeDetailPanel"
+          @toggle-self-loop="toggleSelfLoop"
+        />
       </div>
       
       <!-- Loading State -->
@@ -213,16 +70,7 @@
       </div>
     </div>
 
-    <!-- Bottom Legend (Bottom Left) -->
-    <div v-if="graphData && entityTypes.length" class="graph-legend">
-      <span class="legend-title">Entity Types</span>
-      <div class="legend-items">
-        <div class="legend-item" v-for="type in entityTypes" :key="type.name">
-          <span class="legend-dot" :style="{ background: type.color }"></span>
-          <span class="legend-label">{{ type.name }}</span>
-        </div>
-      </div>
-    </div>
+    <GraphLegend v-if="graphData && entityTypes.length" :entity-types="entityTypes" />
     
     <!-- Show Edge Labels Toggle -->
     <div v-if="graphData" class="edge-labels-toggle">
@@ -239,6 +87,10 @@
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import * as d3 from 'd3'
 
+import GraphDetailPanel from './graph/GraphDetailPanel.vue'
+import GraphLegend from './graph/GraphLegend.vue'
+import { buildEntityTypes } from './graph/graphPanelUtils'
+
 const props = defineProps({
   graphData: Object,
   loading: Boolean,
@@ -246,7 +98,7 @@ const props = defineProps({
   isSimulating: Boolean
 })
 
-const emit = defineEmits(['refresh', 'toggle-maximize'])
+defineEmits(['refresh', 'toggle-maximize'])
 
 const graphContainer = ref(null)
 const graphSvg = ref(null)
@@ -262,7 +114,7 @@ const dismissFinishedHint = () => {
 }
 
 // Watch isSimulating change, detect simulation end
-watch(() => props.isSimulating, (newValue, oldValue) => {
+watch(() => props.isSimulating, (newValue) => {
   if (wasSimulating.value && !newValue) {
     // Changed from simulating to not simulating, show finished hint
     showSimulationFinishedHint.value = true
@@ -281,40 +133,7 @@ const toggleSelfLoop = (id) => {
   expandedSelfLoops.value = newSet
 }
 
-// Calculate entity types for legend
-const entityTypes = computed(() => {
-  if (!props.graphData?.nodes) return []
-  const typeMap = {}
-  // Beautiful color palette
-  const colors = ['#FF6B35', '#004E89', '#7B2D8E', '#1A936F', '#C5283D', '#E9724C', '#3498db', '#9b59b6', '#27ae60', '#f39c12']
-  
-  props.graphData.nodes.forEach(node => {
-    const type = node.labels?.find(l => l !== 'Entity') || 'Entity'
-    if (!typeMap[type]) {
-      typeMap[type] = { name: type, count: 0, color: colors[Object.keys(typeMap).length % colors.length] }
-    }
-    typeMap[type].count++
-  })
-  return Object.values(typeMap)
-})
-
-// Format datetime
-const formatDateTime = (dateStr) => {
-  if (!dateStr) return ''
-  try {
-    const date = new Date(dateStr)
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true 
-    })
-  } catch {
-    return dateStr
-  }
-}
+const entityTypes = computed(() => buildEntityTypes(props.graphData))
 
 const closeDetailPanel = () => {
   selectedItem.value = null
@@ -920,54 +739,6 @@ onUnmounted(() => {
   color: var(--fg-muted);
 }
 
-/* Entity Types Legend - Bottom Left */
-.graph-legend {
-  position: absolute;
-  bottom: var(--s-5);
-  left: var(--s-5);
-  background: var(--paper-0);
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-1);
-  border: 1px solid var(--rule);
-  z-index: 10;
-}
-
-.legend-title {
-  display: block;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  margin-bottom: var(--s-2);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-mono);
-}
-
-.legend-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2) var(--s-4);
-  max-width: 320px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  color: var(--fg-body);
-}
-
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.legend-label { white-space: nowrap; }
-
 /* Edge Labels Toggle - Top Right */
 .edge-labels-toggle {
   position: absolute;
@@ -1036,190 +807,6 @@ input:checked + .slider:before {
 .toggle-label {
   font-size: 12px;
   color: #666;
-}
-
-/* Detail Panel - Right Side */
-.detail-panel {
-  position: absolute;
-  top: 60px;
-  right: 20px;
-  width: 320px;
-  max-height: calc(100% - 100px);
-  background: #FFF;
-  border: 1px solid #EAEAEA;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-  overflow: hidden;
-  font-family: 'Noto Sans SC', system-ui, sans-serif;
-  font-size: 13px;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 16px;
-  background: #FAFAFA;
-  border-bottom: 1px solid #EEE;
-  flex-shrink: 0;
-}
-
-.detail-title {
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-}
-
-.detail-type-badge {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: auto;
-  margin-right: 12px;
-}
-
-.detail-close {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: #999;
-  line-height: 1;
-  padding: 0;
-  transition: color 0.2s;
-}
-
-.detail-close:hover {
-  color: #333;
-}
-
-.detail-content {
-  padding: 16px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.detail-row {
-  margin-bottom: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.detail-label {
-  color: #888;
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 80px;
-}
-
-.detail-value {
-  color: #333;
-  flex: 1;
-  word-break: break-word;
-}
-
-.detail-value.uuid-text {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #666;
-}
-
-.detail-value.fact-text {
-  line-height: 1.5;
-  color: #444;
-}
-
-.detail-section {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid #F0F0F0;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 10px;
-}
-
-.properties-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.property-item {
-  display: flex;
-  gap: 8px;
-}
-
-.property-key {
-  color: #888;
-  font-weight: 500;
-  min-width: 90px;
-}
-
-.property-value {
-  color: #333;
-  flex: 1;
-}
-
-.summary-text {
-  line-height: 1.6;
-  color: #444;
-  font-size: 12px;
-}
-
-.labels-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.label-tag {
-  display: inline-block;
-  padding: 4px 12px;
-  background: #F5F5F5;
-  border: 1px solid #E0E0E0;
-  border-radius: 16px;
-  font-size: 11px;
-  color: #555;
-}
-
-.episodes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.episode-tag {
-  display: inline-block;
-  padding: 6px 10px;
-  background: #F8F8F8;
-  border: 1px solid #E8E8E8;
-  border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: #666;
-  word-break: break-all;
-}
-
-/* Edge relation header */
-.edge-relation-header {
-  background: #F8F8F8;
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
-  line-height: 1.5;
-  word-break: break-word;
 }
 
 /* Building hint — editorial pill on dark ink */
@@ -1315,119 +902,4 @@ input:checked + .slider:before {
   margin: 0 auto var(--s-3);
 }
 
-/* Self-loop styles */
-.self-loop-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #E8F5E9 0%, #F1F8E9 100%);
-  border: 1px solid #C8E6C9;
-}
-
-.self-loop-count {
-  margin-left: auto;
-  font-size: 11px;
-  color: #666;
-  background: rgba(255,255,255,0.8);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.self-loop-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.self-loop-item {
-  background: #FAFAFA;
-  border: 1px solid #EAEAEA;
-  border-radius: 8px;
-}
-
-.self-loop-item-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #F5F5F5;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.self-loop-item-header:hover {
-  background: #EEEEEE;
-}
-
-.self-loop-item.expanded .self-loop-item-header {
-  background: #E8E8E8;
-}
-
-.self-loop-index {
-  font-size: 10px;
-  font-weight: 600;
-  color: #888;
-  background: #E0E0E0;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.self-loop-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: #333;
-  flex: 1;
-}
-
-.self-loop-toggle {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: #888;
-  background: #E0E0E0;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.self-loop-item.expanded .self-loop-toggle {
-  background: #D0D0D0;
-  color: #666;
-}
-
-.self-loop-item-content {
-  padding: 12px;
-  border-top: 1px solid #EAEAEA;
-}
-
-.self-loop-item-content .detail-row {
-  margin-bottom: 8px;
-}
-
-.self-loop-item-content .detail-label {
-  font-size: 11px;
-  min-width: 60px;
-}
-
-.self-loop-item-content .detail-value {
-  font-size: 12px;
-}
-
-.self-loop-episodes {
-  margin-top: 8px;
-}
-
-.episodes-list.compact {
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.episode-tag.small {
-  padding: 3px 6px;
-  font-size: 9px;
-}
 </style>
