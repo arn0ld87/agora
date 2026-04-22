@@ -20,6 +20,7 @@ from queue import Queue
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
 
@@ -355,6 +356,24 @@ class SimulationRunner:
             json.dump(data, f, ensure_ascii=False, indent=2)
         
         cls._run_states[state.simulation_id] = state
+        try:
+            registry = RunRegistry()
+            run = registry.get_latest_by_linked_id("simulation_id", state.simulation_id, run_type="simulation_run")
+            if run:
+                registry.update_run(
+                    run["run_id"],
+                    status=state.runner_status.value,
+                    progress=data.get("progress_percent", 0),
+                    message=f"Runner status: {state.runner_status.value}",
+                    artifacts={
+                        "simulation": {
+                            "run_state": state_file,
+                            "simulation_log": os.path.join(cls.RUN_STATE_DIR, state.simulation_id, "simulation.log"),
+                        }
+                    },
+                )
+        except Exception as exc:
+            logger.debug(f"Run registry sync skipped for {state.simulation_id}: {exc}")
     
     @classmethod
     def start_simulation(
@@ -1819,4 +1838,3 @@ class SimulationRunner:
             results = results[:limit]
         
         return results
-

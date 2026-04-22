@@ -13,6 +13,7 @@ import os
 import json
 import time
 import re
+from copy import deepcopy
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -451,6 +452,8 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
+    has_evidence: bool = False
+    evidence_sections: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -463,7 +466,9 @@ class Report:
             "markdown_content": self.markdown_content,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "error": self.error
+            "error": self.error,
+            "has_evidence": self.has_evidence,
+            "evidence_sections": self.evidence_sections,
         }
 
 
@@ -931,8 +936,184 @@ class ReportAgent:
         self.report_logger: Optional[ReportLogger] = None
         # Console logger (initialized in generate_report)
         self.console_logger: Optional[ReportConsoleLogger] = None
+        self.evidence_map: Optional[Dict[str, Any]] = None
+        self._active_section_evidence: List[Dict[str, Any]] = []
+        self._current_section_index: Optional[int] = None
 
         logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
+
+    def _init_evidence_map(self, report_id: str) -> None:
+        self.evidence_map = {
+            "report_id": report_id,
+            "simulation_id": self.simulation_id,
+            "sections": [],
+        }
+
+    def _truncate(self, text: str, limit: int = 300) -> str:
+        if not text:
+            return ""
+        text = str(text).strip()
+        return text if len(text) <= limit else text[:limit] + "..."
+
+    def _record_evidence_item(self, item: Dict[str, Any]) -> None:
+        if not self._active_section_evidence:
+            self._active_section_evidence = []
+        self._active_section_evidence.append(item)
+
+    def _record_tool_evidence(
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+        structured_result: Any,
+        rendered_result: str,
+        section_index: int,
+    ) -> None:
+        items: List[Dict[str, Any]] = []
+        if isinstance(structured_result, InsightForgeResult):
+            for fact in structured_result.semantic_facts[:10]:
+                items.append({
+                    "type": "graph_fact",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(fact),
+                    "raw": fact,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+            for entity in structured_result.entity_insights[:8]:
+                items.append({
+                    "type": "entity_summary",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(entity.get("summary") or entity.get("name")),
+                    "raw": entity,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+            for chain in structured_result.relationship_chains[:8]:
+                items.append({
+                    "type": "relationship_chain",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(chain),
+                    "raw": chain,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+        elif isinstance(structured_result, PanoramaResult):
+            for fact in structured_result.active_facts[:10]:
+                items.append({
+                    "type": "graph_fact",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(fact),
+                    "raw": fact,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+            for fact in structured_result.historical_facts[:6]:
+                items.append({
+                    "type": "graph_fact",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(fact),
+                    "raw": fact,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+        elif isinstance(structured_result, SearchResult):
+            for fact in structured_result.facts[:10]:
+                items.append({
+                    "type": "graph_fact",
+                    "tool_name": tool_name,
+                    "query": structured_result.query,
+                    "snippet": self._truncate(fact),
+                    "raw": fact,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+        elif isinstance(structured_result, InterviewResult):
+            for interview in structured_result.interviews[:6]:
+                items.append({
+                    "type": "agent_interview",
+                    "tool_name": tool_name,
+                    "query": structured_result.interview_topic,
+                    "snippet": self._truncate(interview.response),
+                    "raw": interview.to_dict(),
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+        elif isinstance(structured_result, dict) and "results" in structured_result:
+            for result in (structured_result.get("results") or [])[:8]:
+                items.append({
+                    "type": "web_search_result",
+                    "tool_name": tool_name,
+                    "query": structured_result.get("query") or parameters.get("query"),
+                    "snippet": self._truncate(result.get("content") or result.get("title")),
+                    "raw": result,
+                    "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+                })
+        elif isinstance(structured_result, dict) and "url" in structured_result:
+            items.append({
+                "type": "web_fetch",
+                "tool_name": tool_name,
+                "query": structured_result.get("url"),
+                "snippet": self._truncate(structured_result.get("content") or structured_result.get("title")),
+                "raw": structured_result,
+                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+            })
+
+        if not items and rendered_result:
+            items.append({
+                "type": "model_generated_inference",
+                "tool_name": tool_name,
+                "query": parameters.get("query") or parameters.get("url") or parameters.get("interview_topic"),
+                "snippet": self._truncate(rendered_result),
+                "raw": rendered_result,
+                "agent_log_ref": {"section_index": section_index, "action": "tool_result", "tool_name": tool_name},
+            })
+
+        for item in items:
+            self._record_evidence_item(item)
+
+    def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
+        chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
+        claims = []
+        for index, chunk in enumerate(chunks, 1):
+            direct_items = deepcopy(self._active_section_evidence[:10])
+            evidence_items = direct_items + [{
+                "type": "model_generated_inference",
+                "tool_name": "section_synthesis",
+                "query": None,
+                "snippet": self._truncate(chunk),
+                "raw": {"content": chunk},
+                "agent_log_ref": None,
+            }]
+            direct_count = len([item for item in direct_items if item.get("type") != "model_generated_inference"])
+            claims.append({
+                "claim_id": f"claim_{index:02d}",
+                "claim_text": chunk,
+                "evidence_items": evidence_items,
+                "confidence": "high" if direct_count >= 3 else "medium" if direct_count else "low",
+                "notes": "Section-chunk level evidence mapping in v1.",
+            })
+        if not claims:
+            claims.append({
+                "claim_id": "claim_01",
+                "claim_text": "",
+                "evidence_items": [],
+                "confidence": "low",
+                "notes": "No section content captured.",
+            })
+        return claims
+
+    def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
+        if self.evidence_map is None:
+            self._init_evidence_map(report_id)
+        section_entry = {
+            "section_index": section_index,
+            "section_title": section_title,
+            "section_summary": self._truncate(content, 400),
+            "claims": self._build_claims_for_section(content),
+        }
+        existing_sections = [s for s in self.evidence_map["sections"] if s.get("section_index") != section_index]
+        existing_sections.append(section_entry)
+        existing_sections.sort(key=lambda item: item.get("section_index", 0))
+        self.evidence_map["sections"] = existing_sections
+        ReportManager.save_evidence_map(report_id, self.evidence_map)
     
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         """Define available tools"""
@@ -1012,16 +1193,17 @@ class ReportAgent:
         logger.info(f"Executing tool: {tool_name}, parameters: {parameters}")
         
         try:
+            structured_result = None
             if tool_name == "insight_forge":
                 query = parameters.get("query", "")
                 ctx = parameters.get("report_context", "") or report_context
-                result = self.graph_tools.insight_forge(
+                structured_result = self.graph_tools.insight_forge(
                     graph_id=self.graph_id,
                     query=query,
                     simulation_requirement=self.simulation_requirement,
                     report_context=ctx
                 )
-                return result.to_text()
+                rendered = structured_result.to_text()
             
             elif tool_name == "panorama_search":
                 # Breadth search - get complete panorama
@@ -1029,12 +1211,12 @@ class ReportAgent:
                 include_expired = parameters.get("include_expired", True)
                 if isinstance(include_expired, str):
                     include_expired = include_expired.lower() in ['true', '1', 'yes']
-                result = self.graph_tools.panorama_search(
+                structured_result = self.graph_tools.panorama_search(
                     graph_id=self.graph_id,
                     query=query,
                     include_expired=include_expired
                 )
-                return result.to_text()
+                rendered = structured_result.to_text()
             
             elif tool_name == "quick_search":
                 # Simple search - quick retrieval
@@ -1042,12 +1224,12 @@ class ReportAgent:
                 limit = parameters.get("limit", 10)
                 if isinstance(limit, str):
                     limit = int(limit)
-                result = self.graph_tools.quick_search(
+                structured_result = self.graph_tools.quick_search(
                     graph_id=self.graph_id,
                     query=query,
                     limit=limit
                 )
-                return result.to_text()
+                rendered = structured_result.to_text()
             
             elif tool_name == "interview_agents":
                 # Deep interview - call real OASIS interview API to get simulated agent responses (dual platform)
@@ -1056,13 +1238,13 @@ class ReportAgent:
                 if isinstance(max_agents, str):
                     max_agents = int(max_agents)
                 max_agents = min(max_agents, 10)
-                result = self.graph_tools.interview_agents(
+                structured_result = self.graph_tools.interview_agents(
                     simulation_id=self.simulation_id,
                     interview_requirement=interview_topic,
                     simulation_requirement=self.simulation_requirement,
                     max_agents=max_agents
                 )
-                return result.to_text()
+                rendered = structured_result.to_text()
 
             elif tool_name == "web_search":
                 query = parameters.get("query", "")
@@ -1070,13 +1252,13 @@ class ReportAgent:
                 if isinstance(max_results, str):
                     try: max_results = int(max_results)
                     except ValueError: max_results = 5
-                search_result = self.web_tools.web_search(query=query, max_results=max_results)
-                return self.web_tools.format_search_result(search_result)
+                structured_result = self.web_tools.web_search(query=query, max_results=max_results)
+                rendered = self.web_tools.format_search_result(structured_result)
 
             elif tool_name == "fetch_url":
                 url = parameters.get("url", "")
-                extract_result = self.web_tools.fetch_url(url=url)
-                return self.web_tools.format_extract_result(extract_result)
+                structured_result = self.web_tools.fetch_url(url=url)
+                rendered = self.web_tools.format_extract_result(structured_result)
             
             # ========== Backward Compatibility: Old Tools (Internal Redirect to New Tools) ==========
 
@@ -1114,6 +1296,15 @@ class ReportAgent:
             
             else:
                 return f"Unknown tool: {tool_name}. Please use one of the following tools: insight_forge, panorama_search, quick_search"
+
+            self._record_tool_evidence(
+                tool_name,
+                parameters,
+                structured_result,
+                rendered,
+                section_index=self._current_section_index or 0,
+            )
+            return rendered
 
         except Exception as e:
             logger.error(f"Tool execution failed: {tool_name}, error: {str(e)}")
@@ -1305,6 +1496,8 @@ class ReportAgent:
             Section content (Markdown format)
         """
         logger.info(f"ReACT generating section: {section.title}")
+        self._current_section_index = section_index
+        self._active_section_evidence = []
         
         # Log section start
         if self.report_logger:
@@ -1459,6 +1652,7 @@ class ReportAgent:
                         content=final_answer,
                         tool_calls_count=tool_calls_count
                     )
+                self._current_section_index = None
                 return final_answer
 
             # ── Case 2: LLM attempts to call tools ──
@@ -1557,6 +1751,7 @@ class ReportAgent:
                     content=final_answer,
                     tool_calls_count=tool_calls_count
                 )
+            self._current_section_index = None
             return final_answer
         
         # Reachedmaximum iterations, forcegeneratecontent
@@ -1586,6 +1781,7 @@ class ReportAgent:
                 content=final_answer,
                 tool_calls_count=tool_calls_count
             )
+        self._current_section_index = None
         
         return final_answer
     
@@ -1637,6 +1833,11 @@ class ReportAgent:
         try:
             # Initialize: Create report folder and save initial state
             ReportManager._ensure_report_folder(report_id)
+            self.evidence_map = ReportManager.get_evidence_map(report_id) or {
+                "report_id": report_id,
+                "simulation_id": self.simulation_id,
+                "sections": [],
+            }
             
             # Initialize logslogger（structured logs agent_log.jsonl）
             self.report_logger = ReportLogger(report_id)
@@ -1667,18 +1868,21 @@ class ReportAgent:
             
             if progress_callback:
                 progress_callback("planning", 0, "Start planning report outline...")
-            
-            outline = self.plan_outline(
-                progress_callback=lambda stage, prog, msg: 
-                    progress_callback(stage, prog // 5, msg) if progress_callback else None
-            )
+
+            existing_outline = ReportManager.get_report(report_id)
+            if existing_outline and existing_outline.outline:
+                outline = existing_outline.outline
+            else:
+                outline = self.plan_outline(
+                    progress_callback=lambda stage, prog, msg:
+                        progress_callback(stage, prog // 5, msg) if progress_callback else None
+                )
+                # recordplancompletion log
+                self.report_logger.log_planning_complete(outline.to_dict())
+                # saveoutlinetofile
+                ReportManager.save_outline(report_id, outline)
+
             report.outline = outline
-            
-            # recordplancompletion log
-            self.report_logger.log_planning_complete(outline.to_dict())
-            
-            # saveoutlinetofile
-            ReportManager.save_outline(report_id, outline)
             ReportManager.update_progress(
                 report_id, "planning", 15, f"Outline planning completed, total{len(outline.sections)}sections",
                 completed_sections=[]
@@ -1692,10 +1896,21 @@ class ReportAgent:
             
             total_sections = len(outline.sections)
             generated_sections = []  # savecontentfor context
+            existing_sections = {
+                item["section_index"]: item["content"]
+                for item in ReportManager.get_generated_sections(report_id)
+            }
+            for section_info in ReportManager.get_generated_sections(report_id):
+                title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
+                completed_section_titles.append(title)
+                generated_sections.append(section_info["content"])
             
             for i, section in enumerate(outline.sections):
                 section_num = i + 1
                 base_progress = 20 + int((i / total_sections) * 70)
+                if section_num in existing_sections:
+                    section.content = ReportManager._clean_section_content(existing_sections[section_num], section.title)
+                    continue
                 
                 # Update progress
                 ReportManager.update_progress(
@@ -1731,6 +1946,7 @@ class ReportAgent:
 
                 # saveSection
                 ReportManager.save_section(report_id, section_num, section)
+                self._save_evidence_section(report_id, section_num, section.title, section_content)
                 completed_section_titles.append(section.title)
 
                 # Log sectioncompletion log
@@ -2013,6 +2229,11 @@ class ReportManager:
     def _get_console_log_path(cls, report_id: str) -> str:
         """getconsolelogsfile path"""
         return os.path.join(cls._get_report_folder(report_id), "console_log.txt")
+
+    @classmethod
+    def _get_evidence_map_path(cls, report_id: str) -> str:
+        """Get evidence map path"""
+        return os.path.join(cls._get_report_folder(report_id), "evidence_map.json")
     
     @classmethod
     def get_console_log(cls, report_id: str, from_line: int = 0) -> Dict[str, Any]:
@@ -2136,6 +2357,20 @@ class ReportManager:
         """
         result = cls.get_agent_log(report_id, from_line=0)
         return result["logs"]
+
+    @classmethod
+    def save_evidence_map(cls, report_id: str, evidence_map: Dict[str, Any]) -> None:
+        cls._ensure_report_folder(report_id)
+        with open(cls._get_evidence_map_path(report_id), "w", encoding="utf-8") as f:
+            json.dump(evidence_map, f, ensure_ascii=False, indent=2)
+
+    @classmethod
+    def get_evidence_map(cls, report_id: str) -> Optional[Dict[str, Any]]:
+        path = cls._get_evidence_map_path(report_id)
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
     
     @classmethod
     def save_outline(cls, report_id: str, outline: ReportOutline) -> None:
@@ -2487,6 +2722,10 @@ class ReportManager:
     def save_report(cls, report: Report) -> None:
         """SavereportmetainformationandcompleteReport"""
         cls._ensure_report_folder(report.report_id)
+
+        evidence_map = cls.get_evidence_map(report.report_id)
+        report.has_evidence = bool(evidence_map and evidence_map.get("sections"))
+        report.evidence_sections = len((evidence_map or {}).get("sections", []))
         
         # savemetainformationJSON
         with open(cls._get_report_path(report.report_id), 'w', encoding='utf-8') as f:
@@ -2542,6 +2781,7 @@ class ReportManager:
             if os.path.exists(full_report_path):
                 with open(full_report_path, 'r', encoding='utf-8') as f:
                     markdown_content = f.read()
+        evidence_map = cls.get_evidence_map(report_id)
         
         return Report(
             report_id=data['report_id'],
@@ -2553,7 +2793,11 @@ class ReportManager:
             markdown_content=markdown_content,
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
-            error=data.get('error')
+            error=data.get('error'),
+            has_evidence=bool(data.get('has_evidence') or (evidence_map and evidence_map.get("sections"))),
+            evidence_sections=int(
+                data.get('evidence_sections', 0) or len((evidence_map or {}).get("sections", []))
+            ),
         )
     
     @classmethod

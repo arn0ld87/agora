@@ -14,13 +14,16 @@ from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
+from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from ..utils.validation import validate_project_id, validate_graph_id, validate_task_id
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
+from ..services.run_registry import RunRegistry
 
 # Get logger
 logger = get_logger('agora.api')
+run_registry = RunRegistry()
 
 
 def _get_storage():
@@ -394,7 +397,23 @@ def build_graph():
 
         # Create async task
         task_manager = TaskManager()
-        task_id = task_manager.create_task(f"Build graph: {graph_name}")
+        run_record = run_registry.create_run(
+            run_type="graph_build",
+            entity_id=project_id,
+            status="pending",
+            progress=0,
+            message="Graph build queued",
+            linked_ids={"project_id": project_id},
+            artifacts=ArtifactLocator.existing_paths({
+                "project_dir": ProjectManager._get_project_dir(project_id),
+            }),
+            resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
+            metadata={"graph_name": graph_name},
+        )
+        task_id = task_manager.create_task(
+            f"Build graph: {graph_name}",
+            metadata={"project_id": project_id, "run_id": run_record["run_id"]},
+        )
         logger.info(f"Graph build task created: task_id={task_id}, project_id={project_id}")
         
         # Update project status
@@ -440,6 +459,12 @@ def build_graph():
                 # Update project graph_id
                 project.graph_id = graph_id
                 ProjectManager.save_project(project)
+                run_registry.update_run(
+                    run_record["run_id"],
+                    entity_id=project.graph_id or project_id,
+                    linked_ids={"graph_id": graph_id, "project_id": project_id, "task_id": task_id},
+                    message=f"Graph created: {graph_id}",
+                )
 
                 # Set ontology
                 task_manager.update_task(
@@ -508,6 +533,15 @@ def build_graph():
                         "chunk_count": total_chunks
                     }
                 )
+                run_registry.update_run(
+                    run_record["run_id"],
+                    status="completed",
+                    progress=100,
+                    message="Graph build completed",
+                    artifacts=ArtifactLocator.existing_paths({
+                        "project_dir": ProjectManager._get_project_dir(project_id),
+                    }),
+                )
 
             except Exception as e:
                 # Update project status to failed
@@ -524,6 +558,12 @@ def build_graph():
                     message=f"Build failed: {str(e)}",
                     error=traceback.format_exc()
                 )
+                run_registry.update_run(
+                    run_record["run_id"],
+                    status="failed",
+                    message=f"Build failed: {str(e)}",
+                    error=str(e),
+                )
 
         # Start background thread
         thread = threading.Thread(target=build_task, daemon=True)
@@ -534,6 +574,7 @@ def build_graph():
             "data": {
                 "project_id": project_id,
                 "task_id": task_id,
+                "run_id": run_record["run_id"],
                 "message": "Graph build task started. Query progress via /task/{task_id}"
             }
         })

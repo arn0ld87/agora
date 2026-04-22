@@ -96,6 +96,12 @@ class TaskManager:
         with self._task_lock:
             self._tasks[task_id] = task
 
+        try:
+            from ..services.run_registry import RunRegistry
+            RunRegistry().sync_task(task)
+        except Exception:
+            pass
+
         return task_id
 
     def get_task(self, task_id: str) -> Optional[Task]:
@@ -141,6 +147,11 @@ class TaskManager:
                     task.error = error
                 if progress_detail is not None:
                     task.progress_detail = progress_detail
+                try:
+                    from ..services.run_registry import RunRegistry
+                    RunRegistry().sync_task(task)
+                except Exception:
+                    pass
 
     def complete_task(self, task_id: str, result: Dict):
         """Mark task as completed"""
@@ -181,4 +192,3 @@ class TaskManager:
             ]
             for tid in old_ids:
                 del self._tasks[tid]
-

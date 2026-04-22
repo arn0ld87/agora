@@ -72,7 +72,11 @@ def create_app(config_class=Config):
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
     except Exception as e:
-        logger.error("Neo4jStorage initialization failed: %s", e)
+        logger.error(
+            "Neo4jStorage initialization failed for %s: %s",
+            Config.NEO4J_URI,
+            e,
+        )
         # Store None so endpoints can return 503 gracefully
         app.extensions['neo4j_storage'] = None
 
@@ -98,13 +102,14 @@ def create_app(config_class=Config):
 
     # Register blueprints — jedes bekommt einen Token-Guard als before_request.
     # Guard ist No-Op solange AGORA_AUTH_TOKEN nicht gesetzt ist (s. utils.auth).
-    from .api import graph_bp, simulation_bp, report_bp
+    from .api import graph_bp, simulation_bp, report_bp, runs_bp
     from .utils.auth import install_blueprint_guard, log_auth_mode
-    for bp in (graph_bp, simulation_bp, report_bp):
+    for bp in (graph_bp, simulation_bp, report_bp, runs_bp):
         install_blueprint_guard(bp)
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
+    app.register_blueprint(runs_bp, url_prefix='/api/runs')
     if should_log_startup:
         log_auth_mode(app, logger)
 
@@ -117,4 +122,3 @@ def create_app(config_class=Config):
         logger.info("Agora Backend startup complete")
 
     return app
-

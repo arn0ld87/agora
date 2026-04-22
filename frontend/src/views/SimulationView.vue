@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { getProject, getGraphData } from '../api/graph'
-import { getSimulation, stopSimulation, getEnvStatus, closeSimulationEnv } from '../api/simulation'
+import { createSimulationBranch, getSimulation, stopSimulation, getEnvStatus, closeSimulationEnv } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +20,14 @@ const graphData = ref(null)
 const graphLoading = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing')
+const showBranchPanel = ref(false)
+const branchBusy = ref(false)
+const branchForm = ref({
+  branch_name: '',
+  llm_model: '',
+  language: '',
+  max_agents: ''
+})
 
 const leftPanelStyle = computed(() => {
   if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
@@ -70,6 +78,30 @@ function handleNextStep(params = {}) {
   }
   if (params.maxRounds) routeParams.query = { maxRounds: params.maxRounds }
   router.push(routeParams)
+}
+
+async function handleCreateBranch() {
+  if (!currentSimulationId.value || !branchForm.value.branch_name.trim()) return
+  branchBusy.value = true
+  try {
+    const overrides = {}
+    if (branchForm.value.llm_model.trim()) overrides.llm_model = branchForm.value.llm_model.trim()
+    if (branchForm.value.language.trim()) overrides.language = branchForm.value.language.trim()
+    if (branchForm.value.max_agents !== '') overrides.max_agents = Number(branchForm.value.max_agents)
+    const res = await createSimulationBranch(currentSimulationId.value, {
+      branch_name: branchForm.value.branch_name.trim(),
+      copy_profiles: true,
+      copy_report_artifacts: false,
+      overrides
+    })
+    if (res?.success && res.data?.simulation_id) {
+      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
+    }
+  } catch (err) {
+    addLog(err.message)
+  } finally {
+    branchBusy.value = false
+  }
 }
 
 async function checkAndStopRunningSimulation() {
@@ -156,8 +188,16 @@ onMounted(async () => {
           <span class="status-dot" :class="`status-dot--${statusKind}`" />
           {{ statusText }}
         </span>
+        <button class="branch-btn" @click="showBranchPanel = !showBranchPanel">Create Branch</button>
       </div>
     </header>
+    <div v-if="showBranchPanel" class="branch-panel">
+      <input v-model="branchForm.branch_name" type="text" placeholder="Branch name" />
+      <input v-model="branchForm.llm_model" type="text" placeholder="LLM model override" />
+      <input v-model="branchForm.language" type="text" placeholder="language" />
+      <input v-model="branchForm.max_agents" type="number" min="1" placeholder="max agents" />
+      <button class="branch-btn" :disabled="branchBusy" @click="handleCreateBranch">Create</button>
+    </div>
     <main class="content">
       <div class="panel left" :style="leftPanelStyle">
         <GraphPanel
@@ -261,7 +301,37 @@ onMounted(async () => {
 .status-tag.status-error { color: #b00020; }
 .status-tag.status-done { color: var(--ink-0); }
 .status-tag.status-running { color: var(--accent); }
+.branch-btn {
+  border: 1px solid var(--rule);
+  background: var(--paper-0);
+  color: var(--ink-0);
+  padding: 8px 12px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.branch-panel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-6);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-1);
+}
+.branch-panel input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper-0);
+  color: var(--ink-0);
+  font-family: var(--ff-sans);
+}
 .content { flex: 1; display: flex; overflow: hidden; }
 .panel { height: 100%; overflow: hidden; transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease; }
 .panel.left { border-right: 1px solid var(--rule); }
+@media (max-width: 880px) {
+  .branch-panel { grid-template-columns: 1fr; }
+}
 </style>

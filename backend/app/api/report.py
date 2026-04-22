@@ -11,14 +11,17 @@ from flask import request, jsonify, send_file, current_app
 from . import report_bp
 from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
+from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 
 logger = get_logger(__name__)
+run_registry = RunRegistry()
 # ============== Report Generation Interface ==============
 
 @report_bp.route('/generate', methods=['POST'])
@@ -66,9 +69,34 @@ def generate_report():
         report_id = f"report_{uuid.uuid4().hex[:12]}"
 
         task_manager = TaskManager()
+        run_record = run_registry.create_run(
+            run_type="report_generate",
+            entity_id=report_id,
+            status="pending",
+            progress=0,
+            message="Report generation queued",
+            linked_ids={
+                "simulation_id": simulation_id,
+                "report_id": report_id,
+                "project_id": state.project_id,
+            },
+            artifacts=ArtifactLocator.existing_paths({
+                "report": ArtifactLocator.report_artifacts(report_id),
+                "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+            }),
+            resume_capability={"available": True, "action": "resume", "label": "Continue report generation"},
+            branch_label=state.branch_name,
+            metadata={
+                "graph_id": graph_id,
+                "source_simulation_id": state.source_simulation_id,
+                "root_simulation_id": state.root_simulation_id,
+                "branch_name": state.branch_name,
+                "branch_depth": state.branch_depth,
+            },
+        )
         task_id = task_manager.create_task(
             task_type="report_generate",
-            metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id}
+            metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
         )
 
         # Initialize graph_tools in Flask context BEFORE spawning thread
@@ -93,11 +121,43 @@ def generate_report():
                 report = agent.generate_report(progress_callback=progress_callback, report_id=report_id)
                 ReportManager.save_report(report)
                 if report.status == ReportStatus.COMPLETED:
+                    run_registry.update_run(
+                        run_record["run_id"],
+                        status="completed",
+                        progress=100,
+                        message="Report generated",
+                        artifacts=ArtifactLocator.existing_paths({
+                            "report": ArtifactLocator.report_artifacts(report_id),
+                            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+                        }),
+                        resume_capability={"available": False, "action": None, "label": None},
+                    )
                     task_manager.complete_task(task_id, result={"report_id": report.report_id, "simulation_id": simulation_id, "status": "completed"})
                 else:
+                    run_registry.update_run(
+                        run_record["run_id"],
+                        status="failed",
+                        message=report.error or "Report generation failed",
+                        error=report.error or "Report generation failed",
+                        artifacts=ArtifactLocator.existing_paths({
+                            "report": ArtifactLocator.report_artifacts(report_id),
+                            "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+                        }),
+                        resume_capability={"available": True, "action": "resume", "label": "Continue report generation"},
+                    )
                     task_manager.fail_task(task_id, report.error or "Report generation failed")
             except Exception as e:
                 logger.error(f"Report generation failed: {str(e)}")
+                run_registry.update_run(
+                    run_record["run_id"],
+                    status="failed",
+                    message=str(e),
+                    error=str(e),
+                    artifacts=ArtifactLocator.existing_paths({
+                        "report": ArtifactLocator.report_artifacts(report_id),
+                        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+                    }),
+                )
                 task_manager.fail_task(task_id, str(e))
 
         thread = threading.Thread(target=run_generate, daemon=True)
@@ -107,6 +167,7 @@ def generate_report():
             "simulation_id": simulation_id,
             "report_id": report_id,
             "task_id": task_id,
+            "run_id": run_record["run_id"],
             "status": "generating",
             "message": "Report generation task started. Query progress via /api/report/generate/status",
             "already_generated": False
@@ -139,6 +200,30 @@ def get_generate_status():
         if report_id and not validate_report_id(report_id):
             return jsonify({"success": False, "error": "Invalid report_id format"}), 400
         task_manager = TaskManager()
+
+        # ── 0) Prefer persisted run-registry status for report-specific polls ──
+        if report_id:
+            run = run_registry.get_latest_by_linked_id("report_id", report_id, run_type="report_generate")
+            if run:
+                progress_state = ReportManager.get_progress(report_id) or {}
+                report_obj = ReportManager.get_report(report_id)
+                generated_sections = {}
+                for section in ReportManager.get_generated_sections(report_id):
+                    generated_sections[section.get("section_index")] = {"content": section.get("content", "")}
+                data = {
+                    "simulation_id": run.get("linked_ids", {}).get("simulation_id") or simulation_id,
+                    "report_id": report_id,
+                    "run_id": run.get("run_id"),
+                    "status": run.get("status"),
+                    "progress": run.get("progress", 0),
+                    "message": progress_state.get("message") or run.get("message", ""),
+                    "error": run.get("error"),
+                    "outline": report_obj.outline.to_dict() if report_obj and report_obj.outline else None,
+                    "sections": generated_sections,
+                    "current_section_index": len(progress_state.get("completed_sections") or []),
+                }
+                if run.get("status") in {"completed", "failed", "paused", "stopped", "processing", "pending"}:
+                    return jsonify({"success": True, "data": data})
 
         # ── 1) Resolve task_id + simulation_id from report_id if needed ────
         if report_id and not task_id:
@@ -264,6 +349,45 @@ def list_reports():
     except Exception as e:
         logger.error(f"Failed to list reports: {str(e)}")
         return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc() if Config.DEBUG else None}), 500
+
+
+@report_bp.route('/<report_id>/evidence', methods=['GET'])
+def get_report_evidence(report_id: str):
+    if not validate_report_id(report_id):
+        return jsonify({"success": False, "error": "Invalid report_id format"}), 400
+    evidence_map = ReportManager.get_evidence_map(report_id)
+    if not evidence_map:
+        return jsonify({"success": False, "error": f"No evidence map available for report: {report_id}"}), 404
+    return jsonify({"success": True, "data": evidence_map})
+
+
+@report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])
+def get_report_evidence_section(report_id: str, section_index: int):
+    if not validate_report_id(report_id):
+        return jsonify({"success": False, "error": "Invalid report_id format"}), 400
+    evidence_map = ReportManager.get_evidence_map(report_id)
+    if not evidence_map:
+        return jsonify({"success": False, "error": f"No evidence map available for report: {report_id}"}), 404
+    section = next((item for item in evidence_map.get("sections", []) if item.get("section_index") == section_index), None)
+    if not section:
+        return jsonify({"success": False, "error": f"Evidence section not found: {section_index}"}), 404
+    return jsonify({"success": True, "data": section})
+
+
+@report_bp.route('/<report_id>/evidence/<int:section_index>/<claim_id>', methods=['GET'])
+def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str):
+    if not validate_report_id(report_id):
+        return jsonify({"success": False, "error": "Invalid report_id format"}), 400
+    evidence_map = ReportManager.get_evidence_map(report_id)
+    if not evidence_map:
+        return jsonify({"success": False, "error": f"No evidence map available for report: {report_id}"}), 404
+    section = next((item for item in evidence_map.get("sections", []) if item.get("section_index") == section_index), None)
+    if not section:
+        return jsonify({"success": False, "error": f"Evidence section not found: {section_index}"}), 404
+    claim = next((item for item in section.get("claims", []) if item.get("claim_id") == claim_id), None)
+    if not claim:
+        return jsonify({"success": False, "error": f"Claim not found: {claim_id}"}), 404
+    return jsonify({"success": True, "data": claim})
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])

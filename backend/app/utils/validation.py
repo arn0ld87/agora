@@ -6,6 +6,7 @@ from typing import Optional
 PROJ_ID_PATTERN = re.compile(r'^proj_[a-f0-9]{12}$')
 SIM_ID_PATTERN = re.compile(r'^sim_[a-f0-9]{12}$')
 REPORT_ID_PATTERN = re.compile(r'^report_[a-f0-9]{12}$')
+RUN_ID_PATTERN = re.compile(r'^run_[a-f0-9]{12}$')
 
 # Graph IDs in Neo4j are UUIDs
 UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$|'
@@ -39,6 +40,12 @@ def validate_graph_id(graph_id: str) -> bool:
     if not graph_id:
         return False
     return bool(UUID_PATTERN.match(graph_id))
+
+def validate_run_id(run_id: str) -> bool:
+    """Validate run_id format"""
+    if not run_id:
+        return False
+    return bool(RUN_ID_PATTERN.match(run_id))
 
 def validate_task_id(task_id: str) -> bool:
     """Validate task_id format"""

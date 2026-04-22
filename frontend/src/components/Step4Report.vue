@@ -3,8 +3,8 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus } from '../api/report'
-import { getAvailableModels } from '../api/simulation'
+import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
+import { createSimulationBranch, getAvailableModels } from '../api/simulation'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -37,6 +37,15 @@ const fullReport = ref(null)
 const collapsedSections = ref(new Set())
 const agentLogRef = ref(null)
 const consoleLogRef = ref(null)
+const evidenceMap = ref(null)
+const selectedEvidenceSection = ref(null)
+const branchBusy = ref(false)
+const branchForm = ref({
+  branch_name: '',
+  llm_model: '',
+  language: '',
+  max_agents: ''
+})
 // Resolved from /generate/status when only reportId was known on mount.
 const resolvedSimulationId = ref(props.simulationId || null)
 
@@ -151,7 +160,10 @@ async function pollStatus() {
         emit('update-status', 'completed')
         try {
           const full = await getReport(resolvedId)
-          if (full?.success) fullReport.value = full.data
+          if (full?.success) {
+            fullReport.value = full.data
+            await loadEvidence()
+          }
         } catch (_) { /* report not yet flushed to disk — next tick */ }
         stopPolling()
       } else if (st.status === 'failed') {
@@ -300,6 +312,24 @@ const sectionHtml = computed(() => {
   return map
 })
 
+const evidenceSections = computed(() => evidenceMap.value?.sections || [])
+const activeEvidenceSection = computed(() => {
+  return evidenceSections.value.find((section) => section.section_index === selectedEvidenceSection.value) || null
+})
+
+async function loadEvidence() {
+  if (!props.reportId) return
+  try {
+    const res = await getReportEvidence(props.reportId)
+    if (res?.success) {
+      evidenceMap.value = res.data
+      if (!selectedEvidenceSection.value && Array.isArray(res.data?.sections) && res.data.sections.length) {
+        selectedEvidenceSection.value = res.data.sections[0].section_index
+      }
+    }
+  } catch (_) { /* optional */ }
+}
+
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -390,6 +420,39 @@ async function copyMarkdown() {
   }
 }
 
+function downloadEvidence() {
+  if (!evidenceMap.value) return
+  triggerDownload(
+    new Blob([JSON.stringify(evidenceMap.value, null, 2)], { type: 'application/json;charset=utf-8' }),
+    `agora-report-${props.reportId}-evidence.json`
+  )
+}
+
+async function createBranchFromReport() {
+  const simulationId = resolvedSimulationId.value || props.simulationId
+  if (!simulationId || !branchForm.value.branch_name.trim()) return
+  branchBusy.value = true
+  try {
+    const overrides = {}
+    if (branchForm.value.llm_model.trim()) overrides.llm_model = branchForm.value.llm_model.trim()
+    if (branchForm.value.language.trim()) overrides.language = branchForm.value.language.trim()
+    if (branchForm.value.max_agents !== '') overrides.max_agents = Number(branchForm.value.max_agents)
+    const res = await createSimulationBranch(simulationId, {
+      branch_name: branchForm.value.branch_name.trim(),
+      copy_profiles: true,
+      copy_report_artifacts: false,
+      overrides
+    })
+    if (res?.success && res.data?.simulation_id) {
+      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
+    }
+  } catch (e) {
+    addLog(e.message)
+  } finally {
+    branchBusy.value = false
+  }
+}
+
 function goConversation() {
   if (props.reportId) router.push({ name: 'Interaction', params: { reportId: props.reportId } })
 }
@@ -403,7 +466,10 @@ onMounted(async () => {
   } else if (!fullReport.value) {
     try {
       const full = await getReport(props.reportId)
-      if (full?.success) fullReport.value = full.data
+      if (full?.success) {
+        fullReport.value = full.data
+        await loadEvidence()
+      }
     } catch (_) { /* swallow — pollStatus will retry later */ }
   }
 })
@@ -530,9 +596,47 @@ onUnmounted(stopPolling)
             <Btn variant="ghost" @click="downloadMarkdown">.md</Btn>
             <Btn variant="ghost" @click="downloadHtml">.html</Btn>
             <Btn variant="ghost" @click="printReport">Drucken / PDF</Btn>
+            <Btn v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Btn>
           </div>
         </header>
-        <div class="report-body markdown-body" v-html="reportHtml"></div>
+        <div class="report-layout" :class="{ 'report-layout--stacked': !evidenceSections.length }">
+          <div class="report-body markdown-body" v-html="reportHtml"></div>
+          <aside v-if="evidenceSections.length" class="evidence-panel">
+            <div class="evidence-head">
+              <strong>Evidence Inspector</strong>
+              <span>{{ evidenceSections.length }} sections</span>
+            </div>
+            <div class="evidence-sections">
+              <button
+                v-for="section in evidenceSections"
+                :key="section.section_index"
+                class="evidence-tab"
+                :class="{ active: selectedEvidenceSection === section.section_index }"
+                @click="selectedEvidenceSection = section.section_index"
+              >
+                {{ section.section_index }} · {{ section.section_title }}
+              </button>
+            </div>
+            <div v-if="activeEvidenceSection" class="evidence-body">
+              <p class="meta">{{ activeEvidenceSection.section_summary }}</p>
+              <article v-for="claim in activeEvidenceSection.claims" :key="claim.claim_id" class="claim-card">
+                <header>
+                  <strong>{{ claim.claim_id }}</strong>
+                  <Badge :variant="claim.confidence === 'low' ? 'ghost' : claim.confidence === 'medium' ? 'accent' : 'solid'">
+                    {{ claim.confidence }}
+                  </Badge>
+                </header>
+                <p>{{ claim.claim_text }}</p>
+                <div class="evidence-items">
+                  <div v-for="(item, idx) in claim.evidence_items" :key="`${claim.claim_id}-${idx}`" class="evidence-item">
+                    <Badge variant="ghost">{{ item.type }}</Badge>
+                    <span>{{ item.snippet }}</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </aside>
+        </div>
       </article>
 
       <!-- Conversation hand-off -->
@@ -540,6 +644,13 @@ onUnmounted(stopPolling)
         <header class="card-head">
           <Kicker num="05" accent>{{ t('step4.next') }}</Kicker>
         </header>
+        <div class="branch-controls" v-if="resolvedSimulationId || simulationId">
+          <input v-model="branchForm.branch_name" class="model-input" type="text" placeholder="Branch name" />
+          <input v-model="branchForm.llm_model" class="model-input" type="text" placeholder="LLM model override" />
+          <input v-model="branchForm.language" class="model-input" type="text" placeholder="language" />
+          <input v-model="branchForm.max_agents" class="model-input" type="number" min="1" placeholder="max agents" />
+          <Btn variant="ghost" :loading="branchBusy" :disabled="branchBusy" @click="createBranchFromReport">Create Branch</Btn>
+        </div>
         <div class="actions">
           <Btn variant="primary" arrow @click="goConversation">{{ t('step4.next') }}</Btn>
         </div>
@@ -632,6 +743,68 @@ onUnmounted(stopPolling)
   line-height: 1.75;
   padding: var(--s-4) 0;
 }
+.report-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+  gap: var(--s-5);
+}
+.report-layout--stacked {
+  grid-template-columns: 1fr;
+}
+.evidence-panel {
+  border-left: 1px solid var(--rule);
+  padding-left: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.evidence-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.evidence-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.evidence-tab {
+  border: 1px solid var(--rule);
+  background: var(--paper-0);
+  color: var(--ink-0);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.evidence-tab.active { border-color: var(--accent); background: var(--paper-1); }
+.claim-card {
+  border-top: 1px solid var(--rule);
+  padding-top: var(--s-3);
+}
+.claim-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  align-items: center;
+}
+.evidence-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: var(--s-3);
+}
+.evidence-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--paper-1);
+  border: 1px solid var(--rule);
+}
 
 .markdown-body :deep(h1),
 .markdown-body :deep(h2),
@@ -700,6 +873,11 @@ onUnmounted(stopPolling)
 .outline li.is-current .outline-title { color: var(--accent); }
 
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
+.branch-controls {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-3);
+}
 
 .model-row {
   display: grid;
@@ -730,6 +908,7 @@ onUnmounted(stopPolling)
 .model-input:focus { border-color: var(--accent); }
 @media (max-width: 720px) {
   .model-row { grid-template-columns: 1fr; }
+  .branch-controls { grid-template-columns: 1fr; }
 }
 
 .log-meta { display: flex; gap: var(--s-2); }
@@ -830,5 +1009,12 @@ onUnmounted(stopPolling)
 
 @media (max-width: 880px) {
   .logs-grid { grid-template-columns: 1fr; }
+  .report-layout { grid-template-columns: 1fr; }
+  .evidence-panel {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-left: 0;
+    padding-top: var(--s-4);
+  }
 }
 </style>

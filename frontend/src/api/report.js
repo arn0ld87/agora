@@ -47,6 +47,18 @@ export const getReport = (reportId) => {
   return service.get(`/api/report/${reportId}`)
 }
 
+export const getReportEvidence = (reportId) => {
+  return service.get(`/api/report/${reportId}/evidence`)
+}
+
+export const getReportEvidenceSection = (reportId, sectionIndex) => {
+  return service.get(`/api/report/${reportId}/evidence/${sectionIndex}`)
+}
+
+export const getReportEvidenceClaim = (reportId, sectionIndex, claimId) => {
+  return service.get(`/api/report/${reportId}/evidence/${sectionIndex}/${claimId}`)
+}
+
 /**
  * Chat with Report Agent
  * @param {Object} data - { simulation_id, message, chat_history? }

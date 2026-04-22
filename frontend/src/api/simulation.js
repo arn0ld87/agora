@@ -238,3 +238,10 @@ export const deleteSimulationProfile = (simulationId, username, platform = 'redd
   })
 }
 
+export const createSimulationBranch = (simulationId, data) => {
+  return service.post(`/api/simulation/${simulationId}/branch`, data)
+}
+
+export const listSimulationBranches = (simulationId) => {
+  return service.get(`/api/simulation/${simulationId}/branches`)
+}

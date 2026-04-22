@@ -1,0 +1,41 @@
+{
+  "todos": [
+    {
+      "id": "3572bcd4",
+      "content": "PC-Umgebung scannen (OS, Prozesse, Docker, Projekte)",
+      "status": "completed",
+      "priority": "high"
+    },
+    {
+      "id": "0a22a43a",
+      "content": "pi-mcp-adapter als PI Extension installieren",
+      "status": "completed",
+      "priority": "high"
+    },
+    {
+      "id": "acf4b735",
+      "content": "MCP Konfiguration erstellen: context7, sequential-thinking, memory, qdrant (Ollama)",
+      "status": "completed",
+      "priority": "high"
+    },
+    {
+      "id": "8a693e19",
+      "content": "Globalen AGENTS.md mit Stack-spezifischen Regeln erstellen",
+      "status": "completed",
+      "priority": "high"
+    },
+    {
+      "id": "f90237c6",
+      "content": "GitHub MCP Server bauen & Token sicher hinterlegen",
+      "status": "completed",
+      "priority": "high"
+    },
+    {
+      "id": "e3a84d37",
+      "content": "PI Client Neustart und finale Verifizierung",
+      "status": "completed",
+      "priority": "medium"
+    }
+  ],
+  "updated_at": "2026-04-22T15:28:53.346Z"
+}

@@ -14,9 +14,11 @@ from enum import Enum
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.artifact_locator import ArtifactLocator
 from .entity_reader import EntityReader, FilteredEntities
 from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
+from .run_registry import RunRegistry
 
 logger = get_logger('agora.simulation')
 
@@ -73,6 +75,12 @@ class SimulationState:
     
     # Error message
     error: Optional[str] = None
+
+    # Scenario branching lineage
+    source_simulation_id: Optional[str] = None
+    root_simulation_id: Optional[str] = None
+    branch_name: Optional[str] = None
+    branch_depth: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
         """Complete status dict (internal use)"""
@@ -94,6 +102,10 @@ class SimulationState:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "error": self.error,
+            "source_simulation_id": self.source_simulation_id,
+            "root_simulation_id": self.root_simulation_id,
+            "branch_name": self.branch_name,
+            "branch_depth": self.branch_depth,
         }
     
     def to_simple_dict(self) -> Dict[str, Any]:
@@ -108,6 +120,10 @@ class SimulationState:
             "entity_types": self.entity_types,
             "config_generated": self.config_generated,
             "error": self.error,
+            "source_simulation_id": self.source_simulation_id,
+            "root_simulation_id": self.root_simulation_id,
+            "branch_name": self.branch_name,
+            "branch_depth": self.branch_depth,
         }
 
 
@@ -185,6 +201,10 @@ class SimulationManager:
             created_at=data.get("created_at", datetime.now().isoformat()),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             error=data.get("error"),
+            source_simulation_id=data.get("source_simulation_id"),
+            root_simulation_id=data.get("root_simulation_id"),
+            branch_name=data.get("branch_name"),
+            branch_depth=int(data.get("branch_depth", 0) or 0),
         )
         
         self._simulations[simulation_id] = state
@@ -219,6 +239,7 @@ class SimulationManager:
             enable_twitter=enable_twitter,
             enable_reddit=enable_reddit,
             status=SimulationStatus.CREATED,
+            root_simulation_id=simulation_id,
         )
         
         self._save_simulation_state(state)
@@ -503,6 +524,216 @@ class SimulationManager:
                         simulations.append(state)
         
         return simulations
+
+    def get_simulation_config(self, simulation_id: str) -> Optional[Dict[str, Any]]:
+        config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
+        if not os.path.exists(config_path):
+            return None
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def list_branches(self, simulation_id: str) -> List[SimulationState]:
+        source = self.get_simulation(simulation_id)
+        if not source:
+            return []
+        root_id = source.root_simulation_id or source.simulation_id
+        simulations = self.list_simulations(project_id=source.project_id)
+        branches = [
+            sim for sim in simulations
+            if (sim.root_simulation_id or sim.simulation_id) == root_id
+        ]
+        branches.sort(key=lambda sim: sim.created_at, reverse=True)
+        return branches
+
+    def create_branch(
+        self,
+        simulation_id: str,
+        branch_name: str,
+        *,
+        copy_profiles: bool = True,
+        copy_report_artifacts: bool = False,
+        overrides: Optional[Dict[str, Any]] = None,
+    ) -> SimulationState:
+        allowed_override_keys = {
+            "llm_model",
+            "language",
+            "max_agents",
+            "time_config",
+            "enable_twitter",
+            "enable_reddit",
+            "persona_additions",
+            "persona_removals",
+        }
+        overrides = overrides or {}
+        unknown = sorted(set(overrides.keys()) - allowed_override_keys)
+        if unknown:
+            raise ValueError(f"Unsupported branch overrides: {', '.join(unknown)}")
+
+        source = self.get_simulation(simulation_id)
+        if not source:
+            raise ValueError(f"Simulation does not exist: {simulation_id}")
+        if source.status not in {SimulationStatus.READY, SimulationStatus.RUNNING, SimulationStatus.PAUSED, SimulationStatus.STOPPED, SimulationStatus.COMPLETED, SimulationStatus.FAILED}:
+            raise ValueError("Only prepared simulations can be branched")
+
+        source_dir = self._get_simulation_dir(simulation_id)
+        config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
+        if not os.path.exists(config_path):
+            raise ValueError("Prepared simulation config not found")
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        enable_twitter = bool(overrides.get("enable_twitter", source.enable_twitter))
+        enable_reddit = bool(overrides.get("enable_reddit", source.enable_reddit))
+        branch = self.create_simulation(
+            project_id=source.project_id,
+            graph_id=source.graph_id,
+            enable_twitter=enable_twitter,
+            enable_reddit=enable_reddit,
+        )
+        branch.status = SimulationStatus.READY
+        branch.entities_count = source.entities_count
+        branch.profiles_count = source.profiles_count
+        branch.entity_types = list(source.entity_types)
+        branch.config_generated = True
+        branch.source_simulation_id = source.simulation_id
+        branch.root_simulation_id = source.root_simulation_id or source.simulation_id
+        branch.branch_name = branch_name
+        branch.branch_depth = int(source.branch_depth or 0) + 1
+        branch.config_reasoning = source.config_reasoning
+
+        branch_dir = self._get_simulation_dir(branch.simulation_id)
+
+        config["simulation_id"] = branch.simulation_id
+        config["project_id"] = branch.project_id
+        config["graph_id"] = branch.graph_id
+        config["branch_metadata"] = {
+            "source_simulation_id": source.simulation_id,
+            "root_simulation_id": branch.root_simulation_id,
+            "branch_name": branch_name,
+            "branch_depth": branch.branch_depth,
+        }
+        for key in ("llm_model", "language", "max_agents"):
+            if key in overrides and overrides[key] not in (None, ""):
+                config[key] = overrides[key]
+        if "time_config" in overrides and isinstance(overrides["time_config"], dict):
+            existing = config.get("time_config", {}) or {}
+            existing.update(overrides["time_config"])
+            config["time_config"] = existing
+        config["enable_twitter"] = enable_twitter
+        config["enable_reddit"] = enable_reddit
+
+        with open(os.path.join(branch_dir, "simulation_config.json"), "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        persona_removals = set(overrides.get("persona_removals") or [])
+        persona_additions = overrides.get("persona_additions") or []
+
+        if copy_profiles:
+            for filename in ("reddit_profiles.json", "twitter_profiles.csv"):
+                src = os.path.join(source_dir, filename)
+                dst = os.path.join(branch_dir, filename)
+                if os.path.exists(src):
+                    shutil.copy2(src, dst)
+
+            if persona_removals or persona_additions:
+                self._apply_persona_overrides(branch_dir, persona_removals, persona_additions)
+
+        if copy_report_artifacts:
+            reports_dir = os.path.join(Config.UPLOAD_FOLDER, "reports")
+            if os.path.isdir(reports_dir):
+                for report_folder in os.listdir(reports_dir):
+                    meta_path = os.path.join(reports_dir, report_folder, "meta.json")
+                    if not os.path.exists(meta_path):
+                        continue
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as f:
+                            report_meta = json.load(f)
+                    except Exception:
+                        continue
+                    if report_meta.get("simulation_id") != simulation_id:
+                        continue
+                    branch_report_dir = os.path.join(branch_dir, "reports", report_folder)
+                    shutil.copytree(os.path.join(reports_dir, report_folder), branch_report_dir, dirs_exist_ok=True)
+
+        self._save_simulation_state(branch)
+        RunRegistry().create_run(
+            run_type="simulation_prepare",
+            entity_id=branch.simulation_id,
+            status="completed",
+            progress=100,
+            message=f"Scenario branch created from {simulation_id}",
+            branch_label=branch_name,
+            linked_ids={
+                "simulation_id": branch.simulation_id,
+                "project_id": branch.project_id,
+                "source_simulation_id": simulation_id,
+            },
+            artifacts=ArtifactLocator.existing_paths({
+                "simulation": ArtifactLocator.simulation_artifacts(branch.simulation_id),
+            }),
+            metadata={
+                "branch_name": branch_name,
+                "branch_depth": branch.branch_depth,
+                "root_simulation_id": branch.root_simulation_id,
+                "copy_profiles": copy_profiles,
+                "copy_report_artifacts": copy_report_artifacts,
+                "overrides": overrides,
+            },
+        )
+        return branch
+
+    def _apply_persona_overrides(
+        self,
+        sim_dir: str,
+        persona_removals: set,
+        persona_additions: List[Dict[str, Any]],
+    ) -> None:
+        reddit_path = os.path.join(sim_dir, "reddit_profiles.json")
+        twitter_path = os.path.join(sim_dir, "twitter_profiles.csv")
+
+        if os.path.exists(reddit_path):
+            with open(reddit_path, "r", encoding="utf-8") as f:
+                try:
+                    reddit_profiles = json.load(f)
+                except json.JSONDecodeError:
+                    reddit_profiles = []
+            reddit_profiles = [
+                profile for profile in reddit_profiles
+                if profile.get("username") not in persona_removals
+            ]
+            for addition in persona_additions:
+                platform = (addition.get("platform") or "reddit").lower()
+                if platform == "reddit":
+                    reddit_profiles.append(addition)
+            with open(reddit_path, "w", encoding="utf-8") as f:
+                json.dump(reddit_profiles, f, ensure_ascii=False, indent=2)
+
+        if os.path.exists(twitter_path):
+            import csv
+
+            with open(twitter_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                fieldnames = list(reader.fieldnames or [])
+                twitter_profiles = [
+                    row for row in reader
+                    if row.get("username") not in persona_removals
+                ]
+            for addition in persona_additions:
+                platform = (addition.get("platform") or "reddit").lower()
+                if platform != "twitter":
+                    continue
+                if not fieldnames:
+                    fieldnames = list(addition.keys())
+                for key in addition.keys():
+                    if key not in fieldnames:
+                        fieldnames.append(key)
+                twitter_profiles.append({k: addition.get(k, "") for k in fieldnames})
+            if fieldnames:
+                with open(twitter_path, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(twitter_profiles)
     
     def get_profiles(self, simulation_id: str, platform: str = "reddit") -> List[Dict[str, Any]]:
         """Get Agent Profiles for simulation"""

@@ -77,12 +77,27 @@ class Neo4jStorage(GraphStorage):
         self._ner = ner_extractor or NERExtractor()
         self._search = SearchService(self._embedding)
 
+        # Fail fast when Neo4j is not reachable so Flask can expose a clean
+        # "storage unavailable" state instead of spamming one warning per schema query.
+        self._verify_connectivity()
+
         # Initialize schema (indexes, constraints)
         self._ensure_schema()
 
     def close(self):
         """Close the Neo4j driver connection."""
         self._driver.close()
+
+    def _verify_connectivity(self):
+        """Ensure the driver can actually reach Neo4j."""
+        try:
+            self._driver.verify_connectivity()
+        except Exception:
+            try:
+                self._driver.close()
+            except Exception:
+                pass
+            raise
 
     def _ensure_schema(self):
         """Create indexes and constraints if they don't exist."""
@@ -91,7 +106,7 @@ class Neo4jStorage(GraphStorage):
                 try:
                     session.run(query)
                 except Exception as e:
-                    logger.warning(f"Schema query warning (may already exist): {e}")
+                    logger.warning(f"Schema query warning: {e}")
 
     # ----------------------------------------------------------------
     # Retry wrapper

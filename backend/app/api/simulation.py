@@ -13,11 +13,14 @@ from ..services.entity_reader import EntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
+from ..services.run_registry import RunRegistry
+from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from ..utils.validation import validate_simulation_id, validate_project_id, validate_graph_id, validate_task_id
 from ..models.project import ProjectManager
 
 logger = get_logger('agora.api.simulation')
+run_registry = RunRegistry()
 
 
 # Interview prompt optimization prefix
@@ -41,6 +44,29 @@ def optimize_interview_prompt(prompt: str) -> str:
     if prompt.startswith(INTERVIEW_PROMPT_PREFIX):
         return prompt
     return f"{INTERVIEW_PROMPT_PREFIX}{prompt}"
+
+
+def _simulation_run_artifacts(simulation_id: str):
+    return ArtifactLocator.existing_paths({
+        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+    })
+
+
+def _simulation_resume_capability(simulation_id: str, state=None):
+    control_state_path = ArtifactLocator.simulation_file(simulation_id, "control_state.json")
+    config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
+    run_state = SimulationRunner.get_run_state(simulation_id)
+    current_state = state or SimulationManager().get_simulation(simulation_id)
+
+    if run_state and run_state.runner_status == RunnerStatus.PAUSED:
+        return {"available": True, "action": "resume", "label": "Resume run"}
+    if run_state and run_state.runner_status == RunnerStatus.STOPPED and os.path.exists(config_path):
+        return {"available": True, "action": "restart", "label": "Restart run"}
+    if current_state and current_state.status == SimulationStatus.READY and os.path.exists(config_path):
+        return {"available": True, "action": "restart", "label": "Start run"}
+    if os.path.exists(control_state_path) and os.path.exists(config_path):
+        return {"available": True, "action": "restart", "label": "Restart run"}
+    return {"available": False, "action": None, "label": None}
 
 
 # ============== Model listing (Phase 3 — UI dropdown) ==============
@@ -588,11 +614,34 @@ def prepare_simulation():
         
         # Create async task
         task_manager = TaskManager()
+        run_record = run_registry.create_run(
+            run_type="simulation_prepare",
+            entity_id=simulation_id,
+            status="pending",
+            progress=0,
+            message="Simulation preparation queued",
+            linked_ids={
+                "simulation_id": simulation_id,
+                "project_id": state.project_id,
+            },
+            artifacts=_simulation_run_artifacts(simulation_id),
+            resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
+            branch_label=state.branch_name,
+            metadata={
+                "project_id": state.project_id,
+                "graph_id": state.graph_id,
+                "source_simulation_id": state.source_simulation_id,
+                "root_simulation_id": state.root_simulation_id,
+                "branch_name": state.branch_name,
+                "branch_depth": state.branch_depth,
+            },
+        )
         task_id = task_manager.create_task(
             task_type="simulation_prepare",
             metadata={
                 "simulation_id": simulation_id,
-                "project_id": state.project_id
+                "project_id": state.project_id,
+                "run_id": run_record["run_id"],
             }
         )
         
@@ -715,6 +764,7 @@ def prepare_simulation():
             "data": {
                 "simulation_id": simulation_id,
                 "task_id": task_id,
+                "run_id": run_record["run_id"],
                 "status": "preparing",
                 "message": "Preparation task started，Please via /api/simulation/prepare/status Query progress",
                 "already_prepared": False,
@@ -1064,7 +1114,11 @@ def get_simulation_history():
             
             # Get associated report_id（FindThis simulation Latest report）
             sim_dict["report_id"] = _get_report_id_for_simulation(sim.simulation_id)
-            
+            sim_dict["source_simulation_id"] = sim.source_simulation_id
+            sim_dict["root_simulation_id"] = sim.root_simulation_id or sim.simulation_id
+            sim_dict["branch_name"] = sim.branch_name
+            sim_dict["branch_depth"] = sim.branch_depth
+
             # Add version number
             sim_dict["version"] = "v1.0.2"
             
@@ -1089,6 +1143,63 @@ def get_simulation_history():
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc() if Config.DEBUG else None
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/branch', methods=['POST'])
+def create_simulation_branch(simulation_id: str):
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
+    try:
+        data = request.get_json() or {}
+        branch_name = (data.get("branch_name") or "").strip()
+        if not branch_name:
+            return jsonify({"success": False, "error": "branch_name is required"}), 400
+
+        manager = SimulationManager()
+        branch = manager.create_branch(
+            simulation_id=simulation_id,
+            branch_name=branch_name,
+            copy_profiles=data.get("copy_profiles", True),
+            copy_report_artifacts=data.get("copy_report_artifacts", False),
+            overrides=data.get("overrides") or {},
+        )
+
+        return jsonify({
+            "success": True,
+            "data": branch.to_dict(),
+        })
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Failed to create simulation branch: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc() if Config.DEBUG else None,
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>/branches', methods=['GET'])
+def list_simulation_branches(simulation_id: str):
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
+    try:
+        manager = SimulationManager()
+        branches = manager.list_branches(simulation_id)
+        return jsonify({
+            "success": True,
+            "data": [branch.to_dict() for branch in branches],
+            "count": len(branches),
+        })
+    except Exception as e:
+        logger.error(f"Failed to list simulation branches: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc() if Config.DEBUG else None,
         }), 500
 
 
@@ -1892,12 +2003,36 @@ def start_simulation():
         # Update simulation status
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
+
+        run_record = run_registry.create_run(
+            run_type="simulation_run",
+            entity_id=simulation_id,
+            status="processing",
+            progress=0,
+            message="Simulation run started",
+            linked_ids={
+                "simulation_id": simulation_id,
+                "project_id": state.project_id,
+            },
+            artifacts=_simulation_run_artifacts(simulation_id),
+            resume_capability=_simulation_resume_capability(simulation_id, state),
+            branch_label=state.branch_name,
+            metadata={
+                "graph_id": state.graph_id,
+                "platform": platform,
+                "source_simulation_id": state.source_simulation_id,
+                "root_simulation_id": state.root_simulation_id,
+                "branch_name": state.branch_name,
+                "branch_depth": state.branch_depth,
+            },
+        )
         
         response_data = run_state.to_dict()
         if max_rounds:
             response_data['max_rounds_applied'] = max_rounds
         response_data['graph_memory_update_enabled'] = enable_graph_memory_update
         response_data['force_restarted'] = force_restarted
+        response_data['run_id'] = run_record["run_id"]
         if enable_graph_memory_update:
             response_data['graph_id'] = graph_id
         
@@ -1961,6 +2096,16 @@ def stop_simulation():
         if state:
             state.status = SimulationStatus.PAUSED
             manager._save_simulation_state(state)
+            run = run_registry.get_latest_by_linked_id("simulation_id", simulation_id, run_type="simulation_run")
+            if run:
+                run_registry.update_run(
+                    run["run_id"],
+                    status="stopped",
+                    progress=run_state.to_dict().get("progress_percent", 0),
+                    message="Simulation stopped",
+                    artifacts=_simulation_run_artifacts(simulation_id),
+                    resume_capability=_simulation_resume_capability(simulation_id, state),
+                )
         
         return jsonify({
             "success": True,
@@ -1999,6 +2144,16 @@ def pause_simulation(simulation_id: str):
         return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
     state = set_pause_state(sim_dir, True)
     logger.info(f"Pause requested for {simulation_id}")
+    run = run_registry.get_latest_by_linked_id("simulation_id", simulation_id, run_type="simulation_run")
+    if run:
+        sim_state = SimulationManager().get_simulation(simulation_id)
+        run_registry.update_run(
+            run["run_id"],
+            status="paused",
+            message="Pause requested",
+            artifacts=_simulation_run_artifacts(simulation_id),
+            resume_capability=_simulation_resume_capability(simulation_id, sim_state),
+        )
     return jsonify({"success": True, "data": {"simulation_id": simulation_id, "control_state": state}})
 
 
@@ -2013,6 +2168,16 @@ def resume_simulation(simulation_id: str):
         return jsonify({"success": False, "error": f"Simulation does not exist: {simulation_id}"}), 404
     state = set_pause_state(sim_dir, False)
     logger.info(f"Resume requested for {simulation_id}")
+    run = run_registry.get_latest_by_linked_id("simulation_id", simulation_id, run_type="simulation_run")
+    if run:
+        sim_state = SimulationManager().get_simulation(simulation_id)
+        run_registry.update_run(
+            run["run_id"],
+            status="processing",
+            message="Run resumed",
+            artifacts=_simulation_run_artifacts(simulation_id),
+            resume_capability=_simulation_resume_capability(simulation_id, sim_state),
+        )
     return jsonify({"success": True, "data": {"simulation_id": simulation_id, "control_state": state}})
 
 
