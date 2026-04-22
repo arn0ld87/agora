@@ -79,6 +79,12 @@
   - Prefer a simple detect-and-report approach over dynamic container mutation.
   - If Compose GPU reservation is added, make it optional and documented, not mandatory.
 
+  **Implementation status (Haiku 4.5):**
+  - ✅ `backend/app/utils/gpu_probe.py` with `detect_gpu()` function completed and tested
+  - ✅ `docker-compose.yml` updated with commented-out GPU reservation section
+  - ✅ `README.md` GPU/CPU fallback documentation added
+  - **TODO:** `/api/status` endpoint must import and call `detect_gpu()` to include results in response payload
+
   ### 4. Neo4j connection resilience
 
   Reduce hard failures caused by transient Neo4j unavailability, especially around startup and long-running usage.

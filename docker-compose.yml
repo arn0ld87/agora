@@ -14,6 +14,17 @@ services:
       - ./backend/uploads:/app/backend/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Optional: GPU acceleration via NVIDIA Container Toolkit
+    # Uncomment the following section if nvidia-container-toolkit is installed
+    # and you want Ollama to use GPU acceleration (CUDA).
+    # Without this, the container runs in CPU-only mode.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     depends_on:
       neo4j:
         condition: service_healthy

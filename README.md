@@ -365,6 +365,16 @@ ENABLE_WEB_TOOLS=true
 
 Agent tool-use is experimental and disabled by default. When enabled, agents may run a limited number of graph/context tool calls before producing an action. This can improve context but increases latency and LLM usage. If Neo4j credentials are unavailable at runtime, the tool-aware loop fails closed and falls back to standard OASIS `LLMAction`.
 
+### GPU / CPU Fallback
+
+Agora runs on **CPU by default**. To enable GPU acceleration for Ollama:
+
+1. Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on your host.
+2. Uncomment the `deploy.resources.reservations.devices` section in `docker-compose.yml`.
+3. Rebuild and restart: `docker compose build agora && docker compose up -d --force-recreate --no-deps agora`.
+
+Without GPU setup, Ollama will run in CPU-only mode. The `/api/status` endpoint reports GPU availability and hints for configuration.
+
 ### Attribution
 
 Agora is a fork/derivative of [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), which itself is based on [666ghj/MiroFish](https://github.com/666ghj/MiroFish). The simulation engine uses [OASIS](https://github.com/camel-ai/oasis) from CAMEL-AI.
