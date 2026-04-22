@@ -172,7 +172,7 @@ function phaseVariant(phase) {
           </div>
           <div class="stat">
             <span class="stat-value">{{ graphStats.types }}</span>
-            <span class="stat-label">SCHEMA</span>
+            <span class="stat-label">ENTITÄTSTYPEN</span>
           </div>
         </div>
         <div v-if="currentPhase === 1 && buildProgress?.message" class="progress-row">
