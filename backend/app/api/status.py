@@ -21,7 +21,7 @@ def _get_backend_status():
     """Get backend health and version."""
     return {
         "ok": True,
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
 
 

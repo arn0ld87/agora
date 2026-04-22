@@ -19,7 +19,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.3.0 Alpha — bugbehaftet
+> ## ⚠️ Status: v0.4.0 Alpha — weiterhin experimentell, aber deutlich besser abgesichert
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
@@ -45,6 +45,13 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Marktstimmung und soziale Dynamiken.
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
+
+### Engineering-Stand v0.4.0
+
+- **Quality-Gates vorhanden**: `npm run check` führt gescoptes Backend-Linting, Backend-Tests, Frontend-Lint und Frontend-Build aus.
+- **Simulation-API entmonolithisiert**: die frühere XXL-Datei `backend/app/api/simulation.py` ist in fokussierte Module zerlegt (`simulation_lifecycle`, `simulation_prepare`, `simulation_run`, `simulation_interviews`, `simulation_history`, ...).
+- **Graph-UI begonnen zu modularisieren**: `GraphPanel.vue` wurde bereits in Detailpanel-, Legenden- und Datenaufbereitungs-Module geschnitten.
+- **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
 
 ### Was wurde gegenüber MiroFish geändert?
 
@@ -233,8 +240,14 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 ```text
 Flask API
   ├─ api/graph.py
-  ├─ api/simulation.py
-  └─ api/report.py
+  ├─ api/report.py
+  ├─ api/simulation_common.py
+  ├─ api/simulation_lifecycle.py
+  ├─ api/simulation_prepare.py
+  ├─ api/simulation_profiles.py
+  ├─ api/simulation_run.py
+  ├─ api/simulation_interviews.py
+  └─ api/simulation_history.py
         │
         ▼
 Service Layer
@@ -258,11 +271,18 @@ OASIS-Simulationen laufen als separate Subprozesse unter `backend/scripts/`. IPC
 ### Entwicklung
 
 ```bash
+npm run setup:all
 npm run dev
-npm run build
+npm run check
 cd backend && uv run pytest
 cd backend && uv run python -m compileall app scripts
 ```
+
+Weitere Refactoring- und Architekturprotokolle liegen in `docu/`, unter anderem:
+- `docu/p0-arbeitsprotokoll.md`
+- `docu/p0-simulation-api-split-protokoll.md`
+- `docu/p0-graph-panel-modularisierung-protokoll.md`
+- `docu/target-architecture.md`
 
 ### Herkunft und Lizenz
 
@@ -277,7 +297,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.3.0 alpha — usable, but still rough around the edges.** Agora is an active experimental
+> **⚠️ Status: v0.4.0 alpha — still experimental, but materially better structured and verified.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
 > swapped mid-run. Not production-ready. The HTTP API currently has **no
@@ -291,9 +311,16 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
+### Engineering status in v0.4.0
+
+- **Quality gates are in place** via `npm run check`.
+- **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file.
+- **GraphPanel modularization has started** with extracted detail-panel, legend, and graph-data preparation modules.
+- **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
+
 ### Key Features
 
-- **GraphRAG ingest** with Neo4j 5.18+ and `nomic-embed-text`.
+- **GraphRAG ingest** with Neo4j 5.18+ and Ollama embeddings (`qwen3-embedding:4b` currently exercised, `nomic-embed-text` still supported).
 - **Model selection in the workflow** for upload/setup and report generation.
 - **Per-simulation frozen config**: prepared simulations keep their selected model and language.
 - **Persona control**: cap agent count, inspect generated personas, add or remove manual personas.
@@ -374,6 +401,35 @@ Agora runs on **CPU by default**. To enable GPU acceleration for Ollama:
 3. Rebuild and restart: `docker compose build agora && docker compose up -d --force-recreate --no-deps agora`.
 
 Without GPU setup, Ollama will run in CPU-only mode. The `/api/status` endpoint reports GPU availability and hints for configuration.
+
+### Architecture snapshot
+
+```text
+Flask API
+  ├─ api/graph.py
+  ├─ api/report.py
+  ├─ api/simulation_common.py
+  ├─ api/simulation_lifecycle.py
+  ├─ api/simulation_prepare.py
+  ├─ api/simulation_profiles.py
+  ├─ api/simulation_run.py
+  ├─ api/simulation_interviews.py
+  └─ api/simulation_history.py
+        │
+        ▼
+Service Layer → Storage Layer → Neo4j / Ollama / OASIS subprocesses
+```
+
+### Development checks
+
+```bash
+npm run setup:all
+npm run dev
+npm run check
+cd backend && uv run pytest
+```
+
+Detailed audit and refactor logs are tracked in `docu/`.
 
 ### Attribution
 

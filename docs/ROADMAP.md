@@ -1,15 +1,20 @@
 # Agora Roadmap
 
-## Current State (v0.3.0)
+## Current State (v0.4.0)
 
 Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies removed. Core pipeline works: upload text → build knowledge graph → entity extraction → simulation → report generation.
+
+v0.4.0 also established the first refactoring baseline:
+- root quality gates and CI
+- split simulation API modules
+- first GraphPanel modularization steps
 
 ---
 
 ## Near Term
 
-### v0.4.0 — Operability & Resilience (in progress)
-Scope-Fokus umgestellt auf Betrieb & Robustheit. Siehe `docs/plan_0.4.md`.
+### v0.4.0 — Operability & Resilience (completed)
+Scope-Fokus auf Betrieb, Robustheit und Refactoring-Basis. Siehe `docs/plan_0.4.md`.
 - [x] Add Docker Compose GPU auto-detection (fallback to CPU-only Ollama)
 - [x] Connection resilience: auto-reconnect to Neo4j on transient failures
 - [x] Add `/api/status` endpoint showing Neo4j connection state, Ollama model availability, and disk usage

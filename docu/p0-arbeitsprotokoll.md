@@ -533,6 +533,42 @@ Danach wurde die **D3-Datenaufbereitung / Graph-Normalisierung** aus `GraphPanel
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.11 Versions- und README-Synchronisierung
+Zwischen den Refactoring-Schritten wurde zusätzlich eine **sichtbare Versionsanhebung plus README-Überarbeitung** eingezogen, damit der öffentliche Projektzustand zum tatsächlichen Stand passt.
+
+**Version angehoben auf**
+- `0.4.0`
+
+**Geänderte Dateien**
+- `package.json`
+- `package-lock.json`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `backend/pyproject.toml`
+- `backend/uv.lock`
+- `backend/app/api/status.py`
+- `backend/tests/test_status.py`
+- `frontend/src/i18n/locales/de.json`
+- `frontend/src/i18n/locales/en.json`
+- `README.md`
+- `CHANGELOG.md`
+- `docs/ROADMAP.md`
+
+**README-Überarbeitung**
+- Versionsstatus auf `v0.4.0 alpha` aktualisiert
+- Engineering-Status (Qualitäts-Gates, API-Split, GraphPanel-Modularisierung) sichtbar gemacht
+- Architekturabschnitt auf die gesplitteten Simulation-API-Module aktualisiert
+- Entwicklungsbefehle um `npm run check` ergänzt
+- Refactoring-Dokumentation unter `docu/` im README verlinkt
+- englische README-Hälfte ebenfalls auf denselben Stand gebracht
+
+**Verifikation**
+- `npm run check` lief nach der Versionsanhebung erneut erfolgreich durch
+- dabei weiter bestätigt:
+  - **63 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
