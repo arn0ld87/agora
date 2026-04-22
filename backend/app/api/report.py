@@ -18,7 +18,7 @@ from ..services.graph_tools import GraphToolsService
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 
-
+logger = get_logger(__name__)
 # ============== Report Generation Interface ==============
 
 @report_bp.route('/generate', methods=['POST'])
