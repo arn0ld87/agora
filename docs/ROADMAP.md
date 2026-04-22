@@ -8,12 +8,13 @@ Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies remove
 
 ## Near Term
 
-### v0.4.0 — Stability & Python Compatibility
-- [ ] Fix `camel-oasis` / `camel-ai` compatibility with Python 3.12+ (currently requires <3.12)
+### v0.4.0 — Operability & Resilience (in progress)
+Scope-Fokus umgestellt auf Betrieb & Robustheit. Siehe `docs/plan_0.4.md`.
 - [ ] Add Docker Compose GPU auto-detection (fallback to CPU-only Ollama)
 - [ ] Connection resilience: auto-reconnect to Neo4j on transient failures
 - [ ] Add `/api/status` endpoint showing Neo4j connection state, Ollama model availability, and disk usage
-- [ ] Structured logging with JSON output option
+- [ ] Structured logging with JSON output option (opt-in via `AGORA_LOG_FORMAT`)
+- [ ] ~~Fix `camel-oasis` / `camel-ai` compatibility with Python 3.12+~~ → **deferred** zu v0.4.1/v0.5 (Upstream-blockiert, Host-Python ist im Container irrelevant)
 
 ### v0.5.0 — Search & Retrieval Improvements
 - [ ] Tune hybrid search weights (currently 0.7 vector / 0.3 BM25) — make configurable per graph

@@ -142,3 +142,18 @@
   - The current partial health/model probe in simulation.py is good enough to reuse rather than rewrite from scratch.
   - Python 3.12 compatibility is intentionally out of scope for 0.4.0.
   - Context7 is not available in this session, so this plan is grounded in the checked-in code and current repo structure rather than live MCP doc lookups.
+
+  ## Ausführungszuordnung (2026-04-22)
+
+  Kostenoptimierung durch Modell-Staffelung:
+
+  | Feature | Agent-Modell | Begründung |
+  |---------|--------------|-----------|
+  | Docker/GPU-Readiness-Detection | **Haiku 4.5** | Compose-YAML + Startup-Probe, wenig Architektur-Tiefe |
+  | `GET /api/status` Endpoint | **Haiku 4.5** | Klarer Seed in `api/simulation.py:90`, schematische Aggregation |
+  | Neo4j-Reconnect-Resilience | **Sonnet 4.6** | Touched Storage-Boundary, Retry-Semantik, Fehlermodell |
+  | Structured JSON-Logging | **Sonnet 4.6** | Formatter-Refactor + Context-Enrichment, Subprocess-Auswirkungen |
+
+  Ausführung parallel in isolierten Worktrees (`isolation: worktree`), Review und Integration durch Hauptagent. Jedes Feature = eigener Commit + PR oder Fast-Forward-Merge.
+
+  Python-3.12/CAMEL-Kompatibilität: **nicht ausgelagert**, bleibt zurückgestellt bis Upstream-Status klar ist.
