@@ -19,6 +19,25 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
+> ## ⚠️ Status: frühes Alpha — bugbehaftet
+>
+> Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
+> Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
+> Fehlern aussteigen, insbesondere wenn Ollama langsam antwortet, JSON-Modus
+> zickt oder Modellwechsel mittendrin passieren. Erwarte Abstürze, leere
+> Reports, halbfertige Personas und gelegentliche 500er.
+> **Nicht für Produktion, nicht öffentlich erreichbar machen** — die API hat
+> derzeit weder Authentifizierung noch CORS-Einschränkung.
+>
+> **Getestet aktuell hauptsächlich mit:**
+> - LLM: `qwen3-coder-next:cloud` (Ollama Cloud)
+> - **Embedding: `qwen3-embedding:4b`** (2560-dim, `VECTOR_DIM=2560` nötig)
+>
+> Der frühere Default `nomic-embed-text` (768-dim) funktioniert weiterhin,
+> ist aber nicht mehr der aktiv gepflegte Pfad.
+
+---
+
 ## Deutsch
 
 ### Was ist Agora?
@@ -99,8 +118,12 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 - Ollama mit mindestens:
 
 ```bash
+# Default-LLM (lokal) oder Cloud-Variante
 ollama pull qwen2.5:32b
-ollama pull nomic-embed-text
+# Aktuell genutztes Embedding (2560 dim, erfordert VECTOR_DIM=2560)
+ollama pull qwen3-embedding:4b
+# Fallback (768 dim), falls du kein Qwen3-Embedding willst:
+# ollama pull nomic-embed-text
 ```
 
 #### Option A: Docker Compose
@@ -147,9 +170,11 @@ NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=agora
 
-# Embeddings
-EMBEDDING_MODEL=nomic-embed-text
+# Embeddings — aktuell getestet mit Qwen3-Embedding (2560 dim)
+EMBEDDING_MODEL=qwen3-embedding:4b
 EMBEDDING_BASE_URL=http://localhost:11434
+VECTOR_DIM=2560
+# Fallback (768 dim): EMBEDDING_MODEL=nomic-embed-text + VECTOR_DIM=768
 
 # GraphRAG Performance
 GRAPH_CHUNK_SIZE=1500
@@ -191,11 +216,17 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 
 ### Sicherheit
 
+> **Warnung:** Die HTTP-API hat derzeit **keine Authentifizierung** und CORS
+> steht auf `*`. Agora ist explizit für den Betrieb auf `localhost` oder in
+> einem vertrauenswürdigen Netz (Tailscale, Wireguard, internes LAN) gedacht.
+> Nicht direkt ins Internet hängen.
+
 - Keine echten Secrets committen.
 - `.env` bleibt lokal.
 - `.env.example` enthält nur Beispielwerte.
 - Neo4j-Passwörter werden nicht in `simulation_config.json` oder andere persistierte Simulation-Artefakte geschrieben.
 - `backend/uploads/` ist nicht versioniert.
+- Siehe [`SECURITY_REVIEW_SUMMARY.md`](./SECURITY_REVIEW_SUMMARY.md) für bekannte, noch offene Punkte (CORS/Auth).
 
 ### Architektur
 
@@ -246,6 +277,14 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
+> **⚠️ Status: early alpha — expect bugs.** Agora is an active experimental
+> fork. Graph build, simulation, and report pipeline can fail in creative
+> ways, especially when Ollama is slow, JSON mode misbehaves, or models are
+> swapped mid-run. Not production-ready. The HTTP API currently has **no
+> authentication** and CORS is wide open — run on localhost or inside a
+> trusted network only. Currently exercised with **LLM `qwen3-coder-next:cloud`**
+> and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+
 ### What is Agora?
 
 Agora is a local-first multi-agent simulation engine for public reaction, market sentiment, and social dynamics.
@@ -270,7 +309,10 @@ Host Ollama is expected by default:
 
 ```bash
 ollama pull qwen2.5:32b
-ollama pull nomic-embed-text
+# Current embedding (2560 dim, requires VECTOR_DIM=2560):
+ollama pull qwen3-embedding:4b
+# Alternative 768-dim embedding:
+# ollama pull nomic-embed-text
 
 git clone https://github.com/arn0ld87/agora.git
 cd agora
@@ -297,7 +339,8 @@ npm run dev
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_MODEL_NAME=qwen2.5:32b
 NEO4J_URI=bolt://localhost:7687
-EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_MODEL=qwen3-embedding:4b
+VECTOR_DIM=2560
 
 AGENT_LANGUAGE=de
 REPORT_LANGUAGE=German
