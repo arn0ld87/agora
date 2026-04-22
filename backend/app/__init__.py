@@ -9,7 +9,9 @@ import warnings
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request
+import uuid
+
+from flask import Flask, g, request
 from flask_cors import CORS
 
 from .config import Config
@@ -86,18 +88,29 @@ def create_app(config_class=Config):
     if should_log_startup:
         logger.info("Simulation process cleanup function registered")
 
-    # Request logging middleware
+    # Request-ID middleware + request/response logging
+    req_logger = get_logger('agora.request')
+
     @app.before_request
     def log_request():
-        logger = get_logger('agora.request')
-        logger.debug(f"Request: {request.method} {request.path}")
+        g.request_id = uuid.uuid4().hex[:8]
+        req_logger.debug(
+            f"Request: {request.method} {request.path}",
+            extra={'request_id': g.request_id},
+        )
         if request.content_type and 'json' in request.content_type:
-            logger.debug(f"Request body: {request.get_json(silent=True)}")
+            req_logger.debug(
+                f"Request body: {request.get_json(silent=True)}",
+                extra={'request_id': g.request_id},
+            )
 
     @app.after_request
     def log_response(response):
-        logger = get_logger('agora.request')
-        logger.debug(f"Response: {response.status_code}")
+        req_id = getattr(g, 'request_id', None)
+        req_logger.debug(
+            f"Response: {response.status_code}",
+            extra={'request_id': req_id},
+        )
         return response
 
     # Register blueprints — jedes bekommt einen Token-Guard als before_request.

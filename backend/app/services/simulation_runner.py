@@ -542,7 +542,10 @@ class SimulationRunner:
             monitor_thread.start()
             cls._monitor_threads[simulation_id] = monitor_thread
             
-            logger.info(f"Simulation started successfully: {simulation_id}, pid={process.pid}, platform={platform}")
+            logger.info(
+                f"Simulation started successfully: {simulation_id}, pid={process.pid}, platform={platform}",
+                extra={'simulation_id': simulation_id},
+            )
             
         except Exception as e:
             state.runner_status = RunnerStatus.FAILED
@@ -600,7 +603,10 @@ class SimulationRunner:
             if exit_code == 0:
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
-                logger.info(f"Simulation completed: {simulation_id}")
+                logger.info(
+                    f"Simulation completed: {simulation_id}",
+                    extra={'simulation_id': simulation_id},
+                )
             else:
                 state.runner_status = RunnerStatus.FAILED
                 # Read error info from main log file
@@ -613,7 +619,10 @@ class SimulationRunner:
                 except Exception:
                     pass
                 state.error = f"Process exit code: {exit_code}, error: {error_info}"
-                logger.error(f"Simulation failed: {simulation_id}, error={state.error}")
+                logger.error(
+                    f"Simulation failed: {simulation_id}, error={state.error}",
+                    extra={'simulation_id': simulation_id},
+                )
             
             state.twitter_running = False
             state.reddit_running = False
@@ -891,7 +900,10 @@ class SimulationRunner:
                 logger.error(f"Failed to stop graph memory updater: {e}")
             cls._graph_memory_enabled.pop(simulation_id, None)
         
-        logger.info(f"Simulation stopped: {simulation_id}")
+        logger.info(
+            f"Simulation stopped: {simulation_id}",
+            extra={'simulation_id': simulation_id},
+        )
         return state
     
     @classmethod

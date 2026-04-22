@@ -106,6 +106,10 @@ class Config:
     # Default social activity timing profile.
     TIME_PROFILE = os.environ.get('TIME_PROFILE', 'dach_default').lower()
 
+    # Logging format: "text" (default, human-readable) or "json" (structured, machine-readable).
+    # Mirrors the AGORA_LOG_FORMAT env var read directly in utils/logger.py at import time.
+    AGORA_LOG_FORMAT = os.environ.get('AGORA_LOG_FORMAT', 'text').lower()
+
     # Curated LLM model presets shown in the UI dropdown alongside locally installed Ollama models.
     LLM_MODEL_PRESETS = [
         {"name": "qwen3-coder-next:cloud", "label": "Qwen3 Coder (Cloud) — empfohlen", "kind": "cloud"},
