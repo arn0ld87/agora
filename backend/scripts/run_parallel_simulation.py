@@ -102,6 +102,8 @@ else:
         load_dotenv(_backend_env)
         print(f"Loaded environment configuration: {_backend_env}")
 
+from app.config import Config
+
 
 class MaxTokensWarningFilter(logging.Filter):
     """Filter out camel-ai max_tokens warnings (we intentionally don't set max_tokens to let the model decide)"""
@@ -160,19 +162,6 @@ from action_logger import SimulationLogManager, PlatformActionLogger
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
-    # Monkey-Patch: CAMEL ChatAgent defaulted token_limit auf 8192 bei OpenAI-
-    # kompatiblen Backends. Wir wollen bei großen Cloud-Modellen das volle
-    # Window nutzen. Muss VOR dem Import von oasis passieren, sonst greift's
-    # nicht für SocialAgent-Instanzen.
-    from camel.memories.context_creators.score_based import ScoreBasedContextCreator as _SBCC
-    _SBCC_ORIG_INIT = _SBCC.__init__
-    _CTX_LIMIT_OVERRIDE = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
-    def _sbcc_patched_init(self, token_counter, token_limit=None, *args, **kwargs):
-        # Wenn explizit gesetzter Wert kleiner ist als unser Override, überschreiben.
-        effective = _CTX_LIMIT_OVERRIDE if (token_limit is None or token_limit < _CTX_LIMIT_OVERRIDE) else token_limit
-        return _SBCC_ORIG_INIT(self, token_counter, effective, *args, **kwargs)
-    _SBCC.__init__ = _sbcc_patched_init
-    print(f"[context-patch] ScoreBasedContextCreator token_limit floor = {_CTX_LIMIT_OVERRIDE}", flush=True)
     import oasis
     from oasis import (
         ActionType,
@@ -1008,6 +997,54 @@ def _get_comment_info(
     return None
 
 
+def _parse_model_context_limits() -> Dict[str, int]:
+    raw = os.environ.get("LLM_MODEL_CONTEXT_LIMITS_JSON", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        print(f"[LLM config] Ignoring invalid LLM_MODEL_CONTEXT_LIMITS_JSON: {exc}", flush=True)
+        return {}
+    if not isinstance(parsed, dict):
+        print("[LLM config] Ignoring non-object LLM_MODEL_CONTEXT_LIMITS_JSON", flush=True)
+        return {}
+
+    result: Dict[str, int] = {}
+    for model_name, value in parsed.items():
+        try:
+            limit = int(value)
+        except (TypeError, ValueError):
+            print(f"[LLM config] Ignoring invalid context limit for {model_name!r}: {value!r}", flush=True)
+            continue
+        if limit > 0:
+            result[str(model_name)] = limit
+    return result
+
+
+def resolve_model_runtime_settings(model_name: str) -> Dict[str, Any]:
+    """Resolve completion, CAMEL memory budget and local Ollama num_ctx hints."""
+    completion_max_tokens = int(
+        os.environ.get("LLM_MAX_OUTPUT_TOKENS", str(Config.LLM_MAX_OUTPUT_TOKENS))
+    )
+    default_memory_limit = int(
+        os.environ.get("LLM_CONTEXT_LIMIT", str(Config.LLM_CONTEXT_LIMIT))
+    )
+    context_overrides = dict(getattr(Config, "LLM_MODEL_CONTEXT_LIMITS", {}) or {})
+    context_overrides.update(_parse_model_context_limits())
+    memory_token_limit = int(context_overrides.get(model_name, default_memory_limit))
+    is_cloud_model = str(model_name).endswith(":cloud")
+
+    return {
+        "completion_max_tokens": completion_max_tokens,
+        "memory_token_limit": memory_token_limit,
+        # Ollama Cloud runs at the server-side max context; keep per-request
+        # num_ctx overrides for local Ollama models only.
+        "ollama_num_ctx": None if is_cloud_model else memory_token_limit,
+        "is_cloud_model": is_cloud_model,
+    }
+
+
 def create_model(config: Dict[str, Any], use_boost: bool = False):
     """
     Create LLM model
@@ -1060,23 +1097,24 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     if llm_base_url:
         os.environ["OPENAI_API_BASE_URL"] = llm_base_url
     
-    print(f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
+    runtime_settings = resolve_model_runtime_settings(llm_model)
+    print(
+        f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
+        f"completion_max_tokens={runtime_settings['completion_max_tokens']}, "
+        f"memory_token_limit={runtime_settings['memory_token_limit']}, "
+        f"ollama_num_ctx={runtime_settings['ollama_num_ctx']}",
+        flush=True,
+    )
 
     # Suppress reasoning output on Qwen3/Nemotron/DeepSeek/GPT-OSS etc.
     # so that `content` isn't starved by `reasoning` tokens.
-    # max_tokens must be large enough to cover the tool-prompt system message
-    # (agent bio + tool definitions can reach ~3000 tokens on rich personas).
-    # num_ctx zwingt Ollama, das volle Context-Window zu allozieren (Default ist
-    # sonst oft 4k-8k, unabhängig davon, was das Modell kann).
     think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-    ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
     model_cfg = {
-        "max_tokens": 8192,
-        "extra_body": {
-            "think": think_on,
-            "options": {"num_ctx": ctx_limit},
-        },
+        "max_tokens": runtime_settings["completion_max_tokens"],
+        "extra_body": {"think": think_on},
     }
+    if runtime_settings["ollama_num_ctx"] is not None:
+        model_cfg["extra_body"]["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
 
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
@@ -1170,7 +1208,8 @@ async def run_twitter_simulation(
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Twitter] {msg}")
-        print(f"[Twitter] {msg}")
+        else:
+            print(f"[Twitter] {msg}")
     
     log_info("Initializing...")
 
@@ -1412,7 +1451,8 @@ async def run_reddit_simulation(
     def log_info(msg):
         if main_logger:
             main_logger.info(f"[Reddit] {msg}")
-        print(f"[Reddit] {msg}")
+        else:
+            print(f"[Reddit] {msg}")
     
     log_info("Initializing...")
     

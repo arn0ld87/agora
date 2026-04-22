@@ -36,6 +36,7 @@ _env_file = os.path.join(_project_root, '.env')
 if os.path.exists(_env_file):
     load_dotenv(_env_file)
 
+from app.config import Config
 # Import backend storage (needs NEO4J_URI / NEO4J_PASSWORD in env)
 from app.storage import Neo4jStorage
 from app.storage.embedding_service import EmbeddingService
@@ -888,6 +889,25 @@ TOOL_USE_INSTRUCTION = (
 )
 
 
+def _resolve_memory_token_limit(model_name: Optional[str] = None) -> int:
+    raw_overrides = os.environ.get("LLM_MODEL_CONTEXT_LIMITS_JSON", "").strip()
+    overrides: Dict[str, Any] = dict(getattr(Config, "LLM_MODEL_CONTEXT_LIMITS", {}) or {})
+    if raw_overrides:
+        try:
+            parsed = json.loads(raw_overrides)
+        except json.JSONDecodeError as exc:
+            print(f"[attach_tools] invalid LLM_MODEL_CONTEXT_LIMITS_JSON ignored: {exc}", flush=True)
+        else:
+            if isinstance(parsed, dict):
+                overrides.update(parsed)
+    default_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", str(Config.LLM_CONTEXT_LIMIT)))
+    override = overrides.get(model_name or "")
+    try:
+        return int(override) if override is not None else default_limit
+    except (TypeError, ValueError):
+        return default_limit
+
+
 def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
     """Inject the given FunctionTools into every SocialAgent in an AgentGraph.
 
@@ -943,34 +963,51 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
         except Exception as e:
             print(f"[attach_tools] agent {agent_id} max_iteration patch failed: {e}")
 
-        # Context-Limit am Memory-ContextCreator hochziehen. CAMEL's
-        # ScoreBasedContextCreator ignoriert den num_ctx-Hint an Ollama und nutzt
-        # sein eigenes token_limit (Default 8192 bei kleinen Modellen). Ohne
-        # diesen Patch wird bei 1500-Wort-Personas sofort truncated.
+        # Raise the CAMEL memory budget independently from max_tokens.
+        # In this CAMEL version token_limit is read-only and backed by
+        # `_token_limit`, so patch the live creator instance instead.
         try:
-            ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
+            model_name = str(getattr(getattr(agent, "model_backend", None), "model_type", "") or "")
+            ctx_limit = _resolve_memory_token_limit(model_name)
             memory = getattr(agent, "memory", None)
             if memory and hasattr(memory, "get_context_creator"):
                 creator = memory.get_context_creator()
-                if creator and hasattr(creator, "token_limit"):
-                    creator.token_limit = ctx_limit
+                if creator is not None:
+                    old_limit = getattr(creator, "token_limit", None)
+                    if hasattr(creator, "_token_limit"):
+                        creator._token_limit = ctx_limit
+                        print(
+                            f"[attach_tools] agent {agent_id} context limit: {old_limit} -> {ctx_limit} "
+                            f"(model={model_name or '?'})",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[attach_tools] agent {agent_id} context creator has no _token_limit; "
+                            f"skip memory patch (type={type(creator).__name__})",
+                            flush=True,
+                        )
         except Exception as e:
             print(f"[attach_tools] agent {agent_id} token_limit patch failed: {e}")
 
     # Sanity: dump the tool names on the first agent after patching.
     try:
         first_id, first_agent = next(iter(agent_graph.get_agents()))
-        all_names = []
-        for attr in ("tools", "_tools", "_all_tools"):
-            tlist = getattr(first_agent, attr, None)
-            if tlist:
-                for t in tlist:
-                    n = getattr(t, "func", None)
-                    n = getattr(n, "__name__", None) if n else getattr(t, "__name__", str(t))
-                    all_names.append(n)
-                break
+        tool_dict = getattr(first_agent, "tool_dict", None) or getattr(first_agent, "_internal_tools", {}) or {}
+        all_names = list(tool_dict.keys()) if isinstance(tool_dict, dict) else []
+        creator = None
+        memory = getattr(first_agent, "memory", None)
+        if memory and hasattr(memory, "get_context_creator"):
+            creator = memory.get_context_creator()
+        memory_limit = getattr(creator, "token_limit", "?") if creator is not None else "?"
+        model_cfg = getattr(getattr(first_agent, "model_backend", None), "model_config_dict", {}) or {}
         print(f"[attach_tools] sanity: agent {first_id} now has {len(all_names)} tools: {all_names}", flush=True)
         print(f"[attach_tools] sanity: agent {first_id} max_iteration = {getattr(first_agent, 'max_iteration', '?')}", flush=True)
+        print(f"[attach_tools] sanity: agent {first_id} memory_token_limit = {memory_limit}", flush=True)
+        print(
+            f"[attach_tools] sanity: agent {first_id} completion_max_tokens = {model_cfg.get('max_tokens', '?')}",
+            flush=True,
+        )
     except Exception as e:
         print(f"[attach_tools] sanity dump failed: {e}")
 

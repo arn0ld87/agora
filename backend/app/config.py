@@ -3,6 +3,7 @@ Configuration Management
 Loads configuration from .env file in project root directory
 """
 
+import json
 import os
 from dotenv import load_dotenv
 
@@ -35,9 +36,20 @@ class Config:
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'http://localhost:11434/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen2.5:32b')
-    # Kontextfenster für OASIS/CAMEL. Ollama defaultet sonst auf 4k-8k egal
-    # was das Modell kann. Override pro Modell falls nötig.
+    # Completion-Limit fuer einzelne LLM-Antworten. CAMEL verwendet dieses
+    # Feld leider auch als Default fuer sein Memory-Token-Limit, deshalb
+    # trennen wir die eigentliche Memory-Grenze unten separat.
+    LLM_MAX_OUTPUT_TOKENS = int(os.environ.get('LLM_MAX_OUTPUT_TOKENS', '8192'))
+    # Default-Memory-Budget fuer OASIS/CAMEL. Dieses Limit steuert, wie viel
+    # Verlauf + Persona im Agent-Memory gehalten werden darf; es ist nicht
+    # gleichbedeutend mit einem verlässlichen Ollama-/v1-num_ctx Override.
     LLM_CONTEXT_LIMIT = int(os.environ.get('LLM_CONTEXT_LIMIT', '262144'))
+    try:
+        LLM_MODEL_CONTEXT_LIMITS = json.loads(
+            os.environ.get('LLM_MODEL_CONTEXT_LIMITS_JSON', '{}')
+        )
+    except json.JSONDecodeError:
+        LLM_MODEL_CONTEXT_LIMITS = {}
 
     # Neo4j configuration
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
