@@ -11,6 +11,7 @@ import requests
 
 from . import status_bp
 from ..config import Config
+from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
 
 logger = get_logger('agora.api.status')
@@ -38,16 +39,23 @@ def _get_neo4j_status():
     try:
         # Verify connectivity using the driver's verify_connectivity method
         storage._driver.verify_connectivity()
+        last_success = getattr(storage, 'last_success_ts', None)
         return {
             "reachable": True,
             "error": None,
             "uri": Config.NEO4J_URI,
+            "is_connected": getattr(storage, 'is_connected', True),
+            "last_success_ts": last_success.isoformat() if last_success else None,
         }
     except Exception as e:
+        last_error = getattr(storage, 'last_error', None) or e
         return {
             "reachable": False,
-            "error": str(e),
+            "error": str(last_error),
             "uri": Config.NEO4J_URI,
+            "is_connected": getattr(storage, 'is_connected', False),
+            "last_success_ts": (storage.last_success_ts.isoformat()
+                                if getattr(storage, 'last_success_ts', None) else None),
         }
 
 
@@ -133,10 +141,17 @@ def get_status():
     """
     timestamp = datetime.now(timezone.utc).isoformat()
 
+    try:
+        gpu = detect_gpu()
+    except Exception as e:  # detect_gpu is documented to never raise, but be defensive.
+        logger.debug(f"GPU probe failed unexpectedly: {e}")
+        gpu = {"nvidia_smi_available": False, "ollama_uses_gpu": None, "hints": [f"probe error: {e}"]}
+
     return jsonify({
         "backend": _get_backend_status(),
         "neo4j": _get_neo4j_status(),
         "ollama": _get_ollama_status(),
         "disk": _get_disk_status(),
+        "gpu": gpu,
         "timestamp": timestamp,
     }), 200

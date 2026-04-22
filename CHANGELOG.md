@@ -3,21 +3,32 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unreleased] — v0.4.0 (in Arbeit)
+## [Unreleased] — v0.4.0 (Feature-Complete, noch ungetagged)
 
 Scope-Fokus: **Operability & Resilienz**. Details siehe `docs/plan_0.4.md`.
 
-### Geplant
-- `GET /api/status` als einheitlicher Ops-Endpoint (Backend, Neo4j, Ollama, Modelle, Disk)
-- Strukturiertes JSON-Logging als Opt-in (`AGORA_LOG_FORMAT=text|json`)
-- Docker/GPU-Readiness-Detection mit expliziter CPU-Fallback-Doku
-- Neo4j-Reconnect bei transienten Laufzeitfehlern
-- Python-3.12-Kompat (CAMEL/OASIS): **explizit verschoben** auf v0.4.1/v0.5 — Upstream-blockiert
+### Hinzugefügt
+- `GET /api/status` — konsolidierter Ops-Endpoint mit `backend`, `neo4j`, `ollama`, `disk`, `gpu`, `timestamp` (`backend/app/api/status.py`, 7 Tests)
+- `backend/app/utils/gpu_probe.py` — `detect_gpu()` erkennt `nvidia-smi` und parst `ollama ps` (wirft nie, 8 Tests)
+- `AGORA_LOG_FORMAT=text|json` Env-Toggle — Opt-in JSON-Logging via neuem `JSONFormatter` in `backend/app/utils/logger.py` (stdlib-only, 10 Tests)
+- Request-ID-Middleware in `backend/app/__init__.py` (8-Zeichen-UUID, loggt bei `after_request`)
+- `simulation_id`-Context in Simulation-Logs (`simulation_runner.py`, `api/simulation.py`)
+- Kommentierte GPU-Reservation-Sektion in `docker-compose.yml` + README-Abschnitt „GPU/CPU Fallback"
 
-### Ausführungsplan
-- GPU-Detect + `/api/status` → Haiku-Subagent
-- Neo4j-Reconnect + Structured-Logging → Sonnet-Subagent
-- Beide parallel in isolierten Worktrees, Review durch Hauptagent
+### Geändert
+- `Neo4jStorage` mit transientem Retry (`ServiceUnavailable`, `SessionExpired`, `TransientError`, exp. Backoff + Jitter, max 3 Retries) — via neuem `neo4j_call_with_retry` in `backend/app/utils/retry.py`
+- Neue Read-only-Properties auf `Neo4jStorage`: `is_connected`, `last_error`, `last_success_ts` — vom `/api/status`-Endpoint konsumiert
+- `get_ontology()` und `search()` durchlaufen jetzt das Retry-Wrapper
+
+### Verschoben
+- Python-3.12/CAMEL/OASIS-Kompatibilität → v0.4.1/v0.5 (Upstream-blockiert, Host-Python im Container irrelevant)
+
+### Test-Status
+- 35/35 Backend-Tests grün (8 GPU, 10 Logging, 6 Neo4j-Resilience, 7 Status, 3 Simulation-Runtime, 1 Profile-Format)
+
+### Entwicklungs-Vorgehen
+- Feature-Arbeit parallel über isolierte Git-Worktrees: Haiku 4.5 für GPU-Probe + `/api/status`, Sonnet 4.6 für Neo4j-Reconnect + JSON-Logging
+- Merges als `--no-ff` in main, GPU-Detect in `/api/status` nachverdrahtet
 
 ## [0.3.1] — 2026-04-22
 
