@@ -86,9 +86,9 @@ class LLMClient:
             kwargs["extra_body"] = extra_body
 
         response = self.client.chat.completions.create(**kwargs)
-        content = response.choices[0].message.content
-        # Some models (like MiniMax M2.5) include <think>thinking content in response, need to remove
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        content = response.choices[0].message.content or ""
+        # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
 
     def describe_image(
@@ -133,7 +133,7 @@ class LLMClient:
 
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content or ""
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
 
     def chat_json(
@@ -162,8 +162,9 @@ class LLMClient:
         )
         # Clean markdown code block markers
         cleaned_response = response.strip()
-        cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
+        # Robustly remove ```json ... ``` or just ``` ... ```
+        cleaned_response = re.sub(r'^```(?:json)?\s*', '', cleaned_response, flags=re.IGNORECASE)
+        cleaned_response = re.sub(r'\s*```$', '', cleaned_response)
         cleaned_response = cleaned_response.strip()
 
         try:
