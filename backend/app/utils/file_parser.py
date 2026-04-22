@@ -147,12 +147,23 @@ def _downscale_png(image_bytes: bytes, max_dim: int) -> bytes:
 
 
 class _VisionHelper:
-    """Lazy wrapper around LLMClient.describe_image — survives missing Pillow etc."""
+    """Lazy wrapper around LLMClient.describe_image — survives missing Pillow etc.
+
+    Hartes Cap `VISION_MAX_CALLS_PER_UPLOAD` (Default 40) verhindert, dass ein
+    präpariertes PDF mit hunderten kleinen Bildern einen Vision-LLM-Kostenabfluss
+    auslöst. Wenn das Limit erreicht ist, werden weitere Calls mit Warning
+    übersprungen — der Text-Layer bleibt erhalten.
+    """
 
     def __init__(self):
         self.enabled = False
         self.model: Optional[str] = None
         self.client = None
+        self.calls_made = 0
+        try:
+            self.max_calls = int(os.environ.get('VISION_MAX_CALLS_PER_UPLOAD', '40'))
+        except ValueError:
+            self.max_calls = 40
         try:
             from .llm_client import LLMClient
             model = os.environ.get('VISION_MODEL_NAME', 'gemini-3-flash-preview:cloud').strip() or None
@@ -169,9 +180,18 @@ class _VisionHelper:
     def describe(self, image_bytes: bytes, prompt: str, tag: str = "") -> str:
         if not self.enabled or not image_bytes:
             return ""
+        if self.calls_made >= self.max_calls:
+            if self.calls_made == self.max_calls:
+                _log(
+                    f"vision cap reached: {self.max_calls} calls pro Upload. "
+                    f"Weitere Bilder werden übersprungen."
+                )
+                self.calls_made += 1  # nur einmal loggen
+            return ""
         try:
             png = _downscale_png(image_bytes, self.max_dim)
             b64 = base64.b64encode(png).decode('ascii')
+            self.calls_made += 1
             text = self.client.describe_image(b64, prompt=prompt, mime="image/png")
             return (text or '').strip()
         except Exception as exc:

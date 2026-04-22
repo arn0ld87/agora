@@ -39,9 +39,22 @@ def create_app(config_class=Config):
         logger.info("Agora Backend starting...")
         logger.info("=" * 50)
 
-    # Enable CORS
-    # TODO(JULES): Enhance CORS policy to restrict origins in production environments (P1).
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS: nur explizit freigegebene Origins. Default = lokaler Vite-Dev-Server.
+    # Zusätzliche Origins (z.B. Tailnet-Hostname) via AGORA_EXTRA_ORIGINS als
+    # Komma-separierte Liste. Wildcard nur mit AGORA_CORS_ALLOW_ALL=true und
+    # lautem Warning im Log.
+    default_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+    extra = os.environ.get('AGORA_EXTRA_ORIGINS', '').strip()
+    extra_origins = [o.strip() for o in extra.split(',') if o.strip()] if extra else []
+    allow_all = os.environ.get('AGORA_CORS_ALLOW_ALL', 'false').lower() == 'true'
+
+    if allow_all:
+        logger.warning("CORS: AGORA_CORS_ALLOW_ALL=true — alle Origins erlaubt. NICHT in Prod.")
+        cors_origins = '*'
+    else:
+        cors_origins = default_origins + extra_origins
+
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=not allow_all)
 
     # --- Initialize Neo4jStorage singleton (DI via app.extensions) ---
     from .storage import Neo4jStorage
@@ -75,12 +88,17 @@ def create_app(config_class=Config):
         logger.debug(f"Response: {response.status_code}")
         return response
 
-    # Register blueprints
-    # TODO(JULES): Implement authentication and resource ownership checks for /api endpoints (P1).
+    # Register blueprints — jedes bekommt einen Token-Guard als before_request.
+    # Guard ist No-Op solange AGORA_AUTH_TOKEN nicht gesetzt ist (s. utils.auth).
     from .api import graph_bp, simulation_bp, report_bp
+    from .utils.auth import install_blueprint_guard, log_auth_mode
+    for bp in (graph_bp, simulation_bp, report_bp):
+        install_blueprint_guard(bp)
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
+    if should_log_startup:
+        log_auth_mode(app, logger)
 
     # Health check
     @app.route('/health')

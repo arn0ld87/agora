@@ -9,9 +9,22 @@ const service = axios.create({
   }
 })
 
-// Request interceptor
+// Token-Quelle: localStorage > Build-Time-Env (VITE_AGORA_TOKEN).
+// Token wird entweder beim ersten Login gespeichert oder per
+// localStorage.setItem('agora_token', '...') vom User hinterlegt.
+export const getAgoraToken = () =>
+  (typeof window !== 'undefined' && window.localStorage?.getItem('agora_token')) ||
+  import.meta.env.VITE_AGORA_TOKEN ||
+  ''
+
+// Request interceptor — hängt Token-Header an, wenn einer bekannt ist.
 service.interceptors.request.use(
   config => {
+    const token = getAgoraToken()
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers['X-Agora-Token'] = token
+    }
     return config
   },
   error => {

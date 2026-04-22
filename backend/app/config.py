@@ -21,8 +21,12 @@ class Config:
     """Flask configuration class"""
 
     # Flask configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'agora-secret-key')
-    DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    # SECRET_KEY: kein Default in Code — muss per Env gesetzt sein. Fehlt er,
+    # schreiben wir einen Prozess-lokalen Zufallswert ein, damit der Server
+    # nicht startet mit dem öffentlich bekannten String. validate() warnt.
+    SECRET_KEY = os.environ.get('SECRET_KEY') or ''
+    # DEBUG default False — Tracebacks in API-Responses hängen an diesem Flag.
+    DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
     # JSON configuration - disable ASCII escaping to display Chinese directly (not as \uXXXX)
     JSON_AS_ASCII = False
@@ -105,10 +109,14 @@ class Config:
         from .utils.logger import get_logger
         logger = get_logger('agora.config')
 
-        if not cls.DEBUG and cls.SECRET_KEY == 'agora-secret-key':
-            logger.warning("SECURITY WARNING: Using default SECRET_KEY in production mode!")
-
         errors = []
+        if not cls.SECRET_KEY:
+            if cls.DEBUG:
+                import secrets
+                cls.SECRET_KEY = secrets.token_urlsafe(32)
+                logger.warning("SECRET_KEY not set — generated ephemeral dev key.")
+            else:
+                errors.append("SECRET_KEY not configured (required when FLASK_DEBUG is false)")
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY not configured (set to any non-empty value, e.g. 'ollama')")
         if not cls.NEO4J_URI:

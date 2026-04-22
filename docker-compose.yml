@@ -25,7 +25,9 @@ services:
       - "7474:7474"   # Neo4j Browser
       - "7687:7687"   # Bolt protocol
     environment:
-      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-agora}
+      # :?-Syntax: Compose bricht ab, wenn die Variable fehlt oder leer ist.
+      # Kein Default-Passwort mehr — muss bewusst in .env gesetzt werden.
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?NEO4J_PASSWORD muss in .env gesetzt sein}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_server_memory_heap_initial__size=256m
       - NEO4J_server_memory_heap_max__size=1g

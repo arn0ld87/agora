@@ -33,6 +33,10 @@ COPY --chown=agora:agora . .
 # Switch to non-root user
 USER agora
 
+# Im Container bindet Flask auf 0.0.0.0, damit der Port-Publish greift.
+# Außerhalb von Docker defaultet run.py auf 127.0.0.1.
+ENV FLASK_HOST=0.0.0.0
+
 EXPOSE 5173 5001
 
 # Healthcheck

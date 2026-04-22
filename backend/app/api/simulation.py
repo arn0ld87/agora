@@ -1341,11 +1341,24 @@ def add_simulation_profile(simulation_id: str):
             'source_entity_type': data.get('source_entity_type', 'manual'),
             'is_manual': True,
         }
-        # Carry over any additional keys the caller supplied.
+        # Zusätzliche Keys nur aus Whitelist übernehmen. Blinder Merge war
+        # indirekter Prompt-Injection-Vektor, weil Persona-Felder in die
+        # OASIS-System-Prompts gespiegelt werden.
+        _extra_allowed = {
+            'followers_count', 'following_count', 'favourites_count',
+            'listed_count', 'verified', 'status', 'location', 'language',
+            'activity_level', 'time_zone',
+        }
         for k, v in data.items():
             if k in ('platform',) or k in new_profile:
                 continue
-            new_profile[k] = v
+            if k not in _extra_allowed:
+                logger.debug(f"add_simulation_profile: ignoring unknown key {k!r}")
+                continue
+            if isinstance(v, (str, int, float, bool, list)) or v is None:
+                new_profile[k] = v
+            else:
+                logger.debug(f"add_simulation_profile: ignoring non-primitive {k!r}")
 
         profiles.append(new_profile)
         _save_profiles_file(path, profiles, platform)

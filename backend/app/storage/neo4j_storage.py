@@ -6,11 +6,34 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 """
 
 import json
+import re
 import time
 import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable
+
+# Cypher erlaubt Labels nur als Identifier, nicht als Parameter. Labels kommen
+# hier aus LLM-Output (Entity-Type aus NER) — ohne Filter liefert das einen
+# f-string-Injection-Vektor (Backticks im Namen brechen aus dem Quoting aus).
+# Whitelist-Regex: Buchstabe/Underscore-Start, dann A-Za-z0-9_, max 50 Zeichen.
+_LABEL_SAFE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,49}$')
+
+
+def _sanitize_label(value: Any) -> Optional[str]:
+    """Return a Cypher-safe label or ``None`` when the input is unusable."""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped or stripped == 'Entity':
+        return None
+    # Häufige LLM-Verwüstungen aufräumen: Leerzeichen zu Underscore,
+    # Umlaute weg (Neo4j-Labels sind ASCII-praktisch nur dann lesbar).
+    normalized = re.sub(r'\s+', '_', stripped)
+    normalized = re.sub(r'[^A-Za-z0-9_]', '', normalized)
+    if not _LABEL_SAFE_RE.match(normalized):
+        return None
+    return normalized
 
 from neo4j import GraphDatabase, Session as Neo4jSession
 from neo4j.exceptions import (
@@ -278,18 +301,23 @@ class Neo4jStorage(GraphStorage):
                 actual_uuid = self._call_with_retry(session.execute_write, _merge_entity)
                 entity_uuid_map[ename.lower()] = actual_uuid
 
-                # Add entity type label
-                if etype and etype != "Entity":
+                # Add entity type label. Labels werden durch _sanitize_label
+                # auf einen sicheren Identifier beschränkt — LLM-Output kann
+                # sonst aus dem Backtick-Quoting ausbrechen.
+                safe_label = _sanitize_label(etype)
+                if safe_label:
                     try:
-                        def _add_label(tx, _name_lower=ename.lower()):
+                        def _add_label(tx, _name_lower=ename.lower(), _label=safe_label):
                             tx.run(
-                                f"MATCH (n:Entity {{graph_id: $gid, name_lower: $nl}}) SET n:`{etype}`",
+                                f"MATCH (n:Entity {{graph_id: $gid, name_lower: $nl}}) SET n:`{_label}`",
                                 gid=graph_id,
                                 nl=_name_lower,
                             )
                         self._call_with_retry(session.execute_write, _add_label)
                     except Exception as e:
-                        logger.warning(f"Failed to add label '{etype}' to '{ename}': {e}")
+                        logger.warning(f"Failed to add label '{safe_label}' to '{ename}': {e}")
+                elif etype and etype != "Entity":
+                    logger.debug(f"Discarded unsafe entity label {etype!r} for '{ename}'")
 
             # Create relations
             for idx, relation in enumerate(relations):

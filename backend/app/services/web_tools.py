@@ -11,8 +11,11 @@ the service reports itself as disabled and the tools are simply not registered.
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -23,6 +26,50 @@ logger = get_logger('agora.web_tools')
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
 DEFAULT_TIMEOUT = 25.0
+
+
+def _is_public_url(url: str) -> tuple[bool, str]:
+    """
+    Defense-in-Depth-Check: bricht ab, sobald die URL auf private/Loopback/
+    Link-Local/Metadata-Adressen zeigt. Tavily fetcht die URL zwar extern, aber
+    wir wollen weder durch DNS-Tricks noch durch fehlerhafte Proxy-Konfig einen
+    internen Service triggern.
+    """
+    try:
+        p = urlparse(url)
+    except Exception:
+        return False, "unparsable URL"
+    if p.scheme not in ("http", "https"):
+        return False, f"unsupported scheme {p.scheme!r}"
+    host = p.hostname
+    if not host:
+        return False, "missing host"
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        return False, f"dns resolution failed: {exc}"
+
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr.split("%")[0])  # strip zone-id for IPv6
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False, f"host resolves to non-public address {ip}"
+        # AWS/GCP/Azure Metadata-Endpunkte — doppelt prüfen, auch wenn is_link_local
+        # sie meist bereits erwischt.
+        if str(ip) in ("169.254.169.254", "fd00:ec2::254"):
+            return False, "metadata endpoint blocked"
+    return True, ""
 
 
 class WebToolsService:
@@ -116,6 +163,11 @@ class WebToolsService:
 
         if not url or not url.startswith(("http://", "https://")):
             return {"url": url, "content": "", "error": "Invalid URL"}
+
+        ok, reason = _is_public_url(url)
+        if not ok:
+            logger.warning(f"fetch_url blocked ({reason}): {url}")
+            return {"url": url, "content": "", "error": f"URL rejected: {reason}"}
 
         payload = {"api_key": self.api_key, "urls": [url]}
         try:
