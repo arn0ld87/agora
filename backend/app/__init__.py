@@ -102,14 +102,15 @@ def create_app(config_class=Config):
 
     # Register blueprints — jedes bekommt einen Token-Guard als before_request.
     # Guard ist No-Op solange AGORA_AUTH_TOKEN nicht gesetzt ist (s. utils.auth).
-    from .api import graph_bp, simulation_bp, report_bp, runs_bp
+    from .api import graph_bp, simulation_bp, report_bp, runs_bp, status_bp
     from .utils.auth import install_blueprint_guard, log_auth_mode
-    for bp in (graph_bp, simulation_bp, report_bp, runs_bp):
+    for bp in (graph_bp, simulation_bp, report_bp, runs_bp, status_bp):
         install_blueprint_guard(bp)
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(runs_bp, url_prefix='/api/runs')
+    app.register_blueprint(status_bp, url_prefix='/api/status')
     if should_log_startup:
         log_auth_mode(app, logger)
 
