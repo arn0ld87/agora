@@ -7,12 +7,14 @@ PROJ_ID_PATTERN = re.compile(r'^proj_[a-f0-9]{12}$')
 SIM_ID_PATTERN = re.compile(r'^sim_[a-f0-9]{12}$')
 REPORT_ID_PATTERN = re.compile(r'^report_[a-f0-9]{12}$')
 
-# Task IDs seem to be task_ followed by hex (length not explicitly seen but likely similar)
-TASK_ID_PATTERN = re.compile(r'^task_[a-f0-9]+$')
-
 # Graph IDs in Neo4j are UUIDs
 UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$|'
                           r'^[a-f0-9]{32}$')
+
+# Task-IDs sind bare UUIDs — TaskManager.create_task() nutzt str(uuid.uuid4()),
+# kein "task_"-Prefix. Security-Review f5dd63b hatte hier fälschlich ^task_[a-f0-9]+$
+# erzwungen, wodurch jeder /api/graph/task/<id>-Poll mit 400 abstürzte.
+TASK_ID_PATTERN = UUID_PATTERN
 
 def validate_project_id(project_id: str) -> bool:
     """Validate project_id format"""

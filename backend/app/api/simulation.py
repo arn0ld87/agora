@@ -119,17 +119,17 @@ def get_available_models():
 @simulation_bp.route('/entities/<graph_id>', methods=['GET'])
 def get_graph_entities(graph_id: str):
     """
-    Get all entities from the knowledge graph (filtered)
-    """
-    if not validate_graph_id(graph_id):
-        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
-    
-    Only return nodes that match predefined entity types (nodes whose Labels are not just Entity)
-    
+    Get all entities from the knowledge graph (filtered).
+
+    Only return nodes that match predefined entity types (nodes whose Labels are not just Entity).
+
     Query parameters:
         entity_types: comma-separated list of entity types (optional, for further filtering)
         enrich: whether to get related edge information (default true)
     """
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
+
     try:
         entity_types_str = request.args.get('entity_types', '')
         entity_types = [t.strip() for t in entity_types_str.split(',') if t.strip()] if entity_types_str else None
@@ -1095,13 +1095,14 @@ def get_simulation_history():
 @simulation_bp.route('/<simulation_id>/profiles', methods=['GET'])
 def get_simulation_profiles(simulation_id: str):
     """
-    Get simulation'sAgent Profile
+    Get simulation's Agent Profile.
 
     Query parameters:
-        platform: Platform type（reddit/twitter，Defaultreddit）
+        platform: Platform type (reddit/twitter, default reddit)
     """
     if not validate_simulation_id(simulation_id):
         return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     try:
         platform = request.args.get('platform', 'reddit')
         
@@ -1136,17 +1137,15 @@ def get_simulation_profiles(simulation_id: str):
 def get_simulation_profiles_realtime(simulation_id: str):
     """
     Real-time get simulation's Agent Profile (for viewing during generation).
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Difference from /profiles endpoint:
     - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
     - Returns additional metadata (such as file modification time, whether generation is in progress, etc.)
-    
+
     Query parameters:
-        platform: Platform type（reddit/twitter，Defaultreddit）
-    
+        platform: Platform type (reddit/twitter, default reddit)
+
     Returns:
         {
             "success": true,
@@ -1154,7 +1153,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
                 "simulation_id": "sim_xxxx",
                 "platform": "reddit",
                 "count": 15,
-                "total_expected": 93,  // Expected total（IfHas）
+                "total_expected": 93,  // Expected total (if available)
                 "is_generating": true,  // Is generating
                 "file_exists": true,
                 "file_modified_at": "2025-12-04T18:20:00",
@@ -1162,6 +1161,9 @@ def get_simulation_profiles_realtime(simulation_id: str):
             }
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     import json
     import csv
     from datetime import datetime
@@ -1285,9 +1287,7 @@ def _save_profiles_file(path: str, profiles: list, platform: str):
 def add_simulation_profile(simulation_id: str):
     """
     Append a manually authored persona to the simulation.
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Request JSON (Reddit/default shape; any extra fields are preserved):
         {
             "platform": "reddit" | "twitter"  (optional, default "reddit"),
@@ -1301,6 +1301,8 @@ def add_simulation_profile(simulation_id: str):
             "interested_topics": [...]
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         data = request.get_json() or {}
         platform = data.get('platform', 'reddit')
@@ -1392,15 +1394,13 @@ def delete_simulation_profile(simulation_id: str, username: str):
 def get_simulation_config_realtime(simulation_id: str):
     """
     Real-time get simulation configuration (for viewing during generation).
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Difference from /config endpoint:
     - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
     - Returns additional metadata (such as file modification time, whether generation is in progress, etc.)
     - Returns partial information even if config not fully generated
-    
+
     Returns:
         {
             "success": true,
@@ -1410,10 +1410,12 @@ def get_simulation_config_realtime(simulation_id: str):
                 "file_modified_at": "2025-12-04T18:20:00",
                 "is_generating": true,  // Is generating
                 "generation_stage": "generating_config",  // Current generation stage
-                "config": {...}  // Configuration content（IfExists）
+                "config": {...}  // Configuration content (If Exists)
             }
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     import json
     from datetime import datetime
     
@@ -1514,9 +1516,7 @@ def get_simulation_config_realtime(simulation_id: str):
 def get_simulation_config(simulation_id: str):
     """
     Get simulation configuration (generated with LLM intelligence).
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Returns:
         - time_config: Time configuration (simulation duration, start time, end time, etc.)
         - agent_configs: Activity configuration for each agent (behavior patterns, interaction styles, etc.)
@@ -1524,6 +1524,9 @@ def get_simulation_config(simulation_id: str):
         - platform_configs: Platform configuration
         - generation_reasoning: LLM configuration reasoning explanation
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     try:
         manager = SimulationManager()
         config = manager.get_simulation_config(simulation_id)
@@ -2006,15 +2009,15 @@ def resume_simulation(simulation_id: str):
 def get_simulation_console_log(simulation_id: str):
     """
     Stream raw stdout/stderr of the OASIS subprocess for this simulation.
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+
     Query params:
         from_line: skip lines before this index (for incremental polling)
 
     Returns:
         { "success": true, "data": { "lines": [...], "total_lines": N, "from_line": K, "next_line": N, "has_more": false } }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         from_line = request.args.get('from_line', 0, type=int)
         data = SimulationRunner.get_console_log(simulation_id, from_line=from_line)
@@ -2031,10 +2034,8 @@ def get_simulation_console_log(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/run-status', methods=['GET'])
 def get_run_status(simulation_id: str):
     """
-    Get simulation real-time running status（For frontend polling）
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+    Get simulation real-time running status (For frontend polling)
+
     Returns:
         {
             "success": true,
@@ -2056,6 +2057,8 @@ def get_run_status(simulation_id: str):
             }
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         from ..services.simulation_ipc import read_control_state
         run_state = SimulationRunner.get_run_state(simulation_id)
@@ -2093,15 +2096,13 @@ def get_run_status(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/run-status/detail', methods=['GET'])
 def get_run_status_detail(simulation_id: str):
     """
-    Get simulation detailed running status（Include all actions）
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+    Get simulation detailed running status (Include all actions)
+
     For frontend to display real-time dynamics
-    
+
     Query parameters:
-        platform: Filter platform（twitter/reddit，Optional）
-    
+        platform: Filter platform (twitter/reddit, Optional)
+
     Returns:
         {
             "success": true,
@@ -2129,6 +2130,8 @@ def get_run_status_detail(simulation_id: str):
             }
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         run_state = SimulationRunner.get_run_state(simulation_id)
         platform_filter = request.args.get('platform')
@@ -2196,17 +2199,15 @@ def get_run_status_detail(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/actions', methods=['GET'])
 def get_simulation_actions(simulation_id: str):
     """
-    Get from simulationAgentAction history
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+    Get from simulation Agent Action history
+
     Query parameters:
-        limit: Return count（Default100）
-        offset: Offset（Default0）
-        platform: Filter platform（twitter/reddit）
-        agent_id: FilterAgent ID
+        limit: Return count (Default 100)
+        offset: Offset (Default 0)
+        platform: Filter platform (twitter/reddit)
+        agent_id: Filter Agent ID
         round_num: Filter round
-    
+
     Returns:
         {
             "success": true,
@@ -2216,6 +2217,8 @@ def get_simulation_actions(simulation_id: str):
             }
         }
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
@@ -2252,18 +2255,18 @@ def get_simulation_actions(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/timeline', methods=['GET'])
 def get_simulation_timeline(simulation_id: str):
     """
-    Get simulation timeline（Summarized by round）
+    Get simulation timeline (Summarized by round)
+
+    For frontend to display progress bar and timeline view
+
+    Query parameters:
+        start_round: Start round (Default 0)
+        end_round: End round (Default all)
+
+    Return summary information per round
     """
     if not validate_simulation_id(simulation_id):
         return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
-    For frontend to display progress bar and timeline view
-    
-    Query parameters:
-        start_round: Start round（Default0）
-        end_round: End round（Default all）
-    
-    Return summary information per round
-    """
     try:
         start_round = request.args.get('start_round', 0, type=int)
         end_round = request.args.get('end_round', type=int)
@@ -2294,12 +2297,12 @@ def get_simulation_timeline(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/agent-stats', methods=['GET'])
 def get_agent_stats(simulation_id: str):
     """
-    Get eachAgentStatistics
+    Get each Agent Statistics
+
+    For frontend display of agent activity ranking and statistics.
     """
     if not validate_simulation_id(simulation_id):
         return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
-    For frontend display of agent activity ranking and statistics.
-    """
     try:
         stats = SimulationRunner.get_agent_stats(simulation_id)
         
@@ -2326,16 +2329,16 @@ def get_agent_stats(simulation_id: str):
 def get_simulation_posts(simulation_id: str):
     """
     Get posts in simulation
+
+    Query parameters:
+        platform: Platform type (twitter/reddit)
+        limit: Return count (Default 50)
+        offset: Offset
+
+    Return post list (read from SQLite database)
     """
     if not validate_simulation_id(simulation_id):
         return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
-    Query parameters:
-        platform: Platform type（twitter/reddit）
-        limit: Return count（Default50）
-        offset: Offset
-    
-    Return post list (read from SQLite database)
-    """
     try:
         platform = request.args.get('platform', 'reddit')
         limit = request.args.get('limit', 50, type=int)
@@ -2405,15 +2408,15 @@ def get_simulation_posts(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/comments', methods=['GET'])
 def get_simulation_comments(simulation_id: str):
     """
-    Get comments in simulation（OnlyReddit）
-    """
-    if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+    Get comments in simulation (Only Reddit)
+
     Query parameters:
-        post_id: Filter postsID（Optional）
+        post_id: Filter posts ID (Optional)
         limit: Return count
         offset: Offset
     """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         post_id = request.args.get('post_id')
         limit = request.args.get('limit', 50, type=int)
