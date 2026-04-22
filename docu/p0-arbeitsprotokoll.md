@@ -601,6 +601,66 @@ Danach wurde die **Link-Geometrie** aus `GraphPanel.vue` herausgezogen.
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.13 Embedding-Konfiguration gehärtet
+Nach der Architekturkritik wurde die Kopplung von `EMBEDDING_MODEL` und `VECTOR_DIM` fail-fast abgesichert.
+
+**Neue Datei**
+- `backend/tests/test_embedding_service.py`
+- zusätzliches Detailprotokoll: `docu/p0-embedding-config-hardening-protokoll.md`
+
+**Geänderte Dateien**
+- `backend/app/config.py`
+- `backend/app/storage/embedding_service.py`
+- `backend/app/__init__.py`
+- `.env.example`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Umgesetzte Logik**
+- bekannte Modell→Dim-Mappings eingeführt
+- `VECTOR_DIM` wird nun standardmäßig aus `EMBEDDING_MODEL` abgeleitet, wenn nichts explizit gesetzt ist
+- Startup-Probe gegen das echte Embedding-Backend eingeführt
+- Mismatch zwischen Modell, Probe-Vektor und `VECTOR_DIM` führt nun zu einem **harten Fehler beim Start**
+- `.env.example` auf den realen v0.4.0-Stand gebracht
+
+**Zusätzliche Verifikation**
+- `cd backend && uv run pytest tests/test_embedding_service.py tests/test_status.py` → **11/11 bestanden**
+- `cd backend && uv run ruff check app/__init__.py app/config.py app/storage/embedding_service.py tests/test_embedding_service.py` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **67 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
+### 9.14 Polling-Composable eingeführt
+Anschließend wurde der nächste von außen identifizierte P0-Hebel umgesetzt: Polling-Grundlogik wurde zentralisiert.
+
+**Neue Datei**
+- `frontend/src/composables/usePolling.js`
+- zusätzliches Detailprotokoll: `docu/p0-polling-composable-protokoll.md`
+
+**Geänderte Dateien**
+- `frontend/src/components/Step2EnvSetup.vue`
+- `frontend/src/components/Step3Simulation.vue`
+- `frontend/src/components/Step4Report.vue`
+
+**Umgesetzte Logik**
+- wiederverwendbares Polling-Composable mit Start/Stop/Tick/Cleanup
+- Overlap-Schutz für laufende Async-Polls
+- Migration der wichtigsten Langläufer:
+  - Prepare-Status / Realtime-Profile / Realtime-Config
+  - Run-Status / Run-Detail / Console-Log
+  - Report-Status / Agent-Log / Console-Log
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 21 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **67 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

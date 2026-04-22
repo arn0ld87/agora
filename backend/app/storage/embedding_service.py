@@ -8,13 +8,48 @@ Output dimension depends on the model (see Config.VECTOR_DIM).
 import time
 import logging
 from typing import List, Optional
-from functools import lru_cache
 
 import requests
 
-from ..config import Config
+from ..config import Config, infer_vector_dim_for_model
 
 logger = logging.getLogger('agora.embedding')
+
+
+def validate_embedding_configuration(
+    model: Optional[str] = None,
+    vector_dim: Optional[int] = None,
+    base_url: Optional[str] = None,
+    timeout: int = 15,
+) -> int:
+    """Fail fast if the configured embedding model/dimension combination is invalid."""
+    effective_model = model or Config.EMBEDDING_MODEL
+    effective_dim = vector_dim or Config.VECTOR_DIM
+    effective_base_url = base_url or Config.EMBEDDING_BASE_URL
+
+    expected_dim = infer_vector_dim_for_model(effective_model)
+    if expected_dim and effective_dim != expected_dim:
+        raise EmbeddingError(
+            f"VECTOR_DIM={effective_dim} does not match known dimension {expected_dim} "
+            f"for EMBEDDING_MODEL='{effective_model}'"
+        )
+
+    service = EmbeddingService(
+        model=effective_model,
+        base_url=effective_base_url,
+        max_retries=1,
+        timeout=timeout,
+    )
+    vector = service.embed("dimension probe")
+    actual_dim = len(vector)
+
+    if actual_dim != effective_dim:
+        raise EmbeddingError(
+            f"Embedding probe for model '{effective_model}' returned dimension {actual_dim}, "
+            f"but VECTOR_DIM is configured as {effective_dim}"
+        )
+
+    return actual_dim
 
 
 class EmbeddingService:

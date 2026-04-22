@@ -7,6 +7,27 @@ import json
 import os
 from dotenv import load_dotenv
 
+
+KNOWN_EMBEDDING_DIMS = {
+    'nomic-embed-text': 768,
+    'embeddinggemma:300m': 768,
+    'qwen3-embedding:4b': 2560,
+    'qwen3-embedding:8b': 4096,
+}
+
+
+def infer_vector_dim_for_model(model_name: str | None) -> int | None:
+    """Infer a known vector dimension from the embedding model name."""
+    normalized = (model_name or '').strip().lower()
+    if not normalized:
+        return None
+
+    for known_model, dim in KNOWN_EMBEDDING_DIMS.items():
+        if normalized == known_model or normalized.startswith(known_model):
+            return dim
+
+    return None
+
 # Load .env file from project root
 # Path: Agora/.env (relative to backend/app/config.py)
 project_root_env = os.path.join(os.path.dirname(__file__), '../../.env')
@@ -65,7 +86,12 @@ class Config:
     # qwen3-embedding:8b: 4096). Falsche Dim → Neo4j-Index stream rejected.
     EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'nomic-embed-text')
     EMBEDDING_BASE_URL = os.environ.get('EMBEDDING_BASE_URL', 'http://localhost:11434')
-    VECTOR_DIM = int(os.environ.get('VECTOR_DIM', '768'))
+    VECTOR_DIM = int(
+        os.environ.get(
+            'VECTOR_DIM',
+            str(infer_vector_dim_for_model(EMBEDDING_MODEL) or 768),
+        )
+    )
 
     # File upload configuration
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
@@ -139,4 +165,11 @@ class Config:
             errors.append("NEO4J_URI not configured")
         if not cls.NEO4J_PASSWORD:
             errors.append("NEO4J_PASSWORD not configured")
+
+        expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
+        if expected_dim and cls.VECTOR_DIM != expected_dim:
+            errors.append(
+                "VECTOR_DIM mismatch for EMBEDDING_MODEL "
+                f"'{cls.EMBEDDING_MODEL}': configured {cls.VECTOR_DIM}, expected {expected_dim}"
+            )
         return errors

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -43,10 +44,14 @@ const consoleLogs = ref([])
 const consoleLogLine = ref(0)
 const consoleScrollEl = ref(null)
 const startError = ref(null)
-let pollTimer = null
-let consoleTimer = null
 
 function addLog(msg) { emit('add-log', msg) }
+
+const statusPolling = usePolling(async () => {
+  await pollStatus()
+  await pollDetail()
+}, 2500)
+const consolePolling = usePolling(pollConsole, 2000)
 
 function resetState() {
   phase.value = 0
@@ -137,15 +142,12 @@ async function doPauseResume() {
 }
 
 function startPolling() {
-  pollStatus()
-  pollDetail()
-  pollConsole()
-  pollTimer = setInterval(() => { pollStatus(); pollDetail() }, 2500)
-  consoleTimer = setInterval(pollConsole, 2000)
+  void statusPolling.start({ immediate: true })
+  void consolePolling.start({ immediate: true })
 }
 function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  if (consoleTimer) { clearInterval(consoleTimer); consoleTimer = null }
+  statusPolling.stop()
+  consolePolling.stop()
 }
 
 async function pollConsole() {

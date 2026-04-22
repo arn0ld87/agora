@@ -51,6 +51,7 @@ htmlcov/
 # Local docs and scratch dirs
 mydoc/
 mytest/
+.alex-eastereggs.local.md
 
 # Log files
 backend/logs/

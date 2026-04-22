@@ -9,13 +9,13 @@ import warnings
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-import uuid
+import uuid  # noqa: E402
 
-from flask import Flask, g, request
-from flask_cors import CORS
+from flask import Flask, g, request  # noqa: E402
+from flask_cors import CORS  # noqa: E402
 
-from .config import Config
-from .utils.logger import setup_logger, get_logger
+from .config import Config  # noqa: E402
+from .utils.logger import setup_logger, get_logger  # noqa: E402
 
 
 def create_app(config_class=Config):
@@ -48,6 +48,21 @@ def create_app(config_class=Config):
             logger.error(f"Config error: {err}")
         if not Config.DEBUG:
             raise RuntimeError(f"Critical configuration missing: {', '.join(config_errors)}")
+
+    # Fail fast on embedding misconfiguration or unavailable embedding backend.
+    # Keep startup checks crisp and local — small nod to alexle135.de.
+    from .storage.embedding_service import EmbeddingError, validate_embedding_configuration
+    try:
+        actual_embedding_dim = validate_embedding_configuration()
+        if should_log_startup:
+            logger.info(
+                "Embedding configuration validated (%s → %s dims)",
+                Config.EMBEDDING_MODEL,
+                actual_embedding_dim,
+            )
+    except EmbeddingError as e:
+        logger.error("Embedding configuration invalid: %s", e)
+        raise RuntimeError(f"Embedding configuration invalid: {e}") from e
 
     # CORS: nur explizit freigegebene Origins. Default = lokaler Vite-Dev-Server.
     # Zusätzliche Origins (z.B. Tailnet-Hostname) via AGORA_EXTRA_ORIGINS als

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
@@ -48,10 +49,6 @@ const branchForm = ref({
 })
 // Resolved from /generate/status when only reportId was known on mount.
 const resolvedSimulationId = ref(props.simulationId || null)
-
-let pollTimer = null
-let agentLogTimer = null
-let consoleLogTimer = null
 
 // ----- Per-report model override (falls back to .env LLM_MODEL_NAME) -----
 const STORAGE_REPORT_MODEL = 'agora.reportModel'
@@ -134,6 +131,10 @@ async function regenerateWithModel() {
 }
 
 function addLog(msg) { emit('add-log', msg) }
+
+const statusPolling = usePolling(pollStatus, 2500)
+const agentLogPolling = usePolling(pollAgentLog, 1500)
+const consoleLogPolling = usePolling(pollConsoleLog, 2000)
 
 async function pollStatus() {
   if (!props.reportId && !props.simulationId) return
@@ -267,15 +268,14 @@ async function pollConsoleLog() {
 }
 
 function startPolling() {
-  pollTimer = setInterval(pollStatus, 2500)
-  agentLogTimer = setInterval(pollAgentLog, 1500)
-  consoleLogTimer = setInterval(pollConsoleLog, 2000)
+  void statusPolling.start()
+  void agentLogPolling.start()
+  void consoleLogPolling.start()
 }
 function stopPolling() {
-  for (const t of [pollTimer, agentLogTimer, consoleLogTimer]) {
-    if (t) clearInterval(t)
-  }
-  pollTimer = agentLogTimer = consoleLogTimer = null
+  statusPolling.stop()
+  agentLogPolling.stop()
+  consoleLogPolling.stop()
 }
 
 function toggleSection(i) {
