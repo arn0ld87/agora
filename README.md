@@ -277,7 +277,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: early alpha — expect bugs.** Agora is an active experimental
+> **⚠️ Status: v0.3.0 alpha — usable, but still rough around the edges.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
 > swapped mid-run. Not production-ready. The HTTP API currently has **no

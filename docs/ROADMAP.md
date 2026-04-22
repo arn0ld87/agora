@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-## Current State (v0.2.0)
+## Current State (v0.3.0)
 
 Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies removed. Core pipeline works: upload text → build knowledge graph → entity extraction → simulation → report generation.
 
@@ -8,14 +8,14 @@ Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies remove
 
 ## Near Term
 
-### v0.3.0 — Stability & Python Compatibility
+### v0.4.0 — Stability & Python Compatibility
 - [ ] Fix `camel-oasis` / `camel-ai` compatibility with Python 3.12+ (currently requires <3.12)
 - [ ] Add Docker Compose GPU auto-detection (fallback to CPU-only Ollama)
 - [ ] Connection resilience: auto-reconnect to Neo4j on transient failures
 - [ ] Add `/api/status` endpoint showing Neo4j connection state, Ollama model availability, and disk usage
 - [ ] Structured logging with JSON output option
 
-### v0.4.0 — Search & Retrieval Improvements
+### v0.5.0 — Search & Retrieval Improvements
 - [ ] Tune hybrid search weights (currently 0.7 vector / 0.3 BM25) — make configurable per graph
 - [ ] Add graph-aware reranking: boost results connected to the query entity
 - [ ] Support multiple embedding models (e.g., mxbai-embed-large, bge-m3 for multilingual)
@@ -25,20 +25,20 @@ Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies remove
 
 ## Mid Term
 
-### v0.5.0 — Multi-Model Support
+### v0.6.0 — Multi-Model Support
 - [ ] Model router: assign different Ollama models to different tasks (fast model for NER, large model for reports)
 - [ ] Support vLLM and llama.cpp as alternative backends alongside Ollama
 - [ ] Add model benchmarking tool: compare NER/RE quality across models on the same seed text
 - [ ] Quantization-aware config: auto-select context window based on available VRAM
 
-### v0.6.0 — Enhanced Simulation
+### v0.7.0 — Enhanced Simulation
 - [ ] Real-time simulation dashboard with WebSocket updates
 - [ ] Agent memory persistence across simulation rounds (currently in-memory)
 - [ ] Custom agent archetypes: define personality templates beyond OASIS defaults
 - [ ] Multi-language simulation support (agents can interact in different languages)
 - [ ] Export simulation transcripts as structured JSON for external analysis
 
-### v0.7.0 — Graph Intelligence
+### v0.8.0 — Graph Intelligence
 - [ ] Community detection (Louvain/Leiden) to auto-identify entity clusters
 - [ ] Graph visualization improvements: force-directed layout, filtering by entity type
 - [ ] Temporal graph: track how entity relationships evolve across simulation rounds

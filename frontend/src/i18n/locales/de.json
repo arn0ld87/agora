@@ -84,7 +84,7 @@
     "lead": "Agora baut aus deinem Text einen Wissensgraphen, bevölkert ihn mit hunderten Agenten — jeder mit eigener Biografie, Haltung, Blase — und lässt sie diskutieren, teilen, streiten. Du siehst in Echtzeit, wie sich Narrative ausbreiten, wo Gegenwind entsteht und welche Stimmen den Diskurs kippen. Vollständig lokal. Dein Laptop, dein Neo4j, dein Ollama.",
     "tags": {
       "engine": "Schwarm-Engine",
-      "version": "v0.2-vorschau"
+      "version": "v0.3.0 alpha"
     },
     "system": {
       "kicker": "№ 02 — SYSTEM",
