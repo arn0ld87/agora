@@ -285,3 +285,74 @@ Die nächsten sinnvollen Kandidaten sind nun deutlich klarer:
 1. Link-Path- und Midpoint-Geometrie extrahieren
 2. Force-Simulation / SVG-Renderer kapseln
 3. Controls / Hint-Bereiche weiter separieren
+
+---
+
+## 12. Dritter GraphPanel-Schritt — Link-Geometrie herausgelöst
+
+Im nächsten sicheren Schritt wurde die **reine Link-Geometrie** aus `GraphPanel.vue` extrahiert.
+
+### 12.1 Neue Datei
+- `frontend/src/components/graph/graphPanelGeometry.js`
+
+### 12.2 Geänderte Datei
+- `frontend/src/components/GraphPanel.vue`
+
+### 12.3 Herausgelöste Logik
+Die neue Datei kapselt jetzt:
+- SVG-Path-Berechnung für normale Kanten
+- SVG-Path-Berechnung für Self-Loops
+- Midpoint-Berechnung für gerade Kanten
+- Midpoint-Berechnung für gekrümmte Kanten
+- gemeinsame Kontrollpunkt-Berechnung für Quadratic-Bezier-Kurven
+
+### 12.4 Warum dieser Schnitt sicher war
+Dieser Teil ist **funktional und deterministisch**:
+- keine Seiteneffekte
+- keine D3-Lifecycle-Steuerung
+- keine DOM-Selektion
+- keine Watcher / Refs / Simulation-Steuerung
+
+Damit war der Geometrie-Schnitt deutlich risikoärmer als eine direkte Extraktion des kompletten Renderers.
+
+### 12.5 Messbarer Effekt
+- `frontend/src/components/GraphPanel.vue` wurde weiter reduziert:
+  - nach Schritt 2: **785 Zeilen**
+  - nach Schritt 3: **714 Zeilen**
+- Lint-Warnungsstand blieb stabil bei **21 Warnungen**
+
+### 12.6 Verifikation
+
+#### Frontend-Lint
+Befehl:
+```bash
+cd frontend && npm run lint
+```
+Ergebnis:
+- **0 Fehler**
+- **21 Warnungen**
+
+#### Frontend-Build
+Befehl:
+```bash
+cd frontend && npm run build
+```
+Ergebnis:
+- **Build erfolgreich**
+
+#### Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **63 bestanden**
+- Frontend Lint → **0 Fehler, 21 Warnungen**
+- Frontend Build → **bestanden**
+
+### 12.7 Neuer nächster Kandidat
+Nach UI, Datenaufbereitung und Geometrie bleibt jetzt als nächster größerer Brocken vor allem:
+1. Force-Simulation / SVG-Renderer kapseln
+2. Link-/Node-Selection-Highlighting strukturieren
+3. Controls / Hint-Bereiche separat ziehen

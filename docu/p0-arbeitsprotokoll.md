@@ -569,6 +569,38 @@ Zwischen den Refactoring-Schritten wurde zusätzlich eine **sichtbare Versionsan
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.12 Dritter GraphPanel-Modularisierungsschritt
+Danach wurde die **Link-Geometrie** aus `GraphPanel.vue` herausgezogen.
+
+**Neue Datei**
+- `frontend/src/components/graph/graphPanelGeometry.js`
+
+**Geänderte Datei**
+- `frontend/src/components/GraphPanel.vue`
+
+**Herausgelöste Logik**
+- SVG-Path-Berechnung für Links
+- Midpoint-Berechnung für Label-Positionen
+- Self-Loop-Geometrie
+- gemeinsame Kontrollpunkt-Berechnung für gekrümmte Kanten
+
+**Wichtige Designentscheidung**
+- Die Geometrie wurde vor dem Renderer extrahiert, weil sie rein funktional ist.
+- D3-Simulation, Zoom, Drag und DOM-Manipulation blieben weiter im Parent.
+
+**Messbarer Effekt**
+- `GraphPanel.vue` wurde weiter von **785 auf 714 Zeilen** reduziert
+- Frontend-ESLint-Warnungen blieben stabil bei **21**
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 21 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **63 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

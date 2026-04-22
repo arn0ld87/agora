@@ -90,6 +90,7 @@ import * as d3 from 'd3'
 import GraphDetailPanel from './graph/GraphDetailPanel.vue'
 import GraphLegend from './graph/GraphLegend.vue'
 import { buildGraphRenderData } from './graph/graphPanelData'
+import { getLinkMidpoint, getLinkPath } from './graph/graphPanelGeometry'
 import { buildEntityTypes } from './graph/graphPanelUtils'
 
 const props = defineProps({
@@ -194,78 +195,6 @@ const renderGraph = () => {
 
   // Links - use path to support curves
   const linkGroup = g.append('g').attr('class', 'links')
-
-  // Calculate curve path
-  const getLinkPath = (d) => {
-    const sx = d.source.x, sy = d.source.y
-    const tx = d.target.x, ty = d.target.y
-
-    // Detect self-loop
-    if (d.isSelfLoop) {
-      // Self-loop: draw an arc from node and back
-      const loopRadius = 30
-      // Start from node's right side, circle around and back
-      const x1 = sx + 8  // Start offset
-      const y1 = sy - 4
-      const x2 = sx + 8  // End offset
-      const y2 = sy + 4
-      // Use arc to draw self-loop (sweep-flag=1 clockwise)
-      return `M${x1},${y1} A${loopRadius},${loopRadius} 0 1,1 ${x2},${y2}`
-    }
-
-    if (d.curvature === 0) {
-      // Straight line
-      return `M${sx},${sy} L${tx},${ty}`
-    }
-
-    // Calculate curve control point - dynamically adjust based on edge count and distance
-    const dx = tx - sx, dy = ty - sy
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    // Offset perpendicular to connection direction, calculated by distance ratio to ensure visible curve
-    // More edges means larger offset proportion
-    const pairTotal = d.pairTotal || 1
-    const offsetRatio = 0.25 + pairTotal * 0.05 // Base 25%, add 5% per additional edge
-    const baseOffset = Math.max(35, dist * offsetRatio)
-    const offsetX = -dy / dist * d.curvature * baseOffset
-    const offsetY = dx / dist * d.curvature * baseOffset
-    const cx = (sx + tx) / 2 + offsetX
-    const cy = (sy + ty) / 2 + offsetY
-
-    return `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`
-  }
-
-  // Calculate curve midpoint (for label positioning)
-  const getLinkMidpoint = (d) => {
-    const sx = d.source.x, sy = d.source.y
-    const tx = d.target.x, ty = d.target.y
-
-    // Detect self-loop
-    if (d.isSelfLoop) {
-      // Self-loop label position: right side of node
-      return { x: sx + 70, y: sy }
-    }
-    
-    if (d.curvature === 0) {
-      return { x: (sx + tx) / 2, y: (sy + ty) / 2 }
-    }
-
-    // Quadratic Bezier curve midpoint t=0.5
-    const dx = tx - sx, dy = ty - sy
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    const pairTotal = d.pairTotal || 1
-    const offsetRatio = 0.25 + pairTotal * 0.05
-    const baseOffset = Math.max(35, dist * offsetRatio)
-    const offsetX = -dy / dist * d.curvature * baseOffset
-    const offsetY = dx / dist * d.curvature * baseOffset
-    const cx = (sx + tx) / 2 + offsetX
-    const cy = (sy + ty) / 2 + offsetY
-
-    // Quadratic Bezier curve formula B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2, t=0.5
-    const midX = 0.25 * sx + 0.5 * cx + 0.25 * tx
-    const midY = 0.25 * sy + 0.5 * cy + 0.25 * ty
-
-    return { x: midX, y: midY }
-  }
 
   const link = linkGroup.selectAll('path')
     .data(edges)
