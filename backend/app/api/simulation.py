@@ -528,7 +528,10 @@ def prepare_simulation():
         
         # Check if forced regeneration
         force_regenerate = data.get('force_regenerate', False)
-        logger.info(f"Start processing /prepare Request: simulation_id={simulation_id}, force_regenerate={force_regenerate}")
+        logger.info(
+            f"Start processing /prepare Request: simulation_id={simulation_id}, force_regenerate={force_regenerate}",
+            extra={'simulation_id': simulation_id},
+        )
         
         # Check if already prepared（Avoid duplicatesGenerate）
         if not force_regenerate:
@@ -1989,7 +1992,10 @@ def start_simulation():
                     "error": "Enable knowledge graph memory update requires valid graph_id，Please ensure project graph built"
                 }), 400
             
-            logger.info(f"Enable knowledge graph memory update: simulation_id={simulation_id}, graph_id={graph_id}")
+            logger.info(
+                f"Enable knowledge graph memory update: simulation_id={simulation_id}, graph_id={graph_id}",
+                extra={'simulation_id': simulation_id},
+            )
         
         # Start simulation
         run_state = SimulationRunner.start_simulation(
