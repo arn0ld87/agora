@@ -15,6 +15,7 @@ from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
+from ..utils.validation import validate_project_id, validate_graph_id, validate_task_id
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 
@@ -30,12 +31,25 @@ def _get_storage():
     return storage
 
 
-def allowed_file(filename: str) -> bool:
-    """Check if file extension is allowed"""
+def allowed_file(file_storage) -> bool:
+    """Check if file extension and content are allowed"""
+    filename = file_storage.filename
     if not filename or '.' not in filename:
         return False
     ext = os.path.splitext(filename)[1].lower().lstrip('.')
-    return ext in Config.ALLOWED_EXTENSIONS
+    if ext not in Config.ALLOWED_EXTENSIONS:
+        return False
+
+    # Basic content verification for PDF
+    if ext == 'pdf':
+        try:
+            header = file_storage.stream.read(4)
+            file_storage.stream.seek(0)
+            return header == b'%PDF'
+        except Exception:
+            return False
+
+    return True
 
 
 # ============== Project Management Interface ==============
@@ -45,6 +59,9 @@ def get_project(project_id: str):
     """
     Get project details
     """
+    if not validate_project_id(project_id):
+        return jsonify({"success": False, "error": "Invalid project_id format"}), 400
+
     project = ProjectManager.get_project(project_id)
     
     if not project:
@@ -79,6 +96,9 @@ def delete_project(project_id: str):
     """
     Delete project
     """
+    if not validate_project_id(project_id):
+        return jsonify({"success": False, "error": "Invalid project_id format"}), 400
+
     success = ProjectManager.delete_project(project_id)
 
     if not success:
@@ -98,6 +118,9 @@ def reset_project(project_id: str):
     """
     Reset project status (for rebuilding graph)
     """
+    if not validate_project_id(project_id):
+        return jsonify({"success": False, "error": "Invalid project_id format"}), 400
+
     project = ProjectManager.get_project(project_id)
 
     if not project:
@@ -189,7 +212,7 @@ def generate_ontology():
         all_text = ""
 
         for file in uploaded_files:
-            if file and file.filename and allowed_file(file.filename):
+            if file and file.filename and allowed_file(file):
                 # Save file to project directory
                 file_info = ProjectManager.save_file_to_project(
                     project.project_id,
@@ -255,11 +278,13 @@ def generate_ontology():
         })
         
     except Exception as e:
-        return jsonify({
+        response = {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+            "error": str(e)
+        }
+        if Config.DEBUG:
+            response["traceback"] = traceback.format_exc()
+        return jsonify(response), 500
 
 
 # ============== Interface 2: Build Graph ==============
@@ -300,6 +325,9 @@ def build_graph():
                 "success": False,
                 "error": "Please provide project_id"
             }), 400
+
+        if not validate_project_id(project_id):
+            return jsonify({"success": False, "error": "Invalid project_id format"}), 400
 
         # Get project
         project = ProjectManager.get_project(project_id)
@@ -507,11 +535,13 @@ def build_graph():
         })
         
     except Exception as e:
-        return jsonify({
+        response = {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+            "error": str(e)
+        }
+        if Config.DEBUG:
+            response["traceback"] = traceback.format_exc()
+        return jsonify(response), 500
 
 
 # ============== Task Query Interface ==============
@@ -521,6 +551,9 @@ def get_task(task_id: str):
     """
     Query task status
     """
+    if not validate_task_id(task_id):
+        return jsonify({"success": False, "error": "Invalid task_id format"}), 400
+
     task = TaskManager().get_task(task_id)
 
     if not task:
@@ -556,6 +589,9 @@ def get_graph_data(graph_id: str):
     """
     Get graph data (nodes and edges)
     """
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
+
     try:
         storage = _get_storage()
         builder = GraphBuilderService(storage=storage)
@@ -567,11 +603,13 @@ def get_graph_data(graph_id: str):
         })
 
     except Exception as e:
-        return jsonify({
+        response = {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+            "error": str(e)
+        }
+        if Config.DEBUG:
+            response["traceback"] = traceback.format_exc()
+        return jsonify(response), 500
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
@@ -579,6 +617,9 @@ def delete_graph(graph_id: str):
     """
     Delete graph
     """
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
+
     try:
         storage = _get_storage()
         builder = GraphBuilderService(storage=storage)
@@ -590,8 +631,10 @@ def delete_graph(graph_id: str):
         })
 
     except Exception as e:
-        return jsonify({
+        response = {
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+            "error": str(e)
+        }
+        if Config.DEBUG:
+            response["traceback"] = traceback.format_exc()
+        return jsonify(response), 500

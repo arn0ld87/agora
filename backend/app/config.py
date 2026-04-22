@@ -102,6 +102,12 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate required configuration"""
+        from .utils.logger import get_logger
+        logger = get_logger('agora.config')
+
+        if not cls.DEBUG and cls.SECRET_KEY == 'agora-secret-key':
+            logger.warning("SECURITY WARNING: Using default SECRET_KEY in production mode!")
+
         errors = []
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY not configured (set to any non-empty value, e.g. 'ollama')")

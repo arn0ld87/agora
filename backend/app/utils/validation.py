@@ -1,0 +1,45 @@
+import re
+from typing import Optional
+
+# Standard identifier regex: prefix_ followed by 12 hex characters
+# Based on uuid4().hex[:12] usage in the codebase
+PROJ_ID_PATTERN = re.compile(r'^proj_[a-f0-9]{12}$')
+SIM_ID_PATTERN = re.compile(r'^sim_[a-f0-9]{12}$')
+REPORT_ID_PATTERN = re.compile(r'^report_[a-f0-9]{12}$')
+
+# Task IDs seem to be task_ followed by hex (length not explicitly seen but likely similar)
+TASK_ID_PATTERN = re.compile(r'^task_[a-f0-9]+$')
+
+# Graph IDs in Neo4j are UUIDs
+UUID_PATTERN = re.compile(r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$|'
+                          r'^[a-f0-9]{32}$')
+
+def validate_project_id(project_id: str) -> bool:
+    """Validate project_id format"""
+    if not project_id:
+        return False
+    return bool(PROJ_ID_PATTERN.match(project_id))
+
+def validate_simulation_id(simulation_id: str) -> bool:
+    """Validate simulation_id format"""
+    if not simulation_id:
+        return False
+    return bool(SIM_ID_PATTERN.match(simulation_id))
+
+def validate_report_id(report_id: str) -> bool:
+    """Validate report_id format"""
+    if not report_id:
+        return False
+    return bool(REPORT_ID_PATTERN.match(report_id))
+
+def validate_graph_id(graph_id: str) -> bool:
+    """Validate graph_id format (UUID)"""
+    if not graph_id:
+        return False
+    return bool(UUID_PATTERN.match(graph_id))
+
+def validate_task_id(task_id: str) -> bool:
+    """Validate task_id format"""
+    if not task_id:
+        return False
+    return bool(TASK_ID_PATTERN.match(task_id))

@@ -438,10 +438,15 @@ class Neo4jStorage(GraphStorage):
             return self._call_with_retry(session.execute_read, _read)
 
     def get_nodes_by_label(self, graph_id: str, label: str) -> List[Dict[str, Any]]:
+        # Sanitize label to prevent Cypher injection
+        # Only allow alphanumeric characters and underscores
+        import re
+        safe_label = re.sub(r'[^a-zA-Z0-9_]', '', label)
+
         def _read(tx):
-            # Dynamic label in query (safe — label comes from ontology, not user input)
+            # Dynamic label in query (now sanitized)
             query = f"""
-                MATCH (n:Entity:`{label}` {{graph_id: $gid}})
+                MATCH (n:Entity:`{safe_label}` {{graph_id: $gid}})
                 RETURN n, labels(n) AS labels
             """
             result = tx.run(query, gid=graph_id)
