@@ -306,10 +306,73 @@ Ergebnis:
 
 ---
 
-## 9. Offene Punkte nach diesem P0-Block
+## 9. Folgeblock: erster kontrollierter Split von `simulation.py`
+
+### 9.1 Ziel
+Nach der Quality-Basis wurde der nächste P0-Schritt gestartet: die kontrollierte Aufspaltung von `backend/app/api/simulation.py`.
+
+### 9.2 Umgesetzter Teilschritt
+Es wurden zunächst die **am schwächsten gekoppelten Routen** herausgelöst:
+
+**Neue Dateien**
+- `backend/app/api/simulation_common.py`
+- `backend/app/api/simulation_entities.py`
+- `backend/app/api/simulation_lifecycle.py`
+- `backend/tests/test_simulation_api_routes.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Herausgelöste Endpunkte**
+- `/available-models`
+- `/entities/<graph_id>`
+- `/entities/<graph_id>/<entity_uuid>`
+- `/entities/<graph_id>/by-type/<entity_type>`
+- `/create`
+- `/<simulation_id>`
+- `/list`
+
+### 9.3 Verifikation dieses Split-Schritts
+#### Zusatztest
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **4 Tests bestanden**
+
+#### Voller Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **53 bestanden**
+- Frontend Lint → **0 Fehler, 23 Warnungen**
+- Frontend Build → **bestanden**
+
+### 9.4 Bewertung
+- Der Split ist **funktional gelungen**.
+- Das bestehende Routing blieb stabil.
+- Das Blueprint-Modell wurde nicht gebrochen.
+- `simulation.py` ist noch nicht fertig zerlegt, aber der riskante erste Schnitt ist jetzt sauber etabliert.
+
+---
+
+## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
 2. Frontend-Warnungen gezielt abbauen
-3. `simulation.py`-Aufspaltung als nächster großer P0/P1-Block
+3. weitere Aufspaltung von `simulation.py`:
+   - `prepare`
+   - run control
+   - profiles/config
+   - interviews/artifacts/env
 4. `GraphPanel.vue`-Zerlegung nachziehen
 5. eventuelle `npm audit`-Nacharbeit separat priorisieren

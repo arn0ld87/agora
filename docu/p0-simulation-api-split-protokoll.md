@@ -115,3 +115,69 @@ Für Stufe 1 werden folgende neuen Module vorgesehen:
 - `backend/app/api/simulation_lifecycle.py`
 
 Diese Auswahl ist bewusst konservativ und risikoarm.
+
+### 5.3 Umgesetzter Split-Schritt 1
+
+**Neue Dateien**
+- `backend/app/api/simulation_common.py`
+- `backend/app/api/simulation_entities.py`
+- `backend/app/api/simulation_lifecycle.py`
+- `backend/tests/test_simulation_api_routes.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Inhalt des Split-Schritts**
+- gemeinsame Simulation-API-Helfer nach `simulation_common.py` verschoben:
+  - Logger
+  - RunRegistry-Instanz
+  - Interview-Prompt-Normalisierung
+  - Run-Artefakt-Helfer
+  - Resume-Capability-Helfer
+  - Storage-Zugriffshilfe
+- Entity-Lese-Endpunkte nach `simulation_entities.py` verschoben:
+  - `/entities/<graph_id>`
+  - `/entities/<graph_id>/<entity_uuid>`
+  - `/entities/<graph_id>/by-type/<entity_type>`
+- Lifecycle-/Metadaten-Endpunkte nach `simulation_lifecycle.py` verschoben:
+  - `/available-models`
+  - `/create`
+  - `/<simulation_id>`
+  - `/list`
+- `backend/app/api/__init__.py` importiert die neuen Module explizit, damit die Routen weiter auf demselben Blueprint registriert werden.
+- `backend/app/api/simulation.py` wurde um die verschobenen Routen reduziert und importiert die gemeinsamen Helfer zurück.
+
+### 5.4 Verifikation für Split-Schritt 1
+
+#### Targeted API-Smoke-Tests
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **4/4 Tests bestanden**
+- verifiziert wurden:
+  - Route `/available-models` registriert
+  - Entity-Validierung bleibt aktiv
+  - `/create` verlangt weiterhin `project_id`
+  - `/list` bleibt registriert
+
+#### Scoped Ruff-Check nach Split
+Befehl:
+```bash
+cd backend && uv run ruff check app/models/project.py app/services/run_registry.py app/utils/validation.py app/api/simulation_common.py app/api/simulation_entities.py app/api/simulation_lifecycle.py tests/test_project_manager.py tests/test_run_registry.py tests/test_validation.py tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **alle Checks bestanden**
+
+### 5.5 Nächste sichere Split-Kandidaten
+Nach diesem ersten Split sind die nächsten sinnvollen Kandidaten:
+1. `prepare` + `prepare/status`
+2. Profile-/Config-Endpunkte
+3. Run-Control-Endpunkte
+4. Interview-/Artifact-Endpunkte
