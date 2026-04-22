@@ -89,6 +89,7 @@ import * as d3 from 'd3'
 
 import GraphDetailPanel from './graph/GraphDetailPanel.vue'
 import GraphLegend from './graph/GraphLegend.vue'
+import { buildGraphRenderData } from './graph/graphPanelData'
 import { buildEntityTypes } from './graph/graphPanelUtils'
 
 const props = defineProps({
@@ -163,129 +164,8 @@ const renderGraph = () => {
     
   svg.selectAll('*').remove()
   
-  const nodesData = props.graphData.nodes || []
-  const edgesData = props.graphData.edges || []
-  
-  if (nodesData.length === 0) return
-
-  // Prepare data
-  const nodeMap = {}
-  nodesData.forEach(n => nodeMap[n.uuid] = n)
-
-  const nodes = nodesData.map(n => ({
-    id: n.uuid,
-    name: n.name || 'Unnamed',
-    type: n.labels?.find(l => l !== 'Entity') || 'Entity',
-    rawData: n
-  }))
-
-  const nodeIds = new Set(nodes.map(n => n.id))
-
-  // Process edge data, calculate edge count and index between same pair of nodes
-  const edgePairCount = {}
-  const selfLoopEdges = {} // Self-loop edges grouped by node
-  const tempEdges = edgesData
-    .filter(e => nodeIds.has(e.source_node_uuid) && nodeIds.has(e.target_node_uuid))
-
-  // Count edges between each pair of nodes, collect self-loop edges
-  tempEdges.forEach(e => {
-    if (e.source_node_uuid === e.target_node_uuid) {
-      // Self-loop - collect into array
-      if (!selfLoopEdges[e.source_node_uuid]) {
-        selfLoopEdges[e.source_node_uuid] = []
-      }
-      selfLoopEdges[e.source_node_uuid].push({
-        ...e,
-        source_name: nodeMap[e.source_node_uuid]?.name,
-        target_name: nodeMap[e.target_node_uuid]?.name
-      })
-    } else {
-      const pairKey = [e.source_node_uuid, e.target_node_uuid].sort().join('_')
-      edgePairCount[pairKey] = (edgePairCount[pairKey] || 0) + 1
-    }
-  })
-
-  // Record which edge index we're at for each pair of nodes
-  const edgePairIndex = {}
-  const processedSelfLoopNodes = new Set() // Processed self-loop nodes
-  
-  const edges = []
-  
-  tempEdges.forEach(e => {
-    const isSelfLoop = e.source_node_uuid === e.target_node_uuid
-
-    if (isSelfLoop) {
-      // Self-loop edge - add only one merged self-loop per node
-      if (processedSelfLoopNodes.has(e.source_node_uuid)) {
-        return // Already processed, skip
-      }
-      processedSelfLoopNodes.add(e.source_node_uuid)
-      
-      const allSelfLoops = selfLoopEdges[e.source_node_uuid]
-      const nodeName = nodeMap[e.source_node_uuid]?.name || 'Unknown'
-      
-      edges.push({
-        source: e.source_node_uuid,
-        target: e.target_node_uuid,
-        type: 'SELF_LOOP',
-        name: `Self Relations (${allSelfLoops.length})`,
-        curvature: 0,
-        isSelfLoop: true,
-        rawData: {
-          isSelfLoopGroup: true,
-          source_name: nodeName,
-          target_name: nodeName,
-          selfLoopCount: allSelfLoops.length,
-          selfLoopEdges: allSelfLoops // Store detailed information of all self-loop edges
-        }
-      })
-      return
-    }
-    
-    const pairKey = [e.source_node_uuid, e.target_node_uuid].sort().join('_')
-    const totalCount = edgePairCount[pairKey]
-    const currentIndex = edgePairIndex[pairKey] || 0
-    edgePairIndex[pairKey] = currentIndex + 1
-
-    // Check if edge direction matches normalized direction (source UUID < target UUID)
-    const isReversed = e.source_node_uuid > e.target_node_uuid
-
-    // Calculate curvature: spread out when multiple edges, straight when single
-    let curvature = 0
-    if (totalCount > 1) {
-      // Evenly distribute curvature to ensure clear distinction
-      // Curvature range increases with edge count
-      const curvatureRange = Math.min(1.2, 0.6 + totalCount * 0.15)
-      curvature = ((currentIndex / (totalCount - 1)) - 0.5) * curvatureRange * 2
-
-      // If edge direction is opposite to normalized direction, flip curvature
-      // This ensures all edges distribute in same reference frame, no overlap from direction difference
-      if (isReversed) {
-        curvature = -curvature
-      }
-    }
-    
-    edges.push({
-      source: e.source_node_uuid,
-      target: e.target_node_uuid,
-      type: e.fact_type || e.name || 'RELATED',
-      name: e.name || e.fact_type || 'RELATED',
-      curvature,
-      isSelfLoop: false,
-      pairIndex: currentIndex,
-      pairTotal: totalCount,
-      rawData: {
-        ...e,
-        source_name: nodeMap[e.source_node_uuid]?.name,
-        target_name: nodeMap[e.target_node_uuid]?.name
-      }
-    })
-  })
-    
-  // Color scale
-  const colorMap = {}
-  entityTypes.value.forEach(t => colorMap[t.name] = t.color)
-  const getColor = (type) => colorMap[type] || '#999'
+  const { nodes, edges, getColor } = buildGraphRenderData(props.graphData, entityTypes.value)
+  if (nodes.length === 0) return
 
   // Simulation - dynamically adjust node spacing based on edge count
   const simulation = d3.forceSimulation(nodes)

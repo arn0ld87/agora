@@ -498,6 +498,41 @@ Nach dem Abschluss des Backend-Splits wurde der nächste P0-Hotspot im Frontend 
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.10 Zweiter GraphPanel-Modularisierungsschritt
+Danach wurde die **D3-Datenaufbereitung / Graph-Normalisierung** aus `GraphPanel.vue` herausgezogen.
+
+**Neue Datei**
+- `frontend/src/components/graph/graphPanelData.js`
+
+**Geänderte Datei**
+- `frontend/src/components/GraphPanel.vue`
+
+**Herausgelöste Logik**
+- Node-Normalisierung
+- Farbmapping für Entity Types
+- Filterung renderbarer Kanten
+- Self-Loop-Gruppierung
+- Mehrfachkanten-Zählung pro Node-Paar
+- Krümmungsberechnung
+- Zusammenbau des Render-Modells `{ nodes, edges, getColor }`
+
+**Wichtige Designentscheidung**
+- Force-Simulation, SVG-Renderer, Zoom und Drag-Handling blieben noch in `GraphPanel.vue`.
+- So wurde die funktionale Datenlogik getrennt, ohne den sensibleren D3-Lebenszyklus unnötig anzufassen.
+
+**Messbarer Effekt**
+- `GraphPanel.vue` wurde weiter von **905 auf 785 Zeilen** reduziert
+- Frontend-ESLint-Warnungen blieben stabil bei **21**
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 21 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **63 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
@@ -505,7 +540,7 @@ Nach dem Abschluss des Backend-Splits wurde der nächste P0-Hotspot im Frontend 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
 2. Frontend-Warnungen gezielt abbauen
 3. `GraphPanel.vue` weiter zerlegen:
-   - D3-Datenaufbereitung
+   - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer
    - Toolbar-/Toggle-/Hint-Bereiche
 4. gemeinsames Frontend-Workspace-Layout einführen

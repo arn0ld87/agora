@@ -208,3 +208,80 @@ Dieser Schritt ist kein kosmetischer Umbau, sondern der **erste echte kontrollie
 - Darstellungslogik wurde von Renderlogik getrennt
 - zwei ESLint-Warnungen wurden nebenbei abgebaut
 - die Grundlage für den nächsten, technisch riskanteren D3-Split ist gelegt
+
+---
+
+## 11. Zweiter GraphPanel-Schritt — D3-Datenaufbereitung herausgelöst
+
+Nach dem ersten UI-orientierten Schnitt wurde im nächsten Schritt die **D3-nahe Datenvorbereitung** aus `GraphPanel.vue` herausgezogen, ohne schon die eigentliche Force-Simulation anzufassen.
+
+### 11.1 Neue Datei
+- `frontend/src/components/graph/graphPanelData.js`
+
+### 11.2 Geänderte Datei
+- `frontend/src/components/GraphPanel.vue`
+
+### 11.3 Herausgelöste Logik
+Die neue Datei kapselt jetzt:
+- Node-Normalisierung für das Rendering
+- Aufbau der Entity-Type-Farbzuordnung
+- Filterung ungültiger Kanten ohne passende Nodes
+- Self-Loop-Gruppierung
+- Multiedge-Zählung pro Node-Paar
+- Krümmungsberechnung für Mehrfachkanten
+- Zusammenbau des finalen Render-Modells `{ nodes, edges, getColor }`
+
+### 11.4 Bewusste Abgrenzung
+**Nicht** ausgelagert wurden in diesem Schritt:
+- `d3.forceSimulation(...)`
+- Zoom-Setup
+- Drag-Handling
+- Pfad- und Midpoint-Berechnung der bereits simulierten Kanten
+
+**Grund:**
+Diese Bereiche hängen enger am tatsächlichen SVG-/D3-Lebenszyklus. Die Datenaufbereitung war der nächste sichere Schnitt, weil sie rein funktional ist und sich ohne Verhaltensänderung extrahieren ließ.
+
+### 11.5 Messbarer Effekt
+- `frontend/src/components/GraphPanel.vue` wurde weiter reduziert:
+  - vorher nach Schritt 1: **905 Zeilen**
+  - nach Schritt 2: **785 Zeilen**
+- ESLint-Warnungsstand blieb stabil bei **21 Warnungen**
+- das D3-Rendering blieb vollständig funktionsgleich im Parent
+
+### 11.6 Verifikation
+
+#### Frontend-Lint
+Befehl:
+```bash
+cd frontend && npm run lint
+```
+Ergebnis:
+- **0 Fehler**
+- **21 Warnungen**
+
+#### Frontend-Build
+Befehl:
+```bash
+cd frontend && npm run build
+```
+Ergebnis:
+- **Build erfolgreich**
+
+#### Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **63 bestanden**
+- Frontend Lint → **0 Fehler, 21 Warnungen**
+- Frontend Build → **bestanden**
+
+### 11.7 Bedeutung für die nächsten Schritte
+Mit diesem zweiten Schnitt ist `GraphPanel.vue` jetzt nicht mehr nur UI-seitig kleiner, sondern auch bei der **Datenmodellierung** entlastet.
+
+Die nächsten sinnvollen Kandidaten sind nun deutlich klarer:
+1. Link-Path- und Midpoint-Geometrie extrahieren
+2. Force-Simulation / SVG-Renderer kapseln
+3. Controls / Hint-Bereiche weiter separieren
