@@ -212,7 +212,11 @@ def generate_ontology():
         all_text = ""
 
         for file in uploaded_files:
-            if file and file.filename and allowed_file(file):
+            if file and file.filename:
+                if not allowed_file(file):
+                    logger.warning(f"File rejected by allowed_file: {file.filename}")
+                    continue
+
                 # Save file to project directory
                 file_info = ProjectManager.save_file_to_project(
                     project.project_id,

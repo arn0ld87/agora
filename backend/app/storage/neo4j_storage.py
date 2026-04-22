@@ -467,9 +467,10 @@ class Neo4jStorage(GraphStorage):
 
     def get_nodes_by_label(self, graph_id: str, label: str) -> List[Dict[str, Any]]:
         # Sanitize label to prevent Cypher injection
-        # Only allow alphanumeric characters and underscores
-        import re
-        safe_label = re.sub(r'[^a-zA-Z0-9_]', '', label)
+        safe_label = _sanitize_label(label)
+
+        if not safe_label:
+            return []
 
         def _read(tx):
             # Dynamic label in query (now sanitized)

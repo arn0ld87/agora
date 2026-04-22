@@ -251,13 +251,23 @@ class ProjectManager:
             File information dictionary {filename, path, size}
         """
         from werkzeug.utils import secure_filename
+        from ..utils.validation import validate_project_id
+
+        if not validate_project_id(project_id):
+            raise ValueError(f"Invalid project_id: {project_id}")
+
         files_dir = cls._get_project_files_dir(project_id)
         os.makedirs(files_dir, exist_ok=True)
 
         # Generate safe filename
-        ext = os.path.splitext(secure_filename(original_filename))[1].lower()
+        safe_orig = secure_filename(original_filename)
+        ext = os.path.splitext(safe_orig)[1].lower()
         safe_filename = f"{uuid.uuid4().hex[:8]}{ext}"
         file_path = os.path.join(files_dir, safe_filename)
+
+        # Ensure we are still within the projects directory (defensive)
+        if not os.path.abspath(file_path).startswith(os.path.abspath(cls.PROJECTS_DIR)):
+            raise ValueError("Path traversal attempt detected")
 
         # Save file
         file_storage.save(file_path)

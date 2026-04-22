@@ -39,6 +39,14 @@ def create_app(config_class=Config):
         logger.info("Agora Backend starting...")
         logger.info("=" * 50)
 
+    # Validate configuration
+    config_errors = Config.validate()
+    if config_errors:
+        for err in config_errors:
+            logger.error(f"Config error: {err}")
+        if not Config.DEBUG:
+            raise RuntimeError(f"Critical configuration missing: {', '.join(config_errors)}")
+
     # CORS: nur explizit freigegebene Origins. Default = lokaler Vite-Dev-Server.
     # Zusätzliche Origins (z.B. Tailnet-Hostname) via AGORA_EXTRA_ORIGINS als
     # Komma-separierte Liste. Wildcard nur mit AGORA_CORS_ALLOW_ALL=true und
