@@ -175,9 +175,55 @@ cd backend && uv run ruff check app/models/project.py app/services/run_registry.
 Ergebnis:
 - **alle Checks bestanden**
 
-### 5.5 Nächste sichere Split-Kandidaten
-Nach diesem ersten Split sind die nächsten sinnvollen Kandidaten:
-1. `prepare` + `prepare/status`
-2. Profile-/Config-Endpunkte
-3. Run-Control-Endpunkte
-4. Interview-/Artifact-Endpunkte
+### 5.5 Zweiter umgesetzter Split-Schritt
+
+**Neue Datei**
+- `backend/app/api/simulation_prepare.py`
+
+**Geänderte Dateien**
+- `backend/app/api/__init__.py`
+- `backend/app/api/simulation.py`
+- `backend/tests/test_simulation_api_routes.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Herausgelöste Logik**
+- `_check_simulation_prepared`
+- `/prepare`
+- `/prepare/status`
+
+**Wichtige Detailentscheidung**
+- `_check_simulation_prepared` wurde in das neue Prepare-Modul verschoben und in `simulation.py` zurückimportiert, weil andere verbleibende Endpunkte diese Prüfung weiterhin verwenden.
+- Dadurch bleibt das Verhalten stabil, ohne den nächsten Split künstlich zu blockieren.
+
+### 5.6 Verifikation für Split-Schritt 2
+
+#### Targeted API-Smoke-Tests
+Befehl:
+```bash
+cd backend && uv run pytest tests/test_simulation_api_routes.py
+```
+
+Ergebnis:
+- **6/6 Tests bestanden**
+- zusätzlich verifiziert:
+  - `/prepare` verlangt weiterhin `simulation_id`
+  - `/prepare/status` verlangt weiterhin `task_id` oder `simulation_id`
+
+#### Voller Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **55 bestanden**
+- Frontend Lint → **0 Fehler, 23 Warnungen**
+- Frontend Build → **bestanden**
+
+### 5.7 Nächste sichere Split-Kandidaten
+Nach den ersten zwei Splits sind die nächsten sinnvollen Kandidaten:
+1. Profile-/Config-/Branch-Endpunkte
+2. Run-Control-Endpunkte
+3. Interview-/Artifact-Endpunkte

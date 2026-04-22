@@ -46,6 +46,30 @@ def test_create_simulation_requires_project_id():
     assert payload["error"] == "Please provide project_id"
 
 
+def test_prepare_simulation_requires_simulation_id():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/prepare", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Please provide simulation_id"
+
+
+def test_prepare_status_requires_identifier():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post("/api/simulation/prepare/status", json={})
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Please provide task_id Or simulation_id"
+
+
 def test_list_simulations_route_is_registered():
     app = _build_test_app()
     client = app.test_client()

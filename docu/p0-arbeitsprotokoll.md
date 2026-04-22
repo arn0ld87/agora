@@ -363,6 +363,25 @@ Ergebnis:
 - Das Blueprint-Modell wurde nicht gebrochen.
 - `simulation.py` ist noch nicht fertig zerlegt, aber der riskante erste Schnitt ist jetzt sauber etabliert.
 
+### 9.5 Zweiter Split-Schritt
+Danach wurde zusätzlich der **Prepare-Block** herausgelöst:
+
+**Neue Datei**
+- `backend/app/api/simulation_prepare.py`
+
+**Herausgelöste Logik**
+- `_check_simulation_prepared`
+- `/prepare`
+- `/prepare/status`
+
+**Zusätzliche Verifikation**
+- `backend/tests/test_simulation_api_routes.py` wurde auf **6 API-Smoke-Tests** erweitert
+- `npm run check` lief danach erneut erfolgreich durch
+- Gesamtstand danach:
+  - **55 Backend-Tests bestanden**
+  - Frontend-Lint weiter **0 Fehler, 23 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
