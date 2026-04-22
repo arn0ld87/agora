@@ -7,7 +7,6 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 
 import json
 import re
-import time
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -43,6 +42,7 @@ from neo4j.exceptions import (
 )
 
 from ..config import Config
+from ..utils.retry import neo4j_call_with_retry
 from .graph_storage import GraphStorage
 from .embedding_service import EmbeddingService
 from .ner_extractor import NERExtractor
@@ -56,7 +56,7 @@ class Neo4jStorage(GraphStorage):
     """Neo4j CE implementation of the GraphStorage interface."""
 
     MAX_RETRIES = 3
-    RETRY_DELAY_BASE = 1  # seconds
+    RETRY_DELAY_BASE = 1.0  # seconds (initial backoff)
 
     def __init__(
         self,
@@ -76,6 +76,11 @@ class Neo4jStorage(GraphStorage):
         self._embedding = embedding_service or EmbeddingService()
         self._ner = ner_extractor or NERExtractor()
         self._search = SearchService(self._embedding)
+
+        # Health-state tracking (exposed via properties for /api/status)
+        self._is_connected: bool = True
+        self._last_error: Optional[Exception] = None
+        self._last_success_ts: Optional[datetime] = None
 
         # Fail fast when Neo4j is not reachable so Flask can expose a clean
         # "storage unavailable" state instead of spamming one warning per schema query.
@@ -109,30 +114,55 @@ class Neo4jStorage(GraphStorage):
                     logger.warning(f"Schema query warning: {e}")
 
     # ----------------------------------------------------------------
+    # Health-status properties
+    # ----------------------------------------------------------------
+
+    @property
+    def is_connected(self) -> bool:
+        """True when the last DB operation succeeded; False after a permanent failure."""
+        return self._is_connected
+
+    @property
+    def last_error(self) -> Optional[Exception]:
+        """The exception that caused the most recent permanent failure, or None."""
+        return self._last_error
+
+    @property
+    def last_success_ts(self) -> Optional[datetime]:
+        """Timestamp (UTC) of the most recent successful DB call, or None."""
+        return self._last_success_ts
+
+    # ----------------------------------------------------------------
     # Retry wrapper
     # ----------------------------------------------------------------
 
     def _call_with_retry(self, func, *args, **kwargs):
         """
-        Execute a function with retry on Neo4j transient errors.
-        Replaces 3 different retry patterns from the Zep codebase.
-        """
-        last_error = None
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                return func(*args, **kwargs)
-            except (TransientError, ServiceUnavailable, SessionExpired) as e:
-                last_error = e
-                wait = self.RETRY_DELAY_BASE * (2 ** attempt)
-                logger.warning(
-                    f"Neo4j transient error (attempt {attempt + 1}/{self.MAX_RETRIES}), "
-                    f"retrying in {wait}s: {e}"
-                )
-                time.sleep(wait)
-            except Exception:
-                raise
+        Execute *func* with exponential-backoff retry on Neo4j transient errors.
 
-        raise last_error  # type: ignore
+        Delegates to ``neo4j_call_with_retry`` from ``utils.retry`` (shared
+        mechanism — no parallel retry implementations).  Updates the health
+        state (``is_connected``, ``last_error``, ``last_success_ts``) so
+        callers and the future /api/status endpoint can inspect it.
+        """
+        try:
+            result = neo4j_call_with_retry(
+                func,
+                *args,
+                max_retries=self.MAX_RETRIES,
+                initial_delay=self.RETRY_DELAY_BASE,
+                **kwargs,
+            )
+            # Success — record health state
+            self._is_connected = True
+            self._last_error = None
+            self._last_success_ts = datetime.now(timezone.utc)
+            return result
+        except (TransientError, ServiceUnavailable, SessionExpired) as exc:
+            # Retries exhausted — record failure state and re-raise
+            self._is_connected = False
+            self._last_error = exc
+            raise
 
     # ----------------------------------------------------------------
     # Graph lifecycle
@@ -197,8 +227,8 @@ class Neo4jStorage(GraphStorage):
             self._call_with_retry(session.execute_write, _set)
 
     def get_ontology(self, graph_id: str) -> Dict[str, Any]:
-        with self._driver.session() as session:
-            result = session.run(
+        def _read(tx):
+            result = tx.run(
                 "MATCH (g:Graph {graph_id: $gid}) RETURN g.ontology_json AS oj",
                 gid=graph_id,
             )
@@ -206,6 +236,9 @@ class Neo4jStorage(GraphStorage):
             if record and record["oj"]:
                 return json.loads(record["oj"])
             return {}
+
+        with self._driver.session() as session:
+            return self._call_with_retry(session.execute_read, _read)
 
     # ----------------------------------------------------------------
     # Add data (NER → nodes/edges)
@@ -537,20 +570,25 @@ class Neo4jStorage(GraphStorage):
 
         Returns a dict with 'edges' and/or 'nodes' lists
         (callers like zep_tools will wrap into SearchResult).
+
+        The entire session block is wrapped in ``_call_with_retry`` so a
+        transient connection error mid-search causes a clean retry rather
+        than a half-filled result being returned.
         """
-        result = {"edges": [], "nodes": [], "query": query}
+        result: Dict[str, Any] = {"edges": [], "nodes": [], "query": query}
 
-        with self._driver.session() as session:
-            if scope in ("edges", "both"):
-                result["edges"] = self._search.search_edges(
-                    session, graph_id, query, limit
-                )
+        def _do_search():
+            with self._driver.session() as session:
+                if scope in ("edges", "both"):
+                    result["edges"] = self._search.search_edges(
+                        session, graph_id, query, limit
+                    )
+                if scope in ("nodes", "both"):
+                    result["nodes"] = self._search.search_nodes(
+                        session, graph_id, query, limit
+                    )
 
-            if scope in ("nodes", "both"):
-                result["nodes"] = self._search.search_nodes(
-                    session, graph_id, query, limit
-                )
-
+        self._call_with_retry(_do_search)
         return result
 
     # ----------------------------------------------------------------

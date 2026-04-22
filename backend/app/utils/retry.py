@@ -1,6 +1,6 @@
 """
 API Call Retry Mechanism
-Handles retry logic for external API calls like LLM
+Handles retry logic for external API calls like LLM and Neo4j.
 """
 
 import time
@@ -10,6 +10,87 @@ from typing import Callable, Any, Optional, Type, Tuple
 from ..utils.logger import get_logger
 
 logger = get_logger('agora.retry')
+
+# ---------------------------------------------------------------------------
+# Neo4j transient-failure retry helper
+# ---------------------------------------------------------------------------
+
+# Imported lazily inside the function to avoid import-time side-effects when
+# the neo4j package is not installed in testing environments that don't need it.
+_NEO4J_TRANSIENT_EXCEPTIONS: Optional[Tuple[Type[Exception], ...]] = None
+
+
+def _neo4j_transient_exceptions() -> Tuple[Type[Exception], ...]:
+    """Return the tuple of Neo4j exception types that are safe to retry."""
+    global _NEO4J_TRANSIENT_EXCEPTIONS
+    if _NEO4J_TRANSIENT_EXCEPTIONS is None:
+        from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
+        _NEO4J_TRANSIENT_EXCEPTIONS = (ServiceUnavailable, SessionExpired, TransientError)
+    return _NEO4J_TRANSIENT_EXCEPTIONS
+
+
+def neo4j_call_with_retry(
+    func: Callable,
+    *args,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 10.0,
+    backoff_factor: float = 2.0,
+    **kwargs,
+) -> Any:
+    """
+    Execute *func* with retry logic tuned for Neo4j transient errors.
+
+    Retries on ``ServiceUnavailable``, ``SessionExpired``, and
+    ``TransientError`` (all safe to replay).  Uses exponential backoff with
+    jitter so parallel threads don't thunderherd after a brief outage.
+
+    All other exceptions propagate immediately (e.g. AuthError, ClientError,
+    bad Cypher — these won't be fixed by retrying).
+
+    Args:
+        func:           Callable to execute.
+        *args:          Positional arguments forwarded to *func*.
+        max_retries:    Maximum number of retry attempts (default 3).
+        initial_delay:  Base delay in seconds before the first retry (default 1.0).
+        max_delay:      Upper cap on delay (default 10.0).
+        backoff_factor: Multiplier applied to delay after each attempt (default 2.0).
+        **kwargs:       Keyword arguments forwarded to *func*.
+
+    Returns:
+        The return value of *func* on success.
+
+    Raises:
+        The last captured transient exception when all retries are exhausted.
+    """
+    transient = _neo4j_transient_exceptions()
+    last_exc: Optional[Exception] = None
+    delay = initial_delay
+
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except transient as exc:
+            last_exc = exc
+            # Jitter: multiply by a random factor in [0.5, 1.5]
+            jittered = min(delay * (0.5 + random.random()), max_delay)
+            logger.warning(
+                "Neo4j transient error (attempt %d/%d), retrying in %.1fs: %s",
+                attempt + 1,
+                max_retries,
+                jittered,
+                exc,
+            )
+            time.sleep(jittered)
+            delay = min(delay * backoff_factor, max_delay)
+        except Exception:
+            raise  # Non-transient — propagate immediately
+
+    # All retries exhausted
+    logger.error(
+        "Neo4j call failed permanently after %d attempts: %s", max_retries, last_exc
+    )
+    raise last_exc  # type: ignore[misc]
 
 
 def retry_with_backoff(
