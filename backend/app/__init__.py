@@ -40,6 +40,7 @@ def create_app(config_class=Config):
         logger.info("=" * 50)
 
     # Enable CORS
+    # TODO(JULES): Enhance CORS policy to restrict origins in production environments (P1).
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # --- Initialize Neo4jStorage singleton (DI via app.extensions) ---
@@ -75,6 +76,7 @@ def create_app(config_class=Config):
         return response
 
     # Register blueprints
+    # TODO(JULES): Implement authentication and resource ownership checks for /api endpoints (P1).
     from .api import graph_bp, simulation_bp, report_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')

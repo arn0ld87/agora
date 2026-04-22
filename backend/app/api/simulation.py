@@ -14,6 +14,7 @@ from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
+from ..utils.validation import validate_simulation_id, validate_project_id, validate_graph_id, validate_task_id
 from ..models.project import ProjectManager
 
 logger = get_logger('agora.api.simulation')
@@ -119,6 +120,9 @@ def get_available_models():
 def get_graph_entities(graph_id: str):
     """
     Get all entities from the knowledge graph (filtered)
+    """
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
     
     Only return nodes that match predefined entity types (nodes whose Labels are not just Entity)
     
@@ -153,13 +157,16 @@ def get_graph_entities(graph_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
 @simulation_bp.route('/entities/<graph_id>/<entity_uuid>', methods=['GET'])
 def get_entity_detail(graph_id: str, entity_uuid: str):
     """Get detailed information of a single entity"""
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
+
     try:
         storage = current_app.extensions.get('neo4j_storage')
         if not storage:
@@ -183,13 +190,16 @@ def get_entity_detail(graph_id: str, entity_uuid: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
 @simulation_bp.route('/entities/<graph_id>/by-type/<entity_type>', methods=['GET'])
 def get_entities_by_type(graph_id: str, entity_type: str):
     """Get all entities of specified type"""
+    if not validate_graph_id(graph_id):
+        return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
+
     try:
         enrich = request.args.get('enrich', 'true').lower() == 'true'
         
@@ -217,7 +227,7 @@ def get_entities_by_type(graph_id: str, entity_type: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -261,6 +271,9 @@ def create_simulation():
                 "success": False,
                 "error": "Please provide project_id"
             }), 400
+
+        if not validate_project_id(project_id):
+            return jsonify({"success": False, "error": "Invalid project_id format"}), 400
         
         project = ProjectManager.get_project(project_id)
         if not project:
@@ -275,6 +288,9 @@ def create_simulation():
                 "success": False,
                 "error": "Project has not built knowledge graph yet, please call /api/graph/build first"
             }), 400
+
+        if not validate_graph_id(graph_id):
+            return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
         
         manager = SimulationManager()
         state = manager.create_simulation(
@@ -294,7 +310,7 @@ def create_simulation():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -472,7 +488,9 @@ def prepare_simulation():
                 "success": False,
                 "error": "Please provide simulation_id"
             }), 400
-        
+
+        if not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         
@@ -716,7 +734,7 @@ def prepare_simulation():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -756,6 +774,10 @@ def get_prepare_status():
         task_id = data.get('task_id')
         simulation_id = data.get('simulation_id')
         
+        if task_id and not validate_task_id(task_id):
+            return jsonify({"success": False, "error": "Invalid task_id format"}), 400
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         # If simulation_id is provided, check if preparation is complete
         if simulation_id:
             is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
@@ -836,6 +858,8 @@ def get_prepare_status():
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
 def get_simulation(simulation_id: str):
     """Get simulation status"""
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
@@ -862,7 +886,7 @@ def get_simulation(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -891,7 +915,7 @@ def list_simulations():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1064,7 +1088,7 @@ def get_simulation_history():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1072,7 +1096,9 @@ def get_simulation_history():
 def get_simulation_profiles(simulation_id: str):
     """
     Get simulation'sAgent Profile
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Query parameters:
         platform: Platform type（reddit/twitter，Defaultreddit）
     """
@@ -1102,7 +1128,7 @@ def get_simulation_profiles(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1110,7 +1136,9 @@ def get_simulation_profiles(simulation_id: str):
 def get_simulation_profiles_realtime(simulation_id: str):
     """
     Real-time get simulation's Agent Profile (for viewing during generation).
-
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Difference from /profiles endpoint:
     - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
@@ -1212,7 +1240,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1257,7 +1285,9 @@ def _save_profiles_file(path: str, profiles: list, platform: str):
 def add_simulation_profile(simulation_id: str):
     """
     Append a manually authored persona to the simulation.
-
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Request JSON (Reddit/default shape; any extra fields are preserved):
         {
             "platform": "reddit" | "twitter"  (optional, default "reddit"),
@@ -1326,12 +1356,14 @@ def add_simulation_profile(simulation_id: str):
 
     except Exception as e:
         logger.error(f"Failed to add persona: {e}")
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc() if Config.DEBUG else None}), 500
 
 
 @simulation_bp.route('/<simulation_id>/profiles/<username>', methods=['DELETE'])
 def delete_simulation_profile(simulation_id: str, username: str):
     """Remove a persona from reddit_profiles.json / twitter_profiles.csv by username."""
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         platform = request.args.get('platform', 'reddit')
         sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
@@ -1353,14 +1385,16 @@ def delete_simulation_profile(simulation_id: str, username: str):
 
     except Exception as e:
         logger.error(f"Failed to delete persona: {e}")
-        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+        return jsonify({"success": False, "error": str(e), "traceback": traceback.format_exc() if Config.DEBUG else None}), 500
 
 
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
 def get_simulation_config_realtime(simulation_id: str):
     """
     Real-time get simulation configuration (for viewing during generation).
-
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Difference from /config endpoint:
     - Reads file directly, bypasses SimulationManager
     - For real-time viewing during generation
@@ -1472,7 +1506,7 @@ def get_simulation_config_realtime(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1480,7 +1514,9 @@ def get_simulation_config_realtime(simulation_id: str):
 def get_simulation_config(simulation_id: str):
     """
     Get simulation configuration (generated with LLM intelligence).
-
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Returns:
         - time_config: Time configuration (simulation duration, start time, end time, etc.)
         - agent_configs: Activity configuration for each agent (behavior patterns, interaction styles, etc.)
@@ -1508,13 +1544,15 @@ def get_simulation_config(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
 @simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
 def download_simulation_config(simulation_id: str):
     """Download simulation configuration file"""
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     try:
         manager = SimulationManager()
         sim_dir = manager._get_simulation_dir(simulation_id)
@@ -1537,7 +1575,7 @@ def download_simulation_config(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1589,7 +1627,7 @@ def download_simulation_script(script_name: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1666,7 +1704,7 @@ def generate_profiles():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1723,6 +1761,8 @@ def start_simulation():
                 "error": "Please provide simulation_id"
             }), 400
 
+        if not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         platform = data.get('platform', 'parallel')
         max_rounds = data.get('max_rounds')  # Optional: Maximum simulation rounds
         enable_graph_memory_update = data.get('enable_graph_memory_update', False)  # Optional：IsFalseEnable knowledge graph memory update
@@ -1861,7 +1901,7 @@ def start_simulation():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1894,7 +1934,9 @@ def stop_simulation():
                 "success": False,
                 "error": "Please provide simulation_id"
             }), 400
-        
+
+        if not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         run_state = SimulationRunner.stop_simulation(simulation_id)
         
         # Update simulation status
@@ -1920,7 +1962,7 @@ def stop_simulation():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -1933,6 +1975,8 @@ def _simulation_dir(simulation_id: str) -> str:
 @simulation_bp.route('/<simulation_id>/pause', methods=['POST'])
 def pause_simulation(simulation_id: str):
     """Set the soft-pause flag — OASIS halts after the current round ends."""
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     from ..services.simulation_ipc import set_pause_state
     sim_dir = _simulation_dir(simulation_id)
     if not os.path.isdir(sim_dir):
@@ -1945,6 +1989,8 @@ def pause_simulation(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/resume', methods=['POST'])
 def resume_simulation(simulation_id: str):
     """Clear the pause flag so the OASIS subprocess continues with the next round."""
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     from ..services.simulation_ipc import set_pause_state
     sim_dir = _simulation_dir(simulation_id)
     if not os.path.isdir(sim_dir):
@@ -1960,7 +2006,9 @@ def resume_simulation(simulation_id: str):
 def get_simulation_console_log(simulation_id: str):
     """
     Stream raw stdout/stderr of the OASIS subprocess for this simulation.
-
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Query params:
         from_line: skip lines before this index (for incremental polling)
 
@@ -1976,7 +2024,7 @@ def get_simulation_console_log(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc(),
+            "traceback": traceback.format_exc() if Config.DEBUG else None,
         }), 500
 
 
@@ -1984,7 +2032,9 @@ def get_simulation_console_log(simulation_id: str):
 def get_run_status(simulation_id: str):
     """
     Get simulation real-time running status（For frontend polling）
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Returns:
         {
             "success": true,
@@ -2036,7 +2086,7 @@ def get_run_status(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2044,7 +2094,9 @@ def get_run_status(simulation_id: str):
 def get_run_status_detail(simulation_id: str):
     """
     Get simulation detailed running status（Include all actions）
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     For frontend to display real-time dynamics
     
     Query parameters:
@@ -2137,7 +2189,7 @@ def get_run_status_detail(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2145,7 +2197,9 @@ def get_run_status_detail(simulation_id: str):
 def get_simulation_actions(simulation_id: str):
     """
     Get from simulationAgentAction history
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Query parameters:
         limit: Return count（Default100）
         offset: Offset（Default0）
@@ -2191,7 +2245,7 @@ def get_simulation_actions(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2199,7 +2253,9 @@ def get_simulation_actions(simulation_id: str):
 def get_simulation_timeline(simulation_id: str):
     """
     Get simulation timeline（Summarized by round）
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     For frontend to display progress bar and timeline view
     
     Query parameters:
@@ -2231,7 +2287,7 @@ def get_simulation_timeline(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2239,7 +2295,9 @@ def get_simulation_timeline(simulation_id: str):
 def get_agent_stats(simulation_id: str):
     """
     Get eachAgentStatistics
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     For frontend display of agent activity ranking and statistics.
     """
     try:
@@ -2258,7 +2316,7 @@ def get_agent_stats(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2268,7 +2326,9 @@ def get_agent_stats(simulation_id: str):
 def get_simulation_posts(simulation_id: str):
     """
     Get posts in simulation
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Query parameters:
         platform: Platform type（twitter/reddit）
         limit: Return count（Default50）
@@ -2338,7 +2398,7 @@ def get_simulation_posts(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2346,7 +2406,9 @@ def get_simulation_posts(simulation_id: str):
 def get_simulation_comments(simulation_id: str):
     """
     Get comments in simulation（OnlyReddit）
-    
+    """
+    if not validate_simulation_id(simulation_id):
+        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
     Query parameters:
         post_id: Filter postsID（Optional）
         limit: Return count
@@ -2413,7 +2475,7 @@ def get_simulation_comments(simulation_id: str):
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2474,6 +2536,8 @@ def interview_agent():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         agent_id = data.get('agent_id')
         prompt = data.get('prompt')
         platform = data.get('platform')  # Optional：twitter/reddit/None
@@ -2544,7 +2608,7 @@ def interview_agent():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2596,6 +2660,8 @@ def interview_agents_batch():
         data = request.get_json() or {}
 
         simulation_id = data.get('simulation_id')
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         interviews = data.get('interviews')
         platform = data.get('platform')  # Optional：twitter/reddit/None
         timeout = data.get('timeout', 120)
@@ -2682,7 +2748,7 @@ def interview_agents_batch():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2723,6 +2789,8 @@ def interview_all_agents():
         data = request.get_json() or {}
 
         simulation_id = data.get('simulation_id')
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         prompt = data.get('prompt')
         platform = data.get('platform')  # Optional：twitter/reddit/None
         timeout = data.get('timeout', 180)
@@ -2785,7 +2853,7 @@ def interview_all_agents():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2827,6 +2895,8 @@ def get_interview_history():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         platform = data.get('platform')  # If not specified, return history of both platforms
         agent_id = data.get('agent_id')
         limit = data.get('limit', 100)
@@ -2857,7 +2927,7 @@ def get_interview_history():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2896,6 +2966,8 @@ def get_env_status():
                 "error": "Please provide simulation_id"
             }), 400
 
+        if not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         env_alive = SimulationRunner.check_env_alive(simulation_id)
         
         # Get more detailed status information
@@ -2922,7 +2994,7 @@ def get_env_status():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
 
 
@@ -2956,6 +3028,8 @@ def close_simulation_env():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
+        if simulation_id and not validate_simulation_id(simulation_id):
+            return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
         timeout = data.get('timeout', 30)
         
         if not simulation_id:
@@ -2992,5 +3066,5 @@ def close_simulation_env():
         return jsonify({
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc() if Config.DEBUG else None
         }), 500
