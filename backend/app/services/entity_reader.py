@@ -145,90 +145,47 @@ class EntityReader:
         """
         logger.info(f"Starting to filter entities in graph {graph_id}...")
 
-        # Get all nodes
-        all_nodes = self.get_all_nodes(graph_id)
-        total_count = len(all_nodes)
+        # Cypher-Pushdown: filtering + edge/neighbor fetch runs inside Neo4j
+        # instead of streaming every node and every edge through Python.
+        result = self.storage.get_filtered_entities_with_edges(
+            graph_id=graph_id,
+            defined_entity_types=defined_entity_types,
+            enrich_with_edges=enrich_with_edges,
+        )
 
-        # Get all edges (for subsequent association lookup)
-        all_edges = self.get_all_edges(graph_id) if enrich_with_edges else []
+        raw_entities = result.get("entities", [])
+        total_count = result.get("total_count", 0)
 
-        # Build mapping from node UUID to node data
-        node_map = {n["uuid"]: n for n in all_nodes}
-
-        # Filter entities matching criteria
-        filtered_entities = []
+        filtered_entities: List[EntityNode] = []
         entity_types_found: Set[str] = set()
 
-        for node in all_nodes:
+        for node in raw_entities:
             labels = node.get("labels", [])
-
-            # Filter logic: Labels must contain labels besides "Entity" and "Node"
-            custom_labels = [la for la in labels if la not in ["Entity", "Node"]]
-
+            custom_labels = [la for la in labels if la not in ("Entity", "Node")]
             if not custom_labels:
-                # Only default labels, skip
+                # Defensive: storage already filtered these out, but guard in
+                # case a future backend relaxes the contract.
                 continue
 
-            # If predefined types specified, check if matching
             if defined_entity_types:
-                matching_labels = [la for la in custom_labels if la in defined_entity_types]
-                if not matching_labels:
+                matching = [la for la in custom_labels if la in defined_entity_types]
+                if not matching:
                     continue
-                entity_type = matching_labels[0]
+                entity_type = matching[0]
             else:
                 entity_type = custom_labels[0]
 
             entity_types_found.add(entity_type)
 
-            # Create entity node object
-            entity = EntityNode(
+            filtered_entities.append(EntityNode(
                 uuid=node["uuid"],
-                name=node["name"],
+                name=node.get("name", ""),
                 labels=labels,
                 summary=node.get("summary", ""),
                 attributes=node.get("attributes", {}),
-            )
-
-            # Get related edges and nodes
-            if enrich_with_edges:
-                related_edges = []
-                related_node_uuids: Set[str] = set()
-
-                for edge in all_edges:
-                    if edge["source_node_uuid"] == node["uuid"]:
-                        related_edges.append({
-                            "direction": "outgoing",
-                            "edge_name": edge["name"],
-                            "fact": edge.get("fact", ""),
-                            "target_node_uuid": edge["target_node_uuid"],
-                        })
-                        related_node_uuids.add(edge["target_node_uuid"])
-                    elif edge["target_node_uuid"] == node["uuid"]:
-                        related_edges.append({
-                            "direction": "incoming",
-                            "edge_name": edge["name"],
-                            "fact": edge.get("fact", ""),
-                            "source_node_uuid": edge["source_node_uuid"],
-                        })
-                        related_node_uuids.add(edge["source_node_uuid"])
-
-                entity.related_edges = related_edges
-
-                # Get related linked nodes with their information
-                related_nodes = []
-                for related_uuid in related_node_uuids:
-                    if related_uuid in node_map:
-                        related_node = node_map[related_uuid]
-                        related_nodes.append({
-                            "uuid": related_node["uuid"],
-                            "name": related_node["name"],
-                            "labels": related_node.get("labels", []),
-                            "summary": related_node.get("summary", ""),
-                        })
-
-                entity.related_nodes = related_nodes
-
-            filtered_entities.append(entity)
+                related_edges=list(node.get("related_edges") or []),
+                related_nodes=list(node.get("related_nodes") or []),
+            ))
 
         logger.info(f"Filter completed: total nodes {total_count}, matched {len(filtered_entities)}, "
                      f"entity types: {entity_types_found}")

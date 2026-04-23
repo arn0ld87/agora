@@ -9,8 +9,9 @@ import threading
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 
+from ..config import Config
 from ..utils.logger import get_logger
 from ..storage import GraphStorage
 
@@ -189,18 +190,42 @@ class GraphMemoryUpdater:
     MAX_RETRIES = 3
     RETRY_DELAY = 2
 
-    def __init__(self, graph_id: str, storage: GraphStorage):
+    def __init__(
+        self,
+        graph_id: str,
+        storage: GraphStorage,
+        max_queue_size: Optional[int] = None,
+        put_timeout: Optional[float] = None,
+    ):
         """
-        InitializeUpdatedevice
+        Initialize the updater.
 
         Args:
-            graph_id: GraphID
-            storage: GraphStorage instance (injected)
+            graph_id: Graph ID.
+            storage: GraphStorage instance (injected).
+            max_queue_size: Upper bound on the activity queue. ``0`` or a
+                negative value means unbounded (legacy behaviour). Defaults to
+                ``Config.GRAPH_MEMORY_QUEUE_MAX``.
+            put_timeout: Seconds to block in ``add_activity`` when the queue is
+                full before dropping the event. Defaults to
+                ``Config.GRAPH_MEMORY_PUT_TIMEOUT``.
         """
         self.graph_id = graph_id
         self.storage = storage
 
-        self._activity_queue: Queue = Queue()
+        resolved_max = (
+            max_queue_size if max_queue_size is not None
+            else Config.GRAPH_MEMORY_QUEUE_MAX
+        )
+        # ``Queue(maxsize=0)`` is the stdlib signal for "unbounded", preserve
+        # that escape hatch for debugging / one-off dev runs.
+        self._max_queue_size: int = max(0, int(resolved_max))
+        self._put_timeout: float = (
+            put_timeout if put_timeout is not None
+            else Config.GRAPH_MEMORY_PUT_TIMEOUT
+        )
+
+        self._activity_queue: Queue = Queue(maxsize=self._max_queue_size)
 
         self._platform_buffers: Dict[str, List[AgentActivity]] = {
             'twitter': [],
@@ -216,8 +241,16 @@ class GraphMemoryUpdater:
         self._total_items_sent = 0
         self._failed_count = 0
         self._skipped_count = 0
+        self._dropped_count = 0
 
-        logger.info(f"GraphMemoryUpdater initialized: graph_id={graph_id}, batch_size={self.BATCH_SIZE}")
+        logger.info(
+            "GraphMemoryUpdater initialized: graph_id=%s, batch_size=%s, "
+            "queue_max=%s, put_timeout=%ss",
+            graph_id,
+            self.BATCH_SIZE,
+            self._max_queue_size or "unbounded",
+            self._put_timeout,
+        )
 
     def _get_platform_display_name(self, platform: str) -> str:
         return self.PLATFORM_DISPLAY_NAMES.get(platform.lower(), platform)
@@ -250,15 +283,41 @@ class GraphMemoryUpdater:
                      f"batches_sent={self._total_sent}, "
                      f"items_sent={self._total_items_sent}, "
                      f"failed={self._failed_count}, "
-                     f"skipped={self._skipped_count}")
+                     f"skipped={self._skipped_count}, "
+                     f"dropped={self._dropped_count}")
 
     def add_activity(self, activity: AgentActivity):
-        """Add an agent activity to queue"""
+        """
+        Enqueue an agent activity for ingestion.
+
+        Applies backpressure: if the queue is full, blocks for at most
+        ``put_timeout`` seconds, then drops the event. Dropping is preferable
+        to unbounded growth — an overloaded Neo4j backend otherwise escalates
+        into an OOM crash.
+        """
         if activity.action_type == "DO_NOTHING":
             self._skipped_count += 1
             return
 
-        self._activity_queue.put(activity)
+        try:
+            if self._max_queue_size == 0:
+                # Unbounded mode (opt-in): put_nowait keeps semantics symmetric
+                # with the bounded path (no caller-observable blocking).
+                self._activity_queue.put_nowait(activity)
+            else:
+                self._activity_queue.put(activity, timeout=self._put_timeout)
+        except Full:
+            self._dropped_count += 1
+            logger.error(
+                "Activity queue full for graph %s (maxsize=%s) — dropping "
+                "event: %s by %s",
+                self.graph_id,
+                self._max_queue_size,
+                activity.action_type,
+                activity.agent_name,
+            )
+            return
+
         self._total_activities += 1
         logger.debug(f"Add activity to queue: {activity.agent_name} - {activity.action_type}")
 
@@ -369,7 +428,9 @@ class GraphMemoryUpdater:
             "items_sent": self._total_items_sent,
             "failed_count": self._failed_count,
             "skipped_count": self._skipped_count,
+            "dropped_count": self._dropped_count,
             "queue_size": self._activity_queue.qsize(),
+            "queue_max": self._max_queue_size,
             "buffer_sizes": buffer_sizes,
             "running": self._running,
         }
@@ -388,21 +449,33 @@ class GraphMemoryManager:
 
     @classmethod
     def create_updater(
-        cls, simulation_id: str, graph_id: str, storage: GraphStorage
+        cls,
+        simulation_id: str,
+        graph_id: str,
+        storage: GraphStorage,
+        max_queue_size: Optional[int] = None,
+        put_timeout: Optional[float] = None,
     ) -> GraphMemoryUpdater:
         """
         Create a graph memory updater for a simulation.
 
         Args:
-            simulation_id: Simulation ID
-            graph_id: Graph ID
-            storage: GraphStorage instance
+            simulation_id: Simulation ID.
+            graph_id: Graph ID.
+            storage: GraphStorage instance.
+            max_queue_size: Optional override for the bounded queue size.
+            put_timeout: Optional override for the put backpressure timeout.
         """
         with cls._lock:
             if simulation_id in cls._updaters:
                 cls._updaters[simulation_id].stop()
 
-            updater = GraphMemoryUpdater(graph_id, storage)
+            updater = GraphMemoryUpdater(
+                graph_id,
+                storage,
+                max_queue_size=max_queue_size,
+                put_timeout=put_timeout,
+            )
             updater.start()
             cls._updaters[simulation_id] = updater
 
