@@ -532,6 +532,135 @@ class Neo4jStorage(GraphStorage):
         with self._driver.session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
+    def get_filtered_entities_with_edges(
+        self,
+        graph_id: str,
+        defined_entity_types: Optional[List[str]] = None,
+        enrich_with_edges: bool = True,
+    ) -> Dict[str, Any]:
+        # Normalise the type whitelist: empty list → no filter (consistent with
+        # the old in-memory version, which treated ``None`` and ``[]`` the same).
+        types_param: Optional[List[str]] = (
+            list(defined_entity_types) if defined_entity_types else None
+        )
+
+        def _read(tx):
+            # Baseline count: every Entity node, including ones that only carry
+            # the default label. Needed for the ``total_count`` accounting that
+            # callers expose as filter ratio.
+            total_result = tx.run(
+                "MATCH (n:Entity {graph_id: $gid}) RETURN count(n) AS cnt",
+                gid=graph_id,
+            )
+            total_count = total_result.single()["cnt"]
+
+            if enrich_with_edges:
+                query = """
+                    MATCH (n:Entity {graph_id: $gid})
+                    WITH n, [l IN labels(n) WHERE l <> 'Entity' AND l <> 'Node']
+                             AS custom_labels
+                    WHERE size(custom_labels) > 0
+                      AND ($types IS NULL
+                           OR any(l IN custom_labels WHERE l IN $types))
+                    OPTIONAL MATCH (n)-[r:RELATION {graph_id: $gid}]-(m:Entity)
+                    WITH n, labels(n) AS node_labels,
+                         collect(DISTINCT CASE WHEN r IS NOT NULL THEN {
+                             edge_name: coalesce(r.name, ''),
+                             fact: coalesce(r.fact, ''),
+                             source_node_uuid: startNode(r).uuid,
+                             target_node_uuid: endNode(r).uuid
+                         } END) AS raw_edges,
+                         collect(DISTINCT CASE WHEN m IS NOT NULL THEN {
+                             uuid: m.uuid,
+                             name: coalesce(m.name, ''),
+                             labels: [l IN labels(m) WHERE l <> 'Entity'],
+                             summary: coalesce(m.summary, '')
+                         } END) AS raw_related
+                    RETURN n, node_labels, raw_edges, raw_related
+                """
+                records = tx.run(query, gid=graph_id, types=types_param)
+                return total_count, [
+                    (
+                        record["n"],
+                        record["node_labels"],
+                        list(record["raw_edges"] or []),
+                        list(record["raw_related"] or []),
+                    )
+                    for record in records
+                ]
+
+            query = """
+                MATCH (n:Entity {graph_id: $gid})
+                WITH n, [l IN labels(n) WHERE l <> 'Entity' AND l <> 'Node']
+                         AS custom_labels
+                WHERE size(custom_labels) > 0
+                  AND ($types IS NULL
+                       OR any(l IN custom_labels WHERE l IN $types))
+                RETURN n, labels(n) AS node_labels
+            """
+            records = tx.run(query, gid=graph_id, types=types_param)
+            return total_count, [
+                (record["n"], record["node_labels"], [], [])
+                for record in records
+            ]
+
+        with self._driver.session() as session:
+            total_count, rows = self._call_with_retry(session.execute_read, _read)
+
+        entities: List[Dict[str, Any]] = []
+        for node, node_labels, raw_edges, raw_related in rows:
+            node_dict = self._node_to_dict(node, node_labels)
+            entity_uuid = node_dict["uuid"]
+
+            related_edges: List[Dict[str, Any]] = []
+            for edge in raw_edges:
+                # ``collect(DISTINCT CASE ... END)`` drops NULL entries in
+                # Cypher but can still yield empty maps on some driver
+                # versions — defensive check.
+                if not edge:
+                    continue
+                source_uuid = edge.get("source_node_uuid")
+                target_uuid = edge.get("target_node_uuid")
+                if source_uuid == entity_uuid:
+                    related_edges.append({
+                        "direction": "outgoing",
+                        "edge_name": edge.get("edge_name", ""),
+                        "fact": edge.get("fact", ""),
+                        "target_node_uuid": target_uuid,
+                    })
+                else:
+                    related_edges.append({
+                        "direction": "incoming",
+                        "edge_name": edge.get("edge_name", ""),
+                        "fact": edge.get("fact", ""),
+                        "source_node_uuid": source_uuid,
+                    })
+
+            related_nodes: List[Dict[str, Any]] = []
+            seen_related: set = set()
+            for rel in raw_related:
+                if not rel:
+                    continue
+                rel_uuid = rel.get("uuid")
+                if not rel_uuid or rel_uuid in seen_related:
+                    continue
+                seen_related.add(rel_uuid)
+                related_nodes.append({
+                    "uuid": rel_uuid,
+                    "name": rel.get("name", ""),
+                    "labels": list(rel.get("labels") or []),
+                    "summary": rel.get("summary", ""),
+                })
+
+            node_dict["related_edges"] = related_edges
+            node_dict["related_nodes"] = related_nodes
+            entities.append(node_dict)
+
+        return {
+            "entities": entities,
+            "total_count": total_count,
+        }
+
     # ----------------------------------------------------------------
     # Read edges
     # ----------------------------------------------------------------

@@ -104,6 +104,13 @@ class Config:
     # Parallelism for GraphRAG NER/RE extraction (per-chunk LLM calls).
     GRAPH_PARALLEL_CHUNKS = int(os.environ.get('GRAPH_PARALLEL_CHUNKS', '4'))
 
+    # GraphMemoryUpdater bounded queue — upper bound on buffered agent activities
+    # waiting for Neo4j ingestion. Hitting this cap applies backpressure to the
+    # OASIS subprocess (blocks briefly, then drops). Prevents OOM when the LLM
+    # ingestion is slower than the simulation event rate.
+    GRAPH_MEMORY_QUEUE_MAX = int(os.environ.get('GRAPH_MEMORY_QUEUE_MAX', '10000'))
+    GRAPH_MEMORY_PUT_TIMEOUT = float(os.environ.get('GRAPH_MEMORY_PUT_TIMEOUT', '2.0'))
+
     # OASIS simulation configuration
     OASIS_DEFAULT_MAX_ROUNDS = int(os.environ.get('OASIS_DEFAULT_MAX_ROUNDS', '10'))
     OASIS_SIMULATION_DATA_DIR = os.path.join(os.path.dirname(__file__), '../uploads/simulations')

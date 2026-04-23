@@ -10,16 +10,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - `frontend/src/composables/usePolling.js` als gemeinsamer Polling-Baustein für Langläufer
 - `backend/app/utils/json_io.py` für atomische JSON-Schreibvorgänge und defensive Reads
 - `docu/README.md` sowie `docs/README.md` als klarerer Einstieg in die neue Dokumentationsstruktur
+- `GraphStorage.get_filtered_entities_with_edges` — Cypher-Pushdown für gefilterte Entitäten inkl. Adjazenz (ersetzt In-Memory-Filterung im `EntityReader`)
+- Bounded Queue + Backpressure im `GraphMemoryUpdater` (`GRAPH_MEMORY_QUEUE_MAX`, `GRAPH_MEMORY_PUT_TIMEOUT`) — OOM-Schutz bei langsamer Neo4j-Ingestion
 
 ### Geändert
 - Report-Status-Polling ist robuster gegen leere/trunkierte `progress.json` / `meta.json`
 - Simulation-nahe JSON-Artefakte (`state.json`, `run_state.json`, `simulation_config.json`, `reddit_profiles.json`) werden defensiver gelesen und teils atomisch geschrieben
 - Root von temporären Hilfsdateien entlastet; historische Notizen liegen jetzt unter `docu/history/`, Log-Helfer unter `scripts/logs/`
 - Dokumentationsbestand weiter nach `docu/` konsolidiert
+- `EntityReader.filter_defined_entities` lädt nicht mehr alle Nodes/Edges in den RAM, sondern delegiert Filter + Adjazenz an die Storage-Schicht
+- `GraphMemoryUpdater.get_stats()` meldet zusätzlich `dropped_count` und `queue_max`
 
 ### Test-Status
-- 70/70 Backend-Tests grün
-- Frontend-Lint: 0 Fehler (21 Warnungen)
+- 102/102 Backend-Tests grün (+14 für Cypher-Pushdown und Bounded Queue)
+- Frontend-Lint: 0 Fehler
 - Frontend-Build: erfolgreich
 
 ## [0.4.0] — 2026-04-22

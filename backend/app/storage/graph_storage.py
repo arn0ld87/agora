@@ -80,6 +80,31 @@ class GraphStorage(ABC):
     def get_nodes_by_label(self, graph_id: str, label: str) -> List[Dict[str, Any]]:
         """Get nodes filtered by entity type label."""
 
+    @abstractmethod
+    def get_filtered_entities_with_edges(
+        self,
+        graph_id: str,
+        defined_entity_types: Optional[List[str]] = None,
+        enrich_with_edges: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Push-down variant of the old in-memory filter: return entities that
+        carry at least one custom label (not just ``Entity``/``Node``) together
+        with their adjacent RELATION edges and linked neighbour nodes.
+
+        Prevents loading every node and every edge of the graph into RAM.
+
+        Returns:
+            {
+                "entities": List[Dict[str, Any]] — each entry has keys
+                    ``uuid``, ``name``, ``labels``, ``summary``, ``attributes``,
+                    ``related_edges`` (direction + edge_name + fact + source/target uuid),
+                    ``related_nodes`` (uuid + name + labels + summary),
+                "total_count": int — all ``Entity`` nodes in the graph, including
+                    unlabeled ones, so callers can report a filter ratio.
+            }
+        """
+
     # --- Read edges ---
 
     @abstractmethod
