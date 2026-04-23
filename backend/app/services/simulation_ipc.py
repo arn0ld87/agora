@@ -1,42 +1,45 @@
+"""Simulation inter-process communication module (Flask ↔ OASIS subprocess).
+
+Issue #9 Phase A: The public API stays the same (module-level helpers
+and the ``SimulationIPCClient`` / ``SimulationIPCServer`` classes), but
+the Flask-side implementations now go through :class:`SimulationEventBus`.
+The underlying transport is still the filesystem in Phase A
+(:class:`FilePollingEventBus`); Phase B swaps it for Redis without
+touching the callers.
+
+The OASIS subprocess scripts (``run_reddit_simulation.py``,
+``run_twitter_simulation.py``) still keep their own lightweight
+``IPCHandler`` and read ``control_state.json`` directly. They'll switch
+to the bus in Phase B together with the Redis adapter.
 """
-Simulation inter-process communication module for Flask and simulation script communication.
 
-Communication uses a simple filesystem-based command/response model:
-1. Flask writes commands to the commands/ directory.
-2. The simulation script polls the commands directory, executes the command, and writes the response to the responses/ directory.
-3. Flask polls the responses directory and retrieves the result.
-
-In addition to request/response commands, a single ``control_state.json`` file is used
-for fire-and-forget control flags such as pause/resume. The OASIS subprocess polls this
-file between rounds; Flask writes it directly via :func:`set_pause_state`.
-
-Issue #13: All JSON I/O on simulation artifacts now goes through
-:class:`SimulationArtifactStore`. Helpers accept ``simulation_id`` (not raw
-paths) so the store can resolve the artifact location uniformly.
-"""
+from __future__ import annotations
 
 import os
 import time
 import uuid
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from .artifact_store import resolve_default_store
+from .event_bus import (
+    CHANNEL_CONTROL,
+    CHANNEL_RPC_COMMAND,
+    SimulationEvent,
+    SimulationEventBus,
+    resolve_default_event_bus,
+    rpc_response_channel,
+)
 
-logger = get_logger('agora.simulation_ipc')
+logger = get_logger("agora.simulation_ipc")
 
 
 def _coerce_simulation_id(simulation_id_or_dir: str) -> str:
-    """Accept a simulation_id or a legacy filesystem path and return the id.
-
-    Subprocess scripts and older callers still pass a directory path; we
-    derive the simulation_id from the basename so they keep working without
-    forcing a coordinated change in the OASIS subprocess scripts.
-    """
+    """Accept a simulation_id or a legacy filesystem path and return the id."""
     if not simulation_id_or_dir:
         raise ValueError("simulation_id is required")
     if os.sep in simulation_id_or_dir or "/" in simulation_id_or_dir:
@@ -44,13 +47,17 @@ def _coerce_simulation_id(simulation_id_or_dir: str) -> str:
     return simulation_id_or_dir
 
 
-# ----- Control state (pause/resume between rounds) -----
+# ---------------------------------------------------------------------------
+# Control state (pause/resume between rounds)
+# ---------------------------------------------------------------------------
 
 
 def read_control_state(simulation_id: str) -> Dict[str, Any]:
     """Return current control state for a simulation.
 
-    Defaults: ``{"paused": False, "stop_requested": False, "updated_at": None}``.
+    Reads the persisted snapshot directly from the artifact store because
+    the OASIS subprocess (which has no Flask context) still calls this
+    helper synchronously between rounds.
     """
     sim_id = _coerce_simulation_id(simulation_id)
     store = resolve_default_store()
@@ -62,14 +69,24 @@ def read_control_state(simulation_id: str) -> Dict[str, Any]:
     return data
 
 
-def write_control_state(simulation_id: str, **changes) -> Dict[str, Any]:
-    """Merge ``changes`` into the existing control state and persist atomically."""
+def write_control_state(
+    simulation_id: str,
+    *,
+    bus: Optional[SimulationEventBus] = None,
+    **changes: Any,
+) -> Dict[str, Any]:
+    """Publish a control update to the bus and return the merged state."""
     sim_id = _coerce_simulation_id(simulation_id)
-    state = read_control_state(sim_id)
-    state.update(changes)
-    state["updated_at"] = datetime.now().isoformat()
-    resolve_default_store().write_json(sim_id, "control_state", state)
-    return state
+    bus = bus or resolve_default_event_bus()
+    ts = datetime.now().isoformat()
+    event = SimulationEvent(
+        type="control.update",
+        simulation_id=sim_id,
+        payload=dict(changes),
+        ts=ts,
+    )
+    bus.publish(CHANNEL_CONTROL, event)
+    return read_control_state(sim_id)
 
 
 def set_pause_state(simulation_id: str, paused: bool) -> Dict[str, Any]:
@@ -88,15 +105,22 @@ def wait_while_paused(simulation_id: str, poll_interval: float = 1.0) -> None:
         time.sleep(poll_interval)
 
 
+# ---------------------------------------------------------------------------
+# IPC command / response envelopes
+# ---------------------------------------------------------------------------
+
+
 class CommandType(str, Enum):
     """Command type"""
-    INTERVIEW = "interview"           # Single Agent interview
-    BATCH_INTERVIEW = "batch_interview"  # Batch interview
-    CLOSE_ENV = "close_env"           # Close environment
+
+    INTERVIEW = "interview"
+    BATCH_INTERVIEW = "batch_interview"
+    CLOSE_ENV = "close_env"
 
 
 class CommandStatus(str, Enum):
     """Command status"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -105,7 +129,8 @@ class CommandStatus(str, Enum):
 
 @dataclass
 class IPCCommand:
-    """IPC command"""
+    """IPC command (legacy shape, kept for backward compatibility)."""
+
     command_id: str
     command_type: CommandType
     args: Dict[str, Any]
@@ -116,22 +141,23 @@ class IPCCommand:
             "command_id": self.command_id,
             "command_type": self.command_type.value,
             "args": self.args,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'IPCCommand':
+    def from_dict(cls, data: Dict[str, Any]) -> "IPCCommand":
         return cls(
             command_id=data["command_id"],
             command_type=CommandType(data["command_type"]),
             args=data.get("args", {}),
-            timestamp=data.get("timestamp", datetime.now().isoformat())
+            timestamp=data.get("timestamp", datetime.now().isoformat()),
         )
 
 
 @dataclass
 class IPCResponse:
-    """IPC response"""
+    """IPC response (legacy shape, kept for backward compatibility)."""
+
     command_id: str
     status: CommandStatus
     result: Optional[Dict[str, Any]] = None
@@ -144,34 +170,55 @@ class IPCResponse:
             "status": self.status.value,
             "result": self.result,
             "error": self.error,
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'IPCResponse':
+    def from_dict(cls, data: Dict[str, Any]) -> "IPCResponse":
         return cls(
             command_id=data["command_id"],
             status=CommandStatus(data["status"]),
             result=data.get("result"),
             error=data.get("error"),
-            timestamp=data.get("timestamp", datetime.now().isoformat())
+            timestamp=data.get("timestamp", datetime.now().isoformat()),
         )
 
 
+def _event_to_response(event: SimulationEvent, correlation_id: str) -> IPCResponse:
+    """Translate a bus response event into the legacy :class:`IPCResponse`."""
+    payload = event.payload or {}
+    status_raw = payload.get("status") or event.type.split(".")[-1]
+    try:
+        status = CommandStatus(status_raw)
+    except ValueError:
+        status = CommandStatus.FAILED if payload.get("error") else CommandStatus.COMPLETED
+    return IPCResponse(
+        command_id=correlation_id,
+        status=status,
+        result=payload.get("result"),
+        error=payload.get("error"),
+        timestamp=event.ts,
+    )
+
+
+# ---------------------------------------------------------------------------
+# IPC client (Flask side)
+# ---------------------------------------------------------------------------
+
+
 class SimulationIPCClient:
-    """
-    Simulation IPC client for Flask side.
+    """Flask-side IPC client. Publishes commands on the bus and awaits responses."""
 
-    Used to send commands to the simulation process and wait for responses.
-    """
-
-    def __init__(self, simulation_id: str):
-        """Initialize IPC client.
-
-        ``simulation_id`` may also be a legacy directory path; the basename is
-        used in that case to keep older call sites compatible.
-        """
+    def __init__(
+        self,
+        simulation_id: str,
+        *,
+        bus: Optional[SimulationEventBus] = None,
+    ) -> None:
         self.simulation_id = _coerce_simulation_id(simulation_id)
+        self._bus: SimulationEventBus = bus or resolve_default_event_bus()
+        # Store is only used for non-event reads (env_status). Everything
+        # command-shaped flows through the bus.
         self._store = resolve_default_store()
 
     def send_command(
@@ -179,85 +226,76 @@ class SimulationIPCClient:
         command_type: CommandType,
         args: Dict[str, Any],
         timeout: float = 60.0,
-        poll_interval: float = 0.5
+        poll_interval: float = 0.5,
     ) -> IPCResponse:
-        """Send command and wait for response."""
-        command_id = str(uuid.uuid4())
-        command = IPCCommand(
-            command_id=command_id,
-            command_type=command_type,
-            args=args
+        """Publish a command on the bus and block until the response arrives."""
+        correlation_id = str(uuid.uuid4())
+        # Build the command event directly so we control the correlation id.
+        command_event = SimulationEvent(
+            type=command_type.value,
+            simulation_id=self.simulation_id,
+            payload=dict(args),
+            correlation_id=correlation_id,
+        )
+        self._bus.publish(CHANNEL_RPC_COMMAND, command_event)
+        logger.info(
+            "Send IPC command: %s, correlation_id=%s", command_type.value, correlation_id
         )
 
-        cmd_artifact = f"ipc_command/{command_id}"
-        resp_artifact = f"ipc_response/{command_id}"
+        response_channel = rpc_response_channel(correlation_id)
+        for event in self._bus.subscribe(
+            self.simulation_id,
+            response_channel,
+            timeout=timeout,
+            poll_interval=poll_interval,
+        ):
+            response = _event_to_response(event, correlation_id)
+            logger.info(
+                "Received IPC response: correlation_id=%s, status=%s",
+                correlation_id,
+                response.status.value,
+            )
+            return response
 
-        # Write command file (atomic via store).
-        self._store.write_json(self.simulation_id, cmd_artifact, command.to_dict())
-        logger.info(f"Send IPC command: {command_type.value}, command_id={command_id}")
-
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if self._store.exists(self.simulation_id, resp_artifact):
-                response_data = self._store.read_json(
-                    self.simulation_id, resp_artifact, default=None
-                )
-                if response_data:
-                    response = IPCResponse.from_dict(response_data)
-                    # Clean up command and response artifacts.
-                    self._store.delete(self.simulation_id, cmd_artifact)
-                    self._store.delete(self.simulation_id, resp_artifact)
-                    logger.info(
-                        f"Received IPC response: command_id={command_id}, "
-                        f"status={response.status.value}"
-                    )
-                    return response
-            time.sleep(poll_interval)
-
-        # Timeout
-        logger.error(f"Timeout waiting for IPC response: command_id={command_id}")
-        self._store.delete(self.simulation_id, cmd_artifact)
+        logger.error("Timeout waiting for IPC response: correlation_id=%s", correlation_id)
         raise TimeoutError(f"Timeout waiting for command response ({timeout} seconds)")
 
     def send_interview(
         self,
         agent_id: int,
         prompt: str,
-        platform: str = None,
-        timeout: float = 60.0
+        platform: Optional[str] = None,
+        timeout: float = 60.0,
     ) -> IPCResponse:
-        """Send single Agent interview command."""
-        args = {"agent_id": agent_id, "prompt": prompt}
+        args: Dict[str, Any] = {"agent_id": agent_id, "prompt": prompt}
         if platform:
             args["platform"] = platform
         return self.send_command(
             command_type=CommandType.INTERVIEW,
             args=args,
-            timeout=timeout
+            timeout=timeout,
         )
 
     def send_batch_interview(
         self,
         interviews: List[Dict[str, Any]],
-        platform: str = None,
-        timeout: float = 120.0
+        platform: Optional[str] = None,
+        timeout: float = 120.0,
     ) -> IPCResponse:
-        """Send batch interview command."""
-        args = {"interviews": interviews}
+        args: Dict[str, Any] = {"interviews": interviews}
         if platform:
             args["platform"] = platform
         return self.send_command(
             command_type=CommandType.BATCH_INTERVIEW,
             args=args,
-            timeout=timeout
+            timeout=timeout,
         )
 
     def send_close_env(self, timeout: float = 30.0) -> IPCResponse:
-        """Send close environment command."""
         return self.send_command(
             command_type=CommandType.CLOSE_ENV,
             args={},
-            timeout=timeout
+            timeout=timeout,
         )
 
     def check_env_alive(self) -> bool:
@@ -268,45 +306,44 @@ class SimulationIPCClient:
         return status.get("status") == "alive"
 
 
+# ---------------------------------------------------------------------------
+# IPC server (subprocess side — unchanged file semantics in Phase A)
+# ---------------------------------------------------------------------------
+
+
 class SimulationIPCServer:
-    """
-    Simulation IPC server for the simulation script side.
+    """Subprocess-side IPC server.
 
-    Polls the command directory, executes commands, and returns responses.
-    Runs inside the OASIS subprocess (no Flask app context).
+    Phase A keeps this store-backed because OASIS subprocess scripts have
+    their own lightweight ``IPCHandler`` and do not import the bus. The
+    server exists as a public surface for any caller that still wants a
+    Python-level API; Phase B will rewrite it on top of Redis pub/sub
+    subscriptions.
     """
 
-    def __init__(self, simulation_id: str):
-        """Initialize IPC server. ``simulation_id`` may be a legacy directory path."""
+    def __init__(self, simulation_id: str) -> None:
         self.simulation_id = _coerce_simulation_id(simulation_id)
         self._store = resolve_default_store()
-
-        # Keep a real on-disk path around for callers that still expect one
-        # (e.g. log files written next to the IPC artifacts in subprocess scripts).
         self.simulation_dir = os.path.join(
             ArtifactLocator.simulations_dir(), self.simulation_id
         )
         os.makedirs(self.simulation_dir, exist_ok=True)
-
-        # Environment status
         self._running = False
 
-    def start(self):
-        """Mark server as running"""
+    def start(self) -> None:
         self._running = True
         self._update_env_status("alive")
 
-    def stop(self):
-        """Mark server as stopped"""
+    def stop(self) -> None:
         self._running = False
         self._update_env_status("stopped")
 
-    def _update_env_status(self, status: str):
-        """Update environment status file (atomic via store)."""
-        self._store.write_json(self.simulation_id, "env_status", {
-            "status": status,
-            "timestamp": datetime.now().isoformat()
-        })
+    def _update_env_status(self, status: str) -> None:
+        self._store.write_json(
+            self.simulation_id,
+            "env_status",
+            {"status": status, "timestamp": datetime.now().isoformat()},
+        )
 
     def poll_commands(self) -> Optional[IPCCommand]:
         """Poll command directory, return first pending command."""
@@ -314,8 +351,6 @@ class SimulationIPCServer:
         if not names:
             return None
 
-        # Sort by mtime if the local adapter is in play, else lexicographic
-        # (good enough for in-memory tests where uuid order is stable).
         commands_dir = os.path.join(self.simulation_dir, "ipc_commands")
         if os.path.isdir(commands_dir):
             def mtime_for(name: str) -> float:
@@ -332,16 +367,26 @@ class SimulationIPCServer:
         for artifact_name in names:
             data = self._store.read_json(self.simulation_id, artifact_name, default=None)
             if data is None:
-                logger.warning(f"Failed to read command artifact: {artifact_name}")
+                logger.warning("Failed to read command artifact: %s", artifact_name)
                 continue
             try:
+                # Bus-era event shape has {type, correlation_id, payload, ...};
+                # translate to legacy IPCCommand.
+                if "type" in data and "correlation_id" in data:
+                    return IPCCommand(
+                        command_id=data.get("correlation_id")
+                        or data.get("command_id", ""),
+                        command_type=CommandType(data["type"]),
+                        args=data.get("payload", {}) or {},
+                        timestamp=data.get("ts", datetime.now().isoformat()),
+                    )
                 return IPCCommand.from_dict(data)
             except (KeyError, ValueError) as e:
-                logger.warning(f"Failed to parse command artifact {artifact_name}: {e}")
+                logger.warning("Failed to parse command artifact %s: %s", artifact_name, e)
                 continue
         return None
 
-    def send_response(self, response: IPCResponse):
+    def send_response(self, response: IPCResponse) -> None:
         """Persist a response and clean up the matching command artifact."""
         self._store.write_json(
             self.simulation_id,
@@ -350,18 +395,20 @@ class SimulationIPCServer:
         )
         self._store.delete(self.simulation_id, f"ipc_command/{response.command_id}")
 
-    def send_success(self, command_id: str, result: Dict[str, Any]):
-        """Send success response"""
-        self.send_response(IPCResponse(
-            command_id=command_id,
-            status=CommandStatus.COMPLETED,
-            result=result
-        ))
+    def send_success(self, command_id: str, result: Dict[str, Any]) -> None:
+        self.send_response(
+            IPCResponse(
+                command_id=command_id,
+                status=CommandStatus.COMPLETED,
+                result=result,
+            )
+        )
 
-    def send_error(self, command_id: str, error: str):
-        """Send error response"""
-        self.send_response(IPCResponse(
-            command_id=command_id,
-            status=CommandStatus.FAILED,
-            error=error
-        ))
+    def send_error(self, command_id: str, error: str) -> None:
+        self.send_response(
+            IPCResponse(
+                command_id=command_id,
+                status=CommandStatus.FAILED,
+                error=error,
+            )
+        )

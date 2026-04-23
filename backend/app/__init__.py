@@ -87,6 +87,7 @@ def create_app(config_class=Config):
     # migrate to ``get_container()``.
     from .container import AgoraContainer
     from .services.artifact_store import LocalFilesystemArtifactStore
+    from .services.event_bus import FilePollingEventBus
     from .storage import Neo4jStorage
 
     try:
@@ -107,16 +108,22 @@ def create_app(config_class=Config):
     if should_log_startup:
         logger.info("SimulationArtifactStore initialized (LocalFilesystem)")
 
+    event_bus = FilePollingEventBus(store=artifact_store)
+    if should_log_startup:
+        logger.info("SimulationEventBus initialized (FilePolling, Phase A default)")
+
     container = AgoraContainer(
         neo4j_storage=neo4j_storage,
         artifact_store=artifact_store,
+        event_bus=event_bus,
     )
     app.extensions['container'] = container
     # Backward-compat aliases — same singleton instances, just two ways in.
     app.extensions['neo4j_storage'] = neo4j_storage
     app.extensions['artifact_store'] = artifact_store
+    app.extensions['event_bus'] = event_bus
     if should_log_startup:
-        logger.info("AgoraContainer wired (neo4j_storage + artifact_store)")
+        logger.info("AgoraContainer wired (neo4j_storage + artifact_store + event_bus)")
 
     # Register simulation process cleanup function (ensure all simulation processes terminate on server shutdown)
     from .services.simulation_runner import SimulationRunner
