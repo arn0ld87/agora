@@ -711,6 +711,38 @@ Nach dem Polling-/Refactoring-Stand trat eine Regression auf: `POST /api/report/
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.17 Weitere JSON-/Polling-Härtung im Simulation-Stack
+Danach wurden analoge Race-Condition-Risiken im Simulation-Stack nachgezogen.
+
+**Neue Dateien**
+- `backend/app/utils/json_io.py`
+- zusätzliches Detailprotokoll: `docu/p0-simulation-json-hardening-protokoll.md`
+
+**Geänderte Dateien**
+- `backend/app/services/simulation_runner.py`
+- `backend/app/services/simulation_manager.py`
+- `backend/app/api/simulation_prepare.py`
+- `backend/app/api/simulation_profiles.py`
+- `backend/app/api/simulation_history.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Umgesetzte Logik**
+- gemeinsamer atomic-write/defensive-read Helfer für JSON-Dateien
+- `run_state.json` robuster gegen gleichzeitiges Schreiben/Lesen
+- `state.json`, `simulation_config.json`, `reddit_profiles.json` und report meta lookups defensiver
+- realtime prepare/profile/config polling reagiert toleranter auf temporär unlesbare Dateien
+- Scoped-Ruff-Rollout auf weitere stabilisierte Backend-Dateien erweitert
+
+**Zusätzliche Verifikation**
+- `cd backend && uv run ruff check app/api/simulation_prepare.py app/api/simulation_profiles.py app/api/simulation_history.py app/services/simulation_manager.py app/services/simulation_runner.py app/utils/json_io.py` → **bestanden**
+- `cd backend && uv run pytest tests/test_simulation_runtime.py tests/test_simulation_api_routes.py tests/test_report_manager.py tests/test_embedding_service.py` → **24/24 bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **70 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand

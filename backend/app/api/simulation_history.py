@@ -14,14 +14,13 @@ from ..services.entity_reader import EntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
+from ..utils.json_io import read_json_file
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
 
 def _get_report_id_for_simulation(simulation_id: str) -> str:
     """Get the latest report_id associated with a simulation."""
-    import json
-
     reports_dir = os.path.join(os.path.dirname(__file__), '../../uploads/reports')
     if not os.path.exists(reports_dir):
         return None
@@ -38,9 +37,8 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
                 continue
 
             try:
-                with open(meta_file, 'r', encoding='utf-8') as handle:
-                    meta = json.load(handle)
-                if meta.get('simulation_id') == simulation_id:
+                meta = read_json_file(meta_file, default=None, logger=logger, description=meta_file)
+                if meta and meta.get('simulation_id') == simulation_id:
                     matching_reports.append({
                         'report_id': meta.get('report_id'),
                         'created_at': meta.get('created_at', ''),

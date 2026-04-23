@@ -3,9 +3,28 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.1] — 2026-04-23
+
+### Hinzugefügt
+- fail-fast Validierung für `EMBEDDING_MODEL` / `VECTOR_DIM` inklusive echter Embedding-Probe beim Backend-Start
+- `frontend/src/composables/usePolling.js` als gemeinsamer Polling-Baustein für Langläufer
+- `backend/app/utils/json_io.py` für atomische JSON-Schreibvorgänge und defensive Reads
+- `docu/README.md` sowie `docs/README.md` als klarerer Einstieg in die neue Dokumentationsstruktur
+
+### Geändert
+- Report-Status-Polling ist robuster gegen leere/trunkierte `progress.json` / `meta.json`
+- Simulation-nahe JSON-Artefakte (`state.json`, `run_state.json`, `simulation_config.json`, `reddit_profiles.json`) werden defensiver gelesen und teils atomisch geschrieben
+- Root von temporären Hilfsdateien entlastet; historische Notizen liegen jetzt unter `docu/history/`, Log-Helfer unter `scripts/logs/`
+- Dokumentationsbestand weiter nach `docu/` konsolidiert
+
+### Test-Status
+- 70/70 Backend-Tests grün
+- Frontend-Lint: 0 Fehler (21 Warnungen)
+- Frontend-Build: erfolgreich
+
 ## [0.4.0] — 2026-04-22
 
-Scope-Fokus: **Operability, Refactoring-Basis & Resilienz**. Details siehe `docs/plan_0.4.md` sowie die P0-Protokolle unter `docu/`.
+Scope-Fokus: **Operability, Refactoring-Basis & Resilienz**. Details siehe `docu/plan_0.4.md` sowie die P0-Protokolle unter `docu/`.
 
 ### Hinzugefügt
 - `GET /api/status` — konsolidierter Ops-Endpoint mit `backend`, `neo4j`, `ollama`, `disk`, `gpu`, `timestamp` (`backend/app/api/status.py`, 7 Tests)

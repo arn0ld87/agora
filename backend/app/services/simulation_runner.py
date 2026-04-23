@@ -3,26 +3,27 @@ OASIS Simulation Runner
 Run simulations in the background and record actions for each Agent, supporting real-time status monitoring
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import json
 import time
-import asyncio
 import threading
 import subprocess
 import signal
 import atexit
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from queue import Queue
 
-from ..config import Config
+from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
 from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
-from .simulation_ipc import SimulationIPCClient, CommandType, IPCResponse
+from .simulation_ipc import SimulationIPCClient
 
 logger = get_logger('agora.simulation_runner')
 
@@ -295,9 +296,10 @@ class SimulationRunner:
             return None
         
         try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
+            data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+            if not data:
+                return None
+
             state = SimulationRunState(
                 simulation_id=simulation_id,
                 runner_status=RunnerStatus(data.get("runner_status", "idle")),
@@ -351,9 +353,8 @@ class SimulationRunner:
         state_file = os.path.join(sim_dir, "run_state.json")
         
         data = state.to_detail_dict()
-        
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        write_json_atomic(state_file, data)
         
         cls._run_states[state.simulation_id] = state
         try:
@@ -383,7 +384,7 @@ class SimulationRunner:
         max_rounds: int = None,  # Maximum simulation rounds (optional, for truncating long simulations)
         enable_graph_memory_update: bool = False,  # Whether to update activities to the graph
         graph_id: str = None,  # Graph ID (required when enabling graph updates)
-        storage: 'GraphStorage' = None  # GraphStorage instance (required if enable_graph_memory_update)
+        storage: Any = None  # GraphStorage instance (required if enable_graph_memory_update)
     ) -> SimulationRunState:
         """
         Start simulation
@@ -408,7 +409,7 @@ class SimulationRunner:
         config_path = os.path.join(sim_dir, "simulation_config.json")
 
         if not os.path.exists(config_path):
-            raise ValueError(f"Simulation config does not exist, call /prepare endpoint first")
+            raise ValueError("Simulation config does not exist, call /prepare endpoint first")
 
         # Reset control_state.json so a previous paused/stop_requested flag from a
         # killed run does not silently freeze the new subprocess on round 0.
@@ -1207,8 +1208,6 @@ class SimulationRunner:
         Returns:
             Cleanup result information
         """
-        import shutil
-        
         sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
         
         if not os.path.exists(sim_dir):
@@ -1331,13 +1330,12 @@ class SimulationRunner:
                         state_file = os.path.join(sim_dir, "state.json")
                         logger.info(f"Attempting to update state.json: {state_file}")
                         if os.path.exists(state_file):
-                            with open(state_file, 'r', encoding='utf-8') as f:
-                                state_data = json.load(f)
-                            state_data['status'] = 'stopped'
-                            state_data['updated_at'] = datetime.now().isoformat()
-                            with open(state_file, 'w', encoding='utf-8') as f:
-                                json.dump(state_data, f, indent=2, ensure_ascii=False)
-                            logger.info(f"Updated state.json status to stopped: {simulation_id}")
+                            state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+                            if state_data:
+                                state_data['status'] = 'stopped'
+                                state_data['updated_at'] = datetime.now().isoformat()
+                                write_json_atomic(state_file, state_data)
+                                logger.info(f"Updated state.json status to stopped: {simulation_id}")
                         else:
                             logger.warning(f"state.json does not exist: {state_file}")
                     except Exception as state_err:

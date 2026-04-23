@@ -23,7 +23,7 @@ class TestStatusFunctions:
         """Test backend status returns correct version and ok=true."""
         result = _get_backend_status()
         assert result['ok'] is True
-        assert result['version'] == '0.4.0'
+        assert result['version'] == '0.4.1'
 
     def test_get_disk_status(self):
         """Test disk status returns expected fields."""

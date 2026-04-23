@@ -19,7 +19,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.4.0 Alpha — weiterhin experimentell, aber deutlich besser abgesichert
+> ## ⚠️ Status: v0.4.1 Alpha — experimentell, aber robuster und konsistenter dokumentiert
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
@@ -46,11 +46,13 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.4.0
+### Engineering-Stand v0.4.1
 
 - **Quality-Gates vorhanden**: `npm run check` führt gescoptes Backend-Linting, Backend-Tests, Frontend-Lint und Frontend-Build aus.
 - **Simulation-API entmonolithisiert**: die frühere XXL-Datei `backend/app/api/simulation.py` ist in fokussierte Module zerlegt (`simulation_lifecycle`, `simulation_prepare`, `simulation_run`, `simulation_interviews`, `simulation_history`, ...).
-- **Graph-UI begonnen zu modularisieren**: `GraphPanel.vue` wurde bereits in Detailpanel-, Legenden- und Datenaufbereitungs-Module geschnitten.
+- **Graph-UI weiter modularisiert**: `GraphPanel.vue` ist inzwischen in UI-, Daten- und Geometrie-Bausteine geschnitten.
+- **Embedding-Config fail-fast abgesichert**: Modell-/Dimensions-Mismatches werden beim Backend-Start geprüft.
+- **Polling-Grundlogik zentralisiert**: zentrale Langläufer nutzen jetzt ein gemeinsames `usePolling`-Composable.
 - **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
 
 ### Was wurde gegenüber MiroFish geändert?
@@ -297,7 +299,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.4.0 alpha — still experimental, but materially better structured and verified.** Agora is an active experimental
+> **⚠️ Status: v0.4.1 alpha — still experimental, but more robust and more consistently documented.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
 > swapped mid-run. Not production-ready. The HTTP API currently has **no
@@ -311,11 +313,13 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.4.0
+### Engineering status in v0.4.1
 
 - **Quality gates are in place** via `npm run check`.
 - **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file.
-- **GraphPanel modularization has started** with extracted detail-panel, legend, and graph-data preparation modules.
+- **GraphPanel modularization progressed** into extracted detail-panel, legend, graph-data, and link-geometry modules.
+- **Embedding config now fails fast** when `EMBEDDING_MODEL` and `VECTOR_DIM` do not match.
+- **Long-running frontend flows now share polling infrastructure** via `usePolling`.
 - **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
 
 ### Key Features

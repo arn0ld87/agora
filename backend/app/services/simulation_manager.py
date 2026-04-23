@@ -4,8 +4,9 @@ Manage Twitter and Reddit dual-platform parallel simulations
 Use preset scripts + LLM intelligent generation of config parameters
 """
 
+from __future__ import annotations
+
 import os
-import json
 import shutil
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -13,11 +14,12 @@ from datetime import datetime
 from enum import Enum
 
 from ..config import Config
+from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
 from ..utils.artifact_locator import ArtifactLocator
-from .entity_reader import EntityReader, FilteredEntities
-from .oasis_profile_generator import OasisProfileGenerator, OasisAgentProfile
-from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
+from .entity_reader import EntityReader
+from .oasis_profile_generator import OasisProfileGenerator
+from .simulation_config_generator import SimulationConfigGenerator
 from .run_registry import RunRegistry
 
 logger = get_logger('agora.simulation')
@@ -163,9 +165,8 @@ class SimulationManager:
         state_file = os.path.join(sim_dir, "state.json")
         
         state.updated_at = datetime.now().isoformat()
-        
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
+
+        write_json_atomic(state_file, state.to_dict())
         
         self._simulations[state.simulation_id] = state
     
@@ -179,9 +180,10 @@ class SimulationManager:
         
         if not os.path.exists(state_file):
             return None
-        
-        with open(state_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+
+        data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+        if not data:
+            return None
         
         state = SimulationState(
             simulation_id=simulation_id,
@@ -256,7 +258,7 @@ class SimulationManager:
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
-        storage: 'GraphStorage' = None,
+        storage: Any = None,
         llm_model: Optional[str] = None,
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
@@ -529,8 +531,7 @@ class SimulationManager:
         config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
         if not os.path.exists(config_path):
             return None
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return read_json_file(config_path, default=None, logger=logger, description=config_path)
 
     def list_branches(self, simulation_id: str) -> List[SimulationState]:
         source = self.get_simulation(simulation_id)
@@ -580,8 +581,9 @@ class SimulationManager:
         if not os.path.exists(config_path):
             raise ValueError("Prepared simulation config not found")
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
+        config = read_json_file(config_path, default=None, logger=logger, description=config_path)
+        if not config:
+            raise ValueError("Prepared simulation config is unreadable")
 
         enable_twitter = bool(overrides.get("enable_twitter", source.enable_twitter))
         enable_reddit = bool(overrides.get("enable_reddit", source.enable_reddit))
@@ -623,8 +625,7 @@ class SimulationManager:
         config["enable_twitter"] = enable_twitter
         config["enable_reddit"] = enable_reddit
 
-        with open(os.path.join(branch_dir, "simulation_config.json"), "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+        write_json_atomic(os.path.join(branch_dir, "simulation_config.json"), config)
 
         persona_removals = set(overrides.get("persona_removals") or [])
         persona_additions = overrides.get("persona_additions") or []
@@ -646,10 +647,8 @@ class SimulationManager:
                     meta_path = os.path.join(reports_dir, report_folder, "meta.json")
                     if not os.path.exists(meta_path):
                         continue
-                    try:
-                        with open(meta_path, "r", encoding="utf-8") as f:
-                            report_meta = json.load(f)
-                    except Exception:
+                    report_meta = read_json_file(meta_path, default=None, logger=logger, description=meta_path)
+                    if not report_meta:
                         continue
                     if report_meta.get("simulation_id") != simulation_id:
                         continue
@@ -693,11 +692,7 @@ class SimulationManager:
         twitter_path = os.path.join(sim_dir, "twitter_profiles.csv")
 
         if os.path.exists(reddit_path):
-            with open(reddit_path, "r", encoding="utf-8") as f:
-                try:
-                    reddit_profiles = json.load(f)
-                except json.JSONDecodeError:
-                    reddit_profiles = []
+            reddit_profiles = read_json_file(reddit_path, default=[], logger=logger, description=reddit_path) or []
             reddit_profiles = [
                 profile for profile in reddit_profiles
                 if profile.get("username") not in persona_removals
@@ -706,8 +701,7 @@ class SimulationManager:
                 platform = (addition.get("platform") or "reddit").lower()
                 if platform == "reddit":
                     reddit_profiles.append(addition)
-            with open(reddit_path, "w", encoding="utf-8") as f:
-                json.dump(reddit_profiles, f, ensure_ascii=False, indent=2)
+            write_json_atomic(reddit_path, reddit_profiles)
 
         if os.path.exists(twitter_path):
             import csv
@@ -747,19 +741,7 @@ class SimulationManager:
         if not os.path.exists(profile_path):
             return []
         
-        with open(profile_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    
-    def get_simulation_config(self, simulation_id: str) -> Optional[Dict[str, Any]]:
-        """Get simulation config"""
-        sim_dir = self._get_simulation_dir(simulation_id)
-        config_path = os.path.join(sim_dir, "simulation_config.json")
-        
-        if not os.path.exists(config_path):
-            return None
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        return read_json_file(profile_path, default=[], logger=logger, description=profile_path) or []
     
     def get_run_instructions(self, simulation_id: str) -> Dict[str, str]:
         """Get run instructions"""

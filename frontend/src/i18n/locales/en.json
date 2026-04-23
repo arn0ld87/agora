@@ -84,7 +84,7 @@
     "lead": "Agora turns your text into a knowledge graph, populates it with hundreds of agents — each with their own biography, stance, bubble — and lets them debate, share, argue. You see in real time how narratives spread, where resistance forms, and which voices tip the discourse. Fully local. Your laptop, your Neo4j, your Ollama.",
     "tags": {
       "engine": "Swarm Engine",
-      "version": "v0.4.0 alpha"
+      "version": "v0.4.1 alpha"
     },
     "system": {
       "kicker": "№ 02 — SYSTEM",

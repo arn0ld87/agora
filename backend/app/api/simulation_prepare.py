@@ -13,6 +13,7 @@ from ..config import Config
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.validation import validate_simulation_id, validate_task_id
 from .simulation_common import (
     get_simulation_storage,
@@ -55,10 +56,9 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
     state_file = os.path.join(simulation_dir, "state.json")
     try:
-        import json
-
-        with open(state_file, 'r', encoding='utf-8') as handle:
-            state_data = json.load(handle)
+        state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+        if not state_data:
+            return False, {"reason": "State file is unreadable or temporarily incomplete"}
 
         status = state_data.get("status", "")
         config_generated = state_data.get("config_generated", False)
@@ -71,9 +71,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
             profiles_count = 0
             if os.path.exists(profiles_file):
-                with open(profiles_file, 'r', encoding='utf-8') as handle:
-                    profiles_data = json.load(handle)
-                    profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
+                profiles_data = read_json_file(profiles_file, default=[], logger=logger, description=profiles_file) or []
+                profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
 
             if status == "preparing":
                 try:
@@ -81,8 +80,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
                     state_data["status"] = "ready"
                     state_data["updated_at"] = datetime.now().isoformat()
-                    with open(state_file, 'w', encoding='utf-8') as handle:
-                        json.dump(state_data, handle, ensure_ascii=False, indent=2)
+                    write_json_atomic(state_file, state_data)
                     logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
                     status = "ready"
                 except Exception as exc:

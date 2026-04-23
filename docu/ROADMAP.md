@@ -1,25 +1,28 @@
 # Agora Roadmap
 
-## Current State (v0.4.0)
+## Current State (v0.4.1)
 
 Fully local fork running on Neo4j CE + Ollama. All Zep Cloud dependencies removed. Core pipeline works: upload text → build knowledge graph → entity extraction → simulation → report generation.
 
-v0.4.0 also established the first refactoring baseline:
+v0.4.1 established the first refactoring baseline and the first hardening follow-ups:
 - root quality gates and CI
 - split simulation API modules
-- first GraphPanel modularization steps
+- GraphPanel modularization steps
+- fail-fast embedding validation
+- centralized polling composable
+- more resilient JSON-backed polling/status paths
 
 ---
 
 ## Near Term
 
-### v0.4.0 — Operability & Resilience (completed)
-Scope-Fokus auf Betrieb, Robustheit und Refactoring-Basis. Siehe `docs/plan_0.4.md`.
+### v0.4.1 — Operability & Resilience (completed)
+Scope-Fokus auf Betrieb, Robustheit und Refactoring-Basis. Siehe `docu/plan_0.4.md`.
 - [x] Add Docker Compose GPU auto-detection (fallback to CPU-only Ollama)
 - [x] Connection resilience: auto-reconnect to Neo4j on transient failures
 - [x] Add `/api/status` endpoint showing Neo4j connection state, Ollama model availability, and disk usage
 - [x] Structured logging with JSON output option (opt-in via `AGORA_LOG_FORMAT`)
-- [ ] ~~Fix `camel-oasis` / `camel-ai` compatibility with Python 3.12+~~ → **deferred** zu v0.4.1/v0.5 (Upstream-blockiert, Host-Python ist im Container irrelevant)
+- [ ] ~~Fix `camel-oasis` / `camel-ai` compatibility with Python 3.12+~~ → **deferred** zu v0.4.2/v0.5 (Upstream-blockiert, Host-Python ist im Container irrelevant)
 
 ### v0.5.0 — Search & Retrieval Improvements
 - [ ] Tune hybrid search weights (currently 0.7 vector / 0.3 BM25) — make configurable per graph

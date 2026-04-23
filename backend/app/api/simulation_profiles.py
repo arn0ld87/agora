@@ -10,6 +10,7 @@ from flask import jsonify, request, send_file
 from . import simulation_bp
 from ..config import Config
 from ..services.simulation_manager import SimulationManager
+from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
@@ -123,8 +124,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
             file_modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
             try:
                 if platform == "reddit":
-                    with open(profiles_file, 'r', encoding='utf-8') as handle:
-                        profiles = json.load(handle)
+                    profiles = read_json_file(profiles_file, default=[], logger=logger, description=profiles_file) or []
                 else:
                     with open(profiles_file, 'r', encoding='utf-8') as handle:
                         profiles = list(csv.DictReader(handle))
@@ -137,8 +137,8 @@ def get_simulation_profiles_realtime(simulation_id: str):
         state_file = os.path.join(sim_dir, "state.json")
         if os.path.exists(state_file):
             try:
-                with open(state_file, 'r', encoding='utf-8') as handle:
-                    state_data = json.load(handle)
+                state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+                if state_data:
                     status = state_data.get("status", "")
                     is_generating = status == "preparing"
                     total_expected = state_data.get("entities_count")
@@ -170,17 +170,12 @@ def get_simulation_profiles_realtime(simulation_id: str):
 def _load_profiles_file(sim_dir: str, platform: str):
     """Read reddit_profiles.json or twitter_profiles.csv into a list."""
     import csv
-    import json
 
     if platform == 'reddit':
         path = os.path.join(sim_dir, 'reddit_profiles.json')
         if not os.path.exists(path):
             return path, []
-        with open(path, 'r', encoding='utf-8') as handle:
-            try:
-                return path, json.load(handle)
-            except json.JSONDecodeError:
-                return path, []
+        return path, (read_json_file(path, default=[], logger=logger, description=path) or [])
 
     path = os.path.join(sim_dir, 'twitter_profiles.csv')
     if not os.path.exists(path):
@@ -191,11 +186,9 @@ def _load_profiles_file(sim_dir: str, platform: str):
 
 def _save_profiles_file(path: str, profiles: list, platform: str):
     import csv
-    import json
 
     if platform == 'reddit':
-        with open(path, 'w', encoding='utf-8') as handle:
-            json.dump(profiles, handle, ensure_ascii=False, indent=2)
+        write_json_atomic(path, profiles)
         return
 
     if not profiles:
@@ -346,8 +339,7 @@ def get_simulation_config_realtime(simulation_id: str):
             file_stat = os.stat(config_file)
             file_modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
             try:
-                with open(config_file, 'r', encoding='utf-8') as handle:
-                    config = json.load(handle)
+                config = read_json_file(config_file, default=None, logger=logger, description=config_file)
             except (json.JSONDecodeError, Exception) as exc:
                 logger.warning(f"Failed to read config file: {exc}")
                 config = None
@@ -358,8 +350,8 @@ def get_simulation_config_realtime(simulation_id: str):
         state_file = os.path.join(sim_dir, "state.json")
         if os.path.exists(state_file):
             try:
-                with open(state_file, 'r', encoding='utf-8') as handle:
-                    state_data = json.load(handle)
+                state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+                if state_data:
                     status = state_data.get("status", "")
                     is_generating = status == "preparing"
                     config_generated = state_data.get("config_generated", False)
