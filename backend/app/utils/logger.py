@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import sys
-import traceback as tb_module
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
