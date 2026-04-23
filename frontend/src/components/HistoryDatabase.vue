@@ -50,7 +50,7 @@ async function selectRun(run) {
     ])
     if (events?.data) runEvents.value = events.data
     if (detail?.data?.[0]?.run_id === run.run_id) selectedRun.value = detail.data[0]
-  } catch (_err) {
+  } catch {
     // Non-fatal: keep the currently selected run even if detail hydration fails.
   }
 }

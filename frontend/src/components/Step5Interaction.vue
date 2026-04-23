@@ -15,7 +15,7 @@ const props = defineProps({
   simulationId: String
 })
 
-const emit = defineEmits(['add-log', 'update-status'])
+defineEmits(['add-log', 'update-status'])
 
 const activeTab = ref('chat') // 'chat' | 'survey'
 
@@ -73,7 +73,7 @@ async function loadProfiles() {
   try {
     const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
     if (res?.success && res.data?.profiles) profiles.value = res.data.profiles
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function loadReport() {
@@ -81,7 +81,7 @@ async function loadReport() {
   try {
     const res = await getReport(props.reportId)
     if (res?.success) reportData.value = res.data
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 function pickAgent(idx) {
@@ -157,7 +157,7 @@ function toggleSurveyAgent(idx) {
 }
 
 function selectAllSurvey() {
-  surveySelected.value = new Set(surveyFilteredProfiles.value.map((p, i) => profiles.value.indexOf(p)))
+  surveySelected.value = new Set(surveyFilteredProfiles.value.map((p) => profiles.value.indexOf(p)))
 }
 
 function clearSurvey() {

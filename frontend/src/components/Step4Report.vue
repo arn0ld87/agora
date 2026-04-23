@@ -86,7 +86,7 @@ async function loadModels() {
       presetModels.value = res.data?.presets || []
       defaultModel.value = res.data?.current_default || ''
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function regenerateWithModel() {
@@ -165,7 +165,7 @@ async function pollStatus() {
             fullReport.value = full.data
             await loadEvidence()
           }
-        } catch (_) { /* report not yet flushed to disk — next tick */ }
+        } catch { /* report not yet flushed to disk — next tick */ }
         stopPolling()
       } else if (st.status === 'failed') {
         phase.value = 2
@@ -176,7 +176,7 @@ async function pollStatus() {
         phase.value = 1
       }
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 function parseAgentEntry(raw) {
@@ -250,7 +250,7 @@ async function pollAgentLog() {
       agentLogLine.value = payload.next_line ?? payload.total_lines ?? agentLogLine.value
       nextTick(() => { if (agentLogRef.value) agentLogRef.value.scrollTop = agentLogRef.value.scrollHeight })
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function pollConsoleLog() {
@@ -264,7 +264,7 @@ async function pollConsoleLog() {
       consoleLogLine.value = payload.next_line ?? payload.total_lines ?? consoleLogLine.value
       nextTick(() => { if (consoleLogRef.value) consoleLogRef.value.scrollTop = consoleLogRef.value.scrollHeight })
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 function startPolling() {
@@ -327,7 +327,7 @@ async function loadEvidence() {
         selectedEvidenceSection.value = res.data.sections[0].section_index
       }
     }
-  } catch (_) { /* optional */ }
+  } catch { /* optional */ }
 }
 
 function triggerDownload(blob, filename) {
@@ -470,7 +470,7 @@ onMounted(async () => {
         fullReport.value = full.data
         await loadEvidence()
       }
-    } catch (_) { /* swallow — pollStatus will retry later */ }
+    } catch { /* swallow — pollStatus will retry later */ }
   }
 })
 onUnmounted(stopPolling)

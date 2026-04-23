@@ -49,7 +49,7 @@ async function pollGlobalStatus() {
       if (rs === 'completed') currentStatus.value = 'completed'
       else if (rs === 'failed') currentStatus.value = 'error'
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function togglePause() {
@@ -150,7 +150,7 @@ async function loadSimulationData() {
         if (configRes.success && configRes.data?.time_config?.minutes_per_round) {
           minutesPerRound.value = configRes.data.time_config.minutes_per_round
         }
-      } catch (e) { /* non-fatal */ }
+      } catch { /* non-fatal */ }
       if (simRes.data.project_id) {
         const projRes = await getProject(simRes.data.project_id)
         if (projRes.success && projRes.data) {

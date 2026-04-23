@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -165,7 +165,7 @@ async function pollConsole() {
         }
       })
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function pollStatus() {
@@ -185,7 +185,7 @@ async function pollStatus() {
         stopPolling()
       }
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function pollDetail() {
@@ -203,7 +203,7 @@ async function pollDetail() {
         if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
       })
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 const statusLabel = computed(() => {

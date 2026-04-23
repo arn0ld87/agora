@@ -335,7 +335,7 @@ async function fetchProfilesRealtime() {
     if (res?.success && Array.isArray(res.data?.profiles)) {
       profiles.value = res.data.profiles
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function fetchConfigRealtime() {
@@ -344,7 +344,7 @@ async function fetchConfigRealtime() {
     if (res?.success && res.data?.config) {
       simulationConfig.value = res.data.config
     }
-  } catch (e) { /* swallow */ }
+  } catch { /* swallow */ }
 }
 
 async function loadPreparedData() {

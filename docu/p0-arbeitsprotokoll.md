@@ -743,12 +743,38 @@ Danach wurden analoge Race-Condition-Risiken im Simulation-Stack nachgezogen.
   - Frontend-Lint **0 Fehler, 21 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.18 Frontend-Lint-Warnungen Block A abgebaut
+Als erster Follow-up-Block nach dem v0.4.1-Plan wurden die verbleibenden Low-Risk-Lint-Warnungen im Frontend bereinigt.
+
+**Geänderte Dateien**
+- `frontend/src/components/HistoryDatabase.vue`
+- `frontend/src/components/Step2EnvSetup.vue`
+- `frontend/src/components/Step3Simulation.vue`
+- `frontend/src/components/Step4Report.vue`
+- `frontend/src/components/Step5Interaction.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- `frontend/src/views/Process.vue`
+
+**Umgesetzte Logik**
+- ungenutzte Catch-Parameter durch parameterlose `catch { ... }`-Blöcke ersetzt
+- ungenutzten `watch`-Import in `Step3Simulation.vue` entfernt
+- ungenutztes `emit`-Binding in `Step5Interaction.vue` entfernt
+- ungenutzten Map-Index in `Step5Interaction.vue` entfernt
+- ungenutztes `link`-Binding in `Process.vue` entfernt
+
+**Messbarer Effekt**
+- Frontend-Lint wurde von **0 Fehlern, 21 Warnungen** auf **0 Fehler, 0 Warnungen** reduziert
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
-2. Frontend-Warnungen gezielt abbauen
+2. gemeinsames Frontend-Workspace-Layout einführen
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer

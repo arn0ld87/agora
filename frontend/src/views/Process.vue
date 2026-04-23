@@ -979,7 +979,7 @@ const renderGraph = () => {
     })
 
   // Visible thin lines
-  const link = linkGroup.append('line')
+  linkGroup.append('line')
     .attr('stroke', '#ccc')
     .attr('stroke-width', 1.5)
     .attr('stroke-opacity', 0.6)
