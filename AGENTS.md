@@ -1,10 +1,12 @@
 # AGENTS.md
 
-This file guides Codex and every other coding agent working in this repo. `CLAUDE.md` is the sibling file for Claude Code and should stay materially in sync with this document.
+This file provides guidance to Codex and other agent runtimes working in this repository.
+
+> **Hinweis:** `CLAUDE.md` ist die Schwesterdatei für Claude Code und soll fachlich mit diesem Dokument synchron bleiben.
 
 ## Projekt
 
-Agora (**v0.4.1 alpha**) ist ein lokal-first-Fork von MiroFish: Dokument hochladen → Wissensgraph extrahieren → personalisierte Agenten spawnen → Social-Media-Reaktionen simulieren → Report erzeugen. Der Fork ersetzt Zep Cloud durch Neo4j und DashScope/OpenAI durch Ollama (oder einen beliebigen OpenAI-kompatiblen Endpoint).
+Agora (**v0.5.0 alpha**) ist ein lokal-first-Fork von MiroFish: Dokument hochladen → Wissensgraph extrahieren → personalisierte Agenten spawnen → Social-Media-Reaktionen simulieren → Report erzeugen. Der Fork ersetzt Zep Cloud durch Neo4j und DashScope/OpenAI durch Ollama (oder einen beliebigen OpenAI-kompatiblen Endpoint).
 
 Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package-Manager: `uv` fürs Backend, `npm` fürs Frontend. Aktuell produktiv gefahren mit LLM `qwen3-coder-next:cloud` und Embedding `qwen3-embedding:4b` (2560 dim, siehe Gotchas).
 
@@ -23,13 +25,11 @@ Wichtige Einstiegsdateien:
 
 ## Erwartete Tool-Nutzung (proaktiv — nicht erst auf Anfrage)
 
-Der Repo-Eigentümer erwartet, dass Agents **ohne Aufforderung** zu Verifikations-Tooling greifen:
-
-- **context7** — bei jeder Task, die Bibliotheken, Frameworks, SDKs, CLIs oder Cloud-Services berührt (Flask, Vue 3, Vite, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …) aktuelle Docs prüfen, bevor Code entsteht oder geändert wird.
+- **context7** — bei jeder Task, die Bibliotheken, Frameworks, SDKs, CLIs oder Cloud-Services berührt (Flask, Vue 3, Vite, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …) aktuelle Docs prüfen, bevor du Code schreibst oder änderst.
 - **GitHub-Suche** — bei Debugging von Third-Party-Verhalten (OASIS-Eigenheiten, Neo4j-Vector-Search-Kanten, Ollama-Tool-Call-Payloads, Qwen/GPT-OSS-Reasoning-Blöcke) zuerst Upstream-Issues/PRs prüfen.
 - **sequential-thinking** — automatisch für Multi-File-Refactors, pipelinespannende Änderungen (graph → env → simulation → report), Debugging über die Flask↔OASIS-Subprozess-Grenze oder Tasks mit unklarem Lösungspfad.
 
-Defaults, keine Eskalation. Wer eins davon überspringt, notiert kurz warum.
+Defaults, keine Eskalation. Wenn du eins davon überspringst, notiere kurz warum.
 
 ## Commands
 
@@ -58,7 +58,7 @@ cd backend && uv run pytest path/to/test_file.py::test_name
 cd backend && uv run python -m compileall app scripts
 ```
 
-`npm run lint:backend` ist weiterhin ein **gescopter Rollout** auf refaktorierte/stabilisierte Dateien. Strategischer Zielzustand bleibt „default strict + zentrale Excludes“, aber Stand v0.4.1 ist noch nicht Full-Repo-Ruff-clean.
+`npm run lint:backend` ist weiterhin ein **gescopter Rollout** auf refaktorierte/stabilisierte Dateien. Strategischer Zielzustand bleibt „default strict + zentrale Excludes“, aber Stand v0.5.0 ist noch nicht Full-Repo-Ruff-clean.
 
 Docker (Full Stack inkl. Neo4j):
 
@@ -132,16 +132,30 @@ models/     Dataclasses (Project, Task)
 
 1. **Graph Build** — Dokument chunken → parallele `storage.add_text`-Aufrufe (NER/RE → Embeddings → Neo4j).
 2. **Env Setup** — Persona- und Simulation-Config generieren; Konfiguration wird in `uploads/simulations/<sim_id>/simulation_config.json` eingefroren.
-3. **Simulation** — OASIS läuft als separater Subprozess; IPC über `simulation_ipc.py` + `run_state.json`; `SimulationRunner.register_cleanup()` killt Orphans beim Shutdown.
+3. **Simulation** — OASIS läuft als separater Subprozess; Flask↔Subprozess-IPC über den `SimulationEventBus` (`FilePollingEventBus` offline-first, `RedisEventBus` im Compose-Default); `run_state.json` ist Post-Mortem-Persistenz. `SimulationRunner.register_cleanup()` killt Orphans beim Shutdown.
 4. **Report** — `ReportAgent` nutzt `GraphToolsService` und optional `WebTools`; Loop-Limits via `REPORT_AGENT_MAX_TOOL_CALLS` und `REPORT_AGENT_MAX_REFLECTION_ROUNDS`.
 
-### Operability (v0.4.1)
+### Event-Bus & SSE (Issue #9)
+
+- `backend/app/services/event_bus.py` definiert `SimulationEventBus` (publish / subscribe / request_response) mit Channel-Konstanten `control`, `state`, `rpc.command`, `rpc.response.<id>`, `action`.
+- Drei Adapter: `InMemoryEventBus` (Tests), `FilePollingEventBus` (offline-first, wrappt `SimulationArtifactStore`), `RedisEventBus` (compose-Default via `redis:7-alpine`). Backend-Auswahl via `Config.EVENT_BUS_BACKEND` (`auto` | `redis` | `file`).
+- Live-Kanäle `control`/`state` gehen in Phase B über Redis; RPC bleibt bis Issue #17 file-delegiert.
+- SSE-Bridge: `GET /api/simulation/<id>/stream` mit 15-s-Heartbeat. Frontend nutzt `frontend/src/composables/useEventStream.js`.
+
+### Graph-Analytik (Issues #10 + #12)
+
+- **Temporal Graph (#10):** RELATION-Kanten tragen `valid_from_round`, `valid_to_round`, `reinforced_count`. `TemporalGraphService` (`backend/app/services/temporal_graph.py`) liefert `get_snapshot` und `compute_diff`; API unter `GET /api/graph/snapshot/<gid>/<round>` und `GET /api/graph/diff/<gid>?start_round=..&end_round=..`. Lazy Backfill stampft Pre-#10-Kanten auf `valid_from_round=0`.
+- **Polarisation (#12):** `NetworkAnalyticsService` (`backend/app/services/network_analytics.py`) bildet OASIS-Aktionen auf einen `networkx`-Interaktionsgraph ab, liefert Louvain-Communities, Echo-Chamber-Index und Betweenness-basierte Bridge-Agents. API: `GET /api/simulation/<id>/metrics` (`window_size_rounds`, `platform` optional). Dokumentation in `docu/analytics.md`.
+- **Ontology-Mutation (#11):** `OntologyManager` + `OntologyMutationService` (`backend/app/services/ontology_mutation.py`) mit Modi `disabled`/`review_only`/`auto`, thread-safe per-graph-Locks, Audit-Log und pluggable `ConceptScorer`. Config via `ONTOLOGY_MUTATION_MODE` und `ONTOLOGY_MUTATION_MIN_CONFIDENCE`. NER→Mutation-Wiring ist als Follow-up ausgelagert.
+
+### Operability (v0.5.0)
 
 - `GET /api/status` liefert `backend`, `neo4j`, `ollama`, `disk`, `gpu`, `timestamp`.
 - `Neo4jStorage` nutzt `neo4j_call_with_retry` (Exponential Backoff + Jitter, max 3 Retries bei `ServiceUnavailable`/`SessionExpired`/`TransientError`).
 - Jeder Request bekommt eine 8-Zeichen-Request-ID.
 - Langläufer laufen über `RunRegistry` und `SimulationRunner`.
 - JSON-basierte Polling-Pfade wurden gehärtet: atomische JSON-Writes + defensive Reads (`utils/json_io.py`) für Report- und zentrale Simulation-Artefakte.
+- `Neo4jStorage`-Startfehler werden in `app.extensions['neo4j_storage_error']` gespiegelt und von `/api/status` + `/api/simulation/available-models` ausgeliefert; die UI zeigt den echten Fehler.
 
 ### Frontend (Vue 3 + Vite)
 
@@ -150,7 +164,8 @@ models/     Dataclasses (Project, Task)
 - `frontend/src/components/graph/`: `GraphDetailPanel.vue`, `GraphLegend.vue`, `graphPanelData.js`, `graphPanelUtils.js`, `graphPanelGeometry.js`
 - `frontend/src/components/ui/`: `Btn`, `Card`, `Badge`, `Field`, `Hairline`, `Kicker`, `SectionHead`, `Select`
 - `frontend/src/api/`: `index.js`, `graph.js`, `simulation.js`, `report.js`, `runs.js`
-- `frontend/src/composables/usePolling.js` zentralisiert Polling-Grundlogik für Langläufer.
+- `frontend/src/composables/usePolling.js` zentralisiert Polling-Grundlogik für Langläufer; `frontend/src/composables/useEventStream.js` ist das SSE-Pendant (Issue #9 Phase C).
+- `frontend/src/api/stream.js` baut SSE-URLs mit Auth-Token (`?token=...`, weil EventSource keine Custom-Header setzt).
 - **Pinia wird nicht verwendet.** Persistenter Zustand lebt noch in `src/store/pendingUpload.js`.
 
 ## Conventions & Gotchas
@@ -166,15 +181,16 @@ models/     Dataclasses (Project, Task)
 
 Das Repo steckt mitten in einem phasierten Umbau (Audit: `docu/2026-04-22-refactoring-produkt-audit.md`; Zielarchitektur: `docu/target-architecture.md`; Backlog: `docu/refactoring-backlog-priorisiert.md`).
 
-Stand P0/P0.5:
-- Quality-Gates (`npm run check`, CI, **70/70 Backend-Tests grün** — Stand 2026-04-23)
-- Simulation-API-Split abgeschlossen
-- GraphPanel weiter modularisiert
-- Embedding-Konfiguration fail-fast gehärtet
-- Polling-Composable eingeführt
-- JSON-/Polling-Robustheit für Report- und Simulation-Artefakte verbessert
+Stand v0.5.0 (2026-04-24):
+- Quality-Gates (`npm run check`, CI, **190 Backend-Tests grün** + 1 skip für Redis-Integration)
+- Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 abgeschlossen und auf `main`
+- `AgoraContainer` als DI-Anker; Services werden als Singletons (`neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`) oder Factories (`graph_builder`, `temporal_graph`, `network_analytics`, `ontology_mutation_service`) exponiert
+- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10), Polarization-Metriken (#12), Ontology-Mutation-Skeleton (#11)
 
 Wirklich offen bleiben vor allem:
+- RPC/Interview-IPC-Migration auf Redis Pub/Sub (Issue #17 — eröffnet, noch nicht umgesetzt)
+- NER→Ontology-Mutation-Wiring (Issue #11 Phase 2)
+- Frontend Round-Slider für Temporal-Graph-Snapshots (#10 optional)
 - gemeinsames Workspace-Layout
 - weiterer Abbau der Frontend-Warnungen
 - schrittweise Ausweitung von Ruff Richtung Default-strict

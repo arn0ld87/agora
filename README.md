@@ -19,7 +19,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.4.1 Alpha — experimentell, aber robuster und konsistenter dokumentiert
+> ## ⚠️ Status: v0.5.0 Alpha — Event-Bus-Transport + Graph-Analytik neu, weiter experimentell
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
@@ -46,13 +46,16 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.4.1
+### Engineering-Stand v0.5.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt gescoptes Backend-Linting, Backend-Tests, Frontend-Lint und Frontend-Build aus.
-- **Simulation-API entmonolithisiert**: die frühere XXL-Datei `backend/app/api/simulation.py` ist in fokussierte Module zerlegt (`simulation_lifecycle`, `simulation_prepare`, `simulation_run`, `simulation_interviews`, `simulation_history`, ...).
-- **Graph-UI weiter modularisiert**: `GraphPanel.vue` ist inzwischen in UI-, Daten- und Geometrie-Bausteine geschnitten.
-- **Embedding-Config fail-fast abgesichert**: Modell-/Dimensions-Mismatches werden beim Backend-Start geprüft.
-- **Polling-Grundlogik zentralisiert**: zentrale Langläufer nutzen jetzt ein gemeinsames `usePolling`-Composable.
+- **Quality-Gates vorhanden**: `npm run check` führt gescoptes Backend-Linting, Backend-Tests, Frontend-Lint und Frontend-Build aus (**190 Backend-Tests grün**, 1 Skip für die optionale Redis-Integration).
+- **Event-Bus-Transport (#9)**: `SimulationEventBus`-Port mit In-Memory-, File- und Redis-Adapter. Redis `7-alpine` wird vom `docker-compose.yml` mitgestartet; `Config.EVENT_BUS_BACKEND=auto` probiert Redis und fällt bei Bedarf auf File-Polling zurück.
+- **Frontend Push (#9 Phase C)**: `GET /api/simulation/<id>/stream` (SSE) + `useEventStream`-Composable ersetzen das 2,5-s-Status-Polling in der Simulationsansicht.
+- **Temporal Graph (#10)**: RELATION-Kanten tragen `valid_from_round`/`valid_to_round`/`reinforced_count`; `TemporalGraphService` liefert `/api/graph/snapshot/<gid>/<round>` und `/api/graph/diff/<gid>?start_round=..&end_round=..`.
+- **Polarisations-Metriken (#12)**: `NetworkAnalyticsService` mit Louvain-Communities, Echo-Chamber-Index und Bridge-Agent-Heuristik; API `GET /api/simulation/<id>/metrics`. Dokumentation in `docu/analytics.md`.
+- **Ontology-Mutation (#11, Phase 1)**: `OntologyManager` (thread-safe) + `OntologyMutationService` mit Modi `disabled` / `review_only` / `auto` und pluggable `ConceptScorer`. NER→Mutation-Wiring folgt.
+- **DI-Container (#14)**: Alle Kern-Services laufen über `AgoraContainer` — keine Service-Locator-Suche mehr in `app.extensions`.
+- **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt.
 - **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
 
 ### Was wurde gegenüber MiroFish geändert?
@@ -299,13 +302,14 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.4.1 alpha — still experimental, but more robust and more consistently documented.** Agora is an active experimental
+> **⚠️ Status: v0.5.0 alpha — event bus + graph analytics landed; still experimental.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
 > swapped mid-run. Not production-ready. The HTTP API currently has **no
-> authentication** and CORS is wide open — run on localhost or inside a
-> trusted network only. Currently exercised with **LLM `qwen3-coder-next:cloud`**
-> and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+> authentication by default** (opt-in via `AGORA_AUTH_TOKEN`) and CORS is
+> locked to localhost — run on localhost or inside a trusted network only.
+> Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
+> `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
 
 ### What is Agora?
 
@@ -313,13 +317,15 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.4.1
+### Engineering status in v0.5.0
 
-- **Quality gates are in place** via `npm run check`.
+- **Quality gates are in place** via `npm run check` (**190 backend tests**, 1 skip for the optional Redis integration).
+- **Event bus transport (#9)** with a Redis-backed default (`docker-compose.yml` ships `redis:7-alpine`), file-polling fallback, and an SSE bridge at `GET /api/simulation/<id>/stream` so the frontend stops polling run-state.
+- **Temporal graph (#10)**: RELATION edges carry `valid_from_round` / `valid_to_round` / `reinforced_count`; `/api/graph/snapshot/<gid>/<round>` and `/api/graph/diff/<gid>` answer time-travel queries.
+- **Polarization metrics (#12)**: `GET /api/simulation/<id>/metrics` returns Louvain communities, echo-chamber index and bridge agents via `networkx` (see `docu/analytics.md`).
+- **Dynamic ontology mutation (#11, phase 1)** with three modes (`disabled` / `review_only` / `auto`), thread-safe manager, pluggable scorer, audit log.
+- **Hand-rolled DI container (#14)** underpins all of the above — long-lived services live on `AgoraContainer`, no more `app.extensions` service-locator hunt.
 - **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file.
-- **GraphPanel modularization progressed** into extracted detail-panel, legend, graph-data, and link-geometry modules.
-- **Embedding config now fails fast** when `EMBEDDING_MODEL` and `VECTOR_DIM` do not match.
-- **Long-running frontend flows now share polling infrastructure** via `usePolling`.
 - **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
 
 ### Key Features

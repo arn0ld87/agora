@@ -5,30 +5,58 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
-### Hinzugefügt
+_Nothing yet._
 
-- **Issue #9 Phase A–C**: `SimulationEventBus`-Port (`backend/app/services/event_bus.py`) mit `InMemoryEventBus`, `FilePollingEventBus` und `RedisEventBus` (`backend/app/services/event_bus_redis.py`). Redis-Service in `docker-compose.yml` inkl. Healthcheck; `Config.REDIS_URL` / `Config.EVENT_BUS_BACKEND` wählen den Transport im `AgoraContainer` (auto → redis → file). `SimulationRunner._save_run_state` spiegelt Snapshots auf den Bus. Neuer SSE-Endpoint `GET /api/simulation/<id>/stream` (`backend/app/api/simulation_stream.py`) bridged `state`/`control` an `EventSource`-Clients. Frontend-Composable `useEventStream.js` + API-Helper `api/stream.js`; `Step3Simulation.vue` ersetzt das 2,5-s-Status-Polling durch den Stream. Tests: `tests/test_event_bus.py` (13), `tests/test_event_bus_redis.py` (6, integration-skip ohne Redis), `tests/test_simulation_stream.py` (2).
-- **fix(startup)**: Neo4j-Startup-Exception wird in `app.extensions['neo4j_storage_error']` persistiert und über `/api/status` sowie `/api/simulation/available-models` ausgeliefert. UI-Warnungen (`Home.vue`) zeigen den echten Fehler statt eines Platzhalters.
+## [0.5.0] — 2026-04-24
 
-### Notiz
-
-- Phase B verlagert **Control/State** live auf Redis, **RPC-Interview-Commands** bleiben Datei-basiert: der OASIS-Subprozess hält weiterhin seinen eigenen File-IPC-Handler; dessen Migration ist als Follow-up ausgelagert. Der `RedisEventBus` delegiert entsprechend `CHANNEL_RPC_COMMAND` und `rpc.response.*` an einen internen `FilePollingEventBus`.
-
-### Refactor
-
-- **Issue #14**: Hand-rolled `AgoraContainer` (`backend/app/container.py`) ersetzt das Service-Locator-Pattern via `app.extensions[...]`. Container hält Singletons (`neo4j_storage`, `artifact_store`) und Factories (`graph_builder()`); Pilot-Service `GraphBuilderService` migriert in `api/graph.py` und `api/runs.py`. `app.extensions['neo4j_storage' / 'artifact_store']` bleiben als Backward-Compat-Aliase. Pilot-Tests laufen ohne Flask-App-Context (`tests/test_container.py`).
-- **Issue #13**: Neuer Hexagonal-Port `SimulationArtifactStore` (`backend/app/services/artifact_store.py`) mit `LocalFilesystemArtifactStore` (Produktion) und `InMemoryArtifactStore` (Tests). DI-Registration in `app.extensions['artifact_store']`, Helper `get_artifact_store()` in `api/simulation_common.py`.
-- `SimulationManager`, `SimulationRunner`, `SimulationIPCClient/Server`, `simulation_prepare`, `simulation_profiles`, `simulation_history` greifen nicht mehr direkt auf `utils/json_io` oder `uploads/simulations/<sim_id>/*.json` zu. Smoke-Test (`tests/test_no_json_io_leakage.py`) hält den Constraint dauerhaft hoch.
-- Implizit gefixt durch atomare Store-Writes: vorher non-atomare Writes für `simulation_config.json`, `ipc_commands/*.json`, `ipc_responses/*.json`, `env_status.json`.
+Ship der kompletten Priorisierungs-Kette #13 → #14 → #9 → #10 → #12 → #11 plus Release-Polish.
 
 ### Hinzugefügt
 
-- `backend/tests/test_artifact_store.py` (30 Contract-Tests inkl. Concurrency-Stress für atomare Writes)
-- `backend/tests/test_no_json_io_leakage.py` (AST-Scan, hält den SoC-Constraint)
+- **Issue #9 Phase A–C — Event Bus + SSE Bridge.**
+  - `SimulationEventBus`-Port (`backend/app/services/event_bus.py`) mit `InMemoryEventBus`, `FilePollingEventBus` (offline-first, wrappt `SimulationArtifactStore`) und `RedisEventBus` (`backend/app/services/event_bus_redis.py`).
+  - Redis-Service (`redis:7-alpine` mit Healthcheck + Volume) in `docker-compose.yml`; `Config.REDIS_URL` + `Config.EVENT_BUS_BACKEND` (`auto`/`redis`/`file`) wählen den Transport im `AgoraContainer`.
+  - `SimulationRunner._save_run_state` spiegelt Snapshots auf `CHANNEL_STATE`.
+  - SSE-Endpoint `GET /api/simulation/<id>/stream` (`backend/app/api/simulation_stream.py`) bridged `state`/`control` an `EventSource`-Clients. Heartbeat alle 15 s.
+  - Frontend: `useEventStream.js` + `api/stream.js`; `Step3Simulation.vue` ersetzt 2,5-s-Status-Polling durch den Stream.
+  - Tests: `test_event_bus.py` (13), `test_event_bus_redis.py` (6, skip ohne Redis), `test_simulation_stream.py` (2).
+- **Issue #10 — Temporal Graph Evolution.**
+  - RELATION-Kanten: `valid_from_round`, `valid_to_round`, `reinforced_count` (neu in `Neo4jStorage.add_text` + `_edge_to_dict`).
+  - `Neo4jStorage.get_edges_at_round` (coalesce-Legacy-Semantik), `reinforce_relation`, `tombstone_relation`, idempotenter `backfill_temporal_defaults`. `GraphStorage`-Protocol bekommt Default-Stubs für Non-Neo4j-Adapter.
+  - `TemporalGraphService` (`backend/app/services/temporal_graph.py`) mit `get_snapshot` + `compute_diff` (added / removed / reinforced); lazy Per-Graph-Backfill.
+  - API: `GET /api/graph/snapshot/<gid>/<round>` und `GET /api/graph/diff/<gid>?start_round=..&end_round=..`.
+  - Ingest: `GraphBuilderService` stamped `round_num=0`, `GraphMemoryUpdater` nutzt max(round_num) des Batches.
+  - Tests: `test_temporal_graph.py` (7).
+- **Issue #12 — Polarization-Metriken.**
+  - `NetworkAnalyticsService` (`backend/app/services/network_analytics.py`) — `networkx`-Interaktionsgraph, Louvain-Communities, Echo-Chamber-Index, Betweenness-Bridge-Agents.
+  - `networkx>=3.2` als Runtime-Dep.
+  - API: `GET /api/simulation/<id>/metrics` mit `window_size_rounds` + `platform` Query-Params.
+  - Dokumentation `docu/analytics.md` erklärt Filter (nur gerichtete Aktionen), Graph-Projektion, Heuristiken, API-Schema, Follow-ups.
+  - Tests: `test_network_analytics.py` (7).
+- **Issue #11 Phase 1 — Dynamic Ontology Mutation.**
+  - `OntologyManager` (`backend/app/services/ontology_mutation.py`) mit per-graph `threading.Lock` für thread-safe `update()`.
+  - `OntologyMutationService` mit Modi `disabled`/`review_only`/`auto`, pluggable `ConceptScorer` (Default-Heuristik: rejectet generische Platzhalter, belohnt PascalCase + context match), bounded In-Memory-Audit-Log + optional `audit_sink`.
+  - Config: `ONTOLOGY_MUTATION_MODE` (default `disabled`), `ONTOLOGY_MUTATION_MIN_CONFIDENCE` (default 0.6).
+  - `AgoraContainer.ontology_manager` + `ontology_mutation_service()`.
+  - Tests: `test_ontology_mutation.py` (14) — Sanitization, Scorer, Manager-Idempotenz, Thread-Safety (20 concurrent writers), Modes, Audit-Log.
+- **Issue #14 — `AgoraContainer` (DI).** Hand-rolled Container ersetzt `app.extensions[...]`-Service-Locator; Singletons (`neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`) + Factories (`graph_builder()`, `temporal_graph()`, `network_analytics()`, `ontology_mutation_service()`). `app.extensions['*']` bleiben als Backward-Compat-Aliase. Tests ohne Flask-App-Context (`test_container.py`).
+- **Issue #13 — `SimulationArtifactStore`-Port.** Hexagonal-Port (`backend/app/services/artifact_store.py`) mit `LocalFilesystemArtifactStore` (Produktion, atomare Writes) und `InMemoryArtifactStore` (Tests). Alle Simulation-JSON-I/Os laufen über den Store. Constraint-Guard `tests/test_no_json_io_leakage.py` hält die SoC-Regel aufrecht.
+- **fix(startup)** — Neo4j-Startup-Exception wird in `app.extensions['neo4j_storage_error']` persistiert und über `/api/status` + `/api/simulation/available-models` ausgeliefert. UI (`Home.vue`) zeigt den echten Fehler statt eines Platzhalters.
+- **Dependency-Additionen:** `redis>=5.0.0`, `networkx>=3.2`.
+- **Contract- und Smoke-Tests:** `test_artifact_store.py` (30), `test_no_json_io_leakage.py` (3).
 
-### Notiz
+### Geändert
 
-- `services/run_registry.py` bleibt bewusst beim direkten `json_io`-Zugriff — eigener Store-Adapter folgt in separater PR (anderer Storage-Root, eigene Concurrency-Semantik).
+- `Neo4jStorage.add_text` und `add_text_batch` akzeptieren jetzt einen optionalen `round_num`-Parameter.
+- `SimulationIPCClient/Server` publishen/subscriben jetzt über den `SimulationEventBus` statt direkt den Store. Public-API unverändert.
+- `docker-compose.yml`: Agora-Container hängt an `redis: service_healthy`, `REDIS_URL=redis://redis:6379/0` in Service-Env fest verdrahtet.
+
+### Notiz — offen / Follow-up
+
+- **Issue #17** (neu): RPC/Interview-IPC komplett von File-Polling auf Redis Pub/Sub migrieren. Der `RedisEventBus` delegiert `CHANNEL_RPC_COMMAND` + `rpc.response.*` derzeit bewusst an den `FilePollingEventBus`, weil der OASIS-Subprozess (`run_reddit_simulation.py` / `run_twitter_simulation.py`) seinen eigenen File-IPC-Handler hat. Dessen Umbau ist eigenständig getrackt.
+- **Issue #11 Phase 2**: NER→Mutation-Wiring. Der `OntologyMutationService` ist aufrufbar, aber noch nicht vom Ingest-Pfad getriggert.
+- **Issue #10 Optional**: Frontend-Round-Slider in `GraphPanel`; und echter MERGE-basierter Reinforce-Pfad in `add_text` (heute nur `reinforce_relation` als separater Helper).
+- `services/run_registry.py` bleibt bewusst beim direkten `json_io`-Zugriff — eigener Store-Adapter folgt in separater PR.
 
 ## [0.4.1] — 2026-04-23
 
