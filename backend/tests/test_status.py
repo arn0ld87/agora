@@ -3,9 +3,7 @@ Tests for the unified /api/status endpoint.
 Simpler approach: test the functions directly rather than via Flask test client.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 
 from app.config import Config
 from app.api.status import (

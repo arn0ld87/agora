@@ -13,7 +13,6 @@ from . import runs_bp
 from ..config import Config
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
-from ..services.entity_reader import EntityReader
 from ..services.graph_builder import GraphBuilderService
 from ..services.graph_tools import GraphToolsService
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
@@ -169,7 +168,7 @@ def _restart_graph_build(run: dict):
                 progress = 15 + int(progress_ratio * 40)
                 task_manager.update_task(task_id, message=msg, progress=progress)
 
-            episode_uuids = builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback)
+            episodes = builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback)
             task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
             graph_data = builder.get_graph_data(graph_id)
             project.status = ProjectStatus.GRAPH_COMPLETED
@@ -185,7 +184,7 @@ def _restart_graph_build(run: dict):
                     "node_count": graph_data.get("node_count", 0),
                     "edge_count": graph_data.get("edge_count", 0),
                     "chunk_count": total_chunks,
-                    "episode_count": len(episode_uuids),
+                    "episode_count": len(episodes),
                 },
             )
             run_registry.update_run(

@@ -7,7 +7,7 @@ Never throws — all failures are captured in hints.
 
 import shutil
 import subprocess
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 def detect_gpu() -> Dict[str, Any]:

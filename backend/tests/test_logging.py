@@ -8,7 +8,6 @@ Coverage:
 - Exception logging includes a formatted traceback string
 """
 
-import importlib
 import json
 import logging
 import re
@@ -65,7 +64,7 @@ class TestJSONFormatter:
         log.info("hello world")
         log.warning("something happened")
 
-        lines = [l for l in stream.getvalue().splitlines() if l.strip()]
+        lines = [line for line in stream.getvalue().splitlines() if line.strip()]
         assert len(lines) == 2, "Expected exactly two log lines"
         for line in lines:
             parsed = json.loads(line)  # raises if invalid JSON

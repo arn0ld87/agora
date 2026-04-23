@@ -880,11 +880,37 @@ Danach wurde die nächste offensichtliche Header-Duplizierung in den Workspace-V
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
+### 9.24 Backend-Ruff-Rollout Phase 2
+Danach wurde der gescopte Backend-Lint auf einen weiteren low-risk Modulblock ausgedehnt.
+
+**Neue Datei**
+- `docu/p0-backend-ruff-rollout-protokoll.md`
+
+**Geänderte Dateien**
+- `backend/app/api/runs.py`
+- `backend/app/services/graph_memory_updater.py`
+- `backend/app/utils/gpu_probe.py`
+- `backend/app/storage/search_service.py`
+- `backend/tests/test_status.py`
+- `backend/tests/test_logging.py`
+- `backend/tests/test_neo4j_resilience.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Umgesetzte Logik**
+- ungenutzte Imports und Variablen bereinigt
+- triviale Ruff-Befunde in Tests beseitigt
+- die gesäuberten Dateien in den regulären Ruff-Scope aufgenommen
+
+**Zusätzliche Verifikation**
+- `cd backend && uv run ruff check app/api/runs.py app/services/graph_memory_updater.py app/utils/gpu_probe.py app/storage/search_service.py tests/test_status.py tests/test_logging.py tests/test_neo4j_resilience.py` → **bestanden**
+- `cd backend && uv run pytest tests/test_status.py tests/test_logging.py tests/test_neo4j_resilience.py` → **23/23 bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
-1. Backend-Ruff schrittweise auf weitere Module ausweiten
+1. weitere Backend-Ruff-Cluster schrittweise aufnehmen
 2. gemeinsame Brand-/Header-Aktionen weiter normalisieren
 3. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
 3. `GraphPanel.vue` weiter zerlegen:

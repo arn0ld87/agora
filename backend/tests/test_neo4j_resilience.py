@@ -7,8 +7,8 @@ directly.  ``time.sleep`` is always patched to keep the test suite fast.
 """
 
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, call
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
 
 from app.storage.neo4j_storage import Neo4jStorage
