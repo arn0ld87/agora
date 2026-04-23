@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step5Interaction from '../components/Step5Interaction.vue'
+import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
+import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
+import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
@@ -15,6 +19,11 @@ const { t } = useI18n()
 defineProps({ reportId: String })
 
 const viewMode = ref('workbench')
+const workspaceModes = [
+  { value: 'graph', label: 'Graph' },
+  { value: 'split', label: 'Split' },
+  { value: 'workbench', label: 'Workbench' },
+]
 const currentReportId = ref(route.params.reportId)
 const simulationId = ref(null)
 const projectData = ref(null)
@@ -93,33 +102,38 @@ onMounted(loadData)
 </script>
 
 <template>
-  <div class="main-view">
-    <header class="top-nav">
-      <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
-      <div class="view-switcher">
-        <button
-          v-for="mode in ['graph', 'split', 'workbench']"
-          :key="mode"
-          class="switch-btn"
-          :class="{ active: viewMode === mode }"
-          @click="viewMode = mode"
-        >
-          {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-        </button>
-      </div>
-      <div class="step-status">
-        <span class="kicker-row">
-          <span class="step-counter">№ 05 / 05</span>
-          <span class="step-name">{{ t('process.stepper.step5') }}</span>
-        </span>
-        <span class="status-tag" :class="`status-${statusKind}`">
-          <span class="status-dot" :class="`status-dot--${statusKind}`" />
-          {{ statusText }}
-        </span>
-      </div>
-    </header>
-    <main class="content">
-      <div class="panel left" :style="leftPanelStyle">
+  <WorkspaceLayout>
+    <template #header>
+      <WorkspaceHeader>
+        <template #brand>
+          <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+        </template>
+
+        <template #center>
+          <WorkspaceModeSwitch
+            :current-mode="viewMode"
+            :modes="workspaceModes"
+            @update:mode="viewMode = $event"
+          />
+        </template>
+
+        <template #status>
+          <div class="step-status">
+            <span class="kicker-row">
+              <span class="step-counter">№ 05 / 05</span>
+              <span class="step-name">{{ t('process.stepper.step5') }}</span>
+            </span>
+            <span class="status-tag" :class="`status-${statusKind}`">
+              <span class="status-dot" :class="`status-dot--${statusKind}`" />
+              {{ statusText }}
+            </span>
+          </div>
+        </template>
+      </WorkspaceHeader>
+    </template>
+
+    <WorkspaceSplit :left-style="leftPanelStyle" :right-style="rightPanelStyle">
+      <template #left>
         <GraphPanel
           :graphData="graphData"
           :loading="graphLoading"
@@ -128,28 +142,23 @@ onMounted(loadData)
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
-      </div>
-      <div class="panel right" :style="rightPanelStyle">
+      </template>
+
+      <template #right>
         <Step5Interaction
           :reportId="currentReportId"
           :simulationId="simulationId"
           @add-log="addLog"
           @update-status="updateStatus"
         />
-      </div>
-    </main>
-  </div>
+      </template>
+    </WorkspaceSplit>
+  </WorkspaceLayout>
 </template>
 
 <style scoped>
-.main-view { height: 100vh; display: flex; flex-direction: column; background: var(--paper-0); overflow: hidden; }
-.top-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--s-7); padding: var(--s-4) var(--s-6); border-bottom: 1px solid var(--rule-strong); background: var(--paper-0); z-index: 10; }
 .brand-link { font-family: var(--ff-serif); font-weight: 500; font-size: 22px; letter-spacing: -0.02em; cursor: pointer; color: var(--ink-0); }
 .brand-link:hover { color: var(--accent); }
-.view-switcher { display: inline-flex; justify-self: center; gap: var(--s-2); padding: 4px; background: var(--paper-1); border-radius: var(--r-1); }
-.switch-btn { border: 0; background: transparent; padding: 6px 14px; font-family: var(--ff-mono); font-size: 11px; letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); border-radius: var(--r-1); cursor: pointer; }
-.switch-btn:hover { color: var(--ink-0); }
-.switch-btn.active { background: var(--paper-0); color: var(--ink-0); border: 1px solid var(--rule); }
 .step-status { display: inline-flex; align-items: center; gap: var(--s-5); }
 .kicker-row { display: inline-flex; align-items: baseline; gap: var(--s-3); }
 .step-counter { font-family: var(--ff-mono); font-size: 11px; letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); }
@@ -158,7 +167,4 @@ onMounted(loadData)
 .status-tag.status-error { color: #b00020; }
 .status-tag.status-done { color: var(--ink-0); }
 .status-tag.status-running { color: var(--accent); }
-.content { flex: 1; display: flex; overflow: hidden; }
-.panel { height: 100%; overflow: hidden; transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease; }
-.panel.left { border-right: 1px solid var(--rule); }
 </style>

@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
+import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
+import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { createSimulationBranch, getSimulation, stopSimulation, getEnvStatus, closeSimulationEnv } from '../api/simulation'
 
@@ -14,6 +18,11 @@ const { t } = useI18n()
 defineProps({ simulationId: String })
 
 const viewMode = ref('split')
+const workspaceModes = [
+  { value: 'graph', label: 'Graph' },
+  { value: 'split', label: 'Split' },
+  { value: 'workbench', label: 'Workbench' },
+]
 const currentSimulationId = ref(route.params.simulationId)
 const projectData = ref(null)
 const graphData = ref(null)
@@ -169,32 +178,37 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="main-view">
-    <header class="top-nav">
-      <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
-      <div class="view-switcher">
-        <button
-          v-for="mode in ['graph', 'split', 'workbench']"
-          :key="mode"
-          class="switch-btn"
-          :class="{ active: viewMode === mode }"
-          @click="viewMode = mode"
-        >
-          {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-        </button>
-      </div>
-      <div class="step-status">
-        <span class="kicker-row">
-          <span class="step-counter">№ 02 / 05</span>
-          <span class="step-name">{{ t('process.stepper.step2') }}</span>
-        </span>
-        <span class="status-tag" :class="`status-${statusKind}`">
-          <span class="status-dot" :class="`status-dot--${statusKind}`" />
-          {{ statusText }}
-        </span>
-        <button class="branch-btn" @click="showBranchPanel = !showBranchPanel">Create Branch</button>
-      </div>
-    </header>
+  <WorkspaceLayout>
+    <template #header>
+      <WorkspaceHeader>
+        <template #brand>
+          <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+        </template>
+
+        <template #center>
+          <WorkspaceModeSwitch
+            :current-mode="viewMode"
+            :modes="workspaceModes"
+            @update:mode="viewMode = $event"
+          />
+        </template>
+
+        <template #status>
+          <div class="step-status">
+            <span class="kicker-row">
+              <span class="step-counter">№ 02 / 05</span>
+              <span class="step-name">{{ t('process.stepper.step2') }}</span>
+            </span>
+            <span class="status-tag" :class="`status-${statusKind}`">
+              <span class="status-dot" :class="`status-dot--${statusKind}`" />
+              {{ statusText }}
+            </span>
+            <button class="branch-btn" @click="showBranchPanel = !showBranchPanel">Create Branch</button>
+          </div>
+        </template>
+      </WorkspaceHeader>
+    </template>
+
     <div v-if="showBranchPanel" class="branch-panel">
       <input v-model="branchForm.branch_name" type="text" placeholder="Branch name" />
       <input v-model="branchForm.llm_model" type="text" placeholder="LLM model override" />
@@ -202,8 +216,9 @@ onMounted(async () => {
       <input v-model="branchForm.max_agents" type="number" min="1" placeholder="max agents" />
       <button class="branch-btn" :disabled="branchBusy" @click="handleCreateBranch">Create</button>
     </div>
-    <main class="content">
-      <div class="panel left" :style="leftPanelStyle">
+
+    <WorkspaceSplit :left-style="leftPanelStyle" :right-style="rightPanelStyle">
+      <template #left>
         <GraphPanel
           :graphData="graphData"
           :loading="graphLoading"
@@ -211,8 +226,9 @@ onMounted(async () => {
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
-      </div>
-      <div class="panel right" :style="rightPanelStyle">
+      </template>
+
+      <template #right>
         <Step2EnvSetup
           :simulationId="currentSimulationId"
           :projectData="projectData"
@@ -223,29 +239,12 @@ onMounted(async () => {
           @add-log="addLog"
           @update-status="updateStatus"
         />
-      </div>
-    </main>
-  </div>
+      </template>
+    </WorkspaceSplit>
+  </WorkspaceLayout>
 </template>
 
 <style scoped>
-.main-view {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--paper-0);
-  overflow: hidden;
-}
-.top-nav {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--s-7);
-  padding: var(--s-4) var(--s-6);
-  border-bottom: 1px solid var(--rule-strong);
-  background: var(--paper-0);
-  z-index: 10;
-}
 .brand-link {
   font-family: var(--ff-serif);
   font-weight: 500;
@@ -255,29 +254,6 @@ onMounted(async () => {
   color: var(--ink-0);
 }
 .brand-link:hover { color: var(--accent); }
-.view-switcher {
-  display: inline-flex;
-  justify-self: center;
-  gap: var(--s-2);
-  padding: 4px;
-  background: var(--paper-1);
-  border-radius: var(--r-1);
-}
-.switch-btn {
-  border: 0;
-  background: transparent;
-  padding: 6px 14px;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  border-radius: var(--r-1);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-.switch-btn:hover { color: var(--ink-0); }
-.switch-btn.active { background: var(--paper-0); color: var(--ink-0); border: 1px solid var(--rule); }
 .step-status { display: inline-flex; align-items: center; gap: var(--s-5); }
 .kicker-row { display: inline-flex; align-items: baseline; gap: var(--s-3); }
 .step-counter {
@@ -332,9 +308,6 @@ onMounted(async () => {
   color: var(--ink-0);
   font-family: var(--ff-sans);
 }
-.content { flex: 1; display: flex; overflow: hidden; }
-.panel { height: 100%; overflow: hidden; transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease; }
-.panel.left { border-right: 1px solid var(--rule); }
 @media (max-width: 880px) {
   .branch-panel { grid-template-columns: 1fr; }
 }

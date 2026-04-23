@@ -151,9 +151,39 @@ Nach der Migration von `MainView.vue` und `SimulationRunView.vue` blieb eine off
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
-## 9. Nächster sinnvoller Schritt
+## 9. Vierter Workspace-Schritt — weitere Arbeitsviews migriert
+
+Nach den ersten beiden Workspace-Screens wurden drei weitere Views auf dieselbe Shell gezogen:
+
+### 9.1 Geänderte Dateien
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+
+### 9.2 Umgesetzte Logik
+- alle drei Views nutzen jetzt ebenfalls:
+  - `WorkspaceLayout`
+  - `WorkspaceHeader`
+  - `WorkspaceSplit`
+  - `WorkspaceModeSwitch`
+- bestehende Brand-/Status-/Graph-Workbench-Struktur blieb funktional erhalten
+- `SimulationView.vue` behält zusätzlich sein Branch-Panel oberhalb des Split-Layouts
+
+### 9.3 Wirkung
+Damit teilen jetzt praktisch alle zentralen Workspace-/Pipeline-Views denselben strukturellen Rahmen:
+- `MainView.vue`
+- `SimulationView.vue`
+- `SimulationRunView.vue`
+- `ReportView.vue`
+- `InteractionView.vue`
+
+### 9.4 Verifikation
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
+## 10. Nächster sinnvoller Schritt
 
 Nach diesem Shell-Cleanup sind die nächsten Kandidaten:
-- `SimulationView.vue` oder `ReportView.vue` auf dieselbe Workspace-Shell umziehen
 - gemeinsame Status-/Header-Bausteine weiter normalisieren
-- anschließend weitere Shell-/Header-Duplizierung abbauen
+- `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder entkoppeln
+- anschließend Backend-Ruff-Ausweitung als nächster großer Block

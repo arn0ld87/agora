@@ -839,13 +839,31 @@ Als nächster kleiner Shell-Cleanup wurde der View-Mode-Umschalter der Workspace
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
+### 9.22 Weitere Workspace-Views umgestellt
+Danach wurde die gemeinsame Workspace-Shell auf weitere Kernscreens ausgeweitet.
+
+**Geänderte Dateien**
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+- Detailprotokoll aktualisiert: `docu/p0-workspace-layout-protokoll.md`
+
+**Umgesetzte Logik**
+- alle drei Views nutzen jetzt `WorkspaceLayout`, `WorkspaceHeader`, `WorkspaceSplit` und `WorkspaceModeSwitch`
+- bestehende Brand-/Status-/Split-Logik blieb erhalten
+- `SimulationView.vue` behält sein Branch-Panel in derselben fachlichen Position
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
-2. weitere Views auf gemeinsames Workspace-Layout umstellen
-3. gemeinsame Status-/Header-Bausteine weiter normalisieren
+2. gemeinsame Status-/Header-Bausteine weiter normalisieren
+3. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer
