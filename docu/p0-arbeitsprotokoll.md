@@ -769,12 +769,37 @@ Als erster Follow-up-Block nach dem v0.4.1-Plan wurden die verbleibenden Low-Ris
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
+### 9.19 Workspace-Layout-Grundlage gelegt
+Danach wurde der erste sichere Schritt für die gemeinsame Frontend-Workspace-Shell umgesetzt.
+
+**Neue Dateien**
+- `frontend/src/layouts/WorkspaceLayout.vue`
+- `frontend/src/layouts/WorkspaceHeader.vue`
+- `frontend/src/layouts/WorkspaceSplit.vue`
+- zusätzliches Detailprotokoll: `docu/p0-workspace-layout-protokoll.md`
+
+**Geänderte Datei**
+- `frontend/src/views/MainView.vue`
+
+**Umgesetzte Logik**
+- gemeinsame Layout-Primitives für Header und Split-Workspace eingeführt
+- `MainView.vue` auf die neuen Layout-Bausteine umgestellt
+- Routing und fachliche State-Logik unverändert gelassen
+
+**Wichtige Designentscheidung**
+- Es wurde bewusst nur **ein** View migriert.
+- So bleibt der erste Shell-Schnitt risikoarm und schafft dennoch die Basis für weitere Migrationen (`Process.vue`, `SimulationRunView.vue`, ...).
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
-2. gemeinsames Frontend-Workspace-Layout einführen
+2. weitere Views auf gemeinsames Workspace-Layout umstellen
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer

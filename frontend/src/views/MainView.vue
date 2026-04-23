@@ -5,6 +5,9 @@ import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
+import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 
@@ -285,34 +288,44 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
 </script>
 
 <template>
-  <div class="main-view">
-    <header class="top-nav">
-      <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
-      <div class="view-switcher">
-        <button
-          v-for="mode in ['graph', 'split', 'workbench']"
-          :key="mode"
-          class="switch-btn"
-          :class="{ active: viewMode === mode }"
-          @click="viewMode = mode"
-        >
-          {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-        </button>
-      </div>
-      <div class="step-status">
-        <span class="kicker-row">
-          <span class="step-counter">№ 0{{ currentStep }} / 05</span>
-          <span class="step-name">{{ stepLabels[currentStep - 1] }}</span>
-        </span>
-        <span class="status-tag" :class="`status-${statusClass}`">
-          <span class="status-dot" :class="`status-dot--${statusClass === 'done' ? 'done' : statusClass === 'error' ? 'error' : 'running'}`" />
-          {{ statusText }}
-        </span>
-      </div>
-    </header>
+  <WorkspaceLayout>
+    <template #header>
+      <WorkspaceHeader>
+        <template #brand>
+          <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+        </template>
 
-    <main class="content">
-      <div class="panel left" :style="leftPanelStyle">
+        <template #center>
+          <div class="view-switcher">
+            <button
+              v-for="mode in ['graph', 'split', 'workbench']"
+              :key="mode"
+              class="switch-btn"
+              :class="{ active: viewMode === mode }"
+              @click="viewMode = mode"
+            >
+              {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
+            </button>
+          </div>
+        </template>
+
+        <template #status>
+          <div class="step-status">
+            <span class="kicker-row">
+              <span class="step-counter">№ 0{{ currentStep }} / 05</span>
+              <span class="step-name">{{ stepLabels[currentStep - 1] }}</span>
+            </span>
+            <span class="status-tag" :class="`status-${statusClass}`">
+              <span class="status-dot" :class="`status-dot--${statusClass === 'done' ? 'done' : statusClass === 'error' ? 'error' : 'running'}`" />
+              {{ statusText }}
+            </span>
+          </div>
+        </template>
+      </WorkspaceHeader>
+    </template>
+
+    <WorkspaceSplit :left-style="leftPanelStyle" :right-style="rightPanelStyle">
+      <template #left>
         <GraphPanel
           :graphData="graphData"
           :loading="graphLoading"
@@ -320,8 +333,9 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
-      </div>
-      <div class="panel right" :style="rightPanelStyle">
+      </template>
+
+      <template #right>
         <Step1GraphBuild
           v-if="currentStep === 1"
           :currentPhase="currentPhase"
@@ -341,30 +355,12 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
           @next-step="handleNextStep"
           @add-log="addLog"
         />
-      </div>
-    </main>
-  </div>
+      </template>
+    </WorkspaceSplit>
+  </WorkspaceLayout>
 </template>
 
 <style scoped>
-.main-view {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--paper-0);
-  overflow: hidden;
-}
-
-.top-nav {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--s-7);
-  padding: var(--s-4) var(--s-6);
-  border-bottom: 1px solid var(--rule-strong);
-  background: var(--paper-0);
-  z-index: 10;
-}
 .brand-link {
   font-family: var(--ff-serif);
   font-weight: 500;
@@ -435,20 +431,7 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
 .status-tag.status-done { color: var(--ink-0); }
 .status-tag.status-running { color: var(--accent); }
 
-.content {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-.panel {
-  height: 100%;
-  overflow: hidden;
-  transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease;
-}
-.panel.left { border-right: 1px solid var(--rule); }
-
 @media (max-width: 720px) {
-  .top-nav { grid-template-columns: 1fr; gap: var(--s-3); }
   .view-switcher { justify-self: start; }
 }
 </style>
