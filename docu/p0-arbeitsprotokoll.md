@@ -906,13 +906,36 @@ Danach wurde der gescopte Backend-Lint auf einen weiteren low-risk Modulblock au
 - `cd backend && uv run ruff check app/api/runs.py app/services/graph_memory_updater.py app/utils/gpu_probe.py app/storage/search_service.py tests/test_status.py tests/test_logging.py tests/test_neo4j_resilience.py` → **bestanden**
 - `cd backend && uv run pytest tests/test_status.py tests/test_logging.py tests/test_neo4j_resilience.py` → **23/23 bestanden**
 
+### 9.25 Gemeinsamen Workspace-Brand-Link extrahiert
+Danach wurde die letzte naheliegende Header-Duplikation in den Workspace-Views beseitigt.
+
+**Neue Datei**
+- `frontend/src/layouts/WorkspaceBrandLink.vue`
+
+**Geänderte Dateien**
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+- Detailprotokoll aktualisiert: `docu/p0-workspace-layout-protokoll.md`
+
+**Umgesetzte Logik**
+- einheitlicher Brand-Link über alle Workspace-Screens
+- redundante Brand-Styles in den Views entfernt
+- Workspace-Shell weiter in kleine Layout-Primitives aufgeteilt
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. weitere Backend-Ruff-Cluster schrittweise aufnehmen
-2. gemeinsame Brand-/Header-Aktionen weiter normalisieren
-3. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
+2. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
+3. größere Frontend-Strukturthemen jenseits der Workspace-Shell angehen
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer

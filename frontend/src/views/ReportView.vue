@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step4Report from '../components/Step4Report.vue'
+import WorkspaceBrandLink from '../layouts/WorkspaceBrandLink.vue'
 import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
 import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
 import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
@@ -112,7 +113,9 @@ onMounted(loadReportData)
     <template #header>
       <WorkspaceHeader>
         <template #brand>
-          <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+          <WorkspaceBrandLink @navigate-home="router.push('/')">
+            {{ t('brand.name') }}
+          </WorkspaceBrandLink>
         </template>
 
         <template #center>
@@ -160,12 +163,4 @@ onMounted(loadReportData)
 </template>
 
 <style scoped>
-.brand-link {
-  font-family: var(--ff-serif);
-  font-weight: 500;
-  font-size: 22px;
-  letter-spacing: -0.02em;
-  cursor: pointer;
-  color: var(--ink-0);
-}
-.brand-link:hover { color: var(--accent); }</style>
+</style>

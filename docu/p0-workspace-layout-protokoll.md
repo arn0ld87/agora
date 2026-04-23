@@ -204,9 +204,32 @@ Nach der Vereinheitlichung des Mode-Switchers blieb in fast allen Workspace-View
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
-## 11. Nächster sinnvoller Schritt
+## 11. Sechster Workspace-Schritt — gemeinsamer Brand-Link extrahiert
+
+Nach dem Status-Block war noch eine letzte offensichtliche Header-Duplikatstelle übrig: derselbe klickbare Brand-Link in allen Workspace-Views.
+
+### 11.1 Neue Datei
+- `frontend/src/layouts/WorkspaceBrandLink.vue`
+
+### 11.2 Geänderte Dateien
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+
+### 11.3 Nutzen
+- einheitliches Brand-Link-Verhalten über alle Workspace-Screens
+- weniger redundante Stildefinitionen in den Views
+- Header-Shell weiter in eigenständige Primitives zerlegt
+
+### 11.4 Verifikation
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
+## 12. Nächster sinnvoller Schritt
 
 Nach diesem Shell-Cleanup sind die nächsten Kandidaten:
 - `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder entkoppeln
-- gemeinsame Brand-/Header-Aktionen weiter normalisieren
-- anschließend Backend-Ruff-Ausweitung als nächster großer Block
+- anschließend Backend-Ruff-Ausweitung weiterziehen
+- danach erst größere Frontend-Strukturthemen jenseits der Workspace-Shell angehen
