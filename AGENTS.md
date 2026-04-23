@@ -1,105 +1,187 @@
 # AGENTS.md
 
-This file provides guidance to Codex (and any other coding agent — Claude Code reads `CLAUDE.md`, which mirrors this) when working with code in this repository.
+This file guides Codex and every other coding agent working in this repo. `CLAUDE.md` is the sibling file for Claude Code and should stay materially in sync with this document.
 
-## Project
+## Projekt
 
-Agora is a fully local fork of MiroFish: a multi-agent swarm-intelligence simulator. Upload a document → extract a knowledge graph → spawn hundreds of personality-driven agents → simulate social-media reactions → generate a report. The fork replaces Zep Cloud with Neo4j and DashScope/OpenAI with Ollama (or any OpenAI-compatible endpoint).
+Agora (**v0.4.1 alpha**) ist ein lokal-first-Fork von MiroFish: Dokument hochladen → Wissensgraph extrahieren → personalisierte Agenten spawnen → Social-Media-Reaktionen simulieren → Report erzeugen. Der Fork ersetzt Zep Cloud durch Neo4j und DashScope/OpenAI durch Ollama (oder einen beliebigen OpenAI-kompatiblen Endpoint).
 
-Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package managers: `uv` for backend, `npm` for frontend.
+Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package-Manager: `uv` fürs Backend, `npm` fürs Frontend. Aktuell produktiv gefahren mit LLM `qwen3-coder-next:cloud` und Embedding `qwen3-embedding:4b` (2560 dim, siehe Gotchas).
 
-## Expected tool usage (proactive — don't wait to be asked)
+## Dokumentationsquellen
 
-The owner of this repo expects agents to reach for verification tooling **without being prompted**:
+- **`docu/`** ist die verbindliche Ablage für laufende Projekt-Doku: Audit, Zielarchitektur, Refactoring-Backlog, P0-Protokolle, Verlauf.
+- **`docs/README.md`** ist nur noch ein Redirect-Hinweis auf `docu/`.
+- **`CHANGELOG.md`** am Repo-Root führt die Release-Notes.
 
-- **context7** — query current docs whenever touching a library/framework/SDK/CLI (Flask, Vue 3, Vite, Neo4j 5.18 driver, OASIS/CAMEL, Ollama, OpenAI-compatible chat/tool-call APIs, pytest, uv, etc.) before writing or editing code. Do it even for "well-known" APIs — model training data lags real releases.
-- **GitHub search** (via `gh`, WebFetch, or WebSearch scoped to `github.com`) — when a third-party dependency misbehaves (OASIS edge cases, Neo4j relationship vector search, Ollama tool-call quirks, Qwen/GPT-OSS reasoning-block handling), check upstream issues/PRs for an existing fix before rolling your own workaround.
-- **sequential-thinking** — engage automatically for: multi-file refactors, pipeline-spanning changes (graph → env → simulation → report), debugging across the Flask ↔ OASIS subprocess boundary, or any task where the solution isn't obvious after a first read. No need for the user to say "think step by step."
+Wichtige Einstiegsdateien:
+- `docu/README.md`
+- `docu/target-architecture.md`
+- `docu/refactoring-backlog-priorisiert.md`
+- `docu/p0-arbeitsprotokoll.md`
+- `CHANGELOG.md`
 
-Treat these as defaults. If skipping one, briefly note why.
+## Erwartete Tool-Nutzung (proaktiv — nicht erst auf Anfrage)
+
+Der Repo-Eigentümer erwartet, dass Agents **ohne Aufforderung** zu Verifikations-Tooling greifen:
+
+- **context7** — bei jeder Task, die Bibliotheken, Frameworks, SDKs, CLIs oder Cloud-Services berührt (Flask, Vue 3, Vite, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …) aktuelle Docs prüfen, bevor Code entsteht oder geändert wird.
+- **GitHub-Suche** — bei Debugging von Third-Party-Verhalten (OASIS-Eigenheiten, Neo4j-Vector-Search-Kanten, Ollama-Tool-Call-Payloads, Qwen/GPT-OSS-Reasoning-Blöcke) zuerst Upstream-Issues/PRs prüfen.
+- **sequential-thinking** — automatisch für Multi-File-Refactors, pipelinespannende Änderungen (graph → env → simulation → report), Debugging über die Flask↔OASIS-Subprozess-Grenze oder Tasks mit unklarem Lösungspfad.
+
+Defaults, keine Eskalation. Wer eins davon überspringt, notiert kurz warum.
 
 ## Commands
 
-All commands run from repo root unless stated otherwise.
+Alle Commands laufen vom Repo-Root.
 
 ```bash
 # First-time install (root npm + frontend npm + backend uv sync)
 npm run setup:all
 
-# Dev — runs backend (uv run python run.py) and frontend (vite) concurrently
+# Dev — backend (uv run python run.py) und frontend (vite) parallel
 npm run dev
 
-# Individual processes
-npm run backend        # Flask on :5001
-npm run frontend       # Vite on :5173 (proxies /api → :5001)
-npm run build          # Production frontend bundle
+# Einzelprozesse
+npm run backend        # Flask auf :5001
+npm run frontend       # Vite auf :5173 (proxy /api → :5001)
+npm run build          # Production-Frontend-Bundle
 
-# Backend tests (pytest, optional dev group)
-cd backend && uv run pytest
+# Quality-Gate
+npm run check
+
+# Einzel-Linter / Tests
+npm run lint:backend   # ruff, gescopter Rollout
+npm run lint:frontend
+npm run test:backend   # = cd backend && uv run pytest
 cd backend && uv run pytest path/to/test_file.py::test_name
+cd backend && uv run python -m compileall app scripts
 ```
 
-Docker (full stack incl. Neo4j):
+`npm run lint:backend` ist weiterhin ein **gescopter Rollout** auf refaktorierte/stabilisierte Dateien. Strategischer Zielzustand bleibt „default strict + zentrale Excludes“, aber Stand v0.4.1 ist noch nicht Full-Repo-Ruff-clean.
+
+Docker (Full Stack inkl. Neo4j):
 
 ```bash
 docker compose up -d
-docker compose build agora && docker compose up -d --force-recreate --no-deps agora  # after code/env changes
+docker compose build agora && docker compose up -d --force-recreate --no-deps agora
 docker logs -f agora
 ```
 
-Neo4j Browser: http://localhost:7474 · Backend health: http://localhost:5001/health
+Neo4j Browser: http://localhost:7474  
+Backend Health: http://localhost:5001/health  
+Status: http://localhost:5001/api/status
 
-## Configuration
+## Konfiguration
 
-All runtime config flows through `.env` at repo root, loaded by `backend/app/config.py`. Required: `LLM_API_KEY` (any non-empty string for Ollama, e.g. `ollama`), `NEO4J_URI`, `NEO4J_PASSWORD`. Important non-obvious knobs:
+Alles läuft über `.env` am Repo-Root, geladen von `backend/app/config.py`.
 
-- `LLM_MODEL_NAME` — defaults to `qwen2.5:32b`. For Ollama Cloud, `qwen3-coder-next:cloud` is the recommended model (see `docs/graphrag-speedup.md`).
-- `OLLAMA_THINKING=false` — strips reasoning blocks for Qwen3/GPT-OSS/DeepSeek-R1 (handled in `utils/llm_client.py`).
-- `LLM_DISABLE_JSON_MODE=true` — disables `response_format=json_object`; markdown fences are stripped in `chat_json()`.
-- `GRAPH_CHUNK_SIZE=1500`, `GRAPH_CHUNK_OVERLAP=150`, `GRAPH_PARALLEL_CHUNKS=4` — graph-build performance (sweet spot for Ollama Cloud).
-- `REPORT_LANGUAGE=German` — output language for ReportAgent.
-- `TIME_PROFILE=dach_default` — DACH / Europe-Berlin social activity timing defaults.
-- `ENABLE_AGENT_TOOLS=false` — experimental OASIS agent tool-use is opt-in; enabling it adds LLM calls and latency.
+Pflicht: `LLM_API_KEY`, `NEO4J_URI`, `NEO4J_PASSWORD`, `SECRET_KEY` (außer `FLASK_DEBUG=true`).
 
-## Architecture
+Wichtige nicht-offensichtliche Knöpfe:
 
-### Backend layering (DI via `app.extensions`, no globals)
+- **`EMBEDDING_MODEL` ↔ `VECTOR_DIM` müssen zusammenpassen.**
+  - `nomic-embed-text` → 768
+  - `embeddinggemma:300m` → 768
+  - `qwen3-embedding:4b` → 2560
+  - `qwen3-embedding:8b` → 4096
+- Das Backend validiert die Embedding-Konfiguration jetzt **fail-fast beim Startup** inkl. echter Probe gegen das Embedding-Backend.
+- `LLM_MODEL_NAME` — Default `qwen2.5:32b`; für Ollama Cloud ist `qwen3-coder-next:cloud` empfohlen.
+- `OLLAMA_THINKING=false` — strippt Reasoning-Blöcke bei Qwen3/GPT-OSS/DeepSeek-R1.
+- `LLM_DISABLE_JSON_MODE=true` — deaktiviert `response_format=json_object`; Markdown-Fences werden in `chat_json()` gestrippt.
+- `GRAPH_CHUNK_SIZE=1500`, `GRAPH_CHUNK_OVERLAP=150`, `GRAPH_PARALLEL_CHUNKS=4` — Graph-Build-Tuning.
+- `REPORT_LANGUAGE=German`, `AGENT_LANGUAGE=de`, `TIME_PROFILE=dach_default` — DACH-Defaults.
+- `ENABLE_AGENT_TOOLS=false` — experimentelles OASIS-Tool-Use, opt-in.
+- `AGORA_AUTH_TOKEN` — optionaler API-Token-Schutz für `/api/*`.
+- `AGORA_EXTRA_ORIGINS` / `AGORA_CORS_ALLOW_ALL=true` — CORS ist standardmäßig auf `localhost:5173` / `127.0.0.1:5173` gelockt.
+- `AGORA_LOG_FORMAT=text|json` — opt-in JSON-Logs.
+- `TAVILY_API_KEY` + `ENABLE_WEB_TOOLS=true` — optionaler Live-Web-Kontext für den ReportAgent.
 
-`Flask app (create_app)` → registers three blueprints under `/api/{graph,simulation,report}` and stores a single `Neo4jStorage` instance in `app.extensions['neo4j_storage']`. Endpoints pull the storage from there; services receive it via constructor.
+## Architektur
 
+### Backend-Schichten (DI über `app.extensions`, keine Globals)
+
+`Flask create_app` registriert fünf Blueprints und legt die einzige `Neo4jStorage`-Instanz in `app.extensions['neo4j_storage']` ab. Ein Token-Guard (`install_blueprint_guard`) hängt sich als `before_request` in jedes Blueprint. Schlägt `Neo4jStorage()` fehl, wird `None` abgelegt und Endpunkte antworten kontrolliert.
+
+```text
+api/        thin HTTP-Layer — graph.py, report.py, runs.py, status.py
+            plus Simulation-Slice:
+              simulation.py (Kompatibilitätsmodul)
+              simulation_common.py
+              simulation_lifecycle.py
+              simulation_entities.py
+              simulation_prepare.py
+              simulation_profiles.py
+              simulation_run.py
+              simulation_interviews.py
+              simulation_history.py
+services/   graph_builder, simulation_manager, simulation_runner,
+            report_agent, graph_tools, oasis_profile_generator,
+            simulation_config_generator, simulation_ipc,
+            run_registry, entity_reader, web_tools, …
+storage/    GraphStorage → Neo4jStorage, EmbeddingService,
+            NERExtractor, SearchService, neo4j_schema
+utils/      llm_client, file_parser, logger, retry, auth,
+            gpu_probe, validation, artifact_locator, json_io
+models/     Dataclasses (Project, Task)
 ```
-api/        thin HTTP layer (graph.py, simulation.py, report.py)
-services/   business logic — graph_builder, simulation_manager,
-            simulation_runner (subprocess), report_agent, etc.
-storage/    GraphStorage abstract → Neo4jStorage impl,
-            EmbeddingService (Ollama), NERExtractor (LLM), SearchService (hybrid)
-utils/      llm_client (OpenAI-compatible wrapper with Ollama tweaks),
-            file_parser (PDF/MD/TXT), logger, retry
-models/     dataclasses (Project, Task)
-```
 
-`GraphStorage` is the swap point — replace `Neo4jStorage` and the rest of the app keeps working. `SearchService` uses hybrid scoring `0.7 * vector + 0.3 * BM25`; vector dim = 768 (`nomic-embed-text`).
+`SearchService` verwendet hybrides Scoring `0.7 * vector + 0.3 * BM25`; die Vektor-Dimension ist `Config.VECTOR_DIM`.
 
-### The four-stage pipeline
+### Die Vier-Stufen-Pipeline
 
-1. **Graph build** (`services/graph_builder.py`) — chunk document → parallel `ThreadPoolExecutor` of `storage.add_text` calls (LLM NER/RE per chunk → embeddings → Neo4j). Parallelism gated by `GRAPH_PARALLEL_CHUNKS`.
-2. **Env setup** (`services/oasis_profile_generator.py`, `simulation_config_generator.py`) — generates persona JSON for OASIS. Persona/config is **frozen** into `uploads/simulations/<sim_id>/simulation_config.json`; runtime `.env` changes do NOT propagate to a prepared simulation (see speedup doc for the patch recipe).
-3. **Simulation** (`services/simulation_runner.py`, `scripts/run_*_simulation.py`) — OASIS runs in a **separate subprocess** (Twitter/Reddit/parallel scripts under `backend/scripts/`). IPC via `simulation_ipc.py` and `run_state.json` files. `SimulationRunner.register_cleanup()` is wired into Flask startup to kill orphans on shutdown.
-4. **Report** (`services/report_agent.py`) — tool-using agent that queries `GraphToolsService` (graph search, agent interview, panorama). Loop limits: `REPORT_AGENT_MAX_TOOL_CALLS`, `REPORT_AGENT_MAX_REFLECTION_ROUNDS`.
+1. **Graph Build** — Dokument chunken → parallele `storage.add_text`-Aufrufe (NER/RE → Embeddings → Neo4j).
+2. **Env Setup** — Persona- und Simulation-Config generieren; Konfiguration wird in `uploads/simulations/<sim_id>/simulation_config.json` eingefroren.
+3. **Simulation** — OASIS läuft als separater Subprozess; IPC über `simulation_ipc.py` + `run_state.json`; `SimulationRunner.register_cleanup()` killt Orphans beim Shutdown.
+4. **Report** — `ReportAgent` nutzt `GraphToolsService` und optional `WebTools`; Loop-Limits via `REPORT_AGENT_MAX_TOOL_CALLS` und `REPORT_AGENT_MAX_REFLECTION_ROUNDS`.
+
+### Operability (v0.4.1)
+
+- `GET /api/status` liefert `backend`, `neo4j`, `ollama`, `disk`, `gpu`, `timestamp`.
+- `Neo4jStorage` nutzt `neo4j_call_with_retry` (Exponential Backoff + Jitter, max 3 Retries bei `ServiceUnavailable`/`SessionExpired`/`TransientError`).
+- Jeder Request bekommt eine 8-Zeichen-Request-ID.
+- Langläufer laufen über `RunRegistry` und `SimulationRunner`.
+- JSON-basierte Polling-Pfade wurden gehärtet: atomische JSON-Writes + defensive Reads (`utils/json_io.py`) für Report- und zentrale Simulation-Artefakte.
 
 ### Frontend (Vue 3 + Vite)
 
-`frontend/src/views/` contains one component per pipeline stage (`Process`, `SimulationView`, `SimulationRunView`, `ReportView`, `InteractionView`). API helpers in `src/api/` mirror the three blueprints. Vite dev server proxies `/api` → `localhost:5001`, so the frontend code uses relative `/api/...` paths. Pinia is **not** used — state lives in a single `src/store/pendingUpload.js` module.
+- `frontend/src/views/`: `Home.vue`, `MainView.vue`, `Process.vue`, `SimulationView.vue`, `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`
+- `frontend/src/components/`: `GraphPanel.vue`, `Step[1-5]*.vue`, `HistoryDatabase.vue`, `AppFooter.vue`
+- `frontend/src/components/graph/`: `GraphDetailPanel.vue`, `GraphLegend.vue`, `graphPanelData.js`, `graphPanelUtils.js`, `graphPanelGeometry.js`
+- `frontend/src/components/ui/`: `Btn`, `Card`, `Badge`, `Field`, `Hairline`, `Kicker`, `SectionHead`, `Select`
+- `frontend/src/api/`: `index.js`, `graph.js`, `simulation.js`, `report.js`, `runs.js`
+- `frontend/src/composables/usePolling.js` zentralisiert Polling-Grundlogik für Langläufer.
+- **Pinia wird nicht verwendet.** Persistenter Zustand lebt noch in `src/store/pendingUpload.js`.
 
-## Conventions & gotchas
+## Conventions & Gotchas
 
-- Neo4j must be **5.18+** for relationship vector search (pinned in `docker-compose.yml`; do not downgrade).
-- The OASIS subprocess inherits env from the Python process, so backend env updates take effect only after a backend restart, **not** a Flask reload.
-- File uploads land in `backend/uploads/`; simulations under `backend/uploads/simulations/<sim_id>/`. The Docker volume mounts only `backend/uploads`.
-- Backend allowed extensions: `pdf`, `md`, `txt`, `markdown`. `MAX_CONTENT_LENGTH = 50 MB`.
-- Some upstream Chinese references may remain in attribution or migration inventories, but runtime prompts/defaults should not assume non-DACH user behavior.
+- Neo4j **muss 5.18+** sein.
+- Backend-Env-Änderungen wirken erst nach **Backend-Restart**, nicht nach Flask-Reload.
+- Uploads landen in `backend/uploads/`; Simulationen in `backend/uploads/simulations/<sim_id>/`.
+- Erlaubte Upload-Extensions: `pdf`, `md`, `txt`, `markdown`. `MAX_CONTENT_LENGTH = 50 MB`.
+- Secrets werden nicht in `simulation_config.json` oder andere persistierte Artefakte serialisiert.
+- Upstream-Chinesisch in Attribution/Migrations-Inventaren kann bleiben; Runtime-Defaults gehen von DACH aus.
 
-## Reference
+## Laufendes Refactoring
 
-- `docs/graphrag-speedup.md` — concrete recipe for getting graph-build under one minute against Ollama Cloud (model choice, thinking-flag, JSON mode, chunk size/parallelism, plus Docker recreate footguns and the simulation-config patch trick). Read this before touching `graph_builder.py`, `llm_client.py`, or anything that calls Ollama.
-- `docs/agent-tools-integration.md` — how OASIS agents are wired to `GraphToolsService` / `WebTools` when `ENABLE_AGENT_TOOLS=true`.
+Das Repo steckt mitten in einem phasierten Umbau (Audit: `docu/2026-04-22-refactoring-produkt-audit.md`; Zielarchitektur: `docu/target-architecture.md`; Backlog: `docu/refactoring-backlog-priorisiert.md`).
+
+Stand P0/P0.5:
+- Quality-Gates (`npm run check`, CI, **70/70 Backend-Tests grün** — Stand 2026-04-23)
+- Simulation-API-Split abgeschlossen
+- GraphPanel weiter modularisiert
+- Embedding-Konfiguration fail-fast gehärtet
+- Polling-Composable eingeführt
+- JSON-/Polling-Robustheit für Report- und Simulation-Artefakte verbessert
+
+Wirklich offen bleiben vor allem:
+- gemeinsames Workspace-Layout
+- weiterer Abbau der Frontend-Warnungen
+- schrittweise Ausweitung von Ruff Richtung Default-strict
+
+## Referenz
+
+- `docu/graphrag-speedup.md` — Ollama-Cloud-Tuning / Graph-Build-Speedup
+- `docu/agent-tools-integration.md` — OASIS-Agenten + `GraphToolsService` / `WebTools`
+- `docu/security-hardening.md` — aktuelle Security-Baseline
+- `docu/target-architecture.md` — Soll-Bild nach dem Refactoring
