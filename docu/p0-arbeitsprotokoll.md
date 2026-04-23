@@ -931,6 +931,27 @@ Danach wurde die letzte naheliegende Header-Duplikation in den Workspace-Views b
 
 ---
 
+### 9.26 Frontend-Build-Hygiene um `pendingUpload` bereinigt
+Danach wurde der letzte verbleibende Frontend-Build-Hinweis im aktuellen Hauptpfad entfernt.
+
+**Neue Datei**
+- `docu/p0-frontend-build-hygiene-protokoll.md`
+
+**Geänderte Dateien**
+- `frontend/src/views/Home.vue`
+
+**Umgesetzte Logik**
+- `setPendingUpload` in `Home.vue` von dynamischem Import auf statischen Import umgestellt
+- gemischte statisch/dynamisch-Importstrategie für `frontend/src/store/pendingUpload.js` beseitigt
+- Home→Process-Verhalten bewusst unverändert gelassen
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden, pendingUpload-Warnung entfernt**
+- `npm run check` → **bestanden (88 Backend-Tests grün)**
+
+---
+
 ## 10. Offene Punkte nach diesem Stand
 
 1. weitere Backend-Ruff-Cluster schrittweise aufnehmen

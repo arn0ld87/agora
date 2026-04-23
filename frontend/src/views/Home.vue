@@ -10,6 +10,7 @@ import Kicker from '../components/ui/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
 import { getAvailableModels } from '../api/simulation.js'
+import { setPendingUpload } from '../store/pendingUpload'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -122,7 +123,6 @@ async function startSimulation() {
     }
     localStorage.setItem(STORAGE_LANG, language.value)
 
-    const { setPendingUpload } = await import('../store/pendingUpload.js')
     setPendingUpload(files.value, simulationPrompt.value)
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (err) {
