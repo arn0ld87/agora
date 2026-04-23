@@ -19,11 +19,21 @@ from datetime import datetime
 from enum import Enum
 from queue import Queue
 
-from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
+from .artifact_store import resolve_default_store
 from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient
+
+
+def _store():
+    """Return the active SimulationArtifactStore (Issue #13).
+
+    SimulationRunner is a classmethod-only orchestrator that runs both inside
+    Flask request handlers and inside the daemonic cleanup hook (no app context).
+    Resolving lazily keeps both paths working without changing the call surface.
+    """
+    return resolve_default_store()
 
 logger = get_logger('agora.simulation_runner')
 
@@ -291,12 +301,12 @@ class SimulationRunner:
     @classmethod
     def _load_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
         """Load run state from file"""
-        state_file = os.path.join(cls.RUN_STATE_DIR, simulation_id, "run_state.json")
-        if not os.path.exists(state_file):
+        store = _store()
+        if not store.exists(simulation_id, "run_state"):
             return None
-        
+
         try:
-            data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+            data = store.read_json(simulation_id, "run_state", default=None)
             if not data:
                 return None
 
@@ -349,13 +359,11 @@ class SimulationRunner:
     def _save_run_state(cls, state: SimulationRunState):
         """Save run state to file"""
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
-        os.makedirs(sim_dir, exist_ok=True)
-        state_file = os.path.join(sim_dir, "run_state.json")
-        
-        data = state.to_detail_dict()
+        os.makedirs(sim_dir, exist_ok=True)  # keep dir for log-pipe / shutil consumers
 
-        write_json_atomic(state_file, data)
-        
+        data = state.to_detail_dict()
+        _store().write_json(state.simulation_id, "run_state", data)
+
         cls._run_states[state.simulation_id] = state
         try:
             registry = RunRegistry()
@@ -368,7 +376,7 @@ class SimulationRunner:
                     message=f"Runner status: {state.runner_status.value}",
                     artifacts={
                         "simulation": {
-                            "run_state": state_file,
+                            "run_state": os.path.join(cls.RUN_STATE_DIR, state.simulation_id, "run_state.json"),
                             "simulation_log": os.path.join(cls.RUN_STATE_DIR, state.simulation_id, "simulation.log"),
                         }
                     },
@@ -406,21 +414,22 @@ class SimulationRunner:
         
         # Load simulation config
         sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        config_path = os.path.join(sim_dir, "simulation_config.json")
+        store = _store()
 
-        if not os.path.exists(config_path):
+        if not store.exists(simulation_id, "simulation_config"):
             raise ValueError("Simulation config does not exist, call /prepare endpoint first")
 
         # Reset control_state.json so a previous paused/stop_requested flag from a
         # killed run does not silently freeze the new subprocess on round 0.
         try:
             from .simulation_ipc import write_control_state
-            write_control_state(sim_dir, paused=False, stop_requested=False)
+            write_control_state(simulation_id, paused=False, stop_requested=False)
         except Exception as ctrl_err:
             logger.warning(f"Could not reset control_state.json before start: {ctrl_err}")
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+
+        config = store.read_json(simulation_id, "simulation_config", default=None)
+        if not config:
+            raise ValueError("Simulation config is unreadable")
         
         # Initialize run state
         time_config = config.get("time_config", {})
@@ -490,7 +499,10 @@ class SimulationRunner:
             #   twitter/actions.jsonl - Twitter action log
             #   reddit/actions.jsonl  - Reddit action log
             #   simulation.log        - Main process log
-            
+
+            # OASIS subprocess scripts expect a real filesystem path for --config;
+            # the artifact store is Flask-side only.
+            config_path = os.path.join(sim_dir, "simulation_config.json")
             cmd = [
                 sys.executable,  # Python interpreter
                 script_path,
@@ -1326,18 +1338,16 @@ class SimulationRunner:
                     
                     # Also update state.json, set status to stopped
                     try:
-                        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-                        state_file = os.path.join(sim_dir, "state.json")
-                        logger.info(f"Attempting to update state.json: {state_file}")
-                        if os.path.exists(state_file):
-                            state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+                        store = _store()
+                        if store.exists(simulation_id, "state"):
+                            state_data = store.read_json(simulation_id, "state", default=None)
                             if state_data:
                                 state_data['status'] = 'stopped'
                                 state_data['updated_at'] = datetime.now().isoformat()
-                                write_json_atomic(state_file, state_data)
+                                store.write_json(simulation_id, "state", state_data)
                                 logger.info(f"Updated state.json status to stopped: {simulation_id}")
                         else:
-                            logger.warning(f"state.json does not exist: {state_file}")
+                            logger.warning(f"state.json does not exist for {simulation_id}")
                     except Exception as state_err:
                         logger.warning(f"Failed to update state.json: {simulation_id}, error={state_err}")
                         
@@ -1482,30 +1492,23 @@ class SimulationRunner:
         Returns:
             Status details dict, contains status, twitter_available, reddit_available, timestamp
         """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        status_file = os.path.join(sim_dir, "env_status.json")
-        
         default_status = {
             "status": "stopped",
             "twitter_available": False,
             "reddit_available": False,
             "timestamp": None
         }
-        
-        if not os.path.exists(status_file):
+
+        store = _store()
+        status = store.read_json(simulation_id, "env_status", default=None)
+        if not status:
             return default_status
-        
-        try:
-            with open(status_file, 'r', encoding='utf-8') as f:
-                status = json.load(f)
-            return {
-                "status": status.get("status", "stopped"),
-                "twitter_available": status.get("twitter_available", False),
-                "reddit_available": status.get("reddit_available", False),
-                "timestamp": status.get("timestamp")
-            }
-        except (json.JSONDecodeError, OSError):
-            return default_status
+        return {
+            "status": status.get("status", "stopped"),
+            "twitter_available": status.get("twitter_available", False),
+            "reddit_available": status.get("reddit_available", False),
+            "timestamp": status.get("timestamp")
+        }
 
     @classmethod
     def interview_agent(
@@ -1660,12 +1663,13 @@ class SimulationRunner:
             raise ValueError(f"Simulation does not exist: {simulation_id}")
 
         # Get all Agent information from config file
-        config_path = os.path.join(sim_dir, "simulation_config.json")
-        if not os.path.exists(config_path):
+        store = _store()
+        if not store.exists(simulation_id, "simulation_config"):
             raise ValueError(f"Simulation config does not exist: {simulation_id}")
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        config = store.read_json(simulation_id, "simulation_config", default=None)
+        if not config:
+            raise ValueError(f"Simulation config is unreadable: {simulation_id}")
 
         agent_configs = config.get("agent_configs", [])
         if not agent_configs:

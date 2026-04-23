@@ -97,6 +97,13 @@ def create_app(config_class=Config):
         # Store None so endpoints can return 503 gracefully
         app.extensions['neo4j_storage'] = None
 
+    # --- Initialize SimulationArtifactStore singleton (DI via app.extensions) ---
+    # Issue #13: domain layer talks to JSON artifacts only through this port.
+    from .services.artifact_store import LocalFilesystemArtifactStore
+    app.extensions['artifact_store'] = LocalFilesystemArtifactStore()
+    if should_log_startup:
+        logger.info("SimulationArtifactStore initialized (LocalFilesystem)")
+
     # Register simulation process cleanup function (ensure all simulation processes terminate on server shutdown)
     from .services.simulation_runner import SimulationRunner
     SimulationRunner.register_cleanup()

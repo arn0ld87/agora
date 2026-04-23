@@ -2,6 +2,7 @@
 History, standalone profile generation, and database-query routes split from the main module.
 """
 
+import json
 import os
 import sqlite3
 from typing import Optional
@@ -16,7 +17,6 @@ from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
-from ..utils.json_io import read_json_file
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
@@ -36,7 +36,15 @@ def _get_report_id_for_simulation(simulation_id: str) -> Optional[str]:
             if not os.path.exists(meta_file):
                 continue
 
-            meta = read_json_file(meta_file, default=None, logger=logger, description=meta_file)
+            # Reports live outside the SimulationArtifactStore namespace
+            # (separate ReportStore on the roadmap). Inline JSON read keeps
+            # services-/api-layer free of json_io imports.
+            try:
+                with open(meta_file, "r", encoding="utf-8") as handle:
+                    meta = json.load(handle)
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning(f"Skipping unreadable report meta {meta_file}: {exc}")
+                continue
             if meta and meta.get('simulation_id') == simulation_id:
                 matching_reports.append({
                     'report_id': meta.get('report_id'),

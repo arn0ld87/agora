@@ -12,10 +12,10 @@ from ..config import Config
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.simulation_manager import SimulationManager, SimulationStatus
-from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import (
+    get_artifact_store,
     get_simulation_storage,
     logger,
     run_registry,
@@ -31,21 +31,35 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
     if not os.path.exists(simulation_dir):
         return False, {"reason": "Simulation directory does not exist"}
 
-    required_files = [
-        "state.json",
-        "simulation_config.json",
-        "reddit_profiles.json",
-        "twitter_profiles.csv",
-    ]
+    store = get_artifact_store()
+
+    # JSON-Artefakte gehen über den Store; CSV (twitter_profiles) bleibt FS-direkt
+    # (out of scope für Issue #13).
+    json_artifacts = {
+        "state.json": ("state", lambda: store.exists(simulation_id, "state")),
+        "simulation_config.json": (
+            "simulation_config",
+            lambda: store.exists(simulation_id, "simulation_config"),
+        ),
+        "reddit_profiles.json": (
+            "reddit_profiles",
+            lambda: store.exists(simulation_id, "reddit_profiles"),
+        ),
+    }
 
     existing_files = []
     missing_files = []
-    for filename in required_files:
-        file_path = os.path.join(simulation_dir, filename)
-        if os.path.exists(file_path):
+    for filename, (_, exists_fn) in json_artifacts.items():
+        if exists_fn():
             existing_files.append(filename)
         else:
             missing_files.append(filename)
+
+    twitter_csv = os.path.join(simulation_dir, "twitter_profiles.csv")
+    if os.path.exists(twitter_csv):
+        existing_files.append("twitter_profiles.csv")
+    else:
+        missing_files.append("twitter_profiles.csv")
 
     if missing_files:
         return False, {
@@ -54,9 +68,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             "existing_files": existing_files,
         }
 
-    state_file = os.path.join(simulation_dir, "state.json")
     try:
-        state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+        state_data = store.read_json(simulation_id, "state", default=None)
         if not state_data:
             return False, {"reason": "State file is unreadable or temporarily incomplete"}
 
@@ -68,11 +81,8 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
         prepared_statuses = ["ready", "preparing", "running", "completed", "stopped", "failed"]
         if status in prepared_statuses and config_generated:
-            profiles_file = os.path.join(simulation_dir, "reddit_profiles.json")
-            profiles_count = 0
-            if os.path.exists(profiles_file):
-                profiles_data = read_json_file(profiles_file, default=[], logger=logger, description=profiles_file) or []
-                profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
+            profiles_data = store.read_json(simulation_id, "reddit_profiles", default=[]) or []
+            profiles_count = len(profiles_data) if isinstance(profiles_data, list) else 0
 
             if status == "preparing":
                 try:
@@ -80,7 +90,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
                     state_data["status"] = "ready"
                     state_data["updated_at"] = datetime.now().isoformat()
-                    write_json_atomic(state_file, state_data)
+                    store.write_json(simulation_id, "state", state_data)
                     logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
                     status = "ready"
                 except Exception as exc:

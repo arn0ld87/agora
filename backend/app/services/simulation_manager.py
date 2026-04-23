@@ -6,6 +6,7 @@ Use preset scripts + LLM intelligent generation of config parameters
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from typing import Dict, Any, List, Optional
@@ -14,9 +15,9 @@ from datetime import datetime
 from enum import Enum
 
 from ..config import Config
-from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
 from ..utils.artifact_locator import ArtifactLocator
+from .artifact_store import SimulationArtifactStore, resolve_default_store
 from .entity_reader import EntityReader
 from .oasis_profile_generator import OasisProfileGenerator
 from .simulation_config_generator import SimulationConfigGenerator
@@ -146,12 +147,17 @@ class SimulationManager:
         '../../uploads/simulations'
     )
     
-    def __init__(self):
+    def __init__(self, store: Optional[SimulationArtifactStore] = None):
         # Ensure directory exists
         os.makedirs(self.SIMULATION_DATA_DIR, exist_ok=True)
-        
+
         # In-memory simulation state cache
         self._simulations: Dict[str, SimulationState] = {}
+
+        # SimulationArtifactStore (Issue #13). Falls keiner injiziert wird,
+        # ziehen wir den App-weiten Store; outside Flask context fällt der
+        # Resolver auf einen Default-LocalAdapter zurück.
+        self._store = store or resolve_default_store()
     
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """Get simulation data directory"""
@@ -161,27 +167,28 @@ class SimulationManager:
     
     def _save_simulation_state(self, state: SimulationState):
         """Save simulation state to file"""
-        sim_dir = self._get_simulation_dir(state.simulation_id)
-        state_file = os.path.join(sim_dir, "state.json")
-        
-        state.updated_at = datetime.now().isoformat()
+        # Ensure the on-disk directory exists for non-store consumers (e.g. profile
+        # generator writes via filesystem path); the store itself also creates it.
+        self._get_simulation_dir(state.simulation_id)
 
-        write_json_atomic(state_file, state.to_dict())
-        
+        state.updated_at = datetime.now().isoformat()
+        self._store.write_json(state.simulation_id, "state", state.to_dict())
+
         self._simulations[state.simulation_id] = state
-    
+
     def _load_simulation_state(self, simulation_id: str) -> Optional[SimulationState]:
         """Load simulation state from file"""
         if simulation_id in self._simulations:
             return self._simulations[simulation_id]
-        
-        sim_dir = self._get_simulation_dir(simulation_id)
-        state_file = os.path.join(sim_dir, "state.json")
-        
-        if not os.path.exists(state_file):
+
+        # Touch the directory so list_simulations + downstream FS users keep working
+        # after a fresh install where only state.json exists in the store.
+        self._get_simulation_dir(simulation_id)
+
+        if not self._store.exists(simulation_id, "state"):
             return None
 
-        data = read_json_file(state_file, default=None, logger=logger, description=state_file)
+        data = self._store.read_json(simulation_id, "state", default=None)
         if not data:
             return None
         
@@ -468,10 +475,12 @@ class SimulationManager:
                     total=3
                 )
             
-            # Save config files
-            config_path = os.path.join(sim_dir, "simulation_config.json")
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write(sim_params.to_json())
+            # Save config files (atomic via store — fixes prior non-atomic write).
+            self._store.write_json(
+                simulation_id,
+                "simulation_config",
+                json.loads(sim_params.to_json()),
+            )
             
             state.config_generated = True
             state.config_reasoning = sim_params.generation_reasoning
@@ -528,10 +537,9 @@ class SimulationManager:
         return simulations
 
     def get_simulation_config(self, simulation_id: str) -> Optional[Dict[str, Any]]:
-        config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
-        if not os.path.exists(config_path):
+        if not self._store.exists(simulation_id, "simulation_config"):
             return None
-        return read_json_file(config_path, default=None, logger=logger, description=config_path)
+        return self._store.read_json(simulation_id, "simulation_config", default=None)
 
     def list_branches(self, simulation_id: str) -> List[SimulationState]:
         source = self.get_simulation(simulation_id)
@@ -577,11 +585,10 @@ class SimulationManager:
             raise ValueError("Only prepared simulations can be branched")
 
         source_dir = self._get_simulation_dir(simulation_id)
-        config_path = ArtifactLocator.simulation_file(simulation_id, "simulation_config.json")
-        if not os.path.exists(config_path):
+        if not self._store.exists(simulation_id, "simulation_config"):
             raise ValueError("Prepared simulation config not found")
 
-        config = read_json_file(config_path, default=None, logger=logger, description=config_path)
+        config = self._store.read_json(simulation_id, "simulation_config", default=None)
         if not config:
             raise ValueError("Prepared simulation config is unreadable")
 
@@ -625,7 +632,7 @@ class SimulationManager:
         config["enable_twitter"] = enable_twitter
         config["enable_reddit"] = enable_reddit
 
-        write_json_atomic(os.path.join(branch_dir, "simulation_config.json"), config)
+        self._store.write_json(branch.simulation_id, "simulation_config", config)
 
         persona_removals = set(overrides.get("persona_removals") or [])
         persona_additions = overrides.get("persona_additions") or []
@@ -638,7 +645,9 @@ class SimulationManager:
                     shutil.copy2(src, dst)
 
             if persona_removals or persona_additions:
-                self._apply_persona_overrides(branch_dir, persona_removals, persona_additions)
+                self._apply_persona_overrides(
+                    branch.simulation_id, branch_dir, persona_removals, persona_additions
+                )
 
         if copy_report_artifacts:
             reports_dir = os.path.join(Config.UPLOAD_FOLDER, "reports")
@@ -647,10 +656,16 @@ class SimulationManager:
                     meta_path = os.path.join(reports_dir, report_folder, "meta.json")
                     if not os.path.exists(meta_path):
                         continue
-                    report_meta = read_json_file(meta_path, default=None, logger=logger, description=meta_path)
-                    if not report_meta:
+                    # Reports live outside the SimulationArtifactStore namespace
+                    # (separate ReportStore is on the roadmap). Inline JSON read
+                    # is the explicit boundary; no json_io leak into services/.
+                    try:
+                        with open(meta_path, "r", encoding="utf-8") as handle:
+                            report_meta = json.load(handle)
+                    except (json.JSONDecodeError, OSError) as exc:
+                        logger.warning(f"Skipping unreadable report meta {meta_path}: {exc}")
                         continue
-                    if report_meta.get("simulation_id") != simulation_id:
+                    if not report_meta or report_meta.get("simulation_id") != simulation_id:
                         continue
                     branch_report_dir = os.path.join(branch_dir, "reports", report_folder)
                     shutil.copytree(os.path.join(reports_dir, report_folder), branch_report_dir, dirs_exist_ok=True)
@@ -684,15 +699,17 @@ class SimulationManager:
 
     def _apply_persona_overrides(
         self,
+        simulation_id: str,
         sim_dir: str,
         persona_removals: set,
         persona_additions: List[Dict[str, Any]],
     ) -> None:
-        reddit_path = os.path.join(sim_dir, "reddit_profiles.json")
         twitter_path = os.path.join(sim_dir, "twitter_profiles.csv")
 
-        if os.path.exists(reddit_path):
-            reddit_profiles = read_json_file(reddit_path, default=[], logger=logger, description=reddit_path) or []
+        if self._store.exists(simulation_id, "reddit_profiles"):
+            reddit_profiles = self._store.read_json(
+                simulation_id, "reddit_profiles", default=[]
+            ) or []
             reddit_profiles = [
                 profile for profile in reddit_profiles
                 if profile.get("username") not in persona_removals
@@ -701,7 +718,7 @@ class SimulationManager:
                 platform = (addition.get("platform") or "reddit").lower()
                 if platform == "reddit":
                     reddit_profiles.append(addition)
-            write_json_atomic(reddit_path, reddit_profiles)
+            self._store.write_json(simulation_id, "reddit_profiles", reddit_profiles)
 
         if os.path.exists(twitter_path):
             import csv
@@ -730,18 +747,22 @@ class SimulationManager:
                     writer.writerows(twitter_profiles)
     
     def get_profiles(self, simulation_id: str, platform: str = "reddit") -> List[Dict[str, Any]]:
-        """Get Agent Profiles for simulation"""
+        """Get Agent Profiles for simulation.
+
+        Only Reddit profiles are persisted as JSON; Twitter uses CSV (out of
+        scope for the JSON artifact store) and would always have been empty
+        through this code path.
+        """
         state = self._load_simulation_state(simulation_id)
         if not state:
             raise ValueError(f"Simulation does not exist: {simulation_id}")
-        
-        sim_dir = self._get_simulation_dir(simulation_id)
-        profile_path = os.path.join(sim_dir, f"{platform}_profiles.json")
-        
-        if not os.path.exists(profile_path):
+
+        if platform != "reddit":
             return []
-        
-        return read_json_file(profile_path, default=[], logger=logger, description=profile_path) or []
+
+        if not self._store.exists(simulation_id, "reddit_profiles"):
+            return []
+        return self._store.read_json(simulation_id, "reddit_profiles", default=[]) or []
     
     def get_run_instructions(self, simulation_id: str) -> Dict[str, str]:
         """Get run instructions"""

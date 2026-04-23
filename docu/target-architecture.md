@@ -643,6 +643,7 @@ Mindestens auf Anwendungsebene sinnvoll:
 - Pfadauflösung nur über Whitelisting und sichere Join-Strategien
 - keine frei kombinierbaren Client-Pfade
 - Uploads und Simulation-Artefakte bleiben strikt innerhalb definierter Roots
+- **`SimulationArtifactStore`-Port** (`backend/app/services/artifact_store.py`, Issue #13) ist die einzige zugelassene Schreib-/Lese-Schnittstelle für JSON-Artefakte unter `uploads/simulations/<sim_id>/`. Domäne und API benutzen logische Artefakt-Namen; der `LocalFilesystemArtifactStore` wrappt `utils/json_io` (atomic write + fsync). Tests injizieren den `InMemoryArtifactStore`. Cloud-Adapter (S3/Azure) folgen hinter dem gleichen Interface.
 
 ### 12.4 Daten- und Modell-Sicherheit
 - Sanitizing von Graph-Labels und extern abgeleiteten Bezeichnern

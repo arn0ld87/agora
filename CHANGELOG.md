@@ -3,6 +3,23 @@
 Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+
+### Refactor
+
+- **Issue #13**: Neuer Hexagonal-Port `SimulationArtifactStore` (`backend/app/services/artifact_store.py`) mit `LocalFilesystemArtifactStore` (Produktion) und `InMemoryArtifactStore` (Tests). DI-Registration in `app.extensions['artifact_store']`, Helper `get_artifact_store()` in `api/simulation_common.py`.
+- `SimulationManager`, `SimulationRunner`, `SimulationIPCClient/Server`, `simulation_prepare`, `simulation_profiles`, `simulation_history` greifen nicht mehr direkt auf `utils/json_io` oder `uploads/simulations/<sim_id>/*.json` zu. Smoke-Test (`tests/test_no_json_io_leakage.py`) hält den Constraint dauerhaft hoch.
+- Implizit gefixt durch atomare Store-Writes: vorher non-atomare Writes für `simulation_config.json`, `ipc_commands/*.json`, `ipc_responses/*.json`, `env_status.json`.
+
+### Hinzugefügt
+
+- `backend/tests/test_artifact_store.py` (30 Contract-Tests inkl. Concurrency-Stress für atomare Writes)
+- `backend/tests/test_no_json_io_leakage.py` (AST-Scan, hält den SoC-Constraint)
+
+### Notiz
+
+- `services/run_registry.py` bleibt bewusst beim direkten `json_io`-Zugriff — eigener Store-Adapter folgt in separater PR (anderer Storage-Root, eigene Concurrency-Semantik).
+
 ## [0.4.1] — 2026-04-23
 
 ### Hinzugefügt

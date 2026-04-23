@@ -9,10 +9,9 @@ from flask import request, send_file
 from . import simulation_bp
 from ..config import Config
 from ..services.simulation_manager import SimulationManager
-from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.validation import validate_simulation_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
-from .simulation_common import logger
+from .simulation_common import get_artifact_store, logger
 
 
 @simulation_bp.route('/<simulation_id>/branch', methods=['POST'])
@@ -74,7 +73,6 @@ def get_simulation_profiles_realtime(simulation_id: str):
         return json_error("Invalid simulation_id format", status=400)
 
     import csv
-    import json
     from datetime import datetime
 
     platform = request.args.get('platform', 'reddit')
@@ -82,36 +80,42 @@ def get_simulation_profiles_realtime(simulation_id: str):
     if not os.path.exists(sim_dir):
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    profiles_file = os.path.join(sim_dir, "reddit_profiles.json" if platform == "reddit" else "twitter_profiles.csv")
-    file_exists = os.path.exists(profiles_file)
+    store = get_artifact_store()
     profiles = []
     file_modified_at = None
 
-    if file_exists:
-        file_stat = os.stat(profiles_file)
-        file_modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
-        try:
-            if platform == "reddit":
-                profiles = read_json_file(profiles_file, default=[], logger=logger, description=profiles_file) or []
-            else:
+    if platform == "reddit":
+        file_exists = store.exists(simulation_id, "reddit_profiles")
+        if file_exists:
+            # mtime kommt weiter vom Filesystem; der Store-Port modelliert keine Metadaten.
+            profiles_path = os.path.join(sim_dir, "reddit_profiles.json")
+            if os.path.exists(profiles_path):
+                file_modified_at = datetime.fromtimestamp(
+                    os.stat(profiles_path).st_mtime
+                ).isoformat()
+            profiles = store.read_json(simulation_id, "reddit_profiles", default=[]) or []
+    else:
+        # CSV liegt außerhalb des JSON-Stores (out of scope für Issue #13).
+        profiles_file = os.path.join(sim_dir, "twitter_profiles.csv")
+        file_exists = os.path.exists(profiles_file)
+        if file_exists:
+            file_modified_at = datetime.fromtimestamp(
+                os.stat(profiles_file).st_mtime
+            ).isoformat()
+            try:
                 with open(profiles_file, 'r', encoding='utf-8') as handle:
                     profiles = list(csv.DictReader(handle))
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning(f"Failed to read profiles file: {exc}")
-            profiles = []
+            except OSError as exc:
+                logger.warning(f"Failed to read profiles file: {exc}")
+                profiles = []
 
     is_generating = False
     total_expected = None
-    state_file = os.path.join(sim_dir, "state.json")
-    if os.path.exists(state_file):
-        try:
-            state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
-            if state_data:
-                status = state_data.get("status", "")
-                is_generating = status == "preparing"
-                total_expected = state_data.get("entities_count")
-        except Exception:
-            pass
+    state_data = store.read_json(simulation_id, "state", default=None)
+    if state_data:
+        status = state_data.get("status", "")
+        is_generating = status == "preparing"
+        total_expected = state_data.get("entities_count")
 
     return json_success({
         "simulation_id": simulation_id,
@@ -125,15 +129,14 @@ def get_simulation_profiles_realtime(simulation_id: str):
     })
 
 
-def _load_profiles_file(sim_dir: str, platform: str):
+def _load_profiles_file(simulation_id: str, sim_dir: str, platform: str):
     """Read reddit_profiles.json or twitter_profiles.csv into a list."""
     import csv
 
     if platform == 'reddit':
-        path = os.path.join(sim_dir, 'reddit_profiles.json')
-        if not os.path.exists(path):
-            return path, []
-        return path, (read_json_file(path, default=[], logger=logger, description=path) or [])
+        store = get_artifact_store()
+        profiles = store.read_json(simulation_id, 'reddit_profiles', default=[]) or []
+        return None, profiles
 
     path = os.path.join(sim_dir, 'twitter_profiles.csv')
     if not os.path.exists(path):
@@ -142,11 +145,11 @@ def _load_profiles_file(sim_dir: str, platform: str):
         return path, list(csv.DictReader(handle))
 
 
-def _save_profiles_file(path: str, profiles: list, platform: str):
+def _save_profiles_file(simulation_id: str, path: str, profiles: list, platform: str):
     import csv
 
     if platform == 'reddit':
-        write_json_atomic(path, profiles)
+        get_artifact_store().write_json(simulation_id, 'reddit_profiles', profiles)
         return
 
     if not profiles:
@@ -174,7 +177,7 @@ def add_simulation_profile(simulation_id: str):
     if not os.path.exists(sim_dir):
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    path, profiles = _load_profiles_file(sim_dir, platform)
+    path, profiles = _load_profiles_file(simulation_id, sim_dir, platform)
     existing_ids = [int(profile.get('user_id', 0) or 0) for profile in profiles]
     next_id = (max(existing_ids) + 1) if existing_ids else 0
     username = (data.get('username') or f'user_{next_id}').strip()
@@ -220,7 +223,7 @@ def add_simulation_profile(simulation_id: str):
             logger.debug(f"add_simulation_profile: ignoring non-primitive {key!r}")
 
     profiles.append(new_profile)
-    _save_profiles_file(path, profiles, platform)
+    _save_profiles_file(simulation_id, path, profiles, platform)
     return json_success({
         "platform": platform,
         "count": len(profiles),
@@ -240,13 +243,13 @@ def delete_simulation_profile(simulation_id: str, username: str):
     if not os.path.exists(sim_dir):
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    path, profiles = _load_profiles_file(sim_dir, platform)
+    path, profiles = _load_profiles_file(simulation_id, sim_dir, platform)
     before = len(profiles)
     profiles = [profile for profile in profiles if str(profile.get('username', '')) != username]
     if len(profiles) == before:
         return json_error(f"Persona not found: {username}", status=404)
 
-    _save_profiles_file(path, profiles, platform)
+    _save_profiles_file(simulation_id, path, profiles, platform)
     return json_success({
         "platform": platform,
         "count": len(profiles),
@@ -261,44 +264,35 @@ def get_simulation_config_realtime(simulation_id: str):
     if not validate_simulation_id(simulation_id):
         return json_error("Invalid simulation_id format", status=400)
 
-    import json
     from datetime import datetime
 
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    config_file = os.path.join(sim_dir, "simulation_config.json")
-    file_exists = os.path.exists(config_file)
-    config = None
+    store = get_artifact_store()
+    file_exists = store.exists(simulation_id, "simulation_config")
     file_modified_at = None
-
     if file_exists:
-        file_stat = os.stat(config_file)
-        file_modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
-        try:
-            config = read_json_file(config_file, default=None, logger=logger, description=config_file)
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning(f"Failed to read config file: {exc}")
-            config = None
+        config_path = os.path.join(sim_dir, "simulation_config.json")
+        if os.path.exists(config_path):
+            file_modified_at = datetime.fromtimestamp(
+                os.stat(config_path).st_mtime
+            ).isoformat()
+    config = store.read_json(simulation_id, "simulation_config", default=None) if file_exists else None
 
     is_generating = False
     generation_stage = None
     config_generated = False
-    state_file = os.path.join(sim_dir, "state.json")
-    if os.path.exists(state_file):
-        try:
-            state_data = read_json_file(state_file, default=None, logger=logger, description=state_file)
-            if state_data:
-                status = state_data.get("status", "")
-                is_generating = status == "preparing"
-                config_generated = state_data.get("config_generated", False)
-                if is_generating:
-                    generation_stage = "generating_config" if state_data.get("profiles_generated", False) else "generating_profiles"
-                elif status == "ready":
-                    generation_stage = "completed"
-        except Exception:
-            pass
+    state_data = store.read_json(simulation_id, "state", default=None)
+    if state_data:
+        status = state_data.get("status", "")
+        is_generating = status == "preparing"
+        config_generated = state_data.get("config_generated", False)
+        if is_generating:
+            generation_stage = "generating_config" if state_data.get("profiles_generated", False) else "generating_profiles"
+        elif status == "ready":
+            generation_stage = "completed"
 
     response_data = {
         "simulation_id": simulation_id,
