@@ -3,14 +3,14 @@ Lifecycle and metadata endpoints split from the main simulation API module.
 """
 
 import os
-import traceback
 
-from flask import current_app, jsonify, request
+from flask import current_app, request
 
 from . import simulation_bp
 from ..config import Config
 from ..models.project import ProjectManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_graph_id, validate_project_id, validate_simulation_id
 from .simulation_common import logger
 
@@ -61,133 +61,84 @@ def get_available_models():
             "Neo4j storage not initialised — check NEO4J_URI / NEO4J_PASSWORD and that Neo4j is running."
         )
 
-    return jsonify({
-        "success": True,
-        "data": {
-            "ollama": ollama_models,
-            "presets": presets,
-            "current_default": Config.LLM_MODEL_NAME,
-            "ollama_base_url": base,
-            "ollama_reachable": ollama_error is None,
-            "ollama_error": ollama_error,
-            "neo4j_reachable": neo4j_reachable,
-            "neo4j_error": neo4j_error,
-            "neo4j_uri": Config.NEO4J_URI,
-            "default_language": Config.AGENT_LANGUAGE,
-            "agent_tools_enabled": Config.ENABLE_AGENT_TOOLS,
-            "max_tool_calls_per_action": Config.MAX_TOOL_CALLS_PER_ACTION,
-        },
+    return json_success({
+        "ollama": ollama_models,
+        "presets": presets,
+        "current_default": Config.LLM_MODEL_NAME,
+        "ollama_base_url": base,
+        "ollama_reachable": ollama_error is None,
+        "ollama_error": ollama_error,
+        "neo4j_reachable": neo4j_reachable,
+        "neo4j_error": neo4j_error,
+        "neo4j_uri": Config.NEO4J_URI,
+        "default_language": Config.AGENT_LANGUAGE,
+        "agent_tools_enabled": Config.ENABLE_AGENT_TOOLS,
+        "max_tool_calls_per_action": Config.MAX_TOOL_CALLS_PER_ACTION,
     })
 
 
 @simulation_bp.route('/create', methods=['POST'])
+@handle_api_errors(logger=logger, log_prefix="Failed to create simulation")
 def create_simulation():
     """Create a new simulation."""
-    try:
-        data = request.get_json() or {}
+    data = request.get_json() or {}
 
-        project_id = data.get('project_id')
-        if not project_id:
-            return jsonify({
-                "success": False,
-                "error": "Please provide project_id",
-            }), 400
+    project_id = data.get('project_id')
+    if not project_id:
+        return json_error("Please provide project_id")
+    if not validate_project_id(project_id):
+        return json_error("Invalid project_id format")
 
-        if not validate_project_id(project_id):
-            return jsonify({"success": False, "error": "Invalid project_id format"}), 400
+    project = ProjectManager.get_project(project_id)
+    if not project:
+        return json_error(f"Project does not exist: {project_id}", status=404)
 
-        project = ProjectManager.get_project(project_id)
-        if not project:
-            return jsonify({
-                "success": False,
-                "error": f"Project does not exist: {project_id}",
-            }), 404
-
-        graph_id = data.get('graph_id') or project.graph_id
-        if not graph_id:
-            return jsonify({
-                "success": False,
-                "error": "Project has not built knowledge graph yet, please call /api/graph/build first",
-            }), 400
-
-        if not validate_graph_id(graph_id):
-            return jsonify({"success": False, "error": "Invalid graph_id format"}), 400
-
-        manager = SimulationManager()
-        state = manager.create_simulation(
-            project_id=project_id,
-            graph_id=graph_id,
-            enable_twitter=data.get('enable_twitter', True),
-            enable_reddit=data.get('enable_reddit', True),
+    graph_id = data.get('graph_id') or project.graph_id
+    if not graph_id:
+        return json_error(
+            "Project has not built knowledge graph yet, please call /api/graph/build first"
         )
+    if not validate_graph_id(graph_id):
+        return json_error("Invalid graph_id format")
 
-        return jsonify({
-            "success": True,
-            "data": state.to_dict(),
-        })
-
-    except Exception as exc:
-        logger.error(f"Failed to create simulation: {str(exc)}")
-        return jsonify({
-            "success": False,
-            "error": str(exc),
-            "traceback": traceback.format_exc() if Config.DEBUG else None,
-        }), 500
+    manager = SimulationManager()
+    state = manager.create_simulation(
+        project_id=project_id,
+        graph_id=graph_id,
+        enable_twitter=data.get('enable_twitter', True),
+        enable_reddit=data.get('enable_reddit', True),
+    )
+    return json_success(state.to_dict())
 
 
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
+@handle_api_errors(logger=logger, log_prefix="Failed to get simulation status")
 def get_simulation(simulation_id: str):
     """Get simulation status."""
     if not validate_simulation_id(simulation_id):
-        return jsonify({"success": False, "error": "Invalid simulation_id format"}), 400
+        return json_error("Invalid simulation_id format")
 
-    try:
-        manager = SimulationManager()
-        state = manager.get_simulation(simulation_id)
+    manager = SimulationManager()
+    state = manager.get_simulation(simulation_id)
+    if not state:
+        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-        if not state:
-            return jsonify({
-                "success": False,
-                "error": f"Simulation does not exist: {simulation_id}",
-            }), 404
-
-        result = state.to_dict()
-        if state.status == SimulationStatus.READY:
-            result["run_instructions"] = manager.get_run_instructions(simulation_id)
-
-        return jsonify({
-            "success": True,
-            "data": result,
-        })
-
-    except Exception as exc:
-        logger.error(f"Failed to get simulation status: {str(exc)}")
-        return jsonify({
-            "success": False,
-            "error": str(exc),
-            "traceback": traceback.format_exc() if Config.DEBUG else None,
-        }), 500
+    result = state.to_dict()
+    if state.status == SimulationStatus.READY:
+        result["run_instructions"] = manager.get_run_instructions(simulation_id)
+    return json_success(result)
 
 
 @simulation_bp.route('/list', methods=['GET'])
+@handle_api_errors(logger=logger, log_prefix="Failed to list simulations")
 def list_simulations():
     """List simulations, optionally filtered by project_id."""
-    try:
-        project_id = request.args.get('project_id')
+    project_id = request.args.get('project_id')
 
-        manager = SimulationManager()
-        simulations = manager.list_simulations(project_id=project_id)
+    manager = SimulationManager()
+    simulations = manager.list_simulations(project_id=project_id)
 
-        return jsonify({
-            "success": True,
-            "data": [simulation.to_dict() for simulation in simulations],
-            "count": len(simulations),
-        })
-
-    except Exception as exc:
-        logger.error(f"Failed to list simulations: {str(exc)}")
-        return jsonify({
-            "success": False,
-            "error": str(exc),
-            "traceback": traceback.format_exc() if Config.DEBUG else None,
-        }), 500
+    return json_success(
+        [simulation.to_dict() for simulation in simulations],
+        count=len(simulations),
+    )
