@@ -1,22 +1,84 @@
 """
 API Call Retry Mechanism
 Handles retry logic for external API calls like LLM and Neo4j.
+Consolidated to use a single core loop logic for sync and async.
 """
 
 import time
 import random
 import functools
+import asyncio
 from typing import Callable, Any, Optional, Type, Tuple
 from ..utils.logger import get_logger
 
 logger = get_logger('agora.retry')
 
 # ---------------------------------------------------------------------------
+# Core retry logic (internal)
+# ---------------------------------------------------------------------------
+
+class _RetryState:
+    """Internal state tracker for a retry loop to ensure consistent behavior."""
+    def __init__(
+        self,
+        max_retries: int,
+        initial_delay: float,
+        max_delay: float,
+        backoff_factor: float,
+        jitter: bool,
+        func_name: str,
+        on_retry: Optional[Callable[[Exception, int], None]] = None,
+        logger_instance=None
+    ):
+        self.max_retries = max_retries
+        self.delay = initial_delay
+        self.max_delay = max_delay
+        self.backoff_factor = backoff_factor
+        self.jitter = jitter
+        self.func_name = func_name
+        self.on_retry = on_retry
+        self.logger = logger_instance or logger
+
+    def handle_failure(self, attempt: int, exc: Exception) -> float:
+        """
+        Handle a failed attempt. Logs appropriately and returns wait time.
+        Raises the exception if retries are exhausted.
+        """
+        if attempt >= self.max_retries:
+            self.logger.error(
+                "%s still failed after %d retries: %s",
+                self.func_name,
+                self.max_retries,
+                str(exc)
+            )
+            raise exc
+
+        # Calculate delay
+        wait_time = min(self.delay, self.max_delay)
+        if self.jitter:
+            # Jitter: multiply by a random factor in [0.5, 1.5]
+            wait_time *= (0.5 + random.random())
+
+        self.logger.warning(
+            "%s (attempt %d/%d) failed: %s, retrying in %.1fs...",
+            self.func_name,
+            attempt + 1,
+            self.max_retries + 1,
+            str(exc),
+            wait_time
+        )
+
+        if self.on_retry:
+            self.on_retry(exc, attempt + 1)
+
+        self.delay *= self.backoff_factor
+        return wait_time
+
+
+# ---------------------------------------------------------------------------
 # Neo4j transient-failure retry helper
 # ---------------------------------------------------------------------------
 
-# Imported lazily inside the function to avoid import-time side-effects when
-# the neo4j package is not installed in testing environments that don't need it.
 _NEO4J_TRANSIENT_EXCEPTIONS: Optional[Tuple[Type[Exception], ...]] = None
 
 
@@ -24,8 +86,12 @@ def _neo4j_transient_exceptions() -> Tuple[Type[Exception], ...]:
     """Return the tuple of Neo4j exception types that are safe to retry."""
     global _NEO4J_TRANSIENT_EXCEPTIONS
     if _NEO4J_TRANSIENT_EXCEPTIONS is None:
-        from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
-        _NEO4J_TRANSIENT_EXCEPTIONS = (ServiceUnavailable, SessionExpired, TransientError)
+        try:
+            from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
+            _NEO4J_TRANSIENT_EXCEPTIONS = (ServiceUnavailable, SessionExpired, TransientError)
+        except ImportError:
+            # Fallback if neo4j is not installed
+            _NEO4J_TRANSIENT_EXCEPTIONS = ()
     return _NEO4J_TRANSIENT_EXCEPTIONS
 
 
@@ -42,16 +108,12 @@ def neo4j_call_with_retry(
     Execute *func* with retry logic tuned for Neo4j transient errors.
 
     Retries on ``ServiceUnavailable``, ``SessionExpired``, and
-    ``TransientError`` (all safe to replay).  Uses exponential backoff with
-    jitter so parallel threads don't thunderherd after a brief outage.
-
-    All other exceptions propagate immediately (e.g. AuthError, ClientError,
-    bad Cypher — these won't be fixed by retrying).
+    ``TransientError``. Uses exponential backoff with jitter.
 
     Args:
         func:           Callable to execute.
         *args:          Positional arguments forwarded to *func*.
-        max_retries:    Maximum number of retry attempts (default 3).
+        max_retries:    Number of retries after the first attempt (default 3, total 4 attempts).
         initial_delay:  Base delay in seconds before the first retry (default 1.0).
         max_delay:      Upper cap on delay (default 10.0).
         backoff_factor: Multiplier applied to delay after each attempt (default 2.0).
@@ -59,39 +121,28 @@ def neo4j_call_with_retry(
 
     Returns:
         The return value of *func* on success.
-
-    Raises:
-        The last captured transient exception when all retries are exhausted.
     """
-    transient = _neo4j_transient_exceptions()
-    last_exc: Optional[Exception] = None
-    delay = initial_delay
+    state = _RetryState(
+        max_retries=max_retries,
+        initial_delay=initial_delay,
+        max_delay=max_delay,
+        backoff_factor=backoff_factor,
+        jitter=True,
+        func_name="Neo4j call"
+    )
+    exceptions = _neo4j_transient_exceptions()
 
-    for attempt in range(max_retries):
+    for attempt in range(max_retries + 1):
         try:
             return func(*args, **kwargs)
-        except transient as exc:
-            last_exc = exc
-            # Jitter: multiply by a random factor in [0.5, 1.5]
-            jittered = min(delay * (0.5 + random.random()), max_delay)
-            logger.warning(
-                "Neo4j transient error (attempt %d/%d), retrying in %.1fs: %s",
-                attempt + 1,
-                max_retries,
-                jittered,
-                exc,
-            )
-            time.sleep(jittered)
-            delay = min(delay * backoff_factor, max_delay)
-        except Exception:
-            raise  # Non-transient — propagate immediately
+        except exceptions as e:
+            wait_time = state.handle_failure(attempt, e)
+            time.sleep(wait_time)
 
-    # All retries exhausted
-    logger.error(
-        "Neo4j call failed permanently after %d attempts: %s", max_retries, last_exc
-    )
-    raise last_exc  # type: ignore[misc]
 
+# ---------------------------------------------------------------------------
+# Decorators
+# ---------------------------------------------------------------------------
 
 def retry_with_backoff(
     max_retries: int = 3,
@@ -103,57 +154,35 @@ def retry_with_backoff(
     on_retry: Optional[Callable[[Exception, int], None]] = None
 ):
     """
-    Retry decorator with exponential backoff
+    Retry decorator with exponential backoff.
 
     Args:
-        max_retries: Max retry attempts
-        initial_delay: Initial delay (seconds)
-        max_delay: Max delay (seconds)
-        backoff_factor: Backoff factor
-        jitter: Whether to add random jitter
-        exceptions: Exception types to retry
-        on_retry: Callback on retry (exception, retry_count)
-
-    Usage:
-        @retry_with_backoff(max_retries=3)
-        def call_llm_api():
-            ...
+        max_retries: Number of retries after the first attempt (total attempts = max_retries + 1).
+        initial_delay: Initial delay (seconds).
+        max_delay: Max delay (seconds).
+        backoff_factor: Backoff factor.
+        jitter: Whether to add random jitter.
+        exceptions: Exception types to retry.
+        on_retry: Callback on retry (exception, retry_count).
     """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
-            last_exception = None
-            delay = initial_delay
-
+            state = _RetryState(
+                max_retries=max_retries,
+                initial_delay=initial_delay,
+                max_delay=max_delay,
+                backoff_factor=backoff_factor,
+                jitter=jitter,
+                func_name=f"Function {func.__name__}",
+                on_retry=on_retry
+            )
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
-
                 except exceptions as e:
-                    last_exception = e
-
-                    if attempt == max_retries:
-                        logger.error(f"Function {func.__name__} still failed after {max_retries} retries: {str(e)}")
-                        raise
-
-                    # Calculate delay
-                    current_delay = min(delay, max_delay)
-                    if jitter:
-                        current_delay = current_delay * (0.5 + random.random())
-
-                    logger.warning(
-                        f"Function {func.__name__} attempt {attempt + 1} failed: {str(e)}, "
-                        f"retrying in {current_delay:.1f} seconds..."
-                    )
-
-                    if on_retry:
-                        on_retry(e, attempt + 1)
-
-                    time.sleep(current_delay)
-                    delay *= backoff_factor
-
-            raise last_exception
-
+                    wait_time = state.handle_failure(attempt, e)
+                    time.sleep(wait_time)
         return wrapper
     return decorator
 
@@ -167,52 +196,32 @@ def retry_with_backoff_async(
     exceptions: Tuple[Type[Exception], ...] = (Exception,),
     on_retry: Optional[Callable[[Exception, int], None]] = None
 ):
-    """
-    Async version of retry decorator
-    """
-    import asyncio
-    
+    """Async version of retry decorator."""
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            last_exception = None
-            delay = initial_delay
-
+            state = _RetryState(
+                max_retries=max_retries,
+                initial_delay=initial_delay,
+                max_delay=max_delay,
+                backoff_factor=backoff_factor,
+                jitter=jitter,
+                func_name=f"Async function {func.__name__}",
+                on_retry=on_retry
+            )
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
-
                 except exceptions as e:
-                    last_exception = e
-
-                    if attempt == max_retries:
-                        logger.error(f"Async function {func.__name__} still failed after {max_retries} retries: {str(e)}")
-                        raise
-
-                    current_delay = min(delay, max_delay)
-                    if jitter:
-                        current_delay = current_delay * (0.5 + random.random())
-
-                    logger.warning(
-                        f"Async function {func.__name__} attempt {attempt + 1} failed: {str(e)}, "
-                        f"retrying in {current_delay:.1f} seconds..."
-                    )
-
-                    if on_retry:
-                        on_retry(e, attempt + 1)
-
-                    await asyncio.sleep(current_delay)
-                    delay *= backoff_factor
-
-            raise last_exception
-
+                    wait_time = state.handle_failure(attempt, e)
+                    await asyncio.sleep(wait_time)
         return wrapper
     return decorator
 
 
 class RetryableAPIClient:
     """
-    Retryable API client wrapper
+    Retryable API client wrapper.
     """
 
     def __init__(
@@ -232,46 +241,27 @@ class RetryableAPIClient:
         func: Callable,
         *args,
         exceptions: Tuple[Type[Exception], ...] = (Exception,),
+        jitter: bool = True,
+        on_retry: Optional[Callable[[Exception, int], None]] = None,
+        func_name: str = "API call",
         **kwargs
     ) -> Any:
-        """
-        Execute function call with retry on failure
-
-        Args:
-            func: Function to call
-            *args: Function arguments
-            exceptions: Exception types to retry
-            **kwargs: Function keyword arguments
-
-        Returns:
-            Function return value
-        """
-        last_exception = None
-        delay = self.initial_delay
-
+        """Execute function call with retry on failure."""
+        state = _RetryState(
+            max_retries=self.max_retries,
+            initial_delay=self.initial_delay,
+            max_delay=self.max_delay,
+            backoff_factor=self.backoff_factor,
+            jitter=jitter,
+            func_name=func_name,
+            on_retry=on_retry
+        )
         for attempt in range(self.max_retries + 1):
             try:
                 return func(*args, **kwargs)
-
             except exceptions as e:
-                last_exception = e
-
-                if attempt == self.max_retries:
-                    logger.error(f"API call still failed after {self.max_retries} retries: {str(e)}")
-                    raise
-
-                current_delay = min(delay, self.max_delay)
-                current_delay = current_delay * (0.5 + random.random())
-
-                logger.warning(
-                    f"API call attempt {attempt + 1} failed: {str(e)}, "
-                    f"retrying in {current_delay:.1f} seconds..."
-                )
-
-                time.sleep(current_delay)
-                delay *= self.backoff_factor
-
-        raise last_exception
+                wait_time = state.handle_failure(attempt, e)
+                time.sleep(wait_time)
 
     def call_batch_with_retry(
         self,
@@ -280,18 +270,7 @@ class RetryableAPIClient:
         exceptions: Tuple[Type[Exception], ...] = (Exception,),
         continue_on_failure: bool = True
     ) -> Tuple[list, list]:
-        """
-        Batch call with individual retry for each failed item
-
-        Args:
-            items: List of items to process
-            process_func: Processing function, accepts single item as parameter
-            exceptions: Exception types to retry
-            continue_on_failure: Whether to continue processing other items after failure
-
-        Returns:
-            (successful results list, failed items list)
-        """
+        """Batch call with individual retry for each failed item."""
         results = []
         failures = []
 
@@ -300,20 +279,18 @@ class RetryableAPIClient:
                 result = self.call_with_retry(
                     process_func,
                     item,
-                    exceptions=exceptions
+                    exceptions=exceptions,
+                    func_name=f"Batch item {idx + 1}"
                 )
                 results.append(result)
-
             except Exception as e:
-                logger.error(f"Failed to process item {idx + 1}: {str(e)}")
+                logger.error("Failed to process item %d: %s", idx + 1, str(e))
                 failures.append({
                     "index": idx,
                     "item": item,
                     "error": str(e)
                 })
-
                 if not continue_on_failure:
                     raise
 
         return results, failures
-

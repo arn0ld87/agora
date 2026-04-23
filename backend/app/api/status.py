@@ -6,13 +6,14 @@ Returns backend version, Neo4j reachability, Ollama availability, and disk usage
 import os
 import shutil
 from datetime import datetime, timezone
-from flask import current_app, jsonify
+from flask import current_app
 import requests
 
 from . import status_bp
 from ..config import Config
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
+from ..utils.api_responses import handle_api_errors, json_success
 
 logger = get_logger('agora.api.status')
 
@@ -126,6 +127,7 @@ def _get_disk_status():
 
 
 @status_bp.route('', methods=['GET'])
+@handle_api_errors
 def get_status():
     """
     Unified status endpoint.
@@ -147,11 +149,22 @@ def get_status():
         logger.debug(f"GPU probe failed unexpectedly: {e}")
         gpu = {"nvidia_smi_available": False, "ollama_uses_gpu": None, "hints": [f"probe error: {e}"]}
 
-    return jsonify({
-        "backend": _get_backend_status(),
-        "neo4j": _get_neo4j_status(),
-        "ollama": _get_ollama_status(),
-        "disk": _get_disk_status(),
-        "gpu": gpu,
-        "timestamp": timestamp,
-    }), 200
+    # json_success normally wraps data in "data" field.
+    # The original endpoint returned the dict directly at top level.
+    # To preserve this, we can pass the dict as extra arguments or just use json_success's behavior
+    # Actually, original return was:
+    # return jsonify({
+    #     "backend": _get_backend_status(),
+    #     ...
+    # }), 200
+
+    # json_success(data=None, **extra) -> {"success": True, **extra}
+
+    return json_success(
+        backend=_get_backend_status(),
+        neo4j=_get_neo4j_status(),
+        ollama=_get_ollama_status(),
+        disk=_get_disk_status(),
+        gpu=gpu,
+        timestamp=timestamp
+    )
