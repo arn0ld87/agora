@@ -857,12 +857,35 @@ Danach wurde die gemeinsame Workspace-Shell auf weitere Kernscreens ausgeweitet.
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
+### 9.23 Gemeinsamen Workspace-Step-Status extrahiert
+Danach wurde die nächste offensichtliche Header-Duplizierung in den Workspace-Views beseitigt.
+
+**Neue Datei**
+- `frontend/src/layouts/WorkspaceStepStatus.vue`
+
+**Geänderte Dateien**
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+- Detailprotokoll aktualisiert: `docu/p0-workspace-layout-protokoll.md`
+
+**Umgesetzte Logik**
+- gemeinsamer Baustein für Schrittzähler + Statusanzeige
+- Header-Duplikat in allen Workspace-Kernviews reduziert
+- viewspezifische Zusatzcontrols (Pause / Branch) blieben lokal in den jeweiligen Screens
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
-2. gemeinsame Status-/Header-Bausteine weiter normalisieren
+2. gemeinsame Brand-/Header-Aktionen weiter normalisieren
 3. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie

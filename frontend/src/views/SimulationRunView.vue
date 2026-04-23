@@ -8,6 +8,7 @@ import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
 import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
 import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
 import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
+import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { getProject, getGraphData } from '../api/graph'
 import {
   getSimulation,
@@ -227,15 +228,12 @@ onUnmounted(() => {
         </template>
 
         <template #status>
-          <div class="step-status">
-            <span class="kicker-row">
-              <span class="step-counter">№ 03 / 05</span>
-              <span class="step-name">{{ t('process.stepper.step3') }}</span>
-            </span>
-            <span class="status-tag" :class="`status-${statusKind}`">
-              <span class="status-dot" :class="`status-dot--${statusKind}`" />
-              {{ statusText }}
-            </span>
+          <WorkspaceStepStatus
+            step-counter="№ 03 / 05"
+            :step-name="t('process.stepper.step3')"
+            :status-kind="statusKind"
+            :status-text="statusText"
+          >
             <button
               v-if="statusKind === 'running' || statusKind === 'paused'"
               class="quick-pause"
@@ -248,7 +246,7 @@ onUnmounted(() => {
               <span v-else>❚❚</span>
               {{ isPaused ? t('step3.controls.resume') : t('step3.controls.pause') }}
             </button>
-          </div>
+          </WorkspaceStepStatus>
         </template>
       </WorkspaceHeader>
     </template>
@@ -293,35 +291,6 @@ onUnmounted(() => {
   color: var(--ink-0);
 }
 .brand-link:hover { color: var(--accent); }
-.step-status { display: inline-flex; align-items: center; gap: var(--s-5); }
-.kicker-row { display: inline-flex; align-items: baseline; gap: var(--s-3); }
-.step-counter {
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-.step-name {
-  font-family: var(--ff-serif);
-  font-size: var(--fs-20);
-  color: var(--ink-0);
-}
-.status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-.status-tag.status-error { color: #b00020; }
-.status-tag.status-done { color: var(--ink-0); }
-.status-tag.status-running { color: var(--accent); }
-.status-tag.status-paused { color: var(--ink-3); }
-
 .quick-pause {
   background: transparent;
   border: 1px solid var(--rule-strong);

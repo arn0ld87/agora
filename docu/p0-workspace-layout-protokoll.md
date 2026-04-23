@@ -181,9 +181,32 @@ Damit teilen jetzt praktisch alle zentralen Workspace-/Pipeline-Views denselben 
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
-## 10. Nächster sinnvoller Schritt
+## 10. Fünfter Workspace-Schritt — gemeinsamer Step-Status extrahiert
+
+Nach der Vereinheitlichung des Mode-Switchers blieb in fast allen Workspace-Views noch derselbe Schritt-/Statusblock im Header dupliziert.
+
+### 10.1 Neue Datei
+- `frontend/src/layouts/WorkspaceStepStatus.vue`
+
+### 10.2 Geänderte Dateien
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- `frontend/src/views/ReportView.vue`
+- `frontend/src/views/InteractionView.vue`
+
+### 10.3 Nutzen
+- gemeinsamer visueller Standard für Schrittzähler + Statusdarstellung
+- weniger Header-Duplikat über die Kern-Pipeline hinweg
+- Views behalten nur noch ihre wirklich spezifischen Zusatzcontrols (z. B. Quick-Pause, Branch-Button)
+
+### 10.4 Verifikation
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
+## 11. Nächster sinnvoller Schritt
 
 Nach diesem Shell-Cleanup sind die nächsten Kandidaten:
-- gemeinsame Status-/Header-Bausteine weiter normalisieren
 - `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder entkoppeln
+- gemeinsame Brand-/Header-Aktionen weiter normalisieren
 - anschließend Backend-Ruff-Ausweitung als nächster großer Block
