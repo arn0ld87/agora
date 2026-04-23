@@ -5,6 +5,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Issue #9 Phase A–C**: `SimulationEventBus`-Port (`backend/app/services/event_bus.py`) mit `InMemoryEventBus`, `FilePollingEventBus` und `RedisEventBus` (`backend/app/services/event_bus_redis.py`). Redis-Service in `docker-compose.yml` inkl. Healthcheck; `Config.REDIS_URL` / `Config.EVENT_BUS_BACKEND` wählen den Transport im `AgoraContainer` (auto → redis → file). `SimulationRunner._save_run_state` spiegelt Snapshots auf den Bus. Neuer SSE-Endpoint `GET /api/simulation/<id>/stream` (`backend/app/api/simulation_stream.py`) bridged `state`/`control` an `EventSource`-Clients. Frontend-Composable `useEventStream.js` + API-Helper `api/stream.js`; `Step3Simulation.vue` ersetzt das 2,5-s-Status-Polling durch den Stream. Tests: `tests/test_event_bus.py` (13), `tests/test_event_bus_redis.py` (6, integration-skip ohne Redis), `tests/test_simulation_stream.py` (2).
+- **fix(startup)**: Neo4j-Startup-Exception wird in `app.extensions['neo4j_storage_error']` persistiert und über `/api/status` sowie `/api/simulation/available-models` ausgeliefert. UI-Warnungen (`Home.vue`) zeigen den echten Fehler statt eines Platzhalters.
+
+### Notiz
+
+- Phase B verlagert **Control/State** live auf Redis, **RPC-Interview-Commands** bleiben Datei-basiert: der OASIS-Subprozess hält weiterhin seinen eigenen File-IPC-Handler; dessen Migration ist als Follow-up ausgelagert. Der `RedisEventBus` delegiert entsprechend `CHANNEL_RPC_COMMAND` und `rpc.response.*` an einen internen `FilePollingEventBus`.
+
 ### Refactor
 
 - **Issue #14**: Hand-rolled `AgoraContainer` (`backend/app/container.py`) ersetzt das Service-Locator-Pattern via `app.extensions[...]`. Container hält Singletons (`neo4j_storage`, `artifact_store`) und Factories (`graph_builder()`); Pilot-Service `GraphBuilderService` migriert in `api/graph.py` und `api/runs.py`. `app.extensions['neo4j_storage' / 'artifact_store']` bleiben als Backward-Compat-Aliase. Pilot-Tests laufen ohne Flask-App-Context (`tests/test_container.py`).

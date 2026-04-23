@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { usePolling } from '../composables/usePolling'
+import { useEventStream } from '../composables/useEventStream'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -47,10 +48,14 @@ const startError = ref(null)
 
 function addLog(msg) { emit('add-log', msg) }
 
-const statusPolling = usePolling(async () => {
-  await pollStatus()
-  await pollDetail()
-}, 2500)
+// Issue #9 Phase C: run-state now arrives via SSE (backend subscribes to
+// the event bus), so the 2.5 s status-polling loop is gone. Detail + console
+// stay on HTTP polls — they read different artifacts.
+const statusStream = useEventStream(() => props.simulationId, {
+  state: (msg) => applyRunStateEvent(msg?.payload),
+  control: (msg) => applyControlEvent(msg?.payload),
+})
+const detailPolling = usePolling(pollDetail, 2500)
 const consolePolling = usePolling(pollConsole, 2000)
 
 function resetState() {
@@ -142,12 +147,37 @@ async function doPauseResume() {
 }
 
 function startPolling() {
-  void statusPolling.start({ immediate: true })
+  statusStream.start()
+  void detailPolling.start({ immediate: true })
   void consolePolling.start({ immediate: true })
 }
 function stopPolling() {
-  statusPolling.stop()
+  statusStream.stop()
+  detailPolling.stop()
   consolePolling.stop()
+}
+
+function applyRunStateEvent(data) {
+  if (!data || typeof data !== 'object') return
+  runStatus.value = { ...runStatus.value, ...data }
+  const status = data?.runner_status
+  if (status === 'completed') {
+    phase.value = 2
+    addLog(t('step3.status.completed', { total: data.current_round }))
+    emit('update-status', 'completed')
+    stopPolling()
+  } else if (status === 'failed') {
+    phase.value = 2
+    emit('update-status', 'error')
+    stopPolling()
+  }
+}
+
+function applyControlEvent(data) {
+  if (!data || typeof data !== 'object') return
+  // Merge pause flag into the visible status so the Pause/Resume button
+  // flips on the same tick the backend saw the change.
+  runStatus.value = { ...runStatus.value, paused: !!data.paused }
 }
 
 async function pollConsole() {
@@ -169,22 +199,12 @@ async function pollConsole() {
 }
 
 async function pollStatus() {
+  // Hydration fallback: the SSE endpoint replays the retained snapshot
+  // on connect, so this only runs once on mount before the stream opens
+  // (or if the stream failed and we want a last-gasp state read).
   try {
     const res = await getRunStatus(props.simulationId)
-    if (res?.success) {
-      runStatus.value = res.data
-      const status = res.data?.runner_status
-      if (status === 'completed') {
-        phase.value = 2
-        addLog(t('step3.status.completed', { total: res.data.current_round }))
-        emit('update-status', 'completed')
-        stopPolling()
-      } else if (status === 'failed') {
-        phase.value = 2
-        emit('update-status', 'error')
-        stopPolling()
-      }
-    }
+    if (res?.success) applyRunStateEvent(res.data)
   } catch { /* swallow */ }
 }
 

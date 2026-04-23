@@ -522,6 +522,20 @@ Der Zustandsautomat lebt nicht in API-Routen, sondern in `simulations/state_mach
 ### 9.7 Evolutionspfad
 Kurzfristig bleibt **Polling** Standard. Mittelfristig wird die Architektur für **SSE oder WebSockets** vorbereitet, ohne Feature-Komponenten erneut zu zerlegen.
 
+### 9.8 Event Bus + SSE Bridge (Issue #9)
+
+Der Flask↔OASIS-Subprozess-Kanal läuft nicht mehr ausschließlich über File-Polling:
+
+- **Port:** `backend/app/services/event_bus.py` definiert `SimulationEventBus` (`publish`, `subscribe`, `request_response`) und die Kanäle `control`, `state`, `rpc.command`, `rpc.response.<id>`, `action`.
+- **Adapter:**
+  - `InMemoryEventBus` – threadsafe Pub/Sub, getestet und wiederverwendbar für weitere in-process-Consumer (z. B. geplanter `AnalyticsWorker`).
+  - `FilePollingEventBus` – wrappt `SimulationArtifactStore`, reproduziert das historische JSON-File-Verhalten und ist Offline-Fallback.
+  - `RedisEventBus` – Pub/Sub via Redis (`redis:7-alpine` in `docker-compose.yml`). Kanäle `control` und `state` gehen live via `PUBLISH`; der Adapter mirrort diese zusätzlich in den Artifact Store als Retained Snapshot, damit Snapshot-Reader (`read_control_state`, `/api/status`) ohne Subscribe funktionieren. RPC-Kanäle delegieren in Phase B weiterhin an den `FilePollingEventBus` – der OASIS-Subprozess hält seinen eigenen File-IPC-Handler, dessen Migration ist ein eigenständiges Follow-up.
+- **Backend-Auswahl:** `Config.EVENT_BUS_BACKEND` (`auto` | `redis` | `file`) und `Config.REDIS_URL` entscheiden im `AgoraContainer`. `auto` pingt Redis mit 500 ms Timeout und fällt sonst auf File zurück.
+- **SSE-Bridge:** `GET /api/simulation/<id>/stream` (`backend/app/api/simulation_stream.py`) abonniert `state`- und `control`-Kanäle, streamt sie als `text/event-stream`-Frames inkl. Heartbeat alle 15 s. Tokens werden bei gesetztem `AGORA_AUTH_TOKEN` via `?token=`-Query validiert (EventSource kann keine Custom-Header setzen).
+- **Frontend:** `frontend/src/composables/useEventStream.js` wrappt die `EventSource` mit Reconnect-Cap; `Step3Simulation.vue` nutzt ihn für run-state/pause statt des 2,5-s-Pollings. Detail- und Konsolen-Logs bleiben HTTP-Polling, weil sie andere Artefakte lesen.
+- **Operability:** `Neo4jStorage`-Startfehler werden in `app.extensions['neo4j_storage_error']` gespiegelt und von `/api/status` sowie `/api/simulation/available-models` ausgeliefert, damit UI-Warnungen den tatsächlichen Fehler statt eines Platzhalters zeigen.
+
 ---
 
 ## 10. Datenverträge
