@@ -66,8 +66,8 @@ def test_permanent_failure_raises_after_max_retries(storage):
         with pytest.raises(ServiceUnavailable):
             storage._call_with_retry(mock_func)
 
-    assert mock_func.call_count == Neo4jStorage.MAX_RETRIES, (
-        f"Expected exactly {Neo4jStorage.MAX_RETRIES} attempts"
+    assert mock_func.call_count == Neo4jStorage.MAX_RETRIES + 1, (
+        f"Expected exactly {Neo4jStorage.MAX_RETRIES + 1} attempts"
     )
 
 
