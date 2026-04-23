@@ -50,6 +50,7 @@ Module werden nach Domänen und Verantwortlichkeiten geschnitten, nicht nach his
 - **API/Views** orchestrieren nur.
 - **Services/Composables** enthalten Logik.
 - **Repositories/Adapter** kapseln IO, JSON, Neo4j und externe Systeme.
+- **Dependency Injection** über `AgoraContainer` (`backend/app/container.py`, Issue #14): Singletons (`neo4j_storage`, `artifact_store`) und Factories (`graph_builder()`) werden zentral verdrahtet. API-Layer holt Services über `get_container()`; `app.extensions['neo4j_storage' / 'artifact_store']` bleiben als Backward-Compat-Aliase, bis alle Call-Sites auf den Container migriert sind.
 
 ### 3.3 Single Source of Truth je Domäne
 Jede fachliche Domäne hat genau eine führende Persistenz für Status und Artefakte. In-Memory-Objekte sind nur Runtime-Caches.

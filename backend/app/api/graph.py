@@ -10,7 +10,8 @@ from flask import request, current_app
 from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
-from ..services.graph_builder import GraphBuilderService
+from ..container import get_container
+from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.artifact_locator import ArtifactLocator
@@ -297,7 +298,11 @@ def build_graph():
         return json_error("Ontology definition not found", status=400)
 
     # Get storage in request context (background thread cannot access current_app)
-    storage = _get_storage()
+    # Capture container in the request thread so the background closure
+    # below can resolve services without a live Flask app context.
+    container = get_container()
+    if container.neo4j_storage is None:
+        return json_error("GraphStorage not initialized", status=503)
 
     # Create async task
     task_manager = TaskManager()
@@ -336,8 +341,8 @@ def build_graph():
                 message="Initializing graph build service..."
             )
 
-            # Create graph builder service (storage passed from outer closure)
-            builder = GraphBuilderService(storage=storage)
+            # Resolve via container captured in the outer closure (Issue #14).
+            builder = container.graph_builder()
 
             # Chunk text
             task_manager.update_task(
@@ -523,8 +528,7 @@ def get_graph_data(graph_id: str):
     if not validate_graph_id(graph_id):
         return json_error("Invalid graph_id format", status=400)
 
-    storage = _get_storage()
-    builder = GraphBuilderService(storage=storage)
+    builder = get_container().graph_builder()
     graph_data = builder.get_graph_data(graph_id)
 
     return json_success(graph_data)
@@ -539,8 +543,7 @@ def delete_graph(graph_id: str):
     if not validate_graph_id(graph_id):
         return json_error("Invalid graph_id format", status=400)
 
-    storage = _get_storage()
-    builder = GraphBuilderService(storage=storage)
+    builder = get_container().graph_builder()
     builder.delete_graph(graph_id)
 
     return json_success(message=f"Graph deleted: {graph_id}")

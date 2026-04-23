@@ -81,11 +81,16 @@ def create_app(config_class=Config):
 
     CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=not allow_all)
 
-    # --- Initialize Neo4jStorage singleton (DI via app.extensions) ---
+    # --- Initialize singletons via AgoraContainer (Issue #14) ---
+    # The container owns the long-lived services; ``app.extensions['*']``
+    # entries remain as backward-compatible aliases until all call sites
+    # migrate to ``get_container()``.
+    from .container import AgoraContainer
+    from .services.artifact_store import LocalFilesystemArtifactStore
     from .storage import Neo4jStorage
+
     try:
         neo4j_storage = Neo4jStorage()
-        app.extensions['neo4j_storage'] = neo4j_storage
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
     except Exception as e:
@@ -94,15 +99,24 @@ def create_app(config_class=Config):
             Config.NEO4J_URI,
             e,
         )
-        # Store None so endpoints can return 503 gracefully
-        app.extensions['neo4j_storage'] = None
+        # Keep None so endpoints can return 503 gracefully; the container
+        # accepts an explicit None and the legacy alias preserves the contract.
+        neo4j_storage = None
 
-    # --- Initialize SimulationArtifactStore singleton (DI via app.extensions) ---
-    # Issue #13: domain layer talks to JSON artifacts only through this port.
-    from .services.artifact_store import LocalFilesystemArtifactStore
-    app.extensions['artifact_store'] = LocalFilesystemArtifactStore()
+    artifact_store = LocalFilesystemArtifactStore()
     if should_log_startup:
         logger.info("SimulationArtifactStore initialized (LocalFilesystem)")
+
+    container = AgoraContainer(
+        neo4j_storage=neo4j_storage,
+        artifact_store=artifact_store,
+    )
+    app.extensions['container'] = container
+    # Backward-compat aliases — same singleton instances, just two ways in.
+    app.extensions['neo4j_storage'] = neo4j_storage
+    app.extensions['artifact_store'] = artifact_store
+    if should_log_startup:
+        logger.info("AgoraContainer wired (neo4j_storage + artifact_store)")
 
     # Register simulation process cleanup function (ensure all simulation processes terminate on server shutdown)
     from .services.simulation_runner import SimulationRunner

@@ -13,7 +13,8 @@ from . import runs_bp
 from ..config import Config
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
-from ..services.graph_builder import GraphBuilderService
+from ..container import get_container
+from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
@@ -118,8 +119,8 @@ def _restart_graph_build(run: dict):
     if not ontology:
         raise ValueError("Ontology definition not found")
 
-    storage = current_app.extensions.get("neo4j_storage")
-    if not storage:
+    container = get_container()
+    if container.neo4j_storage is None:
         raise ValueError("GraphStorage not initialized")
 
     graph_name = project.name or "Agora Graph"
@@ -150,7 +151,7 @@ def _restart_graph_build(run: dict):
     def build_task():
         try:
             task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
-            builder = GraphBuilderService(storage=storage)
+            builder = container.graph_builder()
             task_manager.update_task(task_id, message="Chunking text...", progress=5)
             from ..services.text_processor import TextProcessor
             chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)

@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Refactor
 
+- **Issue #14**: Hand-rolled `AgoraContainer` (`backend/app/container.py`) ersetzt das Service-Locator-Pattern via `app.extensions[...]`. Container hält Singletons (`neo4j_storage`, `artifact_store`) und Factories (`graph_builder()`); Pilot-Service `GraphBuilderService` migriert in `api/graph.py` und `api/runs.py`. `app.extensions['neo4j_storage' / 'artifact_store']` bleiben als Backward-Compat-Aliase. Pilot-Tests laufen ohne Flask-App-Context (`tests/test_container.py`).
 - **Issue #13**: Neuer Hexagonal-Port `SimulationArtifactStore` (`backend/app/services/artifact_store.py`) mit `LocalFilesystemArtifactStore` (Produktion) und `InMemoryArtifactStore` (Tests). DI-Registration in `app.extensions['artifact_store']`, Helper `get_artifact_store()` in `api/simulation_common.py`.
 - `SimulationManager`, `SimulationRunner`, `SimulationIPCClient/Server`, `simulation_prepare`, `simulation_profiles`, `simulation_history` greifen nicht mehr direkt auf `utils/json_io` oder `uploads/simulations/<sim_id>/*.json` zu. Smoke-Test (`tests/test_no_json_io_leakage.py`) hält den Constraint dauerhaft hoch.
 - Implizit gefixt durch atomare Store-Writes: vorher non-atomare Writes für `simulation_config.json`, `ipc_commands/*.json`, `ipc_responses/*.json`, `env_status.json`.
