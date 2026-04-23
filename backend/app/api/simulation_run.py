@@ -186,6 +186,7 @@ def stop_simulation():
 
 
 @simulation_bp.route('/<simulation_id>/pause', methods=['POST'])
+@handle_api_errors(logger=logger, log_prefix="Failed to pause simulation")
 def pause_simulation(simulation_id: str):
     """Set the soft-pause flag so the simulation halts after the current round."""
     if not validate_simulation_id(simulation_id):
@@ -213,6 +214,7 @@ def pause_simulation(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/resume', methods=['POST'])
+@handle_api_errors(logger=logger, log_prefix="Failed to resume simulation")
 def resume_simulation(simulation_id: str):
     """Clear the pause flag so the simulation continues."""
     if not validate_simulation_id(simulation_id):

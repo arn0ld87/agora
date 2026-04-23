@@ -52,11 +52,9 @@ def interview_agent():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
 
-    # Legacy order: format-check runs before presence-check.
-    if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
-    if not simulation_id:
-        return json_error("Please provide simulation_id")
+    error = _require_simulation_id(simulation_id)
+    if error:
+        return error
 
     agent_id = data.get('agent_id')
     prompt = data.get('prompt')
@@ -94,10 +92,9 @@ def interview_agents_batch():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
 
-    if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
-    if not simulation_id:
-        return json_error("Please provide simulation_id")
+    error = _require_simulation_id(simulation_id)
+    if error:
+        return error
 
     interviews = data.get('interviews')
     platform = data.get('platform')
@@ -147,10 +144,9 @@ def interview_all_agents():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
 
-    if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
-    if not simulation_id:
-        return json_error("Please provide simulation_id")
+    error = _require_simulation_id(simulation_id)
+    if error:
+        return error
 
     prompt = data.get('prompt')
     platform = data.get('platform')
@@ -184,10 +180,9 @@ def get_interview_history():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
 
-    if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
-    if not simulation_id:
-        return json_error("Please provide simulation_id")
+    error = _require_simulation_id(simulation_id)
+    if error:
+        return error
 
     platform = data.get('platform')
     agent_id = data.get('agent_id')

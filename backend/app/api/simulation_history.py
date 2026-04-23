@@ -54,8 +54,13 @@ def _get_report_id_for_simulation(simulation_id: str) -> Optional[str]:
 
 
 def _connect_sqlite_readonly(db_path: str) -> sqlite3.Connection:
-    """Open a SQLite connection with ``Row`` factory for ``dict(row)`` access."""
-    conn = sqlite3.connect(db_path)
+    """Open a SQLite connection in read-only mode with ``Row`` factory.
+
+    Uses the ``file:<path>?mode=ro`` URI form so the driver both rejects any
+    write attempt and refuses to create an empty database file if ``db_path``
+    is missing — the caller is expected to ``os.path.exists`` beforehand.
+    """
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
