@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .services.artifact_store import SimulationArtifactStore
     from .services.event_bus import SimulationEventBus
     from .services.graph_builder import GraphBuilderService
+    from .services.temporal_graph import TemporalGraphService
     from .storage import Neo4jStorage
 
 
@@ -137,6 +138,16 @@ class AgoraContainer:
         )
 
     # ----- Factories -------------------------------------------------------
+
+    def temporal_graph(self) -> "TemporalGraphService":
+        """Construct a :class:`TemporalGraphService` wired to the container's storage.
+
+        Request-scoped because callers often operate on a specific graph and
+        the service caches per-graph backfill-state internally.
+        """
+        from .services.temporal_graph import TemporalGraphService
+
+        return TemporalGraphService(storage=self.neo4j_storage)
 
     def graph_builder(self) -> "GraphBuilderService":
         """Construct a fresh ``GraphBuilderService`` wired to the container's storage.

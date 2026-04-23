@@ -33,10 +33,15 @@ class GraphStorage(ABC):
     # --- Add data ---
 
     @abstractmethod
-    def add_text(self, graph_id: str, text: str) -> str:
+    def add_text(self, graph_id: str, text: str, round_num: Optional[int] = None) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
         This is synchronous (unlike Zep Cloud's async episodes).
+
+        Issue #10: ``round_num`` stamps newly created RELATION edges with
+        ``valid_from_round``. Pass ``0`` for the initial document ingest
+        and the current OASIS round for live simulation updates; leave
+        ``None`` for legacy callers where temporal tracking is not needed.
         """
 
     @abstractmethod
@@ -46,6 +51,7 @@ class GraphStorage(ABC):
         chunks: List[str],
         batch_size: int = 3,
         progress_callback: Optional[Callable] = None,
+        round_num: Optional[int] = None,
     ) -> List[str]:
         """Batch-add text chunks. Returns list of episode_ids."""
 
@@ -67,6 +73,33 @@ class GraphStorage(ABC):
     @abstractmethod
     def get_all_nodes(self, graph_id: str, limit: int = 2000) -> List[Dict[str, Any]]:
         """Get all nodes in a graph (with optional limit)."""
+
+    # --- Temporal helpers (Issue #10) ---
+
+    def get_edges_at_round(self, graph_id: str, round_num: int) -> List[Dict[str, Any]]:
+        """Return edges that were valid at ``round_num``. Default stub: all edges."""
+        return self.get_all_edges(graph_id)
+
+    def reinforce_relation(
+        self,
+        graph_id: str,
+        source_uuid: str,
+        target_uuid: str,
+        rtype: str,
+        round_num: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Bump reinforced_count on an existing edge. Returns None when missing."""
+        return None
+
+    def tombstone_relation(
+        self, graph_id: str, relation_uuid: str, round_num: int
+    ) -> bool:
+        """Mark an edge as no longer valid at ``round_num``. Default stub."""
+        return False
+
+    def backfill_temporal_defaults(self, graph_id: Optional[str] = None) -> int:
+        """Migrate pre-#10 edges to ``valid_from_round=0``. Default stub."""
+        return 0
 
     @abstractmethod
     def get_node(self, uuid: str) -> Optional[Dict[str, Any]]:

@@ -534,6 +534,44 @@ def get_graph_data(graph_id: str):
     return json_success(graph_data)
 
 
+@graph_bp.route('/snapshot/<graph_id>/<int:round_num>', methods=['GET'])
+@handle_api_errors
+def get_graph_snapshot(graph_id: str, round_num: int):
+    """Return the set of RELATION edges valid at ``round_num`` (Issue #10)."""
+    if not validate_graph_id(graph_id):
+        return json_error("Invalid graph_id format", status=400)
+    if round_num < 0:
+        return json_error("round_num must be >= 0", status=400)
+
+    service = get_container().temporal_graph()
+    snapshot = service.get_snapshot(graph_id, round_num)
+    return json_success(snapshot.to_dict())
+
+
+@graph_bp.route('/diff/<graph_id>', methods=['GET'])
+@handle_api_errors
+def get_graph_diff(graph_id: str):
+    """Return added / removed / reinforced edges between two rounds (Issue #10).
+
+    Query params: ``start_round``, ``end_round`` (both required, ints).
+    """
+    if not validate_graph_id(graph_id):
+        return json_error("Invalid graph_id format", status=400)
+
+    try:
+        start_round = int(request.args.get('start_round', '0'))
+        end_round = int(request.args.get('end_round', '0'))
+    except (TypeError, ValueError):
+        return json_error("start_round and end_round must be integers", status=400)
+
+    if end_round < start_round:
+        return json_error("end_round must be >= start_round", status=400)
+
+    service = get_container().temporal_graph()
+    diff = service.compute_diff(graph_id, start_round, end_round)
+    return json_success(diff.to_dict())
+
+
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
 @handle_api_errors
 def delete_graph(graph_id: str):

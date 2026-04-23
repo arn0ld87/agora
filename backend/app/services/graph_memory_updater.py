@@ -373,10 +373,16 @@ class GraphMemoryUpdater:
 
         episode_texts = [activity.to_episode_text() for activity in activities]
         combined_text = "\n".join(episode_texts)
+        # Issue #10 — stamp RELATION edges with the current OASIS round so
+        # time-travel queries can isolate what the simulation learned after
+        # the initial ingest. Pick the max round in the batch (activities in
+        # one batch are within the same SEND_INTERVAL, so rounds are tightly
+        # bunched in practice).
+        batch_round = max((a.round_num for a in activities), default=0)
 
         for attempt in range(self.MAX_RETRIES):
             try:
-                self.storage.add_text(self.graph_id, combined_text)
+                self.storage.add_text(self.graph_id, combined_text, round_num=batch_round)
 
                 self._total_sent += 1
                 self._total_items_sent += len(activities)

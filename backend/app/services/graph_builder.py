@@ -215,7 +215,10 @@ class GraphBuilderService:
             )
             t0 = time.time()
             try:
-                episode_id = self.storage.add_text(graph_id, chunk)
+                # Issue #10 — initial document ingest stamps round 0 so later
+                # time-travel diffs can distinguish document knowledge from
+                # edges learned during simulation.
+                episode_id = self.storage.add_text(graph_id, chunk, round_num=0)
                 elapsed = time.time() - t0
                 logger.info(
                     f"[graph_build] Chunk {idx + 1}/{total_chunks} done in {elapsed:.1f}s"

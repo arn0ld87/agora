@@ -244,8 +244,14 @@ class Neo4jStorage(GraphStorage):
     # Add data (NER → nodes/edges)
     # ----------------------------------------------------------------
 
-    def add_text(self, graph_id: str, text: str) -> str:
-        """Process text: NER/RE → batch embed → create nodes/edges → return episode_id."""
+    def add_text(self, graph_id: str, text: str, round_num: Optional[int] = None) -> str:
+        """Process text: NER/RE → batch embed → create nodes/edges → return episode_id.
+
+        ``round_num`` (Issue #10) stamps new RELATION edges with
+        ``valid_from_round``. ``None`` keeps the legacy behaviour (property
+        absent); ``0`` means "present since the initial ingest"; any positive
+        value means the edge was learned during that OASIS round.
+        """
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
@@ -390,7 +396,8 @@ class Neo4jStorage(GraphStorage):
                 def _create_relation(tx, _r_uuid=r_uuid, _source_uuid=source_uuid,
                                      _target_uuid=target_uuid, _rtype=rtype,
                                      _fact=fact, _fact_emb=fact_embedding,
-                                     _episode_id=episode_id, _now=now):
+                                     _episode_id=episode_id, _now=now,
+                                     _round=round_num):
                     tx.run(
                         """
                         MATCH (src:Entity {uuid: $src_uuid})
@@ -406,7 +413,10 @@ class Neo4jStorage(GraphStorage):
                             created_at: $now,
                             valid_at: null,
                             invalid_at: null,
-                            expired_at: null
+                            expired_at: null,
+                            valid_from_round: $round,
+                            valid_to_round: null,
+                            reinforced_count: 1
                         }]->(tgt)
                         """,
                         src_uuid=_source_uuid,
@@ -418,6 +428,7 @@ class Neo4jStorage(GraphStorage):
                         fact_embedding=_fact_emb,
                         episode_id=_episode_id,
                         now=_now,
+                        round=_round,
                     )
 
                 self._call_with_retry(session.execute_write, _create_relation)
@@ -431,6 +442,7 @@ class Neo4jStorage(GraphStorage):
         chunks: List[str],
         batch_size: int = 3,
         progress_callback: Optional[Callable] = None,
+        round_num: Optional[int] = None,
     ) -> List[str]:
         """Batch-add text chunks with progress reporting."""
         episode_ids = []
@@ -439,7 +451,7 @@ class Neo4jStorage(GraphStorage):
         for i, chunk in enumerate(chunks):
             if not chunk or not chunk.strip():
                 continue
-            episode_id = self.add_text(graph_id, chunk)
+            episode_id = self.add_text(graph_id, chunk, round_num=round_num)
             episode_ids.append(episode_id)
 
             if progress_callback:
@@ -684,6 +696,148 @@ class Neo4jStorage(GraphStorage):
             return self._call_with_retry(session.execute_read, _read)
 
     # ----------------------------------------------------------------
+    # Temporal edges (Issue #10)
+    # ----------------------------------------------------------------
+
+    def get_edges_at_round(
+        self, graph_id: str, round_num: int
+    ) -> List[Dict[str, Any]]:
+        """Return edges that were valid at the given OASIS round.
+
+        An edge is "valid" at round R if:
+          (valid_from_round IS NULL OR valid_from_round <= R)
+          AND (valid_to_round IS NULL OR valid_to_round > R)
+
+        Missing ``valid_from_round`` is treated as 0 (present since ingest).
+        Missing ``valid_to_round`` is treated as open-ended.
+        """
+
+        def _read(tx):
+            result = tx.run(
+                """
+                MATCH (src:Entity)-[r:RELATION {graph_id: $gid}]->(tgt:Entity)
+                WHERE coalesce(r.valid_from_round, 0) <= $round
+                  AND (r.valid_to_round IS NULL OR r.valid_to_round > $round)
+                RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid
+                ORDER BY r.created_at DESC
+                """,
+                gid=graph_id,
+                round=round_num,
+            )
+            return [
+                self._edge_to_dict(record["r"], record["src_uuid"], record["tgt_uuid"])
+                for record in result
+            ]
+
+        with self._driver.session() as session:
+            return self._call_with_retry(session.execute_read, _read)
+
+    def reinforce_relation(
+        self,
+        graph_id: str,
+        source_uuid: str,
+        target_uuid: str,
+        rtype: str,
+        round_num: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Bump ``reinforced_count`` on an existing RELATION.
+
+        Looks up an edge matching (graph_id, src, tgt, name=rtype). Returns
+        the updated edge dict, or ``None`` when no matching edge exists.
+        Callers should fall back to ``add_text`` when ``None`` is returned.
+        """
+
+        def _write(tx):
+            result = tx.run(
+                """
+                MATCH (src:Entity {uuid: $src})-[r:RELATION {graph_id: $gid, name: $name}]->(tgt:Entity {uuid: $tgt})
+                WITH r, src, tgt
+                ORDER BY coalesce(r.reinforced_count, 1) DESC
+                LIMIT 1
+                SET r.reinforced_count = coalesce(r.reinforced_count, 1) + 1
+                RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid
+                """,
+                gid=graph_id,
+                src=source_uuid,
+                tgt=target_uuid,
+                name=rtype,
+            )
+            record = result.single()
+            if not record:
+                return None
+            return self._edge_to_dict(
+                record["r"], record["src_uuid"], record["tgt_uuid"]
+            )
+
+        with self._driver.session() as session:
+            return self._call_with_retry(session.execute_write, _write)
+
+    def tombstone_relation(
+        self,
+        graph_id: str,
+        relation_uuid: str,
+        round_num: int,
+    ) -> bool:
+        """Mark a RELATION as no longer valid at round ``round_num``.
+
+        Sets ``valid_to_round`` to the given round. Returns True if a
+        matching edge was found.
+        """
+
+        def _write(tx):
+            result = tx.run(
+                """
+                MATCH ()-[r:RELATION {graph_id: $gid, uuid: $uuid}]->()
+                SET r.valid_to_round = $round
+                RETURN count(r) AS hit
+                """,
+                gid=graph_id,
+                uuid=relation_uuid,
+                round=round_num,
+            )
+            record = result.single()
+            return bool(record and record["hit"])
+
+        with self._driver.session() as session:
+            return self._call_with_retry(session.execute_write, _write)
+
+    def backfill_temporal_defaults(self, graph_id: Optional[str] = None) -> int:
+        """One-shot migration: stamp pre-#10 edges with ``valid_from_round=0``.
+
+        Called from the temporal service on first use per graph; idempotent
+        — sets properties only where they are missing. Returns the number
+        of edges touched.
+        """
+
+        def _write(tx):
+            if graph_id:
+                result = tx.run(
+                    """
+                    MATCH ()-[r:RELATION {graph_id: $gid}]->()
+                    WHERE r.valid_from_round IS NULL
+                    SET r.valid_from_round = 0,
+                        r.reinforced_count = coalesce(r.reinforced_count, 1)
+                    RETURN count(r) AS touched
+                    """,
+                    gid=graph_id,
+                )
+            else:
+                result = tx.run(
+                    """
+                    MATCH ()-[r:RELATION]->()
+                    WHERE r.valid_from_round IS NULL
+                    SET r.valid_from_round = 0,
+                        r.reinforced_count = coalesce(r.reinforced_count, 1)
+                    RETURN count(r) AS touched
+                    """
+                )
+            record = result.single()
+            return int(record["touched"]) if record else 0
+
+        with self._driver.session() as session:
+            return self._call_with_retry(session.execute_write, _write)
+
+    # ----------------------------------------------------------------
     # Search
     # ----------------------------------------------------------------
 
@@ -869,5 +1023,8 @@ class Neo4jStorage(GraphStorage):
             "valid_at": props.get("valid_at"),
             "invalid_at": props.get("invalid_at"),
             "expired_at": props.get("expired_at"),
+            "valid_from_round": props.get("valid_from_round"),
+            "valid_to_round": props.get("valid_to_round"),
+            "reinforced_count": props.get("reinforced_count", 1),
             "episode_ids": episode_ids,
         }
