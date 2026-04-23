@@ -52,6 +52,7 @@ htmlcov/
 mydoc/
 mytest/
 .alex-eastereggs.local.md
+context.md
 
 # Log files
 backend/logs/
