@@ -952,11 +952,34 @@ Danach wurde der letzte verbleibende Frontend-Build-Hinweis im aktuellen Hauptpf
 
 ---
 
+### 9.27 Legacy-Altlast `Process.vue` entfernt
+Danach wurde eine inzwischen ungenutzte Frontend-Altdatei bereinigt.
+
+**Neue Datei**
+- `docu/p0-legacy-process-view-cleanup-protokoll.md`
+
+**Geänderte Dateien**
+- `frontend/src/router/index.js`
+- gelöscht: `frontend/src/views/Process.vue`
+
+**Umgesetzte Logik**
+- Router-Importalias von `Process` auf `MainView` präzisiert
+- Route `name: 'Process'` und Pfad `/process/:projectId` unverändert beibehalten
+- tote Legacy-Datei `frontend/src/views/Process.vue` entfernt
+
+**Zusätzliche Verifikation**
+- Code-Suche auf verbleibende `Process.vue`-Direktverweise → **keine Treffer**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → **bestanden (88 Backend-Tests grün)**
+
+---
+
 ## 10. Offene Punkte nach diesem Stand
 
 1. weitere Backend-Ruff-Cluster schrittweise aufnehmen
-2. `Process.vue` als Alt-View gegen den neuen Shell-Stand bewerten oder zurückbauen
-3. größere Frontend-Strukturthemen jenseits der Workspace-Shell angehen
+2. größere Frontend-Strukturthemen jenseits der Workspace-Shell angehen
+3. verbleibende mittelgroße Cleanups nur noch auswählen, wenn sie klar low-risk sind
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer
