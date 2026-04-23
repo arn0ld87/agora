@@ -11,11 +11,11 @@ Features:
 
 import os
 import json
-import time
 import re
+import tempfile
 from copy import deepcopy
 from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -1250,8 +1250,10 @@ class ReportAgent:
                 query = parameters.get("query", "")
                 max_results = parameters.get("max_results", 5)
                 if isinstance(max_results, str):
-                    try: max_results = int(max_results)
-                    except ValueError: max_results = 5
+                    try:
+                        max_results = int(max_results)
+                    except ValueError:
+                        max_results = 5
                 structured_result = self.web_tools.web_search(query=query, max_results=max_results)
                 rendered = self.web_tools.format_search_result(structured_result)
 
@@ -1766,8 +1768,7 @@ class ReportAgent:
 
         # Check forceconclusion when LLM return is None
         if response is None:
-            final_answer = f"(This section generation failed: LLM returned empty response, please retry later)"
-            final_answer = f"(ThisSectiongeneratefailed: LLM returnedemptyresponse, pleaselaterretry)"
+            final_answer = "(ThisSectiongeneratefailed: LLM returnedemptyresponse, pleaselaterretry)"
         elif "Final Answer:" in response:
             final_answer = response.split("Final Answer:")[-1].strip()
         else:
@@ -2234,6 +2235,33 @@ class ReportManager:
     def _get_evidence_map_path(cls, report_id: str) -> str:
         """Get evidence map path"""
         return os.path.join(cls._get_report_folder(report_id), "evidence_map.json")
+
+    @classmethod
+    def _write_json_atomic(cls, path: str, payload: Dict[str, Any]) -> None:
+        """Write JSON atomically so polling never sees a half-written file."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix='.tmp-report-', suffix='.json', dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_path, path)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    @classmethod
+    def _read_json_safe(cls, path: str) -> Optional[Dict[str, Any]]:
+        """Read JSON defensively; return None for empty/truncated files during polling."""
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, 'r', encoding='utf-8') as handle:
+                return json.load(handle)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(f"Skipping unreadable report JSON {path}: {exc}")
+            return None
     
     @classmethod
     def get_console_log(cls, report_id: str, from_line: int = 0) -> Dict[str, Any]:
@@ -2361,16 +2389,11 @@ class ReportManager:
     @classmethod
     def save_evidence_map(cls, report_id: str, evidence_map: Dict[str, Any]) -> None:
         cls._ensure_report_folder(report_id)
-        with open(cls._get_evidence_map_path(report_id), "w", encoding="utf-8") as f:
-            json.dump(evidence_map, f, ensure_ascii=False, indent=2)
+        cls._write_json_atomic(cls._get_evidence_map_path(report_id), evidence_map)
 
     @classmethod
     def get_evidence_map(cls, report_id: str) -> Optional[Dict[str, Any]]:
-        path = cls._get_evidence_map_path(report_id)
-        if not os.path.exists(path):
-            return None
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return cls._read_json_safe(cls._get_evidence_map_path(report_id))
     
     @classmethod
     def save_outline(cls, report_id: str, outline: ReportOutline) -> None:
@@ -2381,8 +2404,7 @@ class ReportManager:
         """
         cls._ensure_report_folder(report_id)
         
-        with open(cls._get_outline_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(outline.to_dict(), f, ensure_ascii=False, indent=2)
+        cls._write_json_atomic(cls._get_outline_path(report_id), outline.to_dict())
         
         logger.info(f"outlinesaved: {report_id}")
     
@@ -2455,7 +2477,6 @@ class ReportManager:
             heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
             
             if heading_match:
-                level = len(heading_match.group(1))
                 title_text = heading_match.group(2).strip()
                 
                 # Checkwhether isandSection Titleduplicatetitle（skip first5rowwithinduplicate）
@@ -2517,19 +2538,12 @@ class ReportManager:
             "updated_at": datetime.now().isoformat()
         }
         
-        with open(cls._get_progress_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+        cls._write_json_atomic(cls._get_progress_path(report_id), progress_data)
     
     @classmethod
     def get_progress(cls, report_id: str) -> Optional[Dict[str, Any]]:
         """getreportgenerateprogress"""
-        path = cls._get_progress_path(report_id)
-        
-        if not os.path.exists(path):
-            return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        return cls._read_json_safe(cls._get_progress_path(report_id))
     
     @classmethod
     def get_generated_sections(cls, report_id: str) -> List[Dict[str, Any]]:
@@ -2569,12 +2583,10 @@ class ReportManager:
         
         fromsaveSectionfileassembleComplete report，and processrowtitleclean
         """
-        folder = cls._get_report_folder(report_id)
-        
         # BuildReportheader
         md_content = f"# {outline.title}\n\n"
         md_content += f"> {outline.summary}\n\n"
-        md_content += f"---\n\n"
+        md_content += "---\n\n"
         
         # sequentiallyReadallSectionfile
         sections = cls.get_generated_sections(report_id)
@@ -2728,8 +2740,7 @@ class ReportManager:
         report.evidence_sections = len((evidence_map or {}).get("sections", []))
         
         # savemetainformationJSON
-        with open(cls._get_report_path(report.report_id), 'w', encoding='utf-8') as f:
-            json.dump(report.to_dict(), f, ensure_ascii=False, indent=2)
+        cls._write_json_atomic(cls._get_report_path(report.report_id), report.to_dict())
         
         # saveoutline
         if report.outline:
@@ -2755,8 +2766,9 @@ class ReportManager:
             else:
                 return None
         
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        data = cls._read_json_safe(path)
+        if not data:
+            return None
         
         # rebuildReportobject
         outline = None

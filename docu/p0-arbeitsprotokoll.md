@@ -680,6 +680,37 @@ Zusätzlich wurde das Wurzelverzeichnis von alten Hilfsdateien und Notiz-Artefak
 - Pfad- und Dateiumzug geprüft
 - Log-Skripte zeigen nun auf die neue Dokumentationsablage
 
+### 9.16 Report-Status-Regression behoben
+Nach dem Polling-/Refactoring-Stand trat eine Regression auf: `POST /api/report/generate/status` konnte mit HTTP 500 abbrechen, wenn Polling genau in dem Moment auf `progress.json` oder `meta.json` zugriff, in dem diese Dateien gerade neu geschrieben wurden.
+
+**Root Cause**
+- Report-Status-Endpunkte lasen JSON-Artefakte direkt
+- Report-Dateien wurden nicht atomar geschrieben
+- bei einer Polling-Anfrage im falschen Moment konnte `json.load(...)` auf einer leeren/trunkierten Datei landen
+- Ergebnis: `JSONDecodeError` und 500er im Backend-Log
+
+**Geänderte Dateien**
+- `backend/app/services/report_agent.py`
+- `backend/tests/test_report_manager.py`
+- `package.json`
+- `.github/workflows/ci.yml`
+
+**Umgesetzter Fix**
+- atomische JSON-Schreibfunktion für Report-Artefakte eingeführt
+- defensive JSON-Lesehilfe eingeführt
+- `get_progress()`, `get_report()` und `get_evidence_map()` tolerieren jetzt kurzzeitig unlesbare/trunkierte Dateien sauber
+- zusätzlicher Testschutz für ungültige/temporär leere Report-JSON-Dateien
+- Scoped-Ruff-Rollout auf `report_agent.py` und neuen Report-Manager-Test erweitert
+
+**Zusätzliche Verifikation**
+- `cd backend && uv run pytest tests/test_report_manager.py tests/test_embedding_service.py tests/test_status.py` → **14/14 bestanden**
+- `cd backend && uv run ruff check app/__init__.py app/config.py app/storage/embedding_service.py app/services/report_agent.py tests/test_embedding_service.py tests/test_report_manager.py` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **70 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 21 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
