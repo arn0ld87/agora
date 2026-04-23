@@ -8,7 +8,6 @@ backend restarts and different subsystems can be queried uniformly.
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 import uuid
@@ -17,9 +16,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..config import Config
+from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.run_registry")
+
+# Sentinel returned by ``read_json_file`` on missing files. A corrupt file
+# also returns this default, so we distinguish the two cases by a preceding
+# ``os.path.exists`` check.
+_MISSING = object()
 
 
 class RunRegistry:
@@ -70,16 +75,18 @@ class RunRegistry:
         path = self._run_path(run_id)
         if not os.path.exists(path):
             return None
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = read_json_file(path, default=_MISSING, logger=logger, description=f"run manifest {run_id}")
+        if data is _MISSING or not isinstance(data, dict):
+            # Corrupt or unreadable — treat as absent so list_runs et al. keep
+            # working instead of crashing the whole history endpoint.
+            return None
         self._cache[run_id] = data
         return deepcopy(data)
 
     def _write_run(self, data: Dict[str, Any]) -> Dict[str, Any]:
         run_id = data["run_id"]
         path = self._run_path(run_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        write_json_atomic(path, data)
         self._cache[run_id] = deepcopy(data)
         return deepcopy(data)
 
@@ -245,6 +252,9 @@ class RunRegistry:
         with self._lock:
             for filename in os.listdir(self.REGISTRY_DIR):
                 if not filename.endswith(".json"):
+                    continue
+                # Skip tempfiles from atomic writes (.tmp-json-*.json).
+                if filename.startswith("."):
                     continue
                 run = self._read_run(filename[:-5])
                 if not run:

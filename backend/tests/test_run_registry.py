@@ -110,3 +110,64 @@ def test_sync_task_updates_existing_run(tmp_path, monkeypatch):
     assert updated["status"] == "processing"
     assert updated["progress"] == 65
     assert updated["linked_ids"]["task_id"] == "task_1"
+
+
+def test_list_runs_skips_corrupt_manifest(tmp_path, monkeypatch):
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    good = registry.create_run(
+        run_type="simulation_run",
+        entity_id="sim_good",
+        linked_ids={"simulation_id": "sim_good"},
+    )
+
+    # Simulate a mid-write crash: zero-byte manifest that json.load would choke on.
+    (Path(tmp_path) / "run_corrupt.json").write_bytes(b"")
+    # And a garbled manifest with non-JSON content.
+    (Path(tmp_path) / "run_garbage.json").write_text("not json at all", encoding="utf-8")
+
+    # Drop the in-memory cache so the corrupt files actually go through the disk path.
+    registry._cache.clear()
+
+    runs = registry.list_runs()
+    run_ids = {run["run_id"] for run in runs}
+
+    assert good["run_id"] in run_ids
+    assert "run_corrupt" not in run_ids
+    assert "run_garbage" not in run_ids
+
+
+def test_list_runs_ignores_atomic_write_tempfiles(tmp_path, monkeypatch):
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    good = registry.create_run(
+        run_type="simulation_run",
+        entity_id="sim_x",
+        linked_ids={"simulation_id": "sim_x"},
+    )
+
+    # A stray tempfile from a crashed atomic write — must not be parsed as a run.
+    (Path(tmp_path) / ".tmp-json-abc123.json").write_text("{}", encoding="utf-8")
+    registry._cache.clear()
+
+    runs = registry.list_runs()
+    assert [run["run_id"] for run in runs] == [good["run_id"]]
+
+
+def test_write_run_is_atomic(tmp_path, monkeypatch):
+    registry = _reset_registry(tmp_path, monkeypatch)
+
+    run = registry.create_run(
+        run_type="simulation_run",
+        entity_id="sim_atomic",
+        linked_ids={"simulation_id": "sim_atomic"},
+    )
+
+    manifest_path = Path(tmp_path) / f"{run['run_id']}.json"
+
+    # No half-written .tmp-json-*.json left behind after a successful write.
+    leftover = [p.name for p in Path(tmp_path).iterdir() if p.name.startswith(".tmp-json-")]
+    assert leftover == []
+    # File is a valid, fully formed JSON manifest.
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["run_id"] == run["run_id"]
