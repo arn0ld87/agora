@@ -819,13 +819,33 @@ Danach wurde die neue Workspace-Shell direkt auf einen zweiten zentralen Arbeits
   - Frontend-Lint **0 Fehler, 0 Warnungen**
   - Frontend-Build **bestanden**
 
+### 9.21 Gemeinsamen Workspace-Mode-Switcher extrahiert
+Als nächster kleiner Shell-Cleanup wurde der View-Mode-Umschalter der Workspace-Screens zentralisiert.
+
+**Neue Datei**
+- `frontend/src/layouts/WorkspaceModeSwitch.vue`
+
+**Geänderte Dateien**
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+- Detailprotokoll aktualisiert: `docu/p0-workspace-layout-protokoll.md`
+
+**Umgesetzte Logik**
+- gemeinsamer `WorkspaceModeSwitch` für `graph` / `split` / `workbench`
+- Header-Duplikat in beiden migrierten Workspace-Views entfernt
+- View-Mode-Verhalten blieb unverändert
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
 2. weitere Views auf gemeinsames Workspace-Layout umstellen
-3. gemeinsame Workspace-Controls weiter normalisieren
+3. gemeinsame Status-/Header-Bausteine weiter normalisieren
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer

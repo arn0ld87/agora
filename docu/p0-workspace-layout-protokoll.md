@@ -131,9 +131,29 @@ Ergebnis:
 
 ---
 
-## 8. Nächster sinnvoller Schritt
+## 8. Dritter Workspace-Schritt — Mode-Switcher extrahiert
 
-Nach diesem Grundschnitt sind die nächsten Kandidaten:
+Nach der Migration von `MainView.vue` und `SimulationRunView.vue` blieb eine offensichtliche Duplizierung im Header bestehen: derselbe View-Mode-Switcher (`graph` / `split` / `workbench`) wurde in beiden Views separat gepflegt.
+
+### 8.1 Neue Datei
+- `frontend/src/layouts/WorkspaceModeSwitch.vue`
+
+### 8.2 Geänderte Dateien
+- `frontend/src/views/MainView.vue`
+- `frontend/src/views/SimulationRunView.vue`
+
+### 8.3 Nutzen
+- gemeinsames UI-Verhalten für Workspace-Modi
+- weniger Header-Duplikat in den migrierten Views
+- künftige Workspace-Screens können denselben Umschalter direkt wiederverwenden
+
+### 8.4 Verifikation
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+
+## 9. Nächster sinnvoller Schritt
+
+Nach diesem Shell-Cleanup sind die nächsten Kandidaten:
 - `SimulationView.vue` oder `ReportView.vue` auf dieselbe Workspace-Shell umziehen
-- gemeinsame Workspace-Controls weiter normalisieren (z. B. View-Switcher als eigenes UI-Teil)
+- gemeinsame Status-/Header-Bausteine weiter normalisieren
 - anschließend weitere Shell-/Header-Duplizierung abbauen

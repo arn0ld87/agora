@@ -6,6 +6,7 @@ import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
 import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
 import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
 import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { getProject, getGraphData } from '../api/graph'
 import {
@@ -26,6 +27,11 @@ const { t } = useI18n()
 defineProps({ simulationId: String })
 
 const viewMode = ref('split')
+const workspaceModes = [
+  { value: 'graph', label: 'Graph' },
+  { value: 'split', label: 'Split' },
+  { value: 'workbench', label: 'Workbench' },
+]
 const currentSimulationId = ref(route.params.simulationId)
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
 const minutesPerRound = ref(30)
@@ -213,17 +219,11 @@ onUnmounted(() => {
         </template>
 
         <template #center>
-          <div class="view-switcher">
-            <button
-              v-for="mode in ['graph', 'split', 'workbench']"
-              :key="mode"
-              class="switch-btn"
-              :class="{ active: viewMode === mode }"
-              @click="viewMode = mode"
-            >
-              {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-            </button>
-          </div>
+          <WorkspaceModeSwitch
+            :current-mode="viewMode"
+            :modes="workspaceModes"
+            @update:mode="viewMode = $event"
+          />
         </template>
 
         <template #status>
@@ -293,28 +293,6 @@ onUnmounted(() => {
   color: var(--ink-0);
 }
 .brand-link:hover { color: var(--accent); }
-.view-switcher {
-  display: inline-flex;
-  justify-self: center;
-  gap: var(--s-2);
-  padding: 4px;
-  background: var(--paper-1);
-  border-radius: var(--r-1);
-}
-.switch-btn {
-  border: 0;
-  background: transparent;
-  padding: 6px 14px;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  border-radius: var(--r-1);
-  cursor: pointer;
-}
-.switch-btn:hover { color: var(--ink-0); }
-.switch-btn.active { background: var(--paper-0); color: var(--ink-0); border: 1px solid var(--rule); }
 .step-status { display: inline-flex; align-items: center; gap: var(--s-5); }
 .kicker-row { display: inline-flex; align-items: baseline; gap: var(--s-3); }
 .step-counter {

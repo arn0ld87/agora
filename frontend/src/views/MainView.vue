@@ -7,6 +7,7 @@ import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
 import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceModeSwitch from '../layouts/WorkspaceModeSwitch.vue'
 import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
@@ -20,6 +21,11 @@ const viewMode = ref('split')
 
 // Wizard state — Steps 1+2 live in MainView; 3-5 jump to dedicated views.
 const currentStep = ref(1)
+const workspaceModes = [
+  { value: 'graph', label: 'Graph' },
+  { value: 'split', label: 'Split' },
+  { value: 'workbench', label: 'Workbench' },
+]
 const stepLabels = computed(() => [
   t('process.stepper.step1'),
   t('process.stepper.step2'),
@@ -296,17 +302,11 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
         </template>
 
         <template #center>
-          <div class="view-switcher">
-            <button
-              v-for="mode in ['graph', 'split', 'workbench']"
-              :key="mode"
-              class="switch-btn"
-              :class="{ active: viewMode === mode }"
-              @click="viewMode = mode"
-            >
-              {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-            </button>
-          </div>
+          <WorkspaceModeSwitch
+            :current-mode="viewMode"
+            :modes="workspaceModes"
+            @update:mode="viewMode = $event"
+          />
         </template>
 
         <template #status>
@@ -371,30 +371,6 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
 }
 .brand-link:hover { color: var(--accent); }
 
-.view-switcher {
-  display: inline-flex;
-  justify-self: center;
-  gap: var(--s-2);
-  padding: 4px;
-  background: var(--paper-1);
-  border-radius: var(--r-1);
-}
-.switch-btn {
-  border: 0;
-  background: transparent;
-  padding: 6px 14px;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  border-radius: var(--r-1);
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
-}
-.switch-btn:hover { color: var(--ink-0); }
-.switch-btn.active { background: var(--paper-0); color: var(--ink-0); border: 1px solid var(--rule); }
-
 .step-status {
   display: inline-flex;
   align-items: center;
@@ -430,8 +406,4 @@ onUnmounted(() => { stopPolling(); stopGraphPolling() })
 .status-tag.status-error { color: #b00020; }
 .status-tag.status-done { color: var(--ink-0); }
 .status-tag.status-running { color: var(--accent); }
-
-@media (max-width: 720px) {
-  .view-switcher { justify-self: start; }
-}
 </style>
