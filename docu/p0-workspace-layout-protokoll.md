@@ -12,7 +12,7 @@ Dabei wurde bewusst nicht sofort die gesamte App auf einmal umgebaut.
 
 Der erste sichere Schnitt war:
 - Layout-Primitives anlegen
-- **einen** bestehenden View darauf umstellen
+- bestehende Workspace-nahe Views schrittweise darauf umstellen
 - Verhalten und Routing unverändert lassen
 
 ---
@@ -39,15 +39,31 @@ Diese Shell-Verantwortung wurde jetzt auf die neuen Layout-Komponenten verteilt.
 
 ---
 
-## 4. Umgesetzte Schnittgrenzen
+## 4. Zweiter migrierter View
 
-### 4.1 `WorkspaceLayout.vue`
+### `frontend/src/views/SimulationRunView.vue`
+
+Nach `MainView.vue` wurde als nächster Schritt `SimulationRunView.vue` auf dieselbe Shell umgestellt.
+
+Auch dort war die Struktur klar genug für einen risikoarmen Umbau:
+- Brand / Header
+- View-Switcher
+- Laufstatus + Quick-Pause
+- Graph links / Workbench rechts
+
+Damit teilen jetzt bereits zwei zentrale Arbeitsviews denselben Workspace-Rahmen.
+
+---
+
+## 5. Umgesetzte Schnittgrenzen
+
+### 5.1 `WorkspaceLayout.vue`
 Verantwortlich für:
 - volle Workspace-Höhe
 - vertikale Gesamtstruktur
 - Header-Slot + Content-Slot
 
-### 4.2 `WorkspaceHeader.vue`
+### 5.2 `WorkspaceHeader.vue`
 Verantwortlich für:
 - dreiteiligen Header-Rahmen
 - Brand-Slot
@@ -55,33 +71,33 @@ Verantwortlich für:
 - Status-Slot
 - responsive Grundstruktur
 
-### 4.3 `WorkspaceSplit.vue`
+### 5.3 `WorkspaceSplit.vue`
 Verantwortlich für:
 - zweispaltige Arbeitsfläche
 - linkes/rechtes Panel
 - Übergänge für Breite/Opacity
 - Slot-basierte Befüllung
 
-### 4.4 `MainView.vue`
-Behält weiterhin:
+### 5.4 Migrierte Views behalten weiterhin
 - echte fachliche State-Logik
 - Graph-/Step-Komponenten
-- Umschalten zwischen `graph` / `split` / `workbench`
+- View-Umschaltung
 - Projekt-/Graph-/Task-Orchestrierung
+- Simulationsstatus / Pause-Handling
 
 ---
 
-## 5. Warum dieser Schritt sinnvoll war
+## 6. Warum dieser Schritt sinnvoll war
 
 Der Umbau ist klein, aber strukturell wichtig:
-- Workspace-Shell ist nicht länger nur implizit in einem View verborgen
-- neue Views können künftig dieselben Layout-Bausteine wiederverwenden
-- spätere Umstellung weiterer Screens (`Process.vue`, `SimulationRunView.vue`, ggf. `ReportView.vue`) wird einfacher
-- der Eingriff bleibt risikoarm, weil nur ein einzelner View migriert wurde
+- Workspace-Shell ist nicht länger nur implizit in einem einzelnen View verborgen
+- neue Views können dieselben Layout-Bausteine wiederverwenden
+- spätere Umstellung weiterer Screens (`Process.vue`, ggf. `SimulationView.vue`, `ReportView.vue`) wird einfacher
+- der Eingriff bleibt risikoarm, weil die eigentliche Fachlogik in den migrierten Views unangetastet blieb
 
 ---
 
-## 6. Verifikation
+## 7. Verifikation
 
 ### Frontend-Lint
 Befehl:
@@ -101,10 +117,23 @@ cd frontend && npm run build
 Ergebnis:
 - **Build erfolgreich**
 
+### Gesamtcheck
+Befehl:
+```bash
+npm run check
+```
+
+Ergebnis:
+- Backend Ruff (scoped) → **bestanden**
+- Backend Tests → **70 bestanden**
+- Frontend Lint → **0 Fehler, 0 Warnungen**
+- Frontend Build → **bestanden**
+
 ---
 
-## 7. Nächster sinnvoller Schritt
+## 8. Nächster sinnvoller Schritt
 
-Nach diesem Grundschnitt ist der nächste Kandidat klar:
-- `Process.vue` oder `SimulationRunView.vue` auf dieselbe Workspace-Shell umziehen
-- danach weitere Shell-/Header-Duplizierung abbauen
+Nach diesem Grundschnitt sind die nächsten Kandidaten:
+- `SimulationView.vue` oder `ReportView.vue` auf dieselbe Workspace-Shell umziehen
+- gemeinsame Workspace-Controls weiter normalisieren (z. B. View-Switcher als eigenes UI-Teil)
+- anschließend weitere Shell-/Header-Duplizierung abbauen

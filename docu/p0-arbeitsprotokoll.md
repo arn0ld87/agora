@@ -794,12 +794,38 @@ Danach wurde der erste sichere Schritt für die gemeinsame Frontend-Workspace-Sh
 - `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
 - `cd frontend && npm run build` → **bestanden**
 
+### 9.20 Zweiter Workspace-Layout-Schritt
+Danach wurde die neue Workspace-Shell direkt auf einen zweiten zentralen Arbeitsview ausgeweitet.
+
+**Geänderte Datei**
+- `frontend/src/views/SimulationRunView.vue`
+- Detailprotokoll aktualisiert: `docu/p0-workspace-layout-protokoll.md`
+
+**Umgesetzte Logik**
+- `SimulationRunView.vue` nutzt jetzt ebenfalls `WorkspaceLayout`, `WorkspaceHeader` und `WorkspaceSplit`
+- Brand / View-Switcher / Status + Quick-Pause bleiben funktional unverändert
+- linker Graph-/rechter Workbench-Bereich bleibt in derselben fachlichen Struktur erhalten
+
+**Wichtige Designentscheidung**
+- Wieder nur der Shell-Rahmen wurde ersetzt, nicht die innere Simulationslogik.
+- So wird die gemeinsame Workspace-Sprache gestärkt, ohne Laufstatus-/Pause-/Routing-Logik zu gefährden.
+
+**Zusätzliche Verifikation**
+- `cd frontend && npm run lint` → **0 Fehler, 0 Warnungen**
+- `cd frontend && npm run build` → **bestanden**
+- `npm run check` → erneut vollständig erfolgreich
+- Gesamtstand danach:
+  - **70 Backend-Tests bestanden**
+  - Frontend-Lint **0 Fehler, 0 Warnungen**
+  - Frontend-Build **bestanden**
+
 ---
 
 ## 10. Offene Punkte nach diesem Stand
 
 1. Backend-Ruff schrittweise auf weitere Module ausweiten
 2. weitere Views auf gemeinsames Workspace-Layout umstellen
+3. gemeinsame Workspace-Controls weiter normalisieren
 3. `GraphPanel.vue` weiter zerlegen:
    - Link-Path-/Midpoint-Geometrie
    - Force-Simulation / Renderer

@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
+import WorkspaceHeader from '../layouts/WorkspaceHeader.vue'
+import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import { getProject, getGraphData } from '../api/graph'
 import {
   getSimulation,
@@ -202,45 +205,56 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="main-view">
-    <header class="top-nav">
-      <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
-      <div class="view-switcher">
-        <button
-          v-for="mode in ['graph', 'split', 'workbench']"
-          :key="mode"
-          class="switch-btn"
-          :class="{ active: viewMode === mode }"
-          @click="viewMode = mode"
-        >
-          {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
-        </button>
-      </div>
-      <div class="step-status">
-        <span class="kicker-row">
-          <span class="step-counter">№ 03 / 05</span>
-          <span class="step-name">{{ t('process.stepper.step3') }}</span>
-        </span>
-        <span class="status-tag" :class="`status-${statusKind}`">
-          <span class="status-dot" :class="`status-dot--${statusKind}`" />
-          {{ statusText }}
-        </span>
-        <button
-          v-if="statusKind === 'running' || statusKind === 'paused'"
-          class="quick-pause"
-          :class="{ paused: isPaused }"
-          :disabled="isPauseToggling"
-          :title="isPaused ? t('step3.controls.resume') : t('step3.controls.pause')"
-          @click="togglePause"
-        >
-          <span v-if="isPaused">▶</span>
-          <span v-else>❚❚</span>
-          {{ isPaused ? t('step3.controls.resume') : t('step3.controls.pause') }}
-        </button>
-      </div>
-    </header>
-    <main class="content">
-      <div class="panel left" :style="leftPanelStyle">
+  <WorkspaceLayout>
+    <template #header>
+      <WorkspaceHeader>
+        <template #brand>
+          <div class="brand-link" @click="router.push('/')">{{ t('brand.name') }}</div>
+        </template>
+
+        <template #center>
+          <div class="view-switcher">
+            <button
+              v-for="mode in ['graph', 'split', 'workbench']"
+              :key="mode"
+              class="switch-btn"
+              :class="{ active: viewMode === mode }"
+              @click="viewMode = mode"
+            >
+              {{ { graph: 'Graph', split: 'Split', workbench: 'Workbench' }[mode] }}
+            </button>
+          </div>
+        </template>
+
+        <template #status>
+          <div class="step-status">
+            <span class="kicker-row">
+              <span class="step-counter">№ 03 / 05</span>
+              <span class="step-name">{{ t('process.stepper.step3') }}</span>
+            </span>
+            <span class="status-tag" :class="`status-${statusKind}`">
+              <span class="status-dot" :class="`status-dot--${statusKind}`" />
+              {{ statusText }}
+            </span>
+            <button
+              v-if="statusKind === 'running' || statusKind === 'paused'"
+              class="quick-pause"
+              :class="{ paused: isPaused }"
+              :disabled="isPauseToggling"
+              :title="isPaused ? t('step3.controls.resume') : t('step3.controls.pause')"
+              @click="togglePause"
+            >
+              <span v-if="isPaused">▶</span>
+              <span v-else>❚❚</span>
+              {{ isPaused ? t('step3.controls.resume') : t('step3.controls.pause') }}
+            </button>
+          </div>
+        </template>
+      </WorkspaceHeader>
+    </template>
+
+    <WorkspaceSplit :left-style="leftPanelStyle" :right-style="rightPanelStyle">
+      <template #left>
         <GraphPanel
           :graphData="graphData"
           :loading="graphLoading"
@@ -249,8 +263,9 @@ onUnmounted(() => {
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />
-      </div>
-      <div class="panel right" :style="rightPanelStyle">
+      </template>
+
+      <template #right>
         <Step3Simulation
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
@@ -263,29 +278,12 @@ onUnmounted(() => {
           @add-log="addLog"
           @update-status="updateStatus"
         />
-      </div>
-    </main>
-  </div>
+      </template>
+    </WorkspaceSplit>
+  </WorkspaceLayout>
 </template>
 
 <style scoped>
-.main-view {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--paper-0);
-  overflow: hidden;
-}
-.top-nav {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--s-7);
-  padding: var(--s-4) var(--s-6);
-  border-bottom: 1px solid var(--rule-strong);
-  background: var(--paper-0);
-  z-index: 10;
-}
 .brand-link {
   font-family: var(--ff-serif);
   font-weight: 500;
@@ -365,7 +363,4 @@ onUnmounted(() => {
 .quick-pause:hover { color: var(--accent); border-color: var(--accent); }
 .quick-pause.paused { color: var(--accent); border-color: var(--accent); }
 .quick-pause:disabled { opacity: 0.5; cursor: wait; }
-.content { flex: 1; display: flex; overflow: hidden; }
-.panel { height: 100%; overflow: hidden; transition: width 350ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 200ms ease; }
-.panel.left { border-right: 1px solid var(--rule); }
 </style>
