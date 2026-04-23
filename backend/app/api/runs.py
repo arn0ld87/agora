@@ -7,7 +7,7 @@ from __future__ import annotations
 import threading
 import traceback
 
-from flask import current_app, jsonify, request
+from flask import current_app, request
 
 from . import runs_bp
 from ..config import Config
@@ -19,6 +19,7 @@ from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
+from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from ..utils.validation import validate_run_id
@@ -27,33 +28,32 @@ logger = get_logger("agora.api.runs")
 run_registry = RunRegistry()
 
 
-def _json_error(message: str, status: int = 400):
-    return jsonify({"success": False, "error": message}), status
+def _simulation_artifacts(simulation_id: str):
+    return ArtifactLocator.existing_paths({
+        "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
+    })
 
 
 def _get_run_or_404(run_id: str):
     if not validate_run_id(run_id):
-        return None, _json_error("Invalid run_id format", 400)
+        return None, json_error("Invalid run_id format", status=400)
     run = run_registry.get_run(run_id)
     if not run:
-        return None, _json_error(f"Run does not exist: {run_id}", 404)
+        return None, json_error(f"Run does not exist: {run_id}", status=404)
     return run, None
 
 
 @runs_bp.route("", methods=["GET"])
+@handle_api_errors(logger=logger, log_prefix="Failed to list runs")
 def list_runs():
-    try:
-        runs = run_registry.list_runs(
-            project_id=request.args.get("project"),
-            run_type=request.args.get("run_type"),
-            status=request.args.get("status"),
-            branch=request.args.get("branch"),
-            limit=request.args.get("limit", 200, type=int),
-        )
-        return jsonify({"success": True, "data": runs, "count": len(runs)})
-    except Exception as e:
-        logger.error(f"Failed to list runs: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+    runs = run_registry.list_runs(
+        project_id=request.args.get("project"),
+        run_type=request.args.get("run_type"),
+        status=request.args.get("status"),
+        branch=request.args.get("branch"),
+        limit=request.args.get("limit", 200, type=int),
+    )
+    return json_success(runs, count=len(runs))
 
 
 @runs_bp.route("/<run_id>", methods=["GET"])
@@ -61,7 +61,7 @@ def get_run(run_id: str):
     run, error = _get_run_or_404(run_id)
     if error:
         return error
-    return jsonify({"success": True, "data": run})
+    return json_success(run)
 
 
 @runs_bp.route("/<run_id>/events", methods=["GET"])
@@ -69,7 +69,7 @@ def get_run_events(run_id: str):
     run, error = _get_run_or_404(run_id)
     if error:
         return error
-    return jsonify({"success": True, "data": run.get("events", [])})
+    return json_success(run.get("events", []))
 
 
 @runs_bp.route("/<run_id>/stop", methods=["POST"])
@@ -79,31 +79,30 @@ def stop_run(run_id: str):
         return error
 
     if run.get("run_type") != "simulation_run":
-        return _json_error("Stop is only supported for simulation_run in this version", 409)
+        return json_error("Stop is only supported for simulation_run in this version", status=409)
 
     simulation_id = run.get("linked_ids", {}).get("simulation_id")
     if not simulation_id:
-        return _json_error("Run is missing simulation_id linkage", 409)
+        return json_error("Run is missing simulation_id linkage", status=409)
 
     try:
         run_state = SimulationRunner.stop_simulation(simulation_id)
-        sim_state = SimulationManager().get_simulation(simulation_id)
+        manager = SimulationManager()
+        sim_state = manager.get_simulation(simulation_id)
         if sim_state:
             sim_state.status = SimulationStatus.STOPPED
-            SimulationManager()._save_simulation_state(sim_state)
+            manager._save_simulation_state(sim_state)
         run_registry.update_run(
             run_id,
             status="stopped",
             progress=run_state.to_dict().get("progress_percent", 0),
             message="Simulation stopped",
-            artifacts=ArtifactLocator.existing_paths({
-                "simulation": ArtifactLocator.simulation_artifacts(simulation_id),
-            }),
+            artifacts=_simulation_artifacts(simulation_id),
             resume_capability={"available": True, "action": "restart", "label": "Restart run"},
         )
-        return jsonify({"success": True, "data": run_registry.get_run(run_id)})
-    except Exception as e:
-        return _json_error(str(e), 400)
+        return json_success(run_registry.get_run(run_id))
+    except Exception as exc:
+        return json_error(str(exc), status=400)
 
 
 def _restart_graph_build(run: dict):
@@ -236,7 +235,7 @@ def _restart_simulation_prepare(run: dict):
         progress=0,
         message="Simulation preparation restart queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
-        artifacts=ArtifactLocator.existing_paths({"simulation": ArtifactLocator.simulation_artifacts(simulation_id)}),
+        artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
         branch_label=state.branch_name,
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
@@ -283,7 +282,7 @@ def _restart_simulation_prepare(run: dict):
                 status="completed",
                 progress=100,
                 message="Simulation preparation completed",
-                artifacts=ArtifactLocator.existing_paths({"simulation": ArtifactLocator.simulation_artifacts(simulation_id)}),
+                artifacts=_simulation_artifacts(simulation_id),
                 resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
             )
         except Exception as exc:
@@ -296,7 +295,8 @@ def _restart_simulation_prepare(run: dict):
 
 def _resume_or_restart_simulation_run(run: dict):
     simulation_id = run.get("linked_ids", {}).get("simulation_id") or run.get("entity_id")
-    state = SimulationManager().get_simulation(simulation_id)
+    manager = SimulationManager()
+    state = manager.get_simulation(simulation_id)
     if not state:
         raise ValueError(f"Simulation does not exist: {simulation_id}")
 
@@ -308,14 +308,14 @@ def _resume_or_restart_simulation_run(run: dict):
             run["run_id"],
             status="processing",
             message="Simulation resumed",
-            artifacts=ArtifactLocator.existing_paths({"simulation": ArtifactLocator.simulation_artifacts(simulation_id)}),
+            artifacts=_simulation_artifacts(simulation_id),
             resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         )
         return {"run_id": run["run_id"], "status": "processing", "message": "Simulation resumed"}
 
     new_run_state = SimulationRunner.start_simulation(simulation_id=simulation_id, platform="parallel")
     state.status = SimulationStatus.RUNNING
-    SimulationManager()._save_simulation_state(state)
+    manager._save_simulation_state(state)
     new_run = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
@@ -324,7 +324,7 @@ def _resume_or_restart_simulation_run(run: dict):
         progress=0,
         message="Simulation restarted",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
-        artifacts=ArtifactLocator.existing_paths({"simulation": ArtifactLocator.simulation_artifacts(simulation_id)}),
+        artifacts=_simulation_artifacts(simulation_id),
         resume_capability={"available": True, "action": "resume", "label": "Resume run"},
         branch_label=state.branch_name,
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
@@ -400,30 +400,21 @@ def _resume_report_generate(run: dict):
 
 
 @runs_bp.route("/<run_id>/resume", methods=["POST"])
+@handle_api_errors(logger=logger, log_prefix="Failed to resume run")
 def resume_run(run_id: str):
     run, error = _get_run_or_404(run_id)
     if error:
         return error
 
-    try:
-        run_type = run.get("run_type")
-        if run_type == "graph_build":
-            data = _restart_graph_build(run)
-        elif run_type == "simulation_prepare":
-            data = _restart_simulation_prepare(run)
-        elif run_type == "simulation_run":
-            data = _resume_or_restart_simulation_run(run)
-        elif run_type == "report_generate":
-            data = _resume_report_generate(run)
-        else:
-            return _json_error(f"Unsupported run type: {run_type}", 409)
-        return jsonify({"success": True, "data": data})
-    except ValueError as e:
-        return _json_error(str(e), 400)
-    except Exception as e:
-        logger.error(f"Failed to resume run {run_id}: {e}")
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc() if Config.DEBUG else None,
-        }), 500
+    run_type = run.get("run_type")
+    if run_type == "graph_build":
+        data = _restart_graph_build(run)
+    elif run_type == "simulation_prepare":
+        data = _restart_simulation_prepare(run)
+    elif run_type == "simulation_run":
+        data = _resume_or_restart_simulation_run(run)
+    elif run_type == "report_generate":
+        data = _resume_report_generate(run)
+    else:
+        return json_error(f"Unsupported run type: {run_type}", status=409)
+    return json_success(data)
