@@ -260,8 +260,8 @@ const steps = computed(() => tm('home.steps'))
           <button v-if="!loadingModels" class="status-refresh" @click="loadStatus" :title="t('common.refresh')">↻</button>
         </div>
         <div v-if="!loadingModels && !servicesReady" class="status-warn">
-          {{ neo4jReachable ? '' : 'Neo4j nicht erreichbar — starte: brew services start neo4j (oder docker compose up -d neo4j). ' }}
-          {{ ollamaReachable ? '' : 'Ollama nicht erreichbar — starte: ollama serve.' }}
+          {{ neo4jReachable ? '' : `Neo4j nicht erreichbar — ${neo4jError || 'prüfe NEO4J_URI / NEO4J_PASSWORD und dass Neo4j läuft'}. ` }}
+          {{ ollamaReachable ? '' : `Ollama nicht erreichbar — ${ollamaError || 'starte: ollama serve'}.` }}
         </div>
 
         <div class="console-head">
@@ -368,7 +368,7 @@ const steps = computed(() => tm('home.steps'))
             {{ t('home.console.needPrompt') }}
           </span>
           <span v-else-if="!servicesReady" class="console-warning">
-            Dienste nicht bereit (Neo4j/Ollama).
+            Dienste nicht bereit (Neo4j/Ollama). {{ neo4jError || ollamaError || '' }}
           </span>
         </div>
         <p v-if="errorMsg" class="error-line">{{ errorMsg }}</p>

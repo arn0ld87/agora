@@ -57,7 +57,7 @@ def get_available_models():
     neo4j_reachable = storage is not None
     neo4j_error = None
     if storage is None:
-        neo4j_error = (
+        neo4j_error = current_app.extensions.get('neo4j_storage_error') or (
             "Neo4j storage not initialised — check NEO4J_URI / NEO4J_PASSWORD and that Neo4j is running."
         )
 

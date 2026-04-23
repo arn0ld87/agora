@@ -22,6 +22,19 @@ def test_available_models_route_is_registered():
     assert "current_default" in payload["data"]
 
 
+def test_available_models_surfaces_startup_neo4j_error():
+    app = _build_test_app()
+    app.extensions["neo4j_storage_error"] = "AuthError: unauthorized"
+    client = app.test_client()
+
+    response = client.get("/api/simulation/available-models")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"]["neo4j_reachable"] is False
+    assert payload["data"]["neo4j_error"] == "AuthError: unauthorized"
+
+
 def test_entity_routes_keep_validation_guard():
     app = _build_test_app()
     client = app.test_client()

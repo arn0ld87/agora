@@ -33,7 +33,7 @@ def _get_neo4j_status():
     if storage is None:
         return {
             "reachable": False,
-            "error": "Storage not initialized",
+            "error": current_app.extensions.get('neo4j_storage_error') or "Storage not initialized",
             "uri": Config.NEO4J_URI,
         }
 

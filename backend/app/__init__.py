@@ -90,11 +90,13 @@ def create_app(config_class=Config):
     from .services.event_bus import FilePollingEventBus
     from .storage import Neo4jStorage
 
+    neo4j_storage_error = None
     try:
         neo4j_storage = Neo4jStorage()
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
     except Exception as e:
+        neo4j_storage_error = str(e)
         logger.error(
             "Neo4jStorage initialization failed for %s: %s",
             Config.NEO4J_URI,
@@ -120,6 +122,7 @@ def create_app(config_class=Config):
     app.extensions['container'] = container
     # Backward-compat aliases — same singleton instances, just two ways in.
     app.extensions['neo4j_storage'] = neo4j_storage
+    app.extensions['neo4j_storage_error'] = neo4j_storage_error
     app.extensions['artifact_store'] = artifact_store
     app.extensions['event_bus'] = event_bus
     if should_log_startup:

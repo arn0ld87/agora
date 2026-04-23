@@ -81,6 +81,21 @@ class TestStatusFunctions:
             assert result['error'] is not None
             assert 'uri' in result
 
+    def test_get_neo4j_status_uses_startup_error_when_available(self):
+        """Surface the original startup error instead of a generic placeholder."""
+        from flask import Flask
+        app = Flask(__name__)
+
+        with app.app_context():
+            app.extensions = {
+                'neo4j_storage_error': 'AuthError: unauthorized',
+            }
+
+            result = _get_neo4j_status()
+
+            assert result['reachable'] is False
+            assert result['error'] == 'AuthError: unauthorized'
+
     def test_get_neo4j_status_reachable(self):
         """Test Neo4j status when service is reachable."""
         from flask import Flask
