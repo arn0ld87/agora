@@ -21,6 +21,7 @@ from queue import Queue
 
 from ..utils.logger import get_logger
 from .artifact_store import resolve_default_store
+from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient
@@ -363,6 +364,24 @@ class SimulationRunner:
 
         data = state.to_detail_dict()
         _store().write_json(state.simulation_id, "run_state", data)
+
+        # Issue #9 Phase B — mirror the snapshot to the bus so live
+        # subscribers (frontend SSE in Phase C, future analytics workers)
+        # get a push instead of polling run_state.json. Best-effort:
+        # a broken bus must not poison state persistence.
+        try:
+            bus = resolve_default_event_bus()
+            bus.publish(
+                CHANNEL_STATE,
+                SimulationEvent(
+                    type="state.update",
+                    simulation_id=state.simulation_id,
+                    payload=data,
+                    ts=data.get("updated_at", datetime.now().isoformat()),
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Event bus state publish skipped: %s", exc)
 
         cls._run_states[state.simulation_id] = state
         try:

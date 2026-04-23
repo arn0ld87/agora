@@ -143,6 +143,12 @@ class Config:
     # Mirrors the AGORA_LOG_FORMAT env var read directly in utils/logger.py at import time.
     AGORA_LOG_FORMAT = os.environ.get('AGORA_LOG_FORMAT', 'text').lower()
 
+    # Event bus transport for simulation IPC (Issue #9 Phase B).
+    # "redis" → RedisEventBus via REDIS_URL; "file" → FilePollingEventBus (offline fallback);
+    # "auto" (default) → redis if REDIS_URL pings OK, otherwise file.
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://redis:6379/0')
+    EVENT_BUS_BACKEND = os.environ.get('EVENT_BUS_BACKEND', 'auto').lower()
+
     # Curated LLM model presets shown in the UI dropdown alongside locally installed Ollama models.
     LLM_MODEL_PRESETS = [
         {"name": "qwen3-coder-next:cloud", "label": "Qwen3 Coder (Cloud) — empfohlen", "kind": "cloud"},

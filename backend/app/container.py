@@ -82,15 +82,59 @@ class AgoraContainer:
     def event_bus(self) -> "SimulationEventBus":
         """Singleton event bus for simulation IPC (Issue #9).
 
-        Phase A default: :class:`FilePollingEventBus` backed by the container's
-        artifact store. Phase B will switch to :class:`RedisEventBus` when
-        ``REDIS_URL`` is reachable.
+        Backend is picked from :data:`Config.EVENT_BUS_BACKEND`:
+
+        * ``redis`` → :class:`RedisEventBus` (fails loud if unreachable)
+        * ``file`` → :class:`FilePollingEventBus` (offline-first fallback)
+        * ``auto`` (default) → Redis if ``REDIS_URL`` pings within 500ms,
+          otherwise file.
         """
         if self._event_bus is None:
-            from .services.event_bus import FilePollingEventBus
-
-            self._event_bus = FilePollingEventBus(store=self.artifact_store)
+            self._event_bus = self._build_event_bus()
         return self._event_bus
+
+    def _build_event_bus(self) -> "SimulationEventBus":
+        from .config import Config
+        from .services.event_bus import FilePollingEventBus
+        from .utils.logger import get_logger
+
+        logger = get_logger("agora.container")
+        backend = (Config.EVENT_BUS_BACKEND or "auto").lower()
+
+        def _file_bus() -> "SimulationEventBus":
+            logger.info("SimulationEventBus: using FilePollingEventBus")
+            return FilePollingEventBus(store=self.artifact_store)
+
+        if backend == "file":
+            return _file_bus()
+
+        if backend in ("redis", "auto"):
+            from .services.event_bus_redis import RedisEventBus, is_redis_reachable
+
+            if backend == "auto" and not is_redis_reachable(Config.REDIS_URL):
+                logger.info(
+                    "SimulationEventBus: REDIS_URL=%s unreachable, falling back to file",
+                    Config.REDIS_URL,
+                )
+                return _file_bus()
+            try:
+                bus = RedisEventBus(Config.REDIS_URL, artifact_store=self.artifact_store)
+                logger.info("SimulationEventBus: RedisEventBus connected to %s", Config.REDIS_URL)
+                return bus
+            except Exception as exc:
+                if backend == "redis":
+                    raise RuntimeError(
+                        f"EVENT_BUS_BACKEND=redis but Redis unreachable at {Config.REDIS_URL}: {exc}"
+                    ) from exc
+                logger.warning(
+                    "SimulationEventBus: Redis init failed (%s), falling back to file", exc
+                )
+                return _file_bus()
+
+        raise ValueError(
+            f"Unknown EVENT_BUS_BACKEND={Config.EVENT_BUS_BACKEND!r} "
+            f"(expected one of: redis, file, auto)"
+        )
 
     # ----- Factories -------------------------------------------------------
 

@@ -36,6 +36,10 @@ dependencies = [
     # Utilities
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
+
+    # Event bus transport (Issue #9 Phase B). Used when EVENT_BUS_BACKEND=redis;
+    # the FilePolling fallback keeps the offline-only path working without Redis.
+    "redis>=5.0.0",
 ]
 
 [project.optional-dependencies]

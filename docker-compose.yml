@@ -28,6 +28,25 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Issue #9 Phase B — event bus transport for Flask↔OASIS IPC.
+      # Overrides any REDIS_URL in .env so the bus stays pointed at the
+      # compose-private service regardless of host-side defaults.
+      - REDIS_URL=redis://redis:6379/0
+
+  redis:
+    image: redis:7-alpine
+    container_name: agora-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   neo4j:
     image: neo4j:5.18-community
@@ -57,3 +76,4 @@ services:
 volumes:
   neo4j_data:
   neo4j_logs:
+  redis_data:
