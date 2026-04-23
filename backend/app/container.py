@@ -27,6 +27,10 @@ if TYPE_CHECKING:
     from .services.event_bus import SimulationEventBus
     from .services.graph_builder import GraphBuilderService
     from .services.network_analytics import NetworkAnalyticsService  # noqa: F401
+    from .services.ontology_mutation import (  # noqa: F401
+        OntologyManager,
+        OntologyMutationService,
+    )
     from .services.temporal_graph import TemporalGraphService
     from .storage import Neo4jStorage
 
@@ -58,6 +62,7 @@ class AgoraContainer:
         self._neo4j_storage = neo4j_storage
         self._artifact_store = artifact_store
         self._event_bus = event_bus
+        self._ontology_manager = None
         self._neo4j_storage_explicit = neo4j_storage is not None
         self._artifact_store_explicit = artifact_store is not None
         self._event_bus_explicit = event_bus is not None
@@ -139,6 +144,26 @@ class AgoraContainer:
         )
 
     # ----- Factories -------------------------------------------------------
+
+    @property
+    def ontology_manager(self) -> "OntologyManager":
+        """Singleton :class:`OntologyManager` bound to the container's storage (Issue #11)."""
+        if getattr(self, "_ontology_manager", None) is None:
+            from .services.ontology_mutation import OntologyManager
+
+            self._ontology_manager = OntologyManager(storage=self.neo4j_storage)
+        return self._ontology_manager
+
+    def ontology_mutation_service(self) -> "OntologyMutationService":
+        """Construct an :class:`OntologyMutationService` from Config flags."""
+        from .config import Config
+        from .services.ontology_mutation import OntologyMutationService
+
+        return OntologyMutationService(
+            manager=self.ontology_manager,
+            mode=Config.ONTOLOGY_MUTATION_MODE,
+            min_confidence=Config.ONTOLOGY_MUTATION_MIN_CONFIDENCE,
+        )
 
     def network_analytics(self) -> "NetworkAnalyticsService":
         """Construct a stateless :class:`NetworkAnalyticsService` (Issue #12)."""

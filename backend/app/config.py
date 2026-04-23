@@ -143,6 +143,17 @@ class Config:
     # Mirrors the AGORA_LOG_FORMAT env var read directly in utils/logger.py at import time.
     AGORA_LOG_FORMAT = os.environ.get('AGORA_LOG_FORMAT', 'text').lower()
 
+    # Ontology mutation (Issue #11) — how to handle novel entity types that
+    # the NER pipeline flags during simulation:
+    #   disabled (default) → drop the signal, ontology never changes
+    #   review_only        → audit-log only, no ontology write
+    #   auto               → apply patches whose confidence clears
+    #                        ONTOLOGY_MUTATION_MIN_CONFIDENCE
+    ONTOLOGY_MUTATION_MODE = os.environ.get('ONTOLOGY_MUTATION_MODE', 'disabled').lower()
+    ONTOLOGY_MUTATION_MIN_CONFIDENCE = float(
+        os.environ.get('ONTOLOGY_MUTATION_MIN_CONFIDENCE', '0.6')
+    )
+
     # Event bus transport for simulation IPC (Issue #9 Phase B).
     # "redis" → RedisEventBus via REDIS_URL; "file" → FilePollingEventBus (offline fallback);
     # "auto" (default) → redis if REDIS_URL pings OK, otherwise file.
