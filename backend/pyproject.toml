@@ -40,6 +40,11 @@ dependencies = [
     # Event bus transport (Issue #9 Phase B). Used when EVENT_BUS_BACKEND=redis;
     # the FilePolling fallback keeps the offline-only path working without Redis.
     "redis>=5.0.0",
+
+    # Graph analytics (Issue #12): Louvain community detection + betweenness
+    # centrality on the agent-interaction graph. networkx >= 3.2 ships the
+    # built-in community.louvain_communities implementation.
+    "networkx>=3.2",
 ]
 
 [project.optional-dependencies]

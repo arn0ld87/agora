@@ -20,6 +20,7 @@ from . import simulation_run  # noqa: E402, F401
 from . import simulation_interviews  # noqa: E402, F401
 from . import simulation_history  # noqa: E402, F401
 from . import simulation_stream  # noqa: E402, F401 -- Issue #9 Phase C: SSE bridge
+from . import simulation_metrics  # noqa: E402, F401 -- Issue #12: polarization metrics
 from . import simulation  # noqa: E402, F401
 from . import report  # noqa: E402, F401
 from . import runs  # noqa: E402, F401

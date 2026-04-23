@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .services.artifact_store import SimulationArtifactStore
     from .services.event_bus import SimulationEventBus
     from .services.graph_builder import GraphBuilderService
+    from .services.network_analytics import NetworkAnalyticsService  # noqa: F401
     from .services.temporal_graph import TemporalGraphService
     from .storage import Neo4jStorage
 
@@ -138,6 +139,12 @@ class AgoraContainer:
         )
 
     # ----- Factories -------------------------------------------------------
+
+    def network_analytics(self) -> "NetworkAnalyticsService":
+        """Construct a stateless :class:`NetworkAnalyticsService` (Issue #12)."""
+        from .services.network_analytics import NetworkAnalyticsService
+
+        return NetworkAnalyticsService()
 
     def temporal_graph(self) -> "TemporalGraphService":
         """Construct a :class:`TemporalGraphService` wired to the container's storage.
