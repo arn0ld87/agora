@@ -132,14 +132,15 @@ models/     Dataclasses (Project, Task)
 
 1. **Graph Build** — Dokument chunken → parallele `storage.add_text`-Aufrufe (NER/RE → Embeddings → Neo4j).
 2. **Env Setup** — Persona- und Simulation-Config generieren; Konfiguration wird in `uploads/simulations/<sim_id>/simulation_config.json` eingefroren.
-3. **Simulation** — OASIS läuft als separater Subprozess; Flask↔Subprozess-IPC über den `SimulationEventBus` (`FilePollingEventBus` offline-first, `RedisEventBus` im Compose-Default); `run_state.json` ist Post-Mortem-Persistenz. `SimulationRunner.register_cleanup()` killt Orphans beim Shutdown.
+3. **Simulation** — OASIS läuft als separater Subprozess; Flask↔Subprozess-IPC über den `SimulationEventBus` (`FilePollingEventBus` offline-first, `RedisEventBus` hybrid Pub/Sub + File im Compose-Default seit Issue #17); `run_state.json` ist Post-Mortem-Persistenz. `SimulationRunner.register_cleanup()` killt Orphans beim Shutdown.
 4. **Report** — `ReportAgent` nutzt `GraphToolsService` und optional `WebTools`; Loop-Limits via `REPORT_AGENT_MAX_TOOL_CALLS` und `REPORT_AGENT_MAX_REFLECTION_ROUNDS`.
 
-### Event-Bus & SSE (Issue #9)
+### Event-Bus & SSE (Issues #9 + #17)
 
 - `backend/app/services/event_bus.py` definiert `SimulationEventBus` (publish / subscribe / request_response) mit Channel-Konstanten `control`, `state`, `rpc.command`, `rpc.response.<id>`, `action`.
 - Drei Adapter: `InMemoryEventBus` (Tests), `FilePollingEventBus` (offline-first, wrappt `SimulationArtifactStore`), `RedisEventBus` (compose-Default via `redis:7-alpine`). Backend-Auswahl via `Config.EVENT_BUS_BACKEND` (`auto` | `redis` | `file`).
-- Live-Kanäle `control`/`state` gehen in Phase B über Redis; RPC bleibt bis Issue #17 file-delegiert.
+- **Live-Kanäle** `control`/`state` gehen über Redis Pub/Sub mit retained Snapshot im Artifact-Store für späte Subscriber.
+- **RPC-Kanäle** (`rpc.command`, `rpc.response.*`) seit Issue #17 hybrid: Backend published parallel auf Redis + File, `_await_response` race't beide Quellen, first-come-wins, der Verlierer wird via `_cleanup_rpc_artifacts` aufgeräumt. Subprocess-Listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) läuft im OASIS-Eventloop neben dem File-Polling; `seen_command_ids` im IPCHandler dedupliziert Doppel-Dispatch. Ohne `REDIS_URL` bleibt die Bridge inaktiv und alles läuft wie im File-only-Modus.
 - SSE-Bridge: `GET /api/simulation/<id>/stream` mit 15-s-Heartbeat. Frontend nutzt `frontend/src/composables/useEventStream.js`.
 
 ### Graph-Analytik (Issues #10 + #12)
@@ -184,19 +185,19 @@ Das Repo steckt mitten in einem phasierten Umbau (Audit: `docu/2026-04-22-refact
 
 Stand v0.5.0 + Unreleased (2026-04-25):
 
-- Quality-Gates (`npm run check`, CI, **202 Backend-Tests grün** + 1 skip für Redis-Integration). Backend-Lint ist auf `app/ tests/` umgestellt (default-strict).
-- Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 (Phase 1 + 2) abgeschlossen und auf `main`
+- Quality-Gates (`npm run check`, CI, **214 Backend-Tests grün** mit Live-Redis; Module skipt sauber ohne `TEST_REDIS_URL`). Backend-Lint ist auf `app/ tests/` umgestellt (default-strict).
+- Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 (Phase 1 + 2) → #17 abgeschlossen und auf `main`
 - `AgoraContainer` als DI-Anker; Singletons `neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`, `ontology_mutation_service`. Factories: `graph_builder`, `temporal_graph`, `network_analytics`
-- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10), Polarization-Metriken (#12), Ontology-Mutation inkl. NER-Wiring (#11), LLM-Retry gegen Cloud-5xx-Flaps
+- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10), Polarization-Metriken (#12), Ontology-Mutation inkl. NER-Wiring (#11), LLM-Retry gegen Cloud-5xx-Flaps, RPC/Interview-IPC hybrid Redis Pub/Sub + File (#17)
 
 Wirklich offen bleiben vor allem:
 
-- RPC/Interview-IPC-Migration auf Redis Pub/Sub (Issue #17 — eröffnet, noch nicht umgesetzt)
 - Frontend Round-Slider für Temporal-Graph-Snapshots (#10 optional)
 - gemeinsames Workspace-Layout (EPIC-03)
 - weiterer Abbau der Frontend-Warnungen
 - standardisierte API-Error/Response-Envelopes (EPIC-09)
 - TypeScript-Migration der Frontend-API-Schicht (EPIC-14)
+- Folgeticket: File-IPC-Pfad deprecaten sobald Telemetrie zeigt dass alle Live-Setups den Redis-Bridge-Pfad nutzen
 
 ## Referenz
 
