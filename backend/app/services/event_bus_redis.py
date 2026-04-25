@@ -1,21 +1,21 @@
-"""Redis-backed SimulationEventBus (Issue #9 Phase B).
+"""Redis-backed SimulationEventBus (Issue #9 Phase B + Issue #17 Phase D).
 
-Scope: Redis Pub/Sub carries the **live** channels — ``CHANNEL_CONTROL``
-and ``CHANNEL_STATE``. These are the low-latency, one-writer/many-reader
-channels that Phase C's frontend SSE bridge will consume.
+Scope:
 
-RPC channels (``CHANNEL_RPC_COMMAND`` and ``rpc.response.*``) keep the
-filesystem semantics from Phase A in this release: the OASIS subprocess
-ships its own lightweight file-based ``IPCHandler`` (see
-``backend/scripts/run_{reddit,twitter}_simulation.py``) and migrating
-*both sides* to Redis is a dedicated follow-up. Until then, this adapter
-delegates RPC publish/subscribe to an internal
-:class:`FilePollingEventBus`, keeping IPC latency on par with Phase A
-without requiring subprocess changes.
+* ``CHANNEL_CONTROL`` / ``CHANNEL_STATE`` ride Redis Pub/Sub for live
+  delivery and mirror to the artifact store as retained snapshots
+  (Issue #9 Phase B).
+* ``CHANNEL_RPC_COMMAND`` and ``rpc.response.*`` go **hybrid**: every
+  publish hits both Redis and the file IPC layer, and every response
+  read races a Redis Pub/Sub subscription against a file-artifact
+  poller. Whichever arrives first wins; the loser is cleaned up so it
+  cannot trigger a duplicate later (Issue #17 Phase D).
 
-``CHANNEL_CONTROL`` and ``CHANNEL_STATE`` writes go to both Redis
-(pub/sub for live subscribers) and the artifact store (retained snapshot
-for ``read_control_state`` / UI polling).
+The hybrid path keeps rolling upgrades safe: a subprocess that already
+runs the new ``RedisIPCBridge`` answers via Pub/Sub (low latency); a
+legacy subprocess that only writes the response file is still picked
+up by the file poller; backward compat with no dependence on which
+side ships first.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import datetime
 from typing import Any, Dict, Iterator, Optional
 
 from ..utils.logger import get_logger
@@ -104,9 +105,24 @@ class RedisEventBus:
 
     def publish(self, channel: str, event: SimulationEvent) -> None:
         if _is_rpc_channel(channel):
-            # RPC stays file-backed in Phase B (subprocess keeps its
-            # legacy file IPC handler). Phase D migrates both sides.
-            self._file_bus.publish(channel, event)
+            # Phase D hybrid: publish on Redis Pub/Sub for the live
+            # subprocess listener AND through the file bus so legacy
+            # subprocesses keep working and the file poller in
+            # _await_response can fall back if Redis stays silent.
+            try:
+                self._publish_redis(channel, event)
+            except Exception:
+                logger.exception(
+                    "Redis publish failed for RPC channel=%s — file path remains",
+                    channel,
+                )
+            try:
+                self._file_bus.publish(channel, event)
+            except Exception:
+                logger.exception(
+                    "File publish failed for RPC channel=%s — Redis path remains",
+                    channel,
+                )
             return
         if channel == CHANNEL_ACTION:
             # No transport for action events in Phase B — the action log
@@ -138,9 +154,17 @@ class RedisEventBus:
         timeout: Optional[float] = None,
         poll_interval: float = 0.5,
     ) -> Iterator[SimulationEvent]:
-        if _is_rpc_channel(channel):
+        if channel == CHANNEL_RPC_COMMAND:
+            # Subprocess-side concern only; Backend never subscribes to
+            # rpc.command. Keep file-bus delegation for defensive use.
             yield from self._file_bus.subscribe(
                 simulation_id, channel, timeout=timeout, poll_interval=poll_interval
+            )
+            return
+        if channel.startswith("rpc.response."):
+            cid = channel.removeprefix("rpc.response.")
+            yield from self._subscribe_rpc_response_hybrid(
+                simulation_id, cid, timeout=timeout, poll_interval=poll_interval
             )
             return
         if channel == CHANNEL_ACTION:
@@ -201,6 +225,121 @@ class RedisEventBus:
             except Exception as exc:  # noqa: BLE001 — cleanup must never raise
                 logger.debug("Pubsub cleanup error on %s: %s", key, exc)
 
+    # ----- hybrid RPC response wait (Issue #17 Phase D) -----------------
+
+    def _cleanup_rpc_artifacts(
+        self, simulation_id: str, correlation_id: str
+    ) -> None:
+        """Best-effort delete of file artifacts after a response is consumed."""
+        for artifact in (
+            f"ipc_response/{correlation_id}",
+            f"ipc_command/{correlation_id}",
+        ):
+            try:
+                self._store.delete(simulation_id, artifact)
+            except Exception:  # noqa: BLE001 — cleanup must never raise
+                pass
+
+    def _decode_file_response(
+        self,
+        data: Dict[str, Any],
+        simulation_id: str,
+        correlation_id: str,
+    ) -> SimulationEvent:
+        """Translate either Bus-event or legacy IPCResponse shapes."""
+        if "type" in data and "simulation_id" in data:
+            return SimulationEvent.from_dict(data)
+        return SimulationEvent(
+            type=f"rpc.response.{data.get('status', 'unknown')}",
+            simulation_id=simulation_id,
+            payload={
+                "status": data.get("status"),
+                "result": data.get("result"),
+                "error": data.get("error"),
+            },
+            ts=data.get("timestamp", datetime.now().isoformat()),
+            correlation_id=correlation_id,
+        )
+
+    def _await_response(
+        self,
+        simulation_id: str,
+        correlation_id: str,
+        *,
+        deadline: Optional[float],
+        poll_interval: float,
+        pubsub: Any,
+    ) -> Optional[SimulationEvent]:
+        """Race a Redis Pub/Sub subscription against the file artifact poller.
+
+        Returns the first response observed on either path, or None if
+        ``deadline`` elapses. Cleans up file leftovers on success so a
+        late-arriving second copy cannot trigger a duplicate dispatch.
+        """
+        artifact = f"ipc_response/{correlation_id}"
+        while True:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                wait = min(remaining, poll_interval)
+            else:
+                wait = poll_interval
+
+            msg = pubsub.get_message(timeout=wait)
+            if msg and msg.get("type") == "message":
+                try:
+                    data = json.loads(msg["data"])
+                    self._cleanup_rpc_artifacts(simulation_id, correlation_id)
+                    return SimulationEvent.from_dict(data)
+                except (json.JSONDecodeError, KeyError) as exc:
+                    logger.warning(
+                        "Dropped malformed RPC response on rpc.response.%s: %s",
+                        correlation_id,
+                        exc,
+                    )
+
+            if self._store.exists(simulation_id, artifact):
+                data = self._store.read_json(simulation_id, artifact, default=None)
+                if data is not None:
+                    self._cleanup_rpc_artifacts(simulation_id, correlation_id)
+                    return self._decode_file_response(
+                        data, simulation_id, correlation_id
+                    )
+
+    def _subscribe_rpc_response_hybrid(
+        self,
+        simulation_id: str,
+        correlation_id: str,
+        *,
+        timeout: Optional[float],
+        poll_interval: float,
+    ) -> Iterator[SimulationEvent]:
+        response_key = _channel_key(
+            simulation_id, rpc_response_channel(correlation_id)
+        )
+        pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(response_key)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        try:
+            event = self._await_response(
+                simulation_id,
+                correlation_id,
+                deadline=deadline,
+                poll_interval=poll_interval,
+                pubsub=pubsub,
+            )
+            if event is not None:
+                yield event
+        finally:
+            try:
+                pubsub.unsubscribe(response_key)
+                pubsub.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "Pubsub cleanup error on %s: %s", response_key, exc
+                )
+
     # ----- port: request_response ---------------------------------------
 
     def request_response(
@@ -212,28 +351,56 @@ class RedisEventBus:
         timeout: float = 60.0,
         poll_interval: float = 0.5,
     ) -> SimulationEvent:
-        # RPC round-trip continues over the file bus in Phase B so the
-        # unchanged OASIS subprocess can respond.
         correlation_id = str(uuid.uuid4())
-        command = SimulationEvent(
-            type=command_type,
-            simulation_id=simulation_id,
-            payload=dict(args),
-            correlation_id=correlation_id,
+        response_key = _channel_key(
+            simulation_id, rpc_response_channel(correlation_id)
         )
-        self._file_bus.publish(CHANNEL_RPC_COMMAND, command)
-        for event in self._file_bus.subscribe(
-            simulation_id,
-            rpc_response_channel(correlation_id),
-            timeout=timeout,
-            poll_interval=poll_interval,
-        ):
-            return event
-        raise TimeoutError(
-            f"Timeout waiting for IPC response "
-            f"(command_type={command_type}, correlation_id={correlation_id}, "
-            f"timeout={timeout}s)"
-        )
+
+        # Pre-arm the Redis subscription BEFORE publishing — the
+        # subprocess might answer before this method gets back the
+        # control flow otherwise.
+        pubsub = self._redis.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(response_key)
+        try:
+            command = SimulationEvent(
+                type=command_type,
+                simulation_id=simulation_id,
+                payload=dict(args),
+                correlation_id=correlation_id,
+            )
+            # publish() handles the Redis+File hybrid for RPC channels.
+            self.publish(CHANNEL_RPC_COMMAND, command)
+
+            deadline = time.monotonic() + timeout
+            event = self._await_response(
+                simulation_id,
+                correlation_id,
+                deadline=deadline,
+                poll_interval=poll_interval,
+                pubsub=pubsub,
+            )
+            if event is not None:
+                return event
+
+            # Timeout: drop a stale command artifact so the subprocess
+            # cannot pick it up after the caller gave up.
+            try:
+                self._store.delete(simulation_id, f"ipc_command/{correlation_id}")
+            except Exception:  # noqa: BLE001
+                pass
+            raise TimeoutError(
+                f"Timeout waiting for IPC response "
+                f"(command_type={command_type}, correlation_id={correlation_id}, "
+                f"timeout={timeout}s)"
+            )
+        finally:
+            try:
+                pubsub.unsubscribe(response_key)
+                pubsub.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "Pubsub cleanup error on %s: %s", response_key, exc
+                )
 
     # ----- lifecycle -----------------------------------------------------
 

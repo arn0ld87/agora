@@ -206,52 +206,13 @@ def test_redis_channel_key_is_per_simulation():
 # ---------------------------------------------------------------------------
 
 
-def test_rpc_request_response_goes_through_file_bus(bus):
-    from app.services.event_bus import CHANNEL_RPC_COMMAND, rpc_response_channel
-
-    # A responder thread consumes the command via the file adapter inside
-    # the Redis bus (Phase B keeps RPC on files until subprocess migrates).
-    def responder() -> None:
-        for cmd in bus._file_bus.subscribe(  # noqa: SLF001
-            SIM_ID, CHANNEL_RPC_COMMAND, timeout=2.0, poll_interval=0.05
-        ):
-            bus._file_bus.publish(  # noqa: SLF001
-                rpc_response_channel(cmd.correlation_id),
-                SimulationEvent(
-                    type="rpc.response.completed",
-                    simulation_id=SIM_ID,
-                    payload={"status": "completed", "result": {"ok": True}},
-                    correlation_id=cmd.correlation_id,
-                ),
-            )
-            return
-
-    t = threading.Thread(target=responder, daemon=True)
-    t.start()
-
-    response = bus.request_response(
-        SIM_ID,
-        command_type="interview",
-        args={"agent_id": 1, "prompt": "ping"},
-        timeout=2.0,
-        poll_interval=0.05,
-    )
-    t.join(timeout=3.0)
-
-    assert response.payload["status"] == "completed"
-
-
 # ---------------------------------------------------------------------------
-# Issue #17 — RPC migration spec (xfail until Phase 3 lands)
+# Issue #17 Phase D — RPC hybrid pub/sub coverage
 #
-# These tests describe the post-migration behaviour: backend publishes RPC
-# commands on Redis Pub/Sub, subscribes to RPC responses on Redis Pub/Sub,
-# and falls back to the legacy file IPC layer only when Redis stays silent.
-#
-# All four are marked ``xfail(strict=True)`` so the suite stays green while
-# Phase 1 only ships the spec. Phase 3 flips the implementation; the
-# strict-xfail then turns those tests into XPASS-failures, which is the
-# signal to remove the marker.
+# The backend publishes RPC commands on Redis Pub/Sub *and* mirrors them
+# to the file IPC layer; responses are read by racing a Redis Pub/Sub
+# subscription against the file artifact poller. Whichever arrives first
+# wins, the loser is cleaned up so it cannot fire later.
 # ---------------------------------------------------------------------------
 
 
@@ -276,10 +237,6 @@ def _redis_subscribe_blocking(redis_url: str, key: str, timeout: float = 2.0):
         client.close()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Issue #17 Phase 3: backend publishes rpc.command via Redis Pub/Sub",
-)
 def test_rpc_command_publish_reaches_redis_subscriber(bus, redis_client):
     """Backend.publish(CHANNEL_RPC_COMMAND) must reach a raw-Redis subscriber.
 
@@ -321,10 +278,6 @@ def test_rpc_command_publish_reaches_redis_subscriber(bus, redis_client):
     assert received[0]["payload"]["agent_id"] == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Issue #17 Phase 3: backend subscribes rpc.response.<cid> via Redis Pub/Sub",
-)
 def test_rpc_response_subscribe_consumes_redis_publish(bus, redis_client):
     """Backend.subscribe(rpc.response.<cid>) must yield events published on Redis."""
     from app.services.event_bus import rpc_response_channel
@@ -363,10 +316,6 @@ def test_rpc_response_subscribe_consumes_redis_publish(bus, redis_client):
     assert received[0].payload["status"] == "completed"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Issue #17 Phase 3: request_response round-trips fully over Redis",
-)
 def test_request_response_redis_round_trip(bus, redis_client):
     """End-to-end: publish via Redis, mock subprocess answers via Redis, no file I/O."""
     from app.services.event_bus import CHANNEL_RPC_COMMAND
