@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { listRuns, getRunEvents, resumeRun, stopRun } from '../api/runs.js'
+import { listRuns, getRunEvents, resumeRun, stopRun } from '../api/runs'
 import { createSimulationBranch } from '../api/simulation.js'
 
 const { locale } = useI18n()

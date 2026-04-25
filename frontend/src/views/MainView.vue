@@ -13,6 +13,7 @@ import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,7 +47,7 @@ const graphData = ref(null)
 const currentPhase = ref(-1) // -1 upload, 0 ontology, 1 build, 2 done
 const ontologyProgress = ref(null)
 const buildProgress = ref(null)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog({ cap: 100 })
 
 let pollTimer = null
 let graphPollTimer = null
@@ -76,12 +77,6 @@ const statusText = computed(() => {
   return t('common.starting')
 })
 
-function addLog(msg) {
-  const now = new Date()
-  const time = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 100) systemLogs.value.shift()
-}
 
 function toggleMaximize(target) {
   viewMode.value = viewMode.value === target ? 'split' : target

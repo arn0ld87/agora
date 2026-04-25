@@ -12,6 +12,7 @@ import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { createSimulationBranch, getSimulation, stopSimulation, getEnvStatus, closeSimulationEnv } from '../api/simulation'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,7 +30,7 @@ const currentSimulationId = ref(route.params.simulationId)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog({ cap: 100 })
 const currentStatus = ref('processing')
 const showBranchPanel = ref(false)
 const branchBusy = ref(false)
@@ -61,13 +62,6 @@ const statusText = computed(() => {
   if (currentStatus.value === 'completed') return t('common.ready')
   return t('common.preparing')
 })
-
-function addLog(msg) {
-  const now = new Date()
-  const time = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 100) systemLogs.value.shift()
-}
 
 function updateStatus(s) { currentStatus.value = s }
 function toggleMaximize(target) {

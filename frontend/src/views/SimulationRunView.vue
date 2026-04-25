@@ -21,6 +21,7 @@ import {
   pauseSimulation,
   resumeSimulation
 } from '../api/simulation'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,7 +41,7 @@ const minutesPerRound = ref(30)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog({ cap: 200 })
 const currentStatus = ref('processing')
 const isPaused = ref(false)
 const currentRound = ref(0)
@@ -113,13 +114,6 @@ const statusText = computed(() => {
   })
 })
 const isSimulating = computed(() => currentStatus.value === 'processing')
-
-function addLog(msg) {
-  const now = new Date()
-  const time = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 200) systemLogs.value.shift()
-}
 
 function updateStatus(s) { currentStatus.value = s }
 

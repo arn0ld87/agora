@@ -13,6 +13,7 @@ import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,7 +32,7 @@ const simulationId = ref(null)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog({ cap: 200 })
 const currentStatus = ref('processing')
 
 const leftPanelStyle = computed(() => {
@@ -56,12 +57,6 @@ const statusText = computed(() => {
   return t('common.processing')
 })
 
-function addLog(msg) {
-  const now = new Date()
-  const time = now.toTimeString().slice(0, 8) + '.' + String(now.getMilliseconds()).padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 200) systemLogs.value.shift()
-}
 function updateStatus(s) { currentStatus.value = s }
 function toggleMaximize(target) { viewMode.value = viewMode.value === target ? 'split' : target }
 
