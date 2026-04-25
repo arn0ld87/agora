@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
 from ..config import Config
+from .retry import llm_call_with_retry
 
 
 class LLMClient:
@@ -42,6 +43,11 @@ class LLMClient:
         # Ollama thinking toggle (Gemma 4, Qwen3, DeepSeek-R1, GPT-OSS).
         # Default false to keep latency low on long prompts.
         self._think = os.environ.get('OLLAMA_THINKING', 'false').lower() in ('1', 'true', 'yes')
+
+        # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
+        self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
+        self._retry_initial_delay = float(os.environ.get('LLM_RETRY_INITIAL_DELAY', '1.0'))
+        self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
 
     def _is_ollama(self) -> bool:
         """Check if we're talking to an Ollama server."""
@@ -85,7 +91,13 @@ class LLMClient:
             extra_body["think"] = self._think
             kwargs["extra_body"] = extra_body
 
-        response = self.client.chat.completions.create(**kwargs)
+        response = llm_call_with_retry(
+            self.client.chat.completions.create,
+            max_retries=self._max_retries,
+            initial_delay=self._retry_initial_delay,
+            max_delay=self._retry_max_delay,
+            **kwargs,
+        )
         content = response.choices[0].message.content or ""
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
@@ -131,7 +143,13 @@ class LLMClient:
             extra_body["think"] = False  # never want reasoning noise in vision output
             kwargs["extra_body"] = extra_body
 
-        response = self.client.chat.completions.create(**kwargs)
+        response = llm_call_with_retry(
+            self.client.chat.completions.create,
+            max_retries=self._max_retries,
+            initial_delay=self._retry_initial_delay,
+            max_delay=self._retry_max_delay,
+            **kwargs,
+        )
         content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content

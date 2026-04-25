@@ -4,7 +4,8 @@ from app.utils.retry import (
     retry_with_backoff,
     retry_with_backoff_async,
     RetryableAPIClient,
-    neo4j_call_with_retry
+    neo4j_call_with_retry,
+    llm_call_with_retry,
 )
 
 class TestRetryUtilities:
@@ -128,3 +129,62 @@ class TestRetryUtilities:
                 neo4j_call_with_retry(mock_func, max_retries=1, initial_delay=0.01)
 
         assert mock_func.call_count == 2
+
+    def test_llm_retry_on_5xx_then_success(self):
+        """LLM helper retries on 5xx APIStatusError and recovers."""
+        from openai import APIStatusError
+        import httpx
+
+        request = httpx.Request("POST", "http://x/v1/chat/completions")
+        response = httpx.Response(500, request=request)
+        err = APIStatusError("upstream 500", response=response, body=None)
+
+        mock_func = Mock(side_effect=[err, "ok"])
+        result = llm_call_with_retry(mock_func, max_retries=2, initial_delay=0.01)
+
+        assert result == "ok"
+        assert mock_func.call_count == 2
+
+    def test_llm_retry_does_not_retry_on_4xx(self):
+        """LLM helper must NOT retry on 4xx client errors (auth/bad request)."""
+        from openai import APIStatusError
+        import httpx
+
+        request = httpx.Request("POST", "http://x/v1/chat/completions")
+        response = httpx.Response(400, request=request)
+        err = APIStatusError("bad request", response=response, body=None)
+
+        mock_func = Mock(side_effect=err)
+        with pytest.raises(APIStatusError):
+            llm_call_with_retry(mock_func, max_retries=3, initial_delay=0.01)
+
+        assert mock_func.call_count == 1
+
+    def test_llm_retry_on_connection_error(self):
+        """LLM helper retries on APIConnectionError (network drop)."""
+        from openai import APIConnectionError
+        import httpx
+
+        request = httpx.Request("POST", "http://x/v1/chat/completions")
+        err = APIConnectionError(request=request)
+
+        mock_func = Mock(side_effect=[err, err, "ok"])
+        result = llm_call_with_retry(mock_func, max_retries=3, initial_delay=0.01)
+
+        assert result == "ok"
+        assert mock_func.call_count == 3
+
+    def test_llm_retry_exhausted_raises(self):
+        """LLM helper re-raises after exhausting retries on persistent 5xx."""
+        from openai import APIStatusError
+        import httpx
+
+        request = httpx.Request("POST", "http://x/v1/chat/completions")
+        response = httpx.Response(503, request=request)
+        err = APIStatusError("persistent 503", response=response, body=None)
+
+        mock_func = Mock(side_effect=err)
+        with pytest.raises(APIStatusError):
+            llm_call_with_retry(mock_func, max_retries=2, initial_delay=0.01)
+
+        assert mock_func.call_count == 3

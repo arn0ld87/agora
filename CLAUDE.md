@@ -152,6 +152,7 @@ models/     Dataclasses (Project, Task)
 
 - `GET /api/status` liefert `backend`, `neo4j`, `ollama`, `disk`, `gpu`, `timestamp`.
 - `Neo4jStorage` nutzt `neo4j_call_with_retry` (Exponential Backoff + Jitter, max 3 Retries bei `ServiceUnavailable`/`SessionExpired`/`TransientError`).
+- `LLMClient.chat` / `describe_image` nutzen `llm_call_with_retry` (gleiche Backoff-Mechanik) gegen transiente Upstream-Fehler: `APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429. 4xx-Client-Fehler werden sofort durchgereicht. Knöpfe: `LLM_MAX_RETRIES` (3), `LLM_RETRY_INITIAL_DELAY` (1.0), `LLM_RETRY_MAX_DELAY` (30.0). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Flaps.
 - Jeder Request bekommt eine 8-Zeichen-Request-ID.
 - Langläufer laufen über `RunRegistry` und `SimulationRunner`.
 - JSON-basierte Polling-Pfade wurden gehärtet: atomische JSON-Writes + defensive Reads (`utils/json_io.py`) für Report- und zentrale Simulation-Artefakte.

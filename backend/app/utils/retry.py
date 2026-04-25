@@ -141,6 +141,97 @@ def neo4j_call_with_retry(
 
 
 # ---------------------------------------------------------------------------
+# LLM transient-failure retry helper
+# ---------------------------------------------------------------------------
+
+_LLM_TRANSIENT_EXCEPTIONS: Optional[Tuple[Type[Exception], ...]] = None
+
+
+def _llm_transient_exceptions() -> Tuple[Type[Exception], ...]:
+    """Return the tuple of openai exception types that signal transient failure.
+
+    Connection drops, timeouts and rate-limit responses are always retried.
+    Generic ``APIStatusError`` is included so the per-call filter can decide
+    based on ``status_code`` (only 5xx / 408 are treated as transient).
+    """
+    global _LLM_TRANSIENT_EXCEPTIONS
+    if _LLM_TRANSIENT_EXCEPTIONS is None:
+        try:
+            from openai import (
+                APIConnectionError,
+                APITimeoutError,
+                APIStatusError,
+                RateLimitError,
+            )
+            _LLM_TRANSIENT_EXCEPTIONS = (
+                APIConnectionError,
+                APITimeoutError,
+                RateLimitError,
+                APIStatusError,
+            )
+        except ImportError:
+            _LLM_TRANSIENT_EXCEPTIONS = ()
+    return _LLM_TRANSIENT_EXCEPTIONS
+
+
+def _is_transient_llm_error(exc: Exception) -> bool:
+    """Return True iff *exc* is a retry-worthy LLM upstream failure.
+
+    APIStatusError is only transient for 5xx and 408 (request timeout); 4xx
+    client errors (400/401/403/404/422) must not be retried.
+    """
+    try:
+        from openai import APIStatusError
+    except ImportError:
+        return True
+
+    if isinstance(exc, APIStatusError):
+        status = getattr(exc, "status_code", None)
+        if status is None:
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", None)
+        if status is None:
+            return False
+        return status >= 500 or status == 408 or status == 429
+    return True
+
+
+def llm_call_with_retry(
+    func: Callable,
+    *args,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 30.0,
+    backoff_factor: float = 2.0,
+    **kwargs,
+) -> Any:
+    """Execute *func* with retry logic tuned for OpenAI-compatible LLM calls.
+
+    Retries on connection errors, timeouts, rate limits (429) and 5xx / 408
+    responses. 4xx client errors fall through immediately. Uses exponential
+    backoff with jitter — same shape as :func:`neo4j_call_with_retry`.
+    """
+    state = _RetryState(
+        max_retries=max_retries,
+        initial_delay=initial_delay,
+        max_delay=max_delay,
+        backoff_factor=backoff_factor,
+        jitter=True,
+        func_name="LLM call",
+    )
+    exceptions = _llm_transient_exceptions()
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except exceptions as e:
+            if not _is_transient_llm_error(e):
+                raise
+            wait_time = state.handle_failure(attempt, e)
+            time.sleep(wait_time)
+
+
+# ---------------------------------------------------------------------------
 # Decorators
 # ---------------------------------------------------------------------------
 
