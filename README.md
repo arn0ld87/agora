@@ -48,12 +48,13 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
 ### Engineering-Stand v0.5.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt gescoptes Backend-Linting, Backend-Tests, Frontend-Lint und Frontend-Build aus (**190 Backend-Tests grün**, 1 Skip für die optionale Redis-Integration).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (jetzt **default-strict** auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**202 Backend-Tests grün**, 1 Skip für die optionale Redis-Integration).
+- **LLM-Resilienz**: `LLMClient.chat` und `describe_image` retryen über `llm_call_with_retry` auf transiente Upstream-Fehler (`APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Hickser.
 - **Event-Bus-Transport (#9)**: `SimulationEventBus`-Port mit In-Memory-, File- und Redis-Adapter. Redis `7-alpine` wird vom `docker-compose.yml` mitgestartet; `Config.EVENT_BUS_BACKEND=auto` probiert Redis und fällt bei Bedarf auf File-Polling zurück.
 - **Frontend Push (#9 Phase C)**: `GET /api/simulation/<id>/stream` (SSE) + `useEventStream`-Composable ersetzen das 2,5-s-Status-Polling in der Simulationsansicht.
 - **Temporal Graph (#10)**: RELATION-Kanten tragen `valid_from_round`/`valid_to_round`/`reinforced_count`; `TemporalGraphService` liefert `/api/graph/snapshot/<gid>/<round>` und `/api/graph/diff/<gid>?start_round=..&end_round=..`.
 - **Polarisations-Metriken (#12)**: `NetworkAnalyticsService` mit Louvain-Communities, Echo-Chamber-Index und Bridge-Agent-Heuristik; API `GET /api/simulation/<id>/metrics`. Dokumentation in `docu/analytics.md`.
-- **Ontology-Mutation (#11, Phase 1)**: `OntologyManager` (thread-safe) + `OntologyMutationService` mit Modi `disabled` / `review_only` / `auto` und pluggable `ConceptScorer`. NER→Mutation-Wiring folgt.
+- **Ontology-Mutation (#11, Phase 1+2)**: `OntologyManager` (thread-safe) + `OntologyMutationService` mit Modi `disabled` / `review_only` / `auto`. **NER → Mutation-Wiring ist live**: `Neo4jStorage.add_text` reicht NER-emittierte unbekannte Entity-Types automatisch an den Service weiter; Service-Exceptions blockieren Ingestion nicht.
 - **DI-Container (#14)**: Alle Kern-Services laufen über `AgoraContainer` — keine Service-Locator-Suche mehr in `app.extensions`.
 - **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt.
 - **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.

@@ -146,7 +146,7 @@ models/     Dataclasses (Project, Task)
 
 - **Temporal Graph (#10):** RELATION-Kanten tragen `valid_from_round`, `valid_to_round`, `reinforced_count`. `TemporalGraphService` (`backend/app/services/temporal_graph.py`) liefert `get_snapshot` und `compute_diff`; API unter `GET /api/graph/snapshot/<gid>/<round>` und `GET /api/graph/diff/<gid>?start_round=..&end_round=..`. Lazy Backfill stampft Pre-#10-Kanten auf `valid_from_round=0`.
 - **Polarisation (#12):** `NetworkAnalyticsService` (`backend/app/services/network_analytics.py`) bildet OASIS-Aktionen auf einen `networkx`-Interaktionsgraph ab, liefert Louvain-Communities, Echo-Chamber-Index und Betweenness-basierte Bridge-Agents. API: `GET /api/simulation/<id>/metrics` (`window_size_rounds`, `platform` optional). Dokumentation in `docu/analytics.md`.
-- **Ontology-Mutation (#11):** `OntologyManager` + `OntologyMutationService` (`backend/app/services/ontology_mutation.py`) mit Modi `disabled`/`review_only`/`auto`, thread-safe per-graph-Locks, Audit-Log und pluggable `ConceptScorer`. Config via `ONTOLOGY_MUTATION_MODE` und `ONTOLOGY_MUTATION_MIN_CONFIDENCE`. NER→Mutation-Wiring ist als Follow-up ausgelagert.
+- **Ontology-Mutation (#11):** `OntologyManager` + `OntologyMutationService` (`backend/app/services/ontology_mutation.py`) mit Modi `disabled`/`review_only`/`auto`, thread-safe per-graph-Locks, Audit-Log und pluggable `ConceptScorer`. Config via `ONTOLOGY_MUTATION_MODE` und `ONTOLOGY_MUTATION_MIN_CONFIDENCE`. **Phase 2 ist live**: `Neo4jStorage.add_text` ruft `_evaluate_ontology_mutations()` direkt nach NER, filtert NER-Output gegen die aktuelle Ontologie und reicht alles Unbekannte an `service.evaluate_batch()` durch. Service ist im Container Singleton, wird via `Neo4jStorage.set_ontology_mutation_service()` late-bound (vermeidet zirkuläre `OntologyManager↔Storage`-Dependency). Service-Exceptions werden geloggt aber geschluckt — Ingestion bleibt robust.
 
 ### Operability (v0.5.0)
 
@@ -182,19 +182,20 @@ models/     Dataclasses (Project, Task)
 
 Das Repo steckt mitten in einem phasierten Umbau (Audit: `docu/2026-04-22-refactoring-produkt-audit.md`; Zielarchitektur: `docu/target-architecture.md`; Backlog: `docu/refactoring-backlog-priorisiert.md`).
 
-Stand v0.5.0 (2026-04-24):
-- Quality-Gates (`npm run check`, CI, **190 Backend-Tests grün** + 1 skip für Redis-Integration)
-- Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 abgeschlossen und auf `main`
-- `AgoraContainer` als DI-Anker; Services werden als Singletons (`neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`) oder Factories (`graph_builder`, `temporal_graph`, `network_analytics`, `ontology_mutation_service`) exponiert
-- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10), Polarization-Metriken (#12), Ontology-Mutation-Skeleton (#11)
+Stand v0.5.0 + Unreleased (2026-04-25):
+
+- Quality-Gates (`npm run check`, CI, **202 Backend-Tests grün** + 1 skip für Redis-Integration). Backend-Lint ist auf `app/ tests/` umgestellt (default-strict).
+- Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 (Phase 1 + 2) abgeschlossen und auf `main`
+- `AgoraContainer` als DI-Anker; Singletons `neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`, `ontology_mutation_service`. Factories: `graph_builder`, `temporal_graph`, `network_analytics`
+- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10), Polarization-Metriken (#12), Ontology-Mutation inkl. NER-Wiring (#11), LLM-Retry gegen Cloud-5xx-Flaps
 
 Wirklich offen bleiben vor allem:
 - RPC/Interview-IPC-Migration auf Redis Pub/Sub (Issue #17 — eröffnet, noch nicht umgesetzt)
-- NER→Ontology-Mutation-Wiring (Issue #11 Phase 2)
 - Frontend Round-Slider für Temporal-Graph-Snapshots (#10 optional)
-- gemeinsames Workspace-Layout
+- gemeinsames Workspace-Layout (EPIC-03)
 - weiterer Abbau der Frontend-Warnungen
-- schrittweise Ausweitung von Ruff Richtung Default-strict
+- standardisierte API-Error/Response-Envelopes (EPIC-09)
+- TypeScript-Migration der Frontend-API-Schicht (EPIC-14)
 
 ## Referenz
 
