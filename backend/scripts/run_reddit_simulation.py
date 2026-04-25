@@ -155,8 +155,8 @@ class CommandType:
 
 class IPCHandler:
     """IPC command handler"""
-    
-    def __init__(self, simulation_dir: str, env, agent_graph):
+
+    def __init__(self, simulation_dir: str, env, agent_graph, redis_bridge=None):
         self.simulation_dir = simulation_dir
         self.env = env
         self.agent_graph = agent_graph
@@ -164,7 +164,11 @@ class IPCHandler:
         self.responses_dir = os.path.join(simulation_dir, IPC_RESPONSES_DIR)
         self.status_file = os.path.join(simulation_dir, ENV_STATUS_FILE)
         self._running = True
-        
+        # Issue #17: Redis bridge runs alongside file polling. Both paths
+        # call _execute_command(); seen_command_ids dedupes the dispatch.
+        self.redis_bridge = redis_bridge
+        self.seen_command_ids: set = set()
+
         # Ensure directories exist
         os.makedirs(self.commands_dir, exist_ok=True)
         os.makedirs(self.responses_dir, exist_ok=True)
@@ -200,8 +204,14 @@ class IPCHandler:
         
         return None
     
-    def send_response(self, command_id: str, status: str, result: Dict = None, error: str = None):
-        """Send response"""
+    async def send_response(
+        self,
+        command_id: str,
+        status: str,
+        result: Dict = None,
+        error: str = None,
+    ):
+        """Send response: write file (legacy path) and mirror to Redis (issue #17)."""
         response = {
             "command_id": command_id,
             "status": status,
@@ -209,17 +219,22 @@ class IPCHandler:
             "error": error,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         response_file = os.path.join(self.responses_dir, f"{command_id}.json")
         with open(response_file, 'w', encoding='utf-8') as f:
             json.dump(response, f, ensure_ascii=False, indent=2)
-        
-        # Delete command file
+
+        # Delete command file (best-effort; bridge-only commands have none)
         command_file = os.path.join(self.commands_dir, f"{command_id}.json")
         try:
             os.remove(command_file)
         except OSError:
             pass
+
+        # Issue #17: mirror to Redis if the bridge is active. File response
+        # stays as the rolling-upgrade fallback.
+        if self.redis_bridge is not None and self.redis_bridge.active:
+            await self.redis_bridge.publish_response(command_id, response)
     
     async def handle_interview(self, command_id: str, agent_id: int, prompt: str) -> bool:
         """
@@ -244,15 +259,15 @@ class IPCHandler:
             
             # Get result from database
             result = self._get_interview_result(agent_id)
-            
-            self.send_response(command_id, "completed", result=result)
+
+            await self.send_response(command_id, "completed", result=result)
             print(f"  Interview completed: agent_id={agent_id}")
             return True
-            
+
         except Exception as e:
             error_msg = str(e)
             print(f"  Interview failed: agent_id={agent_id}, error={error_msg}")
-            self.send_response(command_id, "failed", error=error_msg)
+            await self.send_response(command_id, "failed", error=error_msg)
             return False
     
     async def handle_batch_interview(self, command_id: str, interviews: List[Dict]) -> bool:
@@ -282,29 +297,29 @@ class IPCHandler:
                     print(f"  Warning: Unable to get Agent {agent_id}: {e}")
             
             if not actions:
-                self.send_response(command_id, "failed", error="No valid Agents")
+                await self.send_response(command_id, "failed", error="No valid Agents")
                 return False
-            
+
             # Execute batch Interview
             await self.env.step(actions)
-            
+
             # Get all results
             results = {}
             for agent_id in agent_prompts.keys():
                 result = self._get_interview_result(agent_id)
                 results[agent_id] = result
-            
-            self.send_response(command_id, "completed", result={
+
+            await self.send_response(command_id, "completed", result={
                 "interviews_count": len(results),
                 "results": results
             })
             print(f"  Batch Interview completed: {len(results)} Agents")
             return True
-            
+
         except Exception as e:
             error_msg = str(e)
             print(f"  batchInterview failed: {error_msg}")
-            self.send_response(command_id, "failed", error=error_msg)
+            await self.send_response(command_id, "failed", error=error_msg)
             return False
     
     def _get_interview_result(self, agent_id: int) -> Dict[str, Any]:
@@ -350,23 +365,10 @@ class IPCHandler:
         
         return result
     
-    async def process_commands(self) -> bool:
-        """
-        Process all pending commands
-        
-        Returns:
-            True means continue running, False means should exit
-        """
-        command = self.poll_command()
-        if not command:
-            return True
-        
-        command_id = command.get("command_id")
-        command_type = command.get("command_type")
-        args = command.get("args", {})
-        
-        print(f"\nReceived IPC command: {command_type}, id={command_id}")
-        
+    async def _execute_command(
+        self, command_id: str, command_type: str, args: Dict[str, Any]
+    ) -> bool:
+        """Run a deduped command and return False iff the env must shut down."""
         if command_type == CommandType.INTERVIEW:
             await self.handle_interview(
                 command_id,
@@ -374,22 +376,68 @@ class IPCHandler:
                 args.get("prompt", "")
             )
             return True
-            
+
         elif command_type == CommandType.BATCH_INTERVIEW:
             await self.handle_batch_interview(
                 command_id,
                 args.get("interviews", [])
             )
             return True
-            
+
         elif command_type == CommandType.CLOSE_ENV:
             print("Received close environment command")
-            self.send_response(command_id, "completed", result={"message": "Environment will close"})
+            await self.send_response(
+                command_id, "completed", result={"message": "Environment will close"}
+            )
             return False
-        
+
         else:
-            self.send_response(command_id, "failed", error=f"Unknown command type: {command_type}")
+            await self.send_response(
+                command_id, "failed", error=f"Unknown command type: {command_type}"
+            )
             return True
+
+    async def process_commands(self) -> bool:
+        """Poll the file IPC layer for pending commands and dispatch."""
+        command = self.poll_command()
+        if not command:
+            return True
+
+        command_id = command.get("command_id")
+        # Dedup against the Redis bridge: if the bus already dispatched this
+        # command, just clean up the lingering file and move on.
+        if command_id in self.seen_command_ids:
+            try:
+                os.remove(os.path.join(self.commands_dir, f"{command_id}.json"))
+            except OSError:
+                pass
+            return True
+        self.seen_command_ids.add(command_id)
+
+        command_type = command.get("command_type")
+        args = command.get("args", {})
+
+        print(f"\n[file] Received IPC command: {command_type}, id={command_id}")
+        return await self._execute_command(command_id, command_type, args)
+
+    async def dispatch_bus_event(self, event: Dict[str, Any]) -> None:
+        """Bridge callback: dispatch a Redis-delivered command event.
+
+        Event shape: {type, simulation_id, payload, correlation_id, ts}.
+        Returns nothing — close-env shutdown is handled out-of-band by the
+        existing wait loop reacting to env_status / shutdown_event.
+        """
+        command_id = event.get("correlation_id") or event.get("command_id")
+        if not command_id:
+            return
+        if command_id in self.seen_command_ids:
+            return  # File polling beat us to it
+        self.seen_command_ids.add(command_id)
+
+        command_type = event.get("type")
+        args = event.get("payload") or {}
+        print(f"\n[redis] Received IPC command: {command_type}, id={command_id}")
+        await self._execute_command(command_id, command_type, args)
 
 
 # Import agent tools (optional — only loaded when enable_agent_tools is set)
@@ -446,6 +494,7 @@ class RedditSimulationRunner:
         self.agent_graph = None
         self.ipc_handler = None
         self.tool_loop = None
+        self.redis_bridge = None  # Issue #17: optional Redis Pub/Sub listener
         
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration file"""
@@ -623,6 +672,28 @@ class RedditSimulationRunner:
         # Initialize IPC handler
         self.ipc_handler = IPCHandler(self.simulation_dir, self.env, self.agent_graph)
         self.ipc_handler.update_status("running")
+
+        # Issue #17: optionaler Redis-Listener parallel zum File-Polling.
+        # Bei deaktiviertem REDIS_URL bleibt alles File-basiert wie vorher.
+        redis_url = os.environ.get("REDIS_URL")
+        if redis_url:
+            try:
+                from subprocess_redis_bridge import RedisIPCBridge
+                sim_id = os.path.basename(self.simulation_dir.rstrip("/"))
+                self.redis_bridge = RedisIPCBridge(
+                    simulation_id=sim_id,
+                    redis_url=redis_url,
+                    on_command=self.ipc_handler.dispatch_bus_event,
+                )
+                started = await self.redis_bridge.start()
+                if started:
+                    self.ipc_handler.redis_bridge = self.redis_bridge
+                    print(f"[IPC] Redis bridge active on {redis_url} for sim {sim_id}")
+                else:
+                    self.redis_bridge = None
+            except Exception as exc:
+                print(f"[IPC] Redis bridge setup failed ({exc}); falling back to file IPC")
+                self.redis_bridge = None
         
         # Execute initial events
         event_config = self.config.get("event_config", {})
@@ -776,8 +847,11 @@ class RedditSimulationRunner:
         
         # Close environment
         self.ipc_handler.update_status("stopped")
+        if self.redis_bridge is not None:
+            await self.redis_bridge.stop()
+            self.redis_bridge = None
         await self.env.close()
-        
+
         print("Environment closed")
         print("=" * 60)
 
