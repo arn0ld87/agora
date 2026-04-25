@@ -77,6 +77,12 @@ class Neo4jStorage(GraphStorage):
         self._ner = ner_extractor or NERExtractor()
         self._search = SearchService(self._embedding)
 
+        # Issue #11 Phase 2 — late-bound to avoid the
+        # OntologyManager → Neo4jStorage circular dependency.
+        # Container injects via :meth:`set_ontology_mutation_service` after
+        # the manager is built. ``None`` means the hook is a no-op.
+        self._ontology_mutation_service = None
+
         # Health-state tracking (exposed via properties for /api/status)
         self._is_connected: bool = True
         self._last_error: Optional[Exception] = None
@@ -92,6 +98,67 @@ class Neo4jStorage(GraphStorage):
     def close(self):
         """Close the Neo4j driver connection."""
         self._driver.close()
+
+    def set_ontology_mutation_service(self, service) -> None:
+        """Late-bind the Issue #11 ``OntologyMutationService``.
+
+        The container wires this *after* construction because the service
+        depends on ``OntologyManager``, which itself holds a reference to
+        this storage — direct constructor injection would deadlock the DI
+        graph. Pass ``None`` to disable the hook again.
+        """
+        self._ontology_mutation_service = service
+
+    def _evaluate_ontology_mutations(
+        self,
+        graph_id: str,
+        ontology: Dict[str, Any],
+        entities: List[Dict[str, Any]],
+        text: str,
+    ) -> None:
+        """Forward novel entity types to the OntologyMutationService.
+
+        Filters NER output against the graph's current ``entity_types`` and
+        passes anything unknown through to the service. Failures are logged
+        and swallowed — ontology mutation is best-effort and must never
+        block ingestion.
+        """
+        service = self._ontology_mutation_service
+        if service is None or not entities:
+            return
+        # Don't even build the candidate list if the service is disabled.
+        if getattr(service, "mode", None) == "disabled":
+            return
+
+        known_types = {
+            (t.get("name") if isinstance(t, dict) else t)
+            for t in (ontology.get("entity_types") or [])
+        }
+        known_types.discard(None)
+
+        novel: List[Dict[str, str]] = []
+        seen_types: set = set()
+        for ent in entities:
+            etype = (ent.get("type") or "").strip()
+            if not etype or etype in known_types or etype in seen_types:
+                continue
+            seen_types.add(etype)
+            novel.append({
+                "type": etype,
+                "name": ent.get("name", ""),
+                "context": text[:200],
+            })
+
+        if not novel:
+            return
+
+        try:
+            service.evaluate_batch(graph_id, novel)
+        except Exception as exc:  # noqa: BLE001 — best-effort hook
+            logger.warning(
+                "Ontology mutation evaluation failed (graph=%s, novel=%d): %s",
+                graph_id, len(novel), exc,
+            )
 
     def _verify_connectivity(self):
         """Ensure the driver can actually reach Neo4j."""
@@ -267,6 +334,11 @@ class Neo4jStorage(GraphStorage):
         logger.info(
             f"[add_text] NER done: {len(entities)} entities, {len(relations)} relations"
         )
+
+        # Issue #11 Phase 2 — propose ontology mutations for any entity types
+        # the LLM emitted that the current ontology does not cover. The
+        # service decides per-mode whether to log, queue or auto-apply.
+        self._evaluate_ontology_mutations(graph_id, ontology, entities, text)
 
         # --- Batch embed all texts at once ---
         entity_summaries = [f"{e['name']} ({e['type']})" for e in entities]

@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Issue #11 Phase 2 — NER → OntologyMutationService verdrahtet.** `Neo4jStorage` bekommt einen Setter `set_ontology_mutation_service()` (Late-Binding, vermeidet die zirkuläre Dependency `OntologyManager → Neo4jStorage → Service`). In `add_text` filtert `_evaluate_ontology_mutations()` NER-Output gegen die aktuelle `entity_types`-Liste der Ontologie und reicht alles Unbekannte an `OntologyMutationService.evaluate_batch` weiter — der Service entscheidet per Mode (`disabled`/`review_only`/`auto`) ob nur geloggt, im Audit-Log gehalten oder direkt patcht. `AgoraContainer.ontology_mutation_service()` ist jetzt Singleton und wird in `create_app` eagerly konstruiert, damit das Late-Binding noch vor dem ersten Build greift. Service-Exceptions werden geschluckt — Ontologie-Mutation ist Best-Effort und darf Ingestion nie blockieren. Tests: `test_neo4j_ontology_wiring.py` (8).
+
+### Geändert
+
+- **Backend-Lint-Scope auf `app/ tests/` gehoben.** `npm run lint:backend` lief bisher als gescopter Whitelist-Rollout; jetzt deckt er den ganzen Backend-Baum ab. 31 Pre-existing Ruff-Findings dafür erschlagen: 16 auto-fixed (F401/F541/F841), 15 manuell (E402-Importsortierung in `neo4j_storage.py`, E741 `l` → `lbl`, E722 bare-except → `(JSONDecodeError, ValueError)`, F841 ungenutztes Listing). Erledigt das „schrittweise Ausweitung von Ruff Richtung Default-strict" aus dem CLAUDE.md-Backlog.
+
 ### Behoben
 
 - **`HistoryDatabase.vue::loadRuns()` schluckte Backend-Fehler ohne Catch.** Wenn `listRuns()` einen Reject lieferte (Run-Registry-API down, Auth-Token falsch, Timeout), bubbelte der Promise-Reject als unhandled Rejection durch — UI zeigte stumm eine leere Liste, Browser-Konsole spammte „Axios response error". Neuer `.catch`-Branch setzt `loadError`, rendert eine sichtbare Fehlerzeile mit „Erneut versuchen"-Button und behält die leere Liste konsistent.

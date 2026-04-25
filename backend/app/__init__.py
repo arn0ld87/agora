@@ -116,6 +116,13 @@ def create_app(config_class=Config):
     # Build the bus lazily via the container so Config.EVENT_BUS_BACKEND /
     # REDIS_URL are consulted exactly once, with consistent logging.
     event_bus = container.event_bus
+
+    # Issue #11 Phase 2 — eagerly construct the OntologyMutationService once
+    # so it can late-bind onto Neo4jStorage. Otherwise the NER pipeline
+    # never sees a service unless an /api/ontology/* route fetches it first.
+    if neo4j_storage is not None:
+        container.ontology_mutation_service()
+
     app.extensions['container'] = container
     # Backward-compat aliases — same singleton instances, just two ways in.
     app.extensions['neo4j_storage'] = neo4j_storage

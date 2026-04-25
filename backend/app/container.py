@@ -63,6 +63,7 @@ class AgoraContainer:
         self._artifact_store = artifact_store
         self._event_bus = event_bus
         self._ontology_manager = None
+        self._ontology_mutation_service = None
         self._neo4j_storage_explicit = neo4j_storage is not None
         self._artifact_store_explicit = artifact_store is not None
         self._event_bus_explicit = event_bus is not None
@@ -155,15 +156,31 @@ class AgoraContainer:
         return self._ontology_manager
 
     def ontology_mutation_service(self) -> "OntologyMutationService":
-        """Construct an :class:`OntologyMutationService` from Config flags."""
-        from .config import Config
-        from .services.ontology_mutation import OntologyMutationService
+        """Singleton :class:`OntologyMutationService` (Issue #11 Phase 2).
 
-        return OntologyMutationService(
-            manager=self.ontology_manager,
-            mode=Config.ONTOLOGY_MUTATION_MODE,
-            min_confidence=Config.ONTOLOGY_MUTATION_MIN_CONFIDENCE,
-        )
+        Lazily constructed and cached. On first call the service is also
+        late-bound onto :attr:`neo4j_storage` via
+        ``Neo4jStorage.set_ontology_mutation_service`` so the NER pipeline
+        forwards novel entity types automatically. Subsequent calls return
+        the same instance — necessary because the in-memory audit log
+        otherwise resets per call.
+        """
+        if self._ontology_mutation_service is None:
+            from .config import Config
+            from .services.ontology_mutation import OntologyMutationService
+
+            service = OntologyMutationService(
+                manager=self.ontology_manager,
+                mode=Config.ONTOLOGY_MUTATION_MODE,
+                min_confidence=Config.ONTOLOGY_MUTATION_MIN_CONFIDENCE,
+            )
+            self._ontology_mutation_service = service
+
+            storage = self._neo4j_storage
+            if storage is not None and hasattr(storage, "set_ontology_mutation_service"):
+                storage.set_ontology_mutation_service(service)
+
+        return self._ontology_mutation_service
 
     def network_analytics(self) -> "NetworkAnalyticsService":
         """Construct a stateless :class:`NetworkAnalyticsService` (Issue #12)."""
