@@ -163,13 +163,16 @@ class RedisIPCBridge:
             except Exception:
                 pass
             try:
-                await self._pubsub.close()
+                # redis.asyncio 5.0.1+ deprecates close() in favor of aclose()
+                close_fn = getattr(self._pubsub, "aclose", None) or self._pubsub.close
+                await close_fn()
             except Exception:
                 pass
             self._pubsub = None
         if self._client is not None:
             try:
-                await self._client.close()
+                close_fn = getattr(self._client, "aclose", None) or self._client.close
+                await close_fn()
             except Exception:
                 pass
             self._client = None
