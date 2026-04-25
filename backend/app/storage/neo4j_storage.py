@@ -12,6 +12,23 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable
 
+from neo4j import GraphDatabase
+from neo4j.exceptions import (
+    TransientError,
+    ServiceUnavailable,
+    SessionExpired,
+)
+
+from ..config import Config
+from ..utils.retry import neo4j_call_with_retry
+from .graph_storage import GraphStorage
+from .embedding_service import EmbeddingService
+from .ner_extractor import NERExtractor
+from .search_service import SearchService
+from . import neo4j_schema
+
+logger = logging.getLogger('agora.neo4j_storage')
+
 # Cypher erlaubt Labels nur als Identifier, nicht als Parameter. Labels kommen
 # hier aus LLM-Output (Entity-Type aus NER) — ohne Filter liefert das einen
 # f-string-Injection-Vektor (Backticks im Namen brechen aus dem Quoting aus).
@@ -33,23 +50,6 @@ def _sanitize_label(value: Any) -> Optional[str]:
     if not _LABEL_SAFE_RE.match(normalized):
         return None
     return normalized
-
-from neo4j import GraphDatabase, Session as Neo4jSession
-from neo4j.exceptions import (
-    TransientError,
-    ServiceUnavailable,
-    SessionExpired,
-)
-
-from ..config import Config
-from ..utils.retry import neo4j_call_with_retry
-from .graph_storage import GraphStorage
-from .embedding_service import EmbeddingService
-from .ner_extractor import NERExtractor
-from .search_service import SearchService
-from . import neo4j_schema
-
-logger = logging.getLogger('agora.neo4j_storage')
 
 
 class Neo4jStorage(GraphStorage):
@@ -284,7 +284,7 @@ class Neo4jStorage(GraphStorage):
 
         entity_embeddings = all_embeddings[:len(entities)]
         relation_embeddings = all_embeddings[len(entities):]
-        logger.info(f"[add_text] Embedding done, writing to Neo4j...")
+        logger.info("[add_text] Embedding done, writing to Neo4j...")
 
         with self._driver.session() as session:
             # Create episode node
@@ -989,7 +989,7 @@ class Neo4jStorage(GraphStorage):
         return {
             "uuid": props.get("uuid", ""),
             "name": props.get("name", ""),
-            "labels": [l for l in labels if l != "Entity"] if labels else [],
+            "labels": [lbl for lbl in labels if lbl != "Entity"] if labels else [],
             "summary": props.get("summary", ""),
             "attributes": attributes,
             "created_at": props.get("created_at"),
