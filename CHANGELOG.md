@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Behoben
 
+- **`HistoryDatabase.vue::loadRuns()` schluckte Backend-Fehler ohne Catch.** Wenn `listRuns()` einen Reject lieferte (Run-Registry-API down, Auth-Token falsch, Timeout), bubbelte der Promise-Reject als unhandled Rejection durch — UI zeigte stumm eine leere Liste, Browser-Konsole spammte „Axios response error". Neuer `.catch`-Branch setzt `loadError`, rendert eine sichtbare Fehlerzeile mit „Erneut versuchen"-Button und behält die leere Liste konsistent.
 - **LLM-Resilienz gegen transiente Upstream-5xx.** `LLMClient.chat()` und `LLMClient.describe_image()` rufen den OpenAI-kompatiblen Endpoint jetzt über `llm_call_with_retry()` (`backend/app/utils/retry.py`) auf — Exponential-Backoff mit Jitter analog zu `neo4j_call_with_retry`. Retry auf `APIConnectionError`, `APITimeoutError`, `RateLimitError` und `APIStatusError` mit Status 5xx / 408 / 429; 4xx-Client-Fehler fallen sofort durch. Ollama-Cloud-Hickser killen damit nicht mehr die Pipeline-Init (Symptom: `POST /api/graph/ontology/generate` → `Error code: 500 - {'error': 'Internal Server Error (ref: ...)'}`). Konfigurierbar per `LLM_MAX_RETRIES` (Default 3), `LLM_RETRY_INITIAL_DELAY` (1.0 s), `LLM_RETRY_MAX_DELAY` (30 s). Tests: `test_retry.py` (+4 → 13).
 
 ## [0.5.0] — 2026-04-24

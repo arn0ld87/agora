@@ -10,6 +10,7 @@ const router = useRouter()
 
 const runs = ref([])
 const loading = ref(true)
+const loadError = ref('')
 const selectedRun = ref(null)
 const runEvents = ref([])
 const filters = ref({
@@ -32,9 +33,14 @@ const actionBusy = ref(false)
 
 async function loadRuns() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await listRuns()
     runs.value = Array.isArray(res?.data) ? res.data : []
+  } catch (err) {
+    runs.value = []
+    loadError.value = err?.message || 'Run-Registry nicht erreichbar'
+    console.error('HistoryDatabase: failed to load runs', err)
   } finally {
     loading.value = false
   }
@@ -223,6 +229,10 @@ onMounted(loadRuns)
     <div class="layout">
       <div class="table">
         <div v-if="loading" class="empty">Loading runs…</div>
+        <div v-else-if="loadError" class="empty error">
+          Run-Registry nicht erreichbar: {{ loadError }}
+          <button class="retry-btn" type="button" @click="loadRuns">Erneut versuchen</button>
+        </div>
         <div v-else-if="!groupedRuns.length" class="empty">No runs match the current filters.</div>
 
         <template v-else>
@@ -425,6 +435,19 @@ onMounted(loadRuns)
 .meta-grid strong { display: block; margin-top: 4px; }
 .message-block, .error { margin-top: var(--s-4); }
 .error { color: #b00020; }
+.retry-btn {
+  display: inline-block;
+  margin-left: var(--s-3);
+  padding: 4px 10px;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--r-1);
+}
+.retry-btn:hover { background: var(--ink-2); }
 .actions, .branch-row { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
 .branch-box, .artifacts, .events { margin-top: var(--s-6); }
 .branch-box h4, .artifacts h4, .events h4 { margin-bottom: var(--s-3); font-family: var(--ff-serif); }
