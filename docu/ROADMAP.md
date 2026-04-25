@@ -27,8 +27,8 @@ The 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 
 
 Schließt die letzten Loose Ends der 0.5-Saga und macht das Frontend Production-tauglich.
 
-- [ ] **Issue #17 — RPC/Interview-IPC auf Redis Pub/Sub**. Aktuell laufen `state` und `control` über Redis, RPC und Interview-Streams hängen noch am `FilePollingEventBus`. Migration entkoppelt Backend und Subprozess sauber.
-- [ ] **Frontend Round-Slider** für Temporal-Graph-Snapshots (#10 optional). UI-Bedienelement für `GET /api/graph/snapshot/<gid>/<round>`.
+- [x] **Issue #17 — RPC/Interview-IPC auf Redis Pub/Sub** (abgeschlossen). Backend `RedisEventBus` und alle drei OASIS-Subprocess-Scripts laufen jetzt hybrid (Redis Pub/Sub + File-Fallback); `RedisIPCBridge` im OASIS-Eventloop, Backend-side `_await_response` race't beide Quellen.
+- [x] **Frontend Round-Slider** für Temporal-Graph-Snapshots (#10 optional, abgeschlossen). `GraphRoundSlider.vue` lebt im `GraphPanel`, blendet sich automatisch ein sobald der Graph mindestens eine Simulationsrunde gesehen hat. Filter läuft client-seitig (`filterEdgesAtRound`); `getGraphSnapshot`/`getGraphDiff` für späteren server-side Bedarf bereitgestellt.
 - [ ] **Gemeinsames Workspace-Layout** (Backlog EPIC-03). Aktuell duplizierte Layout-Logik in `MainView`/`ReportView`/`InteractionView`/`SimulationRunView`.
 - [ ] **Frontend-Warnungen abbauen** — Vue/Vite-Build noch mit Warnings, schrittweise erschlagen.
 - [ ] Tune hybrid search weights (currently `0.7 vector / 0.3 BM25`) — make configurable per graph.

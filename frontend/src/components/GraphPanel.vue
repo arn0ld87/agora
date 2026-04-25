@@ -71,6 +71,13 @@
     </div>
 
     <GraphLegend v-if="graphData && entityTypes.length" :entity-types="entityTypes" />
+
+    <!-- Issue #10 — Temporal-Round-Slider (only visible once the graph carries simulation rounds) -->
+    <GraphRoundSlider
+      v-if="graphData && maxRound > 0"
+      v-model="selectedRound"
+      :max-round="maxRound"
+    />
     
     <!-- Show Edge Labels Toggle -->
     <div v-if="graphData" class="edge-labels-toggle">
@@ -89,7 +96,12 @@ import * as d3 from 'd3'
 
 import GraphDetailPanel from './graph/GraphDetailPanel.vue'
 import GraphLegend from './graph/GraphLegend.vue'
-import { buildGraphRenderData } from './graph/graphPanelData'
+import GraphRoundSlider from './graph/GraphRoundSlider.vue'
+import {
+  buildGraphRenderData,
+  filterEdgesAtRound,
+  getMaxRoundFromEdges,
+} from './graph/graphPanelData'
 import { getLinkMidpoint, getLinkPath } from './graph/graphPanelGeometry'
 import { buildEntityTypes } from './graph/graphPanelUtils'
 
@@ -109,6 +121,19 @@ const showEdgeLabels = ref(true) // Default show edge labels
 const expandedSelfLoops = ref(new Set()) // Expanded self-loop items
 const showSimulationFinishedHint = ref(false) // Simulation finished hint
 const wasSimulating = ref(false) // Track whether was simulating before
+// Issue #10 — Temporal-Slider state. null means "live" (= maxRound, all current edges).
+const selectedRound = ref(null)
+
+const maxRound = computed(() => getMaxRoundFromEdges(props.graphData?.edges))
+
+const displayedGraphData = computed(() => {
+  if (!props.graphData) return null
+  if (selectedRound.value == null) return props.graphData
+  return {
+    ...props.graphData,
+    edges: filterEdgesAtRound(props.graphData.edges, selectedRound.value),
+  }
+})
 
 // Dismiss simulation finished hint
 const dismissFinishedHint = () => {
@@ -147,25 +172,25 @@ let linkLabelsRef = null
 let linkLabelBgRef = null
 
 const renderGraph = () => {
-  if (!graphSvg.value || !props.graphData) return
+  if (!graphSvg.value || !displayedGraphData.value) return
 
   // Stop previous simulation
   if (currentSimulation) {
     currentSimulation.stop()
   }
-  
+
   const container = graphContainer.value
   const width = container.clientWidth
   const height = container.clientHeight
-  
+
   const svg = d3.select(graphSvg.value)
     .attr('width', width)
     .attr('height', height)
     .attr('viewBox', `0 0 ${width} ${height}`)
-    
+
   svg.selectAll('*').remove()
-  
-  const { nodes, edges, getColor } = buildGraphRenderData(props.graphData, entityTypes.value)
+
+  const { nodes, edges, getColor } = buildGraphRenderData(displayedGraphData.value, entityTypes.value)
   if (nodes.length === 0) return
 
   // Simulation - dynamically adjust node spacing based on edge count
@@ -414,6 +439,11 @@ const renderGraph = () => {
 watch(() => props.graphData, () => {
   nextTick(renderGraph)
 }, { deep: true })
+
+// Issue #10 — re-render when the temporal-slider position changes.
+watch(selectedRound, () => {
+  nextTick(renderGraph)
+})
 
 // Watch edge label show/hide toggle
 watch(showEdgeLabels, (newVal) => {

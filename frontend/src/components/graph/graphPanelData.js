@@ -134,6 +134,40 @@ function buildGraphEdges(candidateEdges, selfLoopEdges, edgePairCount, nodeMap) 
   return edges
 }
 
+/**
+ * Issue #10 — Highest valid_from_round seen across the edge list. Returns 0
+ * for graphs that never went through a simulation (no temporal stamps).
+ * Treats missing values as 0 (legacy edges before #10 backfill).
+ */
+export function getMaxRoundFromEdges(edges) {
+  if (!Array.isArray(edges) || edges.length === 0) return 0
+  let max = 0
+  for (const edge of edges) {
+    const from = edge?.valid_from_round
+    if (typeof from === 'number' && from > max) max = from
+    const to = edge?.valid_to_round
+    if (typeof to === 'number' && to > max) max = to
+  }
+  return max
+}
+
+/**
+ * Issue #10 — Local snapshot filter mirroring the backend's snapshot semantics:
+ * an edge is "alive" at round R iff valid_from_round <= R and (valid_to_round
+ * is null OR valid_to_round > R). Saves a round-trip during slider scrubbing.
+ */
+export function filterEdgesAtRound(edges, round) {
+  if (!Array.isArray(edges)) return []
+  if (round == null) return edges
+  return edges.filter((edge) => {
+    const from = typeof edge?.valid_from_round === 'number' ? edge.valid_from_round : 0
+    const to = edge?.valid_to_round
+    if (from > round) return false
+    if (to != null && to <= round) return false
+    return true
+  })
+}
+
 export function buildGraphRenderData(graphData, entityTypes = []) {
   const nodesData = graphData?.nodes || []
   const edgesData = graphData?.edges || []

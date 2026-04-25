@@ -68,3 +68,30 @@ export function getProject(projectId) {
     method: 'get'
   })
 }
+
+/**
+ * Issue #10 — Snapshot of RELATION edges valid at a given OASIS round.
+ * @param {String} graphId
+ * @param {Number} roundNum  zero-based round number (>=0)
+ * @returns {Promise} resolves to { graph_id, round_num, edges, edge_count }
+ */
+export function getGraphSnapshot(graphId, roundNum) {
+  return service({
+    url: `/api/graph/snapshot/${graphId}/${roundNum}`,
+    method: 'get'
+  })
+}
+
+/**
+ * Issue #10 — Diff between two rounds: added / removed / reinforced edges.
+ * @param {String} graphId
+ * @param {Number} startRound
+ * @param {Number} endRound  must be >= startRound
+ */
+export function getGraphDiff(graphId, startRound, endRound) {
+  return service({
+    url: `/api/graph/diff/${graphId}`,
+    method: 'get',
+    params: { start_round: startRound, end_round: endRound }
+  })
+}
