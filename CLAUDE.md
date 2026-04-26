@@ -90,6 +90,7 @@ Wichtige nicht-offensichtliche Knöpfe:
 - `OLLAMA_THINKING=false` — strippt Reasoning-Blöcke bei Qwen3/GPT-OSS/DeepSeek-R1.
 - `LLM_DISABLE_JSON_MODE=true` — deaktiviert `response_format=json_object`; Markdown-Fences werden in `chat_json()` gestrippt.
 - `GRAPH_CHUNK_SIZE=1500`, `GRAPH_CHUNK_OVERLAP=150`, `GRAPH_PARALLEL_CHUNKS=4` — Graph-Build-Tuning.
+- `HYBRID_SEARCH_VECTOR_WEIGHT=0.7`, `HYBRID_SEARCH_KEYWORD_WEIGHT=0.3` — Mischung im `SearchService`. Müssen sich nicht zu 1.0 summieren (jede Seite wird vorher normalisiert).
 - `REPORT_LANGUAGE=German`, `AGENT_LANGUAGE=de`, `TIME_PROFILE=dach_default` — DACH-Defaults.
 - `ENABLE_AGENT_TOOLS=false` — experimentelles OASIS-Tool-Use, opt-in.
 - `AGORA_AUTH_TOKEN` — optionaler API-Token-Schutz für `/api/*`.

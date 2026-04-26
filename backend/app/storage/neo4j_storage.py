@@ -75,7 +75,11 @@ class Neo4jStorage(GraphStorage):
         )
         self._embedding = embedding_service or EmbeddingService()
         self._ner = ner_extractor or NERExtractor()
-        self._search = SearchService(self._embedding)
+        self._search = SearchService(
+            self._embedding,
+            vector_weight=Config.HYBRID_SEARCH_VECTOR_WEIGHT,
+            keyword_weight=Config.HYBRID_SEARCH_KEYWORD_WEIGHT,
+        )
 
         # Issue #11 Phase 2 — late-bound to avoid the
         # OntologyManager → Neo4jStorage circular dependency.

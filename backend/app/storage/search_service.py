@@ -2,11 +2,13 @@
 SearchService — hybrid search (vector + keyword) over Neo4j graph data.
 
 Replaces Zep Cloud's built-in search with reranker.
-Scoring: 0.7 * vector_score + 0.3 * keyword_score (BM25 via fulltext index).
+Default scoring: 0.7 * vector_score + 0.3 * keyword_score (BM25 via fulltext index).
+Both weights are configurable per-instance and overridable via
+``Config.HYBRID_SEARCH_VECTOR_WEIGHT`` / ``Config.HYBRID_SEARCH_KEYWORD_WEIGHT``.
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from neo4j import Session as Neo4jSession
 
@@ -56,13 +58,30 @@ LIMIT $limit
 
 
 class SearchService:
-    """Hybrid search combining vector similarity and keyword matching."""
+    """Hybrid search combining vector similarity and keyword matching.
+
+    The default weights (0.7 / 0.3) reproduce the historical scoring; pass
+    explicit values to override them per-instance, or rely on the caller
+    (typically ``Neo4jStorage``) to pull defaults from ``Config``.
+    """
 
     VECTOR_WEIGHT = 0.7
     KEYWORD_WEIGHT = 0.3
 
-    def __init__(self, embedding_service: EmbeddingService):
+    def __init__(
+        self,
+        embedding_service: EmbeddingService,
+        *,
+        vector_weight: Optional[float] = None,
+        keyword_weight: Optional[float] = None,
+    ):
         self.embedding = embedding_service
+        self.vector_weight = (
+            self.VECTOR_WEIGHT if vector_weight is None else float(vector_weight)
+        )
+        self.keyword_weight = (
+            self.KEYWORD_WEIGHT if keyword_weight is None else float(keyword_weight)
+        )
 
     def search_edges(
         self,
@@ -233,7 +252,7 @@ class SearchService:
         for uid, item in all_items.items():
             v = v_scores.get(uid, 0.0)
             k = k_scores.get(uid, 0.0)
-            combined = self.VECTOR_WEIGHT * v + self.KEYWORD_WEIGHT * k
+            combined = self.vector_weight * v + self.keyword_weight * k
             item["score"] = combined
             scored.append(item)
 

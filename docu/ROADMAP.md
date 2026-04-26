@@ -31,8 +31,8 @@ Schließt die letzten Loose Ends der 0.5-Saga und macht das Frontend Production-
 - [x] **Frontend Round-Slider** für Temporal-Graph-Snapshots (#10 optional, abgeschlossen). `GraphRoundSlider.vue` lebt im `GraphPanel`, blendet sich automatisch ein sobald der Graph mindestens eine Simulationsrunde gesehen hat. Filter läuft client-seitig (`filterEdgesAtRound`); `getGraphSnapshot`/`getGraphDiff` für späteren server-side Bedarf bereitgestellt.
 - [x] **Workspace-Layout-Shell** (EPIC-03 ST-01). `WorkspaceLayout`/`WorkspaceHeader`/`WorkspaceSplit`/`WorkspaceBrandLink`/`WorkspaceModeSwitch`/`WorkspaceStepStatus` (`frontend/src/layouts/`) sind die gemeinsame Shell für `MainView`/`SimulationView`/`SimulationRunView`/`ReportView`/`InteractionView`.
 - [x] **Workspace-State-Composables** (EPIC-03 ST-02 + ST-03). `useWorkspaceMode` (viewMode + Panel-Styles + toggleMaximize + workspaceModes) und `useWorkspaceStatus` (currentStatus + konfigurierbares Status-Mapping zu kind/text) liegen unter `frontend/src/composables/`. Alle 5 Pipeline-Views konsumieren `useWorkspaceMode`; SimulationView/ReportView/InteractionView zusätzlich `useWorkspaceStatus`. SimulationRunView behält paused-Overlay-Logik bewusst eigenständig, MainView phasen-basierte Status-Logik ebenfalls.
-- [ ] **Frontend-Warnungen abbauen** — Vue/Vite-Build noch mit Warnings, schrittweise erschlagen.
-- [ ] Tune hybrid search weights (currently `0.7 vector / 0.3 BM25`) — make configurable per graph.
+- [x] **Frontend-Warnungen abbauen** — Vue/Vite-Build und ESLint laufen aktuell warning-frei (`npm run check` exit=0). Falls neue Warnings auftauchen, im Folgeticket erfassen.
+- [x] **Hybrid-Search-Weights konfigurierbar** — `Config.HYBRID_SEARCH_VECTOR_WEIGHT` / `Config.HYBRID_SEARCH_KEYWORD_WEIGHT` (Defaults 0.7 / 0.3 wie bisher), `SearchService` nimmt sie per Constructor-Argument, `Neo4jStorage` reicht sie aus der Config durch. Pro Graph noch nicht (das wäre ein größerer Schnitt — Folgeticket).
 
 ### v0.7.0 — Multi-model + persona governance
 

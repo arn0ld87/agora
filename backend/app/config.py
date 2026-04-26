@@ -104,6 +104,12 @@ class Config:
     # Parallelism for GraphRAG NER/RE extraction (per-chunk LLM calls).
     GRAPH_PARALLEL_CHUNKS = int(os.environ.get('GRAPH_PARALLEL_CHUNKS', '4'))
 
+    # Hybrid search weights (SearchService — vector × keyword/BM25 mix).
+    # Defaults reproduce the historical 0.7 / 0.3 split. The two weights do
+    # not have to sum to 1; SearchService normalises within each side first.
+    HYBRID_SEARCH_VECTOR_WEIGHT = float(os.environ.get('HYBRID_SEARCH_VECTOR_WEIGHT', '0.7'))
+    HYBRID_SEARCH_KEYWORD_WEIGHT = float(os.environ.get('HYBRID_SEARCH_KEYWORD_WEIGHT', '0.3'))
+
     # GraphMemoryUpdater bounded queue — upper bound on buffered agent activities
     # waiting for Neo4j ingestion. Hitting this cap applies backpressure to the
     # OASIS subprocess (blocks briefly, then drops). Prevents OOM when the LLM
