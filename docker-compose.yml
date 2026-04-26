@@ -35,6 +35,12 @@ services:
       # Overrides any REDIS_URL in .env so the bus stays pointed at the
       # compose-private service regardless of host-side defaults.
       - REDIS_URL=redis://redis:6379/0
+      # Service discovery for compose-internal Neo4j and host-side Ollama.
+      # These overrides win over .env so dev users can keep localhost defaults
+      # there for `npm run dev` without breaking the compose workflow.
+      - NEO4J_URI=bolt://neo4j:7687
+      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - EMBEDDING_BASE_URL=http://host.docker.internal:11434
 
   redis:
     image: redis:7-alpine
