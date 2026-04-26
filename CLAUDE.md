@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Projekt
 
-Agora (**v0.5.0 alpha**) ist ein lokal-first-Fork von MiroFish: Dokument hochladen → Wissensgraph extrahieren → personalisierte Agenten spawnen → Social-Media-Reaktionen simulieren → Report erzeugen. Der Fork ersetzt Zep Cloud durch Neo4j und DashScope/OpenAI durch Ollama (oder einen beliebigen OpenAI-kompatiblen Endpoint).
+Agora (**v0.6.0 alpha**) ist ein lokal-first-Fork von MiroFish: Dokument hochladen → Wissensgraph extrahieren → personalisierte Agenten spawnen → Social-Media-Reaktionen simulieren → Report erzeugen. Der Fork ersetzt Zep Cloud durch Neo4j und DashScope/OpenAI durch Ollama (oder einen beliebigen OpenAI-kompatiblen Endpoint).
 
 Stack: Flask (Python 3.11) + Vue 3 + Vite + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Ollama. Package-Manager: `uv` fürs Backend, `npm` fürs Frontend. Aktuell produktiv gefahren mit LLM `qwen3-coder-next:cloud` und Embedding `qwen3-embedding:4b` (2560 dim, siehe Gotchas).
 
@@ -184,7 +184,7 @@ models/     Dataclasses (Project, Task)
 
 Das Repo steckt mitten in einem phasierten Umbau (Audit: `docu/2026-04-22-refactoring-produkt-audit.md`; Zielarchitektur: `docu/target-architecture.md`; Backlog: `docu/refactoring-backlog-priorisiert.md`).
 
-Stand v0.5.0 + Unreleased (2026-04-25):
+Stand v0.6.0 (2026-04-26):
 
 - Quality-Gates (`npm run check`, CI, **214 Backend-Tests grün** mit Live-Redis; Module skipt sauber ohne `TEST_REDIS_URL`). Backend-Lint ist auf `app/ tests/` umgestellt (default-strict).
 - Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 (Phase 1 + 2) → #17 abgeschlossen und auf `main`

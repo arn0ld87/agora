@@ -2,7 +2,7 @@
 
 > Stand: 2026-04-25. Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
 
-## Current State (v0.5.0 + Unreleased)
+## Current State (v0.6.0)
 
 Fully local fork on Neo4j CE + Ollama, no Zep Cloud dependency. Core pipeline works end-to-end: upload → graph build → persona generation → multi-agent OASIS simulation → report.
 

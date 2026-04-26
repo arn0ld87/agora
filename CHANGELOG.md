@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-04-26
+
+Ship des v0.6-Backlogs: RPC/Interview-IPC-Migration auf Redis Pub/Sub (#17), Frontend Round-Slider für den Temporal-Graph (#10 optional), EPIC-03 Workspace-Konsolidierung vollständig (Layout-Shell + State-Composables), konfigurierbare Hybrid-Search-Weights, LLM-Retry-Resilienz, NER-→-Ontology-Mutation-Wiring (#11 Phase 2). 207 Backend-Tests, Frontend warning-frei.
+
 ### Hinzugefügt
 
 - **Hybrid-Search-Weights konfigurierbar.** `Config.HYBRID_SEARCH_VECTOR_WEIGHT` (Default 0.7) und `Config.HYBRID_SEARCH_KEYWORD_WEIGHT` (Default 0.3) lesen aus den gleichnamigen env-Vars. `SearchService` nimmt beide als optionale Constructor-Argumente; `Neo4jStorage` reicht die Config-Werte automatisch durch. Class-Konstanten `VECTOR_WEIGHT`/`KEYWORD_WEIGHT` bleiben als Backward-Compat. Doku in `.env.example` + CLAUDE.md/AGENTS.md. Tests: `tests/test_search_service.py` (5).

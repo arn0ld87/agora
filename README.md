@@ -19,7 +19,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.5.0+unreleased Alpha (Richtung v0.6) — RPC-Pub/Sub + Round-Slider neu, weiter experimentell
+> ## ⚠️ Status: v0.6.0 Alpha — RPC-Pub/Sub-Migration, Round-Slider und Workspace-State-Composables, weiter experimentell
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
@@ -46,7 +46,7 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.5.0+unreleased
+### Engineering-Stand v0.6.0
 
 - **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**214 Backend-Tests grün** mit Live-Redis; ohne Redis-Container wird die Live-Suite sauber geskippt).
 - **LLM-Resilienz**: `LLMClient.chat` und `describe_image` retryen über `llm_call_with_retry` auf transiente Upstream-Fehler (`APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Hickser.
@@ -304,7 +304,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.5.0+unreleased alpha (heading toward v0.6) — RPC pub/sub migration and temporal round-slider landed; still experimental.** Agora is an active experimental
+> **⚠️ Status: v0.6.0 alpha — RPC pub/sub migration, temporal round-slider, and workspace state composables landed; still experimental.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
 > swapped mid-run. Not production-ready. The HTTP API currently has **no
@@ -319,7 +319,7 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.5.0+unreleased
+### Engineering status in v0.6.0
 
 - **Quality gates are in place** via `npm run check` (**214 backend tests** with live Redis; the live-Redis suite skips cleanly when no Redis container is reachable).
 - **Event bus transport (#9 + #17)** with a Redis-backed default (`docker-compose.yml` ships `redis:7-alpine`) and file-polling fallback. Live channels (`control` / `state`) ride Redis pub/sub with a retained snapshot. **Since issue #17** RPC channels (`rpc.command` / `rpc.response.*`) are hybrid: the backend publishes to Redis and the file IPC layer in parallel, then races both sources for the response (loser is cleaned up). The OASIS subprocess listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) lives next to the legacy file polling. Backout via `EVENT_BUS_BACKEND=file`. SSE bridge at `GET /api/simulation/<id>/stream` keeps the frontend off run-state polling.
