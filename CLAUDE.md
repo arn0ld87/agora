@@ -188,11 +188,10 @@ Stand v0.5.0 + Unreleased (2026-04-25):
 - Quality-Gates (`npm run check`, CI, **214 Backend-Tests grün** mit Live-Redis; Module skipt sauber ohne `TEST_REDIS_URL`). Backend-Lint ist auf `app/ tests/` umgestellt (default-strict).
 - Issue-Serie #13 → #14 → #9 → #10 → #12 → #11 (Phase 1 + 2) → #17 abgeschlossen und auf `main`
 - `AgoraContainer` als DI-Anker; Singletons `neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`, `ontology_mutation_service`. Factories: `graph_builder`, `temporal_graph`, `network_analytics`
-- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10) inkl. Frontend-Round-Slider, Polarization-Metriken (#12), Ontology-Mutation inkl. NER-Wiring (#11), LLM-Retry gegen Cloud-5xx-Flaps, RPC/Interview-IPC hybrid Redis Pub/Sub + File (#17)
+- Event-Bus + SSE-Bridge (#9), Temporal Graph Snapshots (#10) inkl. Frontend-Round-Slider, Polarization-Metriken (#12), Ontology-Mutation inkl. NER-Wiring (#11), LLM-Retry gegen Cloud-5xx-Flaps, RPC/Interview-IPC hybrid Redis Pub/Sub + File (#17), Workspace-Layout-Shell + State-Composables (EPIC-03 ST-01/02/03)
 
 Wirklich offen bleiben vor allem:
 
-- Workspace-State-Composables (EPIC-03 ST-02/03) — Layout-Shell ist da (`WorkspaceLayout`/`WorkspaceHeader`/`WorkspaceSplit` in allen 5 Pipeline-Views), offen sind die `useWorkspaceMode` / `useWorkspaceStatus`-Composables, die aktuell pro View identisch dupliziert sind
 - weiterer Abbau der Frontend-Warnungen
 - standardisierte API-Error/Response-Envelopes (EPIC-09)
 - TypeScript-Migration der Frontend-API-Schicht (EPIC-14)

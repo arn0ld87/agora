@@ -14,21 +14,19 @@ import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import { useSystemLog } from '../composables/useSystemLog'
+import { useWorkspaceMode } from '../composables/useWorkspaceMode'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 
-// Layout: graph | split | workbench
-const viewMode = ref('split')
+// MainView keeps its own status (driven by currentPhase + error) — the
+// generic useWorkspaceStatus composable only models a single status string.
+const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximize } =
+  useWorkspaceMode('split')
 
 // Wizard state — Steps 1+2 live in MainView; 3-5 jump to dedicated views.
 const currentStep = ref(1)
-const workspaceModes = [
-  { value: 'graph', label: 'Graph' },
-  { value: 'split', label: 'Split' },
-  { value: 'workbench', label: 'Workbench' },
-]
 const stepLabels = computed(() => [
   t('process.stepper.step1'),
   t('process.stepper.step2'),
@@ -52,17 +50,6 @@ const { systemLogs, addLog } = useSystemLog({ cap: 100 })
 let pollTimer = null
 let graphPollTimer = null
 
-const leftPanelStyle = computed(() => {
-  if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-const rightPanelStyle = computed(() => {
-  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'graph') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-
 const statusClass = computed(() => {
   if (error.value) return 'error'
   if (currentPhase.value >= 2) return 'done'
@@ -76,11 +63,6 @@ const statusText = computed(() => {
   if (currentPhase.value === 0) return t('step1.ontology.generate')
   return t('common.starting')
 })
-
-
-function toggleMaximize(target) {
-  viewMode.value = viewMode.value === target ? 'split' : target
-}
 
 function handleNextStep(params = {}) {
   if (currentStep.value === 2) {

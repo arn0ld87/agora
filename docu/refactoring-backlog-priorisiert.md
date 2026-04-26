@@ -292,26 +292,26 @@ Als Entwickler möchte ich ein gemeinsames Layout für die Pipeline-Views, damit
 
 ---
 
-## Story EPIC-03-ST-02 — Status-/Header-Konfiguration declarative machen
+## Story EPIC-03-ST-02 — Status-/Header-Konfiguration declarative machen — **abgeschlossen**
 **Typ:** Task  
 **Priorität:** P0  
 **Aufwand:** S  
-**Status:** offen — Layout-Komponenten konsumieren bereits Slots/Props, aber alle 5 Views halten weiterhin eigene `currentStatus`/`statusKind`/`statusText`-Computed mit nahezu identischer Logik. Geplant: ein `useWorkspaceStatus`-Composable mit konfigurierbarem Status-Mapping.
+**Status:** ✅ done — `frontend/src/composables/useWorkspaceStatus.js` kapselt `currentStatus` + `statusKind` + `statusText` + `updateStatus` mit konfigurierbarem `{ status: { kind, text-key } }`-Mapping. SimulationView, ReportView und InteractionView konsumieren das Composable; SimulationRunView nutzt nur den `currentStatus`-Teil und behält seine eigenen `paused`-Overlay-Computed (gewollte Sonderbehandlung). MainView bleibt mit seiner phasen-basierten Status-Logik bewusst draußen.
 
 **Akzeptanzkriterien**
-- Views liefern nur Props/Config statt eigenes Header-Markup
-- Statusformatierung konsistent
+- ✅ Views liefern nur Props/Config statt eigenes Header-Markup
+- ✅ Statusformatierung konsistent
 
 ---
 
-## Story EPIC-03-ST-03 — ViewMode-Logik zentralisieren
+## Story EPIC-03-ST-03 — ViewMode-Logik zentralisieren — **abgeschlossen**
 **Typ:** Task  
 **Priorität:** P1  
 **Aufwand:** S  
-**Status:** offen — `viewMode` + `leftPanelStyle`/`rightPanelStyle`/`toggleMaximize` sind in allen 5 Views identisch dupliziert (~12 Zeilen je Datei). Geplant: `useWorkspaceMode(initialMode)`-Composable.
+**Status:** ✅ done — `frontend/src/composables/useWorkspaceMode.js` kapselt `viewMode` + `leftPanelStyle` + `rightPanelStyle` + `toggleMaximize` + `workspaceModes`. Alle 5 Views (Main, Simulation, SimulationRun, Report, Interaction) nutzen das Composable; identische 12-Zeilen-Blöcke pro View entfallen.
 
 **Akzeptanzkriterien**
-- `graph/split/workbench`-Logik lebt nicht mehr in fünf Views separat
+- ✅ `graph/split/workbench`-Logik lebt nicht mehr in fünf Views separat
 
 ---
 

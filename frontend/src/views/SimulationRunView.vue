@@ -22,6 +22,7 @@ import {
   resumeSimulation
 } from '../api/simulation'
 import { useSystemLog } from '../composables/useSystemLog'
+import { useWorkspaceMode } from '../composables/useWorkspaceMode'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,12 +30,9 @@ const { t } = useI18n()
 
 defineProps({ simulationId: String })
 
-const viewMode = ref('split')
-const workspaceModes = [
-  { value: 'graph', label: 'Graph' },
-  { value: 'split', label: 'Split' },
-  { value: 'workbench', label: 'Workbench' },
-]
+const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximize } =
+  useWorkspaceMode('split')
+
 const currentSimulationId = ref(route.params.simulationId)
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
 const minutesPerRound = ref(30)
@@ -42,6 +40,10 @@ const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
 const { systemLogs, addLog } = useSystemLog({ cap: 200 })
+// SimulationRunView keeps its own statusKind/statusText computeds because of
+// the paused-overlay + round counter — useWorkspaceStatus would have to model
+// transient state too. Composable migration deferred until a paused-aware
+// variant exists; for now only useWorkspaceMode is shared.
 const currentStatus = ref('processing')
 const isPaused = ref(false)
 const currentRound = ref(0)
@@ -82,17 +84,6 @@ async function togglePause() {
   }
 }
 
-const leftPanelStyle = computed(() => {
-  if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-const rightPanelStyle = computed(() => {
-  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'graph') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-
 const statusKind = computed(() => {
   if (currentStatus.value === 'error') return 'error'
   if (currentStatus.value === 'completed') return 'done'
@@ -116,10 +107,6 @@ const statusText = computed(() => {
 const isSimulating = computed(() => currentStatus.value === 'processing')
 
 function updateStatus(s) { currentStatus.value = s }
-
-function toggleMaximize(target) {
-  viewMode.value = viewMode.value === target ? 'split' : target
-}
 
 async function handleGoBack() {
   stopGraphRefresh()

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
@@ -14,6 +14,8 @@ import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'
 import { useSystemLog } from '../composables/useSystemLog'
+import { useWorkspaceMode } from '../composables/useWorkspaceMode'
+import { useWorkspaceStatus } from '../composables/useWorkspaceStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,44 +23,23 @@ const { t } = useI18n()
 
 defineProps({ reportId: String })
 
-const viewMode = ref('workbench')
-const workspaceModes = [
-  { value: 'graph', label: 'Graph' },
-  { value: 'split', label: 'Split' },
-  { value: 'workbench', label: 'Workbench' },
-]
+const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximize } =
+  useWorkspaceMode('workbench')
+const { statusKind, statusText, updateStatus } = useWorkspaceStatus({
+  initial: 'processing',
+  map: {
+    error:     { kind: 'error', text: 'common.error' },
+    completed: { kind: 'done',  text: 'common.completed' },
+  },
+  fallback: { kind: 'running', text: 'common.processing' },
+})
+
 const currentReportId = ref(route.params.reportId)
 const simulationId = ref(null)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
 const { systemLogs, addLog } = useSystemLog({ cap: 200 })
-const currentStatus = ref('processing')
-
-const leftPanelStyle = computed(() => {
-  if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-const rightPanelStyle = computed(() => {
-  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'graph') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-
-const statusKind = computed(() => {
-  if (currentStatus.value === 'error') return 'error'
-  if (currentStatus.value === 'completed') return 'done'
-  return 'running'
-})
-const statusText = computed(() => {
-  if (currentStatus.value === 'error') return t('common.error')
-  if (currentStatus.value === 'completed') return t('common.completed')
-  return t('common.processing')
-})
-
-function updateStatus(s) { currentStatus.value = s }
-function toggleMaximize(target) { viewMode.value = viewMode.value === target ? 'split' : target }
 
 async function loadReportData() {
   try {

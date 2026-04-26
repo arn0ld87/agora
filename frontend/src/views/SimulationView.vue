@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
@@ -13,6 +13,8 @@ import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { getProject, getGraphData } from '../api/graph'
 import { createSimulationBranch, getSimulation, stopSimulation, getEnvStatus, closeSimulationEnv } from '../api/simulation'
 import { useSystemLog } from '../composables/useSystemLog'
+import { useWorkspaceMode } from '../composables/useWorkspaceMode'
+import { useWorkspaceStatus } from '../composables/useWorkspaceStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,18 +22,22 @@ const { t } = useI18n()
 
 defineProps({ simulationId: String })
 
-const viewMode = ref('split')
-const workspaceModes = [
-  { value: 'graph', label: 'Graph' },
-  { value: 'split', label: 'Split' },
-  { value: 'workbench', label: 'Workbench' },
-]
+const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximize } =
+  useWorkspaceMode('split')
+const { statusKind, statusText, updateStatus } = useWorkspaceStatus({
+  initial: 'processing',
+  map: {
+    error:     { kind: 'error', text: 'common.error' },
+    completed: { kind: 'done',  text: 'common.ready' },
+  },
+  fallback: { kind: 'running', text: 'common.preparing' },
+})
+
 const currentSimulationId = ref(route.params.simulationId)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
 const { systemLogs, addLog } = useSystemLog({ cap: 100 })
-const currentStatus = ref('processing')
 const showBranchPanel = ref(false)
 const branchBusy = ref(false)
 const branchForm = ref({
@@ -40,33 +46,6 @@ const branchForm = ref({
   language: '',
   max_agents: ''
 })
-
-const leftPanelStyle = computed(() => {
-  if (viewMode.value === 'graph') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'workbench') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-const rightPanelStyle = computed(() => {
-  if (viewMode.value === 'workbench') return { width: '100%', opacity: 1 }
-  if (viewMode.value === 'graph') return { width: '0%', opacity: 0 }
-  return { width: '50%', opacity: 1 }
-})
-
-const statusKind = computed(() => {
-  if (currentStatus.value === 'error') return 'error'
-  if (currentStatus.value === 'completed') return 'done'
-  return 'running'
-})
-const statusText = computed(() => {
-  if (currentStatus.value === 'error') return t('common.error')
-  if (currentStatus.value === 'completed') return t('common.ready')
-  return t('common.preparing')
-})
-
-function updateStatus(s) { currentStatus.value = s }
-function toggleMaximize(target) {
-  viewMode.value = viewMode.value === target ? 'split' : target
-}
 
 function handleGoBack() {
   if (projectData.value?.project_id) {
