@@ -269,32 +269,34 @@ Als Maintainer möchte ich vor dem Split eine stabile Modulgrenze festlegen, dam
 **Priorität:** P0  
 **Nutzen:** Weniger Duplication, konsistentere UX, schnellere Änderungen.
 
-## Story EPIC-03-ST-01 — Gemeinsames WorkspaceLayout bauen
+## Story EPIC-03-ST-01 — Gemeinsames WorkspaceLayout bauen — **abgeschlossen**
 **Typ:** Story  
 **Priorität:** P0  
-**Aufwand:** M
+**Aufwand:** M  
+**Status:** ✅ done (alle 5 Pipeline-Views nutzen `WorkspaceLayout`/`WorkspaceHeader`/`WorkspaceSplit`/`WorkspaceBrandLink`/`WorkspaceModeSwitch`/`WorkspaceStepStatus`).
 
 **User Story**  
 Als Entwickler möchte ich ein gemeinsames Layout für die Pipeline-Views, damit Header, Statusanzeige und Split-Logik nur einmal gepflegt werden müssen.
 
 **Akzeptanzkriterien**
-- `MainView.vue`, `SimulationView.vue`, `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue` verwenden dieselbe Layout-Shell
-- View-spezifische Logik bleibt in den Views
-- UX bleibt gleich oder wird konsistenter
+- ✅ `MainView.vue`, `SimulationView.vue`, `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue` verwenden dieselbe Layout-Shell
+- ✅ View-spezifische Logik bleibt in den Views
+- ✅ UX bleibt gleich oder wird konsistenter
 
 ### Tasks
-- [ ] `frontend/src/layouts/WorkspaceLayout.vue` anlegen
-- [ ] `WorkspaceHeader.vue` anlegen
-- [ ] `WorkspaceSplit.vue` anlegen
-- [ ] erste View migrieren
-- [ ] restliche Views migrieren
+- [x] `frontend/src/layouts/WorkspaceLayout.vue` anlegen
+- [x] `WorkspaceHeader.vue` anlegen
+- [x] `WorkspaceSplit.vue` anlegen
+- [x] erste View migrieren
+- [x] restliche Views migrieren
 
 ---
 
 ## Story EPIC-03-ST-02 — Status-/Header-Konfiguration declarative machen
 **Typ:** Task  
 **Priorität:** P0  
-**Aufwand:** S
+**Aufwand:** S  
+**Status:** offen — Layout-Komponenten konsumieren bereits Slots/Props, aber alle 5 Views halten weiterhin eigene `currentStatus`/`statusKind`/`statusText`-Computed mit nahezu identischer Logik. Geplant: ein `useWorkspaceStatus`-Composable mit konfigurierbarem Status-Mapping.
 
 **Akzeptanzkriterien**
 - Views liefern nur Props/Config statt eigenes Header-Markup
@@ -305,7 +307,8 @@ Als Entwickler möchte ich ein gemeinsames Layout für die Pipeline-Views, damit
 ## Story EPIC-03-ST-03 — ViewMode-Logik zentralisieren
 **Typ:** Task  
 **Priorität:** P1  
-**Aufwand:** S
+**Aufwand:** S  
+**Status:** offen — `viewMode` + `leftPanelStyle`/`rightPanelStyle`/`toggleMaximize` sind in allen 5 Views identisch dupliziert (~12 Zeilen je Datei). Geplant: `useWorkspaceMode(initialMode)`-Composable.
 
 **Akzeptanzkriterien**
 - `graph/split/workbench`-Logik lebt nicht mehr in fünf Views separat

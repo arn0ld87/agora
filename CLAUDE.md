@@ -192,7 +192,7 @@ Stand v0.5.0 + Unreleased (2026-04-25):
 
 Wirklich offen bleiben vor allem:
 
-- gemeinsames Workspace-Layout (EPIC-03)
+- Workspace-State-Composables (EPIC-03 ST-02/03) — Layout-Shell ist da (`WorkspaceLayout`/`WorkspaceHeader`/`WorkspaceSplit` in allen 5 Pipeline-Views), offen sind die `useWorkspaceMode` / `useWorkspaceStatus`-Composables, die aktuell pro View identisch dupliziert sind
 - weiterer Abbau der Frontend-Warnungen
 - standardisierte API-Error/Response-Envelopes (EPIC-09)
 - TypeScript-Migration der Frontend-API-Schicht (EPIC-14)

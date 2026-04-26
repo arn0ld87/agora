@@ -29,7 +29,8 @@ Schließt die letzten Loose Ends der 0.5-Saga und macht das Frontend Production-
 
 - [x] **Issue #17 — RPC/Interview-IPC auf Redis Pub/Sub** (abgeschlossen). Backend `RedisEventBus` und alle drei OASIS-Subprocess-Scripts laufen jetzt hybrid (Redis Pub/Sub + File-Fallback); `RedisIPCBridge` im OASIS-Eventloop, Backend-side `_await_response` race't beide Quellen.
 - [x] **Frontend Round-Slider** für Temporal-Graph-Snapshots (#10 optional, abgeschlossen). `GraphRoundSlider.vue` lebt im `GraphPanel`, blendet sich automatisch ein sobald der Graph mindestens eine Simulationsrunde gesehen hat. Filter läuft client-seitig (`filterEdgesAtRound`); `getGraphSnapshot`/`getGraphDiff` für späteren server-side Bedarf bereitgestellt.
-- [ ] **Gemeinsames Workspace-Layout** (Backlog EPIC-03). Aktuell duplizierte Layout-Logik in `MainView`/`ReportView`/`InteractionView`/`SimulationRunView`.
+- [x] **Workspace-Layout-Shell** (EPIC-03 ST-01). `WorkspaceLayout`/`WorkspaceHeader`/`WorkspaceSplit`/`WorkspaceBrandLink`/`WorkspaceModeSwitch`/`WorkspaceStepStatus` (`frontend/src/layouts/`) sind die gemeinsame Shell für `MainView`/`SimulationView`/`SimulationRunView`/`ReportView`/`InteractionView`.
+- [ ] **Workspace-State-Composables** (EPIC-03 ST-02 + ST-03). Alle 5 Views halten weiterhin eigene `viewMode`/`leftPanelStyle`/`rightPanelStyle`/`toggleMaximize` (~12 Zeilen identisch dupliziert) und ähnliche `currentStatus`/`statusKind`/`statusText`-Computed. Geplant: `useWorkspaceMode` + `useWorkspaceStatus` Composables.
 - [ ] **Frontend-Warnungen abbauen** — Vue/Vite-Build noch mit Warnings, schrittweise erschlagen.
 - [ ] Tune hybrid search weights (currently `0.7 vector / 0.3 BM25`) — make configurable per graph.
 
