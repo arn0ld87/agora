@@ -68,6 +68,24 @@ docker compose build agora && docker compose up -d --force-recreate --no-deps ag
 docker logs -f agora
 ```
 
+**Dev-Override aktiv:** `docker-compose.override.yml` bind-mountet den Repo-Root nach `/app` und hält `/app/node_modules`, `/app/frontend/node_modules` und `/app/backend/.venv` auf named volumes. Damit sind Source-Änderungen im Container sofort sichtbar; ein Rebuild ist nur bei Dockerfile- oder Dependency-Änderungen nötig.
+
+Nützliche Dev-Kommandos:
+
+```bash
+# Dev-Container mit aktuellem Source-Code neu erstellen
+
+docker compose up -d --force-recreate agora
+
+# Nach Dockerfile-/Dependency-Änderungen sauber rebuilden
+
+docker compose build agora && docker compose up -d --force-recreate --no-deps agora
+
+# Dependency-Volumes bei Bedarf hart zurücksetzen
+
+docker compose down -v && docker compose up -d
+```
+
 Neo4j Browser: http://localhost:7474  
 Backend Health: http://localhost:5001/health  
 Status: http://localhost:5001/api/status

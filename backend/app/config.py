@@ -30,13 +30,16 @@ def infer_vector_dim_for_model(model_name: str | None) -> int | None:
 
 # Load .env file from project root
 # Path: Agora/.env (relative to backend/app/config.py)
+# Important: do not override already-exported environment variables.
+# Docker Compose relies on process env overrides (e.g. host.docker.internal
+# instead of localhost) and those must win over values from the host-side .env.
 project_root_env = os.path.join(os.path.dirname(__file__), '../../.env')
 
 if os.path.exists(project_root_env):
-    load_dotenv(project_root_env, override=True)
+    load_dotenv(project_root_env, override=False)
 else:
     # If no .env in root, try to load environment variables (for production)
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 
 
 class Config:

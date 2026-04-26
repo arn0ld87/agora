@@ -1,0 +1,15 @@
+services:
+  agora:
+    # Dev override: bind-mount the repo so Python/JS source changes are visible
+    # immediately inside the container, while keeping dependency directories on
+    # named volumes so the image-installed node_modules/.venv are not shadowed.
+    volumes:
+      - .:/app
+      - agora_node_modules:/app/node_modules
+      - agora_frontend_node_modules:/app/frontend/node_modules
+      - agora_backend_venv:/app/backend/.venv
+
+volumes:
+  agora_node_modules:
+  agora_frontend_node_modules:
+  agora_backend_venv:

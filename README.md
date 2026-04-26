@@ -152,6 +152,24 @@ cp .env.example .env
 docker compose up -d
 ```
 
+**Dev-Hinweis:** Das Repo enthält zusätzlich eine `docker-compose.override.yml`, die den Source-Code nach `/app` bind-mountet und `node_modules` / `frontend/node_modules` / `backend/.venv` als named volumes isoliert. Damit greifen Code-Änderungen im laufenden Dev-Container sofort, ohne dass das Image für reine Source-Änderungen neu gebaut werden muss.
+
+Nützliche Dev-Kommandos:
+
+```bash
+# Container mit Dev-Override neu erstellen
+
+docker compose up -d --force-recreate agora
+
+# Wenn Docker-/Dependency-Layer geändert wurden
+
+docker compose build agora && docker compose up -d --force-recreate --no-deps agora
+
+# Wenn named volumes für Dependencies einmal resettet werden sollen
+
+docker compose down -v && docker compose up -d
+```
+
 Danach:
 
 - Frontend: <http://localhost:5173>
