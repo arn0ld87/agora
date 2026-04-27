@@ -5,6 +5,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Geändert
+
+- API-Contract-Härtung begonnen: Auth-Fehler aus `token_required()` und `install_blueprint_guard()` nutzen jetzt die zentrale `json_error()`-Envelope mit `success: false`.
+
+### Hinzugefügt
+
+- `docu/v1-development-log.md` dokumentiert die v1.0-Entwicklungsschritte.
+- Tests für den Auth-Guard decken Open-Mode, fehlende Tokens sowie Header-/Bearer-/Query-Token ab.
+
 ## [0.6.1] — 2026-04-27
 
 Kleines Hygiene-Release nach v0.6.0: Dependency-Advisories im Frontend beseitigt, Versionsdrift korrigiert und Doku/Testzahlen synchronisiert.
