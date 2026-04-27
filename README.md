@@ -79,6 +79,7 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 ### Kernfunktionen
 
 - **GraphRAG-Ingest**: PDF, Markdown oder Text hochladen; Entitäten und Beziehungen landen in Neo4j.
+- **Flexible Ontologie-Generierung**: Entitätstypen sind nicht mehr hart auf exakt 10 begrenzt; Defaults sind 8-16 Typen plus Pflicht-Fallbacks `Person` und `Organization` (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
 - **Modellauswahl im Workflow**: Modell und Agentensprache können bereits auf der Start-/Upload-Seite und in der Umgebungsvorbereitung gewählt werden.
 - **Gefrorene Simulation-Config**: Eine vorbereitete Simulation speichert ihr Modell in `simulation_config.json`; spätere `.env`-Änderungen wirken erst bei neuer Vorbereitung.
 - **Persona-Steuerung**: Agentenanzahl begrenzen, Personas durchsuchen, manuelle Personas hinzufügen oder löschen.
@@ -357,6 +358,7 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 ### Key Features
 
 - **GraphRAG ingest** with Neo4j 5.18+ and Ollama embeddings (`qwen3-embedding:4b` currently exercised, `nomic-embed-text` still supported).
+- **Flexible ontology generation**: entity types are no longer hard-capped at exactly 10; defaults are 8-16 types plus required `Person` and `Organization` fallbacks (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
 - **Model selection in the workflow** for upload/setup and report generation.
 - **Per-simulation frozen config**: prepared simulations keep their selected model and language.
 - **Persona control**: cap agent count, inspect generated personas, add or remove manual personas.

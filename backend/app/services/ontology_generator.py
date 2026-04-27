@@ -4,6 +4,7 @@ Interface 1: Analyze text content and generate entity and relationship type defi
 """
 
 from typing import Dict, Any, List, Optional
+from ..config import Config
 from ..utils.llm_client import LLMClient
 
 
@@ -73,17 +74,17 @@ Please output JSON format with the following structure:
 
 ### 1. Entity Type Design - Must Strictly Follow
 
-**Quantity requirement: Must have exactly 10 entity types**
+**Quantity requirement: Generate 8-16 entity types, based on document complexity**
 
 **Hierarchical structure requirement (must include both specific types and fallback types)**:
 
-Your 10 entity types must include the following hierarchy:
+Your entity types must include the following hierarchy:
 
 A. **Fallback types (must include, place in last 2 of list)**:
    - `Person`: Fallback type for any natural person. When a person does not fit other more specific person types, use this.
    - `Organization`: Fallback type for any organization. When an organization does not fit other more specific organization types, use this.
 
-B. **Specific types (8, designed based on text content)**:
+B. **Specific types (designed based on text content)**:
    - Design more specific types for main characters appearing in the text
    - Example: If text involves academic events, can have `Student`, `Professor`, `University`
    - Example: If text involves business events, can have `Company`, `CEO`, `Employee`
@@ -240,13 +241,13 @@ class OntologyGenerator:
 {additional_context}
 """
 
-        message += """
+        message += f"""
 Based on the above content, design entity types and relationship types suitable for social opinion simulation.
 
 **Rules to follow**:
-1. Must output exactly 10 entity types
+1. Output between {Config.ONTOLOGY_MIN_ENTITY_TYPES} and {Config.ONTOLOGY_MAX_ENTITY_TYPES} entity types, based on document complexity
 2. Last 2 must be fallback types: Person (individual fallback) and Organization (organization fallback)
-3. First 8 are specific types designed based on text content
+3. All other types are specific types designed based on text content
 4. All entity types must be real-world subjects that can voice opinions, not abstract concepts
 5. Attribute names cannot use reserved words like name, uuid, group_id, use full_name, org_name, etc. instead
 """
@@ -283,9 +284,8 @@ Based on the above content, design entity types and relationship types suitable 
             if len(edge.get("description", "")) > 100:
                 edge["description"] = edge["description"][:97] + "..."
 
-        # Zep API limit: maximum 10 custom entity types, maximum 10 custom edge types
-        MAX_ENTITY_TYPES = 10
-        MAX_EDGE_TYPES = 10
+        max_entity_types = max(2, Config.ONTOLOGY_MAX_ENTITY_TYPES)
+        max_edge_types = max(1, Config.ONTOLOGY_MAX_EDGE_TYPES)
 
         # Fallback type definitions
         person_fallback = {
@@ -324,10 +324,11 @@ Based on the above content, design entity types and relationship types suitable 
             current_count = len(result["entity_types"])
             needed_slots = len(fallbacks_to_add)
 
-            # If adding would exceed 10, need to remove some existing types
-            if current_count + needed_slots > MAX_ENTITY_TYPES:
+            # If adding would exceed the configured cap, remove some specific
+            # types from the end while preserving slots for fallbacks.
+            if current_count + needed_slots > max_entity_types:
                 # Calculate how many to remove
-                to_remove = current_count + needed_slots - MAX_ENTITY_TYPES
+                to_remove = current_count + needed_slots - max_entity_types
                 # Remove from end (keep more important specific types in front)
                 result["entity_types"] = result["entity_types"][:-to_remove]
 
@@ -335,11 +336,23 @@ Based on the above content, design entity types and relationship types suitable 
             result["entity_types"].extend(fallbacks_to_add)
 
         # Final check to ensure limits not exceeded (defensive programming)
-        if len(result["entity_types"]) > MAX_ENTITY_TYPES:
-            result["entity_types"] = result["entity_types"][:MAX_ENTITY_TYPES]
+        if len(result["entity_types"]) > max_entity_types:
+            fallbacks = [
+                entity
+                for entity in result["entity_types"]
+                if entity.get("name") in {"Person", "Organization"}
+            ]
+            fallback_names = {entity.get("name") for entity in fallbacks}
+            specific_slots = max_entity_types - len(fallback_names)
+            specifics = [
+                entity
+                for entity in result["entity_types"]
+                if entity.get("name") not in {"Person", "Organization"}
+            ][:specific_slots]
+            result["entity_types"] = specifics + fallbacks
 
-        if len(result["edge_types"]) > MAX_EDGE_TYPES:
-            result["edge_types"] = result["edge_types"][:MAX_EDGE_TYPES]
+        if len(result["edge_types"]) > max_edge_types:
+            result["edge_types"] = result["edge_types"][:max_edge_types]
 
         return result
     
@@ -445,4 +458,3 @@ Based on the above content, design entity types and relationship types suitable 
         code_lines.append('}')
 
         return '\n'.join(code_lines)
-

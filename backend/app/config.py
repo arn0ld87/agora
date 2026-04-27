@@ -107,6 +107,13 @@ class Config:
     # Parallelism for GraphRAG NER/RE extraction (per-chunk LLM calls).
     GRAPH_PARALLEL_CHUNKS = int(os.environ.get('GRAPH_PARALLEL_CHUNKS', '4'))
 
+    # Ontology generation. Agora no longer uses the old Zep custom-type cap,
+    # but very large type lists make LLM extraction noisier. Keep defaults
+    # conservative and configurable per deployment.
+    ONTOLOGY_MIN_ENTITY_TYPES = int(os.environ.get('ONTOLOGY_MIN_ENTITY_TYPES', '8'))
+    ONTOLOGY_MAX_ENTITY_TYPES = int(os.environ.get('ONTOLOGY_MAX_ENTITY_TYPES', '16'))
+    ONTOLOGY_MAX_EDGE_TYPES = int(os.environ.get('ONTOLOGY_MAX_EDGE_TYPES', '12'))
+
     # Hybrid search weights (SearchService — vector × keyword/BM25 mix).
     # Defaults reproduce the historical 0.7 / 0.3 split. The two weights do
     # not have to sum to 1; SearchService normalises within each side first.
