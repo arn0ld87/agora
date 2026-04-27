@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import functools
 import traceback
-from typing import Any, Callable, Mapping
+from collections.abc import Mapping
+from typing import Any, Callable
 
 from flask import jsonify
 
@@ -106,7 +107,10 @@ def handle_api_errors(
         @functools.wraps(view)
         def wrapper(*args, **kwargs):
             try:
-                return view(*args, **kwargs)
+                result = view(*args, **kwargs)
+                if isinstance(result, Mapping):
+                    return json_success(dict(result))
+                return result
             except ValueError as exc:
                 return json_error(str(exc), status=400)
             except TimeoutError as exc:

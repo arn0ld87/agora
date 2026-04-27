@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Geändert
 
 - API-Contract-Härtung begonnen: Auth-Fehler aus `token_required()` und `install_blueprint_guard()` nutzen jetzt die zentrale `json_error()`-Envelope mit `success: false`.
+- `@handle_api_errors` setzt seine dokumentierte Contract-Regel jetzt auch technisch um: rohe `dict`-Returns werden in `json_success()` gewrappt.
 
 ### Hinzugefügt
 

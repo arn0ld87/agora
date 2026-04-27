@@ -36,3 +36,20 @@
 **Rollback:**
 
 - Rückgängig machen von `backend/app/utils/auth.py` und Entfernen von `backend/tests/test_auth.py` stellt das alte Payload-Format wieder her.
+
+## Schritt 2 — API-Contract: rohe Dict-Returns envelopen
+
+**Problem:** `backend/app/utils/api_responses.py` dokumentierte bereits, dass `@handle_api_errors` rohe `dict`-Returns in `json_success()` überführt. Die Implementierung gab solche Dicts aber unverändert an Flask zurück.
+
+**Änderung:**
+
+- `handle_api_errors()` ruft die View auf, prüft das Ergebnis und wandelt `Mapping`-Returns in `json_success(dict(result))` um.
+- Bestehende `Response`-Objekte und `(Response, status)`-Tupel werden unverändert durchgereicht.
+
+**Tests:**
+
+- `backend/tests/test_api_responses.py::test_handle_api_errors_wraps_raw_dict_return`
+
+**Rollback:**
+
+- Entfernen des Mapping-Branches in `handle_api_errors()` stellt das alte Flask-Default-Verhalten für rohe Dicts wieder her.

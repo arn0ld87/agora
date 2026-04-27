@@ -77,6 +77,19 @@ def test_handle_api_errors_passes_through_success_tuple():
     assert response.get_json() == {"success": True, "data": {"ok": True}}
 
 
+def test_handle_api_errors_wraps_raw_dict_return():
+    app = _build_app()
+
+    @handle_api_errors
+    def view():
+        return {"ok": True}
+
+    with app.test_request_context():
+        response, status = view()
+    assert status == 200
+    assert response.get_json() == {"success": True, "data": {"ok": True}}
+
+
 def test_handle_api_errors_maps_value_error_to_400():
     app = _build_app()
 
