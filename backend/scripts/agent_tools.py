@@ -89,9 +89,12 @@ class AgentToolRegistry:
         config files are persisted artifacts and must not carry passwords or API
         keys.
         """
-        neo4j_uri = config.get("neo4j_uri") or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+        # Runtime environment must win over persisted simulation_config.json.
+        # Prepared simulations can move between host-dev and docker-compose
+        # environments, so a baked-in URI like localhost:7687 becomes stale.
+        neo4j_uri = os.environ.get("NEO4J_URI") or config.get("neo4j_uri") or "bolt://localhost:7687"
         neo4j_secret = os.environ.get("NEO4J_PASSWORD", "")
-        neo4j_user = config.get("neo4j_user") or os.environ.get("NEO4J_USER", "neo4j")
+        neo4j_user = os.environ.get("NEO4J_USER") or config.get("neo4j_user") or "neo4j"
         graph_id = config.get("graph_id")
         simulation_dir = os.path.dirname(config.get("config_path", ""))
 
