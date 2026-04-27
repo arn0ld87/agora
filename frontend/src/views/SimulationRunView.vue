@@ -35,6 +35,7 @@ const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximiz
 
 const currentSimulationId = ref(route.params.simulationId)
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
+const simulationDays = ref(route.query.simulationDays ? parseInt(route.query.simulationDays) : null)
 const minutesPerRound = ref(30)
 const projectData = ref(null)
 const graphData = ref(null)
@@ -183,6 +184,7 @@ watch(isSimulating, (val) => val ? startGraphRefresh() : stopGraphRefresh(), { i
 
 onMounted(() => {
   if (maxRounds.value) addLog(`max_rounds = ${maxRounds.value}`)
+  if (simulationDays.value) addLog(`simulation_days = ${simulationDays.value}`)
   loadSimulationData()
   pollGlobalStatus()
   statusTimer = setInterval(pollGlobalStatus, 3000)
@@ -251,6 +253,7 @@ onUnmounted(() => {
         <Step3Simulation
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
+          :simulationDays="simulationDays"
           :minutesPerRound="minutesPerRound"
           :projectData="projectData"
           :graphData="graphData"

@@ -82,8 +82,8 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 - **Flexible Ontologie-Generierung**: Entitätstypen sind nicht mehr hart auf exakt 10 begrenzt; Defaults sind 8-16 Typen plus Pflicht-Fallbacks `Person` und `Organization` (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
 - **Modellauswahl im Workflow**: Modell und Agentensprache können bereits auf der Start-/Upload-Seite und in der Umgebungsvorbereitung gewählt werden.
 - **Gefrorene Simulation-Config**: Eine vorbereitete Simulation speichert ihr Modell in `simulation_config.json`; spätere `.env`-Änderungen wirken erst bei neuer Vorbereitung.
-- **Persona-Steuerung**: Agentenanzahl begrenzen, Personas durchsuchen, manuelle Personas hinzufügen oder löschen.
-- **Simulation-Laufsteuerung**: Start, Stop, Pause/Resume nach Rundenende und rohes Console-Log der OASIS-Subprozesse.
+- **Persona-Steuerung**: Agentenanzahl begrenzen, Personas durchsuchen, manuelle Personas hinzufügen oder löschen; erzeugte oder manuelle Personas können in einer lokalen Bibliothek gespeichert und später wiederverwendet werden.
+- **Simulation-Laufsteuerung**: Laufdauer in Tagen und optionales Rundenlimit setzen, Start, Stop, Pause/Resume nach Rundenende und rohes Console-Log der OASIS-Subprozesse.
 - **ReportAgent**: Nutzt Graph-Tools, Interviews und Panorama-Suche; Report-Modell kann beim Generieren/Regenerieren gewechselt werden.
 - **Optionaler Live-Web-Kontext**: Mit `TAVILY_API_KEY` kann der ReportAgent aktuelle externe Fakten recherchieren.
 - **Experimenteller Agent-Tool-Use**: Simulationsagenten können vor einer Aktion den Wissensgraphen abfragen, wenn `ENABLE_AGENT_TOOLS=true` gesetzt ist.
@@ -101,7 +101,7 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
 3. **Environment Setup**
 
-   Agenten-Personas und Simulationsparameter werden erzeugt. Modell, Sprache und Agentenlimit werden in der Simulation eingefroren.
+   Agenten-Personas und Simulationsparameter werden erzeugt. Modell, Sprache, Agentenlimit, Laufdauer und optional gespeicherte Personas werden in der Simulation eingefroren.
 
 4. **Simulation**
 
@@ -361,8 +361,8 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 - **Flexible ontology generation**: entity types are no longer hard-capped at exactly 10; defaults are 8-16 types plus required `Person` and `Organization` fallbacks (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
 - **Model selection in the workflow** for upload/setup and report generation.
 - **Per-simulation frozen config**: prepared simulations keep their selected model and language.
-- **Persona control**: cap agent count, inspect generated personas, add or remove manual personas.
-- **Simulation controls**: start, stop, pause/resume after a round, plus raw subprocess console logs.
+- **Persona control**: cap agent count, inspect generated personas, add or remove manual personas, and save reusable persona templates locally.
+- **Simulation controls**: configure duration in days plus an optional round limit, start, stop, pause/resume after a round, plus raw subprocess console logs.
 - **ReportAgent** with graph tools, agent interviews, panorama search, model override, and optional Tavily web tools.
 - **Experimental agent tool-use**: simulation agents can query the knowledge graph before acting when explicitly enabled.
 - **DACH defaults**: German UI, German agent language by default, and Europe/Berlin activity timing.

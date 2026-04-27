@@ -228,7 +228,16 @@
       "running": "Erzeugt {done} / {total} Personas…",
       "completed": "{count} Personas erzeugt.",
       "preview": "Beispiel-Persona ansehen",
-      "edit": "Bearbeiten"
+      "edit": "Bearbeiten",
+      "save": "Persona speichern",
+      "saveAll": "Alle Personas speichern"
+    },
+    "library": {
+      "title": "Persona-Bibliothek",
+      "hint": "Gespeicherte Personas kannst du in jeder neuen Simulation wiederverwenden.",
+      "empty": "Noch keine gespeicherten Personas.",
+      "refresh": "Aktualisieren",
+      "use": "Verwenden"
     },
     "language": {
       "label": "Agentensprache",
@@ -248,6 +257,7 @@
     "config": {
       "title": "Lauf-Parameter",
       "rounds": "Anzahl Runden",
+      "days": "Anzahl Tage",
       "graphMemory": "Graph-Memory aktualisieren",
       "graphMemoryHint": "Agenten-Erfahrungen fließen während der Simulation in den Wissensgraphen zurück."
     },

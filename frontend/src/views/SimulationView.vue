@@ -60,7 +60,10 @@ function handleNextStep(params = {}) {
     name: 'SimulationRun',
     params: { simulationId: currentSimulationId.value }
   }
-  if (params.maxRounds) routeParams.query = { maxRounds: params.maxRounds }
+  const query = {}
+  if (params.maxRounds) query.maxRounds = params.maxRounds
+  if (params.simulationDays) query.simulationDays = params.simulationDays
+  if (Object.keys(query).length) routeParams.query = query
   router.push(routeParams)
 }
 

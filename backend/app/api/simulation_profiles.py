@@ -8,6 +8,7 @@ from flask import request, send_file
 
 from . import simulation_bp
 from ..config import Config
+from ..services.persona_library import PersonaLibrary
 from ..services.simulation_manager import SimulationManager
 from ..utils.validation import validate_simulation_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -63,6 +64,34 @@ def get_simulation_profiles(simulation_id: str):
         "count": len(profiles),
         "profiles": profiles,
     })
+
+
+@simulation_bp.route('/persona-library', methods=['GET'])
+@handle_api_errors(log_prefix="Failed to list persona templates")
+def list_persona_templates():
+    """List reusable persona templates stored on this machine."""
+    templates = PersonaLibrary().list_templates()
+    return json_success({"count": len(templates), "templates": templates})
+
+
+@simulation_bp.route('/persona-library', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to save persona template")
+def save_persona_template():
+    """Persist a generated or manually authored persona for later simulations."""
+    data = request.get_json() or {}
+    if not (data.get("username") or data.get("name") or data.get("persona")):
+        return json_error("Provide at least username, name, or persona", status=400)
+    template = PersonaLibrary().save_template(data)
+    return json_success({"template": template})
+
+
+@simulation_bp.route('/persona-library/<template_id>', methods=['DELETE'])
+@handle_api_errors(log_prefix="Failed to delete persona template")
+def delete_persona_template(template_id: str):
+    """Remove a reusable persona template."""
+    if not PersonaLibrary().delete_template(template_id):
+        return json_error(f"Persona template not found: {template_id}", status=404)
+    return json_success({"removed": template_id})
 
 
 @simulation_bp.route('/<simulation_id>/profiles/realtime', methods=['GET'])

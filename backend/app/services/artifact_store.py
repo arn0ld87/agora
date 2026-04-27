@@ -38,6 +38,7 @@ _ARTIFACT_FILENAMES: dict[str, str] = {
     "run_state": "run_state.json",
     "control_state": "control_state.json",
     "reddit_profiles": "reddit_profiles.json",
+    "persona_library": "persona_library.json",
     "env_status": "env_status.json",
 }
 

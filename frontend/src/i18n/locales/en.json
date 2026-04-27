@@ -217,7 +217,16 @@
       "running": "Generating {done} / {total} personas…",
       "completed": "{count} personas generated.",
       "preview": "Preview a persona",
-      "edit": "Edit"
+      "edit": "Edit",
+      "save": "Save persona",
+      "saveAll": "Save all personas"
+    },
+    "library": {
+      "title": "Persona library",
+      "hint": "Saved personas can be reused in any later simulation.",
+      "empty": "No saved personas yet.",
+      "refresh": "Refresh",
+      "use": "Use"
     },
     "language": {
       "label": "Agent language",
@@ -237,6 +246,7 @@
     "config": {
       "title": "Run parameters",
       "rounds": "Number of rounds",
+      "days": "Number of days",
       "graphMemory": "Update graph memory",
       "graphMemoryHint": "Agent experiences flow back into the knowledge graph during the simulation."
     },

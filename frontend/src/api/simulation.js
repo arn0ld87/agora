@@ -78,7 +78,7 @@ export const listSimulations = (projectId) => {
 
 /**
  * Start simulation
- * @param {Object} data - { simulation_id, platform?, max_rounds?, enable_graph_memory_update? }
+ * @param {Object} data - { simulation_id, platform?, max_rounds?, simulation_days?, enable_graph_memory_update? }
  */
 export const startSimulation = (data) => {
   return requestWithRetry(() => service.post('/api/simulation/start', data), 3, 1000)
@@ -236,6 +236,29 @@ export const deleteSimulationProfile = (simulationId, username, platform = 'redd
   return service.delete(`/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}`, {
     params: { platform }
   })
+}
+
+/**
+ * List reusable persona templates stored on the local backend.
+ */
+export const listPersonaTemplates = () => {
+  return service.get('/api/simulation/persona-library')
+}
+
+/**
+ * Save a generated or manually authored persona as a reusable template.
+ * @param {Object} data
+ */
+export const savePersonaTemplate = (data) => {
+  return service.post('/api/simulation/persona-library', data)
+}
+
+/**
+ * Delete a reusable persona template.
+ * @param {string} templateId
+ */
+export const deletePersonaTemplate = (templateId) => {
+  return service.delete(`/api/simulation/persona-library/${encodeURIComponent(templateId)}`)
 }
 
 export const createSimulationBranch = (simulationId, data) => {

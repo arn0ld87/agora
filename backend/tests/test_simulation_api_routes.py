@@ -119,6 +119,54 @@ def test_start_simulation_requires_simulation_id():
     assert payload["error"] == "Please provide simulation_id"
 
 
+def test_start_simulation_validates_simulation_days():
+    app = _build_test_app()
+    client = app.test_client()
+
+    response = client.post(
+        "/api/simulation/start",
+        json={"simulation_id": "sim_abcdef123456", "simulation_days": 0},
+    )
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "simulation_days Must be between 1 and 365"
+
+
+def test_persona_library_round_trip(monkeypatch, tmp_path):
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
+    app = _build_test_app()
+    client = app.test_client()
+
+    create_response = client.post(
+        "/api/simulation/persona-library",
+        json={
+            "username": "debug_sre",
+            "name": "Debug SRE",
+            "bio": "SRE with a bias toward reproducible incidents.",
+            "persona": "Pragmatic infrastructure operator.",
+        },
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.get_json()
+    assert created["success"] is True
+    template_id = created["data"]["template"]["template_id"]
+
+    list_response = client.get("/api/simulation/persona-library")
+    listed = list_response.get_json()
+    assert listed["success"] is True
+    assert listed["data"]["count"] == 1
+    assert listed["data"]["templates"][0]["username"] == "debug_sre"
+
+    delete_response = client.delete(f"/api/simulation/persona-library/{template_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.get_json()["success"] is True
+
+
 def test_pause_route_keeps_validation_guard():
     app = _build_test_app()
     client = app.test_client()

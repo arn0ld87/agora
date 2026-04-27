@@ -14,6 +14,7 @@ from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.validation import validate_simulation_id
 from .simulation_common import (
+    get_artifact_store,
     logger,
     run_registry,
     simulation_resume_capability as _simulation_resume_capability,
@@ -40,6 +41,7 @@ def start_simulation():
 
     platform = data.get('platform', 'parallel')
     max_rounds = data.get('max_rounds')
+    simulation_days = data.get('simulation_days')
     enable_graph_memory_update = data.get('enable_graph_memory_update', False)
     force = data.get('force', False)
 
@@ -50,6 +52,14 @@ def start_simulation():
                 return json_error("max_rounds Must be positive integer")
         except (ValueError, TypeError):
             return json_error("max_rounds Must be valid integer")
+
+    if simulation_days is not None:
+        try:
+            simulation_days = int(simulation_days)
+            if simulation_days <= 0 or simulation_days > 365:
+                return json_error("simulation_days Must be between 1 and 365")
+        except (ValueError, TypeError):
+            return json_error("simulation_days Must be valid integer")
 
     if platform not in ['twitter', 'reddit', 'parallel']:
         return json_error(f"Invalid platform type: {platform}，Optional: twitter/reddit/parallel")
@@ -112,6 +122,16 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
+    if simulation_days is not None:
+        store = get_artifact_store()
+        config = store.read_json(simulation_id, "simulation_config", default=None)
+        if not config:
+            return json_error("Simulation configuration does not exist. Please call /prepare first", status=404)
+        time_config = dict(config.get("time_config") or {})
+        time_config["total_simulation_hours"] = simulation_days * 24
+        config["time_config"] = time_config
+        store.write_json(simulation_id, "simulation_config", config)
+
     run_state = SimulationRunner.start_simulation(
         simulation_id=simulation_id,
         platform=platform,
@@ -146,6 +166,8 @@ def start_simulation():
     response_data = run_state.to_dict()
     if max_rounds:
         response_data['max_rounds_applied'] = max_rounds
+    if simulation_days:
+        response_data['simulation_days_applied'] = simulation_days
     response_data['graph_memory_update_enabled'] = enable_graph_memory_update
     response_data['force_restarted'] = force_restarted
     response_data['run_id'] = run_record["run_id"]

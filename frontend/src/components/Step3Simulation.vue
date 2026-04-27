@@ -24,6 +24,7 @@ const router = useRouter()
 const props = defineProps({
   simulationId: String,
   maxRounds: Number,
+  simulationDays: Number,
   minutesPerRound: { type: Number, default: 30 },
   projectData: Object,
   graphData: Object,
@@ -84,6 +85,7 @@ async function doStart() {
       enable_graph_memory_update: false
     }
     if (props.maxRounds) params.max_rounds = props.maxRounds
+    if (props.simulationDays) params.simulation_days = props.simulationDays
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {

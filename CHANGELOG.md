@@ -16,6 +16,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 - `docu/v1-development-log.md` dokumentiert die v1.0-Entwicklungsschritte.
 - Tests für den Auth-Guard decken Open-Mode, fehlende Tokens sowie Header-/Bearer-/Query-Token ab.
+- Simulationsstarts akzeptieren zusätzlich `simulation_days`; die UI schreibt daraus `time_config.total_simulation_hours`, während das bestehende Rundenlimit als optionaler Cap erhalten bleibt.
+- Lokale Persona-Bibliothek: erzeugte oder manuelle Personas können gespeichert, gelistet, gelöscht und in späteren Simulationen wiederverwendet werden.
 
 ## [0.6.1] — 2026-04-27
 
