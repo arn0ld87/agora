@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-04-27
+
+Kleines Hygiene-Release nach v0.6.0: Dependency-Advisories im Frontend beseitigt, Versionsdrift korrigiert und Doku/Testzahlen synchronisiert.
+
+### Geändert
+
+- Frontend-Lockfile per kompatiblem `npm audit fix` aktualisiert: `axios` → 1.15.2, `follow-redirects` → 1.16.0, `postcss` → 8.5.12.
+- `/api/status` liest die Backend-Version jetzt aus `app.__version__` statt aus einem alten Literal.
+- README und Roadmap auf den aktuellen Quality-Gate-Stand gebracht: 207 Backend-Tests grün, 2 Redis-Integrationstests skippen ohne `TEST_REDIS_URL`.
+
+### Sicherheit
+
+- `npm audit --omit=dev` ist im Frontend wieder ohne Findings.
+- README-Warnung korrigiert: Agora hat inzwischen optionalen `AGORA_AUTH_TOKEN`-Schutz und restriktive CORS-Defaults, bleibt aber nicht für öffentlichen Betrieb gedacht.
+
 ## [0.6.0] — 2026-04-26
 
 Ship des v0.6-Backlogs: RPC/Interview-IPC-Migration auf Redis Pub/Sub (#17), Frontend Round-Slider für den Temporal-Graph (#10 optional), EPIC-03 Workspace-Konsolidierung vollständig (Layout-Shell + State-Composables), konfigurierbare Hybrid-Search-Weights, LLM-Retry-Resilienz, NER-→-Ontology-Mutation-Wiring (#11 Phase 2). 207 Backend-Tests, Frontend warning-frei.

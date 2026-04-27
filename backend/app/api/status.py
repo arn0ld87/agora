@@ -10,6 +10,7 @@ from flask import current_app
 import requests
 
 from . import status_bp
+from .. import __version__
 from ..config import Config
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
@@ -22,7 +23,7 @@ def _get_backend_status():
     """Get backend health and version."""
     return {
         "ok": True,
-        "version": "0.4.1",
+        "version": __version__,
     }
 
 

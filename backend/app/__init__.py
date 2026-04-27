@@ -17,6 +17,8 @@ from flask_cors import CORS  # noqa: E402
 from .config import Config  # noqa: E402
 from .utils.logger import setup_logger, get_logger  # noqa: E402
 
+__version__ = "0.6.1"
+
 
 def create_app(config_class=Config):
     """Flask application factory function"""

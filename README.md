@@ -19,15 +19,17 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.6.0 Alpha — RPC-Pub/Sub-Migration, Round-Slider und Workspace-State-Composables, weiter experimentell
+> ## ⚠️ Status: v0.6.1 Alpha — Hygiene-Release nach v0.6.0, weiter experimentell
 >
 > Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
 > Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
 > Fehlern aussteigen, insbesondere wenn Ollama langsam antwortet, JSON-Modus
 > zickt oder Modellwechsel mittendrin passieren. Erwarte Abstürze, leere
 > Reports, halbfertige Personas und gelegentliche 500er.
-> **Nicht für Produktion, nicht öffentlich erreichbar machen** — die API hat
-> derzeit weder Authentifizierung noch CORS-Einschränkung.
+> **Nicht öffentlich erreichbar machen.** Die API hat einen optionalen
+> `AGORA_AUTH_TOKEN`-Guard und restriktive CORS-Defaults, ist aber weiterhin
+> für lokale Single-User-Setups gedacht, nicht für Mehrbenutzer- oder
+> Internet-Betrieb.
 >
 > **Getestet aktuell hauptsächlich mit:**
 > - LLM: `qwen3-coder-next:cloud` (Ollama Cloud)
@@ -46,9 +48,9 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.6.0
+### Engineering-Stand v0.6.1
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**214 Backend-Tests grün** mit Live-Redis; ohne Redis-Container wird die Live-Suite sauber geskippt).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**207 Backend-Tests grün**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
 - **LLM-Resilienz**: `LLMClient.chat` und `describe_image` retryen über `llm_call_with_retry` auf transiente Upstream-Fehler (`APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Hickser.
 - **Event-Bus-Transport (#9 + #17)**: `SimulationEventBus`-Port mit In-Memory-, File- und Redis-Adapter. Redis `7-alpine` wird vom `docker-compose.yml` mitgestartet. Live-Kanäle (`control`/`state`) gehen über Redis Pub/Sub mit retained Snapshot. **Seit Issue #17** laufen auch `rpc.command` / `rpc.response.*` hybrid: Backend published parallel auf Redis und File, `_await_response` race't beide Quellen, der Verlierer wird aufgeräumt. Subprocess-Listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) sitzt im OASIS-Eventloop neben dem File-Polling. Backout über `EVENT_BUS_BACKEND=file`.
 - **Frontend Push (#9 Phase C)**: `GET /api/simulation/<id>/stream` (SSE) + `useEventStream`-Composable ersetzen das 2,5-s-Status-Polling in der Simulationsansicht.
@@ -248,17 +250,18 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 
 ### Sicherheit
 
-> **Warnung:** Die HTTP-API hat derzeit **keine Authentifizierung** und CORS
-> steht auf `*`. Agora ist explizit für den Betrieb auf `localhost` oder in
-> einem vertrauenswürdigen Netz (Tailscale, Wireguard, internes LAN) gedacht.
-> Nicht direkt ins Internet hängen.
+> **Warnung:** Agora ist explizit für den Betrieb auf `localhost` oder in einem
+> vertrauenswürdigen Netz (Tailscale, Wireguard, internes LAN) gedacht. Der
+> optionale `AGORA_AUTH_TOKEN`-Guard und die CORS-Whitelist reduzieren die
+> Angriffsfläche, ersetzen aber keine echte Mehrbenutzer-Auth. Nicht direkt ins
+> Internet hängen.
 
 - Keine echten Secrets committen.
 - `.env` bleibt lokal.
 - `.env.example` enthält nur Beispielwerte.
 - Neo4j-Passwörter werden nicht in `simulation_config.json` oder andere persistierte Simulation-Artefakte geschrieben.
 - `backend/uploads/` ist nicht versioniert.
-- Siehe [`docs/security-hardening.md`](./docs/security-hardening.md) für die aktuelle Sicherheitsbaseline (Auth-Token, CORS-Whitelist, SSRF-Blocker, Vision- und Label-Caps) sowie [`docs/SECURITY_REVIEW_SUMMARY.md`](./docs/SECURITY_REVIEW_SUMMARY.md) für den historischen Review-Stand.
+- Siehe [`docu/security-hardening.md`](./docu/security-hardening.md) für die aktuelle Sicherheitsbaseline (Auth-Token, CORS-Whitelist, SSRF-Blocker, Vision- und Label-Caps) sowie [`docu/SECURITY_REVIEW_SUMMARY.md`](./docu/SECURITY_REVIEW_SUMMARY.md) für den historischen Review-Stand.
 
 ### Architektur
 
@@ -322,12 +325,12 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.6.0 alpha — RPC pub/sub migration, temporal round-slider, and workspace state composables landed; still experimental.** Agora is an active experimental
+> **⚠️ Status: v0.6.1 alpha — hygiene release after v0.6.0; still experimental.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail in creative
 > ways, especially when Ollama is slow, JSON mode misbehaves, or models are
-> swapped mid-run. Not production-ready. The HTTP API currently has **no
-> authentication by default** (opt-in via `AGORA_AUTH_TOKEN`) and CORS is
-> locked to localhost — run on localhost or inside a trusted network only.
+> swapped mid-run. Not production-ready. The HTTP API has an optional
+> `AGORA_AUTH_TOKEN` guard and localhost-locked CORS defaults, but no real
+> multi-user AuthN/AuthZ — run on localhost or inside a trusted network only.
 > Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
 > `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
 
@@ -337,15 +340,15 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.6.0
+### Engineering status in v0.6.1
 
-- **Quality gates are in place** via `npm run check` (**214 backend tests** with live Redis; the live-Redis suite skips cleanly when no Redis container is reachable).
+- **Quality gates are in place** via `npm run check` (**207 backend tests passed**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
 - **Event bus transport (#9 + #17)** with a Redis-backed default (`docker-compose.yml` ships `redis:7-alpine`) and file-polling fallback. Live channels (`control` / `state`) ride Redis pub/sub with a retained snapshot. **Since issue #17** RPC channels (`rpc.command` / `rpc.response.*`) are hybrid: the backend publishes to Redis and the file IPC layer in parallel, then races both sources for the response (loser is cleaned up). The OASIS subprocess listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) lives next to the legacy file polling. Backout via `EVENT_BUS_BACKEND=file`. SSE bridge at `GET /api/simulation/<id>/stream` keeps the frontend off run-state polling.
 - **Temporal graph (#10)**: RELATION edges carry `valid_from_round` / `valid_to_round` / `reinforced_count`; `/api/graph/snapshot/<gid>/<round>` and `/api/graph/diff/<gid>` answer time-travel queries. The new **round slider** in `GraphPanel` scrubs through the timeline once the graph has seen at least one simulation round (client-side filter; no extra API call while scrubbing).
 - **Polarization metrics (#12)**: `GET /api/simulation/<id>/metrics` returns Louvain communities, echo-chamber index and bridge agents via `networkx` (see `docu/analytics.md`).
 - **Dynamic ontology mutation (#11, phase 1+2)** with three modes (`disabled` / `review_only` / `auto`), thread-safe manager, pluggable scorer, audit log. The NER → mutation wiring is live — `Neo4jStorage.add_text` forwards novel entity types automatically; service exceptions never block ingestion.
 - **Hand-rolled DI container (#14)** underpins all of the above — long-lived services live on `AgoraContainer`, no more `app.extensions` service-locator hunt.
-- **Workspace layout shell (EPIC-03 ST-01)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) are the shared shell for all five pipeline views. ST-02/ST-03 (declarative status and view-mode composables) come next.
+- **Workspace layout shell + state composables (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) are the shared shell for all five pipeline views. `useWorkspaceMode` and `useWorkspaceStatus` remove duplicated view-mode and status boilerplate.
 - **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file.
 - **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
 

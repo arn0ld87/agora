@@ -1,16 +1,16 @@
 # Agora Roadmap
 
-> Stand: 2026-04-25. Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
+> Stand: 2026-04-27. Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
 
-## Current State (v0.6.0)
+## Current State (v0.6.1)
 
 Fully local fork on Neo4j CE + Ollama, no Zep Cloud dependency. Core pipeline works end-to-end: upload → graph build → persona generation → multi-agent OASIS simulation → report.
 
-The 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 → #11 Phase 1) and the post-0.5 unreleased branch added LLM retry resilience, frontend defensive error handling, default-strict ruff scope, and the NER → ontology-mutation wiring (#11 Phase 2).
+The 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 → #11 Phase 1). The 0.6 line added LLM retry resilience, frontend defensive error handling, default-strict ruff scope, NER → ontology-mutation wiring (#11 Phase 2), RPC/Interview-IPC over Redis Pub/Sub (#17), and v0.6.1 dependency/docs hygiene.
 
 ### Implemented (v0.5.0 + unreleased)
 
-- **Quality gates** — `npm run check` runs default-strict ruff on `app/ tests/`, pytest (202 passed, 1 skip), frontend lint, frontend build.
+- **Quality gates** — `npm run check` runs default-strict ruff on `app/ tests/`, pytest (207 passed, 2 Redis integration skips without `TEST_REDIS_URL`), frontend lint, frontend build.
 - **DI container (#14)** — `AgoraContainer` with singletons (`neo4j_storage`, `artifact_store`, `event_bus`, `ontology_manager`, `ontology_mutation_service`) and request-scoped factories (`graph_builder`, `temporal_graph`, `network_analytics`).
 - **Event bus + SSE (#9)** — `SimulationEventBus` with `InMemoryEventBus`, `FilePollingEventBus`, `RedisEventBus`. SSE endpoint `GET /api/simulation/<id>/stream` replaces 2.5s status polling.
 - **Temporal graph (#10)** — relation edges carry `valid_from_round`, `valid_to_round`, `reinforced_count`. APIs `GET /api/graph/snapshot/<gid>/<round>` and `GET /api/graph/diff/<gid>?...`.
@@ -23,7 +23,7 @@ The 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 
 
 ## Near Term
 
-### v0.6.0 — RPC migration + frontend hygiene
+### v0.6.1 — RPC migration + frontend hygiene
 
 Schließt die letzten Loose Ends der 0.5-Saga und macht das Frontend Production-tauglich.
 
@@ -33,6 +33,7 @@ Schließt die letzten Loose Ends der 0.5-Saga und macht das Frontend Production-
 - [x] **Workspace-State-Composables** (EPIC-03 ST-02 + ST-03). `useWorkspaceMode` (viewMode + Panel-Styles + toggleMaximize + workspaceModes) und `useWorkspaceStatus` (currentStatus + konfigurierbares Status-Mapping zu kind/text) liegen unter `frontend/src/composables/`. Alle 5 Pipeline-Views konsumieren `useWorkspaceMode`; SimulationView/ReportView/InteractionView zusätzlich `useWorkspaceStatus`. SimulationRunView behält paused-Overlay-Logik bewusst eigenständig, MainView phasen-basierte Status-Logik ebenfalls.
 - [x] **Frontend-Warnungen abbauen** — Vue/Vite-Build und ESLint laufen aktuell warning-frei (`npm run check` exit=0). Falls neue Warnings auftauchen, im Folgeticket erfassen.
 - [x] **Hybrid-Search-Weights konfigurierbar** — `Config.HYBRID_SEARCH_VECTOR_WEIGHT` / `Config.HYBRID_SEARCH_KEYWORD_WEIGHT` (Defaults 0.7 / 0.3 wie bisher), `SearchService` nimmt sie per Constructor-Argument, `Neo4jStorage` reicht sie aus der Config durch. Pro Graph noch nicht (das wäre ein größerer Schnitt — Folgeticket).
+- [x] **Dependency-/Doku-Hygiene** — Frontend-Advisories für `axios` / `follow-redirects` / `postcss` per kompatiblem `npm audit fix` bereinigt, `/api/status` nutzt die zentrale App-Version, README/Roadmap-Testzahlen aktualisiert.
 
 ### v0.7.0 — Multi-model + persona governance
 

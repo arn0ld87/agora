@@ -5,6 +5,7 @@ Simpler approach: test the functions directly rather than via Flask test client.
 
 from unittest.mock import Mock, patch
 
+from app import __version__
 from app.config import Config
 from app.api.status import (
     _get_backend_status,
@@ -21,7 +22,7 @@ class TestStatusFunctions:
         """Test backend status returns correct version and ok=true."""
         result = _get_backend_status()
         assert result['ok'] is True
-        assert result['version'] == '0.4.1'
+        assert result['version'] == __version__
 
     def test_get_disk_status(self):
         """Test disk status returns expected fields."""
