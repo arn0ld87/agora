@@ -26,7 +26,7 @@ import traceback
 from collections.abc import Mapping
 from typing import Any, Callable
 
-from flask import jsonify
+from flask import jsonify, request
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -129,3 +129,19 @@ def handle_api_errors(
         # Allow usage as bare decorator: @handle_api_errors
         return decorator(func)
     return decorator
+
+
+def install_api_error_handlers(app) -> None:
+    """Install app-level JSON envelopes for framework-raised API errors."""
+
+    @app.errorhandler(404)
+    def _api_not_found(error):
+        if request.path.startswith("/api/"):
+            return json_error("not found", status=404, code="not_found")
+        return error
+
+    @app.errorhandler(405)
+    def _api_method_not_allowed(error):
+        if request.path.startswith("/api/"):
+            return json_error("method not allowed", status=405, code="method_not_allowed")
+        return error

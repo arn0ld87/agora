@@ -53,3 +53,25 @@
 **Rollback:**
 
 - Entfernen des Mapping-Branches in `handle_api_errors()` stellt das alte Flask-Default-Verhalten für rohe Dicts wieder her.
+
+## Schritt 3 — API-Contract: Framework-404/405 envelopen
+
+**Problem:** Routen, die nicht bis zu einem Blueprint/View gelangen (`/api/...` nicht gefunden oder falsche HTTP-Methode), wurden von Flask als HTML-Fehlerseiten beantwortet. Das ist für API-Clients inkonsistent.
+
+**Änderung:**
+
+- Neuer Helper `install_api_error_handlers(app)` in `backend/app/utils/api_responses.py`.
+- `create_app()` installiert diesen Helper vor der Blueprint-Registrierung.
+- `/api/*`-404 liefert `{"success": false, "error": "not found", "code": "not_found"}`.
+- `/api/*`-405 liefert `{"success": false, "error": "method not allowed", "code": "method_not_allowed"}`.
+- Nicht-API-Pfade behalten das Flask-Default-Verhalten.
+
+**Tests:**
+
+- `test_install_api_error_handlers_envelopes_api_404`
+- `test_install_api_error_handlers_envelopes_api_405`
+- `test_install_api_error_handlers_preserves_non_api_404`
+
+**Rollback:**
+
+- `install_api_error_handlers(app)` aus `create_app()` entfernen und Helper/Tests zurücknehmen.
