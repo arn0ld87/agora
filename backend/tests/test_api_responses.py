@@ -4,7 +4,12 @@ from unittest.mock import patch
 
 from flask import Flask
 
-from app.utils.api_responses import handle_api_errors, json_error, json_success
+from app.utils.api_responses import (
+    handle_api_errors,
+    install_api_error_handlers,
+    json_error,
+    json_success,
+)
 
 
 def _build_app():
@@ -77,6 +82,19 @@ def test_handle_api_errors_passes_through_success_tuple():
     assert response.get_json() == {"success": True, "data": {"ok": True}}
 
 
+def test_handle_api_errors_wraps_raw_dict_return():
+    app = _build_app()
+
+    @handle_api_errors
+    def view():
+        return {"ok": True}
+
+    with app.test_request_context():
+        response, status = view()
+    assert status == 200
+    assert response.get_json() == {"success": True, "data": {"ok": True}}
+
+
 def test_handle_api_errors_maps_value_error_to_400():
     app = _build_app()
 
@@ -138,3 +156,49 @@ def test_handle_api_errors_includes_traceback_in_debug_mode():
     payload = response.get_json()
     assert status == 500
     assert "Traceback" in payload["traceback"]
+
+
+def test_install_api_error_handlers_envelopes_api_404():
+    app = _build_app()
+    install_api_error_handlers(app)
+    client = app.test_client()
+
+    response = client.get("/api/missing")
+
+    assert response.status_code == 404
+    assert response.get_json() == {
+        "success": False,
+        "error": "not found",
+        "code": "not_found",
+    }
+
+
+def test_install_api_error_handlers_envelopes_api_405():
+    app = _build_app()
+
+    @app.route("/api/items", methods=["GET"])
+    def get_items():
+        return json_success([])
+
+    install_api_error_handlers(app)
+    client = app.test_client()
+
+    response = client.post("/api/items")
+
+    assert response.status_code == 405
+    assert response.get_json() == {
+        "success": False,
+        "error": "method not allowed",
+        "code": "method_not_allowed",
+    }
+
+
+def test_install_api_error_handlers_preserves_non_api_404():
+    app = _build_app()
+    install_api_error_handlers(app)
+    client = app.test_client()
+
+    response = client.get("/missing")
+
+    assert response.status_code == 404
+    assert response.is_json is False

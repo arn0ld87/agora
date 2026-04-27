@@ -18,7 +18,13 @@ import hmac
 import os
 from functools import wraps
 
-from flask import Blueprint, Flask, jsonify, request
+from flask import Blueprint, Flask, request
+
+from .api_responses import json_error
+
+
+def _auth_error():
+    return json_error("unauthorized", status=401, code="auth_required")
 
 
 def _expected_token() -> str:
@@ -45,7 +51,7 @@ def token_required(view):
             return view(*args, **kwargs)
         got = _extract_token()
         if not got or not hmac.compare_digest(got, expected):
-            return jsonify({"error": "unauthorized", "code": "auth_required"}), 401
+            return _auth_error()
         return view(*args, **kwargs)
 
     return wrapper
@@ -61,7 +67,7 @@ def install_blueprint_guard(bp: Blueprint) -> None:
             return None
         got = _extract_token()
         if not got or not hmac.compare_digest(got, expected):
-            return jsonify({"error": "unauthorized", "code": "auth_required"}), 401
+            return _auth_error()
         return None
 
 

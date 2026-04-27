@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import functools
 import traceback
-from typing import Any, Callable, Mapping
+from collections.abc import Mapping
+from typing import Any, Callable
 
-from flask import jsonify
+from flask import jsonify, request
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -106,7 +107,10 @@ def handle_api_errors(
         @functools.wraps(view)
         def wrapper(*args, **kwargs):
             try:
-                return view(*args, **kwargs)
+                result = view(*args, **kwargs)
+                if isinstance(result, Mapping):
+                    return json_success(dict(result))
+                return result
             except ValueError as exc:
                 return json_error(str(exc), status=400)
             except TimeoutError as exc:
@@ -125,3 +129,19 @@ def handle_api_errors(
         # Allow usage as bare decorator: @handle_api_errors
         return decorator(func)
     return decorator
+
+
+def install_api_error_handlers(app) -> None:
+    """Install app-level JSON envelopes for framework-raised API errors."""
+
+    @app.errorhandler(404)
+    def _api_not_found(error):
+        if request.path.startswith("/api/"):
+            return json_error("not found", status=404, code="not_found")
+        return error
+
+    @app.errorhandler(405)
+    def _api_method_not_allowed(error):
+        if request.path.startswith("/api/"):
+            return json_error("method not allowed", status=405, code="method_not_allowed")
+        return error
