@@ -31,6 +31,9 @@ Container.
   Neo4j und Redis, sodass nach `reboot` alles selbstständig hochkommt.
 - Kein Compose-Build mehr im Standardfall. Docker bleibt als alternativer Pfad
   bestehen, wird aber im README als "Option B" deklassiert.
+- **Persistente Daten liegen außerhalb des Repos.** Uploads, Run-State und
+  Simulation-Artefakte werden nach `/var/lib/agora/` ausgelagert, damit
+  `git pull` und Neuinstallationen Nutzerdaten nicht überschreiben.
 
 **Nicht-Ziele**
 
@@ -44,7 +47,7 @@ Container.
 
 | Komponente | Bisher | Künftig (Linux) | Bezugsquelle |
 |---|---|---|---|
-| Python 3.11 | im Container | Distro-Paket | `apt install python3.11 python3.11-venv` (Debian 12 hat 3.11 nativ; Ubuntu 22.04 via deadsnakes-PPA, Ubuntu 24.04 nativ) |
+| Python ≥ 3.11 | im Container | Distro-Paket | `apt install python3 python3-venv` — Debian 12 liefert nativ 3.11, Ubuntu 24.04 liefert 3.12 (kompatibel zur `>=3.11`-Range in `pyproject.toml`); Ubuntu 22.04 nur via deadsnakes-PPA für 3.11. `python3.11`-Paketnamen explizit zu nageln scheitert auf Ubuntu 24.04. |
 | Node.js ≥18 | im Container | NodeSource-Repo | `curl -fsSL https://deb.nodesource.com/setup_20.x \| sudo -E bash -` + `apt install nodejs` |
 | `uv` | aus ghcr-Image kopiert | offizielles Astral-Install | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Neo4j 5.18+ Community | Docker-Image | offizielles Neo4j-APT-Repo | `apt install neo4j=1:5.18.*` mit gepinntem Major |
@@ -99,14 +102,19 @@ add_repo_nodesource_20
 
 # 2. Pakete installieren
 apt update
-apt install -y python3.11 python3.11-venv \
+apt install -y python3 python3-venv \
                nodejs \
                redis-server \
                neo4j \
                build-essential ca-certificates curl jq
+# Auf Ubuntu 22.04 zusätzlich deadsnakes-PPA + python3.11-venv, weil das
+# Distro-Default dort 3.10 ist; auf Debian 12 / Ubuntu 24.04 reicht python3.
 
-# 3. uv installieren (per-User), wenn noch nicht da
-sudo -u "$AGORA_USER" sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+# 3. uv installieren — systemweit nach /usr/local/bin/, damit die
+#    systemd-Unit nicht vom Home-Verzeichnis des agora-Users abhängt.
+command -v uv >/dev/null || \
+  curl -LsSf https://astral.sh/uv/install.sh | \
+    env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
 
 # 4. Ollama installieren, wenn nicht vorhanden
 command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
@@ -121,6 +129,10 @@ systemctl enable --now redis-server
 
 # 7. Agora-Repo deployen
 deploy_repo_to /opt/agora       # git clone oder rsync, owner agora:agora
+install -d -o agora -g agora -m 0750 \
+  /var/lib/agora/uploads /var/lib/agora/simulations
+# UPLOAD_DIR (und perspektivisch SIMULATION_DIR) in /etc/agora/agora.env
+# einpflegen, damit das Backend nicht mehr in den Repo-Pfad schreibt.
 sudo -u agora npm run setup:all
 sudo -u agora npm run build      # Frontend einmalig bauen
 
@@ -155,7 +167,7 @@ User=agora
 Group=agora
 WorkingDirectory=/opt/agora/backend
 EnvironmentFile=/etc/agora/agora.env
-ExecStart=/home/agora/.local/bin/uv run gunicorn \
+ExecStart=/usr/local/bin/uv run gunicorn \
     --workers 2 --bind 127.0.0.1:5001 \
     --worker-class gthread --threads 8 \
     'app:create_app()'
@@ -209,6 +221,14 @@ optionale nginx-Konfig im Repo unter `scripts/deploy/nginx-agora.conf`.
 - `LLM_BASE_URL=http://127.0.0.1:11434/v1` und
   `EMBEDDING_BASE_URL=http://127.0.0.1:11434` ersetzen das Compose-spezifische
   `host.docker.internal`.
+- **Persistente Datenverzeichnisse außerhalb von `/opt/agora`**: Das
+  Install-Script legt `/var/lib/agora/uploads` (chown `agora:agora`, chmod
+  0750) und `/var/lib/agora/simulations` an. In `agora.env` werden
+  `UPLOAD_DIR=/var/lib/agora/uploads` und — sobald das Backend einen
+  entsprechenden Knopf bekommt — `SIMULATION_DIR=/var/lib/agora/simulations`
+  gesetzt. Damit überlebt jeder `git pull` und jedes Image-Reroll die
+  Nutzerdaten unverändert. Backend-Folge-Ticket: `Config.UPLOAD_FOLDER` muss
+  diesen Env-Knopf akzeptieren (heute hardcoded relativ zum Backend-Pfad).
 
 ## 9. Update-Pfad
 
@@ -232,8 +252,9 @@ vorher `npm run check` als Smoke-Test fährt.
 3. **`scripts/install.sh`** laufen lassen.
 4. **Neo4j-Dump einspielen**: `neo4j-admin database load neo4j
    --from-path=/var/lib/neo4j/import`.
-5. `backend/uploads/` aus dem alten Bind-Mount nach `/opt/agora/backend/uploads/`
-   spiegeln (`rsync -a`).
+5. `backend/uploads/` aus dem alten Bind-Mount nach `/var/lib/agora/uploads/`
+   spiegeln (`rsync -a`); analog `backend/uploads/simulations/` nach
+   `/var/lib/agora/simulations/`.
 6. Smoke-Test: `curl localhost:5001/health` und `curl localhost:5001/api/status`.
 
 ## 11. Phasen / Liefer-Inkremente
@@ -283,9 +304,13 @@ nicht als Big Bang.
   Engstelle wird, müssen wir auf `gunicorn -k gevent` oder `uvicorn` mit ASGI
   wechseln — wegen Flask aktuell nicht trivial. Für ein Single-User-Setup ist
   `gunicorn` mit Threads ausreichend.
-- **Persistente Pfade**: `backend/uploads/` muss bei Paket-Installation außerhalb
-  des Repos liegen (z.B. `/var/lib/agora/uploads`), damit `git pull` ihn nicht
-  überschreibt. Backend-Konfig dafür über `UPLOAD_DIR`-Env wäre sauber.
+- **Backend-Knopf für `UPLOAD_DIR`/`SIMULATION_DIR`**: Heute liegt der
+  Upload-Pfad in `Config.UPLOAD_FOLDER` relativ zum Backend-Pfad. Phase 1
+  braucht ein kleines Backend-Patch, das `UPLOAD_DIR` (und perspektivisch
+  `SIMULATION_DIR`) aus der Env akzeptiert — sonst greift die in Sektion 8
+  beschriebene Auslagerung nicht. Solange das Patch fehlt, bleibt der
+  Symlink `/opt/agora/backend/uploads → /var/lib/agora/uploads` als
+  Fallback.
 
 ## 13. Akzeptanzkriterien
 
