@@ -477,7 +477,7 @@ onUnmounted(stopPolling)
   word-wrap: break-word;
 }
 .feed-line .ts { color: var(--accent); }
-.feed-line .who { color: #f0c14b; margin: 0 var(--s-2); }
+.feed-line .who { color: var(--status-warn); margin: 0 var(--s-2); }
 .feed-line .act { color: var(--mono-300); }
 .feed-line .content { color: var(--mono-100); }
 

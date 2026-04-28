@@ -72,11 +72,11 @@ defineProps({
 }
 
 .status-tag.status-error {
-  color: #b00020;
+  color: var(--status-error);
 }
 
 .status-tag.status-done {
-  color: var(--ink-0);
+  color: var(--status-success);
 }
 
 .status-tag.status-running {
@@ -84,6 +84,6 @@ defineProps({
 }
 
 .status-tag.status-paused {
-  color: var(--ink-3);
+  color: var(--fg-body);
 }
 </style>

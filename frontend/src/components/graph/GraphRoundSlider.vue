@@ -94,7 +94,7 @@ function reset() {
 }
 
 .slider-total {
-  color: var(--fg-muted, #888);
+  color: var(--fg-muted);
   margin-left: 2px;
 }
 

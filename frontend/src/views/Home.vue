@@ -9,6 +9,7 @@ import Badge from '../components/ui/Badge.vue'
 import Kicker from '../components/ui/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
+import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import { getAvailableModels } from '../api/simulation.js'
 import { setPendingUpload } from '../store/pendingUpload'
 
@@ -152,7 +153,8 @@ const steps = computed(() => tm('home.steps'))
       <!-- Top nav -->
       <header class="nav">
         <div class="brand">
-          Ag<span class="n">o</span>ra
+          <AgoraGlyph :size="22" />
+          <span class="wordmark">Agor<span class="n">·</span>a</span>
         </div>
         <nav class="nav-links">
           <a href="#console">{{ t('home.console.uploadKicker') }}</a>
@@ -395,13 +397,17 @@ const steps = computed(() => tm('home.steps'))
 
 /* Brand */
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--ff-serif);
   font-weight: 500;
   font-size: 24px;
   letter-spacing: -0.02em;
-  color: var(--ink-0);
+  color: var(--fg);
 }
-.brand .n { color: var(--accent); font-style: italic; }
+.brand .wordmark { line-height: 1; }
+.brand .n { color: var(--accent); font-style: normal; }
 
 /* Hero */
 .hero {

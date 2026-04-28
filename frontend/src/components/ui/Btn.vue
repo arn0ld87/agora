@@ -1,10 +1,12 @@
 <script setup>
 defineProps({
   variant: { type: String, default: 'primary' },
+  size: { type: String, default: 'md' },
   type: { type: String, default: 'button' },
   disabled: { type: Boolean, default: false },
   arrow: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
+  icon: { type: Boolean, default: false },
 })
 </script>
 
@@ -13,7 +15,12 @@ defineProps({
     :type="type"
     :disabled="disabled || loading"
     class="btn"
-    :class="[`btn--${variant}`, { 'is-loading': loading }]"
+    :class="[
+      `btn--${variant}`,
+      size !== 'md' && `btn--${size}`,
+      icon && 'btn--icon',
+      { 'is-loading': loading },
+    ]"
   >
     <slot />
     <span v-if="arrow" class="arrow">→</span>
@@ -22,41 +29,6 @@ defineProps({
 </template>
 
 <style scoped>
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-3);
-  padding: 14px 20px;
-  font-family: var(--ff-sans);
-  font-size: var(--fs-16);
-  font-weight: 500;
-  line-height: 1;
-  border-radius: var(--r-1);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-  text-decoration: none;
-  white-space: nowrap;
-}
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn--primary { background: var(--ink-0); color: var(--paper-0); }
-.btn--primary:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
-
-.btn--secondary { background: transparent; color: var(--ink-0); border-color: var(--ink-0); }
-.btn--secondary:hover:not(:disabled) { background: var(--ink-0); color: var(--paper-0); }
-
-.btn--ghost { background: transparent; color: var(--ink-0); border-color: var(--rule); padding: 12px 16px; }
-.btn--ghost:hover:not(:disabled) { border-color: var(--ink-0); }
-
-.btn--accent { background: var(--accent); color: var(--accent-ink); }
-.btn--accent:hover:not(:disabled) { background: var(--ink-0); color: var(--accent); }
-
-.btn--danger { background: transparent; color: #b00020; border-color: #b00020; }
-.btn--danger:hover:not(:disabled) { background: #b00020; color: var(--paper-0); }
-
-.btn .arrow { font-family: var(--ff-mono); font-weight: 400; }
-
 .spinner {
   width: 12px;
   height: 12px;

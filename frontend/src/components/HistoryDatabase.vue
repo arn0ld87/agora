@@ -401,9 +401,9 @@ onMounted(loadRuns)
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.status[data-status="failed"] { color: #b00020; }
+.status[data-status="failed"] { color: var(--status-error); }
 .status[data-status="processing"] { color: var(--accent); }
-.status[data-status="completed"] { color: #1e6a3b; }
+.status[data-status="completed"] { color: var(--status-success); }
 .drawer { padding: 20px; }
 .drawer-head {
   grid-template-columns: 1fr auto;
@@ -434,7 +434,7 @@ onMounted(loadRuns)
 .meta-grid span { display: block; color: var(--fg-muted); font-size: 12px; }
 .meta-grid strong { display: block; margin-top: 4px; }
 .message-block, .error { margin-top: var(--s-4); }
-.error { color: #b00020; }
+.error { color: var(--status-error); }
 .retry-btn {
   display: inline-block;
   margin-left: var(--s-3);

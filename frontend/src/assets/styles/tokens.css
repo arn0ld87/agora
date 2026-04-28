@@ -1,34 +1,56 @@
 /* ============================================================
-   alexle135.de — Design Tokens
-   v2 "Editorial & Präzise" — DARK MODE FIRST
-   Mirrors src/styles/v2-theme.css from the production site.
+   Agora — Design Tokens
+   Built on alexle135 v2 — extended for tool use
+   "Cartographic Notebook": Cartographic × Lab Notebook × Editorial
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Geist+Mono:wght@400;500&family=Geist:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap');
 
 :root {
   /* ---------- MONO SCALE (source of truth) ---------- */
-  --mono-50:  #f6f2eb;   /* cream — default foreground */
+  --mono-50:  #f6f2eb;
   --mono-100: #e6e0d7;
   --mono-200: #ccc4ba;
-  --mono-300: #ada398;   /* body text */
-  --mono-400: #8b8177;   /* secondary */
-  --mono-500: #6a625a;   /* tertiary / meta */
-  --mono-600: #4f4a44;   /* hairlines on dark */
+  --mono-300: #ada398;
+  --mono-400: #8b8177;
+  --mono-500: #6a625a;
+  --mono-600: #4f4a44;
   --mono-700: #37332f;
   --mono-800: #221f1d;
-  --mono-900: #171514;   /* panel */
-  --mono-950: #0d0c0c;   /* page background */
+  --mono-900: #171514;
+  --mono-950: #0d0c0c;
 
-  /* ---------- ACCENT ---------- */
-  --neon-orange: #ff6a00;
-  --neon-orange-ink: #2a1100;
+  /* ---------- ACCENT (Neon-Orange) ---------- */
+  --neon-orange:      #ff6a00;
+  --neon-orange-ink:  #2a1100;
+  --neon-orange-soft: rgba(255, 106, 0, 0.14);
 
-  /* ---------- SEMANTIC (dark-first) ---------- */
-  --bg:             var(--mono-950);
-  --bg-elevated:    var(--mono-900);
-  --bg-panel:       color-mix(in srgb, var(--mono-50) 6%, transparent);
-  --bg-inverse:     var(--mono-50);
+  /* ---------- SECONDARY ACCENT (Plasma-Cyan) ---------- */
+  --plasma-50:  #e7f4f8;
+  --plasma-200: #9ed3e0;
+  --plasma-400: #5ab4c8;
+  --plasma-500: #3d9cb3;
+  --plasma-600: #2c7e94;
+  --plasma-ink: #061417;
+  --plasma-soft: rgba(93, 180, 200, 0.14);
+
+  /* ---------- STATUS (muted, non-bootstrap) ---------- */
+  --status-success:      #6ea870;
+  --status-success-soft: rgba(110, 168, 112, 0.14);
+  --status-warn:         #d6a154;
+  --status-warn-soft:    rgba(214, 161, 84, 0.14);
+  --status-error:        #c25a5a;
+  --status-error-soft:   rgba(194, 90, 90, 0.14);
+  --status-info:         var(--plasma-400);
+  --status-info-soft:    var(--plasma-soft);
+
+  /* ---------- SEMANTIC SURFACES ---------- */
+  --bg:           var(--mono-950);
+  --bg-elevated:  var(--mono-900);
+  --bg-sunken:    #0a0908;
+  --bg-panel:     color-mix(in srgb, var(--mono-50) 5%, transparent);
+  --bg-panel-2:   color-mix(in srgb, var(--mono-50) 8%, transparent);
+  --bg-inverse:   var(--mono-50);
 
   --fg:             var(--mono-50);
   --fg-body:        var(--mono-300);
@@ -36,28 +58,31 @@
   --fg-meta:        var(--mono-500);
   --fg-on-inverse:  var(--mono-950);
 
-  --rule:           color-mix(in srgb, var(--mono-50) 12%, transparent);
-  --rule-strong:    color-mix(in srgb, var(--mono-50) 32%, transparent);
-  --rule-soft:      color-mix(in srgb, var(--mono-50) 6%, transparent);
+  --rule:        color-mix(in srgb, var(--mono-50) 12%, transparent);
+  --rule-strong: color-mix(in srgb, var(--mono-50) 28%, transparent);
+  --rule-soft:   color-mix(in srgb, var(--mono-50) 6%, transparent);
 
-  --accent:         var(--neon-orange);
-  --accent-ink:     var(--neon-orange-ink);
+  --accent:     var(--neon-orange);
+  --accent-ink: var(--neon-orange-ink);
 
-  /* Page backdrop — subtle radial + cream highlight over near-black */
+  /* Page backdrop — subtle radial accents over near-black */
   --bg-page:
-    radial-gradient(circle at top left, rgba(255, 106, 0, 0.14), transparent 26rem),
-    linear-gradient(180deg, rgba(246, 242, 235, 0.06), transparent 28rem),
+    radial-gradient(circle at top left, rgba(255, 106, 0, 0.10), transparent 32rem),
+    radial-gradient(circle at 80% 0%, rgba(93, 180, 200, 0.06), transparent 28rem),
+    linear-gradient(180deg, rgba(246, 242, 235, 0.04), transparent 28rem),
     var(--mono-950);
 
-  /* ---------- LEGACY ALIASES (compat with first-pass components) ----------
-     Old "paper" tokens were the light surface family. In dark-first mode they
-     map onto the dark backgrounds so existing component CSS keeps working. */
+  /* Lab-notebook grid (used as ::before opacity 0.6 on artboards) */
+  --bg-grid:
+    linear-gradient(rgba(246, 242, 235, 0.025) 1px, transparent 1px) 0 0/32px 32px,
+    linear-gradient(90deg, rgba(246, 242, 235, 0.025) 1px, transparent 1px) 0 0/32px 32px;
+
+  /* ---------- LEGACY ALIASES (compat with first-pass components) ---------- */
   --paper-0: var(--mono-950);
   --paper-1: var(--mono-900);
   --paper-2: var(--mono-800);
   --paper-3: var(--mono-700);
 
-  /* Old "ink" tokens were the dark text family. In dark-first they invert. */
   --ink-0: var(--mono-50);
   --ink-1: var(--mono-100);
   --ink-2: var(--mono-600);
@@ -65,8 +90,6 @@
   --ink-4: var(--mono-400);
   --ink-5: var(--mono-500);
 
-  /* Reverse-block tokens: in dark-first they keep their *visual* meaning
-     (a high-contrast pull-quote block on inverse cream surface). */
   --bg-dark:           var(--bg-inverse);
   --fg-on-dark:        var(--mono-950);
   --fg-on-dark-muted:  var(--mono-500);
@@ -77,28 +100,33 @@
   --ff-sans:  'Geist', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --ff-mono:  'Geist Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
+  --fs-11: 11px;
   --fs-12: 12px;
+  --fs-13: 13px;
   --fs-14: 14px;
+  --fs-15: 15px;
   --fs-16: 16px;
   --fs-18: 18px;
   --fs-20: 20px;
   --fs-24: 24px;
+  --fs-28: 28px;
   --fs-32: 32px;
   --fs-44: 44px;
   --fs-60: 60px;
   --fs-84: 84px;
   --fs-120: 120px;
 
-  --lh-tight: 1.02;
+  --lh-tight:   1.02;
   --lh-display: 1.08;
   --lh-heading: 1.18;
-  --lh-body: 1.55;
-  --lh-mono: 1.4;
+  --lh-body:    1.55;
+  --lh-mono:    1.4;
 
-  --ls-mono: 0.24em;
+  --ls-mono:       0.24em;
   --ls-mono-tight: 0.12em;
-  --ls-caps: 0.08em;
-  --ls-tight: -0.02em;
+  --ls-mono-wide:  0.32em;
+  --ls-caps:       0.08em;
+  --ls-tight:      -0.02em;
 
   /* ---------- SPACE ---------- */
   --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
@@ -108,14 +136,24 @@
   /* ---------- RADII ---------- */
   --r-0: 0; --r-1: 2px; --r-2: 4px; --r-pill: 999px;
 
-  /* ---------- SHADOWS ---------- */
+  /* ---------- SHADOWS / GLOWS ---------- */
   --shadow-editorial: 0 24px 80px rgba(0, 0, 0, 0.28);
   --shadow-hairline:  0 0 0 1px var(--rule);
+  --shadow-popover:   0 18px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--rule);
+  --shadow-modal:     0 40px 120px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--rule-strong);
+  --glow-accent:      0 0 24px rgba(255, 106, 0, 0.45);
+  --glow-plasma:      0 0 28px rgba(93, 180, 200, 0.40);
+
+  /* ---------- CONTROL SIZES ---------- */
+  --ctl-h-sm:  28px;
+  --ctl-h-md:  36px;
+  --ctl-h-lg:  44px;
+  --ctl-pad-x: 14px;
 
   /* ---------- GRID ---------- */
-  --grid-max: 1280px;
+  --grid-max:    1280px;
   --grid-gutter: 24px;
-  --grid-cols: 12;
+  --grid-cols:   12;
 }
 
 /* ============================================================
@@ -161,7 +199,7 @@ body {
 .t-title {
   font-family: var(--ff-serif);
   font-weight: 400;
-  font-size: var(--fs-44);
+  font-size: var(--fs-32);
   line-height: var(--lh-heading);
   letter-spacing: -0.015em;
   color: var(--fg);
@@ -169,41 +207,43 @@ body {
 .t-subtitle {
   font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-24);
+  font-size: var(--fs-20);
   line-height: 1.35;
   color: var(--fg);
 }
 .t-body {
   font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-18);
+  font-size: var(--fs-16);
   line-height: var(--lh-body);
   color: var(--fg-body);
 }
 .t-body-sm {
   font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-16);
+  font-size: var(--fs-14);
   line-height: var(--lh-body);
   color: var(--fg-body);
 }
 .t-meta {
   font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-14);
+  font-size: var(--fs-13);
   line-height: 1.4;
   color: var(--fg-meta);
 }
 .t-kicker {
   font-family: var(--ff-mono);
   font-weight: 400;
-  font-size: var(--fs-12);
+  font-size: var(--fs-11);
   line-height: var(--lh-mono);
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   color: var(--fg-muted);
 }
 .t-kicker--accent { color: var(--accent); }
+.t-kicker--plasma { color: var(--plasma-400); }
+
 .t-numeral {
   font-family: var(--ff-serif);
   font-weight: 300;
@@ -224,125 +264,3 @@ body {
   line-height: 1.3;
   color: var(--fg);
 }
-
-/* ============================================================
-   Primitives
-   ============================================================ */
-.hairline { border: 0; border-top: 1px solid var(--rule); margin: 0; }
-.hairline--strong { border-top-color: var(--rule-strong); }
-.hairline--glow {
-  border: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--rule-strong), transparent);
-  margin: 0;
-}
-
-.kicker-row {
-  display: flex; align-items: baseline; gap: var(--s-4);
-  padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule);
-}
-
-/* Button — flat rectangles */
-.btn {
-  display: inline-flex; align-items: center; gap: var(--s-3);
-  padding: 14px 20px;
-  font-family: var(--ff-sans);
-  font-size: var(--fs-16);
-  font-weight: 500;
-  line-height: 1;
-  border-radius: var(--r-1);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-  text-decoration: none;
-}
-.btn--primary { background: var(--accent); color: var(--accent-ink); }
-.btn--primary:hover { background: var(--mono-50); color: var(--mono-950); }
-.btn--secondary { background: transparent; color: var(--fg); border-color: var(--rule-strong); }
-.btn--secondary:hover { background: var(--mono-50); color: var(--mono-950); border-color: var(--mono-50); }
-.btn--ghost { background: transparent; color: var(--fg); border-color: var(--rule); padding: 12px 16px; }
-.btn--ghost:hover { border-color: var(--accent); color: var(--accent); }
-.btn--accent { background: var(--accent); color: var(--accent-ink); }
-.btn--accent:hover { background: var(--mono-50); color: var(--mono-950); }
-
-.btn .arrow { font-family: var(--ff-mono); font-weight: 400; }
-
-/* Badge */
-.badge {
-  display: inline-flex; align-items: center; gap: var(--s-2);
-  padding: 4px 10px;
-  font-family: var(--ff-mono);
-  font-size: var(--fs-12);
-  line-height: 1.4;
-  letter-spacing: var(--ls-mono-tight);
-  text-transform: uppercase;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--rule-strong);
-  color: var(--fg);
-  background: transparent;
-}
-.badge--solid { background: var(--mono-50); color: var(--mono-950); border-color: var(--mono-50); }
-.badge--accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-/* Accent dot w/ glow — signature detail */
-.accent-dot {
-  width: 10px; height: 10px; border-radius: 9999px;
-  background: var(--accent);
-  box-shadow: 0 0 24px rgba(255, 106, 0, 0.65);
-  display: inline-block;
-}
-
-/* Input */
-.field { display: flex; flex-direction: column; gap: var(--s-2); }
-.field > label {
-  font-family: var(--ff-mono);
-  font-size: var(--fs-12);
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-}
-.input {
-  font-family: var(--ff-sans);
-  font-size: var(--fs-18);
-  padding: 12px 0;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--rule-strong);
-  color: var(--fg);
-  outline: none;
-  transition: border-color 150ms ease;
-}
-.input:focus { border-bottom-color: var(--accent); }
-.input::placeholder { color: var(--fg-meta); }
-
-/* Panel — glass editorial card */
-.panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--rule);
-  box-shadow: var(--shadow-editorial);
-  backdrop-filter: blur(18px);
-}
-
-/* Card — editorial index row */
-.card-work {
-  display: grid;
-  grid-template-columns: 56px 1fr auto;
-  gap: var(--s-5);
-  align-items: baseline;
-  padding: var(--s-5) 0;
-  border-top: 1px solid var(--rule);
-  text-decoration: none;
-  color: inherit;
-  transition: background 160ms ease, padding-left 160ms ease;
-}
-.card-work:hover { background: var(--bg-panel); padding-left: var(--s-3); }
-.card-work .idx { font-family: var(--ff-mono); font-size: var(--fs-14); color: var(--fg-meta); letter-spacing: var(--ls-mono-tight); }
-.card-work .title { font-family: var(--ff-serif); font-weight: 400; font-size: var(--fs-32); line-height: 1.15; letter-spacing: -0.01em; color: var(--fg); }
-.card-work .title .sub { display: block; font-family: var(--ff-sans); font-size: var(--fs-14); color: var(--fg-muted); letter-spacing: 0; margin-top: 6px; }
-.card-work .meta { font-family: var(--ff-mono); font-size: var(--fs-12); letter-spacing: var(--ls-mono-tight); text-transform: uppercase; color: var(--fg-meta); }
-
-/* Utility */
-.stack > * + * { margin-top: var(--s-4); }
-.stack-lg > * + * { margin-top: var(--s-6); }
-.row { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; }
-.container { max-width: var(--grid-max); margin: 0 auto; padding: 0 var(--s-6); }

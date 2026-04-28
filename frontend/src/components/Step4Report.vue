@@ -1001,10 +1001,10 @@ onUnmounted(stopPolling)
   line-height: 1.6;
 }
 .agent-entry.action-tool_call .agent-title { color: var(--accent); }
-.agent-entry.action-tool_result .agent-title { color: #7cdc8e; }
-.agent-entry.action-error .agent-title { color: #ff8a8a; }
+.agent-entry.action-tool_result .agent-title { color: var(--status-success); }
+.agent-entry.action-error .agent-title { color: var(--status-error); }
 .agent-entry.action-section_start .agent-title,
-.agent-entry.action-section_complete .agent-title { color: #f0c14b; }
+.agent-entry.action-section_complete .agent-title { color: var(--status-warn); }
 .agent-entry.action-llm_response .agent-title { color: var(--mono-400); }
 
 @media (max-width: 880px) {
