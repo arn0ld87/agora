@@ -194,13 +194,14 @@ class OntologyGenerator:
             {"role": "user", "content": user_message}
         ]
 
-        # Call LLM. 8192 tokens fit a 8–12 entity-type schema with attributes
-        # and examples (1.5–2 k tokens per entity), and stay well below the
-        # ~5 min round-trip budget that Ollama Cloud imposes on a single chat
-        # completion. With higher budgets the Cloud edge stalls and the call
-        # never returns. The chat_json layer best-effort-repairs trailing
-        # truncation, so under-shooting is the safer default.
-        max_tokens = int(os.environ.get('ONTOLOGY_MAX_TOKENS', '8192'))
+        # Call LLM. 12288 tokens fit a 8–12 entity-type schema with attributes
+        # and examples plus the reasoning-block overhead that cloud models such
+        # as qwen3-coder-next:cloud and deepseek-v4:cloud emit (5–10 k tokens
+        # for the JSON alone). With 4096–8192 the answer got clipped mid-string
+        # and the chat_json layer surfaced "Invalid JSON format from LLM" in
+        # the UI. chat_json still best-effort-repairs trailing truncation as a
+        # safety net for outliers.
+        max_tokens = int(os.environ.get('ONTOLOGY_MAX_TOKENS', '12288'))
         result = self.llm_client.chat_json(
             messages=messages,
             temperature=0.3,
