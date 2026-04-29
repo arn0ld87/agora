@@ -216,6 +216,21 @@ class Config:
         if not cls.NEO4J_PASSWORD:
             errors.append("NEO4J_PASSWORD not configured")
 
+        # Auth-Policy: außerhalb FLASK_DEBUG verlangen wir entweder einen
+        # Token oder eine bewusste Opt-out-Entscheidung. Verhindert offene
+        # /api/*-Deployments durch reines „Token vergessen".
+        if not cls.DEBUG:
+            auth_token = os.environ.get('AGORA_AUTH_TOKEN', '').strip()
+            allow_anon = (
+                os.environ.get('AGORA_ALLOW_ANONYMOUS', 'false').lower()
+                in ('true', '1', 'yes')
+            )
+            if not auth_token and not allow_anon:
+                errors.append(
+                    "AGORA_AUTH_TOKEN missing in non-debug mode "
+                    "(set AGORA_ALLOW_ANONYMOUS=true to opt out explicitly)"
+                )
+
         expected_dim = infer_vector_dim_for_model(cls.EMBEDDING_MODEL)
         if expected_dim and cls.VECTOR_DIM != expected_dim:
             errors.append(
