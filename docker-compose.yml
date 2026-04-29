@@ -10,6 +10,20 @@ services:
       - "${AGORA_FRONTEND_PORT:-5173}:5173"
       - "${AGORA_BACKEND_PORT:-5001}:5001"
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=128M,mode=1777
+      - /app/backend/logs:size=64M,mode=0700,uid=1000,gid=1000
+      - /app/.npm:size=64M,mode=0700,uid=1000,gid=1000
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     volumes:
       - ./backend/uploads:/app/backend/uploads
     extra_hosts:
@@ -41,6 +55,8 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - LLM_BASE_URL=http://host.docker.internal:11434/v1
       - EMBEDDING_BASE_URL=http://host.docker.internal:11434
+      # Read-only rootfs: don't try to write __pycache__ next to source.
+      - PYTHONDONTWRITEBYTECODE=1
 
   redis:
     image: redis:7-alpine
