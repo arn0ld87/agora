@@ -8,6 +8,8 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
+> **v0.7 in Entwicklung:** [Umsetzungsplan](docu/2026-04-29-v07-umsetzungsplan.md) — Slices 0–5 abgeschlossen, aktuell Slice 6 (Branch Compare).
+
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
@@ -19,13 +21,11 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## ⚠️ Status: v0.6.1 Alpha — Hygiene-Release nach v0.6.0, weiter experimentell
+> ## Status: v0.7.0-beta — Slices 0–5 abgeschlossen, Slice 6 in Arbeit
 >
-> Agora ist ein aktiver, **experimenteller Fork** und an vielen Stellen noch rau.
-> Graph-Build, Simulation und Report-Pipeline können jederzeit mit kuriosen
-> Fehlern aussteigen, insbesondere wenn Ollama langsam antwortet, JSON-Modus
-> zickt oder Modellwechsel mittendrin passieren. Erwarte Abstürze, leere
-> Reports, halbfertige Personas und gelegentliche 500er.
+> Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
+> Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
+> JSON-Mode-Aussetzer, Modellwechsel) Fehler produzieren.
 > **Nicht öffentlich erreichbar machen.** Die API hat einen optionalen
 > `AGORA_AUTH_TOKEN`-Guard und restriktive CORS-Defaults, ist aber weiterhin
 > für lokale Single-User-Setups gedacht, nicht für Mehrbenutzer- oder
@@ -48,18 +48,23 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.6.1
+### Engineering-Stand v0.7.0-beta
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**207 Backend-Tests grün**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**286 Backend-Tests gesammelt**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Design-System konsolidiert (Slice 1)**: `tokens.css` als Source-of-Truth, UI-Komponenten (`Btn`, `Badge`, `Field`, `Card`, `Select`) auf Tokens umgestellt, harte Farbwerte in Views/Layouts durch Token-Referenzen ersetzt.
+- **Persona Review (Slice 2)**: Generierte Personas sind vor Simulationsstart prüfbar, editierbar und freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität) liefern Badges. `PERSONA_REVIEW_ENABLED=true` blockt Simulationsstart bis alle Personas approved sind.
+- **Run Dashboard (Slice 3)**: Zentrale `/runs`-View mit Status, Datum, Modell, Dokument, Graph-ID, Persona-Anzahl. Detail-Drawer für Fehler, Artefakte und Copy-Buttons. Runs-Persistenz über `RunRegistry`.
+- **Evidence & Confidence (Slice 4)**: Report-Claims tragen `confidence`-Score und strukturierte `evidence`-Blöcke (Graph-Metriken, Agentenaktionen). UI zeigt Confidence-Badges und Evidence-Drawer.
+- **Export Center (Slice 5)**: JSON- und Markdown-Export für Reports, CSV für Polarisationsmetriken, GraphML für Graphen, SVG/PNG/PDF für Graph-Ansicht.
 - **LLM-Resilienz**: `LLMClient.chat` und `describe_image` retryen über `llm_call_with_retry` auf transiente Upstream-Fehler (`APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Hickser.
 - **Event-Bus-Transport (#9 + #17)**: `SimulationEventBus`-Port mit In-Memory-, File- und Redis-Adapter. Redis `7-alpine` wird vom `docker-compose.yml` mitgestartet. Live-Kanäle (`control`/`state`) gehen über Redis Pub/Sub mit retained Snapshot. **Seit Issue #17** laufen auch `rpc.command` / `rpc.response.*` hybrid: Backend published parallel auf Redis und File, `_await_response` race't beide Quellen, der Verlierer wird aufgeräumt. Subprocess-Listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) sitzt im OASIS-Eventloop neben dem File-Polling. Backout über `EVENT_BUS_BACKEND=file`.
 - **Frontend Push (#9 Phase C)**: `GET /api/simulation/<id>/stream` (SSE) + `useEventStream`-Composable ersetzen das 2,5-s-Status-Polling in der Simulationsansicht.
-- **Temporal Graph (#10)**: RELATION-Kanten tragen `valid_from_round`/`valid_to_round`/`reinforced_count`; `TemporalGraphService` liefert `/api/graph/snapshot/<gid>/<round>` und `/api/graph/diff/<gid>?start_round=..&end_round=..`. Im UI scrubt der neue **Round-Slider** im `GraphPanel` durch die Zeitachse, sobald der Graph mindestens eine Simulationsrunde gesehen hat (Client-side-Filter, kein extra API-Call beim Scrubben).
+- **Temporal Graph (#10)**: RELATION-Kanten tragen `valid_from_round`/`valid_to_round`/`reinforced_count`; `TemporalGraphService` liefert `/api/graph/snapshot/<gid>/<round>` und `/api/graph/diff/<gid>?start_round=..&end_round=..`. Im UI scrubt der **Round-Slider** im `GraphPanel` durch die Zeitachse (Client-side-Filter, kein extra API-Call beim Scrubben).
 - **Polarisations-Metriken (#12)**: `NetworkAnalyticsService` mit Louvain-Communities, Echo-Chamber-Index und Bridge-Agent-Heuristik; API `GET /api/simulation/<id>/metrics`. Dokumentation in `docu/analytics.md`.
 - **Ontology-Mutation (#11, Phase 1+2)**: `OntologyManager` (thread-safe) + `OntologyMutationService` mit Modi `disabled` / `review_only` / `auto`. **NER → Mutation-Wiring ist live**: `Neo4jStorage.add_text` reicht NER-emittierte unbekannte Entity-Types automatisch an den Service weiter; Service-Exceptions blockieren Ingestion nicht.
 - **DI-Container (#14)**: Alle Kern-Services laufen über `AgoraContainer` — keine Service-Locator-Suche mehr in `app.extensions`.
 - **API-Contract-Härtung Richtung v1.0**: zentrale Success-/Error-Envelopes (`success`, `data`, `error`, `code`) werden schrittweise durchgesetzt. Auth-Fehler, rohe `dict`-Returns in `@handle_api_errors` sowie Framework-404/405 unter `/api/*` liefern konsistente JSON-Responses. Laufende Schritte stehen in `docu/v1-development-log.md`.
-- **Workspace-Layout-Shell (EPIC-03 ST-01)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) sind die gemeinsame Shell für alle 5 Pipeline-Views. ST-02/03 (deklarative Status- und ViewMode-Composables) sind als nächstes dran.
+- **Workspace-Layout-Shell (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) sind die gemeinsame Shell für alle 5 Pipeline-Views. `useWorkspaceMode` und `useWorkspaceStatus` ersetzen dupliziertes View-Mode/Status-Boilerplate.
 - **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt.
 - **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
 
