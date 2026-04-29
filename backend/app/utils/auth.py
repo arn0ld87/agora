@@ -71,11 +71,34 @@ def install_blueprint_guard(bp: Blueprint) -> None:
         return None
 
 
+def _allow_anonymous() -> bool:
+    return os.environ.get("AGORA_ALLOW_ANONYMOUS", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+
 def log_auth_mode(app: Flask, logger) -> None:
     if _expected_token():
         logger.info("Auth: AGORA_AUTH_TOKEN aktiv — /api/* verlangt Token.")
-    else:
+        return
+
+    debug_mode = bool(app.config.get("DEBUG"))
+    if _allow_anonymous():
         logger.warning(
-            "Auth: AGORA_AUTH_TOKEN nicht gesetzt — /api/* ist offen. "
-            "Nur für lokale Entwicklung akzeptabel."
+            "Auth: AGORA_ALLOW_ANONYMOUS=true — /api/* offen, opt-in erteilt. "
+            "Nicht für Prod-Deployments."
+        )
+    elif debug_mode:
+        logger.warning(
+            "Auth: AGORA_AUTH_TOKEN nicht gesetzt — /api/* ist offen "
+            "(FLASK_DEBUG aktiv, akzeptabel für lokale Entwicklung)."
+        )
+    else:
+        # Sollte Config.validate() bereits abgefangen haben; lautes Signal
+        # falls jemand die Validation umgangen hat.
+        logger.error(
+            "Auth: kein Token, kein Allow-Flag, kein Debug — /api/* offen. "
+            "Config.validate() hätte das blocken müssen."
         )

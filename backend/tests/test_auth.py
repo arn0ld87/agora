@@ -1,9 +1,11 @@
 """Tests for token auth response contracts."""
 
+import logging
+
 from flask import Blueprint, Flask
 
 from app.utils.api_responses import json_success
-from app.utils.auth import install_blueprint_guard, token_required
+from app.utils.auth import install_blueprint_guard, log_auth_mode, token_required
 
 
 def _build_guarded_app():
@@ -95,3 +97,80 @@ def test_blueprint_guard_accepts_query_token(monkeypatch):
 
     assert response.status_code == 200
     assert response.get_json() == {"success": True, "data": {"ok": True}}
+
+
+def _capture_logs(target_logger):
+    handler = _ListHandler()
+    target_logger.addHandler(handler)
+    target_logger.setLevel(logging.DEBUG)
+    return handler
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def test_log_auth_mode_token_set_emits_info(monkeypatch):
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "deploy-secret")
+    monkeypatch.delenv("AGORA_ALLOW_ANONYMOUS", raising=False)
+    app = Flask(__name__)
+    app.config["DEBUG"] = False
+    logger = logging.getLogger("test.auth.token")
+    handler = _capture_logs(logger)
+
+    log_auth_mode(app, logger)
+
+    assert any(r.levelno == logging.INFO and "AGORA_AUTH_TOKEN aktiv" in r.message for r in handler.records)
+
+
+def test_log_auth_mode_allow_anonymous_emits_warning(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("AGORA_ALLOW_ANONYMOUS", "true")
+    app = Flask(__name__)
+    app.config["DEBUG"] = False
+    logger = logging.getLogger("test.auth.allow")
+    handler = _capture_logs(logger)
+
+    log_auth_mode(app, logger)
+
+    assert any(
+        r.levelno == logging.WARNING and "ALLOW_ANONYMOUS=true" in r.message
+        for r in handler.records
+    )
+
+
+def test_log_auth_mode_debug_no_token_warns(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("AGORA_ALLOW_ANONYMOUS", raising=False)
+    app = Flask(__name__)
+    app.config["DEBUG"] = True
+    logger = logging.getLogger("test.auth.debug")
+    handler = _capture_logs(logger)
+
+    log_auth_mode(app, logger)
+
+    assert any(
+        r.levelno == logging.WARNING and "FLASK_DEBUG aktiv" in r.message
+        for r in handler.records
+    )
+
+
+def test_log_auth_mode_no_token_no_flag_no_debug_logs_error(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("AGORA_ALLOW_ANONYMOUS", raising=False)
+    app = Flask(__name__)
+    app.config["DEBUG"] = False
+    logger = logging.getLogger("test.auth.bypass")
+    handler = _capture_logs(logger)
+
+    log_auth_mode(app, logger)
+
+    assert any(
+        r.levelno == logging.ERROR and "Config.validate()" in r.message
+        for r in handler.records
+    )
