@@ -20,8 +20,8 @@
 |---|---|---|---|---|
 | P0 | Auth in Non-Debug standardmäßig erzwingen oder explizites Allow-Flag einführen | verhindert offene API-Deployments | Mittel (Deployment-Anpassung nötig) | `security/repo-hardening` |
 | P0 | SSE/Download Auth von Query-Token auf kurzlebige signed tickets migrieren | reduziert Token-Leakage in URLs/Logs | Mittel | `security/repo-hardening` |
-| P1 | Security-Scans in CI integrieren (`npm audit`, Python-Audit, Secret Scan) | frühzeitige Erkennung neuer Risiken | Niedrig | `ci/add-security-checks` |
-| P1 | Einheitliche Error-Envelope inkl. Security-safe Fehlermeldungen prüfen/erzwingen | konsistente API + weniger Info-Leaks | Niedrig-Mittel | `refactor/code-quality-pass` |
+| P1 | Security-Scans in CI integrieren (`npm audit`, Python-Audit, Secret Scan) | frühzeitige Erkennung neuer Risiken | Niedrig | `ci/add-security-checks` — umgesetzt 2026-04-29 |
+| P1 | Einheitliche Error-Envelope inkl. Security-safe Fehlermeldungen prüfen/erzwingen | konsistente API + weniger Info-Leaks | Niedrig-Mittel | `refactor/code-quality-pass` — umgesetzt 2026-04-29 |
 | P2 | Logging-Review auf Secret-Redaction und Token-Schutz | verhindert versehentliche Secret-Exposition | Niedrig | `refactor/code-quality-pass` |
 
 ## Safe First Steps
@@ -35,3 +35,11 @@
 - Signed URL/Ticket-System für SSE und Artefakt-Downloads.
 - Harte Auth-Policy in Prod inklusive klarer Migrationshinweise.
 - Security-Regression-Tests (z. B. Auth required, CORS policy, token leakage checks).
+
+## Umsetzung P1 — 2026-04-29
+
+- CI: separater `security`-Job mit Frontend-`npm audit --audit-level=high`, Python-`pip-audit` gegen einen aus `uv.lock` exportierten Runtime-Requirements-Snapshot und Gitleaks Secret Scan über die volle Git-Historie.
+- Python-Audit: 39 bestehende Advisories per kompatiblem `uv.lock`-Upgrade beseitigt; 6 verbleibende Advisories sind wegen fester `camel-oasis`-/`camel-ai`-/`sentence-transformers`-Pins temporär gebaselined.
+- API: `handle_api_errors()` liefert bei ungefangenen 5xx-Fehlern im Nicht-Debug-Modus nur noch sichere Standardmeldungen (`internal server error`, `request timed out`) plus maschinenlesbare Codes.
+- Flask-Framework-Fehler: generische `/api/*`-`HTTPException`- und ungefangene Exception-Handler erzwingen die zentrale JSON-Envelope auch außerhalb dekorierter Views.
+- Dokumentation: Details und Rollback in `docu/p1-security-ci-error-envelope-protokoll.md`.

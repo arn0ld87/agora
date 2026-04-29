@@ -168,3 +168,72 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 
 - Upstream-Review-Status aus `SECURITY_REVIEW_SUMMARY.md` ist durch diese Phasen teilweise überholt; der Abschnitt dort wird in einem Follow-up abgeglichen.
 - Langfristig: echte Session-/Login-Auth statt Static-Token. Aktueller Ansatz ist ein Shared-Secret-Bearer, was für Single-User-Dev-Setups OK ist, aber kein Multi-User-Szenario abbildet.
+
+---
+
+## P1 — CI-Security-Scans und sichere Error-Envelopes
+
+**Stand:** 2026-04-29, Europe/Berlin
+
+### Ziel
+
+Security-Regressions früher erkennen und interne Exception-Details aus produktionsnahen API-Responses entfernen.
+
+### Änderungen
+
+| Datei | Änderung |
+|---|---|
+| `.github/workflows/ci.yml` | Neuer Job `security` mit `npm audit --audit-level=high`, `uv export` + `pip-audit` und Gitleaks Secret Scan. |
+| `backend/uv.lock` | 39 Python-Advisories durch konservative Lockfile-Upgrades beseitigt. |
+| `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details nur bei `Config.DEBUG=true`. |
+| `backend/app/utils/api_responses.py` | Generische `/api/*`-Handler für `HTTPException` und ungefangene Exceptions ergänzen die zentrale JSON-Envelope. |
+| `backend/tests/test_api_responses.py` | Regression-Tests für nicht-leakende 5xx-Responses und generische Framework-Fehler ergänzt. |
+
+### Response-Contract
+
+```json
+{
+  "success": false,
+  "error": "internal server error",
+  "code": "internal_error"
+}
+```
+
+Im Debug-Modus kann zusätzlich `debug_error` und `traceback` erscheinen. Dieser Modus bleibt lokale Entwicklung und Tests vorbehalten.
+
+### CI-Checks
+
+```bash
+# Frontend Dependency Audit
+cd frontend
+npm audit --audit-level=high
+
+# Backend Runtime Dependency Audit aus uv.lock
+cd ../backend
+uv export --frozen --no-dev --no-hashes --no-emit-project \
+  --format requirements.txt --output-file /tmp/agora-backend-requirements.txt \
+  > /dev/null
+uvx pip-audit --strict \
+  --ignore-vuln CVE-2026-25990 \
+  --ignore-vuln CVE-2026-40192 \
+  --ignore-vuln CVE-2025-71176 \
+  --ignore-vuln CVE-2026-1839 \
+  --ignore-vuln CVE-2024-46455 \
+  --ignore-vuln CVE-2025-64712 \
+  -r /tmp/agora-backend-requirements.txt
+```
+
+Gitleaks läuft in GitHub Actions mit vollständiger Historie (`fetch-depth: 0`). Bei echten Findings gilt: Secret sofort rotieren, Commit-Historie separat bereinigen und erst danach das Finding suppressen.
+
+### Temporäre Baseline
+
+Die sechs `pip-audit`-Ignores sind durch feste Upstream-Pins blockiert:
+
+| Advisory | Paket | Upstream-Pin |
+|---|---|---|
+| `CVE-2026-25990`, `CVE-2026-40192` | `pillow==10.3.0` | `camel-ai==0.2.78` begrenzt `pillow<11`. |
+| `CVE-2025-71176` | `pytest==8.2.0` | `camel-oasis==0.2.5` pinnt `pytest==8.2.0`. |
+| `CVE-2026-1839` | `transformers==4.57.6` | `sentence-transformers==3.0.0` begrenzt `transformers<5`. |
+| `CVE-2024-46455`, `CVE-2025-64712` | `unstructured==0.13.7` | `camel-oasis==0.2.5` pinnt `unstructured==0.13.7`. |
+
+Die Baseline muss beim nächsten `camel-oasis`-/`camel-ai`-Upgrade erneut geprüft und reduziert werden.

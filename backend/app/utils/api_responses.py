@@ -11,8 +11,8 @@ The behaviour preserved by this module (used by the existing API surface):
   explicitly overridden, carry a top-level ``data`` field.
 - Validation errors (``ValueError``) map to HTTP 400.
 - Timeouts map to HTTP 504.
-- Any other exception logs the stack trace and returns HTTP 500, optionally
-  including ``traceback`` when ``Config.DEBUG`` is true.
+- Any other exception logs the stack trace and returns a security-safe HTTP 500
+  envelope. Production responses do not expose exception strings.
 
 The decorator never swallows domain results — it only kicks in on exceptions.
 Handlers may continue to return ``Response`` objects, ``(Response, status)``
@@ -27,12 +27,25 @@ from collections.abc import Mapping
 from typing import Any, Callable
 
 from flask import jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from ..config import Config
 from ..utils.logger import get_logger
 
 
 _default_logger = get_logger("agora.api")
+_INTERNAL_ERROR_MESSAGE = "internal server error"
+_TIMEOUT_ERROR_MESSAGE = "request timed out"
+
+
+def _debug_extra(exc: Exception) -> dict[str, Any] | None:
+    if not Config.DEBUG:
+        return None
+    return {"debug_error": str(exc)}
+
+
+def _http_error_code(error: HTTPException) -> str:
+    return (error.name or "http_error").lower().replace(" ", "_")
 
 
 def json_success(data: Any = None, *, status: int = 200, **extra: Any):
@@ -93,8 +106,8 @@ def handle_api_errors(
             return json_success(result)
 
     - ``ValueError`` → HTTP 400 with ``{"success": False, "error": str(exc)}``.
-    - ``TimeoutError`` → HTTP 504.
-    - any other ``Exception`` → HTTP 500 with optional traceback (Config.DEBUG).
+    - ``TimeoutError`` → HTTP 504 with a safe public message.
+    - any other ``Exception`` → HTTP 500 with a safe public message.
 
     The decorator deliberately does not catch :class:`BaseException` subclasses
     like ``SystemExit`` / ``KeyboardInterrupt``.
@@ -114,13 +127,21 @@ def handle_api_errors(
             except ValueError as exc:
                 return json_error(str(exc), status=400)
             except TimeoutError as exc:
-                return json_error(f"{prefix}: timeout — {exc}", status=504)
-            except Exception as exc:
-                active_logger.error(f"{prefix}: {exc}")
+                active_logger.warning(f"{prefix}: timeout: {exc}")
                 return json_error(
-                    str(exc),
+                    _TIMEOUT_ERROR_MESSAGE,
+                    status=504,
+                    code="timeout",
+                    extra=_debug_extra(exc),
+                )
+            except Exception as exc:
+                active_logger.exception(f"{prefix}: {exc}")
+                return json_error(
+                    _INTERNAL_ERROR_MESSAGE,
                     status=500,
+                    code="internal_error",
                     include_traceback=bool(Config.DEBUG),
+                    extra=_debug_extra(exc),
                 )
 
         return wrapper
@@ -145,3 +166,34 @@ def install_api_error_handlers(app) -> None:
         if request.path.startswith("/api/"):
             return json_error("method not allowed", status=405, code="method_not_allowed")
         return error
+
+    @app.errorhandler(HTTPException)
+    def _api_http_exception(error):
+        if request.path.startswith("/api/"):
+            if (error.code or 500) >= 500:
+                return json_error(
+                    _INTERNAL_ERROR_MESSAGE,
+                    status=error.code or 500,
+                    code=_http_error_code(error),
+                )
+            return json_error(
+                error.description or error.name or "request failed",
+                status=error.code or 400,
+                code=_http_error_code(error),
+            )
+        return error
+
+    @app.errorhandler(Exception)
+    def _api_unhandled_exception(error):
+        if isinstance(error, HTTPException):
+            return error
+        if request.path.startswith("/api/"):
+            _default_logger.exception("Unhandled API exception: %s", error)
+            return json_error(
+                _INTERNAL_ERROR_MESSAGE,
+                status=500,
+                code="internal_error",
+                include_traceback=bool(Config.DEBUG),
+                extra=_debug_extra(error),
+            )
+        raise error

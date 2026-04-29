@@ -7,13 +7,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Geändert
 
+- API-Error-Envelopes sind für 5xx-Fehler jetzt security-safe: ungefangene Exceptions liefern außerhalb von `Config.DEBUG=true` nur noch generische Meldungen plus `code`, während konkrete Exception-Details im Log bleiben.
+- Backend-Lockfile sicherheitsseitig aktualisiert: `pip-audit`-Findings in 14 Python-Paketen durch kompatible `uv.lock`-Upgrades reduziert; 6 verbleibende Upstream-Pin-Findings sind eng im CI dokumentiert und gebaselined.
 - API-Contract-Härtung begonnen: Auth-Fehler aus `token_required()` und `install_blueprint_guard()` nutzen jetzt die zentrale `json_error()`-Envelope mit `success: false`.
 - `@handle_api_errors` setzt seine dokumentierte Contract-Regel jetzt auch technisch um: rohe `dict`-Returns werden in `json_success()` gewrappt.
-- Framework-seitige `/api/*`-404/405-Fehler liefern jetzt ebenfalls standardisierte JSON-Envelopes statt HTML-Fehlerseiten.
+- Framework-seitige `/api/*`-HTTP-Fehler und ungefangene API-Exceptions liefern jetzt ebenfalls standardisierte JSON-Envelopes statt HTML-Fehlerseiten.
 - Ontologie-Generierung ist nicht mehr auf exakt 10 Entitätstypen fixiert; Defaults sind 8-16 Typen und per `ONTOLOGY_MIN_ENTITY_TYPES` / `ONTOLOGY_MAX_ENTITY_TYPES` konfigurierbar.
 
 ### Hinzugefügt
 
+- CI-Security-Stage ergänzt: Frontend-`npm audit`, Python-`pip-audit` auf Basis des `uv.lock`-Exports und Gitleaks Secret Scan laufen als eigener GitHub-Actions-Job.
+- `docu/p1-security-ci-error-envelope-protokoll.md` dokumentiert P1-Umsetzung, Checks und Rollback.
 - `docu/v1-development-log.md` dokumentiert die v1.0-Entwicklungsschritte.
 - Tests für den Auth-Guard decken Open-Mode, fehlende Tokens sowie Header-/Bearer-/Query-Token ab.
 - Simulationsstarts akzeptieren zusätzlich `simulation_days`; die UI schreibt daraus `time_config.total_simulation_hours`, während das bestehende Rundenlimit als optionaler Cap erhalten bleibt.

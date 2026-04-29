@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from flask import Flask
+from flask import Flask, abort
 
 from app.utils.api_responses import (
     handle_api_errors,
@@ -89,8 +89,10 @@ def test_handle_api_errors_wraps_raw_dict_return():
     def view():
         return {"ok": True}
 
-    with app.test_request_context():
-        response, status = view()
+    with patch("app.utils.api_responses.Config") as mock_config:
+        mock_config.DEBUG = False
+        with app.test_request_context():
+            response, status = view()
     assert status == 200
     assert response.get_json() == {"success": True, "data": {"ok": True}}
 
@@ -108,20 +110,24 @@ def test_handle_api_errors_maps_value_error_to_400():
     assert response.get_json() == {"success": False, "error": "bad input"}
 
 
-def test_handle_api_errors_maps_timeout_to_504():
+def test_handle_api_errors_maps_timeout_to_504_without_leaking_detail_outside_debug():
     app = _build_app()
 
     @handle_api_errors(log_prefix="Stuck")
     def view():
         raise TimeoutError("too slow")
 
-    with app.test_request_context():
-        response, status = view()
+    with patch("app.utils.api_responses.Config") as mock_config:
+        mock_config.DEBUG = False
+        with app.test_request_context():
+            response, status = view()
     assert status == 504
     payload = response.get_json()
-    assert payload["success"] is False
-    assert "timeout" in payload["error"].lower()
-    assert "too slow" in payload["error"]
+    assert payload == {
+        "success": False,
+        "error": "request timed out",
+        "code": "timeout",
+    }
 
 
 def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug():
@@ -137,9 +143,13 @@ def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug
             response, status = view()
     payload = response.get_json()
     assert status == 500
-    assert payload["success"] is False
-    assert payload["error"] == "kapow"
+    assert payload == {
+        "success": False,
+        "error": "internal server error",
+        "code": "internal_error",
+    }
     assert "traceback" not in payload
+    assert "kapow" not in payload.values()
 
 
 def test_handle_api_errors_includes_traceback_in_debug_mode():
@@ -155,6 +165,9 @@ def test_handle_api_errors_includes_traceback_in_debug_mode():
             response, status = view()
     payload = response.get_json()
     assert status == 500
+    assert payload["error"] == "internal server error"
+    assert payload["code"] == "internal_error"
+    assert payload["debug_error"] == "kapow"
     assert "Traceback" in payload["traceback"]
 
 
@@ -190,6 +203,48 @@ def test_install_api_error_handlers_envelopes_api_405():
         "success": False,
         "error": "method not allowed",
         "code": "method_not_allowed",
+    }
+
+
+def test_install_api_error_handlers_envelopes_generic_api_http_errors():
+    app = _build_app()
+
+    @app.route("/api/bad-request")
+    def bad_request():
+        abort(400, description="invalid payload")
+
+    install_api_error_handlers(app)
+    client = app.test_client()
+
+    response = client.get("/api/bad-request")
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "success": False,
+        "error": "invalid payload",
+        "code": "bad_request",
+    }
+
+
+def test_install_api_error_handlers_envelopes_uncaught_api_exceptions_safely():
+    app = _build_app()
+
+    @app.route("/api/explodes")
+    def explodes():
+        raise RuntimeError("database password is hunter2")
+
+    install_api_error_handlers(app)
+    client = app.test_client()
+
+    with patch("app.utils.api_responses.Config") as mock_config:
+        mock_config.DEBUG = False
+        response = client.get("/api/explodes")
+
+    assert response.status_code == 500
+    assert response.get_json() == {
+        "success": False,
+        "error": "internal server error",
+        "code": "internal_error",
     }
 
 
