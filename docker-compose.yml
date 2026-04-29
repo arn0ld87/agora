@@ -22,6 +22,10 @@ services:
       - ALL
     volumes:
       - ./backend/uploads:/app/backend/uploads
+      # Persist HuggingFace model cache on the external disk so OASIS-pulled
+      # models (z. B. Twitter/twhin-bert-base, ~1.1 GB) das 256 MB tmpfs nicht
+      # sprengen und beim Container-Restart nicht neu gezogen werden.
+      - ./backend/.cache/huggingface:/home/agora/.cache/huggingface
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Optional: GPU acceleration via NVIDIA Container Toolkit
