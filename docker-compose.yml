@@ -14,16 +14,12 @@ services:
     tmpfs:
       - /tmp:size=128M,mode=1777
       - /app/backend/logs:size=64M,mode=0700,uid=1000,gid=1000
-      - /app/.npm:size=64M,mode=0700,uid=1000,gid=1000
+      - /home/agora/.cache:size=256M,mode=0700,uid=1000,gid=1000
+      - /home/agora/.npm:size=64M,mode=0700,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - DAC_OVERRIDE
     volumes:
       - ./backend/uploads:/app/backend/uploads
     extra_hosts:
