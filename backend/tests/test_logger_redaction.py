@@ -64,8 +64,8 @@ class TestScrubHelper:
                 "hunter2",
             ),
             (
-                'payload={"api_key": "sk-live-abcdef123456"}',
-                "sk-live-abcdef123456",
+                'payload={"api_key": "sk-live-abcdef123456"}',  # gitleaks:allow
+                "sk-live-abcdef123456",  # gitleaks:allow
             ),
             (
                 "env: LLM_API_KEY=ollama-cloud-very-secret",
