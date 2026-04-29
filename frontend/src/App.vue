@@ -25,14 +25,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--ink-2);
+  background: var(--rule-strong);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ink-0);
+  background: var(--fg);
 }
 </style>

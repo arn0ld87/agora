@@ -279,7 +279,7 @@ onUnmounted(() => {
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   cursor: pointer;
-  color: var(--ink-0);
+  color: var(--fg);
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);

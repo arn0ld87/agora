@@ -173,3 +173,19 @@ Ergebnis: keine Fehler.
 73. Alias-Scan fuer Step5Interaction.vue erneut ausgefuehrt: keine Legacy-Aliase mehr.
 74. git diff --check ausgefuehrt: keine Fehler.
 75. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.
+
+## Fortsetzung 6 — Slice-1-Abschluss
+
+76. Nutzerauftrag erhalten, Slice 1 vollstaendig fertigzustellen.
+77. Arbeitsbaum und letzter Commit geprueft: HEAD 304c0f4, Arbeitsbaum sauber.
+78. Step4Report.vue gelesen und App-UI-CSS vom Standalone-Export-Stylestring getrennt bewertet.
+79. Vollstaendigen Legacy-Alias-Scan ueber frontend/src ausgefuehrt.
+80. Entscheidung: Alias-Definitionen in tokens.css bleiben als Kompatibilitaetsschicht erhalten; App-Code soll keine Legacy-Aliase mehr verwenden.
+81. Alle verbleibenden App-Code-Legacy-Aliase ausserhalb tokens.css ersetzt.
+82. Graph-Hint-Border auf --mono-200 angepasst, weil die Hint-Fläche nun --bg-inverse nutzt.
+83. Abschluss-Scans ausgefuehrt: Legacy-Aliase nur noch in tokens.css; harte Farben nur noch in tokens.css und Standalone-HTML-Export-Stylestring.
+84. git diff --check ausgefuehrt: keine Fehler.
+85. Kontrollblick in GraphPanel.vue hat einen beschaedigten CSS-Selektorblock gefunden.
+86. Graph-Hint-CSS-Block vollstaendig repariert und erneut geprueft.
+87. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.
+88. Slice-1-Akzeptanz erreicht: App-Code nutzt keine Legacy-Aliase mehr; harte Farben verbleiben nur in Token-Definitionen und Standalone-Export-Stylestring.

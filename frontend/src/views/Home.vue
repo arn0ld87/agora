@@ -416,7 +416,7 @@ const steps = computed(() => tm('home.steps'))
   gap: var(--s-7);
   padding: var(--s-9) 0 var(--s-7);
   align-items: end;
-  border-bottom: 1px solid var(--ink-2);
+  border-bottom: 1px solid var(--rule-strong);
 }
 .hero-left { display: flex; flex-direction: column; gap: var(--s-5); }
 .edition {
@@ -427,7 +427,7 @@ const steps = computed(() => tm('home.steps'))
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   color: var(--fg-muted);
-  border-top: 1px solid var(--ink-2);
+  border-top: 1px solid var(--rule-strong);
   padding-top: var(--s-3);
   margin-bottom: var(--s-5);
 }
@@ -437,7 +437,7 @@ const steps = computed(() => tm('home.steps'))
   font-size: clamp(56px, 8vw, 132px);
   line-height: 0.98;
   letter-spacing: -0.03em;
-  color: var(--ink-0);
+  color: var(--fg);
   margin: 0;
 }
 .display .it {
@@ -457,7 +457,7 @@ const steps = computed(() => tm('home.steps'))
 
 .hero-right { display: flex; flex-direction: column; gap: var(--s-3); position: relative; }
 .portrait {
-  background: var(--paper-0);
+  background: var(--bg);
   aspect-ratio: 1/1;
   overflow: hidden;
   border-radius: var(--r-1);
@@ -475,7 +475,7 @@ const steps = computed(() => tm('home.steps'))
 .portrait-meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-top: 1px solid var(--ink-2);
+  border-top: 1px solid var(--rule-strong);
   padding-top: var(--s-3);
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -491,7 +491,7 @@ const steps = computed(() => tm('home.steps'))
   width: 40px;
   height: 40px;
   background: transparent;
-  border: 1px solid var(--ink-2);
+  border: 1px solid var(--rule-strong);
   color: var(--accent);
   font-size: 18px;
   cursor: pointer;
@@ -521,7 +521,7 @@ const steps = computed(() => tm('home.steps'))
   font-weight: 400;
   font-size: var(--fs-44);
   line-height: 1.05;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .metric .label {
   font-family: var(--ff-mono);
@@ -562,7 +562,7 @@ const steps = computed(() => tm('home.steps'))
   font-size: var(--fs-32);
   line-height: 1.15;
   letter-spacing: -0.01em;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .step-desc {
   font-family: var(--ff-sans);
@@ -574,7 +574,7 @@ const steps = computed(() => tm('home.steps'))
 /* Console */
 .console {
   padding: var(--s-9) 0;
-  border-top: 1px solid var(--ink-2);
+  border-top: 1px solid var(--rule-strong);
   display: flex;
   flex-direction: column;
   gap: var(--s-5);
@@ -594,14 +594,14 @@ const steps = computed(() => tm('home.steps'))
   color: var(--fg-muted);
 }
 .dropzone {
-  border: 1px dashed var(--ink-2);
-  background: var(--paper-1);
+  border: 1px dashed var(--rule-strong);
+  background: var(--bg-elevated);
   min-height: 180px;
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
   padding: var(--s-5);
 }
-.dropzone.is-dragover { background: var(--paper-2); border-color: var(--accent); }
+.dropzone.is-dragover { background: var(--bg-panel-2); border-color: var(--accent); }
 .dropzone.has-files { cursor: default; padding: 0; }
 .dropzone-empty {
   display: flex;
@@ -620,7 +620,7 @@ const steps = computed(() => tm('home.steps'))
 .dropzone-title {
   font-family: var(--ff-serif);
   font-size: var(--fs-24);
-  color: var(--ink-0);
+  color: var(--fg);
   font-weight: 400;
 }
 .dropzone-hint {
@@ -641,10 +641,10 @@ const steps = computed(() => tm('home.steps'))
   gap: var(--s-4);
   align-items: center;
   padding: var(--s-3) var(--s-5);
-  border-bottom: 1px solid var(--paper-2);
+  border-bottom: 1px solid var(--bg-panel-2);
   font-family: var(--ff-mono);
   font-size: var(--fs-14);
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .file-row:last-child { border-bottom: none; }
 .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -661,13 +661,13 @@ const steps = computed(() => tm('home.steps'))
 
 .prompt {
   width: 100%;
-  background: var(--paper-1);
-  border: 1px solid var(--ink-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule-strong);
   padding: var(--s-5);
   font-family: var(--ff-mono);
   font-size: var(--fs-14);
   line-height: 1.55;
-  color: var(--ink-0);
+  color: var(--fg);
   resize: vertical;
   min-height: 160px;
   outline: none;
@@ -693,7 +693,7 @@ const steps = computed(() => tm('home.steps'))
   font-family: var(--ff-mono);
   font-size: var(--fs-12);
   color: var(--status-error);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   padding: var(--s-3);
   border-left: 2px solid var(--status-error);
   margin: 0;
@@ -721,7 +721,7 @@ const steps = computed(() => tm('home.steps'))
   border: 1px solid var(--rule);
   border-radius: var(--r-pill);
 }
-.status-pill.ok { color: var(--ink-0); border-color: var(--ink-2); }
+.status-pill.ok { color: var(--fg); border-color: var(--rule-strong); }
 .status-pill.bad { color: var(--status-error); border-color: var(--status-error); }
 .status-refresh {
   background: transparent;

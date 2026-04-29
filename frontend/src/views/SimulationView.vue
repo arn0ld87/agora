@@ -224,8 +224,8 @@ onMounted(async () => {
 <style scoped>
 .branch-btn {
   border: 1px solid var(--rule);
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   padding: 8px 12px;
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -239,14 +239,14 @@ onMounted(async () => {
   gap: var(--s-3);
   padding: var(--s-4) var(--s-6);
   border-bottom: 1px solid var(--rule);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
 }
 .branch-panel input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--rule);
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--ff-sans);
 }
 @media (max-width: 880px) {

@@ -24,7 +24,7 @@ defineProps({
   position: absolute;
   bottom: var(--s-5);
   left: var(--s-5);
-  background: var(--paper-0);
+  background: var(--bg);
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-1);
   border: 1px solid var(--rule);

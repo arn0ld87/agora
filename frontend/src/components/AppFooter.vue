@@ -51,7 +51,7 @@ function pick(loc) { setLocale(loc) }
   color: var(--fg-muted);
 }
 .author-line a {
-  color: var(--ink-0);
+  color: var(--fg);
   text-decoration: none;
   border-bottom: 1px solid var(--accent);
   padding-bottom: 1px;

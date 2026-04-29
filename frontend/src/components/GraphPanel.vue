@@ -476,8 +476,8 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  background-color: var(--paper-1);
-  background-image: radial-gradient(var(--paper-3) 1px, transparent 1px);
+  background-color: var(--bg-elevated);
+  background-image: radial-gradient(var(--mono-700) 1px, transparent 1px);
   background-size: 24px 24px;
   overflow: hidden;
 }
@@ -492,7 +492,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(to bottom, var(--paper-0), transparent);
+  background: linear-gradient(to bottom, var(--bg), transparent);
   pointer-events: none;
 }
 
@@ -517,7 +517,7 @@ onUnmounted(() => {
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--rule);
-  background: var(--paper-0);
+  background: var(--bg);
   border-radius: var(--r-1);
   display: flex;
   align-items: center;
@@ -586,7 +586,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  background: var(--paper-0);
+  background: var(--bg);
   padding: 6px 12px;
   border-radius: var(--r-pill);
   border: 1px solid var(--rule);
@@ -648,14 +648,14 @@ input:checked + .slider:before {
   color: var(--fg-meta);
 }
 
-/* Building hint — editorial pill on dark ink */
+/* Building hint — editorial pill on inverse surface */
 .graph-building-hint {
   position: absolute;
   bottom: 160px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--bg-dark);
-  color: var(--paper-0);
+  background: var(--bg-inverse);
+  color: var(--bg);
   padding: 8px 16px;
   border-radius: var(--r-pill);
   font-family: var(--ff-mono);
@@ -665,7 +665,7 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  border: 1px solid var(--ink-2);
+  border: 1px solid var(--mono-200);
   z-index: 100;
 }
 
@@ -688,8 +688,8 @@ input:checked + .slider:before {
 }
 
 .graph-building-hint.finished-hint {
-  background: var(--bg-dark);
-  border: 1px solid var(--ink-2);
+  background: var(--bg-inverse);
+  border: 1px solid var(--mono-200);
 }
 
 .finished-hint .hint-icon-wrapper {
@@ -701,7 +701,7 @@ input:checked + .slider:before {
 .finished-hint .hint-icon {
   width: 14px;
   height: 14px;
-  color: var(--paper-0);
+  color: var(--bg);
 }
 
 .finished-hint .hint-text {
@@ -716,10 +716,10 @@ input:checked + .slider:before {
   width: 18px;
   height: 18px;
   background: transparent;
-  border: 1px solid var(--rule-on-dark);
+  border: 1px solid var(--mono-200);
   border-radius: 50%;
   cursor: pointer;
-  color: var(--paper-0);
+  color: var(--bg);
   transition: border-color 150ms ease, color 150ms ease;
   margin-left: var(--s-2);
   flex-shrink: 0;

@@ -662,7 +662,7 @@ onUnmounted(stopPolling)
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--paper-0);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -676,7 +676,7 @@ onUnmounted(stopPolling)
   gap: var(--s-5);
 }
 .card {
-  background: var(--paper-0);
+  background: var(--bg);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: var(--s-5);
@@ -720,7 +720,7 @@ onUnmounted(stopPolling)
 .outline-title {
   font-family: var(--ff-serif);
   font-size: var(--fs-20);
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .outline-body {
   margin-top: var(--s-3);
@@ -730,7 +730,7 @@ onUnmounted(stopPolling)
   font-family: var(--ff-serif);
   font-size: var(--fs-16);
   line-height: 1.7;
-  color: var(--ink-0);
+  color: var(--fg);
   margin: 0;
 }
 
@@ -738,7 +738,7 @@ onUnmounted(stopPolling)
   max-width: 72ch;
   margin: 0 auto;
   font-family: var(--ff-serif);
-  color: var(--ink-0);
+  color: var(--fg);
   font-size: var(--fs-18, 17px);
   line-height: 1.75;
   padding: var(--s-4) 0;
@@ -774,13 +774,13 @@ onUnmounted(stopPolling)
 }
 .evidence-tab {
   border: 1px solid var(--rule);
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   text-align: left;
   padding: 10px 12px;
   cursor: pointer;
 }
-.evidence-tab.active { border-color: var(--accent); background: var(--paper-1); }
+.evidence-tab.active { border-color: var(--accent); background: var(--bg-elevated); }
 .claim-card {
   border-top: 1px solid var(--rule);
   padding-top: var(--s-3);
@@ -802,7 +802,7 @@ onUnmounted(stopPolling)
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
 }
 
@@ -811,7 +811,7 @@ onUnmounted(stopPolling)
 .markdown-body :deep(h3),
 .markdown-body :deep(h4) {
   font-family: var(--ff-serif);
-  color: var(--ink-0);
+  color: var(--fg);
   line-height: 1.25;
   margin: 1.8em 0 0.4em;
   font-weight: 500;
@@ -834,7 +834,7 @@ onUnmounted(stopPolling)
   font-style: italic;
 }
 .markdown-body :deep(code) {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: var(--ff-mono);
@@ -862,14 +862,14 @@ onUnmounted(stopPolling)
   padding: 6px 10px;
   text-align: left;
 }
-.markdown-body :deep(th) { background: var(--paper-1); font-weight: 500; }
+.markdown-body :deep(th) { background: var(--bg-elevated); font-weight: 500; }
 .markdown-body :deep(hr) { border: 0; border-top: 1px solid var(--rule); margin: 2em 0; }
 .markdown-body :deep(a) {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.markdown-body :deep(strong) { font-weight: 600; color: var(--ink-0); }
+.markdown-body :deep(strong) { font-weight: 600; color: var(--fg); }
 .outline li.is-current .outline-title { color: var(--accent); }
 
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
@@ -896,10 +896,10 @@ onUnmounted(stopPolling)
   color: var(--fg-muted);
 }
 .model-input {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
-  color: var(--ink-0);
+  color: var(--fg);
   font-family: var(--ff-mono);
   font-size: var(--fs-14);
   padding: 8px 10px;
