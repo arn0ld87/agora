@@ -34,6 +34,35 @@ const branchForm = ref({
 })
 const branchBusy = ref(false)
 const actionBusy = ref(false)
+const showAdvanced = ref(false)
+const copiedPath = ref('')
+
+let copyResetTimer = null
+function copyPath(path) {
+  if (!path || typeof path !== 'string') return
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(path).catch(() => {
+      // Clipboard write rejected by browser (insecure context, denied permission).
+      // The path stays visible — user can copy manually.
+    })
+  }
+  copiedPath.value = path
+  if (copyResetTimer) clearTimeout(copyResetTimer)
+  copyResetTimer = setTimeout(() => { copiedPath.value = '' }, 1500)
+}
+
+function flattenArtifacts(artifacts) {
+  if (!artifacts || typeof artifacts !== 'object') return []
+  const sections = []
+  for (const [section, entries] of Object.entries(artifacts)) {
+    if (!entries || typeof entries !== 'object') continue
+    const items = Object.entries(entries)
+      .filter(([, value]) => typeof value === 'string' && value)
+      .map(([label, path]) => ({ label, path }))
+    if (items.length) sections.push({ section, items })
+  }
+  return sections
+}
 
 async function loadRuns() {
   loading.value = true
@@ -155,6 +184,11 @@ function openRun(run) {
 
 async function handleResume() {
   if (!selectedRun.value) return
+  const action = selectedRun.value.resume_capability?.action || 'resume'
+  const verb = action === 'restart' ? 'neu starten' : 'fortsetzen'
+  if (typeof window !== 'undefined' && !window.confirm(`Run ${verb}?\n${selectedRun.value.run_id}`)) {
+    return
+  }
   actionBusy.value = true
   try {
     const res = await resumeRun(selectedRun.value.run_id)
@@ -170,6 +204,9 @@ async function handleResume() {
 
 async function handleStop() {
   if (!selectedRun.value) return
+  if (typeof window !== 'undefined' && !window.confirm(`Run wirklich stoppen?\n${selectedRun.value.run_id}`)) {
+    return
+  }
   actionBusy.value = true
   try {
     await stopRun(selectedRun.value.run_id)
@@ -313,7 +350,11 @@ onMounted(loadRuns)
         </div>
 
         <p class="message-block">{{ selectedRun.message || 'No status message.' }}</p>
-        <p v-if="selectedRun.error" class="error">{{ selectedRun.error }}</p>
+
+        <details v-if="selectedRun.error" class="error-block" open>
+          <summary>Fehler</summary>
+          <pre>{{ selectedRun.error }}</pre>
+        </details>
 
         <div class="actions">
           <button
@@ -334,22 +375,46 @@ onMounted(loadRuns)
           </button>
         </div>
 
-        <div v-if="selectedRun.linked_ids?.simulation_id" class="branch-box">
-          <h4>Create Branch</h4>
-          <input v-model="branchForm.branch_name" type="text" placeholder="Branch name" />
-          <input v-model="branchForm.llm_model" type="text" placeholder="LLM model override" />
-          <div class="branch-row">
-            <input v-model="branchForm.language" type="text" placeholder="language" />
-            <input v-model="branchForm.max_agents" type="number" min="1" placeholder="max agents" />
+        <div class="artifacts" v-if="flattenArtifacts(selectedRun.artifacts).length">
+          <h4>Artifacts</h4>
+          <div v-for="group in flattenArtifacts(selectedRun.artifacts)" :key="group.section" class="artifact-group">
+            <div class="artifact-section">{{ group.section }}</div>
+            <button
+              v-for="item in group.items"
+              :key="`${group.section}-${item.label}`"
+              type="button"
+              class="artifact-row"
+              :title="`Pfad kopieren: ${item.path}`"
+              @click="copyPath(item.path)"
+            >
+              <span class="artifact-label">{{ item.label }}</span>
+              <span class="artifact-path">{{ item.path }}</span>
+              <span class="artifact-hint">{{ copiedPath === item.path ? 'kopiert' : 'kopieren' }}</span>
+            </button>
           </div>
-          <label><input v-model="branchForm.enable_twitter" type="checkbox" /> Twitter</label>
-          <label><input v-model="branchForm.enable_reddit" type="checkbox" /> Reddit</label>
-          <button class="action" :disabled="branchBusy" @click="handleBranch">Create branch</button>
         </div>
 
-        <div class="artifacts" v-if="selectedRun.artifacts">
-          <h4>Artifacts</h4>
-          <pre>{{ JSON.stringify(selectedRun.artifacts, null, 2) }}</pre>
+        <div v-if="selectedRun.linked_ids?.simulation_id" class="advanced-box">
+          <button
+            type="button"
+            class="advanced-toggle"
+            :aria-expanded="showAdvanced"
+            @click="showAdvanced = !showAdvanced"
+          >
+            {{ showAdvanced ? 'Mehr Aktionen ausblenden ▴' : 'Mehr Aktionen anzeigen ▾' }}
+          </button>
+          <div v-if="showAdvanced" class="branch-box">
+            <h4>Branch erstellen</h4>
+            <input v-model="branchForm.branch_name" type="text" placeholder="Branch-Name" />
+            <input v-model="branchForm.llm_model" type="text" placeholder="LLM-Modell-Override" />
+            <div class="branch-row">
+              <input v-model="branchForm.language" type="text" placeholder="Sprache" />
+              <input v-model="branchForm.max_agents" type="number" min="1" placeholder="Max Agents" />
+            </div>
+            <label><input v-model="branchForm.enable_twitter" type="checkbox" /> Twitter</label>
+            <label><input v-model="branchForm.enable_reddit" type="checkbox" /> Reddit</label>
+            <button class="action" :disabled="branchBusy" @click="handleBranch">Branch anlegen</button>
+          </div>
         </div>
 
         <div class="events" v-if="runEvents.length">
@@ -492,7 +557,7 @@ onMounted(loadRuns)
 }
 .retry-btn:hover { background: var(--bg-panel-2); }
 .actions, .branch-row { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
-.branch-box, .artifacts, .events { margin-top: var(--s-6); }
+.branch-box, .artifacts, .events, .advanced-box { margin-top: var(--s-6); }
 .branch-box h4, .artifacts h4, .events h4 { margin-bottom: var(--s-3); font-family: var(--ff-serif); }
 .branch-box label { display: block; margin-top: var(--s-2); color: var(--fg-muted); }
 pre {
@@ -504,6 +569,68 @@ pre {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.error-block {
+  margin-top: var(--s-4);
+  border: 1px solid var(--status-error);
+  background: var(--bg-elevated);
+}
+.error-block > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--status-error);
+}
+.error-block pre {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--status-error);
+  color: var(--status-error);
+}
+.artifact-group + .artifact-group { margin-top: var(--s-4); }
+.artifact-section {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: var(--s-2);
+}
+.artifact-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 70px;
+  gap: var(--s-3);
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
+.artifact-group .artifact-row:last-child { border-bottom: 1px solid var(--rule); }
+.artifact-row:hover { background: var(--bg-elevated); }
+.artifact-label { color: var(--fg-muted); text-transform: uppercase; letter-spacing: var(--ls-mono); }
+.artifact-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.artifact-hint { color: var(--accent); text-align: right; text-transform: uppercase; letter-spacing: var(--ls-mono); }
+.advanced-toggle {
+  display: inline-block;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.advanced-toggle:hover { color: var(--fg); }
 .event {
   padding: 12px 0;
   border-top: 1px solid var(--rule);

@@ -105,3 +105,46 @@ Ergebnis: Backend-Lint gruen, **264 passed, 2 skipped**, Frontend-Lint gruen, Vi
 ### Naechste Schritte
 
 - 3.3 Drawer-Polish: Fehler-Block separat (mit `error`-Feld + Stacktrace falls vorhanden), Artefakte als klickbare Pfade statt JSON-Pre-Block, Resume/Stop hinter `confirm()`-Dialog, Branch-Form einklappbar.
+
+## 3.3 — Drawer-Polish
+
+### Vorgehen
+
+1. Fehler-Block: bisher einzeiliger `<p class="error">`. Ersetzt durch `<details class="error-block" open>` mit `<summary>Fehler</summary>` und `<pre>`-Container fuer mehrzeilige Stacktraces. Visuell markiert mit `--status-error`-Border und -Text, kollabierbar via Browser-Default ohne Custom-State.
+2. Artefakte: bisher `JSON.stringify(...)`-Dump. Neuer Helper `flattenArtifacts(artifacts)` gruppiert die `{section: {label: path}}`-Struktur (z. B. `{simulation: {simulation_dir: ..., state_file: ...}}`) in `[{section, items: [{label, path}]}]`. Jede Zeile ist ein `<button>`, der den Pfad ueber `navigator.clipboard.writeText` in die Zwischenablage legt; ein 1.5-s-Toast (`copiedPath`) signalisiert den Erfolg. Clipboard-Failures (insecure context, denied permission) werden geschluckt — der Pfad bleibt sichtbar, der User kann manuell kopieren.
+3. Mutationen guarded:
+   - `handleResume()` / `handleStop()` werfen `window.confirm(...)`-Bestaetigung mit deutscher Frage und Run-ID. Bei Abbruch sofortiges `return`, kein Network-Call.
+   - `handleResume()` unterscheidet `action='resume'` vs. `action='restart'` im Bestaetigungstext, weil Restart einen neuen Run anlegt — das ist destruktiver als ein Resume eines pausierten Runs.
+4. Branch-Form: hinter Toggle "Mehr Aktionen anzeigen" verlagert (`showAdvanced`-Ref). Read-only-Schiene (Status, Drawer-Felder, Artefakte) bleibt zuerst sichtbar, mutierende Branch-Erstellung erst auf Klick — entspricht dem Plan-Vorgehen "zuerst read-only/oeffnen, dann mutierend".
+5. Form-Strings auf Deutsch umgestellt (Branch-Name, LLM-Modell-Override, Sprache, Max Agents, "Branch anlegen") — passt zur DACH-Default-Konvention der uebrigen Slice-2/3-UI.
+
+### Geaenderte/Neue Dateien (3.3)
+
+| Datei | Aenderung |
+|---|---|
+| `frontend/src/components/HistoryDatabase.vue` | Fehler-Block als `<details>`-Element mit `<pre>`; Artefakt-Liste mit `flattenArtifacts` + `copyPath` (Clipboard-Helper, 1.5-s-Feedback); `handleResume`/`handleStop` mit `window.confirm`; Branch-Form hinter `showAdvanced`-Toggle; deutschsprachige Form-Labels; neue Styles `.error-block`, `.artifact-group`, `.artifact-section`, `.artifact-row`, `.artifact-label`, `.artifact-path`, `.artifact-hint`, `.advanced-toggle` |
+
+### Bewusst nicht geaendert
+
+1. Polling: kein Auto-Refresh in 3.3 ergaenzt. Liste laedt weiterhin bei Mount + nach Mutationen. Wenn der Bedarf entsteht (lange Runs, viele User), wird das in einem separaten Sub-Slice behandelt.
+2. Delete/Duplicate-Aktionen: bewusst nicht ergaenzt — Semantik laut Plan ungeklaert. Branch-Erstellung deckt den Duplicate-Light-Use-Case bereits ab.
+3. Backend-API: keine Aenderungen. 3.3 ist reine Frontend-Politur auf der bestehenden Slice-3.1-Datenkonsole.
+4. `<pre>`-Default-Style fuer Artefakte: das alte JSON-Pre-Layout wurde komplett entfernt, weil die strukturierte Liste sowohl ergonomischer als auch fuer DOM-Tooling besser ist (jeder Pfad ist eine eigene Aktion).
+
+### Verifikation (3.3)
+
+```bash
+npm run check
+```
+
+Ergebnis: Backend-Lint gruen, **264 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen.
+
+## Slice-3-Abschluss
+
+Mit 3.1 → 3.2 → 3.3 ist das **Run Dashboard** komplett:
+
+- Backend liefert auf `/api/runs` und `/api/runs/<id>` einen `summary`-Block mit Modell, Dokument, Persona-Anzahl, Graph und Branch (Read-Path-Anreicherung, keine Persistenz).
+- Frontend hat eine dedizierte `/runs`-Route mit Vollbild-Dashboard und behaelt die Home-Section als Einstiegspunkt.
+- Drawer zeigt Fehler kollabierbar, Artefakte als klickbar-kopierbare Pfade und schiebt mutierende Aktionen hinter Bestaetigung bzw. Toggle.
+
+Naechster sinnvoller Schritt aus `docu/2026-04-29-v07-umsetzungsplan.md`: **Slice 4 Evidence & Confidence MVP** oder **Slice 5 Export Center**.
