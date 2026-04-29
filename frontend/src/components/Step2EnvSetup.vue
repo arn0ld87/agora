@@ -1251,7 +1251,7 @@ onUnmounted(() => {
 
 .modal {
   position: fixed; inset: 0;
-  background: rgba(13, 12, 12, 0.6);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
   padding: var(--s-5);

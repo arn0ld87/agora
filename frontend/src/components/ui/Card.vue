@@ -15,17 +15,17 @@ defineProps({
 <style scoped>
 .card {
   padding: var(--s-6);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
   border-radius: var(--r-1);
 }
 .card--dark {
-  background: var(--bg-dark);
-  color: var(--fg-on-dark);
+  background: var(--bg-inverse);
+  color: var(--fg-on-inverse);
 }
-.card--dark .card-label { color: var(--fg-on-dark-muted); }
+.card--dark .card-label { color: var(--fg-meta); }
 .card-label {
   font-family: var(--ff-mono);
   font-size: 11px;

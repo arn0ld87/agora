@@ -187,7 +187,7 @@ export function buildGraphRenderData(graphData, entityTypes = []) {
     nodes,
     edges,
     getColor(type) {
-      return colorMap[type] || '#999'
+      return colorMap[type] || 'var(--fg-muted)'
     },
   }
 }

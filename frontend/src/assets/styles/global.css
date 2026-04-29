@@ -383,7 +383,7 @@ button { font: inherit; cursor: pointer; }
   font-family: var(--ff-mono); font-size: var(--fs-11);
   letter-spacing: var(--ls-mono-tight); text-transform: uppercase;
   border-radius: var(--r-1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-popover);
 }
 .tooltip--dark { background: var(--mono-900); color: var(--mono-50); border: 1px solid var(--rule-strong); }
 
@@ -472,7 +472,7 @@ button { font: inherit; cursor: pointer; }
    ============================================================ */
 .log,
 .log-block {
-  background: #07060a;
+  background: var(--bg-sunken);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: 14px 16px;
@@ -707,7 +707,7 @@ button { font: inherit; cursor: pointer; }
 .stepper .step.is-active::after, .ws-stepper .ws-step.is-active::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
   height: 2px; background: var(--accent);
-  box-shadow: 0 0 12px rgba(255, 106, 0, 0.6);
+  box-shadow: var(--glow-accent);
 }
 .stepper .step.is-active .head, .ws-stepper .ws-step.is-active .head { color: var(--accent); }
 .stepper .step.is-future .head, .ws-stepper .ws-step.is-future .head,
@@ -730,7 +730,7 @@ button { font: inherit; cursor: pointer; }
 .stepper .step.active::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
   height: 2px; background: var(--accent);
-  box-shadow: 0 0 12px rgba(255, 106, 0, 0.6);
+  box-shadow: var(--glow-accent);
 }
 .stepper .step.active .idx { color: var(--accent); }
 .stepper .step.active .label { color: var(--fg); }

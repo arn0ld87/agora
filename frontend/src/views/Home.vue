@@ -692,10 +692,10 @@ const steps = computed(() => tm('home.steps'))
 .error-line {
   font-family: var(--ff-mono);
   font-size: var(--fs-12);
-  color: #b00020;
+  color: var(--status-error);
   background: var(--paper-1);
   padding: var(--s-3);
-  border-left: 2px solid #b00020;
+  border-left: 2px solid var(--status-error);
   margin: 0;
   white-space: pre-wrap;
 }
@@ -722,7 +722,7 @@ const steps = computed(() => tm('home.steps'))
   border-radius: var(--r-pill);
 }
 .status-pill.ok { color: var(--ink-0); border-color: var(--ink-2); }
-.status-pill.bad { color: #b00020; border-color: #b00020; }
+.status-pill.bad { color: var(--status-error); border-color: var(--status-error); }
 .status-refresh {
   background: transparent;
   border: 1px solid var(--rule);
@@ -738,7 +738,7 @@ const steps = computed(() => tm('home.steps'))
   font-family: var(--ff-mono);
   font-size: 11px;
   letter-spacing: var(--ls-mono);
-  color: #b00020;
+  color: var(--status-error);
   margin: 0;
 }
 

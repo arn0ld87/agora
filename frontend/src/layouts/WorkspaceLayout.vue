@@ -10,7 +10,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--paper-0);
+  background: var(--bg);
   overflow: hidden;
 }
 </style>

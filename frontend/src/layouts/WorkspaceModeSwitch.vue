@@ -33,7 +33,7 @@ defineEmits(['update:mode'])
   justify-self: center;
   gap: var(--s-2);
   padding: 4px;
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border-radius: var(--r-1);
 }
 
@@ -52,12 +52,12 @@ defineEmits(['update:mode'])
 }
 
 .switch-btn:hover {
-  color: var(--ink-0);
+  color: var(--fg);
 }
 
 .switch-btn.active {
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   border: 1px solid var(--rule);
 }
 

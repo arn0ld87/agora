@@ -957,7 +957,7 @@ onUnmounted(stopPolling)
 
 .agent-entry {
   padding: 6px 0;
-  border-bottom: 1px dashed rgba(255,255,255,0.08);
+  border-bottom: 1px dashed var(--rule-soft);
   font-family: var(--ff-mono);
   font-size: 11px;
   line-height: 1.5;
@@ -995,7 +995,7 @@ onUnmounted(stopPolling)
   white-space: pre-wrap;
   word-break: break-word;
   padding: 4px 0 0 12px;
-  border-left: 2px solid rgba(226,104,26,0.35);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
   font-family: var(--ff-serif);
   font-size: 12px;
   line-height: 1.6;

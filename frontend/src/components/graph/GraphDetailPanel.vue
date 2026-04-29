@@ -5,7 +5,7 @@
       <span
         v-if="item.type === 'node'"
         class="detail-type-badge"
-        :style="{ background: item.color, color: '#fff' }"
+        :style="{ background: item.color, color: 'var(--mono-50)' }"
       >
         {{ item.entityType }}
       </span>
@@ -172,12 +172,12 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   right: 20px;
   width: 320px;
   max-height: calc(100% - 100px);
-  background: #fff;
-  border: 1px solid #eaeaea;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  box-shadow: var(--shadow-popover);
   overflow: hidden;
-  font-family: 'Noto Sans SC', system-ui, sans-serif;
+  font-family: var(--ff-sans);
   font-size: 13px;
   z-index: 20;
   display: flex;
@@ -189,14 +189,14 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  background: #fafafa;
-  border-bottom: 1px solid #eee;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
   flex-shrink: 0;
 }
 
 .detail-title {
   font-weight: 600;
-  color: #333;
+  color: var(--fg);
   font-size: 14px;
 }
 
@@ -214,14 +214,14 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   border: none;
   font-size: 20px;
   cursor: pointer;
-  color: #999;
+  color: var(--fg-meta);
   line-height: 1;
   padding: 0;
   transition: color 0.2s;
 }
 
 .detail-close:hover {
-  color: #333;
+  color: var(--fg);
 }
 
 .detail-content {
@@ -238,39 +238,39 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 }
 
 .detail-label {
-  color: #888;
+  color: var(--fg-muted);
   font-size: 12px;
   font-weight: 500;
   min-width: 80px;
 }
 
 .detail-value {
-  color: #333;
+  color: var(--fg);
   flex: 1;
   word-break: break-word;
 }
 
 .detail-value.uuid-text {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--ff-mono);
   font-size: 11px;
-  color: #666;
+  color: var(--fg-body);
 }
 
 .detail-value.fact-text {
   line-height: 1.5;
-  color: #444;
+  color: var(--fg-body);
 }
 
 .detail-section {
   margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--rule);
 }
 
 .section-title {
   font-size: 12px;
   font-weight: 600;
-  color: #666;
+  color: var(--fg-body);
   margin-bottom: 10px;
 }
 
@@ -286,19 +286,19 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 }
 
 .property-key {
-  color: #888;
+  color: var(--fg-muted);
   font-weight: 500;
   min-width: 90px;
 }
 
 .property-value {
-  color: #333;
+  color: var(--fg);
   flex: 1;
 }
 
 .summary-text {
   line-height: 1.6;
-  color: #444;
+  color: var(--fg-body);
   font-size: 12px;
 }
 
@@ -311,11 +311,11 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 .label-tag {
   display: inline-block;
   padding: 4px 12px;
-  background: #f5f5f5;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-panel-2);
+  border: 1px solid var(--rule);
   border-radius: 16px;
   font-size: 11px;
-  color: #555;
+  color: var(--fg-body);
 }
 
 .episodes-list {
@@ -327,23 +327,23 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 .episode-tag {
   display: inline-block;
   padding: 6px 10px;
-  background: #f8f8f8;
-  border: 1px solid #e8e8e8;
+  background: var(--bg-panel);
+  border: 1px solid var(--rule);
   border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--ff-mono);
   font-size: 10px;
-  color: #666;
+  color: var(--fg-body);
   word-break: break-all;
 }
 
 .edge-relation-header {
-  background: #f8f8f8;
+  background: var(--bg-panel);
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 16px;
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: var(--fg);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -352,17 +352,17 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
-  border: 1px solid #c8e6c9;
+  background: var(--status-success-soft);
+  border: 1px solid var(--status-success);
 }
 
 .self-loop-count {
   margin-left: auto;
   font-size: 11px;
-  color: #666;
-  background: rgba(255, 255, 255, 0.8);
+  color: var(--fg-body);
+  background: var(--bg-panel-2);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--r-1);
 }
 
 .self-loop-list {
@@ -372,8 +372,8 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 }
 
 .self-loop-item {
-  background: #fafafa;
-  border: 1px solid #eaeaea;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
   border-radius: 8px;
 }
 
@@ -382,24 +382,24 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #f5f5f5;
+  background: var(--bg-panel-2);
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .self-loop-item-header:hover {
-  background: #eee;
+  background: var(--bg-panel-2);
 }
 
 .self-loop-item.expanded .self-loop-item-header {
-  background: #e8e8e8;
+  background: var(--rule-strong);
 }
 
 .self-loop-index {
   font-size: 10px;
   font-weight: 600;
-  color: #888;
-  background: #e0e0e0;
+  color: var(--fg-muted);
+  background: var(--rule-strong);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -407,7 +407,7 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
 .self-loop-name {
   font-size: 12px;
   font-weight: 500;
-  color: #333;
+  color: var(--fg);
   flex: 1;
 }
 
@@ -419,20 +419,20 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  color: #888;
-  background: #e0e0e0;
+  color: var(--fg-muted);
+  background: var(--rule-strong);
   border-radius: 4px;
   transition: all 0.2s;
 }
 
 .self-loop-item.expanded .self-loop-toggle {
-  background: #d0d0d0;
-  color: #666;
+  background: var(--mono-600);
+  color: var(--fg-body);
 }
 
 .self-loop-item-content {
   padding: 12px;
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--rule);
 }
 
 .self-loop-item-content .detail-row {

@@ -1,14 +1,14 @@
 const ENTITY_TYPE_COLORS = [
-  '#FF6B35',
-  '#004E89',
-  '#7B2D8E',
-  '#1A936F',
-  '#C5283D',
-  '#E9724C',
-  '#3498db',
-  '#9b59b6',
-  '#27ae60',
-  '#f39c12',
+  'var(--accent)',
+  'var(--plasma-600)',
+  'var(--plasma-400)',
+  'var(--status-success)',
+  'var(--status-error)',
+  'var(--status-warn)',
+  'var(--plasma-500)',
+  'var(--plasma-200)',
+  'var(--status-success)',
+  'var(--status-warn)',
 ]
 
 export function buildEntityTypes(graphData) {

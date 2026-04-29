@@ -11,15 +11,21 @@ defineEmits(['update:modelValue'])
 <template>
   <div class="field">
     <label>{{ label }}<span v-if="required" class="req">*</span></label>
-    <select
-      class="select"
-      :value="modelValue"
-      @change="$emit('update:modelValue', $event.target.value)"
-    >
-      <option v-for="opt in options" :key="(typeof opt === 'object' ? opt.value : opt)" :value="(typeof opt === 'object' ? opt.value : opt)">
-        {{ typeof opt === 'object' ? opt.label : opt }}
-      </option>
-    </select>
+    <span class="select-wrap">
+      <select
+        class="select"
+        :value="modelValue"
+        @change="$emit('update:modelValue', $event.target.value)"
+      >
+        <option
+          v-for="opt in options"
+          :key="(typeof opt === 'object' ? opt.value : opt)"
+          :value="(typeof opt === 'object' ? opt.value : opt)"
+        >
+          {{ typeof opt === 'object' ? opt.label : opt }}
+        </option>
+      </select>
+    </span>
   </div>
 </template>
 
@@ -33,13 +39,24 @@ label {
   color: var(--fg-muted);
 }
 .req { color: var(--accent); margin-left: 4px; }
+.select-wrap { position: relative; display: block; }
+.select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--fg-muted);
+  border-bottom: 1.5px solid var(--fg-muted);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+}
 .select {
   font-family: var(--ff-sans);
   font-size: var(--fs-18);
   padding: 12px 28px 12px 0;
-  background: transparent
-    url("data:image/svg+xml,%3Csvg width='12' height='8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%230d0c0c' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")
-    no-repeat right 4px center;
+  background: transparent;
   border: 0;
   border-bottom: 1px solid var(--rule-strong);
   color: var(--fg);

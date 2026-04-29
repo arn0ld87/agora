@@ -20,7 +20,7 @@
   gap: var(--s-7);
   padding: var(--s-4) var(--s-6);
   border-bottom: 1px solid var(--rule-strong);
-  background: var(--paper-0);
+  background: var(--bg);
   z-index: 10;
 }
 

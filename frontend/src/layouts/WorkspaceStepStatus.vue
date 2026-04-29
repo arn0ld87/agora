@@ -57,7 +57,7 @@ defineProps({
 .step-name {
   font-family: var(--ff-serif);
   font-size: var(--fs-20);
-  color: var(--ink-0);
+  color: var(--fg);
 }
 
 .status-tag {

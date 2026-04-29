@@ -41,7 +41,7 @@ defineProps({
   font-size: clamp(84px, 10vw, 140px);
   line-height: 0.88;
   letter-spacing: -0.04em;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .k {
   font-family: var(--ff-mono);
@@ -57,7 +57,7 @@ h2 {
   line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .sub {
   font-family: var(--ff-sans);

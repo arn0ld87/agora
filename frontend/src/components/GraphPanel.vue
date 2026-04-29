@@ -224,18 +224,18 @@ const renderGraph = () => {
   const link = linkGroup.selectAll('path')
     .data(edges)
     .enter().append('path')
-    .attr('stroke', '#C0C0C0')
+    .attr('stroke', 'var(--rule-strong)')
     .attr('stroke-width', 1.5)
     .attr('fill', 'none')
     .style('cursor', 'pointer')
     .on('click', (event, d) => {
       event.stopPropagation()
       // Reset previous selected edge style
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-      linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
-      linkLabels.attr('fill', '#666')
+      linkGroup.selectAll('path').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1.5)
+      linkLabelBg.attr('fill', 'var(--bg-inverse)')
+      linkLabels.attr('fill', 'var(--fg-meta)')
       // Highlight currently selected edge
-      d3.select(event.target).attr('stroke', '#3498db').attr('stroke-width', 3)
+      d3.select(event.target).attr('stroke', 'var(--plasma-400)').attr('stroke-width', 3)
 
       selectedItem.value = {
         type: 'edge',
@@ -247,7 +247,7 @@ const renderGraph = () => {
   const linkLabelBg = linkGroup.selectAll('rect')
     .data(edges)
     .enter().append('rect')
-    .attr('fill', 'rgba(255,255,255,0.95)')
+    .attr('fill', 'var(--bg-inverse)')
     .attr('rx', 3)
     .attr('ry', 3)
     .style('cursor', 'pointer')
@@ -255,12 +255,12 @@ const renderGraph = () => {
     .style('display', showEdgeLabels.value ? 'block' : 'none')
     .on('click', (event, d) => {
       event.stopPropagation()
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-      linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
-      linkLabels.attr('fill', '#666')
+      linkGroup.selectAll('path').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1.5)
+      linkLabelBg.attr('fill', 'var(--bg-inverse)')
+      linkLabels.attr('fill', 'var(--fg-meta)')
       // Highlight corresponding edge
-      link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
-      d3.select(event.target).attr('fill', 'rgba(52, 152, 219, 0.1)')
+      link.filter(l => l === d).attr('stroke', 'var(--plasma-400)').attr('stroke-width', 3)
+      d3.select(event.target).attr('fill', 'var(--plasma-soft)')
 
       selectedItem.value = {
         type: 'edge',
@@ -274,7 +274,7 @@ const renderGraph = () => {
     .enter().append('text')
     .text(d => d.name)
     .attr('font-size', '9px')
-    .attr('fill', '#666')
+    .attr('fill', 'var(--fg-meta)')
     .attr('text-anchor', 'middle')
     .attr('dominant-baseline', 'middle')
     .style('cursor', 'pointer')
@@ -283,12 +283,12 @@ const renderGraph = () => {
     .style('display', showEdgeLabels.value ? 'block' : 'none')
     .on('click', (event, d) => {
       event.stopPropagation()
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-      linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
-      linkLabels.attr('fill', '#666')
+      linkGroup.selectAll('path').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1.5)
+      linkLabelBg.attr('fill', 'var(--bg-inverse)')
+      linkLabels.attr('fill', 'var(--fg-meta)')
       // Highlight corresponding edge
-      link.filter(l => l === d).attr('stroke', '#3498db').attr('stroke-width', 3)
-      d3.select(event.target).attr('fill', '#3498db')
+      link.filter(l => l === d).attr('stroke', 'var(--plasma-400)').attr('stroke-width', 3)
+      d3.select(event.target).attr('fill', 'var(--plasma-400)')
 
       selectedItem.value = {
         type: 'edge',
@@ -309,7 +309,7 @@ const renderGraph = () => {
     .enter().append('circle')
     .attr('r', 10)
     .attr('fill', d => getColor(d.type))
-    .attr('stroke', '#fff')
+    .attr('stroke', 'var(--mono-50)')
     .attr('stroke-width', 2.5)
     .style('cursor', 'pointer')
     .call(d3.drag()
@@ -351,13 +351,13 @@ const renderGraph = () => {
     .on('click', (event, d) => {
       event.stopPropagation()
       // Reset all node styles
-      node.attr('stroke', '#fff').attr('stroke-width', 2.5)
-      linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
+      node.attr('stroke', 'var(--mono-50)').attr('stroke-width', 2.5)
+      linkGroup.selectAll('path').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1.5)
       // Highlight selected node
-      d3.select(event.target).attr('stroke', '#E91E63').attr('stroke-width', 4)
+      d3.select(event.target).attr('stroke', 'var(--accent)').attr('stroke-width', 4)
       // Highlight edges connected to this node
       link.filter(l => l.source.id === d.id || l.target.id === d.id)
-        .attr('stroke', '#E91E63')
+        .attr('stroke', 'var(--accent)')
         .attr('stroke-width', 2.5)
 
       selectedItem.value = {
@@ -369,12 +369,12 @@ const renderGraph = () => {
     })
     .on('mouseenter', (event, d) => {
       if (!selectedItem.value || selectedItem.value.data?.uuid !== d.rawData.uuid) {
-        d3.select(event.target).attr('stroke', '#333').attr('stroke-width', 3)
+        d3.select(event.target).attr('stroke', 'var(--fg-on-inverse)').attr('stroke-width', 3)
       }
     })
     .on('mouseleave', (event, d) => {
       if (!selectedItem.value || selectedItem.value.data?.uuid !== d.rawData.uuid) {
-        d3.select(event.target).attr('stroke', '#fff').attr('stroke-width', 2.5)
+        d3.select(event.target).attr('stroke', 'var(--mono-50)').attr('stroke-width', 2.5)
       }
     })
 
@@ -384,7 +384,7 @@ const renderGraph = () => {
     .enter().append('text')
     .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
     .attr('font-size', '11px')
-    .attr('fill', '#333')
+    .attr('fill', 'var(--fg-on-inverse)')
     .attr('font-weight', '500')
     .attr('dx', 14)
     .attr('dy', 4)
@@ -429,10 +429,10 @@ const renderGraph = () => {
   // Click on blank area to close detail panel
   svg.on('click', () => {
     selectedItem.value = null
-    node.attr('stroke', '#fff').attr('stroke-width', 2.5)
-    linkGroup.selectAll('path').attr('stroke', '#C0C0C0').attr('stroke-width', 1.5)
-    linkLabelBg.attr('fill', 'rgba(255,255,255,0.95)')
-    linkLabels.attr('fill', '#666')
+    node.attr('stroke', 'var(--mono-50)').attr('stroke-width', 2.5)
+    linkGroup.selectAll('path').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1.5)
+    linkLabelBg.attr('fill', 'var(--bg-inverse)')
+    linkLabels.attr('fill', 'var(--fg-meta)')
   })
 }
 
@@ -492,7 +492,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(to bottom, var(--paper-0), rgba(246,242,235,0));
+  background: linear-gradient(to bottom, var(--paper-0), transparent);
   pointer-events: none;
 }
 
@@ -618,7 +618,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #E0E0E0;
+  background-color: var(--rule-strong);
   border-radius: 22px;
   transition: 0.3s;
 }
@@ -630,13 +630,13 @@ onUnmounted(() => {
   width: 16px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
+  background-color: var(--mono-50);
   border-radius: 50%;
   transition: 0.3s;
 }
 
 input:checked + .slider {
-  background-color: #7B2D8E;
+  background-color: var(--plasma-400);
 }
 
 input:checked + .slider:before {
@@ -645,7 +645,7 @@ input:checked + .slider:before {
 
 .toggle-label {
   font-size: 12px;
-  color: #666;
+  color: var(--fg-meta);
 }
 
 /* Building hint — editorial pill on dark ink */
