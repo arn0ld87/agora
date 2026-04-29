@@ -332,14 +332,13 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **⚠️ Status: v0.6.1 alpha — hygiene release after v0.6.0; still experimental.** Agora is an active experimental
-> fork. Graph build, simulation, and report pipeline can fail in creative
-> ways, especially when Ollama is slow, JSON mode misbehaves, or models are
-> swapped mid-run. Not production-ready. The HTTP API has an optional
-> `AGORA_AUTH_TOKEN` guard and localhost-locked CORS defaults, but no real
-> multi-user AuthN/AuthZ — run on localhost or inside a trusted network only.
-> Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
-> `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+> **Status: v0.7.0-beta — Slices 0–5 done, Slice 6 in progress.** Agora is an active experimental
+> fork. Graph build, simulation, and report pipeline can fail when Ollama is slow,
+> JSON mode misbehaves, or models are switched mid-run. Not production-ready.
+> The HTTP API has an optional `AGORA_AUTH_TOKEN` guard and localhost-locked CORS
+> defaults, but no real multi-user AuthN/AuthZ — run on localhost or inside a
+> trusted network only. Currently exercised with **LLM `qwen3-coder-next:cloud`**
+> and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
 
 ### What is Agora?
 
@@ -347,11 +346,16 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.6.1
+### Engineering status in v0.7.0-beta
 
-- **Quality gates are in place** via `npm run check` (**207 backend tests passed**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**286 backend tests collected**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Design system consolidated (Slice 1)**: `tokens.css` as source of truth, UI components (`Btn`, `Badge`, `Field`, `Card`, `Select`) tokenized, hardcoded colors replaced with token references.
+- **Persona review (Slice 2)**: Generated personas can be inspected, edited, and approved before simulation start. Quality heuristics (duplicates, missing fields, role diversity) provide badges. `PERSONA_REVIEW_ENABLED=true` gates simulation start until all personas are approved.
+- **Run dashboard (Slice 3)**: Central `/runs` view with status, date, model, document, graph ID, persona count. Detail drawer for errors, artifacts, and copy buttons. Run persistence via `RunRegistry`.
+- **Evidence & confidence (Slice 4)**: Report claims carry `confidence` scores and structured `evidence` blocks (graph metrics, agent actions). UI shows confidence badges and evidence drawer.
+- **Export center (Slice 5)**: JSON and Markdown export for reports, CSV for polarization metrics, GraphML for graphs, SVG/PNG/PDF for graph view.
 - **Event bus transport (#9 + #17)** with a Redis-backed default (`docker-compose.yml` ships `redis:7-alpine`) and file-polling fallback. Live channels (`control` / `state`) ride Redis pub/sub with a retained snapshot. **Since issue #17** RPC channels (`rpc.command` / `rpc.response.*`) are hybrid: the backend publishes to Redis and the file IPC layer in parallel, then races both sources for the response (loser is cleaned up). The OASIS subprocess listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) lives next to the legacy file polling. Backout via `EVENT_BUS_BACKEND=file`. SSE bridge at `GET /api/simulation/<id>/stream` keeps the frontend off run-state polling.
-- **Temporal graph (#10)**: RELATION edges carry `valid_from_round` / `valid_to_round` / `reinforced_count`; `/api/graph/snapshot/<gid>/<round>` and `/api/graph/diff/<gid>` answer time-travel queries. The new **round slider** in `GraphPanel` scrubs through the timeline once the graph has seen at least one simulation round (client-side filter; no extra API call while scrubbing).
+- **Temporal graph (#10)**: RELATION edges carry `valid_from_round` / `valid_to_round` / `reinforced_count`; `/api/graph/snapshot/<gid>/<round>` and `/api/graph/diff/<gid>` answer time-travel queries. The **round slider** in `GraphPanel` scrubs through the timeline (client-side filter; no extra API call while scrubbing).
 - **Polarization metrics (#12)**: `GET /api/simulation/<id>/metrics` returns Louvain communities, echo-chamber index and bridge agents via `networkx` (see `docu/analytics.md`).
 - **Dynamic ontology mutation (#11, phase 1+2)** with three modes (`disabled` / `review_only` / `auto`), thread-safe manager, pluggable scorer, audit log. The NER → mutation wiring is live — `Neo4jStorage.add_text` forwards novel entity types automatically; service exceptions never block ingestion.
 - **Hand-rolled DI container (#14)** underpins all of the above — long-lived services live on `AgoraContainer`, no more `app.extensions` service-locator hunt.
@@ -366,9 +370,12 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 - **Flexible ontology generation**: entity types are no longer hard-capped at exactly 10; defaults are 8-16 types plus required `Person` and `Organization` fallbacks (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
 - **Model selection in the workflow** for upload/setup and report generation.
 - **Per-simulation frozen config**: prepared simulations keep their selected model and language.
-- **Persona control**: cap agent count, inspect generated personas, add or remove manual personas, and save reusable persona templates locally.
+- **Persona review & control**: cap agent count, inspect, edit and approve/reject generated personas before simulation start. Quality heuristics flag duplicates, missing fields, and low role diversity. Save reusable persona templates locally.
+- **Run dashboard**: central overview of all runs with status, model, document, and persona counts. Detail drawer for errors and artifacts.
 - **Simulation controls**: configure duration in days plus an optional round limit, start, stop, pause/resume after a round, plus raw subprocess console logs.
-- **ReportAgent** with graph tools, agent interviews, panorama search, model override, and optional Tavily web tools.
+- **ReportAgent** with evidence-backed claims, graph tools, agent interviews, panorama search, model override, and optional Tavily web tools.
+- **Export center**: JSON/Markdown for reports, CSV for polarization metrics, GraphML for graphs, SVG/PNG/PDF for graph view.
+- **Branch compare** (Slice 6, in progress): side-by-side run comparison with metric diffs and claim analysis.
 - **Experimental agent tool-use**: simulation agents can query the knowledge graph before acting when explicitly enabled.
 - **DACH defaults**: German UI, German agent language by default, and Europe/Berlin activity timing.
 - **Secret guardrails**: Neo4j passwords are not serialized into simulation config artifacts.
