@@ -7,7 +7,12 @@ get dropped during JSON serialization, which downstream causes
 
 from __future__ import annotations
 
-from app.services.oasis_profile_generator import OasisAgentProfile
+import json
+
+from app.services.oasis_profile_generator import (
+    OasisAgentProfile,
+    OasisProfileGenerator,
+)
 
 
 def _profile(**overrides):
@@ -46,3 +51,18 @@ def test_twitter_format_omits_entity_link_when_unset():
     out = _profile(source_entity_uuid=None, source_entity_type=None).to_twitter_format()
     assert "source_entity_uuid" not in out
     assert "source_entity_type" not in out
+
+
+def test_save_reddit_json_persists_entity_link(tmp_path):
+    gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
+    profiles = [_profile(), _profile(user_id=2, user_name="bob",
+                                     source_entity_uuid=None,
+                                     source_entity_type=None)]
+    out_path = tmp_path / "reddit_profiles.json"
+    gen._save_reddit_json(profiles, str(out_path))
+
+    data = json.loads(out_path.read_text(encoding="utf-8"))
+    assert data[0]["source_entity_uuid"] == "uuid-123"
+    assert data[0]["source_entity_type"] == "Person"
+    assert "source_entity_uuid" not in data[1]
+    assert "source_entity_type" not in data[1]

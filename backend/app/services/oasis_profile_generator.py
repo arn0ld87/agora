@@ -1304,6 +1304,10 @@ Important:
                 item["profession"] = profile.profession
             if profile.interested_topics:
                 item["interested_topics"] = profile.interested_topics
+            if profile.source_entity_uuid:
+                item["source_entity_uuid"] = profile.source_entity_uuid
+            if profile.source_entity_type:
+                item["source_entity_type"] = profile.source_entity_type
 
             data.append(item)
 
