@@ -35,6 +35,7 @@ from ..services.event_bus import (
     SimulationEventBus,
 )
 from ..utils.api_responses import json_error
+from ..utils.auth import allow_ticket_auth
 from ..utils.logger import get_logger
 from ..utils.validation import validate_simulation_id
 from . import simulation_bp
@@ -132,6 +133,7 @@ def _stream(simulation_id: str) -> Iterator[str]:
 
 
 @simulation_bp.route('/<simulation_id>/stream', methods=['GET'])
+@allow_ticket_auth(lambda simulation_id: f"sse:{simulation_id}")
 def simulation_stream(simulation_id: str):
     """SSE endpoint for live run-state + control updates."""
     if not validate_simulation_id(simulation_id):

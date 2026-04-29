@@ -19,6 +19,7 @@ from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.auth import allow_ticket_auth
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -379,6 +380,7 @@ EXPORT_SCHEMA_VERSION = 1
 
 
 @report_bp.route('/<report_id>/export', methods=['GET'])
+@allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
 @handle_api_errors(log_prefix="Failed to export report")
 def export_report(report_id: str):
     """Unified report export (Slice 5.1).
@@ -424,6 +426,7 @@ def export_report(report_id: str):
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])
+@allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
 @handle_api_errors(log_prefix="Failed to download report")
 def download_report(report_id: str):
     if not validate_report_id(report_id):

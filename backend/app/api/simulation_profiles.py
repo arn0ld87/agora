@@ -16,6 +16,7 @@ from ..services.persona_review_service import (
     PersonaReviewService,
 )
 from ..services.simulation_manager import SimulationManager
+from ..utils.auth import allow_ticket_auth
 from ..utils.validation import validate_simulation_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import get_artifact_store, logger
@@ -456,6 +457,7 @@ def get_simulation_config(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
+@allow_ticket_auth(lambda simulation_id: f"download:simulation_config:{simulation_id}")
 @handle_api_errors(log_prefix="Failed to download configuration")
 def download_simulation_config(simulation_id: str):
     """Download simulation configuration file."""
@@ -472,6 +474,7 @@ def download_simulation_config(simulation_id: str):
 
 
 @simulation_bp.route('/script/<script_name>/download', methods=['GET'])
+@allow_ticket_auth(lambda script_name: f"download:simulation_script:{script_name}")
 @handle_api_errors(log_prefix="Failed to download script")
 def download_simulation_script(script_name: str):
     """Download shared simulation script files from backend/scripts/."""

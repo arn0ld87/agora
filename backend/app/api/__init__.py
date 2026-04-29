@@ -10,6 +10,7 @@ report_bp = Blueprint('report', __name__)
 runs_bp = Blueprint('runs', __name__)
 status_bp = Blueprint('status', __name__)
 
+from .auth import auth_bp  # noqa: E402, F401 -- P0.2b: signed-ticket endpoint
 from . import graph  # noqa: E402, F401
 from . import simulation_common  # noqa: E402, F401
 from . import simulation_lifecycle  # noqa: E402, F401

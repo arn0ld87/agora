@@ -115,6 +115,7 @@ Wichtige nicht-offensichtliche Knöpfe:
 - `PERSONA_REVIEW_ENABLED=false` — Slice 2 Persona-Review: Lifecycle (`pending|approved|rejected`), Edit-Pfad, Approve/Reject- und Quality-Endpoints werden in `simulation_profiles.py` immer ausgeliefert. Wenn `true`, blockiert `POST /api/simulation/start` mit `409 persona_review_required`, solange nicht alle Personas `approved` sind (Slice 2.3 Gate, scharf seit v0.7).
 - `AGORA_AUTH_TOKEN` — API-Token-Schutz für `/api/*`. Außerhalb von `FLASK_DEBUG=true` ist der Token **Pflicht**, sonst weigert sich `Config.validate()` zu starten.
 - `AGORA_ALLOW_ANONYMOUS=true` — bewusstes Opt-out für offene Lab-/Klassenraum-Setups. Übersteuert die Auth-Pflicht in Non-Debug-Mode. Nicht in Prod setzen.
+- **Signed Tickets für URL-Auth (P0.2):** SSE und Downloads akzeptieren statt `?token=<bearer>` ein `?ticket=<signed>`-Param. Tickets werden via `POST /api/auth/ticket` (Header-Auth) gegen `SECRET_KEY` geholt, sind 60 s gültig, scope-bound (`sse:<sim_id>` / `download:report:<id>` / …) und single-use. `?token=` bleibt als Deprecation-Pfad mit Logger-Warning aktiv.
 - `AGORA_EXTRA_ORIGINS` / `AGORA_CORS_ALLOW_ALL=true` — CORS ist standardmäßig auf `localhost:5173` / `127.0.0.1:5173` gelockt.
 - `AGORA_LOG_FORMAT=text|json` — opt-in JSON-Logs.
 - `TAVILY_API_KEY` + `ENABLE_WEB_TOOLS=true` — optionaler Live-Web-Kontext für den ReportAgent.
