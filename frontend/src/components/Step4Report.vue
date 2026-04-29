@@ -4,7 +4,7 @@ import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
-import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
+import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence, exportReport } from '../api/report'
 import { createSimulationBranch, getAvailableModels } from '../api/simulation'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
@@ -464,6 +464,19 @@ function downloadEvidence() {
   )
 }
 
+async function downloadCombinedJson() {
+  if (!props.reportId) return
+  try {
+    const res = await exportReport(props.reportId, 'json')
+    const blob = res?.data instanceof Blob
+      ? res.data
+      : new Blob([JSON.stringify(res?.data ?? res, null, 2)], { type: 'application/json;charset=utf-8' })
+    triggerDownload(blob, `agora-report-${props.reportId}.json`)
+  } catch (e) {
+    addLog('JSON-Export fehlgeschlagen: ' + (e?.message || e))
+  }
+}
+
 async function createBranchFromReport() {
   const simulationId = resolvedSimulationId.value || props.simulationId
   if (!simulationId || !branchForm.value.branch_name.trim()) return
@@ -630,6 +643,7 @@ onUnmounted(stopPolling)
           <div class="log-meta">
             <Btn variant="ghost" @click="copyMarkdown">Markdown kopieren</Btn>
             <Btn variant="ghost" @click="downloadMarkdown">.md</Btn>
+            <Btn variant="ghost" @click="downloadCombinedJson">.json</Btn>
             <Btn variant="ghost" @click="downloadHtml">.html</Btn>
             <Btn variant="ghost" @click="printReport">Drucken / PDF</Btn>
             <Btn v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Btn>

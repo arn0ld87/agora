@@ -60,6 +60,19 @@ export const getReportEvidenceClaim = (reportId, sectionIndex, claimId) => {
 }
 
 /**
+ * Combined report export (Slice 5.1).
+ * @param {string} reportId
+ * @param {'md'|'json'} format
+ * @returns Blob response
+ */
+export const exportReport = (reportId, format = 'json') => {
+  return service.get(`/api/report/${reportId}/export`, {
+    params: { format },
+    responseType: 'blob',
+  })
+}
+
+/**
  * Chat with Report Agent
  * @param {Object} data - { simulation_id, message, chat_history? }
  */

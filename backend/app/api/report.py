@@ -3,10 +3,13 @@ Report API Routes
 Provides interfaces for simulation report generation, retrieval, and conversation
 """
 
+import json
 import os
 import threading
 import uuid
-from flask import request, send_file, current_app
+from datetime import datetime, timezone
+
+from flask import Response, request, send_file, current_app
 
 from . import report_bp
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
@@ -370,6 +373,54 @@ def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str)
     if not claim:
         return json_error(f"Claim not found: {claim_id}", status=404)
     return json_success(claim)
+
+
+EXPORT_SCHEMA_VERSION = 1
+
+
+@report_bp.route('/<report_id>/export', methods=['GET'])
+@handle_api_errors(log_prefix="Failed to export report")
+def export_report(report_id: str):
+    """Unified report export (Slice 5.1).
+
+    Query params:
+      * ``format`` — ``md`` (default) or ``json``.
+
+    ``md`` returns the rendered markdown as attachment.
+    ``json`` returns a combined envelope ``{schema_version, exported_at, report, evidence}``
+    so consumers can persist the full claim/evidence picture in one file.
+    """
+    if not validate_report_id(report_id):
+        return json_error("Invalid report_id format", status=400)
+
+    fmt = (request.args.get('format') or 'md').strip().lower()
+    if fmt not in ('md', 'json'):
+        return json_error("format must be 'md' or 'json'", status=400)
+
+    report = ReportManager.get_report(report_id)
+    if not report:
+        return json_error(f"Report does not exist: {report_id}", status=404)
+
+    if fmt == 'md':
+        download_name = f"agora-report-{report_id}.md"
+        md_path = ReportManager._get_report_markdown_path(report_id)
+        if os.path.exists(md_path):
+            return send_file(md_path, as_attachment=True, download_name=download_name)
+        body = report.markdown_content or ""
+        response = Response(body, mimetype='text/markdown; charset=utf-8')
+        response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
+        return response
+
+    payload = {
+        "schema_version": EXPORT_SCHEMA_VERSION,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "report": report.to_dict(),
+        "evidence": ReportManager.get_evidence_map(report_id),
+    }
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    response = Response(body, mimetype='application/json; charset=utf-8')
+    response.headers['Content-Disposition'] = f'attachment; filename="agora-report-{report_id}.json"'
+    return response
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])
