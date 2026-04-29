@@ -2,7 +2,7 @@
 Interview-related simulation API routes split from the main module.
 """
 
-from flask import jsonify, request
+from flask import request
 
 from . import simulation_bp
 from ..services.simulation_runner import SimulationRunner
@@ -42,7 +42,7 @@ def _echo_result(result: dict):
     outer ``success`` tracked the runner's internal success rather than the HTTP
     layer outcome.
     """
-    return jsonify({"success": result.get("success", False), "data": result})
+    return json_success(result) if result.get("success", False) else json_error(result.get("error", "Unknown error"))
 
 
 @simulation_bp.route('/interview', methods=['POST'])

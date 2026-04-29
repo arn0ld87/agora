@@ -4,7 +4,7 @@ Run-control and live-status routes split from the main simulation API module.
 
 import os
 
-from flask import jsonify, request
+from flask import request
 
 from . import simulation_bp
 from ..models.project import ProjectManager
@@ -445,4 +445,4 @@ def close_simulation_env():
         manager._save_simulation_state(state)
 
     # Preserve legacy envelope: outer ``success`` mirrors runner's inner success flag.
-    return jsonify({"success": result.get("success", False), "data": result})
+    return json_success(result) if result.get("success", False) else json_error(result.get("error", "Unknown error"))

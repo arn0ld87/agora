@@ -255,7 +255,8 @@ async function loadGraph(graphId) {
     const res = await getGraphData(graphId)
     if (res.success) graphData.value = res.data
   } catch (e) {
-    addLog(`Exception loading graph: ${e.message}`)
+    // Logging is handled by the global interceptor, but we can update local UI error state if needed
+    addLog(`Graph load failed: ${e.message}`)
   } finally {
     graphLoading.value = false
   }

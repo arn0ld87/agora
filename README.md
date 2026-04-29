@@ -176,8 +176,8 @@ docker compose down -v && docker compose up -d
 
 Danach:
 
-- Frontend: <http://localhost:5173>
-- Backend Health: <http://localhost:5001/health>
+- Frontend: <http://127.0.0.1:5173>
+- Backend Health: <http://127.0.0.1:5001/health>
 - Neo4j Browser: <http://localhost:7474>
 
 #### Option B: Lokal ohne Docker
@@ -387,8 +387,8 @@ docker compose up -d
 
 Open:
 
-- Frontend: <http://localhost:5173>
-- Backend health: <http://localhost:5001/health>
+- Frontend: <http://127.0.0.1:5173>
+- Backend health: <http://127.0.0.1:5001/health>
 - Neo4j Browser: <http://localhost:7474>
 
 Local development:

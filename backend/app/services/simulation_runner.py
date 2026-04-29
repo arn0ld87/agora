@@ -457,6 +457,8 @@ class SimulationRunner:
         total_rounds = int(total_hours * 60 / minutes_per_round)
         
         # If max_rounds specified, truncate
+        if max_rounds is not None:
+            max_rounds = int(max_rounds)
         if max_rounds is not None and max_rounds > 0:
             original_rounds = total_rounds
             total_rounds = min(total_rounds, max_rounds)
@@ -529,6 +531,8 @@ class SimulationRunner:
             ]
             
             # If max_rounds specified, add to command-line arguments
+            if max_rounds is not None:
+                max_rounds = int(max_rounds)
             if max_rounds is not None and max_rounds > 0:
                 cmd.extend(["--max-rounds", str(max_rounds)])
             

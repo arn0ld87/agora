@@ -64,7 +64,7 @@ async function pollGlobalStatus() {
       if (rs === 'completed') currentStatus.value = 'completed'
       else if (rs === 'failed') currentStatus.value = 'error'
     }
-  } catch { /* swallow */ }
+  } catch (err) { console.error('Caught an error', err) }
 }
 
 async function togglePause() {
@@ -116,13 +116,13 @@ async function handleGoBack() {
     if (envStatusRes.success && envStatusRes.data?.env_alive) {
       try {
         await closeSimulationEnv({ simulation_id: currentSimulationId.value, timeout: 10 })
-      } catch {
-        await stopSimulation({ simulation_id: currentSimulationId.value }).catch(() => {})
+      } catch (err) { console.error('Error during cleanup', err)
+        await stopSimulation({ simulation_id: currentSimulationId.value }).catch(err => console.error('Error stopping simulation', err))
       }
     } else if (isSimulating.value) {
       try {
         await stopSimulation({ simulation_id: currentSimulationId.value })
-      } catch {
+      } catch (err) { console.error('Error during cleanup', err)
         // Best-effort cleanup before navigating back.
       }
     }
@@ -143,7 +143,7 @@ async function loadSimulationData() {
         if (configRes.success && configRes.data?.time_config?.minutes_per_round) {
           minutesPerRound.value = configRes.data.time_config.minutes_per_round
         }
-      } catch { /* non-fatal */ }
+      } catch (err) { console.error('Error during cleanup', err) /* non-fatal */ }
       if (simRes.data.project_id) {
         const projRes = await getProject(simRes.data.project_id)
         if (projRes.success && projRes.data) {
