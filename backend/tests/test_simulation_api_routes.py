@@ -170,6 +170,38 @@ def test_persona_library_round_trip(monkeypatch, tmp_path):
     assert delete_response.get_json()["success"] is True
 
 
+def test_persona_quality_route_returns_summary_and_issues():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [
+        {"username": "alice", "bio": "x", "persona": "y", "profession": "ops",
+         "mbti": "INTJ", "source_entity_uuid": "u-1"},
+        {"username": "alice", "bio": "x", "persona": "y", "profession": "ops",
+         "mbti": "INTJ", "source_entity_uuid": "u-2"},
+    ])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.get(f"/api/simulation/{sim_id}/profiles/quality")
+
+    assert response.status_code == 200
+    payload = response.get_json()["data"]
+    assert payload["summary"]["total"] == 2
+    codes = {issue["code"] for entry in payload["personas"] for issue in entry["issues"]}
+    assert "duplicate_username" in codes
+    assert payload["review_enabled"] is False
+
+
+def test_persona_quality_route_validates_simulation_id():
+    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+    client = app.test_client()
+
+    response = client.get("/api/simulation/not-a-sim/profiles/quality")
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Invalid simulation_id format"
+
+
 def test_persona_review_endpoints_round_trip():
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()

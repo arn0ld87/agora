@@ -9,6 +9,7 @@ from flask import request, send_file
 from . import simulation_bp
 from ..config import Config
 from ..services.persona_library import PersonaLibrary
+from ..services.persona_quality_service import PersonaQualityService
 from ..services.persona_review_service import (
     InvalidReviewStatusError,
     PersonaNotFoundError,
@@ -300,6 +301,20 @@ def delete_simulation_profile(simulation_id: str, username: str):
         "count": len(profiles),
         "removed": username,
     })
+
+
+@simulation_bp.route('/<simulation_id>/profiles/quality', methods=['GET'])
+@handle_api_errors(log_prefix="Failed to compute persona quality")
+def get_simulation_profiles_quality(simulation_id: str):
+    """Quality heuristics over the reddit personas of a simulation."""
+    if not validate_simulation_id(simulation_id):
+        return json_error("Invalid simulation_id format", status=400)
+    # No existence check: an empty/unknown simulation surfaces ``no_personas``
+    # as a global warning, which is the more useful UX than a hard 404 while
+    # the Step 2 UI is still spinning up profiles.
+    report = PersonaQualityService(get_artifact_store()).evaluate(simulation_id)
+    report["review_enabled"] = Config.PERSONA_REVIEW_ENABLED
+    return json_success(report)
 
 
 def _handle_review_action(

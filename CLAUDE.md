@@ -138,6 +138,7 @@ api/        thin HTTP-Layer — graph.py, report.py, runs.py, status.py
 services/   graph_builder, simulation_manager, simulation_runner,
             report_agent, graph_tools, oasis_profile_generator,
             simulation_config_generator, simulation_ipc,
+            persona_review_service, persona_quality_service,
             run_registry, entity_reader, web_tools, …
 storage/    GraphStorage → Neo4jStorage, EmbeddingService,
             NERExtractor, SearchService, neo4j_schema

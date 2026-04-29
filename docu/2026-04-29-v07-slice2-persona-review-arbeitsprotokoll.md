@@ -92,6 +92,40 @@ git diff --check
 
 ### Naechste Schritte
 
-- 2.2 Quality-MVP: Service `persona_quality_service.py` mit Heuristiken (Dubletten, fehlende Kernfelder, Entity-Bezug, Rollen-/MBTI-Diversitaet) und `GET /<sim>/profiles/quality`.
+- 2.2 Quality-MVP — siehe Abschnitt unten.
 - 2.3 Start-Gate: in `simulation_run.py` / `simulation_prepare.py` `409` werfen, wenn `PERSONA_REVIEW_ENABLED=true` und nicht alle Personas `approved`.
 - 2.4 Frontend: Liste, Editor-Drawer, Quality-Badges in `Step2EnvSetup.vue`; API-Anbindung via `frontend/src/api/simulation.js` und ein `usePersonaReview.js`-Composable.
+
+## 2.2 — Quality-MVP
+
+### Vorgehen
+
+1. Heuristiken bewusst deterministisch und ohne LLM-/Neo4j-Zugriff gehalten, weil das Endpoint im Hot-Path der UI-Liste landen wird.
+2. Per-Persona-Detektoren:
+   - `duplicate_username` (error) — case-insensitives Mehrfachvorkommen.
+   - `duplicate_name` (warning) — case-insensitives Mehrfachvorkommen, leere Namen werden ignoriert.
+   - `missing_core_fields` (warning bei einem fehlenden Kernfeld, error wenn alle drei `bio|persona|profession` fehlen).
+   - `missing_entity_link` (info) — kein `source_entity_uuid` und nicht `is_manual=true`.
+3. Globale Detektoren:
+   - `no_personas` (warning) — leere Liste.
+   - `role_diversity` — warning bei nur 1 distinct profession; info wenn distinct/total < 0.34, sonst kein Signal.
+   - `mbti_diversity` — analog (warning nur wenn total > 1, sonst rauscht das Signal).
+4. Summary liefert zusaetzlich Status-Counts (`approved`/`pending`/`rejected`) und Diversity-Ratios.
+5. Route: `GET /<sim>/profiles/quality` ohne Existenz-Check fuer die Simulation, weil ein leerer Lauf das `no_personas`-Signal sowieso liefert. Antwort enthaelt `review_enabled` parallel zu `GET /profiles`, damit die UI ein einziges Truth-Source-Dokument zum Rendern hat.
+
+### Geaenderte/Neue Dateien (2.2)
+
+| Datei | Aenderung |
+|---|---|
+| `backend/app/services/persona_quality_service.py` | **Neu**: pure-Python Heuristik-Service, deterministisch, JSON-serialisierbar |
+| `backend/app/api/simulation_profiles.py` | neue Route `GET /<sim>/profiles/quality` (liefert Summary, Per-Persona-Issues, Global-Issues, `review_enabled`) |
+| `backend/tests/test_persona_quality_service.py` | **Neu**: 11 Service-Tests (Empty-Sim, Dubletten, Kernfelder, Entity-Link, Diversity-Severities, Default-Status-Normalisierung) |
+| `backend/tests/test_simulation_api_routes.py` | API-Smoke-Tests `quality_route_returns_summary_and_issues`, `quality_route_validates_simulation_id` |
+
+### Verifikation (2.2)
+
+```bash
+npm run check
+```
+
+Ergebnis: Backend-Lint gruen, **251 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen.
