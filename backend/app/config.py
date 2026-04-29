@@ -78,7 +78,8 @@ class Config:
     # Neo4j configuration
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
     NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
-    NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'agora')
+    # No insecure default password. Must be provided via environment (.env / secret manager).
+    NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', '')
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
