@@ -896,7 +896,7 @@ onUnmounted(() => {
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--paper-0);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -911,7 +911,7 @@ onUnmounted(() => {
 }
 
 .card {
-  background: var(--paper-0);
+  background: var(--bg);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: var(--s-5);
@@ -945,7 +945,7 @@ onUnmounted(() => {
   font-size: 12px;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
-  color: var(--ink-0);
+  color: var(--fg);
   cursor: pointer;
 }
 .agent-cap-slider {
@@ -966,7 +966,7 @@ onUnmounted(() => {
   font-family: var(--ff-mono);
   font-size: var(--fs-16);
   padding: 4px 0;
-  color: var(--ink-0);
+  color: var(--fg);
   outline: none;
   text-align: right;
 }
@@ -995,7 +995,7 @@ onUnmounted(() => {
 }
 .persona {
   border: 1px solid var(--rule);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   padding: var(--s-3);
   border-radius: var(--r-1);
   display: flex;
@@ -1005,7 +1005,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease;
 }
-.persona:hover { background: var(--paper-2); border-color: var(--ink-2); }
+.persona:hover { background: var(--bg-panel-2); border-color: var(--rule-strong); }
 
 .persona--card {
   position: relative;
@@ -1095,7 +1095,7 @@ onUnmounted(() => {
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: var(--s-3);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
 }
 .persona-template strong {
   font-family: var(--ff-mono);
@@ -1115,7 +1115,7 @@ onUnmounted(() => {
 .persona-template-actions button {
   border: 1px solid var(--rule);
   background: transparent;
-  color: var(--ink-0);
+  color: var(--fg);
   border-radius: var(--r-1);
   padding: 6px 8px;
   cursor: pointer;
@@ -1136,7 +1136,7 @@ onUnmounted(() => {
   font-family: var(--ff-serif);
   font-size: var(--fs-16);
   line-height: 1.3;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 
 .form-grid {
@@ -1158,10 +1158,10 @@ onUnmounted(() => {
 .form-row input,
 .form-row select,
 .form-row textarea {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
-  color: var(--ink-0);
+  color: var(--fg);
   font-family: var(--ff-sans);
   font-size: var(--fs-14);
   padding: 8px 10px;
@@ -1199,7 +1199,7 @@ onUnmounted(() => {
   font-size: var(--fs-16);
   padding: 4px 0;
   margin: 0 var(--s-2);
-  color: var(--ink-0);
+  color: var(--fg);
   outline: none;
 }
 .rounds-input:focus { border-bottom-color: var(--accent); }
@@ -1219,7 +1219,7 @@ onUnmounted(() => {
   padding: var(--s-2) 0;
   font-family: var(--ff-sans);
   font-size: var(--fs-16);
-  color: var(--ink-0);
+  color: var(--fg);
   outline: none;
 }
 .persona-search-input:focus { border-bottom-color: var(--accent); }
@@ -1257,8 +1257,8 @@ onUnmounted(() => {
   padding: var(--s-5);
 }
 .modal-card {
-  background: var(--paper-0);
-  border: 1px solid var(--ink-2);
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
   padding: var(--s-7);
   max-width: 880px;
   max-height: 85vh;
@@ -1290,7 +1290,7 @@ onUnmounted(() => {
   line-height: 1.05;
   letter-spacing: -0.02em;
   margin: 0;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .modal-bio {
   font-family: var(--ff-serif);
@@ -1298,7 +1298,7 @@ onUnmounted(() => {
   font-weight: 400;
   font-size: var(--fs-24);
   line-height: 1.35;
-  color: var(--ink-3);
+  color: var(--fg-body);
   margin: 0;
   border-left: 2px solid var(--accent);
   padding-left: var(--s-4);
@@ -1329,7 +1329,7 @@ onUnmounted(() => {
   margin: 0;
   font-family: var(--ff-sans);
   font-size: var(--fs-16);
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .modal-marginalia dd.mono-big {
   font-family: var(--ff-mono);
@@ -1356,7 +1356,7 @@ onUnmounted(() => {
   letter-spacing: 0.04em;
   border: 1px solid var(--rule-strong);
   background: transparent;
-  color: var(--ink-0);
+  color: var(--fg);
   border-radius: var(--r-pill);
 }
 .modal-persona {

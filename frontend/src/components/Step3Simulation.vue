@@ -402,7 +402,7 @@ onUnmounted(stopPolling)
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--paper-0);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -416,7 +416,7 @@ onUnmounted(stopPolling)
   gap: var(--s-5);
 }
 .card {
-  background: var(--paper-0);
+  background: var(--bg);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: var(--s-5);
@@ -451,7 +451,7 @@ onUnmounted(stopPolling)
   display: block;
   font-family: var(--ff-serif);
   font-size: var(--fs-32);
-  color: var(--ink-0);
+  color: var(--fg);
   line-height: 1;
 }
 .stat-label {

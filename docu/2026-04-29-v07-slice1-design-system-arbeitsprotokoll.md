@@ -151,3 +151,14 @@ Ergebnis: keine Fehler.
 57. Alias-Scan fuer beide Dateien erneut ausgefuehrt: keine Legacy-Aliase mehr.
 58. git diff --check ausgefuehrt: keine Fehler.
 59. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.
+
+## Fortsetzung 4 — Step2 und Step3
+
+60. Nutzerfreigabe fuer den naechsten Slice-1-Block erhalten.
+61. Arbeitsbaum und letzter Commit geprueft: HEAD bc16bfd, Arbeitsbaum sauber.
+62. Dateien gelesen: frontend/src/components/Step2EnvSetup.vue und frontend/src/components/Step3Simulation.vue.
+63. Alias-Scan fuer beide Dateien ausgefuehrt und die Legacy-Token-Stellen identifiziert.
+64. Legacy-Aliase in Step2EnvSetup.vue und Step3Simulation.vue ersetzt.
+65. Alias-Scan fuer beide Dateien erneut ausgefuehrt: keine Legacy-Aliase mehr.
+66. git diff --check ausgefuehrt: keine Fehler.
+67. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.
