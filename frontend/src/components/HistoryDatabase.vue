@@ -5,6 +5,10 @@ import { useI18n } from 'vue-i18n'
 import { listRuns, getRunEvents, resumeRun, stopRun } from '../api/runs'
 import { createSimulationBranch } from '../api/simulation.js'
 
+defineProps({
+  showOpenLink: { type: Boolean, default: false }
+})
+
 const { locale } = useI18n()
 const router = useRouter()
 
@@ -105,6 +109,27 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString(locale.value === 'de' ? 'de-DE' : 'en-GB')
 }
 
+function summaryFor(run) {
+  return run?.summary || {}
+}
+
+function metaLineFor(run) {
+  const summary = summaryFor(run)
+  const branch = run.branch_label || run.metadata?.branch_name || summary.branch_name || ''
+  const parts = []
+  if (summary.model) parts.push(summary.model)
+  if (typeof summary.persona_count === 'number') parts.push(`${summary.persona_count} Personas`)
+  if (summary.graph_name) parts.push(summary.graph_name)
+  if (branch && branch !== 'main') parts.push(branch)
+  if (!parts.length) parts.push(run.run_id)
+  return parts.join(' · ')
+}
+
+function primaryLabelFor(run) {
+  const summary = summaryFor(run)
+  return summary.document_name || run.message || run.entity_id
+}
+
 function routeForRun(run) {
   const linked = run.linked_ids || {}
   if (run.run_type === 'report_generate' && linked.report_id) {
@@ -195,6 +220,9 @@ onMounted(loadRuns)
       <div class="copy">
         <h2>History, resume, branching</h2>
         <p class="sub">All graph builds, simulation prep/runs, and report generation in one persisted registry.</p>
+        <p v-if="showOpenLink" class="sub">
+          <router-link :to="{ name: 'Runs' }" class="open-link">Run-Dashboard öffnen →</router-link>
+        </p>
       </div>
     </div>
 
@@ -251,8 +279,8 @@ onMounted(loadRuns)
             >
               <span class="type">{{ run.run_type }}</span>
               <span class="message">
-                {{ run.message || run.entity_id }}
-                <small>{{ run.run_id }} · {{ run.branch_label || 'main' }}</small>
+                {{ primaryLabelFor(run) }}
+                <small>{{ metaLineFor(run) }}</small>
               </span>
               <span class="status" :data-status="run.status">{{ run.status }}</span>
               <span class="progress">{{ run.progress ?? 0 }}%</span>
@@ -276,6 +304,12 @@ onMounted(loadRuns)
           <div><span>Progress</span><strong>{{ selectedRun.progress ?? 0 }}%</strong></div>
           <div><span>Entity</span><strong>{{ selectedRun.entity_id }}</strong></div>
           <div><span>Updated</span><strong>{{ formatDate(selectedRun.updated_at) }}</strong></div>
+          <div><span>Modell</span><strong>{{ summaryFor(selectedRun).model || '—' }}</strong></div>
+          <div><span>Personas</span><strong>{{ summaryFor(selectedRun).persona_count ?? '—' }}</strong></div>
+          <div><span>Dokument</span><strong>{{ summaryFor(selectedRun).document_name || '—' }}</strong></div>
+          <div><span>Graph</span><strong>{{ summaryFor(selectedRun).graph_name || summaryFor(selectedRun).graph_id || '—' }}</strong></div>
+          <div><span>Branch</span><strong>{{ selectedRun.branch_label || summaryFor(selectedRun).branch_name || 'main' }}</strong></div>
+          <div><span>Started</span><strong>{{ formatDate(selectedRun.started_at) }}</strong></div>
         </div>
 
         <p class="message-block">{{ selectedRun.message || 'No status message.' }}</p>
@@ -335,6 +369,15 @@ onMounted(loadRuns)
 <style scoped>
 .run-center { padding-top: var(--s-7); }
 .copy .sub { color: var(--fg-muted); margin-top: var(--s-2); }
+.open-link {
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+}
+.open-link:hover { text-decoration: underline; }
 .filters {
   display: grid;
   grid-template-columns: 1.6fr repeat(4, minmax(0, 1fr));

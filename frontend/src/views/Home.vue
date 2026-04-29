@@ -378,7 +378,7 @@ const steps = computed(() => tm('home.steps'))
 
       <!-- History section -->
       <section id="history" class="section">
-        <HistoryDatabase />
+        <HistoryDatabase :show-open-link="true" />
       </section>
 
     </div>

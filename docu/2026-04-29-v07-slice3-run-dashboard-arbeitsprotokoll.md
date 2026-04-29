@@ -59,3 +59,49 @@ Ergebnis: 8 passed in 2.60s.
 
 - 3.2 Frontend: `RunsView.vue` als Route `/runs`, Tabelle erweitert um Datum-, Modell-, Dokument-, Graph-, Persona-Spalten; TS-Type-Korrekturen (`started_at`, neue Filter-Params).
 - 3.3 Drawer-Polish: Fehler-Block, Artefakt-Links, guarded mutierende Aktionen.
+
+## 3.2 — Frontend Run-Dashboard-View
+
+### Vorgehen
+
+1. Inventur: `HistoryDatabase.vue` ist eine Komponente, eingebettet in `Home.vue` als Section "06 Run Center". Eine eigene Route `/runs` existiert bisher nicht, der Wunsch aus dem Plan ist aber ein zentrales Dashboard. Loesung: HistoryDatabase bleibt die einzige Stelle mit der Run-Logik, eine neue `RunsView.vue` haengt sie als Vollbild-View ein, Home behaelt seine Section und bekommt einen "Run-Dashboard oeffnen"-Link.
+2. Komponente bekommt eine Prop `showOpenLink` (Default `false`), damit Home den Link zeigt und die dedizierte View nicht.
+3. Tabellenzeilen rendern jetzt aus dem `summary`-Block (Slice 3.1): primaere Zeile zeigt `summary.document_name` (Fallback: `message`/`entity_id`), die Sub-Zeile bricht `model · persona_count Personas · graph_name · branch` zusammen — minimal-invasiv, keine zusaetzliche Spalte, kein Layout-Bruch im 5-Spalten-Grid.
+4. Detail-Drawer (`.meta-grid`) ergaenzt sechs Felder: Modell, Personas, Dokument, Graph (Name oder Fallback ID), Branch, Started — alle mit `'—'`-Fallback bei fehlenden Werten. So zeigt der Drawer auf einen Blick, was in 3.1 angereichert wurde.
+5. TS-Types (`frontend/src/types/run.ts`) auf den realen Backend-Manifest-Stand gebracht:
+   - `created_at` (gab es nie) entfernt, dafuer `started_at` (Backend `RunRegistry.create_run`).
+   - `error`, `artifacts`, `resume_capability`, `summary` ergaenzt.
+   - Neue Interfaces `RunResumeCapability`, `RunArtifacts`, `RunSummary`.
+   - `RunEvent` umstrukturiert auf das tatsaechliche Manifest-Format (`timestamp`, `type`, `status`, `progress`, `message`, `error`, `details`).
+   - `ListRunsParams` um `project` und `branch` erweitert (Backend kennt sie, Frontend nutzt sie in den Filter-Selects).
+6. Neue `RunsView.vue` als Route `/runs` mit dezentem Header (Brand-Link + Zurueck-Button), `<HistoryDatabase :show-open-link="false" />` und `AppFooter`. Bewusst KEIN WorkspaceLayout — Run-Dashboard ist keine Pipeline-Step-View und braucht weder ModeSwitch noch Step-Status.
+7. Router (`frontend/src/router/index.js`) bekommt Route `Runs` → `/runs`.
+
+### Geaenderte/Neue Dateien (3.2)
+
+| Datei | Aenderung |
+|---|---|
+| `frontend/src/types/run.ts` | TS-Types am Backend-Manifest ausgerichtet; neue Interfaces `RunSummary`, `RunArtifacts`, `RunResumeCapability`; `started_at` statt `created_at`; `ListRunsParams` um `project` + `branch` erweitert |
+| `frontend/src/components/HistoryDatabase.vue` | Prop `showOpenLink`, Helfer `summaryFor`/`metaLineFor`/`primaryLabelFor`, Sub-Zeile aus Summary, Detail-Drawer um sechs Summary-Felder erweitert, Header-Link auf `/runs` |
+| `frontend/src/views/RunsView.vue` | **Neu**: dezidierte `/runs`-Vollbild-View mit Brand-Link, eingebetteter `HistoryDatabase` und `AppFooter` |
+| `frontend/src/router/index.js` | Neue Route `Runs` → `/runs` |
+| `frontend/src/views/Home.vue` | `HistoryDatabase` mit `:show-open-link="true"` aufgerufen |
+
+### Bewusst nicht geaendert
+
+1. Tabellen-Layout: keine zusaetzlichen Spalten, sondern eine zwei-Zeilen-Variante in der vorhandenen `message`-Zelle — verhindert harte Breakpoints und Layout-Brueche im bestehenden 5-Spalten-Grid.
+2. Polling: noch keine Auto-Refresh-Logik. Liste laedt bei Mount, nach `Resume`/`Stop`/`Branch`. Polling kommt ggf. zusammen mit dem 3.3-Drawer-Polish, wenn die Mutationen mehr Live-Feedback brauchen.
+3. Mutationen (`Resume`, `Stop`, `Branch`-Form) bleiben unveraendert — Slice 3.3 schiebt sie hinter Confirm-Dialoge bzw. einklappbare "Mehr Aktionen"-Box.
+4. WorkspaceLayout-System: bewusst nicht uebernommen. Run-Dashboard ist keine Pipeline-Step-View; das Layout-System ist hier overkill und wuerde unnoetige Abhaengigkeiten ziehen.
+
+### Verifikation (3.2)
+
+```bash
+npm run check
+```
+
+Ergebnis: Backend-Lint gruen, **264 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen (726 Module, +2 fuer `RunsView.vue` + Run-Type-Update).
+
+### Naechste Schritte
+
+- 3.3 Drawer-Polish: Fehler-Block separat (mit `error`-Feld + Stacktrace falls vorhanden), Artefakte als klickbare Pfade statt JSON-Pre-Block, Resume/Stop hinter `confirm()`-Dialog, Branch-Form einklappbar.

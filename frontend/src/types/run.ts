@@ -2,9 +2,11 @@
  * Shared types for the run-registry API.
  *
  * Backend source of truth: backend/app/services/run_registry.py
- * (RunRegistry.create / .update_run / canonical_status). Keep field names
- * in sync with the manifest dict written there — anything we add must
- * also exist in the manifest, otherwise the type lies.
+ * (RunRegistry.create / .update_run / canonical_status) for the manifest, and
+ * backend/app/api/runs.py (`_build_run_summary`) for the read-path
+ * `summary` block. Keep field names in sync — anything we add here must
+ * exist either in the manifest or in the API enrichment, otherwise the
+ * type lies.
  */
 
 export type RunType =
@@ -26,6 +28,29 @@ export interface RunLinkedIds {
   simulation_id?: string
   report_id?: string
   graph_id?: string
+  task_id?: string
+}
+
+export interface RunResumeCapability {
+  available?: boolean
+  action?: string | null
+  label?: string | null
+}
+
+export interface RunArtifacts {
+  simulation?: Record<string, string>
+  report?: Record<string, string>
+  project_dir?: Record<string, string>
+  [key: string]: Record<string, string> | undefined
+}
+
+export interface RunSummary {
+  model: string | null
+  document_name: string | null
+  persona_count: number | null
+  graph_id: string | null
+  graph_name: string | null
+  branch_name: string | null
 }
 
 export interface RunRecord {
@@ -36,19 +61,27 @@ export interface RunRecord {
   status: RunStatus
   progress: number
   message: string
-  created_at: string
+  error: string | null
+  started_at: string
   updated_at: string
   completed_at: string | null
   branch_label: string | null
   metadata: Record<string, unknown>
   linked_ids: RunLinkedIds
+  artifacts: RunArtifacts
+  resume_capability: RunResumeCapability
+  /** Read-path enrichment from `/api/runs` and `/api/runs/<id>` (Slice 3.1). */
+  summary?: RunSummary
 }
 
 export interface RunEvent {
-  run_id: string
-  ts: string
+  timestamp: string
   type: string
-  payload: Record<string, unknown>
+  status?: RunStatus
+  progress?: number | null
+  message?: string
+  error?: string | null
+  details?: Record<string, unknown>
 }
 
 /** Standard `{success, data, error?}` response envelope from `frontend/src/api/index.js`. */
@@ -65,4 +98,6 @@ export interface ListRunsParams {
   entity_id?: string
   run_type?: RunType
   status?: RunStatus
+  project?: string
+  branch?: string
 }
