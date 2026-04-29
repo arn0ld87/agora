@@ -164,6 +164,30 @@ def test_role_diversity_info_severity_below_threshold():
     assert issue["severity"] == SEVERITY_INFO
 
 
+def test_group_entity_profession_excluded_from_core_fields():
+    store = _store([
+        {"username": "germany", "name": "Germany", "bio": "b", "persona": "p",
+         "source_entity_uuid": "u-1", "source_entity_type": "Country"},
+    ])
+    report = PersonaQualityService(store).evaluate(SIM_ID)
+    codes = _codes(_persona(report, "germany")["issues"])
+    assert "missing_core_fields" not in codes
+
+
+def test_group_entity_missing_all_remaining_core_fields_is_error():
+    store = _store([
+        {"username": "ngo_x", "name": "NGO X",
+         "source_entity_uuid": "u-1", "source_entity_type": "NGO"},
+    ])
+    report = PersonaQualityService(store).evaluate(SIM_ID)
+    issue = next(
+        i for i in _persona(report, "ngo_x")["issues"]
+        if i["code"] == "missing_core_fields"
+    )
+    assert issue["severity"] == SEVERITY_ERROR
+    assert set(issue["detail"]["missing"]) == {"bio", "persona"}
+
+
 def test_review_status_normalised_in_persona_entries():
     store = _store([{"username": "alice", "bio": "b", "persona": "p",
                      "profession": "ops", "source_entity_uuid": "u-1"}])

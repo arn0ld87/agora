@@ -34,6 +34,15 @@ SEVERITY_INFO = "info"
 
 CORE_FIELDS = ("bio", "persona", "profession")
 
+# Group/institutional entity types do not carry a profession by design
+# (countries, ministries, media outlets, …). For those, ``profession`` is
+# excluded from the missing-core-fields check.
+_GROUP_ENTITY_TYPES = frozenset({
+    "university", "governmentagency", "organization", "ngo",
+    "mediaoutlet", "company", "institution", "group", "community",
+    "country", "diplomaticbody", "platform",
+})
+
 # Diversity ratio below this triggers a warning. Above stays informational.
 _DIVERSITY_WARN_THRESHOLD = 0.34
 
@@ -114,10 +123,16 @@ class PersonaQualityService:
                 "detail": {"name": profile.get("name")},
             })
 
-        missing = [field for field in CORE_FIELDS if _is_blank(profile.get(field))]
+        is_group = _norm(profile.get("source_entity_type")) in _GROUP_ENTITY_TYPES
+        core_fields = (
+            tuple(f for f in CORE_FIELDS if f != "profession")
+            if is_group
+            else CORE_FIELDS
+        )
+        missing = [field for field in core_fields if _is_blank(profile.get(field))]
         if missing:
             severity = (
-                SEVERITY_ERROR if len(missing) == len(CORE_FIELDS)
+                SEVERITY_ERROR if len(missing) == len(core_fields)
                 else SEVERITY_WARNING
             )
             issues.append({
