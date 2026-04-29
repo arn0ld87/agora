@@ -146,6 +146,44 @@ def test_edit_can_explicitly_keep_review_status():
     assert updated["review_status"] == REVIEW_STATUS_APPROVED
 
 
+def test_start_gate_blocks_when_pending_or_rejected():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_APPROVED},
+        {"username": "bob"},  # defaults to pending
+        {"username": "carol", "review_status": REVIEW_STATUS_REJECTED},
+    ])
+    service = PersonaReviewService(store)
+
+    gate = service.evaluate_start_gate(SIM_ID)
+
+    assert gate["allowed"] is False
+    assert gate["pending"] == ["bob"]
+    assert gate["rejected"] == ["carol"]
+    assert gate["approved"] == ["alice"]
+    assert gate["total"] == 3
+
+
+def test_start_gate_allows_when_all_approved():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_APPROVED},
+        {"username": "bob", "is_manual": True},  # manual default = approved
+    ])
+    service = PersonaReviewService(store)
+
+    gate = service.evaluate_start_gate(SIM_ID)
+
+    assert gate["allowed"] is True
+    assert set(gate["approved"]) == {"alice", "bob"}
+
+
+def test_start_gate_blocks_empty_simulation():
+    service = PersonaReviewService(InMemoryArtifactStore())
+    gate = service.evaluate_start_gate(SIM_ID)
+    # An empty simulation cannot start either — there is nothing to approve.
+    assert gate["allowed"] is False
+    assert gate["total"] == 0
+
+
 def test_set_status_idempotent():
     store = _store_with_profiles([{"username": "alice"}])
     service = PersonaReviewService(store)

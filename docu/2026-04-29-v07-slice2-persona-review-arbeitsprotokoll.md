@@ -172,3 +172,48 @@ npm run check
 ```
 
 Ergebnis: Backend-Lint gruen, **251 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen (724 Module statt vorher 723; +ca. 8 KB JS gzip).
+
+## 2.3 — Simulation-Start-Gate
+
+### Vorgehen
+
+1. Gate bewusst als **letzter** Slice-2-Schritt scharfgeschaltet, weil 2.1/2.2/2.4 produktiv ohne Verhaltenswechsel laufen mussten.
+2. `PersonaReviewService.evaluate_start_gate(simulation_id)` ergaenzt: liefert `{allowed, total, approved[], pending[], rejected[]}` und liest selbst keinen Config-Flag, damit der Service unit-testbar bleibt.
+3. Helper `_evaluate_persona_review_gate` in `backend/app/api/simulation_run.py`: prueft den globalen Flag, ruft den Service und liefert bei `allowed=False` ein `409 Conflict`-Envelope mit `code="persona_review_required"` plus dem vollen `review`-Objekt unter `extra={"review": ...}`. Frontend kann darueber direkt rendern, welche Personas blockieren.
+4. Gate liegt in `start_simulation` direkt nach dem `404`-Check fuer die Simulation und vor `_check_simulation_prepared`/Status-Reset, damit Resume/Restart denselben Gate sehen wie ein Erststart.
+5. Empty-Simulation-Edge-Case: `evaluate_start_gate` setzt `allowed=False` wenn keine Personas vorhanden sind — ein Run ohne Agenten waere ohnehin sinnlos und der Gate liefert dafuer eine eindeutige 409-Begruendung.
+6. Tests: drei zusaetzliche Service-Tests (`blocks_when_pending_or_rejected`, `allows_when_all_approved`, `blocks_empty_simulation`) und zwei API-Smoke-Tests (`blocks_when_personas_pending`, `skips_gate_when_flag_disabled`). Letzterer monkeypatcht `Config.PERSONA_REVIEW_ENABLED=False` und prueft nur, dass kein 409 kommt — die Folgevalidierungen sind nicht Teil dieses Gates.
+
+### Geaenderte/Neue Dateien (2.3)
+
+| Datei | Aenderung |
+|---|---|
+| `backend/app/services/persona_review_service.py` | neue Methode `evaluate_start_gate(simulation_id)` |
+| `backend/app/api/simulation_run.py` | Helper `_evaluate_persona_review_gate`; Aufruf direkt nach dem Existenz-Check der Simulation; Imports um `Config` und `PersonaReviewService` ergaenzt |
+| `backend/tests/test_persona_review_service.py` | drei Gate-Tests (Pending/Rejected, alle approved inkl. manuelle, leere Simulation) |
+| `backend/tests/test_simulation_api_routes.py` | zwei Route-Tests (`/api/simulation/start` mit Flag on/off, monkeypatched `Config.PERSONA_REVIEW_ENABLED`) und ein `_seed_ready_simulation`-Helper |
+
+### Bewusst nicht geaendert
+
+1. Resume-/Restart-Pfad teilt das gleiche Gate, weil `start_simulation` der einzige Eingang in den OASIS-Subprozess ist.
+2. `prepare`/`generate-profiles` werden vom Gate NICHT erfasst — Reviewer:innen sollen Personas weiter editieren, approven oder rejecten koennen, auch wenn der Run blockiert ist.
+3. Der OASIS-Subprozess selbst kennt das Gate nicht; sobald der Start zugelassen ist, laufen alle Personas (auch die mit `review_status=approved`) wie bisher in den OASIS-Configgenerator.
+
+### Verifikation (2.3)
+
+```bash
+npm run check
+```
+
+Ergebnis: Backend-Lint gruen, **256 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen.
+
+## Slice-2-Abschluss
+
+Mit 2.1 → 2.2 → 2.4 → 2.3 ist die **Persona Review Foundation** komplett:
+
+- Backend-Lifecycle (`pending|approved|rejected`) inkl. Edit-Reset, opt-in via `PERSONA_REVIEW_ENABLED`.
+- Quality-MVP mit Per-Persona- und Global-Heuristiken.
+- Frontend: Status- und Hinweis-Badges auf jeder Karte, Review-Bar im Detail-Modal, Inline-Edit-Form, reaktiver Cache via `usePersonaReview`.
+- Start-Gate: blockiert OASIS-Run mit `409 persona_review_required`, solange das Flag aktiv ist und nicht alle Personas freigegeben sind.
+
+Naechster sinnvoller Schritt aus `docu/2026-04-29-v07-umsetzungsplan.md`: **Slice 3 Run Dashboard** oder **Slice 4 Evidence & Confidence MVP**.

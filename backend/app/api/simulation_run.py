@@ -7,7 +7,9 @@ import os
 from flask import jsonify, request
 
 from . import simulation_bp
+from ..config import Config
 from ..models.project import ProjectManager
+from ..services.persona_review_service import PersonaReviewService
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_responses import handle_api_errors, json_error, json_success
@@ -21,6 +23,28 @@ from .simulation_common import (
     simulation_run_artifacts as _simulation_run_artifacts,
 )
 from .simulation_prepare import _check_simulation_prepared
+
+
+def _evaluate_persona_review_gate(simulation_id: str):
+    """Return a 409 response when PERSONA_REVIEW_ENABLED blocks the start.
+
+    Returns None when the gate is open. The gate is silent while the global
+    ``PERSONA_REVIEW_ENABLED`` flag is off so existing behaviour is unchanged
+    until an operator explicitly opts in.
+    """
+    if not Config.PERSONA_REVIEW_ENABLED:
+        return None
+    review = PersonaReviewService(get_artifact_store()).evaluate_start_gate(
+        simulation_id
+    )
+    if review["allowed"]:
+        return None
+    return json_error(
+        "Persona review pending. Approve all personas before starting the simulation.",
+        status=409,
+        code="persona_review_required",
+        extra={"review": review},
+    )
 
 
 def _simulation_dir(simulation_id: str) -> str:
@@ -68,6 +92,10 @@ def start_simulation():
     state = manager.get_simulation(simulation_id)
     if not state:
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+
+    gate_response = _evaluate_persona_review_gate(simulation_id)
+    if gate_response is not None:
+        return gate_response
 
     force_restarted = False
     if state.status != SimulationStatus.READY:

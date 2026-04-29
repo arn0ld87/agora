@@ -148,6 +148,37 @@ class PersonaReviewService:
             simulation_id, username, REVIEW_STATUS_REJECTED, notes=notes
         )
 
+    def evaluate_start_gate(self, simulation_id: str) -> Dict[str, Any]:
+        """Decide whether the simulation may start under the current review state.
+
+        Returns a serialisable dict the API layer maps onto a 409 envelope.
+        ``allowed`` is True when no persona is still pending or rejected. The
+        caller is responsible for honouring :data:`Config.PERSONA_REVIEW_ENABLED`
+        — the service itself never reads global config so it stays cheap to
+        unit-test.
+        """
+        profiles = self.list_profiles(simulation_id)
+        pending = [
+            p["username"] for p in profiles
+            if p.get("review_status") == REVIEW_STATUS_PENDING
+        ]
+        rejected = [
+            p["username"] for p in profiles
+            if p.get("review_status") == REVIEW_STATUS_REJECTED
+        ]
+        approved = [
+            p["username"] for p in profiles
+            if p.get("review_status") == REVIEW_STATUS_APPROVED
+        ]
+        allowed = not pending and not rejected and bool(profiles)
+        return {
+            "allowed": allowed,
+            "total": len(profiles),
+            "approved": approved,
+            "pending": pending,
+            "rejected": rejected,
+        }
+
     def edit(
         self,
         simulation_id: str,

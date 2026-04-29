@@ -170,6 +170,64 @@ def test_persona_library_round_trip(monkeypatch, tmp_path):
     assert delete_response.get_json()["success"] is True
 
 
+def _seed_ready_simulation(store, sim_id, profiles):
+    store.write_json(sim_id, "state", {
+        "project_id": "proj_abcdef012345",
+        "graph_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+        "status": "ready",
+    })
+    store.write_json(sim_id, "reddit_profiles", profiles)
+
+
+def test_start_route_blocks_when_personas_pending(monkeypatch):
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "PERSONA_REVIEW_ENABLED", True)
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    _seed_ready_simulation(store, sim_id, [
+        {"username": "alice", "review_status": "approved"},
+        {"username": "bob"},  # default pending
+    ])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.post(
+        "/api/simulation/start",
+        json={"simulation_id": sim_id},
+    )
+
+    assert response.status_code == 409
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "persona_review_required"
+    assert payload["review"]["pending"] == ["bob"]
+
+
+def test_start_route_skips_gate_when_flag_disabled(monkeypatch):
+    from app.config import Config
+
+    monkeypatch.setattr(Config, "PERSONA_REVIEW_ENABLED", False)
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    _seed_ready_simulation(store, sim_id, [{"username": "bob"}])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.post(
+        "/api/simulation/start",
+        json={"simulation_id": sim_id},
+    )
+
+    # The gate is silent; later validation/runtime layers may still fail in
+    # this test harness, but the request must not be rejected with a
+    # persona-review 409.
+    assert response.status_code != 409
+    if response.is_json:
+        payload = response.get_json()
+        assert payload.get("code") != "persona_review_required"
+
+
 def test_persona_quality_route_returns_summary_and_issues():
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()

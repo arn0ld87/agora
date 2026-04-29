@@ -93,7 +93,7 @@ Wichtige nicht-offensichtliche Knöpfe:
 - `HYBRID_SEARCH_VECTOR_WEIGHT=0.7`, `HYBRID_SEARCH_KEYWORD_WEIGHT=0.3` — Mischung im `SearchService`. Müssen sich nicht zu 1.0 summieren (jede Seite wird vorher normalisiert).
 - `REPORT_LANGUAGE=German`, `AGENT_LANGUAGE=de`, `TIME_PROFILE=dach_default` — DACH-Defaults.
 - `ENABLE_AGENT_TOOLS=false` — experimentelles OASIS-Tool-Use, opt-in.
-- `PERSONA_REVIEW_ENABLED=false` — Slice 2 Persona-Review: Lifecycle (`pending|approved|rejected`), Edit-Pfad und Approve/Reject-Endpoints werden in `simulation_profiles.py` immer ausgeliefert; das Flag schaltet später (Slice 2.3) den Simulation-Start-Gate scharf.
+- `PERSONA_REVIEW_ENABLED=false` — Slice 2 Persona-Review: Lifecycle (`pending|approved|rejected`), Edit-Pfad, Approve/Reject- und Quality-Endpoints werden in `simulation_profiles.py` immer ausgeliefert. Wenn `true`, blockiert `POST /api/simulation/start` mit `409 persona_review_required`, solange nicht alle Personas `approved` sind (Slice 2.3 Gate, scharf seit v0.7).
 - `AGORA_AUTH_TOKEN` — optionaler API-Token-Schutz für `/api/*`.
 - `AGORA_EXTRA_ORIGINS` / `AGORA_CORS_ALLOW_ALL=true` — CORS ist standardmäßig auf `localhost:5173` / `127.0.0.1:5173` gelockt.
 - `AGORA_LOG_FORMAT=text|json` — opt-in JSON-Logs.
