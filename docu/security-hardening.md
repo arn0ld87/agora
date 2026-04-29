@@ -184,6 +184,7 @@ Security-Regressions früher erkennen und interne Exception-Details aus produkti
 | Datei | Änderung |
 |---|---|
 | `.github/workflows/ci.yml` | Neuer Job `security` mit `npm audit --audit-level=high`, `uv export` + `pip-audit` und Gitleaks Secret Scan. |
+| `.gitleaksignore` | Zwei historische False Positives fingerprint-genau gebaselined; neue Secret-Findings bleiben blockierend. |
 | `backend/uv.lock` | 39 Python-Advisories durch konservative Lockfile-Upgrades beseitigt. |
 | `backend/app/utils/api_responses.py` | 500/504 aus `@handle_api_errors` nutzen sichere Standardmeldungen plus `code`; konkrete Exception-Details nur bei `Config.DEBUG=true`. |
 | `backend/app/utils/api_responses.py` | Generische `/api/*`-Handler für `HTTPException` und ungefangene Exceptions ergänzen die zentrale JSON-Envelope. |
@@ -224,6 +225,13 @@ uvx pip-audit --strict \
 ```
 
 Gitleaks läuft in GitHub Actions mit vollständiger Historie (`fetch-depth: 0`). Bei echten Findings gilt: Secret sofort rotieren, Commit-Historie separat bereinigen und erst danach das Finding suppressen.
+
+Lokaler Smoke-Check:
+
+```bash
+docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+  detect --source=/repo --redact=100 --no-banner
+```
 
 ### Temporäre Baseline
 

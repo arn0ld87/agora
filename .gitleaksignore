@@ -1,0 +1,5 @@
+# False positive: historical auth helper attribute name, not a secret.
+c92385bbfca1e16b246c5827f7145a1f0f304c1e:backend/app/utils/auth.py:generic-api-key:90
+
+# False positive: intentionally malformed signed-ticket test fixture.
+92cfdf99188a76b51b18543eacd16d3eae48e92b:backend/tests/test_signed_ticket.py:generic-api-key:55

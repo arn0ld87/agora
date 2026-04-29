@@ -17,6 +17,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Hinzugefügt
 
 - CI-Security-Stage ergänzt: Frontend-`npm audit`, Python-`pip-audit` auf Basis des `uv.lock`-Exports und Gitleaks Secret Scan laufen als eigener GitHub-Actions-Job.
+- `.gitleaksignore` ergänzt zwei fingerprint-genaue False-Positive-Baselines aus der bestehenden Git-Historie.
 - `docu/p1-security-ci-error-envelope-protokoll.md` dokumentiert P1-Umsetzung, Checks und Rollback.
 - `docu/v1-development-log.md` dokumentiert die v1.0-Entwicklungsschritte.
 - Tests für den Auth-Guard decken Open-Mode, fehlende Tokens sowie Header-/Bearer-/Query-Token ab.
