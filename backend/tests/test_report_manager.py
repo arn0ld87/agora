@@ -1,6 +1,7 @@
 import json
 
-from app.services.report_agent import Report, ReportAgent, ReportManager, ReportOutline, ReportSection, ReportStatus
+from app.services.report_agent import ReportAgent, ReportManager
+from app.models.report import Report, ReportOutline, ReportSection, ReportStatus
 
 
 def test_get_progress_returns_none_for_invalid_json(tmp_path, monkeypatch):

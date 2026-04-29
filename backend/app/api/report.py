@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from flask import Response, request, send_file, current_app
 
 from . import report_bp
-from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent import ReportAgent, ReportManager
+from ..models.report import ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager

@@ -16,7 +16,8 @@ from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
-from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent import ReportAgent, ReportManager
+from ..models.report import ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
