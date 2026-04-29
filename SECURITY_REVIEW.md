@@ -1,18 +1,31 @@
 # Security Review
 
+> **Stand 2026-04-29:** Dieser Review ist ein **historischer Snapshot** (Erstfassung 2026-04-22).
+> Aktueller Status der Findings siehe
+> [`docu/2026-04-29-security-followup-plan.md`](./docu/2026-04-29-security-followup-plan.md)
+> und [`docu/security-hardening.md`](./docu/security-hardening.md).
+>
+> Kurzstatus:
+>
+> - **F1** (API offen ohne Token) — erledigt (`Config.validate()` fail-fast in Non-Debug, `AGORA_ALLOW_ANONYMOUS` als Opt-out).
+> - **F2** (Query-Token-Leakage) — Signed Tickets live; `?token=`-Fallback noch im Deprecation-Pfad.
+> - **F3** (Neo4j-Default-Passwort) — erledigt (Default entfernt, Compose erzwingt Env).
+> - **Low** (CI-Security-Scans) — erledigt (`npm audit`, `pip-audit`, gitleaks im CI).
+> - **Info** (Container-Hardening) — read-only rootfs + `cap_drop` offen.
+
 ## Summary
 
 Das Repository hat bereits gute Baseline-Härtung (nicht-root Container-User, zentrale Token-Guard-Option, restriktive CORS-Defaults, Upload-Größenlimit, Healthchecks). Die wichtigsten Risiken liegen aktuell in **unsicheren Dev-Defaults** (API offen ohne Token) und in der **Query-Token-Nutzung für SSE/Downloads** (Leakage-Risiko in URL-basierten Logs/Proxies). Zusätzlich fehlt ein automatisierter Security-Scan in der Standard-Quality-Gate-Pipeline.
 
 ## Risk Table
 
-| Severity | Area | Finding | Impact | Recommendation |
-|---|---|---|---|---|
-| High | AuthN/AuthZ | API ist standardmäßig offen, wenn `AGORA_AUTH_TOKEN` nicht gesetzt ist | Unautorisierter Zugriff auf `/api/*` in falsch konfigurierten Deployments | Secure-by-default erzwingen (Prod-Fail ohne Token) oder expliziten `ALLOW_UNAUTH_DEV=true` Schalter nutzen |
-| Medium | Secret Handling | Token-Fallback über Query-Parameter (`?token=`) | Token kann in Reverse-Proxy-Logs, Browser-History, Monitoring auftauchen | Kurzfristig dokumentieren + Log-Redaction; mittelfristig kurzlebige Signed URLs/one-time tokens |
-| Medium | Configuration | Historischer Neo4j-Passwort-Default (`agora`) in Code | Risiko schwacher/vergessener Defaults in lokalen/CI-Setups | Default entfernen, Passwort zwingend via Env setzen |
-| Low | Dependency Security | Kein durchgängiger Security-Scan im `npm run check` Flow | Schwachstellen werden ggf. spät entdeckt | CI-Job mit `npm audit` + `pip-audit` (oder OSV-Scan) ergänzen |
-| Info | Container Hardening | Container läuft als non-root User (agora) | Positiv: reduziert Impact bei Container-Kompromittierung | Beibehalten, zusätzlich read-only rootfs + capabilities drop prüfen |
+| Severity | Area                | Finding                                                                    | Impact                                                                      | Recommendation                                                                                               |
+| -------- | ------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| High     | AuthN/AuthZ         | API ist standardmäßig offen, wenn `AGORA_AUTH_TOKEN` nicht gesetzt ist | Unautorisierter Zugriff auf `/api/*` in falsch konfigurierten Deployments | Secure-by-default erzwingen (Prod-Fail ohne Token) oder expliziten `ALLOW_UNAUTH_DEV=true` Schalter nutzen |
+| Medium   | Secret Handling     | Token-Fallback über Query-Parameter (`?token=`)                         | Token kann in Reverse-Proxy-Logs, Browser-History, Monitoring auftauchen    | Kurzfristig dokumentieren + Log-Redaction; mittelfristig kurzlebige Signed URLs/one-time tokens              |
+| Medium   | Configuration       | Historischer Neo4j-Passwort-Default (`agora`) in Code                    | Risiko schwacher/vergessener Defaults in lokalen/CI-Setups                  | Default entfernen, Passwort zwingend via Env setzen                                                          |
+| Low      | Dependency Security | Kein durchgängiger Security-Scan im `npm run check` Flow                | Schwachstellen werden ggf. spät entdeckt                                   | CI-Job mit `npm audit` + `pip-audit` (oder OSV-Scan) ergänzen                                           |
+| Info     | Container Hardening | Container läuft als non-root User (agora)                                 | Positiv: reduziert Impact bei Container-Kompromittierung                    | Beibehalten, zusätzlich read-only rootfs + capabilities drop prüfen                                        |
 
 ## Findings
 
