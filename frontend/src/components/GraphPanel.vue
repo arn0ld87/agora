@@ -16,6 +16,30 @@
         >
           <span class="btn-text">.graphml</span>
         </button>
+        <button
+          v-if="graphData"
+          class="tool-btn"
+          @click="downloadSvg"
+          title="Export current view as SVG"
+        >
+          <span class="btn-text">.svg</span>
+        </button>
+        <button
+          v-if="graphData"
+          class="tool-btn"
+          @click="downloadPng"
+          title="Export current view as PNG"
+        >
+          <span class="btn-text">.png</span>
+        </button>
+        <button
+          v-if="graphData"
+          class="tool-btn"
+          @click="printGraphPdf"
+          title="Print / save current view as PDF"
+        >
+          <span class="btn-text">.pdf</span>
+        </button>
         <button class="tool-btn" @click="$emit('toggle-maximize')" title="Maximize/Restore">
           <span class="icon-maximize">⛶</span>
         </button>
@@ -176,6 +200,17 @@ const closeDetailPanel = () => {
   expandedSelfLoops.value = new Set() // Reset expand state
 }
 
+function _triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 500)
+}
+
 async function downloadGraphml() {
   const gid = props.graphData?.graph_id
   if (!gid) return
@@ -184,17 +219,141 @@ async function downloadGraphml() {
     const blob = res?.data instanceof Blob
       ? res.data
       : new Blob([res?.data ?? ''], { type: 'application/xml' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `agora-graph-${gid}.graphml`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 500)
+    _triggerBlobDownload(blob, `agora-graph-${gid}.graphml`)
   } catch (e) {
     console.error('GraphML export failed', e)
   }
+}
+
+// Slice 5.4 — collect every --token from :root so the cloned, off-document
+// SVG can resolve var(--rule-strong) etc. without our scoped Vue classes.
+function _collectRootCssVariables() {
+  const root = document.documentElement
+  const styles = getComputedStyle(root)
+  const decls = []
+  for (let i = 0; i < styles.length; i++) {
+    const name = styles.item(i)
+    if (name.startsWith('--')) {
+      decls.push(`${name}: ${styles.getPropertyValue(name).trim()};`)
+    }
+  }
+  return `:root {\n${decls.join('\n')}\n}`
+}
+
+function _buildStandaloneSvg() {
+  const live = graphSvg.value
+  if (!live) return null
+  const clone = live.cloneNode(true)
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
+
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style')
+  styleEl.textContent = `${_collectRootCssVariables()}\nsvg { background: var(--bg-canvas, #fff); }\ntext { font-family: var(--font-sans, sans-serif); }`
+  clone.insertBefore(styleEl, clone.firstChild)
+
+  const serializer = new XMLSerializer()
+  const body = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone)
+  return {
+    body,
+    width: parseInt(live.getAttribute('width') || '0', 10) || live.clientWidth,
+    height: parseInt(live.getAttribute('height') || '0', 10) || live.clientHeight,
+  }
+}
+
+function downloadSvg() {
+  const out = _buildStandaloneSvg()
+  if (!out) return
+  const gid = props.graphData?.graph_id || 'graph'
+  _triggerBlobDownload(
+    new Blob([out.body], { type: 'image/svg+xml;charset=utf-8' }),
+    `agora-graph-${gid}.svg`,
+  )
+}
+
+async function downloadPng() {
+  const out = _buildStandaloneSvg()
+  if (!out) return
+  const gid = props.graphData?.graph_id || 'graph'
+  const { width, height } = out
+  if (!width || !height) {
+    console.warn('PNG export: SVG has zero dimensions')
+    return
+  }
+
+  const blob = await new Promise((resolve, reject) => {
+    const img = new Image()
+    const svgBlob = new Blob([out.body], { type: 'image/svg+xml;charset=utf-8' })
+    const svgUrl = URL.createObjectURL(svgBlob)
+    img.onload = () => {
+      try {
+        const scale = window.devicePixelRatio > 1 ? 2 : 1
+        const canvas = document.createElement('canvas')
+        canvas.width = width * scale
+        canvas.height = height * scale
+        const ctx = canvas.getContext('2d')
+        ctx.scale(scale, scale)
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((b) => {
+          URL.revokeObjectURL(svgUrl)
+          if (b) resolve(b)
+          else reject(new Error('canvas.toBlob returned null'))
+        }, 'image/png')
+      } catch (err) {
+        URL.revokeObjectURL(svgUrl)
+        reject(err)
+      }
+    }
+    img.onerror = (err) => {
+      URL.revokeObjectURL(svgUrl)
+      reject(err)
+    }
+    img.src = svgUrl
+  }).catch((e) => {
+    console.error('PNG export failed', e)
+    return null
+  })
+
+  if (blob) {
+    _triggerBlobDownload(blob, `agora-graph-${gid}.png`)
+  }
+}
+
+// Slice 5.5 — PDF for the graph piggybacks on the browser print dialog.
+// No jsPDF / weasyprint dependency: open a fresh window pointing at a
+// Blob URL with the standalone SVG, trigger print, let the user pick
+// "Save as PDF".
+function printGraphPdf() {
+  const out = _buildStandaloneSvg()
+  if (!out) return
+  const gid = props.graphData?.graph_id || 'graph'
+  const html = `<!doctype html>
+<html lang="de"><head><meta charset="utf-8" />
+<title>Agora-Graph · ${gid}</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  svg { max-width: 100%; max-height: 100vh; }
+  @media print { body { min-height: auto; } }
+</style>
+</head><body>
+${out.body}
+</body></html>`
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const w = window.open(url, '_blank')
+  if (!w) {
+    URL.revokeObjectURL(url)
+    console.warn('Popup blocked — cannot open print window for graph PDF')
+    return
+  }
+  const cleanup = () => {
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+  }
+  w.addEventListener('load', () => {
+    setTimeout(() => {
+      try { w.print() } finally { cleanup() }
+    }, 200)
+  })
 }
 
 let currentSimulation = null
