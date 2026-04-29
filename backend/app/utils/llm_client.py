@@ -11,7 +11,55 @@ from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
 from ..config import Config
+from .logger import get_logger
 from .retry import llm_call_with_retry
+
+logger = get_logger("agora.llm_client")
+
+
+def _try_repair_truncated_json(payload: str) -> Optional[str]:
+    """Best-effort recovery for an LLM JSON answer cut off at the output cap.
+
+    Closes any string still open, then balances brackets/braces by counting
+    unescaped occurrences. Returns ``None`` when nothing reasonable can be
+    rebuilt. The result is fed back through ``json.loads`` by the caller, so
+    a wrong guess just falls through to the original error.
+    """
+    if not payload or payload[0] not in "[{":
+        return None
+    in_string = False
+    escape = False
+    stack: List[str] = []
+    last_struct_pos = -1
+    for idx, ch in enumerate(payload):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+            last_struct_pos = idx
+        elif ch in "}]":
+            if not stack:
+                return None
+            stack.pop()
+            last_struct_pos = idx
+    if not stack and not in_string:
+        return None  # already balanced — repair would not help
+    truncated = payload[: last_struct_pos + 1] if last_struct_pos >= 0 else payload
+    if in_string:
+        truncated += '"'
+    # Drop dangling ``,`` so the closer doesn't produce another parse error.
+    truncated = truncated.rstrip().rstrip(",")
+    truncated += "".join(reversed(stack))
+    return truncated
 
 
 class LLMClient:
@@ -91,14 +139,61 @@ class LLMClient:
             extra_body["think"] = self._think
             kwargs["extra_body"] = extra_body
 
-        response = llm_call_with_retry(
-            self.client.chat.completions.create,
-            max_retries=self._max_retries,
-            initial_delay=self._retry_initial_delay,
-            max_delay=self._retry_max_delay,
-            **kwargs,
+        # Force streaming for Ollama: the OpenAI-compatible endpoint in Ollama
+        # 0.21.0 stalls on non-streaming completions for cloud models (e.g.
+        # qwen3-coder-next:cloud, deepseek-v4-flash:cloud) — the call never
+        # returns. Streaming bypasses the bug; we reassemble chunks below.
+        # Configurable via LLM_FORCE_STREAM=false to opt out.
+        force_stream = (
+            self._is_ollama()
+            and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
-        content = response.choices[0].message.content or ""
+
+        import time as _time
+        _t0 = _time.monotonic()
+        if force_stream:
+            kwargs["stream"] = True
+            stream = llm_call_with_retry(
+                self.client.chat.completions.create,
+                max_retries=self._max_retries,
+                initial_delay=self._retry_initial_delay,
+                max_delay=self._retry_max_delay,
+                **kwargs,
+            )
+            chunks: List[str] = []
+            finish_reason = None
+            completion_tokens = None
+            for event in stream:
+                if not event.choices:
+                    continue
+                delta = event.choices[0].delta
+                piece = getattr(delta, "content", None)
+                if piece:
+                    chunks.append(piece)
+                if event.choices[0].finish_reason:
+                    finish_reason = event.choices[0].finish_reason
+                usage = getattr(event, "usage", None)
+                if usage and getattr(usage, "completion_tokens", None) is not None:
+                    completion_tokens = usage.completion_tokens
+            content = "".join(chunks)
+        else:
+            response = llm_call_with_retry(
+                self.client.chat.completions.create,
+                max_retries=self._max_retries,
+                initial_delay=self._retry_initial_delay,
+                max_delay=self._retry_max_delay,
+                **kwargs,
+            )
+            choice = response.choices[0]
+            finish_reason = getattr(choice, "finish_reason", None)
+            usage = getattr(response, "usage", None)
+            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+            content = choice.message.content or ""
+        elapsed = _time.monotonic() - _t0
+        logger.info(
+            "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
+            self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
+        )
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
@@ -188,4 +283,24 @@ class LLMClient:
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format from LLM: {cleaned_response}")
+            repaired = _try_repair_truncated_json(cleaned_response)
+            if repaired is not None:
+                logger.warning(
+                    "LLM JSON looked truncated; recovered with best-effort repair "
+                    "(%d → %d chars). Consider raising the max_tokens budget for "
+                    "this caller.",
+                    len(cleaned_response), len(repaired),
+                )
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    pass
+            preview = cleaned_response[:400]
+            tail = cleaned_response[-200:] if len(cleaned_response) > 600 else ""
+            raise ValueError(
+                "Invalid JSON format from LLM "
+                f"(len={len(cleaned_response)}; likely truncated — "
+                "try raising max_tokens). "
+                f"Head: {preview}{'…' if tail else ''}"
+                + (f" Tail: …{tail}" if tail else "")
+            )

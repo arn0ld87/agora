@@ -3,6 +3,7 @@ Ontology generation service
 Interface 1: Analyze text content and generate entity and relationship type definitions suitable for social simulation
 """
 
+import os
 from typing import Dict, Any, List, Optional
 from ..config import Config
 from ..utils.llm_client import LLMClient
@@ -193,11 +194,17 @@ class OntologyGenerator:
             {"role": "user", "content": user_message}
         ]
 
-        # Call LLM
+        # Call LLM. 8192 tokens fit a 8–12 entity-type schema with attributes
+        # and examples (1.5–2 k tokens per entity), and stay well below the
+        # ~5 min round-trip budget that Ollama Cloud imposes on a single chat
+        # completion. With higher budgets the Cloud edge stalls and the call
+        # never returns. The chat_json layer best-effort-repairs trailing
+        # truncation, so under-shooting is the safer default.
+        max_tokens = int(os.environ.get('ONTOLOGY_MAX_TOKENS', '8192'))
         result = self.llm_client.chat_json(
             messages=messages,
             temperature=0.3,
-            max_tokens=4096
+            max_tokens=max_tokens,
         )
 
         # Validate and post-process

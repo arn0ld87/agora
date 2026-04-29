@@ -108,6 +108,7 @@ Wichtige nicht-offensichtliche Knöpfe:
 - `OLLAMA_THINKING=false` — strippt Reasoning-Blöcke bei Qwen3/GPT-OSS/DeepSeek-R1.
 - `LLM_DISABLE_JSON_MODE=true` — deaktiviert `response_format=json_object`; Markdown-Fences werden in `chat_json()` gestrippt.
 - `GRAPH_CHUNK_SIZE=1500`, `GRAPH_CHUNK_OVERLAP=150`, `GRAPH_PARALLEL_CHUNKS=4` — Graph-Build-Tuning.
+- `ONTOLOGY_MAX_TOKENS=12288` — Output-Budget für `/api/graph/ontology/generate`. Cloud-Reasoning-Modelle (`qwen3-coder-next:cloud`, `deepseek-v4:cloud`) emittieren 5–10 k Tokens für die Entity-/Edge-Definitionen; mit 4096 wurde die JSON-Antwort mid-string abgeschnitten und im UI als „Invalid JSON format from LLM" sichtbar.
 - `HYBRID_SEARCH_VECTOR_WEIGHT=0.7`, `HYBRID_SEARCH_KEYWORD_WEIGHT=0.3` — Mischung im `SearchService`. Müssen sich nicht zu 1.0 summieren (jede Seite wird vorher normalisiert).
 - `REPORT_LANGUAGE=German`, `AGENT_LANGUAGE=de`, `TIME_PROFILE=dach_default` — DACH-Defaults.
 - `ENABLE_AGENT_TOOLS=false` — experimentelles OASIS-Tool-Use, opt-in.
