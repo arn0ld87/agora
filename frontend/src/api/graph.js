@@ -95,3 +95,18 @@ export function getGraphDiff(graphId, startRound, endRound) {
     params: { start_round: startRound, end_round: endRound }
   })
 }
+
+/**
+ * Slice 5.3 — GraphML export of the full graph.
+ * Returns a Blob via axios; consumers handle attachment download.
+ * @param {String} graphId
+ * @returns {Promise}
+ */
+export function exportGraphMl(graphId) {
+  return service({
+    url: `/api/graph/${graphId}/export`,
+    method: 'get',
+    params: { format: 'graphml' },
+    responseType: 'blob'
+  })
+}

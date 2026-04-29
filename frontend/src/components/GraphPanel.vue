@@ -8,6 +8,14 @@
           <span class="icon-refresh" :class="{ 'spinning': loading }">↻</span>
           <span class="btn-text">{{ $t('common.refresh') }}</span>
         </button>
+        <button
+          v-if="graphData?.graph_id"
+          class="tool-btn"
+          @click="downloadGraphml"
+          title="Export as GraphML"
+        >
+          <span class="btn-text">.graphml</span>
+        </button>
         <button class="tool-btn" @click="$emit('toggle-maximize')" title="Maximize/Restore">
           <span class="icon-maximize">⛶</span>
         </button>
@@ -104,6 +112,7 @@ import {
 } from './graph/graphPanelData'
 import { getLinkMidpoint, getLinkPath } from './graph/graphPanelGeometry'
 import { buildEntityTypes } from './graph/graphPanelUtils'
+import { exportGraphMl } from '../api/graph'
 
 const props = defineProps({
   graphData: Object,
@@ -165,6 +174,27 @@ const entityTypes = computed(() => buildEntityTypes(props.graphData))
 const closeDetailPanel = () => {
   selectedItem.value = null
   expandedSelfLoops.value = new Set() // Reset expand state
+}
+
+async function downloadGraphml() {
+  const gid = props.graphData?.graph_id
+  if (!gid) return
+  try {
+    const res = await exportGraphMl(gid)
+    const blob = res?.data instanceof Blob
+      ? res.data
+      : new Blob([res?.data ?? ''], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `agora-graph-${gid}.graphml`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 500)
+  } catch (e) {
+    console.error('GraphML export failed', e)
+  }
 }
 
 let currentSimulation = null

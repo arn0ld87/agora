@@ -74,3 +74,41 @@ npm run check
 ```
 
 `npm run check` grün: 281 Backend-Tests (274 vorher + 7 neue), Frontend-Lint, Vite-Build.
+
+## Sub-Slice 5.3 — GraphML-Export
+
+### Ziel
+
+Wissensgraphen lassen sich als GraphML rausziehen, damit sie in Gephi, NetworkX, Cytoscape & Co. weiterverarbeitet werden können — ohne Roh-JSON parsen zu müssen.
+
+### Vorgehen
+
+1. `backend/app/api/graph.py`
+   - Neuer Endpoint `GET /api/graph/<graph_id>/export?format=graphml`.
+   - Reuse vorhandener `Neo4jStorage.get_graph_data()` → kein zusätzlicher DB-Pfad.
+   - Mapping über `_build_networkx_graph()` (MultiDiGraph): Knoten- und Kanten-Attribute werden via `_stringify()` auf GraphML-kompatible Skalare bzw. JSON-Strings reduziert (Listen/Dicts würden sonst werfen).
+   - `nx.write_graphml(g, buf, named_key_ids=True)` schreibt in BytesIO und wird als Attachment ausgeliefert. Filename: `agora-graph-<graph_id>.graphml`.
+   - Leerer Graph (keine Nodes UND keine Edges) → `404`.
+   - Forward-kompatibel: anderes `format` → `400`.
+2. `frontend/src/api/graph.js`
+   - Neuer Helper `exportGraphMl(graphId)` mit `responseType: 'blob'`.
+3. `frontend/src/components/GraphPanel.vue`
+   - `.graphml`-Button neben dem Refresh-Knopf, nur sichtbar wenn `graphData.graph_id` gesetzt ist.
+   - `downloadGraphml()` lädt Blob und triggert Browser-Download.
+4. `backend/tests/test_graph_export.py` (neu)
+   - 5 Tests: ungültige `graph_id`, ungültiges `format`, leerer Graph (404), GraphML-Attachment mit Knoten/Kanten-Asserts via XML-Parsing, Default-Format.
+
+### Bewusst nicht geändert
+
+- Snapshot-Variante (`/snapshot/<gid>/<round>/export`) bleibt offen — der TemporalGraphService liefert nur Edges, eine konsistente Knotenmenge müsste dafür extra synthetisiert werden. Folgeticket, kein Blocker.
+- Knoten-/Kanten-Attribute werden flach als String oder JSON-String exportiert. GraphML stützt formal `bool/int/double/string`; Listen/Dicts werden bewusst als JSON serialisiert, damit kein Datenverlust entsteht.
+- Kein neuer Frontend-Knopf für JSON-Graph-Export — der bestehende `/api/graph/data/<gid>` reicht; GraphML füllt nur die Lücke für Graphtools.
+
+### Verifikation
+
+```bash
+cd backend && uv run pytest tests/test_graph_export.py
+npm run check
+```
+
+`npm run check` grün: 286 Backend-Tests (281 vorher + 5 neue), Frontend-Lint, Vite-Build.

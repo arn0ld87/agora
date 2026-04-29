@@ -3,9 +3,10 @@ Graph-related API Routes
 Uses project context mechanism with server-side state persistence
 """
 
+import io
 import os
 import threading
-from flask import request, current_app
+from flask import Response, request, current_app
 
 from . import graph_bp
 from ..config import Config
@@ -570,6 +571,77 @@ def get_graph_diff(graph_id: str):
     service = get_container().temporal_graph()
     diff = service.compute_diff(graph_id, start_round, end_round)
     return json_success(diff.to_dict())
+
+
+def _stringify(value):
+    """GraphML only accepts scalars — coerce lists/dicts to JSON strings."""
+    import json as _json
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return _json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _build_networkx_graph(graph_data: dict):
+    import networkx as nx
+
+    g = nx.MultiDiGraph()
+    g.graph["graph_id"] = graph_data.get("graph_id", "")
+
+    for node in graph_data.get("nodes", []) or []:
+        node_id = node.get("uuid") or node.get("id")
+        if not node_id:
+            continue
+        attrs = {k: _stringify(v) for k, v in node.items() if k != "uuid"}
+        g.add_node(node_id, **attrs)
+
+    for edge in graph_data.get("edges", []) or []:
+        src = edge.get("source_uuid") or edge.get("source")
+        tgt = edge.get("target_uuid") or edge.get("target")
+        if not src or not tgt:
+            continue
+        attrs = {
+            k: _stringify(v)
+            for k, v in edge.items()
+            if k not in ("source_uuid", "target_uuid", "source", "target")
+        }
+        g.add_edge(src, tgt, **attrs)
+
+    return g
+
+
+@graph_bp.route('/<graph_id>/export', methods=['GET'])
+@handle_api_errors
+def export_graph(graph_id: str):
+    """Export the full graph as GraphML for downstream graph tooling (Slice 5.3).
+
+    Query params: ``format=graphml`` (only currently supported value).
+    """
+    if not validate_graph_id(graph_id):
+        return json_error("Invalid graph_id format", status=400)
+
+    fmt = (request.args.get('format') or 'graphml').strip().lower()
+    if fmt != 'graphml':
+        return json_error("format must be 'graphml'", status=400)
+
+    builder = get_container().graph_builder()
+    graph_data = builder.get_graph_data(graph_id)
+    if not graph_data or (not graph_data.get("nodes") and not graph_data.get("edges")):
+        return json_error(f"Graph not found or empty: {graph_id}", status=404)
+
+    import networkx as nx
+
+    g = _build_networkx_graph(graph_data)
+    buf = io.BytesIO()
+    nx.write_graphml(g, buf, named_key_ids=True)
+    body = buf.getvalue()
+
+    response = Response(body, mimetype='application/xml; charset=utf-8')
+    response.headers['Content-Disposition'] = (
+        f'attachment; filename="agora-graph-{graph_id}.graphml"'
+    )
+    return response
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
