@@ -472,6 +472,63 @@ class Report:
         }
 
 
+@dataclass
+class EvidenceItem:
+    """Structured evidence attached to a report claim."""
+    type: str
+    source: str
+    value: Any = None
+    snippet: str = ""
+    tool_name: Optional[str] = None
+    query: Optional[str] = None
+    raw: Any = None
+    agent_log_ref: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = {
+            "type": self.type,
+            "source": self.source,
+            "snippet": self.snippet,
+        }
+        if self.value is not None:
+            data["value"] = self.value
+        if self.tool_name:
+            data["tool_name"] = self.tool_name
+        if self.query:
+            data["query"] = self.query
+        if self.raw is not None:
+            data["raw"] = self.raw
+        if self.agent_log_ref is not None:
+            data["agent_log_ref"] = self.agent_log_ref
+        return data
+
+
+@dataclass
+class ReportClaim:
+    """Backward-compatible claim model for report evidence maps."""
+    claim_id: str
+    claim_text: str
+    confidence_score: float
+    confidence_label: str
+    evidence: List[Dict[str, Any]]
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        score = round(max(0.0, min(1.0, self.confidence_score)), 2)
+        return {
+            "claim_id": self.claim_id,
+            "claim": self.claim_text,
+            "claim_text": self.claim_text,
+            # Keep the legacy label field stable for existing UI/export consumers.
+            "confidence": self.confidence_label,
+            "confidence_label": self.confidence_label,
+            "confidence_score": score,
+            "evidence": self.evidence,
+            "evidence_items": self.evidence,
+            "notes": self.notes,
+        }
+
+
 # ═══════════════════════════════════════════════════════════════
 # Prompt Template Constants
 # ═══════════════════════════════════════════════════════════════
@@ -944,8 +1001,10 @@ class ReportAgent:
 
     def _init_evidence_map(self, report_id: str) -> None:
         self.evidence_map = {
+            "schema_version": 1,
             "report_id": report_id,
             "simulation_id": self.simulation_id,
+            "global_evidence": self._collect_simulation_evidence_items(),
             "sections": [],
         }
 
@@ -959,6 +1018,57 @@ class ReportAgent:
         if not self._active_section_evidence:
             self._active_section_evidence = []
         self._active_section_evidence.append(item)
+
+    def _collect_simulation_evidence_items(self) -> List[Dict[str, Any]]:
+        """Collect reusable evidence from existing metrics and simulation actions."""
+        try:
+            from .network_analytics import NetworkAnalyticsService
+            from .simulation_runner import SimulationRunner
+
+            actions = SimulationRunner.get_all_actions(self.simulation_id)
+            action_dicts = [action.to_dict() for action in actions]
+            if not action_dicts:
+                return []
+
+            metrics = NetworkAnalyticsService().compute_metrics(
+                action_dicts,
+                simulation_id=self.simulation_id,
+            ).to_dict()
+            items: List[Dict[str, Any]] = []
+            metric_fields = (
+                "echo_chamber_index",
+                "cluster_count",
+                "total_interactions",
+                "bridge_agents",
+            )
+            for field in metric_fields:
+                value = metrics.get(field)
+                if value in (None, [], ""):
+                    continue
+                items.append(EvidenceItem(
+                    type="graph_metric",
+                    source="simulation_metrics",
+                    value=f"{field}={value}",
+                    snippet=f"{field}: {value}",
+                    raw={"metric": field, "value": value, "metrics": metrics},
+                ).to_dict())
+
+            for action in action_dicts[:8]:
+                action_type = action.get("action_type") or "action"
+                agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
+                platform = action.get("platform") or "unknown"
+                round_num = action.get("round_num")
+                items.append(EvidenceItem(
+                    type="agent_action",
+                    source="simulation_actions",
+                    value=action_type,
+                    snippet=f"{agent} {action_type} on {platform} in round {round_num}",
+                    raw=action,
+                ).to_dict())
+            return items
+        except Exception as exc:
+            logger.warning(f"Failed to collect simulation evidence: {exc}")
+            return []
 
     def _record_tool_evidence(
         self,
@@ -1059,6 +1169,7 @@ class ReportAgent:
         if not items and rendered_result:
             items.append({
                 "type": "model_generated_inference",
+                "source": "report_tool",
                 "tool_name": tool_name,
                 "query": parameters.get("query") or parameters.get("url") or parameters.get("interview_topic"),
                 "snippet": self._truncate(rendered_result),
@@ -1067,43 +1178,54 @@ class ReportAgent:
             })
 
         for item in items:
+            item.setdefault("source", "report_tool")
             self._record_evidence_item(item)
 
     def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
         chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
         claims = []
+        global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
         for index, chunk in enumerate(chunks, 1):
             direct_items = deepcopy(self._active_section_evidence[:10])
-            evidence_items = direct_items + [{
-                "type": "model_generated_inference",
-                "tool_name": "section_synthesis",
-                "query": None,
-                "snippet": self._truncate(chunk),
-                "raw": {"content": chunk},
-                "agent_log_ref": None,
-            }]
+            evidence_items = direct_items + global_items + [
+                EvidenceItem(
+                    type="model_generated_inference",
+                    source="section_synthesis",
+                    tool_name="section_synthesis",
+                    snippet=self._truncate(chunk),
+                    raw={"content": chunk},
+                ).to_dict()
+            ]
             direct_count = len([item for item in direct_items if item.get("type") != "model_generated_inference"])
-            claims.append({
-                "claim_id": f"claim_{index:02d}",
-                "claim_text": chunk,
-                "evidence_items": evidence_items,
-                "confidence": "high" if direct_count >= 3 else "medium" if direct_count else "low",
-                "notes": "Section-chunk level evidence mapping in v1.",
-            })
+            support_count = direct_count + len(global_items)
+            confidence_score = min(0.95, 0.25 + support_count * 0.12)
+            confidence_label = "high" if confidence_score >= 0.75 else "medium" if confidence_score >= 0.45 else "low"
+            claims.append(ReportClaim(
+                claim_id=f"claim_{index:02d}",
+                claim_text=chunk,
+                evidence=evidence_items,
+                confidence_score=confidence_score,
+                confidence_label=confidence_label,
+                notes="Section-chunk level evidence mapping in v1.",
+            ).to_dict())
         if not claims:
-            claims.append({
-                "claim_id": "claim_01",
-                "claim_text": "",
-                "evidence_items": [],
-                "confidence": "low",
-                "notes": "No section content captured.",
-            })
+            claims.append(ReportClaim(
+                claim_id="claim_01",
+                claim_text="",
+                evidence=[],
+                confidence_score=0.0,
+                confidence_label="low",
+                notes="No section content captured.",
+            ).to_dict())
         return claims
 
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
+        self.evidence_map.setdefault("schema_version", 1)
+        self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
         section_entry = {
+            "schema_version": 1,
             "section_index": section_index,
             "section_title": section_title,
             "section_summary": self._truncate(content, 400),
@@ -1835,8 +1957,10 @@ class ReportAgent:
             # Initialize: Create report folder and save initial state
             ReportManager._ensure_report_folder(report_id)
             self.evidence_map = ReportManager.get_evidence_map(report_id) or {
+                "schema_version": 1,
                 "report_id": report_id,
                 "simulation_id": self.simulation_id,
+                "global_evidence": self._collect_simulation_evidence_items(),
                 "sections": [],
             }
             

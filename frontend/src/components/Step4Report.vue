@@ -317,6 +317,42 @@ const activeEvidenceSection = computed(() => {
   return evidenceSections.value.find((section) => section.section_index === selectedEvidenceSection.value) || null
 })
 
+function claimConfidenceScore(claim) {
+  const raw = claim?.confidence_score ?? (typeof claim?.confidence === 'number' ? claim.confidence : null)
+  const score = Number(raw)
+  return Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
+}
+
+function claimConfidenceLabel(claim) {
+  if (typeof claim?.confidence_label === 'string' && claim.confidence_label) return claim.confidence_label
+  if (typeof claim?.confidence === 'string' && claim.confidence) return claim.confidence
+  const score = claimConfidenceScore(claim)
+  if (score === null) return 'low'
+  if (score >= 0.75) return 'high'
+  if (score >= 0.45) return 'medium'
+  return 'low'
+}
+
+function claimConfidenceText(claim) {
+  const label = claimConfidenceLabel(claim)
+  const score = claimConfidenceScore(claim)
+  return score === null ? label : `${Math.round(score * 100)}% · ${label}`
+}
+
+function claimEvidenceItems(claim) {
+  if (Array.isArray(claim?.evidence)) return claim.evidence
+  if (Array.isArray(claim?.evidence_items)) return claim.evidence_items
+  return []
+}
+
+function evidenceSnippet(item) {
+  if (!item) return ''
+  if (item.snippet) return item.snippet
+  if (item.value) return item.value
+  if (item.source) return item.source
+  return JSON.stringify(item.raw || item)
+}
+
 async function loadEvidence() {
   if (!props.reportId) return
   try {
@@ -622,15 +658,18 @@ onUnmounted(stopPolling)
               <article v-for="claim in activeEvidenceSection.claims" :key="claim.claim_id" class="claim-card">
                 <header>
                   <strong>{{ claim.claim_id }}</strong>
-                  <Badge :variant="claim.confidence === 'low' ? 'ghost' : claim.confidence === 'medium' ? 'accent' : 'solid'">
-                    {{ claim.confidence }}
+                  <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
+                    {{ claimConfidenceText(claim) }}
                   </Badge>
                 </header>
-                <p>{{ claim.claim_text }}</p>
+                <p>{{ claim.claim_text || claim.claim }}</p>
                 <div class="evidence-items">
-                  <div v-for="(item, idx) in claim.evidence_items" :key="`${claim.claim_id}-${idx}`" class="evidence-item">
-                    <Badge variant="ghost">{{ item.type }}</Badge>
-                    <span>{{ item.snippet }}</span>
+                  <div v-for="(item, idx) in claimEvidenceItems(claim)" :key="`${claim.claim_id}-${idx}`" class="evidence-item">
+                    <div class="evidence-item-head">
+                      <Badge variant="ghost">{{ item.type }}</Badge>
+                      <span v-if="item.source">{{ item.source }}</span>
+                    </div>
+                    <span>{{ evidenceSnippet(item) }}</span>
                   </div>
                 </div>
               </article>
@@ -804,6 +843,15 @@ onUnmounted(stopPolling)
   padding: 10px 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--rule);
+}
+.evidence-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 11px;
 }
 
 .markdown-body :deep(h1),
