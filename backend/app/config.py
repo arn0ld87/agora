@@ -170,6 +170,15 @@ class Config:
         os.environ.get('ONTOLOGY_MUTATION_MIN_CONFIDENCE', '0.6')
     )
 
+    # Persona review (Slice 2.1) — when enabled, every persona carries a
+    # ``review_status`` (pending/approved/rejected) that the upcoming
+    # simulation-start gate (Slice 2.3) will enforce. While disabled, the
+    # review service still works for clients that opt in explicitly, but no
+    # gates are applied and the field is left absent from new personas.
+    PERSONA_REVIEW_ENABLED = (
+        os.environ.get('PERSONA_REVIEW_ENABLED', 'false').lower() == 'true'
+    )
+
     # Event bus transport for simulation IPC (Issue #9 Phase B).
     # "redis" → RedisEventBus via REDIS_URL; "file" → FilePollingEventBus (offline fallback);
     # "auto" (default) → redis if REDIS_URL pings OK, otherwise file.

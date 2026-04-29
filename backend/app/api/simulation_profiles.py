@@ -9,10 +9,19 @@ from flask import request, send_file
 from . import simulation_bp
 from ..config import Config
 from ..services.persona_library import PersonaLibrary
+from ..services.persona_review_service import (
+    InvalidReviewStatusError,
+    PersonaNotFoundError,
+    PersonaReviewService,
+)
 from ..services.simulation_manager import SimulationManager
 from ..utils.validation import validate_simulation_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import get_artifact_store, logger
+
+
+def _persona_review_service() -> PersonaReviewService:
+    return PersonaReviewService(get_artifact_store())
 
 
 @simulation_bp.route('/<simulation_id>/branch', methods=['POST'])
@@ -58,11 +67,18 @@ def get_simulation_profiles(simulation_id: str):
 
     platform = request.args.get('platform', 'reddit')
     manager = SimulationManager()
-    profiles = manager.get_profiles(simulation_id, platform=platform)
+    if platform == 'reddit':
+        # Validate the simulation exists, then read normalized review state
+        # directly from the artifact store via the review service.
+        manager.get_profiles(simulation_id, platform=platform)
+        profiles = _persona_review_service().list_profiles(simulation_id)
+    else:
+        profiles = manager.get_profiles(simulation_id, platform=platform)
     return json_success({
         "platform": platform,
         "count": len(profiles),
         "profiles": profiles,
+        "review_enabled": Config.PERSONA_REVIEW_ENABLED,
     })
 
 
@@ -284,6 +300,68 @@ def delete_simulation_profile(simulation_id: str, username: str):
         "count": len(profiles),
         "removed": username,
     })
+
+
+def _handle_review_action(
+    simulation_id: str,
+    username: str,
+    action,
+):
+    if not validate_simulation_id(simulation_id):
+        return json_error("Invalid simulation_id format", status=400)
+    try:
+        profile = action(_persona_review_service())
+    except PersonaNotFoundError as exc:
+        return json_error(str(exc), status=404)
+    except InvalidReviewStatusError as exc:
+        return json_error(str(exc), status=400)
+    return json_success({
+        "username": username,
+        "review_status": profile.get("review_status"),
+        "profile": profile,
+    })
+
+
+@simulation_bp.route('/<simulation_id>/profiles/<username>', methods=['PATCH'])
+@handle_api_errors(log_prefix="Failed to edit persona")
+def edit_simulation_profile(simulation_id: str, username: str):
+    """Edit a reddit persona in-place; resets review_status to pending."""
+    data = request.get_json(silent=True) or {}
+    return _handle_review_action(
+        simulation_id,
+        username,
+        action=lambda service: service.edit(simulation_id, username, data),
+    )
+
+
+@simulation_bp.route('/<simulation_id>/profiles/<username>/approve', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to approve persona")
+def approve_simulation_profile(simulation_id: str, username: str):
+    """Mark a reddit persona as approved for the upcoming simulation run."""
+    data = request.get_json(silent=True) or {}
+    notes = data.get("notes")
+    return _handle_review_action(
+        simulation_id,
+        username,
+        action=lambda service: service.approve(
+            simulation_id, username, notes=notes
+        ),
+    )
+
+
+@simulation_bp.route('/<simulation_id>/profiles/<username>/reject', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to reject persona")
+def reject_simulation_profile(simulation_id: str, username: str):
+    """Mark a reddit persona as rejected; the gate (Slice 2.3) will skip it."""
+    data = request.get_json(silent=True) or {}
+    notes = data.get("notes") or data.get("reason")
+    return _handle_review_action(
+        simulation_id,
+        username,
+        action=lambda service: service.reject(
+            simulation_id, username, notes=notes
+        ),
+    )
 
 
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])

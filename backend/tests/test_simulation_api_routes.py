@@ -1,11 +1,14 @@
 from flask import Flask
 
 from app.api import simulation_bp
+from app.services.artifact_store import InMemoryArtifactStore
 
 
-def _build_test_app():
+def _build_test_app(*, artifact_store=None):
     app = Flask(__name__)
     app.extensions = {}
+    if artifact_store is not None:
+        app.extensions["artifact_store"] = artifact_store
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
     return app
 
@@ -165,6 +168,65 @@ def test_persona_library_round_trip(monkeypatch, tmp_path):
     delete_response = client.delete(f"/api/simulation/persona-library/{template_id}")
     assert delete_response.status_code == 200
     assert delete_response.get_json()["success"] is True
+
+
+def test_persona_review_endpoints_round_trip():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [
+        {"username": "alice", "is_manual": False},
+        {"username": "bob", "is_manual": True},
+    ])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    approve = client.post(f"/api/simulation/{sim_id}/profiles/alice/approve")
+    assert approve.status_code == 200
+    assert approve.get_json()["data"]["review_status"] == "approved"
+
+    edit = client.patch(
+        f"/api/simulation/{sim_id}/profiles/alice",
+        json={"bio": "tightened"},
+    )
+    assert edit.status_code == 200
+    payload = edit.get_json()["data"]
+    assert payload["profile"]["bio"] == "tightened"
+    assert payload["review_status"] == "pending"
+
+    reject = client.post(
+        f"/api/simulation/{sim_id}/profiles/alice/reject",
+        json={"reason": "thin bio"},
+    )
+    assert reject.status_code == 200
+    assert reject.get_json()["data"]["profile"]["review_notes"] == "thin bio"
+
+    missing = client.post(f"/api/simulation/{sim_id}/profiles/ghost/approve")
+    assert missing.status_code == 404
+
+
+def test_persona_review_endpoint_validates_simulation_id():
+    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+    client = app.test_client()
+
+    response = client.post("/api/simulation/not-a-sim/profiles/alice/approve")
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Invalid simulation_id format"
+
+
+def test_persona_edit_rejects_payload_with_no_editable_fields():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.patch(
+        f"/api/simulation/{sim_id}/profiles/alice",
+        json={"user_id": 7},
+    )
+
+    assert response.status_code == 400
 
 
 def test_pause_route_keeps_validation_guard():
