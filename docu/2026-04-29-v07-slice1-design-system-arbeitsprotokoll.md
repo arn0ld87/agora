@@ -162,3 +162,14 @@ Ergebnis: keine Fehler.
 65. Alias-Scan fuer beide Dateien erneut ausgefuehrt: keine Legacy-Aliase mehr.
 66. git diff --check ausgefuehrt: keine Fehler.
 67. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.
+
+## Fortsetzung 5 — Step5 Interaction
+
+68. Nutzerfreigabe fuer den naechsten Slice-1-Block erhalten.
+69. Arbeitsbaum und letzter Commit geprueft: HEAD 1739545, Arbeitsbaum sauber.
+70. Datei gelesen: frontend/src/components/Step5Interaction.vue.
+71. Alias-Scan fuer Step5Interaction.vue ausgefuehrt und die Legacy-Token-Stellen identifiziert.
+72. Legacy-Aliase in Step5Interaction.vue ersetzt.
+73. Alias-Scan fuer Step5Interaction.vue erneut ausgefuehrt: keine Legacy-Aliase mehr.
+74. git diff --check ausgefuehrt: keine Fehler.
+75. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.

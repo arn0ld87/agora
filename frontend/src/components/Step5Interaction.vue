@@ -414,7 +414,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--paper-0);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -439,7 +439,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
-.tab:hover { color: var(--ink-0); }
+.tab:hover { color: var(--fg); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .layout {
@@ -478,14 +478,14 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   cursor: pointer;
   transition: background 150ms ease;
 }
-.agent-row:hover { background: var(--paper-1); }
-.agent-row.active { background: var(--paper-1); border-left: 2px solid var(--accent); padding-left: calc(var(--s-3) - 2px); }
-.agent-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); margin-top: 6px; }
+.agent-row:hover { background: var(--bg-elevated); }
+.agent-row.active { background: var(--bg-elevated); border-left: 2px solid var(--accent); padding-left: calc(var(--s-3) - 2px); }
+.agent-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-body); margin-top: 6px; }
 .agent-row .dot.accent { background: var(--accent); }
 .agent-name {
   font-family: var(--ff-mono);
   font-size: var(--fs-14);
-  color: var(--ink-0);
+  color: var(--fg);
   letter-spacing: 0.02em;
 }
 .agent-bio {
@@ -510,8 +510,8 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   transition: background 150ms ease;
   align-items: center;
 }
-.agent-check:hover { background: var(--paper-1); }
-.agent-check.active { background: var(--paper-1); border-left: 2px solid var(--accent); padding-left: calc(var(--s-3) - 2px); }
+.agent-check:hover { background: var(--bg-elevated); }
+.agent-check.active { background: var(--bg-elevated); border-left: 2px solid var(--accent); padding-left: calc(var(--s-3) - 2px); }
 .agent-check input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
 .chat {
@@ -532,7 +532,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   font-family: var(--ff-serif);
   font-weight: 400;
   font-size: var(--fs-32);
-  color: var(--ink-0);
+  color: var(--fg);
   margin: var(--s-2) 0 0;
 }
 .sub {
@@ -572,7 +572,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   font-family: var(--ff-serif);
   font-size: var(--fs-18);
   line-height: 1.55;
-  color: var(--ink-0);
+  color: var(--fg);
   margin: 0;
   white-space: pre-wrap;
 }
@@ -587,12 +587,12 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
 }
 .input {
   flex: 1;
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   padding: var(--s-3);
   font-family: var(--ff-sans);
   font-size: var(--fs-16);
-  color: var(--ink-0);
+  color: var(--fg);
   resize: vertical;
   outline: none;
   border-radius: var(--r-1);
@@ -600,7 +600,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
 .input:focus { border-color: var(--accent); }
 
 .profile-card {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   padding: var(--s-3);
   border-radius: var(--r-1);
@@ -617,7 +617,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   font-family: var(--ff-serif);
   font-style: italic;
   font-size: var(--fs-18);
-  color: var(--ink-3);
+  color: var(--fg-body);
   margin: var(--s-3) 0 0;
 }
 .profile-persona {
@@ -636,7 +636,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
-  background: var(--paper-1);
+  background: var(--bg-elevated);
 }
 .survey-actions { display: flex; gap: var(--s-3); align-self: flex-end; }
 .survey-results {
@@ -662,14 +662,14 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   font-size: var(--fs-12);
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
-  color: var(--ink-0);
+  color: var(--fg);
 }
 .survey-bio { display: block; margin-bottom: var(--s-2); font-style: italic; }
 .survey-answer {
   font-family: var(--ff-serif);
   font-size: var(--fs-18);
   line-height: 1.55;
-  color: var(--ink-0);
+  color: var(--fg);
   margin: 0;
   white-space: pre-wrap;
 }
