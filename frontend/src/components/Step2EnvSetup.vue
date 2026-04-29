@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { usePolling } from '../composables/usePolling'
+import { usePersonaReview } from '../composables/usePersonaReview'
 import { useI18n } from 'vue-i18n'
 import {
   prepareSimulation,
@@ -131,6 +132,115 @@ const isLoadingPersonaLibrary = ref(false)
 const personaLibraryError = ref('')
 const savingPersonaKeys = ref(new Set())
 const usingPersonaTemplateIds = ref(new Set())
+
+// Persona review (Slice 2.4): quality badges, approve/reject, inline edit.
+const personaReview = usePersonaReview()
+const editingProfile = ref(null) // editable working copy bound to the detail modal
+const reviewActionPending = ref(false)
+const reviewActionError = ref('')
+const STATUS_VARIANTS = { approved: 'success', pending: 'warn', rejected: 'error' }
+const SEVERITY_VARIANTS = { error: 'error', warning: 'warn', info: 'plasma' }
+const STATUS_LABELS = { approved: 'freigegeben', pending: 'offen', rejected: 'abgelehnt' }
+
+function statusVariant(status) {
+  return STATUS_VARIANTS[status] || 'ghost'
+}
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status || '—'
+}
+function issueBadgeVariant(severity) {
+  return SEVERITY_VARIANTS[severity] || 'ghost'
+}
+function startEditingSelected() {
+  if (!selectedProfile.value) return
+  const src = selectedProfile.value
+  editingProfile.value = {
+    username: src.username,
+    name: src.name || '',
+    bio: src.bio || '',
+    persona: src.persona || '',
+    profession: src.profession || '',
+    country: src.country || '',
+    age: src.age ?? null,
+    gender: src.gender || 'other',
+    mbti: src.mbti || '',
+    interested_topics: Array.isArray(src.interested_topics)
+      ? src.interested_topics.join(', ')
+      : (src.interested_topics || ''),
+  }
+  reviewActionError.value = ''
+}
+function cancelEditing() {
+  editingProfile.value = null
+  reviewActionError.value = ''
+}
+function applyProfileToList(profile) {
+  if (!profile?.username) return
+  const idx = profiles.value.findIndex((p) => p.username === profile.username)
+  if (idx >= 0) {
+    profiles.value.splice(idx, 1, { ...profiles.value[idx], ...profile })
+  }
+  if (selectedProfile.value?.username === profile.username) {
+    selectedProfile.value = { ...selectedProfile.value, ...profile }
+  }
+}
+async function approveSelected() {
+  if (!selectedProfile.value || !props.simulationId) return
+  reviewActionPending.value = true
+  reviewActionError.value = ''
+  try {
+    const data = await personaReview.approve(props.simulationId, selectedProfile.value.username)
+    applyProfileToList(data?.profile)
+    addLog(`Persona freigegeben: ${selectedProfile.value.username}`)
+    await personaReview.refreshQuality(props.simulationId)
+  } catch (err) {
+    reviewActionError.value = err.message
+  } finally {
+    reviewActionPending.value = false
+  }
+}
+async function rejectSelected() {
+  if (!selectedProfile.value || !props.simulationId) return
+  reviewActionPending.value = true
+  reviewActionError.value = ''
+  try {
+    const data = await personaReview.reject(props.simulationId, selectedProfile.value.username)
+    applyProfileToList(data?.profile)
+    addLog(`Persona abgelehnt: ${selectedProfile.value.username}`)
+    await personaReview.refreshQuality(props.simulationId)
+  } catch (err) {
+    reviewActionError.value = err.message
+  } finally {
+    reviewActionPending.value = false
+  }
+}
+async function saveEditingProfile() {
+  if (!editingProfile.value || !props.simulationId) return
+  const payload = { ...editingProfile.value }
+  delete payload.username
+  if (typeof payload.interested_topics === 'string') {
+    payload.interested_topics = payload.interested_topics
+      .split(',').map((t) => t.trim()).filter(Boolean)
+  }
+  if (payload.age === '' || payload.age === null) delete payload.age
+  reviewActionPending.value = true
+  reviewActionError.value = ''
+  try {
+    const data = await personaReview.editProfile(
+      props.simulationId,
+      editingProfile.value.username,
+      payload,
+    )
+    applyProfileToList(data?.profile)
+    addLog(`Persona bearbeitet: ${editingProfile.value.username}`)
+    editingProfile.value = null
+    await personaReview.refreshQuality(props.simulationId)
+  } catch (err) {
+    reviewActionError.value = err.message
+  } finally {
+    reviewActionPending.value = false
+  }
+}
 
 // Agent-count cap (optional; null = unlimited / all matching entities).
 const STORAGE_MAX_AGENTS = 'agora.maxAgents'
@@ -447,6 +557,11 @@ async function fetchProfilesRealtime() {
     const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
     if (res?.success && Array.isArray(res.data?.profiles)) {
       profiles.value = res.data.profiles
+      if (profiles.value.length) {
+        // Refresh quality heuristics in the background; failures are reported
+        // through personaReview.error and do not block the polling loop.
+        personaReview.refreshQuality(props.simulationId)
+      }
     }
   } catch { /* swallow */ }
 }
@@ -629,6 +744,17 @@ onUnmounted(() => {
                 <span v-if="p.username && p.name && p.username !== p.name" class="persona-handle">@{{ p.username }}</span>
                 <span v-if="p.is_manual" class="persona-tag">manuell</span>
               </span>
+              <span class="persona-meta-row">
+                <Badge
+                  v-if="p.review_status"
+                  :variant="statusVariant(p.review_status)"
+                  dot
+                >{{ statusLabel(p.review_status) }}</Badge>
+                <Badge
+                  v-if="personaReview.getIssuesFor(p.username).length"
+                  :variant="issueBadgeVariant(personaReview.highestSeverityFor(p.username))"
+                >{{ personaReview.getIssuesFor(p.username).length }} Hinweis<span v-if="personaReview.getIssuesFor(p.username).length > 1">e</span></Badge>
+              </span>
               <span class="persona-bio">{{ (p.bio || '').slice(0, 90) }}{{ (p.bio || '').length > 90 ? '…' : '' }}</span>
               <span v-if="p.interested_topics?.length" class="persona-topics">
                 {{ p.interested_topics.slice(0, 3).join(' · ') }}
@@ -768,7 +894,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Modal: persona detail (editorial marginalia layout) -->
-    <div v-if="selectedProfile" class="modal" @click.self="selectedProfile = null">
+    <div v-if="selectedProfile" class="modal" @click.self="selectedProfile = null; cancelEditing()">
       <div class="modal-card">
         <header class="modal-head">
           <div>
@@ -776,47 +902,136 @@ onUnmounted(() => {
             <h3>{{ selectedProfile.name || selectedProfile.username }}</h3>
             <div v-if="selectedProfile.username && selectedProfile.name && selectedProfile.username !== selectedProfile.name" class="modal-handle">@{{ selectedProfile.username }}</div>
           </div>
-          <button class="x" @click="selectedProfile = null" aria-label="×">×</button>
+          <button class="x" @click="selectedProfile = null; cancelEditing()" aria-label="×">×</button>
         </header>
 
-        <p class="modal-bio">{{ selectedProfile.bio }}</p>
+        <div class="review-bar">
+          <Badge
+            v-if="selectedProfile.review_status"
+            :variant="statusVariant(selectedProfile.review_status)"
+            dot
+          >{{ statusLabel(selectedProfile.review_status) }}</Badge>
+          <span v-if="personaReview.reviewEnabled.value" class="meta">Review aktiv</span>
+          <span class="review-bar-spacer" />
+          <template v-if="!editingProfile">
+            <Btn variant="ghost" :disabled="reviewActionPending" @click="startEditingSelected">Bearbeiten</Btn>
+            <Btn
+              variant="ghost"
+              :disabled="reviewActionPending"
+              @click="rejectSelected"
+            >Ablehnen</Btn>
+            <Btn
+              variant="primary"
+              :disabled="reviewActionPending"
+              @click="approveSelected"
+            >Freigeben</Btn>
+          </template>
+          <template v-else>
+            <Btn variant="ghost" :disabled="reviewActionPending" @click="cancelEditing">Abbrechen</Btn>
+            <Btn
+              variant="primary"
+              :loading="reviewActionPending"
+              :disabled="reviewActionPending"
+              @click="saveEditingProfile"
+            >Speichern</Btn>
+          </template>
+        </div>
 
-        <div class="modal-marginalia">
-          <dl>
-            <div v-if="selectedProfile.age">
-              <dt>Alter</dt>
-              <dd>{{ selectedProfile.age }}</dd>
-            </div>
-            <div v-if="selectedProfile.gender">
-              <dt>Gender</dt>
-              <dd>{{ selectedProfile.gender }}</dd>
-            </div>
-            <div v-if="selectedProfile.mbti">
-              <dt>MBTI</dt>
-              <dd class="mono-big">{{ selectedProfile.mbti }}</dd>
-            </div>
-            <div v-if="selectedProfile.country">
-              <dt>Land</dt>
-              <dd>{{ selectedProfile.country }}</dd>
-            </div>
-            <div v-if="selectedProfile.profession">
-              <dt>Beruf</dt>
-              <dd>{{ selectedProfile.profession }}</dd>
-            </div>
-          </dl>
-          <div class="modal-content">
-            <div v-if="selectedProfile.interested_topics?.length" class="topic-chips">
-              <span class="kicker-mono">{{ t('step5.agent.interests') }}</span>
-              <div class="chips">
-                <span v-for="topic in selectedProfile.interested_topics" :key="topic" class="chip">
-                  {{ topic }}
-                </span>
+        <ul v-if="personaReview.getIssuesFor(selectedProfile.username).length" class="review-issues">
+          <li
+            v-for="issue in personaReview.getIssuesFor(selectedProfile.username)"
+            :key="issue.code"
+          >
+            <Badge :variant="issueBadgeVariant(issue.severity)">{{ issue.severity }}</Badge>
+            <span>{{ issue.code }}</span>
+            <span v-if="issue.detail?.missing" class="meta">→ {{ issue.detail.missing.join(', ') }}</span>
+          </li>
+        </ul>
+        <p v-if="reviewActionError" class="meta review-error">{{ reviewActionError }}</p>
+
+        <template v-if="!editingProfile">
+          <p class="modal-bio">{{ selectedProfile.bio }}</p>
+
+          <div class="modal-marginalia">
+            <dl>
+              <div v-if="selectedProfile.age">
+                <dt>Alter</dt>
+                <dd>{{ selectedProfile.age }}</dd>
               </div>
+              <div v-if="selectedProfile.gender">
+                <dt>Gender</dt>
+                <dd>{{ selectedProfile.gender }}</dd>
+              </div>
+              <div v-if="selectedProfile.mbti">
+                <dt>MBTI</dt>
+                <dd class="mono-big">{{ selectedProfile.mbti }}</dd>
+              </div>
+              <div v-if="selectedProfile.country">
+                <dt>Land</dt>
+                <dd>{{ selectedProfile.country }}</dd>
+              </div>
+              <div v-if="selectedProfile.profession">
+                <dt>Beruf</dt>
+                <dd>{{ selectedProfile.profession }}</dd>
+              </div>
+            </dl>
+            <div class="modal-content">
+              <div v-if="selectedProfile.interested_topics?.length" class="topic-chips">
+                <span class="kicker-mono">{{ t('step5.agent.interests') }}</span>
+                <div class="chips">
+                  <span v-for="topic in selectedProfile.interested_topics" :key="topic" class="chip">
+                    {{ topic }}
+                  </span>
+                </div>
+              </div>
+              <p class="modal-persona" v-if="selectedProfile.persona">
+                {{ selectedProfile.persona }}
+              </p>
             </div>
-            <p class="modal-persona" v-if="selectedProfile.persona">
-              {{ selectedProfile.persona }}
-            </p>
           </div>
+        </template>
+
+        <div v-else class="form-grid">
+          <label class="form-row">
+            <span>Anzeigename</span>
+            <input v-model="editingProfile.name" type="text" />
+          </label>
+          <label class="form-row">
+            <span>Beruf / Rolle</span>
+            <input v-model="editingProfile.profession" type="text" />
+          </label>
+          <label class="form-row form-row--wide">
+            <span>Bio (kurz)</span>
+            <input v-model="editingProfile.bio" type="text" maxlength="200" />
+          </label>
+          <label class="form-row">
+            <span>Land</span>
+            <input v-model="editingProfile.country" type="text" maxlength="4" />
+          </label>
+          <label class="form-row">
+            <span>Alter</span>
+            <input v-model.number="editingProfile.age" type="number" min="15" max="99" />
+          </label>
+          <label class="form-row">
+            <span>Gender</span>
+            <select v-model="editingProfile.gender">
+              <option value="other">other</option>
+              <option value="female">female</option>
+              <option value="male">male</option>
+            </select>
+          </label>
+          <label class="form-row">
+            <span>MBTI</span>
+            <input v-model="editingProfile.mbti" type="text" maxlength="4" />
+          </label>
+          <label class="form-row form-row--wide">
+            <span>Interessen (Komma-getrennt)</span>
+            <input v-model="editingProfile.interested_topics" type="text" />
+          </label>
+          <label class="form-row form-row--wide">
+            <span>Persona-Beschreibung</span>
+            <textarea v-model="editingProfile.persona" rows="6" />
+          </label>
         </div>
       </div>
     </div>
@@ -1052,6 +1267,40 @@ onUnmounted(() => {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
+}
+.persona-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin: var(--s-2) 0;
+}
+.review-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.review-bar-spacer { flex: 1; }
+.review-issues {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.review-issues li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--font-mono-sm);
+  color: var(--fg-body);
+}
+.review-error {
+  color: var(--status-error);
+  margin-top: var(--s-2);
 }
 .persona-tag {
   display: inline-block;

@@ -129,3 +129,46 @@ npm run check
 ```
 
 Ergebnis: Backend-Lint gruen, **251 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen.
+
+## 2.4 — Frontend (Step2EnvSetup)
+
+### Vorgehen
+
+1. Bestehende Step2-Komponente und API-Schicht inventarisiert; bestaetigt, dass `frontend/src/api/simulation.js` axios-`service` mit `patch`-Support exportiert und `Badge.vue`/`Btn.vue` die benoetigten Varianten (`success|warn|error|plasma|ghost`) bereits aus Slice 1 mitbringen.
+2. API-Methoden in `frontend/src/api/simulation.js` ergaenzt:
+   - `editSimulationProfile(simId, username, data)`
+   - `approveSimulationProfile(simId, username, notes?)`
+   - `rejectSimulationProfile(simId, username, reason?)`
+   - `getSimulationProfilesQuality(simId)`
+3. Composable `frontend/src/composables/usePersonaReview.js` neu angelegt:
+   - reaktiver Cache `issuesByUsername` (`Map`), `summary`, `globalIssues`, `reviewEnabled`, `isLoading`, `error`.
+   - Helfer `getIssuesFor(username)`, `highestSeverityFor(username)` fuer Badge-Logik.
+   - Aktionen `refreshQuality`, `approve`, `reject`, `editProfile` werfen kontrolliert Fehler weiter.
+4. `Step2EnvSetup.vue` erweitert, ohne Layout/UX umzubauen:
+   - Persona-Karten zeigen jetzt einen Status-Badge (`approved`/`pending`/`rejected`) und einen Hinweis-Badge mit Anzahl + Severity-Farbe.
+   - Detail-Modal hat eine Review-Bar (Status, Bearbeiten, Ablehnen, Freigeben) und listet die Quality-Issues unterhalb der Bar.
+   - Edit-Modus toggelt das Read-Only-Layout in ein Form-Grid mit denselben Feldern wie der Add-Persona-Dialog; Save ruft den PATCH-Endpoint, anschliessender `refreshQuality()` aktualisiert Badges.
+   - `applyProfileToList()` patcht das Profil sowohl in `profiles.value` als auch in `selectedProfile`, damit das Modal nach Approve/Reject/Edit ohne Reload sofort den neuen Status zeigt.
+5. Quality-Fetch ist an `fetchProfilesRealtime()` gekoppelt: wenn Personas geladen sind, refresht der Composable im Hintergrund. Polling-Intervall bleibt 3s aus `usePolling`, kein zusaetzlicher Timer.
+
+### Geaenderte/Neue Dateien (2.4)
+
+| Datei | Aenderung |
+|---|---|
+| `frontend/src/api/simulation.js` | Vier neue Methoden (`editSimulationProfile`, `approveSimulationProfile`, `rejectSimulationProfile`, `getSimulationProfilesQuality`) |
+| `frontend/src/composables/usePersonaReview.js` | **Neu**: reaktiver Wrapper um Review/Quality-Endpoints |
+| `frontend/src/components/Step2EnvSetup.vue` | Karten zeigen Status-/Hinweis-Badges; Detail-Modal mit Review-Bar, Issue-Liste, Inline-Edit; Quality-Refresh nach jedem Profile-Polling-Tick; neue scoped Styles `persona-meta-row`, `review-bar`, `review-issues`, `review-error` |
+
+### Bewusst nicht geaendert
+
+1. Add-Persona-Dialog bleibt unveraendert; der Edit-Modus nutzt eine eigene, kleinere Form-Variante im bestehenden Detail-Modal.
+2. Polling-Architektur (`usePolling`) wurde nicht erweitert; Quality-Refresh laeuft als Side-Effect im Profile-Tick.
+3. Keine `i18n`-Keys ergaenzt — Slice-2-UI nutzt deutsche Inline-Strings im DACH-Default-Modus, konsistent mit den uebrigen Slice-2-Buttons.
+
+### Verifikation (2.4)
+
+```bash
+npm run check
+```
+
+Ergebnis: Backend-Lint gruen, **251 passed, 2 skipped**, Frontend-Lint gruen, Vite-Build gruen (724 Module statt vorher 723; +ca. 8 KB JS gzip).

@@ -239,6 +239,54 @@ export const deleteSimulationProfile = (simulationId, username, platform = 'redd
 }
 
 /**
+ * Edit a persona in-place. Resets review_status to pending unless the caller
+ * explicitly sends review_status (Slice 2.1 backend semantics).
+ * @param {string} simulationId
+ * @param {string} username
+ * @param {Object} data — editable subset (bio, persona, profession, …)
+ */
+export const editSimulationProfile = (simulationId, username, data) => {
+  return service.patch(
+    `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}`,
+    data
+  )
+}
+
+/**
+ * Approve a persona for the upcoming simulation run.
+ * @param {string} simulationId
+ * @param {string} username
+ * @param {string} [notes]
+ */
+export const approveSimulationProfile = (simulationId, username, notes) => {
+  return service.post(
+    `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/approve`,
+    notes ? { notes } : {}
+  )
+}
+
+/**
+ * Reject a persona; will be skipped once the start-gate (Slice 2.3) is live.
+ * @param {string} simulationId
+ * @param {string} username
+ * @param {string} [reason]
+ */
+export const rejectSimulationProfile = (simulationId, username, reason) => {
+  return service.post(
+    `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/reject`,
+    reason ? { reason } : {}
+  )
+}
+
+/**
+ * Quality heuristics report for the personas of a simulation.
+ * @param {string} simulationId
+ */
+export const getSimulationProfilesQuality = (simulationId) => {
+  return service.get(`/api/simulation/${simulationId}/profiles/quality`)
+}
+
+/**
  * List reusable persona templates stored on the local backend.
  */
 export const listPersonaTemplates = () => {
