@@ -9,6 +9,13 @@ jobs:
   backend:
     name: Backend tests + lint
     runs-on: ubuntu-latest
+    env:
+      # Tests instantiate LLMClient() directly (e.g. test_ontology_generator);
+      # the constructor rejects an empty API key. No HTTP calls are made.
+      LLM_API_KEY: dummy-ci-key
+      # Stay in dev mode so Config.validate() doesn't enforce the
+      # AGORA_AUTH_TOKEN / SECRET_KEY policy on test runs.
+      FLASK_DEBUG: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
