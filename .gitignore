@@ -54,9 +54,31 @@ mytest/
 .alex-eastereggs.local.md
 context.md
 
+# Local/internal project material kept out of the public install repo
+/AGENTS.md
+/CLAUDE.md
+/PLAN.md
+/REFACTORING_PLAN.md
+/SECURITY_REVIEW.md
+/CHANGELOG.md
+/docu/
+/docs/
+/Agora_design/
+/scripts/logs/
+/.github/
+/.codex
+/.gitleaksignore
+/docker-compose.override.yml
+/media/
+/static/image/
+/static/media/
+
 # Log files
 backend/logs/
 *.log
+
+# Persistent caches mounted into the agora container
+backend/.cache/
 
 # Upload folder
 backend/uploads/
