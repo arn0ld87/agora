@@ -220,7 +220,7 @@ function phaseVariant(phase) {
 <style scoped>
 .step-panel {
   height: 100%;
-  background: var(--paper-0);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -235,7 +235,7 @@ function phaseVariant(phase) {
 }
 
 .card {
-  background: var(--paper-0);
+  background: var(--bg);
   border: 1px solid var(--rule);
   border-radius: var(--r-1);
   padding: var(--s-5);
@@ -289,7 +289,7 @@ function phaseVariant(phase) {
   display: block;
   font-family: var(--ff-serif);
   font-size: var(--fs-32);
-  color: var(--ink-0);
+  color: var(--fg);
   line-height: 1;
 }
 .stat-label {
@@ -312,14 +312,14 @@ function phaseVariant(phase) {
   letter-spacing: 0.04em;
   border: 1px solid var(--rule-strong);
   background: transparent;
-  color: var(--ink-0);
+  color: var(--fg);
   border-radius: var(--r-pill);
 }
 .chip.clickable { cursor: pointer; transition: background 150ms ease; }
-.chip.clickable:hover { background: var(--paper-1); }
+.chip.clickable:hover { background: var(--bg-elevated); }
 
 .detail-overlay {
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border-left: 2px solid var(--accent);
   padding: var(--s-4);
   display: flex;
@@ -330,14 +330,14 @@ function phaseVariant(phase) {
 .detail-name {
   font-family: var(--ff-serif);
   font-size: var(--fs-20);
-  color: var(--ink-0);
+  color: var(--fg);
   margin-left: var(--s-2);
 }
 .detail-desc { color: var(--fg-body); margin: 0; }
 .detail-section { display: flex; flex-direction: column; gap: var(--s-2); }
 .detail-section ul { list-style: none; padding-left: 0; margin: 0; display: flex; flex-direction: column; gap: var(--s-2); font-family: var(--ff-sans); font-size: var(--fs-14); }
 .detail-section li { color: var(--fg-body); }
-.detail-section li strong { color: var(--ink-0); }
+.detail-section li strong { color: var(--fg); }
 .x {
   background: transparent;
   border: 0;
@@ -354,7 +354,7 @@ function phaseVariant(phase) {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  background: var(--paper-0);
+  background: var(--bg);
 }
 .logs-head { display: flex; justify-content: space-between; align-items: baseline; }
 .logs-body {

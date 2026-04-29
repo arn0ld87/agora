@@ -140,3 +140,14 @@ Ergebnis: keine Fehler.
 49. Git-Status, Branch und Remotes geprueft: Branch main, Push-Remote origin.
 50. Fuer den Commit werden nur die aktuellen Slice-1-Frontend-Dateien und diese Arbeitsprotokoll-MD gestaged.
 51. Commit erstellt mit Message: Consolidate frontend design tokens.
+
+## Fortsetzung 3 — Step1 und HistoryDatabase
+
+52. Nutzerfreigabe fuer den naechsten kleinen Slice-1-Block erhalten.
+53. Arbeitsbaum und letzter Commit geprueft: HEAD 377da83, Arbeitsbaum sauber.
+54. Dateien gelesen: frontend/src/components/Step1GraphBuild.vue und frontend/src/components/HistoryDatabase.vue.
+55. Alias-Scan fuer beide Dateien ausgefuehrt und die Legacy-Token-Stellen identifiziert.
+56. Legacy-Aliase in Step1GraphBuild.vue und HistoryDatabase.vue ersetzt.
+57. Alias-Scan fuer beide Dateien erneut ausgefuehrt: keine Legacy-Aliase mehr.
+58. git diff --check ausgefuehrt: keine Fehler.
+59. npm run check ausgefuehrt: Backend-Lint gruen, Backend-Tests 223 passed/2 skipped, Frontend-Lint gruen, Vite-Build gruen.

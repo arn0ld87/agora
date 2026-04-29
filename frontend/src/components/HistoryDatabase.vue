@@ -345,8 +345,8 @@ onMounted(loadRuns)
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--rule);
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--ff-sans);
 }
 .layout {
@@ -357,7 +357,7 @@ onMounted(loadRuns)
 }
 .table, .drawer {
   border: 1px solid var(--rule);
-  background: var(--paper-0);
+  background: var(--bg);
 }
 .group-head, .row, .drawer-head {
   display: grid;
@@ -385,7 +385,7 @@ onMounted(loadRuns)
   text-align: left;
   cursor: pointer;
 }
-.row.active, .row:hover { background: var(--paper-1); }
+.row.active, .row:hover { background: var(--bg-elevated); }
 .row .type, .row .progress, .row .updated, .status {
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -415,8 +415,8 @@ onMounted(loadRuns)
 .eyebrow { font-family: var(--ff-mono); font-size: 11px; letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); }
 .linkish, .action {
   border: 1px solid var(--rule-strong);
-  background: var(--paper-0);
-  color: var(--ink-0);
+  background: var(--bg);
+  color: var(--fg);
   padding: 10px 14px;
   cursor: pointer;
   font-family: var(--ff-mono);
@@ -424,7 +424,7 @@ onMounted(loadRuns)
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
 }
-.action.alt { background: var(--paper-1); }
+.action.alt { background: var(--bg-elevated); }
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -447,7 +447,7 @@ onMounted(loadRuns)
   cursor: pointer;
   border-radius: var(--r-1);
 }
-.retry-btn:hover { background: var(--ink-2); }
+.retry-btn:hover { background: var(--bg-panel-2); }
 .actions, .branch-row { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
 .branch-box, .artifacts, .events { margin-top: var(--s-6); }
 .branch-box h4, .artifacts h4, .events h4 { margin-bottom: var(--s-3); font-family: var(--ff-serif); }
@@ -456,7 +456,7 @@ pre {
   max-height: 200px;
   overflow: auto;
   padding: 14px;
-  background: var(--paper-1);
+  background: var(--bg-elevated);
   border: 1px solid var(--rule);
   white-space: pre-wrap;
   word-break: break-word;
