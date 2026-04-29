@@ -2,11 +2,17 @@
 Logger Configuration Module
 Provides unified logging management with output to both console and file.
 Supports opt-in structured JSON output via AGORA_LOG_FORMAT=json.
+
+Includes a default :class:`RedactionFilter` that scrubs tokens, tickets,
+bearer credentials, API keys and passwords from formatted messages before
+they hit any handler. Active on every Agora logger and on the werkzeug
+access logger (P2: Logging-Review auf Secret-Redaction und Token-Schutz).
 """
 
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -81,6 +87,106 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+REDACTED = "***"
+
+# Patterns sind absichtlich konservativ: lieber einmal zu viel maskieren als
+# einmal ein Token im Log stehen lassen. Reihenfolge ist relevant — spezifische
+# Patterns vor generischen.
+_REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Authorization: Bearer <token>
+    (re.compile(r"(?i)(bearer\s+)([A-Za-z0-9\-._~+/=]{6,})"), r"\1" + REDACTED),
+    # Header X-Agora-Token: <value>
+    (
+        re.compile(r"(?i)(x[-_]agora[-_]token['\"\s:=]+)([A-Za-z0-9\-._~+/=]{4,})"),
+        r"\1" + REDACTED,
+    ),
+    # Query- oder Form-Parameter: token=, ticket=, api_key=, password=, secret=
+    (
+        re.compile(
+            r"(?i)\b(token|ticket|api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|password|passwd|pwd)"
+            r"(\s*[=:]\s*)"
+            r"([^\s,&;'\"<>]{3,})"
+        ),
+        r"\1\2" + REDACTED,
+    ),
+    # JSON-Style "password": "value"
+    (
+        re.compile(
+            r"(?i)([\"'](?:token|ticket|api[_-]?key|access[_-]?key|secret(?:[_-]?key)?|password|passwd|pwd)[\"']\s*:\s*[\"'])"
+            r"([^\"']+)"
+            r"([\"'])"
+        ),
+        r"\1" + REDACTED + r"\3",
+    ),
+    # Env-Style LLM_API_KEY=foo
+    (
+        re.compile(
+            r"(?i)\b([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|PASSWD))"
+            r"(\s*[=:]\s*)"
+            r"([^\s,;'\"]+)"
+        ),
+        r"\1\2" + REDACTED,
+    ),
+)
+
+
+def _scrub(text: str) -> str:
+    if not text or not isinstance(text, str):
+        return text
+    out = text
+    for pattern, replacement in _REDACTION_PATTERNS:
+        out = pattern.sub(replacement, out)
+    return out
+
+
+class RedactionFilter(logging.Filter):
+    """Maskiert bekannte Secret-Muster im finalen Log-Output.
+
+    Greift nach :meth:`logging.LogRecord.getMessage`, weil wir auch ``%s``-
+    interpolierte Argumente und ``f``-Strings abdecken müssen. Das Original-
+    Record wird *nicht* mutiert, sondern eine vorgerenderte Message in
+    ``record.msg`` mit leeren ``args`` gesetzt — alle Formatter darunter
+    sehen damit den maskierten Text.
+
+    Why: SSE/Download-Endpoints akzeptieren weiterhin ``?token=`` als
+    Deprecation-Pfad, und Werkzeugs Access-Log enthält die volle Request-Line
+    inklusive Query-String. Ohne Filter würden Bearer-Tokens und ablaufende
+    Tickets im Klartext in ``backend/logs/*.log`` landen.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            rendered = record.getMessage()
+        except Exception:  # noqa: BLE001 — Logging darf niemals werfen
+            return True
+        scrubbed = _scrub(rendered)
+        if scrubbed != rendered:
+            record.msg = scrubbed
+            record.args = ()
+        # exc_text wird vom Formatter on-demand gerendert; falls schon
+        # gesetzt, ebenfalls scrubben.
+        if record.exc_text:
+            record.exc_text = _scrub(record.exc_text)
+        return True
+
+
+_REDACTION_FILTER = RedactionFilter()
+
+
+def install_redaction_filter(logger: logging.Logger) -> None:
+    """Hängt den Redaction-Filter idempotent an Logger und alle Handler.
+
+    Zusätzlich zu Loggern selbst werden Filter auf die Handler gesetzt, damit
+    auch Subloggern, die ihre Records nach oben propagieren, die Maskierung
+    nicht entgeht.
+    """
+    if _REDACTION_FILTER not in logger.filters:
+        logger.addFilter(_REDACTION_FILTER)
+    for handler in logger.handlers:
+        if _REDACTION_FILTER not in handler.filters:
+            handler.addFilter(_REDACTION_FILTER)
+
+
 def _make_formatter(use_json: bool, detailed: bool = True) -> logging.Formatter:
     """Return the appropriate formatter instance."""
     if use_json:
@@ -145,6 +251,11 @@ def setup_logger(name: str = 'agora', level: int = logging.DEBUG) -> logging.Log
     # Add handlers
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
+    # Secret-Redaction auf Logger + Handler. Ohne diesen Filter würden
+    # ?token=, ?ticket=, Bearer-Tokens und API-Keys im Klartext in
+    # backend/logs landen.
+    install_redaction_filter(logger)
 
     return logger
 

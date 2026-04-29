@@ -9,13 +9,18 @@ import warnings
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
+import logging  # noqa: E402
 import uuid  # noqa: E402
 
 from flask import Flask, g, request  # noqa: E402
 from flask_cors import CORS  # noqa: E402
 
 from .config import Config  # noqa: E402
-from .utils.logger import setup_logger, get_logger  # noqa: E402
+from .utils.logger import (  # noqa: E402
+    install_redaction_filter,
+    setup_logger,
+    get_logger,
+)
 
 __version__ = "0.6.1"
 
@@ -32,6 +37,11 @@ def create_app(config_class=Config):
 
     # Setup logging
     logger = setup_logger('agora')
+
+    # Werkzeug-Access-Log enthält die volle Request-Line inkl. Query-String
+    # (z. B. /api/simulation/<id>/stream?ticket=<signed>); ohne Redaction
+    # würden Tickets und Tokens im Klartext in stderr/Container-Logs landen.
+    install_redaction_filter(logging.getLogger('werkzeug'))
 
     # Only print startup info in reloader subprocess (avoid printing twice in debug mode)
     is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
@@ -149,15 +159,16 @@ def create_app(config_class=Config):
     @app.before_request
     def log_request():
         g.request_id = uuid.uuid4().hex[:8]
+        # Bewusst nur method+path. request.full_path enthält den Query-String
+        # (?token=, ?ticket=) und würde damit Auth-Material ins DEBUG-Log
+        # spülen. JSON-Bodies werden gar nicht mehr geloggt: Login-/Ticket-
+        # Endpoints reflektieren sonst Passwörter/Token unnötig in DEBUG.
         req_logger.debug(
-            f"Request: {request.method} {request.path}",
+            "Request: %s %s",
+            request.method,
+            request.path,
             extra={'request_id': g.request_id},
         )
-        if request.content_type and 'json' in request.content_type:
-            req_logger.debug(
-                f"Request body: {request.get_json(silent=True)}",
-                extra={'request_id': g.request_id},
-            )
 
     @app.after_request
     def log_response(response):

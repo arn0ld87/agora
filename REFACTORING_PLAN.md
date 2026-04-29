@@ -22,7 +22,7 @@
 | P0 | SSE/Download Auth von Query-Token auf kurzlebige signed tickets migrieren | reduziert Token-Leakage in URLs/Logs | Mittel | `security/repo-hardening` |
 | P1 | Security-Scans in CI integrieren (`npm audit`, Python-Audit, Secret Scan) | frühzeitige Erkennung neuer Risiken | Niedrig | `ci/add-security-checks` — umgesetzt 2026-04-29 |
 | P1 | Einheitliche Error-Envelope inkl. Security-safe Fehlermeldungen prüfen/erzwingen | konsistente API + weniger Info-Leaks | Niedrig-Mittel | `refactor/code-quality-pass` — umgesetzt 2026-04-29 |
-| P2 | Logging-Review auf Secret-Redaction und Token-Schutz | verhindert versehentliche Secret-Exposition | Niedrig | `refactor/code-quality-pass` |
+| P2 | Logging-Review auf Secret-Redaction und Token-Schutz | verhindert versehentliche Secret-Exposition | Niedrig | `refactor/code-quality-pass` — umgesetzt 2026-04-29 |
 
 ## Safe First Steps
 
