@@ -12,7 +12,7 @@ Das Repository hat bereits gute Baseline-Härtung (nicht-root Container-User, ze
 | Medium | Secret Handling | Token-Fallback über Query-Parameter (`?token=`) | Token kann in Reverse-Proxy-Logs, Browser-History, Monitoring auftauchen | Kurzfristig dokumentieren + Log-Redaction; mittelfristig kurzlebige Signed URLs/one-time tokens |
 | Medium | Configuration | Historischer Neo4j-Passwort-Default (`agora`) in Code | Risiko schwacher/vergessener Defaults in lokalen/CI-Setups | Default entfernen, Passwort zwingend via Env setzen |
 | Low | Dependency Security | Kein durchgängiger Security-Scan im `npm run check` Flow | Schwachstellen werden ggf. spät entdeckt | CI-Job mit `npm audit` + `pip-audit` (oder OSV-Scan) ergänzen |
-| Info | Container Hardening | Container läuft als non-root User (`agora`) | Positiv: reduziert Impact bei Container-Komprimittierung | Beibehalten, zusätzlich read-only rootfs + capabilities drop prüfen |
+| Info | Container Hardening | Container läuft als non-root User (agora) | Positiv: reduziert Impact bei Container-Kompromittierung | Beibehalten, zusätzlich read-only rootfs + capabilities drop prüfen |
 
 ## Findings
 
