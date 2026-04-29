@@ -37,9 +37,14 @@ def app():
     bp = Blueprint("guarded", __name__)
 
     @bp.route("/sse/<sim_id>")
-    @allow_ticket_auth(lambda sim_id: f"sse:{sim_id}")
+    @allow_ticket_auth(lambda sim_id: f"sse:{sim_id}", single_use=False)
     def sse(sim_id):
         return json_success({"sim": sim_id})
+
+    @bp.route("/dl/<rid>")
+    @allow_ticket_auth(lambda rid: f"download:report:{rid}")
+    def dl(rid):
+        return json_success({"rid": rid})
 
     @bp.route("/no-ticket")
     def no_ticket():
@@ -117,11 +122,22 @@ def test_guarded_endpoint_rejects_ticket_for_other_simulation(client):
     assert response.status_code == 401
 
 
-def test_guarded_endpoint_rejects_ticket_replay(client):
+def test_guarded_sse_endpoint_allows_ticket_reuse(client):
+    """SSE views are reusable so EventSource reconnects within TTL still work."""
     ticket = signed_ticket.issue(SECRET, "sse:sim_abc", ttl_seconds=60)
 
     first = client.get(f"/api/guarded/sse/sim_abc?ticket={ticket}")
     second = client.get(f"/api/guarded/sse/sim_abc?ticket={ticket}")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
+def test_guarded_download_endpoint_rejects_ticket_replay(client):
+    ticket = signed_ticket.issue(SECRET, "download:report:r1", ttl_seconds=60)
+
+    first = client.get(f"/api/guarded/dl/r1?ticket={ticket}")
+    second = client.get(f"/api/guarded/dl/r1?ticket={ticket}")
 
     assert first.status_code == 200
     assert second.status_code == 401

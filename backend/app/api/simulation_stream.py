@@ -133,7 +133,7 @@ def _stream(simulation_id: str) -> Iterator[str]:
 
 
 @simulation_bp.route('/<simulation_id>/stream', methods=['GET'])
-@allow_ticket_auth(lambda simulation_id: f"sse:{simulation_id}")
+@allow_ticket_auth(lambda simulation_id: f"sse:{simulation_id}", single_use=False)
 def simulation_stream(simulation_id: str):
     """SSE endpoint for live run-state + control updates."""
     if not validate_simulation_id(simulation_id):

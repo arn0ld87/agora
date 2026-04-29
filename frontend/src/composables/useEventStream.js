@@ -37,12 +37,15 @@ export function useEventStream(simulationIdRef, handlers = {}) {
     }
   }
 
-  function start() {
+  async function start() {
     const id = getId()
     if (!id) return
     if (source) return
     try {
-      source = openSimulationStream(id, {
+      // openSimulationStream is async since P0.2c — it fetches a signed ticket
+      // before opening the EventSource. Errors during ticket fetch surface
+      // here just like the previous synchronous failures.
+      source = await openSimulationStream(id, {
         hello: wrap(handlers.hello),
         state: wrap(handlers.state),
         control: wrap(handlers.control),

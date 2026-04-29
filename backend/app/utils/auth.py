@@ -32,6 +32,7 @@ from .logger import get_logger
 
 _logger = get_logger("agora.auth")
 _TICKET_SCOPE_ATTR = "_agora_ticket_scope_fn"
+_TICKET_SINGLE_USE_ATTR = "_agora_ticket_single_use"
 
 
 def _auth_error():
@@ -59,20 +60,26 @@ def _extract_token() -> str:
     return query_token
 
 
-def allow_ticket_auth(scope_fn: Callable[..., str]):
+def allow_ticket_auth(scope_fn: Callable[..., str], *, single_use: bool = True):
     """Mark a view as accepting ``?ticket=`` auth in addition to the bearer
     token. ``scope_fn`` receives the URL view kwargs and must return the
     expected ticket scope, e.g. ``lambda simulation_id: f"sse:{simulation_id}"``.
+
+    ``single_use=True`` (default) consumes the ticket on first hit and
+    rejects replays. SSE endpoints set this to ``False`` so an
+    ``EventSource`` can reconnect within the ticket TTL — replay protection
+    falls back to the short TTL alone.
     """
 
     def decorator(view):
         setattr(view, _TICKET_SCOPE_ATTR, scope_fn)
+        setattr(view, _TICKET_SINGLE_USE_ATTR, single_use)
         return view
 
     return decorator
 
 
-def _ticket_scope_for_request() -> str | None:
+def _ticket_view_metadata() -> tuple[str, bool] | None:
     endpoint = request.endpoint
     if not endpoint:
         return None
@@ -82,24 +89,29 @@ def _ticket_scope_for_request() -> str | None:
     scope_fn = getattr(view, _TICKET_SCOPE_ATTR, None)
     if scope_fn is None:
         return None
+    single_use = bool(getattr(view, _TICKET_SINGLE_USE_ATTR, True))
     try:
-        return scope_fn(**(request.view_args or {}))
+        scope = scope_fn(**(request.view_args or {}))
     except Exception:  # noqa: BLE001
         _logger.exception("ticket scope_fn raised for %s", endpoint)
         return None
+    return scope, single_use
 
 
 def _try_consume_ticket() -> bool:
     ticket = request.args.get("ticket", "").strip()
     if not ticket:
         return False
-    expected_scope = _ticket_scope_for_request()
-    if expected_scope is None:
+    meta = _ticket_view_metadata()
+    if meta is None:
         return False
+    expected_scope, single_use = meta
     secret = current_app.config.get("SECRET_KEY") or ""
     if not secret:
         return False
-    return signed_ticket.consume(secret, ticket, expected_scope)
+    if single_use:
+        return signed_ticket.consume(secret, ticket, expected_scope)
+    return signed_ticket.verify(secret, ticket, expected_scope)
 
 
 def token_required(view):
