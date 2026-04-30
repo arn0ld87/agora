@@ -21,6 +21,7 @@ from ..utils.validation import validate_project_id, validate_graph_id, validate_
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 from ..services.run_registry import RunRegistry
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 
 # Get logger
@@ -66,12 +67,16 @@ def get_project(project_id: str):
     Get project details
     """
     if not validate_project_id(project_id):
-        return json_error("Invalid project_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     project = ProjectManager.get_project(project_id)
     
     if not project:
-        return json_error(f"Project does not exist: {project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {project_id}",
+        )
     
     return json_success(project.to_dict())
 
@@ -95,12 +100,16 @@ def delete_project(project_id: str):
     Delete project
     """
     if not validate_project_id(project_id):
-        return json_error("Invalid project_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     success = ProjectManager.delete_project(project_id)
 
     if not success:
-        return json_error(f"Project does not exist or deletion failed: {project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist or deletion failed: {project_id}",
+        )
 
     return json_success(message=f"Project deleted: {project_id}")
 
@@ -112,12 +121,16 @@ def reset_project(project_id: str):
     Reset project status (for rebuilding graph)
     """
     if not validate_project_id(project_id):
-        return json_error("Invalid project_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     project = ProjectManager.get_project(project_id)
 
     if not project:
-        return json_error(f"Project does not exist: {project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {project_id}",
+        )
 
     # Reset to ontology generated state
     if project.ontology:
@@ -152,12 +165,20 @@ def generate_ontology():
     logger.debug(f"Simulation requirement: {simulation_requirement[:100]}...")
 
     if not simulation_requirement:
-        return json_error("Please provide simulation requirement description (simulation_requirement)", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Please provide simulation requirement description (simulation_requirement)",
+        )
 
     # Get uploaded files
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or all(not f.filename for f in uploaded_files):
-        return json_error("Please upload at least one document file", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Please upload at least one document file",
+        )
 
     # Create project
     project = ProjectManager.create_project(name=project_name)
@@ -193,7 +214,11 @@ def generate_ontology():
 
     if not document_texts:
         ProjectManager.delete_project(project.project_id)
-        return json_error("No documents successfully processed. Please check file format", status=400)
+        return json_error(
+            ApiErrorCode.UNSUPPORTED_FORMAT,
+            status=400,
+            message="No documents successfully processed. Please check file format",
+        )
 
     # Save extracted text
     project.total_text_length = len(all_text)
@@ -249,27 +274,40 @@ def build_graph():
     logger.debug(f"Request parameters: project_id={project_id}")
 
     if not project_id:
-        return json_error("Please provide project_id", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Please provide project_id",
+        )
 
     if not validate_project_id(project_id):
-        return json_error("Invalid project_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     # Get project
     project = ProjectManager.get_project(project_id)
     if not project:
-        return json_error(f"Project does not exist: {project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {project_id}",
+        )
 
     # Check project status
     force = data.get('force', False)  # Force rebuild
 
     if project.status == ProjectStatus.CREATED:
-        return json_error("Project has not generated ontology yet. Please call /ontology/generate first", status=400)
+        return json_error(
+            ApiErrorCode.ONTOLOGY_MISSING,
+            status=400,
+            message="Project has not generated ontology yet. Please call /ontology/generate first",
+        )
 
     if project.status == ProjectStatus.GRAPH_BUILDING and not force:
         return json_error(
-            "Graph is being built. Do not submit repeatedly. To force rebuild, add force: true",
-            status=400,
-            task_id=project.graph_build_task_id
+            ApiErrorCode.GRAPH_BUILD_IN_PROGRESS,
+            status=409,
+            message="Graph is being built. Do not submit repeatedly. To force rebuild, add force: true",
+            extra={"task_id": project.graph_build_task_id},
         )
 
     # If force rebuild, reset status
@@ -291,19 +329,31 @@ def build_graph():
     # Get extracted text
     text = ProjectManager.get_extracted_text(project_id)
     if not text:
-        return json_error("Extracted text not found", status=400)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=400,
+            message="Extracted text not found",
+        )
 
     # Get ontology
     ontology = project.ontology
     if not ontology:
-        return json_error("Ontology definition not found", status=400)
+        return json_error(
+            ApiErrorCode.ONTOLOGY_MISSING,
+            status=400,
+            message="Ontology definition not found",
+        )
 
     # Get storage in request context (background thread cannot access current_app)
     # Capture container in the request thread so the background closure
     # below can resolve services without a live Flask app context.
     container = get_container()
     if container.neo4j_storage is None:
-        return json_error("GraphStorage not initialized", status=503)
+        return json_error(
+            ApiErrorCode.NEO4J_UNAVAILABLE,
+            status=503,
+            message="GraphStorage not initialized",
+        )
 
     # Create async task
     task_manager = TaskManager()
@@ -497,12 +547,16 @@ def get_task(task_id: str):
     Query task status
     """
     if not validate_task_id(task_id):
-        return json_error("Invalid task_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     task = TaskManager().get_task(task_id)
 
     if not task:
-        return json_error(f"Task does not exist: {task_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Task does not exist: {task_id}",
+        )
 
     return json_success(task.to_dict())
 
@@ -527,7 +581,7 @@ def get_graph_data(graph_id: str):
     Get graph data (nodes and edges)
     """
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     builder = get_container().graph_builder()
     graph_data = builder.get_graph_data(graph_id)
@@ -540,9 +594,13 @@ def get_graph_data(graph_id: str):
 def get_graph_snapshot(graph_id: str, round_num: int):
     """Return the set of RELATION edges valid at ``round_num`` (Issue #10)."""
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
     if round_num < 0:
-        return json_error("round_num must be >= 0", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="round_num must be >= 0",
+        )
 
     service = get_container().temporal_graph()
     snapshot = service.get_snapshot(graph_id, round_num)
@@ -557,16 +615,24 @@ def get_graph_diff(graph_id: str):
     Query params: ``start_round``, ``end_round`` (both required, ints).
     """
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     try:
         start_round = int(request.args.get('start_round', '0'))
         end_round = int(request.args.get('end_round', '0'))
     except (TypeError, ValueError):
-        return json_error("start_round and end_round must be integers", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="start_round and end_round must be integers",
+        )
 
     if end_round < start_round:
-        return json_error("end_round must be >= start_round", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="end_round must be >= start_round",
+        )
 
     service = get_container().temporal_graph()
     diff = service.compute_diff(graph_id, start_round, end_round)
@@ -619,16 +685,24 @@ def export_graph(graph_id: str):
     Query params: ``format=graphml`` (only currently supported value).
     """
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     fmt = (request.args.get('format') or 'graphml').strip().lower()
     if fmt != 'graphml':
-        return json_error("format must be 'graphml'", status=400)
+        return json_error(
+            ApiErrorCode.UNSUPPORTED_FORMAT,
+            status=400,
+            message="format must be 'graphml'",
+        )
 
     builder = get_container().graph_builder()
     graph_data = builder.get_graph_data(graph_id)
     if not graph_data or (not graph_data.get("nodes") and not graph_data.get("edges")):
-        return json_error(f"Graph not found or empty: {graph_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Graph not found or empty: {graph_id}",
+        )
 
     import networkx as nx
 
@@ -651,7 +725,7 @@ def delete_graph(graph_id: str):
     Delete graph
     """
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format", status=400)
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     builder = get_container().graph_builder()
     builder.delete_graph(graph_id)

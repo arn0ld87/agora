@@ -70,11 +70,13 @@ def env(monkeypatch):
 def test_export_rejects_invalid_graph_id(env):
     response = env["client"].get("/api/graph/not-valid/export?format=graphml")
     assert response.status_code == 400
+    assert response.get_json()["code"] == "invalid_id"
 
 
 def test_export_rejects_unknown_format(env):
     response = env["client"].get(f"/api/graph/{GID}/export?format=svg")
     assert response.status_code == 400
+    assert response.get_json()["code"] == "unsupported_format"
 
 
 def test_export_404_when_graph_empty(env):
@@ -87,6 +89,7 @@ def test_export_404_when_graph_empty(env):
     })
     response = env["client"].get(f"/api/graph/{GID}/export?format=graphml")
     assert response.status_code == 404
+    assert response.get_json()["code"] == "not_found"
 
 
 def test_export_returns_graphml_attachment(env):
