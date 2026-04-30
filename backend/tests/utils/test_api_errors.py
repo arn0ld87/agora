@@ -31,6 +31,7 @@ REQUIRED_CODES = {
     "not_implemented",
     "bad_request",
     "method_not_allowed",
+    "graph_build_in_progress",
 }
 
 
