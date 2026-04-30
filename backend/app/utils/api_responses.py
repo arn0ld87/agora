@@ -31,6 +31,7 @@ from werkzeug.exceptions import HTTPException
 
 from ..config import Config
 from ..utils.logger import get_logger
+from .api_errors import DEFAULT_MESSAGES, ApiErrorCode
 
 
 _default_logger = get_logger("agora.api")
@@ -65,22 +66,39 @@ def json_success(data: Any = None, *, status: int = 200, **extra: Any):
 
 
 def json_error(
-    message: str,
+    error: str | ApiErrorCode,
     status: int = 400,
     *,
     code: str | None = None,
+    message: str | None = None,
     include_traceback: bool = False,
     extra: Mapping[str, Any] | None = None,
 ):
     """
     Build a standard error envelope.
 
+    Two call styles:
+
+    - ``json_error("Frei formulierter Text", status=400)`` — Legacy-Pfad,
+      Body ohne ``code`` (oder mit explizit übergebenem ``code=...``).
+    - ``json_error(ApiErrorCode.INVALID_ID, status=400)`` — Code-Pfad,
+      ``code`` und Default-Message werden aus dem Katalog gezogen. Über
+      ``message="..."`` lässt sich die Default-Message punktuell überschreiben,
+      ohne den Code zu verlieren.
+
     Keeps the ``traceback`` field opt-in so that internal server errors can
     surface the trace in debug mode without changing the shape for 4xx errors.
     """
-    payload: dict[str, Any] = {"success": False, "error": message}
-    if code:
-        payload["code"] = code
+    if isinstance(error, ApiErrorCode):
+        resolved_code = code or error.value
+        resolved_text = message if message is not None else DEFAULT_MESSAGES[error]
+    else:
+        resolved_code = code
+        resolved_text = message if message is not None else error
+
+    payload: dict[str, Any] = {"success": False, "error": resolved_text}
+    if resolved_code:
+        payload["code"] = resolved_code
     if include_traceback:
         payload["traceback"] = traceback.format_exc()
     if extra:
