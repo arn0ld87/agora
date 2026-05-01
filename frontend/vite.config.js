@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
@@ -14,5 +15,12 @@ export default defineConfig({
         secure: false
       }
     }
+  },
+  test: {
+    // node-Environment reicht für die aktuelle Smoke-Coverage (api/envelope.ts);
+    // Vue-Component- und DOM-Tests in EPIC-10-ST-07 werden auf jsdom umstellen.
+    environment: 'node',
+    include: ['src/**/*.{test,spec}.{js,ts}'],
+    globals: false
   }
 })
