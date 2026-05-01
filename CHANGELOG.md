@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Geändert
 
+- **Issue #41 (EPIC-06-ST-01: SimulationRepository einführen) als bereits erledigt geschlossen.** Inventur zum v0.9.0-Slice-Start zeigt, dass `backend/app/services/artifact_store.py` (Issue #13, Hexagonal-Port mit `LocalFilesystemArtifactStore` und `InMemoryArtifactStore`) alle Akzeptanzkriterien retrospektiv erfüllt. `SimulationManager` (Konstruktor-DI, 7+ Store-Aufrufstellen) und `SimulationRunner` (`resolve_default_store()`) konsumieren den Store durchgängig; `state.json`-Zugriffe sind über den logischen Namen `"state"` gekapselt; File-Pfade zentralisiert in `ArtifactLocator`. Restliche `open()`-Calls im Manager betreffen Report-Meta (Folge-Issue #46) oder den Twitter-CSV-Export (out-of-scope). Status-Doku: `docu/2026-05-01-issue41-simulation-repository-status.md`.
 - **Neo4j-Memory-Settings angehoben** (`docker-compose.yml`): `server.memory.pagecache.size` 256m → **4g**, `heap.max_size` 1g → 2g, `heap.initial_size` 256m → 512m. Reaktion auf I/O-Last bei mittelgroßen Graphen — der alte 256m-Pagecache verursachte Random-Reads von der Platte. Werte sind im Compose-File die Source-of-Truth, kein `.env`-Override nötig. Rollback durch alte Werte. Live verifiziert in Neo4j 5.18 via `CALL dbms.listConfig()`.
 
 ## [0.8.0] — 2026-05-01
