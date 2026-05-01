@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-01
+
+Milestone „Frontend Consolidation" abgeschlossen — 13/13 Issues geschlossen, **519 Tests grün** (488 Backend + 31 Frontend). Schwerpunkt: 933-zeiliges `GraphPanel.vue` zerlegt in fünf Subkomponenten plus ein Render-Composable, Polling-Stack vereinheitlicht (alle 12 Polling-Stellen über `usePolling`, drei Log-Stellen über `useIncrementalLogPolling`), Composable-Test-Coverage von 11 auf 31 hochgezogen, EPIC-02 (Backend-API-Splitting) und EPIC-05-ST-01 (`usePolling`) retrospektiv als bereits erledigt dokumentiert. Vier weitere v0.8.0-Story-Issues (#37, #40, #68, alle EPIC-02-Stories) wurden durch Status-Dokus geschlossen — der eigentliche Code-Stand der Anwendung ist seit v0.6.0/v0.7.0 schon dort.
+
 ### Hinzugefügt
 
 - **`frontend/src/components/graph/GraphHints.vue`** — neue rein präsentationale Komponente für Building-/Simulating-Hint und Simulation-Finished-Hint. Erste Etappe von Issue #34 (EPIC-04-ST-01: GraphPanel zerlegen). Props: `currentPhase`, `isSimulating`, `showFinishedHint`. Emits: `dismiss-finished`. Styles 1:1 aus `GraphPanel.vue` übernommen, kein Visual-Diff. Sub-Slice 2.1 von 3.

@@ -60,26 +60,11 @@ context.md
 /PLAN.md
 /REFACTORING_PLAN.md
 /SECURITY_REVIEW.md
-/CHANGELOG.md
-/docu/*
-!/docu/api-contracts.md
-!/docu/2026-05-01-v0.7.0-release-notes.md
-!/docu/2026-05-01-epic02-api-split-status.md
-!/docu/2026-05-01-issue34-sub21-graphhints-arbeitsprotokoll.md
-!/docu/2026-05-01-issue34-sub22-graphtoolbar-arbeitsprotokoll.md
-!/docu/2026-05-01-issue34-sub23-graphcanvas-arbeitsprotokoll.md
-!/docu/2026-05-01-issue35-usegraphrender-arbeitsprotokoll.md
-!/docu/2026-05-01-issue37-usepolling-status.md
-!/docu/2026-05-01-issue38-usepolling-migration-arbeitsprotokoll.md
-!/docu/2026-05-01-issue68-persona-review-ui-status.md
-!/docu/2026-05-01-issue40-sse-strategy-status.md
-!/docu/2026-05-01-issue39-useincrementallogpolling-arbeitsprotokoll.md
-!/docu/2026-05-01-issue36-graph-dto-normalisierung-arbeitsprotokoll.md
-!/docu/2026-05-01-issue84-composable-tests-arbeitsprotokoll.md
+# docu/ ist seit v0.8.0 öffentlich (Portfolio-Material).
+# .github/ enthält die CI- und Docker-Image-Workflows — getrackt und aktiv.
 /docs/
 /Agora_design/
 /scripts/logs/
-# /.github/ — jetzt getrackt (CI-Workflows)
 /.codex
 /.gitleaksignore
 /docker-compose.override.yml
