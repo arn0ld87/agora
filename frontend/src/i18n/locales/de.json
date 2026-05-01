@@ -374,7 +374,9 @@
     "selected": "Ausgewählt: {name}",
     "noSelection": "Klick auf einen Knoten, um Details zu sehen.",
     "ui": {
-      "toggleEdgeLabels": "Beziehungslabels"
+      "toggleEdgeLabels": "Beziehungslabels",
+      "pauseLayout": "Layout pausieren",
+      "resumeLayout": "Layout fortsetzen"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",

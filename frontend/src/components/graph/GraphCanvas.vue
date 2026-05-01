@@ -74,7 +74,7 @@ const expandedSelfLoops = ref(new Set())
 // `selectedItem` wird vom Composable gehalten und hier nur gelesen + zurückgesetzt.
 // `translateLabel` reicht den vue-i18n-Hook in das Composable: Edge-Labels werden
 // gemäß aktueller Locale formatiert (Issue #129).
-const { selectedItem, render } = useGraphRender({
+const { selectedItem, render, isPaused, togglePause } = useGraphRender({
   svgRef: graphSvg,
   containerRef: graphContainer,
   graphData: toRef(props, 'graphData'),
@@ -264,6 +264,8 @@ defineExpose({
   downloadSvg,
   downloadPng,
   printPdf,
+  isPaused,
+  togglePause,
 })
 </script>
 

@@ -63,11 +63,15 @@ Edge-Labels im Graph werden bei `locale=de` lesbar deutsch dargestellt. Lesbarke
 - [x] Commit erstellt
 - [ ] Browser-Smoke (durch User)
 
-### SUB3
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB3 — abgeschlossen 2026-05-01
+- [x] Implementiert: `useGraphRender` exponiert `pauseSimulation`/`resumeSimulation`/`togglePause` und `isPaused`-Ref. Pause beim Re-Render wird respektiert (Simulation startet pausiert, wenn aktiv pausiert). `GraphCanvas` reicht `isPaused`/`togglePause` an Parent durch. `GraphToolbar` bekommt einen Pause/Resume-Button (⏸/▶) mit i18n-Beschriftung.
+- [x] Tests grün (`npm run check`: 690 Backend + 52 Frontend, Build)
+- [x] Commit erstellt (`Closes #129`)
+- [ ] Browser-Smoke (durch User)
+
+### Bewusst aus Issue gestrichen → Folge-Issue empfohlen
+- **Auto-Freeze pro Batch** (800 ms): Im aktuellen Build-Pfad gibt es kein klares „Batch"-Signal aus dem Backend an den Renderer (Updates kommen via `graphData`-Watch deep). Saubere Implementierung erfordert Backend-Side-Cue (z. B. SSE-Event mit Batch-Marker) — out-of-scope für #129. Folge-Issue: „Graph-Build emit Batch-Marker für UI-Auto-Freeze" (size-s, frontend+backend).
+- **Backend `localized_label` aus Ontology-Generator**: nur sinnvoll, wenn die statische Map zu viele LLM-generierte Edge-Types misst. Erst nach Browser-Smoke entscheiden, dann ggf. Folge-Issue.
 
 ## CHANGELOG-Eintrag (Vorschau)
 ```

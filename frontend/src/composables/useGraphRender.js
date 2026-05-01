@@ -37,6 +37,7 @@ import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeom
  */
 export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels, translateLabel = null }) {
   const selectedItem = ref(null)
+  const isPaused = ref(false)
 
   let currentSimulation = null
   let linkLabelsRef = null
@@ -80,6 +81,10 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .force('y', d3.forceY(height / 2).strength(0.04))
 
     currentSimulation = simulation
+    if (isPaused.value) {
+      // Vor dem Re-Render war pausiert → Simulation gar nicht erst loslaufen lassen.
+      simulation.stop()
+    }
 
     const g = svg.append('g')
 
@@ -334,5 +339,35 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     }
   })
 
-  return { selectedItem, render }
+  /**
+   * Pause/Resume der laufenden Force-Simulation. Issue #129 SUB3:
+   * Während des Graph-Aufbaus ist die Animation oft hektisch — Pause
+   * friert die aktuelle Position ein, Resume nimmt den Layout-Fluss
+   * wieder auf (schwacher Alpha, damit nichts springt).
+   */
+  function pauseSimulation() {
+    isPaused.value = true
+    if (currentSimulation) currentSimulation.stop()
+  }
+
+  function resumeSimulation() {
+    isPaused.value = false
+    if (currentSimulation) {
+      currentSimulation.alpha(0.3).alphaTarget(0).restart()
+    }
+  }
+
+  function togglePause() {
+    if (isPaused.value) resumeSimulation()
+    else pauseSimulation()
+  }
+
+  return {
+    selectedItem,
+    render,
+    isPaused,
+    pauseSimulation,
+    resumeSimulation,
+    togglePause,
+  }
 }

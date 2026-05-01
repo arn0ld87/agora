@@ -363,7 +363,9 @@
     "selected": "Selected: {name}",
     "noSelection": "Click a node to see details.",
     "ui": {
-      "toggleEdgeLabels": "Edge Labels"
+      "toggleEdgeLabels": "Edge Labels",
+      "pauseLayout": "Pause layout",
+      "resumeLayout": "Resume layout"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
