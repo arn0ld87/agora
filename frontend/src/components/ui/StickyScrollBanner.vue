@@ -26,24 +26,34 @@ defineEmits(['jump'])
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
-  padding: 6px 14px;
-  background: var(--accent);
-  color: var(--bg);
-  border: 0;
+  padding: 8px 18px;
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--accent) 100%, white 12%),
+    var(--accent));
+  color: var(--accent-ink);
+  border: 1px solid color-mix(in oklch, var(--accent) 40%, transparent);
   border-radius: var(--r-pill);
   font-family: var(--ff-mono);
   font-size: 11px;
+  font-weight: 500;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   cursor: pointer;
   z-index: 5;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow:
+    0 1px 0 0 color-mix(in oklch, white 35%, transparent) inset,
+    0 8px 24px -6px var(--accent-glow),
+    0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  transition: transform 120ms cubic-bezier(.2,.8,.2,1),
+              box-shadow 160ms ease;
 }
 
 .sticky-banner:hover {
-  transform: translateX(-50%) translateY(-1px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow:
+    0 1px 0 0 color-mix(in oklch, white 40%, transparent) inset,
+    0 14px 32px -6px var(--accent-glow),
+    0 2px 4px 0 rgba(0, 0, 0, 0.22);
 }
 
 .arrow {
