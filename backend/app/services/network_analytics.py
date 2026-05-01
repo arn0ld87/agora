@@ -83,14 +83,40 @@ class PolarizationMetrics:
         }
 
 
-def _extract_target_agent(action: Dict[str, Any]) -> Optional[int]:
+# Reale OASIS-Logs tragen Target-Identitäten in *Strings* (`*_author_name`,
+# `target_user_name`), nicht in den fiktionalen numerischen Keys, die der
+# Service vor S2-pre suchte. Diese String-Felder pro Action-Type:
+_TARGET_NAME_KEYS = (
+    "post_author_name",       # LIKE_POST, DISLIKE_POST
+    "comment_author_name",    # LIKE_COMMENT, DISLIKE_COMMENT
+    "target_user_name",       # FOLLOW
+    "original_author_name",   # REPOST, QUOTE_POST
+)
+
+
+def _extract_target_agent(
+    action: Dict[str, Any],
+    name_to_id: Optional[Dict[str, int]] = None,
+    comment_to_author: Optional[Dict[int, int]] = None,
+) -> Optional[int]:
     """Best-effort pull of the target agent id from an action dict.
 
-    Reddit/Twitter logs store the target under different keys depending on
-    the action type. Falling back to a broad set of likely fields avoids
-    having to hard-code platform schemas.
+    Three lookup tiers, in order:
+
+    1. **Legacy/test path** — numeric ID keys (``followee_id``, ``author_id``,
+       …). Bestehende Unit-Tests benutzen diese Form, OASIS produziert sie
+       in der Praxis nicht.
+    2. **Comment-ID-Index** (S2-pre) — ``LIKE_COMMENT``/``DISLIKE_COMMENT``
+       tragen ``comment_id``. Über einen vorab aufgebauten
+       ``comment_id → agent_id``-Index aus den ``CREATE_COMMENT``-Actions
+       lässt sich der Comment-Author auflösen.
+    3. **Name-Lookup** (S2-pre) — die Strings aus ``_TARGET_NAME_KEYS``
+       werden gegen einen ``agent_name → agent_id``-Index aus allen
+       Actions aufgelöst. Robust solange Agent-Namen unique sind (in
+       OASIS-Profile-Generation der Default).
     """
     args = action.get("action_args") or {}
+
     for key in (
         "target_agent_id",
         "followee_id",
@@ -104,9 +130,68 @@ def _extract_target_agent(action: Dict[str, Any]) -> Optional[int]:
                 return int(val)
             except (TypeError, ValueError):
                 continue
-    # Some logs reference a post/comment id instead of a user id. Those are
-    # broadcast-ish interactions for polarization purposes — skip them.
+
+    if comment_to_author:
+        cid = args.get("comment_id")
+        if cid is not None:
+            try:
+                resolved = comment_to_author.get(int(cid))
+            except (TypeError, ValueError):
+                resolved = None
+            if resolved is not None:
+                return resolved
+
+    if name_to_id:
+        for key in _TARGET_NAME_KEYS:
+            name = args.get(key)
+            if isinstance(name, str) and name:
+                resolved = name_to_id.get(name)
+                if resolved is not None:
+                    return resolved
+
     return None
+
+
+def _build_lookup_indexes(
+    actions: List[Dict[str, Any]],
+) -> Tuple[Dict[str, int], Dict[int, int]]:
+    """Build name and comment lookup tables from a single pass over actions.
+
+    - ``name_to_id``: jede Action trägt ``agent_id`` + ``agent_name``.
+      Sammeln liefert die Reverse-Map. Bei Namens-Kollision gewinnt die
+      *erste* Beobachtung (deterministisch, da Action-Liste sortiert ist).
+    - ``comment_to_author``: ``CREATE_COMMENT`` schreibt ``comment_id`` und
+      die ``agent_id`` ist der Comment-Author. Ergibt den Index, den
+      ``LIKE_COMMENT``/``DISLIKE_COMMENT`` für den Author-Resolve brauchen.
+    """
+    name_to_id: Dict[str, int] = {}
+    comment_to_author: Dict[int, int] = {}
+
+    for action in actions:
+        agent_id_raw = action.get("agent_id")
+        if agent_id_raw is None:
+            continue
+        try:
+            agent_id = int(agent_id_raw)
+        except (TypeError, ValueError):
+            continue
+
+        agent_name = action.get("agent_name")
+        if isinstance(agent_name, str) and agent_name and agent_name not in name_to_id:
+            name_to_id[agent_name] = agent_id
+
+        if (action.get("action_type") or "").upper() == "CREATE_COMMENT":
+            args = action.get("action_args") or {}
+            cid_raw = args.get("comment_id")
+            if cid_raw is not None:
+                try:
+                    cid = int(cid_raw)
+                except (TypeError, ValueError):
+                    continue
+                if cid not in comment_to_author:
+                    comment_to_author[cid] = agent_id
+
+    return name_to_id, comment_to_author
 
 
 class NetworkAnalyticsService:
@@ -159,6 +244,12 @@ class NetworkAnalyticsService:
     def _iter_interactions(
         self, actions: Iterable[Dict[str, Any]]
     ) -> Iterable[Tuple[int, int]]:
+        # S2-pre: Lookup-Indexe einmalig vorab aufbauen, statt sie pro
+        # Action zu rekonstruieren. Liste materialisieren, damit der Index-
+        # Pass und der Iteration-Pass auf demselben Datensatz laufen.
+        actions = list(actions)
+        name_to_id, comment_to_author = _build_lookup_indexes(actions)
+
         for action in actions:
             action_type = (action.get("action_type") or "").upper()
             if action_type not in _DIRECTED_ACTIONS:
@@ -170,7 +261,7 @@ class NetworkAnalyticsService:
                 src_id = int(src)
             except (TypeError, ValueError):
                 continue
-            tgt_id = _extract_target_agent(action)
+            tgt_id = _extract_target_agent(action, name_to_id, comment_to_author)
             if tgt_id is None or tgt_id == src_id:
                 continue
             yield src_id, tgt_id

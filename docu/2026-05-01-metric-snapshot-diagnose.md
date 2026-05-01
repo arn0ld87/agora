@@ -1,7 +1,61 @@
-# Metric-Snapshot-Diagnose (S0)
+# Metric-Snapshot-Diagnose (S0 + S2-pre)
 
-**Datum:** 2026-05-01T07:40:16+02:00
+**Datum:** 2026-05-01T08:05:19+02:00
 **Diagnostizierte Sim-Runs:** 10
+
+## Status nach S2-pre
+
+| Verdict | Vor S2-pre | Nach S2-pre |
+|---|---:|---:|
+| `metrics_consistent` | 0 | **7** |
+| `broadcast_only_no_pairwise` | 2 | 2 |
+| `directed_actions_but_no_agents_extracted` | 8 | 1 |
+
+Akzeptanzkriterium von Issue #104 (≥6/10 `metrics_consistent`) **erfüllt** mit 7/10. Die zwei `broadcast_only_no_pairwise`-Runs sind echte Test-Fixtures mit ausschließlich `CREATE_POST`-Actions; deren 0er-Metrik wird in S2a über einen Status-Flag transparent gemacht.
+
+Der eine verbliebene `directed_actions_but_no_agents_extracted`-Run (`sim_65bfd5702ab0`) ist ein **Edge-Case ohne Bug-Charakter**: insgesamt nur 3 directed Actions, davon 1 `FOLLOW` ohne `target_user_name` (OASIS hat den Namen ausnahmsweise nicht mit-geloggt) und 1 `LIKE_COMMENT` als Self-Loop (Eva Feußner liked ihren eigenen Kommentar). Beide werden korrekt verworfen. Zukünftiger Mini-Slice könnte das Verdict-Mapping in `diagnose_metric_snapshot.py` verfeinern (`directed_actions_filtered_to_empty` als eigene Kategorie für Self-Loops + nicht-resolvebare Targets), nicht S2-pre-blockierend.
+
+## Hauptbefund (S0, Pre-Fix)
+
+**8 von 10 Runs (80 %) trugen vor S2-pre den Verdict `directed_actions_but_no_agents_extracted`.**
+Der `NetworkAnalyticsService` lieferte strukturell `0/0/0/0` für Polarization-Metriken — bei *jedem* Run mit pairwise Interactions. Das Polarization-Feature (Issue #12) war faktisch tot, nicht kosmetisch falsch.
+
+### Root-Cause (Pre-Fix)
+
+Der Code suchte in `action_args` nach numerischen Keys:
+
+```python
+for key in ("target_agent_id", "followee_id", "user_id", "target_user_id", "author_id"):
+    val = args.get(key)
+    if val is not None: return int(val)
+```
+
+Reale OASIS-Action-Args für `LIKE_POST` (aus `sim_660e1a87dad5/twitter/actions.jsonl`):
+
+```json
+{
+  "action_args": {
+    "post_id": 1,
+    "like_id": 1,
+    "post_content": "...",
+    "post_author_name": "Landesregierung Nordrhein-Westfalen"
+  }
+}
+```
+
+Kein einziger gesuchter Key drin. OASIS loggt `post_id` + `post_author_name` (String), nicht `author_id` → `_extract_target_agent` returned `None` → Interaction wurde verworfen → leerer Graph → 0/0/0/0.
+
+## Fix (S2-pre, commit-folgender Slice)
+
+Implementiert wurde **Variante 3 mit Twist**: Reverse-Lookup `agent_name → agent_id` aus den Actions selbst (jede Action trägt `agent_id` + `agent_name`), statt einer `post_id → agent_id`-Map. Begründung: `CREATE_POST` loggt im OASIS-Output **keine `post_id`**, eine ID-basierte Map wäre nicht aufbaubar gewesen. Die Strings (`post_author_name`, `comment_author_name`, `target_user_name`, `original_author_name`) sind aber bei jeder directed Action mit-geloggt — kollisionsfrei, solange Agent-Namen unique sind (OASIS-Profile-Generation-Default).
+
+Zusätzlich: `comment_id → agent_id`-Index aus `CREATE_COMMENT`-Actions, damit `LIKE_COMMENT`/`DISLIKE_COMMENT` auch dann auflösen, wenn `comment_author_name` ausnahmsweise fehlt.
+
+Bestehende Tests (`followee_id`/`author_id`-basiert) wurden NICHT angefasst: die alten ID-Keys bleiben als erste Lookup-Tier erhalten und sichern Rückwärtskompatibilität.
+
+### Sekundärbefund (gilt unverändert)
+
+`SEARCH_USER`, `TREND`, `DO_NOTHING`, `SEARCH_POSTS` sind nicht in `_DIRECTED_ACTIONS` und werden korrekt ignoriert. `MUTE` ist in `_DIRECTED_ACTIONS`, hat aber `action_args = {}` — wird durch das fehlende Target nun ebenfalls korrekt verworfen.
 
 ## Methodik
 
@@ -15,20 +69,20 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 
 | Sim | Status | Lines (T/R) | Actions | Directed | Agents | Metric agents/inter/cluster | Verdict |
 |---|---|---|---|---|---|---|---|
-| `sim_660e1a87dad5` | paused | 590/766 | 1046 | 745 | 20 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
-| `sim_e2dcc0797dfd` | running | 137/139 | 188 | 108 | 18 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
-| `sim_c03db93ddebd` | running | 237/244 | 381 | 227 | 20 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
+| `sim_660e1a87dad5` | paused | 590/766 | 1046 | 745 | 20 | 20/361/3 | **metrics_consistent** |
+| `sim_e2dcc0797dfd` | running | 137/139 | 188 | 108 | 18 | 17/46/3 | **metrics_consistent** |
+| `sim_c03db93ddebd` | running | 237/244 | 381 | 227 | 20 | 20/112/4 | **metrics_consistent** |
 | `sim_65bfd5702ab0` | ready | 41/40 | 31 | 3 | 9 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
-| `sim_397e32bf8483` | stopped | 308/267 | 395 | 238 | 13 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
-| `sim_645585de00d9` | stopped | 44/53 | 49 | 13 | 9 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
+| `sim_397e32bf8483` | stopped | 308/267 | 395 | 238 | 13 | 13/93/3 | **metrics_consistent** |
+| `sim_645585de00d9` | stopped | 44/53 | 49 | 13 | 9 | 5/6/2 | **metrics_consistent** |
 | `sim_fb7eb300ce71` | stopped | 29/7 | 10 | 0 | 5 | 0/0/0 | **broadcast_only_no_pairwise** |
-| `sim_1788f01ab463` | stopped | 185/201 | 214 | 99 | 18 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
-| `sim_1d2298b006ed` | running | 264/565 | 533 | 274 | 11 | 0/0/0 | **directed_actions_but_no_agents_extracted** |
+| `sim_1788f01ab463` | stopped | 185/201 | 214 | 99 | 18 | 11/36/3 | **metrics_consistent** |
+| `sim_1d2298b006ed` | running | 264/565 | 533 | 274 | 11 | 11/111/3 | **metrics_consistent** |
 | `sim_03717ada1e52` | ready | 11/11 | 10 | 0 | 5 | 0/0/0 | **broadcast_only_no_pairwise** |
 
 ## Action-Type-Histogramm pro Run
 
-### `sim_660e1a87dad5` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_660e1a87dad5` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -41,7 +95,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 | `REPOST` | 36 | ✅ |
 | `SEARCH_USER` | 1 | ❌ |
 
-### `sim_e2dcc0797dfd` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_e2dcc0797dfd` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -59,7 +113,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 | `REPOST` | 2 | ✅ |
 | `MUTE` | 1 | ✅ |
 
-### `sim_c03db93ddebd` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_c03db93ddebd` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -87,7 +141,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 | `SEARCH_USER` | 1 | ❌ |
 | `SEARCH_POSTS` | 1 | ❌ |
 
-### `sim_397e32bf8483` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_397e32bf8483` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -105,7 +159,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 | `DISLIKE_COMMENT` | 2 | ✅ |
 | `MUTE` | 1 | ✅ |
 
-### `sim_645585de00d9` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_645585de00d9` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -121,7 +175,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 |---|---|---|
 | `CREATE_POST` | 10 | ❌ |
 
-### `sim_1788f01ab463` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_1788f01ab463` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -139,7 +193,7 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 | `QUOTE_POST` | 1 | ✅ |
 | `MUTE` | 1 | ✅ |
 
-### `sim_1d2298b006ed` — verdict: **directed_actions_but_no_agents_extracted**
+### `sim_1d2298b006ed` — verdict: **metrics_consistent**
 
 | Type | Count | In _DIRECTED_ACTIONS? |
 |---|---|---|
@@ -166,68 +220,11 @@ Skript repliziert den Pfad aus `report_agent._collect_simulation_evidence_items`
 - **`directed_actions_filtered_to_empty`** — Directed Actions vorhanden mit Targets, aber alle werden später gefiltert (z. B. self-loops). Sollte selten sein.
 - **`metrics_consistent`** — Metriken passen zu Actions, kein Bug.
 
-## Hauptbefund
+## Konsequenzen für S2
 
-**8 von 10 Runs (80 %) tragen den Verdict `directed_actions_but_no_agents_extracted`.**
-Damit liefert der `NetworkAnalyticsService` heute strukturell `0/0/0/0` für Polarization-Metriken — bei *jedem* echten Run mit pairwise Interactions. Das Polarization-Feature (Issue #12) ist faktisch tot, nicht nur kosmetisch falsch.
+Die Diagnose-Verteilung bestimmt, was S2a (Snapshot-Hardening) konkret tun muss:
 
-### Root-Cause: Schema-Mismatch in `_extract_target_agent`
-
-Code-Annahme (`backend/app/services/network_analytics.py:86-109`):
-
-```python
-for key in ("target_agent_id", "followee_id", "user_id", "target_user_id", "author_id"):
-    val = args.get(key)
-    if val is not None: return int(val)
-```
-
-Reale OASIS-Action-Args für `LIKE_POST` (aus `sim_660e1a87dad5/twitter/actions.jsonl`):
-
-```json
-{
-  "action_type": "LIKE_POST",
-  "agent_id": 14,
-  "agent_name": "Gesamtschule Brünninghausen",
-  "action_args": {
-    "post_id": 1,
-    "like_id": 1,
-    "post_content": "...",
-    "post_author_name": "Landesregierung Nordrhein-Westfalen"
-  }
-}
-```
-
-→ Kein einziger der gesuchten Keys ist drin. OASIS schreibt `post_id` + `post_author_name` (String), nicht `author_id`.
-→ `_extract_target_agent` returned `None`, Interaction wird verworfen.
-→ `compute_metrics` baut einen leeren Graphen, Metriken sind 0.
-
-### Was im Code ankommen muss
-
-Das Mapping `post_id → post_author_id (numeric agent_id)` muss aus einer der OASIS-Quellen rekonstruiert werden:
-
-1. **`reddit_simulation.db` / `twitter_simulation.db`** — SQLite-Tables haben `posts(post_id, user_id)`, das löst `post_id → user_id` exakt auf. Sauberster Weg, aber Service braucht DB-Zugriff oder vorab-aufgelöste Lookup-Tabelle.
-2. **`reddit_profiles.json` / `twitter_profiles.csv` + `post_author_name` Reverse-Lookup** — Name → agent_id. Zerbrechlich bei Namens-Kollisionen, aber DB-frei.
-3. **`CREATE_POST`-Actions vorab indexieren** — jeder `CREATE_POST` schreibt `agent_id` + `action_args.post_id` (zu prüfen). Daraus eine In-Memory-Map `post_id → agent_id` aufbauen, dann LIKE_POST/QUOTE_POST/REPOST/COMMENT auflösen. Kein DB-Zugriff nötig.
-
-Variante 3 ist am einfachsten und passt zur Stateless-Service-API.
-
-Gleiches Problem trifft `LIKE_COMMENT`/`DISLIKE_COMMENT`: dort steht `comment_id`, nicht `comment_author_id`. Brauchen ebenfalls einen Vorab-Index aus `CREATE_COMMENT`-Actions.
-
-### Sekundärbefund: Action-Type-Mismatch
-
-`SEARCH_USER`, `TREND`, `DO_NOTHING`, `SEARCH_POSTS` sind **nicht** in `_DIRECTED_ACTIONS` und werden korrekt ignoriert. `MUTE` und `QUOTE_POST` sind drin — gut. Keine fehlenden Types entdeckt.
-
-`broadcast_only_no_pairwise` (2 Runs) ist semantisch ein Sub-Symptom: kleine Test-Runs mit nur 10 `CREATE_POST`-Actions und sonst nichts. Hier sind die 0er Metriken inhaltlich korrekt, müssen aber im Report mit Status-Flag statt nackten Nullen ausgewiesen werden.
-
-## Konsequenzen für die Slice-Sequenz
-
-Der ursprüngliche Plan unterschätzte den Befund. Reihenfolge wird geupdatet:
-
-| Slice | Vorher | Jetzt |
-|---|---|---|
-| **S2-pre (NEU)** | nicht im Plan | **Schema-Fix `_extract_target_agent`**: Vorab-Index `post_id → agent_id` und `comment_id → agent_id` aus `CREATE_POST`/`CREATE_COMMENT`-Actions; Resolver in `_iter_interactions` einhängen. Akzeptanz: Diagnose-Skript zeigt für >0 Runs Verdict `metrics_consistent`. |
-| **S2a** | „total_agents=0 ↔ Actions vorhanden = Inkonsistenz markieren" | bleibt: Status-Flag `no_pairwise_interactions` für die echten Broadcast-Only-Fälle, plus `snapshot_id`/`calculated_at` |
-| **S2b** | Frontend „Metriken nicht verfügbar" | bleibt |
-
-S2-pre ist der echte Werttreiber — danach hat das Polarization-Feature überhaupt erstmal Daten zum Anzeigen. S2a/S2b regelt die Edge-Cases sauber drumherum.
+- Bei vielen `broadcast_only_no_pairwise` → S2a sollte einen **Status-Flag** im Snapshot setzen (`status: "no_pairwise_interactions"`) statt 0/0/0/0 als Metrik auszugeben. UI in S2b zeigt dann Metriken-nicht-verfuegbar.
+- Bei `no_actions_logged` → ähnlich, Status `no_actions`.
+- Bei `directed_actions_but_no_agents_extracted` → echter Bug in `_extract_target_agent`, separate Untersuchung.
 

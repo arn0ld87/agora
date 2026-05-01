@@ -148,3 +148,198 @@ def test_interactions_without_target_ignored():
     m = svc.compute_metrics(actions)
 
     assert m.total_interactions == 0
+
+
+# --- S2-pre: real OASIS action_args schema ---------------------------------
+#
+# OASIS schreibt Target-Identitäten als *Strings* (`*_author_name`,
+# `target_user_name`), nicht als numerische IDs. Diese Tests fixieren das
+# Schema, das die Diagnose in `docu/2026-05-01-metric-snapshot-diagnose.md`
+# dokumentiert hat.
+
+
+def _seed_alice_creates_post(post_author_id: int = 1) -> Dict[str, Any]:
+    """Hilfs-Action: erzeugt eine Identitätsspur für `Alice` im name_to_id-Index."""
+    return {
+        "agent_id": post_author_id,
+        "agent_name": "Alice",
+        "action_type": "CREATE_POST",
+        "action_args": {"content": "..."},
+        "round": 0,
+    }
+
+
+def test_like_post_resolved_via_post_author_name():
+    svc = NetworkAnalyticsService()
+    actions = [
+        _seed_alice_creates_post(),
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "LIKE_POST",
+            "action_args": {
+                "post_id": 1,
+                "like_id": 1,
+                "post_content": "...",
+                "post_author_name": "Alice",
+            },
+            "round": 1,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 1
+    assert m.total_agents == 2
+
+
+def test_follow_resolved_via_target_user_name():
+    svc = NetworkAnalyticsService()
+    actions = [
+        _seed_alice_creates_post(),
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "FOLLOW",
+            "action_args": {"follow_id": 1, "target_user_name": "Alice"},
+            "round": 1,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 1
+    assert m.total_agents == 2
+
+
+def test_repost_and_quote_post_resolved_via_original_author_name():
+    svc = NetworkAnalyticsService()
+    actions = [
+        _seed_alice_creates_post(),
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "REPOST",
+            "action_args": {
+                "new_post_id": 2,
+                "original_content": "...",
+                "original_author_name": "Alice",
+            },
+            "round": 1,
+        },
+        {
+            "agent_id": 3,
+            "agent_name": "Carol",
+            "action_type": "QUOTE_POST",
+            "action_args": {
+                "quoted_id": 1,
+                "new_post_id": 3,
+                "original_content": "...",
+                "original_author_name": "Alice",
+                "quote_content": "...",
+            },
+            "round": 2,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 2
+    assert m.total_agents == 3
+
+
+def test_like_comment_resolved_via_comment_id_index():
+    svc = NetworkAnalyticsService()
+    actions = [
+        # Alice schreibt comment_id=42
+        {
+            "agent_id": 1,
+            "agent_name": "Alice",
+            "action_type": "CREATE_COMMENT",
+            "action_args": {"content": "...", "comment_id": 42},
+            "round": 0,
+        },
+        # Bob liked comment_id=42 — comment_author_name fehlt absichtlich,
+        # damit der comment_id-Index als alleinige Auflösungsquelle greifen muss.
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "LIKE_COMMENT",
+            "action_args": {"comment_id": 42, "comment_content": "..."},
+            "round": 1,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 1
+    assert m.total_agents == 2
+
+
+def test_mute_without_target_is_ignored():
+    svc = NetworkAnalyticsService()
+    actions = [
+        _seed_alice_creates_post(),
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "MUTE",
+            "action_args": {},  # OASIS loggt MUTE ohne Target
+            "round": 1,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 0
+
+
+def test_unknown_author_name_skipped_not_crashing():
+    svc = NetworkAnalyticsService()
+    actions = [
+        # Alice taucht im Index auf
+        _seed_alice_creates_post(),
+        # Aber Bob liked einen Post von "Eve" — die niemals eine Action geloggt hat
+        {
+            "agent_id": 2,
+            "agent_name": "Bob",
+            "action_type": "LIKE_POST",
+            "action_args": {
+                "post_id": 7,
+                "post_author_name": "Eve",
+            },
+            "round": 1,
+        },
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 0
+
+
+def test_full_oasis_run_mixed_directed_actions():
+    """Smoke-Test mit dem typischen OASIS-Mix aus directed actions und
+    CREATE_POST-Broadcasts. Drei Agents in zwei Clustern."""
+    svc = NetworkAnalyticsService()
+    actions = [
+        # Alle drei publishen Posts (broadcast, ignoriert für Metriken).
+        {"agent_id": 1, "agent_name": "Alice", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+        {"agent_id": 2, "agent_name": "Bob", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+        {"agent_id": 3, "agent_name": "Carol", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+        # Bob<->Alice und Bob->Carol per LIKE/FOLLOW.
+        {"agent_id": 2, "agent_name": "Bob", "action_type": "LIKE_POST",
+         "action_args": {"post_id": 1, "post_author_name": "Alice"}, "round": 1},
+        {"agent_id": 1, "agent_name": "Alice", "action_type": "FOLLOW",
+         "action_args": {"target_user_name": "Bob"}, "round": 1},
+        {"agent_id": 2, "agent_name": "Bob", "action_type": "FOLLOW",
+         "action_args": {"target_user_name": "Carol"}, "round": 2},
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.total_interactions == 3
+    assert m.total_agents == 3
+    assert m.cluster_count >= 1
