@@ -34,6 +34,14 @@ from .graph_tools import (
 
 logger = get_logger('agora.report_agent')
 
+# S5: diese Item-Typen sind Modell-Output, keine Evidence. Sie dürfen
+# nicht im `evidence`-Array eines Claims stehen, sondern im separaten
+# `audit_trail`-Feld.
+FORBIDDEN_EVIDENCE_TYPES = frozenset({
+    "model_generated_inference",
+    "section_synthesis",
+})
+
 
 class ReportLogger:
     """
@@ -1306,20 +1314,24 @@ class ReportAgent:
         claims = []
         global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
         # S4b: claim-spezifisches Binding wenn ein Embedder verfügbar ist.
-        # Fällt der Embedder aus (Tests ohne Ollama, Service-Init failed),
-        # nutzt der Code den alten generischen Pool als Fallback. Damit
-        # bleibt der Test-Pfad stabil; Production mit Ollama bekommt
-        # gerankte Evidence.
+        # S5: model_generated_inference und section_synthesis sind keine
+        # Evidence — sie sind Modell-Output. Sie wandern in das separate
+        # `audit_trail`-Feld der Claim-Dataclass, nicht ins `evidence`-Array.
         embedder = self._try_get_embedder()
         for index, chunk in enumerate(chunks, 1):
-            direct_items = deepcopy(self._active_section_evidence[:10])
-            inference_item = EvidenceItem(
-                type="model_generated_inference",
-                source="section_synthesis",
-                tool_name="section_synthesis",
-                snippet=self._truncate(chunk),
-                raw={"content": chunk},
-            ).to_dict()
+            direct_items = [
+                deepcopy(item) for item in self._active_section_evidence[:10]
+                if item.get("type") not in FORBIDDEN_EVIDENCE_TYPES
+            ]
+            audit_trail = [
+                EvidenceItem(
+                    type="model_generated_inference",
+                    source="section_synthesis",
+                    tool_name="section_synthesis",
+                    snippet=self._truncate(chunk),
+                    raw={"content": chunk},
+                ).to_dict()
+            ]
 
             bound: List[Dict[str, Any]] = []
             embedder_ok = False
@@ -1334,37 +1346,33 @@ class ReportAgent:
                     )
                     embedder_ok = True
                 except Exception as exc:
-                    # Embedder ist initialisierbar, aber nicht erreichbar
-                    # (Ollama down, Netzwerk-Probleme, …). Disable für
-                    # restliche Section, fallback auf alten Pool.
                     logger.warning(
                         f"EvidenceBinder failed, falling back to generic pool: {exc!r}"
                     )
                     self._embed_cache = None
                     embedder = None
             if embedder_ok:
-                # Globaler Pool nur als Fallback, max 2 Items, wenn der
-                # Binder gar nichts findet — vermeidet leere Belegliste
-                # für legitime Claims.
                 if not bound:
                     bound = deepcopy(global_items[:2])
-                evidence_items = bound + [inference_item]
+                evidence_items = bound
                 direct_count = len(bound)
             else:
-                evidence_items = direct_items + global_items + [inference_item]
-                direct_count = len([item for item in direct_items if item.get("type") != "model_generated_inference"])
+                evidence_items = direct_items + global_items
+                direct_count = len(direct_items)
 
             support_count = direct_count + len(global_items)
             confidence_score = min(0.95, 0.25 + support_count * 0.12)
             confidence_label = "high" if confidence_score >= 0.75 else "medium" if confidence_score >= 0.45 else "low"
-            claims.append(ReportClaim(
+            claim_dict = ReportClaim(
                 claim_id=f"claim_{index:02d}",
                 claim_text=chunk,
                 evidence=evidence_items,
                 confidence_score=confidence_score,
                 confidence_label=confidence_label,
                 notes="Section-chunk level evidence mapping (schema_version 2).",
-            ).to_dict())
+            ).to_dict()
+            claim_dict["audit_trail"] = audit_trail
+            claims.append(claim_dict)
         if not claims:
             claims.append(ReportClaim(
                 claim_id="claim_01",

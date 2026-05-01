@@ -199,11 +199,13 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     assert claims[0]["confidence"] == "medium"
     assert claims[0]["confidence_score"] == 0.49
     assert claims[0]["evidence"] == claims[0]["evidence_items"]
-    assert {item["type"] for item in claims[0]["evidence"]} == {
-        "graph_fact",
-        "graph_metric",
-        "model_generated_inference",
-    }
+    # S5: model_generated_inference darf nicht mehr im Evidence-Array sein.
+    evidence_types = {item["type"] for item in claims[0]["evidence"]}
+    assert "model_generated_inference" not in evidence_types
+    assert evidence_types == {"graph_fact", "graph_metric"}
+    # Statt dessen lebt die Synthese im audit_trail.
+    audit_types = {item["type"] for item in claims[0].get("audit_trail", [])}
+    assert "model_generated_inference" in audit_types
 
 
 def test_collect_simulation_evidence_uses_metrics_and_actions(monkeypatch):
