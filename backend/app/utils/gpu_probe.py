@@ -44,7 +44,15 @@ def detect_gpu() -> Dict[str, Any]:
     # 2. Query Ollama REST API for GPU usage
     # Ollama /api/ps returns "size_vram" per loaded model — the most reliable
     # GPU signal without needing nvidia-smi or ollama CLI in the container.
-    ollama_base = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
+    #
+    # Derive the Ollama base URL with the same logic as _get_ollama_status()
+    # in api/status.py: strip /v1 from LLM_BASE_URL, fall back to OLLAMA_BASE_URL.
+    from ..config import Config
+    ollama_base = (Config.LLM_BASE_URL or '').rstrip('/')
+    if ollama_base.endswith('/v1'):
+        ollama_base = ollama_base[:-3]
+    if not ollama_base:
+        ollama_base = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
     ps_url = f"{ollama_base}/api/ps"
 
     try:
