@@ -22,6 +22,7 @@ import { onMounted, onUnmounted, ref, toValue, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 
 import { buildGraphRenderData } from '../components/graph/graphPanelData'
+import { formatEdgeLabel } from '../components/graph/edgeLabelI18n'
 import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeometry'
 
 /**
@@ -31,10 +32,12 @@ import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeom
  * @param {import('vue').MaybeRefOrGetter<object|null>} args.graphData – Reactive Source mit `nodes`/`edges`
  * @param {import('vue').MaybeRefOrGetter<Array>}       args.entityTypes – Reactive Source mit Entity-Type-Liste (für Farb-Mapping)
  * @param {import('vue').Ref<boolean>}            args.showEdgeLabels  – Sichtbarkeit der Kantenbeschriftungen
+ * @param {((key: string) => string)=}            args.translateLabel  – optionaler i18n-Hook (`vue-i18n` `t`); wird auf `edge.name` angewandt
  * @returns {{ selectedItem: import('vue').Ref<object|null>, render: () => void }}
  */
-export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels }) {
+export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels, translateLabel = null }) {
   const selectedItem = ref(null)
+  const isPaused = ref(false)
 
   let currentSimulation = null
   let linkLabelsRef = null
@@ -78,11 +81,28 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .force('y', d3.forceY(height / 2).strength(0.04))
 
     currentSimulation = simulation
+    if (isPaused.value) {
+      // Vor dem Re-Render war pausiert → Simulation gar nicht erst loslaufen lassen.
+      simulation.stop()
+    }
 
     const g = svg.append('g')
 
+    // Edge-Labels werden bei sehr weit rausgezoomtem Graph automatisch ausgeblendet,
+    // damit dichte Stellen lesbar bleiben. Schwelle bewusst niedrig (0.6), damit normales
+    // Zoomverhalten die Labels nicht plötzlich verliert. Toggle-State dominiert weiterhin.
+    const EDGE_LABEL_AUTO_HIDE_ZOOM = 0.6
+    let _zoomedOut = false
+
     svg.call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
       g.attr('transform', event.transform)
+      const wantsHide = event.transform.k < EDGE_LABEL_AUTO_HIDE_ZOOM
+      if (wantsHide !== _zoomedOut) {
+        _zoomedOut = wantsHide
+        const visible = showEdgeLabels.value && !_zoomedOut
+        if (linkLabelsRef) linkLabelsRef.style('display', visible ? 'block' : 'none')
+        if (linkLabelBgRef) linkLabelBgRef.style('display', visible ? 'block' : 'none')
+      }
     }))
 
     const linkGroup = g.append('g').attr('class', 'links')
@@ -133,8 +153,8 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     const linkLabels = linkGroup.selectAll('text')
       .data(edges)
       .enter().append('text')
-      .text(d => d.name)
-      .attr('font-size', '9px')
+      .text(d => formatEdgeLabel(d.name, translateLabel))
+      .attr('font-size', '12px')
       .attr('fill', 'var(--fg-meta)')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
@@ -228,10 +248,13 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
         }
       })
 
+    // Knoten-Label: bis 14 Zeichen voll, sonst Trunkation mit Ellipsis. Voller Name
+    // bleibt im SVG-`<title>` als nativer Browser-Tooltip erreichbar (Issue #129 SUB2).
+    const NODE_LABEL_MAX = 14
     const nodeLabels = nodeGroup.selectAll('text')
       .data(nodes)
       .enter().append('text')
-      .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
+      .text(d => d.name.length > NODE_LABEL_MAX ? d.name.substring(0, NODE_LABEL_MAX) + '…' : d.name)
       .attr('font-size', '11px')
       .attr('fill', 'var(--fg-on-inverse)')
       .attr('font-weight', '500')
@@ -239,6 +262,9 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .attr('dy', 4)
       .style('pointer-events', 'none')
       .style('font-family', 'system-ui, sans-serif')
+
+    nodeLabels.append('title').text(d => d.name)
+    node.append('title').text(d => d.name)
 
     simulation.on('tick', () => {
       link.attr('d', d => getLinkPath(d))
@@ -256,10 +282,10 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
         const textEl = linkLabels.nodes()[i]
         const bbox = textEl.getBBox()
         d3.select(this)
-          .attr('x', mid.x - bbox.width / 2 - 4)
-          .attr('y', mid.y - bbox.height / 2 - 2)
-          .attr('width', bbox.width + 8)
-          .attr('height', bbox.height + 4)
+          .attr('x', mid.x - bbox.width / 2 - 6)
+          .attr('y', mid.y - bbox.height / 2 - 3)
+          .attr('width', bbox.width + 12)
+          .attr('height', bbox.height + 6)
           .attr('transform', '')
       })
 
@@ -313,5 +339,35 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     }
   })
 
-  return { selectedItem, render }
+  /**
+   * Pause/Resume der laufenden Force-Simulation. Issue #129 SUB3:
+   * Während des Graph-Aufbaus ist die Animation oft hektisch — Pause
+   * friert die aktuelle Position ein, Resume nimmt den Layout-Fluss
+   * wieder auf (schwacher Alpha, damit nichts springt).
+   */
+  function pauseSimulation() {
+    isPaused.value = true
+    if (currentSimulation) currentSimulation.stop()
+  }
+
+  function resumeSimulation() {
+    isPaused.value = false
+    if (currentSimulation) {
+      currentSimulation.alpha(0.3).alphaTarget(0).restart()
+    }
+  }
+
+  function togglePause() {
+    if (isPaused.value) resumeSimulation()
+    else pauseSimulation()
+  }
+
+  return {
+    selectedItem,
+    render,
+    isPaused,
+    pauseSimulation,
+    resumeSimulation,
+    togglePause,
+  }
 }

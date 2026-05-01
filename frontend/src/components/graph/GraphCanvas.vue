@@ -38,18 +38,21 @@
         <input type="checkbox" v-model="showEdgeLabels" />
         <span class="slider"></span>
       </label>
-      <span class="toggle-label">Show Edge Labels</span>
+      <span class="toggle-label">{{ t('graph.ui.toggleEdgeLabels') }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, toRef } from 'vue'
+import { ref, toRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import GraphDetailPanel from './GraphDetailPanel.vue'
 import GraphHints from './GraphHints.vue'
 import { useGraphRender } from '../../composables/useGraphRender'
 import { exportGraphMl } from '../../api/graph'
+
+const { t, locale } = useI18n()
 
 const props = defineProps({
   graphData: { type: Object, default: null },
@@ -69,12 +72,20 @@ const expandedSelfLoops = ref(new Set())
 
 // D3-Renderlogik (Issue #35) — Lifecycle/Resize/Watch im Composable;
 // `selectedItem` wird vom Composable gehalten und hier nur gelesen + zurückgesetzt.
-const { selectedItem } = useGraphRender({
+// `translateLabel` reicht den vue-i18n-Hook in das Composable: Edge-Labels werden
+// gemäß aktueller Locale formatiert (Issue #129).
+const { selectedItem, render, isPaused, togglePause } = useGraphRender({
   svgRef: graphSvg,
   containerRef: graphContainer,
   graphData: toRef(props, 'graphData'),
   entityTypes: toRef(props, 'entityTypes'),
   showEdgeLabels,
+  translateLabel: t,
+})
+
+// Locale-Wechsel: Edge-Labels frisch durch i18n laufen lassen.
+watch(locale, () => {
+  render()
 })
 
 const toggleSelfLoop = (id) => {
@@ -253,6 +264,8 @@ defineExpose({
   downloadSvg,
   downloadPng,
   printPdf,
+  isPaused,
+  togglePause,
 })
 </script>
 

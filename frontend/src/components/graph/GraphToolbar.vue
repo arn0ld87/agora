@@ -12,6 +12,16 @@
         <span class="btn-text">{{ $t('common.refresh') }}</span>
       </button>
       <button
+        v-if="hasGraphData"
+        class="tool-btn"
+        :title="isPaused ? $t('graph.ui.resumeLayout') : $t('graph.ui.pauseLayout')"
+        :aria-pressed="isPaused"
+        @click="$emit('toggle-pause')"
+      >
+        <span class="icon-pause">{{ isPaused ? '▶' : '⏸' }}</span>
+        <span class="btn-text">{{ isPaused ? $t('graph.ui.resumeLayout') : $t('graph.ui.pauseLayout') }}</span>
+      </button>
+      <button
         v-if="hasGraphId"
         class="tool-btn"
         title="Export as GraphML"
@@ -55,6 +65,7 @@ defineProps({
   loading: { type: Boolean, default: false },
   hasGraphId: { type: Boolean, default: false },
   hasGraphData: { type: Boolean, default: false },
+  isPaused: { type: Boolean, default: false },
 })
 
 defineEmits([
@@ -64,6 +75,7 @@ defineEmits([
   'download-png',
   'print-pdf',
   'toggle-maximize',
+  'toggle-pause',
 ])
 </script>
 
