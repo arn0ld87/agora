@@ -166,6 +166,9 @@ git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
 
+# .env anpassen: SECRET_KEY und NEO4J_PASSWORD setzen
+# (siehe Sicherheits-Sektion unten). Für Dev kann FLASK_DEBUG=true bleiben.
+# Erst dann:
 docker compose up -d --build
 ```
 

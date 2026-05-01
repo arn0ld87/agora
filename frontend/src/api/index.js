@@ -19,6 +19,10 @@ let _memoryToken = ''
 export const setAgoraToken = (token) => {
   if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
     _memoryToken = token || ''
+    // Prevent residual localStorage token from shadowing the memory token.
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('agora_token')
+    }
   } else if (typeof window !== 'undefined') {
     if (token) {
       window.localStorage.setItem('agora_token', token)
