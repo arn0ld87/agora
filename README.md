@@ -8,7 +8,7 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
-> **v0.7.0 released:** [Release Notes](docu/2026-05-01-v0.7.0-release-notes.md) — 13/13 Issues geschlossen, 499 Tests grün (488 Backend + 11 Frontend).
+> **v0.8.0 released:** [Release Notes](docu/2026-05-01-v0.8.0-release-notes.md) — 13/13 Issues geschlossen, **519 Tests grün** (488 Backend + 31 Frontend). Vorgänger: [v0.7.0](docu/2026-05-01-v0.7.0-release-notes.md).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
@@ -21,7 +21,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## Status: v0.7.0 — released 2026-05-01
+> ## Status: v0.8.0 — released 2026-05-01
 >
 > Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
 > Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
@@ -51,9 +51,9 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.7.0
+### Engineering-Stand v0.8.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests und Frontend-Build aus (**488 Backend-Tests**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**488 Backend + 31 Frontend Tests**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
 - **Design-System konsolidiert (Slice 1)**: `tokens.css` als Source-of-Truth, UI-Komponenten (`Btn`, `Badge`, `Field`, `Card`, `Select`) auf Tokens umgestellt, harte Farbwerte in Views/Layouts durch Token-Referenzen ersetzt.
 - **Persona Review (Slice 2)**: Generierte Personas sind vor Simulationsstart prüfbar, editierbar und freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität) liefern Badges. `PERSONA_REVIEW_ENABLED=true` blockt Simulationsstart bis alle Personas approved sind.
 - **Run Dashboard (Slice 3)**: Zentrale `/runs`-View mit Status, Datum, Modell, Dokument, Graph-ID, Persona-Anzahl. Detail-Drawer für Fehler, Artefakte und Copy-Buttons. Runs-Persistenz über `RunRegistry`.
@@ -342,7 +342,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **Status: v0.7.0 — released 2026-05-01.** Agora is an active experimental
+> **Status: v0.8.0 — released 2026-05-01.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail when Ollama is slow,
 > JSON mode misbehaves, or models are switched mid-run. Not production-ready.
 > The HTTP API has an optional `AGORA_AUTH_TOKEN` guard and localhost-locked CORS
@@ -359,9 +359,9 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.7.0
+### Engineering status in v0.8.0
 
-- **Quality gates are in place** via `npm run check` (**488 backend tests**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**488 backend + 31 frontend tests**, Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
 - **Design system consolidated (Slice 1)**: `tokens.css` as source of truth, UI components (`Btn`, `Badge`, `Field`, `Card`, `Select`) tokenized, hardcoded colors replaced with token references.
 - **Persona review (Slice 2)**: Generated personas can be inspected, edited, and approved before simulation start. Quality heuristics (duplicates, missing fields, role diversity) provide badges. `PERSONA_REVIEW_ENABLED=true` gates simulation start until all personas are approved.
 - **Run dashboard (Slice 3)**: Central `/runs` view with status, date, model, document, graph ID, persona count. Detail drawer for errors, artifacts, and copy buttons. Run persistence via `RunRegistry`.
