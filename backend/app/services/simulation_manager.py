@@ -6,7 +6,6 @@ Use preset scripts + LLM intelligent generation of config parameters
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -15,10 +14,7 @@ from enum import Enum
 
 from ..utils.logger import get_logger
 from .artifact_store import SimulationArtifactStore, resolve_default_store
-from . import branching_service
-from .entity_reader import EntityReader
-from .oasis_profile_generator import OasisProfileGenerator
-from .simulation_config_generator import SimulationConfigGenerator
+from . import branching_service, prepare_service
 # simulation_state_machine importiert ``SimulationStatus`` aus diesem Modul,
 # daher Lazy-Import in ``_set_status`` (vermeidet Zirkularität).
 
@@ -300,245 +296,21 @@ class SimulationManager:
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
     ) -> SimulationState:
-        """
-        Prepare simulation environment (fully automated)
-        
-        Steps:
-        1. Read and filter entities from graph
-        2. Generate OASIS Agent Profile for each entity (optional LLM enhancement, parallel support)
-        3. Use LLM intelligent generation of simulation config parameters (time, activity, speaking frequency, etc.)
-        4. Save config files and Profile files
-        5. Copy preset scripts to simulation directory
-        
-        Args:
-            simulation_id: Simulation ID
-            simulation_requirement: Simulation requirement description (for LLM config generation)
-            document_text: Original document content (for LLM background understanding)
-            defined_entity_types: Predefined entity types (optional)
-            use_llm_for_profiles: Whether to use LLM to generate detailed profiles
-            progress_callback: Progress callback function (stage, progress, message)
-            parallel_profile_count: Number of parallel profile generations, default 3
-            
-        Returns:
-            SimulationState
-        """
-        state = self._load_simulation_state(simulation_id)
-        if not state:
-            raise ValueError(f"Simulation does not exist: {simulation_id}")
-        
-        try:
-            self._set_status(state, SimulationStatus.PREPARING)
+        return prepare_service.prepare_simulation(
+            self,
+            simulation_id,
+            simulation_requirement,
+            document_text,
+            defined_entity_types=defined_entity_types,
+            use_llm_for_profiles=use_llm_for_profiles,
+            progress_callback=progress_callback,
+            parallel_profile_count=parallel_profile_count,
+            storage=storage,
+            llm_model=llm_model,
+            language=language,
+            max_agents=max_agents,
+        )
 
-            sim_dir = self._get_simulation_dir(simulation_id)
-            
-            # ========== Phase 1: Read and filter entities ==========
-            if progress_callback:
-                progress_callback("reading", 0, "Connecting to graph...")
-
-            if not storage:
-                raise ValueError("storage (GraphStorage) is required for prepare_simulation")
-            reader = EntityReader(storage)
-            
-            if progress_callback:
-                progress_callback("reading", 30, "Reading node data...")
-            
-            filtered = reader.filter_defined_entities(
-                graph_id=state.graph_id,
-                defined_entity_types=defined_entity_types,
-                enrich_with_edges=True
-            )
-
-            # User-controlled cap on number of agents (optional).
-            # Truncates the entity list before persona generation. Entities are
-            # kept in reader order so the most relevant ones win if the reader
-            # already sorts by degree/importance.
-            if max_agents is not None and max_agents > 0 and len(filtered.entities) > max_agents:
-                logger.info(
-                    f"Capping agent count at {max_agents} "
-                    f"(originally {len(filtered.entities)} entities)"
-                )
-                filtered.entities = filtered.entities[:max_agents]
-                filtered.filtered_count = len(filtered.entities)
-
-            state.entities_count = filtered.filtered_count
-            state.entity_types = list(filtered.entity_types)
-
-            if progress_callback:
-                progress_callback(
-                    "reading", 100,
-                    f"Completed, total {filtered.filtered_count} entities",
-                    current=filtered.filtered_count,
-                    total=filtered.filtered_count
-                )
-            
-            if filtered.filtered_count == 0:
-                state.error = "No entities matching criteria found, check if graph is correctly constructed"
-                self._set_status(state, SimulationStatus.FAILED)
-                return state
-            
-            # ========== Phase 2: Generate Agent Profile ==========
-            total_entities = len(filtered.entities)
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 0, 
-                    "Starting generation...",
-                    current=0,
-                    total=total_entities
-                )
-            
-            # Pass graph_id to enable graph retrieval functionality, get richer context.
-            # Per-simulation overrides for model + language come from API request.
-            generator = OasisProfileGenerator(
-                storage=storage,
-                graph_id=state.graph_id,
-                model_name=llm_model,
-                language=language,
-            )
-            
-            def profile_progress(current, total, msg):
-                if progress_callback:
-                    progress_callback(
-                        "generating_profiles", 
-                        int(current / total * 100), 
-                        msg,
-                        current=current,
-                        total=total,
-                        item_name=msg
-                    )
-            
-            # Set real-time save file path (prefer Reddit JSON format)
-            realtime_output_path = None
-            realtime_platform = "reddit"
-            if state.enable_reddit:
-                realtime_output_path = os.path.join(sim_dir, "reddit_profiles.json")
-                realtime_platform = "reddit"
-            elif state.enable_twitter:
-                realtime_output_path = os.path.join(sim_dir, "twitter_profiles.csv")
-                realtime_platform = "twitter"
-            
-            profiles = generator.generate_profiles_from_entities(
-                entities=filtered.entities,
-                use_llm=use_llm_for_profiles,
-                progress_callback=profile_progress,
-                graph_id=state.graph_id,  # Pass graph_id for graph retrieval
-                parallel_count=parallel_profile_count,  # Parallel generation count
-                realtime_output_path=realtime_output_path,  # Real-time save path
-                output_platform=realtime_platform  # Output format
-            )
-            
-            state.profiles_count = len(profiles)
-            
-            # Save Profile files (Note: Twitter uses CSV format, Reddit uses JSON format)
-            # Reddit has been saved in real-time during generation, save once more here to ensure completeness
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 95, 
-                    "Saving Profile files...",
-                    current=total_entities,
-                    total=total_entities
-                )
-            
-            if state.enable_reddit:
-                generator.save_profiles(
-                    profiles=profiles,
-                    file_path=os.path.join(sim_dir, "reddit_profiles.json"),
-                    platform="reddit"
-                )
-            
-            if state.enable_twitter:
-                # Twitter uses CSV format! This is OASIS requirement
-                generator.save_profiles(
-                    profiles=profiles,
-                    file_path=os.path.join(sim_dir, "twitter_profiles.csv"),
-                    platform="twitter"
-                )
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_profiles", 100, 
-                    f"Completed, total {len(profiles)} Profiles",
-                    current=len(profiles),
-                    total=len(profiles)
-                )
-            
-            # ========== Phase 3: LLM intelligent generation of simulation config ==========
-            if progress_callback:
-                progress_callback(
-                    "generating_config", 0, 
-                    "Analyzing simulation requirements...",
-                    current=0,
-                    total=3
-                )
-            
-            config_generator = SimulationConfigGenerator(
-                model_name=llm_model,
-                language=language,
-            )
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_config", 30, 
-                    "Calling LLM to generate config...",
-                    current=1,
-                    total=3
-                )
-            
-            sim_params = config_generator.generate_config(
-                simulation_id=simulation_id,
-                project_id=state.project_id,
-                graph_id=state.graph_id,
-                simulation_requirement=simulation_requirement,
-                document_text=document_text,
-                entities=filtered.entities,
-                enable_twitter=state.enable_twitter,
-                enable_reddit=state.enable_reddit
-            )
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_config", 70, 
-                    "Saving config files...",
-                    current=2,
-                    total=3
-                )
-            
-            # Save config files (atomic via store — fixes prior non-atomic write).
-            self._store.write_json(
-                simulation_id,
-                "simulation_config",
-                json.loads(sim_params.to_json()),
-            )
-            
-            state.config_generated = True
-            state.config_reasoning = sim_params.generation_reasoning
-            
-            if progress_callback:
-                progress_callback(
-                    "generating_config", 100, 
-                    "Config generation completed",
-                    current=3,
-                    total=3
-                )
-            
-            # Note: Run scripts remain in backend/scripts/ directory, no longer copy to simulation directory
-            # When starting simulation, simulation_runner runs scripts from scripts/ directory
-            
-            # Update status
-            self._set_status(state, SimulationStatus.READY)
-
-            logger.info(f"Simulation preparation completed: {simulation_id}, "
-                       f"entities={state.entities_count}, profiles={state.profiles_count}")
-
-            return state
-
-        except Exception as e:
-            logger.error(f"Simulation preparation failed: {simulation_id}, error={str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
-            state.error = str(e)
-            self._set_status(state, SimulationStatus.FAILED)
-            raise
     
     def get_simulation(self, simulation_id: str) -> Optional[SimulationState]:
         """Get simulation state"""
