@@ -287,6 +287,18 @@
         "compact": "Compact"
       }
     },
+    "toolPanel": {
+      "toggle": "Tool calls & errors",
+      "show": "Show (Ctrl+L)",
+      "hide": "Hide (Ctrl+L)",
+      "unread": "no new errors | one new error | {count} new errors",
+      "filter": "Filter",
+      "filterAll": "All",
+      "filterErrors": "Errors only",
+      "copyAsJson": "Copy as JSON",
+      "empty": "Waiting for output…",
+      "noErrors": "No errors in log."
+    },
     "next": "Next: report →"
   },
   "step4": {
