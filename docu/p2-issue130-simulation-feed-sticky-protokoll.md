@@ -69,11 +69,11 @@ Simulationskonversation lesbar groß, Sticky-Scroll: Auto-Scroll greift nur, wen
 - [x] Commit erstellt
 - [ ] Browser-Smoke (durch User)
 
-### SUB2
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB2 — abgeschlossen 2026-05-01
+- [x] Implementiert: `.log-pane-body { min-height: 480px; max-height: clamp(480px, 60vh, 720px) }` für Live-Feed und Console-Pane; Density-Toggle Komfort/Kompakt mit `localStorage`-Persistenz (`agora.ui.feedDensity`); typografische Hierarchie (max 75ch Zeilenbreite, Density-spezifische Schriftgröße/Line-Height). i18n-Keys waren bereits aus SUB1.
+- [x] Tests grün (`npm run check`: 690 Backend + 45 Frontend, Build erfolgreich)
+- [x] Commit erstellt
+- [ ] Browser-Smoke (durch User)
 
 ### SUB3
 - [ ] Implementiert
