@@ -7,7 +7,7 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import (
@@ -26,6 +26,7 @@ from .neo4j_mappings import (
     node_to_dict as _node_to_dict_func,
 )
 from .neo4j_read import Neo4jReadMixin
+from .neo4j_search import Neo4jSearchMixin
 from .neo4j_write import Neo4jWriteMixin
 from .search_service import SearchService
 from . import neo4j_schema
@@ -33,7 +34,7 @@ from . import neo4j_schema
 logger = logging.getLogger('agora.neo4j_storage')
 
 
-class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, GraphStorage):
+class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStorage):
     """Neo4j CE implementation of the GraphStorage interface."""
 
     MAX_RETRIES = 3
@@ -177,41 +178,9 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, GraphStorage):
     # ----------------------------------------------------------------
 
     # ----------------------------------------------------------------
-    # Search (Sub-Slice 3 wird das nach Neo4jSearchMixin ziehen)
+    # Search-Pfad (search) lebt jetzt im Neo4jSearchMixin
+    # (Issue #50, Sub-Slice 3).
     # ----------------------------------------------------------------
-
-    def search(
-        self,
-        graph_id: str,
-        query: str,
-        limit: int = 10,
-        scope: str = "edges",
-    ):
-        """
-        Hybrid search — returns results matching the scope.
-
-        Returns a dict with 'edges' and/or 'nodes' lists
-        (callers like zep_tools will wrap into SearchResult).
-
-        The entire session block is wrapped in ``_call_with_retry`` so a
-        transient connection error mid-search causes a clean retry rather
-        than a half-filled result being returned.
-        """
-        result: Dict[str, Any] = {"edges": [], "nodes": [], "query": query}
-
-        def _do_search():
-            with self._driver.session() as session:
-                if scope in ("edges", "both"):
-                    result["edges"] = self._search.search_edges(
-                        session, graph_id, query, limit
-                    )
-                if scope in ("nodes", "both"):
-                    result["nodes"] = self._search.search_nodes(
-                        session, graph_id, query, limit
-                    )
-
-        self._call_with_retry(_do_search)
-        return result
 
     # ----------------------------------------------------------------
     # get_graph_info, get_graph_data + Dict-Konversion (_node_to_dict /
