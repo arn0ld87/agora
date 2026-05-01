@@ -30,6 +30,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "jsonschema" },
     { name = "pipreqs" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -38,6 +39,7 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -51,6 +53,7 @@ requires-dist = [
     { name = "charset-normalizer", specifier = ">=3.0.0" },
     { name = "flask", specifier = ">=3.0.0" },
     { name = "flask-cors", specifier = ">=6.0.0" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "neo4j", specifier = ">=5.15.0" },
     { name = "networkx", specifier = ">=3.2" },
     { name = "openai", specifier = ">=1.0.0" },
@@ -69,6 +72,7 @@ provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jsonschema", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "ruff", specifier = ">=0.8.0" },
