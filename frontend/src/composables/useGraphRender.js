@@ -83,8 +83,21 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
 
     const g = svg.append('g')
 
+    // Edge-Labels werden bei sehr weit rausgezoomtem Graph automatisch ausgeblendet,
+    // damit dichte Stellen lesbar bleiben. Schwelle bewusst niedrig (0.6), damit normales
+    // Zoomverhalten die Labels nicht plötzlich verliert. Toggle-State dominiert weiterhin.
+    const EDGE_LABEL_AUTO_HIDE_ZOOM = 0.6
+    let _zoomedOut = false
+
     svg.call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
       g.attr('transform', event.transform)
+      const wantsHide = event.transform.k < EDGE_LABEL_AUTO_HIDE_ZOOM
+      if (wantsHide !== _zoomedOut) {
+        _zoomedOut = wantsHide
+        const visible = showEdgeLabels.value && !_zoomedOut
+        if (linkLabelsRef) linkLabelsRef.style('display', visible ? 'block' : 'none')
+        if (linkLabelBgRef) linkLabelBgRef.style('display', visible ? 'block' : 'none')
+      }
     }))
 
     const linkGroup = g.append('g').attr('class', 'links')
@@ -136,7 +149,7 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .data(edges)
       .enter().append('text')
       .text(d => formatEdgeLabel(d.name, translateLabel))
-      .attr('font-size', '9px')
+      .attr('font-size', '12px')
       .attr('fill', 'var(--fg-meta)')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
@@ -230,10 +243,13 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
         }
       })
 
+    // Knoten-Label: bis 14 Zeichen voll, sonst Trunkation mit Ellipsis. Voller Name
+    // bleibt im SVG-`<title>` als nativer Browser-Tooltip erreichbar (Issue #129 SUB2).
+    const NODE_LABEL_MAX = 14
     const nodeLabels = nodeGroup.selectAll('text')
       .data(nodes)
       .enter().append('text')
-      .text(d => d.name.length > 8 ? d.name.substring(0, 8) + '…' : d.name)
+      .text(d => d.name.length > NODE_LABEL_MAX ? d.name.substring(0, NODE_LABEL_MAX) + '…' : d.name)
       .attr('font-size', '11px')
       .attr('fill', 'var(--fg-on-inverse)')
       .attr('font-weight', '500')
@@ -241,6 +257,9 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .attr('dy', 4)
       .style('pointer-events', 'none')
       .style('font-family', 'system-ui, sans-serif')
+
+    nodeLabels.append('title').text(d => d.name)
+    node.append('title').text(d => d.name)
 
     simulation.on('tick', () => {
       link.attr('d', d => getLinkPath(d))
@@ -258,10 +277,10 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
         const textEl = linkLabels.nodes()[i]
         const bbox = textEl.getBBox()
         d3.select(this)
-          .attr('x', mid.x - bbox.width / 2 - 4)
-          .attr('y', mid.y - bbox.height / 2 - 2)
-          .attr('width', bbox.width + 8)
-          .attr('height', bbox.height + 4)
+          .attr('x', mid.x - bbox.width / 2 - 6)
+          .attr('y', mid.y - bbox.height / 2 - 3)
+          .attr('width', bbox.width + 12)
+          .attr('height', bbox.height + 6)
           .attr('transform', '')
       })
 

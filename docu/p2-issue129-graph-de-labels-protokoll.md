@@ -57,11 +57,11 @@ Edge-Labels im Graph werden bei `locale=de` lesbar deutsch dargestellt. Lesbarke
 - [x] Commit erstellt
 - [ ] Browser-Smoke (durch User; Dev-Server muss lokal laufen)
 
-### SUB2
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB2 — abgeschlossen 2026-05-01
+- [x] Implementiert: Edge-Schrift 9 → 12 px, BG-Padding 4/2 → 6/3, Knoten-Label-Truncation 8 → 14 Zeichen, native `<title>`-Tooltips an Knoten + Knoten-Label, Auto-Hide der Edge-Labels bei Zoom <0.6
+- [x] Tests grün (`npm run check`: 690 Backend + 52 Frontend, Build)
+- [x] Commit erstellt
+- [ ] Browser-Smoke (durch User)
 
 ### SUB3
 - [ ] Implementiert

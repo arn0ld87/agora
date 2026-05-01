@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Added
 
+- **Issue #129 (SUB2): Graph-Lesbarkeit-Polish.** Edge-Label-Schrift von 9 px auf 12 px erhöht, Pillen-Padding von 4/2 auf 6/3 px ausgebaut. Knoten-Label-Trunkation von 8 auf 14 Zeichen entspannt; vollständiger Knoten-Name bleibt im SVG-`<title>` als nativer Browser-Tooltip erreichbar. Auto-Hide der Edge-Labels bei Zoomstufe <0.6 (Schwelle dominiert vom Toggle-State, springt nur bei Übergängen). Arbeitsprotokoll: [`docu/p2-issue129-graph-de-labels-protokoll.md`](docu/p2-issue129-graph-de-labels-protokoll.md).
 - **Issue #129 (SUB1): Graph-Edge-Labels via i18n.** Neuer Display-Layer `frontend/src/components/graph/edgeLabelI18n.js` (`formatEdgeLabel`, `normalizeEdgeKey`, `humanizeEdgeKey`) übersetzt LLM-generierte Beziehungs-Labels in die aktuelle UI-Locale (`graph.edgeLabels.*` mit ~75 Standard-Edge-Types in DE/EN, plus `graph.ui.toggleEdgeLabels`). Heuristik-Fallback (UPPER_SNAKE → Title Case) für unbekannte Edge-Types. `useGraphRender` akzeptiert optionalen `translateLabel`-Hook; `GraphCanvas.vue` reicht `useI18n().t` durch und rendert bei `locale`-Wechsel neu. Neo4j-Persistenz unverändert (Display only). Tests: `frontend/src/components/graph/__tests__/edgeLabelI18n.spec.js` (12 Cases). Arbeitsprotokoll: [`docu/p2-issue129-graph-de-labels-protokoll.md`](docu/p2-issue129-graph-de-labels-protokoll.md).
 
 ### Docs
