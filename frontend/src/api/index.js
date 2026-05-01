@@ -10,13 +10,35 @@ const service = axios.create({
   }
 })
 
-// Token-Quelle: localStorage > Build-Time-Env (VITE_AGORA_TOKEN).
-// Token wird entweder beim ersten Login gespeichert oder per
-// localStorage.setItem('agora_token', '...') vom User hinterlegt.
-export const getAgoraToken = () =>
-  (typeof window !== 'undefined' && window.localStorage?.getItem('agora_token')) ||
-  import.meta.env.VITE_AGORA_TOKEN ||
-  ''
+// Token-Quelle: localStorage (Dev-Default) oder Memory (Prod-Haertung).
+// Memory-Mode aktiviert via VITE_AGORA_TOKEN_STORAGE=memory.
+// In Memory-Mode lebt das Token nur im JS-Heap und ueberlebt keinen
+// Page-Reload; das verhindert Persistence in localStorage (XSS-Residuum).
+let _memoryToken = ''
+
+export const setAgoraToken = (token) => {
+  if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
+    _memoryToken = token || ''
+  } else if (typeof window !== 'undefined') {
+    if (token) {
+      window.localStorage.setItem('agora_token', token)
+    } else {
+      window.localStorage.removeItem('agora_token')
+    }
+  }
+}
+
+export const getAgoraToken = () => {
+  if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
+    return _memoryToken || import.meta.env.VITE_AGORA_TOKEN || ''
+  }
+  // Dev-Fallback: localStorage (bewusst, siehe docu/auth.md)
+  return (
+    (typeof window !== 'undefined' && window.localStorage?.getItem('agora_token')) ||
+    import.meta.env.VITE_AGORA_TOKEN ||
+    ''
+  )
+}
 
 // Request interceptor — hängt Token-Header an, wenn einer bekannt ist.
 service.interceptors.request.use(
