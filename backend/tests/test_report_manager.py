@@ -66,6 +66,43 @@ def test_update_progress_and_save_report_use_readable_json(tmp_path, monkeypatch
     assert loaded.status == ReportStatus.COMPLETED
 
 
+def test_is_claim_candidate_filters_markdown_headers_and_bold_titles():
+    """S3a: Überschriften und Bold-Section-Titel sind keine Claims."""
+    is_claim = ReportAgent._is_claim_candidate
+
+    assert is_claim("Das Land NRW beschloss am 22. Mai 2024 die Einführung.") is True
+    assert is_claim("**Diese Bold-Zeile ist lang genug acht zehn Wörter zu überschreiten klar erkennbar**") is True
+
+    assert is_claim("# Hauptüberschrift") is False
+    assert is_claim("## Sub-Heading") is False
+    assert is_claim("### Tertiary") is False
+    assert is_claim("**Der Beschluss und seine Architekten**") is False
+    assert is_claim("- **Was passiert ist**") is False
+    assert is_claim("") is False
+    assert is_claim("   ") is False
+
+
+def test_build_claims_for_section_drops_headers():
+    """S3a: Markdown-Header werden vor der Evidence-Bindung verworfen."""
+    agent = ReportAgent.__new__(ReportAgent)
+    agent._active_section_evidence = []
+    agent.evidence_map = {"global_evidence": []}
+
+    content = (
+        "## Übersicht\n\n"
+        "**Der Beschluss und seine Architekten**\n\n"
+        "Das Land NRW beschloss am 22. Mai 2024 die Einführung des Pflichtfachs.\n\n"
+        "Ministerin Feller erklärte: Wir setzen den Beschluss bis 2027/28 um."
+    )
+
+    claims = agent._build_claims_for_section(content)
+
+    texts = [c["claim_text"] for c in claims]
+    assert all("##" not in t for t in texts)
+    assert not any(t.startswith("**Der Beschluss") for t in texts)
+    assert len(claims) == 2
+
+
 def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     agent = ReportAgent.__new__(ReportAgent)
     agent._active_section_evidence = [{

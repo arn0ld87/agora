@@ -1198,8 +1198,37 @@ class ReportAgent:
             item.setdefault("source", "report_tool")
             self._record_evidence_item(item)
 
+    @staticmethod
+    def _is_claim_candidate(text: str) -> bool:
+        """S3a: filtert Markdown-Header, Bold-Section-Titel, leere Stellen.
+
+        Externer Review hatte beanstandet, dass Überschriften wie
+        ``**Der Beschluss und seine Architekten**`` als prüfbare Claims
+        in der Evidence-Map landen. Eine Überschrift ist kein Claim,
+        sondern Strukturmarkup. Dieser Filter wirft sie raus, bevor
+        Evidence gebunden wird.
+        """
+        stripped = (text or "").strip()
+        if not stripped:
+            return False
+        if stripped.startswith("#"):
+            return False
+        # Reine Bold-Zeile als Section-Title (kürzer als 8 Wörter).
+        if (
+            stripped.startswith("**")
+            and stripped.endswith("**")
+            and stripped.count("**") == 2
+            and len(stripped.split()) < 8
+        ):
+            return False
+        # Single-bullet bold-only-Heading (`- **Was passiert ist**`).
+        if re.fullmatch(r"[-*]\s*\*\*[^*]+\*\*\s*", stripped):
+            return False
+        return True
+
     def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
-        chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
+        raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
+        chunks = [c for c in raw_chunks if self._is_claim_candidate(c)]
         claims = []
         global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
         for index, chunk in enumerate(chunks, 1):
