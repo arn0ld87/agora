@@ -1,3 +1,7 @@
+<script setup>
+import ThemeToggle from '../components/ui/ThemeToggle.vue'
+</script>
+
 <template>
   <header class="workspace-header">
     <div class="workspace-brand">
@@ -8,6 +12,7 @@
     </div>
     <div class="workspace-status">
       <slot name="status" />
+      <ThemeToggle class="workspace-theme-toggle" />
     </div>
   </header>
 </template>
@@ -18,9 +23,11 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--s-7);
-  padding: var(--s-4) var(--s-6);
-  border-bottom: 1px solid var(--rule-strong);
-  background: var(--bg);
+  padding: var(--s-3) var(--s-6);
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   z-index: 10;
 }
 
@@ -30,6 +37,9 @@
 
 .workspace-status {
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
 }
 
 @media (max-width: 720px) {
