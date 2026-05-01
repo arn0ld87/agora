@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { usePolling } from '../composables/usePolling'
 import { useEventStream } from '../composables/useEventStream'
+import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
+import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -42,10 +43,22 @@ const runStatus = ref({})
 const allActions = ref([])
 const actionIds = ref(new Set())
 const scrollEl = ref(null)
-const consoleLogs = ref([])
-const consoleLogLine = ref(0)
-const consoleScrollEl = ref(null)
 const startError = ref(null)
+
+// Issue #39 — Console-Logs werden über das useIncrementalLogPolling-Composable
+// inkrementell gefetcht, an `consoleLogs` gehängt und automatisch zum Bottom
+// gescrollt. Cursor und Append-/Scroll-Logik liegen im Composable.
+const {
+  lines: consoleLogs,
+  containerRef: consoleScrollEl,
+  polling: consolePolling,
+  reset: resetConsoleLogs,
+} = useIncrementalLogPolling({
+  fetcher: (sinceLine) => props.simulationId
+    ? getSimulationConsoleLog(props.simulationId, sinceLine)
+    : Promise.resolve(null),
+  intervalMs: 2000,
+})
 
 function addLog(msg) { emit('add-log', msg) }
 
@@ -57,15 +70,13 @@ const statusStream = useEventStream(() => props.simulationId, {
   control: (msg) => applyControlEvent(msg?.payload),
 })
 const detailPolling = usePolling(pollDetail, 2500)
-const consolePolling = usePolling(pollConsole, 2000)
 
 function resetState() {
   phase.value = 0
   runStatus.value = {}
   allActions.value = []
   actionIds.value = new Set()
-  consoleLogs.value = []
-  consoleLogLine.value = 0
+  resetConsoleLogs()
   startError.value = null
   isStarting.value = false
   isStopping.value = false
@@ -180,24 +191,6 @@ function applyControlEvent(data) {
   // Merge pause flag into the visible status so the Pause/Resume button
   // flips on the same tick the backend saw the change.
   runStatus.value = { ...runStatus.value, paused: !!data.paused }
-}
-
-async function pollConsole() {
-  if (!props.simulationId) return
-  try {
-    const res = await getSimulationConsoleLog(props.simulationId, consoleLogLine.value)
-    if (res?.success && Array.isArray(res.data?.lines)) {
-      if (res.data.lines.length) {
-        for (const line of res.data.lines) consoleLogs.value.push(line)
-      }
-      consoleLogLine.value = res.data.next_line ?? consoleLogLine.value
-      nextTick(() => {
-        if (consoleScrollEl.value) {
-          consoleScrollEl.value.scrollTop = consoleScrollEl.value.scrollHeight
-        }
-      })
-    }
-  } catch { /* swallow */ }
 }
 
 async function pollStatus() {
