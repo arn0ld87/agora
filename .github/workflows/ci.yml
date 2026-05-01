@@ -39,17 +39,19 @@ jobs:
             > /dev/null
 
       - name: Run Python dependency audit
-        # Temporary baseline: these six advisories are pinned by
-        # camel-oasis==0.2.5 / camel-ai==0.2.78 / sentence-transformers==3.0.0.
+        # Temporary baseline: these six advisories are pinned by upstream
+        # dependencies (camel-oasis==0.2.5 / camel-ai==0.2.78 /
+        # sentence-transformers==3.0.0). Tracked in
+        # docu/dependency-risk-register.md. Expires 2026-07-30.
         # New pip-audit findings still fail the job.
         run: |
           uvx pip-audit --strict \
-            --ignore-vuln CVE-2026-25990 \
-            --ignore-vuln CVE-2026-40192 \
-            --ignore-vuln CVE-2025-71176 \
-            --ignore-vuln CVE-2026-1839 \
-            --ignore-vuln CVE-2024-46455 \
-            --ignore-vuln CVE-2025-64712 \
+            --ignore-vuln CVE-2026-25990   # pillow==10.3.0  via camel-ai  #121 \
+            --ignore-vuln CVE-2026-40192   # pillow==10.3.0  via camel-ai  #122 \
+            --ignore-vuln CVE-2025-71176   # pytest==8.2.0   via camel-oasis #123 \
+            --ignore-vuln CVE-2026-1839    # transformers==4.57.6 via s-t  #124 \
+            --ignore-vuln CVE-2024-46455   # unstructured==0.13.7 via c-o #125 \
+            --ignore-vuln CVE-2025-64712   # unstructured==0.13.7 via c-o #126 \
             -r /tmp/agora-backend-requirements.txt
 
       - name: Set up Node.js
