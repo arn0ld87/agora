@@ -11,7 +11,7 @@
  *  - Alles andere → text.
  */
 
-const TOKEN_REGEX = /(@[\p{L}\p{N}_.]{1,30}|#[\p{L}\p{N}_]{1,30})/gu
+const TOKEN_REGEX = /(?<=^|\s)(@[\p{L}\p{N}_.]{0,29}[\p{L}\p{N}_]|#[\p{L}\p{N}_]{1,30})/gu
 
 /**
  * @typedef {{ type: 'text'|'mention'|'hashtag', value: string }} FeedToken
