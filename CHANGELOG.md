@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Geändert
+
+- **Neo4j-Memory-Settings angehoben** (`docker-compose.yml`): `server.memory.pagecache.size` 256m → **4g**, `heap.max_size` 1g → 2g, `heap.initial_size` 256m → 512m. Reaktion auf I/O-Last bei mittelgroßen Graphen — der alte 256m-Pagecache verursachte Random-Reads von der Platte. Werte sind im Compose-File die Source-of-Truth, kein `.env`-Override nötig. Rollback durch alte Werte. Live verifiziert in Neo4j 5.18 via `CALL dbms.listConfig()`.
+
 ## [0.8.0] — 2026-05-01
 
 Milestone „Frontend Consolidation" abgeschlossen — 13/13 Issues geschlossen, **519 Tests grün** (488 Backend + 31 Frontend). Schwerpunkt: 933-zeiliges `GraphPanel.vue` zerlegt in fünf Subkomponenten plus ein Render-Composable, Polling-Stack vereinheitlicht (alle 12 Polling-Stellen über `usePolling`, drei Log-Stellen über `useIncrementalLogPolling`), Composable-Test-Coverage von 11 auf 31 hochgezogen, EPIC-02 (Backend-API-Splitting) und EPIC-05-ST-01 (`usePolling`) retrospektiv als bereits erledigt dokumentiert. Vier weitere v0.8.0-Story-Issues (#37, #40, #68, alle EPIC-02-Stories) wurden durch Status-Dokus geschlossen — der eigentliche Code-Stand der Anwendung ist seit v0.6.0/v0.7.0 schon dort.
