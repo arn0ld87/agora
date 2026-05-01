@@ -18,10 +18,11 @@ import re
 import sqlite3
 import sys
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
 # Allow importing backend modules (run scripts already do sys.path.insert)
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,16 +31,10 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 # Load .env for Neo4j credentials
-from dotenv import load_dotenv
 _project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
 _env_file = os.path.join(_project_root, '.env')
 if os.path.exists(_env_file):
     load_dotenv(_env_file)
-
-from app.config import Config
-# Import backend storage (needs NEO4J_URI / NEO4J_PASSWORD in env)
-from app.storage import Neo4jStorage
-from app.storage.embedding_service import EmbeddingService
 
 
 @dataclass
@@ -57,7 +52,7 @@ class ToolResult:
             return self.data
         try:
             return json.dumps(self.data, ensure_ascii=False, indent=2)
-        except:
+        except (TypeError, ValueError):
             return str(self.data)
 
 
@@ -69,7 +64,7 @@ class AgentToolRegistry:
     Each tool returns a ToolResult that can be fed back to the LLM.
     """
 
-    def __init__(self, neo4j_storage: Optional[Neo4jStorage] = None,
+    def __init__(self, neo4j_storage: Optional[Any] = None,
                  simulation_dir: Optional[str] = None,
                  graph_id: Optional[str] = None):
         self.storage = neo4j_storage
@@ -79,6 +74,8 @@ class AgentToolRegistry:
 
         # Lazy-init embedding service for search
         if self.storage and not self.storage._embedding:
+            from app.storage.embedding_service import EmbeddingService
+
             self.storage._embedding = EmbeddingService()
 
     @classmethod
@@ -101,6 +98,8 @@ class AgentToolRegistry:
         storage = None
         if neo4j_uri and neo4j_secret:
             try:
+                from app.storage import Neo4jStorage
+
                 storage = Neo4jStorage(
                     uri=neo4j_uri,
                     user=neo4j_user,
@@ -267,7 +266,10 @@ class AgentToolRegistry:
                 if isinstance(node, dict):
                     entities.append({
                         "name": node.get('name', ''),
-                        "type": ", ".join([l for l in node.get('labels', []) if l not in ('Entity', 'Node')]),
+                        "type": ", ".join([
+                            label for label in node.get('labels', [])
+                            if label not in ('Entity', 'Node')
+                        ]),
                         "summary": node.get('summary', '')[:200]
                     })
 
@@ -306,7 +308,10 @@ class AgentToolRegistry:
                 if isinstance(node, dict):
                     name = node.get('name', '')
                     if name.lower() == entity_name.lower():
-                        labels = [l for l in node.get('labels', []) if l not in ('Entity', 'Node')]
+                        labels = [
+                            label for label in node.get('labels', [])
+                            if label not in ('Entity', 'Node')
+                        ]
                         return {
                             "name": name,
                             "type": labels[0] if labels else "Unknown",
@@ -350,7 +355,10 @@ class AgentToolRegistry:
                     name = node.get('name', '')
                     if name and name not in seen:
                         seen.add(name)
-                        labels = [l for l in node.get('labels', []) if l not in ('Entity', 'Node')]
+                        labels = [
+                            label for label in node.get('labels', [])
+                            if label not in ('Entity', 'Node')
+                        ]
                         related.append({
                             "name": name,
                             "type": labels[0] if labels else "Unknown",
@@ -672,8 +680,7 @@ class ToolAwareActionLoop:
 
         Returns an OASIS ManualAction or LLMAction.
         """
-        from camel.agents import ChatAgent
-        from oasis import ManualAction, ActionType, LLMAction
+        from oasis import LLMAction
 
         # Build initial prompt with tools
         prompt = build_agent_prompt_with_tools(
@@ -892,7 +899,73 @@ TOOL_USE_INSTRUCTION = (
 )
 
 
+def _role_value(role: Any) -> str:
+    return str(getattr(role, "value", role) or "").lower()
+
+
+def _message_has_tool_calls(message: Any) -> bool:
+    if isinstance(message, dict):
+        meta_dict = message.get("meta_dict") or message
+    else:
+        meta_dict = getattr(message, "meta_dict", None) or {}
+    tool_calls = meta_dict.get("tool_calls") if isinstance(meta_dict, dict) else None
+    return bool(tool_calls)
+
+
+def _message_content(message: Any) -> Any:
+    if isinstance(message, dict):
+        return message.get("content")
+    return getattr(message, "content", None)
+
+
+def _sanitize_memory_records(records: List[Any]) -> List[Any]:
+    sanitized = []
+    for record in records:
+        if isinstance(record, dict):
+            role = _role_value(record.get("role_at_backend"))
+            message = record.get("message", {})
+        else:
+            role = _role_value(getattr(record, "role_at_backend", None))
+            message = getattr(record, "message", None)
+
+        if (
+            role == "assistant"
+            and _message_content(message) is None
+            and not _message_has_tool_calls(message)
+        ):
+            continue
+        sanitized.append(record)
+    return sanitized
+
+
+def _install_empty_assistant_memory_sanitizer(agent_id: Any, memory: Any) -> None:
+    if memory is None or getattr(memory, "_agora_empty_assistant_sanitizer", False):
+        return
+    if not hasattr(memory, "write_records"):
+        return
+
+    original_write_records = memory.write_records
+
+    def write_records_with_sanitizer(records):
+        record_list = list(records)
+        sanitized_records = _sanitize_memory_records(record_list)
+        dropped_count = len(record_list) - len(sanitized_records)
+        if dropped_count:
+            print(
+                f"[attach_tools] agent {agent_id} dropped {dropped_count} empty assistant memory record(s)",
+                flush=True,
+            )
+        if not sanitized_records:
+            return None
+        return original_write_records(sanitized_records)
+
+    memory.write_records = write_records_with_sanitizer
+    memory._agora_empty_assistant_sanitizer = True
+
+
 def _resolve_memory_token_limit(model_name: Optional[str] = None) -> int:
+    from app.config import Config
+
     raw_overrides = os.environ.get("LLM_MODEL_CONTEXT_LIMITS_JSON", "").strip()
     overrides: Dict[str, Any] = dict(getattr(Config, "LLM_MODEL_CONTEXT_LIMITS", {}) or {})
     if raw_overrides:
@@ -965,6 +1038,11 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
                 agent.max_iteration = max(getattr(agent, "max_iteration", 1) or 1, 4)
         except Exception as e:
             print(f"[attach_tools] agent {agent_id} max_iteration patch failed: {e}")
+
+        try:
+            _install_empty_assistant_memory_sanitizer(agent_id, getattr(agent, "memory", None))
+        except Exception as e:
+            print(f"[attach_tools] agent {agent_id} memory sanitizer patch failed: {e}")
 
         # Raise the CAMEL memory budget independently from max_tokens.
         # In this CAMEL version token_limit is read-only and backed by

@@ -165,6 +165,8 @@ class OasisProfileGenerator:
         "ISTJ", "ISFJ", "ESTJ", "ESFJ",
         "ISTP", "ISFP", "ESTP", "ESFP"
     ]
+    REQUIRED_PROFILE_FIELDS = ("age", "gender", "mbti", "country")
+    VALID_PROFILE_GENDERS = {"male", "female", "nonbinary", "other"}
 
     # Common countries list
     COUNTRIES = [
@@ -191,6 +193,13 @@ class OasisProfileGenerator:
     @classmethod
     def _pick_dach_name(cls) -> str:
         return f"{random.choice(cls.DACH_FIRST_NAMES)} {random.choice(cls.DACH_LAST_NAMES)}"
+
+    @staticmethod
+    def _last_name(name: str) -> Optional[str]:
+        parts = (name or "").strip().split()
+        if len(parts) < 2:
+            return None
+        return parts[-1].lower()
 
     @staticmethod
     def _pick_individual_gender() -> str:
@@ -546,6 +555,17 @@ class OasisProfileGenerator:
                     if "persona" not in result or not result["persona"]:
                         result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
 
+                    missing_fields = self._validate_profile_metadata(result)
+                    if missing_fields:
+                        last_error = ValueError(
+                            f"Missing required persona metadata: {', '.join(missing_fields)}"
+                        )
+                        logger.warning(
+                            f"LLM persona missing required metadata (attempt {attempt+1}): "
+                            f"{', '.join(missing_fields)}"
+                        )
+                        continue
+
                     return result
 
                 except json.JSONDecodeError as je:
@@ -555,6 +575,20 @@ class OasisProfileGenerator:
                     result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
                     if result.get("_fixed"):
                         del result["_fixed"]
+                        if "bio" not in result or not result["bio"]:
+                            result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
+                        if "persona" not in result or not result["persona"]:
+                            result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
+                        missing_fields = self._validate_profile_metadata(result)
+                        if missing_fields:
+                            last_error = ValueError(
+                                f"Missing required persona metadata after JSON repair: {', '.join(missing_fields)}"
+                            )
+                            logger.warning(
+                                f"Fixed JSON still missing required metadata (attempt {attempt+1}): "
+                                f"{', '.join(missing_fields)}"
+                            )
+                            continue
                         return result
 
                     last_error = je
@@ -569,6 +603,52 @@ class OasisProfileGenerator:
         return self._generate_profile_rule_based(
             entity_name, entity_type, entity_summary, entity_attributes
         )
+
+    def _validate_profile_metadata(self, result: Dict[str, Any]) -> List[str]:
+        """Validate and normalize structured fields that OASIS actually consumes."""
+        missing_fields = []
+
+        age = result.get("age")
+        if isinstance(age, str) and age.strip().isdigit():
+            age = int(age.strip())
+            result["age"] = age
+        if not isinstance(age, int) or age < 18 or age > 75:
+            missing_fields.append("age")
+
+        gender = result.get("gender")
+        if isinstance(gender, str):
+            normalized_gender = gender.strip().lower()
+            if normalized_gender in self.VALID_PROFILE_GENDERS:
+                result["gender"] = normalized_gender
+            else:
+                missing_fields.append("gender")
+        else:
+            missing_fields.append("gender")
+
+        mbti = result.get("mbti")
+        if isinstance(mbti, str):
+            normalized_mbti = mbti.strip().upper()
+            if normalized_mbti in self.MBTI_TYPES:
+                result["mbti"] = normalized_mbti
+            else:
+                missing_fields.append("mbti")
+        else:
+            missing_fields.append("mbti")
+
+        country = result.get("country")
+        if isinstance(country, str) and country.strip():
+            country_map = {
+                "germany": "DE",
+                "deutschland": "DE",
+                "united states": "US",
+                "usa": "US",
+            }
+            country_value = country.strip()
+            result["country"] = country_map.get(country_value.lower(), country_value.upper())
+        else:
+            missing_fields.append("country")
+
+        return missing_fields
     
     def _fix_truncated_json(self, content: str) -> str:
         """Fix truncated JSON (output truncated by max_tokens limit)"""
@@ -1107,20 +1187,31 @@ Important:
         # mehrfach zu klonen wenn sie im Doc prominent ist. Bei Dubletten neuen
         # DACH-Namen aus dem Pool ziehen, Handle entsprechend neu bauen.
         seen_names: set = set()
+        seen_last_names: set = set()
         seen_handles: set = set()
         for p in profiles:
             if p is None:
                 continue
             norm_name = (p.name or "").strip().lower()
-            if norm_name and norm_name in seen_names:
+            last_name = self._last_name(p.name or "")
+            if norm_name and (
+                norm_name in seen_names
+                or (last_name is not None and last_name in seen_last_names)
+            ):
                 new_name = self._pick_dach_name()
                 attempts = 0
-                while new_name.lower() in seen_names and attempts < 10:
+                while (
+                    new_name.lower() in seen_names
+                    or (self._last_name(new_name) or "") in seen_last_names
+                ) and attempts < 30:
                     new_name = self._pick_dach_name()
                     attempts += 1
                 p.name = new_name
                 p.user_name = self._generate_username(new_name)
             seen_names.add((p.name or "").strip().lower())
+            last_name = self._last_name(p.name or "")
+            if last_name:
+                seen_last_names.add(last_name)
 
             norm_handle = (p.user_name or "").strip().lower()
             if norm_handle and norm_handle in seen_handles:
@@ -1326,4 +1417,3 @@ Important:
         """[Deprecated] Please use save_profiles() method"""
         logger.warning("save_profiles_to_json is deprecated, please use save_profiles method")
         self.save_profiles(profiles, file_path, platform)
-
