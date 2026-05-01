@@ -1035,23 +1035,40 @@ class ReportAgent:
                 simulation_id=self.simulation_id,
             ).to_dict()
             items: List[Dict[str, Any]] = []
-            metric_fields = (
-                "echo_chamber_index",
-                "cluster_count",
-                "total_interactions",
-                "bridge_agents",
-            )
-            for field in metric_fields:
-                value = metrics.get(field)
-                if value in (None, [], ""):
-                    continue
+            # S2b: Wenn der Snapshot keinen "ok"-Status hat (z. B. Broadcast-
+            # only-Run ohne pairwise Interactions), keine 0er Pseudo-Metriken
+            # als Evidence ausweisen. Stattdessen ein einzelnes Status-Item
+            # mit klarer Aussage anhängen, damit der Audit-Trail nicht ganz
+            # leer ist.
+            if metrics.get("status") != "ok":
                 items.append(EvidenceItem(
-                    type="graph_metric",
+                    type="graph_metric_status",
                     source="simulation_metrics",
-                    value=f"{field}={value}",
-                    snippet=f"{field}: {value}",
-                    raw={"metric": field, "value": value, "metrics": metrics},
+                    value=f"status={metrics.get('status')}",
+                    snippet=(
+                        f"Polarization-Metriken nicht verfügbar "
+                        f"(Status: {metrics.get('status')})"
+                    ),
+                    raw={"metrics": metrics},
                 ).to_dict())
+            else:
+                metric_fields = (
+                    "echo_chamber_index",
+                    "cluster_count",
+                    "total_interactions",
+                    "bridge_agents",
+                )
+                for field in metric_fields:
+                    value = metrics.get(field)
+                    if value in (None, [], ""):
+                        continue
+                    items.append(EvidenceItem(
+                        type="graph_metric",
+                        source="simulation_metrics",
+                        value=f"{field}={value}",
+                        snippet=f"{field}: {value}",
+                        raw={"metric": field, "value": value, "metrics": metrics},
+                    ).to_dict())
 
             for action in action_dicts[:8]:
                 action_type = action.get("action_type") or "action"
