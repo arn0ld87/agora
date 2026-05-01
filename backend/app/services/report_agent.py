@@ -21,6 +21,7 @@ from enum import Enum
 
 from ..config import Config
 from ..utils.llm_client import LLMClient
+from .confidence_calculator import compute_confidence
 from .evidence_binder import bind_evidence_to_claim
 from .web_tools import WebToolsService
 from ..utils.logger import get_logger
@@ -1360,9 +1361,15 @@ class ReportAgent:
                 evidence_items = direct_items + global_items
                 direct_count = len(direct_items)
 
-            support_count = direct_count + len(global_items)
-            confidence_score = min(0.95, 0.25 + support_count * 0.12)
-            confidence_label = "high" if confidence_score >= 0.75 else "medium" if confidence_score >= 0.45 else "low"
+            # S6: formelbasierte Confidence statt linear-in-N. Berechnet
+            # aus relevance (mean match_score), source_quality (Typ-
+            # Gewichtung), specificity (top match_score), consistency
+            # (Anzahl unique Quellen). Verified-Label nur bei Top-
+            # Match-Score >= 0.85.
+            confidence_score, confidence_label = compute_confidence(evidence_items)
+            # Hinweis fürs Test-Backwards-Compat: support_count wird nicht
+            # mehr genutzt, bleibt aber lokal für ggf. Logging.
+            support_count = direct_count + len(global_items)  # noqa: F841
             claim_dict = ReportClaim(
                 claim_id=f"claim_{index:02d}",
                 claim_text=chunk,
