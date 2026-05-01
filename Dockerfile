@@ -93,5 +93,5 @@ CMD ["uv", "run", "--project", "backend", "gunicorn", \
      "--workers", "2", \
      "--bind", "0.0.0.0:5001", \
      "--chdir", "backend", \
-     "--pid", "/tmp/gunicorn.pid", \
+     "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
      "app:create_app()"]

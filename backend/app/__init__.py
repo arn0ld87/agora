@@ -215,6 +215,17 @@ def create_app(config_class=Config):
         @app.route('/', defaults={'path': ''})
         @app.route('/<path:path>')
         def serve_spa(path):
+            # API-Pfade dürfen NICHT auf die SPA-`index.html` durchfallen,
+            # sonst kriegt ein API-Client bei einem Tippfehler ein
+            # HTML-Dokument mit 200 statt einer JSON-404 (Bot-Review zu PR
+            # #151). Hier hart abfangen und im Standard-Error-Envelope
+            # antworten.
+            if path == 'api' or path.startswith('api/'):
+                return {
+                    "success": False,
+                    "error": "Not Found",
+                    "code": "not_found",
+                }, 404
             target = frontend_dist / path
             if path and target.is_file():
                 return send_from_directory(frontend_dist, path)
