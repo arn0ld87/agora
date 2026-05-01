@@ -34,6 +34,10 @@ import { usePolling } from './usePolling'
  *   – Lieferant der Log-Page; bekommt den aktuellen Cursor und gibt das API-Envelope zurück.
  * @param {number} [args.intervalMs=2000] – Pacing.
  * @param {(raw: TRaw) => TEntry|null} [args.parseLine] – optionale Transformation; `null` → Eintrag wird verworfen.
+ * @param {{ markAppended: (delta?: number) => void } | null} [args.stickyScroll]
+ *   – Optionale `useStickyScroll`-Instanz. Wenn übergeben, ruft das Composable
+ *     `stickyScroll.markAppended(deltaCount)` statt blind `scrollTop = scrollHeight`,
+ *     damit ein Nutzer-Scrollback respektiert wird (Issue #131, baut auf #130 auf).
  * @returns {{
  *   lines: import('vue').Ref<TEntry[]>,
  *   containerRef: import('vue').Ref<HTMLElement|null>,
@@ -42,7 +46,7 @@ import { usePolling } from './usePolling'
  *   tick: () => Promise<void>
  * }}
  */
-export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine = null }) {
+export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine = null, stickyScroll = null }) {
   const lines = ref([])
   const containerRef = ref(null)
   const sinceLine = ref(0)
@@ -60,22 +64,26 @@ export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine
     const incoming = payload.lines || payload.logs
     if (!Array.isArray(incoming) || incoming.length === 0) return
 
-    let appended = false
+    let appendedCount = 0
     for (const raw of incoming) {
       const entry = parseLine ? parseLine(raw) : raw
       if (entry !== null && entry !== undefined) {
         lines.value.push(entry)
-        appended = true
+        appendedCount += 1
       }
     }
 
     sinceLine.value = payload.next_line ?? payload.total_lines ?? sinceLine.value
 
-    if (appended) {
-      nextTick(() => {
-        const el = containerRef.value
-        if (el) el.scrollTop = el.scrollHeight
-      })
+    if (appendedCount > 0) {
+      if (stickyScroll && typeof stickyScroll.markAppended === 'function') {
+        nextTick(() => stickyScroll.markAppended(appendedCount))
+      } else {
+        nextTick(() => {
+          const el = containerRef.value
+          if (el) el.scrollTop = el.scrollHeight
+        })
+      }
     }
   }
 

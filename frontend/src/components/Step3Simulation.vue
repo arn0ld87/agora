@@ -73,9 +73,14 @@ function setFeedDensity(value) {
 // Issue #39 — Console-Logs werden über das useIncrementalLogPolling-Composable
 // inkrementell gefetcht, an `consoleLogs` gehängt und automatisch zum Bottom
 // gescrollt. Cursor und Append-/Scroll-Logik liegen im Composable.
+//
+// Issue #131 SUB1: Console-Pane bekommt Sticky-Scroll wie der Live-Feed.
+// Die `useStickyScroll`-Instanz wird ans Composable gereicht; sobald sie
+// aktiv ist, ersetzt `markAppended(deltaCount)` das blinde Auto-Scroll.
+const consoleScrollEl = ref(null)
+const consoleSticky = useStickyScroll(consoleScrollEl)
 const {
   lines: consoleLogs,
-  containerRef: consoleScrollEl,
   polling: consolePolling,
   reset: resetConsoleLogs,
 } = useIncrementalLogPolling({
@@ -83,6 +88,7 @@ const {
     ? getSimulationConsoleLog(props.simulationId, sinceLine)
     : Promise.resolve(null),
   intervalMs: 2000,
+  stickyScroll: consoleSticky,
 })
 
 function addLog(msg) { emit('add-log', msg) }
@@ -443,11 +449,17 @@ onUnmounted(stopPolling)
               <span class="meta">Terminal (stdout/stderr)</span>
               <span class="meta">{{ consoleLogs.length }}</span>
             </div>
-            <div ref="consoleScrollEl" class="log-block log-pane-body">
-              <div v-if="!consoleLogs.length" class="meta">Warte auf Ausgabe…</div>
-              <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="console-line">
-                {{ line }}
+            <div class="log-pane-scroll-wrap">
+              <div ref="consoleScrollEl" class="log-block log-pane-body">
+                <div v-if="!consoleLogs.length" class="meta">Warte auf Ausgabe…</div>
+                <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="console-line">
+                  {{ line }}
+                </div>
               </div>
+              <StickyScrollBanner
+                :count="consoleSticky.unreadCount.value"
+                @jump="consoleSticky.scrollToBottom"
+              />
             </div>
           </div>
         </div>
