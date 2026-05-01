@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -29,15 +30,9 @@ const statusMsg = ref('')
 const reportOutline = ref(null)
 const generatedSections = ref({})
 const currentSectionIndex = ref(null)
-const agentLogs = ref([])           // structured entries (parsed)
-const consoleLogs = ref([])
-const agentLogLine = ref(0)
-const consoleLogLine = ref(0)
 const isComplete = ref(false)
 const fullReport = ref(null)
 const collapsedSections = ref(new Set())
-const agentLogRef = ref(null)
-const consoleLogRef = ref(null)
 const evidenceMap = ref(null)
 const selectedEvidenceSection = ref(null)
 const branchBusy = ref(false)
@@ -112,10 +107,8 @@ async function regenerateWithModel() {
       reportOutline.value = null
       generatedSections.value = {}
       currentSectionIndex.value = null
-      agentLogs.value = []
-      consoleLogs.value = []
-      agentLogLine.value = 0
-      consoleLogLine.value = 0
+      resetAgentLogs()
+      resetConsoleLogs()
       fullReport.value = null
       emit('update-status', 'processing')
       router.push({ name: 'Report', params: { reportId: res.data.report_id } })
@@ -133,8 +126,33 @@ async function regenerateWithModel() {
 function addLog(msg) { emit('add-log', msg) }
 
 const statusPolling = usePolling(pollStatus, 2500)
-const agentLogPolling = usePolling(pollAgentLog, 1500)
-const consoleLogPolling = usePolling(pollConsoleLog, 2000)
+
+// Issue #39 — Agent- und Console-Logs laufen über das geteilte Composable.
+// `parseAgentEntry` filtert ungültige Zeilen (return null), Composable überspringt sie.
+const {
+  lines: agentLogs,
+  containerRef: agentLogRef,
+  polling: agentLogPolling,
+  reset: resetAgentLogs,
+} = useIncrementalLogPolling({
+  fetcher: (sinceLine) => props.reportId
+    ? getAgentLog(props.reportId, sinceLine)
+    : Promise.resolve(null),
+  intervalMs: 1500,
+  parseLine: parseAgentEntry,
+})
+
+const {
+  lines: consoleLogs,
+  containerRef: consoleLogRef,
+  polling: consoleLogPolling,
+  reset: resetConsoleLogs,
+} = useIncrementalLogPolling({
+  fetcher: (sinceLine) => props.reportId
+    ? getConsoleLog(props.reportId, sinceLine)
+    : Promise.resolve(null),
+  intervalMs: 2000,
+})
 
 async function pollStatus() {
   if (!props.reportId && !props.simulationId) return
@@ -234,37 +252,6 @@ function parseAgentEntry(raw) {
     body,
     elapsed: obj.elapsed_seconds,
   }
-}
-
-async function pollAgentLog() {
-  if (!props.reportId) return
-  try {
-    const res = await getAgentLog(props.reportId, agentLogLine.value)
-    const payload = res?.data
-    const lines = payload?.lines || payload?.logs
-    if (res?.success && Array.isArray(lines)) {
-      for (const line of lines) {
-        const entry = parseAgentEntry(line)
-        if (entry) agentLogs.value.push(entry)
-      }
-      agentLogLine.value = payload.next_line ?? payload.total_lines ?? agentLogLine.value
-      nextTick(() => { if (agentLogRef.value) agentLogRef.value.scrollTop = agentLogRef.value.scrollHeight })
-    }
-  } catch { /* swallow */ }
-}
-
-async function pollConsoleLog() {
-  if (!props.reportId) return
-  try {
-    const res = await getConsoleLog(props.reportId, consoleLogLine.value)
-    const payload = res?.data
-    const lines = payload?.lines || payload?.logs
-    if (res?.success && Array.isArray(lines)) {
-      for (const line of lines) consoleLogs.value.push(line)
-      consoleLogLine.value = payload.next_line ?? payload.total_lines ?? consoleLogLine.value
-      nextTick(() => { if (consoleLogRef.value) consoleLogRef.value.scrollTop = consoleLogRef.value.scrollHeight })
-    }
-  } catch { /* swallow */ }
 }
 
 function startPolling() {
