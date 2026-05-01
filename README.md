@@ -8,7 +8,7 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
-> **v0.9.0 released:** [Release Notes](docu/2026-05-01-v0.9.0-release-notes.md) — 12/12 Issues (Milestone „Domain Cleanup") geschlossen, **711 Tests grün** (671 Backend + 40 Frontend). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
+> **v0.9.0 released:** [Release Notes](docu/2026-05-01-v0.9.0-release-notes.md) — 12/12 Issues (Milestone „Domain Cleanup") geschlossen, **796 Tests grün** (744 Backend + 52 Frontend; +85 ggü. v0.9.0-Tag durch Repo-Review-Folge-Slices). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
@@ -53,7 +53,7 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
 ### Engineering-Stand v0.9.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**671 Backend + 40 Frontend Tests** (+192 ggü. v0.8.0), 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**744 Backend + 52 Frontend Tests** (+85 ggü. v0.9.0-Tag durch Repo-Review-Folge-Slices), 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
 - **Domain-Cleanup (v0.9.0)**: Drei Hot-Spot-Module entkernt — `simulation_manager.py` 789→403 LOC (−49 %), `report_agent.py` 3184→2179 LOC (−31,6 %), `neo4j_storage.py` 1127→195 LOC (−82,7 %). Neue Service-Schichten in `backend/app/services/` (Branching, Prepare-Pipeline, Report-Logger/Models/Prompts/Tools, Ingestion-Pipeline). Storage in fünf Module gesplittet: `neo4j_mappings.py` + Read/Write/Search-Mixins. Re-Export-Pattern hält alle Caller stabil — keine Breaking-Changes.
 - **Wire-Identity gepinnt (v0.9.0, Issue #52)**: `models/graph.py` führt Backend-Graph-DTOs ein, deren Schema bit-identisch zum bisherigen Storage-Output ist; jede künftige Schema-Änderung wird durch DTO-Tests ausgelöst, bevor das Frontend kaputt geht.
 - **FSM aktiv konsumiert (v0.9.0, Issue #42)**: Die deklarative State-Machine wird vom `SimulationManager` und allen API-Routen verwendet; `ALLOWED_TRANSITIONS` bleibt Single-Source-of-Truth, ungültige Übergänge werfen `InvalidStatusTransition`. Branching durchläuft jetzt explizit `CREATED → PREPARING → READY`; Force-Restart nutzt `_reset_to_ready(...)` mit Log-Begründung.
@@ -394,7 +394,7 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 
 ### Engineering status in v0.9.0
 
-- **Quality gates are in place** via `npm run check` (**671 backend + 40 frontend tests** (+192 vs. v0.8.0), Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**744 backend + 52 frontend tests** (+85 vs. v0.9.0 tag through repo-review follow-up slices), Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
 - **Domain cleanup (v0.9.0)**: three hot-spot modules carved out — `simulation_manager.py` 789→403 LOC (−49%), `report_agent.py` 3184→2179 LOC (−31.6%), `neo4j_storage.py` 1127→195 LOC (−82.7%). New service layers under `backend/app/services/` (branching, prepare pipeline, report logger/models/prompts/tools, ingestion pipeline). Storage split into five modules: `neo4j_mappings.py` + Read/Write/Search mixins. Re-export pattern keeps every caller stable — no breaking changes.
 - **Wire identity pinned (v0.9.0, issue #52)**: `models/graph.py` carries backend graph DTOs whose schema is bit-identical to the previous storage output; future schema drifts trigger DTO tests before they reach the frontend.
 - **FSM actively consumed (v0.9.0, issue #42)**: the declarative state machine is now used by `SimulationManager` and every API route; `ALLOWED_TRANSITIONS` is the single source of truth, invalid transitions raise `InvalidStatusTransition`. Branching now goes through `CREATED → PREPARING → READY`; force-restart uses `_reset_to_ready(...)` with a logged reason.
