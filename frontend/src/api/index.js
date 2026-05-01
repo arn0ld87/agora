@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ApiError } from './envelope'
 
 // Create axios instance
 const service = axios.create({
@@ -33,39 +34,60 @@ service.interceptors.request.use(
   }
 )
 
-// Response interceptor (fault-tolerant retry mechanism)
+// Response interceptor (EPIC-09 Sub-Slice 5: surfaces ApiError with `code`).
 service.interceptors.response.use(
   response => {
     const res = response.data
 
-    // If the returned status code is not success, throw error
-    if (!res.success && res.success !== undefined) {
-      console.error('API Error:', res.error || res.message || 'Unknown error')
-      return Promise.reject(new Error(res.error || res.message || 'Error'))
+    // 2xx mit `success: false` (Backend-eigene Fehlerlogik in 200er-Hülle)
+    // → Code-tragenden ApiError werfen, damit UI semantisch reagieren kann.
+    if (res && res.success === false) {
+      const err = new ApiError({
+        code: res.code || 'unknown_error',
+        status: response.status || 0,
+        message: res.error || res.message || 'Unbekannter Fehler',
+        details: res.details,
+        originalResponse: res,
+      })
+      console.error('API Error:', err.code, '—', err.message)
+      return Promise.reject(err)
     }
 
     return res
   },
   error => {
-    // Surface the backend's actual `error` field if available — much more useful
-    // than "Request failed with status code 500".
+    // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
     const data = error?.response?.data
-    const backendMsg = data && (data.error || data.message)
-    if (backendMsg) {
-      const wrapped = new Error(backendMsg)
-      wrapped.status = error.response?.status
-      wrapped.original = error
-      console.error('Backend error:', wrapped.message)
-      return Promise.reject(wrapped)
+    if (data && data.success === false) {
+      const err = new ApiError({
+        code: data.code || 'unknown_error',
+        status: error.response?.status || 0,
+        message: data.error || data.message || 'Unbekannter Fehler',
+        details: data.details,
+        originalResponse: data,
+      })
+      console.error('Backend error:', err.code, '—', err.message)
+      return Promise.reject(err)
     }
 
-    if (error.code === 'ECONNABORTED' && error.message?.includes('timeout')) {
-      console.error('Request timeout')
+    // Kein Envelope verfügbar (z.B. Network Error, Timeout): heuristischer Code.
+    let code = 'unknown_error'
+    let message = error.message || 'Unbekannter Fehler'
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      code = 'timeout'
+      message = 'Zeitüberschreitung — Backend antwortet zu langsam'
+    } else if (error.message === 'Network Error') {
+      code = 'service_unavailable'
+      message = 'Backend offline oder nicht erreichbar'
     }
-    if (error.message === 'Network Error') {
-      console.error('Network error – is the backend reachable?')
-    }
-    return Promise.reject(error)
+    const wrapped = new ApiError({
+      code,
+      status: error.response?.status || 0,
+      message,
+      originalResponse: error,
+    })
+    console.error('Network/transport error:', wrapped.code, '—', wrapped.message)
+    return Promise.reject(wrapped)
   }
 )
 

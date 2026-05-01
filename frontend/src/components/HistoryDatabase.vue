@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listRuns, getRunEvents, resumeRun, stopRun } from '../api/runs'
 import { createSimulationBranch } from '../api/simulation.js'
+import { isApiError } from '../api/envelope'
+import { userMessageFor, isRetryable } from '../api/errorMessages'
 
 defineProps({
   showOpenLink: { type: Boolean, default: false }
@@ -15,6 +17,7 @@ const router = useRouter()
 const runs = ref([])
 const loading = ref(true)
 const loadError = ref('')
+const loadErrorRetryable = ref(false)
 const selectedRun = ref(null)
 const runEvents = ref([])
 const filters = ref({
@@ -67,12 +70,19 @@ function flattenArtifacts(artifacts) {
 async function loadRuns() {
   loading.value = true
   loadError.value = ''
+  loadErrorRetryable.value = false
   try {
     const res = await listRuns()
     runs.value = Array.isArray(res?.data) ? res.data : []
   } catch (err) {
     runs.value = []
-    loadError.value = err?.message || 'Run-Registry nicht erreichbar'
+    if (isApiError(err)) {
+      loadError.value = userMessageFor(err)
+      loadErrorRetryable.value = isRetryable(err)
+    } else {
+      loadError.value = err?.message || 'Run-Registry nicht erreichbar'
+      loadErrorRetryable.value = true
+    }
     console.error('HistoryDatabase: failed to load runs', err)
   } finally {
     loading.value = false
@@ -295,8 +305,8 @@ onMounted(loadRuns)
       <div class="table">
         <div v-if="loading" class="empty">Loading runs…</div>
         <div v-else-if="loadError" class="empty error">
-          Run-Registry nicht erreichbar: {{ loadError }}
-          <button class="retry-btn" type="button" @click="loadRuns">Erneut versuchen</button>
+          {{ loadError }}
+          <button v-if="loadErrorRetryable" class="retry-btn" type="button" @click="loadRuns">Erneut versuchen</button>
         </div>
         <div v-else-if="!groupedRuns.length" class="empty">No runs match the current filters.</div>
 
