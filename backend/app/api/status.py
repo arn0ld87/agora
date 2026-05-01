@@ -19,11 +19,35 @@ from ..utils.api_responses import handle_api_errors, json_success
 logger = get_logger('agora.api.status')
 
 
+def _get_auth_mode():
+    """Classify which auth posture the API runs under right now.
+
+    Values:
+    - ``"token"``: ``AGORA_AUTH_TOKEN`` is set; ``/api/*`` requires it.
+    - ``"anonymous"``: ``AGORA_ALLOW_ANONYMOUS=true`` opt-out is active.
+    - ``"open"``: no token, no opt-out, but ``FLASK_DEBUG=true`` (dev).
+    - ``"misconfigured"``: no token, no opt-out, no debug — `Config.validate()`
+      should have blocked this; we surface it loudly so an operator notices.
+
+    Operators monitor this via ``/api/status.backend.auth_mode`` to confirm
+    that production is on ``"token"`` and not silently in one of the
+    open modes.
+    """
+    if os.environ.get("AGORA_AUTH_TOKEN", "").strip():
+        return "token"
+    if os.environ.get("AGORA_ALLOW_ANONYMOUS", "false").lower() in ("true", "1", "yes"):
+        return "anonymous"
+    if os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1", "yes"):
+        return "open"
+    return "misconfigured"
+
+
 def _get_backend_status():
-    """Get backend health and version."""
+    """Get backend health, version, and active auth mode."""
     return {
         "ok": True,
         "version": __version__,
+        "auth_mode": _get_auth_mode(),
     }
 
 
