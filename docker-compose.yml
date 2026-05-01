@@ -1,8 +1,8 @@
 services:
   agora:
     build: .
-    # Or use pre-built image (when available):
-    # image: ghcr.io/nikmcfly/agora:latest
+    # Oder Pre-built Image:
+    # image: alexle135/agora-agora:latest
     container_name: agora
     env_file:
       - .env

@@ -76,7 +76,7 @@ context.md
 /docs/
 /Agora_design/
 /scripts/logs/
-/.github/
+# /.github/ — jetzt getrackt (CI-Workflows)
 /.codex
 /.gitleaksignore
 /docker-compose.override.yml
