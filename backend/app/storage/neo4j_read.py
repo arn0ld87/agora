@@ -340,11 +340,9 @@ class Neo4jReadMixin:
                 gid=graph_id,
             )
             nodes = []
-            node_map: Dict[str, str] = {}  # uuid -> name
             for record in node_result:
                 nd = node_to_dict(record["n"], record["labels"])
                 nodes.append(nd)
-                node_map[nd["uuid"]] = nd["name"]
 
             # Get all edges with source/target node names (JOIN)
             edge_result = tx.run(
