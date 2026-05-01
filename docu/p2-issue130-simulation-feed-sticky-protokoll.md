@@ -75,11 +75,16 @@ Simulationskonversation lesbar groß, Sticky-Scroll: Auto-Scroll greift nur, wen
 - [x] Commit erstellt
 - [ ] Browser-Smoke (durch User)
 
-### SUB3
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB3 — abgeschlossen 2026-05-01
+- [x] Implementiert: Statt der ursprünglich geplanten Polling-Composable-Migration jetzt Mention/Hashtag-Highlight (passt besser zu #130-Akzeptanz; Polling-Migration gehört zu #131-Akzeptanz „Sticky-Logik wie #130 wiederverwenden"). Neue Util `frontend/src/utils/feedHighlight.js` (`tokenizeFeedText`) liefert sichere Token-Liste; `Step3Simulation` rendert Tokens via `v-for` ohne `v-html` (XSS-frei). CSS-Klassen `.tok-mention` (accent, fett) und `.tok-hashtag` (status-warn) hervorgehoben.
+- [x] Tests grün (6 neue Vitest-Cases, `npm run check`: 690 Backend + 51 Frontend, Build erfolgreich)
+- [x] Commit erstellt (`Closes #130`)
+- [ ] Browser-Smoke (durch User)
+
+### Bewusst aus Issue gestrichen → Folge-Issues
+- **Polling-Composable-Migration zu Sticky-Scroll** (`useIncrementalLogPolling`): liegt eigentlich auf der Schnittmenge mit #131 („Tool-Calls/Errors-Pane mit gleicher Sticky-Logik"). Wird dort umgesetzt.
+- **Echter Playwright-Test** (User scrollt hoch → kein Auto-Scroll): Repo nutzt heute Vitest+JSDOM; dedizierter Playwright-Setup ist eigenes Vorhaben (Folge-Issue empfohlen, wenn Smoke-Tests systematischer aufgesetzt werden).
+- **Step4-Report-Logs** auf Sticky-Scroll umstellen: gleiches Pattern wie Console-Pane in Step3, gehört nicht zur Live-Feed-Akzeptanz von #130. Folge-Issue empfohlen.
 
 ## CHANGELOG-Eintrag (Vorschau)
 ```

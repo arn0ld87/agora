@@ -20,6 +20,7 @@ import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
+import { tokenizeFeedText } from '../utils/feedHighlight'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -418,7 +419,12 @@ onUnmounted(stopPolling)
                   <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
                   <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
                   <span class="act">{{ a.action_type }}</span>
-                  <span class="content" v-if="a.action_args?.content">— {{ a.action_args.content }}</span>
+                  <span class="content" v-if="a.action_args?.content">
+                    — <template
+                      v-for="(tok, ti) in tokenizeFeedText(a.action_args.content)"
+                      :key="ti"
+                    ><span :class="['tok', 'tok-' + tok.type]">{{ tok.value }}</span></template>
+                  </span>
                 </div>
               </div>
               <StickyScrollBanner
@@ -537,6 +543,15 @@ onUnmounted(stopPolling)
 .feed-line .who { color: var(--status-warn); margin: 0 var(--s-2); }
 .feed-line .act { color: var(--mono-300); }
 .feed-line .content { color: var(--mono-100); }
+.feed-line .tok-text { color: inherit; }
+.feed-line .tok-mention {
+  color: var(--accent);
+  font-weight: 600;
+}
+.feed-line .tok-hashtag {
+  color: var(--status-warn, var(--accent));
+  font-weight: 500;
+}
 
 .log-meta { display: flex; gap: var(--s-2); }
 .logs-grid {
