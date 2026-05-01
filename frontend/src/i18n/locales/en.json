@@ -42,6 +42,7 @@
     "select": "Select",
     "confirm": "Confirm",
     "refresh": "Refresh",
+    "scrollToBottom": "Jump to latest",
     "copy": "Copy",
     "copied": "Copied",
     "send": "Send",
@@ -278,7 +279,13 @@
       "all": "All",
       "posts_only": "Posts only",
       "replies_only": "Replies only",
-      "empty": "No activity yet."
+      "empty": "No activity yet.",
+      "unread": "no new posts | one new post | {count} new posts",
+      "density": {
+        "label": "Density",
+        "comfort": "Comfort",
+        "compact": "Compact"
+      }
     },
     "next": "Next: report →"
   },

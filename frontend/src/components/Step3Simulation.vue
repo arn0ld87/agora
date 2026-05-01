@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useEventStream } from '../composables/useEventStream'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
+import { useStickyScroll } from '../composables/useStickyScroll'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -18,6 +19,7 @@ import { generateReport } from '../api/report'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
+import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -44,6 +46,10 @@ const allActions = ref([])
 const actionIds = ref(new Set())
 const scrollEl = ref(null)
 const startError = ref(null)
+
+// Issue #130: Sticky-Scroll im Live-Feed. Nutzer-Scrollback wird respektiert,
+// neue Beiträge werden im Banner gezählt statt blind ans Ende zu springen.
+const feedSticky = useStickyScroll(scrollEl)
 
 // Issue #39 — Console-Logs werden über das useIncrementalLogPolling-Composable
 // inkrementell gefetcht, an `consoleLogs` gehängt und automatisch zum Bottom
@@ -207,16 +213,20 @@ async function pollDetail() {
   try {
     const res = await getRunStatusDetail(props.simulationId)
     if (res?.success && Array.isArray(res.data?.all_actions)) {
+      let appended = 0
       for (const a of res.data.all_actions) {
         const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
         if (!actionIds.value.has(key)) {
           actionIds.value.add(key)
           allActions.value.push(a)
+          appended += 1
         }
       }
-      nextTick(() => {
-        if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-      })
+      if (appended > 0) {
+        // Sticky-Scroll: nur ans Ende springen, wenn Nutzer dort klebt;
+        // sonst Banner-Counter erhöhen.
+        nextTick(() => feedSticky.markAppended(appended))
+      }
     }
   } catch { /* swallow */ }
 }
@@ -363,14 +373,20 @@ onUnmounted(stopPolling)
               <span class="meta">Live-Feed</span>
               <span class="meta">{{ allActions.length }}</span>
             </div>
-            <div ref="scrollEl" class="feed log-block log-pane-body">
-              <div v-if="!allActions.length" class="meta">{{ t('step3.feed.empty') }}</div>
-              <div v-for="(a, i) in allActions" :key="i" class="feed-line">
-                <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
-                <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
-                <span class="act">{{ a.action_type }}</span>
-                <span class="content" v-if="a.action_args?.content">— {{ a.action_args.content }}</span>
+            <div class="log-pane-scroll-wrap">
+              <div ref="scrollEl" class="feed log-block log-pane-body">
+                <div v-if="!allActions.length" class="meta">{{ t('step3.feed.empty') }}</div>
+                <div v-for="(a, i) in allActions" :key="i" class="feed-line">
+                  <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
+                  <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
+                  <span class="act">{{ a.action_type }}</span>
+                  <span class="content" v-if="a.action_args?.content">— {{ a.action_args.content }}</span>
+                </div>
               </div>
+              <StickyScrollBanner
+                :count="feedSticky.unreadCount.value"
+                @jump="feedSticky.scrollToBottom"
+              />
             </div>
           </div>
           <div class="log-pane">
@@ -485,6 +501,9 @@ onUnmounted(stopPolling)
   flex-direction: column;
   gap: var(--s-2);
   min-width: 0;
+}
+.log-pane-scroll-wrap {
+  position: relative;
 }
 .log-pane-head {
   display: flex;
