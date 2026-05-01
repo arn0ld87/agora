@@ -357,6 +357,7 @@ Doku-Index (Auswahl):
 
 - Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
 - Operations: [`docu/operations.md`](./docu/operations.md) · [`docu/backup-restore.md`](./docu/backup-restore.md)
+- Release-Process: [`docu/release-process.md`](./docu/release-process.md)
 - Auth & Security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/security-threat-model.md`](./docu/security-threat-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
 - API-Verträge: [`docu/api-contracts.md`](./docu/api-contracts.md)
 - Architektur & Refactoring: [`docu/target-architecture.md`](./docu/target-architecture.md), `docu/p0-*-protokoll.md`, `docu/2026-05-01-*-arbeitsprotokoll.md`
@@ -555,6 +556,7 @@ Doc index (selection):
 
 - Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
 - Operations: [`docu/operations.md`](./docu/operations.md) · [`docu/backup-restore.md`](./docu/backup-restore.md)
+- Release process: [`docu/release-process.md`](./docu/release-process.md)
 - Auth & security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/security-threat-model.md`](./docu/security-threat-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
 - API contracts: [`docu/api-contracts.md`](./docu/api-contracts.md)
 - Architecture & refactor logs: [`docu/target-architecture.md`](./docu/target-architecture.md) plus `docu/2026-05-01-*-arbeitsprotokoll.md`.
