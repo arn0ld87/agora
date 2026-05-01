@@ -32,6 +32,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 > Internet-Betrieb.
 >
 > **Getestet aktuell hauptsächlich mit:**
+>
 > - LLM: `qwen3-coder-next:cloud` (Ollama Cloud)
 > - **Embedding: `qwen3-embedding:4b`** (2560-dim, `VECTOR_DIM=2560` nötig)
 >
@@ -78,16 +79,16 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
 ### Was wurde gegenüber MiroFish geändert?
 
-| Bereich | Upstream MiroFish / MiroFish-Offline | Agora |
-|---|---|---|
-| Sprache/UI | Chinesischer Ursprung, später englische Migration | Deutsche UI als Default, Englisch als Fallback |
-| Graph Memory | Zep/Graphiti-Ansatz im Ursprung | Eigene `GraphStorage`-Abstraktion mit Neo4j 5.18+ |
-| LLMs | DashScope/OpenAI-orientiert | Ollama lokal oder beliebiger OpenAI-kompatibler Endpoint |
-| Modelle | Primär per `.env` | Modell-Auswahl im Workflow, plus `.env`-Fallback |
-| Simulation | Feste KI-Personas | Persona-Limit, manuelle Personas, Sprache/Modell pro Vorbereitung |
-| Report | ReportAgent mit Graph-Tools | Report-Modell wechselbar, Tool-Log sichtbar, optional Webtools |
-| Agent-Tool-Use | Nicht stabiler Kernpfad | Experimentell, opt-in, default aus |
-| Region/Zeit | Upstream China-Kontext | DACH / Europe-Berlin Timing-Profil |
+| Bereich        | Upstream MiroFish / MiroFish-Offline               | Agora                                                             |
+| -------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
+| Sprache/UI     | Chinesischer Ursprung, später englische Migration | Deutsche UI als Default, Englisch als Fallback                    |
+| Graph Memory   | Zep/Graphiti-Ansatz im Ursprung                    | Eigene `GraphStorage`-Abstraktion mit Neo4j 5.18+               |
+| LLMs           | DashScope/OpenAI-orientiert                        | Ollama lokal oder beliebiger OpenAI-kompatibler Endpoint          |
+| Modelle        | Primär per `.env`                               | Modell-Auswahl im Workflow, plus `.env`-Fallback                |
+| Simulation     | Feste KI-Personas                                  | Persona-Limit, manuelle Personas, Sprache/Modell pro Vorbereitung |
+| Report         | ReportAgent mit Graph-Tools                        | Report-Modell wechselbar, Tool-Log sichtbar, optional Webtools    |
+| Agent-Tool-Use | Nicht stabiler Kernpfad                            | Experimentell, opt-in, default aus                                |
+| Region/Zeit    | Upstream China-Kontext                             | DACH / Europe-Berlin Timing-Profil                                |
 
 ### Kernfunktionen
 
@@ -107,23 +108,18 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 1. **Upload & Modellwahl**
 
    Dokumente hochladen, Fragestellung formulieren, LLM-Modell und Agentensprache wählen.
-
 2. **Graph Build**
 
    Agora chunked das Dokument, ruft das LLM für NER/Relation-Extraction auf und schreibt Graphdaten nach Neo4j.
-
 3. **Environment Setup**
 
    Agenten-Personas und Simulationsparameter werden erzeugt. Modell, Sprache, Agentenlimit, Laufdauer und optional gespeicherte Personas werden in der Simulation eingefroren.
-
 4. **Simulation**
 
    OASIS läuft als Subprozess. Aktionen erscheinen live; Console-Logs helfen beim Debugging. Pause/Resume ist möglich.
-
 5. **Report**
 
    Der ReportAgent durchsucht Graph und Simulation, kann Agenten interviewen und optional Webtools nutzen. Das Report-Modell ist wechselbar.
-
 6. **Interaction**
 
    Nach der Simulation kannst du mit Agenten oder dem ReportAgent weiterarbeiten.
@@ -210,9 +206,9 @@ docker compose down -v && docker compose up -d
 
 Danach:
 
-- Frontend: <http://localhost:5173>
-- Backend Health: <http://localhost:5001/health>
-- Neo4j Browser: <http://localhost:7474>
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend Health: [http://localhost:5001/health](http://localhost:5001/health)
+- Neo4j Browser: [http://localhost:7474](http://localhost:7474)
 
 #### Option B: Lokal ohne Docker
 
@@ -460,9 +456,9 @@ docker compose up -d --build
 
 Open:
 
-- Frontend: <http://localhost:5173>
-- Backend health: <http://localhost:5001/health>
-- Neo4j Browser: <http://localhost:7474>
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend health: [http://localhost:5001/health](http://localhost:5001/health)
+- Neo4j Browser: [http://localhost:7474](http://localhost:7474)
 
 Local development (without Docker):
 
