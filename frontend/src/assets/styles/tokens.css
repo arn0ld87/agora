@@ -1,120 +1,182 @@
 /* ============================================================
-   Agora — Design Tokens
-   Built on alexle135 v2 — extended for tool use
-   "Cartographic Notebook": Cartographic × Lab Notebook × Editorial
+   Agora — Design Tokens v2 (2026)
+   Dual theme · Light (default) + Dark
+   Liquid-Glass / Spatial UI · oklch · Aurora coral primary
+   Legacy aliases preserved for staged migration.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap');
+/* ─────────────────────────────────────────────────────────────
+   LIGHT THEME (default) — soft, warm, gallery paper
+   ───────────────────────────────────────────────────────────── */
+:root, [data-theme="light"] {
+  /* ── Brand axis ─────────────────────────────────────────── */
+  --brand-aurora: oklch(72% 0.20 38);
+  --brand-iris:   oklch(70% 0.17 268);
+  --brand-mint:   oklch(82% 0.13 168);
+  --brand-violet: oklch(64% 0.21 305);
 
+  /* ── Neutral scale (light) ──────────────────────────────── */
+  --ink-0:    oklch(99% 0.003 80);
+  --ink-50:   oklch(97% 0.004 80);
+  --ink-100:  oklch(94% 0.005 80);
+  --ink-200:  oklch(90% 0.006 80);
+  --ink-300:  oklch(84% 0.008 80);
+  --ink-400:  oklch(72% 0.010 80);
+  --ink-500:  oklch(58% 0.012 80);
+  --ink-600:  oklch(45% 0.014 80);
+  --ink-700:  oklch(34% 0.014 80);
+  --ink-800:  oklch(24% 0.012 80);
+  --ink-900:  oklch(16% 0.010 80);
+  --ink-1000: oklch(10% 0.008 80);
+
+  /* ── Surfaces ───────────────────────────────────────────── */
+  --bg:           var(--ink-0);
+  --bg-elevated:  oklch(100% 0 0);
+  --bg-sunken:    var(--ink-50);
+  --bg-glass:     color-mix(in oklch, white 70%, transparent);
+  --bg-glass-hi:  color-mix(in oklch, white 85%, transparent);
+  --bg-panel:     color-mix(in oklch, white 55%, transparent);
+  --bg-panel-2:   color-mix(in oklch, white 75%, transparent);
+  --bg-inverse:   var(--ink-1000);
+
+  /* ── Foreground ─────────────────────────────────────────── */
+  --fg:        var(--ink-1000);
+  --fg-body:   var(--ink-800);
+  --fg-muted:  var(--ink-600);
+  --fg-meta:   var(--ink-500);
+  --fg-on-inverse: var(--ink-0);
+
+  /* ── Lines ──────────────────────────────────────────────── */
+  --rule:        color-mix(in oklch, var(--ink-1000) 8%, transparent);
+  --rule-strong: color-mix(in oklch, var(--ink-1000) 16%, transparent);
+  --rule-soft:   color-mix(in oklch, var(--ink-1000) 4%, transparent);
+
+  /* ── Mesh — animated aurora (subtler in light) ──────────── */
+  --mesh-1: var(--brand-aurora);
+  --mesh-2: var(--brand-iris);
+  --mesh-3: var(--brand-violet);
+  --mesh-4: var(--brand-mint);
+  --mesh-alpha: 0.20;
+
+  /* ── Accent — Aurora coral ──────────────────────────────── */
+  --accent:        var(--brand-aurora);
+  --accent-ink:    oklch(99% 0.005 38);
+  --accent-soft:   color-mix(in oklch, var(--brand-aurora) 14%, transparent);
+  --accent-glow:   color-mix(in oklch, var(--brand-aurora) 45%, transparent);
+
+  --info:        var(--brand-iris);
+  --info-soft:   color-mix(in oklch, var(--brand-iris) 12%, transparent);
+
+  /* ── Status ─────────────────────────────────────────────── */
+  --ok:    oklch(58% 0.16 152);
+  --warn:  oklch(70% 0.14 78);
+  --err:   oklch(58% 0.21 22);
+  --ok-soft:   color-mix(in oklch, var(--ok) 14%, transparent);
+  --warn-soft: color-mix(in oklch, var(--warn) 14%, transparent);
+  --err-soft:  color-mix(in oklch, var(--err) 14%, transparent);
+
+  /* ── Shadows / Glows ────────────────────────────────────── */
+  --shadow-1: 0 1px 2px 0 rgba(20,18,14,0.04),
+              0 1px 0 0 rgba(255,255,255,0.6) inset;
+  --shadow-2: 0 6px 16px -4px rgba(20,18,14,0.08),
+              0 1px 3px 0 rgba(20,18,14,0.05),
+              0 1px 0 0 rgba(255,255,255,0.8) inset;
+  --shadow-3: 0 24px 56px -16px rgba(20,18,14,0.18),
+              0 4px 12px -2px rgba(20,18,14,0.08),
+              0 1px 0 0 rgba(255,255,255,0.9) inset;
+  --shadow-glass: 0 8px 32px -4px rgba(20,18,14,0.12),
+                  inset 0 1px 0 0 rgba(255,255,255,0.9),
+                  inset 0 0 0 1px rgba(20,18,14,0.04);
+  --shadow-popover: 0 18px 48px rgba(20,18,14,0.18), 0 0 0 1px var(--rule);
+  --shadow-modal:   0 40px 120px rgba(20,18,14,0.24), 0 0 0 1px var(--rule-strong);
+  --shadow-editorial: 0 24px 80px rgba(20,18,14,0.10);
+  --shadow-hairline: 0 0 0 1px var(--rule);
+
+  --glow-accent:  0 0 0 1px var(--accent-glow), 0 8px 28px -4px var(--accent-glow);
+  --glow-info:    0 0 0 1px color-mix(in oklch, var(--info) 50%, transparent),
+                  0 8px 28px -4px color-mix(in oklch, var(--info) 40%, transparent);
+  --glow-plasma:  var(--glow-info);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DARK THEME — deep ink with aurora accents
+   ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --ink-0:    oklch(8%  0.012 264);
+  --ink-50:   oklch(12% 0.014 264);
+  --ink-100:  oklch(16% 0.016 264);
+  --ink-200:  oklch(22% 0.018 264);
+  --ink-300:  oklch(32% 0.020 264);
+  --ink-400:  oklch(48% 0.018 264);
+  --ink-500:  oklch(62% 0.015 264);
+  --ink-600:  oklch(75% 0.012 264);
+  --ink-700:  oklch(85% 0.008 264);
+  --ink-800:  oklch(92% 0.005 264);
+  --ink-900:  oklch(96% 0.003 264);
+  --ink-1000: oklch(99% 0.001 264);
+
+  --bg:          var(--ink-0);
+  --bg-elevated: var(--ink-50);
+  --bg-sunken:   oklch(6% 0.012 264);
+  --bg-glass:    color-mix(in oklch, var(--ink-100) 60%, transparent);
+  --bg-glass-hi: color-mix(in oklch, var(--ink-200) 70%, transparent);
+  --bg-panel:    color-mix(in oklch, var(--ink-100) 45%, transparent);
+  --bg-panel-2:  color-mix(in oklch, var(--ink-200) 55%, transparent);
+  --bg-inverse:  var(--ink-1000);
+
+  --fg:        var(--ink-1000);
+  --fg-body:   var(--ink-700);
+  --fg-muted:  var(--ink-500);
+  --fg-meta:   var(--ink-400);
+  --fg-on-inverse: var(--ink-0);
+
+  --rule:        color-mix(in oklch, var(--ink-1000) 8%, transparent);
+  --rule-strong: color-mix(in oklch, var(--ink-1000) 18%, transparent);
+  --rule-soft:   color-mix(in oklch, var(--ink-1000) 4%, transparent);
+
+  --mesh-alpha: 0.28;
+
+  --accent-ink:  oklch(15% 0.02 38);
+  --accent-soft: color-mix(in oklch, var(--brand-aurora) 16%, transparent);
+  --accent-glow: color-mix(in oklch, var(--brand-aurora) 50%, transparent);
+
+  --info:        var(--brand-iris);
+  --info-soft:   color-mix(in oklch, var(--brand-iris) 14%, transparent);
+
+  --ok:    oklch(72% 0.16 152);
+  --warn:  oklch(78% 0.14 78);
+  --err:   oklch(64% 0.21 22);
+  --ok-soft:   color-mix(in oklch, var(--ok) 14%, transparent);
+  --warn-soft: color-mix(in oklch, var(--warn) 14%, transparent);
+  --err-soft:  color-mix(in oklch, var(--err) 14%, transparent);
+
+  --shadow-1: 0 1px 0 0 color-mix(in oklch, var(--ink-1000) 6%, transparent),
+              0 1px 2px 0 rgba(0,0,0,0.4);
+  --shadow-2: 0 4px 12px -2px rgba(0,0,0,0.5),
+              0 1px 0 0 color-mix(in oklch, var(--ink-1000) 8%, transparent) inset;
+  --shadow-3: 0 24px 48px -12px rgba(0,0,0,0.6),
+              0 1px 0 0 color-mix(in oklch, var(--ink-1000) 10%, transparent) inset;
+  --shadow-glass: 0 8px 32px -4px rgba(0,0,0,0.5),
+                  inset 0 1px 0 0 color-mix(in oklch, var(--ink-1000) 12%, transparent),
+                  inset 0 0 0 1px color-mix(in oklch, var(--ink-1000) 6%, transparent);
+  --shadow-popover: 0 18px 48px rgba(0,0,0,0.55), 0 0 0 1px var(--rule);
+  --shadow-modal:   0 40px 120px rgba(0,0,0,0.65), 0 0 0 1px var(--rule-strong);
+  --shadow-editorial: 0 24px 80px rgba(0,0,0,0.28);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Cross-theme tokens — type, space, radii, motion, controls
+   ───────────────────────────────────────────────────────────── */
 :root {
-  /* ---------- MONO SCALE (source of truth) ---------- */
-  --mono-50:  #f6f2eb;
-  --mono-100: #e6e0d7;
-  --mono-200: #ccc4ba;
-  --mono-300: #ada398;
-  --mono-400: #8b8177;
-  --mono-500: #6a625a;
-  --mono-600: #4f4a44;
-  --mono-700: #37332f;
-  --mono-800: #221f1d;
-  --mono-900: #171514;
-  --mono-950: #0d0c0c;
+  /* Type — v2 stack (Instrument Serif / Inter Tight / JetBrains Mono) */
+  --ff-serif: 'Instrument Serif', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --ff-sans:  'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ff-mono:  'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* ---------- ACCENT (Neon-Orange) ---------- */
-  --neon-orange:      #ff6a00;
-  --neon-orange-ink:  #2a1100;
-  --neon-orange-soft: rgba(255, 106, 0, 0.14);
-
-  /* ---------- SECONDARY ACCENT (Plasma-Cyan) ---------- */
-  --plasma-50:  #e7f4f8;
-  --plasma-200: #9ed3e0;
-  --plasma-400: #5ab4c8;
-  --plasma-500: #3d9cb3;
-  --plasma-600: #2c7e94;
-  --plasma-ink: #061417;
-  --plasma-soft: rgba(93, 180, 200, 0.14);
-
-  /* ---------- STATUS (muted, non-bootstrap) ---------- */
-  --status-success:      #6ea870;
-  --status-success-soft: rgba(110, 168, 112, 0.14);
-  --status-warn:         #d6a154;
-  --status-warn-soft:    rgba(214, 161, 84, 0.14);
-  --status-error:        #c25a5a;
-  --status-error-soft:   rgba(194, 90, 90, 0.14);
-  --status-info:         var(--plasma-400);
-  --status-info-soft:    var(--plasma-soft);
-
-  /* ---------- SEMANTIC SURFACES ---------- */
-  --bg:           var(--mono-950);
-  --bg-elevated:  var(--mono-900);
-  --bg-sunken:    #0a0908;
-  --bg-panel:     color-mix(in srgb, var(--mono-50) 5%, transparent);
-  --bg-panel-2:   color-mix(in srgb, var(--mono-50) 8%, transparent);
-  --bg-inverse:   var(--mono-50);
-
-  --fg:             var(--mono-50);
-  --fg-body:        var(--mono-300);
-  --fg-muted:       var(--mono-400);
-  --fg-meta:        var(--mono-500);
-  --fg-on-inverse:  var(--mono-950);
-
-  --rule:        color-mix(in srgb, var(--mono-50) 12%, transparent);
-  --rule-strong: color-mix(in srgb, var(--mono-50) 28%, transparent);
-  --rule-soft:   color-mix(in srgb, var(--mono-50) 6%, transparent);
-
-  --accent:     var(--neon-orange);
-  --accent-ink: var(--neon-orange-ink);
-
-  /* Page backdrop — subtle radial accents over near-black */
-  --bg-page:
-    radial-gradient(circle at top left, rgba(255, 106, 0, 0.10), transparent 32rem),
-    radial-gradient(circle at 80% 0%, rgba(93, 180, 200, 0.06), transparent 28rem),
-    linear-gradient(180deg, rgba(246, 242, 235, 0.04), transparent 28rem),
-    var(--mono-950);
-
-  /* Lab-notebook grid (used as ::before opacity 0.6 on artboards) */
-  --bg-grid:
-    linear-gradient(rgba(246, 242, 235, 0.025) 1px, transparent 1px) 0 0/32px 32px,
-    linear-gradient(90deg, rgba(246, 242, 235, 0.025) 1px, transparent 1px) 0 0/32px 32px;
-
-  /* ---------- LEGACY ALIASES (compat with first-pass components) ---------- */
-  --paper-0: var(--mono-950);
-  --paper-1: var(--mono-900);
-  --paper-2: var(--mono-800);
-  --paper-3: var(--mono-700);
-
-  --ink-0: var(--mono-50);
-  --ink-1: var(--mono-100);
-  --ink-2: var(--mono-600);
-  --ink-3: var(--mono-300);
-  --ink-4: var(--mono-400);
-  --ink-5: var(--mono-500);
-
-  --bg-dark:           var(--bg-inverse);
-  --fg-on-dark:        var(--mono-950);
-  --fg-on-dark-muted:  var(--mono-500);
-  --rule-on-dark:      var(--mono-200);
-
-  /* ---------- TYPE ---------- */
-  --ff-serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  --ff-sans:  'Geist', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --ff-mono:  'Geist Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-
-  --fs-11: 11px;
-  --fs-12: 12px;
-  --fs-13: 13px;
-  --fs-14: 14px;
-  --fs-15: 15px;
-  --fs-16: 16px;
-  --fs-18: 18px;
-  --fs-20: 20px;
-  --fs-24: 24px;
-  --fs-28: 28px;
-  --fs-32: 32px;
-  --fs-44: 44px;
-  --fs-60: 60px;
-  --fs-84: 84px;
-  --fs-120: 120px;
+  --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
+  --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-22: 22px; --fs-24: 24px;
+  --fs-28: 28px; --fs-32: 32px; --fs-40: 40px; --fs-44: 44px; --fs-52: 52px;
+  --fs-60: 60px; --fs-72: 72px; --fs-84: 84px; --fs-96: 96px; --fs-120: 120px;
 
   --lh-tight:   1.02;
   --lh-display: 1.08;
@@ -122,107 +184,184 @@
   --lh-body:    1.55;
   --lh-mono:    1.4;
 
-  --ls-mono:       0.24em;
-  --ls-mono-tight: 0.12em;
-  --ls-mono-wide:  0.32em;
-  --ls-caps:       0.08em;
   --ls-tight:      -0.02em;
+  --ls-display:    -0.035em;
+  --ls-mono:       0.06em;
+  --ls-mono-tight: 0.03em;
+  --ls-mono-wide:  0.18em;
+  --ls-caps:       0.08em;
 
-  /* ---------- SPACE ---------- */
+  /* Spacing */
   --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
   --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
   --s-9: 96px; --s-10: 128px;
 
-  /* ---------- RADII ---------- */
-  --r-0: 0; --r-1: 2px; --r-2: 4px; --r-pill: 999px;
+  /* Radii — 2026 = generous */
+  --r-0: 0; --r-1: 6px; --r-2: 10px; --r-3: 14px; --r-4: 20px; --r-5: 28px;
+  --r-pill: 999px;
 
-  /* ---------- SHADOWS / GLOWS ---------- */
-  --shadow-editorial: 0 24px 80px rgba(0, 0, 0, 0.28);
-  --shadow-hairline:  0 0 0 1px var(--rule);
-  --shadow-popover:   0 18px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--rule);
-  --shadow-modal:     0 40px 120px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--rule-strong);
-  --glow-accent:      0 0 24px rgba(255, 106, 0, 0.45);
-  --glow-plasma:      0 0 28px rgba(93, 180, 200, 0.40);
+  /* Controls */
+  --ctl-h-sm: 30px; --ctl-h-md: 38px; --ctl-h-lg: 48px;
+  --ctl-pad-x: 16px;
 
-  /* ---------- CONTROL SIZES ---------- */
-  --ctl-h-sm:  28px;
-  --ctl-h-md:  36px;
-  --ctl-h-lg:  44px;
-  --ctl-pad-x: 14px;
-
-  /* ---------- GRID ---------- */
+  /* Grid */
   --grid-max:    1280px;
   --grid-gutter: 24px;
   --grid-cols:   12;
+
+  /* Lab-notebook grid (legacy artboard hint, kept for compat) */
+  --bg-grid:
+    linear-gradient(color-mix(in oklch, var(--fg) 4%, transparent) 1px, transparent 1px) 0 0/32px 32px,
+    linear-gradient(90deg, color-mix(in oklch, var(--fg) 4%, transparent) 1px, transparent 1px) 0 0/32px 32px;
+  --bg-page:
+    radial-gradient(circle at top left, color-mix(in oklch, var(--brand-aurora) 12%, transparent), transparent 32rem),
+    radial-gradient(circle at 80% 0%, color-mix(in oklch, var(--brand-iris) 8%, transparent), transparent 28rem),
+    var(--bg);
 }
 
-/* ============================================================
+/* ─────────────────────────────────────────────────────────────
+   Legacy aliases — keep v1 component code rendering during
+   the staged migration (Slice B/C will remove these gradually).
+   ───────────────────────────────────────────────────────────── */
+:root, [data-theme="light"] {
+  --mono-50:  var(--ink-1000);
+  --mono-100: var(--ink-900);
+  --mono-200: var(--ink-800);
+  --mono-300: var(--ink-700);
+  --mono-400: var(--ink-500);
+  --mono-500: var(--ink-400);
+  --mono-600: var(--ink-300);
+  --mono-700: var(--ink-200);
+  --mono-800: var(--ink-100);
+  --mono-900: var(--ink-50);
+  --mono-950: var(--ink-0);
+
+  --neon-orange:      var(--brand-aurora);
+  --neon-orange-ink:  var(--accent-ink);
+  --neon-orange-soft: var(--accent-soft);
+
+  --plasma-50:  color-mix(in oklch, var(--brand-iris) 12%, white);
+  --plasma-200: color-mix(in oklch, var(--brand-iris) 35%, white);
+  --plasma-400: var(--brand-iris);
+  --plasma-500: var(--brand-iris);
+  --plasma-600: color-mix(in oklch, var(--brand-iris) 80%, black);
+  --plasma-ink: oklch(15% 0.02 268);
+  --plasma-soft: var(--info-soft);
+
+  --status-success:      var(--ok);
+  --status-success-soft: var(--ok-soft);
+  --status-warn:         var(--warn);
+  --status-warn-soft:    var(--warn-soft);
+  --status-error:        var(--err);
+  --status-error-soft:   var(--err-soft);
+  --status-info:         var(--info);
+  --status-info-soft:    var(--info-soft);
+
+  --paper-0: var(--bg);
+  --paper-1: var(--bg-elevated);
+  --paper-2: var(--bg-sunken);
+  --paper-3: var(--ink-100);
+
+  --ink-1: var(--ink-900);
+  --ink-2: var(--ink-300);
+  --ink-3: var(--ink-700);
+  --ink-4: var(--ink-500);
+  --ink-5: var(--ink-400);
+
+  --bg-dark:           var(--bg-inverse);
+  --fg-on-dark:        var(--bg);
+  --fg-on-dark-muted:  var(--ink-400);
+  --rule-on-dark:      color-mix(in oklch, var(--bg) 18%, transparent);
+}
+
+[data-theme="dark"] {
+  --mono-50:  var(--ink-1000);
+  --mono-100: var(--ink-900);
+  --mono-200: var(--ink-800);
+  --mono-300: var(--ink-700);
+  --mono-400: var(--ink-600);
+  --mono-500: var(--ink-500);
+  --mono-600: var(--ink-400);
+  --mono-700: var(--ink-300);
+  --mono-800: var(--ink-200);
+  --mono-900: var(--ink-50);
+  --mono-950: var(--ink-0);
+
+  --paper-0: var(--bg);
+  --paper-1: var(--bg-elevated);
+  --paper-2: var(--bg-sunken);
+  --paper-3: var(--ink-100);
+}
+
+/* ─────────────────────────────────────────────────────────────
    Base
-   ============================================================ */
+   ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; transition: background 400ms ease, color 200ms ease; }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg-page);
+  background: var(--bg);
   color: var(--fg);
   font-family: var(--ff-sans);
-  font-size: var(--fs-16);
+  font-size: var(--fs-15);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection { background: var(--accent); color: var(--accent-ink); }
 
-/* ============================================================
+/* ─────────────────────────────────────────────────────────────
    Type roles
-   ============================================================ */
+   ───────────────────────────────────────────────────────────── */
 .t-display {
   font-family: var(--ff-serif);
-  font-weight: 300;
-  font-size: clamp(60px, 8vw, 120px);
-  line-height: var(--lh-tight);
-  letter-spacing: var(--ls-tight);
+  font-weight: 400;
+  font-size: clamp(64px, 8vw, 120px);
+  line-height: 0.96;
+  letter-spacing: var(--ls-display);
   color: var(--fg);
 }
 .t-headline {
   font-family: var(--ff-serif);
   font-weight: 400;
-  font-size: clamp(44px, 5vw, 84px);
-  line-height: var(--lh-display);
-  letter-spacing: var(--ls-tight);
+  font-size: clamp(40px, 5vw, 72px);
+  line-height: 1.02;
+  letter-spacing: var(--ls-display);
   color: var(--fg);
 }
 .t-title {
   font-family: var(--ff-serif);
   font-weight: 400;
   font-size: var(--fs-32);
-  line-height: var(--lh-heading);
-  letter-spacing: -0.015em;
+  line-height: 1.1;
+  letter-spacing: var(--ls-tight);
   color: var(--fg);
 }
 .t-subtitle {
   font-family: var(--ff-sans);
-  font-weight: 400;
+  font-weight: 500;
   font-size: var(--fs-20);
-  line-height: 1.35;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
   color: var(--fg);
 }
 .t-body {
   font-family: var(--ff-sans);
   font-weight: 400;
   font-size: var(--fs-16);
-  line-height: var(--lh-body);
+  line-height: 1.6;
   color: var(--fg-body);
 }
 .t-body-sm {
   font-family: var(--ff-sans);
   font-weight: 400;
   font-size: var(--fs-14);
-  line-height: var(--lh-body);
+  line-height: 1.55;
   color: var(--fg-body);
 }
 .t-meta {
@@ -234,26 +373,27 @@ body {
 }
 .t-kicker {
   font-family: var(--ff-mono);
-  font-weight: 400;
+  font-weight: 500;
   font-size: var(--fs-11);
   line-height: var(--lh-mono);
-  letter-spacing: var(--ls-mono);
+  letter-spacing: var(--ls-mono-wide);
   text-transform: uppercase;
   color: var(--fg-muted);
 }
 .t-kicker--accent { color: var(--accent); }
-.t-kicker--plasma { color: var(--plasma-400); }
+.t-kicker--plasma,
+.t-kicker--info   { color: var(--info); }
 
 .t-numeral {
   font-family: var(--ff-serif);
-  font-weight: 300;
+  font-weight: 400;
   font-size: clamp(84px, 10vw, 160px);
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: var(--ls-display);
   color: var(--fg);
 }
 .t-numeral--outline {
-  -webkit-text-stroke: 1px var(--mono-500);
+  -webkit-text-stroke: 1px var(--ink-400);
   color: transparent;
 }
 .t-quote {
@@ -264,3 +404,4 @@ body {
   line-height: 1.3;
   color: var(--fg);
 }
+.t-num { font-variant-numeric: tabular-nums; }
