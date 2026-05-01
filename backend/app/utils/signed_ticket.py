@@ -19,18 +19,20 @@ process ``SECRET_KEY``. Format::
 * ``sig`` — first 32 hex chars (128 bits) of
   ``HMAC-SHA256(secret, "v1.<exp>.<scope>")``.
 
-``consume`` additionally tracks redeemed signatures in an in-process
-set with TTL-based sweeping so the same ticket can't be replayed inside
-its expiry window. Multi-worker deployments lose that guarantee per
-worker; tighten via a shared store later if needed.
+``consume`` uses an atomic ``SET NX`` against Redis when available,
+making replay detection safe across gunicorn workers. Falls back to
+the in-process set when Redis is unreachable or not configured.
 """
 
 from __future__ import annotations
 
 import hmac
+import logging
 import threading
 import time
 from hashlib import sha256
+
+logger = logging.getLogger("agora.signed_ticket")
 
 VERSION = "v1"
 _SIG_LEN = 32
@@ -97,6 +99,55 @@ def verify(
 _seen_lock = threading.Lock()
 _seen: dict[str, int] = {}  # signature -> expiry unix seconds
 
+# Redis integration (multi-worker-safe replay detection)
+_redis_client: "object | None" = None  # redis.Redis or None
+_redis_init_attempted = False
+
+_REDIS_TICKET_PREFIX = "ticket:"
+
+
+def _get_redis_client() -> "object | None":
+    """Lazy-init a Redis client from Config.REDIS_URL. Returns None on failure."""
+    global _redis_client, _redis_init_attempted
+    if _redis_init_attempted:
+        return _redis_client
+    _redis_init_attempted = True
+    try:
+        import redis as redis_lib
+
+        from ..config import Config
+
+        url = Config.REDIS_URL
+        if not url:
+            return None
+        _redis_client = redis_lib.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        _redis_client.ping()
+        logger.info("signed_ticket Redis connected to %s", url)
+    except Exception as exc:
+        logger.warning("signed_ticket Redis not available: %s", exc)
+        _redis_client = None
+    return _redis_client
+
+
+def _try_redis_consume(sig: str, ttl: int) -> bool | None:
+    """Try atomic ``SET ticket:<sig> 1 NX EX <ttl>`` against Redis.
+
+    Returns:
+        True:  first consumer (SET returned OK)
+        False: replay (SET returned None — key already existed)
+        None:  Redis unavailable, caller should fall back to in-memory
+    """
+    r = _get_redis_client()
+    if r is None:
+        return None
+    try:
+        key = f"{_REDIS_TICKET_PREFIX}{sig}"
+        was_set = r.set(key, "1", nx=True, ex=ttl)
+        return bool(was_set)
+    except Exception as exc:
+        logger.warning("Redis SET NX failed: %s, falling back to in-memory", exc)
+        return None
+
 
 def _sweep_locked(now_int: int) -> None:
     expired = [sig for sig, exp in _seen.items() if exp <= now_int]
@@ -111,7 +162,11 @@ def consume(
     *,
     now: float | None = None,
 ) -> bool:
-    """Verify and mark ticket as redeemed. Replay returns False."""
+    """Verify and mark ticket as redeemed. Replay returns False.
+
+    Uses atomic Redis ``SET NX`` when available for multi-worker safety.
+    Falls back to in-process set with a warning.
+    """
     if not verify(secret, ticket, expected_scope, now=now):
         return False
     parsed = _parse(ticket)
@@ -119,6 +174,18 @@ def consume(
     _, exp, _, sig = parsed
     current = now if now is not None else time.time()
     now_int = int(current)
+    ttl = max(1, exp - now_int)
+
+    # Try Redis first (atomic across workers)
+    result = _try_redis_consume(sig, ttl)
+    if result is not None:
+        return result
+
+    # Fallback: in-process set (not safe under gunicorn multi-worker)
+    logger.debug(
+        "Using in-process ticket store (single-worker mode); "
+        "configure REDIS_URL for multi-worker safety"
+    )
     with _seen_lock:
         _sweep_locked(now_int)
         if sig in _seen:
@@ -129,5 +196,8 @@ def consume(
 
 def _reset_seen_for_tests() -> None:
     """Test helper — clear the redemption store between cases."""
+    global _redis_client, _redis_init_attempted
     with _seen_lock:
         _seen.clear()
+    _redis_client = None
+    _redis_init_attempted = False

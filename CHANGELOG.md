@@ -11,6 +11,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Security
 
+- **Slice 3 (Repo-Review-Umsetzung, PR3): Redis-basierte Single-Use-Tickets.** `signed_ticket.consume()` versucht jetzt zuerst ein atomisches `SET ticket:<sig> 1 NX EX <ttl>` gegen Redis; erst wenn Redis nicht erreichbar ist, fällt es auf den bestehenden in-process `_seen`-Speicher zurück. Das schließt die Multi-Worker-Replay-Lücke unter gunicorn. `fakeredis[lua]>=2.30.0` als neue Dev-Dependency. Tests: `backend/tests/test_signed_ticket_redis.py` (6 Cases: Replay-Block, Multi-Worker-Race, In-Memory-Fallback + Warning). Arbeitsprotokoll: `docu/2026-05-01-slice-3-redis-tickets-arbeitsprotokoll.md`.
+
 - **Slice 1 (Repo-Review-Umsetzung, PR1): Secure Defaults + Config-Validation.** `Config.validate()` lehnt im Nicht-Debug-Betrieb jetzt bekannte Platzhalter-Werte aus `.env.example` hart ab (`SECRET_KEY` ∈ {`change-me`, `change-me-use-token_urlsafe-32`, `agora`, `password`}; `NEO4J_PASSWORD` ∈ {`change-me`, `agora`, `neo4j`, `password`}). Vergleich ist case-insensitive. Im Debug-Betrieb erzeugt das gleiche Setup eine laute `agora.config`-Warning, blockt aber nicht. `.env.example` defaultet `FLASK_DEBUG=false` (secure-by-default) und kommentiert die Placeholder-Reject-Policy. Auth-Token-Pflicht im Nicht-Debug bleibt unverändert (P0.1a). Neue Test-Datei `backend/tests/test_config_security.py` (12 Cases inkl. Parametrize-Coverage je Platzhalter); Bestand `test_config_validate.py` weiter grün. README-Sicherheits-Sektion um `python -c "import secrets; print(secrets.token_urlsafe(32))"` ergänzt. Arbeitsprotokoll: `docu/2026-05-01-slice-1-secure-defaults-arbeitsprotokoll.md`.
 
 ### Docs

@@ -233,6 +233,42 @@ docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
   detect --source=/repo --redact=100 --no-banner
 ```
 
+---
+
+## Slice 3 — Redis-basierte Single-Use-Tickets (v0.9.0)
+
+**Datum:** 2026-05-01
+
+### Ziel
+
+Die in-process `_seen`-Menge in `consume()` schützt vor Replay nur innerhalb
+eines Workers. Unter gunicorn mit mehreren Workern kann das gleiche Ticket
+mehrfach eingelöst werden.
+
+### Änderungen
+
+| Datei | Änderung |
+|---|---|
+| `backend/app/utils/signed_ticket.py` | `consume()` versucht zuerst atomisches `SET ticket:<sig> 1 NX EX <ttl>` gegen Redis. Erfolgreiches `True` → ok, `False`/`None` → Replay oder Fallback. In-Memory-Pfad bleibt mit `logger.debug` als Fallback. |
+| `backend/tests/test_signed_ticket_redis.py` | 6 Cases: Replay-Block via Redis, Multi-Worker-Simulation, In-Memory-Fallback + Warning. |
+| `backend/pyproject.toml` | `fakeredis[lua]>=2.30.0` in `dev`-Group ergänzt. |
+
+### Warum
+- `?ticket=<signed>` wird für SSE-Streams und Download-Links verwendet.
+- Ein Ticket ist 60 s gültig und scope-bound (`sse:<sim_id>`).
+- Multi-Worker-Deployments (gunicorn, Docker-Swarm, k8s) brauchen einen
+  shared Store für die Single-Use-Garantie.
+
+### Verifikation
+- `uv run pytest tests/test_signed_ticket.py tests/test_signed_ticket_redis.py -v` → 16 passed.
+
+### Migration
+- Keine — Redis wird via `REDIS_URL` (bereits im Default-Compose vorhanden)
+  automatisch erkannt. Fehlt Redis, fällt `consume()` lautlos auf den
+  in-process-Pfad zurück.
+
+---
+
 ### Temporäre Baseline
 
 Die sechs `pip-audit`-Ignores sind durch feste Upstream-Pins blockiert:
