@@ -8,7 +8,7 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
-> **v0.7 in Entwicklung:** [Umsetzungsplan](docu/2026-04-29-v07-umsetzungsplan.md) — Slices 0–5 abgeschlossen, aktuell Slice 6 (Branch Compare).
+> **v0.7.0 released:** [Release Notes](docu/2026-05-01-v0.7.0-release-notes.md) — 13/13 Issues geschlossen, 499 Tests grün (488 Backend + 11 Frontend).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
@@ -21,7 +21,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## Status: v0.7.0-beta — Slices 0–5 abgeschlossen, Slice 6 in Arbeit
+> ## Status: v0.7.0 — released 2026-05-01
 >
 > Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
 > Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
@@ -37,6 +37,9 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 >
 > Der frühere Default `nomic-embed-text` (768-dim) funktioniert weiterhin,
 > ist aber nicht mehr der aktiv gepflegte Pfad.
+>
+> **Docker Hub:** `docker pull alexle135/agora-agora:latest` |
+> [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
 
 ---
 
@@ -48,9 +51,9 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.7.0-beta
+### Engineering-Stand v0.7.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint und Frontend-Build aus (**286 Backend-Tests gesammelt**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests und Frontend-Build aus (**488 Backend-Tests**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
 - **Design-System konsolidiert (Slice 1)**: `tokens.css` als Source-of-Truth, UI-Komponenten (`Btn`, `Badge`, `Field`, `Card`, `Select`) auf Tokens umgestellt, harte Farbwerte in Views/Layouts durch Token-Referenzen ersetzt.
 - **Persona Review (Slice 2)**: Generierte Personas sind vor Simulationsstart prüfbar, editierbar und freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität) liefern Badges. `PERSONA_REVIEW_ENABLED=true` blockt Simulationsstart bis alle Personas approved sind.
 - **Run Dashboard (Slice 3)**: Zentrale `/runs`-View mit Status, Datum, Modell, Dokument, Graph-ID, Persona-Anzahl. Detail-Drawer für Fehler, Artefakte und Copy-Buttons. Runs-Persistenz über `RunRegistry`.
@@ -65,7 +68,9 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 - **DI-Container (#14)**: Alle Kern-Services laufen über `AgoraContainer` — keine Service-Locator-Suche mehr in `app.extensions`.
 - **API-Contract-Härtung Richtung v1.0**: zentrale Success-/Error-Envelopes (`success`, `data`, `error`, `code`) werden schrittweise durchgesetzt. Auth-Fehler, rohe `dict`-Returns in `@handle_api_errors` sowie Framework-404/405 unter `/api/*` liefern konsistente JSON-Responses. Laufende Schritte stehen in `docu/v1-development-log.md`.
 - **Workspace-Layout-Shell (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) sind die gemeinsame Shell für alle 5 Pipeline-Views. `useWorkspaceMode` und `useWorkspaceStatus` ersetzen dupliziertes View-Mode/Status-Boilerplate.
-- **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt.
+- **GraphPanel modularisiert (EPIC-04)**: `GraphPanel.vue` von 933 auf 98 Zeilen reduziert (−90 %). D3-Renderlogik nach `useGraphRender`-Composable extrahiert (#35), UI in `GraphHints`, `GraphToolbar` und `GraphCanvas` zerlegt (#34).
+- **Polling zentralisiert (EPIC-05)**: Alle 12 `setInterval`-Stellen im Frontend nutzen jetzt das gemeinsame `usePolling`-Composable (#37, #38). SSE-Stream via `useEventStream` ersetzt Status-Polling in der Simulationsansicht (#9, #40).
+- **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt (10 Dateien, 48 Routen).
 - **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
 
 ### Was wurde gegenüber MiroFish geändert?
@@ -276,21 +281,26 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 Flask API
   ├─ api/graph.py
   ├─ api/report.py
+  ├─ api/status.py
   ├─ api/simulation_common.py
   ├─ api/simulation_lifecycle.py
   ├─ api/simulation_prepare.py
   ├─ api/simulation_profiles.py
   ├─ api/simulation_run.py
   ├─ api/simulation_interviews.py
-  └─ api/simulation_history.py
+  ├─ api/simulation_history.py
+  ├─ api/simulation_entities.py
+  ├─ api/simulation_stream.py
+  └─ api/simulation_metrics.py
         │
         ▼
 Service Layer
-  ├─ GraphBuilderService
+  ├─ GraphBuilderService / TemporalGraphService
   ├─ SimulationManager / SimulationRunner
   ├─ OasisProfileGenerator
   ├─ SimulationConfigGenerator
-  ├─ GraphToolsService
+  ├─ NetworkAnalyticsService / OntologyMutationService
+  ├─ GraphToolsService / WebTools
   └─ ReportAgent
         │
         ▼
@@ -301,7 +311,7 @@ GraphStorage Interface
        └─ SearchService
 ```
 
-OASIS-Simulationen laufen als separate Subprozesse unter `backend/scripts/`. IPC, Pause/Resume und Run-State laufen über Dateien in `backend/uploads/simulations/<sim_id>/`.
+OASIS-Simulationen laufen als separate Subprozesse unter `backend/scripts/`. IPC, Pause/Resume und Run-State laufen über den `SimulationEventBus` (Redis Pub/Sub im Compose-Default, File-Polling als Fallback).
 
 ### Entwicklung
 
@@ -332,13 +342,16 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **Status: v0.7.0-beta — Slices 0–5 done, Slice 6 in progress.** Agora is an active experimental
+> **Status: v0.7.0 — released 2026-05-01.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail when Ollama is slow,
 > JSON mode misbehaves, or models are switched mid-run. Not production-ready.
 > The HTTP API has an optional `AGORA_AUTH_TOKEN` guard and localhost-locked CORS
 > defaults, but no real multi-user AuthN/AuthZ — run on localhost or inside a
 > trusted network only. Currently exercised with **LLM `qwen3-coder-next:cloud`**
 > and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+>
+> **Docker Hub:** `docker pull alexle135/agora-agora:latest` |
+> [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
 
 ### What is Agora?
 
@@ -346,9 +359,9 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.7.0-beta
+### Engineering status in v0.7.0
 
-- **Quality gates are in place** via `npm run check` (**286 backend tests collected**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**488 backend tests**, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
 - **Design system consolidated (Slice 1)**: `tokens.css` as source of truth, UI components (`Btn`, `Badge`, `Field`, `Card`, `Select`) tokenized, hardcoded colors replaced with token references.
 - **Persona review (Slice 2)**: Generated personas can be inspected, edited, and approved before simulation start. Quality heuristics (duplicates, missing fields, role diversity) provide badges. `PERSONA_REVIEW_ENABLED=true` gates simulation start until all personas are approved.
 - **Run dashboard (Slice 3)**: Central `/runs` view with status, date, model, document, graph ID, persona count. Detail drawer for errors, artifacts, and copy buttons. Run persistence via `RunRegistry`.
@@ -361,7 +374,9 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 - **Hand-rolled DI container (#14)** underpins all of the above — long-lived services live on `AgoraContainer`, no more `app.extensions` service-locator hunt.
 - **API contract hardening toward v1.0**: centralized success/error envelopes (`success`, `data`, `error`, `code`) are being enforced incrementally. Auth failures, raw `dict` returns in `@handle_api_errors`, and framework-level `/api/*` 404/405 responses now use consistent JSON payloads. Ongoing steps are tracked in `docu/v1-development-log.md`.
 - **Workspace layout shell + state composables (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) are the shared shell for all five pipeline views. `useWorkspaceMode` and `useWorkspaceStatus` remove duplicated view-mode and status boilerplate.
-- **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file.
+- **GraphPanel modularized (EPIC-04)**: `GraphPanel.vue` shrunk from 933 to 98 lines (−90%). D3 render logic extracted into `useGraphRender` composable (#35), UI split into `GraphHints`, `GraphToolbar` and `GraphCanvas` (#34).
+- **Polling centralized (EPIC-05)**: All 12 `setInterval` sites in the frontend now use the shared `usePolling` composable (#37, #38). SSE stream via `useEventStream` replaces status polling in the simulation view (#9, #40).
+- **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file (10 files, 48 routes).
 - **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
 
 ### Key Features
@@ -375,7 +390,6 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 - **Simulation controls**: configure duration in days plus an optional round limit, start, stop, pause/resume after a round, plus raw subprocess console logs.
 - **ReportAgent** with evidence-backed claims, graph tools, agent interviews, panorama search, model override, and optional Tavily web tools.
 - **Export center**: JSON/Markdown for reports, CSV for polarization metrics, GraphML for graphs, SVG/PNG/PDF for graph view.
-- **Branch compare** (Slice 6, in progress): side-by-side run comparison with metric diffs and claim analysis.
 - **Experimental agent tool-use**: simulation agents can query the knowledge graph before acting when explicitly enabled.
 - **DACH defaults**: German UI, German agent language by default, and Europe/Berlin activity timing.
 - **Secret guardrails**: Neo4j passwords are not serialized into simulation config artifacts.
@@ -442,15 +456,15 @@ ENABLE_WEB_TOOLS=true
 
 Agent tool-use is experimental and disabled by default. When enabled, agents may run a limited number of graph/context tool calls before producing an action. This can improve context but increases latency and LLM usage. If Neo4j credentials are unavailable at runtime, the tool-aware loop fails closed and falls back to standard OASIS `LLMAction`.
 
-### GPU / CPU Fallback
+### GPU / CPU
 
-Agora runs on **CPU by default**. To enable GPU acceleration for Ollama:
+Agora erkennt die GPU-Nutzung automatisch via Ollama REST API (`/api/ps`) — es ist kein `nvidia-smi` oder NVIDIA Container Toolkit im Container nötig. Das Backend fragt Ollama direkt nach geladenen Modellen und deren VRAM-Nutzung.
 
-1. Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on your host.
-2. Uncomment the `deploy.resources.reservations.devices` section in `docker-compose.yml`.
-3. Rebuild and restart: `docker compose build agora && docker compose up -d --force-recreate --no-deps agora`.
+- **GPU aktiv**: `/api/status` zeigt `ollama_uses_gpu: true` mit VRAM-Belegung in GB.
+- **CPU-only**: Wenn Ollama nur Modelle ohne VRAM meldet, zeigt der Status entsprechende Hinweise.
+- **Ollama nicht erreichbar**: Status meldet `ollama_uses_gpu: null`.
 
-Without GPU setup, Ollama will run in CPU-only mode. The `/api/status` endpoint reports GPU availability and hints for configuration.
+Für GPU-Beschleunigung muss Ollama auf dem Host mit GPU-Zugriff laufen. Optional kann der Container via NVIDIA Container Toolkit GPU-Passthrough bekommen (siehe auskommentierte Sektion in `docker-compose.yml`), das ist aber für die reine Ollama-Nutzung auf dem Host nicht nötig.
 
 ### Architecture snapshot
 
@@ -458,16 +472,28 @@ Without GPU setup, Ollama will run in CPU-only mode. The `/api/status` endpoint 
 Flask API
   ├─ api/graph.py
   ├─ api/report.py
+  ├─ api/status.py
   ├─ api/simulation_common.py
   ├─ api/simulation_lifecycle.py
   ├─ api/simulation_prepare.py
   ├─ api/simulation_profiles.py
   ├─ api/simulation_run.py
   ├─ api/simulation_interviews.py
-  └─ api/simulation_history.py
+  ├─ api/simulation_history.py
+  ├─ api/simulation_entities.py
+  ├─ api/simulation_stream.py
+  └─ api/simulation_metrics.py
         │
         ▼
-Service Layer → Storage Layer → Neo4j / Ollama / OASIS subprocesses
+Service Layer (AgoraContainer DI)
+  ├─ GraphBuilderService / TemporalGraphService
+  ├─ SimulationManager / SimulationRunner
+  ├─ NetworkAnalyticsService / OntologyMutationService
+  ├─ ReportAgent / GraphToolsService / WebTools
+  └─ EventBus (Redis | File | InMemory)
+        │
+        ▼
+Storage Layer → Neo4j / Ollama / Redis / OASIS subprocesses
 ```
 
 ### Development checks
