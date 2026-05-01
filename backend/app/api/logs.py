@@ -102,9 +102,8 @@ def _read_tail(path: Path, n: int) -> tuple[list[str], int]:
     """
     try:
         with path.open('r', encoding='utf-8', errors='replace') as fh:
-            buf = deque(fh, maxlen=n)
-            offset = fh.tell()
-        return list(buf), offset
+            buf = deque((ln.rstrip('\r\n') for ln in fh), maxlen=n)
+        return list(buf), path.stat().st_size
     except FileNotFoundError:
         return [], 0
 
