@@ -43,6 +43,7 @@ from .tool_validation import (
     is_valid_tool_call,
     parse_tool_calls,
 )
+from .tool_execution import execute_tool
 from .graph_tools import (
     GraphToolsService,
     SearchResult,
@@ -934,139 +935,21 @@ class ReportAgent:
         return tools
     
     def _execute_tool(self, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
-        """
-        Execute tool call
+        """Dispatch a tool call (delegates to tool_execution.execute_tool)."""
+        return execute_tool(
+            tool_name=tool_name,
+            parameters=parameters,
+            report_context=report_context,
+            graph_tools=self.graph_tools,
+            web_tools=self.web_tools,
+            graph_id=self.graph_id,
+            simulation_id=self.simulation_id,
+            simulation_requirement=self.simulation_requirement,
+            record_evidence=self._record_tool_evidence,
+            section_index=self._current_section_index or 0,
+        )
 
-        Args:
-            tool_name: Tool name
-            parameters: Tool parameters
-            report_context: Report context (for InsightForge)
 
-        Returns:
-            Tool execution result (text format)
-        """
-        logger.info(f"Executing tool: {tool_name}, parameters: {parameters}")
-        
-        try:
-            structured_result = None
-            if tool_name == "insight_forge":
-                query = parameters.get("query", "")
-                ctx = parameters.get("report_context", "") or report_context
-                structured_result = self.graph_tools.insight_forge(
-                    graph_id=self.graph_id,
-                    query=query,
-                    simulation_requirement=self.simulation_requirement,
-                    report_context=ctx
-                )
-                rendered = structured_result.to_text()
-            
-            elif tool_name == "panorama_search":
-                # Breadth search - get complete panorama
-                query = parameters.get("query", "")
-                include_expired = parameters.get("include_expired", True)
-                if isinstance(include_expired, str):
-                    include_expired = include_expired.lower() in ['true', '1', 'yes']
-                structured_result = self.graph_tools.panorama_search(
-                    graph_id=self.graph_id,
-                    query=query,
-                    include_expired=include_expired
-                )
-                rendered = structured_result.to_text()
-            
-            elif tool_name == "quick_search":
-                # Simple search - quick retrieval
-                query = parameters.get("query", "")
-                limit = parameters.get("limit", 10)
-                if isinstance(limit, str):
-                    limit = int(limit)
-                structured_result = self.graph_tools.quick_search(
-                    graph_id=self.graph_id,
-                    query=query,
-                    limit=limit
-                )
-                rendered = structured_result.to_text()
-            
-            elif tool_name == "interview_agents":
-                # Deep interview - call real OASIS interview API to get simulated agent responses (dual platform)
-                interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
-                max_agents = parameters.get("max_agents", 5)
-                if isinstance(max_agents, str):
-                    max_agents = int(max_agents)
-                max_agents = min(max_agents, 10)
-                structured_result = self.graph_tools.interview_agents(
-                    simulation_id=self.simulation_id,
-                    interview_requirement=interview_topic,
-                    simulation_requirement=self.simulation_requirement,
-                    max_agents=max_agents
-                )
-                rendered = structured_result.to_text()
-
-            elif tool_name == "web_search":
-                query = parameters.get("query", "")
-                max_results = parameters.get("max_results", 5)
-                if isinstance(max_results, str):
-                    try:
-                        max_results = int(max_results)
-                    except ValueError:
-                        max_results = 5
-                structured_result = self.web_tools.web_search(query=query, max_results=max_results)
-                rendered = self.web_tools.format_search_result(structured_result)
-
-            elif tool_name == "fetch_url":
-                url = parameters.get("url", "")
-                structured_result = self.web_tools.fetch_url(url=url)
-                rendered = self.web_tools.format_extract_result(structured_result)
-            
-            # ========== Backward Compatibility: Old Tools (Internal Redirect to New Tools) ==========
-
-            elif tool_name == "search_graph":
-                # Redirect to quick_search
-                logger.info("search_graph has been redirected to quick_search")
-                return self._execute_tool("quick_search", parameters, report_context)
-            
-            elif tool_name == "get_graph_statistics":
-                result = self.graph_tools.get_graph_statistics(self.graph_id)
-                return json.dumps(result, ensure_ascii=False, indent=2)
-            
-            elif tool_name == "get_entity_summary":
-                entity_name = parameters.get("entity_name", "")
-                result = self.graph_tools.get_entity_summary(
-                    graph_id=self.graph_id,
-                    entity_name=entity_name
-                )
-                return json.dumps(result, ensure_ascii=False, indent=2)
-            
-            elif tool_name == "get_simulation_context":
-                # Redirect to insight_forge because it's more powerful
-                logger.info("get_simulation_context has been redirected to insight_forge")
-                query = parameters.get("query", self.simulation_requirement)
-                return self._execute_tool("insight_forge", {"query": query}, report_context)
-            
-            elif tool_name == "get_entities_by_type":
-                entity_type = parameters.get("entity_type", "")
-                nodes = self.graph_tools.get_entities_by_type(
-                    graph_id=self.graph_id,
-                    entity_type=entity_type
-                )
-                result = [n.to_dict() for n in nodes]
-                return json.dumps(result, ensure_ascii=False, indent=2)
-            
-            else:
-                return f"Unknown tool: {tool_name}. Please use one of the following tools: insight_forge, panorama_search, quick_search"
-
-            self._record_tool_evidence(
-                tool_name,
-                parameters,
-                structured_result,
-                rendered,
-                section_index=self._current_section_index or 0,
-            )
-            return rendered
-
-        except Exception as e:
-            logger.error(f"Tool execution failed: {tool_name}, error: {str(e)}")
-            return f"Tool execution failed: {str(e)}"
-    
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """Parse tool calls from an LLM response (delegates to tool_validation)."""
         return parse_tool_calls(response)
