@@ -147,11 +147,16 @@ def create_branch(
     persona_additions = overrides.get("persona_additions") or []
 
     if copy_profiles:
-        for filename in ("reddit_profiles.json", "twitter_profiles.csv"):
-            src = os.path.join(source_dir, filename)
-            dst = os.path.join(branch_dir, filename)
-            if os.path.exists(src):
-                shutil.copy2(src, dst)
+        # Reddit profiles are managed via ArtifactStore
+        if manager._store.exists(simulation_id, "reddit_profiles"):
+            reddit_data = manager._store.read_json(simulation_id, "reddit_profiles")
+            manager._store.write_json(branch.simulation_id, "reddit_profiles", reddit_data)
+
+        # Twitter profiles are currently outside the store
+        twitter_src = os.path.join(source_dir, "twitter_profiles.csv")
+        twitter_dst = os.path.join(branch_dir, "twitter_profiles.csv")
+        if os.path.exists(twitter_src):
+            shutil.copy2(twitter_src, twitter_dst)
 
         if persona_removals or persona_additions:
             _apply_persona_overrides(
