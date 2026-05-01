@@ -6,7 +6,6 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 """
 
 import json
-import re
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -28,35 +27,19 @@ from ..utils.retry import neo4j_call_with_retry
 from .graph_storage import GraphStorage
 from .embedding_service import EmbeddingService
 from .ner_extractor import NERExtractor
+from .neo4j_mappings import (
+    edge_to_dict as _edge_to_dict_func,
+    node_to_dict as _node_to_dict_func,
+    sanitize_label as _sanitize_label,
+)
+from .neo4j_read import Neo4jReadMixin
 from .search_service import SearchService
 from . import neo4j_schema
 
 logger = logging.getLogger('agora.neo4j_storage')
 
-# Cypher erlaubt Labels nur als Identifier, nicht als Parameter. Labels kommen
-# hier aus LLM-Output (Entity-Type aus NER) — ohne Filter liefert das einen
-# f-string-Injection-Vektor (Backticks im Namen brechen aus dem Quoting aus).
-# Whitelist-Regex: Buchstabe/Underscore-Start, dann A-Za-z0-9_, max 50 Zeichen.
-_LABEL_SAFE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,49}$')
 
-
-def _sanitize_label(value: Any) -> Optional[str]:
-    """Return a Cypher-safe label or ``None`` when the input is unusable."""
-    if not isinstance(value, str):
-        return None
-    stripped = value.strip()
-    if not stripped or stripped == 'Entity':
-        return None
-    # Häufige LLM-Verwüstungen aufräumen: Leerzeichen zu Underscore,
-    # Umlaute weg (Neo4j-Labels sind ASCII-praktisch nur dann lesbar).
-    normalized = re.sub(r'\s+', '_', stripped)
-    normalized = re.sub(r'[^A-Za-z0-9_]', '', normalized)
-    if not _LABEL_SAFE_RE.match(normalized):
-        return None
-    return normalized
-
-
-class Neo4jStorage(GraphStorage):
+class Neo4jStorage(Neo4jReadMixin, GraphStorage):
     """Neo4j CE implementation of the GraphStorage interface."""
 
     MAX_RETRIES = 3
@@ -301,19 +284,7 @@ class Neo4jStorage(GraphStorage):
         with self._driver.session() as session:
             self._call_with_retry(session.execute_write, _set)
 
-    def get_ontology(self, graph_id: str) -> Dict[str, Any]:
-        def _read(tx):
-            result = tx.run(
-                "MATCH (g:Graph {graph_id: $gid}) RETURN g.ontology_json AS oj",
-                gid=graph_id,
-            )
-            record = result.single()
-            if record and record["oj"]:
-                return json.loads(record["oj"])
-            return {}
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
+    # get_ontology lebt jetzt im Neo4jReadMixin (Issue #50, Sub-Slice 1).
 
     # ----------------------------------------------------------------
     # Add data (NER → nodes/edges)
@@ -570,264 +541,10 @@ class Neo4jStorage(GraphStorage):
             progress_callback(1.0)
 
     # ----------------------------------------------------------------
-    # Read nodes
+    # Read-Pfad (get_all_nodes, get_node, get_node_edges, get_nodes_by_label,
+    # get_filtered_entities_with_edges, get_all_edges, get_edges_at_round)
+    # lebt jetzt im Neo4jReadMixin (Issue #50, Sub-Slice 1).
     # ----------------------------------------------------------------
-
-    def get_all_nodes(self, graph_id: str, limit: int = 2000) -> List[Dict[str, Any]]:
-        def _read(tx):
-            result = tx.run(
-                """
-                MATCH (n:Entity {graph_id: $gid})
-                RETURN n, labels(n) AS labels
-                ORDER BY n.created_at DESC
-                LIMIT $limit
-                """,
-                gid=graph_id,
-                limit=limit,
-            )
-            return [self._node_to_dict(record["n"], record["labels"]) for record in result]
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    def get_node(self, uuid: str) -> Optional[Dict[str, Any]]:
-        def _read(tx):
-            result = tx.run(
-                "MATCH (n:Entity {uuid: $uuid}) RETURN n, labels(n) AS labels",
-                uuid=uuid,
-            )
-            record = result.single()
-            if record:
-                return self._node_to_dict(record["n"], record["labels"])
-            return None
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
-        """O(1) Cypher — NOT full scan + filter like the old Zep code."""
-        def _read(tx):
-            result = tx.run(
-                """
-                MATCH (n:Entity {uuid: $uuid})-[r:RELATION]-(m:Entity)
-                RETURN r, startNode(r).uuid AS src_uuid, endNode(r).uuid AS tgt_uuid
-                """,
-                uuid=node_uuid,
-            )
-            return [
-                self._edge_to_dict(record["r"], record["src_uuid"], record["tgt_uuid"])
-                for record in result
-            ]
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    def get_nodes_by_label(self, graph_id: str, label: str) -> List[Dict[str, Any]]:
-        # Sanitize label to prevent Cypher injection
-        safe_label = _sanitize_label(label)
-
-        if not safe_label:
-            return []
-
-        def _read(tx):
-            # Dynamic label in query (now sanitized)
-            query = f"""
-                MATCH (n:Entity:`{safe_label}` {{graph_id: $gid}})
-                RETURN n, labels(n) AS labels
-            """
-            result = tx.run(query, gid=graph_id)
-            return [self._node_to_dict(record["n"], record["labels"]) for record in result]
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    def get_filtered_entities_with_edges(
-        self,
-        graph_id: str,
-        defined_entity_types: Optional[List[str]] = None,
-        enrich_with_edges: bool = True,
-    ) -> Dict[str, Any]:
-        # Normalise the type whitelist: empty list → no filter (consistent with
-        # the old in-memory version, which treated ``None`` and ``[]`` the same).
-        types_param: Optional[List[str]] = (
-            list(defined_entity_types) if defined_entity_types else None
-        )
-
-        def _read(tx):
-            # Baseline count: every Entity node, including ones that only carry
-            # the default label. Needed for the ``total_count`` accounting that
-            # callers expose as filter ratio.
-            total_result = tx.run(
-                "MATCH (n:Entity {graph_id: $gid}) RETURN count(n) AS cnt",
-                gid=graph_id,
-            )
-            total_count = total_result.single()["cnt"]
-
-            if enrich_with_edges:
-                query = """
-                    MATCH (n:Entity {graph_id: $gid})
-                    WITH n, [l IN labels(n) WHERE l <> 'Entity' AND l <> 'Node']
-                             AS custom_labels
-                    WHERE size(custom_labels) > 0
-                      AND ($types IS NULL
-                           OR any(l IN custom_labels WHERE l IN $types))
-                    OPTIONAL MATCH (n)-[r:RELATION {graph_id: $gid}]-(m:Entity)
-                    WITH n, labels(n) AS node_labels,
-                         collect(DISTINCT CASE WHEN r IS NOT NULL THEN {
-                             edge_name: coalesce(r.name, ''),
-                             fact: coalesce(r.fact, ''),
-                             source_node_uuid: startNode(r).uuid,
-                             target_node_uuid: endNode(r).uuid
-                         } END) AS raw_edges,
-                         collect(DISTINCT CASE WHEN m IS NOT NULL THEN {
-                             uuid: m.uuid,
-                             name: coalesce(m.name, ''),
-                             labels: [l IN labels(m) WHERE l <> 'Entity'],
-                             summary: coalesce(m.summary, '')
-                         } END) AS raw_related
-                    RETURN n, node_labels, raw_edges, raw_related
-                """
-                records = tx.run(query, gid=graph_id, types=types_param)
-                return total_count, [
-                    (
-                        record["n"],
-                        record["node_labels"],
-                        list(record["raw_edges"] or []),
-                        list(record["raw_related"] or []),
-                    )
-                    for record in records
-                ]
-
-            query = """
-                MATCH (n:Entity {graph_id: $gid})
-                WITH n, [l IN labels(n) WHERE l <> 'Entity' AND l <> 'Node']
-                         AS custom_labels
-                WHERE size(custom_labels) > 0
-                  AND ($types IS NULL
-                       OR any(l IN custom_labels WHERE l IN $types))
-                RETURN n, labels(n) AS node_labels
-            """
-            records = tx.run(query, gid=graph_id, types=types_param)
-            return total_count, [
-                (record["n"], record["node_labels"], [], [])
-                for record in records
-            ]
-
-        with self._driver.session() as session:
-            total_count, rows = self._call_with_retry(session.execute_read, _read)
-
-        entities: List[Dict[str, Any]] = []
-        for node, node_labels, raw_edges, raw_related in rows:
-            node_dict = self._node_to_dict(node, node_labels)
-            entity_uuid = node_dict["uuid"]
-
-            related_edges: List[Dict[str, Any]] = []
-            for edge in raw_edges:
-                # ``collect(DISTINCT CASE ... END)`` drops NULL entries in
-                # Cypher but can still yield empty maps on some driver
-                # versions — defensive check.
-                if not edge:
-                    continue
-                source_uuid = edge.get("source_node_uuid")
-                target_uuid = edge.get("target_node_uuid")
-                if source_uuid == entity_uuid:
-                    related_edges.append({
-                        "direction": "outgoing",
-                        "edge_name": edge.get("edge_name", ""),
-                        "fact": edge.get("fact", ""),
-                        "target_node_uuid": target_uuid,
-                    })
-                else:
-                    related_edges.append({
-                        "direction": "incoming",
-                        "edge_name": edge.get("edge_name", ""),
-                        "fact": edge.get("fact", ""),
-                        "source_node_uuid": source_uuid,
-                    })
-
-            related_nodes: List[Dict[str, Any]] = []
-            seen_related: set = set()
-            for rel in raw_related:
-                if not rel:
-                    continue
-                rel_uuid = rel.get("uuid")
-                if not rel_uuid or rel_uuid in seen_related:
-                    continue
-                seen_related.add(rel_uuid)
-                related_nodes.append({
-                    "uuid": rel_uuid,
-                    "name": rel.get("name", ""),
-                    "labels": list(rel.get("labels") or []),
-                    "summary": rel.get("summary", ""),
-                })
-
-            node_dict["related_edges"] = related_edges
-            node_dict["related_nodes"] = related_nodes
-            entities.append(node_dict)
-
-        return {
-            "entities": entities,
-            "total_count": total_count,
-        }
-
-    # ----------------------------------------------------------------
-    # Read edges
-    # ----------------------------------------------------------------
-
-    def get_all_edges(self, graph_id: str) -> List[Dict[str, Any]]:
-        def _read(tx):
-            result = tx.run(
-                """
-                MATCH (src:Entity)-[r:RELATION {graph_id: $gid}]->(tgt:Entity)
-                RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid
-                ORDER BY r.created_at DESC
-                """,
-                gid=graph_id,
-            )
-            return [
-                self._edge_to_dict(record["r"], record["src_uuid"], record["tgt_uuid"])
-                for record in result
-            ]
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    # ----------------------------------------------------------------
-    # Temporal edges (Issue #10)
-    # ----------------------------------------------------------------
-
-    def get_edges_at_round(
-        self, graph_id: str, round_num: int
-    ) -> List[Dict[str, Any]]:
-        """Return edges that were valid at the given OASIS round.
-
-        An edge is "valid" at round R if:
-          (valid_from_round IS NULL OR valid_from_round <= R)
-          AND (valid_to_round IS NULL OR valid_to_round > R)
-
-        Missing ``valid_from_round`` is treated as 0 (present since ingest).
-        Missing ``valid_to_round`` is treated as open-ended.
-        """
-
-        def _read(tx):
-            result = tx.run(
-                """
-                MATCH (src:Entity)-[r:RELATION {graph_id: $gid}]->(tgt:Entity)
-                WHERE coalesce(r.valid_from_round, 0) <= $round
-                  AND (r.valid_to_round IS NULL OR r.valid_to_round > $round)
-                RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid
-                ORDER BY r.created_at DESC
-                """,
-                gid=graph_id,
-                round=round_num,
-            )
-            return [
-                self._edge_to_dict(record["r"], record["src_uuid"], record["tgt_uuid"])
-                for record in result
-            ]
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
 
     def reinforce_relation(
         self,
@@ -972,156 +689,13 @@ class Neo4jStorage(GraphStorage):
         return result
 
     # ----------------------------------------------------------------
-    # Graph info
+    # get_graph_info, get_graph_data + Dict-Konversion (_node_to_dict /
+    # _edge_to_dict) leben jetzt im Neo4jReadMixin bzw. in
+    # storage/neo4j_mappings.py (Issue #50, Sub-Slice 1).
     # ----------------------------------------------------------------
 
-    def get_graph_info(self, graph_id: str) -> Dict[str, Any]:
-        def _read(tx):
-            # Count nodes
-            node_result = tx.run(
-                "MATCH (n:Entity {graph_id: $gid}) RETURN count(n) AS cnt",
-                gid=graph_id,
-            )
-            node_count = node_result.single()["cnt"]
-
-            # Count edges
-            edge_result = tx.run(
-                "MATCH ()-[r:RELATION {graph_id: $gid}]->() RETURN count(r) AS cnt",
-                gid=graph_id,
-            )
-            edge_count = edge_result.single()["cnt"]
-
-            # Distinct entity types
-            label_result = tx.run(
-                """
-                MATCH (n:Entity {graph_id: $gid})
-                UNWIND labels(n) AS lbl
-                WITH lbl WHERE lbl <> 'Entity'
-                RETURN DISTINCT lbl
-                """,
-                gid=graph_id,
-            )
-            entity_types = [record["lbl"] for record in label_result]
-
-            return {
-                "graph_id": graph_id,
-                "node_count": node_count,
-                "edge_count": edge_count,
-                "entity_types": entity_types,
-            }
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    def get_graph_data(self, graph_id: str) -> Dict[str, Any]:
-        """
-        Full graph dump with enriched edge format (for frontend).
-        Includes derived fields: fact_type, source_node_name, target_node_name.
-        """
-        def _read(tx):
-            # Get all nodes
-            node_result = tx.run(
-                """
-                MATCH (n:Entity {graph_id: $gid})
-                RETURN n, labels(n) AS labels
-                """,
-                gid=graph_id,
-            )
-            nodes = []
-            node_map: Dict[str, str] = {}  # uuid -> name
-            for record in node_result:
-                nd = self._node_to_dict(record["n"], record["labels"])
-                nodes.append(nd)
-                node_map[nd["uuid"]] = nd["name"]
-
-            # Get all edges with source/target node names (JOIN)
-            edge_result = tx.run(
-                """
-                MATCH (src:Entity)-[r:RELATION {graph_id: $gid}]->(tgt:Entity)
-                RETURN r, src.uuid AS src_uuid, tgt.uuid AS tgt_uuid,
-                       src.name AS src_name, tgt.name AS tgt_name
-                """,
-                gid=graph_id,
-            )
-            edges = []
-            for record in edge_result:
-                ed = self._edge_to_dict(record["r"], record["src_uuid"], record["tgt_uuid"])
-                # Enriched fields for frontend
-                ed["fact_type"] = ed["name"]
-                ed["source_node_name"] = record["src_name"] or ""
-                ed["target_node_name"] = record["tgt_name"] or ""
-                # Legacy alias
-                ed["episodes"] = ed.get("episode_ids", [])
-                edges.append(ed)
-
-            return {
-                "graph_id": graph_id,
-                "nodes": nodes,
-                "edges": edges,
-                "node_count": len(nodes),
-                "edge_count": len(edges),
-            }
-
-        with self._driver.session() as session:
-            return self._call_with_retry(session.execute_read, _read)
-
-    # ----------------------------------------------------------------
-    # Dict conversion helpers
-    # ----------------------------------------------------------------
-
-    @staticmethod
-    def _node_to_dict(node, labels: List[str]) -> Dict[str, Any]:
-        """Convert Neo4j node to the standard node dict format."""
-        props = dict(node)
-        attrs_json = props.pop("attributes_json", "{}")
-        try:
-            attributes = json.loads(attrs_json) if attrs_json else {}
-        except (json.JSONDecodeError, TypeError):
-            attributes = {}
-
-        # Remove internal fields from dict
-        props.pop("embedding", None)
-        props.pop("name_lower", None)
-
-        return {
-            "uuid": props.get("uuid", ""),
-            "name": props.get("name", ""),
-            "labels": [lbl for lbl in labels if lbl != "Entity"] if labels else [],
-            "summary": props.get("summary", ""),
-            "attributes": attributes,
-            "created_at": props.get("created_at"),
-        }
-
-    @staticmethod
-    def _edge_to_dict(rel, source_uuid: str, target_uuid: str) -> Dict[str, Any]:
-        """Convert Neo4j relationship to the standard edge dict format."""
-        props = dict(rel)
-        attrs_json = props.pop("attributes_json", "{}")
-        try:
-            attributes = json.loads(attrs_json) if attrs_json else {}
-        except (json.JSONDecodeError, TypeError):
-            attributes = {}
-
-        # Remove internal fields
-        props.pop("fact_embedding", None)
-
-        episode_ids = props.get("episode_ids", [])
-        if episode_ids and not isinstance(episode_ids, list):
-            episode_ids = [str(episode_ids)]
-
-        return {
-            "uuid": props.get("uuid", ""),
-            "name": props.get("name", ""),
-            "fact": props.get("fact", ""),
-            "source_node_uuid": source_uuid,
-            "target_node_uuid": target_uuid,
-            "attributes": attributes,
-            "created_at": props.get("created_at"),
-            "valid_at": props.get("valid_at"),
-            "invalid_at": props.get("invalid_at"),
-            "expired_at": props.get("expired_at"),
-            "valid_from_round": props.get("valid_from_round"),
-            "valid_to_round": props.get("valid_to_round"),
-            "reinforced_count": props.get("reinforced_count", 1),
-            "episode_ids": episode_ids,
-        }
+    # Re-Export der Mapping-Funktionen als statische Methoden, falls
+    # Subklassen oder externer Code historisch über die Klasse zugriff
+    # (laut grep keine Caller, aber die Wire-Identity bleibt damit billig).
+    _node_to_dict = staticmethod(_node_to_dict_func)
+    _edge_to_dict = staticmethod(_edge_to_dict_func)
