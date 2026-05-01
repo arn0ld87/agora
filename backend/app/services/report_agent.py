@@ -1199,6 +1199,45 @@ class ReportAgent:
             self._record_evidence_item(item)
 
     @staticmethod
+    def _atomize_claim_chunk(chunk: str) -> List[str]:
+        """S3b: Section-Chunk in Einzelsätze splitten.
+
+        Reviewer hatte gefordert: ein Claim = eine prüfbare Aussage.
+        Mehrsatz-Chunks werden in atomare Sätze zerlegt; Trennung über
+        Satzendzeichen + Großbuchstaben-Folgewort. Reicht für DACH-
+        Reports ohne neue NLP-Dependency.
+        """
+        cleaned = (chunk or "").strip()
+        if not cleaned:
+            return []
+        # Lookbehind verlangt einen *Buchstaben* vor dem Satzende-Zeichen,
+        # damit Datums-/Zahlen-Punkte ("am 22. Mai") und einzelne
+        # Initialen-Punkte nicht fälschlich als Satzgrenze gewertet werden.
+        parts = re.split(r"(?<=[a-zäöüß][.!?])\s+(?=[A-ZÄÖÜ])", cleaned)
+        return [p.strip() for p in parts if p.strip()]
+
+    # S3b-Verbliste — finite Verben, die typische Aussagen einleiten.
+    # Bewusst klein gehalten; größere NER-Listen würden falsch-negative
+    # Filter erzeugen, der Filter soll nur grobe Übergangssätze killen.
+    _CLAIM_VERB_HINTS = (
+        " ist ", " sind ", " war ", " waren ", " wird ", " werden ",
+        " soll ", " sollen ", " kann ", " können ", " muss ", " müssen ",
+        " hat ", " haben ", " erklärt", " fordert", " kritisiert",
+        " betont", " sagt", " warnt", " beschloss", " plant",
+        " antwortete", " unterstützt",
+    )
+
+    @staticmethod
+    def _is_atomic_claim(text: str) -> bool:
+        """S3b: Atom-Satz-Filter — verlangt minimale Aussage-Substanz."""
+        s = (text or "").strip()
+        if len(s.split()) < 5:
+            return False
+        if s.endswith((".", "!", "?")):
+            return True
+        return any(hint in s.lower() for hint in ReportAgent._CLAIM_VERB_HINTS)
+
+    @staticmethod
     def _is_claim_candidate(text: str) -> bool:
         """S3a: filtert Markdown-Header, Bold-Section-Titel, leere Stellen.
 
@@ -1228,7 +1267,17 @@ class ReportAgent:
 
     def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
         raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
+        # S3a: Strukturmarkup (Header, Bold-Section-Titel) verwerfen.
         chunks = [c for c in raw_chunks if self._is_claim_candidate(c)]
+        # S3b: Mehrsatz-Chunks in atomare Aussagen splitten und Übergangs-
+        # sätze ohne prüfbare Substanz verwerfen. Fallback: wenn nichts den
+        # Atom-Filter passiert, behält der Chunk einen Eintrag (sonst gehen
+        # legitime Single-Sentence-Sections verloren).
+        atomic_chunks: List[str] = []
+        for chunk in chunks:
+            atoms = [a for a in self._atomize_claim_chunk(chunk) if self._is_atomic_claim(a)]
+            atomic_chunks.extend(atoms or [chunk])
+        chunks = atomic_chunks
         claims = []
         global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
         for index, chunk in enumerate(chunks, 1):

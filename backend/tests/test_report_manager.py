@@ -82,6 +82,27 @@ def test_is_claim_candidate_filters_markdown_headers_and_bold_titles():
     assert is_claim("   ") is False
 
 
+def test_atomize_claim_chunk_splits_multisentence():
+    """S3b: ein Mehrsatz-Chunk wird in atomare Sätze zerlegt."""
+    atoms = ReportAgent._atomize_claim_chunk(
+        "Ministerin Feller erklärte die Pläne. Die GEW kritisiert den Zeitplan. "
+        "Die RWTH unterstützt das Curriculum."
+    )
+    assert len(atoms) == 3
+    assert all(a.endswith(".") for a in atoms)
+
+
+def test_is_atomic_claim_filters_short_and_unverbose():
+    """S3b: Atom-Satz ohne Verb oder zu kurz wird verworfen."""
+    is_atomic = ReportAgent._is_atomic_claim
+
+    assert is_atomic("Das Land NRW beschloss die Einführung des Pflichtfachs.") is True
+    assert is_atomic("Die Schule kritisiert den Zeitplan") is True
+    assert is_atomic("Außerdem.") is False  # zu kurz
+    assert is_atomic("Hier weiter mit") is False  # kein Satzende, kein Verb-Hint
+    assert is_atomic("") is False
+
+
 def test_build_claims_for_section_drops_headers():
     """S3a: Markdown-Header werden vor der Evidence-Bindung verworfen."""
     agent = ReportAgent.__new__(ReportAgent)
