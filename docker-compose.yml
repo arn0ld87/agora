@@ -1,17 +1,23 @@
 services:
   agora:
-    # Default: lokaler Build aus diesem Repo. Wer ein vorgebackenes
-    # Image (Docker Hub / GHCR) ziehen will, ersetzt `build: .` mit
-    # `image: alexle135/agora:latest` und kommentiert den build-Block.
-    # Beide Varianten zugleich aktiv ist ungültig (compose ignoriert
-    # `image` dann).
-    build: .
+    # Default-Variante: Dev-Stage aus dem Multi-Stage-Dockerfile (Vite +
+    # Flask, Hot-Reload). Für Prod-like-Setups gibt es das explizite
+    # Override `docker-compose.prod.yml`, das `target: prod` setzt und
+    # gunicorn als WSGI startet. Wer ein vorgebackenes Image (Docker Hub
+    # / GHCR) ziehen will, ersetzt den `build`-Block durch
+    # `image: alexle135/agora:latest`.
+    build:
+      context: .
+      target: dev
     container_name: agora
     env_file:
       - .env
+    # Loopback-Bind: Frontend (Vite) und Backend (Flask) sind im Dev-
+    # Default nur lokal erreichbar. Tailscale/LAN-Setups setzen das
+    # bewusst über die ENV-Variablen oder einen Reverse-Proxy.
     ports:
-      - "${AGORA_FRONTEND_PORT:-5173}:5173"
-      - "${AGORA_BACKEND_PORT:-5001}:5001"
+      - "127.0.0.1:${AGORA_FRONTEND_PORT:-5173}:5173"
+      - "127.0.0.1:${AGORA_BACKEND_PORT:-5001}:5001"
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -76,9 +82,14 @@ services:
   neo4j:
     image: neo4j:5.18-community
     container_name: agora-neo4j
+    # Loopback-Bind: Browser/Bolt nur lokal erreichbar. Container-zu-
+    # Container-Verbindungen laufen weiter über das Compose-Netzwerk
+    # und brauchen die Host-Ports nicht. Im Prod-Override
+    # (`docker-compose.prod.yml`) werden die Ports per `!reset []`
+    # komplett rausgenommen.
     ports:
-      - "7474:7474"   # Neo4j Browser
-      - "7687:7687"   # Bolt protocol
+      - "127.0.0.1:7474:7474"   # Neo4j Browser
+      - "127.0.0.1:7687:7687"   # Bolt protocol
     environment:
       # :?-Syntax: Compose bricht ab, wenn die Variable fehlt oder leer ist.
       # Kein Default-Passwort mehr — muss bewusst in .env gesetzt werden.

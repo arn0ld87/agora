@@ -157,24 +157,28 @@ ollama pull qwen3-embedding:4b
 # ollama pull nomic-embed-text
 ```
 
-#### Option A: Docker Compose
+#### Option A: Docker Compose (Dev-Default)
 
-Docker Compose startet Agora und Neo4j. Ollama läuft standardmäßig auf dem Host und wird aus dem Container über `host.docker.internal` erreicht.
+Docker Compose startet Agora, Neo4j und Redis. Ollama läuft standardmäßig auf dem Host und wird aus dem Container über `host.docker.internal` erreicht. Der Default-Compose nutzt seit v0.9.0 explizit den **Dev-Stage** (Vite + Flask, Hot-Reload) und bindet alle veröffentlichten Ports auf `127.0.0.1`.
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
 
-docker compose up -d
+docker compose up -d --build
 ```
 
-> **Hardening-Drift v0.9.0** (wird in einem Folge-Slice entschärft):
-> - Default-Compose hat aktuell **kein** explizites `target: dev` — ein nackter `docker build` zieht deshalb den letzten Multi-Stage `prod` (gunicorn). Wer Vite-Dev will, baut heute noch explizit mit `docker compose build --build-arg target=dev` oder nutzt `docker-compose.override.yml`.
-> - Neo4j-Browser (`7474`) und Bolt (`7687`) binden im Default-Compose noch auf `0.0.0.0`. Auf einer geteilten Maschine bewusst verhalten oder hinter Firewall/Tailscale stellen.
-> - Backend (`5001`) und Vite (`5173`) binden ebenfalls noch auf `0.0.0.0`.
+**Was läuft jetzt:**
 
-**Dev-Hinweis:** Das Repo enthält zusätzlich eine `docker-compose.override.yml`, die den Source-Code nach `/app` bind-mountet und `node_modules` / `frontend/node_modules` / `backend/.venv` als named volumes isoliert. Damit greifen Code-Änderungen im laufenden Dev-Container sofort, ohne dass das Image für reine Source-Änderungen neu gebaut werden muss.
+| Endpoint | URL | Bind |
+|---|---|---|
+| Frontend (Vite) | <http://localhost:5173> | `127.0.0.1` |
+| Backend (Flask) | <http://localhost:5001/health> | `127.0.0.1` |
+| Neo4j Browser | <http://localhost:7474> | `127.0.0.1` |
+| Neo4j Bolt | `bolt://localhost:7687` | `127.0.0.1` |
+
+Wer aus einem anderen Netzsegment (LAN, Tailscale) auf das Frontend zugreifen will, setzt einen Reverse-Proxy davor — direkter Bind auf `0.0.0.0` ist im Default bewusst aus.
 
 Nützliche Dev-Kommandos:
 
