@@ -41,10 +41,10 @@ def agora_config_log():
 @pytest.fixture
 def base_env(monkeypatch):
     """Defaults so validate() only fails on the security policy, nothing else."""
-    monkeypatch.setattr(Config, "SECRET_KEY", "real-secret-from-env", raising=False)
+    monkeypatch.setattr(Config, "SECRET_KEY", "unittest-secret-42", raising=False)
     monkeypatch.setattr(Config, "LLM_API_KEY", "ollama", raising=False)
     monkeypatch.setattr(Config, "NEO4J_URI", "bolt://localhost:7687", raising=False)
-    monkeypatch.setattr(Config, "NEO4J_PASSWORD", "real-neo4j-password", raising=False)
+    monkeypatch.setattr(Config, "NEO4J_PASSWORD", "unittest-neo4j-42", raising=False)
     monkeypatch.setattr(Config, "EMBEDDING_MODEL", "nomic-embed-text", raising=False)
     monkeypatch.setattr(Config, "VECTOR_DIM", 768, raising=False)
     monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
@@ -67,7 +67,7 @@ def test_validate_non_debug_rejects_placeholder_secret_key(
     """SECRET_KEY = jeder bekannte Platzhalter im Nicht-Debug → ConfigError."""
     monkeypatch.setattr(Config, "DEBUG", False, raising=False)
     monkeypatch.setattr(Config, "SECRET_KEY", placeholder, raising=False)
-    monkeypatch.setenv("AGORA_AUTH_TOKEN", "deploy-token")
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "unittest-token-42")
 
     errors = Config.validate()
 
@@ -83,7 +83,7 @@ def test_validate_non_debug_rejects_placeholder_neo4j_password(
     """NEO4J_PASSWORD = jeder bekannte Platzhalter im Nicht-Debug → ConfigError."""
     monkeypatch.setattr(Config, "DEBUG", False, raising=False)
     monkeypatch.setattr(Config, "NEO4J_PASSWORD", placeholder, raising=False)
-    monkeypatch.setenv("AGORA_AUTH_TOKEN", "deploy-token")
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "unittest-token-42")
 
     errors = Config.validate()
 
@@ -111,9 +111,9 @@ def test_validate_debug_allows_placeholder_secret_with_warning(
 def test_validate_non_debug_with_real_values_passes(monkeypatch, base_env):
     """Echte Werte + Token → validate() liefert keine Security-Errors."""
     monkeypatch.setattr(Config, "DEBUG", False, raising=False)
-    monkeypatch.setattr(Config, "SECRET_KEY", "real-deploy-secret", raising=False)
-    monkeypatch.setattr(Config, "NEO4J_PASSWORD", "real-neo4j-pass", raising=False)
-    monkeypatch.setenv("AGORA_AUTH_TOKEN", "deploy-token")
+    monkeypatch.setattr(Config, "SECRET_KEY", "unittest-secret-42", raising=False)
+    monkeypatch.setattr(Config, "NEO4J_PASSWORD", "unittest-neo4j-42", raising=False)
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "unittest-token-42")
 
     errors = Config.validate()
 
@@ -126,7 +126,7 @@ def test_validate_case_insensitive_placeholder_match(monkeypatch, base_env):
     """Großbuchstaben-Variante eines Platzhalters wird ebenfalls abgewiesen."""
     monkeypatch.setattr(Config, "DEBUG", False, raising=False)
     monkeypatch.setattr(Config, "SECRET_KEY", "CHANGE-ME", raising=False)
-    monkeypatch.setenv("AGORA_AUTH_TOKEN", "deploy-token")
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "unittest-token-42")
 
     errors = Config.validate()
 

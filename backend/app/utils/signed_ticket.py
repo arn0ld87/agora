@@ -105,13 +105,29 @@ _redis_init_attempted = False
 
 _REDIS_TICKET_PREFIX = "ticket:"
 
+_warn_in_memory_done = False
+
+
+def _warn_in_memory_once() -> None:
+    """Emit a single process-lifetime warning about in-process ticket storage."""
+    global _warn_in_memory_done
+    if not _warn_in_memory_done:
+        _warn_in_memory_done = True
+        logger.warning(
+            "Using in-process ticket store (single-worker mode); "
+            "configure REDIS_URL for multi-worker safety"
+        )
+
 
 def _get_redis_client() -> "object | None":
-    """Lazy-init a Redis client from Config.REDIS_URL. Returns None on failure."""
+    """Lazy-init a Redis client from Config.REDIS_URL. Returns None on failure.
+
+    Does NOT permanently cache a failed init — if Redis was down on first
+    attempt, the next call will retry.
+    """
     global _redis_client, _redis_init_attempted
-    if _redis_init_attempted:
+    if _redis_init_attempted and _redis_client is not None:
         return _redis_client
-    _redis_init_attempted = True
     try:
         import redis as redis_lib
 
@@ -122,10 +138,14 @@ def _get_redis_client() -> "object | None":
             return None
         _redis_client = redis_lib.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         _redis_client.ping()
-        logger.info("signed_ticket Redis connected to %s", url)
+        # Log host:port only — REDIS_URL may contain credentials.
+        safe_url = url.replace("//", "//***@") if "@" in url else url
+        logger.info("signed_ticket Redis connected to %s", safe_url)
+        _redis_init_attempted = True
     except Exception as exc:
         logger.warning("signed_ticket Redis not available: %s", exc)
         _redis_client = None
+        # Leave _redis_init_attempted False so the next call retries.
     return _redis_client
 
 
@@ -182,10 +202,7 @@ def consume(
         return result
 
     # Fallback: in-process set (not safe under gunicorn multi-worker)
-    logger.debug(
-        "Using in-process ticket store (single-worker mode); "
-        "configure REDIS_URL for multi-worker safety"
-    )
+    _warn_in_memory_once()
     with _seen_lock:
         _sweep_locked(now_int)
         if sig in _seen:
@@ -196,8 +213,9 @@ def consume(
 
 def _reset_seen_for_tests() -> None:
     """Test helper — clear the redemption store between cases."""
-    global _redis_client, _redis_init_attempted
+    global _redis_client, _redis_init_attempted, _warn_in_memory_done
     with _seen_lock:
         _seen.clear()
     _redis_client = None
     _redis_init_attempted = False
+    _warn_in_memory_done = False
