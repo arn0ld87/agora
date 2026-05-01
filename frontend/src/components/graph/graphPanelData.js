@@ -1,5 +1,53 @@
+/**
+ * Issue #36 — Stabile Node-/Edge-ViewModels für die Graph-UI.
+ *
+ * Backend-Edges tragen historisch zwei alternative Felder für Beziehungs-Typ
+ * und -Label (`fact_type` aus früherer NER-Pipeline, `name` aus dem aktuellen
+ * Schema). Hier landet die einzige Stelle, an der dieser Legacy-Alias
+ * aufgelöst wird; die UI-Komponenten konsumieren nur noch das normalisierte
+ * Result.
+ *
+ * @typedef {object} GraphNodeViewModel
+ * @property {string} id        – stabile Node-ID (UUID des Backends)
+ * @property {string} name      – Anzeige-Name, fällt auf 'Unnamed' zurück
+ * @property {string} type      – Entity-Typ-Label aus Neo4j-Labels
+ * @property {object} rawData   – ungemappter Backend-Node für Detail-Panel
+ *
+ * @typedef {object} GraphEdgeViewModel
+ * @property {string}  source       – Source-Node-UUID (für d3-forceLink)
+ * @property {string}  target       – Target-Node-UUID
+ * @property {string}  type         – Beziehungs-Typ (alias-aufgelöst)
+ * @property {string}  name         – Anzeige-Label (alias-aufgelöst)
+ * @property {number}  curvature    – Pfad-Krümmung für mehrfach-Edges
+ * @property {boolean} isSelfLoop   – `true` bei Self-Loop-Aggregat
+ * @property {number} [pairIndex]   – Index in der Paar-Gruppe (nicht-Self-Loops)
+ * @property {number} [pairTotal]   – Gesamtzahl Edges zwischen demselben Paar
+ * @property {object}  rawData      – ungemapptes Backend-Edge plus aufgelöste Namen
+ */
+
 function getNodeType(node) {
   return node.labels?.find((label) => label !== 'Entity') || 'Entity'
+}
+
+/**
+ * Löst die Backend-Aliasse `fact_type` und `name` zu einem stabilen
+ * `{ type, label }`-Paar auf. Einziger Ort der Alias-Logik.
+ *
+ * Backend-Konvention:
+ *  - Aktuelles Schema: `name` ist das Beziehungs-Label.
+ *  - Legacy NER-Pipeline: `fact_type` lieferte Typ und Label.
+ *
+ * Mapping:
+ *  - `type`  bevorzugt `fact_type`, fällt auf `name`, dann `'RELATED'` zurück.
+ *  - `label` bevorzugt `name`, fällt auf `fact_type`, dann `'RELATED'` zurück.
+ */
+function normalizeEdgeAliases(edge) {
+  const factType = edge.fact_type
+  const name = edge.name
+  return {
+    type: factType || name || 'RELATED',
+    label: name || factType || 'RELATED',
+  }
 }
 
 function buildColorMap(entityTypes) {
@@ -73,11 +121,13 @@ function buildCurvedEdge(edge, edgePairCount, edgePairIndex, nodeMap) {
     }
   }
 
+  const aliases = normalizeEdgeAliases(edge)
+
   return {
     source: edge.source_node_uuid,
     target: edge.target_node_uuid,
-    type: edge.fact_type || edge.name || 'RELATED',
-    name: edge.name || edge.fact_type || 'RELATED',
+    type: aliases.type,
+    name: aliases.label,
     curvature,
     isSelfLoop: false,
     pairIndex: currentIndex,
@@ -168,6 +218,19 @@ export function filterEdgesAtRound(edges, round) {
   })
 }
 
+/**
+ * Public-API des Daten-Mappers. Liefert die UI-konsumierten ViewModels plus
+ * die Farbabbildung. UI-Komponenten greifen NICHT direkt auf das Backend-
+ * Format zu, sondern lesen ausschließlich diese ViewModels.
+ *
+ * @param {{ nodes?: Array, edges?: Array }} graphData – Rohformat vom Backend
+ * @param {Array<{ name: string, color: string }>} [entityTypes=[]] – Farb-Mapping
+ * @returns {{
+ *   nodes: GraphNodeViewModel[],
+ *   edges: GraphEdgeViewModel[],
+ *   getColor: (type: string) => string,
+ * }}
+ */
 export function buildGraphRenderData(graphData, entityTypes = []) {
   const nodesData = graphData?.nodes || []
   const edgesData = graphData?.edges || []
