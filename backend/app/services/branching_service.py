@@ -109,7 +109,11 @@ def create_branch(
         enable_twitter=enable_twitter,
         enable_reddit=enable_reddit,
     )
-    branch.status = SimulationStatus.READY
+    # Branching ist semantisch eine implizite Prepare-Phase: der Branch
+    # erbt Entities/Profiles vom Source statt sie neu zu generieren.
+    # Wir durchlaufen den FSM-Pfad CREATED -> PREPARING -> READY explizit,
+    # damit Issue #42 keine Sonder-Bypässe für Branching kennt.
+    manager._set_status(branch, SimulationStatus.PREPARING)
     branch.entities_count = source.entities_count
     branch.profiles_count = source.profiles_count
     branch.entity_types = list(source.entity_types)
@@ -189,7 +193,7 @@ def create_branch(
                     dirs_exist_ok=True,
                 )
 
-    manager._save_simulation_state(branch)
+    manager._set_status(branch, SimulationStatus.READY)
     RunRegistry().create_run(
         run_type="simulation_prepare",
         entity_id=branch.simulation_id,

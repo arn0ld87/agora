@@ -16,6 +16,8 @@ from app.services.simulation_manager import SimulationStatus
 from app.services.simulation_state_machine import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATES,
+    InvalidStatusTransition,
+    assert_valid_transition,
     get_allowed_next,
     is_terminal,
     is_valid_transition,
@@ -42,6 +44,8 @@ ALL_STATUSES = list(SimulationStatus)
         (SimulationStatus.STOPPED, SimulationStatus.RUNNING),
         # Idempotent re-prepare aus READY (Manager prüft Status nicht)
         (SimulationStatus.READY, SimulationStatus.PREPARING),
+        # Retry aus FAILED — User triggert prepare nochmal (Issue #42)
+        (SimulationStatus.FAILED, SimulationStatus.PREPARING),
         # Fehlerpfade aus aktiven Phasen
         (SimulationStatus.CREATED, SimulationStatus.FAILED),
         (SimulationStatus.PREPARING, SimulationStatus.FAILED),
@@ -79,7 +83,6 @@ def test_allowed_transitions(
         (SimulationStatus.COMPLETED, SimulationStatus.RUNNING),
         (SimulationStatus.COMPLETED, SimulationStatus.PREPARING),
         (SimulationStatus.FAILED, SimulationStatus.RUNNING),
-        (SimulationStatus.FAILED, SimulationStatus.PREPARING),
         # STOPPED → COMPLETED (terminal-jump)
         (SimulationStatus.STOPPED, SimulationStatus.COMPLETED),
         (SimulationStatus.STOPPED, SimulationStatus.PREPARING),
@@ -96,10 +99,18 @@ def test_forbidden_transitions(
     )
 
 
-@pytest.mark.parametrize("terminal", [SimulationStatus.COMPLETED, SimulationStatus.FAILED])
-def test_terminal_states_have_no_outgoing(terminal: SimulationStatus) -> None:
-    assert get_allowed_next(terminal) == frozenset()
-    assert is_terminal(terminal)
+def test_completed_has_no_outgoing() -> None:
+    """COMPLETED ist endgültig terminal — keine Übergänge erlaubt."""
+    assert get_allowed_next(SimulationStatus.COMPLETED) == frozenset()
+    assert is_terminal(SimulationStatus.COMPLETED)
+
+
+def test_failed_allows_only_retry() -> None:
+    """FAILED ist terminal, lässt aber den Retry-Übergang nach PREPARING zu (Issue #42)."""
+    assert get_allowed_next(SimulationStatus.FAILED) == frozenset(
+        {SimulationStatus.PREPARING}
+    )
+    assert is_terminal(SimulationStatus.FAILED)
 
 
 @pytest.mark.parametrize(
@@ -128,12 +139,19 @@ def test_table_covers_all_statuses() -> None:
     )
 
 
-def test_terminal_set_matches_empty_outgoing() -> None:
-    """``TERMINAL_STATES`` und ``ALLOWED_TRANSITIONS`` müssen konsistent sein."""
-    derived_terminals = frozenset(
-        s for s, allowed in ALLOWED_TRANSITIONS.items() if not allowed
-    )
-    assert TERMINAL_STATES == derived_terminals
+def test_terminal_set_consistency() -> None:
+    """Jeder Status in ``TERMINAL_STATES`` darf höchstens den Retry-Pfad haben.
+
+    COMPLETED hat 0 outgoing, FAILED nur ``{PREPARING}`` (Retry). Beide gelten
+    aus Lifecycle-Sicht als „abgeschlossen", weshalb sie in TERMINAL_STATES
+    stehen.
+    """
+    for terminal in TERMINAL_STATES:
+        outgoing = get_allowed_next(terminal)
+        assert outgoing <= frozenset({SimulationStatus.PREPARING}), (
+            f"Terminal-Status {terminal.value} hat unerwartete Outgoing-"
+            f"Transitions: {outgoing}"
+        )
 
 
 def test_no_transition_targets_unknown_status() -> None:
@@ -158,3 +176,26 @@ def test_is_valid_transition_handles_unknown_from_status() -> None:
     # Konstruiert über einen synthetischen Wert, der nicht im Enum existiert.
     # Da SimulationStatus ein StrEnum ist, geht das nur via direkter dict-Lookup-Test.
     assert ALLOWED_TRANSITIONS.get("definitely_not_a_status") is None  # type: ignore[arg-type]
+
+
+def test_assert_valid_transition_passes_for_allowed() -> None:
+    """``assert_valid_transition`` ist No-op für erlaubte Übergänge."""
+    assert_valid_transition(SimulationStatus.CREATED, SimulationStatus.PREPARING)
+
+
+def test_assert_valid_transition_raises_for_forbidden() -> None:
+    """Verbotener Übergang wirft ``InvalidStatusTransition`` mit beiden Endpunkten."""
+    with pytest.raises(InvalidStatusTransition) as exc_info:
+        assert_valid_transition(SimulationStatus.CREATED, SimulationStatus.RUNNING)
+    err = exc_info.value
+    assert err.from_status == SimulationStatus.CREATED
+    assert err.to_status == SimulationStatus.RUNNING
+    # Fehlermeldung listet die erlaubten Folgestatus.
+    assert "preparing" in str(err)
+    assert "failed" in str(err)
+
+
+def test_assert_valid_transition_allows_self_transition() -> None:
+    """Self-Übergang ist No-op (idempotente Status-Setzungen)."""
+    assert_valid_transition(SimulationStatus.RUNNING, SimulationStatus.RUNNING)
+    assert_valid_transition(SimulationStatus.COMPLETED, SimulationStatus.COMPLETED)
