@@ -475,6 +475,16 @@
       "INTERESTED_IN": "interessiert sich für"
     }
   },
+  "logs": {
+    "drawer": {
+      "title": "Backend-Logs",
+      "toggle": "Logs anzeigen (Strg+Shift+L)",
+      "allLevels": "Alle Level",
+      "search": "Suchen…",
+      "pause": "Auto-Scroll pausieren",
+      "empty": "Noch keine Log-Zeilen."
+    }
+  },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
     "backend": "Backend-Fehler.",
