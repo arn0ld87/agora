@@ -1,0 +1,208 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - banner [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - generic [ref=e12]: Agor·a
+      - navigation [ref=e13]:
+        - link "01 / DOKUMENT" [ref=e14] [cursor=pointer]:
+          - /url: "#console"
+        - link "№ 03 — ABLAUF" [ref=e15] [cursor=pointer]:
+          - /url: "#workflow"
+        - link "№ 04 — HISTORIE" [ref=e16] [cursor=pointer]:
+          - /url: "#history"
+      - generic [ref=e17]: Bereit
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e22]: № 01 — AUSGABE
+          - generic [ref=e23]: OFFLINE · OPEN SOURCE
+        - heading "Ein Dokument rein. Eine Welt raus." [level=1] [ref=e24]:
+          - text: Ein Dokument rein.
+          - text: Eine Welt raus.
+        - paragraph [ref=e25]: Agora baut aus deinem Text einen Wissensgraphen, bevölkert ihn mit hunderten Agenten — jeder mit eigener Biografie, Haltung, Blase — und lässt sie diskutieren, teilen, streiten. Du siehst in Echtzeit, wie sich Narrative ausbreiten, wo Gegenwind entsteht und welche Stimmen den Diskurs kippen. Vollständig lokal. Dein Laptop, dein Neo4j, dein Ollama.
+        - generic [ref=e26]:
+          - generic [ref=e27]: Schwarm-Engine
+          - generic [ref=e28]: v0.6.1 alpha
+      - complementary [ref=e29]:
+        - img "Agora" [ref=e31]
+        - generic [ref=e32]:
+          - generic [ref=e33]: AGORA
+          - generic [ref=e34]: Schwarmintelligenz, lokal.
+        - button "↓" [ref=e35] [cursor=pointer]
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]: "02"
+        - generic [ref=e40]: № 02 — SYSTEM
+      - generic [ref=e41]:
+        - heading "Bereit." [level=2] [ref=e42]
+        - paragraph [ref=e43]: Die Engine läuft auf deiner Hardware. Kein Account, keine Anmeldung. Lade ein Dokument hoch, formuliere die Frage — die Simulation übernimmt den Rest.
+        - generic [ref=e44]:
+          - article [ref=e45]:
+            - generic [ref=e46]: Frei
+            - generic [ref=e47]: Läuft auf deiner Hardware
+          - article [ref=e48]:
+            - generic [ref=e49]: Privat
+            - generic [ref=e50]: Nichts verlässt diesen Rechner
+          - article [ref=e51]:
+            - generic [ref=e52]: Offen
+            - generic [ref=e53]: AGPL-3.0 lizenziert
+    - generic [ref=e55]:
+      - generic [ref=e56]:
+        - generic [ref=e57]: "03"
+        - generic [ref=e58]: № 03 — ABLAUF
+      - list [ref=e60]:
+        - listitem [ref=e61]:
+          - generic [ref=e62]: "01"
+          - generic [ref=e63]:
+            - generic [ref=e64]: Graph aufbauen
+            - generic [ref=e65]: Entitäten und Beziehungen aus deinem Dokument extrahieren — Wissensgraph in Neo4j.
+        - listitem [ref=e66]:
+          - generic [ref=e67]: "02"
+          - generic [ref=e68]:
+            - generic [ref=e69]: Umgebung
+            - generic [ref=e70]: Hunderte Agenten-Personas mit Persönlichkeit, Bias und Reaktionsverhalten erzeugen.
+        - listitem [ref=e71]:
+          - generic [ref=e72]: "03"
+          - generic [ref=e73]:
+            - generic [ref=e74]: Simulation
+            - generic [ref=e75]: Agenten posten, antworten, streiten — rundenbasiert, lokal, beobachtbar in Echtzeit.
+        - listitem [ref=e76]:
+          - generic [ref=e77]: "04"
+          - generic [ref=e78]:
+            - generic [ref=e79]: Report
+            - generic [ref=e80]: ReportAgent durchsucht das Ergebnis, befragt eine Fokusgruppe und schreibt den Bericht.
+        - listitem [ref=e81]:
+          - generic [ref=e82]: "05"
+          - generic [ref=e83]:
+            - generic [ref=e84]: Gespräch
+            - generic [ref=e85]: Sprich direkt mit den Agenten der simulierten Welt — oder mit dem ReportAgent.
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - generic [ref=e88]: Neo4j verbunden
+        - generic [ref=e90]: Ollama verbunden
+        - button "↻" [ref=e92] [cursor=pointer]
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: № 04 —
+          - generic [ref=e96]: 01 / DOKUMENT
+        - generic [ref=e97]: PDF · MD · TXT — bis 50 MB
+      - generic [ref=e99] [cursor=pointer]:
+        - generic [ref=e100]: ↑
+        - generic [ref=e101]: Lege deine Dokumente hier ab.
+        - generic [ref=e102]: oder klicke, um zu wählen
+      - generic [ref=e103]:
+        - generic [ref=e104]:
+          - generic [ref=e105]: № 05 —
+          - generic [ref=e106]: LLM-Modell
+        - generic [ref=e107]: Agentensprache
+      - generic [ref=e108]:
+        - generic [ref=e110]:
+          - generic [ref=e111]: LLM-Modell
+          - combobox [ref=e113] [cursor=pointer]:
+            - option "Standard aus .env — qwen3-coder-next:cloud" [selected]
+            - option "Qwen3 Coder (Cloud) — empfohlen"
+            - option "Qwen 2.5 32B (lokal)"
+            - option "Qwen 2.5 14B (lokal, GPU-arm)"
+            - option "Llama 3.1 8B (lokal, schnell)"
+            - option "GPT-OSS 20B (lokal)"
+            - option "deepseek-v4-pro:cloud (Ollama)"
+            - option "deepseek-v4-flash:cloud (Ollama)"
+            - option "gemma4:31b-cloud (Ollama)"
+            - option "ministral-3:14b-cloud (Ollama)"
+            - option "nemotron-3-nano:30b-cloud (Ollama)"
+            - option "embeddinggemma:300m (Ollama)"
+            - option "kimi-k2.6:cloud (Ollama)"
+            - option "devstral-2:123b-cloud (Ollama)"
+            - option "nomic-embed-text:latest (Ollama)"
+            - option "cogito-2.1:671b-cloud (Ollama)"
+            - option "qwen3-embedding:8b (Ollama)"
+            - option "qwen3-embedding:4b (Ollama)"
+            - option "glm-5.1:cloud (Ollama)"
+            - option "qwen3.5:397b-cloud (Ollama)"
+            - option "deepseek-v3.2:cloud (Ollama)"
+            - option "gemini-3-flash-preview:cloud (Ollama)"
+            - option "qwen3-vl:235b-cloud (Ollama)"
+            - option "qwen3-coder:480b-cloud (Ollama)"
+            - option "kimi-k2.5:cloud (Ollama)"
+            - option "deepseek-v3.1:671b-cloud (Ollama)"
+            - option "gpt-oss:120b-cloud (Ollama)"
+            - option "gpt-oss:20b-cloud (Ollama)"
+            - option "minimax-m2.5:cloud (Ollama)"
+            - option "glm-5:cloud (Ollama)"
+            - option "qwen3.5:cloud (Ollama)"
+            - option "nemotron-3-super:cloud (Ollama)"
+            - option "minimax-m2.7:cloud (Ollama)"
+            - option "Eigene Eingabe"
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: Agentensprache
+            - combobox [ref=e118] [cursor=pointer]:
+              - option "Deutsch" [selected]
+              - option "Englisch"
+          - paragraph [ref=e119]: Bestimmt, in welcher Sprache die Agenten posten und antworten.
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - generic [ref=e122]: № 06 —
+          - generic [ref=e123]: 02 / FRAGESTELLUNG
+        - generic [ref=e124]: "Engine: Ollama + Neo4j"
+      - 'textbox "Beschreibe knapp, was simuliert werden soll. Beispiel: „Wie reagiert die Kölner Innenstadt auf eine flächendeckende Videoüberwachung?\"" [ref=e125]'
+      - generic [ref=e126]:
+        - button "Engine starten →" [disabled] [ref=e127]:
+          - text: Engine starten
+          - generic [ref=e128]: →
+        - generic [ref=e129]: Mindestens ein Dokument hochladen.
+    - generic [ref=e131]:
+      - generic [ref=e132]:
+        - generic [ref=e133]:
+          - generic [ref=e134]: "06"
+          - generic [ref=e135]: Run Center
+        - generic [ref=e136]:
+          - heading "History, resume, branching" [level=2] [ref=e137]
+          - paragraph [ref=e138]: All graph builds, simulation prep/runs, and report generation in one persisted registry.
+          - paragraph [ref=e139]:
+            - link "Run-Dashboard öffnen →" [ref=e140] [cursor=pointer]:
+              - /url: /runs
+      - generic [ref=e141]:
+        - searchbox "Search run, project, branch" [ref=e142]
+        - combobox [ref=e143]:
+          - option "All projects" [selected]
+        - combobox [ref=e144]:
+          - option "All types" [selected]
+          - option "graph_build"
+          - option "simulation_prepare"
+          - option "simulation_run"
+          - option "report_generate"
+        - combobox [ref=e145]:
+          - option "All status" [selected]
+          - option "pending"
+          - option "processing"
+          - option "paused"
+          - option "completed"
+          - option "failed"
+          - option "stopped"
+        - combobox [ref=e146]:
+          - option "All branches" [selected]
+      - generic [ref=e149]: Loading runs…
+  - contentinfo [ref=e150]:
+    - generic [ref=e151]:
+      - generic [ref=e152]: Agora — Schwarmintelligenz lokal.
+      - generic [ref=e153]:
+        - text: Entwickelt von
+        - link "Alexander Schneider" [ref=e154] [cursor=pointer]:
+          - /url: https://alexle135.de
+        - text: ·
+        - link "alexle135.de ↗" [ref=e155] [cursor=pointer]:
+          - /url: https://alexle135.de
+      - generic [ref=e156]: Fork von MiroFish · AGPL-3.0
+    - generic [ref=e157]:
+      - link "Quellcode auf GitHub ↗" [ref=e158] [cursor=pointer]:
+        - /url: https://github.com/nikmcfly/Agora
+      - link "Neo4j Browser ↗" [ref=e159] [cursor=pointer]:
+        - /url: http://localhost:7474
+    - generic [ref=e160]:
+      - generic [ref=e161]: Sprache
+      - generic [ref=e162]:
+        - button "DE" [ref=e163] [cursor=pointer]
+        - generic [ref=e164]: ·
+        - button "EN" [ref=e165] [cursor=pointer]
