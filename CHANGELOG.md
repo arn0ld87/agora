@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Docs
+
+- **Slice 0 (Repo-Review-Umsetzung): README/Doku-Sync auf v0.9.0.** README-Status-Block, deutsche und englische Engineering-Stand-Sektionen, Testzahlen-Block (519 → 711, 488 → 671 Backend, 31 → 40 Frontend) und Release-Notes-Verweis auf v0.9.0 / Vorgänger v0.8.0 aktualisiert. Schnellstart-Sektion um expliziten Hardening-Drift-Hinweis ergänzt: `docker-compose.yml` baut aktuell den `prod`-Stage statt `dev`, Neo4j (`7474`/`7687`), Backend (`5001`) und Vite (`5173`) binden noch auf `0.0.0.0` — wird in Slice 2 entschärft. Arbeitsprotokoll: `docu/2026-05-01-slice-0-readme-v090-sync-arbeitsprotokoll.md`.
+
 ## [0.9.0] — 2026-05-01
 
 Milestone „Domain Cleanup" abgeschlossen — 12/12 Issues geschlossen, **711 Tests grün** (671 Backend + 40 Frontend; +192 gegenüber v0.8.0). Drei Hot-Spot-Module signifikant entkernt: `simulation_manager.py` 789 → 403 LOC (−49 %), `report_agent.py` 3184 → 2179 LOC (−31,6 %), `neo4j_storage.py` 1127 → 195 LOC (−82,7 %). Domain-Schichten klar getrennt: neue Service-Module für Branching, Prepare-Pipeline, Report-Logging/Models/Prompts/Tools, Ingestion-Pipeline; Storage in fünf Module gesplittet (Mappings + Read/Write/Search-Mixins). Wire-Identity gepinnt: Backend-Graph-DTOs für Frontend-API, FSM-Validierung aller Statusübergänge, Re-Export-Pattern hält alle Caller stabil. Drei Issues retrospektiv als bereits erledigt geschlossen (#41 SimulationRepository, #49 Evidence-Layer; beide durch frühere Slices abgedeckt).

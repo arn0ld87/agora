@@ -8,7 +8,7 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
-> **v0.8.0 released:** [Release Notes](docu/2026-05-01-v0.8.0-release-notes.md) — 13/13 Issues geschlossen, **519 Tests grün** (488 Backend + 31 Frontend). Vorgänger: [v0.7.0](docu/2026-05-01-v0.7.0-release-notes.md).
+> **v0.9.0 released:** [Release Notes](docu/2026-05-01-v0.9.0-release-notes.md) — 12/12 Issues (Milestone „Domain Cleanup") geschlossen, **711 Tests grün** (671 Backend + 40 Frontend). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
@@ -21,7 +21,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## Status: v0.8.0 — released 2026-05-01
+> ## Status: v0.9.0 — released 2026-05-01
 >
 > Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
 > Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
@@ -51,9 +51,12 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.8.0
+### Engineering-Stand v0.9.0
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**488 Backend + 31 Frontend Tests**, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**671 Backend + 40 Frontend Tests** (+192 ggü. v0.8.0), 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Domain-Cleanup (v0.9.0)**: Drei Hot-Spot-Module entkernt — `simulation_manager.py` 789→403 LOC (−49 %), `report_agent.py` 3184→2179 LOC (−31,6 %), `neo4j_storage.py` 1127→195 LOC (−82,7 %). Neue Service-Schichten in `backend/app/services/` (Branching, Prepare-Pipeline, Report-Logger/Models/Prompts/Tools, Ingestion-Pipeline). Storage in fünf Module gesplittet: `neo4j_mappings.py` + Read/Write/Search-Mixins. Re-Export-Pattern hält alle Caller stabil — keine Breaking-Changes.
+- **Wire-Identity gepinnt (v0.9.0, Issue #52)**: `models/graph.py` führt Backend-Graph-DTOs ein, deren Schema bit-identisch zum bisherigen Storage-Output ist; jede künftige Schema-Änderung wird durch DTO-Tests ausgelöst, bevor das Frontend kaputt geht.
+- **FSM aktiv konsumiert (v0.9.0, Issue #42)**: Die deklarative State-Machine wird vom `SimulationManager` und allen API-Routen verwendet; `ALLOWED_TRANSITIONS` bleibt Single-Source-of-Truth, ungültige Übergänge werfen `InvalidStatusTransition`. Branching durchläuft jetzt explizit `CREATED → PREPARING → READY`; Force-Restart nutzt `_reset_to_ready(...)` mit Log-Begründung.
 - **Design-System konsolidiert (Slice 1)**: `tokens.css` als Source-of-Truth, UI-Komponenten (`Btn`, `Badge`, `Field`, `Card`, `Select`) auf Tokens umgestellt, harte Farbwerte in Views/Layouts durch Token-Referenzen ersetzt.
 - **Persona Review (Slice 2)**: Generierte Personas sind vor Simulationsstart prüfbar, editierbar und freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität) liefern Badges. `PERSONA_REVIEW_ENABLED=true` blockt Simulationsstart bis alle Personas approved sind.
 - **Run Dashboard (Slice 3)**: Zentrale `/runs`-View mit Status, Datum, Modell, Dokument, Graph-ID, Persona-Anzahl. Detail-Drawer für Fehler, Artefakte und Copy-Buttons. Runs-Persistenz über `RunRegistry`.
@@ -165,6 +168,11 @@ cp .env.example .env
 
 docker compose up -d
 ```
+
+> **Hardening-Drift v0.9.0** (wird in einem Folge-Slice entschärft):
+> - Default-Compose hat aktuell **kein** explizites `target: dev` — ein nackter `docker build` zieht deshalb den letzten Multi-Stage `prod` (gunicorn). Wer Vite-Dev will, baut heute noch explizit mit `docker compose build --build-arg target=dev` oder nutzt `docker-compose.override.yml`.
+> - Neo4j-Browser (`7474`) und Bolt (`7687`) binden im Default-Compose noch auf `0.0.0.0`. Auf einer geteilten Maschine bewusst verhalten oder hinter Firewall/Tailscale stellen.
+> - Backend (`5001`) und Vite (`5173`) binden ebenfalls noch auf `0.0.0.0`.
 
 **Dev-Hinweis:** Das Repo enthält zusätzlich eine `docker-compose.override.yml`, die den Source-Code nach `/app` bind-mountet und `node_modules` / `frontend/node_modules` / `backend/.venv` als named volumes isoliert. Damit greifen Code-Änderungen im laufenden Dev-Container sofort, ohne dass das Image für reine Source-Änderungen neu gebaut werden muss.
 
@@ -342,7 +350,7 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **Status: v0.8.0 — released 2026-05-01.** Agora is an active experimental
+> **Status: v0.9.0 — released 2026-05-01.** Agora is an active experimental
 > fork. Graph build, simulation, and report pipeline can fail when Ollama is slow,
 > JSON mode misbehaves, or models are switched mid-run. Not production-ready.
 > The HTTP API has an optional `AGORA_AUTH_TOKEN` guard and localhost-locked CORS
@@ -359,9 +367,12 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.8.0
+### Engineering status in v0.9.0
 
-- **Quality gates are in place** via `npm run check` (**488 backend + 31 frontend tests**, Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**671 backend + 40 frontend tests** (+192 vs. v0.8.0), Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Domain cleanup (v0.9.0)**: three hot-spot modules carved out — `simulation_manager.py` 789→403 LOC (−49%), `report_agent.py` 3184→2179 LOC (−31.6%), `neo4j_storage.py` 1127→195 LOC (−82.7%). New service layers under `backend/app/services/` (branching, prepare pipeline, report logger/models/prompts/tools, ingestion pipeline). Storage split into five modules: `neo4j_mappings.py` + Read/Write/Search mixins. Re-export pattern keeps every caller stable — no breaking changes.
+- **Wire identity pinned (v0.9.0, issue #52)**: `models/graph.py` carries backend graph DTOs whose schema is bit-identical to the previous storage output; future schema drifts trigger DTO tests before they reach the frontend.
+- **FSM actively consumed (v0.9.0, issue #42)**: the declarative state machine is now used by `SimulationManager` and every API route; `ALLOWED_TRANSITIONS` is the single source of truth, invalid transitions raise `InvalidStatusTransition`. Branching now goes through `CREATED → PREPARING → READY`; force-restart uses `_reset_to_ready(...)` with a logged reason.
 - **Design system consolidated (Slice 1)**: `tokens.css` as source of truth, UI components (`Btn`, `Badge`, `Field`, `Card`, `Select`) tokenized, hardcoded colors replaced with token references.
 - **Persona review (Slice 2)**: Generated personas can be inspected, edited, and approved before simulation start. Quality heuristics (duplicates, missing fields, role diversity) provide badges. `PERSONA_REVIEW_ENABLED=true` gates simulation start until all personas are approved.
 - **Run dashboard (Slice 3)**: Central `/runs` view with status, date, model, document, graph ID, persona count. Detail drawer for errors, artifacts, and copy buttons. Run persistence via `RunRegistry`.
