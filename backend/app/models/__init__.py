@@ -12,10 +12,16 @@ from .report import (
     ReportSection,
     ReportStatus,
 )
+from .graph import (
+    GraphDataDTO,
+    GraphEdgeDTO,
+    GraphNodeDTO,
+)
 
 __all__ = [
     'TaskManager', 'TaskStatus',
     'Project', 'ProjectStatus', 'ProjectManager',
     'Report', 'ReportStatus', 'ReportSection', 'ReportOutline',
     'EvidenceItem', 'ReportClaim',
+    'GraphDataDTO', 'GraphEdgeDTO', 'GraphNodeDTO',
 ]

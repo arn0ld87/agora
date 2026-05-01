@@ -20,6 +20,7 @@ from ..utils.logger import get_logger
 from ..utils.validation import validate_project_id, validate_graph_id, validate_task_id
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
+from ..models.graph import GraphDataDTO
 from ..services.run_registry import RunRegistry
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -578,15 +579,19 @@ def list_tasks():
 @handle_api_errors
 def get_graph_data(graph_id: str):
     """
-    Get graph data (nodes and edges)
+    Get graph data (nodes and edges).
+
+    Issue #52: Response geht durch ``GraphDataDTO``, damit das Wire-Format
+    explizit dokumentiert und gegen Storage-Drift abgesichert ist.
     """
     if not validate_graph_id(graph_id):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
 
     builder = get_container().graph_builder()
     graph_data = builder.get_graph_data(graph_id)
+    dto = GraphDataDTO.from_storage_dict(graph_data)
 
-    return json_success(graph_data)
+    return json_success(dto.to_dict())
 
 
 @graph_bp.route('/snapshot/<graph_id>/<int:round_num>', methods=['GET'])
