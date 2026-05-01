@@ -80,7 +80,16 @@ export function useStickyScroll(containerRef) {
 
   function attach(el) {
     if (!el) return
-    const handler = () => evaluatePosition()
+    let ticking = false
+    const handler = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          evaluatePosition()
+          ticking = false
+        })
+        ticking = true
+      }
+    }
     el.addEventListener('scroll', handler, { passive: true })
     _detach = () => el.removeEventListener('scroll', handler)
     // Initialer State: wir starten am Ende (= AutoScroll an).
