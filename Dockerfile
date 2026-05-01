@@ -53,6 +53,12 @@ CMD ["npm", "run", "dev"]
 # ---------- prod-builder (frontend bundle only) ----------
 FROM base AS prod-builder
 
+# VITE_AGORA_TOKEN wird als Build-Arg durchgereicht und von Vite zur
+# Build-Zeit in das Frontend-Bundle als Plaintext einkompiliert. Nur
+# sinnvoll für Single-User-Tailnet-Deploys; nicht für Public-Internet.
+ARG VITE_AGORA_TOKEN=""
+ENV VITE_AGORA_TOKEN=${VITE_AGORA_TOKEN}
+
 COPY --chown=agora:agora frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
 
@@ -87,4 +93,5 @@ CMD ["uv", "run", "--project", "backend", "gunicorn", \
      "--workers", "2", \
      "--bind", "0.0.0.0:5001", \
      "--chdir", "backend", \
+     "--pid", "/tmp/gunicorn.pid", \
      "app:create_app()"]
