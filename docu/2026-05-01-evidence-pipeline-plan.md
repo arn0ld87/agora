@@ -31,6 +31,7 @@ Der Plan baut die Belegschicht von vorne neu auf, behält die produktive Demo-Ta
 | **S4b** | Binder im `report_agent._collect_simulation_evidence_items` verdrahten, globaler Pool nur Fallback (≤2), `schema_version: 2` | M | Bestehender Report re-generiert, jeder Claim hat ≤5 Evidence-Items mit `match_score`, Globaler Pool drinnen nur als Fallback markiert |
 | **S5** | `model_generated_inference`/`section_synthesis` aus `evidence` raus → in neues Feld `audit_trail` | S | Schema-Test: kein `evidence`-Item mit verbotenen Typen, `audit_trail` enthält die Originale |
 | **S6** | Confidence-Formel + Label-Mapping (`low`/`medium`/`high`/`verified`) | S | Bekannte Cases erzeugen erwartete Labels; `verified` nur bei direkter, claim-spezifischer Evidence |
+| **R0** | Dev-Tooling: `scripts/dev-rebuild.sh` + `scripts/verify-deploy.sh` + npm-Aliases (`dev:rebuild`, `dev:rebuild:deps`, `dev:rebuild:full`, `dev:verify`) | XS | Container-Workflow ohne Issue-Tracking nötig, pure Helfer |
 | **R3** | CI-Ruff-Scope = lokal (`app/ tests/`) | XS | `.github/workflows/ci.yml` deckt denselben Scope wie `npm run lint:backend` |
 | **R4** | Compose: `image:`/`build:`/Kommentar konsistent | XS | Doku entspricht Realität, kein Lügen-Kommentar mehr |
 | **R1** | CI: Vitest im Frontend-Job aktiv | XS | PR triggert Vitest, Frontend-Job zeigt Test-Counts |
