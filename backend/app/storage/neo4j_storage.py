@@ -20,6 +20,10 @@ from neo4j.exceptions import (
 )
 
 from ..config import Config
+from ..services.ingestion_pipeline import (
+    embed_entities_and_relations,
+    extract_entities_and_relations,
+)
 from ..utils.retry import neo4j_call_with_retry
 from .graph_storage import GraphStorage
 from .embedding_service import EmbeddingService
@@ -316,7 +320,12 @@ class Neo4jStorage(GraphStorage):
     # ----------------------------------------------------------------
 
     def add_text(self, graph_id: str, text: str, round_num: Optional[int] = None) -> str:
-        """Process text: NER/RE → batch embed → create nodes/edges → return episode_id.
+        """Process text in three phases — NER, embed, persist.
+
+        Phase 1 (``extract_entities_and_relations``) + Phase 2
+        (``embed_entities_and_relations``) leben in
+        ``services/ingestion_pipeline.py``; Phase 3 (``_persist_episode``)
+        ist storage-nah, weil sie Driver, Cypher und Retry-Logik nutzt.
 
         ``round_num`` (Issue #10) stamps new RELATION edges with
         ``valid_from_round``. ``None`` keeps the legacy behaviour (property
@@ -326,42 +335,57 @@ class Neo4jStorage(GraphStorage):
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
-        # Get ontology for NER guidance
+        # Phase 1 — NER + Relation-Extraction
         ontology = self.get_ontology(graph_id)
-
-        # Extract entities and relations
-        logger.info(f"[add_text] Starting NER extraction for chunk ({len(text)} chars)...")
-        extraction = self._ner.extract(text, ontology)
+        extraction = extract_entities_and_relations(self._ner, text, ontology)
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])
-
-        logger.info(
-            f"[add_text] NER done: {len(entities)} entities, {len(relations)} relations"
-        )
 
         # Issue #11 Phase 2 — propose ontology mutations for any entity types
         # the LLM emitted that the current ontology does not cover. The
         # service decides per-mode whether to log, queue or auto-apply.
         self._evaluate_ontology_mutations(graph_id, ontology, entities, text)
 
-        # --- Batch embed all texts at once ---
-        entity_summaries = [f"{e['name']} ({e['type']})" for e in entities]
-        fact_texts = [r.get("fact", f"{r['source']} {r['type']} {r['target']}") for r in relations]
-        all_texts_to_embed = entity_summaries + fact_texts
+        # Phase 2 — Batch-Embedding
+        entity_embeddings, relation_embeddings = embed_entities_and_relations(
+            self._embedding, entities, relations
+        )
 
-        all_embeddings: list = []
-        if all_texts_to_embed:
-            logger.info(f"[add_text] Batch-embedding {len(all_texts_to_embed)} texts...")
-            try:
-                all_embeddings = self._embedding.embed_batch(all_texts_to_embed)
-            except Exception as e:
-                logger.warning(f"[add_text] Batch embedding failed, falling back to empty: {e}")
-                all_embeddings = [[] for _ in all_texts_to_embed]
-
-        entity_embeddings = all_embeddings[:len(entities)]
-        relation_embeddings = all_embeddings[len(entities):]
+        # Phase 3 — Persist (Episode-Node, Entities, Relations)
         logger.info("[add_text] Embedding done, writing to Neo4j...")
+        self._persist_episode(
+            graph_id=graph_id,
+            episode_id=episode_id,
+            text=text,
+            now=now,
+            entities=entities,
+            relations=relations,
+            entity_embeddings=entity_embeddings,
+            relation_embeddings=relation_embeddings,
+            round_num=round_num,
+        )
 
+        logger.info(f"[add_text] Chunk done: episode={episode_id}")
+        return episode_id
+
+    def _persist_episode(
+        self,
+        *,
+        graph_id: str,
+        episode_id: str,
+        text: str,
+        now: str,
+        entities: List[Dict[str, Any]],
+        relations: List[Dict[str, Any]],
+        entity_embeddings: List[List[float]],
+        relation_embeddings: List[List[float]],
+        round_num: Optional[int],
+    ) -> None:
+        """Phase 3 — Persistiert Episode-Node, Entities und Relations in Neo4j.
+
+        Storage-intern (Cypher + Driver + Retry); separat von Phase 1/2,
+        weil reine Funktionen kein Neo4j-Coupling haben sollen.
+        """
         with self._driver.session() as session:
             # Create episode node
             def _create_episode(tx):
@@ -389,7 +413,7 @@ class Neo4jStorage(GraphStorage):
                 ename = entity["name"]
                 etype = entity["type"]
                 attrs = entity.get("attributes", {})
-                summary_text = entity_summaries[idx]
+                summary_text = f"{ename} ({etype})"
                 embedding = entity_embeddings[idx] if idx < len(entity_embeddings) else []
 
                 e_uuid = str(uuid.uuid4())
@@ -508,9 +532,6 @@ class Neo4jStorage(GraphStorage):
                     )
 
                 self._call_with_retry(session.execute_write, _create_relation)
-
-        logger.info(f"[add_text] Chunk done: episode={episode_id}")
-        return episode_id
 
     def add_text_batch(
         self,
