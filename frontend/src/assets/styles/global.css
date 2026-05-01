@@ -481,26 +481,29 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* ============================================================
-   Tables — hairline trenner statt zebra
+   Tables — v2: hairline trenner, glass-hover, accent-selected
    ============================================================ */
 .table { width: 100%; border-collapse: collapse; font-family: var(--ff-sans); font-size: var(--fs-13); }
 .table thead th {
-  font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono); text-transform: uppercase;
+  font-family: var(--ff-mono); font-size: var(--fs-11); font-weight: 500;
+  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
   color: var(--fg-muted);
-  text-align: left; padding: 10px var(--s-4);
+  text-align: left; padding: 12px var(--s-4);
   border-bottom: 1px solid var(--rule-strong);
-  font-weight: 400; background: var(--bg-sunken);
+  background: var(--bg-sunken);
 }
 .table thead th .sort { font-size: var(--fs-11); color: var(--fg-meta); margin-left: 4px; }
 .table tbody td {
-  padding: 12px var(--s-4);
+  padding: 14px var(--s-4);
   border-bottom: 1px solid var(--rule);
   color: var(--fg); vertical-align: middle;
 }
-.table tbody tr:hover { background: var(--bg-panel); }
-.table tbody tr.is-selected { background: var(--plasma-soft); }
-.table tbody tr.is-selected td:first-child { box-shadow: inset 2px 0 0 0 var(--plasma-400); }
+.table tbody tr {
+  transition: background 160ms ease;
+}
+.table tbody tr:hover { background: var(--bg-glass); }
+.table tbody tr.is-selected { background: var(--accent-soft); }
+.table tbody tr.is-selected td:first-child { box-shadow: inset 2px 0 0 0 var(--accent); }
 .table .col-mono { font-family: var(--ff-mono); font-size: var(--fs-12); color: var(--fg-body); letter-spacing: var(--ls-mono-tight); }
 .table .col-num  { font-family: var(--ff-mono); text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -535,19 +538,24 @@ button { font: inherit; cursor: pointer; }
    ============================================================ */
 .tooltip {
   display: inline-block; padding: 8px 12px;
-  background: var(--mono-50); color: var(--mono-950);
+  background: var(--bg-inverse); color: var(--fg-on-inverse);
   font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono-tight); text-transform: uppercase;
-  border-radius: var(--r-1);
+  letter-spacing: var(--ls-mono); text-transform: uppercase;
+  border-radius: var(--r-2);
   box-shadow: var(--shadow-popover);
 }
-.tooltip--dark { background: var(--mono-900); color: var(--mono-50); border: 1px solid var(--rule-strong); }
+.tooltip--dark {
+  background: var(--bg-elevated); color: var(--fg);
+  border: 1px solid var(--rule-strong);
+}
 
 .popover {
-  background: var(--bg-elevated);
+  background: var(--bg-glass-hi);
   border: 1px solid var(--rule-strong);
-  border-radius: var(--r-1);
+  border-radius: var(--r-3);
   box-shadow: var(--shadow-popover);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   min-width: 240px;
 }
 
@@ -573,12 +581,13 @@ button { font: inherit; cursor: pointer; }
 
 .kbd-key {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding: 0 5px;
-  font-family: var(--ff-mono); font-size: 10px; color: var(--fg-body);
-  background: var(--bg-sunken);
-  border: 1px solid var(--rule);
+  min-width: 20px; height: 20px; padding: 0 6px;
+  font-family: var(--ff-mono); font-size: 10px; font-weight: 500; color: var(--fg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule-strong);
   border-bottom-width: 2px;
-  border-radius: var(--r-1);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-1);
 }
 
 /* ============================================================
@@ -624,25 +633,48 @@ button { font: inherit; cursor: pointer; }
 }
 
 /* ============================================================
-   Log / Terminal viewer
+   Log / Terminal viewer (v2: glass surface, oklch level colors)
    ============================================================ */
 .log,
 .log-block {
   background: var(--bg-sunken);
   border: 1px solid var(--rule);
-  border-radius: var(--r-1);
+  border-radius: var(--r-3);
   padding: 14px 16px;
   font-family: var(--ff-mono); font-size: var(--fs-12);
-  line-height: 1.55; color: var(--mono-200);
+  line-height: 1.55; color: var(--fg-body);
   max-height: 320px; overflow: auto;
 }
 .log-block { font-size: var(--fs-14); padding: var(--s-5); max-height: 520px; }
-.log .ts,      .log-block .ts      { color: var(--mono-600); }
-.log .lvl-info { color: var(--plasma-400); }
-.log .lvl-warn { color: var(--status-warn); }
-.log .lvl-err  { color: var(--status-error); }
-.log .lvl-ok   { color: var(--status-success); }
+.log .ts,      .log-block .ts      { color: var(--fg-meta); }
+.log .lvl-info { color: var(--info); }
+.log .lvl-warn { color: var(--warn); }
+.log .lvl-err  { color: var(--err); }
+.log .lvl-ok   { color: var(--ok); }
 .log .agent    { color: var(--accent); }
+
+/* ============================================================
+   KPI — Numeric callouts (v2: serif numerals + mono labels)
+   ============================================================ */
+.kpi {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.kpi .label {
+  font-family: var(--ff-mono); font-size: var(--fs-11); font-weight: 500;
+  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.kpi .value {
+  font-family: var(--ff-serif); font-size: 40px;
+  line-height: 1; letter-spacing: var(--ls-display);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.kpi .delta {
+  font-family: var(--ff-mono); font-size: var(--fs-12);
+  color: var(--ok);
+}
+.kpi .delta.is-down { color: var(--err); }
 
 /* ============================================================
    Toast
@@ -650,23 +682,26 @@ button { font: inherit; cursor: pointer; }
 .toast {
   display: flex; align-items: flex-start; gap: 12px;
   padding: 14px 18px;
-  background: var(--bg-elevated);
+  background: var(--bg-glass-hi);
   border: 1px solid var(--rule-strong);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--r-1);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-3);
   box-shadow: var(--shadow-popover);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   width: 360px;
 }
-.toast--success { border-left-color: var(--status-success); }
-.toast--warn    { border-left-color: var(--status-warn); }
-.toast--error   { border-left-color: var(--status-error); }
-.toast--plasma  { border-left-color: var(--plasma-400); }
+.toast--success { border-left-color: var(--ok); }
+.toast--warn    { border-left-color: var(--warn); }
+.toast--error   { border-left-color: var(--err); }
+.toast--plasma,
+.toast--info    { border-left-color: var(--info); }
 .toast .body .title { font-family: var(--ff-sans); font-size: var(--fs-13); color: var(--fg); }
 .toast .body .desc  { font-family: var(--ff-sans); font-size: var(--fs-12); color: var(--fg-body); margin-top: 4px; }
 .toast .body .meta  { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-tight); text-transform: uppercase; color: var(--fg-meta); margin-top: 6px; }
 
 /* ============================================================
-   Persona / agent card
+   Persona / agent card (v2: gradient avatar, hover-lift)
    ============================================================ */
 .persona {
   display: grid;
@@ -674,25 +709,73 @@ button { font: inherit; cursor: pointer; }
   gap: 14px;
   padding: 14px 18px;
   border-top: 1px solid var(--rule);
+  transition: background 200ms ease, transform 200ms cubic-bezier(.2,.8,.2,1);
 }
+.persona:hover { background: var(--bg-glass); }
 .persona .avatar {
   width: 56px; height: 56px;
-  border: 1px solid var(--rule-strong);
-  background: var(--bg-sunken);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-iris), var(--brand-violet));
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--ff-serif); font-size: 24px; font-weight: 400;
-  color: var(--fg);
+  font-family: var(--ff-serif); font-size: 22px; font-weight: 400;
+  color: white;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3),
+              0 4px 12px -2px color-mix(in oklch, var(--brand-iris) 30%, transparent);
   position: relative;
 }
+.persona .avatar.is-aurora  { background: linear-gradient(135deg, var(--brand-aurora), var(--brand-violet)); }
+.persona .avatar.is-mint    { background: linear-gradient(135deg, var(--brand-mint), var(--brand-iris)); color: oklch(15% 0.03 168); }
+.persona .avatar.is-violet  { background: linear-gradient(135deg, var(--brand-violet), var(--brand-aurora)); }
 .persona .avatar .ring {
-  position: absolute; inset: -2px;
-  border: 1px solid var(--accent);
+  position: absolute; inset: -3px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
   opacity: 0; pointer-events: none;
+  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 .persona.is-active .avatar .ring { opacity: 1; }
-.persona .name      { font-family: var(--ff-serif); font-size: var(--fs-18); line-height: 1.15; }
-.persona .meta-line { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-tight); color: var(--fg-meta); margin-top: 4px; }
+.persona .name      { font-family: var(--ff-serif); font-size: var(--fs-18); line-height: 1.15; color: var(--fg); }
+.persona .meta-line { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-wide); text-transform: uppercase; color: var(--fg-meta); margin-top: 4px; }
 .persona .traits    { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.persona .traits .tag {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: var(--ls-mono); text-transform: uppercase;
+  padding: 2px 8px; border-radius: var(--r-pill);
+  background: var(--bg-glass); border: 1px solid var(--rule);
+  color: var(--fg-body);
+}
+.persona.is-approved {
+  background: linear-gradient(180deg, var(--ok-soft), transparent 30%);
+  border-top-color: color-mix(in oklch, var(--ok) 35%, transparent);
+}
+.persona.is-flagged {
+  background: linear-gradient(180deg, var(--warn-soft), transparent 30%);
+  border-top-color: color-mix(in oklch, var(--warn) 35%, transparent);
+}
+
+/* Stance bar — Polarization indicator (v2 design) */
+.persona .stance-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: var(--ls-mono); text-transform: uppercase;
+  color: var(--fg-meta);
+  margin-top: 8px;
+}
+.persona .stance-track {
+  height: 4px;
+  background: color-mix(in oklch, var(--fg) 10%, transparent);
+  border-radius: var(--r-pill);
+  position: relative;
+  overflow: hidden;
+}
+.persona .stance-fill {
+  position: absolute; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--brand-iris), var(--accent));
+  border-radius: var(--r-pill);
+}
 
 /* ============================================================
    Layout shell — bestehende Klassen aus v1, ergänzt um Workspace-Shell
@@ -709,7 +792,7 @@ button { font: inherit; cursor: pointer; }
   padding: 0 var(--s-6);
 }
 
-/* Top navigation (alt — Home/marketing) */
+/* Top navigation (alt — Home/marketing, v2: glass-toned hairline) */
 .nav {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -717,6 +800,9 @@ button { font: inherit; cursor: pointer; }
   gap: var(--s-7);
   padding: var(--s-5) 0;
   border-bottom: 1px solid var(--rule);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 .nav .brand {
   font-family: var(--ff-serif);
@@ -822,33 +908,35 @@ button { font: inherit; cursor: pointer; }
 .ws-content { padding: 28px 32px; overflow: hidden; min-height: 0; }
 
 /* ============================================================
-   Stepper — 5-Step Pipeline (aus Design-Sprache)
+   Stepper — 5-Step Pipeline (v2: accent-soft active state)
    ============================================================ */
 .stepper, .ws-stepper {
   display: grid; grid-template-columns: repeat(5, 1fr);
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
-  background: var(--mono-950);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
 }
 .stepper .step, .ws-stepper .ws-step {
-  padding: 14px 20px;
+  padding: 16px 20px;
   border-right: 1px solid var(--rule);
   display: flex; flex-direction: column; gap: 6px;
   cursor: pointer; position: relative;
   background: transparent;
-  transition: background 150ms ease;
+  transition: background 200ms ease;
 }
 .stepper .step:last-child, .ws-stepper .ws-step:last-child { border-right: 0; }
 .stepper .step .head, .ws-stepper .ws-step .head {
   display: flex; align-items: center; gap: 10px;
   font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono); text-transform: uppercase;
-  color: var(--fg-meta);
+  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
+  color: var(--fg-muted);
 }
 .stepper .step .head .n, .ws-stepper .ws-step .head .n {
-  font-family: var(--ff-serif); font-weight: 300;
-  font-size: 32px; color: var(--fg);
-  line-height: 1; letter-spacing: -0.04em; margin-right: 4px;
+  font-family: var(--ff-serif); font-weight: 400;
+  font-size: 28px; color: var(--fg);
+  line-height: 1; letter-spacing: var(--ls-display); margin-right: 4px;
 }
 .stepper .step .lbl, .ws-stepper .ws-step .lbl {
   font-family: var(--ff-serif); font-weight: 400;
@@ -858,12 +946,12 @@ button { font: inherit; cursor: pointer; }
   font-family: var(--ff-mono); font-size: var(--fs-11);
   letter-spacing: var(--ls-mono-tight); color: var(--fg-meta);
 }
-.stepper .step.is-done .head, .ws-stepper .ws-step.is-done .head { color: var(--status-success); }
-.stepper .step.is-active, .ws-stepper .ws-step.is-active { background: var(--mono-900); }
+.stepper .step:hover, .ws-stepper .ws-step:hover { background: var(--bg-glass-hi); }
+.stepper .step.is-done .head, .ws-stepper .ws-step.is-done .head { color: var(--ok); }
+.stepper .step.is-active, .ws-stepper .ws-step.is-active { background: var(--accent-soft); }
 .stepper .step.is-active::after, .ws-stepper .ws-step.is-active::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
   height: 2px; background: var(--accent);
-  box-shadow: var(--glow-accent);
 }
 .stepper .step.is-active .head, .ws-stepper .ws-step.is-active .head { color: var(--accent); }
 .stepper .step.is-future .head, .ws-stepper .ws-step.is-future .head,
@@ -873,7 +961,7 @@ button { font: inherit; cursor: pointer; }
 /* Legacy stepper (.idx/.label) — bestehende Views */
 .stepper .step .idx {
   font-family: var(--ff-mono); font-size: var(--fs-11);
-  letter-spacing: var(--ls-mono); text-transform: uppercase;
+  letter-spacing: var(--ls-mono-wide); text-transform: uppercase;
   color: var(--fg-muted);
 }
 .stepper .step .label {
@@ -881,16 +969,14 @@ button { font: inherit; cursor: pointer; }
   font-weight: 400; line-height: 1.2;
   color: var(--fg);
 }
-.stepper .step:hover { background: var(--bg-panel); }
-.stepper .step.active { background: var(--mono-900); position: relative; }
+.stepper .step.active { background: var(--accent-soft); position: relative; }
 .stepper .step.active::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
   height: 2px; background: var(--accent);
-  box-shadow: var(--glow-accent);
 }
 .stepper .step.active .idx { color: var(--accent); }
 .stepper .step.active .label { color: var(--fg); }
-.stepper .step.done .idx::before { content: "✓ "; color: var(--status-success); }
+.stepper .step.done .idx::before { content: "✓ "; color: var(--ok); }
 
 /* ============================================================
    Sections / Marginalia / Bleed (Editorial-Layouts)
