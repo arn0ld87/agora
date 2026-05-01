@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Deploy
+
+- **Slice 2 (Repo-Review-Umsetzung, PR2): Compose Dev/Prod-Trennung.** `docker-compose.yml` baut jetzt explizit `target: dev` (Vite + Flask, Hot-Reload statt vorher `prod`-Stage via Default). Alle Host-Ports auf `127.0.0.1` gelockt (5173, 5001, 7474, 7687). `docker-compose.prod.yml` entfernt Vite- und Neo4j-Host-Ports komplett via `!reset []` (Docker Compose v2.24+), Backend-Port bleibt auf Loopback. README-Schnellstart in Dev-/Prod-Blöcke aufgeteilt mit Endpoint-Tabelle. Neuer optionaler Compose-Snapshot-Test (`backend/tests/test_compose_snapshot.py`, skip-if-no-docker, 8 Cases). Arbeitsprotokoll: `docu/2026-05-01-slice-2-compose-dev-prod-arbeitsprotokoll.md`.
+
 ### Security
 
 - **Slice 1 (Repo-Review-Umsetzung, PR1): Secure Defaults + Config-Validation.** `Config.validate()` lehnt im Nicht-Debug-Betrieb jetzt bekannte Platzhalter-Werte aus `.env.example` hart ab (`SECRET_KEY` ∈ {`change-me`, `change-me-use-token_urlsafe-32`, `agora`, `password`}; `NEO4J_PASSWORD` ∈ {`change-me`, `agora`, `neo4j`, `password`}). Vergleich ist case-insensitive. Im Debug-Betrieb erzeugt das gleiche Setup eine laute `agora.config`-Warning, blockt aber nicht. `.env.example` defaultet `FLASK_DEBUG=false` (secure-by-default) und kommentiert die Placeholder-Reject-Policy. Auth-Token-Pflicht im Nicht-Debug bleibt unverändert (P0.1a). Neue Test-Datei `backend/tests/test_config_security.py` (12 Cases inkl. Parametrize-Coverage je Platzhalter); Bestand `test_config_validate.py` weiter grün. README-Sicherheits-Sektion um `python -c "import secrets; print(secrets.token_urlsafe(32))"` ergänzt. Arbeitsprotokoll: `docu/2026-05-01-slice-1-secure-defaults-arbeitsprotokoll.md`.
