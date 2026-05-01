@@ -21,6 +21,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Docs
 
+- **Slice 6 (Repo-Review-Umsetzung): Review archiviert + Folge-Sub-Slice-Plan.** Externer Repo-Review aus `claude/v0.9.0-frontend-version` (Commit `e375d42`) als Audit-Artefakt unter `docu/2026-05-01-v0.9.0-repository-review.md` archiviert: vorangestellter Statusblock referenziert pro Action-Plan-Punkt (PR 1–5) den umsetzenden Commit (`28a5f2d`, `4bda1d8`, `821b4dd`, `21028d7`, `aace638`) plus Followups (`95cfee6`, `9d566b1`); Test-Cross-Check-Tabelle (12 Forderungen vs. Bestand in `backend/tests/`) und Doku-Cross-Check-Tabelle (8 Forderungen vs. `docu/`) machen Restpunkte sichtbar. Folge-Plan `docu/2026-05-01-v0.9.0-review-folge-slices-plan.md` definiert sechs Sub-Slices F1–F6 (Deployment-Doku Dev/Prod, Threat-Model, Operations + Backup/Restore, Release-Process, Test-Lücken SSRF/Upload/Cypher-Sanitizer, Branch-Cleanup). Quell-Branch wird in F6 gelöscht; `rolle-du-bist-temporal-otter.md` bewusst nicht ins Repo übernommen. Arbeitsprotokoll: `docu/2026-05-01-slice-6-review-archivierung-arbeitsprotokoll.md`.
+
 - **Slice 0 (Repo-Review-Umsetzung): README/Doku-Sync auf v0.9.0.** README-Status-Block, deutsche und englische Engineering-Stand-Sektionen, Testzahlen-Block (519 → 711, 488 → 671 Backend, 31 → 40 Frontend) und Release-Notes-Verweis auf v0.9.0 / Vorgänger v0.8.0 aktualisiert. Schnellstart-Sektion um expliziten Hardening-Drift-Hinweis ergänzt: `docker-compose.yml` baut aktuell den `prod`-Stage statt `dev`, Neo4j (`7474`/`7687`), Backend (`5001`) und Vite (`5173`) binden noch auf `0.0.0.0` — wird in Slice 2 entschärft. Arbeitsprotokoll: `docu/2026-05-01-slice-0-readme-v090-sync-arbeitsprotokoll.md`.
 
 ## [0.9.0] — 2026-05-01
