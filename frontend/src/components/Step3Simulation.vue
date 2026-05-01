@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useEventStream } from '../composables/useEventStream'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
@@ -68,6 +68,89 @@ function setFeedDensity(value) {
   if (value !== 'comfort' && value !== 'compact') return
   feedDensity.value = value
   try { localStorage.setItem(FEED_DENSITY_KEY, value) } catch { /* ignore */ }
+}
+
+// Issue #131 SUB2/SUB3: Tool-Call/Error-Panel.
+// - default: collapsed
+// - Hotkey Ctrl+L / Cmd+L
+// - Persistenz `agora.ui.toolPanel.open`
+// - Badge mit Counter ungesehener Errors; Counter resettet, wenn Panel sichtbar wird
+const TOOL_PANEL_KEY = 'agora.ui.toolPanel.open'
+const ERROR_PATTERN = /(error|exception|traceback|fatal|warn|warning)/i
+
+function loadToolPanelOpen() {
+  try {
+    return localStorage.getItem(TOOL_PANEL_KEY) === 'true'
+  } catch { /* ignore */ }
+  return false
+}
+
+const toolPanelOpen = ref(loadToolPanelOpen())
+const toolPanelUnreadErrors = ref(0)
+let _lastSeenConsoleLength = 0
+
+function setToolPanelOpen(value) {
+  toolPanelOpen.value = !!value
+  try { localStorage.setItem(TOOL_PANEL_KEY, String(toolPanelOpen.value)) } catch { /* ignore */ }
+  if (toolPanelOpen.value) {
+    toolPanelUnreadErrors.value = 0
+    _lastSeenConsoleLength = consoleLogs.value.length
+  }
+}
+
+function toggleToolPanel() {
+  setToolPanelOpen(!toolPanelOpen.value)
+}
+
+function isErrorLine(line) {
+  if (typeof line !== 'string') return false
+  return ERROR_PATTERN.test(line)
+}
+
+// Filter „Nur Errors" + Copy-as-JSON kommen in SUB3.
+const toolPanelFilter = ref('all') // 'all' | 'errors'
+const filteredConsoleLogs = computed(() => {
+  if (toolPanelFilter.value !== 'errors') return consoleLogs.value
+  return consoleLogs.value.filter(isErrorLine)
+})
+
+async function copyConsoleLineAsJson(line) {
+  const payload = JSON.stringify({ line, ts: Date.now() })
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(payload)
+    } else {
+      // Fallback (Non-Secure-Context); nicht ideal, aber besser als nichts.
+      const ta = document.createElement('textarea')
+      ta.value = payload
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+  } catch { /* ignore */ }
+}
+
+// Watcher: zählt ungesehene Errors nur, wenn das Panel geschlossen ist.
+watch(() => consoleLogs.value.length, (newLen) => {
+  if (toolPanelOpen.value) {
+    _lastSeenConsoleLength = newLen
+    return
+  }
+  for (let i = _lastSeenConsoleLength; i < newLen; i += 1) {
+    if (isErrorLine(consoleLogs.value[i])) {
+      toolPanelUnreadErrors.value += 1
+    }
+  }
+  _lastSeenConsoleLength = newLen
+})
+
+function handleToolPanelHotkey(e) {
+  // Ctrl+L (Windows/Linux) und Cmd+L (Mac); Browser-Default (Adressleiste fokussieren) abfangen.
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'l' || e.key === 'L')) {
+    e.preventDefault()
+    toggleToolPanel()
+  }
 }
 
 // Issue #39 — Console-Logs werden über das useIncrementalLogPolling-Composable
@@ -306,6 +389,7 @@ async function goReport() {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleToolPanelHotkey)
   // If simulation already running on mount, hydrate.
   await pollStatus()
   if (runStatus.value?.runner_status === 'running') {
@@ -316,7 +400,10 @@ onMounted(async () => {
     pollDetail()
   }
 })
-onUnmounted(stopPolling)
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleToolPanelHotkey)
+  stopPolling()
+})
 </script>
 
 <template>
@@ -388,13 +475,27 @@ onUnmounted(stopPolling)
         </div>
       </article>
 
-      <!-- Card 3: Live feed + terminal (two-pane) -->
+      <!-- Card 3: Live feed -->
       <article class="card" v-if="phase >= 1">
         <header class="card-head">
           <Kicker num="03" accent>{{ t('step3.feed.title') }}</Kicker>
           <div class="log-meta">
             <Badge variant="ghost">{{ allActions.length }} actions</Badge>
-            <Badge variant="ghost">{{ consoleLogs.length }} console</Badge>
+            <button
+              type="button"
+              class="tool-panel-toggle"
+              :aria-expanded="toolPanelOpen"
+              :title="toolPanelOpen ? t('step3.toolPanel.hide') : t('step3.toolPanel.show')"
+              @click="toggleToolPanel"
+            >
+              <span class="icon">{{ toolPanelOpen ? '▾' : '▸' }}</span>
+              <span>{{ t('step3.toolPanel.toggle') }}</span>
+              <span
+                v-if="toolPanelUnreadErrors > 0 && !toolPanelOpen"
+                class="tool-panel-badge"
+                :aria-label="t('step3.toolPanel.unread', toolPanelUnreadErrors)"
+              >{{ toolPanelUnreadErrors }}</span>
+            </button>
           </div>
         </header>
         <div class="logs-grid">
@@ -444,23 +545,63 @@ onUnmounted(stopPolling)
               />
             </div>
           </div>
-          <div class="log-pane">
-            <div class="log-pane-head">
-              <span class="meta">Terminal (stdout/stderr)</span>
-              <span class="meta">{{ consoleLogs.length }}</span>
+        </div>
+      </article>
+
+      <!-- Card 4: Tool-Calls + Errors-Panel (collapsible) -->
+      <article
+        v-if="phase >= 1 && toolPanelOpen"
+        class="card tool-panel-card"
+        role="region"
+        :aria-label="t('step3.toolPanel.toggle')"
+      >
+        <header class="card-head">
+          <Kicker num="04">{{ t('step3.toolPanel.toggle') }}</Kicker>
+          <div class="log-meta">
+            <div class="filter-toggle" role="group" :aria-label="t('step3.toolPanel.filter')">
+              <button
+                type="button"
+                class="filter-btn"
+                :class="{ active: toolPanelFilter === 'all' }"
+                :aria-pressed="toolPanelFilter === 'all'"
+                @click="toolPanelFilter = 'all'"
+              >{{ t('step3.toolPanel.filterAll') }}</button>
+              <button
+                type="button"
+                class="filter-btn"
+                :class="{ active: toolPanelFilter === 'errors' }"
+                :aria-pressed="toolPanelFilter === 'errors'"
+                @click="toolPanelFilter = 'errors'"
+              >{{ t('step3.toolPanel.filterErrors') }}</button>
             </div>
-            <div class="log-pane-scroll-wrap">
-              <div ref="consoleScrollEl" class="log-block log-pane-body">
-                <div v-if="!consoleLogs.length" class="meta">Warte auf Ausgabe…</div>
-                <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="console-line">
-                  {{ line }}
-                </div>
+            <Badge variant="ghost">{{ filteredConsoleLogs.length }} / {{ consoleLogs.length }}</Badge>
+          </div>
+        </header>
+        <div class="log-pane">
+          <div class="log-pane-scroll-wrap">
+            <div ref="consoleScrollEl" class="log-block log-pane-body">
+              <div v-if="!filteredConsoleLogs.length" class="meta">
+                {{ toolPanelFilter === 'errors' ? t('step3.toolPanel.noErrors') : t('step3.toolPanel.empty') }}
               </div>
-              <StickyScrollBanner
-                :count="consoleSticky.unreadCount.value"
-                @jump="consoleSticky.scrollToBottom"
-              />
+              <div
+                v-for="(line, i) in filteredConsoleLogs"
+                :key="'c' + i"
+                class="console-line"
+                :class="{ 'is-error': isErrorLine(line) }"
+              >
+                <button
+                  type="button"
+                  class="copy-btn"
+                  :title="t('step3.toolPanel.copyAsJson')"
+                  @click="copyConsoleLineAsJson(line)"
+                >📋</button>
+                <span>{{ line }}</span>
+              </div>
             </div>
+            <StickyScrollBanner
+              :count="consoleSticky.unreadCount.value"
+              @jump="consoleSticky.scrollToBottom"
+            />
           </div>
         </div>
       </article>
@@ -636,6 +777,91 @@ onUnmounted(stopPolling)
   background: var(--accent);
   color: var(--bg);
 }
+
+/* Issue #131 SUB2/SUB3 — Tool-Panel-Toggle, Badge, Filter, Copy-Button */
+.tool-panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  padding: 4px 10px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.tool-panel-toggle:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.tool-panel-toggle .icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.tool-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--status-error, #c53030);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  overflow: hidden;
+}
+.filter-btn {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.filter-btn + .filter-btn {
+  border-left: 1px solid var(--rule);
+}
+.filter-btn:hover { color: var(--fg); }
+.filter-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.console-line {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-start;
+}
+.console-line.is-error {
+  color: var(--status-error, #f56565);
+}
+.copy-btn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  opacity: 0.4;
+  transition: opacity 120ms ease;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.copy-btn:hover { opacity: 1; }
 .console-line {
   font-family: var(--ff-mono);
   font-size: 11px;

@@ -51,23 +51,17 @@ Das zweite Pane („Terminal / Console-Logs / Tool-Calls + Errors") ist standard
 
 ## Status
 
-### SUB1
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB1 — abgeschlossen 2026-05-01
+- [x] Implementiert: `useIncrementalLogPolling` mit optionalem `stickyScroll`-Param, `Step3Simulation` verdrahtet zweite Sticky-Instanz für Console-Pane
+- [x] Tests grün (4 neue Vitest-Cases, `npm run check`: 744 Backend + 69 Frontend)
+- [x] Commit erstellt
+- [ ] Browser-Smoke (durch User)
 
-### SUB2
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
-
-### SUB3
-- [ ] Implementiert
-- [ ] Tests grün
-- [ ] Commit erstellt
-- [ ] Browser-Smoke
+### SUB2 + SUB3 — abgeschlossen 2026-05-01 (zusammengeführt)
+- [x] Implementiert: collapsible Tool-Panel als eigene Card (`role="region"`, `aria-label`), Toggle-Button mit `aria-expanded` + Badge, Hotkey Ctrl+L/Cmd+L (mit `preventDefault()`), `localStorage`-Persistenz (`agora.ui.toolPanel.open`, default `false`), Watcher zählt ungesehene Errors via `/(error|exception|traceback|fatal|warn|warning)/i`-Heuristik. Filter-Toggle Alle/Nur Fehler, Copy-as-JSON pro Zeile via `navigator.clipboard.writeText` (Fallback `document.execCommand`). i18n DE/EN für `step3.toolPanel.*`.
+- [x] Tests grün (`npm run check`: 744 Backend + 69 Frontend)
+- [x] Commit erstellt (`Closes #131`)
+- [ ] Browser-Smoke (durch User)
 
 ## CHANGELOG-Eintrag (Vorschau)
 ```

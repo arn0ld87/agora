@@ -298,6 +298,18 @@
         "compact": "Kompakt"
       }
     },
+    "toolPanel": {
+      "toggle": "Tool-Calls & Fehler",
+      "show": "Anzeigen (Strg+L)",
+      "hide": "Ausblenden (Strg+L)",
+      "unread": "kein neuer Fehler | ein neuer Fehler | {count} neue Fehler",
+      "filter": "Filter",
+      "filterAll": "Alle",
+      "filterErrors": "Nur Fehler",
+      "copyAsJson": "Als JSON kopieren",
+      "empty": "Warte auf Ausgabe…",
+      "noErrors": "Keine Fehler im Log."
+    },
     "next": "Weiter zum Report →"
   },
   "step4": {
