@@ -15,6 +15,7 @@ from ..services.entity_reader import EntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.validation import validate_simulation_id
@@ -140,7 +141,10 @@ def generate_profiles():
     data = request.get_json() or {}
     graph_id = data.get('graph_id')
     if not graph_id:
-        return json_error("Please provide graph_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide graph_id",
+        )
 
     entity_types = data.get('entity_types')
     use_llm = data.get('use_llm', True)
@@ -156,7 +160,11 @@ def generate_profiles():
         enrich_with_edges=True,
     )
     if filtered.filtered_count == 0:
-        return json_error("No matching entities found")
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message="No matching entities found",
+        )
 
     generator = OasisProfileGenerator()
     profiles = generator.generate_profiles_from_entities(entities=filtered.entities, use_llm=use_llm)
@@ -180,7 +188,10 @@ def generate_profiles():
 def get_simulation_posts(simulation_id: str):
     """Get posts from a simulation SQLite database."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     platform = request.args.get('platform', 'reddit')
     limit = request.args.get('limit', 50, type=int)
@@ -192,7 +203,7 @@ def get_simulation_posts(simulation_id: str):
             "platform": platform,
             "count": 0,
             "posts": [],
-            "message": "Database does not exist，SimulationMay not have run yet",
+            "message": "Database does not exist, simulation may not have run yet",
         })
 
     conn = _connect_sqlite_readonly(db_path)
@@ -225,7 +236,10 @@ def get_simulation_posts(simulation_id: str):
 def get_simulation_comments(simulation_id: str):
     """Get comments from the Reddit simulation database."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     post_id = request.args.get('post_id')
     limit = request.args.get('limit', 50, type=int)

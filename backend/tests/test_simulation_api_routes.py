@@ -83,7 +83,8 @@ def test_prepare_status_requires_identifier():
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["success"] is False
-    assert payload["error"] == "Please provide task_id Or simulation_id"
+    assert payload["error"] == "Please provide task_id or simulation_id"
+    assert payload["code"] == "validation_failed"
 
 
 def test_create_branch_requires_branch_name():
@@ -134,7 +135,8 @@ def test_start_simulation_validates_simulation_days():
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["success"] is False
-    assert payload["error"] == "simulation_days Must be between 1 and 365"
+    assert payload["error"] == "simulation_days must be between 1 and 365"
+    assert payload["code"] == "validation_failed"
 
 
 def test_persona_library_round_trip(monkeypatch, tmp_path):
@@ -367,7 +369,8 @@ def test_interview_requires_prompt():
     assert response.status_code == 400
     payload = response.get_json()
     assert payload["success"] is False
-    assert payload["error"] == "Please provide prompt（Interview question）"
+    assert payload["error"] == "Please provide prompt (interview question)"
+    assert payload["code"] == "validation_failed"
 
 
 def test_posts_route_keeps_validation_guard():

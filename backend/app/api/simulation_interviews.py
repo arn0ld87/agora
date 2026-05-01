@@ -6,6 +6,7 @@ from flask import jsonify, request
 
 from . import simulation_bp
 from ..services.simulation_runner import SimulationRunner
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger, optimize_interview_prompt
@@ -14,23 +15,36 @@ from .simulation_common import logger, optimize_interview_prompt
 def _require_simulation_id(simulation_id):
     """Shared guard: simulation_id present + well-formed."""
     if not simulation_id:
-        return json_error("Please provide simulation_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_id",
+        )
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
     return None
 
 
 def _validate_platform(platform):
     if platform and platform not in ("twitter", "reddit"):
-        return json_error("platform Parameter can only be 'twitter' Or 'reddit'")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="platform parameter must be 'twitter' or 'reddit'",
+        )
     return None
 
 
 def _require_env_alive(simulation_id: str):
     if not SimulationRunner.check_env_alive(simulation_id):
         return json_error(
-            "Simulation environment not running or closed. "
-            "Please ensure simulation is started and wait for it to progress."
+            ApiErrorCode.SERVICE_UNAVAILABLE,
+            status=503,
+            message=(
+                "Simulation environment not running or closed. "
+                "Please ensure simulation is started and wait for it to progress."
+            ),
         )
     return None
 
@@ -62,9 +76,15 @@ def interview_agent():
     timeout = data.get('timeout', 60)
 
     if agent_id is None:
-        return json_error("Please provide agent_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide agent_id",
+        )
     if not prompt:
-        return json_error("Please provide prompt（Interview question）")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide prompt (interview question)",
+        )
 
     platform_error = _validate_platform(platform)
     if platform_error:
@@ -101,7 +121,10 @@ def interview_agents_batch():
     timeout = data.get('timeout', 120)
 
     if not interviews or not isinstance(interviews, list):
-        return json_error("Please provide interviews（Interview list）")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide interviews (interview list)",
+        )
 
     platform_error = _validate_platform(platform)
     if platform_error:
@@ -109,13 +132,20 @@ def interview_agents_batch():
 
     for index, interview in enumerate(interviews, 1):
         if 'agent_id' not in interview:
-            return json_error(f"Interview list item{index}Missing agent_id")
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Interview list item {index} missing agent_id",
+            )
         if 'prompt' not in interview:
-            return json_error(f"Interview list item{index}Missing prompt")
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Interview list item {index} missing prompt",
+            )
         item_platform = interview.get('platform')
         if item_platform and item_platform not in ("twitter", "reddit"):
             return json_error(
-                f"Interview list item {index}: platform must be 'twitter' or 'reddit'"
+                ApiErrorCode.VALIDATION_FAILED,
+                message=f"Interview list item {index}: platform must be 'twitter' or 'reddit'",
             )
 
     env_error = _require_env_alive(simulation_id)
@@ -153,7 +183,10 @@ def interview_all_agents():
     timeout = data.get('timeout', 180)
 
     if not prompt:
-        return json_error("Please provide prompt（Interview question）")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide prompt (interview question)",
+        )
 
     platform_error = _validate_platform(platform)
     if platform_error:

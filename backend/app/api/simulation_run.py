@@ -12,6 +12,7 @@ from ..models.project import ProjectManager
 from ..services.persona_review_service import PersonaReviewService
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.validation import validate_simulation_id
@@ -40,9 +41,9 @@ def _evaluate_persona_review_gate(simulation_id: str):
     if review["allowed"]:
         return None
     return json_error(
-        "Persona review pending. Approve all personas before starting the simulation.",
+        ApiErrorCode.PERSONA_REVIEW_REQUIRED,
         status=409,
-        code="persona_review_required",
+        message="Persona review pending. Approve all personas before starting the simulation.",
         extra={"review": review},
     )
 
@@ -59,9 +60,15 @@ def start_simulation():
 
     simulation_id = data.get('simulation_id')
     if not simulation_id:
-        return json_error("Please provide simulation_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_id",
+        )
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     platform = data.get('platform', 'parallel')
     max_rounds = data.get('max_rounds')
@@ -73,25 +80,44 @@ def start_simulation():
         try:
             max_rounds = int(max_rounds)
             if max_rounds <= 0:
-                return json_error("max_rounds Must be positive integer")
+                return json_error(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    message="max_rounds must be a positive integer",
+                )
         except (ValueError, TypeError):
-            return json_error("max_rounds Must be valid integer")
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message="max_rounds must be a valid integer",
+            )
 
     if simulation_days is not None:
         try:
             simulation_days = int(simulation_days)
             if simulation_days <= 0 or simulation_days > 365:
-                return json_error("simulation_days Must be between 1 and 365")
+                return json_error(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    message="simulation_days must be between 1 and 365",
+                )
         except (ValueError, TypeError):
-            return json_error("simulation_days Must be valid integer")
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                message="simulation_days must be a valid integer",
+            )
 
     if platform not in ['twitter', 'reddit', 'parallel']:
-        return json_error(f"Invalid platform type: {platform}，Optional: twitter/reddit/parallel")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message=f"Invalid platform type: {platform}. Allowed: twitter/reddit/parallel",
+        )
 
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     gate_response = _evaluate_persona_review_gate(simulation_id)
     if gate_response is not None:
@@ -102,8 +128,12 @@ def start_simulation():
         is_prepared, _prepare_info = _check_simulation_prepared(simulation_id)
         if not is_prepared:
             return json_error(
-                f"Simulation not ready. Current status: {state.status.value}. "
-                "Please call /prepare first"
+                ApiErrorCode.SIMULATION_NOT_PREPARED,
+                status=409,
+                message=(
+                    f"Simulation not ready. Current status: {state.status.value}. "
+                    "Please call /prepare first"
+                ),
             )
 
         if state.status == SimulationStatus.RUNNING:
@@ -111,9 +141,13 @@ def start_simulation():
             if run_state and run_state.runner_status.value == 'running':
                 if not force:
                     return json_error(
-                        "Simulation is running. Please call /stop first or use force=true to force restart."
+                        ApiErrorCode.SIMULATION_ALREADY_RUNNING,
+                        status=409,
+                        message=(
+                            "Simulation is running. Please call /stop first or use force=true to force restart."
+                        ),
                     )
-                logger.info(f"Force mode：Stop runningSimulation {simulation_id}")
+                logger.info(f"Force mode: stopping running simulation {simulation_id}")
                 try:
                     SimulationRunner.stop_simulation(simulation_id)
                 except Exception as exc:
@@ -142,8 +176,11 @@ def start_simulation():
                 graph_id = project.graph_id
         if not graph_id:
             return json_error(
-                "Enable knowledge graph memory update requires valid graph_id，"
-                "Please ensure project graph built"
+                ApiErrorCode.VALIDATION_FAILED,
+                message=(
+                    "Enable knowledge graph memory update requires valid graph_id. "
+                    "Please ensure project graph is built."
+                ),
             )
         logger.info(
             f"Enable knowledge graph memory update: simulation_id={simulation_id}, graph_id={graph_id}",
@@ -154,7 +191,11 @@ def start_simulation():
         store = get_artifact_store()
         config = store.read_json(simulation_id, "simulation_config", default=None)
         if not config:
-            return json_error("Simulation configuration does not exist. Please call /prepare first", status=404)
+            return json_error(
+                ApiErrorCode.SIMULATION_NOT_PREPARED,
+                status=404,
+                message="Simulation configuration does not exist. Please call /prepare first",
+            )
         time_config = dict(config.get("time_config") or {})
         time_config["total_simulation_hours"] = simulation_days * 24
         config["time_config"] = time_config
@@ -212,9 +253,15 @@ def stop_simulation():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
     if not simulation_id:
-        return json_error("Please provide simulation_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_id",
+        )
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     run_state = SimulationRunner.stop_simulation(simulation_id)
     manager = SimulationManager()
@@ -240,13 +287,20 @@ def stop_simulation():
 def pause_simulation(simulation_id: str):
     """Set the soft-pause flag so the simulation halts after the current round."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     from ..services.simulation_ipc import set_pause_state
 
     sim_dir = _simulation_dir(simulation_id)
     if not os.path.isdir(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     state = set_pause_state(sim_dir, True)
     logger.info(f"Pause requested for {simulation_id}")
@@ -268,13 +322,20 @@ def pause_simulation(simulation_id: str):
 def resume_simulation(simulation_id: str):
     """Clear the pause flag so the simulation continues."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     from ..services.simulation_ipc import set_pause_state
 
     sim_dir = _simulation_dir(simulation_id)
     if not os.path.isdir(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     state = set_pause_state(sim_dir, False)
     logger.info(f"Resume requested for {simulation_id}")
@@ -296,7 +357,10 @@ def resume_simulation(simulation_id: str):
 def get_simulation_console_log(simulation_id: str):
     """Read incremental subprocess console logs for a simulation."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
     from_line = request.args.get('from_line', 0, type=int)
     data = SimulationRunner.get_console_log(simulation_id, from_line=from_line)
     return json_success(data)
@@ -307,7 +371,10 @@ def get_simulation_console_log(simulation_id: str):
 def get_run_status(simulation_id: str):
     """Get lightweight real-time run status for frontend polling."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     from ..services.simulation_ipc import read_control_state
 
@@ -336,7 +403,10 @@ def get_run_status(simulation_id: str):
 def get_run_status_detail(simulation_id: str):
     """Get detailed run status including aggregated actions."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     run_state = SimulationRunner.get_run_state(simulation_id)
     platform_filter = request.args.get('platform')
@@ -377,7 +447,10 @@ def get_run_status_detail(simulation_id: str):
 def get_simulation_actions(simulation_id: str):
     """Get paginated action history for a simulation."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     limit = request.args.get('limit', 100, type=int)
     offset = request.args.get('offset', 0, type=int)
@@ -403,7 +476,10 @@ def get_simulation_actions(simulation_id: str):
 def get_simulation_timeline(simulation_id: str):
     """Get round-level timeline summaries for a simulation."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     start_round = request.args.get('start_round', 0, type=int)
     end_round = request.args.get('end_round', type=int)
@@ -420,7 +496,10 @@ def get_simulation_timeline(simulation_id: str):
 def get_agent_stats(simulation_id: str):
     """Get aggregated per-agent statistics."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     stats = SimulationRunner.get_agent_stats(simulation_id)
     return json_success({"agents_count": len(stats), "stats": stats})
@@ -433,9 +512,15 @@ def get_env_status():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
     if not simulation_id:
-        return json_error("Please provide simulation_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_id",
+        )
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     env_alive = SimulationRunner.check_env_alive(simulation_id)
     env_status = SimulationRunner.get_env_status_detail(simulation_id)
@@ -460,10 +545,16 @@ def close_simulation_env():
     data = request.get_json() or {}
     simulation_id = data.get('simulation_id')
     if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
     timeout = data.get('timeout', 30)
     if not simulation_id:
-        return json_error("Please provide simulation_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide simulation_id",
+        )
 
     result = SimulationRunner.close_simulation_env(simulation_id=simulation_id, timeout=timeout)
     manager = SimulationManager()

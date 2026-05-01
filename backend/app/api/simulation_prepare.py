@@ -13,6 +13,7 @@ from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.validation import validate_simulation_id, validate_task_id
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import (
     get_artifact_store,
@@ -136,15 +137,27 @@ def prepare_simulation():
 
     simulation_id = data.get('simulation_id')
     if not simulation_id:
-        return json_error("Please provide simulation_id", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Please provide simulation_id",
+        )
 
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     force_regenerate = data.get('force_regenerate', False)
     logger.info(
@@ -161,7 +174,7 @@ def prepare_simulation():
             return json_success({
                 "simulation_id": simulation_id,
                 "status": "ready",
-                "message": "Preparation already completed，No need to repeatGenerate",
+                "message": "Preparation already completed, no need to regenerate",
                 "already_prepared": True,
                 "prepare_info": prepare_info,
             })
@@ -169,11 +182,19 @@ def prepare_simulation():
 
     project = ProjectManager.get_project(state.project_id)
     if not project:
-        return json_error(f"Project does not exist: {state.project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {state.project_id}",
+        )
 
     simulation_requirement = project.simulation_requirement or ""
     if not simulation_requirement:
-        return json_error("Project missing simulation requirement description (simulation_requirement)", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Project missing simulation requirement description (simulation_requirement)",
+        )
 
     document_text = ProjectManager.get_extracted_text(state.project_id) or ""
     entity_types_list = data.get('entity_types')
@@ -348,7 +369,7 @@ def prepare_simulation():
         "task_id": task_id,
         "run_id": run_record["run_id"],
         "status": "preparing",
-        "message": "Preparation task started，Please via /api/simulation/prepare/status Query progress",
+        "message": "Preparation task started; query progress via /api/simulation/prepare/status",
         "already_prepared": False,
         "expected_entities_count": state.entities_count,
         "entity_types": state.entity_types,
@@ -366,9 +387,17 @@ def get_prepare_status():
     simulation_id = data.get('simulation_id')
 
     if task_id and not validate_task_id(task_id):
-        return json_error("Invalid task_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid task_id format",
+        )
     if simulation_id and not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     if simulation_id:
         is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
@@ -391,7 +420,11 @@ def get_prepare_status():
                 "message": "Preparation not started yet, please call /api/simulation/prepare",
                 "already_prepared": False,
             })
-        return json_error("Please provide task_id Or simulation_id", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Please provide task_id or simulation_id",
+        )
 
     task_manager = TaskManager()
     task = task_manager.get_task(task_id)
@@ -409,7 +442,11 @@ def get_prepare_status():
                     "prepare_info": prepare_info,
                 })
 
-        return json_error(f"Task does not exist: {task_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Task does not exist: {task_id}",
+        )
 
     task_dict = task.to_dict()
     task_dict["already_prepared"] = False

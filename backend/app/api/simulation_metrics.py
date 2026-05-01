@@ -19,6 +19,7 @@ from . import simulation_bp
 from ..container import get_container
 from ..services.network_analytics import PolarizationMetrics
 from ..services.simulation_runner import SimulationRunner
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_simulation_id
 
@@ -62,16 +63,28 @@ def get_simulation_metrics(simulation_id: str):
     * ``platform`` (optional: twitter | reddit) — filter the action stream.
     """
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     try:
         window = _parse_window(request.args.get('window_size_rounds'))
     except (TypeError, ValueError):
-        return json_error("window_size_rounds must be an integer", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="window_size_rounds must be an integer",
+        )
 
     platform = request.args.get('platform')
     if platform and platform not in ('twitter', 'reddit'):
-        return json_error("platform must be 'twitter' or 'reddit'", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="platform must be 'twitter' or 'reddit'",
+        )
 
     metrics = _compute(simulation_id, window=window, platform=platform)
     return json_success(metrics.to_dict())
@@ -89,24 +102,44 @@ def export_simulation_metrics(simulation_id: str):
     * ``window_size_rounds``, ``platform`` — same semantics as the JSON endpoint.
     """
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     fmt = (request.args.get('format') or 'csv').strip().lower()
     if fmt != 'csv':
-        return json_error("format must be 'csv'", status=400)
+        return json_error(
+            ApiErrorCode.UNSUPPORTED_FORMAT,
+            status=400,
+            message="format must be 'csv'",
+        )
 
     view = (request.args.get('view') or 'summary').strip().lower()
     if view not in ('summary', 'clusters', 'bridges'):
-        return json_error("view must be 'summary', 'clusters' or 'bridges'", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="view must be 'summary', 'clusters' or 'bridges'",
+        )
 
     try:
         window = _parse_window(request.args.get('window_size_rounds'))
     except (TypeError, ValueError):
-        return json_error("window_size_rounds must be an integer", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="window_size_rounds must be an integer",
+        )
 
     platform = request.args.get('platform')
     if platform and platform not in ('twitter', 'reddit'):
-        return json_error("platform must be 'twitter' or 'reddit'", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="platform must be 'twitter' or 'reddit'",
+        )
 
     metrics = _compute(simulation_id, window=window, platform=platform)
     payload = metrics.to_dict()
