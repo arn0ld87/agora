@@ -5,8 +5,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **`frontend/src/components/graph/GraphHints.vue`** — neue rein präsentationale Komponente für Building-/Simulating-Hint und Simulation-Finished-Hint. Erste Etappe von Issue #34 (EPIC-04-ST-01: GraphPanel zerlegen). Props: `currentPhase`, `isSimulating`, `showFinishedHint`. Emits: `dismiss-finished`. Styles 1:1 aus `GraphPanel.vue` übernommen, kein Visual-Diff. Sub-Slice 2.1 von 3.
+
 ### Geändert
 
+- **`frontend/src/components/GraphPanel.vue`** schlanker (933 → 831 Zeilen): Hint-Markup und zugehörige Styles in `GraphHints.vue` ausgelagert; State `showSimulationFinishedHint`/`wasSimulating` plus der `watch` auf `props.isSimulating` bleiben hier (Lifecycle-State gehört nicht in präsentationale Komponente). `dismissFinishedHint` ist jetzt Handler für das `@dismiss-finished`-Event.
 - **EPIC-02 (Backend-API-Splitting) als bereits erledigt geschlossen.** Die Inventur zum v0.8.0-Slice-Start zeigt, dass der Split aus `backend/app/api/simulation.py` in zehn fokussierte Module bereits in v0.4.0 vollständig umgesetzt wurde. `simulation.py` ist seither ein 17-zeiliger Compatibility-Shim ohne Routen. 48 Routen liegen unter `simulation_bp` thematisch verteilt (Lifecycle 4, Prepare 2, Run 12, Profiles 16, Interviews 4, History 4, Entities 3, Stream 1, Metrics 2), gemeinsame Helfer in `simulation_common.py`. Issue #29 wird retrospektiv durch `docu/2026-05-01-epic02-api-split-status.md` erfüllt; #30, #31, #32, #33 schließen mit Verweis auf v0.4.0-CHANGELOG-Eintrag und dieses Status-Dokument. Konsequenz: v0.8.0-Backlog reduziert sich von 13 auf 8 echte Issues (EPIC-04 ×3, EPIC-05 ×4, EPIC-10 ×1).
 
 ## [0.7.0] — 2026-05-01
