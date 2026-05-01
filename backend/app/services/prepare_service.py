@@ -317,12 +317,10 @@ def prepare_simulation(
         )
 
         if filtered.filtered_count == 0:
-            state.error = (
+            raise ValueError(
                 "No entities matching criteria found, "
                 "check if graph is correctly constructed"
             )
-            manager._set_status(state, SimulationStatus.FAILED)
-            return state
 
         # Phase 2: Generate Agent Profiles
         _phase_generate_profiles(
