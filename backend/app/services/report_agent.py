@@ -38,6 +38,11 @@ from .tool_schema import (
     TOOL_DESC_QUICK_SEARCH,
     TOOL_DESC_INTERVIEW_AGENTS,
 )
+from .tool_validation import (
+    VALID_TOOL_NAMES,  # noqa: F401  # re-exported for backwards-compat
+    is_valid_tool_call,
+    parse_tool_calls,
+)
 from .graph_tools import (
     GraphToolsService,
     SearchResult,
@@ -1062,69 +1067,15 @@ class ReportAgent:
             logger.error(f"Tool execution failed: {tool_name}, error: {str(e)}")
             return f"Tool execution failed: {str(e)}"
     
-    # Valid tool names set, used for validation when parsing raw JSON fallback
-    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
-
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
-        """
-        Parse tool calls from LLM response
-
-        Supported formats (in priority order):
-        1. <tool_call>{"name": "tool_name", "parameters": {...}}</tool_call>
-        2. Raw JSON (the entire response or a single line is a tool call JSON)
-        """
-        tool_calls = []
-
-        # Format 1: XML-style (standard format)
-        xml_pattern = r'<tool_call>\s*(\{.*?\})\s*</tool_call>'
-        for match in re.finditer(xml_pattern, response, re.DOTALL):
-            try:
-                call_data = json.loads(match.group(1))
-                tool_calls.append(call_data)
-            except json.JSONDecodeError:
-                pass
-
-        if tool_calls:
-            return tool_calls
-
-        # Format 2: Fallback - LLM directly outputs raw JSON (not wrapped in <tool_call> tags)
-        # Only try if format 1 didn't match to avoid mismatching JSON in body text
-        stripped = response.strip()
-        if stripped.startswith('{') and stripped.endswith('}'):
-            try:
-                call_data = json.loads(stripped)
-                if self._is_valid_tool_call(call_data):
-                    tool_calls.append(call_data)
-                    return tool_calls
-            except json.JSONDecodeError:
-                pass
-
-        # Response may contain thinking text + raw JSON, try to extract the last JSON object
-        json_pattern = r'(\{"(?:name|tool)"\s*:.*?\})\s*$'
-        match = re.search(json_pattern, stripped, re.DOTALL)
-        if match:
-            try:
-                call_data = json.loads(match.group(1))
-                if self._is_valid_tool_call(call_data):
-                    tool_calls.append(call_data)
-            except json.JSONDecodeError:
-                pass
-
-        return tool_calls
+        """Parse tool calls from an LLM response (delegates to tool_validation)."""
+        return parse_tool_calls(response)
 
     def _is_valid_tool_call(self, data: dict) -> bool:
-        """Validate if the parsed JSON is a valid tool call"""
-        # Support both {"name": ..., "parameters": ...} and {"tool": ..., "params": ...} key names
-        tool_name = data.get("name") or data.get("tool")
-        if tool_name and tool_name in self.VALID_TOOL_NAMES:
-            # Normalize key names to name / parameters
-            if "tool" in data:
-                data["name"] = data.pop("tool")
-            if "params" in data and "parameters" not in data:
-                data["parameters"] = data.pop("params")
-            return True
-        return False
-    
+        """Validate the parsed JSON as a tool call (delegates to tool_validation)."""
+        return is_valid_tool_call(data)
+
+
     def _get_tools_description(self) -> str:
         """Generate tool description text"""
         desc_parts = ["Available Tools:"]
