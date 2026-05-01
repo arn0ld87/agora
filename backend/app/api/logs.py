@@ -83,6 +83,20 @@ def _parse_tail_arg() -> int:
     return min(n, _MAX_TAIL)
 
 
+def _parse_offset_arg() -> int | None:
+    """Liest ``?offset=…`` aus der Query und gibt einen non-negativen
+    Integer zurück oder ``None``, wenn der Param fehlt bzw. invalide ist.
+    """
+    raw = request.args.get('offset')
+    if raw is None:
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 0 else None
+
+
 def _filter_lines(lines: list[str], level: str | None) -> list[str]:
     if not level:
         return lines
@@ -99,6 +113,15 @@ def _read_tail(path: Path, n: int) -> tuple[list[str], int]:
     teuer, aber unser Rotation-Limit liegt deutlich darunter (10 MB / 5
     Backups, siehe `RotatingFileHandler`-Config). Für die Akzeptanz reicht
     das, ohne `seek`-Akrobatik.
+
+    Newlines werden gestrippt: der Stream-Endpunkt nutzt
+    ``str.splitlines()`` und liefert daher Lines ohne Trailing-``\\n``;
+    konsistente Form verhindert doppelte Leerzeilen im Frontend
+    (``white-space: pre-wrap`` plus ``<div>``-pro-Zeile).
+
+    Der Datei-Offset wird via ``path.stat().st_size`` ermittelt, weil
+    ``fh.tell()`` nach einer Iteration über das Text-File-Objekt durch
+    Pythons internes Buffering nicht zuverlässig ist.
     """
     try:
         with path.open('r', encoding='utf-8', errors='replace') as fh:
@@ -145,16 +168,27 @@ def stream_logs():
     """
     path = _resolve_log_path()
     level = request.args.get('level')
+    requested_offset = _parse_offset_arg()
+    # Level-Pattern einmal pro Stream-Lebenszeit auflösen — die Iteration
+    # über jede neue Zeile darf nicht jedes Mal das Dictionary neu treffen.
+    level_pat = _LEVEL_PATTERNS.get(level.lower()) if level else None
 
     @stream_with_context
     def gen():
-        # Wir starten am Datei-Ende — alte Lines holt der Tail-Endpunkt.
+        # Default: am Datei-Ende ansetzen, alte Lines holt der Tail-Endpunkt.
+        # Wenn der Client einen ``?offset=…`` aus dem Tail-Response durchreicht,
+        # starten wir genau dort — sonst gehen Logs verloren, die zwischen
+        # Tail-Antwort und Stream-Verbindung geschrieben wurden.
         offset = 0
         if path is not None:
             try:
-                offset = path.stat().st_size
+                file_size = path.stat().st_size
             except OSError:
-                offset = 0
+                file_size = 0
+            if requested_offset is not None and requested_offset <= file_size:
+                offset = requested_offset
+            else:
+                offset = file_size
         last_heartbeat = time.monotonic()
         while True:
             now = time.monotonic()
@@ -183,10 +217,8 @@ def stream_logs():
                 except OSError:
                     chunk = ''
                 for line in chunk.splitlines():
-                    if level:
-                        pat = _LEVEL_PATTERNS.get(level.lower())
-                        if pat and not pat.search(line):
-                            continue
+                    if level_pat is not None and not level_pat.search(line):
+                        continue
                     payload = json.dumps({
                         'line': line,
                         'ts': datetime.now(timezone.utc).isoformat(),

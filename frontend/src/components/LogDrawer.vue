@@ -57,6 +57,10 @@ const search = ref('')
 const paused = ref(false)
 const scrollEl = ref(null)
 const sticky = useStickyScroll(scrollEl)
+// Letzter Datei-Offset aus dem Tail-Response — geben wir dem Stream als
+// Wiederaufsetzpunkt mit, damit zwischen Tail und Connect geschriebene
+// Lines nicht verloren gehen (PR #146-Review).
+let lastOffset = null
 
 const RING_BUFFER_MAX = 5000
 const ERROR_PATTERN = /(error|exception|traceback|fatal)/i
@@ -76,8 +80,11 @@ async function reload() {
   try {
     const res = await fetchLogs({ tail: 500, level: level.value || null })
     if (res?.data?.success) {
-      const incoming = res.data.data?.lines || []
+      const data = res.data.data || {}
+      const incoming = data.lines || []
       lines.value = incoming
+      const off = data.offset
+      lastOffset = Number.isInteger(off) && off >= 0 ? off : null
       nextTick(() => sticky.scrollToBottom())
     }
   } catch { /* swallow */ }
@@ -95,7 +102,7 @@ function appendLine(line) {
 function startStream() {
   stopStream()
   const token = getAgoraToken?.() || ''
-  const url = logsStreamUrl(token, level.value || null)
+  const url = logsStreamUrl(token, level.value || null, lastOffset)
   try {
     _eventSource = new EventSource(url)
     _eventSource.onmessage = (e) => {

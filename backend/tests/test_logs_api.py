@@ -151,4 +151,58 @@ def test_get_logs_no_file_param_supported(client, tmp_path, monkeypatch):
     res = client.get('/api/logs?file=../../etc/passwd')
     assert res.status_code == 200
     lines = res.get_json()['data']['lines']
-    assert lines == ['safe-line\n']
+    # Newlines werden serverseitig gestrippt (Konsistenz mit dem
+    # Stream-Endpunkt, der splitlines() nutzt).
+    assert lines == ['safe-line']
+
+
+def test_get_logs_strips_trailing_newlines(client, tmp_path, monkeypatch):
+    """PR #146-Review: Tail-Lines kommen ohne Trailing-Newline zurück,
+    damit das Frontend (``white-space: pre-wrap`` + ``<div>``-pro-Zeile)
+    keine doppelten Leerzeilen rendert. Stream-Endpunkt liefert das
+    bereits via ``splitlines()``.
+    """
+    monkeypatch.delenv('AGORA_AUTH_TOKEN', raising=False)
+    _write_today_log(tmp_path, 'one\r\ntwo\nthree\n')
+
+    res = client.get('/api/logs')
+    lines = res.get_json()['data']['lines']
+    assert lines == ['one', 'two', 'three']
+    # Niemand soll noch \r oder \n am Ende haben.
+    assert all(not ln.endswith(('\n', '\r')) for ln in lines)
+
+
+def test_get_logs_offset_matches_file_size(client, tmp_path, monkeypatch):
+    """PR #146-Review: Der Offset im Tail-Response soll der echten
+    Dateigröße entsprechen — Stream nutzt den Wert als Wiederaufsetzpunkt.
+    ``fh.tell()`` nach Iteration über das Text-File-Objekt ist durch
+    Pythons internes Buffering nicht zuverlässig.
+    """
+    monkeypatch.delenv('AGORA_AUTH_TOKEN', raising=False)
+    payload = '\n'.join(f'l{i}' for i in range(20)) + '\n'
+    p = _write_today_log(tmp_path, payload)
+
+    res = client.get('/api/logs?tail=5')
+    body = res.get_json()['data']
+    assert body['offset'] == p.stat().st_size
+
+
+def test_parse_offset_arg_rejects_negative_and_garbage():
+    """PR #146-Review: Stream-``?offset=`` muss Garbage absorbieren und
+    auf ``None`` fallen, damit die Default-Wahl (Datei-Ende) greift.
+    """
+    from app.api.logs import _parse_offset_arg
+
+    app_ = Flask(__name__)
+    cases = [
+        ('5', 5),
+        ('0', 0),
+        ('-1', None),
+        ('abc', None),
+        ('', None),
+    ]
+    for raw, expected in cases:
+        with app_.test_request_context(f'/?offset={raw}'):
+            assert _parse_offset_arg() == expected, raw
+    with app_.test_request_context('/'):
+        assert _parse_offset_arg() is None
