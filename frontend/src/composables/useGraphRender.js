@@ -22,6 +22,7 @@ import { onMounted, onUnmounted, ref, toValue, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
 
 import { buildGraphRenderData } from '../components/graph/graphPanelData'
+import { formatEdgeLabel } from '../components/graph/edgeLabelI18n'
 import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeometry'
 
 /**
@@ -31,9 +32,10 @@ import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeom
  * @param {import('vue').MaybeRefOrGetter<object|null>} args.graphData – Reactive Source mit `nodes`/`edges`
  * @param {import('vue').MaybeRefOrGetter<Array>}       args.entityTypes – Reactive Source mit Entity-Type-Liste (für Farb-Mapping)
  * @param {import('vue').Ref<boolean>}            args.showEdgeLabels  – Sichtbarkeit der Kantenbeschriftungen
+ * @param {((key: string) => string)=}            args.translateLabel  – optionaler i18n-Hook (`vue-i18n` `t`); wird auf `edge.name` angewandt
  * @returns {{ selectedItem: import('vue').Ref<object|null>, render: () => void }}
  */
-export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels }) {
+export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels, translateLabel = null }) {
   const selectedItem = ref(null)
 
   let currentSimulation = null
@@ -133,7 +135,7 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     const linkLabels = linkGroup.selectAll('text')
       .data(edges)
       .enter().append('text')
-      .text(d => d.name)
+      .text(d => formatEdgeLabel(d.name, translateLabel))
       .attr('font-size', '9px')
       .attr('fill', 'var(--fg-meta)')
       .attr('text-anchor', 'middle')
