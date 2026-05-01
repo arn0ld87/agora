@@ -25,10 +25,24 @@ services:
     build:
       context: .
       target: prod
+      args:
+        # Hängt den Bearer-Token zur Build-Zeit ins Frontend-Bundle.
+        # Wird per `docker compose build` aus der Host-Env übernommen
+        # (Compose liest VITE_AGORA_TOKEN automatisch aus .env).
+        VITE_AGORA_TOKEN: ${VITE_AGORA_TOKEN:-}
     ports: !override
+      # Backend bleibt auf Loopback gebunden — externer Zugriff geht
+      # über Reverse-Proxy / Tailscale / SSH-Forward, nicht direkt.
       - "127.0.0.1:${AGORA_BACKEND_PORT:-5001}:5001"
+    tmpfs:
+      - /home/agora/.gunicorn:size=1M,mode=0700,uid=1000,gid=1000
     environment:
       - PYTHONDONTWRITEBYTECODE=1
+      # Lokaler Ollama-Container (joined ins agora_default-Netz via
+      # `docker network connect agora_default ollama`). Überschreibt die
+      # host.docker.internal-Defaults aus docker-compose.yml.
+      - LLM_BASE_URL=http://ollama:11434/v1
+      - EMBEDDING_BASE_URL=http://ollama:11434
 
   neo4j:
     ports: !reset []

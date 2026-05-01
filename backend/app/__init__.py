@@ -202,6 +202,39 @@ def create_app(config_class=Config):
     def health():
         return {'status': 'ok', 'service': 'Agora Backend'}
 
+    # Static SPA serving — der Prod-Stage des Dockerfiles kopiert
+    # frontend/dist nach /app/frontend/dist. Im Dev-Mode existiert das
+    # Verzeichnis nicht; dann antwortet Flask einfach 404 und Vite served
+    # die UI separat. /api/* gewinnt durch das Blueprint-Routing immer
+    # Vorrang gegenüber dem Catch-all unten.
+    from pathlib import Path  # noqa: E402
+    from flask import send_from_directory  # noqa: E402
+
+    frontend_dist = Path(__file__).resolve().parent.parent.parent / 'frontend' / 'dist'
+
+    if frontend_dist.is_dir():
+        @app.route('/', defaults={'path': ''})
+        @app.route('/<path:path>')
+        def serve_spa(path):
+            # API-Pfade dürfen NICHT auf die SPA-`index.html` durchfallen,
+            # sonst kriegt ein API-Client bei einem Tippfehler ein
+            # HTML-Dokument mit 200 statt einer JSON-404 (Bot-Review zu PR
+            # #151). Hier hart abfangen und im Standard-Error-Envelope
+            # antworten.
+            if path == 'api' or path.startswith('api/'):
+                return {
+                    "success": False,
+                    "error": "Not Found",
+                    "code": "not_found",
+                }, 404
+            target = frontend_dist / path
+            if path and target.is_file():
+                return send_from_directory(frontend_dist, path)
+            return send_from_directory(frontend_dist, 'index.html')
+
+        if should_log_startup:
+            logger.info("Static SPA serving enabled: %s", frontend_dist)
+
     if should_log_startup:
         logger.info("Agora Backend startup complete")
 

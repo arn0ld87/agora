@@ -1,23 +1,12 @@
-<template>
-  <router-view v-slot="{ Component }">
-    <transition name="fade" mode="out-in">
-      <component :is="Component" />
-    </transition>
-  </router-view>
-
-  <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L. -->
-  <button
-    class="log-drawer-fab"
-    :class="{ active: logDrawerOpen }"
-    :title="$t('logs.drawer.toggle')"
-    @click="logDrawerOpen = !logDrawerOpen"
-  >▤ logs</button>
-  <LogDrawer :open="logDrawerOpen" @close="logDrawerOpen = false" />
-</template>
-
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import AuroraBackground from './components/ui/AuroraBackground.vue'
 import LogDrawer from './components/LogDrawer.vue'
+import { useTheme } from './composables/useTheme.js'
+
+// Mount the theme watcher early so the persisted theme is applied before
+// the first child component reads any token-driven style.
+useTheme()
 
 const STORAGE_KEY = 'agora.ui.logDrawer.open'
 function loadOpen() {
@@ -38,6 +27,24 @@ onMounted(() => window.addEventListener('keydown', handleHotkey))
 onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </script>
 
+<template>
+  <AuroraBackground />
+  <router-view v-slot="{ Component }">
+    <transition name="fade" mode="out-in">
+      <component :is="Component" />
+    </transition>
+  </router-view>
+
+  <!-- Issue #132 — Globaler Log-Drawer; Toggle per Hotkey Ctrl+Shift+L. -->
+  <button
+    class="log-drawer-fab"
+    :class="{ active: logDrawerOpen }"
+    :title="$t('logs.drawer.toggle')"
+    @click="logDrawerOpen = !logDrawerOpen"
+  >▤ logs</button>
+  <LogDrawer :open="logDrawerOpen" @close="logDrawerOpen = false" />
+</template>
+
 <style>
 /* Reset only — design tokens live in src/assets/styles/tokens.css
    App-wide layout helpers in src/assets/styles/global.css */
@@ -45,6 +52,11 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+#app {
+  position: relative;
+  z-index: 2;
 }
 
 ::-webkit-scrollbar {
@@ -58,10 +70,11 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 
 ::-webkit-scrollbar-thumb {
   background: var(--rule-strong);
+  border-radius: var(--r-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--fg);
+  background: var(--fg-muted);
 }
 
 .log-drawer-fab {
