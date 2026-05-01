@@ -15,6 +15,22 @@ KNOWN_EMBEDDING_DIMS = {
     'qwen3-embedding:8b': 4096,
 }
 
+# Bekannte Platzhalter-Werte aus `.env.example` und altem Default-Code.
+# Wenn einer davon im Nicht-Debug-Betrieb durchschlägt, kennt das halbe
+# Internet das Geheimnis — Config.validate() lehnt das deshalb ab.
+SECRET_KEY_PLACEHOLDERS = frozenset({
+    'change-me',
+    'change-me-use-token_urlsafe-32',
+    'agora',
+    'password',
+})
+NEO4J_PASSWORD_PLACEHOLDERS = frozenset({
+    'change-me',
+    'agora',
+    'neo4j',
+    'password',
+})
+
 
 def infer_vector_dim_for_model(model_name: str | None) -> int | None:
     """Infer a known vector dimension from the embedding model name."""
@@ -202,19 +218,41 @@ class Config:
         logger = get_logger('agora.config')
 
         errors = []
-        if not cls.SECRET_KEY:
+        secret_key_value = (cls.SECRET_KEY or '').strip()
+        if not secret_key_value:
             if cls.DEBUG:
                 import secrets
                 cls.SECRET_KEY = secrets.token_urlsafe(32)
                 logger.warning("SECRET_KEY not set — generated ephemeral dev key.")
             else:
                 errors.append("SECRET_KEY not configured (required when FLASK_DEBUG is false)")
+        elif not cls.DEBUG and secret_key_value.lower() in SECRET_KEY_PLACEHOLDERS:
+            errors.append(
+                "SECRET_KEY uses a known placeholder value — generate a real "
+                "secret with `python -c \"import secrets; print(secrets.token_urlsafe(32))\"` "
+                "(required when FLASK_DEBUG is false)"
+            )
+        elif cls.DEBUG and secret_key_value.lower() in SECRET_KEY_PLACEHOLDERS:
+            logger.warning(
+                "SECRET_KEY uses a placeholder value (%s). Acceptable in debug only.",
+                secret_key_value,
+            )
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY not configured (set to any non-empty value, e.g. 'ollama')")
         if not cls.NEO4J_URI:
             errors.append("NEO4J_URI not configured")
-        if not cls.NEO4J_PASSWORD:
+        neo4j_password_value = (cls.NEO4J_PASSWORD or '').strip()
+        if not neo4j_password_value:
             errors.append("NEO4J_PASSWORD not configured")
+        elif not cls.DEBUG and neo4j_password_value.lower() in NEO4J_PASSWORD_PLACEHOLDERS:
+            errors.append(
+                "NEO4J_PASSWORD uses a known placeholder value — set a real "
+                "password (required when FLASK_DEBUG is false)"
+            )
+        elif cls.DEBUG and neo4j_password_value.lower() in NEO4J_PASSWORD_PLACEHOLDERS:
+            logger.warning(
+                "NEO4J_PASSWORD uses a placeholder value. Acceptable in debug only.",
+            )
 
         # Auth-Policy: außerhalb FLASK_DEBUG verlangen wir entweder einen
         # Token oder eine bewusste Opt-out-Entscheidung. Verhindert offene

@@ -278,7 +278,13 @@ Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Such
 
 - Keine echten Secrets committen.
 - `.env` bleibt lokal.
-- `.env.example` enthält nur Beispielwerte.
+- `.env.example` enthält nur Beispielwerte (`change-me*`, `agora`, `neo4j`, `password`). `Config.validate()` lehnt diese Platzhalter im Nicht-Debug-Betrieb hart ab.
+- Echten `SECRET_KEY` und `AGORA_AUTH_TOKEN` mit einem Einzeiler erzeugen:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
 - Neo4j-Passwörter werden nicht in `simulation_config.json` oder andere persistierte Simulation-Artefakte geschrieben.
 - `backend/uploads/` ist nicht versioniert.
 - Siehe [`docu/security-hardening.md`](./docu/security-hardening.md) für die aktuelle Sicherheitsbaseline (Auth-Token, CORS-Whitelist, SSRF-Blocker, Vision- und Label-Caps) sowie [`docu/SECURITY_REVIEW_SUMMARY.md`](./docu/SECURITY_REVIEW_SUMMARY.md) für den historischen Review-Stand.

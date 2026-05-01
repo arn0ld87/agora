@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Security
+
+- **Slice 1 (Repo-Review-Umsetzung, PR1): Secure Defaults + Config-Validation.** `Config.validate()` lehnt im Nicht-Debug-Betrieb jetzt bekannte Platzhalter-Werte aus `.env.example` hart ab (`SECRET_KEY` ∈ {`change-me`, `change-me-use-token_urlsafe-32`, `agora`, `password`}; `NEO4J_PASSWORD` ∈ {`change-me`, `agora`, `neo4j`, `password`}). Vergleich ist case-insensitive. Im Debug-Betrieb erzeugt das gleiche Setup eine laute `agora.config`-Warning, blockt aber nicht. `.env.example` defaultet `FLASK_DEBUG=false` (secure-by-default) und kommentiert die Placeholder-Reject-Policy. Auth-Token-Pflicht im Nicht-Debug bleibt unverändert (P0.1a). Neue Test-Datei `backend/tests/test_config_security.py` (12 Cases inkl. Parametrize-Coverage je Platzhalter); Bestand `test_config_validate.py` weiter grün. README-Sicherheits-Sektion um `python -c "import secrets; print(secrets.token_urlsafe(32))"` ergänzt. Arbeitsprotokoll: `docu/2026-05-01-slice-1-secure-defaults-arbeitsprotokoll.md`.
+
 ### Docs
 
 - **Slice 0 (Repo-Review-Umsetzung): README/Doku-Sync auf v0.9.0.** README-Status-Block, deutsche und englische Engineering-Stand-Sektionen, Testzahlen-Block (519 → 711, 488 → 671 Backend, 31 → 40 Frontend) und Release-Notes-Verweis auf v0.9.0 / Vorgänger v0.8.0 aktualisiert. Schnellstart-Sektion um expliziten Hardening-Drift-Hinweis ergänzt: `docker-compose.yml` baut aktuell den `prod`-Stage statt `dev`, Neo4j (`7474`/`7687`), Backend (`5001`) und Vite (`5173`) binden noch auf `0.0.0.0` — wird in Slice 2 entschärft. Arbeitsprotokoll: `docu/2026-05-01-slice-0-readme-v090-sync-arbeitsprotokoll.md`.
