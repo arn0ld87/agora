@@ -19,6 +19,8 @@ from . import branching_service
 from .entity_reader import EntityReader
 from .oasis_profile_generator import OasisProfileGenerator
 from .simulation_config_generator import SimulationConfigGenerator
+# simulation_state_machine importiert ``SimulationStatus`` aus diesem Modul,
+# daher Lazy-Import in ``_set_status`` (vermeidet Zirkularität).
 
 logger = get_logger('agora.simulation')
 
@@ -173,6 +175,37 @@ class SimulationManager:
 
         self._simulations[state.simulation_id] = state
 
+    def _set_status(
+        self, state: SimulationState, new_status: SimulationStatus
+    ) -> None:
+        """Set ``state.status`` after validating the transition against the FSM.
+
+        Wirft :class:`simulation_state_machine.InvalidStatusTransition`, wenn
+        der Übergang nicht in ``ALLOWED_TRANSITIONS`` steht. Für legitime
+        Resets (Force-Restart einer abgelaufenen Simulation) gibt es die
+        separate Methode :meth:`_reset_to_ready`.
+        """
+        from .simulation_state_machine import assert_valid_transition
+
+        assert_valid_transition(state.status, new_status)
+        state.status = new_status
+        self._save_simulation_state(state)
+
+    def _reset_to_ready(self, state: SimulationState, *, reason: str) -> None:
+        """Force-Reset einer Simulation auf ``READY`` aus beliebigem Status.
+
+        Bewusst kein FSM-Übergang: Aufrufer muss vorher alle Runtime-Artefakte
+        (Logs, run_state, control_state) selbst aufgeräumt haben. Der Reset
+        wird mit ``reason`` geloggt, damit der Bypass nachvollziehbar bleibt.
+        """
+        previous = state.status.value
+        logger.info(
+            f"Force-reset simulation {state.simulation_id} status "
+            f"{previous} -> {SimulationStatus.READY.value} (reason: {reason})"
+        )
+        state.status = SimulationStatus.READY
+        self._save_simulation_state(state)
+
     def _load_simulation_state(self, simulation_id: str) -> Optional[SimulationState]:
         """Load simulation state from file"""
         if simulation_id in self._simulations:
@@ -294,9 +327,8 @@ class SimulationManager:
             raise ValueError(f"Simulation does not exist: {simulation_id}")
         
         try:
-            state.status = SimulationStatus.PREPARING
-            self._save_simulation_state(state)
-            
+            self._set_status(state, SimulationStatus.PREPARING)
+
             sim_dir = self._get_simulation_dir(simulation_id)
             
             # ========== Phase 1: Read and filter entities ==========
@@ -340,9 +372,8 @@ class SimulationManager:
                 )
             
             if filtered.filtered_count == 0:
-                state.status = SimulationStatus.FAILED
                 state.error = "No entities matching criteria found, check if graph is correctly constructed"
-                self._save_simulation_state(state)
+                self._set_status(state, SimulationStatus.FAILED)
                 return state
             
             # ========== Phase 2: Generate Agent Profile ==========
@@ -494,21 +525,19 @@ class SimulationManager:
             # When starting simulation, simulation_runner runs scripts from scripts/ directory
             
             # Update status
-            state.status = SimulationStatus.READY
-            self._save_simulation_state(state)
-            
+            self._set_status(state, SimulationStatus.READY)
+
             logger.info(f"Simulation preparation completed: {simulation_id}, "
                        f"entities={state.entities_count}, profiles={state.profiles_count}")
-            
+
             return state
-            
+
         except Exception as e:
             logger.error(f"Simulation preparation failed: {simulation_id}, error={str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-            state.status = SimulationStatus.FAILED
             state.error = str(e)
-            self._save_simulation_state(state)
+            self._set_status(state, SimulationStatus.FAILED)
             raise
     
     def get_simulation(self, simulation_id: str) -> Optional[SimulationState]:

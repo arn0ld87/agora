@@ -160,12 +160,10 @@ def start_simulation():
                 logger.warning(f"Warning when cleaning logs: {cleanup_result.get('errors')}")
             force_restarted = True
 
-        logger.info(
-            f"Simulation {simulation_id} preparation complete, resetting status to ready "
-            f"(previous status: {state.status.value})"
+        manager._reset_to_ready(
+            state,
+            reason=f"force start_run after status={state.status.value}",
         )
-        state.status = SimulationStatus.READY
-        manager._save_simulation_state(state)
 
     graph_id = None
     if enable_graph_memory_update:
@@ -209,8 +207,7 @@ def start_simulation():
         graph_id=graph_id,
     )
 
-    state.status = SimulationStatus.RUNNING
-    manager._save_simulation_state(state)
+    manager._set_status(state, SimulationStatus.RUNNING)
 
     run_record = run_registry.create_run(
         run_type="simulation_run",
@@ -267,8 +264,7 @@ def stop_simulation():
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if state:
-        state.status = SimulationStatus.PAUSED
-        manager._save_simulation_state(state)
+        manager._set_status(state, SimulationStatus.PAUSED)
         run = run_registry.get_latest_by_linked_id("simulation_id", simulation_id, run_type="simulation_run")
         if run:
             run_registry.update_run(
@@ -560,8 +556,7 @@ def close_simulation_env():
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if state:
-        state.status = SimulationStatus.COMPLETED
-        manager._save_simulation_state(state)
+        manager._set_status(state, SimulationStatus.COMPLETED)
 
     # Preserve legacy envelope: outer ``success`` mirrors runner's inner success flag.
     return jsonify({"success": result.get("success", False), "data": result})

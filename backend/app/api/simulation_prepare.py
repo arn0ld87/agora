@@ -265,8 +265,7 @@ def prepare_simulation():
         },
     )
 
-    state.status = SimulationStatus.PREPARING
-    manager._save_simulation_state(state)
+    manager._set_status(state, SimulationStatus.PREPARING)
 
     def run_prepare():
         try:
@@ -357,9 +356,8 @@ def prepare_simulation():
 
             failed_state = manager.get_simulation(simulation_id)
             if failed_state:
-                failed_state.status = SimulationStatus.FAILED
                 failed_state.error = str(exc)
-                manager._save_simulation_state(failed_state)
+                manager._set_status(failed_state, SimulationStatus.FAILED)
 
     thread = threading.Thread(target=run_prepare, daemon=True)
     thread.start()
