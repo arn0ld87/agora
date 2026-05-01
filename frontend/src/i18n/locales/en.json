@@ -452,6 +452,16 @@
       "INTERESTED_IN": "interested in"
     }
   },
+  "logs": {
+    "drawer": {
+      "title": "Backend logs",
+      "toggle": "Show logs (Ctrl+Shift+L)",
+      "allLevels": "All levels",
+      "search": "Search…",
+      "pause": "Pause auto-scroll",
+      "empty": "No log lines yet."
+    }
+  },
   "errors": {
     "network": "Network error. Is the server reachable?",
     "backend": "Backend error.",
