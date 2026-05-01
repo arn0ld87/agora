@@ -17,9 +17,9 @@ export default defineConfig({
     }
   },
   test: {
-    // node-Environment reicht für die aktuelle Smoke-Coverage (api/envelope.ts);
-    // Vue-Component- und DOM-Tests in EPIC-10-ST-07 werden auf jsdom umstellen.
-    environment: 'node',
+    // jsdom-Environment seit EPIC-10-ST-07 (Issue #84) — Composable-Tests
+    // brauchen DOM-APIs (mount/unmount, EventSource-Mock, document.body).
+    environment: 'jsdom',
     include: ['src/**/*.{test,spec}.{js,ts}'],
     globals: false
   }
