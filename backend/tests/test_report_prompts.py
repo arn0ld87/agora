@@ -1,0 +1,195 @@
+"""Tests für services/report_prompts.py (Issue #48, EPIC-07-ST-04).
+
+Sichern: alle Prompt-Bausteine existieren, sind nicht-leer, enthalten
+ihre erwarteten Format-Platzhalter, und der Re-Export in
+``services/report_agent`` liefert dieselben Objekte (Wire-Identity).
+"""
+
+import pytest
+
+from app.services import report_agent
+from app.services import report_prompts
+
+
+# (Name, erwartete Format-Platzhalter)
+PROMPT_SPECS = [
+    # Planning
+    ("PLAN_SYSTEM_PROMPT_TEMPLATE", ["{language}"]),
+    ("PLAN_USER_PROMPT_TEMPLATE", [
+        "{simulation_requirement}",
+        "{total_nodes}",
+        "{total_edges}",
+        "{entity_types}",
+        "{total_entities}",
+        "{related_facts_json}",
+    ]),
+    # Sections
+    ("SECTION_SYSTEM_PROMPT_TEMPLATE", [
+        "{report_title}",
+        "{report_summary}",
+        "{simulation_requirement}",
+        "{section_title}",
+        "{language}",
+        "{tools_description}",
+    ]),
+    ("SECTION_USER_PROMPT_TEMPLATE", [
+        "{previous_content}",
+        "{section_title}",
+    ]),
+    # Reflection / ReACT
+    ("REACT_OBSERVATION_TEMPLATE", [
+        "{tool_name}",
+        "{result}",
+        "{tool_calls_count}",
+        "{max_tool_calls}",
+        "{used_tools_str}",
+        "{unused_hint}",
+    ]),
+    ("REACT_INSUFFICIENT_TOOLS_MSG", [
+        "{tool_calls_count}",
+        "{min_tool_calls}",
+        "{unused_hint}",
+    ]),
+    ("REACT_INSUFFICIENT_TOOLS_MSG_ALT", [
+        "{tool_calls_count}",
+        "{min_tool_calls}",
+        "{unused_hint}",
+    ]),
+    ("REACT_TOOL_LIMIT_MSG", [
+        "{tool_calls_count}",
+        "{max_tool_calls}",
+    ]),
+    ("REACT_UNUSED_TOOLS_HINT", ["{unused_list}"]),
+    ("REACT_FORCE_FINAL_MSG", []),
+    # Chat
+    ("CHAT_SYSTEM_PROMPT_TEMPLATE", [
+        "{simulation_requirement}",
+        "{report_content}",
+        "{tools_description}",
+        "{language}",
+    ]),
+    ("CHAT_OBSERVATION_SUFFIX", []),
+]
+
+
+@pytest.mark.parametrize("name", [spec[0] for spec in PROMPT_SPECS])
+def test_prompt_constant_exists_and_is_non_empty_string(name):
+    value = getattr(report_prompts, name)
+    assert isinstance(value, str), f"{name} muss str sein"
+    assert value.strip(), f"{name} darf nicht leer sein"
+
+
+@pytest.mark.parametrize("name,placeholders", PROMPT_SPECS)
+def test_prompt_carries_expected_placeholders(name, placeholders):
+    value = getattr(report_prompts, name)
+    for placeholder in placeholders:
+        assert placeholder in value, (
+            f"{name} fehlt der erwartete Platzhalter {placeholder!r} — "
+            "Format-Aufrufer würden fehlschlagen."
+        )
+
+
+def test_all_prompt_names_in_dunder_all():
+    expected = {spec[0] for spec in PROMPT_SPECS}
+    assert set(report_prompts.__all__) == expected
+
+
+@pytest.mark.parametrize("name", [spec[0] for spec in PROMPT_SPECS])
+def test_report_agent_re_exports_identity(name):
+    """Re-Export liefert DASSELBE Objekt (Wire-Identity zum Schutz aller Caller)."""
+    assert getattr(report_agent, name) is getattr(report_prompts, name), (
+        f"{name} im report_agent ist nicht identisch mit report_prompts"
+    )
+
+
+class TestPromptSemantics:
+    """Pinnt invariante Semantik der Prompts gegen versehentliche Verkürzung."""
+
+    def test_plan_system_demands_json_outline(self):
+        assert "JSON" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
+        assert "sections" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
+        assert "minimum 2" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower() or \
+               "at least 2" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower()
+
+    def test_section_system_forbids_markdown_headers(self):
+        # Kern-Constraint: keine ## innerhalb der Section
+        assert "Forbidden to use any Markdown titles" in report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE
+        assert "Final Answer" in report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE
+
+    def test_react_observation_announces_tool_call_progress(self):
+        # Observation-Template muss tool_calls_count/max anzeigen
+        tmpl = report_prompts.REACT_OBSERVATION_TEMPLATE
+        assert "Final Answer" in tmpl
+        assert "Observation" in tmpl
+
+    def test_chat_system_prefers_report_content_over_tools(self):
+        tmpl = report_prompts.CHAT_SYSTEM_PROMPT_TEMPLATE
+        assert "Prioritize answering questions based on the above report" in tmpl
+        # Tool-Einsatz nur falls Report unzureichend
+        assert "Only call tools" in tmpl
+
+    def test_chat_observation_suffix_is_terse_instruction(self):
+        # Sehr kurzer Suffix; sollte nicht versehentlich aufgeblasen werden
+        assert len(report_prompts.CHAT_OBSERVATION_SUFFIX) < 60
+        assert "concis" in report_prompts.CHAT_OBSERVATION_SUFFIX.lower()
+
+
+class TestFormatCallability:
+    """Stellt sicher, dass die Templates mit ihren Platzhaltern formatierbar sind.
+
+    Schützt vor unbalancierten ``{{`` / ``}}``-Sequenzen, die ``str.format``
+    zur Laufzeit zum Crashen bringen würden.
+    """
+
+    def test_plan_user_template_formats(self):
+        out = report_prompts.PLAN_USER_PROMPT_TEMPLATE.format(
+            simulation_requirement="x",
+            total_nodes=1,
+            total_edges=2,
+            entity_types=["a"],
+            total_entities=3,
+            related_facts_json="[]",
+        )
+        assert "x" in out
+
+    def test_section_system_template_formats(self):
+        out = report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+            report_title="T",
+            report_summary="S",
+            simulation_requirement="R",
+            section_title="Sec",
+            language="German",
+            tools_description="tools",
+        )
+        # Doppel-Brace im Tool-Call-Beispiel muss als Single-Brace rauskommen
+        assert '{"name": "Tool Name"' in out
+        assert "T" in out and "Sec" in out
+
+    def test_section_user_template_formats(self):
+        out = report_prompts.SECTION_USER_PROMPT_TEMPLATE.format(
+            previous_content="prev",
+            section_title="Sec",
+        )
+        assert "prev" in out and "Sec" in out
+
+    def test_react_observation_template_formats(self):
+        out = report_prompts.REACT_OBSERVATION_TEMPLATE.format(
+            tool_name="quick_search",
+            result="r",
+            tool_calls_count=2,
+            max_tool_calls=5,
+            used_tools_str="quick_search",
+            unused_hint="",
+        )
+        assert "quick_search" in out
+        assert "2/5" in out
+
+    def test_chat_system_template_formats(self):
+        out = report_prompts.CHAT_SYSTEM_PROMPT_TEMPLATE.format(
+            simulation_requirement="r",
+            report_content="rc",
+            tools_description="td",
+            language="German",
+        )
+        assert '{"name": "Tool Name"' in out
+        assert "rc" in out
