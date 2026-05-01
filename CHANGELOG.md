@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Docs
+
+- **Slice 7 (Repo-Review-Folge, F1): Deployment-Doku Dev + Prod-Like.** Zwei neue Dateien als Single-Source-of-Truth fuer Setup-Pfade: [`docu/deployment-dev.md`](docu/deployment-dev.md) deckt Bare-Metal (`npm run dev`) und Compose-Dev-Stage (`target: dev`, Loopback-Ports, Hot-Reload) ab inkl. Voraussetzungen (`uv`, `npm`, Neo4j, Ollama, optional Redis), Tests-Gate, Volume-Layout und Dev-Stolperfallen; verweist auf [`auth.md`](docu/auth.md) fuer das Token-Setup. [`docu/deployment-prod-like.md`](docu/deployment-prod-like.md) dokumentiert Gunicorn (`--workers 2`), Reverse-Proxy (Traefik/Nginx-Beispiele inkl. SSE-`proxy_buffering off`), Tailscale/WireGuard-Pattern, CORS-/Auth-Pflichtkonfig (`AGORA_AUTH_TOKEN`, kein `AGORA_CORS_ALLOW_ALL`, kein `AGORA_ALLOW_ANONYMOUS`), Compose-Prod-Override (Vite-Port entfaellt, Neo4j-Ports per `!reset []`), Update-/Rollback-Pfad und verweist auf [`dependency-risk-register.md`](docu/dependency-risk-register.md) fuer die CVE-Baseline. README-Schnellstart und Quick-Start (DE + EN) bekommen einen Hinweisblock auf beide Dateien; Doku-Index-Sektion am Ende der `Entwicklung`/`Development checks`-Bloecke nennt Deployment, Auth, API-Contracts und Architektur explizit. Arbeitsprotokoll: [`docu/2026-05-01-slice-7-deployment-doku-arbeitsprotokoll.md`](docu/2026-05-01-slice-7-deployment-doku-arbeitsprotokoll.md).
+
 ### Deploy
 
 - **Slice 2 (Repo-Review-Umsetzung, PR2): Compose Dev/Prod-Trennung.** `docker-compose.yml` baut jetzt explizit `target: dev` (Vite + Flask, Hot-Reload statt vorher `prod`-Stage via Default). Alle Host-Ports auf `127.0.0.1` gelockt (5173, 5001, 7474, 7687). `docker-compose.prod.yml` entfernt Vite- und Neo4j-Host-Ports komplett via `!reset []` (Docker Compose v2.24+), Backend-Port bleibt auf Loopback. README-Schnellstart in Dev-/Prod-Blöcke aufgeteilt mit Endpoint-Tabelle. Neuer optionaler Compose-Snapshot-Test (`backend/tests/test_compose_snapshot.py`, skip-if-no-docker, 8 Cases). Arbeitsprotokoll: `docu/2026-05-01-slice-2-compose-dev-prod-arbeitsprotokoll.md`.

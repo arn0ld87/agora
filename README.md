@@ -140,6 +140,9 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 
 ### Schnellstart
 
+> Vollständige Anleitungen mit Volume-Layout, Reverse-Proxy-Setup und Härtungs-Checkliste:
+> [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md).
+
 #### Voraussetzungen
 
 - Node.js 18+
@@ -350,11 +353,12 @@ cd backend && uv run pytest
 cd backend && uv run python -m compileall app scripts
 ```
 
-Weitere Refactoring- und Architekturprotokolle liegen in `docu/`, unter anderem:
-- `docu/p0-arbeitsprotokoll.md`
-- `docu/p0-simulation-api-split-protokoll.md`
-- `docu/p0-graph-panel-modularisierung-protokoll.md`
-- `docu/target-architecture.md`
+Doku-Index (Auswahl):
+
+- Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
+- Auth & Security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
+- API-Verträge: [`docu/api-contracts.md`](./docu/api-contracts.md)
+- Architektur & Refactoring: [`docu/target-architecture.md`](./docu/target-architecture.md), `docu/p0-*-protokoll.md`, `docu/2026-05-01-*-arbeitsprotokoll.md`
 
 ### Herkunft und Lizenz
 
@@ -425,6 +429,9 @@ Upload a document, extract a knowledge graph, generate agent personas, simulate 
 - **Secret guardrails**: Neo4j passwords are not serialized into simulation config artifacts.
 
 ### Quick Start
+
+> Full guides with volume layout, reverse-proxy setup and hardening checklist:
+> [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md).
 
 Host Ollama is expected by default:
 
@@ -543,7 +550,12 @@ npm run check
 cd backend && uv run pytest
 ```
 
-Detailed audit and refactor logs are tracked in `docu/`.
+Doc index (selection):
+
+- Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
+- Auth & security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
+- API contracts: [`docu/api-contracts.md`](./docu/api-contracts.md)
+- Architecture & refactor logs: [`docu/target-architecture.md`](./docu/target-architecture.md) plus `docu/2026-05-01-*-arbeitsprotokoll.md`.
 
 ### Attribution
 
