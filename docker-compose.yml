@@ -1,8 +1,11 @@
 services:
   agora:
+    # Default: lokaler Build aus diesem Repo. Wer ein vorgebackenes
+    # Image (Docker Hub / GHCR) ziehen will, ersetzt `build: .` mit
+    # `image: alexle135/agora:latest` und kommentiert den build-Block.
+    # Beide Varianten zugleich aktiv ist ungültig (compose ignoriert
+    # `image` dann).
     build: .
-    # Oder Pre-built Image:
-    # image: alexle135/agora-agora:latest
     container_name: agora
     env_file:
       - .env
