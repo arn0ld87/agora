@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
@@ -21,6 +21,7 @@ import {
   pauseSimulation,
   resumeSimulation
 } from '../api/simulation'
+import { usePolling } from '../composables/usePolling'
 import { useSystemLog } from '../composables/useSystemLog'
 import { useWorkspaceMode } from '../composables/useWorkspaceMode'
 
@@ -50,7 +51,10 @@ const isPaused = ref(false)
 const currentRound = ref(0)
 const totalRounds = ref(0)
 const isPauseToggling = ref(false)
-let statusTimer = null
+// Issue #38 — Status- und Graph-Refresh-Polling laufen über das zentrale
+// usePolling-Composable. Cleanup bei Unmount übernimmt usePolling.
+const statusPolling = usePolling(pollGlobalStatus, 3000)
+const graphRefreshPolling = usePolling(refreshGraph, 30000)
 
 async function pollGlobalStatus() {
   if (!currentSimulationId.value) return
@@ -110,7 +114,7 @@ const isSimulating = computed(() => currentStatus.value === 'processing')
 function updateStatus(s) { currentStatus.value = s }
 
 async function handleGoBack() {
-  stopGraphRefresh()
+  graphRefreshPolling.stop()
   try {
     const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
     if (envStatusRes.success && envStatusRes.data?.env_alive) {
@@ -171,28 +175,18 @@ function refreshGraph() {
   if (projectData.value?.graph_id) loadGraph(projectData.value.graph_id)
 }
 
-let graphRefreshTimer = null
-function startGraphRefresh() {
-  if (graphRefreshTimer) return
-  graphRefreshTimer = setInterval(refreshGraph, 30000)
-}
-function stopGraphRefresh() {
-  if (graphRefreshTimer) { clearInterval(graphRefreshTimer); graphRefreshTimer = null }
-}
-
-watch(isSimulating, (val) => val ? startGraphRefresh() : stopGraphRefresh(), { immediate: true })
+watch(isSimulating, (val) => {
+  if (val) graphRefreshPolling.start()
+  else graphRefreshPolling.stop()
+}, { immediate: true })
 
 onMounted(() => {
   if (maxRounds.value) addLog(`max_rounds = ${maxRounds.value}`)
   if (simulationDays.value) addLog(`simulation_days = ${simulationDays.value}`)
   loadSimulationData()
-  pollGlobalStatus()
-  statusTimer = setInterval(pollGlobalStatus, 3000)
+  statusPolling.start({ immediate: true })
 })
-onUnmounted(() => {
-  stopGraphRefresh()
-  if (statusTimer) clearInterval(statusTimer)
-})
+// onUnmounted-Cleanup macht usePolling selbst.
 </script>
 
 <template>

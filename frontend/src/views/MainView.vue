@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import GraphPanel from '../components/GraphPanel.vue'
@@ -13,6 +13,7 @@ import WorkspaceSplit from '../layouts/WorkspaceSplit.vue'
 import WorkspaceStepStatus from '../layouts/WorkspaceStepStatus.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
+import { usePolling } from '../composables/usePolling'
 import { useSystemLog } from '../composables/useSystemLog'
 import { useWorkspaceMode } from '../composables/useWorkspaceMode'
 
@@ -47,8 +48,13 @@ const ontologyProgress = ref(null)
 const buildProgress = ref(null)
 const { systemLogs, addLog } = useSystemLog({ cap: 100 })
 
-let pollTimer = null
-let graphPollTimer = null
+// Issue #38 — Task- und Graph-Polling laufen über das zentrale usePolling-Composable.
+// Cleanup bei Unmount übernimmt usePolling automatisch.
+const currentTaskId = ref(null)
+const taskPolling = usePolling(async () => {
+  if (currentTaskId.value) await pollTaskStatus(currentTaskId.value)
+}, 2000)
+const graphPolling = usePolling(fetchGraphData, 10000)
 
 const statusClass = computed(() => {
   if (error.value) return 'error'
@@ -196,8 +202,7 @@ async function startBuildGraph() {
 }
 
 function startGraphPolling() {
-  fetchGraphData()
-  graphPollTimer = setInterval(fetchGraphData, 10000)
+  graphPolling.start({ immediate: true })
 }
 
 async function fetchGraphData() {
@@ -215,8 +220,8 @@ async function fetchGraphData() {
 }
 
 function startPollingTask(taskId) {
-  pollTaskStatus(taskId)
-  pollTimer = setInterval(() => pollTaskStatus(taskId), 2000)
+  currentTaskId.value = taskId
+  taskPolling.start({ immediate: true })
 }
 
 async function pollTaskStatus(taskId) {
@@ -265,11 +270,14 @@ function refreshGraph() {
   if (projectData.value?.graph_id) loadGraph(projectData.value.graph_id)
 }
 
-function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
-function stopGraphPolling() { if (graphPollTimer) { clearInterval(graphPollTimer); graphPollTimer = null } }
+function stopPolling() {
+  taskPolling.stop()
+  currentTaskId.value = null
+}
+function stopGraphPolling() { graphPolling.stop() }
 
 onMounted(initProject)
-onUnmounted(() => { stopPolling(); stopGraphPolling() })
+// onUnmounted-Cleanup macht usePolling selbst.
 </script>
 
 <template>
