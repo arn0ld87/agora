@@ -42,6 +42,7 @@
     "select": "Auswählen",
     "confirm": "Bestätigen",
     "refresh": "Aktualisieren",
+    "scrollToBottom": "Zum aktuellen Beitrag springen",
     "copy": "Kopieren",
     "copied": "Kopiert",
     "send": "Senden",
@@ -289,7 +290,13 @@
       "all": "Alle",
       "posts_only": "Nur Posts",
       "replies_only": "Nur Antworten",
-      "empty": "Noch keine Aktivität."
+      "empty": "Noch keine Aktivität.",
+      "unread": "kein neuer Beitrag | ein neuer Beitrag | {count} neue Beiträge",
+      "density": {
+        "label": "Dichte",
+        "comfort": "Komfort",
+        "compact": "Kompakt"
+      }
     },
     "next": "Weiter zum Report →"
   },

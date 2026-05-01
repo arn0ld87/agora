@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useEventStream } from '../composables/useEventStream'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
+import { useStickyScroll } from '../composables/useStickyScroll'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -18,6 +19,8 @@ import { generateReport } from '../api/report'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
+import StickyScrollBanner from './ui/StickyScrollBanner.vue'
+import { tokenizeFeedText } from '../utils/feedHighlight'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -44,6 +47,28 @@ const allActions = ref([])
 const actionIds = ref(new Set())
 const scrollEl = ref(null)
 const startError = ref(null)
+
+// Issue #130: Sticky-Scroll im Live-Feed. Nutzer-Scrollback wird respektiert,
+// neue Beiträge werden im Banner gezählt statt blind ans Ende zu springen.
+const feedSticky = useStickyScroll(scrollEl)
+
+// Issue #130 SUB2: Density-Toggle für den Live-Feed; Persistenz pro Browser.
+const FEED_DENSITY_KEY = 'agora.ui.feedDensity'
+const feedDensity = ref(loadFeedDensity())
+
+function loadFeedDensity() {
+  try {
+    const stored = localStorage.getItem(FEED_DENSITY_KEY)
+    if (stored === 'comfort' || stored === 'compact') return stored
+  } catch { /* localStorage unavailable */ }
+  return 'comfort'
+}
+
+function setFeedDensity(value) {
+  if (value !== 'comfort' && value !== 'compact') return
+  feedDensity.value = value
+  try { localStorage.setItem(FEED_DENSITY_KEY, value) } catch { /* ignore */ }
+}
 
 // Issue #39 — Console-Logs werden über das useIncrementalLogPolling-Composable
 // inkrementell gefetcht, an `consoleLogs` gehängt und automatisch zum Bottom
@@ -207,16 +232,25 @@ async function pollDetail() {
   try {
     const res = await getRunStatusDetail(props.simulationId)
     if (res?.success && Array.isArray(res.data?.all_actions)) {
+      let appended = 0
       for (const a of res.data.all_actions) {
         const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
         if (!actionIds.value.has(key)) {
           actionIds.value.add(key)
+          // Tokens einmalig bei Ingestion berechnen — vermeidet Aufruf pro
+          // Render-Zyklus, wenn die Liste während der Simulation wächst.
+          if (a.action_args?.content) {
+            a._tokens = tokenizeFeedText(a.action_args.content)
+          }
           allActions.value.push(a)
+          appended += 1
         }
       }
-      nextTick(() => {
-        if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-      })
+      if (appended > 0) {
+        // Sticky-Scroll: nur ans Ende springen, wenn Nutzer dort klebt;
+        // sonst Banner-Counter erhöhen.
+        nextTick(() => feedSticky.markAppended(appended))
+      }
     }
   } catch { /* swallow */ }
 }
@@ -361,16 +395,47 @@ onUnmounted(stopPolling)
           <div class="log-pane">
             <div class="log-pane-head">
               <span class="meta">Live-Feed</span>
+              <div class="density-toggle" role="group" :aria-label="t('step3.feed.density.label')">
+                <button
+                  type="button"
+                  class="density-btn"
+                  :class="{ active: feedDensity === 'comfort' }"
+                  :aria-pressed="feedDensity === 'comfort'"
+                  @click="setFeedDensity('comfort')"
+                >{{ t('step3.feed.density.comfort') }}</button>
+                <button
+                  type="button"
+                  class="density-btn"
+                  :class="{ active: feedDensity === 'compact' }"
+                  :aria-pressed="feedDensity === 'compact'"
+                  @click="setFeedDensity('compact')"
+                >{{ t('step3.feed.density.compact') }}</button>
+              </div>
               <span class="meta">{{ allActions.length }}</span>
             </div>
-            <div ref="scrollEl" class="feed log-block log-pane-body">
-              <div v-if="!allActions.length" class="meta">{{ t('step3.feed.empty') }}</div>
-              <div v-for="(a, i) in allActions" :key="i" class="feed-line">
-                <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
-                <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
-                <span class="act">{{ a.action_type }}</span>
-                <span class="content" v-if="a.action_args?.content">— {{ a.action_args.content }}</span>
+            <div class="log-pane-scroll-wrap">
+              <div
+                ref="scrollEl"
+                class="feed log-block log-pane-body"
+                :class="['density-' + feedDensity]"
+              >
+                <div v-if="!allActions.length" class="meta">{{ t('step3.feed.empty') }}</div>
+                <div v-for="(a, i) in allActions" :key="i" class="feed-line">
+                  <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
+                  <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
+                  <span class="act">{{ a.action_type }}</span>
+                  <span class="content" v-if="a.action_args?.content">
+                    — <template
+                      v-for="(tok, ti) in (a._tokens || [])"
+                      :key="ti"
+                    ><span :class="['tok', 'tok-' + tok.type]">{{ tok.value }}</span></template>
+                  </span>
+                </div>
               </div>
+              <StickyScrollBanner
+                :count="feedSticky.unreadCount.value"
+                @jump="feedSticky.scrollToBottom"
+              />
             </div>
           </div>
           <div class="log-pane">
@@ -458,7 +523,6 @@ onUnmounted(stopPolling)
 }
 
 .feed {
-  max-height: 360px;
   overflow-y: auto;
 }
 .feed-line {
@@ -468,11 +532,31 @@ onUnmounted(stopPolling)
   color: var(--mono-50);
   margin-bottom: var(--s-2);
   word-wrap: break-word;
+  max-width: 75ch;
+}
+.feed.density-compact .feed-line {
+  font-size: 11px;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+.feed.density-comfort .feed-line {
+  font-size: var(--fs-13, 13px);
+  line-height: 1.6;
+  margin-bottom: var(--s-3);
 }
 .feed-line .ts { color: var(--accent); }
 .feed-line .who { color: var(--status-warn); margin: 0 var(--s-2); }
 .feed-line .act { color: var(--mono-300); }
 .feed-line .content { color: var(--mono-100); }
+.feed-line .tok-text { color: inherit; }
+.feed-line .tok-mention {
+  color: var(--accent);
+  font-weight: 600;
+}
+.feed-line .tok-hashtag {
+  color: var(--status-warn, var(--accent));
+  font-weight: 500;
+}
 
 .log-meta { display: flex; gap: var(--s-2); }
 .logs-grid {
@@ -486,6 +570,9 @@ onUnmounted(stopPolling)
   gap: var(--s-2);
   min-width: 0;
 }
+.log-pane-scroll-wrap {
+  position: relative;
+}
 .log-pane-head {
   display: flex;
   justify-content: space-between;
@@ -498,8 +585,44 @@ onUnmounted(stopPolling)
   padding-bottom: var(--s-2);
 }
 .log-pane-body {
-  max-height: 360px;
+  /* Issue #130 SUB2: Feed-/Console-Panes deutlich größer; floor 480 px,
+     wachsen bis 60 % Viewport, Cap bei 720 px für sehr große Monitore. */
+  min-height: 480px;
+  max-height: clamp(480px, 60vh, 720px);
   overflow-y: auto;
+}
+
+.density-toggle {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  overflow: hidden;
+}
+
+.density-btn {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.density-btn + .density-btn {
+  border-left: 1px solid var(--rule);
+}
+
+.density-btn:hover {
+  color: var(--fg);
+}
+
+.density-btn.active {
+  background: var(--accent);
+  color: var(--bg);
 }
 .console-line {
   font-family: var(--ff-mono);
