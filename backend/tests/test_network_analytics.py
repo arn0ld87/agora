@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from app.services.network_analytics import NetworkAnalyticsService
+from app.services.network_analytics import (
+    METRICS_STATUS_NO_ACTIONS,
+    METRICS_STATUS_NO_PAIRWISE,
+    METRICS_STATUS_OK,
+    NetworkAnalyticsService,
+)
 
 
 def _follow(src: int, tgt: int, round_num: int = 0) -> Dict[str, Any]:
@@ -315,6 +320,58 @@ def test_unknown_author_name_skipped_not_crashing():
     m = svc.compute_metrics(actions)
 
     assert m.total_interactions == 0
+
+
+# --- S2a: Status flag + snapshot metadata ----------------------------------
+
+
+def test_status_no_actions_for_empty_input():
+    svc = NetworkAnalyticsService()
+    m = svc.compute_metrics([])
+
+    assert m.status == METRICS_STATUS_NO_ACTIONS
+    assert m.snapshot_id and m.snapshot_id.startswith("metrics_")
+    assert m.calculated_at is not None
+
+
+def test_status_no_pairwise_for_broadcast_only():
+    svc = NetworkAnalyticsService()
+    actions = [
+        {"agent_id": 1, "agent_name": "Alice", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+        {"agent_id": 2, "agent_name": "Bob", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.status == METRICS_STATUS_NO_PAIRWISE
+    assert m.total_interactions == 0
+    assert m.snapshot_id and m.snapshot_id.startswith("metrics_")
+
+
+def test_status_ok_when_interactions_present():
+    svc = NetworkAnalyticsService()
+    actions = [
+        {"agent_id": 1, "agent_name": "Alice", "action_type": "CREATE_POST",
+         "action_args": {"content": "..."}, "round": 0},
+        {"agent_id": 2, "agent_name": "Bob", "action_type": "LIKE_POST",
+         "action_args": {"post_id": 1, "post_author_name": "Alice"}, "round": 1},
+    ]
+
+    m = svc.compute_metrics(actions)
+
+    assert m.status == METRICS_STATUS_OK
+    assert m.total_interactions == 1
+
+
+def test_to_dict_includes_status_and_metadata():
+    svc = NetworkAnalyticsService()
+    d = svc.compute_metrics([], simulation_id="sim_xyz").to_dict()
+
+    assert d["status"] == METRICS_STATUS_NO_ACTIONS
+    assert d["snapshot_id"].startswith("metrics_")
+    assert d["calculated_at"] is not None
 
 
 def test_full_oasis_run_mixed_directed_actions():

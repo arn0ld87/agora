@@ -21,7 +21,9 @@ analysis to the last ``window_size_rounds`` rounds; 0 or ``None`` disables.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from ..utils.logger import get_logger
@@ -59,6 +61,16 @@ class ClusterDef:
         }
 
 
+# S2a: Snapshot-Status — explizit machen, was 0/0/0/0 bedeutet.
+# `ok` = echte Metriken; `no_actions` = keine Actions geloggt;
+# `no_pairwise_interactions` = nur Broadcasts (CREATE_POST), kein
+# Interaktionsgraph baubar. Externer Review hatte gefordert, nicht
+# stillschweigend Nullen als "Metriken" zu exportieren.
+METRICS_STATUS_OK = "ok"
+METRICS_STATUS_NO_ACTIONS = "no_actions"
+METRICS_STATUS_NO_PAIRWISE = "no_pairwise_interactions"
+
+
 @dataclass
 class PolarizationMetrics:
     simulation_id: Optional[str] = None
@@ -69,10 +81,16 @@ class PolarizationMetrics:
     cluster_count: int = 0
     dominant_clusters: List[ClusterDef] = field(default_factory=list)
     bridge_agents: List[int] = field(default_factory=list)
+    snapshot_id: Optional[str] = None
+    calculated_at: Optional[str] = None
+    status: str = METRICS_STATUS_OK
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "simulation_id": self.simulation_id,
+            "snapshot_id": self.snapshot_id,
+            "calculated_at": self.calculated_at,
+            "status": self.status,
             "window_size_rounds": self.window_size_rounds,
             "total_agents": self.total_agents,
             "total_interactions": self.total_interactions,
@@ -219,11 +237,23 @@ class NetworkAnalyticsService:
                 if int(a.get("round") or a.get("round_num") or 0) >= cutoff
             ]
 
+        # S2a: Snapshot-Identität + Berechnungszeitpunkt deterministisch
+        # vergeben, damit Reports auf einen konkreten Metrik-Stand verweisen
+        # können (statt jeden 0/0/0/0-Export gleich aussehen zu lassen).
+        calculated_at_dt = datetime.now(timezone.utc)
+        calculated_at = calculated_at_dt.isoformat(timespec="seconds")
+        sid_basis = f"{simulation_id or 'no_sim'}|{len(actions)}|{window_size_rounds or 0}|{calculated_at}"
+        snapshot_id = "metrics_" + hashlib.sha1(sid_basis.encode("utf-8")).hexdigest()[:12]
+
         interactions = list(self._iter_interactions(actions))
         if not interactions:
+            status = METRICS_STATUS_NO_ACTIONS if not actions else METRICS_STATUS_NO_PAIRWISE
             return PolarizationMetrics(
                 simulation_id=simulation_id,
                 window_size_rounds=window_size_rounds,
+                snapshot_id=snapshot_id,
+                calculated_at=calculated_at,
+                status=status,
             )
 
         clusters, bridges, echo, total_agents = self._analyse(interactions)
@@ -237,6 +267,9 @@ class NetworkAnalyticsService:
             cluster_count=len(clusters),
             dominant_clusters=clusters,
             bridge_agents=bridges,
+            snapshot_id=snapshot_id,
+            calculated_at=calculated_at,
+            status=METRICS_STATUS_OK,
         )
 
     # -- internals --------------------------------------------------------
@@ -332,4 +365,7 @@ __all__ = [
     "NetworkAnalyticsService",
     "PolarizationMetrics",
     "ClusterDef",
+    "METRICS_STATUS_OK",
+    "METRICS_STATUS_NO_ACTIONS",
+    "METRICS_STATUS_NO_PAIRWISE",
 ]
