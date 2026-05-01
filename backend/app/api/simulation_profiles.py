@@ -18,6 +18,7 @@ from ..services.persona_review_service import (
 from ..services.simulation_manager import SimulationManager
 from ..utils.auth import allow_ticket_auth
 from ..utils.validation import validate_simulation_id
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from .simulation_common import get_artifact_store, logger
 
@@ -30,12 +31,20 @@ def _persona_review_service() -> PersonaReviewService:
 @handle_api_errors(log_prefix="Failed to create simulation branch")
 def create_simulation_branch(simulation_id: str):
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     data = request.get_json() or {}
     branch_name = (data.get("branch_name") or "").strip()
     if not branch_name:
-        return json_error("branch_name is required", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="branch_name is required",
+        )
 
     manager = SimulationManager()
     branch = manager.create_branch(
@@ -53,7 +62,11 @@ def create_simulation_branch(simulation_id: str):
 @handle_api_errors(log_prefix="Failed to list simulation branches")
 def list_simulation_branches(simulation_id: str):
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     manager = SimulationManager()
     branches = manager.list_branches(simulation_id)
@@ -65,7 +78,11 @@ def list_simulation_branches(simulation_id: str):
 def get_simulation_profiles(simulation_id: str):
     """Get stored simulation profiles."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     platform = request.args.get('platform', 'reddit')
     manager = SimulationManager()
@@ -98,7 +115,11 @@ def save_persona_template():
     """Persist a generated or manually authored persona for later simulations."""
     data = request.get_json() or {}
     if not (data.get("username") or data.get("name") or data.get("persona")):
-        return json_error("Provide at least username, name, or persona", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Provide at least username, name, or persona",
+        )
     template = PersonaLibrary().save_template(data)
     return json_success({"template": template})
 
@@ -108,7 +129,11 @@ def save_persona_template():
 def delete_persona_template(template_id: str):
     """Remove a reusable persona template."""
     if not PersonaLibrary().delete_template(template_id):
-        return json_error(f"Persona template not found: {template_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Persona template not found: {template_id}",
+        )
     return json_success({"removed": template_id})
 
 
@@ -117,7 +142,11 @@ def delete_persona_template(template_id: str):
 def get_simulation_profiles_realtime(simulation_id: str):
     """Read profile files directly for realtime generation feedback."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     import csv
     from datetime import datetime
@@ -125,7 +154,11 @@ def get_simulation_profiles_realtime(simulation_id: str):
     platform = request.args.get('platform', 'reddit')
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     store = get_artifact_store()
     profiles = []
@@ -216,13 +249,21 @@ def _save_profiles_file(simulation_id: str, path: str, profiles: list, platform:
 def add_simulation_profile(simulation_id: str):
     """Append a manually authored persona to the simulation."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     data = request.get_json() or {}
     platform = data.get('platform', 'reddit')
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     path, profiles = _load_profiles_file(simulation_id, sim_dir, platform)
     existing_ids = [int(profile.get('user_id', 0) or 0) for profile in profiles]
@@ -283,18 +324,30 @@ def add_simulation_profile(simulation_id: str):
 def delete_simulation_profile(simulation_id: str, username: str):
     """Remove a persona from reddit_profiles.json / twitter_profiles.csv by username."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     platform = request.args.get('platform', 'reddit')
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     path, profiles = _load_profiles_file(simulation_id, sim_dir, platform)
     before = len(profiles)
     profiles = [profile for profile in profiles if str(profile.get('username', '')) != username]
     if len(profiles) == before:
-        return json_error(f"Persona not found: {username}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Persona not found: {username}",
+        )
 
     _save_profiles_file(simulation_id, path, profiles, platform)
     return json_success({
@@ -309,7 +362,11 @@ def delete_simulation_profile(simulation_id: str, username: str):
 def get_simulation_profiles_quality(simulation_id: str):
     """Quality heuristics over the reddit personas of a simulation."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
     # No existence check: an empty/unknown simulation surfaces ``no_personas``
     # as a global warning, which is the more useful UX than a hard 404 while
     # the Step 2 UI is still spinning up profiles.
@@ -324,13 +381,25 @@ def _handle_review_action(
     action,
 ):
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
     try:
         profile = action(_persona_review_service())
     except PersonaNotFoundError as exc:
-        return json_error(str(exc), status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=str(exc),
+        )
     except InvalidReviewStatusError as exc:
-        return json_error(str(exc), status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
     return json_success({
         "username": username,
         "review_status": profile.get("review_status"),
@@ -385,13 +454,21 @@ def reject_simulation_profile(simulation_id: str, username: str):
 def get_simulation_config_realtime(simulation_id: str):
     """Read simulation configuration directly for realtime generation feedback."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     from datetime import datetime
 
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     store = get_artifact_store()
     file_exists = store.exists(simulation_id, "simulation_config")
@@ -446,12 +523,20 @@ def get_simulation_config_realtime(simulation_id: str):
 def get_simulation_config(simulation_id: str):
     """Get the generated simulation configuration."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     manager = SimulationManager()
     config = manager.get_simulation_config(simulation_id)
     if not config:
-        return json_error("Simulation configuration does not exist. Please call /prepare first", status=404)
+        return json_error(
+            ApiErrorCode.SIMULATION_NOT_PREPARED,
+            status=404,
+            message="Simulation configuration does not exist. Please call /prepare first",
+        )
 
     return json_success(config)
 
@@ -462,13 +547,21 @@ def get_simulation_config(simulation_id: str):
 def download_simulation_config(simulation_id: str):
     """Download simulation configuration file."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format", status=400)
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
 
     manager = SimulationManager()
     sim_dir = manager._get_simulation_dir(simulation_id)
     config_path = os.path.join(sim_dir, "simulation_config.json")
     if not os.path.exists(config_path):
-        return json_error("Configuration file does not exist. Please call /prepare first", status=404)
+        return json_error(
+            ApiErrorCode.SIMULATION_NOT_PREPARED,
+            status=404,
+            message="Configuration file does not exist. Please call /prepare first",
+        )
 
     return send_file(config_path, as_attachment=True, download_name="simulation_config.json")
 
@@ -486,10 +579,18 @@ def download_simulation_script(script_name: str):
         "action_logger.py",
     ]
     if script_name not in allowed_scripts:
-        return json_error(f"Unknown script: {script_name}，Optional: {allowed_scripts}", status=400)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=f"Unknown script: {script_name}. Allowed: {allowed_scripts}",
+        )
 
     script_path = os.path.join(scripts_dir, script_name)
     if not os.path.exists(script_path):
-        return json_error(f"Script file does not exist: {script_name}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Script file does not exist: {script_name}",
+        )
 
     return send_file(script_path, as_attachment=True, download_name=script_name)

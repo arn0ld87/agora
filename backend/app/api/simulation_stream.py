@@ -34,6 +34,7 @@ from ..services.event_bus import (
     SimulationEvent,
     SimulationEventBus,
 )
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error
 from ..utils.auth import allow_ticket_auth
 from ..utils.logger import get_logger
@@ -137,7 +138,10 @@ def _stream(simulation_id: str) -> Iterator[str]:
 def simulation_stream(simulation_id: str):
     """SSE endpoint for live run-state + control updates."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     response = Response(
         stream_with_context(_stream(simulation_id)),

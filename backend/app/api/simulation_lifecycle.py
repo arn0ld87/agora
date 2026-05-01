@@ -10,6 +10,7 @@ from . import simulation_bp
 from ..config import Config
 from ..models.project import ProjectManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_graph_id, validate_project_id, validate_simulation_id
 from .simulation_common import logger
@@ -85,21 +86,35 @@ def create_simulation():
 
     project_id = data.get('project_id')
     if not project_id:
-        return json_error("Please provide project_id")
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Please provide project_id",
+        )
     if not validate_project_id(project_id):
-        return json_error("Invalid project_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid project_id format",
+        )
 
     project = ProjectManager.get_project(project_id)
     if not project:
-        return json_error(f"Project does not exist: {project_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {project_id}",
+        )
 
     graph_id = data.get('graph_id') or project.graph_id
     if not graph_id:
         return json_error(
-            "Project has not built knowledge graph yet, please call /api/graph/build first"
+            ApiErrorCode.VALIDATION_FAILED,
+            message="Project has not built knowledge graph yet, please call /api/graph/build first",
         )
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid graph_id format",
+        )
 
     manager = SimulationManager()
     state = manager.create_simulation(
@@ -116,12 +131,19 @@ def create_simulation():
 def get_simulation(simulation_id: str):
     """Get simulation status."""
     if not validate_simulation_id(simulation_id):
-        return json_error("Invalid simulation_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid simulation_id format",
+        )
 
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
-        return json_error(f"Simulation does not exist: {simulation_id}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Simulation does not exist: {simulation_id}",
+        )
 
     result = state.to_dict()
     if state.status == SimulationStatus.READY:

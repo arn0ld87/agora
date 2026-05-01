@@ -6,6 +6,7 @@ from flask import request
 
 from . import simulation_bp
 from ..services.entity_reader import EntityReader
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_graph_id
 from .simulation_common import get_simulation_storage, logger
@@ -16,7 +17,10 @@ from .simulation_common import get_simulation_storage, logger
 def get_graph_entities(graph_id: str):
     """Get all entities from the knowledge graph (filtered)."""
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid graph_id format",
+        )
 
     entity_types_str = request.args.get('entity_types', '')
     entity_types = [t.strip() for t in entity_types_str.split(',') if t.strip()] if entity_types_str else None
@@ -41,14 +45,21 @@ def get_graph_entities(graph_id: str):
 def get_entity_detail(graph_id: str, entity_uuid: str):
     """Get detailed information for a single entity."""
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid graph_id format",
+        )
 
     storage = get_simulation_storage()
     reader = EntityReader(storage)
     entity = reader.get_entity_with_context(graph_id, entity_uuid)
 
     if not entity:
-        return json_error(f"Entity does not exist: {entity_uuid}", status=404)
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Entity does not exist: {entity_uuid}",
+        )
 
     return json_success(entity.to_dict())
 
@@ -58,7 +69,10 @@ def get_entity_detail(graph_id: str, entity_uuid: str):
 def get_entities_by_type(graph_id: str, entity_type: str):
     """Get all entities of the specified type."""
     if not validate_graph_id(graph_id):
-        return json_error("Invalid graph_id format")
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            message="Invalid graph_id format",
+        )
 
     enrich = request.args.get('enrich', 'true').lower() == 'true'
 
