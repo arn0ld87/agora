@@ -1,0 +1,23 @@
+# Production Compose-Override für Agora.
+# Verwendung:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Wesentliche Unterschiede zum Default-Compose:
+# - `target: prod` zieht das gunicorn-Runtime-Stage aus dem Multi-Stage-
+#   Dockerfile (kein Vite, kein npm zur Laufzeit)
+# - Nur Backend-Port (5001) wird publiziert; statisches Frontend wird
+#   später über einen Reverse-Proxy (nginx/Traefik) ausgeliefert. Wer
+#   beim Start eine ad-hoc-Anzeige will, mappt den Backend-Port auf
+#   einen extern erreichbaren Hostport.
+# - Persistente Cache-Mounts (HuggingFace) bleiben.
+
+services:
+  agora:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "${AGORA_BACKEND_PORT:-5001}:5001"
+    # Vite läuft nicht im Prod-Build — Frontend-Port-Mapping rausgenommen.
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
