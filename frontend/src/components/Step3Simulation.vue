@@ -237,6 +237,11 @@ async function pollDetail() {
         const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
         if (!actionIds.value.has(key)) {
           actionIds.value.add(key)
+          // Tokens einmalig bei Ingestion berechnen — vermeidet Aufruf pro
+          // Render-Zyklus, wenn die Liste während der Simulation wächst.
+          if (a.action_args?.content) {
+            a._tokens = tokenizeFeedText(a.action_args.content)
+          }
           allActions.value.push(a)
           appended += 1
         }
@@ -421,7 +426,7 @@ onUnmounted(stopPolling)
                   <span class="act">{{ a.action_type }}</span>
                   <span class="content" v-if="a.action_args?.content">
                     — <template
-                      v-for="(tok, ti) in tokenizeFeedText(a.action_args.content)"
+                      v-for="(tok, ti) in (a._tokens || [])"
                       :key="ti"
                     ><span :class="['tok', 'tok-' + tok.type]">{{ tok.value }}</span></template>
                   </span>

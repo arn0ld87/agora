@@ -52,4 +52,19 @@ describe('tokenizeFeedText', () => {
       { type: 'text', value: '.' },
     ])
   })
+
+  it('matched keine Mention innerhalb einer E-Mail-Adresse', () => {
+    // Word-Boundary vorn: vor `@` ist hier ein Word-Char, also kein Match.
+    expect(tokenizeFeedText('Schreib an user@host.com.')).toEqual([
+      { type: 'text', value: 'Schreib an user@host.com.' },
+    ])
+  })
+
+  it('schliesst Satzpunkt am Ende nicht in die Mention ein', () => {
+    expect(tokenizeFeedText('Frag mal @alex.')).toEqual([
+      { type: 'text', value: 'Frag mal ' },
+      { type: 'mention', value: '@alex' },
+      { type: 'text', value: '.' },
+    ])
+  })
 })

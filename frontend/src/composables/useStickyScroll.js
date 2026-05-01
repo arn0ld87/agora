@@ -16,7 +16,7 @@
  * Nicht-Ziel: Smooth-Scroll-Animation (lassen wir dem Browser-Default).
  */
 
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted, getCurrentInstance } from 'vue'
 
 const BOTTOM_THRESHOLD_PX = 32
 
@@ -80,15 +80,18 @@ export function useStickyScroll(containerRef) {
 
   function attach(el) {
     if (!el) return
+    // Scroll-Drosselung via requestAnimationFrame: bei schnellen Scroll-Events
+    // läuft `evaluatePosition` höchstens einmal pro Frame statt pro Event.
+    // Fallback `setTimeout(cb, 16)` für Non-Browser-Umgebungen (Tests).
     let ticking = false
+    const raf = (typeof window !== 'undefined' && window.requestAnimationFrame) || ((cb) => setTimeout(cb, 16))
     const handler = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          evaluatePosition()
-          ticking = false
-        })
-        ticking = true
-      }
+      if (ticking) return
+      ticking = true
+      raf(() => {
+        ticking = false
+        evaluatePosition()
+      })
     }
     el.addEventListener('scroll', handler, { passive: true })
     _detach = () => el.removeEventListener('scroll', handler)
@@ -109,7 +112,13 @@ export function useStickyScroll(containerRef) {
     if (el) attach(el)
   }, { immediate: true })
 
-  onUnmounted(detach)
+  // Lifecycle-Hook nur registrieren, wenn ein Component-Setup-Context da ist.
+  // Außerhalb von Components (z. B. Unit-Tests) muss der Konsument selbst
+  // aufräumen — `detach` ist über die Composable-API nicht öffentlich, weil
+  // der typische Pfad immer im Component-Setup läuft.
+  if (getCurrentInstance()) {
+    onUnmounted(detach)
+  }
 
   return {
     isAtBottom,

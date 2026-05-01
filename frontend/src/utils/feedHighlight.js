@@ -5,9 +5,12 @@
  * ohne `v-html` und damit ohne XSS-Vektor — Konsument rendert die Tokens
  * mit `v-for` als `<span>`-Sequenz.
  *
- * Pattern:
- *  - Mention: `@` gefolgt von 1–30 Word-Chars / Punkten.
- *  - Hashtag: `#` gefolgt von 1–30 Word-Chars (Unicode-tolerant via `\p{L}`).
+ * Pattern (Bot-Review-Härtung):
+ *  - Wortgrenze vorn: nur am String-Anfang oder nach Whitespace (verhindert
+ *    Treffer in E-Mail-Adressen wie `user@host.com`).
+ *  - Mention: `@` + 0–29 Word/Digit/Punkt-Chars + finaler Word/Digit-Char,
+ *    damit ein Satzpunkt am Ende NICHT zur Mention gehört (`@alex.` → `@alex`).
+ *  - Hashtag: `#` + 1–30 Word/Digit-Chars (Unicode-tolerant via `\p{L}`).
  *  - Alles andere → text.
  */
 

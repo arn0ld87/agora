@@ -81,6 +81,15 @@ Simulationskonversation lesbar groß, Sticky-Scroll: Auto-Scroll greift nur, wen
 - [x] Commit erstellt (`Closes #130`)
 - [ ] Browser-Smoke (durch User)
 
+### SUB4 — Review-Fixes 2026-05-01 (PR #140)
+- [x] **rAF-Drosselung** im Scroll-Listener von `useStickyScroll`: bei schnellen Scroll-Events läuft `evaluatePosition` höchstens einmal pro Frame statt pro Event. Fallback `setTimeout(cb, 16)` für Non-Browser-Umgebungen.
+- [x] **`onUnmounted` nur mit Component-Setup-Context**: `getCurrentInstance()`-Check vermeidet Vue-Warning in reinen Composable-Unit-Tests.
+- [x] **Tokenizer-Cache**: `Step3Simulation.pollDetail` berechnet `_tokens` einmalig bei Daten-Ingestion und cacht sie am Action-Object. Template iteriert über `(a._tokens || [])` statt `tokenizeFeedText(...)` pro Render.
+- [x] **Regex-Härtung** in `feedHighlight.js`: Lookbehind `(?<=^|\s)` verhindert Match in E-Mail-Adressen; Mention-Pattern endet auf Word-/Digit-Char (kein Satzpunkt im Match).
+- [x] **Test-Fix**: Scroll-Re-Aktivierung-Test nutzt JSDOM-konformes `el.scrollTop = 800` statt `Object.defineProperty`-Override (das CI sah anders als lokal); Tests warten via `nextFrame()` auf rAF-Callback.
+- [x] **2 neue Tokenizer-Tests** (E-Mail-Negativ, Satzpunkt-Exclusion).
+- [x] `npm run check` grün (690 Backend, 53 Frontend, Build).
+
 ### Bewusst aus Issue gestrichen → Folge-Issues
 - **Polling-Composable-Migration zu Sticky-Scroll** (`useIncrementalLogPolling`): liegt eigentlich auf der Schnittmenge mit #131 („Tool-Calls/Errors-Pane mit gleicher Sticky-Logik"). Wird dort umgesetzt.
 - **Echter Playwright-Test** (User scrollt hoch → kein Auto-Scroll): Repo nutzt heute Vitest+JSDOM; dedizierter Playwright-Setup ist eigenes Vorhaben (Folge-Issue empfohlen, wenn Smoke-Tests systematischer aufgesetzt werden).
