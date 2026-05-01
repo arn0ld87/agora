@@ -31,7 +31,6 @@ import logging
 import threading
 import time
 from hashlib import sha256
-
 logger = logging.getLogger("agora.signed_ticket")
 
 VERSION = "v1"
@@ -138,9 +137,7 @@ def _get_redis_client() -> "object | None":
             return None
         _redis_client = redis_lib.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         _redis_client.ping()
-        # Log host:port only — REDIS_URL may contain credentials.
-        safe_url = url.replace("//", "//***@") if "@" in url else url
-        logger.info("signed_ticket Redis connected to %s", safe_url)
+        logger.info("signed_ticket Redis connected")
         _redis_init_attempted = True
     except Exception as exc:
         logger.warning("signed_ticket Redis not available: %s", exc)

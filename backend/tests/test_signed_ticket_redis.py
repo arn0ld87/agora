@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 import fakeredis
 
@@ -89,3 +91,30 @@ class TestInMemoryFallback:
         output = handler.stream.getvalue()
         signed_ticket.logger.removeHandler(handler)
         assert "in-process" in output
+
+
+class TestRedisUrlNotLeakedToLogs:
+    """REDIS_URL credentials must never appear in log output."""
+
+    def test_redis_url_credentials_not_in_caplog(self, monkeypatch, caplog):
+        import redis as redis_lib
+        from unittest.mock import MagicMock
+
+        from app.config import Config
+
+        # Wire up a mock Redis that accepts from_url + ping
+        mock_redis = MagicMock()
+        mock_redis.ping.return_value = True
+        monkeypatch.setattr(redis_lib, "Redis", MagicMock())
+        monkeypatch.setattr(
+            redis_lib.Redis, "from_url", MagicMock(return_value=mock_redis)
+        )
+        # Credential-laden URL
+        monkeypatch.setattr(Config, "REDIS_URL", "redis://:secret123@redis:6379/0")
+
+        signed_ticket._reset_seen_for_tests()
+        with caplog.at_level(logging.INFO, logger="agora.signed_ticket"):
+            client = signed_ticket._get_redis_client()
+
+        assert client is not None
+        assert "secret123" not in caplog.text

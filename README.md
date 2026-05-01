@@ -166,8 +166,14 @@ git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
 
-# .env anpassen: SECRET_KEY und NEO4J_PASSWORD setzen
-# (siehe Sicherheits-Sektion unten). Für Dev kann FLASK_DEBUG=true bleiben.
+# .env.example defaultet FLASK_DEBUG=false (secure-by-default).
+#
+# Dev: FLASK_DEBUG=true setzen, SECRET_KEY und NEO4J_PASSWORD duerfen
+#      Platzhalter bleiben (Config.validate() warnt, blockt aber nicht).
+#
+# Hardened: FLASK_DEBUG=false lassen, echte Werte fuer SECRET_KEY,
+#   NEO4J_PASSWORD und AGORA_AUTH_TOKEN erzeugen
+#   (Einzeiler in der Sicherheits-Sektion unten).
 # Erst dann:
 docker compose up -d --build
 ```
@@ -432,7 +438,15 @@ ollama pull qwen3-embedding:4b
 git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
-docker compose up -d
+# .env.example defaults to FLASK_DEBUG=false (secure-by-default).
+#
+# Dev: set FLASK_DEBUG=true, SECRET_KEY and NEO4J_PASSWORD can stay
+#      as placeholders (Config.validate() warns but does not block).
+#
+# Hardened: keep FLASK_DEBUG=false, generate real values for
+#   SECRET_KEY, NEO4J_PASSWORD and AGORA_AUTH_TOKEN
+#   (see Security section below for the one-liner).
+docker compose up -d --build
 ```
 
 Open:
@@ -441,7 +455,7 @@ Open:
 - Backend health: <http://localhost:5001/health>
 - Neo4j Browser: <http://localhost:7474>
 
-Local development:
+Local development (without Docker):
 
 ```bash
 npm run setup:all
