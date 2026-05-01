@@ -168,7 +168,7 @@ RUN_STATUS_SCHEMA = {
                     "timestamp": {"type": "string"},
                     "type": {"type": "string"},
                     "status": {"type": "string"},
-                    "progress": {"type": ["integer", "null"]},
+                    "progress": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
                     "message": {"type": "string"},
                     "error": {"type": ["string", "null"]},
                     "details": {"type": "object"},
