@@ -1,51 +1,18 @@
 <template>
   <div class="graph-panel">
-    <div class="panel-header">
-      <span class="panel-title">{{ $t('graph.panel') }}</span>
-      <!-- Top Toolbar (Internal Top Right) -->
-      <div class="header-tools">
-        <button class="tool-btn" @click="$emit('refresh')" :disabled="loading" :title="$t('common.refresh')">
-          <span class="icon-refresh" :class="{ 'spinning': loading }">↻</span>
-          <span class="btn-text">{{ $t('common.refresh') }}</span>
-        </button>
-        <button
-          v-if="graphData?.graph_id"
-          class="tool-btn"
-          @click="downloadGraphml"
-          title="Export as GraphML"
-        >
-          <span class="btn-text">.graphml</span>
-        </button>
-        <button
-          v-if="graphData"
-          class="tool-btn"
-          @click="downloadSvg"
-          title="Export current view as SVG"
-        >
-          <span class="btn-text">.svg</span>
-        </button>
-        <button
-          v-if="graphData"
-          class="tool-btn"
-          @click="downloadPng"
-          title="Export current view as PNG"
-        >
-          <span class="btn-text">.png</span>
-        </button>
-        <button
-          v-if="graphData"
-          class="tool-btn"
-          @click="printGraphPdf"
-          title="Print / save current view as PDF"
-        >
-          <span class="btn-text">.pdf</span>
-        </button>
-        <button class="tool-btn" @click="$emit('toggle-maximize')" title="Maximize/Restore">
-          <span class="icon-maximize">⛶</span>
-        </button>
-      </div>
-    </div>
-    
+    <GraphToolbar
+      :loading="loading"
+      :has-graph-id="!!graphData?.graph_id"
+      :has-graph-data="!!graphData"
+      @refresh="$emit('refresh')"
+      @toggle-maximize="$emit('toggle-maximize')"
+      @download-graphml="downloadGraphml"
+      @download-svg="downloadSvg"
+      @download-png="downloadPng"
+      @print-pdf="printGraphPdf"
+    />
+
+
     <div class="graph-container" ref="graphContainer">
       <!-- Graph Visualization -->
       <div v-if="graphData" class="graph-view">
@@ -108,6 +75,7 @@ import GraphDetailPanel from './graph/GraphDetailPanel.vue'
 import GraphHints from './graph/GraphHints.vue'
 import GraphLegend from './graph/GraphLegend.vue'
 import GraphRoundSlider from './graph/GraphRoundSlider.vue'
+import GraphToolbar from './graph/GraphToolbar.vue'
 import {
   buildGraphRenderData,
   filterEdgesAtRound,
@@ -648,69 +616,6 @@ onUnmounted(() => {
   background-image: radial-gradient(var(--mono-700) 1px, transparent 1px);
   background-size: 24px 24px;
   overflow: hidden;
-}
-
-.panel-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: var(--s-4) var(--s-5);
-  z-index: 10;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: linear-gradient(to bottom, var(--bg), transparent);
-  pointer-events: none;
-}
-
-.panel-title {
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  font-weight: 500;
-  color: var(--fg-muted);
-  pointer-events: auto;
-}
-
-.header-tools {
-  pointer-events: auto;
-  display: flex;
-  gap: var(--s-2);
-  align-items: center;
-}
-
-.tool-btn {
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--rule);
-  background: var(--bg);
-  border-radius: var(--r-1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-  color: var(--fg-muted);
-  transition: border-color 150ms ease, color 150ms ease;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-}
-
-.tool-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.tool-btn .btn-text {
-  font-size: 11px;
-}
-
-.icon-refresh.spinning {
-  animation: spin 1s linear infinite;
 }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
