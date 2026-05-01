@@ -21,6 +21,7 @@ from enum import Enum
 
 from ..config import Config
 from ..utils.llm_client import LLMClient
+from .evidence_binder import bind_evidence_to_claim
 from .web_tools import WebToolsService
 from ..utils.logger import get_logger
 from .graph_tools import (
@@ -1001,7 +1002,10 @@ class ReportAgent:
 
     def _init_evidence_map(self, report_id: str) -> None:
         self.evidence_map = {
-            "schema_version": 1,
+            # S4b: schema_version 2 markiert claim-spezifisches Evidence-Binding.
+            # v1-Reports bleiben lesbar, neue Reports tragen den v2-Tag und
+            # zusätzliche Felder (`match_score`, `supports_claim`).
+            "schema_version": 2,
             "report_id": report_id,
             "simulation_id": self.simulation_id,
             "global_evidence": self._collect_simulation_evidence_items(),
@@ -1018,6 +1022,27 @@ class ReportAgent:
         if not self._active_section_evidence:
             self._active_section_evidence = []
         self._active_section_evidence.append(item)
+
+    def _try_get_embedder(self) -> Optional[Callable[[str], List[float]]]:
+        """S4b: liefert eine `embed(text) -> Vector`-Callable oder None.
+
+        Lazy-import von ``EmbeddingService`` damit Tests, die den
+        ReportAgent ohne lebenden Storage instanziieren, nicht durch
+        Ollama-Init scheitern. Cache: einmal pro Agent-Instanz.
+        """
+        cached = getattr(self, "_embed_cache", "missing")
+        if cached != "missing":
+            return cached
+        try:
+            from ..storage.embedding_service import EmbeddingService
+
+            service = EmbeddingService()
+            embed_fn = service.embed
+        except Exception as exc:  # pragma: no cover - environment dependent
+            logger.debug(f"EvidenceBinder: kein Embedder verfügbar ({exc!r})")
+            embed_fn = None
+        self._embed_cache = embed_fn
+        return embed_fn
 
     def _collect_simulation_evidence_items(self) -> List[Dict[str, Any]]:
         """Collect reusable evidence from existing metrics and simulation actions."""
@@ -1280,18 +1305,55 @@ class ReportAgent:
         chunks = atomic_chunks
         claims = []
         global_items = deepcopy((self.evidence_map or {}).get("global_evidence", [])[:6])
+        # S4b: claim-spezifisches Binding wenn ein Embedder verfügbar ist.
+        # Fällt der Embedder aus (Tests ohne Ollama, Service-Init failed),
+        # nutzt der Code den alten generischen Pool als Fallback. Damit
+        # bleibt der Test-Pfad stabil; Production mit Ollama bekommt
+        # gerankte Evidence.
+        embedder = self._try_get_embedder()
         for index, chunk in enumerate(chunks, 1):
             direct_items = deepcopy(self._active_section_evidence[:10])
-            evidence_items = direct_items + global_items + [
-                EvidenceItem(
-                    type="model_generated_inference",
-                    source="section_synthesis",
-                    tool_name="section_synthesis",
-                    snippet=self._truncate(chunk),
-                    raw={"content": chunk},
-                ).to_dict()
-            ]
-            direct_count = len([item for item in direct_items if item.get("type") != "model_generated_inference"])
+            inference_item = EvidenceItem(
+                type="model_generated_inference",
+                source="section_synthesis",
+                tool_name="section_synthesis",
+                snippet=self._truncate(chunk),
+                raw={"content": chunk},
+            ).to_dict()
+
+            bound: List[Dict[str, Any]] = []
+            embedder_ok = False
+            if embedder is not None:
+                try:
+                    bound = bind_evidence_to_claim(
+                        chunk,
+                        direct_items + global_items,
+                        embedder,
+                        threshold=0.55,
+                        top_k=5,
+                    )
+                    embedder_ok = True
+                except Exception as exc:
+                    # Embedder ist initialisierbar, aber nicht erreichbar
+                    # (Ollama down, Netzwerk-Probleme, …). Disable für
+                    # restliche Section, fallback auf alten Pool.
+                    logger.warning(
+                        f"EvidenceBinder failed, falling back to generic pool: {exc!r}"
+                    )
+                    self._embed_cache = None
+                    embedder = None
+            if embedder_ok:
+                # Globaler Pool nur als Fallback, max 2 Items, wenn der
+                # Binder gar nichts findet — vermeidet leere Belegliste
+                # für legitime Claims.
+                if not bound:
+                    bound = deepcopy(global_items[:2])
+                evidence_items = bound + [inference_item]
+                direct_count = len(bound)
+            else:
+                evidence_items = direct_items + global_items + [inference_item]
+                direct_count = len([item for item in direct_items if item.get("type") != "model_generated_inference"])
+
             support_count = direct_count + len(global_items)
             confidence_score = min(0.95, 0.25 + support_count * 0.12)
             confidence_label = "high" if confidence_score >= 0.75 else "medium" if confidence_score >= 0.45 else "low"
@@ -1301,7 +1363,7 @@ class ReportAgent:
                 evidence=evidence_items,
                 confidence_score=confidence_score,
                 confidence_label=confidence_label,
-                notes="Section-chunk level evidence mapping in v1.",
+                notes="Section-chunk level evidence mapping (schema_version 2).",
             ).to_dict())
         if not claims:
             claims.append(ReportClaim(

@@ -1,4 +1,5 @@
 import json
+from typing import Dict
 
 from app.services.report_agent import Report, ReportAgent, ReportManager, ReportOutline, ReportSection, ReportStatus
 
@@ -122,6 +123,57 @@ def test_build_claims_for_section_drops_headers():
     assert all("##" not in t for t in texts)
     assert not any(t.startswith("**Der Beschluss") for t in texts)
     assert len(claims) == 2
+
+
+def test_build_claims_uses_embedder_and_emits_match_score():
+    """S4b: bei verfügbarem Embedder bekommt jeder Claim ein gerankt-
+    gefiltertes Evidence-Set mit match_score."""
+    agent = ReportAgent.__new__(ReportAgent)
+    agent._active_section_evidence = [
+        {"type": "graph_fact", "source": "report_tool",
+         "snippet": "NRW Pflichtfach KIDM Curriculum"},
+        {"type": "graph_fact", "source": "report_tool",
+         "snippet": "Bayern plant nichts dergleichen"},
+    ]
+    agent.evidence_map = {
+        "schema_version": 2,
+        "global_evidence": [
+            {"type": "graph_metric", "source": "simulation_metrics",
+             "snippet": "echo_chamber_index 0.42"},
+        ],
+    }
+    vocab: Dict[str, int] = {}
+
+    def embed(text):
+        vec = [0.0] * 16
+        for tok in (text or "").lower().split():
+            vocab.setdefault(tok, len(vocab) % 16)
+            vec[vocab[tok]] += 1.0
+        return vec
+
+    agent._embed_cache = embed
+
+    claims = agent._build_claims_for_section("NRW Pflichtfach KIDM Curriculum startet 2027.")
+
+    assert len(claims) == 1
+    bound_evidence = claims[0]["evidence"]
+    matches = [e for e in bound_evidence if "match_score" in e]
+    assert matches, "Erwarte mindestens ein gebundenes Evidence-Item"
+    assert not any("Bayern" in (e.get("snippet") or "") for e in matches)
+
+
+def test_init_evidence_map_sets_schema_version_2(monkeypatch):
+    """S4b: neue Evidence-Maps tragen schema_version=2."""
+    agent = ReportAgent.__new__(ReportAgent)
+    agent.simulation_id = "sim_xyz"
+
+    monkeypatch.setattr(
+        ReportAgent,
+        "_collect_simulation_evidence_items",
+        lambda self: [],
+    )
+    agent._init_evidence_map("rep_001")
+    assert agent.evidence_map["schema_version"] == 2
 
 
 def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
