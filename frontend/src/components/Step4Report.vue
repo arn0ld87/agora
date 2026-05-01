@@ -4,15 +4,13 @@ import { useIncrementalLogPolling } from '../composables/useIncrementalLogPollin
 import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { marked } from 'marked'
+import { renderMarkdown } from '../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence, exportReport } from '../api/report'
 import { createSimulationBranch, getAvailableModels } from '../api/simulation'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Select from './ui/Select.vue'
-
-marked.setOptions({ gfm: true, breaks: false, mangle: false, headerIds: false })
 
 const { t } = useI18n()
 const router = useRouter()
@@ -269,11 +267,6 @@ function toggleSection(i) {
   const next = new Set(collapsedSections.value)
   next.has(i) ? next.delete(i) : next.add(i)
   collapsedSections.value = next
-}
-
-function renderMarkdown(text) {
-  if (!text) return ''
-  try { return marked.parse(text) } catch { return text }
 }
 
 const reportMarkdown = computed(() => {
