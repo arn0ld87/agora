@@ -146,6 +146,65 @@ def test_evidence_map_must_be_v2():
         })
 
 
+# ---- EvidenceItemModel: quote + source_id_anchor (Task 12) ----
+
+def test_evidence_with_quote_and_anchor_valid():
+    """Neue Felder quote + source_id_anchor werden korrekt gesetzt."""
+    item = EvidenceItemModel(
+        type=EvidenceType.agent_action,
+        source="agent_log",
+        snippet="Persona kmu_ceo äußerte Bedenken.",
+        quote="Persona kmu_ceo äußerte Bedenken.",
+        source_id_anchor="web:https://example.com/x#:~:text=Anker-Tests",
+    )
+    assert item.quote == "Persona kmu_ceo äußerte Bedenken."
+    assert item.source_id_anchor == "web:https://example.com/x#:~:text=Anker-Tests"
+
+
+def test_evidence_without_provenance_still_valid():
+    """Ohne quote und source_id_anchor bleibt EvidenceItemModel valide."""
+    item = EvidenceItemModel(
+        type=EvidenceType.graph_fact,
+        source="graph",
+        snippet="Kein Zitat verfügbar.",
+    )
+    assert item.quote is None
+    assert item.source_id_anchor is None
+
+
+def test_evidence_quote_too_long_rejected():
+    """quote mit 501 Zeichen überschreitet max_length=500 → ValidationError."""
+    with pytest.raises(ValidationError):
+        EvidenceItemModel(
+            type=EvidenceType.graph_fact,
+            source="x",
+            snippet="snippet",
+            quote="x" * 501,
+        )
+
+
+def test_evidence_quote_empty_rejected():
+    """quote='' verletzt min_length=1 → ValidationError."""
+    with pytest.raises(ValidationError):
+        EvidenceItemModel(
+            type=EvidenceType.graph_fact,
+            source="x",
+            snippet="snippet",
+            quote="",
+        )
+
+
+def test_evidence_source_id_anchor_too_long_rejected():
+    """source_id_anchor mit 201 Zeichen überschreitet max_length=200 → ValidationError."""
+    with pytest.raises(ValidationError):
+        EvidenceItemModel(
+            type=EvidenceType.graph_fact,
+            source="x",
+            snippet="snippet",
+            source_id_anchor="x" * 201,
+        )
+
+
 def test_full_contract_round_trip():
     """End-to-End: vollständiges, valides Report-Contract-Objekt."""
     payload = {

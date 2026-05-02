@@ -470,6 +470,56 @@ class ReportAgent:
             return False
         return True
 
+    @staticmethod
+    def _build_source_id_anchor(item: Dict[str, Any]) -> Optional[str]:
+        """Leite einen stabilen Anker fuer das Frontend ab.
+        Reihenfolge: agent_log_ref > raw['url'] > None.
+        """
+        ref = item.get("agent_log_ref") or {}
+        if isinstance(ref, dict):
+            log_id = ref.get("agent_log_id") or ref.get("log_id")
+            entry = ref.get("entry_id") or ref.get("post_id")
+            if log_id and entry:
+                return f"agent-log-{log_id}#entry-{entry}"
+            if log_id:
+                return f"agent-log-{log_id}"
+        raw = item.get("raw") or {}
+        if isinstance(raw, dict):
+            url = raw.get("url") or raw.get("source_url")
+            text = raw.get("text") or raw.get("content") or item.get("snippet") or ""
+            if url:
+                # Word-prefix fuer text-fragment, max 60 chars, urlsafe genug
+                if text:
+                    fragment = text.strip().split("\n", 1)[0][:60]
+                    return f"web:{url}#:~:text={fragment}"
+                return f"web:{url}"
+        return None
+
+    @staticmethod
+    def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
+        """Idempotenter Mutator: setzt quote + source_id_anchor wenn ableitbar.
+        Existierende Werte werden NICHT ueberschrieben.
+        """
+        if not isinstance(item, dict):
+            return item
+        # quote: bevorzugt raw['text'] / raw['content'], sonst snippet selbst
+        if not item.get("quote"):
+            raw = item.get("raw") or {}
+            candidate = None
+            if isinstance(raw, dict):
+                candidate = raw.get("text") or raw.get("content")
+            candidate = candidate or item.get("snippet")
+            if candidate:
+                quote = str(candidate).strip()
+                if quote:
+                    item["quote"] = quote[:500]
+        # source_id_anchor
+        if not item.get("source_id_anchor"):
+            anchor = ReportAgent._build_source_id_anchor(item)
+            if anchor:
+                item["source_id_anchor"] = anchor[:200]
+        return item
+
     def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
         raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
         # S3a: Strukturmarkup (Header, Bold-Section-Titel) verwerfen.
@@ -529,6 +579,9 @@ class ReportAgent:
             else:
                 evidence_items = direct_items
                 direct_count = len(direct_items)
+
+            # Layer 3 (Task 12): Provenance-Anker an jedes Evidence-Item heften.
+            evidence_items = [self._attach_provenance(it) for it in evidence_items]
 
             # S6: formelbasierte Confidence statt linear-in-N. Berechnet
             # aus relevance (mean match_score), source_quality (Typ-

@@ -8,6 +8,9 @@ Code-verifiziert gegen:
 - backend/app/services/oasis_profile_generator.py (OasisAgentProfile-Felder)
 - backend/tests/api/test_response_schemas.py (Schema-Erwartungen)
 
+Layer 3 (Task 12): EvidenceItemModel erhaelt quote + source_id_anchor fuer
+Original-Zitat-Provenance. Section-Builder leitet beide per _attach_provenance ab.
+
 Aufruf zum Schema-Dump: python -m app.contracts.dump_schemas
 """
 from __future__ import annotations
@@ -68,6 +71,19 @@ class EvidenceItemModel(BaseModel):
     query: Optional[str] = None
     raw: Optional[Any] = None
     agent_log_ref: Optional[AgentLogRef] = None
+    # Layer 3 (Task 12): quote — Original-Zitat zur Section-Anbindung.
+    # Wörtlicher Auszug aus der Quelle (kein Summary, keine Paraphrase).
+    # None = nicht ableitbar. Frontend rendert das als zitiertes
+    # Originalzitat unter dem Claim.
+    quote: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    # Layer 3 (Task 12): Stabiler Anker fuer Frontend-Scroll-To-Source.
+    # Format ist absichtlich offen, damit verschiedene Quellen-Klassen
+    # (agent-log, web, knowledge-graph) ihre eigene Anker-Konvention
+    # mitbringen koennen — Beispiele:
+    #   "agent-log-42#post-1234"
+    #   "web:https://example.com/x#:~:text=Originalsatz"
+    #   "kg:entity:9b2f-...."
+    source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     supports_claim: Optional[bool] = None
 

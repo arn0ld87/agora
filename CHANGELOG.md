@@ -15,6 +15,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Added
 
+- evidence_item: Optional-Felder quote (Original-Zitat ≤500 chars) + source_id_anchor (≤200 chars) — Section-Builder leitet beide pro Evidence-Item ab; Frontend-Zod-Spiegel mit. (Sub-Slice 12, Closes #169, Layer 3)
 - backend/scripts/check_voice.py: Voice-Lint als CI-Gate (Forecast + US-Marketing-Phrasen). Bootstrap-Soft, Hartmacher in Layer 5. (Sub-Slice 11, Closes #168)
 - evidence_binder: `detect_contradiction_penalty(evidence)` — strukturierte Contradiction-Erkennung via Boolean-Flags + Stance-Konflikte (Sub-Slice 08, Refs #75)
 

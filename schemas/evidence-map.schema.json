@@ -83,6 +83,20 @@
           "default": null,
           "title": "Query"
         },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
         "raw": {
           "anyOf": [
             {},
@@ -103,6 +117,20 @@
           "minLength": 1,
           "title": "Source",
           "type": "string"
+        },
+        "source_id_anchor": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id Anchor"
         },
         "supports_claim": {
           "anyOf": [

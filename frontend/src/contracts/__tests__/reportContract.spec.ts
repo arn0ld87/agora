@@ -143,4 +143,34 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     };
     expect(ReportClaimSchema.safeParse(bad).success).toBe(false);
   });
+
+  it('parses sample with quote+anchor (Task 12)', () => {
+    const item = {
+      type: 'agent_action',
+      source: 'agent_log',
+      snippet: 'Persona kmu_ceo äußerte Bedenken.',
+      quote: 'Persona kmu_ceo äußerte Bedenken.',
+      source_id_anchor: 'web:https://example.com/x#:~:text=Anker-Tests',
+    };
+    const result = EvidenceItemSchema.safeParse(item);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.quote).toBe('Persona kmu_ceo äußerte Bedenken.');
+      expect(result.data.source_id_anchor).toBe('web:https://example.com/x#:~:text=Anker-Tests');
+    }
+  });
+
+  it('parses sample without optional fields (Task 12 backward compat)', () => {
+    const item = {
+      type: 'graph_fact',
+      source: 'graph',
+      snippet: 'Kein Zitat verfügbar.',
+    };
+    const result = EvidenceItemSchema.safeParse(item);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.quote).toBeUndefined();
+      expect(result.data.source_id_anchor).toBeUndefined();
+    }
+  });
 });

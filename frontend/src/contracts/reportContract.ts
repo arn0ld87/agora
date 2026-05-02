@@ -50,6 +50,8 @@ export const EvidenceItemSchema = z.object({
   agent_log_ref: AgentLogRefSchema.optional().nullable(),
   match_score: z.number().min(0).max(1).optional().nullable(),
   supports_claim: z.boolean().optional().nullable(),
+  quote: z.string().min(1).max(500).optional().nullable(),
+  source_id_anchor: z.string().min(1).max(200).optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt EvidenceItemModel.reject_inference_in_evidence
   if (FORBIDDEN_EVIDENCE_TYPES.has(value.type)) {
