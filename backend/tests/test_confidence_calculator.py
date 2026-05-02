@@ -11,8 +11,11 @@ from app.services.confidence_calculator import compute_confidence
 
 
 def test_no_evidence_yields_low():
+    # Sub-Slice 07: leere Evidence-Liste → ehrliches (0.15, "low")
+    # statt 0.0 — der Guard in compute_confidence gibt einen Minimal-
+    # Score zurück, damit Downstream-Code nicht auf 0.0 spezialisiert ist.
     score, label = compute_confidence([])
-    assert score == 0.0
+    assert score == 0.15
     assert label == "low"
 
 

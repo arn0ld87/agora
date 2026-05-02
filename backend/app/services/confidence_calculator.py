@@ -95,6 +95,8 @@ def compute_confidence(
     contradiction_penalty: float = 0.0,
 ) -> Tuple[float, str]:
     """Liefert (score, label) für eine Evidence-Liste."""
+    if not evidence:
+        return 0.15, "low"
     relevance = _component_relevance(evidence)
     source_quality = _component_source_quality(evidence)
     specificity = _component_specificity(evidence)

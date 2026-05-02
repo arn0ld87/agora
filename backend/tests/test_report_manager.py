@@ -196,16 +196,20 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
 
     assert claims[0]["claim"] == "Akteursgruppe A polarisiert die Diskussion."
     assert claims[0]["claim_text"] == "Akteursgruppe A polarisiert die Diskussion."
+    # Sub-Slice 07: kein global_items-Fallback mehr — im Embedder-Fehler-Pfad
+    # landen nur direct_items (graph_fact) in evidence_items. global_evidence
+    # bleibt draußen.
     # S6: formelbasierte Confidence — relevance(0.5) + source_quality
-    # (0.925 mean of graph_fact + graph_metric) + specificity(0.5) +
-    # consistency(0.8 für 2 unique Quellen) → 0.65, Label "medium".
+    # (1.0 für graph_fact) + specificity(0.5) + consistency(0.6 für 1 Quelle)
+    # = 0.40*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64, Label "medium".
     assert claims[0]["confidence"] == "medium"
-    assert claims[0]["confidence_score"] == 0.65
+    assert claims[0]["confidence_score"] == 0.64
     assert claims[0]["evidence"] == claims[0]["evidence_items"]
     # S5: model_generated_inference darf nicht mehr im Evidence-Array sein.
     evidence_types = {item["type"] for item in claims[0]["evidence"]}
     assert "model_generated_inference" not in evidence_types
-    assert evidence_types == {"graph_fact", "graph_metric"}
+    # Nach Sub-Slice 07: nur noch graph_fact (kein global graph_metric-Leak)
+    assert evidence_types == {"graph_fact"}
     # Statt dessen lebt die Synthese im audit_trail.
     audit_types = {item["type"] for item in claims[0].get("audit_trail", [])}
     assert "model_generated_inference" in audit_types

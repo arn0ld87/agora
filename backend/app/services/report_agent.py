@@ -524,12 +524,10 @@ class ReportAgent:
                     self._embed_cache = None
                     embedder = None
             if embedder_ok:
-                if not bound:
-                    bound = deepcopy(global_items[:2])
                 evidence_items = bound
                 direct_count = len(bound)
             else:
-                evidence_items = direct_items + global_items
+                evidence_items = direct_items
                 direct_count = len(direct_items)
 
             # S6: formelbasierte Confidence statt linear-in-N. Berechnet
@@ -538,6 +536,17 @@ class ReportAgent:
             # (Anzahl unique Quellen). Verified-Label nur bei Top-
             # Match-Score >= 0.85.
             confidence_score, confidence_label = compute_confidence(evidence_items)
+            # Anti-Dekorations-Guard: kein Evidence → ehrliches low-Label
+            # und Audit-Eintrag statt dekorativem global_items-Fallback.
+            if not evidence_items:
+                confidence_score, confidence_label = 0.15, "low"
+                audit_trail.append({
+                    "type": "model_generated_inference",
+                    "source": "validator",
+                    "tool_name": "evidence_validator",
+                    "snippet": "no_direct_evidence_bound",
+                    "raw": {"reason": "no_direct_evidence_bound"},
+                })
             # Hinweis fürs Test-Backwards-Compat: support_count wird nicht
             # mehr genutzt, bleibt aber lokal für ggf. Logging.
             support_count = direct_count + len(global_items)  # noqa: F841
