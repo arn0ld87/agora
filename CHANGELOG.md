@@ -16,6 +16,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Added
 
+- frontend: ConfidenceBadge-Komponente (oklch-Pills mit ok/warn/err-Tokens) plus Hover-Popover für audit_trail. Step4Report.vue rendert pro Section ein Aggregat-Badge (mean confidence_score, label nach Schwelle). (Sub-Slice 16a, Refs #173, Layer 4)
 - network_analytics: deterministisches Cluster-Naming via TF-Top-3 (Stopword-Filter DE+EN, Tie-Break alphabetisch). ClusterDef.label propagiert in compute_metrics + CSV-Export. (Sub-Slice 14, Closes #171, Layer 3)
 - report_agent: Time-Series-Sampling (8 Bins ueber round_num/created_at) statt action_dicts[:8] — Burst-Verzerrung verhindern. Section-Dedup-Audit (cosine >=0.92, Jaccard-Fallback >=0.85) markiert Duplikat-Sections im audit_trail, ohne sie zu droppen. (Sub-Slice 13, Closes #170, Layer 3)
 - evidence_item: Optional-Felder quote (Original-Zitat ≤500 chars) + source_id_anchor (≤200 chars) — Section-Builder leitet beide pro Evidence-Item ab; Frontend-Zod-Spiegel mit. (Sub-Slice 12, Closes #169, Layer 3)

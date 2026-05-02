@@ -11,6 +11,9 @@ import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Select from './ui/Select.vue'
+import ConfidenceBadge from './ui/ConfidenceBadge.vue'
+import { deriveLabel, aggregateSectionConfidence } from '../utils/confidenceUtils'
+import type { SectionConfidenceResult } from '../utils/confidenceUtils'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -390,6 +393,28 @@ function evidenceSnippet(item: EvidenceItem | null | undefined): string {
   return item?.snippet ?? ''
 }
 
+// Sub-Slice 16a — sectionConfidence-Helper (Refs #173)
+// aggregateSectionConfidence und deriveLabel kommen aus ../utils/confidenceUtils
+function sectionConfidence(idx: number): SectionConfidenceResult | null {
+  const sections = evidenceMap.value?.sections
+  if (!sections || sections.length === 0) return null
+  // section_index ist 1-basiert; idx ist 0-basiert aus reportOutline
+  const section = sections.find(s => s.section_index === idx + 1) ?? null
+  if (!section) return null
+  return aggregateSectionConfidence(section)
+}
+
+// Typsichere Getter fuer Template — vermeide Non-null-Assertions in Vue-Templates
+function sectionConfidenceScore(idx: number): number {
+  return sectionConfidence(idx)?.score ?? 0
+}
+function sectionConfidenceLabel(idx: number): 'low' | 'medium' | 'high' | 'verified' {
+  return sectionConfidence(idx)?.label ?? 'low'
+}
+function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['auditTrail'] {
+  return sectionConfidence(idx)?.auditTrail ?? []
+}
+
 async function loadEvidence() {
   if (!props.reportId) return
   try {
@@ -630,9 +655,17 @@ onUnmounted(stopPolling)
             <header class="outline-head" @click="toggleSection(i)">
               <span class="outline-num">{{ String(i + 1).padStart(2, '0') }}</span>
               <span class="outline-title">{{ sec.title }}</span>
-              <Badge :variant="generatedSections[i + 1] ? 'solid' : 'ghost'">
-                {{ generatedSections[i + 1] ? '✓' : (currentSectionIndex === i ? '…' : '—') }}
-              </Badge>
+              <span class="outline-badges">
+                <ConfidenceBadge
+                  v-if="sectionConfidence(i)"
+                  :score="sectionConfidenceScore(i)"
+                  :label="sectionConfidenceLabel(i)"
+                  :audit-trail="sectionConfidenceAuditTrail(i)"
+                />
+                <Badge :variant="generatedSections[i + 1] ? 'solid' : 'ghost'">
+                  {{ generatedSections[i + 1] ? '✓' : (currentSectionIndex === i ? '…' : '—') }}
+                </Badge>
+              </span>
             </header>
             <div
               class="outline-body"
@@ -811,8 +844,13 @@ onUnmounted(stopPolling)
   display: grid;
   grid-template-columns: 32px 1fr auto;
   gap: var(--s-3);
-  align-items: baseline;
+  align-items: center;
   cursor: pointer;
+}
+.outline-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
 }
 .outline-num {
   font-family: var(--ff-mono);

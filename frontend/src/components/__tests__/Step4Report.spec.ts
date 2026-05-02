@@ -177,3 +177,153 @@ describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
     expect(wrapper.find('.schema-error').text()).toContain('evidence')
   })
 })
+
+// Sub-Slice 16a: aggregateSectionConfidence + ConfidenceBadge in Step4Report (Refs #173)
+import { aggregateSectionConfidence } from '../../utils/confidenceUtils'
+
+describe('aggregateSectionConfidence (Sub-Slice 16a)', () => {
+  it('gibt score=0 und label=low zurück für leere claims-Liste', () => {
+    const result = aggregateSectionConfidence({ claims: [] })
+    expect(result.score).toBe(0)
+    expect(result.label).toBe('low')
+    expect(result.auditTrail).toEqual([])
+  })
+
+  it('berechnet arithmetisches Mittel der confidence_scores', () => {
+    const section = {
+      claims: [
+        { confidence_score: 0.8, confidence_label: 'high', audit_trail: [] },
+        { confidence_score: 0.6, confidence_label: 'medium', audit_trail: [] },
+      ],
+    }
+    const result = aggregateSectionConfidence(section)
+    // (0.8 + 0.6) / 2 = 0.7000
+    expect(result.score).toBe(0.7)
+    expect(result.label).toBe('medium')
+  })
+
+  it('rundet auf 4 Dezimalstellen', () => {
+    const section = {
+      claims: [
+        { confidence_score: 1 / 3, confidence_label: 'low', audit_trail: [] },
+      ],
+    }
+    const result = aggregateSectionConfidence(section)
+    // 0.33333... → 0.3333
+    expect(result.score).toBe(0.3333)
+  })
+
+  it('ist deterministisch — gleicher Input ergibt gleichen Output', () => {
+    const section = {
+      claims: [
+        { confidence_score: 0.9, confidence_label: 'verified', audit_trail: [{ type: 'graph_fact', source: 's1' }] },
+        { confidence_score: 0.5, confidence_label: 'medium', audit_trail: [{ type: 'agent_action', source: 's2' }] },
+      ],
+    }
+    const r1 = aggregateSectionConfidence(section)
+    const r2 = aggregateSectionConfidence(section)
+    expect(r1.score).toBe(r2.score)
+    expect(r1.label).toBe(r2.label)
+    expect(r1.auditTrail.length).toBe(r2.auditTrail.length)
+  })
+
+  it('flacht audit_trail über alle Claims flach', () => {
+    const section = {
+      claims: [
+        { confidence_score: 0.8, confidence_label: 'high', audit_trail: [{ source: 'a' }, { source: 'b' }] },
+        { confidence_score: 0.6, confidence_label: 'medium', audit_trail: [{ source: 'c' }] },
+      ],
+    }
+    const result = aggregateSectionConfidence(section)
+    expect(result.auditTrail).toHaveLength(3)
+  })
+})
+
+describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
+  const VALID_EVIDENCE_WITH_SECTIONS = {
+    schema_version: 2,
+    report_id: 'report_test01',
+    simulation_id: 'sim_test01',
+    global_evidence: [],
+    sections: [
+      {
+        section_index: 1,
+        section_title: 'Abschnitt 1',
+        section_summary: 'Zusammenfassung 1',
+        claims: [
+          {
+            claim_id: 'claim_01',
+            claim_text: 'Erster Claim mit genug Länge für Zod-Validierung',
+            confidence_label: 'high',
+            confidence_score: 0.8,
+            evidence: [
+              {
+                type: 'graph_fact',
+                source: 'neo4j',
+                snippet: 'Graph-Fakt A',
+                supports_claim: true,
+                match_score: 0.9,
+              },
+            ],
+            audit_trail: [{ source: 'graph_tool', snippet: 'Audit A' }],
+          },
+        ],
+      },
+      {
+        section_index: 2,
+        section_title: 'Abschnitt 2',
+        section_summary: 'Zusammenfassung 2',
+        claims: [
+          {
+            claim_id: 'claim_02',
+            claim_text: 'Zweiter Claim mit ausreichend Text für Validierung',
+            confidence_label: 'medium',
+            confidence_score: 0.5,
+            evidence: [],
+            audit_trail: [{ source: 'agent_log', snippet: 'Audit B' }],
+          },
+        ],
+      },
+    ],
+  }
+
+  const VALID_OUTLINE_2SECTIONS = {
+    title: 'Test-Report',
+    summary: 'Zusammenfassung',
+    sections: [
+      { title: 'Abschnitt 1', description: 'Beschreibung 1' },
+      { title: 'Abschnitt 2', description: 'Beschreibung 2' },
+    ],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'completed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        outline: VALID_OUTLINE_2SECTIONS,
+      },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE_WITH_SECTIONS,
+    })
+  })
+
+  it('rendert 2 ConfidenceBadge-Instanzen für 2 Sections mit Evidence', async () => {
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+
+    const badges = wrapper.findAllComponents({ name: 'ConfidenceBadge' })
+    expect(badges.length).toBeGreaterThanOrEqual(2)
+  })
+})
