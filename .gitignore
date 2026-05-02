@@ -76,6 +76,12 @@ context.md
 backend/logs/
 *.log
 
+# Archives / Snapshots (kein Backup im Repo)
+*.zip
+
+# Playwright-MCP test artefacts (Konsolenlogs, Page-Snapshots)
+.playwright-mcp/
+
 # Persistent caches mounted into the agora container
 backend/.cache/
 
