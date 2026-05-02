@@ -247,7 +247,7 @@ Optional bei Milestone-Abschluss (z. B. M1 fertig nach allen Layer-0-Tasks): zus
 ## Schritt 8: Worktree-Cleanup (nur bei erfolgreichem Push)
 
 ```bash
-cd /mnt/brain/Projekte/Agora
+cd .
 git worktree remove <worktree-pfad>
 git branch -D <branch>   # lokal weg, da bereits in main per FF
 ```
