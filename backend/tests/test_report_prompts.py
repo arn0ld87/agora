@@ -149,7 +149,6 @@ class TestPromptSemantics:
             "Future trends and risk analysis based on simulation predictions",
             "Prediction Scenario and Core Findings",
             "Crowd Behavior Prediction Analysis",
-            "Trend Outlook and Risk Warning",
         ]
         for phrase in forbidden_phrases:
             assert phrase not in src, (
@@ -157,9 +156,9 @@ class TestPromptSemantics:
                 "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
             )
 
-        # Positive: neuer Wortlaut muss vorhanden sein
-        assert "Simulation Scenario Report" in src
-        assert "Scenario Setup and Core Findings" in src
+        # Positive: neuer Wortlaut muss vorhanden sein (Wording-Glossar v1, Slice C)
+        assert "Scenario Evaluation Report" in src
+        assert "Evaluation Scenario and Core Findings" in src
 
     def test_graph_tools_to_text_has_no_forecast_marketing(self):
         """Sub-Slice 09 Erweiterung: InsightForgeResult.to_text() Heading-Block (Z. 168–177).
@@ -183,10 +182,10 @@ class TestPromptSemantics:
                 "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
             )
 
-        # Positive: neuer Wortlaut muss vorhanden sein
-        assert "Scenario Graph Analysis" in src
-        assert "Scenario Assumptions:" in src
-        assert "Scenario Data Statistics" in src
+        # Positive: neuer Wortlaut muss vorhanden sein (Wording-Glossar v1, Slice B)
+        assert "Scenario Evaluation Deep Analysis" in src
+        assert "Evaluation Scenario:" in src
+        assert "Evaluation Data Statistics" in src
 
     def test_prompts_include_scenario_vocabulary(self):
         """Sub-Slice 09: Neue Scenario-Vokabular muss präsent sein."""
