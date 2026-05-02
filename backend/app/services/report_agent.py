@@ -22,6 +22,7 @@ from ..utils.llm_client import LLMClient
 from .confidence_calculator import compute_confidence
 from .evidence_binder import bind_evidence_to_claim
 from .evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
+from ..contracts import EvidenceMapModel
 from .web_tools import WebToolsService
 from ..utils.logger import get_logger
 from ..models.report import (
@@ -178,16 +179,18 @@ class ReportAgent:
         logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
 
     def _init_evidence_map(self, report_id: str) -> None:
-        self.evidence_map = {
-            # S4b: schema_version 2 markiert claim-spezifisches Evidence-Binding.
-            # v1-Reports bleiben lesbar, neue Reports tragen den v2-Tag und
-            # zusätzliche Felder (`match_score`, `supports_claim`).
-            "schema_version": 2,
+        # S4b: schema_version 2 markiert claim-spezifisches Evidence-Binding.
+        # v1-Reports bleiben lesbar, neue Reports tragen den v2-Tag und
+        # zusätzliche Felder (`match_score`, `supports_claim`).
+        # Layer-0 Boundary: EvidenceMapModel validiert das Dict beim Anlegen.
+        payload = {
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "report_id": report_id,
             "simulation_id": self.simulation_id,
             "global_evidence": self._collect_simulation_evidence_items(),
             "sections": [],
         }
+        self.evidence_map = EvidenceMapModel.model_validate(payload).model_dump(mode="json")
 
     def _truncate(self, text: str, limit: int = 300) -> str:
         if not text:
@@ -564,18 +567,29 @@ class ReportAgent:
             self._init_evidence_map(report_id)
         self.evidence_map.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
         self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
+        # schema_version gehört nur auf Map-Ebene, nicht auf Section-Ebene
+        # (ReportSectionModel hat das Feld nicht).
         section_entry = {
-            "schema_version": CURRENT_SCHEMA_VERSION,
             "section_index": section_index,
             "section_title": section_title,
             "section_summary": self._truncate(content, 400),
             "claims": self._build_claims_for_section(content),
         }
-        existing_sections = [s for s in self.evidence_map["sections"] if s.get("section_index") != section_index]
+        # schema_version auf Section-Ebene entfernen — Überbleibsel von
+        # migrate_v1_to_v2 oder alten Persistierungen; ReportSectionModel
+        # erlaubt das Feld nicht (extra="forbid").
+        existing_sections = [
+            {k: v for k, v in s.items() if k != "schema_version"}
+            for s in self.evidence_map["sections"]
+            if s.get("section_index") != section_index
+        ]
         existing_sections.append(section_entry)
         existing_sections.sort(key=lambda item: item.get("section_index", 0))
         self.evidence_map["sections"] = existing_sections
-        ReportManager.save_evidence_map(report_id, self.evidence_map)
+        # Layer-0 Boundary: vor dem Persistieren gegen EvidenceMapModel validieren.
+        validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
+        self.evidence_map = validated
+        ReportManager.save_evidence_map(report_id, validated)
     
     def _define_tools(self) -> Dict[str, Dict[str, Any]]:
         """Define available tools"""
@@ -1124,13 +1138,18 @@ class ReportAgent:
         try:
             # Initialize: Create report folder and save initial state
             ReportManager._ensure_report_folder(report_id)
-            self.evidence_map = migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)) or {
-                "schema_version": CURRENT_SCHEMA_VERSION,
-                "report_id": report_id,
-                "simulation_id": self.simulation_id,
-                "global_evidence": self._collect_simulation_evidence_items(),
-                "sections": [],
-            }
+            # Layer-0 Boundary: Fallback-Init via EvidenceMapModel validieren.
+            # migrate_v1_to_v2 liefert bei v1-Daten bereits ein v2-Dict;
+            # das wird in der nächsten _save_evidence_section erneut validiert.
+            self.evidence_map = migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)) or (
+                EvidenceMapModel.model_validate({
+                    "schema_version": CURRENT_SCHEMA_VERSION,
+                    "report_id": report_id,
+                    "simulation_id": self.simulation_id,
+                    "global_evidence": self._collect_simulation_evidence_items(),
+                    "sections": [],
+                }).model_dump(mode="json")
+            )
             
             # Initialize logslogger（structured logs agent_log.jsonl）
             self.report_logger = ReportLogger(report_id)
