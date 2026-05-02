@@ -1,0 +1,29 @@
+{
+  "$id": "https://alexle135.de/schemas/persona-quota-plan.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Soll-Plan f\u00fcr Persona-Generation. Erzwingt exakte Counts pro Segment.\nAdressiert ChatGPT-Audit: 'Persona-Erzeugung ist nicht an Segment-Plan gebunden'.",
+  "properties": {
+    "targets": {
+      "additionalProperties": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "title": "Targets",
+      "type": "object"
+    },
+    "total": {
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "targets",
+    "total"
+  ],
+  "title": "PersonaQuotaPlan",
+  "type": "object"
+}

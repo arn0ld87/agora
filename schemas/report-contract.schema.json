@@ -1,0 +1,528 @@
+{
+  "$defs": {
+    "AgentLogRef": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "section_index": {
+          "minimum": 0,
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        }
+      },
+      "required": [
+        "section_index",
+        "action"
+      ],
+      "title": "AgentLogRef",
+      "type": "object"
+    },
+    "ConfidenceLabel": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "verified"
+      ],
+      "title": "ConfidenceLabel",
+      "type": "string"
+    },
+    "EvidenceItemModel": {
+      "additionalProperties": false,
+      "description": "Bestehende EvidenceItem-Felder aus report_agent.py, jetzt typsicher.",
+      "properties": {
+        "agent_log_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentLogRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "match_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Match Score"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "raw": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raw"
+        },
+        "snippet": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Snippet",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "supports_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supports Claim"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        },
+        "type": {
+          "$ref": "#/$defs/EvidenceType"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "type",
+        "source",
+        "snippet"
+      ],
+      "title": "EvidenceItemModel",
+      "type": "object"
+    },
+    "EvidenceMapModel": {
+      "additionalProperties": false,
+      "description": "Persistierte Evidence-Map. Abl\u00f6se f\u00fcr die rohen Dicts in report_agent.py.",
+      "properties": {
+        "global_evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceItemModel"
+          },
+          "title": "Global Evidence",
+          "type": "array"
+        },
+        "report_id": {
+          "minLength": 1,
+          "title": "Report Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "default": 2,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionModel"
+          },
+          "title": "Sections",
+          "type": "array"
+        },
+        "simulation_id": {
+          "minLength": 1,
+          "title": "Simulation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "report_id",
+        "simulation_id"
+      ],
+      "title": "EvidenceMapModel",
+      "type": "object"
+    },
+    "EvidenceType": {
+      "description": "\u00dcbernommen aus report_agent.py \u2014 bestehende Typen plus model_generated_inference.",
+      "enum": [
+        "graph_fact",
+        "graph_metric",
+        "graph_metric_status",
+        "relationship_chain",
+        "entity_summary",
+        "agent_action",
+        "agent_interview",
+        "web_search_result",
+        "web_fetch",
+        "model_generated_inference"
+      ],
+      "title": "EvidenceType",
+      "type": "string"
+    },
+    "ReportClaimModel": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_trail": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Audit Trail",
+          "type": "array"
+        },
+        "claim_id": {
+          "pattern": "^claim_\\d{2,}$",
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "claim_text": {
+          "minLength": 8,
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "confidence_label": {
+          "$ref": "#/$defs/ConfidenceLabel"
+        },
+        "confidence_score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence Score",
+          "type": "number"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceItemModel"
+          },
+          "maxItems": 10,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "claim_id",
+        "claim_text",
+        "confidence_label",
+        "confidence_score"
+      ],
+      "title": "ReportClaimModel",
+      "type": "object"
+    },
+    "ReportModel": {
+      "additionalProperties": false,
+      "description": "Spiegelt models/report.py:Report \u2014 aber als Pydantic mit Validierung.",
+      "properties": {
+        "completed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "evidence_sections": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Evidence Sections",
+          "type": "integer"
+        },
+        "graph_id": {
+          "minLength": 1,
+          "title": "Graph Id",
+          "type": "string"
+        },
+        "has_evidence": {
+          "default": false,
+          "title": "Has Evidence",
+          "type": "boolean"
+        },
+        "markdown_content": {
+          "default": "",
+          "title": "Markdown Content",
+          "type": "string"
+        },
+        "outline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportOutlineModel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_id": {
+          "minLength": 1,
+          "title": "Report Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "default": 2,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "simulation_id": {
+          "minLength": 1,
+          "title": "Simulation Id",
+          "type": "string"
+        },
+        "simulation_requirement": {
+          "minLength": 1,
+          "title": "Simulation Requirement",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ReportStatus"
+        }
+      },
+      "required": [
+        "report_id",
+        "simulation_id",
+        "graph_id",
+        "simulation_requirement",
+        "status"
+      ],
+      "title": "ReportModel",
+      "type": "object"
+    },
+    "ReportOutlineModel": {
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/ReportOutlineSectionModel"
+          },
+          "maxItems": 5,
+          "minItems": 2,
+          "title": "Sections",
+          "type": "array"
+        },
+        "summary": {
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "summary",
+        "sections"
+      ],
+      "title": "ReportOutlineModel",
+      "type": "object"
+    },
+    "ReportOutlineSectionModel": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "description"
+      ],
+      "title": "ReportOutlineSectionModel",
+      "type": "object"
+    },
+    "ReportSectionModel": {
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/ReportClaimModel"
+          },
+          "minItems": 1,
+          "title": "Claims",
+          "type": "array"
+        },
+        "section_index": {
+          "minimum": 1,
+          "title": "Section Index",
+          "type": "integer"
+        },
+        "section_summary": {
+          "minLength": 1,
+          "title": "Section Summary",
+          "type": "string"
+        },
+        "section_title": {
+          "minLength": 3,
+          "title": "Section Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "section_index",
+        "section_title",
+        "section_summary"
+      ],
+      "title": "ReportSectionModel",
+      "type": "object"
+    },
+    "ReportStatus": {
+      "description": "Spiegelt models/report.py:ReportStatus 1:1.",
+      "enum": [
+        "pending",
+        "planning",
+        "generating",
+        "completed",
+        "failed"
+      ],
+      "title": "ReportStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/report-contract.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Wurzel \u2014 was tats\u00e4chlich beim Export rausgeht.",
+  "properties": {
+    "evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EvidenceMapModel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "exported_at": {
+      "format": "date-time",
+      "title": "Exported At",
+      "type": "string"
+    },
+    "report": {
+      "$ref": "#/$defs/ReportModel"
+    },
+    "schema_version": {
+      "const": 2,
+      "default": 2,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "exported_at",
+    "report"
+  ],
+  "title": "ReportContractModel",
+  "type": "object"
+}

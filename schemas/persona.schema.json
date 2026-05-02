@@ -1,0 +1,250 @@
+{
+  "$id": "https://alexle135.de/schemas/persona.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "1:1-Spiegel von OasisAgentProfile, aber typsicher.",
+  "properties": {
+    "age": {
+      "anyOf": [
+        {
+          "maximum": 99,
+          "minimum": 18,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Age"
+    },
+    "bio": {
+      "maxLength": 200,
+      "minLength": 10,
+      "title": "Bio",
+      "type": "string"
+    },
+    "country": {
+      "anyOf": [
+        {
+          "maxLength": 2,
+          "minLength": 2,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Country"
+    },
+    "follower_count": {
+      "default": 150,
+      "minimum": 0,
+      "title": "Follower Count",
+      "type": "integer"
+    },
+    "friend_count": {
+      "default": 100,
+      "minimum": 0,
+      "title": "Friend Count",
+      "type": "integer"
+    },
+    "gender": {
+      "anyOf": [
+        {
+          "enum": [
+            "male",
+            "female",
+            "nonbinary",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Gender"
+    },
+    "interested_topics": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 15,
+      "title": "Interested Topics",
+      "type": "array"
+    },
+    "is_manual": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "title": "Is Manual"
+    },
+    "karma": {
+      "default": 1000,
+      "minimum": 0,
+      "title": "Karma",
+      "type": "integer"
+    },
+    "mbti": {
+      "anyOf": [
+        {
+          "enum": [
+            "INTJ",
+            "INTP",
+            "ENTJ",
+            "ENTP",
+            "INFJ",
+            "INFP",
+            "ENFJ",
+            "ENFP",
+            "ISTJ",
+            "ISFJ",
+            "ESTJ",
+            "ESFJ",
+            "ISTP",
+            "ISFP",
+            "ESTP",
+            "ESFP"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mbti"
+    },
+    "name": {
+      "minLength": 3,
+      "title": "Name",
+      "type": "string"
+    },
+    "persona": {
+      "maxLength": 12000,
+      "minLength": 300,
+      "title": "Persona",
+      "type": "string"
+    },
+    "profession": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Profession"
+    },
+    "review_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Review Status"
+    },
+    "segment": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Segment"
+    },
+    "source_entity_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Entity Type"
+    },
+    "source_entity_uuid": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Entity Uuid"
+    },
+    "statuses_count": {
+      "default": 500,
+      "minimum": 0,
+      "title": "Statuses Count",
+      "type": "integer"
+    },
+    "user_id": {
+      "minimum": 1,
+      "title": "User Id",
+      "type": "integer"
+    },
+    "user_name": {
+      "minLength": 3,
+      "pattern": "^[a-z0-9_]+$",
+      "title": "User Name",
+      "type": "string"
+    },
+    "voice_register": {
+      "anyOf": [
+        {
+          "enum": [
+            "formal-de",
+            "neutral-de",
+            "technical-de",
+            "skeptisch-de"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Voice Register"
+    }
+  },
+  "required": [
+    "user_id",
+    "user_name",
+    "name",
+    "bio",
+    "persona"
+  ],
+  "title": "PersonaModel",
+  "type": "object"
+}

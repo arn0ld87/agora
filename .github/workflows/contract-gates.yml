@@ -1,0 +1,82 @@
+name: contract-gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  schema-drift:
+    name: Schema-Drift verhindern
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Sync backend deps
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Generate schemas from Pydantic models
+        working-directory: backend
+        run: uv run python -m app.contracts.dump_schemas
+      - name: Fail on schema diff
+        run: |
+          # Wenn Backend-Pydantic geändert wurde, müssen Schemas committet werden.
+          if ! git diff --exit-code schemas/; then
+            echo "::error::JSON-Schemas haben gedriftet. Lokal 'uv run python -m app.contracts.dump_schemas' und committen."
+            exit 1
+          fi
+
+  contract-tests:
+    name: Pydantic-Contract-Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip uv
+      - working-directory: backend
+        run: uv sync --group dev
+      - working-directory: backend
+        run: uv run pytest tests/contracts/ -v
+
+  evidence-quality:
+    name: Evidence-Quality-Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip uv
+      - working-directory: backend
+        run: uv sync --group dev
+      - working-directory: backend
+        # Soft-Schwellen erst, bis Layer 1 fertig ist (--soft).
+        # In Layer 5 wird --soft entfernt und es wird ein harter Gate.
+        run: |
+          uv run python scripts/check_evidence_quality.py \
+            --fixtures tests/eval/fixtures \
+            --min-evidence-coverage 0.85 \
+            --min-claim-support-ratio 0.75 \
+            --orphan-claim-rate 0.10 \
+            --require-schema-version 2 \
+            --soft
+
+  zod-mirror-drift:
+    name: Frontend-Zod muss Backend-Schema spiegeln
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: cd frontend && npm ci
+      - name: Vitest - Sample-Payload muss Zod-strikt parsen
+        run: cd frontend && npm run test -- --run src/contracts/
