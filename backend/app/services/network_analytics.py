@@ -22,6 +22,7 @@ analysis to the last ``window_size_rounds`` rounds; 0 or ``None`` disables.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -47,17 +48,98 @@ _DIRECTED_ACTIONS = {
 }
 
 
+# Layer 3 Task 14: Stopwords fuer deterministisches Cluster-Naming.
+# Enthaelt deutsche und englische Top-Function-Words plus Persona-
+# Generator-Floskeln, die in jedem Cluster als hochfrequent erscheinen
+# wuerden ohne semantischen Wert.
+_CLUSTER_LABEL_STOPWORDS: frozenset[str] = frozenset({
+    # Deutsch
+    "der", "die", "das", "den", "dem", "des",
+    "ein", "eine", "einer", "einem", "einen", "eines",
+    "und", "oder", "aber", "doch", "denn", "weil",
+    "ist", "sind", "war", "waren", "wird", "werden", "wurde", "wurden",
+    "hat", "haben", "hatte", "hatten",
+    "nicht", "kein", "keine", "auch", "schon", "noch", "nur", "mehr",
+    "mit", "ohne", "auf", "fuer", "gegen", "von", "vom", "zum", "zur",
+    "bei", "aus", "nach", "vor", "ueber", "unter", "wenn", "dann", "als",
+    "sich", "man", "es", "ich", "du", "er", "sie", "wir", "ihr",
+    "ja", "nein", "mal", "immer", "nie",
+    # Englisch
+    "the", "and", "for", "with", "that", "this", "from", "have", "has",
+    "are", "was", "were", "will", "would", "could", "should",
+    "but", "not", "can", "you", "your", "his", "her", "their",
+    "they", "them", "what", "which", "who", "when", "where", "why", "how",
+    "all", "any", "some", "more", "most", "very", "much",
+    # Floskeln
+    "post", "comment", "user", "agent", "platform",
+})
+
+
+def _derive_cluster_label(
+    member_ids: List[int],
+    actions: List[Dict[str, Any]],
+    stopwords: frozenset[str] = _CLUSTER_LABEL_STOPWORDS,
+    cluster_id: int = 0,
+) -> str:
+    """Deterministisches Cluster-Label aus TF-Top-3 der Member-Action-Texte.
+
+    Reader Honesty: kein LLM-Free-Text, keine Random-Auswahl. Reproduzierbar
+    auf gleicher Eingabe. Sortier-Schluessel: (count desc, alpha asc) fuer
+    stabilen Tie-Break.
+    """
+    member_set = {int(m) for m in member_ids}
+    if not member_set:
+        return f"cluster-{cluster_id}"
+
+    text_fields = ("post_content", "comment_content", "content", "text")
+    fragments: List[str] = []
+    for action in actions:
+        try:
+            agent_id = int(action.get("agent_id"))
+        except (TypeError, ValueError):
+            continue
+        if agent_id not in member_set:
+            continue
+        for field_name in text_fields:
+            value = action.get(field_name)
+            if isinstance(value, str) and value.strip():
+                fragments.append(value)
+
+    if not fragments:
+        return f"cluster-{cluster_id}"
+
+    blob = " ".join(fragments).lower()
+    tokens = re.findall(r"\b[a-zäöüß]{3,}\b", blob)
+    if not tokens:
+        return f"cluster-{cluster_id}"
+
+    counts: Dict[str, int] = {}
+    for tok in tokens:
+        if tok in stopwords:
+            continue
+        counts[tok] = counts.get(tok, 0) + 1
+
+    if not counts:
+        return f"cluster-{cluster_id}"
+
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    top3 = [tok for tok, _ in ranked[:3]]
+    return ", ".join(top3)
+
+
 @dataclass
 class ClusterDef:
     cluster_id: int
     size: int
     agent_ids: List[int]
+    label: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "cluster_id": self.cluster_id,
             "size": self.size,
             "agent_ids": self.agent_ids,
+            "label": self.label,
         }
 
 
@@ -256,7 +338,7 @@ class NetworkAnalyticsService:
                 status=status,
             )
 
-        clusters, bridges, echo, total_agents = self._analyse(interactions)
+        clusters, bridges, echo, total_agents = self._analyse(interactions, actions)
 
         return PolarizationMetrics(
             simulation_id=simulation_id,
@@ -302,6 +384,7 @@ class NetworkAnalyticsService:
     def _analyse(
         self,
         interactions: List[Tuple[int, int]],
+        action_dicts: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[List[ClusterDef], List[int], float, int]:
         import networkx as nx
         from networkx.algorithms.community import louvain_communities
@@ -329,6 +412,13 @@ class NetworkAnalyticsService:
                 agent_to_cluster[m] = idx
             clusters.append(
                 ClusterDef(cluster_id=idx, size=len(member_ids), agent_ids=member_ids)
+            )
+
+        # Layer 3 Task 14: Deterministisches Label pro Cluster aus TF-Top-3.
+        _actions = action_dicts if action_dicts is not None else []
+        for cluster in clusters:
+            cluster.label = _derive_cluster_label(
+                cluster.agent_ids, _actions, cluster_id=cluster.cluster_id,
             )
 
         # Echo-chamber index = share of weighted interactions within the
@@ -368,4 +458,6 @@ __all__ = [
     "METRICS_STATUS_OK",
     "METRICS_STATUS_NO_ACTIONS",
     "METRICS_STATUS_NO_PAIRWISE",
+    "_CLUSTER_LABEL_STOPWORDS",
+    "_derive_cluster_label",
 ]

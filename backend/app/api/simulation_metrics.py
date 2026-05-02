@@ -166,11 +166,12 @@ def export_simulation_metrics(simulation_id: str):
         return _csv_response(rows, filename=f"agora-metrics-{simulation_id}-summary.csv")
 
     if view == 'clusters':
-        rows = [["cluster_id", "size", "agent_ids"]]
+        rows = [["cluster_id", "size", "label", "agent_ids"]]
         for cluster in payload.get("dominant_clusters", []):
             rows.append([
                 str(cluster.get("cluster_id", "")),
                 str(cluster.get("size", 0)),
+                str(cluster.get("label", "")),
                 ";".join(str(a) for a in cluster.get("agent_ids", [])),
             ])
         return _csv_response(rows, filename=f"agora-metrics-{simulation_id}-clusters.csv")

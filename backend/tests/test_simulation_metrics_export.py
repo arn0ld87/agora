@@ -107,12 +107,12 @@ def test_export_clusters_csv(env):
     response = env.get(f"/api/simulation/{SIM_ID}/metrics/export?view=clusters")
     assert response.status_code == 200
     rows = _read_csv(response.data)
-    assert rows[0] == ["cluster_id", "size", "agent_ids"]
-    # Body rows must each have an int size and at least one agent id.
+    assert rows[0] == ["cluster_id", "size", "label", "agent_ids"]
+    # Body rows must each have an int size, a label, and at least one agent id.
     assert len(rows) >= 2
     for row in rows[1:]:
         assert int(row[1]) >= 1
-        assert row[2]  # non-empty agent_ids list
+        assert row[3]  # non-empty agent_ids list (now at index 3, after label)
 
 
 def test_export_bridges_csv(env):

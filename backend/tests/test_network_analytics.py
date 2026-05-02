@@ -400,3 +400,42 @@ def test_full_oasis_run_mixed_directed_actions():
     assert m.total_interactions == 3
     assert m.total_agents == 3
     assert m.cluster_count >= 1
+
+
+# --- Task 14: Cluster-Label Integration ------------------------------------
+
+
+def test_cluster_label_set_when_post_content_present():
+    """compute_metrics setzt dominant_clusters[*].label auf nicht-leeren String,
+    wenn Member-Actions post_content-Felder tragen."""
+    svc = NetworkAnalyticsService()
+    actions: List[Dict[str, Any]] = []
+    # Zwei Agents bilden durch gegenseitiges FOLLOW eine Cluster.
+    for src, tgt in ((1, 2), (2, 1)):
+        actions.append(_follow(src, tgt))
+    # Zusaetzlich Posts mit Text, damit _derive_cluster_label etwas findet.
+    actions.append({"agent_id": 1, "action_type": "CREATE_POST",
+                    "action_args": {}, "post_content": "klimawandel energie solar"})
+    actions.append({"agent_id": 2, "action_type": "CREATE_POST",
+                    "action_args": {}, "post_content": "klimawandel erneuerbar"})
+
+    m = svc.compute_metrics(actions)
+
+    assert m.cluster_count >= 1
+    for cluster in m.dominant_clusters:
+        assert cluster.label != "", f"Cluster {cluster.cluster_id} hat kein Label"
+        # Label darf keine deutschen Stoppwoerter enthalten.
+        for part in cluster.label.split(", "):
+            assert part not in {"der", "die", "und", "ist"}
+
+
+def test_cluster_label_in_to_dict():
+    """to_dict() exponiert das label-Feld jedes Clusters."""
+    svc = NetworkAnalyticsService()
+    actions = [
+        _follow(1, 2), _follow(2, 1),
+        {"agent_id": 1, "post_content": "testlabel testlabel testlabel"},
+    ]
+    d = svc.compute_metrics(actions).to_dict()
+    for cluster_dict in d["dominant_clusters"]:
+        assert "label" in cluster_dict
