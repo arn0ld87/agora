@@ -23,7 +23,9 @@ Labels:
 * 0.40 – 0.69 → ``medium``
 * 0.70 – 0.89 → ``high``
 * 0.90 – 1.00 → ``verified`` (nur wenn mindestens ein Evidence-Item
-  einen ``match_score >= 0.85`` trägt — sonst gedeckelt auf 0.89)
+  einen ``match_score >= 0.85`` trägt UND mindestens 2 unabhängige
+  Quellen vorliegen — sonst gedeckelt auf 0.89)
+* Zusätzlich: wenn alle match_scores < 0.55 → Deckel auf 0.69 (medium)
 """
 
 from __future__ import annotations
@@ -116,8 +118,21 @@ def compute_confidence(
         for e in evidence
         if "match_score" in e
     )
-    # Verified nur bei direkter, claim-spezifischer Evidence (S6 Reviewer-Spec).
-    if score >= 0.90 and not has_strong_match:
+    unique_sources = len({(e.get("type"), e.get("source")) for e in evidence})
+
+    # Task 08: Medium-Cap — kein Claim darf "high" sein, wenn alle
+    # match_scores unter 0.55 liegen.
+    match_scores = [
+        float(e.get("match_score") or 0.0)
+        for e in evidence
+        if "match_score" in e
+    ]
+    all_weak_matches = match_scores and max(match_scores) < 0.55
+    if all_weak_matches:
+        score = min(score, 0.69)
+
+    # Task 08: verified nur bei starkem Match UND mind. 2 unabhängigen Quellen.
+    if score >= 0.90 and (not has_strong_match or unique_sources < 2):
         score = 0.89
 
     if score < 0.40:
