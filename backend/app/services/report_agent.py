@@ -224,6 +224,51 @@ class ReportAgent:
         self._embed_cache = embed_fn
         return embed_fn
 
+    @staticmethod
+    def _sample_actions_timeseries(
+        actions: List[Dict[str, Any]], k: int = 8
+    ) -> List[Dict[str, Any]]:
+        """Stratified Sampling ueber round_num (oder created_at als Fallback).
+
+        - len(actions) <= k: alle behalten, KEIN Sampling-Marker im raw.
+        - len(actions) > k: k gleichgrosse Bins ueber den Sortier-Schluessel,
+          aus jedem Bin das chronologisch erste Item. Falls round_num fehlt,
+          fallback auf Index-Reihenfolge (also stratified ueber Position).
+
+        Reader Honesty: Burst-Verzerrung verhindern, ohne Posts zu droppen
+        die einen einzelnen Bin dominieren.
+        """
+        if not actions:
+            return []
+        if len(actions) <= k:
+            return list(actions)
+
+        def sort_key(a: Dict[str, Any]) -> Any:
+            r = a.get("round_num")
+            if r is not None:
+                return (0, r, str(a.get("action_id") or a.get("id") or ""))
+            ts = a.get("created_at") or a.get("timestamp")
+            if ts is not None:
+                return (1, str(ts), "")
+            return (2, 0, "")
+
+        sorted_actions = sorted(actions, key=sort_key)
+        n = len(sorted_actions)
+        sampled: List[Dict[str, Any]] = []
+        for bin_idx in range(k):
+            start = (bin_idx * n) // k
+            end = ((bin_idx + 1) * n) // k
+            if start >= end:
+                continue
+            picked = sorted_actions[start]
+            picked = dict(picked)  # shallow copy, ohne Original zu mutieren
+            raw_marker = picked.setdefault("_sampling", {})
+            raw_marker["bin"] = bin_idx
+            raw_marker["bin_total"] = k
+            raw_marker["sampled_from_total"] = n
+            sampled.append(picked)
+        return sampled
+
     def _collect_simulation_evidence_items(self) -> List[Dict[str, Any]]:
         """Collect reusable evidence from existing metrics and simulation actions."""
         try:
@@ -275,7 +320,8 @@ class ReportAgent:
                         raw={"metric": field, "value": value, "metrics": metrics},
                     ).to_dict())
 
-            for action in action_dicts[:8]:
+            sampled_actions = self._sample_actions_timeseries(action_dicts, k=8)
+            for action in sampled_actions:
                 action_type = action.get("action_type") or "action"
                 agent = action.get("agent_name") or f"Agent {action.get('agent_id')}"
                 platform = action.get("platform") or "unknown"
@@ -624,6 +670,79 @@ class ReportAgent:
             ).to_dict())
         return claims
 
+    def _section_dedup_check(
+        self, new_summary: str, existing: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Prueft ob new_summary fast identisch zu einer bestehenden Section ist.
+
+        Returns ein Audit-Trail-dict (Marker), wenn Match. Sonst None.
+        Reihenfolge:
+        1. Embedder verfuegbar -> cosine-Similarity, threshold 0.92
+        2. Sonst Jaccard auf normalisierten Tokens, threshold 0.85
+        Defensiv: leere/None summary -> None, leere existing -> None,
+        Embedder-Crash -> Jaccard-Fallback.
+        """
+        if not new_summary or not existing:
+            return None
+        new_norm = (new_summary or "").strip()
+        if not new_norm:
+            return None
+        embedder = self._try_get_embedder()
+        if embedder is not None:
+            try:
+                from .evidence_binder import _cosine
+                new_vec = embedder(new_norm)
+                for sec in existing:
+                    other = (sec.get("section_summary") or "").strip()
+                    if not other:
+                        continue
+                    other_vec = embedder(other)
+                    sim = float(_cosine(new_vec, other_vec))
+                    if sim >= 0.92:
+                        return {
+                            "type": "model_generated_inference",
+                            "source": "section_dedup",
+                            "tool_name": "section_dedup_check",
+                            "snippet": f"duplicate_of_section_{sec.get('section_index')}",
+                            "raw": {
+                                "similarity": round(sim, 4),
+                                "method": "cosine",
+                                "matched_section_index": sec.get("section_index"),
+                            },
+                        }
+            except Exception as exc:
+                logger.warning(f"Section-Dedup cosine fail, jaccard fallback: {exc!r}")
+
+        # Jaccard-Fallback
+        def tokens(s: str) -> set:
+            return {t for t in re.split(r"\W+", (s or "").lower()) if len(t) > 2}
+
+        new_tok = tokens(new_norm)
+        if not new_tok:
+            return None
+        for sec in existing:
+            other_tok = tokens(sec.get("section_summary") or "")
+            if not other_tok:
+                continue
+            inter = len(new_tok & other_tok)
+            union = len(new_tok | other_tok)
+            if union == 0:
+                continue
+            jac = inter / union
+            if jac >= 0.85:
+                return {
+                    "type": "model_generated_inference",
+                    "source": "section_dedup",
+                    "tool_name": "section_dedup_check",
+                    "snippet": f"duplicate_of_section_{sec.get('section_index')}",
+                    "raw": {
+                        "similarity": round(jac, 4),
+                        "method": "jaccard",
+                        "matched_section_index": sec.get("section_index"),
+                    },
+                }
+        return None
+
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
@@ -645,6 +764,16 @@ class ReportAgent:
             for s in self.evidence_map["sections"]
             if s.get("section_index") != section_index
         ]
+        # Reader Honesty: Section-Dedup — Duplikat-Marker im audit_trail ablegen,
+        # Section selbst nicht droppen (Frontend entscheidet).
+        dedup_marker = self._section_dedup_check(
+            new_summary=section_title or content[:200],
+            existing=existing_sections,
+        )
+        if dedup_marker is not None:
+            claims = section_entry.get("claims") or []
+            if claims:
+                claims[0].setdefault("audit_trail", []).append(dedup_marker)
         existing_sections.append(section_entry)
         existing_sections.sort(key=lambda item: item.get("section_index", 0))
         self.evidence_map["sections"] = existing_sections
