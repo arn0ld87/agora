@@ -108,10 +108,12 @@ def _coerce_string(spec: FieldSpec, raw: Any) -> tuple[str | None, str | None]:
         return None, f'{spec.key}: erwarte string, bool erhalten'
     if raw is None:
         # Leerstring ist legitim (z. B. AGORA_AUTH_TOKEN unset);
-        # ``None`` interpretieren wir als „Feld weglassen", nicht als
-        # „auf leer setzen". Aufrufer hat den Key dann gar nicht im
-        # Payload.
-        return None, f'{spec.key}: null als Wert nicht erlaubt — Feld weglassen, um den Default wiederherzustellen'
+        # ``None`` interpretieren wir als „nicht gesetzt". Da
+        # ``apply_payload`` ein Merge-Update macht, lässt das Weglassen
+        # eines Keys den bestehenden Override stehen — ein Reset auf
+        # Default braucht einen separaten Reset-Pfad und ist nicht
+        # Teil dieses Endpunkts.
+        return None, f'{spec.key}: null als Wert nicht erlaubt'
     return str(raw), None
 
 
@@ -153,28 +155,40 @@ def _check_range(spec: FieldSpec, value: Any) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _check_embedding_consistency(validated: dict[str, Any]) -> ValidationError | None:
+def _check_embedding_consistency(
+    validated: dict[str, Any],
+    effective: Mapping[str, Any] | None = None,
+) -> ValidationError | None:
     """``VECTOR_DIM`` muss zur Output-Dim des ``EMBEDDING_MODEL``
     passen — gleiche Regel wie ``Config.validate()`` beim Startup.
 
-    Nur greifen, wenn beide Werte im Payload sind ODER mindestens einer
-    plus der bisher persistierte Gegenpart bekannt ist. Im Validator
-    ohne State greifen wir nur bei beiden im Payload; den State-
-    abhängigen Check übernimmt der Service-Layer.
+    Greift, sobald mindestens eines der beiden Felder im Payload ist;
+    fehlende Gegenseite wird aus ``effective`` (= aktueller persistier-
+    ter Stand inkl. Defaults) ergänzt. Damit fällt auch ein Partial-
+    Update wie „nur ``VECTOR_DIM=1024`` setzen, während Bestand
+    ``EMBEDDING_MODEL=qwen3-embedding:4b`` ist" auf — vorher wurde so
+    eine Mismatch-Konfig stillschweigend persistiert (Issue #133
+    Gemini-Finding High).
     """
-    if 'EMBEDDING_MODEL' in validated and 'VECTOR_DIM' in validated:
-        model = validated['EMBEDDING_MODEL']
-        dim = validated['VECTOR_DIM']
-        expected = infer_vector_dim_for_model(model)
-        if expected is not None and dim != expected:
-            return ValidationError(
-                key='VECTOR_DIM',
-                code='vector_dim_mismatch',
-                message=(
-                    f'VECTOR_DIM {dim} passt nicht zu EMBEDDING_MODEL '
-                    f'{model!r} (erwartet {expected}).'
-                ),
-            )
+    involved = {'EMBEDDING_MODEL', 'VECTOR_DIM'} & set(validated.keys())
+    if not involved:
+        return None
+    merged: dict[str, Any] = dict(effective or {})
+    merged.update(validated)
+    if 'EMBEDDING_MODEL' not in merged or 'VECTOR_DIM' not in merged:
+        return None
+    model = merged['EMBEDDING_MODEL']
+    dim = merged['VECTOR_DIM']
+    expected = infer_vector_dim_for_model(model)
+    if expected is not None and dim != expected:
+        return ValidationError(
+            key='VECTOR_DIM',
+            code='vector_dim_mismatch',
+            message=(
+                f'VECTOR_DIM {dim} passt nicht zu EMBEDDING_MODEL '
+                f'{model!r} (erwartet {expected}).'
+            ),
+        )
     return None
 
 
@@ -187,6 +201,7 @@ def validate_payload(
     payload: Mapping[str, Any],
     *,
     allow_secrets: bool = False,
+    effective_settings: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[ValidationError]]:
     """Validiert ein flaches ``{key: value}``-Payload.
 
@@ -196,6 +211,11 @@ def validate_payload(
             mit ``code='secret_not_allowed'`` abgelehnt — der reguläre
             ``PUT /api/settings``-Endpunkt nutzt das, um Secrets auf
             den dedizierten Endpunkt zu zwingen.
+        effective_settings: Optional aktueller persistierter Stand
+            (key→value, non-secret reicht). Wird für Cross-Field-
+            Regeln benutzt, wenn das Payload nur eine Hälfte eines
+            zusammenhängenden Paares ändert (z. B. nur
+            ``EMBEDDING_MODEL`` ohne ``VECTOR_DIM``).
 
     Returns:
         ``(validated, errors)``. Bei nicht-leerer ``errors``-Liste ist
@@ -254,7 +274,7 @@ def validate_payload(
 
         validated[key] = coerced
 
-    cross = _check_embedding_consistency(validated)
+    cross = _check_embedding_consistency(validated, effective_settings)
     if cross is not None:
         errors.append(cross)
 

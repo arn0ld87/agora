@@ -149,6 +149,49 @@ def test_validate_rejects_vector_dim_mismatch():
     assert any(e.code == 'vector_dim_mismatch' for e in errors)
 
 
+def test_validate_rejects_partial_update_against_effective_state():
+    """Gemini #155-High: vorher schloss der Validator nur die
+    Both-in-Payload-Variante; ein Partial-Update mit nur
+    ``EMBEDDING_MODEL`` (oder nur ``VECTOR_DIM``) ließ einen Mismatch
+    gegen den persistierten Gegenpart durch.
+    """
+    effective = {'EMBEDDING_MODEL': 'qwen3-embedding:4b', 'VECTOR_DIM': 2560}
+    _, errors = validate_payload(
+        {'EMBEDDING_MODEL': 'nomic-embed-text'},
+        effective_settings=effective,
+    )
+    assert any(e.code == 'vector_dim_mismatch' for e in errors)
+
+    _, errors = validate_payload(
+        {'VECTOR_DIM': 1024},
+        effective_settings=effective,
+    )
+    assert any(e.code == 'vector_dim_mismatch' for e in errors)
+
+
+def test_validate_partial_update_passes_with_matching_effective_state():
+    effective = {'EMBEDDING_MODEL': 'qwen3-embedding:4b', 'VECTOR_DIM': 2560}
+    _, errors = validate_payload(
+        {'VECTOR_DIM': 2560},
+        effective_settings=effective,
+    )
+    assert errors == []
+
+
+def test_validate_skips_cross_field_when_pair_not_involved():
+    """Wenn weder ``EMBEDDING_MODEL`` noch ``VECTOR_DIM`` im Payload
+    sind, ist die Cross-Field-Regel kein Thema dieses PUTs — auch
+    nicht, wenn der effective Stand selbst inkonsistent ist.
+    """
+    effective = {'EMBEDDING_MODEL': 'qwen3-embedding:4b', 'VECTOR_DIM': 1024}
+    validated, errors = validate_payload(
+        {'LLM_MODEL_NAME': 'qwen2.5:14b'},
+        effective_settings=effective,
+    )
+    assert errors == []
+    assert validated == {'LLM_MODEL_NAME': 'qwen2.5:14b'}
+
+
 def test_validate_does_not_complain_when_model_unknown():
     """Wir kennen die Output-Dim nicht aller Modelle (z. B. custom
     cloud). In dem Fall greifen wir nicht ins Lenkrad — der Operator

@@ -185,6 +185,29 @@ class SettingsService:
             grouped[spec.section].append(self._field_payload(spec, file_layer))
         return grouped
 
+    def effective_snapshot(self) -> dict[str, Any]:
+        """Liefert pro non-secret Feld den aktuell effektiven Wert.
+
+        Wird vom Validator als Cross-Field-Kontext genutzt: ein PUT-
+        Payload, das nur eine Hälfte eines zusammenhängenden Paares
+        setzt (z. B. ``EMBEDDING_MODEL`` ohne ``VECTOR_DIM``), soll
+        gegen den Bestand der anderen Seite geprüft werden. Defaults
+        sind enthalten — sie sind Teil des effektiven Stands. Secrets
+        bleiben draußen, weil aktuell keine Cross-Field-Regel auf
+        Secrets greift und sie versehentlich nirgends in Validator-
+        Diagnostik landen sollen.
+        """
+        with self._lock:
+            file_layer = self._read_file_layer()
+            snapshot: dict[str, Any] = {}
+            for spec in SETTINGS_FIELDS:
+                if spec.secret:
+                    continue
+                value, _, _ = self._resolve_field(spec, file_layer)
+                if value is not None:
+                    snapshot[spec.key] = value
+            return snapshot
+
     def get_schema(self) -> list[dict[str, Any]]:
         """Liefert nur Meta-Daten (kein Wert, keine Source) — für das
         Frontend-Form-Render. Defaults sind dabei bewusst enthalten,
@@ -324,35 +347,53 @@ class SettingsService:
         :func:`tempfile.NamedTemporaryFile` mit ``delete=False`` im
         Zielverzeichnis — so kann ein Crash zwischen ``write`` und
         ``replace`` höchstens eine zurückgelassene tmp-Datei
-        produzieren, niemals eine korrupte ``settings.json``.
+        produzieren, niemals eine korrupte ``settings.json``. Bei einem
+        Fehler in ``json.dump``/``fsync`` räumt der ``finally``-Block
+        die Tempdatei auf, damit ``instance/`` nicht über fehlgeschla-
+        gene Schreibversuche mit Resten zumüllt (Gemini-Finding zu
+        PR #155).
         """
         target = self._instance_path
         target.parent.mkdir(parents=True, exist_ok=True)
         # NamedTemporaryFile schreibt im Zielverzeichnis — wichtig für
         # Atomicity (gleiches Filesystem). Suffix ``.tmp`` macht
         # Reste nach Crashes leichter erkennbar.
-        with tempfile.NamedTemporaryFile(
-            mode='w',
-            encoding='utf-8',
-            dir=str(target.parent),
-            prefix='settings.',
-            suffix='.json.tmp',
-            delete=False,
-        ) as tmp:
-            tmp_path = Path(tmp.name)
-            json.dump(data, tmp, ensure_ascii=False, indent=2, sort_keys=True)
-            tmp.write('\n')
-            tmp.flush()
-            try:
-                # ``fsync`` ist optional — auf Btrfs (alex' Default)
-                # erhöht es den Schutz gegen Power-Loss-Korruption.
-                os.fsync(tmp.fileno())
-            except OSError:
-                # Manche Filesysteme (z. B. einige Test-Mounts)
-                # mögen kein fsync — wir tolerieren das, atomic
-                # rename hängt nicht davon ab.
-                pass
-        os.replace(tmp_path, target)
+        tmp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=str(target.parent),
+                prefix='settings.',
+                suffix='.json.tmp',
+                delete=False,
+            ) as tmp:
+                tmp_path = Path(tmp.name)
+                json.dump(data, tmp, ensure_ascii=False, indent=2, sort_keys=True)
+                tmp.write('\n')
+                tmp.flush()
+                try:
+                    # ``fsync`` ist optional — auf Btrfs (alex' Default)
+                    # erhöht es den Schutz gegen Power-Loss-Korruption.
+                    os.fsync(tmp.fileno())
+                except OSError:
+                    # Manche Filesysteme (z. B. einige Test-Mounts)
+                    # mögen kein fsync — wir tolerieren das, atomic
+                    # rename hängt nicht davon ab.
+                    pass
+            os.replace(tmp_path, target)
+            # Erfolgreich umbenannt — die Tempdatei existiert nicht mehr,
+            # also ``finally`` keinen Cleanup mehr triggern lassen.
+            tmp_path = None
+        finally:
+            if tmp_path is not None and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    # Wenn auch das Aufräumen scheitert, lieber den
+                    # Original-Fehler durchreichen — Operator sieht
+                    # die Tempdatei und erkennt das Problem.
+                    pass
 
     # ------------------------------------------------------------------
     # Interna

@@ -261,6 +261,33 @@ def test_put_settings_rejects_vector_dim_mismatch(client):
     )
 
 
+def test_put_settings_rejects_partial_update_against_persisted_state(
+    client, app, monkeypatch
+):
+    """Gemini #155-High: PUT mit nur einer Hälfte des
+    EMBEDDING_MODEL/VECTOR_DIM-Paares muss gegen den persistierten
+    Gegenpart geprüft werden — sonst landet eine inkonsistente
+    Konfiguration in der Datei.
+    """
+    # Persisted Stand ist explizit gesetzt
+    app.config['service'].apply_payload(
+        {'EMBEDDING_MODEL': 'qwen3-embedding:4b', 'VECTOR_DIM': 2560},
+        persist=True,
+    )
+    # Jetzt nur EMBEDDING_MODEL wechseln, VECTOR_DIM nicht mit
+    res = client.put(
+        '/api/settings', json={'EMBEDDING_MODEL': 'nomic-embed-text'},
+    )
+    assert res.status_code == 400
+    body = res.get_json()
+    assert any(err['code'] == 'vector_dim_mismatch' for err in body['errors'])
+
+    # Persisted-Stand ist unverändert geblieben (All-or-Nothing).
+    data = json.loads(app.config['service'].instance_path.read_text(encoding='utf-8'))
+    assert data['EMBEDDING_MODEL'] == 'qwen3-embedding:4b'
+    assert data['VECTOR_DIM'] == 2560
+
+
 def test_put_settings_rejects_non_dict_body(client):
     res = client.put('/api/settings', json=['not', 'a', 'dict'])
     assert res.status_code == 400

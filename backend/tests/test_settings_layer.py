@@ -310,3 +310,38 @@ def test_missing_instance_file_is_no_error(isolated_service, clean_env):
     assert not isolated_service.instance_path.exists()
     state = isolated_service.get_field_state('LLM_MODEL_NAME')
     assert state['source'] == SOURCE_DEFAULT
+
+
+# ---------------------------------------------------------------------------
+# effective_snapshot (Cross-Field-Kontext für den Validator)
+# ---------------------------------------------------------------------------
+
+
+def test_effective_snapshot_excludes_secrets(isolated_service, clean_env):
+    snapshot = isolated_service.effective_snapshot()
+    for spec in SETTINGS_FIELDS:
+        if spec.secret:
+            assert spec.key not in snapshot
+
+
+def test_effective_snapshot_includes_defaults_for_unset_fields(
+    isolated_service, clean_env
+):
+    snapshot = isolated_service.effective_snapshot()
+    # EMBEDDING_MODEL und VECTOR_DIM haben Defaults im Schema — sie
+    # müssen im Snapshot stehen, damit der Validator den Cross-Field-
+    # Check auch bei Partial-Updates fahren kann.
+    assert 'EMBEDDING_MODEL' in snapshot
+    assert 'VECTOR_DIM' in snapshot
+
+
+def test_effective_snapshot_reflects_persisted_overrides(
+    isolated_service, clean_env
+):
+    isolated_service.apply_payload(
+        {'EMBEDDING_MODEL': 'qwen3-embedding:4b', 'VECTOR_DIM': 2560},
+        persist=True,
+    )
+    snapshot = isolated_service.effective_snapshot()
+    assert snapshot['EMBEDDING_MODEL'] == 'qwen3-embedding:4b'
+    assert snapshot['VECTOR_DIM'] == 2560
