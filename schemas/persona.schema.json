@@ -234,7 +234,7 @@
           "type": "null"
         }
       ],
-      "default": null,
+      "default": "neutral-de",
       "title": "Voice Register"
     }
   },

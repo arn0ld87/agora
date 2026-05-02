@@ -57,8 +57,8 @@ class PersonaModel(BaseModel):
     review_status: Optional[Literal["pending", "approved", "rejected"]] = None
     is_manual: Optional[bool] = False
 
-    # Layer 2: DACH-Voice — neu, optional bis Layer 2 ausgerollt
-    voice_register: Optional[VoiceRegister] = None
+    # Layer 2: DACH-Voice — Default neutral-de; None bleibt zulässig für alte Daten
+    voice_register: Optional[VoiceRegister] = "neutral-de"
 
     # Layer 1: Segment-Zuordnung — neu, Pflicht ab Persona-Quoten-Vertrag
     segment: Optional[str] = Field(default=None, min_length=1, max_length=64)

@@ -114,3 +114,35 @@ def test_persona_persona_min_length():
             bio="Bio Bio Bio",
             persona="zu kurz",  # < 300
         )
+
+
+# ---- VoiceRegister Roundtrips ----
+
+_BASE = dict(
+    user_id=1,
+    user_name="test_user",
+    name="Test Person",
+    bio="Eine kurze Test-Bio.",
+    persona="x" * 300,
+)
+
+
+@pytest.mark.parametrize("register", ["formal-de", "neutral-de", "technical-de", "skeptisch-de"])
+def test_voice_register_roundtrip(register: str):
+    p = PersonaModel(**_BASE, voice_register=register)
+    assert p.voice_register == register
+
+
+def test_voice_register_invalid_raises():
+    with pytest.raises(ValidationError):
+        PersonaModel(**_BASE, voice_register="english-uk")
+
+
+def test_voice_register_none_allowed():
+    p = PersonaModel(**_BASE, voice_register=None)
+    assert p.voice_register is None
+
+
+def test_voice_register_default_is_neutral_de():
+    p = PersonaModel(**_BASE)
+    assert p.voice_register == "neutral-de"

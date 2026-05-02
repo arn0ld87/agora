@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Changed
 
+- oasis_profile_generator + persona_contract: voice_register-Pflichtfeld pro Persona (formal-de | neutral-de | technical-de | skeptisch-de) — OasisAgentProfile erweitert, JSON-Spec im Individual- und Group-Persona-Prompt um Pflichtfeld + Register-Anker, Validation in `_validate_profile_metadata`, Auto-Fallback `neutral-de` mit `logger.warning` bei fehlendem/ungültigem Wert, rule-based-Fallback heuristisch, PersonaModel-Default `neutral-de` für Backwards-Compat (Sub-Slice 10, Closes #167, Layer 2)
 - confidence_calculator: Match-Score-Cap (alle < 0.55 → max 0.69) + Verified-Quellen-Gate (>= 2 unabhaengige Quellen noetig) (Sub-Slice 08, Closes #165, Refs #105)
 - report_prompts, report_agent, graph_tools: Scenario-Vokabular ersetzt „future prediction"/„rehearsal of the future"/„god's eye view" — entfernt Forecast-Autoritätsclaims aus LLM-Prompts (8 Prompt-Phrasen) und Report-Headings (Default Fallback Outline Z. 775–782, GraphAnalysisResult.to_text() Z. 168–177) (Sub-Slice 09 + Erweiterung, Layer 2).
 - report_agent: EvidenceMapModel-Validation am Schreib-Boundary (`_init_evidence_map`, `_save_evidence_section`, Tool-Loop-Fallback) — Sub-Slice 02c, Refs #107.

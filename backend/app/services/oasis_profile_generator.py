@@ -23,6 +23,9 @@ from ..storage import GraphStorage
 
 logger = get_logger('agora.oasis_profile')
 
+# Erlaubte Voice-Register-Werte (gespiegelt aus VoiceRegister Literal in persona_contract.py)
+VOICE_REGISTERS = ("formal-de", "neutral-de", "technical-de", "skeptisch-de")
+
 
 @dataclass
 class OasisAgentProfile:
@@ -57,6 +60,9 @@ class OasisAgentProfile:
     # Segment tag for PersonaQuotaPlan validation (= entity_type by default)
     segment: Optional[str] = None
 
+    # DACH-Voice-Register (Layer 2)
+    voice_register: Optional[str] = None
+
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     
     def to_reddit_format(self) -> Dict[str, Any]:
@@ -90,6 +96,8 @@ class OasisAgentProfile:
             profile["source_entity_type"] = self.source_entity_type
         if self.segment:
             profile["segment"] = self.segment
+        if self.voice_register:
+            profile["voice_register"] = self.voice_register
 
         return profile
 
@@ -126,6 +134,8 @@ class OasisAgentProfile:
             profile["source_entity_type"] = self.source_entity_type
         if self.segment:
             profile["segment"] = self.segment
+        if self.voice_register:
+            profile["voice_register"] = self.voice_register
 
         return profile
 
@@ -150,6 +160,7 @@ class OasisAgentProfile:
             "source_entity_uuid": self.source_entity_uuid,
             "source_entity_type": self.source_entity_type,
             "segment": self.segment,
+            "voice_register": self.voice_register,
             "created_at": self.created_at,
         }
 
@@ -331,6 +342,7 @@ class OasisProfileGenerator:
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
             segment=segment,
+            voice_register=profile_data.get("voice_register"),
         )
     
     def _generate_username(self, name: str) -> str:
@@ -568,6 +580,14 @@ class OasisProfileGenerator:
                     if "persona" not in result or not result["persona"]:
                         result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
 
+                    # voice_register: Fallback vor allgemeiner Validation (kein Retry nötig)
+                    vr_value = result.get("voice_register")
+                    if vr_value not in VOICE_REGISTERS:
+                        logger.warning(
+                            "voice_register fehlt oder ungültig: %r → fallback neutral-de", vr_value
+                        )
+                        result["voice_register"] = "neutral-de"
+
                     missing_fields = self._validate_profile_metadata(result)
                     if missing_fields:
                         last_error = ValueError(
@@ -660,6 +680,10 @@ class OasisProfileGenerator:
             result["country"] = country_map.get(country_value.lower(), country_value.upper())
         else:
             missing_fields.append("country")
+
+        vr = result.get("voice_register")
+        if vr is not None and vr not in VOICE_REGISTERS:
+            missing_fields.append(f"voice_register: invalid value '{vr}'")
 
         return missing_fields
     
@@ -809,6 +833,12 @@ Antworte als JSON mit folgenden Feldern:
 8. country: ISO-Land in Englisch (z. B. "DE", "US")
 9. profession: Beruf (auf Deutsch)
 10. interested_topics: Array deutscher Themen-Strings
+11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Wähle passend zu Beruf und Bildungsniveau der Persona:
+    - "formal-de": gehoben, Sie-Form, Behörden-/Konzern-Ton, keine Anglizismen (z. B. Beamtin, Juristin).
+    - "neutral-de": alltagssprachlich, Du-Form möglich, keine Werbesprache (z. B. Umschüler, Elternteil).
+    - "technical-de": präzise, Fachvokabular, knapp, kein Marketing (z. B. Senior-Entwicklerin, DevOps-Ingenieur).
+    - "skeptisch-de": kritisch-distanziert, hinterfragend, Anführungszeichen für Buzzwords (z. B. Aktivistin, Journalist).
 
 Wichtig:
 - Antworte ausschließlich mit JSON, keine zusätzlichen Erklärungen.
@@ -816,6 +846,7 @@ Wichtig:
 - Keine unescapten Zeilenumbrüche in Strings.
 - age muss Ganzzahl, gender muss "male"/"female"/"nonbinary" sein.
 - display_name muss ein echter Personenname sein, nicht der abstrakte Entity-Begriff.
+- voice_register MUSS eines der vier exakten Werte sein.
 """
 
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
@@ -847,6 +878,12 @@ Please generate JSON containing the following fields:
 8. country: Country (use English, e.g., "US")
 9. profession: Profession
 10. interested_topics: Array of interested topics
+11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Choose based on the persona's profession and education:
+    - "formal-de": elevated style, formal address, bureaucratic tone, no anglicisms (e.g. civil servant, lawyer).
+    - "neutral-de": everyday language, casual address, no marketing speak (e.g. trainee, parent).
+    - "technical-de": precise, specialist vocabulary, concise, no marketing (e.g. senior developer, DevOps engineer).
+    - "skeptisch-de": critical, questioning, uses quotation marks for buzzwords (e.g. activist, journalist).
 
 Important:
 - All field values must be strings or numbers, do not use newlines
@@ -854,6 +891,7 @@ Important:
 - Use English
 - display_name must be a realistic personal name, not the abstract entity label.
 - age must be a valid integer, gender must be "male"/"female"/"nonbinary".
+- voice_register MUST be one of the four exact values listed above.
 """
 
     def _build_group_persona_prompt(
@@ -900,6 +938,12 @@ Antworte als JSON mit folgenden Feldern:
 8. country: ISO-Land in Englisch (z. B. "DE")
 9. profession: Konkrete Rolle bei/Beziehung zu "{entity_name}" (z. B. "Senior Tech-Recruiter bei TalentCore GmbH", "Developer Advocate bei Docker Inc.", "Redakteur bei alexle135.de").
 10. interested_topics: Array deutscher Themen-Strings
+11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Passend zu Rolle und Kontext der Persona bei "{entity_name}":
+    - "formal-de": gehoben, Sie-Form, Behörden-/Konzern-Ton, keine Anglizismen.
+    - "neutral-de": alltagssprachlich, Du-Form möglich, keine Werbesprache.
+    - "technical-de": präzise, Fachvokabular, knapp, kein Marketing.
+    - "skeptisch-de": kritisch-distanziert, hinterfragend, Anführungszeichen für Buzzwords.
 
 Wichtig:
 - Antworte ausschließlich mit JSON.
@@ -907,6 +951,7 @@ Wichtig:
 - Keine unescapten Zeilenumbrüche.
 - display_name MUSS ein echter Personenname sein, NICHT der Name der Organisation.
 - gender MUSS "male"/"female"/"nonbinary" sein, age MUSS im Bereich 25–65 liegen.
+- voice_register MUSS eines der vier exakten Werte sein.
 """
 
         return f"""Generate a realistic **human person** who speaks FOR the following organization/group on social media — not an institutional account. The person can be an employee, advocate, official representative, or community member.
@@ -939,14 +984,33 @@ Please generate JSON containing the following fields:
 8. country: Country (use English, e.g., "DE")
 9. profession: Concrete role at/relation to "{entity_name}" (e.g. "Senior Tech Recruiter at TalentCore GmbH", "Developer Advocate at Docker Inc.").
 10. interested_topics: Array of topics
+11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
+    Choose based on role at "{entity_name}":
+    - "formal-de": elevated style, formal address, bureaucratic tone, no anglicisms.
+    - "neutral-de": everyday language, casual address, no marketing speak.
+    - "technical-de": precise, specialist vocabulary, concise, no marketing.
+    - "skeptisch-de": critical, questioning, uses quotation marks for buzzwords.
 
 Important:
 - All field values must be strings or numbers, no null values allowed
 - display_name MUST be a real personal name, NEVER the organization's name.
 - gender MUST be "male"/"female"/"nonbinary"; age MUST be in 25–65.
 - persona must be coherent, no newlines.
+- voice_register MUST be one of the four exact values listed above.
 - Use English."""
     
+    @staticmethod
+    def _rule_based_voice_register(entity_type: str, profession: str = "") -> str:
+        """Minimale Heuristik: leite voice_register aus entity_type/profession ab."""
+        combined = (entity_type + " " + profession).lower()
+        if any(k in combined for k in ("beamt", "jurist", "lawyer", "governmentagency", "official", "verwalt")):
+            return "formal-de"
+        if any(k in combined for k in ("develop", "engineer", "devops", "software", "tech", "it_admin", "faculty")):
+            return "technical-de"
+        if any(k in combined for k in ("activist", "journalist", "ngo", "redakteur", "aktivist")):
+            return "skeptisch-de"
+        return "neutral-de"
+
     def _generate_profile_rule_based(
         self,
         entity_name: str,
@@ -973,10 +1037,12 @@ Important:
                 "country": "DE",
                 "profession": "Student",
                 "interested_topics": ["Bildung", "Gesellschaft", "Technologie"],
+                "voice_register": self._rule_based_voice_register(entity_type_lower, "Student"),
             }
 
         elif entity_type_lower in ["publicfigure", "expert", "faculty"]:
             dach = self._pick_dach_name()
+            profession_str = entity_attributes.get("occupation", "Fachexpertin/Fachexperte")
             return {
                 "display_name": dach,
                 "handle": dach.lower().replace(" ", "_"),
@@ -986,8 +1052,9 @@ Important:
                 "gender": self._pick_individual_gender(),
                 "mbti": random.choice(["ENTJ", "INTJ", "ENTP", "INTP"]),
                 "country": "DE",
-                "profession": entity_attributes.get("occupation", "Fachexpertin/Fachexperte"),
+                "profession": profession_str,
                 "interested_topics": ["Politik", "Wirtschaft", "Gesellschaft"],
+                "voice_register": self._rule_based_voice_register(entity_type_lower, profession_str),
             }
 
         # Institutionen-Fallback: ECHTE PERSON als Repräsentant/in der Organisation.
@@ -1004,6 +1071,7 @@ Important:
                 "country": "DE",
                 "profession": f"Redakteur:in bei {entity_name}",
                 "interested_topics": ["Nachrichten", "Aktuelles", "Öffentlichkeit"],
+                "voice_register": self._rule_based_voice_register(entity_type_lower, "journalist"),
             }
 
         elif entity_type_lower in ["university", "governmentagency", "ngo", "organization"]:
@@ -1019,6 +1087,7 @@ Important:
                 "country": "DE",
                 "profession": f"Mitarbeiter:in bei {entity_name}",
                 "interested_topics": ["Politik", "Community", "Arbeit"],
+                "voice_register": self._rule_based_voice_register(entity_type_lower, ""),
             }
 
         else:
@@ -1035,6 +1104,7 @@ Important:
                 "country": "DE",
                 "profession": entity_type,
                 "interested_topics": ["Allgemein", "Gesellschaft"],
+                "voice_register": self._rule_based_voice_register(entity_type_lower, entity_type),
             }
     
     def set_graph_id(self, graph_id: str):
