@@ -168,11 +168,11 @@ class InsightForgeResult:
     def to_text(self) -> str:
         """Convert to detailed text format for LLM understanding"""
         text_parts = [
-            "## Future Prediction Deep Analysis",
+            "## Scenario Evaluation Deep Analysis",
             f"Analysis Query: {self.query}",
-            f"Prediction Scenario: {self.simulation_requirement}",
-            "\n### Prediction Data Statistics",
-            f"- Related Prediction Facts: {self.total_facts}",
+            f"Evaluation Scenario: {self.simulation_requirement}",
+            "\n### Evaluation Data Statistics",
+            f"- Related Simulation Facts: {self.total_facts}",
             f"- Involved Entities: {self.total_entities}",
             f"- Relationship Chains: {self.total_relationships}"
         ]
