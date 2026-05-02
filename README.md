@@ -4,7 +4,7 @@
 
 # Agora
 
-**Local-first, cloud-compatible Agentic-Prediction-Engine.**
+**Local-first, cloud-kompatibler Persona-basierter Resonanz-Simulator.**
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
