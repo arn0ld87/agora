@@ -1,0 +1,154 @@
+{
+  "schema_version": 2,
+  "report_id": "report_orphan_heavy",
+  "simulation_id": "sim_orphan_heavy_001",
+  "global_evidence": [
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
+      "match_score": 0.70,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Durchschnittlicher Degree: 4.2 Knoten.",
+      "match_score": 0.68,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Cluster-Koeffizient: 0.61 im Community-Graph.",
+      "match_score": 0.72,
+      "supports_claim": true
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent-log",
+      "snippet": "Persona Hoffmann: Die Vernetzung in meiner Branche ist gering.",
+      "match_score": 0.58,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Isolierte Knoten: 12 % des Gesamtgraphen.",
+      "match_score": 0.65,
+      "supports_claim": true
+    }
+  ],
+  "sections": [
+    {
+      "section_index": 1,
+      "section_title": "Netzwerkstruktur",
+      "section_summary": "Analyse der Graphstruktur und Verbindungen.",
+      "claims": [
+        {
+          "claim_id": "claim_01",
+          "claim_text": "Die Netzwerkdichte liegt bei 0,34 im Kernsegment.",
+          "confidence_label": "high",
+          "confidence_score": 0.70,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
+              "match_score": 0.70,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_02",
+          "claim_text": "Die Verbindungstiefe zwischen Akteuren ist unbekannt.",
+          "confidence_label": "low",
+          "confidence_score": 0.15,
+          "evidence": [],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_03",
+          "claim_text": "Es existieren isolierte Teilnetzwerke ohne Bruecken.",
+          "confidence_label": "low",
+          "confidence_score": 0.15,
+          "evidence": [],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_04",
+          "claim_text": "Der durchschnittliche Degree betraegt 4,2 Knoten.",
+          "confidence_label": "medium",
+          "confidence_score": 0.65,
+          "evidence": [
+            {
+              "type": "graph_metric",
+              "source": "neo4j-graph",
+              "snippet": "Durchschnittlicher Degree: 4.2 Knoten.",
+              "match_score": 0.68,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 2,
+      "section_title": "Community-Analyse",
+      "section_summary": "Gemeinschaftsstrukturen im sozialen Netz.",
+      "claims": [
+        {
+          "claim_id": "claim_05",
+          "claim_text": "Die Community-Grenzen sind nicht klar definiert.",
+          "confidence_label": "low",
+          "confidence_score": 0.15,
+          "evidence": [],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_06",
+          "claim_text": "Der Cluster-Koeffizient liegt bei 0,61.",
+          "confidence_label": "medium",
+          "confidence_score": 0.68,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Cluster-Koeffizient: 0.61 im Community-Graph.",
+              "match_score": 0.72,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_07",
+          "claim_text": "Informationsfluss zwischen Communities bleibt ungeklaert.",
+          "confidence_label": "low",
+          "confidence_score": 0.15,
+          "evidence": [],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_08",
+          "claim_text": "12 Prozent der Knoten sind isoliert im Gesamtgraphen.",
+          "confidence_label": "medium",
+          "confidence_score": 0.62,
+          "evidence": [
+            {
+              "type": "graph_metric",
+              "source": "neo4j-graph",
+              "snippet": "Isolierte Knoten: 12 % des Gesamtgraphen.",
+              "match_score": 0.65,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    }
+  ]
+}

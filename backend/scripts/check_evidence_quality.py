@@ -34,12 +34,15 @@ from app.contracts.report_contract import EvidenceMapModel, ReportContractModel 
 
 
 def evaluate(evidence_map: EvidenceMapModel) -> dict[str, float]:
-    all_claims = [c for s in evidence_map.sections for c in s.claims]
+    sections = evidence_map.sections
+    all_claims = [c for s in sections for c in s.claims]
     if not all_claims:
         return {
             "evidence_coverage": 0.0,
             "claim_support_ratio": 0.0,
             "orphan_claim_rate": 1.0,
+            "dedup_rate": 0.0,
+            "concentration_index": 0.0,
             "total_claims": 0.0,
         }
     n = len(all_claims)
@@ -49,10 +52,39 @@ def evaluate(evidence_map: EvidenceMapModel) -> dict[str, float]:
         if any((e.supports_claim is True) and ((e.match_score or 0.0) >= 0.55) for e in c.evidence)
     )
     orphans = n - with_any_evidence
+
+    # dedup_rate: Anteil der Sections, die einen section_dedup-Marker im
+    # audit_trail eines ihrer claims tragen (Sub-Slice 13).
+    dedup_count = 0
+    total_sections = len(sections)
+    for section in sections:
+        has_dedup = False
+        for claim in section.claims:
+            for entry in claim.audit_trail:
+                if entry.get("source") == "section_dedup":
+                    has_dedup = True
+                    break
+            if has_dedup:
+                break
+        if has_dedup:
+            dedup_count += 1
+    dedup_rate = (dedup_count / total_sections) if total_sections else 0.0
+
+    # concentration_index: max(count_pro_source) / total_evidence im
+    # global_evidence-Pool (kleiner Pool oder Single-Source -> hoher Index).
+    sources_count: dict[str, int] = {}
+    for item in evidence_map.global_evidence:
+        src = str(item.source)
+        sources_count[src] = sources_count.get(src, 0) + 1
+    total_global = sum(sources_count.values())
+    concentration_index = (max(sources_count.values()) / total_global) if total_global else 0.0
+
     return {
         "evidence_coverage": with_any_evidence / n,
         "claim_support_ratio": with_real_support / n,
         "orphan_claim_rate": orphans / n,
+        "dedup_rate": dedup_rate,
+        "concentration_index": concentration_index,
         "total_claims": float(n),
     }
 
@@ -117,6 +149,8 @@ def main() -> int:
         print(f"  {f.name}: coverage={m['evidence_coverage']:.2f} "
               f"support={m['claim_support_ratio']:.2f} "
               f"orphan={m['orphan_claim_rate']:.2f} "
+              f"dedup={m['dedup_rate']:.2f} "
+              f"concentration={m['concentration_index']:.2f} "
               f"(n={int(m['total_claims'])})")
 
     if failures and not args.soft:

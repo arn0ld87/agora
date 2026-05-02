@@ -1,0 +1,168 @@
+{
+  "schema_version": 2,
+  "report_id": "report_clean_small",
+  "simulation_id": "sim_clean_small_001",
+  "global_evidence": [
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Unternehmen A hat 500 Mitarbeiter im DACH-Raum.",
+      "match_score": 0.88,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Umsatz 2024: 12,4 Mio EUR.",
+      "match_score": 0.91,
+      "supports_claim": true
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent-log",
+      "snippet": "Persona Maier: Ich sehe das Produkt positiv, aber der Preis ist zu hoch.",
+      "match_score": 0.82,
+      "supports_claim": true
+    },
+    {
+      "type": "web_search_result",
+      "source": "web",
+      "snippet": "Marktanteil im DACH-Segment steigt laut Branchenreport 2024.",
+      "match_score": 0.79,
+      "supports_claim": true
+    },
+    {
+      "type": "entity_summary",
+      "source": "knowledge-base",
+      "snippet": "Branche: SaaS B2B, Zielgruppe: KMU Deutschland.",
+      "match_score": 0.85,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Wettbewerber B hat 30 % geringere Kundenzufriedenheit.",
+      "match_score": 0.77,
+      "supports_claim": true
+    }
+  ],
+  "sections": [
+    {
+      "section_index": 1,
+      "section_title": "Marktposition DACH",
+      "section_summary": "Analyse der aktuellen Marktposition im DACH-Raum.",
+      "claims": [
+        {
+          "claim_id": "claim_01",
+          "claim_text": "Das Unternehmen haelt eine starke Marktposition im KMU-Segment.",
+          "confidence_label": "high",
+          "confidence_score": 0.87,
+          "evidence": [
+            {
+              "type": "graph_metric",
+              "source": "neo4j-graph",
+              "snippet": "Umsatz 2024: 12,4 Mio EUR.",
+              "match_score": 0.91,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_02",
+          "claim_text": "Der Marktanteil im DACH-Segment ist 2024 gestiegen.",
+          "confidence_label": "high",
+          "confidence_score": 0.80,
+          "evidence": [
+            {
+              "type": "web_search_result",
+              "source": "web",
+              "snippet": "Marktanteil im DACH-Segment steigt laut Branchenreport 2024.",
+              "match_score": 0.79,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 2,
+      "section_title": "Wettbewerbsanalyse",
+      "section_summary": "Vergleich mit den wichtigsten Wettbewerbern.",
+      "claims": [
+        {
+          "claim_id": "claim_03",
+          "claim_text": "Wettbewerber B schneidet bei der Kundenzufriedenheit schlechter ab.",
+          "confidence_label": "high",
+          "confidence_score": 0.78,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Wettbewerber B hat 30 % geringere Kundenzufriedenheit.",
+              "match_score": 0.77,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_04",
+          "claim_text": "Das Unternehmen beschaeftigt 500 Mitarbeiter im DACH-Raum.",
+          "confidence_label": "high",
+          "confidence_score": 0.88,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Unternehmen A hat 500 Mitarbeiter im DACH-Raum.",
+              "match_score": 0.88,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 3,
+      "section_title": "Zielgruppenwahrnehmung",
+      "section_summary": "Wie nehmen Personas das Produkt wahr?",
+      "claims": [
+        {
+          "claim_id": "claim_05",
+          "claim_text": "Die Zielgruppe bewertet das Produkt positiv, bemängelt aber den Preis.",
+          "confidence_label": "high",
+          "confidence_score": 0.82,
+          "evidence": [
+            {
+              "type": "agent_interview",
+              "source": "agent-log",
+              "snippet": "Persona Maier: Ich sehe das Produkt positiv, aber der Preis ist zu hoch.",
+              "match_score": 0.82,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_06",
+          "claim_text": "Die Branche ist B2B SaaS mit Fokus auf KMU in Deutschland.",
+          "confidence_label": "high",
+          "confidence_score": 0.85,
+          "evidence": [
+            {
+              "type": "entity_summary",
+              "source": "knowledge-base",
+              "snippet": "Branche: SaaS B2B, Zielgruppe: KMU Deutschland.",
+              "match_score": 0.85,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    }
+  ]
+}

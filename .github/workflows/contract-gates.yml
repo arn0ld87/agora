@@ -93,7 +93,8 @@ jobs:
       - working-directory: backend
         run: uv sync --group dev
       - working-directory: backend
-        # Bootstrap: --soft, weil Layer-3-Refactor (Tasks 12+) noch
-        # englische Output-Strings in report_agent.py umräumt. Hartmacher
-        # (--soft raus) ist Aufgabe von Task 17 (Layer 5 Defensibility).
-        run: uv run python scripts/check_voice.py --soft
+        # Hartmacher ab Sub-Slice 17 (Layer 5): Layer 2 (Wording-Glossar v1,
+        # Sub-Slice 09+11) und Layer 3 haben alle verbotenen Forecast- und
+        # Marketing-Phrasen aus report_prompts.py und report_agent.py entfernt.
+        # --soft ist nicht mehr noetig -- Exit != 0 bei Treffern.
+        run: uv run python scripts/check_voice.py

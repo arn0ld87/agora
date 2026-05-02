@@ -16,6 +16,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Added
 
+- backend/tests/eval/: Baseline-Eval-Suite mit 3 Fixtures + Snapshot-Pinning gegen expected_metrics.json (evidence_coverage, claim_support_ratio, orphan_claim_rate, dedup_rate, concentration_index). check_evidence_quality.py liefert die zwei neuen Metriken jetzt mit aus. Voice-Lint im CI ist auf hart umgeschaltet (Wording-Glossar v1 + Layer 2 sauber). (Sub-Slice 17, Closes #174, Layer 5 abgeschlossen)
 - frontend: klickbare Quotes mit source_id_anchor-Scroll. Evidence-Items mit quote-Feld rendern jetzt als <blockquote>; source_id_anchor-Buttons springen smooth zum Agent-Log-Entry, oeffnen Web-URLs in neuem Tab oder loggen KG-Anchors. Layer 4 abgeschlossen. (Sub-Slice 16b, Closes #173, Layer 4)
 - frontend: ConfidenceBadge-Komponente (oklch-Pills mit ok/warn/err-Tokens) plus Hover-Popover für audit_trail. Step4Report.vue rendert pro Section ein Aggregat-Badge (mean confidence_score, label nach Schwelle). (Sub-Slice 16a, Refs #173, Layer 4)
 - network_analytics: deterministisches Cluster-Naming via TF-Top-3 (Stopword-Filter DE+EN, Tie-Break alphabetisch). ClusterDef.label propagiert in compute_metrics + CSV-Export. (Sub-Slice 14, Closes #171, Layer 3)

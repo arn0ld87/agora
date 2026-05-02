@@ -1,0 +1,233 @@
+{
+  "schema_version": 2,
+  "report_id": "report_medium_dedup",
+  "simulation_id": "sim_medium_dedup_001",
+  "global_evidence": [
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Segment Einzelhandel: 42 % der Befragten bevorzugen Online-Kauf.",
+      "match_score": 0.80,
+      "supports_claim": true
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent-log",
+      "snippet": "Persona Schmidt: Ich kaufe lieber im Geschaeft, weil ich das Produkt anfassen will.",
+      "match_score": 0.65,
+      "supports_claim": true
+    },
+    {
+      "type": "web_search_result",
+      "source": "web",
+      "snippet": "E-Commerce-Wachstum 2024 in Deutschland: +8,3 %.",
+      "match_score": 0.72,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_metric",
+      "source": "neo4j-graph",
+      "snippet": "Retourenquote Online-Kanal: 18 %.",
+      "match_score": 0.58,
+      "supports_claim": false
+    },
+    {
+      "type": "entity_summary",
+      "source": "knowledge-base",
+      "snippet": "Stationaerer Handel verliert Marktanteile seit 2020.",
+      "match_score": 0.70,
+      "supports_claim": true
+    },
+    {
+      "type": "agent_action",
+      "source": "agent-log",
+      "snippet": "Agent analysiert Kaufverhalten in der Altersgruppe 35-55.",
+      "match_score": 0.55,
+      "supports_claim": true
+    },
+    {
+      "type": "graph_fact",
+      "source": "neo4j-graph",
+      "snippet": "Preisakzeptanz im Premium-Segment gestiegen um 12 %.",
+      "match_score": 0.76,
+      "supports_claim": true
+    },
+    {
+      "type": "web_search_result",
+      "source": "web",
+      "snippet": "Omnichannel-Strategien gewinnen laut Handelsstudie an Bedeutung.",
+      "match_score": 0.68,
+      "supports_claim": true
+    }
+  ],
+  "sections": [
+    {
+      "section_index": 1,
+      "section_title": "Online- vs. Offline-Kaufverhalten",
+      "section_summary": "Analyse des Kaufverhaltens im Vergleich.",
+      "claims": [
+        {
+          "claim_id": "claim_01",
+          "claim_text": "42 Prozent der Befragten bevorzugen den Online-Kauf.",
+          "confidence_label": "high",
+          "confidence_score": 0.80,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Segment Einzelhandel: 42 % der Befragten bevorzugen Online-Kauf.",
+              "match_score": 0.80,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_02",
+          "claim_text": "Der stationaere Handel verliert seit 2020 Marktanteile.",
+          "confidence_label": "medium",
+          "confidence_score": 0.65,
+          "evidence": [
+            {
+              "type": "entity_summary",
+              "source": "knowledge-base",
+              "snippet": "Stationaerer Handel verliert Marktanteile seit 2020.",
+              "match_score": 0.70,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 2,
+      "section_title": "Online- vs. Offline-Praeferenzen (Duplikat erkannt)",
+      "section_summary": "Sehr aehnlich wie Abschnitt 1 — Duplikat durch section_dedup markiert.",
+      "claims": [
+        {
+          "claim_id": "claim_03",
+          "claim_text": "Viele Personen kaufen weiterhin stationaer wegen des haptischen Erlebnisses.",
+          "confidence_label": "medium",
+          "confidence_score": 0.60,
+          "evidence": [
+            {
+              "type": "agent_interview",
+              "source": "agent-log",
+              "snippet": "Persona Schmidt: Ich kaufe lieber im Geschaeft, weil ich das Produkt anfassen will.",
+              "match_score": 0.65,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": [
+            {
+              "type": "model_generated_inference",
+              "source": "section_dedup",
+              "tool_name": "section_dedup_check",
+              "snippet": "duplicate_of_section_1",
+              "raw": {
+                "similarity": 0.93,
+                "method": "cosine",
+                "matched_section_index": 1
+              }
+            }
+          ]
+        },
+        {
+          "claim_id": "claim_04",
+          "claim_text": "Die Retourenquote im Online-Kanal liegt bei 18 Prozent.",
+          "confidence_label": "low",
+          "confidence_score": 0.45,
+          "evidence": [
+            {
+              "type": "graph_metric",
+              "source": "neo4j-graph",
+              "snippet": "Retourenquote Online-Kanal: 18 %.",
+              "match_score": 0.58,
+              "supports_claim": false
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 3,
+      "section_title": "E-Commerce-Wachstum",
+      "section_summary": "Wachstumstrend im deutschen E-Commerce-Markt.",
+      "claims": [
+        {
+          "claim_id": "claim_05",
+          "claim_text": "E-Commerce ist 2024 um 8,3 Prozent gewachsen.",
+          "confidence_label": "high",
+          "confidence_score": 0.72,
+          "evidence": [
+            {
+              "type": "web_search_result",
+              "source": "web",
+              "snippet": "E-Commerce-Wachstum 2024 in Deutschland: +8,3 %.",
+              "match_score": 0.72,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_06",
+          "claim_text": "Omnichannel-Strategien gewinnen im Handel an Bedeutung.",
+          "confidence_label": "medium",
+          "confidence_score": 0.65,
+          "evidence": [
+            {
+              "type": "web_search_result",
+              "source": "web",
+              "snippet": "Omnichannel-Strategien gewinnen laut Handelsstudie an Bedeutung.",
+              "match_score": 0.68,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    },
+    {
+      "section_index": 4,
+      "section_title": "Preisakzeptanz im Premium-Segment",
+      "section_summary": "Analyse der Zahlungsbereitschaft fuer Premiumprodukte.",
+      "claims": [
+        {
+          "claim_id": "claim_07",
+          "claim_text": "Die Preisakzeptanz im Premium-Segment ist um 12 Prozent gestiegen.",
+          "confidence_label": "high",
+          "confidence_score": 0.76,
+          "evidence": [
+            {
+              "type": "graph_fact",
+              "source": "neo4j-graph",
+              "snippet": "Preisakzeptanz im Premium-Segment gestiegen um 12 %.",
+              "match_score": 0.76,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        },
+        {
+          "claim_id": "claim_08",
+          "claim_text": "Agenten analysieren das Kaufverhalten der Altersgruppe 35 bis 55.",
+          "confidence_label": "medium",
+          "confidence_score": 0.55,
+          "evidence": [
+            {
+              "type": "agent_action",
+              "source": "agent-log",
+              "snippet": "Agent analysiert Kaufverhalten in der Altersgruppe 35-55.",
+              "match_score": 0.55,
+              "supports_claim": true
+            }
+          ],
+          "audit_trail": []
+        }
+      ]
+    }
+  ]
+}
