@@ -38,11 +38,17 @@ services:
       - /home/agora/.gunicorn:size=1M,mode=0700,uid=1000,gid=1000
     environment:
       - PYTHONDONTWRITEBYTECODE=1
-      # Lokaler Ollama-Container (joined ins agora_default-Netz via
-      # `docker network connect agora_default ollama`). Überschreibt die
-      # host.docker.internal-Defaults aus docker-compose.yml.
-      - LLM_BASE_URL=http://ollama:11434/v1
-      - EMBEDDING_BASE_URL=http://ollama:11434
+      # Default-Setup: Ollama läuft auf dem Host (siehe README.md sowie
+      # docu/deployment-prod-like.md → "Ollama"). Container erreicht den
+      # Host über `host.docker.internal`, das im Default-Compose per
+      # `extra_hosts: host-gateway` aufgelöst wird (Linux-Bridge).
+      #
+      # Variante B (Ollama als Sibling-Container): per separatem
+      # `compose.ollama.local.yml` als 3. -f-Datei einhängen und URLs
+      # dort auf `http://ollama:11434` umbiegen — bewusst NICHT im
+      # Repo-Default, weil sonst der Standardpfad bricht.
+      - LLM_BASE_URL=http://host.docker.internal:11434/v1
+      - EMBEDDING_BASE_URL=http://host.docker.internal:11434
 
   neo4j:
     ports: !reset []

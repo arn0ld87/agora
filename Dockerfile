@@ -20,6 +20,10 @@ RUN apt-get update \
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
+# Große CUDA-Wheels (cudnn ~700 MB, nvshmem ~300 MB) sprengen den
+# uv-Default von 30 s auf langsamen Leitungen.
+ENV UV_HTTP_TIMEOUT=600
+
 WORKDIR /app
 RUN useradd -m -u 1000 agora \
   && mkdir -p /app/backend/uploads /app/backend/logs \
@@ -89,9 +93,12 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Gunicorn vor Flask. Worker-Count konservativ; bei CPU-bound Workloads
 # über `--workers` per Compose env überschreibbar.
-CMD ["uv", "run", "--project", "backend", "gunicorn", \
+# Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem
+# Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
+# scheitern.
+CMD ["/app/backend/.venv/bin/gunicorn", \
      "--workers", "2", \
      "--bind", "0.0.0.0:5001", \
-     "--chdir", "backend", \
+     "--chdir", "/app/backend", \
      "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
      "app:create_app()"]
