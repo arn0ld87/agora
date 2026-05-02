@@ -178,6 +178,14 @@ def test_init_evidence_map_sets_schema_version_2(monkeypatch):
 
 def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     agent = ReportAgent.__new__(ReportAgent)
+    # Embedder deterministisch deaktivieren — der Test prüft den
+    # Fallback-Pfad ohne EmbeddingService. Ohne diesen Reset würde
+    # `_try_get_embedder` in Umgebungen mit lebendem Ollama eine echte
+    # Embedder-Funktion liefern und das Binding mit threshold=0.55
+    # liesse `bound=[]` zurück — der Anti-Dekorations-Guard kippt
+    # confidence dann auf "low", obwohl der Test den Embedder-Fehler-
+    # Pfad prüfen will (siehe Sub-Slice-07-Kommentar unten).
+    agent._embed_cache = None
     agent._active_section_evidence = [{
         "type": "graph_fact",
         "source": "report_tool",
