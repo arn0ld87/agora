@@ -197,15 +197,16 @@ class SettingsService:
         Secrets greift und sie versehentlich nirgends in Validator-
         Diagnostik landen sollen.
         """
-        file_layer = self._read_file_layer()
-        snapshot: dict[str, Any] = {}
-        for spec in SETTINGS_FIELDS:
-            if spec.secret:
-                continue
-            value, _, _ = self._resolve_field(spec, file_layer)
-            if value is not None:
-                snapshot[spec.key] = value
-        return snapshot
+        with self._lock:
+            file_layer = self._read_file_layer()
+            snapshot: dict[str, Any] = {}
+            for spec in SETTINGS_FIELDS:
+                if spec.secret:
+                    continue
+                value, _, _ = self._resolve_field(spec, file_layer)
+                if value is not None:
+                    snapshot[spec.key] = value
+            return snapshot
 
     def get_schema(self) -> list[dict[str, Any]]:
         """Liefert nur Meta-Daten (kein Wert, keine Source) — für das
