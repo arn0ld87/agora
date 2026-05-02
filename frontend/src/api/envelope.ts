@@ -22,7 +22,7 @@ export interface ApiSuccessEnvelope<T> {
 export interface ApiErrorEnvelope {
   success: false
   code?: string
-  error: string
+  error?: string
   details?: Record<string, unknown>
   /** Backend ergänzt sporadisch zusätzliche Top-Level-Felder (z.B. `task_id`). */
   [key: string]: unknown

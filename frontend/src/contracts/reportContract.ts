@@ -112,6 +112,7 @@ export const ReportOutlineSchema = z.object({
   summary: z.string().min(1),
   sections: z.array(ReportOutlineSectionSchema).min(2).max(5),
 }).strict();
+export type ReportOutline = z.infer<typeof ReportOutlineSchema>;
 
 export const ReportSchema = z.object({
   schema_version: z.literal(2),

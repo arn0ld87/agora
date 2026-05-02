@@ -1,5 +1,5 @@
-<script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
@@ -11,6 +11,43 @@ import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Select from './ui/Select.vue'
+import {
+  ReportSchema,
+  ReportOutlineSchema,
+  EvidenceMapSchema,
+  type Report,
+  type ReportOutline,
+  type ReportClaim,
+  type EvidenceItem,
+  type EvidenceMap,
+} from '../contracts/reportContract'
+
+// Hilfstype für JS-API-Responses (Dateien haben kein TS — kein Refactor-Scope hier)
+interface StatusData {
+  message?: string
+  outline?: unknown
+  sections?: Record<string, unknown>
+  current_section_index?: number
+  simulation_id?: string
+  report_id?: string
+  status?: string
+  error?: string
+}
+interface ApiResult {
+  success?: boolean
+  data?: Record<string, unknown> & {
+    report_id?: string
+    ollama?: Array<{ name: string; label?: string }>
+    presets?: Array<{ name: string; label?: string }>
+    current_default?: string
+    simulation_id?: string
+  }
+  error?: string
+}
+interface StatusApiResult {
+  success?: boolean
+  data?: StatusData
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -25,15 +62,32 @@ const emit = defineEmits(['add-log', 'update-status'])
 
 const phase = ref(0) // 0 idle, 1 running, 2 done
 const statusMsg = ref('')
-const reportOutline = ref(null)
-const generatedSections = ref({})
-const currentSectionIndex = ref(null)
+const reportOutline = ref<ReportOutline | null>(null)
+const generatedSections = ref<Record<string, unknown>>({})
+const currentSectionIndex = ref<number | null>(null)
 const isComplete = ref(false)
-const fullReport = ref(null)
-const collapsedSections = ref(new Set())
-const evidenceMap = ref(null)
-const selectedEvidenceSection = ref(null)
+const fullReport = ref<Report | null>(null)
+const collapsedSections = ref(new Set<number>())
+const evidenceMap = ref<EvidenceMap | null>(null)
+const selectedEvidenceSection = ref<number | null>(null)
 const branchBusy = ref(false)
+
+// --- Schema-Fehler-State ---
+const schemaError = ref<{ where: string; issues: string[] } | null>(null)
+
+function recordSchemaError(where: string, error: unknown): void {
+  const issues =
+    error &&
+    typeof error === 'object' &&
+    'issues' in (error as object) &&
+    Array.isArray((error as { issues: unknown }).issues)
+      ? (error as { issues: Array<{ path: unknown[]; message: string }> }).issues.map(
+          (i) => `${i.path.length ? i.path.join('.') : '<root>'}: ${i.message}`
+        )
+      : [String((error as { message?: string } | null)?.message ?? error)]
+  schemaError.value = { where, issues }
+  console.error(`[Step4Report] Schema-Mismatch in ${where}:`, issues)
+}
 const branchForm = ref({
   branch_name: '',
   llm_model: '',
@@ -47,8 +101,8 @@ const resolvedSimulationId = ref(props.simulationId || null)
 const STORAGE_REPORT_MODEL = 'agora.reportModel'
 const reportModelOption = ref(localStorage.getItem(STORAGE_REPORT_MODEL) || 'default')
 const customReportModel = ref('')
-const ollamaModels = ref([])
-const presetModels = ref([])
+const ollamaModels = ref<Array<{ name: string; label?: string }>>([])
+const presetModels = ref<Array<{ name: string; label?: string }>>([])
 const defaultModel = ref('')
 const isRegenerating = ref(false)
 
@@ -73,11 +127,11 @@ function effectiveReportModel() {
 
 async function loadModels() {
   try {
-    const res = await getAvailableModels()
+    const res = (await getAvailableModels()) as ApiResult
     if (res?.success) {
-      ollamaModels.value = res.data?.ollama || []
-      presetModels.value = res.data?.presets || []
-      defaultModel.value = res.data?.current_default || ''
+      ollamaModels.value = (res.data?.ollama as Array<{ name: string; label?: string }>) || []
+      presetModels.value = (res.data?.presets as Array<{ name: string; label?: string }>) || []
+      defaultModel.value = (res.data?.current_default as string) || ''
     }
   } catch { /* swallow */ }
 }
@@ -90,14 +144,14 @@ async function regenerateWithModel() {
   }
   isRegenerating.value = true
   try {
-    const payload = {
+    const payload: Record<string, unknown> = {
       simulation_id: simId,
       force_regenerate: true,
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''}…`)
-    const res = await generateReport(payload)
+    const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
       // Reset local UI state, then re-hydrate with the new report.
       isComplete.value = false
@@ -109,19 +163,19 @@ async function regenerateWithModel() {
       resetConsoleLogs()
       fullReport.value = null
       emit('update-status', 'processing')
-      router.push({ name: 'Report', params: { reportId: res.data.report_id } })
+      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
       startPolling()
     } else {
       addLog(`Fehler: ${res?.error || 'unbekannt'}`)
     }
   } catch (err) {
-    addLog(err.message)
+    addLog((err as Error).message)
   } finally {
     isRegenerating.value = false
   }
 }
 
-function addLog(msg) { emit('add-log', msg) }
+function addLog(msg: string) { emit('add-log', msg) }
 
 const statusPolling = usePolling(pollStatus, 2500)
 
@@ -155,14 +209,20 @@ const {
 async function pollStatus() {
   if (!props.reportId && !props.simulationId) return
   try {
-    const res = await getReportStatus({
+    const res = (await getReportStatus({
       simulationId: resolvedSimulationId.value || props.simulationId,
       reportId: props.reportId,
-    })
+    })) as StatusApiResult
     if (res?.success && res.data) {
       const st = res.data
       statusMsg.value = st.message || ''
-      reportOutline.value = st.outline || reportOutline.value
+      if (st.outline) {
+        try {
+          reportOutline.value = ReportOutlineSchema.parse(st.outline)
+        } catch (err) {
+          recordSchemaError('outline', err)
+        }
+      }
       if (st.sections) generatedSections.value = st.sections
       currentSectionIndex.value = st.current_section_index ?? currentSectionIndex.value
       if (st.simulation_id && !resolvedSimulationId.value) {
@@ -171,14 +231,19 @@ async function pollStatus() {
       if (st.status === 'completed') {
         // Use the report_id the backend actually resolved (may differ if
         // the caller provided only simulation_id).
-        const resolvedId = st.report_id || props.reportId
+        const resolvedId = (st.report_id || props.reportId) as string
         isComplete.value = true
         phase.value = 2
         emit('update-status', 'completed')
         try {
-          const full = await getReport(resolvedId)
+          const full = (await getReport(resolvedId)) as ApiResult
           if (full?.success) {
-            fullReport.value = full.data
+            try {
+              fullReport.value = ReportSchema.parse(full.data)
+            } catch (err) {
+              recordSchemaError('report', err)
+              fullReport.value = null
+            }
             await loadEvidence()
           }
         } catch { /* report not yet flushed to disk — next tick */ }
@@ -195,51 +260,61 @@ async function pollStatus() {
   } catch { /* swallow */ }
 }
 
-function parseAgentEntry(raw) {
+interface AgentLogEntry {
+  ts: string
+  stage: string
+  action: string
+  title: string
+  subtitle: string
+  body: string
+  elapsed: number | undefined
+}
+
+function parseAgentEntry(raw: unknown): AgentLogEntry | null {
   // Each backend line is a JSON object (or JSON-encoded string). Parse defensively.
-  let obj = null
+  let obj: Record<string, unknown> | null = null
   if (typeof raw === 'string') {
-    try { obj = JSON.parse(raw) } catch { obj = { action: 'raw', message: raw } }
+    try { obj = JSON.parse(raw) as Record<string, unknown> } catch { obj = { action: 'raw', message: raw } }
   } else if (raw && typeof raw === 'object') {
-    obj = raw
+    obj = raw as Record<string, unknown>
   } else {
     return null
   }
   const ts = obj.timestamp ? String(obj.timestamp).slice(11, 19) : ''
-  const stage = obj.stage || ''
-  const action = obj.action || ''
-  const d = obj.details || {}
+  const stage = (obj.stage as string) || ''
+  const action = (obj.action as string) || ''
+  const d = (obj.details as Record<string, unknown>) || {}
   let title = action.replace(/_/g, ' ')
   let subtitle = ''
   let body = ''
 
   if (action === 'tool_call') {
-    title = `TOOL → ${obj.tool_name || d.tool_name || '?'}`
-    const params = d.parameters || {}
+    title = `TOOL → ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
+    const params = (d.parameters as Record<string, unknown>) || {}
     subtitle = Object.entries(params).map(([k, v]) => {
       const str = typeof v === 'string' ? v : JSON.stringify(v)
       return `${k}=${str.length > 80 ? str.slice(0, 80) + '…' : str}`
     }).join('  ')
   } else if (action === 'tool_result') {
-    title = `← ${obj.tool_name || d.tool_name || '?'}`
-    subtitle = `${d.result_length || 0} chars`
+    title = `← ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
+    subtitle = `${(d.result_length as number) || 0} chars`
   } else if (action === 'llm_response') {
     title = 'LLM'
     subtitle = `iter ${d.iteration ?? ''} · tool_calls=${d.has_tool_calls} · final=${d.has_final_answer}`
-    body = d.response || ''
+    body = (d.response as string) || ''
   } else if (action === 'section_start') {
-    title = `▶ Section ${obj.section_index ?? ''}: ${obj.section_title || d.message || ''}`
+    title = `▶ Section ${obj.section_index ?? ''}: ${(obj.section_title as string) || (d.message as string) || ''}`
   } else if (action === 'section_complete') {
     title = `✓ Section ${obj.section_index ?? ''}`
-    subtitle = d.message || ''
+    subtitle = (d.message as string) || ''
   } else if (action === 'planning_complete') {
     title = 'PLAN'
-    const outline = d.outline?.sections || []
+    const outline = ((d.outline as Record<string, unknown>)?.sections as unknown[]) || []
     subtitle = `${outline.length} sections`
-    body = d.summary || ''
+    body = (d.summary as string) || ''
   } else if (action === 'error') {
     title = '⚠ ERROR'
-    subtitle = d.message || d.error || ''
+    subtitle = (d.message as string) || (d.error as string) || ''
   }
   return {
     ts,
@@ -248,7 +323,7 @@ function parseAgentEntry(raw) {
     title,
     subtitle,
     body,
-    elapsed: obj.elapsed_seconds,
+    elapsed: obj.elapsed_seconds as number | undefined,
   }
 }
 
@@ -263,30 +338,26 @@ function stopPolling() {
   consoleLogPolling.stop()
 }
 
-function toggleSection(i) {
+function toggleSection(i: number) {
   const next = new Set(collapsedSections.value)
   next.has(i) ? next.delete(i) : next.add(i)
   collapsedSections.value = next
 }
 
-const reportMarkdown = computed(() => {
+const reportMarkdown = computed((): string => {
   const r = fullReport.value
   if (!r) return ''
-  if (typeof r.full_text === 'string' && r.full_text.trim()) return r.full_text
-  if (typeof r.markdown === 'string' && r.markdown.trim()) return r.markdown
-  if (typeof r.markdown_content === 'string' && r.markdown_content.trim()) return r.markdown_content
-  if (Array.isArray(r.sections) && r.sections.length) {
-    return r.sections.map((s) => `## ${s.title || ''}\n\n${s.content || ''}`).join('\n\n')
-  }
-  return ''
+  return r.markdown_content ?? ''
 })
 
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
 
-const sectionHtml = computed(() => {
-  const map = {}
+const sectionHtml = computed((): Record<string, string> => {
+  const map: Record<string, string> = {}
   for (const [k, v] of Object.entries(generatedSections.value || {})) {
-    const text = (v && typeof v === 'object') ? (v.content || '') : (v || '')
+    const text = (v && typeof v === 'object')
+      ? ((v as Record<string, unknown>).content as string || '')
+      : (typeof v === 'string' ? v : '')
     map[k] = renderMarkdown(text)
   }
   return map
@@ -297,56 +368,44 @@ const activeEvidenceSection = computed(() => {
   return evidenceSections.value.find((section) => section.section_index === selectedEvidenceSection.value) || null
 })
 
-function claimConfidenceScore(claim) {
-  const raw = claim?.confidence_score ?? (typeof claim?.confidence === 'number' ? claim.confidence : null)
-  const score = Number(raw)
-  return Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : null
+function claimConfidenceScore(claim: ReportClaim | null | undefined): number | null {
+  return claim?.confidence_score ?? null
 }
 
-function claimConfidenceLabel(claim) {
-  if (typeof claim?.confidence_label === 'string' && claim.confidence_label) return claim.confidence_label
-  if (typeof claim?.confidence === 'string' && claim.confidence) return claim.confidence
-  const score = claimConfidenceScore(claim)
-  if (score === null) return 'low'
-  if (score >= 0.75) return 'high'
-  if (score >= 0.45) return 'medium'
-  return 'low'
+function claimConfidenceLabel(claim: ReportClaim | null | undefined): string {
+  return claim?.confidence_label ?? 'low'
 }
 
-function claimConfidenceText(claim) {
+function claimConfidenceText(claim: ReportClaim | null | undefined): string {
   const label = claimConfidenceLabel(claim)
   const score = claimConfidenceScore(claim)
   return score === null ? label : `${Math.round(score * 100)}% · ${label}`
 }
 
-function claimEvidenceItems(claim) {
-  if (Array.isArray(claim?.evidence)) return claim.evidence
-  if (Array.isArray(claim?.evidence_items)) return claim.evidence_items
-  return []
+function claimEvidenceItems(claim: ReportClaim | null | undefined): EvidenceItem[] {
+  return Array.isArray(claim?.evidence) ? claim.evidence : []
 }
 
-function evidenceSnippet(item) {
-  if (!item) return ''
-  if (item.snippet) return item.snippet
-  if (item.value) return item.value
-  if (item.source) return item.source
-  return JSON.stringify(item.raw || item)
+function evidenceSnippet(item: EvidenceItem | null | undefined): string {
+  return item?.snippet ?? ''
 }
 
 async function loadEvidence() {
   if (!props.reportId) return
   try {
-    const res = await getReportEvidence(props.reportId)
-    if (res?.success) {
-      evidenceMap.value = res.data
-      if (!selectedEvidenceSection.value && Array.isArray(res.data?.sections) && res.data.sections.length) {
-        selectedEvidenceSection.value = res.data.sections[0].section_index
-      }
+    const res = (await getReportEvidence(props.reportId)) as ApiResult
+    if (!res?.success) return
+    const parsed = EvidenceMapSchema.parse(res.data)
+    evidenceMap.value = parsed
+    if (!selectedEvidenceSection.value && parsed.sections.length) {
+      selectedEvidenceSection.value = parsed.sections[0].section_index
     }
-  } catch { /* optional */ }
+  } catch (err) {
+    recordSchemaError('evidence', err)
+  }
 }
 
-function triggerDownload(blob, filename) {
+function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -366,7 +425,7 @@ function downloadMarkdown() {
   )
 }
 
-function buildStandaloneHtml(title, bodyHtml) {
+function buildStandaloneHtml(title: string, bodyHtml: string) {
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8" />
 <title>${title}</title>
@@ -432,7 +491,7 @@ async function copyMarkdown() {
     await navigator.clipboard.writeText(md)
     addLog('Markdown in Zwischenablage kopiert.')
   } catch (e) {
-    addLog('Kopieren fehlgeschlagen: ' + e.message)
+    addLog('Kopieren fehlgeschlagen: ' + (e as Error).message)
   }
 }
 
@@ -447,13 +506,13 @@ function downloadEvidence() {
 async function downloadCombinedJson() {
   if (!props.reportId) return
   try {
-    const res = await exportReport(props.reportId, 'json')
+    const res = (await exportReport(props.reportId, 'json')) as ApiResult & { data?: Blob | Record<string, unknown> }
     const blob = res?.data instanceof Blob
       ? res.data
       : new Blob([JSON.stringify(res?.data ?? res, null, 2)], { type: 'application/json;charset=utf-8' })
     triggerDownload(blob, `agora-report-${props.reportId}.json`)
   } catch (e) {
-    addLog('JSON-Export fehlgeschlagen: ' + (e?.message || e))
+    addLog('JSON-Export fehlgeschlagen: ' + ((e as Error)?.message || String(e)))
   }
 }
 
@@ -462,21 +521,21 @@ async function createBranchFromReport() {
   if (!simulationId || !branchForm.value.branch_name.trim()) return
   branchBusy.value = true
   try {
-    const overrides = {}
+    const overrides: Record<string, unknown> = {}
     if (branchForm.value.llm_model.trim()) overrides.llm_model = branchForm.value.llm_model.trim()
     if (branchForm.value.language.trim()) overrides.language = branchForm.value.language.trim()
     if (branchForm.value.max_agents !== '') overrides.max_agents = Number(branchForm.value.max_agents)
-    const res = await createSimulationBranch(simulationId, {
+    const res = (await createSimulationBranch(simulationId, {
       branch_name: branchForm.value.branch_name.trim(),
       copy_profiles: true,
       copy_report_artifacts: false,
       overrides
-    })
+    })) as ApiResult
     if (res?.success && res.data?.simulation_id) {
-      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id } })
+      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id as string } })
     }
   } catch (e) {
-    addLog(e.message)
+    addLog((e as Error).message)
   } finally {
     branchBusy.value = false
   }
@@ -494,9 +553,14 @@ onMounted(async () => {
     startPolling()
   } else if (!fullReport.value) {
     try {
-      const full = await getReport(props.reportId)
+      const full = (await getReport(props.reportId!)) as ApiResult
       if (full?.success) {
-        fullReport.value = full.data
+        try {
+          fullReport.value = ReportSchema.parse(full.data)
+        } catch (err) {
+          recordSchemaError('report', err)
+          fullReport.value = null
+        }
         await loadEvidence()
       }
     } catch { /* swallow — pollStatus will retry later */ }
@@ -507,6 +571,12 @@ onUnmounted(stopPolling)
 
 <template>
   <div class="step-panel">
+    <div v-if="schemaError" class="schema-error" role="alert">
+      <strong>Schema-Mismatch in {{ schemaError.where }}:</strong>
+      <ul>
+        <li v-for="(issue, idx) in schemaError.issues" :key="idx">{{ issue }}</li>
+      </ul>
+    </div>
     <div class="scroll">
       <article class="card" :class="{ 'is-active': phase === 1 }">
         <header class="card-head">
@@ -656,7 +726,7 @@ onUnmounted(stopPolling)
                     {{ claimConfidenceText(claim) }}
                   </Badge>
                 </header>
-                <p>{{ claim.claim_text || claim.claim }}</p>
+                <p>{{ claim.claim_text }}</p>
                 <div class="evidence-items">
                   <div v-for="(item, idx) in claimEvidenceItems(claim)" :key="`${claim.claim_id}-${idx}`" class="evidence-item">
                     <div class="evidence-item-head">
@@ -1058,5 +1128,28 @@ onUnmounted(stopPolling)
     padding-left: 0;
     padding-top: var(--s-4);
   }
+}
+
+.schema-error {
+  background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
+  border: 1px solid var(--status-error, #c0392b);
+  border-radius: var(--r-1);
+  padding: var(--s-4);
+  margin: var(--s-4) var(--s-6) 0;
+  color: var(--fg);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-14, 13px);
+}
+.schema-error strong {
+  display: block;
+  margin-bottom: var(--s-2);
+  color: var(--status-error, #c0392b);
+}
+.schema-error ul {
+  margin: 0;
+  padding-left: var(--s-4);
+}
+.schema-error li {
+  line-height: 1.6;
 }
 </style>
