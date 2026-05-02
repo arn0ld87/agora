@@ -175,6 +175,35 @@ Designentscheidungen, die nachträglich auffielen:
   Validator standalone testbar (31 Cases ohne Flask), und die
   Settings-API testet nur HTTP-Vertrag (nicht das Schema selbst).
 
-## SUB3 — Status: offen (nächster Sub-Slice)
+## SUB3 — Status: erledigt
+
+Commit: `feat(settings): SettingsView + router + store (Issue #133, SUB3)`.
+
+Geliefert:
+
+- `frontend/src/api/settings.js` mit den vier Methoden auf der
+  gemeinsamen Axios-Instanz.
+- `frontend/src/store/settings.js` als reaktiver Singleton mit
+  `loadSettings`, `saveSettings({ confirmSecrets })`, `dirtyKeys`,
+  `dirtySectionFlags`, `discardChanges`, `fieldErrors`. Validation-
+  Errors werden aus dem `ApiError.originalResponse.errors` extrahiert,
+  damit das Backend-Format direkt im Inline-Hint landet.
+- `frontend/src/views/SettingsView.vue` mit Pill-Tabs, Field-Tabelle,
+  Source-Badges, Action-Footer, Confirm-Modal für Secrets.
+- `frontend/src/router/index.js` ergänzt um `/settings`.
+
+Strings sind in dieser SUB3 noch hartcodiert auf Deutsch — SUB4
+zieht sie auf `vue-i18n` um, fügt EN nach und ergänzt Frontend-Tests.
+
+Lint-Stolperfalle: drei `catch (err)`-Blöcke ohne err-Nutzung; ESLint-
+Config matcht `caughtErrors: 'all'` ohne Ignore-Pattern, also
+weder `err` noch `_err` reicht. Lösung: parameterloses
+`catch { ... }` (ES2019). Build und Lint sauber.
+
+`npm run check` grün: 870 Backend-Tests (unverändert seit SUB2),
+69 Frontend-Tests, Build 124 KB CSS / 537 KB JS, ein bestehender
+Lint-Warning unverändert.
+
+## SUB4 — Status: offen (nächster Sub-Slice)
 
 …
