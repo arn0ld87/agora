@@ -106,13 +106,21 @@ def _phase_generate_profiles(
     use_llm_for_profiles: bool,
     parallel_profile_count: int,
     progress_callback: Optional[Callable] = None,
+    quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> List[Any]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
     Aktualisiert ``state.profiles_count`` als Seiteneffekt; gibt die
     Liste der generierten Profile zurück.
+
+    Sub-Slice 20b — Quota-Erzwingung: wenn ``quota_plan`` gesetzt ist,
+    wird ``filtered.entities`` vor der Generation per
+    ``_expand_entities_for_quota`` auf die Quota expandiert (Round-Robin
+    auf zu kleinen Pools). Ohne Plan bleibt das Verhalten "1 Persona pro
+    Entity" unverändert.
     """
-    total_entities = len(filtered.entities)
+    entities = _expand_entities_for_quota(filtered.entities, quota_plan)
+    total_entities = len(entities)
 
     if progress_callback:
         progress_callback(
@@ -153,7 +161,7 @@ def _phase_generate_profiles(
         realtime_platform = "twitter"
 
     profiles = generator.generate_profiles_from_entities(
-        entities=filtered.entities,
+        entities=entities,
         use_llm=use_llm_for_profiles,
         progress_callback=profile_progress,
         graph_id=state.graph_id,
@@ -286,6 +294,53 @@ def _phase_generate_config(
         )
 
 
+def _expand_entities_for_quota(
+    entities: List[Any],
+    plan: Optional[PersonaQuotaPlan],
+) -> List[Any]:
+    """Sub-Slice 20b — Generator-Erzwingung.
+
+    Mappt einen Entity-Pool auf den Soll-Plan: pro ``plan.targets[seg]``
+    werden so viele Entities zurückgegeben, wie die Quote vorgibt.
+    Round-Robin durch den Segment-Pool, wenn der Pool kleiner ist als
+    die Quote — keine Synth-Entities (würde semantische KG-Verankerung
+    aufgeben). Wenn ein Plan-Segment im Pool nicht existiert, wird ein
+    klarer ``ValueError`` geworfen, statt heimlich zu reduzieren.
+
+    Backwards-Compat: ``plan=None`` → Pool wird durchgereicht.
+
+    Hinweis zur Persona-Identität: Bei Replikation derselben Entity
+    bekommt jede Persona einen eigenen ``user_id`` (durch Position in
+    der Generator-Loop) und nutzt die bestehende Display-Name-/User-Name-
+    Dedup-Logik im Generator (s. ``oasis_profile_generator.py`` Z. 1269+),
+    die LLM-Name-Kollisionen abfängt.
+    """
+    if plan is None:
+        return entities
+
+    by_segment: Dict[str, List[Any]] = {}
+    for e in entities:
+        seg = e.get_entity_type() or "Entity"
+        by_segment.setdefault(seg, []).append(e)
+
+    expanded: List[Any] = []
+    for segment, target in plan.targets.items():
+        pool = by_segment.get(segment, [])
+        if not pool:
+            available = sorted(by_segment.keys())
+            raise ValueError(
+                f"PersonaQuotaPlan verlangt {target} Personas im Segment "
+                f"'{segment}', aber der Entity-Pool enthält keine Entity "
+                f"mit entity_type='{segment}'. Verfügbare Segmente: "
+                f"{available or '(leer)'}. Entweder Plan anpassen oder "
+                f"Ontologie um den fehlenden Type erweitern."
+            )
+        for i in range(target):
+            expanded.append(pool[i % len(pool)])
+
+    return expanded
+
+
 def _validate_persona_quota(
     plan: PersonaQuotaPlan,
     profiles: List[OasisAgentProfile],
@@ -369,6 +424,7 @@ def prepare_simulation(
             use_llm_for_profiles=use_llm_for_profiles,
             parallel_profile_count=parallel_profile_count,
             progress_callback=progress_callback,
+            quota_plan=quota_plan,
         )
 
         # Optional quota check: ValidationError propagates → FAILED state.
