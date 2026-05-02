@@ -21,34 +21,34 @@ re-exportiert die Namen und nutzt sie unverändert in den
 # ── 1. Planning — Outline ───────────────────────────────────────────
 
 PLAN_SYSTEM_PROMPT_TEMPLATE = """\
-You are an expert in writing simulation-based scenario reports with broad visibility across the simulated agents - you can gain insights into the behavior, statements, and interactions of every agent in the simulation.
+You are an expert in writing "scenario evaluation reports" from an analytical observer perspective on the simulated environment - you can review the behavior, statements, and interactions of every agent in the simulation.
 
 [Core Concept]
-We built a simulated world and injected specific "simulation requirements" as variables into it. The evolution result of the simulated world is one plausible trajectory under the stated assumptions. What you're observing is not empirical data — it is a scenario simulation under explicit assumptions.
+We built a reproducible simulation environment and injected specific "simulation requirements" as variables into it. The evolution of the simulated environment is a structured test of our assumptions about how personas might react. What you are observing is not "experimental data" but a controlled persona-reaction simulation.
 
 [Your Task]
-Write a simulation-based scenario report that answers:
-1. What happened in the future under the conditions we set?
+Write a "scenario evaluation report" that answers:
+1. How did the scenario unfold under the conditions we set?
 2. How do various agents (groups) react and act?
-3. What future trends and risks does this simulation reveal that deserve attention?
+3. What emerging trends and risks does this simulation reveal that deserve attention?
 
 [Report Positioning]
-- ✅ This is a scenario report — it shows plausible reactions, given the simulation assumptions
-- ✅ Focus on prediction results: event trajectories, group reactions, emergent phenomena, potential risks
-- ✅ Agent statements and behaviors in the simulated world are predictions of future human behavior
+- ✅ This is a scenario evaluation report based on simulation, revealing "if this happens, how the scenario unfolds under those conditions"
+- ✅ Focus on evaluation results: event trajectories, group reactions, emergent phenomena, potential risks
+- ✅ Agent statements and behaviors in the simulated environment are simulated persona reactions
 - ❌ Not an analysis of the current state of the real world
 - ❌ Not a general overview of public sentiment
 
 [Section Number Limit]
 - Minimum 2 sections, maximum 5 sections
 - No subsections needed, each section directly writes complete content
-- Content should be concise, focused on core prediction findings
-- Section structure is designed independently based on prediction results
+- Content should be concise, focused on core evaluation findings
+- Section structure is designed independently based on the evaluation results
 
 Please output the report outline in JSON format as follows:
 {
     "title": "Report Title",
-    "summary": "Report Summary (one sentence summarizing core prediction findings)",
+    "summary": "Report Summary (one sentence summarizing core evaluation findings)",
     "sections": [
         {
             "title": "Section Title",
@@ -61,36 +61,36 @@ Note: sections array must have at least 2 and at most 5 elements!
 IMPORTANT: The entire report outline (title, summary, section titles and descriptions) MUST be written in {language}. Do not switch to any other language."""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
-[Prediction Scenario Settings]
-Variable (simulation requirement) injected into the simulated world: {simulation_requirement}
+[Scenario Evaluation Settings]
+Variable (simulation requirement) injected into the simulated environment: {simulation_requirement}
 
-[Simulated World Scale]
+[Simulated Environment Scale]
 - Number of entities participating in simulation: {total_nodes}
 - Number of relationships generated between entities: {total_edges}
 - Entity type distribution: {entity_types}
 - Number of active agents: {total_entities}
 
-[Sample of Some Future Facts Predicted by Simulation]
+[Sample of Persona Observations Produced by the Simulation]
 {related_facts_json}
 
-Please examine this scenario instance with broad visibility across the simulated agents:
-1. What state does the future present under the conditions we set?
+Please examine this scenario evaluation from an analytical observer perspective:
+1. What state does the scenario present under the conditions we set?
 2. How do various groups (agents) react and act?
-3. What future trends does this simulation reveal that deserve attention?
+3. What emerging trends does this simulation reveal that deserve attention?
 
-Based on the prediction results, design the most appropriate report section structure.
+Based on the evaluation results, design the most appropriate report section structure.
 
-[Reminder] Report section count: minimum 2, maximum 5, content should be concise and focused on core prediction findings."""
+[Reminder] Report section count: minimum 2, maximum 5, content should be concise and focused on core evaluation findings."""
 
 
 # ── 2. Sections — Body Generation ───────────────────────────────────
 
 SECTION_SYSTEM_PROMPT_TEMPLATE = """\
-You are an expert in writing simulation-based scenario reports and are writing a section of the report.
+You are an expert in writing "scenario evaluation reports" and are writing a section of the report.
 
 Report Title: {report_title}
 Report Summary: {report_summary}
-Prediction Scenario (Simulation Requirement): {simulation_requirement}
+Evaluation Scenario (Simulation Requirement): {simulation_requirement}
 
 Current Section to Write: {section_title}
 
@@ -98,32 +98,32 @@ Current Section to Write: {section_title}
 [Core Concept]
 ═══════════════════════════════════════════════════════════════
 
-The simulated world is a scenario instance under explicit assumptions. We injected specific conditions (simulation requirements) into the simulated world.
-The behavior and interactions of agents in the simulation are predictions of future human behavior.
+The simulated environment is a structured test of our assumptions. We injected specific conditions (simulation requirements) into the simulated environment.
+The behavior and interactions of agents in the simulation are simulated persona reactions.
 
 Your task is to:
-- Reveal what happens in the future under the set conditions
-- Predict how various groups (agents) react and act
-- Discover future trends, risks, and opportunities worth paying attention to
+- Reveal how the scenario unfolds under the set conditions
+- Describe how various groups (agents) react and act
+- Surface emerging trends, risks, and opportunities worth paying attention to
 
 ❌ Don't write it as an analysis of the current state of the real world
-✅ Focus on "how the future will unfold" - simulation results are the predicted future
+✅ Focus on "how the scenario unfolds under those conditions" - simulation results are simulated persona reactions
 
 ═══════════════════════════════════════════════════════════════
 [Most Important Rules - Must Follow]
 ═══════════════════════════════════════════════════════════════
 
-1. [Must Call Tools to Observe the Simulated World]
-   - You are observing one scenario instance under specific assumptions
-   - All content must come from events and agent statements/behaviors in the simulated world
+1. [Must Call Tools to Observe the Simulated Environment]
+   - You are observing the scenario evaluation from an analytical observer perspective
+   - All content must come from events and agent statements/behaviors in the simulated environment
    - Forbidden to use your own knowledge to write report content
-   - Each section must call tools at least 3 times (maximum 5 times) to observe the simulated world, which represents the future
+   - Each section must call tools at least 3 times (maximum 5 times) to observe the simulated environment
 
 2. [Must Quote Original Agent Statements and Behaviors]
-   - Agent statements and behaviors are predictions of future human behavior
-   - Use quote format in the report to display these predictions, for example:
-     > "Certain groups will state: original content..."
-   - These quotes are core evidence of simulation predictions
+   - Agent statements and behaviors are simulated persona reactions
+   - Use quote format in the report to display these reactions, for example:
+     > "Certain groups state: original content..."
+   - These quotes are core evidence of the simulation observations
 
 3. [Language Consistency - ALWAYS Write in {language}]
    - The entire report MUST be written in {language}, regardless of source material language
@@ -133,8 +133,8 @@ Your task is to:
    - This rule applies to both body text and quoted content (> format)
    - NEVER switch to any other language mid-report
 
-4. [Faithfully Present Prediction Results]
-   - Report content must reflect simulation results that represent the future in the simulated world
+4. [Faithfully Present Evaluation Results]
+   - Report content must reflect simulation results from the simulated environment
    - Don't add information that doesn't exist in the simulation
    - If information is insufficient in some aspects, state it truthfully
 
@@ -305,10 +305,10 @@ REACT_FORCE_FINAL_MSG = "Tool call limit reached, please directly output Final A
 # ── 4. Chat — Q&A on a Finished Report ──────────────────────────────
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = """\
-You are a concise and efficient simulation prediction assistant.
+You are a concise and efficient scenario evaluation assistant.
 
 [Background]
-Prediction Condition: {simulation_requirement}
+Evaluation Condition: {simulation_requirement}
 
 [Generated Analysis Report]
 {report_content}
