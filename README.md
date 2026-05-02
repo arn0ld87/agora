@@ -8,7 +8,7 @@
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
 
-> **v0.9.0 released:** [Release Notes](docu/2026-05-01-v0.9.0-release-notes.md) — 12/12 Issues (Milestone „Domain Cleanup") geschlossen, **796 Tests grün** (744 Backend + 52 Frontend; +85 ggü. v0.9.0-Tag durch Repo-Review-Folge-Slices). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
+> **v0.9.0 released 2026-05-01** ([Release Notes](docu/2026-05-01-v0.9.0-release-notes.md)) — auf `main` läuft seither der **Reader-Honesty-Refactor (Layer 0–5)** post-tag: Pydantic-Contract-Architektur, DACH-Voice-Glossar v1, Provenance-Anker, deterministisches Cluster-Naming, Frontend strict-Zod + Confidence-UI, Baseline-Eval-Suite. **1383 Tests grün** (1258 Backend + 125 Frontend). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
@@ -21,7 +21,7 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## Status: v0.9.0 — released 2026-05-01
+> ## Status: v0.9.0 (Tag) + Layer 0–5 Reader-Honesty-Refactor (auf `main`)
 >
 > Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
 > Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
@@ -30,6 +30,14 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 > `AGORA_AUTH_TOKEN`-Guard und restriktive CORS-Defaults, ist aber weiterhin
 > für lokale Single-User-Setups gedacht, nicht für Mehrbenutzer- oder
 > Internet-Betrieb.
+>
+> **Stand `main` nach v0.9.0-Tag:** alle 17 Tasks aus
+> [`PLAN.md`](./PLAN.md) durch (Layer 0 Pydantic-Contracts, Layer 1
+> Backend-Hardening, Layer 2 DACH-Voice + Wording-Glossar v1, Layer 3
+> Reader-Honesty, Layer 4 Frontend strict-Zod + Diff/Confidence-UI,
+> Layer 5 Baseline-Eval-Suite). **Kein neuer Release-Tag** — die Versionen
+> in `pyproject.toml` und `package.json` stehen weiter auf `0.9.0`,
+> die Refactor-Schicht ist bewusst Pre-1.0-Iteration.
 >
 > **Getestet aktuell hauptsächlich mit:**
 >
@@ -52,9 +60,15 @@ Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Mar
 
 Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
 
-### Engineering-Stand v0.9.0
+### Engineering-Stand (v0.9.0 + Layer 0–5)
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**744 Backend + 52 Frontend Tests** (+85 ggü. v0.9.0-Tag durch Repo-Review-Folge-Slices), 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (**1258 Backend + 125 Frontend Tests** = 1383 grün, 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL`).
+- **Pydantic-Contract-Architektur (Layer 0)**: `backend/app/contracts/` mit `ReportContractModel`, `ReportModel`, `EvidenceMapModel`, `PersonaModel`, `PersonaQuotaPlan`. JSON-Schemas werden via `python -m app.contracts.dump_schemas` aus den Pydantic-Modellen generiert. Frontend-Spiegel als Zod-Schemas in `frontend/src/contracts/reportContract.ts`. CI-Job `contract-gates` blockt Schema-Drift.
+- **Backend-Hardening (Layer 1)**: `chat_json` mit strict-Schema-Mode (`json_schema`-Response-Format) plus `json_object`-Fallback. `PersonaQuotaPlan`/`PersonaQuotaActual`-Verdrahtung in `prepare_service.py` (Soll/Ist-Validation, ValidationError bei Drift). Anti-Dekorations-Fix: kein `global_items[:2]`-Fallback mehr, orphane Claims bekommen ehrlich `low`-Confidence + Audit-Eintrag. Confidence-Kalibrierung mit Match-Score-Cap (alle Evidenzen <0.55 → max 0.69) und Verified-Quellen-Gate (≥2 unabhängige Quellen). Contradiction-Detector via strukturierte Boolean-Flags + Stance-Konflikte.
+- **DACH-Voice + Wording-Glossar v1 (Layer 2)**: Persona-Generator trägt `voice_register`-Pflichtfeld (`formal-de` / `neutral-de` / `technical-de` / `skeptisch-de`) mit Auto-Fallback. Wording-Glossar v1 (Issue #175) ersetzt englische Forecast-/Marketing-Phrasen (`prediction`, `rehearsal of the future`, `god's eye view`, `high-fidelity digital world`) durch sachliches Persona-Vokabular; Liste in [`docu/glossary-wording.md`](./docu/glossary-wording.md). Voice-Lint (`backend/scripts/check_voice.py`) als CI-Hartmacher in `contract-gates.yml`.
+- **Reader Honesty (Layer 3)**: Evidence-Items tragen seit Layer 3 zwei zusätzliche Felder — `quote` (≤500 chars wörtliches Originalzitat) und `source_id_anchor` (`agent-log-N#entry-X`, `web:URL`, `kg:entity:UUID`). Time-Series-Sampling im Section-Builder ersetzt das alte „erste 8 Actions"-Fenster durch stratifiziertes Sampling über `round_num` (8 Bins, deterministisch). Section-Dedup-Audit (cosine ≥0.92, Jaccard-Fallback ≥0.85) markiert Duplikate, ohne sie zu droppen. Cluster-Labels deterministisch via TF-Top-3 mit DE+EN-Stopword-Filter — kein LLM-Free-Text mehr.
+- **Frontend strict (Layer 4)**: `Step4Report.vue` parst Backend-Antworten via `ReportSchema.parse(...)` / `EvidenceMapSchema.parse(...)` strikt (`.strict()` greift, unbekannte Felder werfen ZodError). Schema-Mismatch zeigt einen Inline-Banner mit Issue-Pfad-Liste. Pro Section ein `ConfidenceBadge` (Pill mit `--ok`/`--warn`/`--err`-Tokens) mit Hover-Popover, das den Section-`audit_trail` listet. Evidence-Quotes rendern als `<blockquote>`; klickbare Source-Anchors springen via `scrollIntoView` zum Agent-Log-Entry oder öffnen Web-URLs in neuem Tab.
+- **Eval-Suite (Layer 5)**: `backend/tests/eval/` mit 3 Fixtures (`clean_small`, `medium_with_dedup`, `orphan_heavy`) plus `expected_metrics.json` als Snapshot-Pin. `check_evidence_quality.py` liefert fünf Metriken: `evidence_coverage`, `claim_support_ratio`, `orphan_claim_rate`, plus die zwei neuen `dedup_rate` und `concentration_index`. Snapshot-Drift wird durch `tests/eval/test_eval_baselines.py` zur Buildtime erkannt.
 - **Domain-Cleanup (v0.9.0)**: Drei Hot-Spot-Module entkernt — `simulation_manager.py` 789→403 LOC (−49 %), `report_agent.py` 3184→2179 LOC (−31,6 %), `neo4j_storage.py` 1127→195 LOC (−82,7 %). Neue Service-Schichten in `backend/app/services/` (Branching, Prepare-Pipeline, Report-Logger/Models/Prompts/Tools, Ingestion-Pipeline). Storage in fünf Module gesplittet: `neo4j_mappings.py` + Read/Write/Search-Mixins. Re-Export-Pattern hält alle Caller stabil — keine Breaking-Changes.
 - **Wire-Identity gepinnt (v0.9.0, Issue #52)**: `models/graph.py` führt Backend-Graph-DTOs ein, deren Schema bit-identisch zum bisherigen Storage-Output ist; jede künftige Schema-Änderung wird durch DTO-Tests ausgelöst, bevor das Frontend kaputt geht.
 - **FSM aktiv konsumiert (v0.9.0, Issue #42)**: Die deklarative State-Machine wird vom `SimulationManager` und allen API-Routen verwendet; `ALLOWED_TRANSITIONS` bleibt Single-Source-of-Truth, ungültige Übergänge werfen `InvalidStatusTransition`. Branching durchläuft jetzt explizit `CREATED → PREPARING → READY`; Force-Restart nutzt `_reset_to_ready(...)` mit Log-Begründung.
@@ -371,13 +385,21 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **Status: v0.9.0 — released 2026-05-01.** Agora is an active experimental
-> fork. Graph build, simulation, and report pipeline can fail when Ollama is slow,
-> JSON mode misbehaves, or models are switched mid-run. Not production-ready.
-> The HTTP API has an optional `AGORA_AUTH_TOKEN` guard and localhost-locked CORS
-> defaults, but no real multi-user AuthN/AuthZ — run on localhost or inside a
-> trusted network only. Currently exercised with **LLM `qwen3-coder-next:cloud`**
-> and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+> **Status: v0.9.0 (tag) + Layer 0–5 reader-honesty refactor on `main`.**
+> Agora is an active experimental fork. Graph build, simulation, and report
+> pipeline can fail when Ollama is slow, JSON mode misbehaves, or models are
+> switched mid-run. Not production-ready. The HTTP API has an optional
+> `AGORA_AUTH_TOKEN` guard and localhost-locked CORS defaults, but no real
+> multi-user AuthN/AuthZ — run on localhost or inside a trusted network only.
+> Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
+> `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+>
+> **Post-tag state on `main`:** all 17 tasks from [`PLAN.md`](./PLAN.md) are
+> done — Layer 0 Pydantic contracts, Layer 1 backend hardening, Layer 2
+> DACH voice + wording glossary v1, Layer 3 reader honesty, Layer 4
+> frontend strict-zod + diff/confidence UI, Layer 5 baseline eval suite.
+> **No new release tag yet** — version markers stay at `0.9.0`, the refactor
+> layer is deliberately pre-1.0 iteration.
 >
 > **Docker Hub:** `docker pull alexle135/agora-agora:latest` |
 > [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
@@ -388,9 +410,15 @@ Agora is a local-first multi-agent simulation engine for public reaction, market
 
 Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
 
-### Engineering status in v0.9.0
+### Engineering status (v0.9.0 + Layer 0–5)
 
-- **Quality gates are in place** via `npm run check` (**744 backend + 52 frontend tests** (+85 vs. v0.9.0 tag through repo-review follow-up slices), Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Quality gates are in place** via `npm run check` (**1258 backend + 125 frontend tests** = 1383 green, Vitest on `jsdom`, 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
+- **Pydantic contract architecture (Layer 0)**: `backend/app/contracts/` with `ReportContractModel`, `ReportModel`, `EvidenceMapModel`, `PersonaModel`, `PersonaQuotaPlan`. JSON schemas generated via `python -m app.contracts.dump_schemas`; Zod mirror in `frontend/src/contracts/reportContract.ts`. CI job `contract-gates` blocks schema drift.
+- **Backend hardening (Layer 1)**: `chat_json` strict-schema mode (json_schema response format) plus json_object fallback. `PersonaQuotaPlan`/`PersonaQuotaActual` enforced in `prepare_service.py`. Anti-decoration fix: no more `global_items[:2]` filler — orphan claims get an honest `low` confidence + audit entry. Confidence calibration with match-score cap (all evidence <0.55 → max 0.69) and verified-source gate (≥2 independent sources). Contradiction detector via boolean flags + stance conflict.
+- **DACH voice + wording glossary v1 (Layer 2)**: persona generator carries a mandatory `voice_register` field (`formal-de` / `neutral-de` / `technical-de` / `skeptisch-de`) with auto-fallback. Wording glossary v1 (issue #175) replaces English forecast/marketing phrases (`prediction`, `rehearsal of the future`, `god's eye view`, `high-fidelity digital world`) with sober persona vocabulary; full list in [`docu/glossary-wording.md`](./docu/glossary-wording.md). Voice lint (`backend/scripts/check_voice.py`) is enforced as a hard CI gate in `contract-gates.yml`.
+- **Reader honesty (Layer 3)**: evidence items now carry `quote` (≤500 chars verbatim original) and `source_id_anchor` (`agent-log-N#entry-X`, `web:URL`, `kg:entity:UUID`). Time-series sampling in the section builder replaces the old "first 8 actions" window with stratified sampling over `round_num` (8 deterministic bins). Section-dedup audit (cosine ≥0.92, jaccard fallback ≥0.85) flags duplicates without dropping them. Cluster labels are deterministic via TF top-3 with DE+EN stopword filter — no more LLM free-text labeling.
+- **Frontend strict (Layer 4)**: `Step4Report.vue` parses backend payloads strictly through `ReportSchema.parse(...)` / `EvidenceMapSchema.parse(...)` (`.strict()` rejects unknown fields with a ZodError). Schema mismatch shows an inline banner with the issue path. Each section gets a `ConfidenceBadge` (pill with `--ok`/`--warn`/`--err` tokens) plus a hover popover listing the section `audit_trail`. Evidence quotes render as `<blockquote>`; clickable source anchors `scrollIntoView` to the agent-log entry or open web URLs in a new tab.
+- **Eval suite (Layer 5)**: `backend/tests/eval/` ships three fixtures (`clean_small`, `medium_with_dedup`, `orphan_heavy`) plus an `expected_metrics.json` snapshot pin. `check_evidence_quality.py` reports five metrics: `evidence_coverage`, `claim_support_ratio`, `orphan_claim_rate`, plus the new `dedup_rate` and `concentration_index`. Snapshot drift is caught at build time via `tests/eval/test_eval_baselines.py`.
 - **Domain cleanup (v0.9.0)**: three hot-spot modules carved out — `simulation_manager.py` 789→403 LOC (−49%), `report_agent.py` 3184→2179 LOC (−31.6%), `neo4j_storage.py` 1127→195 LOC (−82.7%). New service layers under `backend/app/services/` (branching, prepare pipeline, report logger/models/prompts/tools, ingestion pipeline). Storage split into five modules: `neo4j_mappings.py` + Read/Write/Search mixins. Re-export pattern keeps every caller stable — no breaking changes.
 - **Wire identity pinned (v0.9.0, issue #52)**: `models/graph.py` carries backend graph DTOs whose schema is bit-identical to the previous storage output; future schema drifts trigger DTO tests before they reach the frontend.
 - **FSM actively consumed (v0.9.0, issue #42)**: the declarative state machine is now used by `SimulationManager` and every API route; `ALLOWED_TRANSITIONS` is the single source of truth, invalid transitions raise `InvalidStatusTransition`. Branching now goes through `CREATED → PREPARING → READY`; force-restart uses `_reset_to_ready(...)` with a logged reason.
