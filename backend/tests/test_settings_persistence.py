@@ -89,6 +89,33 @@ def test_atomic_write_uses_replace_not_unlink(service, monkeypatch):
     assert src.endswith('.json.tmp')
 
 
+def test_atomic_write_cleans_up_tmp_on_failure(service, monkeypatch):
+    """Gemini-Finding (PR #155): wenn ``json.dump`` oder ``fsync``
+    während des atomic Writes scheitert, soll keine ``settings.*.json.tmp``
+    im ``instance/``-Verzeichnis verwaisen.
+    """
+    real_dump = json.dump
+
+    def boom(*args, **kwargs):
+        # Erst echten Inhalt schreiben (damit eine Tempdatei existiert),
+        # dann Fehler werfen.
+        real_dump({'partial': True}, args[1])
+        raise RuntimeError('forced failure')
+
+    monkeypatch.setattr('app.services.settings_layer.json.dump', boom)
+
+    with pytest.raises(RuntimeError):
+        service.apply_payload({'LLM_MODEL_NAME': 'qwen2.5:14b'}, persist=True)
+
+    leftovers = list(service.instance_path.parent.glob('settings.*.json.tmp'))
+    assert leftovers == [], (
+        f'Tempdatei nicht aufgeräumt nach Fehler: {leftovers}'
+    )
+    # Ziel-Datei existiert nicht — wir hatten ja noch nichts erfolgreich
+    # zu schreiben.
+    assert not service.instance_path.exists()
+
+
 def test_concurrent_writes_do_not_corrupt_file(service):
     """Smoke-Test für das Lock — zwei sequentielle, aber back-to-back
     apply_payload-Calls dürfen kein partielles JSON hinterlassen.
