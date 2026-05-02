@@ -1,0 +1,137 @@
+# Issue #133 — Settings-UI für .env zur Laufzeit (Override-Layer)
+
+Worktree: `.claude/worktrees/issue-133-settings`
+Branch: `claude/issue-133-settings`
+Base: `origin/main` @ `7f3f9ca` (Slice C / Design v2 mergt)
+
+## Ziel
+
+Frontend-Settings-View und ein Backend-Override-Layer, mit dem alle bisher
+nur per `.env` setzbaren Felder zur Laufzeit aktualisiert werden — ohne die
+`.env` selbst anzufassen. Reproduzierbarkeit der `.env` bleibt: das
+Override liegt in `backend/instance/settings.json`, plus ein
+in-memory-Layer (PUT bis nächster Process-Start).
+
+Lade-Reihenfolge (letzter gewinnt):
+`Defaults → .env → instance/settings.json → in-memory Override`.
+
+## Sub-Slices (1 Commit pro Sub-Slice)
+
+### SUB1 — Backend Settings-Layer + Schema + `GET /api/settings`
+
+Neue Module:
+
+- `backend/app/services/settings_schema.py` — Pydantic-v2-Schema (`SettingsSchema`)
+  mit Field-Annotations (Sektion, Reload-Required, Secret-Flag, Typ).
+- `backend/app/services/settings_layer.py` — `SettingsService`:
+  Lade-Reihenfolge auflösen, Source pro Feld bestimmen
+  (`default | env | file | override`), Sektion gruppieren.
+- `backend/app/api/settings.py` — neuer Blueprint `settings_bp`,
+  Route `GET /api/settings` (gruppiert) + `GET /api/settings/schema`
+  (für Frontend-Form-Render).
+- Tests: `backend/tests/test_settings_layer.py` (Lade-Reihenfolge,
+  Source-Tracking, Sektions-Gruppierung) und
+  `backend/tests/test_settings_api.py` (GET-Smoke, Schema-Endpoint,
+  Auth, Secrets-Maske im GET).
+
+Out of scope SUB1: Persistierung (PUT) → SUB2.
+
+### SUB2 — `PUT /api/settings` + Atomic-Write + Secrets-Trennung
+
+- `PUT /api/settings` validiert per `SettingsSchema`, schreibt
+  `backend/instance/settings.json` atomar (`tmp` + `os.replace`).
+- Secrets-Felder (`SECRET_KEY`, `NEO4J_PASSWORD`, `AGORA_AUTH_TOKEN`,
+  `*_API_KEY`): GET liefert nie Klartext, nur `is_set: true|false`.
+  Setzen via separatem Endpoint `PUT /api/settings/secrets` (Bestätigung).
+- `VECTOR_DIM`-Mismatch wird abgewiesen (gleicher Validator wie Startup).
+- Tests: `instance/`-Roundtrip, Atomic-Write (Race-tmp existiert nach
+  Crash nicht), Secrets-Maskierung, Validation-Errors → 400.
+
+### SUB3 — Frontend `SettingsView.vue` + Router + Store
+
+- Neue View `frontend/src/views/SettingsView.vue` mit Sektions-Tabs
+  analog `.env`-Sektionen (LLM, Neo4j, Embedding, Ontology, Hybrid
+  Search, Agent Tools, Event Bus, Logging, Locale, Webtools, OASIS,
+  Security/Secrets).
+- Neuer Router-Eintrag `/settings`.
+- Neues Store-Modul `frontend/src/store/settings.js` (Schema-Cache,
+  Form-State, dirty-Tracking).
+- Neue API-Client-Datei `frontend/src/api/settings.js` (GET/PUT/Secrets).
+
+### SUB4 — i18n DE/EN + Reload-Required-Badges + Frontend-Tests
+
+- `frontend/src/i18n/locales/de.json` + `en.json` Sektion `settings.*`
+  (Tab-Labels, Field-Labels, Help-Texte, Reload-Hinweise, Secret-Setzen).
+- `Reload-erforderlich`-Badge pro Field, wenn `reload_required: true`.
+- Vitest-Cases: SettingsView rendert Schema-Sektionen, dirty-Tracking,
+  Reload-Badge taucht auf.
+
+## Akzeptanz pro Sub-Slice
+
+- `npm run check` grün vor dem Commit.
+- `CHANGELOG.md` `[Unreleased]` aktualisiert.
+- Slice-Eintrag im Arbeitsprotokoll mit konkreten Datei-Pfaden.
+
+## Out of Scope (lt. Issue)
+
+- `.env` schreiben — die Datei bleibt Single-Source-of-Truth fürs
+  Bootstrapping.
+- Multi-User-Profile.
+
+## Design-Entscheidungen
+
+1. **In-memory Override-Tabelle pro Field**: `SettingsService` hält ein
+   `dict[str, Any]`, das beim Restart leer ist. Der „override"-Status
+   im GET zeigt Felder, die seit Boot gesetzt wurden.
+
+2. **`instance/settings.json` wird beim Service-Boot gelesen** und auf
+   `Config` gemergt — so wirken persistierte Werte gleich wie ein
+   manueller `.env`-Edit + Restart, sind aber im UI als Source `file`
+   markiert. Reload-Required-Felder weisen die UI darauf hin, dass die
+   neue Konfiguration einen Restart braucht (z. B. `EMBEDDING_MODEL`).
+
+3. **Secrets**: GET liefert für die genannten Felder nur
+   `{value: null, is_set: bool}`. PUT akzeptiert sie nur über
+   `/api/settings/secrets` mit `confirm: true` und einem zweiten Feld
+   `current_token` (Self-Lockout-Schutz für `AGORA_AUTH_TOKEN`).
+
+4. **Atomic-Write**: Schreibe nach `instance/settings.json.tmp`, dann
+   `os.replace` → reduziert das Risiko korrupter JSON-Dateien bei
+   Crash. POSIX garantiert Rename-Atomicity auf demselben Filesystem.
+
+5. **Validation reuses Config.validate()-Pfade** wo möglich (z. B.
+   `infer_vector_dim_for_model`), damit Schema und Startup-Check nicht
+   divergieren.
+
+## SUB1 — Status: erledigt
+
+Commit: `feat(settings): backend layer + GET /api/settings (Issue #133, SUB1)`
+(siehe `git log --oneline claude/issue-133-settings`).
+
+Geliefert:
+
+- `backend/app/services/settings_schema.py` mit 31 Feldern in 12 Sektionen.
+- `backend/app/services/settings_layer.py` mit `SettingsService`,
+  Modul-Singleton, vier Source-Konstanten und thread-safem Override-Lock.
+- `backend/app/api/settings.py` mit `GET /api/settings` und
+  `GET /api/settings/schema`. Blueprint registriert in
+  `backend/app/__init__.py` und `backend/app/api/__init__.py`
+  hinter dem Standard-Guard (`install_blueprint_guard`).
+- `backend/tests/test_settings_layer.py` (38 Cases) und
+  `backend/tests/test_settings_api.py` (16 Cases) — Σ 54 neue Tests.
+- `CHANGELOG.md` `[Unreleased] / Added` aktualisiert.
+
+`npm run check` grün: 810 Backend-Tests (vorher 756 — +54),
+69 Frontend-Tests, Build 119 KB CSS / 528 KB JS, ein bestehender
+Lint-Warning unverändert.
+
+Notiz zum Pin-Test: Der erste Versuch verglich `spec.default` gegen
+`Config.X`. Weil `Config.X` beim Import aus `os.environ` belegt wird,
+brach der Test sobald die Shell `LLM_MODEL_NAME` gesetzt hatte. Der
+finale Pin nutzt literal Werte aus `app/config.py` als Soll — so ist
+der Test reproduzierbar, schreit aber laut, wenn jemand den
+Code-Default ändert ohne das Schema mitzuziehen.
+
+## SUB2 — Status: offen (nächster Sub-Slice)
+
+…

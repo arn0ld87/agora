@@ -12,6 +12,7 @@ status_bp = Blueprint('status', __name__)
 logs_bp = Blueprint('logs', __name__)
 
 from .auth import auth_bp  # noqa: E402, F401 -- P0.2b: signed-ticket endpoint
+from .settings import settings_bp  # noqa: E402, F401 -- Issue #133: Settings-UI
 from . import graph  # noqa: E402, F401
 from . import simulation_common  # noqa: E402, F401
 from . import simulation_lifecycle  # noqa: E402, F401
