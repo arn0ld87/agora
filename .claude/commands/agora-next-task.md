@@ -15,8 +15,8 @@ Hardstops: kein Auto-Fix-Loop bei rotem Verify, keine Layer-Sprünge gegen die T
 
 Pfade & Default:
 
-- Repo-Root: `/mnt/brain/Projekte/Agora`
-- PLAN.md: `/mnt/brain/Projekte/Agora/PLAN.md` (autoritativ)
+- Repo-Root: .
+- PLAN.md: ./PLAN.md
 - Verify-Slash: `/verify-after-subagent`
 - Default-Branch-Ziel: `main` (FF-Push, kein PR)
 - User-Trait-Sticky: Deutsch, knapp, direkt; ein Sub-Slice = ein Commit + ein Arbeitsprotokoll unter `docu/<datum>-<slice>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
@@ -247,7 +247,7 @@ Optional bei Milestone-Abschluss (z. B. M1 fertig nach allen Layer-0-Tasks): zus
 ## Schritt 8: Worktree-Cleanup (nur bei erfolgreichem Push)
 
 ```bash
-cd /mnt/brain/Projekte/Agora
+cd .
 git worktree remove <worktree-pfad>
 git branch -D <branch>   # lokal weg, da bereits in main per FF
 ```
