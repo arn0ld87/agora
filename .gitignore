@@ -44,9 +44,14 @@ htmlcov/
 
 # Agent tooling
 .cursor/
-.claude/
 .codex/
 .serena/
+
+# Claude Code per-project setup: agents + slash-commands + permissions tracken,
+# aber lokale Per-User-Settings, geschachtelte Worktrees und Sessions raushalten.
+.claude/settings.local.json
+.claude/worktrees/
+.claude/projects/
 
 # Local docs and scratch dirs
 mydoc/
