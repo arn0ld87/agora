@@ -206,10 +206,37 @@ class SimulationRunState:
         return result
 
 
+# Sub-Slice 21 — OASIS-DB-Pfad pro Sim, damit OASIS keine DB ins
+# read-only Site-Packages-Verzeichnis schreibt. Standalone-Helper, damit
+# sie unit-testbar bleiben (kein Subprozess-Setup nötig).
+
+_OASIS_DB_DIR_NAME = "oasis_db"
+_OASIS_DB_FILE_NAME = "social_media.db"
+
+
+def _compute_oasis_db_path(sim_dir: str) -> str:
+    """Liefert ``<sim_dir>/oasis_db/social_media.db`` und legt das
+    Verzeichnis an (idempotent). OASIS' ``get_db_path()`` macht **kein**
+    ``mkdir``, wenn ``OASIS_DB_PATH``-ENV gesetzt ist — das Verzeichnis
+    muss vorhanden sein, bevor der Subprozess startet."""
+    db_dir = os.path.join(sim_dir, _OASIS_DB_DIR_NAME)
+    os.makedirs(db_dir, exist_ok=True)
+    return os.path.join(db_dir, _OASIS_DB_FILE_NAME)
+
+
+def _inject_oasis_db_env(env: Dict[str, str], sim_dir: str) -> None:
+    """Setzt ``OASIS_DB_PATH`` im Subprozess-Env auf einen sim-spezifischen
+    Pfad — aber nur, wenn der User es nicht selbst überschrieben hat
+    (z. B. via Compose-Env oder ``.env``)."""
+    if env.get("OASIS_DB_PATH"):
+        return
+    env["OASIS_DB_PATH"] = _compute_oasis_db_path(sim_dir)
+
+
 class SimulationRunner:
     """
     Simulation Runner
-    
+
     Responsible for:
     1. Running OASIS simulations in background processes
     2. Parsing run logs and recording actions for each Agent
@@ -541,6 +568,10 @@ class SimulationRunner:
             env = os.environ.copy()
             env['PYTHONUTF8'] = '1'  # Python 3.7+ support, make all open() use UTF-8 by default
             env['PYTHONIOENCODING'] = 'utf-8'  # Ensure stdout/stderr use UTF-8
+            # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
+            # legen, sonst crashed OASIS auf read-only-FS beim Anlegen von
+            # site-packages/oasis/data/.
+            _inject_oasis_db_env(env, sim_dir)
             
             # Set working directory to simulation directory (database files etc. will be generated here)
             # Use start_new_session=True to create new process group, ensuring all child processes can be terminated via os.killpg
