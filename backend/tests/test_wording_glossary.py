@@ -75,3 +75,28 @@ def test_insight_forge_result_text_avoids_forbidden_wording(pattern: str) -> Non
         f"InsightForgeResult.to_text() enthält verbotenes Wording {pattern!r} "
         f"(siehe docu/glossary-wording.md, Issue #175): {matches}"
     )
+
+
+# Service-Module mit Report-Strings, die in den Output bzw. in Reports
+# wandern. Dateien werden als Text gelesen — die Tests pinnen also auch
+# String-Literale ausserhalb von Modul-Konstanten.
+SERVICE_FILES = [
+    "backend/app/services/report_agent.py",
+    "backend/app/services/ontology_generator.py",
+]
+
+
+@pytest.mark.parametrize("rel_path", SERVICE_FILES)
+@pytest.mark.parametrize("pattern", FORBIDDEN_PATTERNS)
+def test_service_file_source_avoids_forbidden_wording(
+    rel_path: str, pattern: str
+) -> None:
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / rel_path).read_text(encoding="utf-8")
+    matches = re.findall(pattern, source, flags=re.IGNORECASE)
+    assert not matches, (
+        f"{rel_path} enthält verbotenes Wording {pattern!r} "
+        f"(siehe docu/glossary-wording.md, Issue #175): {matches}"
+    )
