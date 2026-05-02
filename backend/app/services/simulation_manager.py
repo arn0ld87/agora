@@ -7,7 +7,7 @@ Use preset scripts + LLM intelligent generation of config parameters
 from __future__ import annotations
 
 import os
-from typing import Dict, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -15,6 +15,9 @@ from enum import Enum
 from ..utils.logger import get_logger
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 from . import branching_service, prepare_service
+
+if TYPE_CHECKING:
+    from ..contracts import PersonaQuotaPlan
 # simulation_state_machine importiert ``SimulationStatus`` aus diesem Modul,
 # daher Lazy-Import in ``_set_status`` (vermeidet Zirkularität).
 
@@ -295,6 +298,7 @@ class SimulationManager:
         llm_model: Optional[str] = None,
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
+        quota_plan: Optional["PersonaQuotaPlan"] = None,
     ) -> SimulationState:
         return prepare_service.prepare_simulation(
             self,
@@ -309,6 +313,7 @@ class SimulationManager:
             llm_model=llm_model,
             language=language,
             max_agents=max_agents,
+            quota_plan=quota_plan,
         )
 
     

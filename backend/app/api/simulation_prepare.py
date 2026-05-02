@@ -4,11 +4,13 @@ Preparation-related simulation API routes split from the main module.
 
 import os
 import threading
+from typing import Any, Optional
 
 from flask import request
 
 from . import simulation_bp
 from ..config import Config
+from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.simulation_manager import SimulationManager, SimulationStatus
@@ -22,6 +24,29 @@ from .simulation_common import (
     run_registry,
     simulation_run_artifacts as _simulation_run_artifacts,
 )
+
+
+def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
+    """Parse ``quota_plan`` aus dem POST-Body in ein ``PersonaQuotaPlan``.
+
+    Sub-Slice 20a — API-Boundary für Persona-Quoten. Backwards-Compat:
+    fehlendes oder ``None``-Feld → ``None`` (Service verhält sich wie
+    bisher). Leerer Dict ``{}`` zählt ebenfalls als „nicht gesetzt", weil
+    ein leerer Plan keinerlei Aussagekraft hat und sonst eine
+    ``ValidationError`` für „targets darf nicht leer sein" werfen würde —
+    Frontend kann den Eintrag dann mit `{}` defaulten ohne 400.
+
+    Bei strukturell vorhandenem, aber inkonsistentem Plan
+    (``total != sum(targets)``, ``targets`` mit ``count<1``,
+    nicht-Dict-Payload) wird die ``pydantic.ValidationError`` propagiert
+    und vom Caller in eine HTTP-400-Antwort übersetzt.
+    """
+    raw: Any = data.get("quota_plan")
+    if raw is None:
+        return None
+    if isinstance(raw, dict) and not raw:
+        return None
+    return PersonaQuotaPlan.model_validate(raw)
 
 
 def _check_simulation_prepared(simulation_id: str) -> tuple:
@@ -207,6 +232,18 @@ def prepare_simulation():
     except (TypeError, ValueError):
         max_agents = None
 
+    # Sub-Slice 20a: optional PersonaQuotaPlan aus Body. ValidationError →
+    # HTTP 400 mit Pydantic-Fehlermessage; sonst wird der Plan an den
+    # Service durchgereicht (Validierung post-generation, Erzwingung in 20b).
+    try:
+        quota_plan = _parse_quota_plan(data)
+    except Exception as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=f"Invalid quota_plan: {exc}",
+        )
+
     llm_model_override = (data.get('llm_model') or '').strip() or None
     agent_language_override = (data.get('language') or '').strip().lower() or None
     if agent_language_override and agent_language_override not in ('de', 'en'):
@@ -346,6 +383,7 @@ def prepare_simulation():
                 llm_model=llm_model_override,
                 language=agent_language_override,
                 max_agents=max_agents,
+                quota_plan=quota_plan,
             )
 
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())

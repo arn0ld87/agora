@@ -372,6 +372,15 @@ def _restart_simulation_prepare(run: dict):
                 current_progress = int(start + (end - start) * progress / 100)
                 task_manager.update_task(task_id, progress=current_progress, message=f"[{stage}] {message}")
 
+            # Sub-Slice 20a: quota_plan aus persistierter Run-Config wieder
+            # aufnehmen, damit Restart denselben Soll-Plan nutzt wie der
+            # ursprüngliche Prepare-Run. Inkonsistenter Plan im persisted
+            # Config-Snapshot würde im Service-Layer als ValidationError
+            # propagieren und den Restart als FAILED markieren — das ist
+            # gewollt (kein silent-Fallback auf "ohne Plan").
+            from ..api.simulation_prepare import _parse_quota_plan
+            quota_plan = _parse_quota_plan(config or {})
+
             result_state = manager.prepare_simulation(
                 simulation_id=simulation_id,
                 simulation_requirement=simulation_requirement,
@@ -384,6 +393,7 @@ def _restart_simulation_prepare(run: dict):
                 llm_model=config.get("llm_model"),
                 language=config.get("language"),
                 max_agents=config.get("max_agents"),
+                quota_plan=quota_plan,
             )
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())
             run_registry.update_run(
