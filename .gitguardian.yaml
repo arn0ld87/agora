@@ -1,0 +1,19 @@
+version: 2
+
+# GitGuardian-Konfiguration für Agora.
+#
+# Begründung Pfad-Ignores: die hier gelisteten Dateien sind Test-
+# Fixtures, die explizit Secret-Felder gegen ihren Persist-Pfad
+# pinnen (z. B. ``NEO4J_PASSWORD``-Maskierung im GET, Round-Trip in
+# ``instance/settings.json``). Die Strings (``new-pw``, ``tok-xyz``,
+# ``super-secret``) sind synthetische Test-Marker, kein produktives
+# Geheimnis — sie tauchen nirgends im Runtime-Code auf und sind aus
+# einem öffentlichen Test-Suite-Lauf bekannt. Die Ignores betreffen
+# nur Tests; Produktionscode bleibt voll gescannt.
+secret:
+  show-secrets: false
+  ignored-paths:
+    - backend/tests/test_settings_validator.py
+    - backend/tests/test_settings_api.py
+    - backend/tests/test_settings_persistence.py
+    - frontend/src/store/__tests__/settings.spec.js
