@@ -132,6 +132,49 @@ finale Pin nutzt literal Werte aus `app/config.py` als Soll — so ist
 der Test reproduzierbar, schreit aber laut, wenn jemand den
 Code-Default ändert ohne das Schema mitzuziehen.
 
-## SUB2 — Status: offen (nächster Sub-Slice)
+## SUB2 — Status: erledigt
+
+Commit: `feat(settings): PUT + atomic write + secrets endpoint (Issue #133, SUB2)`.
+
+Geliefert:
+
+- `backend/app/services/settings_validator.py` mit `validate_payload`,
+  `split_payload_by_secret`. Sammelt alle Fehler in einem Pass.
+  Cross-Field-Check `EMBEDDING_MODEL` ↔ `VECTOR_DIM` ruft den
+  bestehenden `app.config.infer_vector_dim_for_model` auf — gleiche
+  Regel wie der Startup-Check.
+- `SettingsService.apply_payload(payload, persist=True)` und
+  `remove_persisted([keys])` plus internem
+  `_write_file_layer_atomic(data)` (tmp + `os.fsync` best-effort +
+  `os.replace`).
+- `backend/app/api/settings.py` um `PUT /api/settings` und
+  `PUT /api/settings/secrets` ergänzt. Beide All-or-Nothing,
+  Secrets-Trennung erzwungen, `confirm: true` Pflicht beim
+  Secrets-Endpoint.
+- `backend/tests/test_settings_validator.py` (31 Cases),
+  `backend/tests/test_settings_persistence.py` (14 Cases),
+  `backend/tests/test_settings_api.py` +15 PUT-Cases — Σ 60 neue Tests.
+- `CHANGELOG.md` `[Unreleased] / Added` aktualisiert.
+
+`npm run check` grün: 870 Backend-Tests (vorher 810 — +60),
+69 Frontend-Tests, Build 119 KB CSS / 528 KB JS, ein bestehender
+Lint-Warning unverändert.
+
+Designentscheidungen, die nachträglich auffielen:
+
+- **Override → File-Promotion**: Nach erfolgreichem Persist räumt der
+  Service das in-memory Override für die geschriebenen Keys, damit
+  der Source-Resolver `source: file` zurückgibt statt `override`. Das
+  ist die ehrlichere UI-Aussage: der Wert überlebt den Restart, weil
+  er in der Datei steht.
+- **`os.fsync` best-effort**: manche Test-Mounts (z. B. tmpfs in
+  CI-Environments) lehnen `fsync` mit `OSError` ab; wir ignorieren
+  das, weil die `os.replace`-Atomicity nicht davon abhängt.
+- **Validator vor API**: das HTTP-Layer kennt die FieldSpec gar
+  nicht direkt — nur `validate_payload`/`field_by_key`. Damit ist der
+  Validator standalone testbar (31 Cases ohne Flask), und die
+  Settings-API testet nur HTTP-Vertrag (nicht das Schema selbst).
+
+## SUB3 — Status: offen (nächster Sub-Slice)
 
 …

@@ -1,20 +1,27 @@
-"""Tests für die Settings-API (Issue #133, SUB1).
+"""Tests für die Settings-API (Issue #133, SUB1 + SUB2).
 
-Pinnt die GET-Routen ``/api/settings`` und ``/api/settings/schema`` —
-inklusive Auth-Guard, Sektions-Gruppierung und der Secret-Maske im
-GET-Response. Schreib-Tests folgen in SUB2.
+Pinnt die HTTP-Verträge der vier Routen, inklusive Auth-Guard,
+Sektions-Gruppierung, Secret-Maske im GET-Response und
+All-or-Nothing-Verhalten der PUT-Validierung.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from flask import Blueprint, Flask
 
-from app.api.settings import get_settings, get_settings_schema
+from app.api.settings import (
+    get_settings,
+    get_settings_schema,
+    put_settings,
+    put_settings_secrets,
+)
 from app.services.settings_layer import SettingsService
 from app.services.settings_schema import SECTIONS, SETTINGS_FIELDS
+from app.utils.api_responses import install_api_error_handlers
 from app.utils.auth import install_blueprint_guard
 
 
@@ -29,10 +36,14 @@ def app(monkeypatch, tmp_path: Path):
     )
 
     app = Flask(__name__)
+    install_api_error_handlers(app)
     bp = Blueprint('settings_test', __name__)
     bp.add_url_rule('', view_func=get_settings, methods=['GET'])
     bp.add_url_rule('/', view_func=get_settings, methods=['GET'])
     bp.add_url_rule('/schema', view_func=get_settings_schema, methods=['GET'])
+    bp.add_url_rule('', view_func=put_settings, methods=['PUT'])
+    bp.add_url_rule('/', view_func=put_settings, methods=['PUT'])
+    bp.add_url_rule('/secrets', view_func=put_settings_secrets, methods=['PUT'])
     install_blueprint_guard(bp)
     app.register_blueprint(bp, url_prefix='/api/settings')
     app.config['service'] = service
@@ -151,4 +162,180 @@ def test_auth_required_when_token_set(app, monkeypatch):
     assert res.status_code == 401
     # Mit korrektem Header → 200
     res2 = client.get('/api/settings', headers={'X-Agora-Token': 'tok-xyz'})
+    assert res2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/settings — Happy Path
+# ---------------------------------------------------------------------------
+
+
+def test_put_settings_persists_and_returns_updated_state(client, app):
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'qwen2.5:14b'})
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['success'] is True
+    assert body['data']['updated_keys'] == ['LLM_MODEL_NAME']
+    # Datei wurde geschrieben
+    instance_path = app.config['service'].instance_path
+    assert instance_path.exists()
+    data = json.loads(instance_path.read_text(encoding='utf-8'))
+    assert data == {'LLM_MODEL_NAME': 'qwen2.5:14b'}
+
+
+def test_put_settings_response_reflects_new_source(client):
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'qwen2.5:14b'})
+    fields = res.get_json()['data']['fields']
+    item = next(i for i in fields['llm'] if i['key'] == 'LLM_MODEL_NAME')
+    assert item['value'] == 'qwen2.5:14b'
+    assert item['source'] == 'file'
+
+
+def test_put_settings_round_trip_with_get(client):
+    client.put('/api/settings', json={'REPORT_LANGUAGE': 'English'})
+    res = client.get('/api/settings')
+    fields = res.get_json()['data']['fields']
+    item = next(i for i in fields['locale'] if i['key'] == 'REPORT_LANGUAGE')
+    assert item['value'] == 'English'
+    assert item['source'] == 'file'
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/settings — Validation
+# ---------------------------------------------------------------------------
+
+
+def test_put_settings_returns_400_on_validation_error(client):
+    res = client.put('/api/settings', json={
+        'ONTOLOGY_MIN_ENTITY_TYPES': 'nope',
+    })
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body['success'] is False
+    assert body['code'] == 'validation_failed'
+    assert any(err['key'] == 'ONTOLOGY_MIN_ENTITY_TYPES' for err in body['errors'])
+
+
+def test_put_settings_collects_multiple_errors(client):
+    res = client.put('/api/settings', json={
+        'ONTOLOGY_MIN_ENTITY_TYPES': 'nope',
+        'EVENT_BUS_BACKEND': 'kafka',
+        'BOGUS_KEY': 'x',
+    })
+    assert res.status_code == 400
+    body = res.get_json()
+    keys = [err['key'] for err in body['errors']]
+    assert 'ONTOLOGY_MIN_ENTITY_TYPES' in keys
+    assert 'EVENT_BUS_BACKEND' in keys
+    assert 'BOGUS_KEY' in keys
+
+
+def test_put_settings_all_or_nothing_no_partial_persist(client, app):
+    res = client.put('/api/settings', json={
+        'REPORT_LANGUAGE': 'English',  # gültig
+        'ONTOLOGY_MIN_ENTITY_TYPES': 'broken',  # ungültig
+    })
+    assert res.status_code == 400
+    # File darf nicht angelegt worden sein
+    assert not app.config['service'].instance_path.exists()
+
+
+def test_put_settings_rejects_secrets_on_regular_endpoint(client):
+    res = client.put('/api/settings', json={'NEO4J_PASSWORD': 'pw'})
+    assert res.status_code == 400
+    body = res.get_json()
+    assert any(
+        err['code'] == 'secret_not_allowed' for err in body['errors']
+    )
+
+
+def test_put_settings_rejects_vector_dim_mismatch(client):
+    res = client.put('/api/settings', json={
+        'EMBEDDING_MODEL': 'qwen3-embedding:4b',
+        'VECTOR_DIM': 1024,
+    })
+    assert res.status_code == 400
+    body = res.get_json()
+    assert any(
+        err['code'] == 'vector_dim_mismatch' for err in body['errors']
+    )
+
+
+def test_put_settings_rejects_non_dict_body(client):
+    res = client.put('/api/settings', json=['not', 'a', 'dict'])
+    assert res.status_code == 400
+    assert res.get_json()['code'] == 'invalid_payload'
+
+
+# ---------------------------------------------------------------------------
+# PUT /api/settings/secrets
+# ---------------------------------------------------------------------------
+
+
+def test_put_secrets_requires_confirm_flag(client):
+    res = client.put('/api/settings/secrets', json={
+        'fields': {'NEO4J_PASSWORD': 'new-pw'},
+    })
+    assert res.status_code == 400
+    assert res.get_json()['code'] == 'confirm_required'
+
+
+def test_put_secrets_persists_with_confirm(client, app):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'NEO4J_PASSWORD': 'new-pw'},
+    })
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['success'] is True
+    # GET liefert NIE den Klartext zurück
+    pw_field = next(
+        i for i in body['data']['fields']['neo4j']
+        if i['key'] == 'NEO4J_PASSWORD'
+    )
+    assert pw_field['value'] is None
+    assert pw_field['is_set'] is True
+    # Aber das File enthält den Klartext (Issue-Akzeptanz)
+    data = json.loads(app.config['service'].instance_path.read_text(encoding='utf-8'))
+    assert data['NEO4J_PASSWORD'] == 'new-pw'
+
+
+def test_put_secrets_rejects_non_secret_field(client):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'LLM_MODEL_NAME': 'sneaky'},
+    })
+    assert res.status_code == 400
+    assert res.get_json()['code'] == 'non_secret_field'
+
+
+def test_put_secrets_rejects_unknown_field(client):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'TOTALLY_BOGUS': 'x'},
+    })
+    assert res.status_code == 400
+    # ``non_secret_field`` triggert vor ``unknown_field`` — beides
+    # signalisiert dem Operator: Feld gehört nicht hierher.
+    assert res.get_json()['code'] == 'non_secret_field'
+
+
+def test_put_secrets_response_does_not_leak_plaintext(client):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'NEO4J_PASSWORD': 'super-secret-leak-canary'},
+    })
+    assert b'super-secret-leak-canary' not in res.data
+
+
+def test_put_settings_auth_required(app, monkeypatch):
+    monkeypatch.setenv('AGORA_AUTH_TOKEN', 'tok-xyz')
+    client = app.test_client()
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'a'})
+    assert res.status_code == 401
+    res2 = client.put(
+        '/api/settings',
+        json={'LLM_MODEL_NAME': 'a'},
+        headers={'X-Agora-Token': 'tok-xyz'},
+    )
     assert res2.status_code == 200

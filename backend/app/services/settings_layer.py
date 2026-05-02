@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
@@ -239,6 +240,119 @@ class SettingsService:
     @property
     def instance_path(self) -> Path:
         return self._instance_path
+
+    # ------------------------------------------------------------------
+    # Schreibpfad (SUB2)
+    # ------------------------------------------------------------------
+
+    def apply_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        persist: bool = True,
+    ) -> dict[str, Any]:
+        """Akzeptierte und bereits validierte Werte ins File und in das
+        in-memory Override schreiben.
+
+        ``payload`` muss bereits durch
+        :func:`settings_validator.validate_payload` gegangen sein —
+        diese Methode validiert nicht, sondern persistiert. So bleibt
+        ein klarer „validate first, write second"-Vertrag und der
+        Service hat keine Doppel-Validation.
+
+        Wenn ``persist=True``, wird ``instance/settings.json`` atomar
+        überschrieben (alle in der File-Layer bereits vorhandenen
+        Felder bleiben erhalten und werden vom Payload nur gemerged,
+        nicht ersetzt). Das in-memory Override wird *immer* gesetzt,
+        damit der Live-Wert auch ohne Reload sichtbar ist (UI nutzt
+        ``reload_required``-Flag, um auf Restart-Notwendigkeit
+        hinzuweisen).
+
+        Returns das gemergte File-Layer-Dict (für Tests / Logging).
+        """
+        if not payload:
+            return self._read_file_layer()
+
+        with self._lock:
+            # In-memory Override aktualisieren — mit den bereits
+            # gecasteten Werten aus ``payload``. Damit zeigt GET sofort
+            # die neuen Werte mit ``source=override`` (bzw. ``file``,
+            # falls persist=True und nichts anderes überschreibt).
+            for key, value in payload.items():
+                self._override[key] = value
+
+            if persist:
+                file_layer = self._read_file_layer()
+                file_layer.update(payload)
+                self._write_file_layer_atomic(file_layer)
+                # Override entfernen, weil File jetzt die persistierte
+                # Wahrheit ist und der Source-Resolver zuerst File
+                # prüft. Das hält die UI-Anzeige konsistent
+                # (``source: file`` statt ``override`` nach Persist).
+                for key in payload:
+                    self._override.pop(key, None)
+                return file_layer
+
+        return self._read_file_layer()
+
+    def remove_persisted(self, keys: list[str]) -> dict[str, Any]:
+        """Entfernt Keys aus ``instance/settings.json`` (Reset-auf-Default).
+
+        Schreibt atomar; erzeugt die Datei nicht neu, wenn nach dem
+        Remove nichts mehr übrig wäre und sie noch gar nicht existierte.
+        """
+        if not keys:
+            return self._read_file_layer()
+        with self._lock:
+            file_layer = self._read_file_layer()
+            removed = False
+            for key in keys:
+                if key in file_layer:
+                    file_layer.pop(key)
+                    removed = True
+                self._override.pop(key, None)
+            if removed or self._instance_path.exists():
+                self._write_file_layer_atomic(file_layer)
+            return file_layer
+
+    def _write_file_layer_atomic(self, data: dict[str, Any]) -> None:
+        """Schreibt ``data`` als JSON nach :pyattr:`instance_path` —
+        atomar, via ``tmp`` + ``os.replace``.
+
+        ``os.replace`` ist auf POSIX und Windows atomar, solange Quelle
+        und Ziel auf demselben Filesystem liegen. Wir benutzen
+        :func:`tempfile.NamedTemporaryFile` mit ``delete=False`` im
+        Zielverzeichnis — so kann ein Crash zwischen ``write`` und
+        ``replace`` höchstens eine zurückgelassene tmp-Datei
+        produzieren, niemals eine korrupte ``settings.json``.
+        """
+        target = self._instance_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # NamedTemporaryFile schreibt im Zielverzeichnis — wichtig für
+        # Atomicity (gleiches Filesystem). Suffix ``.tmp`` macht
+        # Reste nach Crashes leichter erkennbar.
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            dir=str(target.parent),
+            prefix='settings.',
+            suffix='.json.tmp',
+            delete=False,
+        ) as tmp:
+            tmp_path = Path(tmp.name)
+            json.dump(data, tmp, ensure_ascii=False, indent=2, sort_keys=True)
+            tmp.write('\n')
+            tmp.flush()
+            try:
+                # ``fsync`` ist optional — auf Btrfs (alex' Default)
+                # erhöht es den Schutz gegen Power-Loss-Korruption.
+                os.fsync(tmp.fileno())
+            except OSError:
+                # Manche Filesysteme (z. B. einige Test-Mounts)
+                # mögen kein fsync — wir tolerieren das, atomic
+                # rename hängt nicht davon ab.
+                pass
+        os.replace(tmp_path, target)
 
     # ------------------------------------------------------------------
     # Interna
