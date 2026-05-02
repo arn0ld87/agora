@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from flask import Response, request, send_file, current_app
 
 from . import report_bp
+from ..services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
@@ -376,7 +377,7 @@ def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str)
     return json_success(claim)
 
 
-EXPORT_SCHEMA_VERSION = 1
+EXPORT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION
 
 
 @report_bp.route('/<report_id>/export', methods=['GET'])
@@ -417,7 +418,7 @@ def export_report(report_id: str):
         "schema_version": EXPORT_SCHEMA_VERSION,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "report": report.to_dict(),
-        "evidence": ReportManager.get_evidence_map(report_id),
+        "evidence": migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)),
     }
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     response = Response(body, mimetype='application/json; charset=utf-8')

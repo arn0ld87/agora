@@ -21,6 +21,7 @@ from ..config import Config
 from ..utils.llm_client import LLMClient
 from .confidence_calculator import compute_confidence
 from .evidence_binder import bind_evidence_to_claim
+from .evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from .web_tools import WebToolsService
 from ..utils.logger import get_logger
 from ..models.report import (
@@ -561,10 +562,10 @@ class ReportAgent:
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
-        self.evidence_map.setdefault("schema_version", 1)
+        self.evidence_map.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
         self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
         section_entry = {
-            "schema_version": 1,
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "section_index": section_index,
             "section_title": section_title,
             "section_summary": self._truncate(content, 400),
@@ -1123,8 +1124,8 @@ class ReportAgent:
         try:
             # Initialize: Create report folder and save initial state
             ReportManager._ensure_report_folder(report_id)
-            self.evidence_map = ReportManager.get_evidence_map(report_id) or {
-                "schema_version": 1,
+            self.evidence_map = migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)) or {
+                "schema_version": CURRENT_SCHEMA_VERSION,
                 "report_id": report_id,
                 "simulation_id": self.simulation_id,
                 "global_evidence": self._collect_simulation_evidence_items(),

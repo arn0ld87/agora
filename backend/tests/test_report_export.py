@@ -112,7 +112,10 @@ def test_export_json_returns_combined_envelope(env):
     assert f"agora-report-{REPORT_ID}.json" in disposition
 
     payload = json.loads(response.data)
-    assert payload["schema_version"] == 1
+    # Sub-Slice 02a: Export-Envelope läuft jetzt auf v2; persistierte v1-
+    # Evidence-Maps werden beim Export durch ``migrate_v1_to_v2`` gehoben.
+    assert payload["schema_version"] == 2
+    assert payload["evidence"]["schema_version"] == 2
     assert payload["exported_at"]
     assert payload["report"]["report_id"] == REPORT_ID
     assert payload["report"]["status"] == "completed"
