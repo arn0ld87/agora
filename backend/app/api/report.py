@@ -393,6 +393,10 @@ def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dic
     requires ``{"title", "description"}`` with ``extra="forbid"``. Existing reports
     are not rewritten on the storage side (Sub-Slice 02b/02c), so the boundary
     keeps both shapes aligned without mutating persisted data.
+
+    Build the target dict explicitly with fallbacks — defending against extra
+    keys (``extra="forbid"``) and ``min_length`` constraints that would
+    otherwise reject legacy payloads with empty / None title or description.
     """
     if not outline:
         return None
@@ -400,10 +404,10 @@ def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dic
     for raw in outline.get("sections") or []:
         if not isinstance(raw, dict):
             continue
-        section = {k: v for k, v in raw.items() if k != "content"}
-        if "description" not in section:
-            section["description"] = raw.get("content") or "—"
-        sections.append(section)
+        sections.append({
+            "title": raw.get("title") or "Section",
+            "description": raw.get("description") or raw.get("content") or "—",
+        })
     return {
         "title": outline.get("title") or "Report",
         "summary": outline.get("summary") or "—",
