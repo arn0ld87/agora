@@ -485,6 +485,64 @@
       "empty": "Noch keine Log-Zeilen."
     }
   },
+  "settings": {
+    "title": "Einstellungen",
+    "subtitle": "Konfiguration zur Laufzeit. Lade-Reihenfolge:",
+    "subtitleHint": "Reload-pflichtige Felder wirken erst nach Backend-Restart.",
+    "loading": "Einstellungen werden geladen…",
+    "loadFailed": "Laden fehlgeschlagen: {message}",
+    "saveFailed": "Speichern fehlgeschlagen: {message}",
+    "saved": "Gespeichert.",
+    "savedReloadHint": "Gespeichert. Reload-pflichtige Felder wirken nach Backend-Restart.",
+    "back": "← Startseite",
+    "save": "Speichern",
+    "discard": "Verwerfen",
+    "dirtyCount": "Keine ungespeicherte Änderung | Eine ungespeicherte Änderung | {count} ungespeicherte Änderungen",
+    "ariaSection": "Sektion {section}",
+    "ariaTablist": "Settings-Sektionen",
+    "ariaUnsaved": "ungespeicherte Änderungen",
+    "table": {
+      "key": "Feld",
+      "source": "Quelle",
+      "value": "Wert",
+      "flags": "Flags"
+    },
+    "source": {
+      "default": "Default",
+      "env": ".env",
+      "file": "Datei",
+      "override": "Override"
+    },
+    "flag": {
+      "secret": "Secret",
+      "reload": "Reload nötig"
+    },
+    "secretInput": {
+      "set": "•••••••• (gesetzt)",
+      "empty": "leer"
+    },
+    "bool": { "on": "an", "off": "aus" },
+    "modal": {
+      "title": "Secrets bestätigen",
+      "body": "Du speicherst Änderungen an Secret-Feldern (z. B. {neoPw} oder {authToken}). Tippfehler hier können dich aus dem Backend aussperren — bitte nochmal sicher prüfen.",
+      "cancel": "Abbrechen",
+      "confirm": "Bestätigen & speichern"
+    },
+    "sections": {
+      "llm": "LLM",
+      "neo4j": "Neo4j",
+      "embedding": "Embedding",
+      "ontology": "Ontology",
+      "hybrid_search": "Hybrid Search",
+      "agent_tools": "Agent Tools",
+      "event_bus": "Event Bus",
+      "logging": "Logging",
+      "locale": "Locale",
+      "webtools": "Webtools",
+      "oasis": "OASIS",
+      "security": "Secrets"
+    }
+  },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
     "backend": "Backend-Fehler.",

@@ -2,9 +2,10 @@
 // Issue #133 — Settings-View: Sektions-Tabs für die .env-Sektionen,
 // Field-Render-Tabelle, Save-/Reset-Buttons, Secret-Confirm-Modal.
 //
-// Strings sind in dieser SUB3 noch hartcodiert auf Deutsch — SUB4
-// zieht sie auf vue-i18n um, fügt EN nach und ergänzt die UI um
-// vollständige „Reload-erforderlich"-Badges plus Frontend-Tests.
+// SUB4 hat alle Strings auf vue-i18n umgezogen (DE+EN, siehe
+// frontend/src/i18n/locales). Reload-pflichtige Felder rendern als
+// Warn-Badge mit übersetztem Text; Field-Tests in
+// frontend/src/__tests__/SettingsView.spec.js.
 //
 // Die View ist bewusst flach: keine Sub-Components für Field-Inputs,
 // solange die Logik noch klein ist. Wenn weitere Field-Typen
@@ -13,6 +14,7 @@
 
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AppFooter from '../components/AppFooter.vue'
 import Badge from '../components/ui/Badge.vue'
@@ -27,6 +29,7 @@ import settingsStore, {
   saveSettings,
 } from '../store/settings'
 
+const { t } = useI18n()
 const router = useRouter()
 
 const activeSection = ref('llm')
@@ -73,7 +76,7 @@ async function handleSave() {
       return
     }
     await saveSettings({ confirmSecrets: false })
-    flashMessage.value = 'Gespeichert.'
+    flashMessage.value = t('settings.saved')
   } catch {
     // Validation-Fehler werden inline pro Field gerendert.
   }
@@ -84,7 +87,7 @@ async function confirmSecretSave() {
   try {
     await saveSettings({ confirmSecrets: true })
     showSecretsModal.value = false
-    flashMessage.value = 'Gespeichert. Reload-pflichtige Felder wirken nach Backend-Restart.'
+    flashMessage.value = t('settings.savedReloadHint')
   } catch {
     showSecretsModal.value = false
   }
@@ -95,32 +98,18 @@ function cancelSecretSave() {
 }
 
 function sectionLabel(section) {
-  // Hartkodiertes Mapping — SUB4 zieht das auf vue-i18n um.
-  const labels = {
-    llm: 'LLM',
-    neo4j: 'Neo4j',
-    embedding: 'Embedding',
-    ontology: 'Ontology',
-    hybrid_search: 'Hybrid Search',
-    agent_tools: 'Agent Tools',
-    event_bus: 'Event Bus',
-    logging: 'Logging',
-    locale: 'Locale',
-    webtools: 'Webtools',
-    oasis: 'OASIS',
-    security: 'Secrets',
-  }
-  return labels[section] || section
+  // i18n-Keys liegen unter ``settings.sections.<id>``; der Fallback
+  // auf den Sektions-Schlüssel hilft, wenn das Backend irgendwann
+  // eine neue Sektion liefert, deren Übersetzung noch fehlt.
+  const key = `settings.sections.${section}`
+  const label = t(key)
+  return label === key ? section : label
 }
 
 function sourceLabel(source) {
-  const labels = {
-    default: 'Default',
-    env: '.env',
-    file: 'Datei',
-    override: 'Override',
-  }
-  return labels[source] || source
+  const key = `settings.source.${source}`
+  const label = t(key)
+  return label === key ? source : label
 }
 
 function sourceVariant(source) {
@@ -139,29 +128,29 @@ function sourceVariant(source) {
         <span class="brand-name">Agora</span>
       </button>
       <nav class="brand-nav">
-        <button class="nav-link" type="button" @click="goHome">← Startseite</button>
+        <button class="nav-link" type="button" @click="goHome">{{ t('settings.back') }}</button>
       </nav>
     </header>
 
     <main class="main">
       <section class="settings-header">
-        <h1 class="title">Einstellungen</h1>
+        <h1 class="title">{{ t('settings.title') }}</h1>
         <p class="subtitle">
-          Konfiguration zur Laufzeit. Lade-Reihenfolge:
+          {{ t('settings.subtitle') }}
           <code>Defaults → .env → instance/settings.json → Override</code>.
-          Reload-pflichtige Felder wirken erst nach Backend-Restart.
+          {{ t('settings.subtitleHint') }}
         </p>
       </section>
 
       <div v-if="settingsStore.loading" class="banner">
-        Einstellungen werden geladen…
+        {{ t('settings.loading') }}
       </div>
       <div v-else-if="settingsStore.loadError" class="banner banner--error">
-        Laden fehlgeschlagen: {{ settingsStore.loadError }}
+        {{ t('settings.loadFailed', { message: settingsStore.loadError }) }}
       </div>
 
       <div v-if="!settingsStore.loading && sections.length" class="settings-body">
-        <nav class="tabs" role="tablist" aria-label="Settings-Sektionen">
+        <nav class="tabs" role="tablist" :aria-label="t('settings.ariaTablist')">
           <button
             v-for="section in sections"
             :key="section"
@@ -176,18 +165,22 @@ function sourceVariant(source) {
             @click="setActive(section)"
           >
             <span class="tab-label">{{ sectionLabel(section) }}</span>
-            <span v-if="dirtySections[section]" class="tab-dot" aria-label="ungespeicherte Änderungen" />
+            <span
+              v-if="dirtySections[section]"
+              class="tab-dot"
+              :aria-label="t('settings.ariaUnsaved')"
+            />
           </button>
         </nav>
 
-        <section class="panel" :aria-label="`Sektion ${sectionLabel(activeSection)}`">
+        <section class="panel" :aria-label="t('settings.ariaSection', { section: sectionLabel(activeSection) })">
           <table class="fields">
             <thead>
               <tr>
-                <th class="col-key">Feld</th>
-                <th class="col-source">Quelle</th>
-                <th class="col-input">Wert</th>
-                <th class="col-flags">Flags</th>
+                <th class="col-key">{{ t('settings.table.key') }}</th>
+                <th class="col-source">{{ t('settings.table.source') }}</th>
+                <th class="col-input">{{ t('settings.table.value') }}</th>
+                <th class="col-flags">{{ t('settings.table.flags') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -209,7 +202,7 @@ function sourceVariant(source) {
                     <input
                       type="password"
                       class="input input--secret"
-                      :placeholder="field.is_set ? '•••••••• (gesetzt)' : 'leer'"
+                      :placeholder="field.is_set ? t('settings.secretInput.set') : t('settings.secretInput.empty')"
                       :value="settingsStore.draft[field.key] || ''"
                       autocomplete="new-password"
                       @input="settingsStore.draft[field.key] = $event.target.value"
@@ -222,7 +215,7 @@ function sourceVariant(source) {
                         :checked="settingsStore.draft[field.key] === true"
                         @change="settingsStore.draft[field.key] = $event.target.checked"
                       >
-                      <span>{{ settingsStore.draft[field.key] === true ? 'an' : 'aus' }}</span>
+                      <span>{{ settingsStore.draft[field.key] === true ? t('settings.bool.on') : t('settings.bool.off') }}</span>
                     </label>
                   </template>
                   <template v-else-if="field.type === 'enum'">
@@ -261,8 +254,8 @@ function sourceVariant(source) {
                   >{{ err.message }}</p>
                 </td>
                 <td class="cell-flags">
-                  <Badge v-if="field.secret" variant="warn">Secret</Badge>
-                  <Badge v-if="field.reload_required" variant="warn">Reload nötig</Badge>
+                  <Badge v-if="field.secret" variant="warn">{{ t('settings.flag.secret') }}</Badge>
+                  <Badge v-if="field.reload_required" variant="warn">{{ t('settings.flag.reload') }}</Badge>
                 </td>
               </tr>
             </tbody>
@@ -272,13 +265,13 @@ function sourceVariant(source) {
         <footer class="actions">
           <span v-if="flashMessage" class="flash">{{ flashMessage }}</span>
           <span v-else-if="settingsStore.saveError" class="flash flash--error">
-            Speichern fehlgeschlagen: {{ settingsStore.saveError }}
+            {{ t('settings.saveFailed', { message: settingsStore.saveError }) }}
           </span>
           <span v-else class="flash flash--muted">
-            {{ totalDirty }} ungespeicherte Änderung{{ totalDirty === 1 ? '' : 'en' }}
+            {{ t('settings.dirtyCount', totalDirty, { count: totalDirty }) }}
           </span>
           <Btn variant="ghost" :disabled="totalDirty === 0 || settingsStore.saving" @click="discardChanges">
-            Verwerfen
+            {{ t('settings.discard') }}
           </Btn>
           <Btn
             variant="accent"
@@ -286,23 +279,22 @@ function sourceVariant(source) {
             :disabled="totalDirty === 0 || settingsStore.saving"
             @click="handleSave"
           >
-            Speichern
+            {{ t('settings.save') }}
           </Btn>
         </footer>
       </div>
     </main>
 
     <div v-if="showSecretsModal" class="modal-overlay" @click.self="cancelSecretSave">
-      <div class="modal">
-        <h2 class="modal-title">Secrets bestätigen</h2>
-        <p>
-          Du speicherst Änderungen an Secret-Feldern (z. B. <code>NEO4J_PASSWORD</code>
-          oder <code>AGORA_AUTH_TOKEN</code>). Tippfehler hier können dich aus dem
-          Backend aussperren — bitte nochmal sicher prüfen.
-        </p>
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 class="modal-title">{{ t('settings.modal.title') }}</h2>
+        <i18n-t keypath="settings.modal.body" tag="p">
+          <template #neoPw><code>NEO4J_PASSWORD</code></template>
+          <template #authToken><code>AGORA_AUTH_TOKEN</code></template>
+        </i18n-t>
         <div class="modal-actions">
-          <Btn variant="ghost" @click="cancelSecretSave">Abbrechen</Btn>
-          <Btn variant="accent" @click="confirmSecretSave">Bestätigen &amp; speichern</Btn>
+          <Btn variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Btn>
+          <Btn variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Btn>
         </div>
       </div>
     </div>

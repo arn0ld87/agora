@@ -474,6 +474,64 @@
       "empty": "No log lines yet."
     }
   },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Runtime configuration. Load order:",
+    "subtitleHint": "Reload-required fields take effect after backend restart.",
+    "loading": "Loading settings…",
+    "loadFailed": "Load failed: {message}",
+    "saveFailed": "Save failed: {message}",
+    "saved": "Saved.",
+    "savedReloadHint": "Saved. Reload-required fields take effect after backend restart.",
+    "back": "← Home",
+    "save": "Save",
+    "discard": "Discard",
+    "dirtyCount": "No unsaved changes | One unsaved change | {count} unsaved changes",
+    "ariaSection": "Section {section}",
+    "ariaTablist": "Settings sections",
+    "ariaUnsaved": "unsaved changes",
+    "table": {
+      "key": "Field",
+      "source": "Source",
+      "value": "Value",
+      "flags": "Flags"
+    },
+    "source": {
+      "default": "Default",
+      "env": ".env",
+      "file": "File",
+      "override": "Override"
+    },
+    "flag": {
+      "secret": "Secret",
+      "reload": "Reload required"
+    },
+    "secretInput": {
+      "set": "•••••••• (set)",
+      "empty": "empty"
+    },
+    "bool": { "on": "on", "off": "off" },
+    "modal": {
+      "title": "Confirm secrets",
+      "body": "You're about to save changes to secret fields (e.g. {neoPw} or {authToken}). A typo here can lock you out of the backend — please double-check.",
+      "cancel": "Cancel",
+      "confirm": "Confirm & save"
+    },
+    "sections": {
+      "llm": "LLM",
+      "neo4j": "Neo4j",
+      "embedding": "Embedding",
+      "ontology": "Ontology",
+      "hybrid_search": "Hybrid Search",
+      "agent_tools": "Agent Tools",
+      "event_bus": "Event Bus",
+      "logging": "Logging",
+      "locale": "Locale",
+      "webtools": "Webtools",
+      "oasis": "OASIS",
+      "security": "Secrets"
+    }
+  },
   "errors": {
     "network": "Network error. Is the server reachable?",
     "backend": "Backend error.",

@@ -204,6 +204,69 @@ weder `err` noch `_err` reicht. Lösung: parameterloses
 69 Frontend-Tests, Build 124 KB CSS / 537 KB JS, ein bestehender
 Lint-Warning unverändert.
 
-## SUB4 — Status: offen (nächster Sub-Slice)
+## SUB4 — Status: erledigt — schließt #133 ab
 
-…
+Commit: `feat(settings): i18n DE+EN + frontend tests (Issue #133, SUB4)`.
+
+Geliefert:
+
+- `frontend/src/i18n/locales/de.json` und `en.json` bekommen den
+  vollständigen `settings.*`-Block. Pluralisierter `dirtyCount`,
+  `<i18n-t>`-Slots im Modal-Body.
+- `frontend/src/views/SettingsView.vue` komplett auf `useI18n().t`
+  umgestellt; Sektions- und Source-Labels haben einen sicheren
+  Fallback auf den rohen Key, damit ein neues Backend-Field nicht
+  in einem `settings.sections.foo`-String auf der UI landet.
+- Modal: `role="dialog"`, `aria-modal="true"`, `aria-label`-Texte
+  durchgängig übersetzt.
+- Frontend-Tests:
+  - `frontend/src/store/__tests__/settings.spec.js` (10 Cases) für
+    Store-Verträge (Load, Dirty, Save-Split, Validation-Mapping).
+  - `frontend/src/views/__tests__/SettingsView.spec.js` (6 Cases)
+    mit `vue-i18n` + `vue-router` (`createMemoryHistory`); `vi.mock`
+    auf `AppFooter`/`AgoraGlyph`, weil das globale `i18n/index.js`
+    bei Module-Init `localStorage.getItem` aufruft und JSDom hier
+    keinen Storage hat. Smoke-Pfade: Tab-Render, Reload-Badge,
+    Secret-Password-Input, Inline-Validation-Hints, Source-Badge,
+    EN-Locale-Switch.
+
+Stolperfalle: AppFooter importiert `frontend/src/i18n/index.js`,
+das beim Modul-Eval `localStorage.getItem('agora.locale')` aufruft.
+Im JSDom-Test-Env ist `localStorage` nicht garantiert — Stubs auf
+Component-Ebene (`global.stubs`) greifen erst nach dem Import. Die
+saubere Lösung: `vi.mock` auf den AppFooter-Modul-Pfad, damit der
+Import gar nicht passiert.
+
+`npm run check` grün: 870 Backend-Tests (unverändert seit SUB2),
+85 Frontend-Tests (+16: 10 Store, 6 View), Build 124 KB CSS /
+537 KB JS, ein bestehender Lint-Warning unverändert.
+
+## Issue-Status
+
+Mit SUB4 sind alle Akzeptanzkriterien des Issues erfüllt:
+
+- ✅ Backend Settings-Layer mit klarer Lade-Reihenfolge
+  Defaults → .env → instance/settings.json → Override.
+- ✅ `GET /api/settings` liefert Schema + Werte + Source pro Feld.
+- ✅ `PUT /api/settings` validiert (gleiche Regeln wie Startup über
+  `infer_vector_dim_for_model`) und persistiert atomar nach
+  `backend/instance/settings.json`.
+- ✅ Secrets sind in der GET-Antwort durchgehend mit `value: null,
+  is_set: bool` maskiert. Setzen geht nur über
+  `PUT /api/settings/secrets` mit `confirm: true`.
+- ✅ `Reload erforderlich`-Badge pro Feld im Frontend.
+- ✅ `SettingsView.vue` mit Sektions-Tabs analog `.env`-Sektionen.
+- ✅ Auth: PUT verlangt `AGORA_AUTH_TOKEN` über den Standard-
+  Blueprint-Guard (gleicher Schutz wie übrige `/api/*`).
+- ✅ Tests: 134 neue Backend-Tests + 16 neue Frontend-Tests
+  inklusive `VECTOR_DIM`-Mismatch-Reject und Secret-Maskierung
+  via Substring-Suche.
+
+Out-of-Scope-Punkte aus dem Issue (`.env` schreiben, Multi-User-
+Profile) bleiben bewusst unberührt.
+
+## Milestone-Counter
+
+Vorgängerstand der p1-Issues:
+129 ✅, 130 ✅, 131 ✅, 132 ✅. Mit #133 ✅ ist die fünfte und
+letzte p1-Issue dieses Blocks abgeschlossen.
