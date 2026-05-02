@@ -80,3 +80,20 @@ jobs:
       - run: cd frontend && npm ci
       - name: Vitest - Sample-Payload muss Zod-strikt parsen
         run: cd frontend && npm run test -- --run src/contracts/
+
+  voice-lint:
+    name: Voice-Lint (DACH-Voice + Anti-Forecast)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip uv
+      - working-directory: backend
+        run: uv sync --group dev
+      - working-directory: backend
+        # Bootstrap: --soft, weil Layer-3-Refactor (Tasks 12+) noch
+        # englische Output-Strings in report_agent.py umräumt. Hartmacher
+        # (--soft raus) ist Aufgabe von Task 17 (Layer 5 Defensibility).
+        run: uv run python scripts/check_voice.py --soft

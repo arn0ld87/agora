@@ -15,6 +15,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Added
 
+- backend/scripts/check_voice.py: Voice-Lint als CI-Gate (Forecast + US-Marketing-Phrasen). Bootstrap-Soft, Hartmacher in Layer 5. (Sub-Slice 11, Closes #168)
 - evidence_binder: `detect_contradiction_penalty(evidence)` — strukturierte Contradiction-Erkennung via Boolean-Flags + Stance-Konflikte (Sub-Slice 08, Refs #75)
 
 
