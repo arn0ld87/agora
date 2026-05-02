@@ -126,11 +126,15 @@ def put_settings():
             message='PUT-Body muss ein JSON-Object sein.',
         )
 
-    validated, errors = validate_payload(raw_payload, allow_secrets=False)
+    service = get_default_service()
+    validated, errors = validate_payload(
+        raw_payload,
+        allow_secrets=False,
+        effective_settings=service.effective_snapshot(),
+    )
     if errors:
         return _validation_error_response(errors)
 
-    service = get_default_service()
     service.apply_payload(validated, persist=True)
     return json_success({
         'sections': list(SECTIONS),

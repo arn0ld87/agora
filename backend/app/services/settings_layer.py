@@ -185,6 +185,28 @@ class SettingsService:
             grouped[spec.section].append(self._field_payload(spec, file_layer))
         return grouped
 
+    def effective_snapshot(self) -> dict[str, Any]:
+        """Liefert pro non-secret Feld den aktuell effektiven Wert.
+
+        Wird vom Validator als Cross-Field-Kontext genutzt: ein PUT-
+        Payload, das nur eine Hälfte eines zusammenhängenden Paares
+        setzt (z. B. ``EMBEDDING_MODEL`` ohne ``VECTOR_DIM``), soll
+        gegen den Bestand der anderen Seite geprüft werden. Defaults
+        sind enthalten — sie sind Teil des effektiven Stands. Secrets
+        bleiben draußen, weil aktuell keine Cross-Field-Regel auf
+        Secrets greift und sie versehentlich nirgends in Validator-
+        Diagnostik landen sollen.
+        """
+        file_layer = self._read_file_layer()
+        snapshot: dict[str, Any] = {}
+        for spec in SETTINGS_FIELDS:
+            if spec.secret:
+                continue
+            value, _, _ = self._resolve_field(spec, file_layer)
+            if value is not None:
+                snapshot[spec.key] = value
+        return snapshot
+
     def get_schema(self) -> list[dict[str, Any]]:
         """Liefert nur Meta-Daten (kein Wert, keine Source) — für das
         Frontend-Form-Render. Defaults sind dabei bewusst enthalten,
