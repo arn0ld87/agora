@@ -334,6 +334,9 @@
       "exportMd": "Export as Markdown",
       "exportPdf": "Export as PDF"
     },
+    "quote": {
+      "openSource": "Open source"
+    },
     "next": "Next: conversation →"
   },
   "step5": {

@@ -53,6 +53,7 @@ const i18n = createI18n({
       'step4.view.sections': 'Abschnitte',
       'step4.view.tools': 'Tools',
       'step4.next': 'Weiter',
+      'step4.quote.openSource': 'Quelle öffnen',
       'common.completed': 'Fertig',
       'common.running': 'Laufend',
       'common.ready': 'Bereit',
@@ -175,6 +176,159 @@ describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
 
     expect(wrapper.find('.schema-error').exists()).toBe(true)
     expect(wrapper.find('.schema-error').text()).toContain('evidence')
+  })
+})
+
+// Sub-Slice 16b: klickbare Quotes + source_id_anchor-Scroll (Refs #173)
+import { parseSourceAnchor, entryAnchorId } from '../../utils/sourceAnchor'
+
+describe('Quote + Anchor (Sub-Slice 16b)', () => {
+  // EvidenceMap mit einem Item, das quote + source_id_anchor hat
+  const EVIDENCE_WITH_QUOTE = {
+    schema_version: 2,
+    report_id: 'report_test01',
+    simulation_id: 'sim_test01',
+    global_evidence: [],
+    sections: [
+      {
+        section_index: 1,
+        section_title: 'Abschnitt mit Quote',
+        section_summary: 'Zusammenfassung mit Quote-Evidence',
+        claims: [
+          {
+            claim_id: 'claim_01',
+            claim_text: 'Claim-Text mit ausreichend Zeichen fuer Zod',
+            confidence_label: 'high',
+            confidence_score: 0.85,
+            evidence: [
+              {
+                type: 'graph_fact',
+                source: 'neo4j',
+                snippet: 'Snippet-Text ohne Quote',
+                supports_claim: true,
+                match_score: 0.9,
+                quote: 'Dies ist ein wörtliches Zitat aus der Quelle.',
+                source_id_anchor: 'agent-log-1#entry-testentry',
+              },
+            ],
+            audit_trail: [],
+          },
+        ],
+      },
+    ],
+  }
+
+  const EVIDENCE_WITHOUT_QUOTE = {
+    schema_version: 2,
+    report_id: 'report_test01',
+    simulation_id: 'sim_test01',
+    global_evidence: [],
+    sections: [
+      {
+        section_index: 1,
+        section_title: 'Abschnitt ohne Quote',
+        section_summary: 'Zusammenfassung ohne Quote',
+        claims: [
+          {
+            claim_id: 'claim_01',
+            claim_text: 'Claim-Text mit ausreichend Zeichen fuer Zod',
+            confidence_label: 'high',
+            confidence_score: 0.85,
+            evidence: [
+              {
+                type: 'graph_fact',
+                source: 'neo4j',
+                snippet: 'Nur Snippet, kein Quote',
+                supports_claim: true,
+                match_score: 0.9,
+              },
+            ],
+            audit_trail: [],
+          },
+        ],
+      },
+    ],
+  }
+
+  function mountWithEvidence(evidenceData: object) {
+    vi.clearAllMocks()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: evidenceData,
+    })
+    return mountComponent()
+  }
+
+  async function waitForRender(wrapper: ReturnType<typeof mountComponent>) {
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+  }
+
+  it('rendert blockquote wenn item.quote gesetzt ist', async () => {
+    const wrapper = mountWithEvidence(EVIDENCE_WITH_QUOTE)
+    await waitForRender(wrapper)
+
+    // Evidence-Panel wird nur angezeigt wenn Sections vorhanden
+    // Erste Section muss ausgewählt sein (automatisch durch loadEvidence)
+    const blockquote = wrapper.find('blockquote.evidence-quote')
+    expect(blockquote.exists()).toBe(true)
+    expect(blockquote.text()).toContain('wörtliches Zitat')
+  })
+
+  it('rendert span statt blockquote wenn item.quote null ist', async () => {
+    const wrapper = mountWithEvidence(EVIDENCE_WITHOUT_QUOTE)
+    await waitForRender(wrapper)
+
+    expect(wrapper.find('blockquote.evidence-quote').exists()).toBe(false)
+  })
+
+  it('rendert anchor-button wenn item.source_id_anchor gesetzt ist', async () => {
+    const wrapper = mountWithEvidence(EVIDENCE_WITH_QUOTE)
+    await waitForRender(wrapper)
+
+    const btn = wrapper.find('button.evidence-anchor-link')
+    expect(btn.exists()).toBe(true)
+  })
+
+  it('click auf web-anchor ruft window.open auf', async () => {
+    const EVIDENCE_WEB = {
+      ...EVIDENCE_WITH_QUOTE,
+      sections: [
+        {
+          ...EVIDENCE_WITH_QUOTE.sections[0],
+          claims: [
+            {
+              ...EVIDENCE_WITH_QUOTE.sections[0].claims[0],
+              evidence: [
+                {
+                  ...EVIDENCE_WITH_QUOTE.sections[0].claims[0].evidence[0],
+                  source_id_anchor: 'web:https://example.com/artikel',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const wrapper = mountWithEvidence(EVIDENCE_WEB)
+    await waitForRender(wrapper)
+
+    const btn = wrapper.find('button.evidence-anchor-link')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/artikel', '_blank', 'noopener,noreferrer')
+    openSpy.mockRestore()
   })
 })
 

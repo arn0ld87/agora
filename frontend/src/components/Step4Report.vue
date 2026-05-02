@@ -14,6 +14,7 @@ import Select from './ui/Select.vue'
 import ConfidenceBadge from './ui/ConfidenceBadge.vue'
 import { deriveLabel, aggregateSectionConfidence } from '../utils/confidenceUtils'
 import type { SectionConfidenceResult } from '../utils/confidenceUtils'
+import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -415,6 +416,27 @@ function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['audi
   return sectionConfidence(idx)?.auditTrail ?? []
 }
 
+function navigateToAnchor(anchor: string | null | undefined) {
+  const parsed = parseSourceAnchor(anchor)
+  if (!parsed) return
+  if (parsed.kind === 'agent-log' && parsed.entryId) {
+    const target = document.getElementById(`agent-entry-${parsed.entryId}`)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.classList.add('is-highlighted')
+      setTimeout(() => target.classList.remove('is-highlighted'), 1500)
+    }
+    return
+  }
+  if (parsed.kind === 'web') {
+    window.open(parsed.url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  if (parsed.kind === 'kg') {
+    console.info('[Step4Report] KG-Anchor noch nicht aufrufbar:', parsed.payload)
+  }
+}
+
 async function loadEvidence() {
   if (!props.reportId) return
   try {
@@ -694,7 +716,13 @@ onUnmounted(stopPolling)
             </div>
             <div ref="agentLogRef" class="log-block log-pane-body">
               <div v-if="!agentLogs.length" class="meta">Warte auf Agent-Aktivität…</div>
-              <div v-for="(e, i) in agentLogs" :key="'a' + i" class="agent-entry" :class="'action-' + (e.action || 'unknown')">
+              <div
+                v-for="(e, i) in agentLogs"
+                :key="'a' + i"
+                :id="`agent-entry-${entryAnchorId(e)}`"
+                class="agent-entry"
+                :class="'action-' + (e.action || 'unknown')"
+              >
                 <div class="agent-entry-head">
                   <span v-if="e.ts" class="agent-ts">{{ e.ts }}</span>
                   <span class="agent-title">{{ e.title }}</span>
@@ -766,7 +794,16 @@ onUnmounted(stopPolling)
                       <Badge variant="ghost">{{ item.type }}</Badge>
                       <span v-if="item.source">{{ item.source }}</span>
                     </div>
-                    <span>{{ evidenceSnippet(item) }}</span>
+                    <blockquote v-if="item.quote" class="evidence-quote">{{ item.quote }}</blockquote>
+                    <span v-else>{{ evidenceSnippet(item) }}</span>
+                    <button
+                      v-if="item.source_id_anchor"
+                      type="button"
+                      class="evidence-anchor-link"
+                      @click="navigateToAnchor(item.source_id_anchor)"
+                    >
+                      {{ t('step4.quote.openSource') }}
+                    </button>
                   </div>
                 </div>
               </article>
@@ -1189,5 +1226,35 @@ onUnmounted(stopPolling)
 }
 .schema-error li {
   line-height: 1.6;
+}
+
+.agent-entry.is-highlighted {
+  background: var(--accent-soft);
+  transition: background 0.4s ease-in-out;
+}
+
+.evidence-quote {
+  border-left: 3px solid var(--accent);
+  margin: 0.5em 0;
+  padding: 0.4em 0.8em;
+  background: var(--bg-glass);
+  font-style: italic;
+  color: var(--fg-meta);
+  font-size: 0.92em;
+}
+
+.evidence-anchor-link {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.2em 0.6em;
+  border-radius: var(--r-pill);
+  font-size: 0.85em;
+  cursor: pointer;
+  margin-left: 0.4em;
+}
+.evidence-anchor-link:hover {
+  background: var(--accent-soft);
 }
 </style>
