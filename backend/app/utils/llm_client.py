@@ -7,14 +7,25 @@ Supports Ollama num_ctx parameter to prevent prompt truncation
 import json
 import os
 import re
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type, Union
 from openai import OpenAI
+from pydantic import BaseModel
 
 from ..config import Config
 from .logger import get_logger
 from .retry import llm_call_with_retry
 
 logger = get_logger("agora.llm_client")
+
+JsonSchemaLike = Union[Type[BaseModel], Dict[str, Any]]
+
+# Provider error messages that indicate strict json_schema is not supported.
+_STRICT_UNSUPPORTED_HINTS = (
+    "json_schema",
+    "unsupported",
+    "not supported",
+    "unknown response_format",
+)
 
 
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
@@ -249,30 +260,123 @@ class LLMClient:
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
 
+    def _maybe_validate(
+        self,
+        parsed: Dict[str, Any],
+        schema: Optional[JsonSchemaLike],
+    ) -> Dict[str, Any]:
+        """Validate *parsed* against *schema* if it is a Pydantic model.
+
+        When *schema* is a plain JSON-Schema dict validation is the caller's
+        responsibility — we return *parsed* unchanged.  When *schema* is a
+        Pydantic model class we call ``model_validate`` and re-serialise via
+        ``model_dump(mode='json')`` so the caller receives JSON-compatible
+        Python types.  ``ValidationError`` propagates unchanged.
+        """
+        if schema is None:
+            return parsed
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            # ValidationError propagates — do NOT swallow.
+            return schema.model_validate(parsed).model_dump(mode="json")
+        # Plain dict schema: no server-side re-validation.
+        return parsed
+
     def chat_json(
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.3,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        schema: Optional[JsonSchemaLike] = None,
+        schema_name: str = "structured_response",
     ) -> Dict[str, Any]:
         """
-        Send chat request and return JSON
+        Send chat request and return JSON.
 
         Args:
             messages: Message list
             temperature: Temperature parameter
             max_tokens: Max token count
+            schema: Optional Pydantic model class or JSON-Schema dict.
+                When provided, attempts strict ``response_format={"type":
+                "json_schema", ...}``.  On providers that do not support this
+                format a single fallback to ``json_object`` is attempted with a
+                warning log.  When *schema* is a Pydantic model the returned
+                dict is also validated against it so that callers can rely on
+                field types matching the model.
+            schema_name: Name embedded in the strict json_schema request
+                (used by some providers for caching / routing).
 
         Returns:
-            Parsed JSON object
+            Parsed JSON object (dict).
+
+        Raises:
+            ValueError: JSON cannot be parsed after optional repair.
+            pydantic.ValidationError: Parsed JSON does not match *schema*
+                when *schema* is a Pydantic model.
         """
         disable_json_mode = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
-        response = self.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=None if disable_json_mode else {"type": "json_object"}
-        )
+
+        if schema is not None:
+            schema_label = schema.__name__ if isinstance(schema, type) else "dict"
+            logger.info(
+                "LLMClient.chat_json: schema=%s name=%s",
+                schema_label,
+                schema_name,
+            )
+
+        # Build response_format ---------------------------------------------------
+        if disable_json_mode:
+            response_format: Optional[Dict[str, Any]] = None
+        elif schema is not None:
+            json_schema: Dict[str, Any] = (
+                schema.model_json_schema()  # type: ignore[union-attr]
+                if isinstance(schema, type) and issubclass(schema, BaseModel)
+                else schema  # type: ignore[assignment]
+            )
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "schema": json_schema,
+                    "strict": True,
+                },
+            }
+        else:
+            response_format = {"type": "json_object"}
+
+        # Call --------------------------------------------------------------------
+        if not disable_json_mode and schema is not None:
+            # Strict-schema path: single fallback on unsupported-provider errors.
+            try:
+                response = self.chat(
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                )
+            except Exception as exc:
+                exc_lower = str(exc).lower()
+                if any(hint in exc_lower for hint in _STRICT_UNSUPPORTED_HINTS):
+                    logger.warning(
+                        "LLMClient.chat_json: strict json_schema not supported by "
+                        "provider, falling back to json_object (caller should not "
+                        "rely on schema enforcement here)"
+                    )
+                    response = self.chat(
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object"},
+                    )
+                else:
+                    raise
+        else:
+            response = self.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+            )
         # Clean markdown code block markers
         cleaned_response = response.strip()
         # Robustly remove ```json ... ``` or just ``` ... ```
@@ -281,7 +385,7 @@ class LLMClient:
         cleaned_response = cleaned_response.strip()
 
         try:
-            return json.loads(cleaned_response)
+            parsed: Dict[str, Any] = json.loads(cleaned_response)
         except json.JSONDecodeError:
             repaired = _try_repair_truncated_json(cleaned_response)
             if repaired is not None:
@@ -292,9 +396,11 @@ class LLMClient:
                     len(cleaned_response), len(repaired),
                 )
                 try:
-                    return json.loads(repaired)
+                    parsed = json.loads(repaired)
                 except json.JSONDecodeError:
                     pass
+                else:
+                    return self._maybe_validate(parsed, schema)
             preview = cleaned_response[:400]
             tail = cleaned_response[-200:] if len(cleaned_response) > 600 else ""
             raise ValueError(
@@ -304,3 +410,4 @@ class LLMClient:
                 f"Head: {preview}{'…' if tail else ''}"
                 + (f" Tail: …{tail}" if tail else "")
             )
+        return self._maybe_validate(parsed, schema)
