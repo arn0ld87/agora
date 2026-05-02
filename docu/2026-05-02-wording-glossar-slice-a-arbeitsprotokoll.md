@@ -1,7 +1,7 @@
 # Sub-Slice A · Wording-Glossar v1 verankern
 
 **Datum:** 2026-05-02
-**Branch:** `feat/wording-glossary` (Worktree `/mnt/brain/Projekte/Agora-wording`)
+**Branch:** `feat/wording-glossary` (in einem `git worktree` lokal beim Autor)
 **Refs:** GitHub-Issue #175 · CLAUDE.md Layer 2 (Prompt-Semantik)
 **Auto-Close:** **nein** — #175 schließt erst nach Sub-Slice C (Restcode + Doku-Zitate)
 
@@ -20,7 +20,7 @@ Verifikation via `rg`:
 
 Frontend: keine Treffer. Historische Logs unter `docu/logs/`: bewusst ausgespart (Zeitdokumente).
 
-Parallel läuft Task 13 (Time-Series-Sampling + Section-Dedup) im Worktree `/tmp/agora-task-13` an `report_agent.py` → Sub-Slice C wartet auf Merge, Slice A+B sind kollisionsfrei.
+Parallel läuft Task 13 (Time-Series-Sampling + Section-Dedup, Branch `feat/layer-3-task-13-timeseries-sampling-section-dedup`) an `report_agent.py` → Sub-Slice C wartet auf Merge, Slice A+B sind kollisionsfrei.
 
 ## Scope dieses Sub-Slice (A)
 
@@ -38,7 +38,7 @@ Genau **ein Commit**, kleinster ehrlicher Schritt zu Issue #175:
 ## Verifikation
 
 ```bash
-cd /mnt/brain/Projekte/Agora-wording
+# aus dem Repo-Root des feat/wording-glossary-Branchs:
 rg -ni "agentic-prediction-engine|prediction|rehears|high.fidelity|god.s eye|public opinion" \
    README.md docu/ \
    --glob '!docu/logs/**' --glob '!docu/glossary-wording.md'
