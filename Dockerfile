@@ -96,8 +96,15 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem
 # Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
 # scheitern.
+# `--timeout 600` deckt LLM-Streaming-Calls ab (Ontology-Generation,
+# Report-Agent, Persona-Generation laufen synchron via httpx-Stream gegen
+# Ollama und blockieren den sync-Worker — Default 30 s killt jeden
+# nicht-trivialen Call). Folge-Slice migriert auf gevent-Worker, dann
+# kann der Timeout konservativer werden.
 CMD ["/app/backend/.venv/bin/gunicorn", \
      "--workers", "2", \
+     "--timeout", "600", \
+     "--graceful-timeout", "30", \
      "--bind", "0.0.0.0:5001", \
      "--chdir", "/app/backend", \
      "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
