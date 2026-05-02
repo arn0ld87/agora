@@ -15,8 +15,8 @@ Hardstops: kein Auto-Fix-Loop bei rotem Verify, keine Layer-Sprünge gegen die T
 
 Pfade & Default:
 
-- Repo-Root: `/mnt/brain/Projekte/Agora`
-- PLAN.md: `/mnt/brain/Projekte/Agora/PLAN.md` (autoritativ)
+- Repo-Root: .
+- PLAN.md: ./PLAN.md
 - Verify-Slash: `/verify-after-subagent`
 - Default-Branch-Ziel: `main` (FF-Push, kein PR)
 - User-Trait-Sticky: Deutsch, knapp, direkt; ein Sub-Slice = ein Commit + ein Arbeitsprotokoll unter `docu/<datum>-<slice>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
