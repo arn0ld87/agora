@@ -10,9 +10,7 @@ Refs #105, Layer 1.
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from app.services.confidence_calculator import compute_confidence
 
