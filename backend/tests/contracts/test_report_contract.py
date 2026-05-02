@@ -14,9 +14,6 @@ from app.contracts.report_contract import (
     EvidenceType,
     ReportClaimModel,
     ReportContractModel,
-    ReportModel,
-    ReportSectionModel,
-    ReportStatus,
 )
 
 

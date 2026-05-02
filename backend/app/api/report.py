@@ -3,15 +3,21 @@ Report API Routes
 Provides interfaces for simulation report generation, retrieval, and conversation
 """
 
-import json
 import os
 import threading
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 from flask import Response, request, send_file, current_app
+from pydantic import ValidationError
 
 from . import report_bp
+from ..contracts import (
+    EvidenceMapModel,
+    ReportContractModel,
+    ReportModel,
+)
 from ..services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
@@ -380,18 +386,84 @@ def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str)
 EXPORT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION
 
 
+def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Map the dataclass outline shape onto the v2 contract shape.
+
+    ``ReportSection.to_dict`` emits ``{"title", "content"}``; ``ReportOutlineSectionModel``
+    requires ``{"title", "description"}`` with ``extra="forbid"``. Existing reports
+    are not rewritten on the storage side (Sub-Slice 02b/02c), so the boundary
+    keeps both shapes aligned without mutating persisted data.
+
+    Build the target dict explicitly with fallbacks — defending against extra
+    keys (``extra="forbid"``) and ``min_length`` constraints that would
+    otherwise reject legacy payloads with empty / None title or description.
+    """
+    if not outline:
+        return None
+    sections: list[dict[str, Any]] = []
+    for raw in outline.get("sections") or []:
+        if not isinstance(raw, dict):
+            continue
+        sections.append({
+            "title": raw.get("title") or "Section",
+            "description": raw.get("description") or raw.get("content") or "—",
+        })
+    return {
+        "title": outline.get("title") or "Report",
+        "summary": outline.get("summary") or "—",
+        "sections": sections,
+    }
+
+
+def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]]) -> ReportContractModel:
+    """Build the v2 export envelope.
+
+    The envelope is strictly typed via ``ReportContractModel``. ``ReportModel`` is
+    validated; legacy evidence-maps that do not yet satisfy ``EvidenceMapModel``
+    fall back gracefully — we drop them from the envelope and log the issue
+    rather than 500-ing on persisted v1-shaped payloads. Storage-side reshape
+    is tracked under Sub-Slice 02b/02c (#107).
+    """
+    report_dict = report_obj.to_dict()
+    report_dict["schema_version"] = CURRENT_SCHEMA_VERSION
+    report_dict["outline"] = _map_outline_for_contract(report_dict.get("outline"))
+
+    report = ReportModel.model_validate(report_dict)
+
+    evidence: Optional[EvidenceMapModel] = None
+    migrated = migrate_v1_to_v2(raw_evidence_map) if raw_evidence_map else None
+    if migrated:
+        try:
+            evidence = EvidenceMapModel.model_validate(migrated)
+        except ValidationError as exc:
+            logger.warning(
+                "Evidence map for report %s is not yet contract-compliant; "
+                "dropped from envelope (Sub-Slice 02b/02c follow-up). First errors: %s",
+                report_obj.report_id,
+                exc.errors(include_url=False)[:3],
+            )
+
+    return ReportContractModel(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        exported_at=datetime.now(timezone.utc),
+        report=report,
+        evidence=evidence,
+    )
+
+
 @report_bp.route('/<report_id>/export', methods=['GET'])
 @allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
 @handle_api_errors(log_prefix="Failed to export report")
 def export_report(report_id: str):
-    """Unified report export (Slice 5.1).
+    """Unified report export (Slice 5.1, contract-bound in Sub-Slice 02b).
 
     Query params:
       * ``format`` — ``md`` (default) or ``json``.
 
     ``md`` returns the rendered markdown as attachment.
-    ``json`` returns a combined envelope ``{schema_version, exported_at, report, evidence}``
-    so consumers can persist the full claim/evidence picture in one file.
+    ``json`` returns a ``ReportContractModel``-shaped envelope
+    ``{schema_version, exported_at, report, evidence}``. The envelope is built
+    from ``app.contracts``; ``schema_version`` is locked to v2 by the contract.
     """
     if not validate_report_id(report_id):
         return json_error("Invalid report_id format", status=400)
@@ -414,13 +486,8 @@ def export_report(report_id: str):
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response
 
-    payload = {
-        "schema_version": EXPORT_SCHEMA_VERSION,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "report": report.to_dict(),
-        "evidence": migrate_v1_to_v2(ReportManager.get_evidence_map(report_id)),
-    }
-    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    envelope = _build_export_envelope(report, ReportManager.get_evidence_map(report_id))
+    body = envelope.model_dump_json(indent=2)
     response = Response(body, mimetype='application/json; charset=utf-8')
     response.headers['Content-Disposition'] = f'attachment; filename="agora-report-{report_id}.json"'
     return response

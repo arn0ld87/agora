@@ -40,7 +40,10 @@ def _persist_report(*, with_evidence: bool = False) -> None:
         outline=ReportOutline(
             title="Demo",
             summary="Summary",
-            sections=[ReportSection(title="Intro", content="Body")],
+            sections=[
+                ReportSection(title="Intro", content="Body"),
+                ReportSection(title="Outlook", content="Trend"),
+            ],
         ),
         markdown_content="# Demo\n\nBody",
         created_at="2026-04-29T10:00:00",
@@ -48,25 +51,38 @@ def _persist_report(*, with_evidence: bool = False) -> None:
     )
     ReportManager.save_report(report)
     if with_evidence:
+        # Sub-Slice 02b: persist a v2-contract-compliant evidence map so the
+        # strict ReportContractModel envelope round-trips through the export.
         ReportManager.save_evidence_map(REPORT_ID, {
-            "schema_version": 1,
+            "schema_version": 2,
             "report_id": REPORT_ID,
+            "simulation_id": "sim_abcdef123456",
+            "global_evidence": [],
             "sections": [
                 {
-                    "section_index": 0,
+                    "section_index": 1,
                     "section_title": "Intro",
+                    "section_summary": "Initial framing",
                     "claims": [
                         {
-                            "claim_id": "c1",
-                            "claim_text": "Demo claim",
+                            "claim_id": "claim_01",
+                            "claim_text": "Demo claim text long enough",
                             "confidence_score": 0.8,
                             "confidence_label": "high",
-                            "evidence": [],
+                            "evidence": [
+                                {
+                                    "type": "graph_metric",
+                                    "source": "simulation_metrics",
+                                    "snippet": "echo_chamber_index: 0.42",
+                                    "match_score": 0.7,
+                                    "supports_claim": True,
+                                }
+                            ],
+                            "audit_trail": [],
                         }
                     ],
                 }
             ],
-            "global_evidence": [],
         })
 
 
@@ -112,15 +128,16 @@ def test_export_json_returns_combined_envelope(env):
     assert f"agora-report-{REPORT_ID}.json" in disposition
 
     payload = json.loads(response.data)
-    # Sub-Slice 02a: Export-Envelope läuft jetzt auf v2; persistierte v1-
-    # Evidence-Maps werden beim Export durch ``migrate_v1_to_v2`` gehoben.
+    # Sub-Slice 02b: Export-Envelope ist ein ReportContractModel — schema_version
+    # ist auf v2 fix-getypt (Literal[2]) und kann nicht mehr driften.
     assert payload["schema_version"] == 2
     assert payload["evidence"]["schema_version"] == 2
     assert payload["exported_at"]
     assert payload["report"]["report_id"] == REPORT_ID
     assert payload["report"]["status"] == "completed"
+    assert payload["report"]["schema_version"] == 2
     assert payload["evidence"]["report_id"] == REPORT_ID
-    assert payload["evidence"]["sections"][0]["claims"][0]["claim_id"] == "c1"
+    assert payload["evidence"]["sections"][0]["claims"][0]["claim_id"] == "claim_01"
 
 
 def test_export_json_without_evidence_returns_null_evidence(env):
