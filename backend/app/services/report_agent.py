@@ -773,12 +773,12 @@ class ReportAgent:
             logger.error(f"Outline planning failed: {str(e)}")
             # Return default outline (3 sections as fallback)
             return ReportOutline(
-                title="Future Prediction Report",
-                summary="Future trends and risk analysis based on simulation predictions",
+                title="Simulation Scenario Report",
+                summary="Plausible reactions and tensions from the scenario simulation under explicit assumptions",
                 sections=[
-                    ReportSection(title="Prediction Scenario and Core Findings"),
-                    ReportSection(title="Crowd Behavior Prediction Analysis"),
-                    ReportSection(title="Trend Outlook and Risk Warning")
+                    ReportSection(title="Scenario Setup and Core Findings"),
+                    ReportSection(title="Crowd Behavior in the Simulated Scenario"),
+                    ReportSection(title="Trends, Tensions, and Open Uncertainties")
                 ]
             )
     

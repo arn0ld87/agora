@@ -105,6 +105,101 @@ def test_report_agent_re_exports_identity(name):
 class TestPromptSemantics:
     """Pinnt invariante Semantik der Prompts gegen versehentliche Verkürzung."""
 
+    def test_prompts_no_forecast_marketing_language(self):
+        """Sub-Slice 09: Entfernt Forecast-Autoritätsclaims aus LLM-Prompts.
+
+        Alte Phrasen (Forecast-Marketing):
+        - "future prediction"
+        - "rehearsal of the future"
+        - "god's eye view"
+
+        Diese dürfen nicht mehr im Prod-Code vorkommen.
+        """
+        all_prompts = [
+            report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE,
+            report_prompts.PLAN_USER_PROMPT_TEMPLATE,
+            report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE,
+            report_prompts.SECTION_USER_PROMPT_TEMPLATE,
+            report_prompts.CHAT_SYSTEM_PROMPT_TEMPLATE,
+        ]
+        forbidden_phrases = [
+            "future prediction",
+            "rehearsal of the future",
+            "god's eye view",
+        ]
+        for phrase in forbidden_phrases:
+            for prompt in all_prompts:
+                assert phrase.lower() not in prompt.lower(), (
+                    f"Forbidden phrase '{phrase}' found in prompt. "
+                    "Use 'scenario' vocabulary instead (Sub-Slice 09)."
+                )
+
+    def test_default_outline_in_report_agent_has_no_forecast_marketing(self):
+        """Sub-Slice 09 Erweiterung: Default Fallback-Outline (report_agent.py Z. 775–782).
+
+        Source-Scan-Test: Prüft den echten Code, nicht ein Mock-Objekt.
+        Der Fallback wird bei Planning-Fehler genutzt.
+        """
+        from pathlib import Path
+        from app.services import report_agent
+        src = Path(report_agent.__file__).read_text(encoding="utf-8")
+
+        forbidden_phrases = [
+            "Future Prediction Report",
+            "Future trends and risk analysis based on simulation predictions",
+            "Prediction Scenario and Core Findings",
+            "Crowd Behavior Prediction Analysis",
+            "Trend Outlook and Risk Warning",
+        ]
+        for phrase in forbidden_phrases:
+            assert phrase not in src, (
+                f"Forbidden phrase {phrase!r} still in report_agent.py "
+                "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
+            )
+
+        # Positive: neuer Wortlaut muss vorhanden sein
+        assert "Simulation Scenario Report" in src
+        assert "Scenario Setup and Core Findings" in src
+
+    def test_graph_tools_to_text_has_no_forecast_marketing(self):
+        """Sub-Slice 09 Erweiterung: InsightForgeResult.to_text() Heading-Block (Z. 168–177).
+
+        Source-Scan-Test: Prüft den echten Code aus graph_tools.py.
+        Die to_text()-Methode wird im LLM-Context für Scenario-Analyse genutzt.
+        """
+        from pathlib import Path
+        from app.services import graph_tools
+        src = Path(graph_tools.__file__).read_text(encoding="utf-8")
+
+        forbidden_phrases = [
+            "Future Prediction Deep Analysis",
+            "Prediction Scenario:",
+            "Prediction Data Statistics",
+            "Related Prediction Facts",
+        ]
+        for phrase in forbidden_phrases:
+            assert phrase not in src, (
+                f"Forbidden phrase {phrase!r} still in graph_tools.py "
+                "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
+            )
+
+        # Positive: neuer Wortlaut muss vorhanden sein
+        assert "Scenario Graph Analysis" in src
+        assert "Scenario Assumptions:" in src
+        assert "Scenario Data Statistics" in src
+
+    def test_prompts_include_scenario_vocabulary(self):
+        """Sub-Slice 09: Neue Scenario-Vokabular muss präsent sein."""
+        # Mindestens einige der neuen Marker sollten präsent sein
+        all_prompts_str = " ".join([
+            report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE,
+            report_prompts.SECTION_SYSTEM_PROMPT_TEMPLATE,
+        ])
+        # Scenario muss erwähnt werden
+        assert "scenario" in all_prompts_str.lower()
+        # Assumptions sollten erwähnt werden
+        assert "assumption" in all_prompts_str.lower()
+
     def test_plan_system_demands_json_outline(self):
         assert "JSON" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
         assert "sections" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
