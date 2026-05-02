@@ -23,11 +23,12 @@ from __future__ import annotations
 import json
 import os
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
+from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
-from .oasis_profile_generator import OasisProfileGenerator
+from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
@@ -275,6 +276,30 @@ def _phase_generate_config(
         )
 
 
+def _validate_persona_quota(
+    plan: PersonaQuotaPlan,
+    profiles: List[OasisAgentProfile],
+) -> None:
+    """Validate actual persona segment counts against ``plan``.
+
+    Raises ``pydantic.ValidationError`` (propagates to caller) when:
+    - A required segment is missing or has wrong count (tolerance=0).
+    - Profiles contain segments not declared in the plan.
+    """
+    actual_counts: Dict[str, int] = {}
+    for p in profiles:
+        seg = getattr(p, "segment", None)
+        if seg:
+            actual_counts[seg] = actual_counts.get(seg, 0) + 1
+    PersonaQuotaActual.model_validate(
+        {
+            "plan": plan.model_dump(),
+            "actual_counts": actual_counts,
+            "tolerance": 0,
+        }
+    )
+
+
 def prepare_simulation(
     manager: SimulationManager,
     simulation_id: str,
@@ -289,6 +314,7 @@ def prepare_simulation(
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
     max_agents: Optional[int] = None,
+    quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -323,7 +349,7 @@ def prepare_simulation(
             )
 
         # Phase 2: Generate Agent Profiles
-        _phase_generate_profiles(
+        profiles = _phase_generate_profiles(
             state,
             storage,
             filtered,
@@ -334,6 +360,10 @@ def prepare_simulation(
             parallel_profile_count=parallel_profile_count,
             progress_callback=progress_callback,
         )
+
+        # Optional quota check: ValidationError propagates → FAILED state.
+        if quota_plan is not None:
+            _validate_persona_quota(quota_plan, profiles)
 
         # Phase 3: LLM-driven config generation
         _phase_generate_config(
@@ -371,4 +401,4 @@ def prepare_simulation(
         raise
 
 
-__all__ = ["prepare_simulation"]
+__all__ = ["prepare_simulation", "_validate_persona_quota"]

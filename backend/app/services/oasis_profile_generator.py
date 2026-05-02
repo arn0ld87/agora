@@ -53,7 +53,10 @@ class OasisAgentProfile:
     # Source entity information
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
-    
+
+    # Segment tag for PersonaQuotaPlan validation (= entity_type by default)
+    segment: Optional[str] = None
+
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     
     def to_reddit_format(self) -> Dict[str, Any]:
@@ -85,6 +88,8 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        if self.segment:
+            profile["segment"] = self.segment
 
         return profile
 
@@ -119,6 +124,8 @@ class OasisAgentProfile:
             profile["source_entity_uuid"] = self.source_entity_uuid
         if self.source_entity_type:
             profile["source_entity_type"] = self.source_entity_type
+        if self.segment:
+            profile["segment"] = self.segment
 
         return profile
 
@@ -142,6 +149,7 @@ class OasisAgentProfile:
             "interested_topics": self.interested_topics,
             "source_entity_uuid": self.source_entity_uuid,
             "source_entity_type": self.source_entity_type,
+            "segment": self.segment,
             "created_at": self.created_at,
         }
 
@@ -300,6 +308,10 @@ class OasisProfileGenerator:
         if handle:
             user_name = self._generate_username(handle)
 
+        # Segment = entity_type string for PersonaQuotaPlan validation.
+        # entity_type is already resolved above (get_entity_type() or "Entity").
+        segment = entity_type if entity_type != "Entity" else None
+
         return OasisAgentProfile(
             user_id=user_id,
             user_name=user_name,
@@ -318,6 +330,7 @@ class OasisProfileGenerator:
             interested_topics=profile_data.get("interested_topics", []),
             source_entity_uuid=entity.uuid,
             source_entity_type=entity_type,
+            segment=segment,
         )
     
     def _generate_username(self, name: str) -> str:
