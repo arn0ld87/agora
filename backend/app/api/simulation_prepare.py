@@ -7,6 +7,7 @@ import threading
 from typing import Any, Optional
 
 from flask import request
+from pydantic import ValidationError
 
 from . import simulation_bp
 from ..config import Config
@@ -235,9 +236,11 @@ def prepare_simulation():
     # Sub-Slice 20a: optional PersonaQuotaPlan aus Body. ValidationError →
     # HTTP 400 mit Pydantic-Fehlermessage; sonst wird der Plan an den
     # Service durchgereicht (Validierung post-generation, Erzwingung in 20b).
+    # Sub-Slice 22 (Gemini-Followup): spezifische Exceptions statt blankem
+    # ``except Exception``, damit echte 500er nicht als 400 maskiert werden.
     try:
         quota_plan = _parse_quota_plan(data)
-    except Exception as exc:
+    except (ValidationError, ValueError, TypeError) as exc:
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,

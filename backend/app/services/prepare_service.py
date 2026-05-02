@@ -211,11 +211,18 @@ def _phase_generate_config(
     llm_model: Optional[str],
     language: Optional[str],
     progress_callback: Optional[Callable] = None,
+    quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> None:
     """Phase 3: Simulation-Config per LLM erzeugen + atomar persistieren.
 
     Aktualisiert ``state.config_generated`` und ``state.config_reasoning``
     als Seiteneffekt; speichert die Config über den ``ArtifactStore``.
+
+    Sub-Slice 22 (Gemini-Followup auf 20a): wenn ``quota_plan`` gesetzt
+    ist, wird er als Top-Level-Key ``quota_plan`` in
+    ``simulation_config.json`` mitgeschrieben — der Restart-Pfad in
+    ``runs.py`` liest ihn von dort über ``_parse_quota_plan(config)``
+    wieder ein. Ohne Persistenz war der Plan beim Restart immer ``None``.
     """
     if progress_callback:
         progress_callback(
@@ -258,10 +265,13 @@ def _phase_generate_config(
         )
 
     # Save config files (atomic via store — fixes prior non-atomic write).
+    config_payload = json.loads(sim_params.to_json())
+    if quota_plan is not None:
+        config_payload["quota_plan"] = quota_plan.model_dump()
     manager._store.write_json(
         simulation_id,
         "simulation_config",
-        json.loads(sim_params.to_json()),
+        config_payload,
     )
 
     state.config_generated = True
@@ -376,6 +386,7 @@ def prepare_simulation(
             llm_model=llm_model,
             language=language,
             progress_callback=progress_callback,
+            quota_plan=quota_plan,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to
