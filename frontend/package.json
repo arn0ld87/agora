@@ -27,7 +27,7 @@
     "@types/d3": "^7.4.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/test-utils": "^2.4.10",
-    "eslint": "^9.39.3",
+    "eslint": "^10.3.0",
     "eslint-plugin-vue": "^10.5.1",
     "globals": "^16.4.0",
     "jsdom": "^29.1.1",
