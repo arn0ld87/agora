@@ -175,6 +175,57 @@ def test_manual_profile_user_id_starts_at_1_when_no_profiles_exist(client, store
     )
 
 
+def test_karma_empty_string_falls_back_to_default(client, store):
+    """Frontend-Form schickt karma als leeren String — int('') würde ValueError werfen.
+
+    Defensive Konversion: leerer String → 1000 (Default), kein Crash.
+    Gemini-Code-Assist Finding, PR #226.
+    """
+    resp = client.post(
+        f"/api/simulation/{SIM_ID}/profiles",
+        json={"username": "empty_karma_user", "name": "Empty Karma", "karma": ""},
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    profiles = _get_profiles(store)
+    manual = next(p for p in profiles if p.get("username") == "empty_karma_user")
+    assert manual["karma"] == 1000
+
+
+def test_karma_non_numeric_falls_back_to_default(client, store):
+    """karma='abc' darf nicht crashen — Fallback auf Default."""
+    resp = client.post(
+        f"/api/simulation/{SIM_ID}/profiles",
+        json={"username": "bad_karma_user", "name": "Bad Karma", "karma": "abc"},
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    profiles = _get_profiles(store)
+    manual = next(p for p in profiles if p.get("username") == "bad_karma_user")
+    assert manual["karma"] == 1000
+
+
+def test_created_at_format_matches_oasis(client, store):
+    """created_at-Format muss '%Y-%m-%d' sein (Schema-Parity mit OasisAgentProfile).
+
+    Gemini-Code-Assist Finding, PR #226 — vorher: '%Y-%m-%dT%H:%M:%S' mit
+    Zeit-Anteil, Drift gegen oasis_profile_generator.py:66.
+    """
+    import re as _re
+    resp = client.post(
+        f"/api/simulation/{SIM_ID}/profiles",
+        json={"username": "fmt_user", "name": "Format Test"},
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    profiles = _get_profiles(store)
+    manual = next(p for p in profiles if p.get("username") == "fmt_user")
+    # Genau YYYY-MM-DD, kein T und kein Zeit-Suffix.
+    assert _re.fullmatch(r"\d{4}-\d{2}-\d{2}", manual["created_at"]), (
+        f"created_at '{manual['created_at']}' weicht von OASIS-Format '%Y-%m-%d' ab"
+    )
+
+
 def test_provided_bio_and_persona_are_kept(client, store):
     """Explizit gelieferte bio/persona dürfen nicht vom Fallback überschrieben werden."""
     resp = client.post(
