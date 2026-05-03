@@ -184,6 +184,11 @@ def stream_logs():
         # retry-Frame zuerst: teilt dem Browser mit, nach wie vielen ms er bei
         # einem Verbindungsabbruch neu verbinden soll (SSE-Spec, RFC 8895 §9.2).
         yield f'retry: {_SSE_RETRY_MS}\n\n'
+        # FOLLOWUP J.5.1 (Issue #233): Browser-Reconnect nutzt dieselbe URL
+        # ohne aktualisierten ?offset= — bei Reconnect droht entweder Datenverlust
+        # (kein Offset → file_size) oder Duplikate (statischer Offset). Sauber via
+        # ``id: <offset>``-Frames + Last-Event-ID-Header-Auswertung. Out-of-Scope
+        # für Sub-Slice J.5 (das nur retry: setzt + LogDrawer.onerror fixt).
         # Default: am Datei-Ende ansetzen, alte Lines holt der Tail-Endpunkt.
         # Wenn der Client einen ``?offset=…`` aus dem Tail-Response durchreicht,
         # starten wir genau dort — sonst gehen Logs verloren, die zwischen

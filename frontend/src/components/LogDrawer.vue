@@ -90,8 +90,10 @@ async function reload() {
   } catch { /* swallow */ }
 }
 
-function appendLine(line) {
-  if (paused.value) return
+function appendLine(line, { bypassPause = false } = {}) {
+  // bypassPause=true: Connection-Diagnostik o. ä., die auch bei pausiertem
+  // Auto-Scroll sichtbar bleiben muss. (Sub-Slice J.5 Followup, PR #232.)
+  if (paused.value && !bypassPause) return
   lines.value.push(line)
   if (lines.value.length > RING_BUFFER_MAX) {
     lines.value.splice(0, lines.value.length - RING_BUFFER_MAX)
@@ -113,13 +115,9 @@ function startStream() {
     }
     _eventSource.onerror = (err) => {
       console.warn('LogDrawer SSE error', err)
-      // Verbindungsfehler werden immer angezeigt — auch wenn Auto-Scroll
-      // pausiert ist. appendLine() würde bei paused=true stumm fallen.
-      lines.value.push(t('logs.drawer.connectionError'))
-      if (lines.value.length > RING_BUFFER_MAX) {
-        lines.value.splice(0, lines.value.length - RING_BUFFER_MAX)
-      }
-      nextTick(() => sticky.markAppended(1))
+      // Connection-Diagnose muss auch bei pausiertem Auto-Scroll sichtbar
+      // sein — bypassPause: true.
+      appendLine(t('logs.drawer.connectionError'), { bypassPause: true })
     }
   } catch { /* ignore */ }
 }

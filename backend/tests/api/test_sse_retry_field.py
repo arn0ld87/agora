@@ -11,8 +11,6 @@ Getestet wird:
 
 from __future__ import annotations
 
-import time
-
 import pytest
 from flask import Blueprint, Flask
 
