@@ -13,13 +13,12 @@ services:
     env_file:
       - .env
     # Loopback-Bind: Frontend (Vite) und Backend (Flask) sind im Dev-
-    # Default nur lokal erreichbar (127.0.0.1). Tailscale/LAN-Setups können
-    # über eine eigene `docker-compose.override.yml` oder ENV-Variable
-    # `AGORA_BIND_HOST=0.0.0.0` explizit auf 0.0.0.0 umschalten.
-    # Kein macOS-Bug mehr — Docker Desktop 4.30+ behandelt 127.0.0.1 korrekt.
+    # Default nur lokal erreichbar. Tailscale/LAN-Setups können über
+    # ENV-Variable `AGORA_BIND_HOST=0.0.0.0` explizit auf 0.0.0.0 umschalten.
+    # Der Default bleibt 127.0.0.1 (sicher-by-default).
     ports:
-      - "127.0.0.1:${AGORA_FRONTEND_PORT:-5173}:5173"
-      - "127.0.0.1:${AGORA_BACKEND_PORT:-5001}:5001"
+      - "${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_FRONTEND_PORT:-5173}:5173"
+      - "${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_BACKEND_PORT:-5001}:5001"
     restart: unless-stopped
     read_only: false
     dns:
