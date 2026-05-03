@@ -21,6 +21,7 @@ import {
   ReportSchema,
   ReportOutlineSchema,
   EvidenceMapSchema,
+  parseReportContract,
   type Report,
   type ReportOutline,
   type ReportClaim,
@@ -565,11 +566,17 @@ function downloadEvidence() {
 async function downloadCombinedJson() {
   if (!props.reportId) return
   try {
-    const res = (await exportReport(props.reportId, 'json')) as ApiResult & { data?: Blob | Record<string, unknown> }
-    const blob = res?.data instanceof Blob
-      ? res.data
-      : new Blob([JSON.stringify(res?.data ?? res, null, 2)], { type: 'application/json;charset=utf-8' })
-    triggerDownload(blob, `agora-report-${props.reportId}.json`)
+    const blob = await exportReport(props.reportId, 'json')
+    const text = await blob.text()
+    const json = JSON.parse(text)
+    const parsed = parseReportContract(json)
+    if (!parsed.ok) {
+      recordSchemaError('export', { issues: parsed.errors })
+      addLog('JSON-Export: Schema-Mismatch — siehe rote Box')
+      return
+    }
+    const validatedBlob = new Blob([JSON.stringify(parsed.data, null, 2)], { type: 'application/json;charset=utf-8' })
+    triggerDownload(validatedBlob, `agora-report-${props.reportId}.json`)
   } catch (e) {
     addLog('JSON-Export fehlgeschlagen: ' + ((e as Error)?.message || String(e)))
   }
