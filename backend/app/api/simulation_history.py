@@ -149,6 +149,7 @@ def generate_profiles():
     entity_types = data.get('entity_types')
     use_llm = data.get('use_llm', True)
     platform = data.get('platform', 'reddit')
+    llm_model_override = (data.get('llm_model') or '').strip() or None
 
     storage = current_app.extensions.get('neo4j_storage')
     if not storage:
@@ -166,7 +167,7 @@ def generate_profiles():
             message="No matching entities found",
         )
 
-    generator = OasisProfileGenerator()
+    generator = OasisProfileGenerator(model_name=llm_model_override)
     profiles = generator.generate_profiles_from_entities(entities=filtered.entities, use_llm=use_llm)
     if platform == 'reddit':
         profiles_data = [profile.to_reddit_format() for profile in profiles]

@@ -103,6 +103,9 @@ def generate_report():
             "root_simulation_id": state.root_simulation_id,
             "branch_name": state.branch_name,
             "branch_depth": state.branch_depth,
+            # Persist the model override so _resume_report_generate in runs.py
+            # can reconstruct the same ReportAgent when the run is resumed. (Sub-Slice C)
+            "llm_model": llm_model_override,
         },
     )
     task_id = task_manager.create_task(

@@ -568,6 +568,11 @@ def _resume_report_generate(run: dict):
     if not simulation_id:
         raise ValueError("Run is missing simulation_id linkage")
 
+    # Recover the model override that was active when the run was originally started.
+    # The original /api/report/generate call stores llm_model_override in the run
+    # metadata; we honour it on resume so the same model is used throughout.
+    llm_model_override = (run.get("metadata") or {}).get("llm_model") or None
+
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
@@ -597,6 +602,7 @@ def _resume_report_generate(run: dict):
                 simulation_id=simulation_id,
                 simulation_requirement=project.simulation_requirement or "",
                 graph_tools=graph_tools,
+                model_name=llm_model_override,
             )
 
             def progress_callback(stage, progress, message):
