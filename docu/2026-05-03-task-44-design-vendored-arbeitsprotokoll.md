@@ -48,7 +48,7 @@ schemas/** linguist-generated=true
 ## Verifikation
 
 ```bash
-git diff --stat HEAD       # nur .gitattributes + dieses Protokoll
+git diff --stat HEAD~1     # nur .gitattributes + dieses Protokoll
 cd backend && uv run pytest -x -q  # erwartet: grün (Touch-frei)
 cd frontend && npm test -- --run    # erwartet: grün (Touch-frei)
 ```
