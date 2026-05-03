@@ -52,7 +52,7 @@ def _extract_token() -> str:
         return auth[7:].strip()
     query_token = request.args.get("token", "")
     if query_token:
-        if not current_app.config.get("FLASK_DEBUG"):
+        if not current_app.debug:
             # In Prod: ?token= ist deaktiviert (F2.2). Signed-Tickets nutzen.
             _logger.error(
                 "auth: ?token= query rejected in production on %s — "
