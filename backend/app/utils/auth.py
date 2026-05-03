@@ -52,6 +52,14 @@ def _extract_token() -> str:
         return auth[7:].strip()
     query_token = request.args.get("token", "")
     if query_token:
+        if not current_app.config.get("FLASK_DEBUG"):
+            # In Prod: ?token= ist deaktiviert (F2.2). Signed-Tickets nutzen.
+            _logger.error(
+                "auth: ?token= query rejected in production on %s — "
+                "use signed tickets (POST /api/auth/ticket).",
+                request.path,
+            )
+            return ""
         _logger.warning(
             "auth: ?token= query fallback used on %s — switch to signed tickets "
             "(see /api/auth/ticket).",
