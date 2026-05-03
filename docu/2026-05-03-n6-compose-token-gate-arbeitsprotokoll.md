@@ -40,7 +40,7 @@ docker run --rm <image-tag> sh -c 'grep -rl test1234 /app/frontend/dist/ || true
 # Opt-In-Build (Gate=true): Token ist im Bundle
 ALLOW_BUILD_TIME_TOKEN=true VITE_AGORA_TOKEN=test1234 \
   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
-docker run --rm <image-tag> sh -c 'grep -rl test1234 /app/static/'
+docker run --rm <image-tag> sh -c 'grep -rl test1234 /app/frontend/dist/'
 # → gefunden
 ```
 
