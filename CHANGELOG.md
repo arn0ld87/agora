@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Build
+
+- Sub-Slice 43 — `mypy>=1.10` als offizielle dev-Dependency in [`backend/pyproject.toml`](backend/pyproject.toml) (sowohl `[project.optional-dependencies].dev` als auch `[dependency-groups].dev`) plus pragmatische `[tool.mypy]`-Baseline (`python_version = "3.11"`, `ignore_missing_imports = true`, `follow_imports = "silent"`); per-Modul-Override silenced den einen vorhandenen `attr-defined`-Finding in `app.contracts.dump_schemas` (Pydantic-`type`-Narrow), bleibt aber explizit als pragmatische Übergangslösung markiert. CLAUDE.md-Standard-Check `uv run mypy app` und alle `agora-*-worker`-Verify-Schritte sind damit ohne `--with mypy`-Workaround lauffähig. `uv lock` + `uv sync --group dev` sauber, `uv run mypy app/contracts/` clean (7 Files). Keine bestehenden Code-Pfade angefasst — Tightening folgt in einem separaten Slice.
+
 ### Documentation
 
 - Sub-Slice 37 — Graph-Diff Modell-Spike (Refs #74): Neue Doku [`docu/2026-05-03-task-22-graph-diff-spike.md`](docu/2026-05-03-task-22-graph-diff-spike.md) definiert Vergleichsdimensionen zwischen zwei Graph-Snapshots (Added/Removed/Reinforced/Weakened-Edges, Node-Property-Drift, Cluster-Shifts, Bridge-Agent-Shifts, Density-Delta, New/Removed-Clusters). Datenmodell skizziert: `GraphDiff` mit `snapshot_a`/`snapshot_b` (je `GraphSnapshot`) + Kanten-/Knoten-/Cluster-Diffs. API-Schnitt: `GET /api/simulation/<sim_id>/graph-diff?branch_a=<id>&branch_b=<id>` mit Error-Cases (404 branch nicht gefunden, 400 inkompatible Netzwerk-Versionen, 422 unvollständiger Graph-Status). 6 offene Fragen für Implementation (#74 API, #76 UI): Edge-Identität (UUID vs. Composite-Key), Cluster-Matching-Strategie, Snapshot-Quelle, Node-Isolation-Definition, Cluster-Seed-Nondeterminismus, Performance bei 10k+ Nodes.
