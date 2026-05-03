@@ -1,7 +1,8 @@
-# Arbeitsprotokoll — Task 44: design/ als linguist-vendored markieren
+# Arbeitsprotokoll — Task 48: design/ als linguist-vendored markieren
 
 **Datum:** 2026-05-03
-**Branch:** `feat/task-44-design-vendored`
+**Branch:** `feat/task-44-design-vendored` (Branch-Name aus Legacy beibehalten,
+nachdem Task-Nummer 44 auf main durch Slice-44-Doku-Sync belegt wurde)
 **Scope:** LOC-Hygiene, kein Code-Verhalten
 
 ## Anlass
