@@ -13,11 +13,11 @@
     "check": "vue-tsc --noEmit && npm run test && npm run build"
   },
   "dependencies": {
-    "axios": "^1.13.2",
+    "axios": "^1.16.0",
     "d3": "^7.9.0",
     "dompurify": "^3.4.2",
-    "marked": "^18.0.2",
-    "vue": "^3.5.24",
+    "marked": "^18.0.3",
+    "vue": "^3.5.33",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.6.3",
     "zod": "^4.4.2"
@@ -25,7 +25,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.3",
     "@types/d3": "^7.4.3",
-    "@vitejs/plugin-vue": "^6.0.1",
+    "@vitejs/plugin-vue": "^6.0.6",
     "@vue/test-utils": "^2.4.10",
     "eslint": "^9.39.3",
     "eslint-plugin-vue": "^10.5.1",
