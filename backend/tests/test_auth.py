@@ -106,7 +106,7 @@ def test_blueprint_guard_rejects_query_token_in_prod(monkeypatch):
     """?token= ist in Prod (FLASK_DEBUG=false) deaktiviert (F2.2)."""
     monkeypatch.setenv("AGORA_AUTH_TOKEN", "secret-token")
     app = _build_guarded_app()
-    app.config["FLASK_DEBUG"] = False
+    app.config["DEBUG"] = False
     client = app.test_client()
 
     response = client.get("/api/guarded/ping?token=secret-token")
