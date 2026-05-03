@@ -191,6 +191,8 @@ function resetState() {
   allActions.value = []
   actionIds.value = new Set()
   resetConsoleLogs()
+  toolPanelUnreadErrors.value = 0
+  _lastSeenConsoleLength = 0
   startError.value = null
   isStarting.value = false
   isStopping.value = false
