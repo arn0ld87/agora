@@ -7,6 +7,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Changed
 
+- Sub-Slice 32 — Contradiction-Penalty in compute_confidence()-Aufruf verdrahtet (report_agent.py:637): detect_contradiction_penalty(evidence_items) speist jetzt den bisher hardcoded `0.0`-Hook. Audit-Trail-Eintrag bei Penalty>0. Closes #105 (Layer 1).
+
 - Sub-Slice 30 — Step4-Report-Logs auf Sticky-Scroll: useIncrementalLogPolling akzeptiert optionalen stickyScroll-Parameter (Backwards-Compat erhalten); Step4Report.vue verdrahtet je eine useStickyScroll-Instanz für Agent- und Console-Logs mit StickyScrollBanner. Closes #141 (Layer 8).
 - Step4Report.vue: strict-Zod-Parse fuer Report + EvidenceMap + Outline; toleranter Fallback (claim.confidence, evidence_items, JSON.stringify-Snippet, silent catch) raus; Schema-Mismatch zeigt UI-Banner mit ZodError-Issue-Pfaden. (Sub-Slice 15, Closes #172, Layer 4)
 - oasis_profile_generator + persona_contract: voice_register-Pflichtfeld pro Persona (formal-de | neutral-de | technical-de | skeptisch-de) — OasisAgentProfile erweitert, JSON-Spec im Individual- und Group-Persona-Prompt um Pflichtfeld + Register-Anker, Validation in `_validate_profile_metadata`, Auto-Fallback `neutral-de` mit `logger.warning` bei fehlendem/ungültigem Wert, rule-based-Fallback heuristisch, PersonaModel-Default `neutral-de` für Backwards-Compat (Sub-Slice 10, Closes #167, Layer 2)

@@ -20,7 +20,7 @@ from datetime import datetime
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from .confidence_calculator import compute_confidence
-from .evidence_binder import bind_evidence_to_claim
+from .evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from .evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from ..contracts import EvidenceMapModel
 from .web_tools import WebToolsService
@@ -634,7 +634,17 @@ class ReportAgent:
             # Gewichtung), specificity (top match_score), consistency
             # (Anzahl unique Quellen). Verified-Label nur bei Top-
             # Match-Score >= 0.85.
-            confidence_score, confidence_label = compute_confidence(evidence_items)
+            penalty = detect_contradiction_penalty(evidence_items)
+            confidence_score, confidence_label = compute_confidence(
+                evidence_items,
+                contradiction_penalty=penalty,
+            )
+            if penalty > 0.0:
+                audit_trail.append({
+                    "type": "contradiction_penalty_applied",
+                    "value": penalty,
+                    "source": "evidence_binder.detect_contradiction_penalty",
+                })
             # Anti-Dekorations-Guard: kein Evidence → ehrliches low-Label
             # und Audit-Eintrag statt dekorativem global_items-Fallback.
             if not evidence_items:
