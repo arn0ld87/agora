@@ -1,11 +1,12 @@
-Das Repo-Konzept ist stark: GraphRAG \+ Multi-Agenten-Simulation \+ Report-Export ist ein spannender Ansatz. Die vorliegende Evidence-JSON ist aber noch nicht belastbar genug, um sie als seriöse Belegschicht für Reports zu verwenden. Der Output wirkt äußerlich strukturiert, aber die Belegzuordnung ist aktuell zu grob, teilweise widersprüchlich und zu selbstreferenziell.Bewertung
+> **HISTORISCHER SNAPSHOT (Stand 2026-04-2x).**
+>
+> Aktueller Stand siehe:
+> - Architektur & Plan: `CLAUDE.md` / `PLAN.md` / `plan.heuristic.md`
+> - Test-Status: `docu/STATUS.md`
+> - Diese Datei wurde aus dem Repo-Root nach `docu/history/` verschoben.
+>
+---
 
-| Bereich | Bewertung | Kommentar |
-| ----- | ----- | ----- |
-| Produktidee | 8/10 | Sehr gutes Konzept, demo-tauglich und technisch interessant |
-| Report-Sprache | 6/10 | Flüssig, aber zu generisch und teilweise politisch-journalistisch überinszeniert |
-| Evidence-Struktur | 4/10 | Gute Absicht, aber falsche Bindung zwischen Claim und Evidence |
-| Metriken | 2/10 | Widerspruch zwischen `total_agents=0`/`total_interactions=0` und vorhandenen Actions |
 | Vertrauenswürdigkeit | 3/10 | Confidence wirkt nicht kalibriert |
 | Demo-Tauglichkeit | 6/10 | Für Showcase nutzbar, aber nur mit Disclaimer |
 | Produktreife | 3/10 | Noch nicht für belastbare Analyseberichte geeignet |
@@ -187,4 +188,3 @@ Nächste Schritte
 1. Metrik-Export fixen: `total_agents`, `total_interactions`, `cluster_count` gegen echte Actions und Graph-Kanten validieren.  
 2. Claim Extraction härten: Überschriften raus, lange Claims atomarisieren, nur prüfbare Aussagen exportieren.  
 3. Evidence-Binding neu bauen: Jeder Claim bekommt nur semantisch passende Evidence mit `match_score`, keine globalen Belegeimer mehr.
-
