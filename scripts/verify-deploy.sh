@@ -62,6 +62,12 @@ docker compose exec -T agora uv run --project backend \
 echo
 echo "Result: $ok ok, $fail fail"
 
+# N2: Loopback-Bind-Check
+echo
+echo "N2 (Loopback-Bind):"
+check "Vite auf 127.0.0.1:5173" bash -c "docker compose exec -T agora ss -tlnp | grep ':5173' | grep -q '127.0.0.1'"
+check "Flask auf 127.0.0.1:5001" bash -c "docker compose exec -T agora ss -tlnp | grep ':5001' | grep -q '127.0.0.1'"
+
 if [ $fail -gt 0 ]; then
   echo
   echo "--- Diagnose ---"
