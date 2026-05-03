@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
+import { useStickyScroll } from '../composables/useStickyScroll'
 import { usePolling } from '../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -12,6 +13,7 @@ import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Select from './ui/Select.vue'
 import ConfidenceBadge from './ui/ConfidenceBadge.vue'
+import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import { deriveLabel, aggregateSectionConfidence } from '../utils/confidenceUtils'
 import type { SectionConfidenceResult } from '../utils/confidenceUtils'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
@@ -183,11 +185,19 @@ function addLog(msg: string) { emit('add-log', msg) }
 
 const statusPolling = usePolling(pollStatus, 2500)
 
+// Issue #141 — Sticky-Scroll für Agent- und Console-Log-Pane.
+// Separate containerRef-Refs werden extern erstellt, an useStickyScroll übergeben
+// und dann im Template gebunden. Der stickyScroll-Parameter ersetzt das blinde
+// scrollTop = scrollHeight im Composable durch markAppended(deltaCount).
+const agentLogRef = ref<HTMLElement | null>(null)
+const consoleLogRef = ref<HTMLElement | null>(null)
+const agentSticky = useStickyScroll(agentLogRef)
+const consoleSticky = useStickyScroll(consoleLogRef)
+
 // Issue #39 — Agent- und Console-Logs laufen über das geteilte Composable.
 // `parseAgentEntry` filtert ungültige Zeilen (return null), Composable überspringt sie.
 const {
   lines: agentLogs,
-  containerRef: agentLogRef,
   polling: agentLogPolling,
   reset: resetAgentLogs,
 } = useIncrementalLogPolling({
@@ -196,11 +206,11 @@ const {
     : Promise.resolve(null),
   intervalMs: 1500,
   parseLine: parseAgentEntry,
+  stickyScroll: agentSticky,
 })
 
 const {
   lines: consoleLogs,
-  containerRef: consoleLogRef,
   polling: consoleLogPolling,
   reset: resetConsoleLogs,
 } = useIncrementalLogPolling({
@@ -208,6 +218,7 @@ const {
     ? getConsoleLog(props.reportId, sinceLine)
     : Promise.resolve(null),
   intervalMs: 2000,
+  stickyScroll: consoleSticky,
 })
 
 async function pollStatus() {
@@ -715,23 +726,29 @@ onUnmounted(stopPolling)
               <span class="meta">Agent</span>
               <span class="meta">{{ agentLogs.length }}</span>
             </div>
-            <div ref="agentLogRef" class="log-block log-pane-body">
-              <div v-if="!agentLogs.length" class="meta">Warte auf Agent-Aktivität…</div>
-              <div
-                v-for="(e, i) in agentLogs"
-                :key="'a' + i"
-                :id="`agent-entry-${entryAnchorId(e)}`"
-                class="agent-entry"
-                :class="'action-' + (e.action || 'unknown')"
-              >
-                <div class="agent-entry-head">
-                  <span v-if="e.ts" class="agent-ts">{{ e.ts }}</span>
-                  <span class="agent-title">{{ e.title }}</span>
-                  <span v-if="e.elapsed" class="agent-meta">{{ e.elapsed.toFixed(1) }}s</span>
+            <div class="log-pane-scroll-wrap">
+              <div ref="agentLogRef" class="log-block log-pane-body">
+                <div v-if="!agentLogs.length" class="meta">Warte auf Agent-Aktivität…</div>
+                <div
+                  v-for="(e, i) in agentLogs"
+                  :key="'a' + i"
+                  :id="`agent-entry-${entryAnchorId(e)}`"
+                  class="agent-entry"
+                  :class="'action-' + (e.action || 'unknown')"
+                >
+                  <div class="agent-entry-head">
+                    <span v-if="e.ts" class="agent-ts">{{ e.ts }}</span>
+                    <span class="agent-title">{{ e.title }}</span>
+                    <span v-if="e.elapsed" class="agent-meta">{{ e.elapsed.toFixed(1) }}s</span>
+                  </div>
+                  <div v-if="e.subtitle" class="agent-subtitle">{{ e.subtitle }}</div>
+                  <div v-if="e.body" class="agent-body">{{ e.body.length > 600 ? e.body.slice(0, 600) + '…' : e.body }}</div>
                 </div>
-                <div v-if="e.subtitle" class="agent-subtitle">{{ e.subtitle }}</div>
-                <div v-if="e.body" class="agent-body">{{ e.body.length > 600 ? e.body.slice(0, 600) + '…' : e.body }}</div>
               </div>
+              <StickyScrollBanner
+                :count="agentSticky.unreadCount.value"
+                @jump="agentSticky.scrollToBottom"
+              />
             </div>
           </div>
           <div class="log-pane">
@@ -739,10 +756,16 @@ onUnmounted(stopPolling)
               <span class="meta">Console</span>
               <span class="meta">{{ consoleLogs.length }}</span>
             </div>
-            <div ref="consoleLogRef" class="log-block log-pane-body">
-              <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="log-line console">
-                {{ line }}
+            <div class="log-pane-scroll-wrap">
+              <div ref="consoleLogRef" class="log-block log-pane-body">
+                <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="log-line console">
+                  {{ line }}
+                </div>
               </div>
+              <StickyScrollBanner
+                :count="consoleSticky.unreadCount.value"
+                @jump="consoleSticky.scrollToBottom"
+              />
             </div>
           </div>
         </div>
@@ -1110,6 +1133,9 @@ onUnmounted(stopPolling)
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
+}
+.log-pane-scroll-wrap {
+  position: relative;
 }
 .log-pane-head {
   display: flex;
