@@ -1,0 +1,682 @@
+{
+  "$defs": {
+    "BridgeAgentShift": {
+      "additionalProperties": false,
+      "description": "Change in betweenness-centrality top-k membership for one agent.",
+      "properties": {
+        "action": {
+          "enum": [
+            "joined_top_k",
+            "left_top_k"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "agent_id": {
+          "title": "Agent Id",
+          "type": "integer"
+        },
+        "centrality_after": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Betweenness nach dem Diff",
+          "title": "Centrality After"
+        },
+        "centrality_before": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Betweenness vor dem Diff",
+          "title": "Centrality Before"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optionales Tier-Label, z. B. \"top-5\"",
+          "title": "Tier"
+        }
+      },
+      "required": [
+        "agent_id",
+        "action"
+      ],
+      "title": "BridgeAgentShift",
+      "type": "object"
+    },
+    "ClusterShift": {
+      "additionalProperties": false,
+      "description": "Agent migrating between two clusters across snapshots.",
+      "properties": {
+        "agent_id": {
+          "title": "Agent Id",
+          "type": "integer"
+        },
+        "cluster_a_id": {
+          "title": "Cluster A Id",
+          "type": "integer"
+        },
+        "cluster_a_label": {
+          "title": "Cluster A Label",
+          "type": "string"
+        },
+        "cluster_a_size": {
+          "description": "Cluster-Gr\u00f6\u00dfe in Snapshot A",
+          "minimum": 0,
+          "title": "Cluster A Size",
+          "type": "integer"
+        },
+        "cluster_b_id": {
+          "title": "Cluster B Id",
+          "type": "integer"
+        },
+        "cluster_b_label": {
+          "title": "Cluster B Label",
+          "type": "string"
+        },
+        "cluster_b_size": {
+          "description": "Cluster-Gr\u00f6\u00dfe in Snapshot B",
+          "minimum": 0,
+          "title": "Cluster B Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "agent_id",
+        "cluster_a_id",
+        "cluster_a_label",
+        "cluster_b_id",
+        "cluster_b_label",
+        "cluster_a_size",
+        "cluster_b_size"
+      ],
+      "title": "ClusterShift",
+      "type": "object"
+    },
+    "ClusterSummary": {
+      "additionalProperties": false,
+      "description": "Summary representation of a single cluster.",
+      "properties": {
+        "cluster_id": {
+          "title": "Cluster Id",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Deterministisches TF-Top-3-Label",
+          "title": "Label",
+          "type": "string"
+        },
+        "member_count": {
+          "description": "Anzahl Agenten im Cluster",
+          "minimum": 0,
+          "title": "Member Count",
+          "type": "integer"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cluster_id",
+        "size",
+        "label",
+        "member_count"
+      ],
+      "title": "ClusterSummary",
+      "type": "object"
+    },
+    "EdgeData": {
+      "additionalProperties": false,
+      "description": "Edge metadata with unique identifier.\n\nNote on properties: uses dict[str, str|int|float|bool] instead of\ndict[str, Any] to remain compatible with extra=\"forbid\" semantics.\nProducers with richer value types should JSON-stringify those values.",
+      "properties": {
+        "properties": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "description": "Weitere Metadaten; komplexe Typen bitte JSON-stringifizieren",
+          "title": "Properties",
+          "type": "object"
+        },
+        "reinforced_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Anzahl Verst\u00e4rkungen",
+          "title": "Reinforced Count"
+        },
+        "relation_type": {
+          "description": "Kantentyp, z. B. \"FOLLOWS\", \"OPPOSES\"",
+          "title": "Relation Type",
+          "type": "string"
+        },
+        "source_id": {
+          "description": "Quell-Knoten-ID (als String serialisiert)",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "target_id": {
+          "description": "Ziel-Knoten-ID (als String serialisiert)",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "uuid": {
+          "description": "Eindeutige Kanten-ID (Neo4j-UUID oder synthetisch)",
+          "title": "Uuid",
+          "type": "string"
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optionales Gewicht/St\u00e4rke",
+          "title": "Weight"
+        }
+      },
+      "required": [
+        "uuid",
+        "source_id",
+        "target_id",
+        "relation_type"
+      ],
+      "title": "EdgeData",
+      "type": "object"
+    },
+    "EdgeReinforcement": {
+      "additionalProperties": false,
+      "description": "Typed record for an edge that gained weight/reinforcement between snapshots.\n\nValidator stellt sicher: weight_after >= weight_before.\nKanten mit sinkendem Gewicht geh\u00f6ren in EdgeWeakening.",
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/EdgeData"
+        },
+        "reinforced_count_after": {
+          "minimum": 0,
+          "title": "Reinforced Count After",
+          "type": "integer"
+        },
+        "reinforced_count_before": {
+          "minimum": 0,
+          "title": "Reinforced Count Before",
+          "type": "integer"
+        },
+        "weight_after": {
+          "title": "Weight After",
+          "type": "number"
+        },
+        "weight_before": {
+          "title": "Weight Before",
+          "type": "number"
+        }
+      },
+      "required": [
+        "edge",
+        "weight_before",
+        "weight_after",
+        "reinforced_count_before",
+        "reinforced_count_after"
+      ],
+      "title": "EdgeReinforcement",
+      "type": "object"
+    },
+    "EdgeWeakening": {
+      "additionalProperties": false,
+      "description": "Typed record for an edge that lost weight/reinforcement between snapshots.\n\nValidator stellt sicher: weight_after < weight_before.\nKanten mit steigendem Gewicht geh\u00f6ren in EdgeReinforcement.",
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/EdgeData"
+        },
+        "reinforced_count_after": {
+          "minimum": 0,
+          "title": "Reinforced Count After",
+          "type": "integer"
+        },
+        "reinforced_count_before": {
+          "minimum": 0,
+          "title": "Reinforced Count Before",
+          "type": "integer"
+        },
+        "weight_after": {
+          "title": "Weight After",
+          "type": "number"
+        },
+        "weight_before": {
+          "title": "Weight Before",
+          "type": "number"
+        }
+      },
+      "required": [
+        "edge",
+        "weight_before",
+        "weight_after",
+        "reinforced_count_before",
+        "reinforced_count_after"
+      ],
+      "title": "EdgeWeakening",
+      "type": "object"
+    },
+    "GraphDiffMetrics": {
+      "additionalProperties": false,
+      "description": "Aggregated metrics summarising the diff between two graph snapshots.",
+      "properties": {
+        "agents_changed_clusters": {
+          "minimum": 0,
+          "title": "Agents Changed Clusters",
+          "type": "integer"
+        },
+        "avg_reinforcement_delta": {
+          "description": "Durchschnittlicher Gewichts-Anstieg bei verst\u00e4rkten Kanten",
+          "title": "Avg Reinforcement Delta",
+          "type": "number"
+        },
+        "avg_weakening_delta": {
+          "description": "Durchschnittlicher Gewichts-R\u00fcckgang bei geschw\u00e4chten Kanten",
+          "title": "Avg Weakening Delta",
+          "type": "number"
+        },
+        "bridge_agents_joined": {
+          "minimum": 0,
+          "title": "Bridge Agents Joined",
+          "type": "integer"
+        },
+        "bridge_agents_left": {
+          "minimum": 0,
+          "title": "Bridge Agents Left",
+          "type": "integer"
+        },
+        "clusters_new": {
+          "minimum": 0,
+          "title": "Clusters New",
+          "type": "integer"
+        },
+        "clusters_removed": {
+          "minimum": 0,
+          "title": "Clusters Removed",
+          "type": "integer"
+        },
+        "density_delta": {
+          "description": "Signed delta: B_density - A_density",
+          "title": "Density Delta",
+          "type": "number"
+        },
+        "node_properties_changed": {
+          "description": "Knoten mit mindestens einer Eigenschafts-\u00c4nderung",
+          "minimum": 0,
+          "title": "Node Properties Changed",
+          "type": "integer"
+        },
+        "total_edges_added": {
+          "minimum": 0,
+          "title": "Total Edges Added",
+          "type": "integer"
+        },
+        "total_edges_reinforced": {
+          "minimum": 0,
+          "title": "Total Edges Reinforced",
+          "type": "integer"
+        },
+        "total_edges_removed": {
+          "minimum": 0,
+          "title": "Total Edges Removed",
+          "type": "integer"
+        },
+        "total_edges_weakened": {
+          "minimum": 0,
+          "title": "Total Edges Weakened",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_edges_added",
+        "total_edges_removed",
+        "total_edges_reinforced",
+        "total_edges_weakened",
+        "avg_reinforcement_delta",
+        "avg_weakening_delta",
+        "density_delta",
+        "node_properties_changed",
+        "agents_changed_clusters",
+        "clusters_new",
+        "clusters_removed",
+        "bridge_agents_joined",
+        "bridge_agents_left"
+      ],
+      "title": "GraphDiffMetrics",
+      "type": "object"
+    },
+    "GraphSnapshot": {
+      "additionalProperties": false,
+      "description": "Graph state at a specific point in time (one snapshot).",
+      "properties": {
+        "bridge_agents": {
+          "description": "Top-k Agenten nach Betweenness-Centrality",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Bridge Agents",
+          "type": "array"
+        },
+        "cluster_count": {
+          "minimum": 0,
+          "title": "Cluster Count",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "density": {
+          "description": "Netzwerk-Dichte: edge_count / (node_count * (node_count - 1))",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Density",
+          "type": "number"
+        },
+        "dominant_clusters": {
+          "description": "Top-k Cluster nach Louvain",
+          "items": {
+            "$ref": "#/$defs/ClusterSummary"
+          },
+          "title": "Dominant Clusters",
+          "type": "array"
+        },
+        "edge_count": {
+          "minimum": 0,
+          "title": "Edge Count",
+          "type": "integer"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/EdgeData"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "graph_id": {
+          "title": "Graph Id",
+          "type": "string"
+        },
+        "node_count": {
+          "minimum": 0,
+          "title": "Node Count",
+          "type": "integer"
+        },
+        "round_num": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Runden-Nummer, falls rund-basiert",
+          "title": "Round Num"
+        },
+        "snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Eindeutiger Snapshot-Key oder UUID",
+          "title": "Snapshot Id"
+        }
+      },
+      "required": [
+        "graph_id",
+        "created_at",
+        "node_count",
+        "edge_count",
+        "density",
+        "cluster_count"
+      ],
+      "title": "GraphSnapshot",
+      "type": "object"
+    },
+    "NodePropertyShift": {
+      "additionalProperties": false,
+      "description": "Property change on a single graph node.\n\nbefore/after verwenden denselben engen Union-Typ wie EdgeData.properties,\num dict[str, Any] mit extra='forbid' zu vermeiden.",
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wert nach dem Diff",
+          "title": "After"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wert vor dem Diff",
+          "title": "Before"
+        },
+        "node_id": {
+          "description": "Knoten-ID (als String serialisiert)",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_label": {
+          "description": "Knotentyp-Label, z. B. \"Agent\", \"Entity\"",
+          "title": "Node Label",
+          "type": "string"
+        },
+        "property_name": {
+          "description": "Eigenschaftsname, z. B. \"sentiment_score\"",
+          "title": "Property Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_id",
+        "node_label",
+        "property_name"
+      ],
+      "title": "NodePropertyShift",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/graph-diff.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Complete diff between two graph snapshots (top-level contract model).\n\ncomparison_type unterscheidet rund-basierten Vergleich (\"round-to-round\")\nvon Branch-Diff (\"branch-diff\"). Beide Snapshot-Objekte werden vollst\u00e4ndig\neingebettet, damit der Consumer keine zweite Anfrage stellen muss.",
+  "properties": {
+    "bridge_agent_shifts": {
+      "items": {
+        "$ref": "#/$defs/BridgeAgentShift"
+      },
+      "title": "Bridge Agent Shifts",
+      "type": "array"
+    },
+    "cluster_shifts": {
+      "description": "Agenten, die zwischen Clustern wechselten",
+      "items": {
+        "$ref": "#/$defs/ClusterShift"
+      },
+      "title": "Cluster Shifts",
+      "type": "array"
+    },
+    "clusters_new": {
+      "items": {
+        "$ref": "#/$defs/ClusterSummary"
+      },
+      "title": "Clusters New",
+      "type": "array"
+    },
+    "clusters_removed": {
+      "items": {
+        "$ref": "#/$defs/ClusterSummary"
+      },
+      "title": "Clusters Removed",
+      "type": "array"
+    },
+    "comparison_type": {
+      "enum": [
+        "round-to-round",
+        "branch-diff"
+      ],
+      "title": "Comparison Type",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "edges_added": {
+      "items": {
+        "$ref": "#/$defs/EdgeData"
+      },
+      "title": "Edges Added",
+      "type": "array"
+    },
+    "edges_reinforced": {
+      "description": "Typisiert \u2014 KEIN list[dict]. Validator pr\u00fcft weight_after >= weight_before.",
+      "items": {
+        "$ref": "#/$defs/EdgeReinforcement"
+      },
+      "title": "Edges Reinforced",
+      "type": "array"
+    },
+    "edges_removed": {
+      "items": {
+        "$ref": "#/$defs/EdgeData"
+      },
+      "title": "Edges Removed",
+      "type": "array"
+    },
+    "edges_weakened": {
+      "description": "Typisiert \u2014 KEIN list[dict]. Validator pr\u00fcft weight_after < weight_before.",
+      "items": {
+        "$ref": "#/$defs/EdgeWeakening"
+      },
+      "title": "Edges Weakened",
+      "type": "array"
+    },
+    "graph_id": {
+      "title": "Graph Id",
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/GraphDiffMetrics"
+    },
+    "node_properties_changed": {
+      "items": {
+        "$ref": "#/$defs/NodePropertyShift"
+      },
+      "title": "Node Properties Changed",
+      "type": "array"
+    },
+    "snapshot_a": {
+      "$ref": "#/$defs/GraphSnapshot"
+    },
+    "snapshot_a_id": {
+      "title": "Snapshot A Id",
+      "type": "string"
+    },
+    "snapshot_b": {
+      "$ref": "#/$defs/GraphSnapshot"
+    },
+    "snapshot_b_id": {
+      "title": "Snapshot B Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "graph_id",
+    "snapshot_a_id",
+    "snapshot_b_id",
+    "created_at",
+    "comparison_type",
+    "snapshot_a",
+    "snapshot_b",
+    "metrics"
+  ],
+  "title": "GraphDiff",
+  "type": "object"
+}
