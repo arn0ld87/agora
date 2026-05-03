@@ -24,6 +24,14 @@ from .persona_contract import (
     PersonaQuotaPlan,
     VoiceRegister,
 )
+from .runs_contract import (
+    RunDetail,
+    RunsAggregation,
+    RunsFilterQuery,
+    RunsListResponse,
+    RunStatus,
+    RunSummary,
+)
 
 __all__ = [
     "ConfidenceLabel",
@@ -39,5 +47,11 @@ __all__ = [
     "ReportOutlineModel",
     "ReportSectionModel",
     "ReportStatus",
+    "RunDetail",
+    "RunsAggregation",
+    "RunsFilterQuery",
+    "RunsListResponse",
+    "RunStatus",
+    "RunSummary",
     "VoiceRegister",
 ]

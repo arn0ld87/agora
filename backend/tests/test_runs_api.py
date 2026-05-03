@@ -148,7 +148,8 @@ def test_list_runs_returns_envelope_with_summary(env):
     payload = response.get_json()
     assert payload["success"] is True
     assert payload["count"] == 1
-    summary = payload["data"][0]["summary"]
+    # Sub-Slice 33: data is now a RunsListResponse dict with a "runs" list.
+    summary = payload["data"]["runs"][0]["summary"]
     assert summary["model"] == "qwen3-coder-next:cloud"
     assert summary["document_name"] == "klima-studie.pdf"
     assert summary["persona_count"] == 4
@@ -168,7 +169,8 @@ def test_list_runs_filters_by_entity_id(env):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["count"] == 1
-    assert payload["data"][0]["entity_id"] == "sim_test"
+    # Sub-Slice 33: data is now a RunsListResponse dict.
+    assert payload["data"]["runs"][0]["entity_id"] == "sim_test"
 
 
 def test_list_runs_combines_filters(env):
@@ -184,8 +186,9 @@ def test_list_runs_combines_filters(env):
 
     assert response.status_code == 200
     assert payload["count"] == 1
-    assert payload["data"][0]["run_type"] == "simulation_run"
-    assert payload["data"][0]["status"] == "completed"
+    # Sub-Slice 33: data is now a RunsListResponse dict.
+    assert payload["data"]["runs"][0]["run_type"] == "simulation_run"
+    assert payload["data"]["runs"][0]["status"] == "completed"
 
 
 def test_get_run_returns_summary(env):

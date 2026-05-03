@@ -9,8 +9,16 @@ import traceback
 
 from flask import current_app, request
 
+from pydantic import ValidationError
+
 from . import runs_bp
 from ..config import Config
+from ..contracts.runs_contract import (
+    RunDetail,
+    RunsAggregation,
+    RunsFilterQuery,
+    RunsListResponse,
+)
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
@@ -148,21 +156,123 @@ def _attach_summary(run: dict, sim_cache: dict, project_cache: dict) -> dict:
     return enriched
 
 
+def _parse_status_param(args) -> list | None:
+    """Parse ?status= query param: supports multi-value and comma-separated."""
+    raw_values = args.getlist("status")
+    if not raw_values:
+        return None
+    # Flatten comma-separated entries: ?status=processing,pending
+    statuses: list[str] = []
+    for v in raw_values:
+        for part in v.split(","):
+            stripped = part.strip()
+            if stripped:
+                statuses.append(stripped)
+    return statuses if statuses else None
+
+
 @runs_bp.route("", methods=["GET"])
 @handle_api_errors(logger=logger, log_prefix="Failed to list runs")
 def list_runs():
+    # Collect and validate query parameters via Pydantic.
+    raw_params: dict = {
+        "limit": request.args.get("limit", 50, type=int),
+        "offset": request.args.get("offset", 0, type=int),
+        "simulation_id": request.args.get("simulation_id"),
+        "since": request.args.get("since"),
+        "aggregate": request.args.get("aggregate"),
+    }
+    status_list = _parse_status_param(request.args)
+    if status_list is not None:
+        raw_params["status"] = status_list
+
+    # Remove None-valued keys so Pydantic uses field defaults.
+    raw_params = {k: v for k, v in raw_params.items() if v is not None}
+
+    try:
+        fq = RunsFilterQuery.model_validate(raw_params)
+    except ValidationError as exc:
+        return json_error(exc.errors(), status=400)
+
+    # Pass legacy filter params through unchanged for backwards compatibility.
     runs = run_registry.list_runs(
         project_id=request.args.get("project"),
         run_type=request.args.get("run_type"),
-        status=request.args.get("status"),
+        statuses=[str(s) for s in fq.status] if fq.status else None,
         branch=request.args.get("branch"),
         entity_id=request.args.get("entity_id"),
-        limit=request.args.get("limit", 200, type=int),
+        simulation_id=fq.simulation_id,
+        since=fq.since.isoformat() if fq.since else None,
+        limit=fq.limit,
+        offset=fq.offset,
     )
+
     sim_cache: dict = {}
     project_cache: dict = {}
     enriched = [_attach_summary(run, sim_cache, project_cache) for run in runs]
-    return json_success(enriched, count=len(enriched))
+
+    # Build optional status aggregation (full scan, not page-scoped).
+    aggregation = None
+    if fq.aggregate == "status":
+        counts = run_registry.aggregate_by_status(
+            project_id=request.args.get("project"),
+            run_type=request.args.get("run_type"),
+            simulation_id=fq.simulation_id,
+        )
+        aggregation = RunsAggregation(counts=counts, total=sum(counts.values()))
+
+    response = RunsListResponse(
+        runs=[RunDetail.model_validate(r) for r in enriched],
+        total=len(enriched),
+        aggregation=aggregation,
+    )
+    return json_success(
+        response.model_dump(mode="json"),
+        count=response.total,
+    )
+
+
+def _build_run_detail(run: dict) -> dict:
+    """Attach live metrics to a run manifest before serialisation.
+
+    eta_seconds: taken from run metadata if present (populated by the runner).
+    log_tail: last up-to-20 event messages — no extra I/O needed.
+    metrics: subset of manifest fields as typed scalars.
+    """
+    enriched = _attach_summary(run, {}, {})
+
+    # eta_seconds from metadata (runners may store it there).
+    metadata = run.get("metadata") or {}
+    eta_seconds: int | None = metadata.get("eta_seconds")
+
+    # log_tail: last 20 event messages from the embedded event log.
+    events: list[dict] = run.get("events") or []
+    log_tail: list[str] | None = None
+    if events:
+        log_tail = [
+            e.get("message") or ""
+            for e in events[-20:]
+            if e.get("message")
+        ] or None
+
+    # metrics: phase, round counter, last_event_at from the manifest/events.
+    metrics: dict | None = None
+    phase = metadata.get("phase") or metadata.get("stage")
+    round_num = metadata.get("round_num") or metadata.get("round")
+    last_event_ts = events[-1].get("timestamp") if events else None
+    if any(v is not None for v in (phase, round_num, last_event_ts)):
+        metrics = {}
+        if phase is not None:
+            metrics["phase"] = str(phase)
+        if round_num is not None:
+            metrics["round_num"] = int(round_num)
+        if last_event_ts is not None:
+            metrics["last_event_at"] = str(last_event_ts)
+
+    enriched["eta_seconds"] = eta_seconds
+    enriched["log_tail"] = log_tail
+    enriched["metrics"] = metrics
+    return enriched
 
 
 @runs_bp.route("/<run_id>", methods=["GET"])
@@ -170,7 +280,8 @@ def get_run(run_id: str):
     run, error = _get_run_or_404(run_id)
     if error:
         return error
-    return json_success(_attach_summary(run, {}, {}))
+    detail = RunDetail.model_validate(_build_run_detail(run))
+    return json_success(detail.model_dump(mode="json"))
 
 
 @runs_bp.route("/<run_id>/events", methods=["GET"])

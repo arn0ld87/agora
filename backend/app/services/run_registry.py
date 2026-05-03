@@ -243,11 +243,36 @@ class RunRegistry:
         project_id: Optional[str] = None,
         run_type: Optional[str] = None,
         status: Optional[str] = None,
+        statuses: Optional[List[str]] = None,
         branch: Optional[str] = None,
         entity_id: Optional[str] = None,
+        simulation_id: Optional[str] = None,
+        since: Optional[str] = None,
         limit: int = 200,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
+        """List runs with optional filtering.
+
+        ``statuses`` accepts a list of canonical status strings and supersedes
+        the single ``status`` parameter when provided.  Both are kept for
+        backwards compatibility with existing callers.
+
+        ``since`` is an ISO-8601 string; only runs whose ``updated_at`` is
+        >= that value are returned.  Filtering happens in-memory because the
+        storage layer is file-based — this is a performance concern at scale.
+
+        ``offset`` and ``limit`` implement basic pagination over the sorted
+        result set.
+        """
         os.makedirs(self.REGISTRY_DIR, exist_ok=True)
+
+        # Normalise status filter to a set of canonical values.
+        canonical_statuses: Optional[set[str]] = None
+        if statuses:
+            canonical_statuses = {self.canonical_status(s) for s in statuses}
+        elif status:
+            canonical_statuses = {self.canonical_status(status)}
+
         manifests: List[Dict[str, Any]] = []
         with self._lock:
             for filename in os.listdir(self.REGISTRY_DIR):
@@ -265,16 +290,49 @@ class RunRegistry:
                     continue
                 if run_type and run.get("run_type") != run_type:
                     continue
-                if status and run.get("status") != self.canonical_status(status):
+                if canonical_statuses and run.get("status") not in canonical_statuses:
                     continue
                 if branch and run.get("branch_label") != branch and metadata.get("branch_name") != branch:
                     continue
                 if entity_id and run.get("entity_id") != entity_id:
                     continue
+                if simulation_id and linked.get("simulation_id") != simulation_id:
+                    continue
+                if since and (run.get("updated_at") or "") < since:
+                    continue
                 manifests.append(run)
 
         manifests.sort(key=lambda item: item.get("updated_at") or item.get("started_at") or "", reverse=True)
-        return manifests[:limit]
+        # Apply offset + limit for pagination.
+        return manifests[offset: offset + limit]
+
+    def aggregate_by_status(
+        self,
+        *,
+        project_id: Optional[str] = None,
+        run_type: Optional[str] = None,
+        simulation_id: Optional[str] = None,
+    ) -> Dict[str, int]:
+        """Return a count-per-canonical-status dict over all matching runs.
+
+        Intended to accompany ``list_runs`` responses when ``?aggregate=status``
+        is requested.  Performs a full scan — same O(n) cost caveat as
+        ``list_runs``.
+        """
+        counts: Dict[str, int] = {s: 0 for s in ("pending", "processing", "paused", "completed", "failed", "stopped")}
+        # Use a large internal limit to count all matching runs, not just the
+        # current page.
+        all_runs = self.list_runs(
+            project_id=project_id,
+            run_type=run_type,
+            simulation_id=simulation_id,
+            limit=100_000,
+            offset=0,
+        )
+        for run in all_runs:
+            s = run.get("status", "pending")
+            counts[s] = counts.get(s, 0) + 1
+        return counts
 
     def find_by_linked_id(self, key: str, value: str, *, run_type: Optional[str] = None) -> List[Dict[str, Any]]:
         return [

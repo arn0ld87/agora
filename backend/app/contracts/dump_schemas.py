@@ -16,6 +16,7 @@ from pathlib import Path
 
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
+from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -26,6 +27,9 @@ CONTRACTS: dict[str, type] = {
     "evidence-map.schema.json": EvidenceMapModel,
     "persona.schema.json": PersonaModel,
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
+    "run-summary.schema.json": RunSummary,
+    "runs-list-response.schema.json": RunsListResponse,
+    "run-detail.schema.json": RunDetail,
 }
 
 
