@@ -26,9 +26,14 @@ services:
       context: .
       target: prod
       args:
-        # Hängt den Bearer-Token zur Build-Zeit ins Frontend-Bundle.
-        # Wird per `docker compose build` aus der Host-Env übernommen
-        # (Compose liest VITE_AGORA_TOKEN automatisch aus .env).
+        # Gate: VITE_AGORA_TOKEN wird nur ins Bundle einkompiliert, wenn
+        # ALLOW_BUILD_TIME_TOKEN=true gesetzt ist. Default: false →
+        # Frontend bekommt leeren Token, Runtime-Login erforderlich.
+        # Opt-In nur für Single-User-Tailnet-Deploys.
+        # Siehe Dockerfile:ARG ALLOW_BUILD_TIME_TOKEN und
+        # docu/security-hardening.md → F2.1
+        ALLOW_BUILD_TIME_TOKEN: ${ALLOW_BUILD_TIME_TOKEN:-false}
+        # Der eigentliche Token-Wert (wird nur bei Gate=true verwendet).
         VITE_AGORA_TOKEN: ${VITE_AGORA_TOKEN:-}
     ports: !override
       # Backend bleibt auf Loopback gebunden — externer Zugriff geht
