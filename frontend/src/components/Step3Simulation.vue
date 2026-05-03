@@ -286,19 +286,28 @@ function stopPolling() {
   consolePolling.stop()
 }
 
+// Gemeinsamer Helper für SSE- und HTTP-Polling-Pfade (Fix #209, H3).
+// Zentralisiert die Phase-2-Promotion, sodass beide Codepfade identische
+// Logik teilen (DRY) und kein SSE-Frame-Verlust den Button verschwinden lässt.
+function promoteToCompletedPhase(status, data) {
+  if (phase.value === 2) return // Idempotent — schon promoted.
+  phase.value = 2
+  if (status === 'completed' || status === 'stopped') {
+    // 'stopped' = manuell via doStop() abgebrochen; kein Fehlerfall.
+    addLog(t('step3.status.completed', { total: data?.current_round }))
+    emit('update-status', 'completed')
+  } else {
+    emit('update-status', 'error')
+  }
+  stopPolling()
+}
+
 function applyRunStateEvent(data) {
   if (!data || typeof data !== 'object') return
   runStatus.value = { ...runStatus.value, ...data }
   const status = data?.runner_status
-  if (status === 'completed') {
-    phase.value = 2
-    addLog(t('step3.status.completed', { total: data.current_round }))
-    emit('update-status', 'completed')
-    stopPolling()
-  } else if (status === 'failed') {
-    phase.value = 2
-    emit('update-status', 'error')
-    stopPolling()
+  if (status === 'completed' || status === 'failed') {
+    promoteToCompletedPhase(status, data)
   }
 }
 
@@ -322,7 +331,20 @@ async function pollStatus() {
 async function pollDetail() {
   try {
     const res = await getRunStatusDetail(props.simulationId)
-    if (res?.success && Array.isArray(res.data?.all_actions)) {
+    if (!res?.success) return
+
+    // Fix #209 H3: HTTP-Polling promotet ebenfalls auf phase=2, falls SSE-Frame
+    // verloren ging. runner_status aus Detail-Response in runStatus mergen und
+    // bei Abschluss-Status den gemeinsamen Helper aufrufen.
+    const detailStatus = res.data?.runner_status
+    if (detailStatus) {
+      runStatus.value = { ...runStatus.value, runner_status: detailStatus, current_round: res.data?.current_round ?? runStatus.value.current_round }
+      if (detailStatus === 'completed' || detailStatus === 'failed' || detailStatus === 'stopped') {
+        promoteToCompletedPhase(detailStatus, res.data)
+      }
+    }
+
+    if (Array.isArray(res.data?.all_actions)) {
       let appended = 0
       for (const a of res.data.all_actions) {
         const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
