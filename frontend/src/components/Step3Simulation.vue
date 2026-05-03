@@ -131,20 +131,6 @@ async function copyConsoleLineAsJson(line) {
   } catch { /* ignore */ }
 }
 
-// Watcher: zählt ungesehene Errors nur, wenn das Panel geschlossen ist.
-watch(() => consoleLogs.value.length, (newLen) => {
-  if (toolPanelOpen.value) {
-    _lastSeenConsoleLength = newLen
-    return
-  }
-  for (let i = _lastSeenConsoleLength; i < newLen; i += 1) {
-    if (isErrorLine(consoleLogs.value[i])) {
-      toolPanelUnreadErrors.value += 1
-    }
-  }
-  _lastSeenConsoleLength = newLen
-})
-
 function handleToolPanelHotkey(e) {
   // Ctrl+L (Windows/Linux) und Cmd+L (Mac); Browser-Default (Adressleiste fokussieren) abfangen.
   if ((e.ctrlKey || e.metaKey) && (e.key === 'l' || e.key === 'L')) {
@@ -172,6 +158,20 @@ const {
     : Promise.resolve(null),
   intervalMs: 2000,
   stickyScroll: consoleSticky,
+})
+
+// Watcher: zählt ungesehene Errors nur, wenn das Panel geschlossen ist.
+watch(() => consoleLogs.value.length, (newLen) => {
+  if (toolPanelOpen.value) {
+    _lastSeenConsoleLength = newLen
+    return
+  }
+  for (let i = _lastSeenConsoleLength; i < newLen; i += 1) {
+    if (isErrorLine(consoleLogs.value[i])) {
+      toolPanelUnreadErrors.value += 1
+    }
+  }
+  _lastSeenConsoleLength = newLen
 })
 
 function addLog(msg) { emit('add-log', msg) }
