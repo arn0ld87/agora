@@ -164,6 +164,61 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 
 ---
 
+## F2.1 — VITE_AGORA_TOKEN per Build-Arg-Gate (Sub-Slice 46)
+
+**Stand:** 2026-05-03
+
+**Problem.** Früher zog das `prod-builder`-Stage des Dockerfile den Wert
+von `VITE_AGORA_TOKEN` automatisch aus der Build-Env (Compose liest das
+implizit aus `.env`) und brannte ihn als Plaintext ins Frontend-Bundle.
+Wer das Bundle in die Hand bekam (per `docker save`, `docker pull`,
+oder dem statisch ausgelieferten `frontend/dist`), bekam den Token.
+
+**Fix.** Das Einbrennen ist jetzt hinter einem expliziten Build-Arg
+`ALLOW_BUILD_TIME_TOKEN` (Default `false`) gelockt.
+
+### Default-Pfad — Token nicht im Bundle
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Build sieht den Token nicht (auch wenn `VITE_AGORA_TOKEN` in `.env`
+gesetzt ist). Frontend-Bundle hat einen leeren `import.meta.env.VITE_AGORA_TOKEN`.
+Der Operator setzt den Token zur Laufzeit über das UI-Eingabefeld
+(siehe `frontend/src/api/index.ts:setAgoraToken`).
+
+### Opt-In — Token im Bundle (Single-User-Tailnet-Deploy)
+
+```bash
+docker build \
+  --target prod \
+  --build-arg ALLOW_BUILD_TIME_TOKEN=true \
+  --build-arg VITE_AGORA_TOKEN="<dein-token>" \
+  -t agora-with-token .
+```
+
+**Caveats:**
+- Nur für Single-User-Tailnet-Deploys oder lokale Entwicklung gedacht.
+- Niemals für Public-Internet-Deploys: jeder, der das Bundle abgreift,
+  bekommt den Token.
+- Token-Rotation erfordert einen vollständigen Image-Rebuild.
+
+### Auth-Header
+
+In beiden Pfaden schickt das Frontend den Token als
+`X-Agora-Token`-Header (nicht als `?token=`-Query-Parameter — siehe
+F2.2 Sub-Slice 47 für das Hard-Disable des Query-Fallbacks).
+
+### Neue Build-Args
+
+| Build-Arg | Default | Zweck |
+|---|---|---|
+| `ALLOW_BUILD_TIME_TOKEN` | `false` | Explizites Gate. Nur bei `true` wird `VITE_AGORA_TOKEN` ins Bundle einkompiliert. |
+| `VITE_AGORA_TOKEN` | leer | Der einzubrennende Token. Wird ohne `ALLOW_BUILD_TIME_TOKEN=true` ignoriert. |
+
+---
+
 ## Offene Punkte (nach Phase 3 abgearbeitet)
 
 - Upstream-Review-Status aus `SECURITY_REVIEW_SUMMARY.md` ist durch diese Phasen teilweise überholt; der Abschnitt dort wird in einem Follow-up abgeglichen.

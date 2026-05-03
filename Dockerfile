@@ -57,17 +57,43 @@ CMD ["npm", "run", "dev"]
 # ---------- prod-builder (frontend bundle only) ----------
 FROM base AS prod-builder
 
-# VITE_AGORA_TOKEN wird als Build-Arg durchgereicht und von Vite zur
-# Build-Zeit in das Frontend-Bundle als Plaintext einkompiliert. Nur
-# sinnvoll für Single-User-Tailnet-Deploys; nicht für Public-Internet.
+# Build-Time-Token-Gate (F2.1, Sub-Slice 46).
+#
+# Default: ALLOW_BUILD_TIME_TOKEN=false → der Build ignoriert
+# VITE_AGORA_TOKEN, das Frontend-Bundle bekommt einen LEEREN Token-Wert
+# einkompiliert. Das Frontend muss den Token zur Laufzeit per
+# setAgoraToken() setzen (siehe frontend/src/api/index.ts und das
+# UI-Eingabefeld in der App).
+#
+# Opt-In: ALLOW_BUILD_TIME_TOKEN=true erlaubt das Einbrennen des Tokens
+# ins Bundle. Nur sinnvoll für Single-User-Tailnet-Deploys. Caveat:
+# wer das Bundle hat, hat den Token. Niemals fuer Public-Internet-Deploys.
+#
+# Aufruf:
+#   docker build --target prod-builder \
+#     --build-arg ALLOW_BUILD_TIME_TOKEN=true \
+#     --build-arg VITE_AGORA_TOKEN=<token> .
+ARG ALLOW_BUILD_TIME_TOKEN=false
 ARG VITE_AGORA_TOKEN=""
-ENV VITE_AGORA_TOKEN=${VITE_AGORA_TOKEN}
+# ENV VITE_AGORA_TOKEN wird bewusst NICHT gesetzt — ein ENV-Befehl würde
+# den ARG-Wert im RUN-Block überschreiben und das Gate wäre wirkungslos.
+# Vite liest VITE_* zur Build-Zeit aus dem Shell-Kontext von npm run build;
+# die /tmp/.vite_token_env-Datei speist den korrekten Wert ein.
+RUN _token="${VITE_AGORA_TOKEN:-}" && \
+    if [ "$ALLOW_BUILD_TIME_TOKEN" = "true" ] && [ -n "$_token" ]; then \
+      echo "ALLOW_BUILD_TIME_TOKEN=true: VITE_AGORA_TOKEN wird ins Bundle einkompiliert."; \
+      printf 'VITE_AGORA_TOKEN=%s\n' "$_token" > /tmp/.vite_token_env; \
+    else \
+      echo "ALLOW_BUILD_TIME_TOKEN=false (Default): Frontend-Bundle bekommt leeren Token. Runtime-Login erforderlich."; \
+      echo "VITE_AGORA_TOKEN=" > /tmp/.vite_token_env; \
+    fi
 
 COPY --chown=agora:agora frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
 
 COPY --chown=agora:agora frontend/ ./frontend/
-RUN cd frontend && npm run build
+RUN export $(cat /tmp/.vite_token_env) && rm /tmp/.vite_token_env && \
+    cd frontend && npm run build
 
 # ---------- prod ----------
 FROM base AS prod
