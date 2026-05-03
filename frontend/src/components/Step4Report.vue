@@ -184,7 +184,13 @@ async function regenerateWithModel() {
 
 function addLog(msg: string) { emit('add-log', msg) }
 
-const statusPolling = usePolling(pollStatus, 2500)
+// Sub-Slice J.3 (#221): Polling-Intervalle gebündelt — statusPolling und
+// agentLog teilen sich denselben Wert, damit Drift bei Anpassungen wegfällt.
+const STATUS_POLLING_INTERVAL_MS = 2500
+const AGENT_LOG_POLLING_INTERVAL_MS = STATUS_POLLING_INTERVAL_MS
+const CONSOLE_LOG_POLLING_INTERVAL_MS = 2000
+
+const statusPolling = usePolling(pollStatus, STATUS_POLLING_INTERVAL_MS)
 
 // Issue #141 — Sticky-Scroll für Agent- und Console-Log-Pane.
 // Separate containerRef-Refs werden extern erstellt, an useStickyScroll übergeben
@@ -205,7 +211,7 @@ const {
   fetcher: (sinceLine) => props.reportId
     ? getAgentLog(props.reportId, sinceLine)
     : Promise.resolve(null),
-  intervalMs: 2500, // Sub-Slice J.3 (#221): auf 2500 ms angeglichen (Konsistenz mit statusPolling, -33 % Backend-Last)
+  intervalMs: AGENT_LOG_POLLING_INTERVAL_MS,
   parseLine: parseAgentEntry,
   stickyScroll: agentSticky,
 })
@@ -218,7 +224,7 @@ const {
   fetcher: (sinceLine) => props.reportId
     ? getConsoleLog(props.reportId, sinceLine)
     : Promise.resolve(null),
-  intervalMs: 2000,
+  intervalMs: CONSOLE_LOG_POLLING_INTERVAL_MS,
   stickyScroll: consoleSticky,
 })
 

@@ -409,22 +409,20 @@ describe('aggregateSectionConfidence (Sub-Slice 16a)', () => {
 // Sub-Slice J.3 (#221): agentLog-Polling-Intervall auf 2500 ms angeglichen
 describe('Step4Report — agentLog-Polling-Intervall (Sub-Slice J.3)', () => {
   it('ruft useIncrementalLogPolling für agentLog mit intervalMs=2500 auf', async () => {
-    vi.clearAllMocks()
-    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(getReportStatus).mockResolvedValue({
       success: true,
       data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
     })
-    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(getReport).mockResolvedValue({
       success: true,
       data: VALID_REPORT,
     })
-    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(getReportEvidence).mockResolvedValue({
       success: true,
       data: VALID_EVIDENCE,
     })
 
     const mockPolling = vi.mocked(useIncrementalLogPolling)
-    mockPolling.mockClear()
 
     mountComponent()
 
@@ -439,7 +437,6 @@ describe('Step4Report — agentLog-Polling-Intervall (Sub-Slice J.3)', () => {
 
   it('consoleLog-Polling bleibt bei 2000 ms (unverändert)', () => {
     const mockPolling = vi.mocked(useIncrementalLogPolling)
-    mockPolling.mockClear()
 
     mountComponent()
 
