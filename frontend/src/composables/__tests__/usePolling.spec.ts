@@ -7,10 +7,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
-import { usePolling } from '../usePolling'
+import { usePolling, type UsePollingReturn, type UsePollingOptions } from '../usePolling'
 
-function mountPolling(task, intervalMs, options) {
-  let exposed
+function mountPolling(
+  task: Parameters<typeof usePolling>[0],
+  intervalMs: number,
+  options?: UsePollingOptions
+): { wrapper: ReturnType<typeof mount>; polling: UsePollingReturn } {
+  let exposed: UsePollingReturn | undefined
   const Comp = defineComponent({
     setup() {
       exposed = usePolling(task, intervalMs, options)
@@ -18,7 +22,7 @@ function mountPolling(task, intervalMs, options) {
     },
   })
   const wrapper = mount(Comp)
-  return { wrapper, polling: exposed }
+  return { wrapper, polling: exposed as UsePollingReturn }
 }
 
 describe('usePolling', () => {
@@ -31,7 +35,7 @@ describe('usePolling', () => {
   })
 
   it('startet den Timer und ruft `task` periodisch auf', async () => {
-    const task = vi.fn().mockResolvedValue()
+    const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 1000)
 
     await polling.start()
@@ -47,7 +51,7 @@ describe('usePolling', () => {
   })
 
   it('führt `task` sofort aus wenn `immediate: true`', async () => {
-    const task = vi.fn().mockResolvedValue()
+    const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 1000, { immediate: true })
 
     await polling.start()
@@ -58,7 +62,7 @@ describe('usePolling', () => {
   })
 
   it('stoppt nach `stop()` und ruft `task` nicht mehr', async () => {
-    const task = vi.fn().mockResolvedValue()
+    const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 500)
 
     await polling.start()
@@ -73,7 +77,7 @@ describe('usePolling', () => {
   })
 
   it('cleanup auf unmount stoppt den Timer', async () => {
-    const task = vi.fn().mockResolvedValue()
+    const task = vi.fn().mockResolvedValue(undefined)
     const { wrapper, polling } = mountPolling(task, 500)
 
     await polling.start()
@@ -102,7 +106,7 @@ describe('usePolling', () => {
   })
 
   it('mehrfacher start() startet keinen zweiten Timer', async () => {
-    const task = vi.fn().mockResolvedValue()
+    const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 1000)
 
     await polling.start()
@@ -116,7 +120,9 @@ describe('usePolling', () => {
   })
 
   it('isTicking schützt vor concurrent ticks', async () => {
-    let resolveTask
+    // reason: resolveTask is assigned asynchronously inside the mock; TypeScript cannot infer its type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolveTask: ((value: any) => void) | undefined
     const task = vi.fn().mockImplementation(() => new Promise((resolve) => {
       resolveTask = resolve
     }))
@@ -132,7 +138,7 @@ describe('usePolling', () => {
     await vi.advanceTimersByTimeAsync(300)
     expect(task).toHaveBeenCalledTimes(1)
 
-    resolveTask()
+    resolveTask?.(undefined)
     await flushPromises()
     expect(polling.isTicking.value).toBe(false)
 

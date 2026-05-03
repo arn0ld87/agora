@@ -9,14 +9,16 @@ import { defineComponent, h } from 'vue'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (key) => `t:${key}`,
+    t: (key: string) => `t:${key}`,
   }),
 }))
 
-import { useWorkspaceStatus } from '../useWorkspaceStatus'
+import { useWorkspaceStatus, type UseWorkspaceStatusOptions, type UseWorkspaceStatusReturn } from '../useWorkspaceStatus'
 
-function mountStatus(args) {
-  let exposed
+function mountStatus(
+  args?: UseWorkspaceStatusOptions
+): { wrapper: ReturnType<typeof mount>; status: UseWorkspaceStatusReturn } {
+  let exposed: UseWorkspaceStatusReturn | undefined
   const Comp = defineComponent({
     setup() {
       exposed = useWorkspaceStatus(args)
@@ -24,7 +26,7 @@ function mountStatus(args) {
     },
   })
   const wrapper = mount(Comp)
-  return { wrapper, status: exposed }
+  return { wrapper, status: exposed as UseWorkspaceStatusReturn }
 }
 
 describe('useWorkspaceStatus', () => {

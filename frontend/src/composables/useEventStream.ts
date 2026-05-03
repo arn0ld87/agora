@@ -9,27 +9,40 @@
 // decide to retry. A simple exponential backoff kicks in after repeated
 // failures so we don't hammer a misbehaving backend.
 
-import { onUnmounted, ref } from 'vue'
-import { openSimulationStream } from '../api/stream'
+import { onUnmounted, ref, type Ref } from 'vue'
+import { openSimulationStream, type StreamHandlers } from '../api/stream'
 
 const MAX_RECONNECT_ATTEMPTS = 5
 
-export function useEventStream(simulationIdRef, handlers = {}) {
+export interface UseEventStreamReturn {
+  isStreaming: Ref<boolean>
+  error: Ref<unknown>
+  lastEventAt: Ref<number | null>
+  start: () => Promise<void>
+  stop: () => void
+}
+
+export function useEventStream(
+  simulationIdRef: Ref<string> | (() => string) | string,
+  handlers: StreamHandlers = {}
+): UseEventStreamReturn {
   const isStreaming = ref(false)
-  const error = ref(null)
-  const lastEventAt = ref(null)
-  let source = null
-  let reconnectTimer = null
+  const error = ref<unknown>(null)
+  const lastEventAt = ref<number | null>(null)
+  let source: EventSource | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let attempts = 0
 
-  function getId() {
-    return typeof simulationIdRef === 'function'
-      ? simulationIdRef()
-      : simulationIdRef?.value ?? simulationIdRef
+  function getId(): string {
+    if (typeof simulationIdRef === 'function') return simulationIdRef()
+    if (simulationIdRef !== null && typeof simulationIdRef === 'object' && 'value' in simulationIdRef) {
+      return (simulationIdRef as Ref<string>).value
+    }
+    return simulationIdRef as string
   }
 
-  function wrap(handler) {
-    return (payload) => {
+  function wrap<T>(handler: ((payload: T) => void) | undefined): (payload: T) => void {
+    return (payload: T) => {
       lastEventAt.value = Date.now()
       error.value = null
       attempts = 0
@@ -37,7 +50,7 @@ export function useEventStream(simulationIdRef, handlers = {}) {
     }
   }
 
-  async function start() {
+  async function start(): Promise<void> {
     const id = getId()
     if (!id) return
     if (source) return
@@ -50,7 +63,7 @@ export function useEventStream(simulationIdRef, handlers = {}) {
         state: wrap(handlers.state),
         control: wrap(handlers.control),
         ping: wrap(handlers.ping),
-        error: (ev) => {
+        error: (ev: Event) => {
           error.value = ev
           if (typeof handlers.error === 'function') handlers.error(ev)
           // EventSource attempts reconnect internally; cap the noise if the
@@ -66,7 +79,7 @@ export function useEventStream(simulationIdRef, handlers = {}) {
     }
   }
 
-  function stop() {
+  function stop(): void {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null

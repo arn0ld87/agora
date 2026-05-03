@@ -7,11 +7,13 @@
 //  4. Scroll-Listener ist via rAF gedrosselt; Eval läuft erst im nächsten Frame.
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, type Ref } from 'vue'
 
 import { useStickyScroll } from '../useStickyScroll'
 
-function makeContainer({ scrollHeight = 1000, clientHeight = 200, scrollTop = 800 } = {}) {
+function makeContainer(
+  { scrollHeight = 1000, clientHeight = 200, scrollTop = 800 }: { scrollHeight?: number; clientHeight?: number; scrollTop?: number } = {}
+): HTMLElement {
   // JSDOM exposes scrollTop als beschreibbares Number-Field. scrollHeight und
   // clientHeight defaulten auf 0; wir patchen sie über Object.defineProperty.
   const el = document.createElement('div')
@@ -29,7 +31,7 @@ function makeContainer({ scrollHeight = 1000, clientHeight = 200, scrollTop = 80
 
 // `requestAnimationFrame` ist im Composable gegen einen Fallback abgesichert.
 // Im Test warten wir explizit auf den nächsten Frame, damit rAF-Callbacks abgearbeitet sind.
-function nextFrame() {
+function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => resolve())
@@ -40,10 +42,10 @@ function nextFrame() {
 }
 
 describe('useStickyScroll', () => {
-  let containerRef
+  let containerRef: Ref<HTMLElement | null>
 
   beforeEach(() => {
-    containerRef = ref(null)
+    containerRef = ref<HTMLElement | null>(null)
   })
 
   it('markAppended scrollt ans Ende, wenn Nutzer am Ende ist', async () => {

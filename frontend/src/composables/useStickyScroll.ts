@@ -16,29 +16,27 @@
  * Nicht-Ziel: Smooth-Scroll-Animation (lassen wir dem Browser-Default).
  */
 
-import { ref, watch, onUnmounted, getCurrentInstance } from 'vue'
+import { ref, watch, onUnmounted, getCurrentInstance, type Ref } from 'vue'
 
 const BOTTOM_THRESHOLD_PX = 32
 
-/**
- * @param {import('vue').Ref<HTMLElement|null>} containerRef
- * @returns {{
- *   isAtBottom: import('vue').Ref<boolean>,
- *   unreadCount: import('vue').Ref<number>,
- *   autoScrollEnabled: import('vue').Ref<boolean>,
- *   markAppended: (delta?: number) => void,
- *   scrollToBottom: () => void,
- *   evaluatePosition: () => void,
- * }}
- */
-export function useStickyScroll(containerRef) {
+export interface UseStickyScrollReturn {
+  isAtBottom: Ref<boolean>
+  unreadCount: Ref<number>
+  autoScrollEnabled: Ref<boolean>
+  markAppended: (delta?: number) => void
+  scrollToBottom: () => void
+  evaluatePosition: () => void
+}
+
+export function useStickyScroll(containerRef: Ref<HTMLElement | null>): UseStickyScrollReturn {
   const isAtBottom = ref(true)
   const autoScrollEnabled = ref(true)
   const unreadCount = ref(0)
 
-  let _detach = null
+  let _detach: (() => void) | null = null
 
-  function evaluatePosition() {
+  function evaluatePosition(): void {
     const el = containerRef.value
     if (!el) return
     // distance from bottom in pixels
@@ -51,7 +49,7 @@ export function useStickyScroll(containerRef) {
     }
   }
 
-  function scrollToBottom() {
+  function scrollToBottom(): void {
     const el = containerRef.value
     if (!el) return
     el.scrollTop = el.scrollHeight
@@ -60,7 +58,7 @@ export function useStickyScroll(containerRef) {
     unreadCount.value = 0
   }
 
-  function markAppended(delta = 1) {
+  function markAppended(delta = 1): void {
     const el = containerRef.value
     if (!el) {
       // Container noch nicht gemountet → Append zählt nicht als „verloren";
@@ -78,13 +76,15 @@ export function useStickyScroll(containerRef) {
     }
   }
 
-  function attach(el) {
+  function attach(el: HTMLElement): void {
     if (!el) return
     // Scroll-Drosselung via requestAnimationFrame: bei schnellen Scroll-Events
     // läuft `evaluatePosition` höchstens einmal pro Frame statt pro Event.
     // Fallback `setTimeout(cb, 16)` für Non-Browser-Umgebungen (Tests).
     let ticking = false
-    const raf = (typeof window !== 'undefined' && window.requestAnimationFrame) || ((cb) => setTimeout(cb, 16))
+    const raf =
+      (typeof window !== 'undefined' && window.requestAnimationFrame) ||
+      ((cb: () => void) => setTimeout(cb, 16))
     const handler = () => {
       if (ticking) return
       ticking = true
@@ -99,7 +99,7 @@ export function useStickyScroll(containerRef) {
     evaluatePosition()
   }
 
-  function detach() {
+  function detach(): void {
     if (_detach) {
       _detach()
       _detach = null

@@ -1,6 +1,27 @@
-import { onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, type Ref } from 'vue'
 
-export function usePolling(task, intervalMs, options = {}) {
+export interface UsePollingOptions {
+  immediate?: boolean
+  onError?: ((error: unknown) => void) | null
+}
+
+export interface UsePollingStartOptions {
+  immediate?: boolean
+}
+
+export interface UsePollingReturn {
+  isRunning: Ref<boolean>
+  isTicking: Ref<boolean>
+  start: (startOptions?: UsePollingStartOptions) => Promise<void>
+  stop: () => void
+  tick: () => Promise<void>
+}
+
+export function usePolling(
+  task: () => Promise<void> | void,
+  intervalMs: number,
+  options: UsePollingOptions = {}
+): UsePollingReturn {
   const {
     immediate = false,
     onError = null,
@@ -8,9 +29,9 @@ export function usePolling(task, intervalMs, options = {}) {
 
   const isRunning = ref(false)
   const isTicking = ref(false)
-  let timerId = null
+  let timerId: ReturnType<typeof setInterval> | null = null
 
-  async function tick() {
+  async function tick(): Promise<void> {
     if (isTicking.value) return
 
     isTicking.value = true
@@ -27,7 +48,7 @@ export function usePolling(task, intervalMs, options = {}) {
     }
   }
 
-  async function start(startOptions = {}) {
+  async function start(startOptions: UsePollingStartOptions = {}): Promise<void> {
     if (timerId) return
 
     const runImmediately = startOptions.immediate ?? immediate
@@ -43,7 +64,7 @@ export function usePolling(task, intervalMs, options = {}) {
     }, intervalMs)
   }
 
-  function stop() {
+  function stop(): void {
     if (timerId) {
       clearInterval(timerId)
       timerId = null

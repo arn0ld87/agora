@@ -61,7 +61,7 @@ describe('useIncrementalLogPolling', () => {
       data: { lines: ['keep', 'skip', 'keep'], next_line: 3 },
     })
     const stickyScroll = { markAppended: vi.fn() }
-    const parseLine = (raw) => raw === 'skip' ? null : raw
+    const parseLine = (raw: string) => raw === 'skip' ? null : raw
     const polling = useIncrementalLogPolling({ fetcher, parseLine, stickyScroll })
     const el = makeFakeContainer()
     polling.containerRef.value = el

@@ -13,28 +13,48 @@
  *   <WorkspaceSplit :left-style="leftPanelStyle" :right-style="rightPanelStyle">
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 
-export const WORKSPACE_MODES = [
+export type WorkspaceMode = 'graph' | 'split' | 'workbench'
+
+export interface WorkspaceModeOption {
+  value: WorkspaceMode
+  label: string
+}
+
+export interface PanelStyle {
+  width: string
+  opacity: number
+}
+
+export interface UseWorkspaceModeReturn {
+  viewMode: Ref<WorkspaceMode>
+  workspaceModes: WorkspaceModeOption[]
+  leftPanelStyle: ComputedRef<PanelStyle>
+  rightPanelStyle: ComputedRef<PanelStyle>
+  toggleMaximize: (target: WorkspaceMode) => void
+}
+
+export const WORKSPACE_MODES: WorkspaceModeOption[] = [
   { value: 'graph', label: 'Graph' },
   { value: 'split', label: 'Split' },
   { value: 'workbench', label: 'Workbench' },
 ]
 
-const FULL = { width: '100%', opacity: 1 }
-const HALF = { width: '50%', opacity: 1 }
-const HIDDEN = { width: '0%', opacity: 0 }
+const FULL: PanelStyle = { width: '100%', opacity: 1 }
+const HALF: PanelStyle = { width: '50%', opacity: 1 }
+const HIDDEN: PanelStyle = { width: '0%', opacity: 0 }
 
-export function useWorkspaceMode(initialMode = 'split') {
-  const viewMode = ref(initialMode)
+export function useWorkspaceMode(initialMode: WorkspaceMode = 'split'): UseWorkspaceModeReturn {
+  const viewMode = ref<WorkspaceMode>(initialMode)
 
-  const leftPanelStyle = computed(() => {
+  const leftPanelStyle = computed<PanelStyle>(() => {
     if (viewMode.value === 'graph') return FULL
     if (viewMode.value === 'workbench') return HIDDEN
     return HALF
   })
 
-  const rightPanelStyle = computed(() => {
+  const rightPanelStyle = computed<PanelStyle>(() => {
     if (viewMode.value === 'workbench') return FULL
     if (viewMode.value === 'graph') return HIDDEN
     return HALF
@@ -42,7 +62,7 @@ export function useWorkspaceMode(initialMode = 'split') {
 
   /** Toggle behaviour: clicking the maximize button on a panel that's already
    *  maximized snaps back to split — matches the existing UX. */
-  function toggleMaximize(target) {
+  function toggleMaximize(target: WorkspaceMode): void {
     viewMode.value = viewMode.value === target ? 'split' : target
   }
 

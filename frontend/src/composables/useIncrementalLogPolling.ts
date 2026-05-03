@@ -23,36 +23,53 @@
  *     Composable scrollt nach jedem Append ans Ende. Auf `null` deaktiviert.
  */
 
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, type Ref } from 'vue'
 
-import { usePolling } from './usePolling'
+import { usePolling, type UsePollingReturn } from './usePolling'
 
-/**
- * @template TRaw, TEntry
- * @param {object} args
- * @param {(sinceLine: number) => Promise<{ success?: boolean, data?: { lines?: TRaw[], logs?: TRaw[], next_line?: number, total_lines?: number } } | null>} args.fetcher
- *   – Lieferant der Log-Page; bekommt den aktuellen Cursor und gibt das API-Envelope zurück.
- * @param {number} [args.intervalMs=2000] – Pacing.
- * @param {(raw: TRaw) => TEntry|null} [args.parseLine] – optionale Transformation; `null` → Eintrag wird verworfen.
- * @param {{ markAppended: (delta?: number) => void } | null} [args.stickyScroll]
- *   – Optionale `useStickyScroll`-Instanz. Wenn übergeben, ruft das Composable
- *     `stickyScroll.markAppended(deltaCount)` statt blind `scrollTop = scrollHeight`,
- *     damit ein Nutzer-Scrollback respektiert wird (Issue #131, baut auf #130 auf).
- * @returns {{
- *   lines: import('vue').Ref<TEntry[]>,
- *   containerRef: import('vue').Ref<HTMLElement|null>,
- *   polling: ReturnType<typeof usePolling>,
- *   reset: () => void,
- *   tick: () => Promise<void>
- * }}
- */
-export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine = null, stickyScroll = null }) {
-  const lines = ref([])
-  const containerRef = ref(null)
+/** Minimal interface for the stickyScroll bridge accepted by this composable. */
+export interface StickyScrollBridge {
+  markAppended: (delta?: number) => void
+}
+
+/** Shape of each API-Envelope page this composable accepts. */
+interface LogPage<TRaw> {
+  success?: boolean
+  data?: {
+    lines?: TRaw[]
+    logs?: TRaw[]
+    next_line?: number
+    total_lines?: number
+  }
+}
+
+export interface UseIncrementalLogPollingArgs<TRaw, TEntry> {
+  fetcher: (sinceLine: number) => Promise<LogPage<TRaw> | null | undefined>
+  intervalMs?: number
+  parseLine?: ((raw: TRaw) => TEntry | null) | null
+  stickyScroll?: StickyScrollBridge | null
+}
+
+export interface UseIncrementalLogPollingReturn<TEntry> {
+  lines: Ref<TEntry[]>
+  containerRef: Ref<HTMLElement | null>
+  polling: UsePollingReturn
+  reset: () => void
+  tick: () => Promise<void>
+}
+
+export function useIncrementalLogPolling<TRaw = unknown, TEntry = TRaw>({
+  fetcher,
+  intervalMs = 2000,
+  parseLine = null,
+  stickyScroll = null,
+}: UseIncrementalLogPollingArgs<TRaw, TEntry>): UseIncrementalLogPollingReturn<TEntry> {
+  const lines = ref<TEntry[]>([]) as Ref<TEntry[]>
+  const containerRef = ref<HTMLElement | null>(null)
   const sinceLine = ref(0)
 
-  async function tick() {
-    let res
+  async function tick(): Promise<void> {
+    let res: LogPage<TRaw> | null | undefined
     try {
       res = await fetcher(sinceLine.value)
     } catch {
@@ -60,13 +77,13 @@ export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine
     }
     if (!res?.success) return
 
-    const payload = res.data || {}
-    const incoming = payload.lines || payload.logs
+    const payload = res.data ?? {}
+    const incoming = payload.lines ?? payload.logs
     if (!Array.isArray(incoming) || incoming.length === 0) return
 
     let appendedCount = 0
     for (const raw of incoming) {
-      const entry = parseLine ? parseLine(raw) : raw
+      const entry = parseLine ? parseLine(raw) : (raw as unknown as TEntry)
       if (entry !== null && entry !== undefined) {
         lines.value.push(entry)
         appendedCount += 1
@@ -89,7 +106,7 @@ export function useIncrementalLogPolling({ fetcher, intervalMs = 2000, parseLine
 
   const polling = usePolling(tick, intervalMs)
 
-  function reset() {
+  function reset(): void {
     lines.value = []
     sinceLine.value = 0
   }

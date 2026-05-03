@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import AuroraBackground from './components/ui/AuroraBackground.vue'
 import LogDrawer from './components/LogDrawer.vue'
-import { useTheme } from './composables/useTheme.js'
+import { useTheme } from './composables/useTheme'
 
 // Mount the theme watcher early so the persisted theme is applied before
 // the first child component reads any token-driven style.

@@ -1,18 +1,27 @@
-import { ref, watch } from 'vue'
+import { ref, watch, type Ref } from 'vue'
+
+export type ThemeValue = 'light' | 'dark'
+
+export interface UseThemeReturn {
+  theme: Ref<ThemeValue>
+  setTheme: (value: ThemeValue) => void
+  toggle: () => void
+  options: ThemeValue[]
+}
 
 const STORAGE_KEY = 'agora-theme'
-const VALID = ['light', 'dark']
-const DEFAULT_THEME = 'light'
+const VALID: ThemeValue[] = ['light', 'dark']
+const DEFAULT_THEME: ThemeValue = 'light'
 
-function readInitial() {
+function readInitial(): ThemeValue {
   if (typeof document !== 'undefined') {
     const attr = document.documentElement.getAttribute('data-theme')
-    if (VALID.includes(attr)) return attr
+    if (attr === 'light' || attr === 'dark') return attr
   }
   if (typeof localStorage !== 'undefined') {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (VALID.includes(stored)) return stored
+      if (stored === 'light' || stored === 'dark') return stored
     } catch {
       /* localStorage blocked */
     }
@@ -20,15 +29,15 @@ function readInitial() {
   return DEFAULT_THEME
 }
 
-const theme = ref(readInitial())
+const theme = ref<ThemeValue>(readInitial())
 let watcherInstalled = false
 
-function applyTheme(value) {
+function applyTheme(value: ThemeValue): void {
   if (typeof document === 'undefined') return
   document.documentElement.setAttribute('data-theme', value)
 }
 
-function persist(value) {
+function persist(value: ThemeValue): void {
   if (typeof localStorage === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY, value)
@@ -37,7 +46,7 @@ function persist(value) {
   }
 }
 
-function ensureWatcher() {
+function ensureWatcher(): void {
   if (watcherInstalled) return
   watcherInstalled = true
   applyTheme(theme.value)
@@ -47,15 +56,15 @@ function ensureWatcher() {
   })
 }
 
-export function useTheme() {
+export function useTheme(): UseThemeReturn {
   ensureWatcher()
 
-  function setTheme(value) {
+  function setTheme(value: ThemeValue): void {
     if (!VALID.includes(value)) return
     theme.value = value
   }
 
-  function toggle() {
+  function toggle(): void {
     theme.value = theme.value === 'dark' ? 'light' : 'dark'
   }
 

@@ -6,23 +6,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
+import type { UseEventStreamReturn } from '../useEventStream'
+import type { StreamHandlers } from '../../api/stream'
 
 const openSimulationStream = vi.fn()
 
 vi.mock('../../api/stream', () => ({
-  openSimulationStream: (...args) => openSimulationStream(...args),
+  // reason: mock factory needs rest params to forward all args to the spy
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  openSimulationStream: (...args: any[]) => openSimulationStream(...args),
 }))
 
 import { useEventStream } from '../useEventStream'
 
-function makeFakeSource() {
+function makeFakeSource(): { close: ReturnType<typeof vi.fn> } {
   return {
     close: vi.fn(),
   }
 }
 
-function mountStream(simulationIdRef, handlers) {
-  let exposed
+function mountStream(
+  // reason: accepts all valid simulationIdRef forms from useEventStream signature
+  simulationIdRef: Parameters<typeof useEventStream>[0],
+  handlers: StreamHandlers = {}
+): { wrapper: ReturnType<typeof mount>; stream: UseEventStreamReturn } {
+  let exposed: UseEventStreamReturn | undefined
   const Comp = defineComponent({
     setup() {
       exposed = useEventStream(simulationIdRef, handlers)
@@ -30,7 +38,7 @@ function mountStream(simulationIdRef, handlers) {
     },
   })
   const wrapper = mount(Comp)
-  return { wrapper, stream: exposed }
+  return { wrapper, stream: exposed as UseEventStreamReturn }
 }
 
 describe('useEventStream', () => {
@@ -72,8 +80,10 @@ describe('useEventStream', () => {
   })
 
   it('handler-wrapping setzt lastEventAt und resettet attempts', async () => {
-    let capturedHandlers
-    openSimulationStream.mockImplementation((id, handlers) => {
+    // reason: capturedHandlers is assigned inside the mock, TS cannot infer type
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let capturedHandlers: any
+    openSimulationStream.mockImplementation((_id: string, handlers: StreamHandlers) => {
       capturedHandlers = handlers
       return Promise.resolve(makeFakeSource())
     })

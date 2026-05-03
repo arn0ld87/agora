@@ -26,24 +26,42 @@
  *     })
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const DEFAULT_FALLBACK = { kind: 'running', text: 'common.processing' }
+export interface StatusMapEntry {
+  kind: string
+  text: string
+}
+
+export interface UseWorkspaceStatusOptions {
+  initial?: string
+  map?: Record<string, StatusMapEntry>
+  fallback?: StatusMapEntry
+}
+
+export interface UseWorkspaceStatusReturn {
+  currentStatus: Ref<string>
+  statusKind: ComputedRef<string>
+  statusText: ComputedRef<string>
+  updateStatus: (next: string) => void
+}
+
+const DEFAULT_FALLBACK: StatusMapEntry = { kind: 'running', text: 'common.processing' }
 
 export function useWorkspaceStatus({
   initial = 'processing',
   map = {},
   fallback = DEFAULT_FALLBACK,
-} = {}) {
+}: UseWorkspaceStatusOptions = {}): UseWorkspaceStatusReturn {
   const { t } = useI18n()
   const currentStatus = ref(initial)
 
-  const entry = computed(() => map[currentStatus.value] ?? fallback)
-  const statusKind = computed(() => entry.value.kind)
-  const statusText = computed(() => t(entry.value.text))
+  const entry = computed<StatusMapEntry>(() => map[currentStatus.value] ?? fallback)
+  const statusKind = computed<string>(() => entry.value.kind)
+  const statusText = computed<string>(() => t(entry.value.text))
 
-  function updateStatus(next) {
+  function updateStatus(next: string): void {
     currentStatus.value = next
   }
 

@@ -18,30 +18,65 @@
  *               leeren (z.B. bei „Detail schließen").
  */
 
-import { onMounted, onUnmounted, ref, toValue, watch, nextTick } from 'vue'
+import { onMounted, onUnmounted, ref, toValue, watch, nextTick, type MaybeRefOrGetter, type Ref } from 'vue'
 import * as d3 from 'd3'
 
 import { buildGraphRenderData } from '../components/graph/graphPanelData'
 import { formatEdgeLabel } from '../components/graph/edgeLabelI18n'
 import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeometry'
 
-/**
- * @param {object} args
- * @param {import('vue').Ref<SVGSVGElement|null>} args.svgRef          – Vue-Ref auf das `<svg>`-Element
- * @param {import('vue').Ref<HTMLElement|null>}   args.containerRef    – Vue-Ref auf den Container, dessen Maße den Viewport definieren
- * @param {import('vue').MaybeRefOrGetter<object|null>} args.graphData – Reactive Source mit `nodes`/`edges`
- * @param {import('vue').MaybeRefOrGetter<Array>}       args.entityTypes – Reactive Source mit Entity-Type-Liste (für Farb-Mapping)
- * @param {import('vue').Ref<boolean>}            args.showEdgeLabels  – Sichtbarkeit der Kantenbeschriftungen
- * @param {((key: string) => string)=}            args.translateLabel  – optionaler i18n-Hook (`vue-i18n` `t`); wird auf `edge.name` angewandt
- * @returns {{ selectedItem: import('vue').Ref<object|null>, render: () => void }}
- */
-export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, showEdgeLabels, translateLabel = null }) {
-  const selectedItem = ref(null)
+/** Raw graph data shape consumed by buildGraphRenderData. */
+interface RawGraphData {
+  nodes?: Record<string, unknown>[]
+  edges?: Record<string, unknown>[]
+}
+
+/** Entity-type color-mapping entry as expected by buildGraphRenderData. */
+export interface EntityTypeEntry {
+  name: string
+  color: string
+}
+
+export interface UseGraphRenderArgs {
+  svgRef: Ref<SVGSVGElement | null>
+  containerRef: Ref<HTMLElement | null>
+  graphData: MaybeRefOrGetter<RawGraphData | null>
+  entityTypes: MaybeRefOrGetter<EntityTypeEntry[]>
+  showEdgeLabels: Ref<boolean>
+  translateLabel?: ((key: string) => string) | null
+}
+
+export interface UseGraphRenderReturn {
+  selectedItem: Ref<Record<string, unknown> | null>
+  render: () => void
+  isPaused: Ref<boolean>
+  pauseSimulation: () => void
+  resumeSimulation: () => void
+  togglePause: () => void
+}
+
+// reason: d3 v7 ships types via @types/d3; its internal Selection/Simulation generics require
+// matching the exact datum types from graphPanelData.js (a JS file, checkJs=false).
+// Using `any` here is the pragmatic choice to avoid sprawling casts across every d3 call.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type D3Selection = d3.Selection<any, any, any, any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type D3Simulation = d3.Simulation<any, any>
+
+export function useGraphRender({
+  svgRef,
+  containerRef,
+  graphData,
+  entityTypes,
+  showEdgeLabels,
+  translateLabel = null,
+}: UseGraphRenderArgs): UseGraphRenderReturn {
+  const selectedItem = ref<Record<string, unknown> | null>(null)
   const isPaused = ref(false)
 
-  let currentSimulation = null
-  let linkLabelsRef = null
-  let linkLabelBgRef = null
+  let currentSimulation: D3Simulation | null = null
+  let linkLabelsRef: D3Selection | null = null
+  let linkLabelBgRef: D3Selection | null = null
 
   const render = () => {
     const svgEl = svgRef.value
@@ -65,11 +100,16 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     svg.selectAll('*').remove()
 
     const types = toValue(entityTypes) || []
-    const { nodes, edges, getColor } = buildGraphRenderData(data, types)
+    // reason: buildGraphRenderData is a JS function; the result types are inferred
+    // as JSDoc-only and are not compatible with d3 SimulationNodeDatum generics.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { nodes, edges, getColor } = buildGraphRenderData(data, types) as { nodes: any[]; edges: any[]; getColor: (type: string) => string }
     if (nodes.length === 0) return
 
-    const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(edges).id(d => d.id).distance(d => {
+    // reason: nodes/edges come from a JS module; cast to any[] is required to satisfy d3 overloads
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const simulation: D3Simulation = (d3.forceSimulation as any)(nodes)
+      .force('link', d3.forceLink(edges).id((d: any) => d.id).distance((d: any) => {
         const baseDistance = 150
         const edgeCount = d.pairTotal || 1
         return baseDistance + (edgeCount - 1) * 50
@@ -94,7 +134,10 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     const EDGE_LABEL_AUTO_HIDE_ZOOM = 0.6
     let _zoomedOut = false
 
-    svg.call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event) => {
+    // reason: d3.zoom() requires Selection<Element,...> but d3.select(svgEl) returns
+    // Selection<SVGSVGElement,...>; cast is safe because SVGSVGElement extends Element.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(svg as any).call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event: any) => {
       g.attr('transform', event.transform)
       const wantsHide = event.transform.k < EDGE_LABEL_AUTO_HIDE_ZOOM
       if (wantsHide !== _zoomedOut) {
@@ -153,7 +196,9 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
     const linkLabels = linkGroup.selectAll('text')
       .data(edges)
       .enter().append('text')
-      .text(d => formatEdgeLabel(d.name, translateLabel))
+      // reason: formatEdgeLabel is JS (checkJs=false); translateLabel null triggers TS type error
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .text((d: any) => formatEdgeLabel(d.name, translateLabel as any))
       .attr('font-size', '12px')
       .attr('fill', 'var(--fg-meta)')
       .attr('text-anchor', 'middle')
@@ -189,15 +234,18 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
       .attr('stroke', 'var(--mono-50)')
       .attr('stroke-width', 2.5)
       .style('cursor', 'pointer')
-      .call(d3.drag()
-        .on('start', (event, d) => {
+      // reason: d3.drag() requires Selection<Element,...>; GraphNodeViewModel from
+      // a JS module does not satisfy d3's datum constraints — cast is safe at runtime.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .call((d3.drag() as any)
+        .on('start', (event: any, d: any) => {
           d.fx = d.x
           d.fy = d.y
           d._dragStartX = event.x
           d._dragStartY = event.y
           d._isDragging = false
         })
-        .on('drag', (event, d) => {
+        .on('drag', (event: any, d: any) => {
           const dx = event.x - d._dragStartX
           const dy = event.y - d._dragStartY
           const distance = Math.sqrt(dx * dx + dy * dy)
@@ -212,7 +260,7 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
             d.fy = event.y
           }
         })
-        .on('end', (event, d) => {
+        .on('end', (event: any, d: any) => {
           if (d._isDragging) {
             simulation.alphaTarget(0)
           }
@@ -237,13 +285,18 @@ export function useGraphRender({ svgRef, containerRef, graphData, entityTypes, s
           color: getColor(d.type),
         }
       })
-      .on('mouseenter', (event, d) => {
-        if (!selectedItem.value || selectedItem.value.data?.uuid !== d.rawData.uuid) {
+      .on('mouseenter', (event: any, d: any) => {
+        // reason: d.rawData is typed as `object` from JSDoc; index access via any is safe
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dataUuid = (selectedItem.value?.data as any)?.uuid
+        if (!selectedItem.value || dataUuid !== (d.rawData as any).uuid) {
           d3.select(event.target).attr('stroke', 'var(--fg-on-inverse)').attr('stroke-width', 3)
         }
       })
-      .on('mouseleave', (event, d) => {
-        if (!selectedItem.value || selectedItem.value.data?.uuid !== d.rawData.uuid) {
+      .on('mouseleave', (event: any, d: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dataUuid = (selectedItem.value?.data as any)?.uuid
+        if (!selectedItem.value || dataUuid !== (d.rawData as any).uuid) {
           d3.select(event.target).attr('stroke', 'var(--mono-50)').attr('stroke-width', 2.5)
         }
       })
