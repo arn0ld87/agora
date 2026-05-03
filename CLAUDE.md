@@ -141,18 +141,34 @@ find . -path "*<pattern>*"
 ChatGPT/Claude-LLM-Vorschläge sind oft präzise, aber Variablen-Namen
 sind manchmal halluziniert. Verifiziere **immer**.
 
-## Subagent-Routing (Pro-Plan-Budget)
+## Subagent-Routing (Max-Plan)
 
-Ziel-Mix: ≤5 % Opus, ≤35 % Sonnet, ≥60 % Haiku.
+Optimierungsziel ist **Rework-Vermeidung**, nicht Token-Sparen. Layer-0-Drift
+oder Wording-Glossar-Verstöße kosten in der Re-Review mehr als ein direkter
+Opus-Run gespart hätte.
 
-| Aufgabe | Modell | Subagent |
-|---|---|---|
-| Architektur-Entscheidung | Opus | (kein Subagent, im Lead) |
-| Refactor 2+ Dateien | Sonnet | `agora-refactor-worker` |
-| Pydantic-Modelle/Tests | Sonnet | `agora-test-worker` |
-| Dokumentation/Markdown | Haiku | `agora-doc-worker` |
-| Read-only Audit | Sonnet | `agora-evidence-auditor` |
-| Vue/Pinia/Zod | Sonnet | `agora-frontend-worker` |
+Ziel-Mix: ~35 % Opus, ~55 % Sonnet, ~10 % Haiku.
+
+| Aufgabe | Modell | Subagent | Anteil-Ziel |
+|---|---|---|---|
+| Architektur-Entscheidung, Cross-Layer-Refactor, ambige Specs | Opus | (Lead, kein Subagent) | ~25 % |
+| Code-Review kritischer Pfade (contracts, evidence_binder, report_agent) | Opus | `feature-dev:code-reviewer` | ~10 % |
+| Refactor 2+ Dateien, Pydantic-Migration | Sonnet | `agora-refactor-worker` | ~25 % |
+| Pydantic-Tests, FSM-Übergänge, Persona-Quoten | Sonnet | `agora-test-worker` | ~15 % |
+| Vue/Pinia/Zod-Spiegel | Sonnet | `agora-frontend-worker` | ~10 % |
+| Read-only Audit (Evidence, Wording-Glossar) | Sonnet | `agora-evidence-auditor` | ~5 % |
+| Dokumentation, CHANGELOG, Arbeitsprotokolle | Haiku | `agora-doc-worker` | ~10 % |
+
+### Opus-Trigger (überstimmen das Default-Routing)
+
+Auch wenn ein Sonnet-Subagent für die Aufgabe definiert ist — bei diesen
+Signalen direkt Opus ziehen:
+
+- Layer-0 (Pydantic-Contracts) wird angefasst
+- Mehrere Layer gleichzeitig betroffen
+- Wording-/Prompt-Semantik (Layer 2, Glossar v1)
+- Spec ist ambig oder Tests fehlen noch
+- Pre-PR-Self-Review **vor** `gh pr create` (fängt Drift bevor Gemini sie sieht)
 
 ## Slash-Commands (im Repo, Cloud-portabel)
 
