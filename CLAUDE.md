@@ -4,7 +4,7 @@
 
 Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
 Stack: **Flask + Pydantic v2 + Vue 3 + Neo4j + Ollama + OASIS** (CAMEL-AI Subprozess).
-Status: v0.9.0+, Backend 1283 Tests, Frontend 137 Tests, Pydantic-Contract-Architektur abgeschlossen (Layer 0–5 grün).
+Status: v0.9.0+, Backend 1289 Tests, Frontend 141 Tests, Pydantic-Contract-Architektur abgeschlossen (Layer 0–6 grün, Layer 7–10 in Arbeit).
 
 ## Sofort wichtig
 
@@ -81,16 +81,21 @@ prompts/                    UI-Prompt-Vorlagen
 | Layer | Inhalt | Status |
 |---|---|---|
 | 0 | Pydantic-Contracts + Zod-Spiegel + JSON-Schema-Dump | grün (Sub-Slice 02a–c) |
-| 1 | Backend-Hardening (Quoten, Evidence-Dedup, Confidence) | grün (06–08, 20a/b/22) |
+| 1 | Backend-Hardening (Quoten, Evidence-Dedup, Confidence) | grün (06–08, 20a/b/22, 32) |
 | 2 | DACH-Voice + Prompt-Semantik (`future prediction` weg) | grün (09, 11, Wording-Glossar v1) |
 | 3 | Reader-Honesty (Quotes, Time-Series, Section-Dedup) | grün (12–14) |
 | 4 | Frontend (Zod-strikt, Diff/Confidence-UI, Quoten) | grün (15, 16a/b, 20c/24) |
-| 5 | Eval/Baseline (Fixtures, Snapshot-Tests) | grün (17) |
+| 5 | Eval/Baseline (Fixtures, Snapshot-Tests) + v1→v2-Migration | grün (17, 25) |
+| 6 | Frontend-TypeScript-Migration (API, Composables, Pinia) | grün (26, 27, 28 — #71/#72/#73) |
+| 7 | Graph / Runs / Compare | teilweise — done: 29 (#65), 33 (#62), 35 (#64). Offen: 22 #74 (Graph-Diff), 24 #66 (Compare-API), 25 #67 (Compare-UI), 27 #63 (RunsDashboard) |
+| 8 | Persona Review + UX | teilweise — done: 30 (#141 Sticky-Scroll). Offen: 29 #69 (Persona-Diff), 30 #70 (Approve/Reject/Regenerate), 32 #137 (Graph-Build-Batch-Marker) |
+| 9 | Production Deployment (Reverse-Proxy, gevent, SSE-Auth-Frontend) | offen — Task 33 (#106). Sub-Slice 19 (gunicorn-Sync) als Workaround vorhanden |
+| 10 | Security Watchlist (CVE-Tracking, pip-audit) | grün dokumentiert (Sub-Slice 31, Refs #121–#126) — Upstream-Pins blockieren weitere Closes |
 
 ## Aktive Hot-Spots / offene Hauspflicht
 
-Die ursprünglichen Layer-0–5-Hot-Spots aus dem ChatGPT-Audit sind alle
-gefixt. Aktuelle bekannte Baustellen:
+Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle
+gefixt. Aktuelle bekannte Baustellen (Layer 7–9):
 
 - **gunicorn-Worker-Modell** — sync mit `--timeout 600` (Sub-Slice 19) ist
   Workaround. Saubere Lösung: `-k gevent` (Plan: [`docu/2026-04-29-prod-slice2-gunicorn.md`](docu/2026-04-29-prod-slice2-gunicorn.md)).
