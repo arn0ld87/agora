@@ -287,15 +287,30 @@ def add_simulation_profile(simulation_id: str):
     persona = (data.get('persona') or '').strip() or (
         f"{display_name} is a participant in social discussions."
     )
+    # karma defensiv casten — Frontend-Forms liefern leere Strings oft als
+    # falsy. int('') würde ValueError werfen. (Gemini-Code-Assist Finding,
+    # PR #226.)
+    karma_raw = data.get('karma')
+    if karma_raw in (None, '', 'null'):
+        karma = 1000
+    else:
+        try:
+            karma = int(karma_raw)
+        except (ValueError, TypeError):
+            karma = 1000
+
+    # created_at-Format spiegelt OasisAgentProfile (oasis_profile_generator.py:66)
+    # — '%Y-%m-%d', kein Zeit-Anteil. Schema-Parity zwischen manuellen und
+    # generierten Profilen. (Gemini-Code-Assist Finding, PR #226.)
     new_profile = {
         'user_id': next_id,
         'username': username,
         'name': display_name,
         'bio': bio,
         'persona': persona,
-        'karma': int(data['karma']) if data.get('karma') is not None else 1000,
+        'karma': karma,
         'created_at': (data.get('created_at') or '').strip()
-            or datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
+            or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
         'age': data.get('age'),
         'gender': data.get('gender', 'other'),
         'mbti': data.get('mbti', ''),
