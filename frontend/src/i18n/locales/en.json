@@ -483,7 +483,8 @@
       "allLevels": "All levels",
       "search": "Search…",
       "pause": "Pause auto-scroll",
-      "empty": "No log lines yet."
+      "empty": "No log lines yet.",
+      "connectionError": "SSE connection interrupted, browser will attempt reconnect…"
     }
   },
   "settings": {

@@ -47,6 +47,12 @@ _LEVEL_PATTERNS = {
 _STREAM_HEARTBEAT_SEC = 15.0
 _STREAM_POLL_SEC = 0.5
 
+# Reconnect-Intervall in ms, das dem Browser via 'retry:'-Frame mitgeteilt
+# wird. Ohne dieses Feld nutzt der Browser seinen internen Default (~3 s,
+# nicht vom Backend steuerbar).
+# TODO: über settings_layer konfigurierbar machen sobald Sub-Slice D durch ist.
+_SSE_RETRY_MS = 5000
+
 
 def _resolve_log_path() -> Path | None:
     """Liefert den absoluten Pfad zur heutigen Logdatei oder ``None``,
@@ -175,6 +181,9 @@ def stream_logs():
 
     @stream_with_context
     def gen():
+        # retry-Frame zuerst: teilt dem Browser mit, nach wie vielen ms er bei
+        # einem Verbindungsabbruch neu verbinden soll (SSE-Spec, RFC 8895 §9.2).
+        yield f'retry: {_SSE_RETRY_MS}\n\n'
         # Default: am Datei-Ende ansetzen, alte Lines holt der Tail-Endpunkt.
         # Wenn der Client einen ``?offset=…`` aus dem Tail-Response durchreicht,
         # starten wir genau dort — sonst gehen Logs verloren, die zwischen

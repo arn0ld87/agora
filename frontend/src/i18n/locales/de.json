@@ -494,7 +494,8 @@
       "allLevels": "Alle Level",
       "search": "Suchen…",
       "pause": "Auto-Scroll pausieren",
-      "empty": "Noch keine Log-Zeilen."
+      "empty": "Noch keine Log-Zeilen.",
+      "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…"
     }
   },
   "settings": {

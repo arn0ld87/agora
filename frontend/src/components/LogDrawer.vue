@@ -111,7 +111,16 @@ function startStream() {
         if (payload?.line != null) appendLine(payload.line)
       } catch { /* ignore non-JSON */ }
     }
-    _eventSource.onerror = () => { /* reconnect handled by browser */ }
+    _eventSource.onerror = (err) => {
+      console.warn('LogDrawer SSE error', err)
+      // Verbindungsfehler werden immer angezeigt — auch wenn Auto-Scroll
+      // pausiert ist. appendLine() würde bei paused=true stumm fallen.
+      lines.value.push(t('logs.drawer.connectionError'))
+      if (lines.value.length > RING_BUFFER_MAX) {
+        lines.value.splice(0, lines.value.length - RING_BUFFER_MAX)
+      }
+      nextTick(() => sticky.markAppended(1))
+    }
   } catch { /* ignore */ }
 }
 

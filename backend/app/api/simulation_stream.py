@@ -48,6 +48,12 @@ logger = get_logger("agora.simulation_stream")
 _HEARTBEAT_SECONDS = 15.0
 _POLL_INTERVAL = 0.5
 
+# Reconnect-Intervall in ms, das dem Browser via 'retry:'-Frame mitgeteilt
+# wird. Ohne dieses Feld nutzt der Browser seinen internen Default (~3 s,
+# nicht vom Backend steuerbar).
+# TODO: über settings_layer konfigurierbar machen sobald Sub-Slice D durch ist.
+_SSE_RETRY_MS = 5000
+
 
 def _sse_format(event: str, data: Any, event_id: Optional[str] = None) -> str:
     payload = json.dumps(data, ensure_ascii=False)
@@ -112,6 +118,9 @@ def _stream(simulation_id: str) -> Iterator[str]:
     for t in threads:
         t.start()
 
+    # retry-Frame zuerst: teilt dem Browser mit, nach wie vielen ms er bei
+    # einem Verbindungsabbruch neu verbinden soll (SSE-Spec, RFC 8895 §9.2).
+    yield f"retry: {_SSE_RETRY_MS}\n\n"
     yield _sse_format("hello", {"simulation_id": simulation_id, "ts": time.time()})
     last_heartbeat = time.monotonic()
     try:
