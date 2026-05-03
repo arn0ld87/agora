@@ -78,6 +78,9 @@ addopts = "-ra --tb=short --import-mode=importlib"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["."]
+markers = [
+    "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
+]
 
 [tool.ruff]
 line-length = 100

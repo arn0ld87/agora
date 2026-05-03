@@ -22,6 +22,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Fixed
 
 - Step3Simulation: Phase-Übergang auf `2` ist robust gegen verlorene SSE-Frames; HTTP-Detail-Polling promotet ebenfalls. Behebt fehlenden „Weiter zum Bericht"-Button (Sub-Slice A, schließt #209).
+- **Graph-Pipeline: Entitäts-Beziehungen werden zuverlässiger extrahiert (Edge-Yield ≥ 1 pro 2 Entitäten auf Fixture-Set). Root-Cause: Prompt-Regel 1 in `NERExtractor._SYSTEM_PROMPT` verbot dem LLM explizit, Relationen zu emittieren, die nicht exakt im Ontologie-Vokabular standen. Bei unvollständigen oder schmalen Ontologien (häufig in frühen Graph-Build-Phasen) emittierte das Modell deshalb gar keine Edges. Fix: Regel 1 umformuliert auf „bevorzuge Ontologie-Typen, erfinde UPPER_SNAKE_CASE-Label wenn kein Typ passt"; drei konkrete Few-Shot-Beispiele (ACQUIRED, LEADS/REPORTS_TO, COLLABORATES_WITH) ergänzt. `_validate_and_clean` war bereits korrekt konfiguriert (kein Type-Filter auf Relations). Neuer `pytest.mark.llm`-Marker in `pyproject.toml` registriert. Tests in `tests/services/test_edge_yield.py` (8 Stub-Tests, 3 opt-in LLM-Smoke-Tests). Fixtures unter `tests/fixtures/edge_yield/`. (Sub-Slice H, schließt #216)**
 
 ### Tests
 
