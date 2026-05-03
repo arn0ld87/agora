@@ -3,6 +3,7 @@ Profile, config, branch, and script-download routes split from the main simulati
 """
 
 import os
+from datetime import datetime, timezone
 
 from flask import request, send_file
 
@@ -267,7 +268,9 @@ def add_simulation_profile(simulation_id: str):
 
     path, profiles = _load_profiles_file(simulation_id, sim_dir, platform)
     existing_ids = [int(profile.get('user_id', 0) or 0) for profile in profiles]
-    next_id = (max(existing_ids) + 1) if existing_ids else 0
+    # When profiles exist, always max+1 to avoid collision with generated user_id=0.
+    # When no profiles exist start at 1 (not 0) to keep 0 reserved for generated profiles.
+    next_id = (max(existing_ids) + 1) if existing_ids else 1
     username = (data.get('username') or f'user_{next_id}').strip()
     existing_names = {str(profile.get('username', '')).lower() for profile in profiles}
     if username.lower() in existing_names:
@@ -277,12 +280,22 @@ def add_simulation_profile(simulation_id: str):
             suffix += 1
         username = f"{base}_{suffix}"
 
+    display_name = data.get('name') or username
+    # Defaults match _save_reddit_json so OASIS can process manual personas identically
+    # to generated ones (Issue #210).
+    bio = (data.get('bio') or '').strip() or display_name
+    persona = (data.get('persona') or '').strip() or (
+        f"{display_name} is a participant in social discussions."
+    )
     new_profile = {
         'user_id': next_id,
         'username': username,
-        'name': data.get('name') or username,
-        'bio': data.get('bio', ''),
-        'persona': data.get('persona', ''),
+        'name': display_name,
+        'bio': bio,
+        'persona': persona,
+        'karma': int(data['karma']) if data.get('karma') is not None else 1000,
+        'created_at': (data.get('created_at') or '').strip()
+            or datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
         'age': data.get('age'),
         'gender': data.get('gender', 'other'),
         'mbti': data.get('mbti', ''),
