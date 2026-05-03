@@ -29,7 +29,7 @@
     "@vue/test-utils": "^2.4.10",
     "eslint": "^10.3.0",
     "eslint-plugin-vue": "^10.5.1",
-    "globals": "^16.4.0",
+    "globals": "^17.6.0",
     "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^7.2.4",
