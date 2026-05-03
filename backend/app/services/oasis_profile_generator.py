@@ -20,6 +20,11 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
+from .persona_demographics import (
+    DACH_NAME_ORIGIN_QUOTAS,
+    build_name_quota_prompt_block,
+    build_name_quota_prompt_block_en,
+)
 
 logger = get_logger('agora.oasis_profile')
 
@@ -193,25 +198,21 @@ class OasisProfileGenerator:
         "Canada", "Australia", "Brazil", "India", "South Korea"
     ]
 
-    # DACH name pool used when the LLM fallback kicks in for individuals.
-    DACH_FIRST_NAMES = [
-        "Lena", "Marie", "Sophie", "Hannah", "Emma", "Laura", "Julia", "Katharina",
-        "Anna", "Sarah", "Lisa", "Nora", "Clara", "Mia", "Leonie",
-        "Jonas", "Leon", "Felix", "Maximilian", "Tim", "Lukas", "Paul", "Julian",
-        "Niklas", "Jan", "Philipp", "David", "Moritz", "Finn", "Tobias",
-        "Alex", "Kim", "Robin", "Sam",  # geschlechtsneutral / nonbinary-freundlich
-    ]
-    DACH_LAST_NAMES = [
-        "Müller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner",
-        "Becker", "Schulz", "Hoffmann", "Schäfer", "Koch", "Bauer", "Richter",
-        "Klein", "Wolf", "Neumann", "Schröder", "Zimmermann", "Braun", "Krüger",
-        "Hofmann", "Hartmann", "Lange", "Werner", "Krause", "Lehmann", "Schmitz",
-        "Maier", "König"
-    ]
+    # DACH-Namenspools werden aus persona_demographics.DACH_NAME_ORIGIN_QUOTAS abgeleitet —
+    # kein separater Pool mehr, damit alle Pfade dieselbe demographische Verteilung nutzen.
 
-    @classmethod
-    def _pick_dach_name(cls) -> str:
-        return f"{random.choice(cls.DACH_FIRST_NAMES)} {random.choice(cls.DACH_LAST_NAMES)}"
+    @staticmethod
+    def _pick_dach_name() -> str:
+        """Wählt einen Vor- und Nachnamen gewichtet nach DACH-Mikrozensus-Quoten.
+
+        Nutzt DACH_NAME_ORIGIN_QUOTAS als Single Source of Truth statt eines
+        statischen deutschen Namenspools.
+        """
+        weights = [q.share for q in DACH_NAME_ORIGIN_QUOTAS]
+        bucket = random.choices(DACH_NAME_ORIGIN_QUOTAS, weights=weights, k=1)[0]
+        first = random.choice(bucket.first_names)
+        last = random.choice(bucket.last_names)
+        return f"{first} {last}"
 
     @staticmethod
     def _last_name(name: str) -> Optional[str]:
@@ -803,6 +804,8 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
         context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
 
+        _quota_block_de = build_name_quota_prompt_block()
+
         if self.language == "de":
             return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
 
@@ -814,9 +817,11 @@ Attribute: {attrs_str}
 Kontext:
 {context_str}
 
+{_quota_block_de}
+
 Antworte als JSON mit folgenden Feldern:
 
-1. display_name: Echter Vor- und Nachname einer Person im DACH-Raum (z. B. "Lena Hoffmann", "Marcel Schmitz"). WICHTIG: Nur dann den tatsächlichen Namen einer realen Person nehmen, wenn "{entity_name}" selbst bereits ein Personenname ist UND diese Person in der Realität so heißt. Bei Rollen ("IT-Umschüler"), Themen ("GraphRAG"), Produkten ("Agora") oder Berufsbezeichnungen IMMER einen anderen, frei gewählten DACH-Namen nehmen — nicht den Namen einer im Kontext erwähnten Person übernehmen. Jede Persona soll einen EIGENEN Namen haben.
+1. display_name: Echter Vor- und Nachname einer Person im DACH-Raum — entsprechend der obigen Namensverteilung. WICHTIG: Nur dann den tatsächlichen Namen einer realen Person nehmen, wenn "{entity_name}" selbst bereits ein Personenname ist UND diese Person in der Realität so heißt. Bei Rollen ("IT-Umschüler"), Themen ("GraphRAG"), Produkten ("Agora") oder Berufsbezeichnungen IMMER einen anderen, frei gewählten Namen nehmen — nicht den Namen einer im Kontext erwähnten Person übernehmen. Jede Persona soll einen EIGENEN Namen haben.
 2. handle: Kurzes Social-Media-Handle in Kleinbuchstaben ohne Leerzeichen (z. B. "lena_hoffmann" oder "marcelschmitz"). Keine Zahlen anhängen — das passiert später.
 3. bio: Social-Media-Bio, max. 200 Zeichen, auf Deutsch.
 4. persona: Ausführliche Personenbeschreibung (rund 1500–2000 Wörter, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
@@ -830,7 +835,7 @@ Antworte als JSON mit folgenden Feldern:
 5. age: Alter als Ganzzahl, frei gewählt im Bereich 18–75 — variiere bewusst, vermeide Standardalter wie 30/35/40.
 6. gender: Genau einer von "male", "female", "nonbinary". KEIN "other" — das ist Institutionen vorbehalten.
 7. mbti: MBTI-Typ (z. B. INTJ, ENFP)
-8. country: ISO-Land in Englisch (z. B. "DE", "US")
+8. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
 9. profession: Beruf (auf Deutsch)
 10. interested_topics: Array deutscher Themen-Strings
 11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
@@ -849,6 +854,8 @@ Wichtig:
 - voice_register MUSS eines der vier exakten Werte sein.
 """
 
+        _quota_block_en = build_name_quota_prompt_block_en()
+
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
 
 Entity Name: {entity_name}
@@ -859,9 +866,11 @@ Entity Attributes: {attrs_str}
 Context Information:
 {context_str}
 
+{_quota_block_en}
+
 Please generate JSON containing the following fields:
 
-1. display_name: Realistic first + last name of a person (culturally appropriate). IMPORTANT: Only use a real person's actual name if "{entity_name}" itself IS a personal name AND matches reality. For roles, topics, products, or job titles ALWAYS pick a different, freshly chosen name — do NOT reuse names of people mentioned in the context. Every persona must have its own unique name.
+1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). IMPORTANT: Only use a real person's actual name if "{entity_name}" itself IS a personal name AND matches reality. For roles, topics, products, or job titles ALWAYS pick a different, freshly chosen name — do NOT reuse names of people mentioned in the context. Every persona must have its own unique name.
 2. handle: Short lowercase social handle without spaces (e.g. "lena_hoffmann"). Do not append digits.
 3. bio: Social media bio, 200 characters
 4. persona: Detailed persona description (2000 words of pure text), must include:
@@ -875,7 +884,7 @@ Please generate JSON containing the following fields:
 5. age: Age as integer, pick deliberately across 18–75 — vary it, avoid default ages like 30.
 6. gender: Exactly one of "male", "female", "nonbinary". Do NOT use "other" — that is reserved for institutions.
 7. mbti: MBTI type (e.g., INTJ, ENFP)
-8. country: Country (use English, e.g., "US")
+8. country: Country ISO code (e.g., "DE", "AT", "CH")
 9. profession: Profession
 10. interested_topics: Array of interested topics
 11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
@@ -907,6 +916,8 @@ Important:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
         context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
 
+        _quota_block_de_grp = build_name_quota_prompt_block()
+
         if self.language == "de":
             return f"""Erzeuge einen realistischen **Menschen**, der als Repräsentantin/Repräsentant oder Mitarbeiter:in für die folgende Organisation / Gruppe auf Social Media spricht — keinen Institutions-Account. Bleibe nah an der bekannten Realität.
 
@@ -918,9 +929,11 @@ Attribute: {attrs_str}
 Kontext:
 {context_str}
 
+{_quota_block_de_grp}
+
 Antworte als JSON mit folgenden Feldern:
 
-1. display_name: Echter Vor- und Nachname einer Person aus dem DACH-Raum (z. B. "Lena Hoffmann", "Marcel Schmitz"). KEIN Organisationsname.
+1. display_name: Echter Vor- und Nachname einer Person — entsprechend der obigen Namensverteilung. KEIN Organisationsname.
 2. handle: Kurzes Social-Media-Handle der Person in Kleinbuchstaben (z. B. "lena_hoffmann"). Keine Zahlen.
 3. bio: Social-Bio der Person, max. 200 Zeichen, Deutsch. Darf die Rolle in der Organisation erwähnen (z. B. "Senior Tech-Recruiter @TalentCore | Karriereberatung für Quereinsteiger").
 4. persona: Ausführliche Personen-Beschreibung (rund 1500–2000 Wörter, Fließtext, Deutsch). Enthalten:
@@ -935,7 +948,7 @@ Antworte als JSON mit folgenden Feldern:
 5. age: Ganzzahl 25–65 (arbeitsfähiges Alter einer:s Repräsentant:in). Variieren, nicht auf 30/40 festnageln.
 6. gender: Genau einer von "male", "female", "nonbinary". KEIN "other".
 7. mbti: MBTI-Typ (z. B. INTJ, ENFP)
-8. country: ISO-Land in Englisch (z. B. "DE")
+8. country: ISO-Land in Englisch (z. B. "DE", "AT", "CH")
 9. profession: Konkrete Rolle bei/Beziehung zu "{entity_name}" (z. B. "Senior Tech-Recruiter bei TalentCore GmbH", "Developer Advocate bei Docker Inc.", "Redakteur bei alexle135.de").
 10. interested_topics: Array deutscher Themen-Strings
 11. voice_register: Genau einer von "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
@@ -954,6 +967,8 @@ Wichtig:
 - voice_register MUSS eines der vier exakten Werte sein.
 """
 
+        _quota_block_en_grp = build_name_quota_prompt_block_en()
+
         return f"""Generate a realistic **human person** who speaks FOR the following organization/group on social media — not an institutional account. The person can be an employee, advocate, official representative, or community member.
 
 Organization/Group: {entity_name}
@@ -964,9 +979,11 @@ Entity Attributes: {attrs_str}
 Context Information:
 {context_str}
 
+{_quota_block_en_grp}
+
 Please generate JSON containing the following fields:
 
-1. display_name: Realistic first + last name of a person (culturally appropriate — e.g. "Lena Hoffmann" for DE-context, "Emily Carter" for US-context). NOT the organization's name.
+1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). NOT the organization's name.
 2. handle: Short lowercase social handle of the person (e.g. "lena_hoffmann"). Do not append digits.
 3. bio: Personal social bio, 200 characters. May reference the role (e.g. "Senior Recruiter @TalentCore | hiring engineers").
 4. persona: Detailed person description (2000 words of pure text), must include:
@@ -981,7 +998,7 @@ Please generate JSON containing the following fields:
 5. age: Integer 25–65 (working-age representative). Vary — do not pin to 30 or 40.
 6. gender: Exactly one of "male", "female", "nonbinary". NOT "other".
 7. mbti: MBTI type (e.g., INTJ, ENFP)
-8. country: Country (use English, e.g., "DE")
+8. country: Country ISO code (e.g., "DE", "AT", "CH")
 9. profession: Concrete role at/relation to "{entity_name}" (e.g. "Senior Tech Recruiter at TalentCore GmbH", "Developer Advocate at Docker Inc.").
 10. interested_topics: Array of topics
 11. voice_register: Exactly one of "formal-de" | "neutral-de" | "technical-de" | "skeptisch-de".
@@ -1209,10 +1226,11 @@ Important:
                 )
                 return idx, fallback_profile, str(e)
 
-        logger.info(f"Starting parallel generation of {total} agent personas (parallel count: {parallel_count})...")
-        print(f"\n{'='*60}")
-        print(f"Starting agent persona generation - {total} entities total, parallel count: {parallel_count}")
-        print(f"{'='*60}\n")
+        logger.info(
+            "Starting parallel generation of %d agent personas (parallel count: %d)",
+            total,
+            parallel_count,
+        )
         
         # Use thread pool for parallel execution
         with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
@@ -1303,9 +1321,10 @@ Important:
                 p.user_name = self._generate_username(base)
             seen_handles.add((p.user_name or "").strip().lower())
 
-        print(f"\n{'='*60}")
-        print(f"Persona generation complete! Generated {len([p for p in profiles if p])} agents")
-        print(f"{'='*60}\n")
+        logger.info(
+            "Persona generation complete — %d agents generated.",
+            len([p for p in profiles if p]),
+        )
 
         # Re-save after dedup to keep realtime file in sync with final state.
         save_profiles_realtime()
@@ -1313,35 +1332,19 @@ Important:
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
-        """Real-time output generated persona to console (complete content, not truncated)"""
-        separator = "-" * 70
-
-        # Build complete output content (not truncated)
+        """Log generated persona details at INFO level (visible in default log config)."""
         topics_str = ', '.join(profile.interested_topics) if profile.interested_topics else 'None'
-
-        output_lines = [
-            f"\n{separator}",
-            f"[Generated] {entity_name} ({entity_type})",
-            f"{separator}",
-            f"Username: {profile.user_name}",
-            "",
-            "[Bio]",
-            f"{profile.bio}",
-            "",
-            "[Detailed Persona]",
-            f"{profile.persona}",
-            "",
-            "[Basic Attributes]",
-            f"Age: {profile.age} | Gender: {profile.gender} | MBTI: {profile.mbti}",
-            f"Profession: {profile.profession} | Country: {profile.country}",
-            f"Interested Topics: {topics_str}",
-            separator
-        ]
-
-        output = "\n".join(output_lines)
-
-        # Only output to console (avoid duplication, logger no longer outputs complete content)
-        print(output)
+        logger.info(
+            "[Generated] %s (%s) → %s | age=%s gender=%s mbti=%s profession=%s topics=%s",
+            entity_name,
+            entity_type,
+            profile.user_name,
+            profile.age,
+            profile.gender,
+            profile.mbti,
+            profile.profession,
+            topics_str,
+        )
     
     def save_profiles(
         self,

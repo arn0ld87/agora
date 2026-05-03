@@ -32,6 +32,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Changed
 
+- Persona-Generierung: Namen folgen DACH-Mikrozensus-Verteilung (~26 % Migrationshintergrund) statt nur deutsch-sprachig (Sub-Slice F, schließt #214). Quoten in `persona_demographics.py`, Prompt zieht aus Single Source of Truth. Fallback-Pfad (`_pick_dach_name`) und alle 4 Prompt-Varianten (DE+EN × Individual+Group) vollständig migriert. `classify_name_origin()` als regelbasierter Bucket-Klassifizierer ohne LLM. `print()`-Statements im Profil-Generator durch `logger.info()`/`logger.debug()` ersetzt.
+
 - **Dev-Stack:** `docker-compose.override.yml` ist jetzt repo-getrackt (aus `.gitignore` entfernt) — Vite-HMR funktioniert neu ohne `docker compose build` bei Frontend-Edits. Lessons-Learned aus PR #207 & PR #208 (TDZ-Bug-Hunt 2026-05-03). Datei mit Bind-Mounts für `frontend/src`, `frontend/public`, `frontend/index.html`, `frontend/vite.config.js`, `frontend/tsconfig.json`. `node_modules` bewusst nicht gemountet (Container-Installation gewinnt). Der bisher persönliche Dev-Override wird damit für alle Devs Default. `docker-compose.prod.yml` bleibt unverändert — Prod-Pipeline nutzt explizit `-f docker-compose.yml -f docker-compose.prod.yml` und ignoriert `override.yml`. Arbeitsprotokoll: `docu/2026-05-03-dev-stack-frontend-bindmount-arbeitsprotokoll.md`. (Sub-Slice DEV-01)
 
 - Sub-Slice 32 — Contradiction-Penalty in compute_confidence()-Aufruf verdrahtet (report_agent.py:637): detect_contradiction_penalty(evidence_items) speist jetzt den bisher hardcoded `0.0`-Hook. Audit-Trail-Eintrag bei Penalty>0. Closes #105 (Layer 1).
