@@ -39,7 +39,20 @@ vi.mock('../../api/simulation', () => ({
   getAvailableModels: vi.fn().mockResolvedValue({ success: true, data: { ollama: [], presets: [], current_default: '' } }),
 }))
 
+// Mock useIncrementalLogPolling — Sub-Slice J.3 (#221): erlaubt Intervall-Prüfung ohne echten Polling-Timer
+vi.mock('../../composables/useIncrementalLogPolling', async () => {
+  const { ref } = await import('vue')
+  return {
+    useIncrementalLogPolling: vi.fn(() => ({
+      lines: ref([]),
+      polling: { start: vi.fn(), stop: vi.fn() },
+      reset: vi.fn(),
+    })),
+  }
+})
+
 import { getReport, getReportStatus, getReportEvidence } from '../../api/report'
+import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
 import Step4Report from '../Step4Report.vue'
 
 // Minimaler i18n-Stub
@@ -390,6 +403,51 @@ describe('aggregateSectionConfidence (Sub-Slice 16a)', () => {
     }
     const result = aggregateSectionConfidence(section)
     expect(result.auditTrail).toHaveLength(3)
+  })
+})
+
+// Sub-Slice J.3 (#221): agentLog-Polling-Intervall auf 2500 ms angeglichen
+describe('Step4Report — agentLog-Polling-Intervall (Sub-Slice J.3)', () => {
+  it('ruft useIncrementalLogPolling für agentLog mit intervalMs=2500 auf', async () => {
+    vi.clearAllMocks()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE,
+    })
+
+    const mockPolling = vi.mocked(useIncrementalLogPolling)
+    mockPolling.mockClear()
+
+    mountComponent()
+
+    // agentLog-Aufruf ist der erste Aufruf (mit parseLine: parseAgentEntry).
+    // consoleLog-Aufruf hat kein parseLine und bleibt bei 2000 ms.
+    const agentCall = mockPolling.mock.calls.find(
+      (args) => typeof args[0].parseLine === 'function'
+    )
+    expect(agentCall).toBeDefined()
+    expect(agentCall![0]).toMatchObject({ intervalMs: 2500 })
+  })
+
+  it('consoleLog-Polling bleibt bei 2000 ms (unverändert)', () => {
+    const mockPolling = vi.mocked(useIncrementalLogPolling)
+    mockPolling.mockClear()
+
+    mountComponent()
+
+    const consoleCall = mockPolling.mock.calls.find(
+      (args) => typeof args[0].parseLine !== 'function'
+    )
+    expect(consoleCall).toBeDefined()
+    expect(consoleCall![0]).toMatchObject({ intervalMs: 2000 })
   })
 })
 

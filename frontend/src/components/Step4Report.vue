@@ -205,7 +205,7 @@ const {
   fetcher: (sinceLine) => props.reportId
     ? getAgentLog(props.reportId, sinceLine)
     : Promise.resolve(null),
-  intervalMs: 1500,
+  intervalMs: 2500, // Sub-Slice J.3 (#221): auf 2500 ms angeglichen (Konsistenz mit statusPolling, -33 % Backend-Last)
   parseLine: parseAgentEntry,
   stickyScroll: agentSticky,
 })
