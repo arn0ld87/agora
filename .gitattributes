@@ -1,0 +1,11 @@
+# GitHub-Linguist Overrides
+#
+# design/ enthält statische Design-Mockups (HTML/JSX/CSS-Token-Studien).
+# Sie sind nicht Teil der produktiven Frontend- oder Backend-Quellen
+# und sollen weder die Sprach-Statistik des Repos noch LOC-Audits
+# verfälschen.
+design/** linguist-vendored=true
+
+# Auto-generierte JSON-Schemas — werden via
+# `uv run python -m app.contracts.dump_schemas` erzeugt.
+schemas/** linguist-generated=true
