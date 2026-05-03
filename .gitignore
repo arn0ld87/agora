@@ -74,7 +74,6 @@ PLAN.md.bak
 /scripts/logs/
 /.codex
 /.gitleaksignore
-/docker-compose.override.yml
 /media/
 /static/image/
 /static/media/

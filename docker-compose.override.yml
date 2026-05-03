@@ -1,0 +1,18 @@
+services:
+  agora:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "${AGORA_FRONTEND_PORT:-5173}:5173"
+    # Frontend-Bind-Mount für Vite-HMR im Dev-Container.
+    # Ohne diese Mounts müsste jeder Source-Edit am Host ein voll-`docker compose build`
+    # auslösen, bevor der Container die Änderung sieht (Lessons-Learned aus PR #207
+    # TDZ-Bug-Hunt vom 2026-05-03). node_modules bewusst NICHT gemountet — Container
+    # hat seine eigene Installation aus dem Image-Build.
+    volumes:
+      - ./frontend/src:/app/frontend/src:cached
+      - ./frontend/public:/app/frontend/public:cached
+      - ./frontend/index.html:/app/frontend/index.html:ro
+      - ./frontend/vite.config.js:/app/frontend/vite.config.js:ro
+      - ./frontend/tsconfig.json:/app/frontend/tsconfig.json:ro
