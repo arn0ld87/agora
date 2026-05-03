@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Tests
+
+- Sub-Slice 35 — Tests für Resume/Stop-Endpoints und HistoryDatabase-Buttons (Closes #64, Layer 7): 6 Backend-Tests in `tests/api/test_runs_resume_stop.py` (404/409-Negativpfade für `/resume` und `/stop`), 4 Frontend-Tests in `src/components/__tests__/HistoryDatabase.spec.ts` (Button-Visibility, resumeRun-Call, stopRun/confirm-Gating).
+
 ### Changed
 
 - Sub-Slice 32 — Contradiction-Penalty in compute_confidence()-Aufruf verdrahtet (report_agent.py:637): detect_contradiction_penalty(evidence_items) speist jetzt den bisher hardcoded `0.0`-Hook. Audit-Trail-Eintrag bei Penalty>0. Closes #105 (Layer 1).
