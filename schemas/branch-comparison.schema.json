@@ -1,0 +1,379 @@
+{
+  "$defs": {
+    "BranchMetrics": {
+      "additionalProperties": false,
+      "description": "Aggregated metrics snapshot for a single fully-simulated branch.\n\nDeckt Netzwerk-Metriken, Evidence-Qualit\u00e4t und Persona-Aktivierung ab.\nAlle float-Felder werden in der API-Response auf 2\u20134 Dezimalstellen gerundet.",
+      "properties": {
+        "avg_evidence_per_claim": {
+          "description": "Durchschnittliche Anzahl Evidence-Items pro Claim",
+          "minimum": 0.0,
+          "title": "Avg Evidence Per Claim",
+          "type": "number"
+        },
+        "bridge_agent_ids": {
+          "description": "Top-k Agenten nach Betweenness-Centrality (Cross-Cluster-Br\u00fcckenbau)",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Bridge Agent Ids",
+          "type": "array"
+        },
+        "claims_without_evidence_ratio": {
+          "description": "Anteil Claims ohne Evidence-Items (struktureller Drift-Marker)",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Claims Without Evidence Ratio",
+          "type": "number"
+        },
+        "cluster_count": {
+          "description": "Anzahl dominanter Cluster",
+          "minimum": 0,
+          "title": "Cluster Count",
+          "type": "integer"
+        },
+        "confidence_distribution": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Histogramm der Claim-Confidence-Scores: {low: int, medium: int, high: int, verified: int}",
+          "propertyNames": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "verified"
+            ]
+          },
+          "title": "Confidence Distribution",
+          "type": "object"
+        },
+        "contradiction_ratio": {
+          "description": "Anteil Claims mit Widerspruchsmarkierungen in der Evidence",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Contradiction Ratio",
+          "type": "number"
+        },
+        "dominant_clusters": {
+          "description": "Top-k Cluster nach Gr\u00f6\u00dfe, deterministisch sortiert \u2014 Reuse aus graph_diff",
+          "items": {
+            "$ref": "#/$defs/ClusterSummary"
+          },
+          "title": "Dominant Clusters",
+          "type": "array"
+        },
+        "echo_chamber_index": {
+          "description": "Anteil Agenteninteraktionen innerhalb desselben Clusters (0.0 = vollst\u00e4ndig integriert, 1.0 = v\u00f6llig polarisiert)",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Echo Chamber Index",
+          "type": "number"
+        },
+        "interaction_density": {
+          "description": "Durchschnittliche Interaktionen pro Runde (interactions / rounds, approx)",
+          "minimum": 0.0,
+          "title": "Interaction Density",
+          "type": "number"
+        },
+        "persona_reach": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SegmentReach"
+          },
+          "description": "Segment-Name \u2192 SegmentReach (Aktivit\u00e4tsquote pro Segment)",
+          "title": "Persona Reach",
+          "type": "object"
+        },
+        "total_agents": {
+          "description": "Gesamtanzahl Agenten im Branch",
+          "minimum": 0,
+          "title": "Total Agents",
+          "type": "integer"
+        },
+        "total_interactions": {
+          "description": "Gesamtanzahl Agenten-Interaktionen",
+          "minimum": 0,
+          "title": "Total Interactions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "echo_chamber_index",
+        "cluster_count",
+        "total_agents",
+        "total_interactions",
+        "interaction_density",
+        "confidence_distribution",
+        "avg_evidence_per_claim",
+        "claims_without_evidence_ratio",
+        "contradiction_ratio"
+      ],
+      "title": "BranchMetrics",
+      "type": "object"
+    },
+    "ClusterChange": {
+      "additionalProperties": false,
+      "description": "Typed record for a cluster that changed its composition or label between two branches.\n\nErsatz f\u00fcr den Spike-Hint `List[Dict]` in ComparisonDeltas.clusters_changed.\nlabel_a und label_b werden separat gef\u00fchrt \u2014 der API-Klient kann den Pfeil im UI rendern.",
+      "properties": {
+        "cluster_id": {
+          "description": "Cluster-ID (gemeinsamer Bezugspunkt zwischen Branches)",
+          "title": "Cluster Id",
+          "type": "integer"
+        },
+        "label_a": {
+          "description": "TF-Top-3-Label in Branch A",
+          "title": "Label A",
+          "type": "string"
+        },
+        "label_b": {
+          "description": "TF-Top-3-Label in Branch B",
+          "title": "Label B",
+          "type": "string"
+        },
+        "size_a": {
+          "description": "Cluster-Gr\u00f6\u00dfe in Branch A",
+          "minimum": 0,
+          "title": "Size A",
+          "type": "integer"
+        },
+        "size_b": {
+          "description": "Cluster-Gr\u00f6\u00dfe in Branch B",
+          "minimum": 0,
+          "title": "Size B",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cluster_id",
+        "size_a",
+        "size_b",
+        "label_a",
+        "label_b"
+      ],
+      "title": "ClusterChange",
+      "type": "object"
+    },
+    "ClusterSummary": {
+      "additionalProperties": false,
+      "description": "Summary representation of a single cluster.",
+      "properties": {
+        "cluster_id": {
+          "title": "Cluster Id",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Deterministisches TF-Top-3-Label",
+          "title": "Label",
+          "type": "string"
+        },
+        "member_count": {
+          "description": "Anzahl Agenten im Cluster",
+          "minimum": 0,
+          "title": "Member Count",
+          "type": "integer"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cluster_id",
+        "size",
+        "label",
+        "member_count"
+      ],
+      "title": "ClusterSummary",
+      "type": "object"
+    },
+    "ComparisonDeltas": {
+      "additionalProperties": false,
+      "description": "Signed differences between Branch B and Branch A (B - A).\n\nNegative Werte bedeuten: Branch A hat h\u00f6here Auspr\u00e4gung.\nPositive Werte bedeuten: Branch B hat h\u00f6here Auspr\u00e4gung.",
+      "properties": {
+        "avg_evidence_delta": {
+          "description": "Delta durchschnittliche Evidence-Items pro Claim (B - A)",
+          "title": "Avg Evidence Delta",
+          "type": "number"
+        },
+        "bridge_agents_delta": {
+          "description": "Delta Bridge-Agent-Anzahl (positiv = mehr Bridge-Agents in B)",
+          "title": "Bridge Agents Delta",
+          "type": "integer"
+        },
+        "cluster_delta": {
+          "description": "Delta Cluster-Anzahl (positiv = mehr Cluster in B)",
+          "title": "Cluster Delta",
+          "type": "integer"
+        },
+        "clusters_changed": {
+          "description": "Cluster die in beiden Branches vorhanden sind, aber Gr\u00f6\u00dfe oder Label ge\u00e4ndert haben. Typisiert als ClusterChange \u2014 KEIN list[dict].",
+          "items": {
+            "$ref": "#/$defs/ClusterChange"
+          },
+          "title": "Clusters Changed",
+          "type": "array"
+        },
+        "clusters_only_in_a": {
+          "description": "Cluster die nur in Branch A existieren (in B verschwunden)",
+          "items": {
+            "$ref": "#/$defs/ClusterSummary"
+          },
+          "title": "Clusters Only In A",
+          "type": "array"
+        },
+        "clusters_only_in_b": {
+          "description": "Cluster die nur in Branch B existieren (in A nicht vorhanden)",
+          "items": {
+            "$ref": "#/$defs/ClusterSummary"
+          },
+          "title": "Clusters Only In B",
+          "type": "array"
+        },
+        "confidence_distribution_delta": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Signed Differenz pro Confidence-Label (B - A)",
+          "propertyNames": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "verified"
+            ]
+          },
+          "title": "Confidence Distribution Delta",
+          "type": "object"
+        },
+        "contradiction_ratio_delta": {
+          "description": "Delta Contradiction-Ratio (B - A, signed)",
+          "title": "Contradiction Ratio Delta",
+          "type": "number"
+        },
+        "echo_chamber_delta": {
+          "description": "Delta Echo-Chamber-Index (positiv = mehr Polarisation in B)",
+          "title": "Echo Chamber Delta",
+          "type": "number"
+        },
+        "interaction_density_delta": {
+          "description": "Delta Interaction-Density (positiv = dichteres Engagement in B)",
+          "title": "Interaction Density Delta",
+          "type": "number"
+        }
+      },
+      "required": [
+        "echo_chamber_delta",
+        "cluster_delta",
+        "bridge_agents_delta",
+        "confidence_distribution_delta",
+        "avg_evidence_delta",
+        "contradiction_ratio_delta",
+        "interaction_density_delta"
+      ],
+      "title": "ComparisonDeltas",
+      "type": "object"
+    },
+    "SegmentReach": {
+      "additionalProperties": false,
+      "description": "Activation coverage for a single persona segment in a simulated branch.\n\nMeasures how many generated personas of a segment have executed at least\none action during the simulation (Aktivit\u00e4ts-Indikator).",
+      "properties": {
+        "active_count": {
+          "description": "Personas mit mindestens 1 Action",
+          "minimum": 0,
+          "title": "Active Count",
+          "type": "integer"
+        },
+        "ratio": {
+          "description": "active_count / total_count",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "segment_name": {
+          "description": "Name des Persona-Segments, z. B. 'Politik'",
+          "title": "Segment Name",
+          "type": "string"
+        },
+        "total_count": {
+          "description": "Alle generierten Personas im Segment",
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "segment_name",
+        "active_count",
+        "total_count",
+        "ratio"
+      ],
+      "title": "SegmentReach",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/branch-comparison.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Top-level contract for comparing two fully-simulated branches of a simulation.\n\nEnth\u00e4lt vollst\u00e4ndige Metriken beider Branches sowie signierte Deltas.\nDer Consumer ben\u00f6tigt keine zweite Anfrage f\u00fcr die Einzelmetriken.",
+  "properties": {
+    "branch_a_completed_at": {
+      "description": "Simulation-Completion-Zeit Branch A",
+      "format": "date-time",
+      "title": "Branch A Completed At",
+      "type": "string"
+    },
+    "branch_a_id": {
+      "description": "ID Branch A (UUID oder Neo4j SimulationBranch-ID)",
+      "title": "Branch A Id",
+      "type": "string"
+    },
+    "branch_b_completed_at": {
+      "description": "Simulation-Completion-Zeit Branch B",
+      "format": "date-time",
+      "title": "Branch B Completed At",
+      "type": "string"
+    },
+    "branch_b_id": {
+      "description": "ID Branch B (UUID oder Neo4j SimulationBranch-ID)",
+      "title": "Branch B Id",
+      "type": "string"
+    },
+    "created_at": {
+      "description": "Zeitstempel dieses Vergleichs (nicht der Simulation)",
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "deltas": {
+      "$ref": "#/$defs/ComparisonDeltas",
+      "description": "Signierte Differenzen (Branch B - Branch A)"
+    },
+    "metrics_a": {
+      "$ref": "#/$defs/BranchMetrics",
+      "description": "Aggregierter Metriken-Snapshot Branch A"
+    },
+    "metrics_b": {
+      "$ref": "#/$defs/BranchMetrics",
+      "description": "Aggregierter Metriken-Snapshot Branch B"
+    },
+    "simulation_id": {
+      "description": "ID der gemeinsamen Parent-Simulation",
+      "title": "Simulation Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "simulation_id",
+    "branch_a_id",
+    "branch_b_id",
+    "created_at",
+    "branch_a_completed_at",
+    "branch_b_completed_at",
+    "metrics_a",
+    "metrics_b",
+    "deltas"
+  ],
+  "title": "BranchComparison",
+  "type": "object"
+}

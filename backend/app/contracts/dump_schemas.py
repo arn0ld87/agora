@@ -14,6 +14,7 @@ import json
 import sys
 from pathlib import Path
 
+from app.contracts.branch_comparison import BranchComparison
 from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
@@ -23,6 +24,7 @@ from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
 
 CONTRACTS: dict[str, type] = {
+    "branch-comparison.schema.json": BranchComparison,
     "graph-diff.schema.json": GraphDiff,
     "report-contract.schema.json": ReportContractModel,
     "report.schema.json": ReportModel,

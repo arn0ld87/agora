@@ -32,6 +32,13 @@ from .runs_contract import (
     RunStatus,
     RunSummary,
 )
+from .branch_comparison import (
+    BranchComparison,
+    BranchMetrics,
+    ClusterChange,
+    ComparisonDeltas,
+    SegmentReach,
+)
 from .graph_diff import (
     BridgeAgentShift,
     ClusterShift,
@@ -46,9 +53,13 @@ from .graph_diff import (
 )
 
 __all__ = [
+    "BranchComparison",
+    "BranchMetrics",
     "BridgeAgentShift",
+    "ClusterChange",
     "ClusterShift",
     "ClusterSummary",
+    "ComparisonDeltas",
     "ConfidenceLabel",
     "EdgeData",
     "EdgeReinforcement",
@@ -75,5 +86,6 @@ __all__ = [
     "RunsListResponse",
     "RunStatus",
     "RunSummary",
+    "SegmentReach",
     "VoiceRegister",
 ]
