@@ -2,6 +2,8 @@
 //
 // Lifecycle-Vertrag: start/stop/tick + onUnmounted-Cleanup. Wir mounten ein
 // Dummy-Setup, das `usePolling` aufruft, und testen Verhalten via fake-timers.
+//
+// Sub-Slice J.4 (Issue #222): pauseWhenHidden-Tests (visibilitychange-Gating).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -141,6 +143,82 @@ describe('usePolling', () => {
     resolveTask?.(undefined)
     await flushPromises()
     expect(polling.isTicking.value).toBe(false)
+
+    polling.stop()
+  })
+})
+
+// Sub-Slice J.4 (Issue #222) — pauseWhenHidden-Gating
+describe('usePolling — pauseWhenHidden', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // Reset to visible state before each test
+    Object.defineProperty(document, 'hidden', {
+      value: false,
+      writable: true,
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('pausiert Tick wenn document.hidden=true bei pauseWhenHidden=true (Default)', async () => {
+    const task = vi.fn().mockResolvedValue(undefined)
+    const { polling } = mountPolling(task, 1000)
+
+    await polling.start()
+
+    // Tab in den Hintergrund
+    Object.defineProperty(document, 'hidden', { value: true, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(task).not.toHaveBeenCalled()
+
+    polling.stop()
+  })
+
+  it('resumed sofort mit Catch-up-Tick bei visibilitychange → sichtbar', async () => {
+    const task = vi.fn().mockResolvedValue(undefined)
+    const { polling } = mountPolling(task, 1000)
+
+    await polling.start()
+
+    // Tab in den Hintergrund
+    Object.defineProperty(document, 'hidden', { value: true, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    // Interval ist pausiert — keine Ticks während der Hintergrundphase
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(task).not.toHaveBeenCalled()
+
+    // Tab wieder sichtbar — Catch-up-Tick erwartet
+    Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    expect(task).toHaveBeenCalledTimes(1) // Catch-up-Tick
+
+    polling.stop()
+  })
+
+  it('pauseWhenHidden=false → läuft auch im Hintergrund weiter', async () => {
+    const task = vi.fn().mockResolvedValue(undefined)
+    const { polling } = mountPolling(task, 1000, { pauseWhenHidden: false })
+
+    await polling.start()
+
+    // Tab in den Hintergrund
+    Object.defineProperty(document, 'hidden', { value: true, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(task).toHaveBeenCalledTimes(2) // läuft ungestört
 
     polling.stop()
   })

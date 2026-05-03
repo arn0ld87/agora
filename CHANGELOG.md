@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Performance
+
+- usePolling: neuer `pauseWhenHidden`-Default (`true`) pausiert alle Polling-Loops bei inaktivem Browser-Tab und springt mit Catch-up-Tick wieder an, sobald der Tab wieder sichtbar wird. Schätzung: 40–60 % Request-Reduktion bei Multi-Tab-Nutzung. Opt-out via `{ pauseWhenHidden: false }` für Loops, die im Hintergrund laufen müssen. Kein bestehender Aufrufer benötigt den Opt-out. Backwards-Compat-Hinweis: Default-Verhalten ändert sich (vorher: immer aktiv; nachher: pausiert im Hintergrund). Arbeitsprotokoll: [`docu/2026-05-03-slice-J4-arbeitsprotokoll.md`](docu/2026-05-03-slice-J4-arbeitsprotokoll.md). (Sub-Slice J.4, schließt #222)
+
 ### Build
 
 - **Sub-Slice 15 (Layer 4, Task 15): Step4Report.vue strict-Zod — Export validiert.** `frontend/src/components/Step4Report.vue` importiert jetzt `parseReportContract` aus `../contracts/reportContract`. `downloadCombinedJson` validiert den JSON-Export-Response gegen den vollständigen `ReportContractSchema`-Envelope; bei Mismatch wird `recordSchemaError('export', ...)` gesetzt und der Download abgebrochen (statt ungültigen Daten zu liefern). Keine Änderung an den bestehenden `.parse()`-Aufrufen für Report/Evidence/Outline — diese waren bereits strikt. TypeScript clean, 146 Frontend-Tests grün, Build success. Arbeitsprotokoll: [`docu/2026-05-03-task-15-step4report-strict-zod-arbeitsprotokoll.md`](docu/2026-05-03-task-15-step4report-strict-zod-arbeitsprotokoll.md). Refs #15.
