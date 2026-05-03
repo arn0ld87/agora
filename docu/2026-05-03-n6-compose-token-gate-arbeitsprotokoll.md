@@ -34,7 +34,7 @@ VITE_AGORA_TOKEN=
 # Default-Build (kein Gate): kein Token im Bundle
 ALLOW_BUILD_TIME_TOKEN= VITE_AGORA_TOKEN=test1234 \
   docker compose -f docker-compose.yml -f docker-compose.prod.yml build
-docker run --rm <image-tag> sh -c 'grep -rl test1234 /app/static/ || true'
+docker run --rm <image-tag> sh -c 'grep -rl test1234 /app/frontend/dist/ || true'
 # → leer
 
 # Opt-In-Build (Gate=true): Token ist im Bundle
