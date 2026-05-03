@@ -62,7 +62,7 @@ DACH_NAME_ORIGIN_QUOTAS: list[NameOriginQuota] = [
         bucket="polish_eastern",
         share=0.04,
         first_names=["Piotr", "Krzysztof", "Marcin", "Agnieszka", "Katarzyna", "Monika", "Andrzej", "Tomasz"],
-        last_names=["Kowalski", "Nowak", "Wiśniewski", "Wójcik", "Kowalczyk", "Kamiński", "Lewandowski", "Zielński"],
+        last_names=["Kowalski", "Nowak", "Wiśniewski", "Wójcik", "Kowalczyk", "Kamiński", "Lewandowski", "Zieliński"],
     ),
     NameOriginQuota(
         bucket="ex_yu_balkan",
@@ -120,12 +120,17 @@ def _nfc(s: str) -> str:
 # Buchstaben-Muster pro Bucket (Teilmenge genügt — fail-soft zu german_native).
 # Nur eindeutig türkische Zeichen — Ö/ö und Ü/ü sind auch deutsch und werden ausgelassen.
 _TURKISH_CHARS = re.compile(r"[İıŞşĞğ]")
-_SLAVIC_CHARS = re.compile(r"[ćčšžđ]", re.IGNORECASE)          # ex_yu
-_POLISH_CHARS = re.compile(r"[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]")
+# Polish-exklusiv: ą, ę, ł — kommen praktisch nur im Polnischen vor.
+_POLISH_EXCLUSIVE_CHARS = re.compile(r"[ąęłĄĘŁ]")
+# Ex-YU/Slavic: ć, č, š, ž, đ. ć überschneidet sich mit Polnisch — deshalb
+# werden Polish-Exclusive-Chars VORHER geprüft.
+_SLAVIC_CHARS = re.compile(r"[ćčšžđ]", re.IGNORECASE)
+# Polish-Lookup-Charset (ohne ć, weil ć ist mehrdeutig — siehe oben).
+_POLISH_OTHER_CHARS = re.compile(r"[ńóśźżŃÓŚŹŻ]")
 _CYRILLIC_CHARS = re.compile(r"[Ѐ-ӿ]")
 
-# Suffix/Last-Name-Listen für schnellere Lookup
-_TURKISH_SUFFIXES = {_nfc(n.lower()) for q in DACH_NAME_ORIGIN_QUOTAS if q.bucket == "turkish" for n in q.last_names}
+# Lookup-Sets pro Bucket (Vornamen + Nachnamen für maximale Trefferquote).
+_TURKISH_NAMES = {_nfc(n.lower()) for q in DACH_NAME_ORIGIN_QUOTAS if q.bucket == "turkish" for n in q.last_names + q.first_names}
 _ARABIC_NAMES = {_nfc(n.lower()) for q in DACH_NAME_ORIGIN_QUOTAS if q.bucket == "arabic_levant" for n in q.last_names + q.first_names}
 _EX_YU_NAMES = {_nfc(n.lower()) for q in DACH_NAME_ORIGIN_QUOTAS if q.bucket == "ex_yu_balkan" for n in q.last_names + q.first_names}
 _POLISH_NAMES = {_nfc(n.lower()) for q in DACH_NAME_ORIGIN_QUOTAS if q.bucket == "polish_eastern" for n in q.last_names + q.first_names}
@@ -152,17 +157,24 @@ def classify_name_origin(full_name: str) -> str:
     # 1. Türkisch: spezifische Unicode-Zeichen (ı, ş, ğ, ç …)
     if _TURKISH_CHARS.search(name_nfc):
         return "turkish"
-    if any(t in _TURKISH_SUFFIXES for t in tokens_nfc):
+    if any(t in _TURKISH_NAMES for t in tokens_nfc):
         return "turkish"
 
-    # 2. Ex-YU: ć, č, š, ž, đ
+    # 2. Polnisch (exklusiv): ą, ę, ł — kommen quasi nur im Polnischen vor.
+    #    Wird VOR Slavic gemacht, weil ć (in _SLAVIC_CHARS) auch polnisch sein
+    #    kann ("Kowalczyk", "Wójcicki"). Polish-only-chars sind unmissverständlich.
+    #    (Gemini-Code-Assist Finding, PR #225.)
+    if _POLISH_EXCLUSIVE_CHARS.search(name_nfc):
+        return "polish_eastern"
+
+    # 3. Ex-YU: ć, č, š, ž, đ. Petrović landet hier (ć ohne polish-exclusive).
     if _SLAVIC_CHARS.search(name_nfc):
         return "ex_yu_balkan"
     if any(t in _EX_YU_NAMES for t in tokens_nfc):
         return "ex_yu_balkan"
 
-    # 3. Polnisch/Ostslawisch: ą, ę, ł, ń, ś, ź, ż
-    if _POLISH_CHARS.search(name_nfc):
+    # 4. Polnisch (mehrdeutige Zeichen + Lookup): ń, ó, ś, ź, ż.
+    if _POLISH_OTHER_CHARS.search(name_nfc):
         return "polish_eastern"
     if any(t in _POLISH_NAMES for t in tokens_nfc):
         return "polish_eastern"
@@ -197,24 +209,23 @@ def classify_name_origin(full_name: str) -> str:
     return "german_native"
 
 
-def build_name_quota_prompt_block(n_personas: int = 20) -> str:
+def build_name_quota_prompt_block() -> str:
     """Erzeugt den Pflicht-Block für Persona-Prompts (DACH-Mikrozensus-Namensverteilung).
 
-    Args:
-        n_personas: Anzahl der Personas im Batch (für absolute Zählung im Hinweis).
-
-    Returns:
-        Prompt-Abschnitt als String (einbettbar in f-Strings).
+    Single-Persona-Calls in `oasis_profile_generator` erzeugen jeweils EINE Persona;
+    deshalb wird der Block als Wahrscheinlichkeits-Verteilung formuliert (nicht als
+    diskrete Stichprobenzählung). Eine fixe N-Angabe wäre Fake-Information für das
+    LLM. (Gemini-Code-Assist Finding, PR #225.)
     """
     lines = [
         "NAMENSVERTEILUNG (PFLICHT — DACH-Mikrozensus 2024):",
-        f"Erzeuge Personas mit Namen entsprechend dieser Verteilung. Bei N={n_personas} Personas zähle aus:",
+        "Wähle den Namen entsprechend folgender Wahrscheinlichkeitsverteilung der DACH-Bevölkerung.",
+        "Ziehe gewichtet — höhere Anteile häufiger, niedrigere seltener:",
     ]
     for q in DACH_NAME_ORIGIN_QUOTAS:
-        count = max(0, round(q.share * n_personas))
         examples = q.first_names[:2] + q.last_names[:2]
         example_str = ", ".join(examples)
-        lines.append(f"- {q.share * 100:.0f} % {q.bucket} (~{count}): z. B. {example_str}")
+        lines.append(f"- {q.share * 100:.0f} % {q.bucket}: z. B. {example_str}")
 
     lines += [
         "",
@@ -224,17 +235,17 @@ def build_name_quota_prompt_block(n_personas: int = 20) -> str:
     return "\n".join(lines)
 
 
-def build_name_quota_prompt_block_en(n_personas: int = 20) -> str:
+def build_name_quota_prompt_block_en() -> str:
     """Same as build_name_quota_prompt_block but for the English prompt variant."""
     lines = [
         "NAME DISTRIBUTION (MANDATORY — DACH Mikrozensus 2024):",
-        f"Generate personas with names matching this distribution. For N={n_personas} personas, count out:",
+        "Pick the name from the following probability distribution of the DACH population.",
+        "Sample weighted — higher shares more often, lower shares more rarely:",
     ]
     for q in DACH_NAME_ORIGIN_QUOTAS:
-        count = max(0, round(q.share * n_personas))
         examples = q.first_names[:2] + q.last_names[:2]
         example_str = ", ".join(examples)
-        lines.append(f"- {q.share * 100:.0f} % {q.bucket} (~{count}): e.g. {example_str}")
+        lines.append(f"- {q.share * 100:.0f} % {q.bucket}: e.g. {example_str}")
 
     lines += [
         "",
