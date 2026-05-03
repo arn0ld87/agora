@@ -58,6 +58,9 @@ mydoc/
 mytest/
 .alex-eastereggs.local.md
 context.md
+# Lokale Blog-/Test-Dokumente am Repo-Root (User-Content, Pipeline-Fixtures)
+/blog-*-draft.md
+/test-document*.md
 
 # docu/ ist seit v0.8.0 öffentlich (Portfolio-Material).
 # AGENTS.md / CLAUDE.md / PLAN.md / REFACTORING_PLAN.md / SECURITY_REVIEW.md
