@@ -62,11 +62,11 @@ docker compose exec -T agora uv run --project backend \
 echo
 echo "Result: $ok ok, $fail fail"
 
-# N2: Loopback-Bind-Check
+# N2: Loopback-Bind-Check (auf dem Host, nicht im Container)
 echo
 echo "N2 (Loopback-Bind):"
-check "Vite auf 127.0.0.1:5173" bash -c "docker compose exec -T agora ss -tlnp | grep ':5173' | grep -q '127.0.0.1'"
-check "Flask auf 127.0.0.1:5001" bash -c "docker compose exec -T agora ss -tlnp | grep ':5001' | grep -q '127.0.0.1'"
+check "Vite auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_FRONTEND_PORT:-5173}" bash -c "ss -tlnp | grep ':${AGORA_FRONTEND_PORT:-5173}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
+check "Flask auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_BACKEND_PORT:-5001}" bash -c "ss -tlnp | grep ':${AGORA_BACKEND_PORT:-5001}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
 
 if [ $fail -gt 0 ]; then
   echo
