@@ -74,7 +74,7 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --tb=short --import-mode=importlib"
+addopts = "-ra --tb=short --import-mode=importlib -m 'not llm'"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["."]
