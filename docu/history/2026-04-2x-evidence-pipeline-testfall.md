@@ -1,11 +1,12 @@
-# Agora Evidence-Pipeline Testfall
+> **HISTORISCHER SNAPSHOT (Stand 2026-04-2x).**
+>
+> Aktueller Stand siehe:
+> - Architektur & Plan: `CLAUDE.md` / `PLAN.md` / `plan.heuristic.md`
+> - Test-Status: `docu/STATUS.md`
+> - Diese Datei wurde aus dem Repo-Root nach `docu/history/` verschoben.
+>
+---
 
-## Zweck
-
-Dieses kleine Markdown-Dokument ist absichtlich so gebaut, dass es die neue Agora-Evidence-Pipeline prüft:
-
-- Markdown-Header dürfen nicht als Claims landen.
-- Kurze Bold-Zwischenüberschriften dürfen nicht als Claims landen.
 - Mehrsatz-Absätze müssen in atomare Claims zerlegt werden.
 - Irrelevante Inhalte dürfen keine starke Evidence für Fach-/Politik-Claims werden.
 - Evidence soll claim-spezifisch mit `match_score` gebunden werden.

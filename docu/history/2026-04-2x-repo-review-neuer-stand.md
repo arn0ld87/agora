@@ -1,11 +1,12 @@
-# Agora Repo-Review — neuer Stand
+> **HISTORISCHER SNAPSHOT (Stand 2026-04-2x).**
+>
+> Aktueller Stand siehe:
+> - Architektur & Plan: `CLAUDE.md` / `PLAN.md` / `plan.heuristic.md`
+> - Test-Status: `docu/STATUS.md`
+> - Diese Datei wurde aus dem Repo-Root nach `docu/history/` verschoben.
+>
+---
 
-## Kurzurteil
-
-Agora hat weiter Fortschritt gemacht. Der wichtigste neue Schritt ist: GitHub Actions sind jetzt wirklich im Repo vorhanden. Damit ist die frühere CI-Auffindbarkeitslücke behoben. Zusätzlich gibt es Docker-Image-Publishing nach Docker Hub und GHCR.
-
-Die stärksten Punkte:
-- `.github/workflows/ci.yml` vorhanden
 - Security-Job mit pip-audit, npm audit und Gitleaks
 - Backend-Job mit pytest und Ruff
 - Frontend-Job mit lint und build

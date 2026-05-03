@@ -1,11 +1,12 @@
-# Repository Review: arn0ld87/agora
+> **HISTORISCHER SNAPSHOT (Stand 2026-04-2x).**
+>
+> Aktueller Stand siehe:
+> - Architektur & Plan: `CLAUDE.md` / `PLAN.md` / `plan.heuristic.md`
+> - Test-Status: `docu/STATUS.md`
+> - Diese Datei wurde aus dem Repo-Root nach `docu/history/` verschoben.
+>
+---
 
-## Kurzbewertung
-
-| Bereich | Bewertung | Begründung |
-|---|---:|---|
-| Architektur | 7.5/10 | Klare Trennung zwischen Flask-API, Service-Layer, GraphStorage/Neo4j, Event-Bus und Frontend. Die README dokumentiert die Zielarchitektur und die API-Aufteilung nachvollziehbar. |
-| Codequalität | 7/10 | Gute Modularisierung, Retry-Wrapper, Validierungsfunktionen und zentrale API-Envelopes. Einzelne Versionen/Runtime-Kommentare sind inkonsistent, und einige Pfade bleiben experimentell. |
 | Sicherheit | 6/10 | Viele sinnvolle Härtungen sind vorhanden: restriktives CORS, optionaler Token-Guard, SSRF-Blocker, DOMPurify, Secret-Redaction, Upload-Schutz. Kritisch bleiben Default-Debug/Auth-Setup, schwacher Beispiel-SECRET_KEY, Token in localStorage, bekannte CVE-Ignores und Multi-Worker-Ticket-Replay-Lücke. |
 | Tests | 8/10 | CI führt Backend-Tests, Frontend-Tests, Ruff, ESLint, Build, npm audit, pip-audit und Gitleaks aus. Laut README existieren 488 Backend- und 31 Frontend-Tests. Ich habe die Tests nicht ausgeführt. |
 | Dokumentation | 7/10 | README und Security-Doku sind ungewöhnlich ausführlich. Problematisch sind widersprüchliche Versionsangaben und falsche/unklare Docker-Compose-Aussagen. |
