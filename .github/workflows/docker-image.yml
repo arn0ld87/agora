@@ -71,11 +71,20 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
 
+      - name: CI-Umgebungsdatei generieren
+        env:
+          VITE_AGORA_TOKEN: ${{ env.VITE_AGORA_TOKEN }}
+          AGORA_AUTH_TOKEN: ${{ env.AGORA_AUTH_TOKEN }}
+          NEO4J_PASSWORD: ${{ env.NEO4J_PASSWORD }}
+        run: |
+          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nAGORA_DEBUG=false\n' \
+            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" > .env
+
       - name: Compose-Stack starten
         env:
-          VITE_AGORA_TOKEN: ci-smoke-token
-          AGORA_AUTH_TOKEN: ci-smoke-token
-          NEO4J_PASSWORD: ci-smoke-neo4j
+          VITE_AGORA_TOKEN: ${{ env.VITE_AGORA_TOKEN }}
+          AGORA_AUTH_TOKEN: ${{ env.AGORA_AUTH_TOKEN }}
+          NEO4J_PASSWORD: ${{ env.NEO4J_PASSWORD }}
         run: |
           docker compose \
             -f docker-compose.yml \
@@ -89,6 +98,11 @@ jobs:
             if curl -fsS http://localhost/healthz; then
               echo "Proxy bereit"
               break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::Healthz-Timeout nach 5 Minuten"
+              docker compose logs --tail=200
+              exit 1
             fi
             sleep 5
           done
