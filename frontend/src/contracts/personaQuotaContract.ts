@@ -40,6 +40,11 @@ export type PersonaQuotaPlan = z.infer<typeof PersonaQuotaPlanSchema>;
  * Helper für UI-State: Reihenfolge erhalten als Array von Tupeln,
  * Konvertierung zu API-konformem `targets`-Dict + `total` für den
  * POST-Body.
+ *
+ * Sub-Slice 24 (Gemini-HIGH-Followup auf 20c): Doppelte Segment-Namen
+ * werden addiert, nicht überschrieben — sonst ergibt eine UI-Anzeige
+ * "Total: 20" einen Backend-Payload mit "total: 10" (last-wins-dict),
+ * und der Backend-Validator failt mit `total != sum(targets)`.
  */
 export function buildQuotaPlanFromEntries(
   entries: ReadonlyArray<{ segment: string; count: number }>
@@ -47,7 +52,7 @@ export function buildQuotaPlanFromEntries(
   const targets: Record<string, number> = {};
   for (const { segment, count } of entries) {
     if (!segment) continue;
-    targets[segment] = count;
+    targets[segment] = (targets[segment] || 0) + count;
   }
   const total = Object.values(targets).reduce((acc, v) => acc + v, 0);
   return { targets, total };

@@ -97,4 +97,30 @@ describe("buildQuotaPlanFromEntries", () => {
     const result = PersonaQuotaPlanSchema.safeParse(plan);
     expect(result.success).toBe(true);
   });
+
+  // Sub-Slice 24 (Gemini-Followup HIGH auf 20c):
+  // Doppelte Segment-Einträge dürfen sich NICHT überschreiben — sonst
+  // weicht UI-Anzeige (sum aller Array-Entries) vom gesendeten Payload
+  // (last-wins-dict) ab. Counts werden addiert, damit Anzeige und
+  // Payload immer übereinstimmen.
+  it("addiert Counts bei doppeltem Segment-Namen statt zu überschreiben", () => {
+    const plan = buildQuotaPlanFromEntries([
+      { segment: "kmu_ceo", count: 5 },
+      { segment: "kmu_ceo", count: 3 },
+      { segment: "it_admin", count: 2 },
+    ]);
+    expect(plan.targets).toEqual({ kmu_ceo: 8, it_admin: 2 });
+    expect(plan.total).toBe(10);
+  });
+
+  it("Total spiegelt addierte Counts auch bei mehrfachen Doppeln", () => {
+    const plan = buildQuotaPlanFromEntries([
+      { segment: "a", count: 1 },
+      { segment: "a", count: 1 },
+      { segment: "a", count: 1 },
+      { segment: "b", count: 4 },
+    ]);
+    expect(plan.targets).toEqual({ a: 3, b: 4 });
+    expect(plan.total).toBe(7);
+  });
 });

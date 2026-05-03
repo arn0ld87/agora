@@ -233,6 +233,15 @@
       "save": "Persona speichern",
       "saveAll": "Alle Personas speichern"
     },
+    "quota": {
+      "toggle": "Persona-Quote pro Segment erzwingen",
+      "hintOff": "Ohne Quote wird pro Entity-Type so viele Personas erzeugt, wie der Graph hergibt — bei zu kleinem Pool fehlen ggf. Personas.",
+      "hintOn": "Segment-Name muss exakt einem entity_type aus der Ontology entsprechen. Round-Robin füllt zu kleine Pools auf.",
+      "segmentPlaceholder": "entity_type (z. B. KMU-Geschäftsführer)",
+      "addSegment": "+ Segment hinzufügen",
+      "total": "Total: {count} Personas",
+      "invalid": "Quoten-Plan ungültig."
+    },
     "library": {
       "title": "Persona-Bibliothek",
       "hint": "Gespeicherte Personas kannst du in jeder neuen Simulation wiederverwenden.",

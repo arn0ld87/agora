@@ -222,6 +222,15 @@
       "save": "Save persona",
       "saveAll": "Save all personas"
     },
+    "quota": {
+      "toggle": "Enforce persona quota per segment",
+      "hintOff": "Without a quota, one persona is generated per entity in the graph — if the pool is too small, personas will be missing.",
+      "hintOn": "Segment name must match an entity_type from the ontology exactly. Round-robin fills small pools.",
+      "segmentPlaceholder": "entity_type (e.g. SME-CEO)",
+      "addSegment": "+ Add segment",
+      "total": "Total: {count} personas",
+      "invalid": "Quota plan invalid."
+    },
     "library": {
       "title": "Persona library",
       "hint": "Saved personas can be reused in any later simulation.",
