@@ -26,6 +26,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Tests
 
+- Sub-Slice 11 — Voice-Lint CI-Check für DACH-Voice-Register (Layer 2, Task 11): Neue Contract-Tests in `tests/contracts/test_voice_register.py` (9 Tests, 2 Klassen). `TestVoiceRegisterContract` pinnen die 4 erlaubten Werte (`formal-de`, `neutral-de`, `technical-de`, `skeptisch-de`), rejecten ungültige Werte, prüfen Default (`neutral-de`) und Legacy-Compat (`None`). `TestVoiceRegisterGeneration` validiert, dass `_rule_based_voice_register` nur erlaubte Werte liefert und deterministisch ist. Keine Code-Änderungen — reiner Test-/Lint-Slice. Arbeitsprotokoll: `docu/2026-05-03-task-11-voice-lint-arbeitsprotokoll.md`.
 - Sub-Slice 35 — Tests für Resume/Stop-Endpoints und HistoryDatabase-Buttons (Closes #64, Layer 7): 6 Backend-Tests in `tests/api/test_runs_resume_stop.py` (404/409-Negativpfade für `/resume` und `/stop`), 4 Frontend-Tests in `src/components/__tests__/HistoryDatabase.spec.ts` (Button-Visibility, resumeRun-Call, stopRun/confirm-Gating).
 
 ### Changed
