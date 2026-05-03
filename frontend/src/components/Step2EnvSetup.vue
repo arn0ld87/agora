@@ -20,6 +20,10 @@ import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
+import {
+  PersonaQuotaPlanSchema,
+  buildQuotaPlanFromEntries,
+} from '../contracts/personaQuotaContract'
 
 const { t } = useI18n()
 
@@ -248,6 +252,56 @@ const useAgentCap = ref(false)
 const maxAgents = ref(Number(localStorage.getItem(STORAGE_MAX_AGENTS)) || 50)
 watch(maxAgents, (v) => { localStorage.setItem(STORAGE_MAX_AGENTS, String(v)) })
 
+// ----- Persona-Quota-Plan (Sub-Slice 20c) -----
+//
+// Quoten erzwingen N Personas pro Segment, statt "1 Persona pro Entity".
+// Backend-Pipeline (Sub-Slices 20a/20b/22): API-Pass-Through, Persistenz
+// in simulation_config.json, Round-Robin-Expansion vor Phase 2.
+const STORAGE_QUOTA_PLAN = 'agora.quotaPlan'
+const useQuotaPlan = ref(false)
+function _loadQuotaEntries() {
+  try {
+    const raw = localStorage.getItem(STORAGE_QUOTA_PLAN)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || !parsed.targets) return []
+    // Reihenfolge stabil halten — Object.entries macht insertion-order.
+    return Object.entries(parsed.targets).map(([segment, count]) => ({
+      segment,
+      count: Number(count) || 1,
+    }))
+  } catch {
+    return []
+  }
+}
+const quotaEntries = ref(_loadQuotaEntries())
+const quotaTotal = computed(() =>
+  quotaEntries.value.reduce((acc, e) => acc + (Number(e.count) || 0), 0)
+)
+const quotaValidationError = computed(() => {
+  if (!useQuotaPlan.value) return ''
+  const plan = buildQuotaPlanFromEntries(quotaEntries.value)
+  const result = PersonaQuotaPlanSchema.safeParse(plan)
+  if (result.success) return ''
+  // Erste Issue mit verständlicher Message
+  const issue = result.error.issues[0]
+  return issue?.message || 'Quoten-Plan ungültig.'
+})
+watch(
+  quotaEntries,
+  (entries) => {
+    const plan = buildQuotaPlanFromEntries(entries)
+    localStorage.setItem(STORAGE_QUOTA_PLAN, JSON.stringify(plan))
+  },
+  { deep: true }
+)
+function addQuotaSegment() {
+  quotaEntries.value.push({ segment: '', count: 5 })
+}
+function removeQuotaSegment(idx) {
+  quotaEntries.value.splice(idx, 1)
+}
+
 // Manual persona editor.
 const showAddPersonaModal = ref(false)
 const newPersona = ref({
@@ -473,6 +527,21 @@ async function startPrepare() {
     if (useAgentCap.value && maxAgents.value > 0) {
       payload.max_agents = maxAgents.value
     }
+    // Sub-Slice 20c: PersonaQuotaPlan ans Backend durchreichen.
+    // Client-seitige Validierung verhindert HTTP 400 für offensichtliche
+    // Inkonsistenzen (total != sum, empty targets, count > 200).
+    if (useQuotaPlan.value) {
+      const plan = buildQuotaPlanFromEntries(quotaEntries.value)
+      const validation = PersonaQuotaPlanSchema.safeParse(plan)
+      if (!validation.success) {
+        const msg = validation.error.issues[0]?.message || 'Quoten-Plan ungültig.'
+        addLog(`${t('errors.personaGenFailed')}: ${msg}`)
+        emit('update-status', 'error')
+        isPreparing.value = false
+        return
+      }
+      payload.quota_plan = plan
+    }
     const res = await prepareSimulation(payload)
     if (res?.success && res.data) {
       if (res.data.already_prepared) {
@@ -685,6 +754,63 @@ onUnmounted(() => {
               <span class="meta">Agenten</span>
             </div>
             <p class="hint" v-if="!useAgentCap">Ohne Begrenzung wird pro Entität im Graph ein Agent erzeugt.</p>
+          </div>
+
+          <!-- Persona-Quota-Plan (Sub-Slice 20c): Soll-Counts pro Segment -->
+          <div class="setup-cell setup-cell--wide">
+            <label class="agent-cap">
+              <input type="checkbox" v-model="useQuotaPlan" :disabled="isPreparing" />
+              <span>Persona-Quote pro Segment erzwingen</span>
+            </label>
+            <p class="hint" v-if="!useQuotaPlan">
+              Ohne Quote wird pro Entity-Type so viele Personas erzeugt, wie der Graph hergibt — bei zu kleinem Pool fehlen ggf. Personas.
+            </p>
+            <div v-if="useQuotaPlan" class="quota-plan">
+              <p class="hint">
+                Segment-Name muss exakt einem <code>entity_type</code> aus der Ontology entsprechen. Round-Robin füllt zu kleine Pools auf.
+              </p>
+              <div
+                v-for="(entry, idx) in quotaEntries"
+                :key="idx"
+                class="quota-row"
+              >
+                <input
+                  type="text"
+                  v-model.trim="entry.segment"
+                  placeholder="entity_type (z. B. KMU-Geschäftsführer)"
+                  :disabled="isPreparing"
+                  class="quota-segment"
+                />
+                <input
+                  type="number"
+                  v-model.number="entry.count"
+                  min="1"
+                  max="200"
+                  :disabled="isPreparing"
+                  class="quota-count"
+                />
+                <Btn
+                  variant="ghost"
+                  :disabled="isPreparing"
+                  @click="removeQuotaSegment(idx)"
+                >−</Btn>
+              </div>
+              <div class="quota-row">
+                <Btn
+                  variant="ghost"
+                  :disabled="isPreparing"
+                  @click="addQuotaSegment"
+                >+ Segment hinzufügen</Btn>
+                <span class="meta">Total: {{ quotaTotal }} Personas</span>
+              </div>
+              <p
+                v-if="quotaValidationError"
+                class="hint"
+                style="color: var(--color-err, #d73a49)"
+              >
+                ⚠ {{ quotaValidationError }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1186,6 +1312,42 @@ onUnmounted(() => {
   text-align: right;
 }
 .agent-cap-number:focus { border-bottom-color: var(--accent); }
+.quota-plan {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.quota-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.quota-segment {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-14);
+  padding: 4px 0;
+  color: var(--fg);
+  outline: none;
+}
+.quota-segment:focus { border-bottom-color: var(--accent); }
+.quota-count {
+  width: 70px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-14);
+  padding: 4px 0;
+  color: var(--fg);
+  outline: none;
+  text-align: right;
+}
+.quota-count:focus { border-bottom-color: var(--accent); }
 .hint {
   font-family: var(--ff-mono);
   font-size: 11px;
