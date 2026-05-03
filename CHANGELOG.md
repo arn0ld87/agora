@@ -7,6 +7,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Changed
 
+- Sub-Slice 28 — frontend/src/store/{pendingUpload,settings}.{js → ts} + settings.spec.{js → ts}: typisierte Pinia-Stores, Types aus api/settings übernommen. Refs #71 #73 (Layer 6).
 - Sub-Slice 27 — frontend/src/composables/use{EventStream,GraphRender,IncrementalLogPolling,PersonaReview,Polling,StickyScroll,SystemLog,Theme,WorkspaceMode,WorkspaceStatus}.{js → ts} + zugehörige __tests__/*.spec.{js → ts}: typisierte Composable-Returns + Parameter, Types aus frontend/src/api/* wo verfügbar. Refs #72 (Layer 6).
 - Sub-Slice 26 — frontend/src/api/{graph,index,logs,report,settings,simulation,stream}.{js → ts}: typisierte Funktions-Signaturen, Response-Types aus frontend/src/contracts/ wo verfügbar. Refs #71 (Layer 6).
 - Step4Report.vue: strict-Zod-Parse fuer Report + EvidenceMap + Outline; toleranter Fallback (claim.confidence, evidence_items, JSON.stringify-Snippet, silent catch) raus; Schema-Mismatch zeigt UI-Banner mit ZodError-Issue-Pfaden. (Sub-Slice 15, Closes #172, Layer 4)

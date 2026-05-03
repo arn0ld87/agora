@@ -12,7 +12,7 @@
 //  6. fieldErrors mappt Backend-Validation auf den richtigen Key.
 //  7. discardChanges resettet den Draft auf den serverseitigen Wert.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 vi.mock('../../api/settings', () => ({
   fetchSettings: vi.fn(),
@@ -27,6 +27,14 @@ import {
   putSecrets,
   putSettings,
 } from '../../api/settings'
+
+// reason: vi.mock() ersetzt die Funktionen durch Mock-Instanzen; TS kennt
+// nur den deklarierten Typ aus api/settings.ts. Cast auf MockInstance nötig,
+// damit .mockResolvedValueOnce / .mockRejectedValueOnce verfügbar sind.
+const _fetchSettings = fetchSettings as unknown as MockInstance
+const _fetchSettingsSchema = fetchSettingsSchema as unknown as MockInstance
+const _putSettings = putSettings as unknown as MockInstance
+const _putSecrets = putSecrets as unknown as MockInstance
 import settingsStore, {
   discardChanges,
   dirtyKeys,
@@ -105,13 +113,13 @@ afterEach(() => {
 
 describe('loadSettings', () => {
   it('lädt Schema + Werte parallel und initialisiert den Draft', async () => {
-    fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    fetchSettings.mockResolvedValueOnce(buildValuesResponse())
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
 
     await loadSettings()
 
-    expect(fetchSettingsSchema).toHaveBeenCalledTimes(1)
-    expect(fetchSettings).toHaveBeenCalledTimes(1)
+    expect(_fetchSettingsSchema).toHaveBeenCalledTimes(1)
+    expect(_fetchSettings).toHaveBeenCalledTimes(1)
     expect(settingsStore.sections).toEqual(['llm', 'security'])
     // Non-secret Draft = serverseitiger Wert
     expect(settingsStore.draft.LLM_MODEL_NAME).toBe('qwen2.5:32b')
@@ -121,8 +129,8 @@ describe('loadSettings', () => {
 
   it('setzt loadError und wirft, wenn der Fetch scheitert', async () => {
     const err = new Error('boom')
-    fetchSettingsSchema.mockRejectedValueOnce(err)
-    fetchSettings.mockResolvedValueOnce(buildValuesResponse())
+    _fetchSettingsSchema.mockRejectedValueOnce(err)
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
 
     await expect(loadSettings()).rejects.toBe(err)
     expect(settingsStore.loadError).toContain('boom')
@@ -132,8 +140,8 @@ describe('loadSettings', () => {
 
 describe('dirty-Tracking', () => {
   beforeEach(async () => {
-    fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    fetchSettings.mockResolvedValueOnce(buildValuesResponse())
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
     await loadSettings()
   })
 
@@ -159,19 +167,19 @@ describe('dirty-Tracking', () => {
 
 describe('saveSettings', () => {
   beforeEach(async () => {
-    fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    fetchSettings.mockResolvedValueOnce(buildValuesResponse())
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
     await loadSettings()
   })
 
   it('ruft nur putSettings, wenn nur non-secret dirty ist', async () => {
     settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
-    putSettings.mockResolvedValueOnce(buildValuesResponse({ modelValue: 'qwen2.5:14b', source: 'file' }))
+    _putSettings.mockResolvedValueOnce(buildValuesResponse({ modelValue: 'qwen2.5:14b', source: 'file' }))
 
     await saveSettings()
 
-    expect(putSettings).toHaveBeenCalledWith({ LLM_MODEL_NAME: 'qwen2.5:14b' })
-    expect(putSecrets).not.toHaveBeenCalled()
+    expect(_putSettings).toHaveBeenCalledWith({ LLM_MODEL_NAME: 'qwen2.5:14b' })
+    expect(_putSecrets).not.toHaveBeenCalled()
     // Server-Snapshot wird übernommen
     expect(settingsStore.fields.llm[0].source).toBe('file')
     // Draft ist nach Save wieder im Sync mit dem Server
@@ -184,21 +192,21 @@ describe('saveSettings', () => {
     await expect(saveSettings()).rejects.toMatchObject({
       code: 'confirm_secrets_required',
     })
-    expect(putSecrets).not.toHaveBeenCalled()
-    expect(putSettings).not.toHaveBeenCalled()
+    expect(_putSecrets).not.toHaveBeenCalled()
+    expect(_putSettings).not.toHaveBeenCalled()
   })
 
   it('mit confirmSecrets ruft sowohl putSettings als auch putSecrets', async () => {
     settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
     settingsStore.draft.NEO4J_PASSWORD = 'new-pw'
-    putSettings.mockResolvedValueOnce(buildValuesResponse())
-    putSecrets.mockResolvedValueOnce(buildValuesResponse())
+    _putSettings.mockResolvedValueOnce(buildValuesResponse())
+    _putSecrets.mockResolvedValueOnce(buildValuesResponse())
 
     await saveSettings({ confirmSecrets: true })
 
-    expect(putSettings).toHaveBeenCalledTimes(1)
-    expect(putSecrets).toHaveBeenCalledTimes(1)
-    expect(putSecrets).toHaveBeenCalledWith({ NEO4J_PASSWORD: 'new-pw' })
+    expect(_putSettings).toHaveBeenCalledTimes(1)
+    expect(_putSecrets).toHaveBeenCalledTimes(1)
+    expect(_putSecrets).toHaveBeenCalledWith({ NEO4J_PASSWORD: 'new-pw' })
   })
 
   it('extrahiert Backend-Validation-Errors in fieldErrors()', async () => {
@@ -213,7 +221,7 @@ describe('saveSettings', () => {
         ],
       },
     })
-    putSettings.mockRejectedValueOnce(apiError)
+    _putSettings.mockRejectedValueOnce(apiError)
 
     await expect(saveSettings()).rejects.toBe(apiError)
     const errs = fieldErrors('LLM_MODEL_NAME')
@@ -225,8 +233,8 @@ describe('saveSettings', () => {
 
 describe('discardChanges', () => {
   it('setzt den Draft zurück und räumt validationErrors', async () => {
-    fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    fetchSettings.mockResolvedValueOnce(buildValuesResponse())
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
     await loadSettings()
     settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
     settingsStore.validationErrors = [
