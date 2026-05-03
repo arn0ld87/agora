@@ -21,12 +21,33 @@ ONTOLOGY:
 {ontology_description}
 
 RULES:
-1. Only extract entity types and relation types defined in the ontology.
+1. Use the ontology types as preferred labels. If a relation clearly exists in the text but
+   no matching ontology type fits, use the most descriptive UPPER_SNAKE_CASE label you can
+   derive from the text (e.g. ACQUIRED, REPORTS_TO, COLLABORATES_WITH). Never omit a
+   relation just because the ontology does not explicitly list its type.
 2. Normalize entity names: strip whitespace, use canonical form (e.g., "Jack Ma" not "ma jack").
-3. Each entity must have: name, type (from ontology), and optional attributes.
-4. Each relation must have: source entity name, target entity name, type (from ontology), and a fact sentence describing the relationship.
+3. Each entity must have: name, type (from ontology or a reasonable fallback), and optional attributes.
+4. Each relation must have: source entity name, target entity name, relation type, and a fact
+   sentence quoting the relationship as stated in the text.
 5. If no entities or relations are found, return empty lists.
-6. Be precise — only extract what is explicitly stated or strongly implied in the text.
+6. Extract every relation that is explicitly stated or strongly implied. When in doubt, include
+   the relation — it is better to include a borderline relation than to omit one.
+
+EXAMPLES of well-formed relation output:
+  Text: "Müller GmbH übernahm Schmidt KG am 1. Januar 2024 für 5 Mio EUR."
+  → {{"source": "Müller GmbH", "target": "Schmidt KG", "type": "ACQUIRED",
+      "fact": "Müller GmbH übernahm Schmidt KG am 1. Januar 2024 für 5 Mio EUR."}}
+
+  Text: "Anna leitet das Projekt Lichtblick und berichtet an Boris."
+  → {{"source": "Anna", "target": "Lichtblick", "type": "LEADS",
+      "fact": "Anna leitet das Projekt Lichtblick."}}
+  → {{"source": "Anna", "target": "Boris", "type": "REPORTS_TO",
+      "fact": "Anna berichtet an Boris."}}
+
+  Text: "Die Universität Leipzig arbeitet mit dem Fraunhofer-Institut zusammen."
+  → {{"source": "Universität Leipzig", "target": "Fraunhofer-Institut",
+      "type": "COLLABORATES_WITH",
+      "fact": "Die Universität Leipzig arbeitet mit dem Fraunhofer-Institut zusammen."}}
 
 Return ONLY valid JSON in this exact format:
 {{
