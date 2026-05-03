@@ -149,7 +149,11 @@ def generate_profiles():
     entity_types = data.get('entity_types')
     use_llm = data.get('use_llm', True)
     platform = data.get('platform', 'reddit')
-    llm_model_override = (data.get('llm_model') or '').strip() or None
+    # Defensive Type-Prüfung: Endpoint hat keine strikte Pydantic-Validation,
+    # Client kann auch Zahlen/Booleans senden. (Gemini-Code-Assist Finding,
+    # PR #231.)
+    llm_model_val = data.get('llm_model')
+    llm_model_override = llm_model_val.strip() or None if isinstance(llm_model_val, str) else None
 
     storage = current_app.extensions.get('neo4j_storage')
     if not storage:
@@ -167,7 +171,14 @@ def generate_profiles():
             message="No matching entities found",
         )
 
-    generator = OasisProfileGenerator(model_name=llm_model_override)
+    # storage + graph_id durchreichen, damit OasisProfileGenerator die
+    # Knowledge-Graph-Hybrid-Suche nutzen kann (Gemini-Code-Assist Finding,
+    # PR #231).
+    generator = OasisProfileGenerator(
+        model_name=llm_model_override,
+        storage=storage,
+        graph_id=graph_id,
+    )
     profiles = generator.generate_profiles_from_entities(entities=filtered.entities, use_llm=use_llm)
     if platform == 'reddit':
         profiles_data = [profile.to_reddit_format() for profile in profiles]
