@@ -89,14 +89,32 @@ def test_blueprint_guard_accepts_bearer_token(monkeypatch):
     assert response.get_json() == {"success": True, "data": {"ok": True}}
 
 
-def test_blueprint_guard_accepts_query_token(monkeypatch):
+def test_blueprint_guard_accepts_query_token_in_debug(monkeypatch):
+    """?token= funktioniert nur im Debug-Modus (Dev)."""
     monkeypatch.setenv("AGORA_AUTH_TOKEN", "secret-token")
-    client = _build_guarded_app().test_client()
+    app = _build_guarded_app()
+    app.config["FLASK_DEBUG"] = True
+    client = app.test_client()
 
     response = client.get("/api/guarded/ping?token=secret-token")
 
     assert response.status_code == 200
     assert response.get_json() == {"success": True, "data": {"ok": True}}
+
+
+def test_blueprint_guard_rejects_query_token_in_prod(monkeypatch):
+    """?token= ist in Prod (FLASK_DEBUG=false) deaktiviert (F2.2)."""
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "secret-token")
+    app = _build_guarded_app()
+    app.config["FLASK_DEBUG"] = False
+    client = app.test_client()
+
+    response = client.get("/api/guarded/ping?token=secret-token")
+
+    # In Prod wird ?token= ignoriert → normaler Auth-Fehler
+    assert response.status_code == 401
+    assert response.get_json()["error"] == "unauthorized"
+    assert response.get_json()["code"] == "auth_required"
 
 
 def _capture_logs(target_logger):

@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- **Sub-Slice F2.2 (M9-4): `?token=` Query-Parameter in Prod deaktiviert.** `backend/app/utils/auth.py:_extract_token()` ignoriert `?token=<bearer>` jetzt in Nicht-Debug-Umgebungen (FLASK_DEBUG=false). Stattdessen wird ein ERROR geloggt mit Hinweis auf Signed-Tickets (`POST /api/auth/ticket`). Der Query-Token-Pfad war seit P0.2 als Deprecation-Warning markiert, wurde aber weiterhin akzeptiert — ein Sicherheitsrisiko (Token in URL = Browser-History, Server-Logs, Referrer). Tests: `test_blueprint_guard_rejects_query_token_in_prod` (401 bei `?token=` in Prod); `test_blueprint_guard_accepts_query_token_in_debug` (weiterhin 200 in Dev). Arbeitsprotokoll: [`docu/2026-05-03-f22-token-query-prod-arbeitsprotokoll.md`](docu/2026-05-03-f22-token-query-prod-arbeitsprotokoll.md). Refs PLAN.md F2.2.
+
 - **Sub-Slice N3 (M9-0): prod-proxy-smoke CI-.env-Fix (Refs #227).** `.github/workflows/docker-image.yml` bekommt vor dem Compose-Stack einen Step „CI-Umgebungsdatei generieren", der `.env` aus den CI-Env-Variablen schreibt (`VITE_AGORA_TOKEN`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`, `AGORA_DEBUG=false`). Die Healthz-Warte-Schleife ergänzt bei Timeout ein `docker compose logs --tail=200` als Diagnose-Output. Der `Frontend-Bundle bauen`-Step bleibt bestehend bis Slice N6 (Compose-Token-Gate) den Dockerfile-Build-Arg-Pfad konsistent macht. Arbeitsprotokoll: [`docu/2026-05-03-n3-prod-smoke-env-arbeitsprotokoll.md`](docu/2026-05-03-n3-prod-smoke-env-arbeitsprotokoll.md).
 
 ### Changed
