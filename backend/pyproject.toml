@@ -45,6 +45,9 @@ dependencies = [
     # centrality on the agent-interaction graph. networkx >= 3.2 ships the
     # built-in community.louvain_communities implementation.
     "networkx>=3.2",
+
+    # Production WSGI: gunicorn + gevent worker (non-blocking SSE)
+    "gevent>=24.0",
 ]
 
 [project.optional-dependencies]

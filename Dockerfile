@@ -103,7 +103,7 @@ COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
 # Backend-Dependencies installieren ohne Dev-Group; gunicorn als
 # Production-WSGI-Server obendrauf.
 RUN cd backend && uv sync --no-dev \
-  && uv pip install --project backend gunicorn \
+  && uv pip install --project backend gunicorn gevent \
   && chown -R agora:agora /app
 
 COPY --chown=agora:agora backend/ ./backend/
@@ -118,19 +118,14 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5001/health || exit 1
 
-# Gunicorn vor Flask. Worker-Count konservativ; bei CPU-bound Workloads
-# über `--workers` per Compose env überschreibbar.
+# Gunicorn vor Flask mit gevent-Worker (non-blocking SSE).
 # Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem
 # Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
 # scheitern.
-# `--timeout 600` deckt LLM-Streaming-Calls ab (Ontology-Generation,
-# Report-Agent, Persona-Generation laufen synchron via httpx-Stream gegen
-# Ollama und blockieren den sync-Worker — Default 30 s killt jeden
-# nicht-trivialen Call). Folge-Slice migriert auf gevent-Worker, dann
-# kann der Timeout konservativer werden.
 CMD ["/app/backend/.venv/bin/gunicorn", \
+     "-k", "gevent", \
      "--workers", "2", \
-     "--timeout", "600", \
+     "--timeout", "60", \
      "--graceful-timeout", "30", \
      "--bind", "0.0.0.0:5001", \
      "--chdir", "/app/backend", \
