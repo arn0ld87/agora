@@ -57,3 +57,51 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  prod-proxy-smoke:
+    name: Smoke-Test Reverse-Proxy-Stack
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Frontend-Bundle bauen
+        run: |
+          cd frontend
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Compose-Stack starten
+        env:
+          VITE_AGORA_TOKEN: ci-smoke-token
+          AGORA_AUTH_TOKEN: ci-smoke-token
+          NEO4J_PASSWORD: ci-smoke-neo4j
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.prod.yml \
+            -f deploy/compose/docker-compose.prod-with-proxy.yml \
+            up -d --build
+
+      - name: Auf Proxy-Health warten
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost/healthz; then
+              echo "Proxy bereit"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Verify-Skript ausfuehren
+        run: bash scripts/verify-deploy.sh
+
+      - name: Logs sammeln (immer)
+        if: always()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=50
+
+      - name: Stack abraeumen
+        if: always()
+        run: docker compose down -v

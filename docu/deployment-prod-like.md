@@ -100,7 +100,135 @@ Redis aktiv haben — der Compose-Default tut das.
 
 ---
 
-## Reverse-Proxy
+## Reverse-Proxy-Topologien (Sub-Slice 45)
+
+Drei Betriebsvarianten stehen bereit. Die **Sidecar-Nginx**-Variante ist die
+Repo-Default-Implementierung (Sub-Slice 45, Closes #106). Traefik und Tailscale
+sind dokumentierte Alternativen für bestehende Stacks.
+
+### Sidecar-Nginx — nginx:alpine als Docker-Compose-Sidecar
+
+**Zielszenario:** Minimaler Prod-Stack ohne externe Abhängigkeiten — nginx läuft
+als eigener Container im selben Compose-Netzwerk, liefert das statische Frontend-Bundle
+aus und reicht API-Calls an den agora-Container durch.
+
+**Voraussetzungen:**
+- Docker Compose 2.24+ (`!reset`-Syntax für Port-Strip)
+- `frontend/dist` lokal gebaut (Bind-Mount, kein Image-internes Bundle)
+- Repo-Root als Arbeitsverzeichnis beim `docker compose`-Aufruf
+
+**Schritt-für-Schritt:**
+1. Frontend-Bundle bauen (muss vor Stack-Start aktuell sein):
+   ```bash
+   cd frontend && npm ci && npm run build && cd ..
+   ```
+2. Drei-File-Stack starten:
+   ```bash
+   docker compose \
+     -f docker-compose.yml \
+     -f docker-compose.prod.yml \
+     -f deploy/compose/docker-compose.prod-with-proxy.yml \
+     up -d --build
+   ```
+3. Verifikation:
+   ```bash
+   curl -fsS http://localhost/healthz    # nginx-eigen, kein Backend nötig
+   curl -fsS http://localhost/health     # Backend durchgereicht
+   curl -fsS http://localhost/           # Frontend-Bundle (200)
+   ```
+   Alternativ: `bash scripts/verify-deploy.sh` (erkennt den Proxy-Stack automatisch).
+
+**Caveats:**
+- Ohne vorher gebautes `frontend/dist` zeigt nginx die nginx-Default-Welcome-Page
+  statt der Agora-SPA. Sichtbares Symptom: `curl http://localhost/ | grep -i "Welcome to nginx"`.
+- HTTPS-Termination muss extern erfolgen (Tailscale-Funnel, Cloudflare-Tunnel oder
+  separater nginx mit Let's Encrypt auf Port 443). Dieser Stack lauscht nur auf HTTP/:80.
+
+---
+
+### Traefik-Labels — für Stacks, die Traefik bereits betreiben
+
+**Zielszenario:** Agora wird in einen bestehenden Traefik-3.x-Stack integriert;
+Traefik übernimmt TLS-Termination und Routing.
+
+**Voraussetzungen:**
+- Traefik 3.x läuft als Container im selben Docker-Netzwerk
+- `--providers.docker.exposedbydefault=false` in der Traefik-Konfiguration
+- `certresolver` konfiguriert (ACME / Let's Encrypt)
+
+**Schritt-für-Schritt:**
+1. Eigene Override-Datei anlegen (z. B. `docker-compose.traefik.yml`):
+   ```yaml
+   services:
+     agora:
+       labels:
+         - "traefik.enable=true"
+         - "traefik.http.routers.agora.rule=Host(`agora.example.com`)"
+         - "traefik.http.routers.agora.tls.certresolver=letsencrypt"
+         - "traefik.http.services.agora.loadbalancer.server.port=5001"
+         - "traefik.http.routers.agora.middlewares=agora-sse@docker"
+         - "traefik.http.middlewares.agora-sse.headers.customresponseheaders.X-Accel-Buffering=no"
+   ```
+2. Stack mit dem zusätzlichen Override starten.
+3. `curl -fsS https://agora.example.com/health` — Backend antwortet über Traefik.
+
+**Caveats:**
+- SSE braucht in Traefik besondere Konfiguration: `X-Accel-Buffering=no` per
+  Middleware (siehe Label oben) plus Traefik muss mit `--providers.docker.exposedbydefault=false`
+  gestartet sein, damit nicht alle Container automatisch exponiert werden.
+- Das statische Frontend-Bundle muss separat ausgeliefert werden. Einfachste Option:
+  ein zweiter nginx-Container nur für `/usr/share/nginx/html`, oder Traefik liest
+  direkt vom Volume. Das ist ein komplexerer Pfad und hier nicht weiter ausgeführt.
+
+---
+
+### Tailscale-Funnel — für Single-User-Setups ohne eigene HTTPS-Infrastruktur
+
+**Zielszenario:** Demo- oder Einzelbenutzer-Setup — Tailscale übernimmt HTTPS und
+stellt eine öffentlich erreichbare `*.ts.net`-URL bereit, ohne eigene Zertifikate.
+
+**Voraussetzungen:**
+- Tailscale installiert und `tailscale up` ausgeführt
+- Sidecar-Nginx läuft auf Port 80 (oder direkt Backend auf 5001)
+- Funnel-Feature im Tailnet aktiviert
+
+**Schritt-für-Schritt:**
+1. Tailscale verbinden: `tailscale up`
+2. Lokalen HTTP-Stack per Tailscale Serve exponieren:
+   ```bash
+   tailscale serve https / http://127.0.0.1:80
+   ```
+3. Öffentlichen Funnel aktivieren (optional, macht die URL internet-erreichbar):
+   ```bash
+   tailscale funnel 443 on
+   ```
+
+**Caveats:**
+- Funnel-Limits: ein Hostname pro Tailnet, sehr begrenzte Bandbreite, keine
+  Custom-Domain. Nur für Demo- oder Einzelbenutzer-Szenarien geeignet — nicht
+  für Multi-User-Prod.
+- `tailscale funnel` macht die Instanz öffentlich erreichbar. Pflicht-Audit:
+  ist das tatsächlich beabsichtigt? `AGORA_AUTH_TOKEN` muss gesetzt sein.
+
+---
+
+## Verifikation
+
+Alle Varianten können mit `bash scripts/verify-deploy.sh` geprüft werden.
+Das Skript erkennt automatisch, ob der nginx-Sidecar aktiv ist:
+
+- **Mit Proxy:** smoket `:${AGORA_PROXY_PORT:-80}/healthz` (nginx-eigen),
+  `/health` (Backend durchgereicht) und `/` (Frontend, HTTP 200).
+- **Ohne Proxy:** prüft Backend direkt auf `127.0.0.1:${AGORA_BACKEND_PORT:-5001}/health`.
+- Bei Fehler: gibt `docker compose ps` und nginx-Logs (letzte 20 Zeilen) aus und
+  beendet mit Exit-Code 1.
+
+---
+
+## Reverse-Proxy (Altbestand)
+
+<!-- veraltet seit Sub-Slice 45 — die Skizzen unten wurden durch die drei
+     Topologie-Sections oben ersetzt. Inhalt bleibt als Referenz erhalten. -->
 
 Traefik, Nginx oder Caddy davorzuschalten ist **Pflicht**, nicht Kür:
 
