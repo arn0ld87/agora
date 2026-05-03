@@ -6,22 +6,38 @@
 
 import service from './index'
 
-export function fetchSettings() {
+export interface SettingsResponse {
+  settings: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface SettingsSchemaResponse {
+  schema: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export type SecretsPayload = Record<string, string>
+
+export function fetchSettings(): Promise<SettingsResponse> {
   return service.get('/api/settings')
 }
 
-export function fetchSettingsSchema() {
+export function fetchSettingsSchema(): Promise<SettingsSchemaResponse> {
   return service.get('/api/settings/schema')
 }
 
-export function putSettings(payload) {
+export function putSettings(
+  payload: Record<string, unknown>
+): Promise<SettingsResponse> {
   // ``payload`` = flaches { KEY: value }-Objekt. Backend lehnt
   // Secrets hier mit ``code: secret_not_allowed`` ab — die View
   // separiert sie deshalb vorher.
   return service.put('/api/settings', payload)
 }
 
-export function putSecrets(secretsPayload) {
+export function putSecrets(
+  secretsPayload: SecretsPayload | null | undefined
+): Promise<SettingsResponse> {
   // Erwartet ``{ confirm: true, fields: { KEY: value, ... } }``.
   // Backend lehnt non-secret Keys symmetrisch ab.
   return service.put('/api/settings/secrets', {

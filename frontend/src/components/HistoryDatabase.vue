@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { listRuns, getRunEvents, resumeRun, stopRun } from '../api/runs'
-import { createSimulationBranch } from '../api/simulation.js'
+import { createSimulationBranch } from '../api/simulation'
 import { isApiError } from '../api/envelope'
 import { userMessageFor, isRetryable } from '../api/errorMessages'
 

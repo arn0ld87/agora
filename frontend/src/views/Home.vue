@@ -10,7 +10,7 @@ import Kicker from '../components/ui/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
-import { getAvailableModels } from '../api/simulation.js'
+import { getAvailableModels } from '../api/simulation'
 import { setPendingUpload } from '../store/pendingUpload'
 
 const { t, tm } = useI18n()

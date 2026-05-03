@@ -272,6 +272,7 @@ interface AgentLogEntry {
   subtitle: string
   body: string
   elapsed: number | undefined
+  [key: string]: unknown
 }
 
 function parseAgentEntry(raw: unknown): AgentLogEntry | null {

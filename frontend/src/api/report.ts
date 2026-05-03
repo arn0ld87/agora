@@ -1,0 +1,160 @@
+import service, { requestWithRetry } from './index'
+import type { ApiEnvelope } from './envelope'
+import type { Report, EvidenceMap, ReportSection, EvidenceItem } from '../contracts/reportContract'
+
+// --- Local payload/data types -------------------------------------------
+// These describe the `data` field inside the API envelope, not the envelope itself.
+
+export interface GenerateReportData {
+  simulation_id: string
+  force_regenerate?: boolean
+  llm_model?: string
+  [key: string]: unknown
+}
+
+export interface ReportStatusParams {
+  simulationId?: string
+  taskId?: string
+  reportId?: string
+}
+
+export interface ReportStatusData {
+  task_id?: string
+  status: string
+  progress?: number
+  message?: string
+  report_id?: string
+  simulation_id?: string
+  error?: string | null
+  outline?: unknown
+  sections?: Record<string, unknown>
+  current_section_index?: number | null
+}
+
+/** Shape expected by useIncrementalLogPolling's fetcher contract. */
+export interface LogEnvelope {
+  success?: boolean
+  data?: {
+    lines?: unknown[]
+    logs?: unknown[]
+    next_line?: number
+    total_lines?: number
+  }
+}
+
+export interface ChatWithReportData {
+  simulation_id: string
+  message: string
+  chat_history?: Array<{ role: string; content: string }>
+}
+
+export interface ChatData {
+  reply: string
+  [key: string]: unknown
+}
+
+// --- API functions -------------------------------------------------------
+// Return types are ApiEnvelope<T> because the index.ts response interceptor
+// returns response.data (the full envelope) unchanged for success: true cases.
+
+/**
+ * Start report generation
+ * @param data - { simulation_id, force_regenerate?, llm_model? }
+ */
+export const generateReport = (
+  data: GenerateReportData | Record<string, unknown>
+): Promise<ApiEnvelope<ReportStatusData>> => {
+  return requestWithRetry(() => service.post('/api/report/generate', data), 3, 1000)
+}
+
+/**
+ * Get report generation status
+ * Backend accepts POST with { task_id } or { simulation_id } or { report_id }.
+ * @param params - { simulationId?, taskId?, reportId? }
+ */
+export const getReportStatus = ({
+  simulationId,
+  taskId,
+  reportId,
+}: ReportStatusParams = {}): Promise<ApiEnvelope<ReportStatusData>> => {
+  const body: Record<string, string> = {}
+  if (simulationId) body['simulation_id'] = simulationId
+  if (taskId) body['task_id'] = taskId
+  if (reportId) body['report_id'] = reportId
+  return service.post('/api/report/generate/status', body)
+}
+
+/**
+ * Get Agent log (incremental)
+ * @param reportId
+ * @param fromLine - Start from which line
+ */
+export const getAgentLog = (
+  reportId: string,
+  fromLine = 0
+): Promise<LogEnvelope> => {
+  return service.get(`/api/report/${reportId}/agent-log`, { params: { from_line: fromLine } })
+}
+
+/**
+ * Get console log (incremental)
+ * @param reportId
+ * @param fromLine - Start from which line
+ */
+export const getConsoleLog = (
+  reportId: string,
+  fromLine = 0
+): Promise<LogEnvelope> => {
+  return service.get(`/api/report/${reportId}/console-log`, { params: { from_line: fromLine } })
+}
+
+/**
+ * Get report details
+ * @param reportId
+ */
+export const getReport = (reportId: string): Promise<ApiEnvelope<Report>> => {
+  return service.get(`/api/report/${reportId}`)
+}
+
+export const getReportEvidence = (reportId: string): Promise<ApiEnvelope<EvidenceMap>> => {
+  return service.get(`/api/report/${reportId}/evidence`)
+}
+
+export const getReportEvidenceSection = (
+  reportId: string,
+  sectionIndex: number
+): Promise<ApiEnvelope<ReportSection>> => {
+  return service.get(`/api/report/${reportId}/evidence/${sectionIndex}`)
+}
+
+export const getReportEvidenceClaim = (
+  reportId: string,
+  sectionIndex: number,
+  claimId: string
+): Promise<ApiEnvelope<EvidenceItem>> => {
+  return service.get(`/api/report/${reportId}/evidence/${sectionIndex}/${claimId}`)
+}
+
+/**
+ * Combined report export (Slice 5.1).
+ * @param reportId
+ * @param format
+ * @returns Blob response
+ */
+export const exportReport = (
+  reportId: string,
+  format: 'md' | 'json' = 'json'
+): Promise<Blob> => {
+  return service.get(`/api/report/${reportId}/export`, {
+    params: { format },
+    responseType: 'blob',
+  })
+}
+
+/**
+ * Chat with Report Agent
+ * @param data - { simulation_id, message, chat_history? }
+ */
+export const chatWithReport = (data: ChatWithReportData): Promise<ApiEnvelope<ChatData>> => {
+  return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)
+}

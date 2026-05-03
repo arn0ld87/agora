@@ -1,8 +1,8 @@
-import axios from 'axios'
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { ApiError } from './envelope'
 
 // Create axios instance
-const service = axios.create({
+const service: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 300000, // 5 minute timeout (ontology generation may require longer time)
   headers: {
@@ -16,7 +16,7 @@ const service = axios.create({
 // Page-Reload; das verhindert Persistence in localStorage (XSS-Residuum).
 let _memoryToken = ''
 
-export const setAgoraToken = (token) => {
+export const setAgoraToken = (token: string | null | undefined): void => {
   if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
     _memoryToken = token || ''
     // Prevent residual localStorage token from shadowing the memory token.
@@ -32,7 +32,7 @@ export const setAgoraToken = (token) => {
   }
 }
 
-export const getAgoraToken = () => {
+export const getAgoraToken = (): string => {
   if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
     return _memoryToken || import.meta.env.VITE_AGORA_TOKEN || ''
   }
@@ -46,33 +46,39 @@ export const getAgoraToken = () => {
 
 // Request interceptor — hängt Token-Header an, wenn einer bekannt ist.
 service.interceptors.request.use(
-  config => {
+  (config: InternalAxiosRequestConfig) => {
     const token = getAgoraToken()
     if (token) {
-      config.headers = config.headers || {}
+      config.headers = config.headers || {} as typeof config.headers
       config.headers['X-Agora-Token'] = token
     }
     return config
   },
-  error => {
+  (error: unknown) => {
     console.error('Request error:', error)
     return Promise.reject(error)
   }
 )
 
 // Response interceptor (EPIC-09 Sub-Slice 5: surfaces ApiError with `code`).
+// reason: interceptor intentionally returns response.data (the envelope body)
+// instead of the full AxiosResponse; callers receive the unwrapped payload.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 service.interceptors.response.use(
-  response => {
-    const res = response.data
+  (response): any => {
+    const res = response.data as Record<string, unknown> | null | undefined
 
     // 2xx mit `success: false` (Backend-eigene Fehlerlogik in 200er-Hülle)
     // → Code-tragenden ApiError werfen, damit UI semantisch reagieren kann.
-    if (res && res.success === false) {
+    if (res && res['success'] === false) {
       const err = new ApiError({
-        code: res.code || 'unknown_error',
+        code: (res['code'] as string | undefined) || 'unknown_error',
         status: response.status || 0,
-        message: res.error || res.message || 'Unbekannter Fehler',
-        details: res.details,
+        message:
+          (res['error'] as string | undefined) ||
+          (res['message'] as string | undefined) ||
+          'Unbekannter Fehler',
+        details: res['details'] as Record<string, unknown> | undefined,
         originalResponse: res,
       })
       console.error('API Error:', err.code, '—', err.message)
@@ -81,15 +87,23 @@ service.interceptors.response.use(
 
     return res
   },
-  error => {
+  (error: unknown) => {
     // Achshalsbruch oder 4xx/5xx-Pfad: Backend-Envelope auspacken, falls da.
-    const data = error?.response?.data
-    if (data && data.success === false) {
+    const axiosError = error as {
+      response?: { data?: Record<string, unknown>; status?: number }
+      code?: string
+      message?: string
+    }
+    const data = axiosError?.response?.data
+    if (data && data['success'] === false) {
       const err = new ApiError({
-        code: data.code || 'unknown_error',
-        status: error.response?.status || 0,
-        message: data.error || data.message || 'Unbekannter Fehler',
-        details: data.details,
+        code: (data['code'] as string | undefined) || 'unknown_error',
+        status: axiosError.response?.status || 0,
+        message:
+          (data['error'] as string | undefined) ||
+          (data['message'] as string | undefined) ||
+          'Unbekannter Fehler',
+        details: data['details'] as Record<string, unknown> | undefined,
         originalResponse: data,
       })
       console.error('Backend error:', err.code, '—', err.message)
@@ -98,17 +112,17 @@ service.interceptors.response.use(
 
     // Kein Envelope verfügbar (z.B. Network Error, Timeout): heuristischer Code.
     let code = 'unknown_error'
-    let message = error.message || 'Unbekannter Fehler'
-    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+    let message = axiosError.message || 'Unbekannter Fehler'
+    if (axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout')) {
       code = 'timeout'
       message = 'Zeitüberschreitung — Backend antwortet zu langsam'
-    } else if (error.message === 'Network Error') {
+    } else if (axiosError.message === 'Network Error') {
       code = 'service_unavailable'
       message = 'Backend offline oder nicht erreichbar'
     }
     const wrapped = new ApiError({
       code,
-      status: error.response?.status || 0,
+      status: axiosError.response?.status || 0,
       message,
       originalResponse: error,
     })
@@ -118,7 +132,11 @@ service.interceptors.response.use(
 )
 
 // Request function with retry
-export const requestWithRetry = async (requestFn, maxRetries = 3, delay = 1000) => {
+export const requestWithRetry = async <T>(
+  requestFn: () => Promise<T>,
+  maxRetries = 3,
+  delay = 1000
+): Promise<T> => {
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await requestFn()
@@ -126,9 +144,11 @@ export const requestWithRetry = async (requestFn, maxRetries = 3, delay = 1000) 
       if (i === maxRetries - 1) throw error
 
       console.warn(`Request failed, retrying (${i + 1}/${maxRetries})...`)
-      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i)))
+      await new Promise<void>(resolve => setTimeout(resolve, delay * Math.pow(2, i)))
     }
   }
+  // Unreachable: loop always throws on last iteration; TS needs this.
+  throw new Error('requestWithRetry: exhausted retries')
 }
 
 export default service
