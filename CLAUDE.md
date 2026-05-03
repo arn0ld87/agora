@@ -4,7 +4,7 @@
 
 Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
 Stack: **Flask + Pydantic v2 + Vue 3 + Neo4j + Ollama + OASIS** (CAMEL-AI Subprozess).
-Status: v0.9.0+, Backend 1289 Tests, Frontend 141 Tests, Pydantic-Contract-Architektur abgeschlossen (Layer 0–6 grün, Layer 7–10 in Arbeit).
+Status: v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–10 in Arbeit · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md).
 
 ## Sofort wichtig
 

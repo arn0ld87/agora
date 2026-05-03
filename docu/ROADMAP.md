@@ -1,12 +1,43 @@
 # Agora Roadmap
 
-> Stand: 2026-04-27. Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
+> Stand: 2026-05-03. Verbindliche Test-Counts und Layer-Status: [`docu/STATUS.md`](STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](../CLAUDE.md#architektur-layer-status). Operative Tasks: [`PLAN.md`](../PLAN.md). Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
 
-## Current State (v0.6.1)
+## Current State (v0.9.0+ post-tag, Layer 0–6 grün)
 
 Fully local fork on Neo4j CE + Ollama, no Zep Cloud dependency. Core pipeline works end-to-end: upload → graph build → persona generation → multi-agent OASIS simulation → report.
 
-The 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 → #11 Phase 1). The 0.6 line added LLM retry resilience, frontend defensive error handling, default-strict ruff scope, NER → ontology-mutation wiring (#11 Phase 2), RPC/Interview-IPC over Redis Pub/Sub (#17), and v0.6.1 dependency/docs hygiene.
+Reader-Honesty-Refactor (Sub-Slices 02–17, Layer 0–5) und Frontend-TypeScript-Migration (Sub-Slices 26–28, Layer 6) sind durch. Die 0.5/0.6-Linien-Historie steht weiter unten unter [§ Historie](#historie-050--06).
+
+---
+
+## Now / Next / Later
+
+### Now — Milestone M9 (Prod-Hardening, Mai 2026, Slices F1–F5)
+
+Übergang von v0.9.0-Release + Reader-Honesty-Refactor zu stabiler Production-Ready-Vorbereitung (Layer 9 Deployment, SSE-Auth, Reverse-Proxy). Detail: [`PLAN.md` § Milestone M9](../PLAN.md).
+
+- **F5 Doku-Sync** (Sub-Slice 44, **diese Woche**): Status.md als Single Source of Truth, ROADMAP v0.9.0+ / 2026-05-03, CONTRIBUTING.md Repo-Root, Inline-Zahlen aus README/CLAUDE.md entfernt.
+- **F1 Reverse-Proxy** (Sub-Slice 45): Saubere Verdrahtung eines Reverse-Proxy (nginx / HAProxy) vor dem Prod-Container; Auth-Token-Termination auf Proxy-Ebene, X-Forwarded-{For,Host,Proto}-Handling, Zero-Downtime-Reload.
+- **F2 Auth-Hardening** (Sub-Slices 46–47): Signed-Ticket-API (`POST /api/auth/ticket`) statt URL-Token-Fallback (#106 Refs); Frontend-Migration auf Ticket-Header; Redis-Session-Store für SSE.
+- **F3 Gunicorn-Gevent** (Sub-Slice 48): Worker-Modell von sync+`--timeout 600` auf `-k gevent` umstellen; OASIS-Subprozess-Entkopplung verifizieren, Fork-Safety-Tests für Neo4j/Redis-Pools.
+
+### Next — Milestone M10 (Test-Schärfe + CVE-Watch, Juni 2026)
+
+Erhöhen der Coverage und automatisierte Security-Überwachung.
+
+- **F6 Coverage** (Sub-Slices 49–50): Backend- und Frontend-Coverage auf >85 % heben; untestete Pfade identifizieren und mit gezielten Tests schliessen.
+- **F12 Lint-Tiefe** (Sub-Slice 51): zusätzliche ruff-Rules (Bandit-Integration für Security-Checks), mypy-Strict-Modus für neue Module.
+- **F4 CVE-Monitor** (Sub-Slice 52): Automated pip-audit + npm-audit in CI; CVE-Tracking-Arbeitsprotokoll; Upstream-Pin-Strategie dokumentieren.
+
+### Later — Milestones M11–M13 (Code-Hotspots, Feature-Welle, v1.0-Vorbereitung)
+
+- **M11 (Code-Hotspots, Juli 2026)**: Refactor kritischer Module (evidence_binder, confidence_calculator, report_agent Pro-Reorg); Multi-Model-Router; Custom-NER-Plugins.
+- **M12 (Feature-Welle, August 2026)**: Graph-Versioning (Snapshots), Branch-Compare-UI, Persona-Review-UX-Polish, Export-Templates (custom Markdown/PDF).
+- **M13 (v1.0-Vorbereitung, September 2026)**: Helm-Chart, E2E-Test-Suite (Playwright), Performance-Benchmarks, Federation-Groundwork.
+
+## Historie (0.5 / 0.6)
+
+Die 0.5 line shipped six prioritized issues (#13 → #14 → #9 → #10 → #12 → #11 Phase 1). The 0.6 line added LLM retry resilience, frontend defensive error handling, default-strict ruff scope, NER → ontology-mutation wiring (#11 Phase 2), RPC/Interview-IPC over Redis Pub/Sub (#17), and the 0.6.x dependency/docs hygiene wave (Stand vor 2026-05-03).
 
 ### Implemented (v0.5.0 + unreleased)
 
