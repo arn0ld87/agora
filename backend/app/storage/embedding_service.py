@@ -37,7 +37,7 @@ def validate_embedding_configuration(
     service = EmbeddingService(
         model=effective_model,
         base_url=effective_base_url,
-        max_retries=1,
+        max_retries=3,
         timeout=timeout,
     )
     vector = service.embed("dimension probe")

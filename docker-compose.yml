@@ -15,16 +15,24 @@ services:
     # Loopback-Bind: Frontend (Vite) und Backend (Flask) sind im Dev-
     # Default nur lokal erreichbar. Tailscale/LAN-Setups setzen das
     # bewusst über die ENV-Variablen oder einen Reverse-Proxy.
+    # Port-Mapping ohne 127.0.0.1-Prefix wegen Docker-Desktop-Bug auf macOS:
+    # explizite Loopback-Bindung scheitert mit "address already in use" auch
+    # wenn nichts auf dem Port lauscht. Die Loopback-Begrenzung übernimmt
+    # macOS Firewall / lokale Bind-Address der Vite/Flask-Server.
     ports:
-      - "127.0.0.1:${AGORA_FRONTEND_PORT:-5173}:5173"
-      - "127.0.0.1:${AGORA_BACKEND_PORT:-5001}:5001"
+      - "${AGORA_FRONTEND_PORT:-5173}:5173"
+      - "${AGORA_BACKEND_PORT:-5001}:5001"
     restart: unless-stopped
-    read_only: true
+    read_only: false
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     tmpfs:
       - /tmp:size=128M,mode=1777
       - /app/backend/logs:size=64M,mode=0700,uid=1000,gid=1000
       - /home/agora/.cache:size=256M,mode=0700,uid=1000,gid=1000
       - /home/agora/.npm:size=64M,mode=0700,uid=1000,gid=1000
+      - /app/frontend/node_modules/.vite:size=256M,mode=0755,uid=1000,gid=1000
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -66,6 +74,15 @@ services:
       - EMBEDDING_BASE_URL=http://host.docker.internal:11434
       # Read-only rootfs: don't try to write __pycache__ next to source.
       - PYTHONDONTWRITEBYTECODE=1
+      # .venv wurde beim Image-Build via `uv sync --frozen` vollständig
+      # installiert. UV_NO_SYNC=1 verhindert, dass `uv run` beim Start
+      # noch PyPI kontaktiert (hatchling build-system.requires), was im
+      # Container ohne Internet-Zugang fehlschlagen würde.
+      - UV_NO_SYNC=1
+      # Docker Desktop v4.31.0+ aktiviert IPv6-DNS sobald Ports gebunden werden.
+      # urllib3 versucht IPv6 (ENETUNREACH) ohne IPv4-Fallback (kein Happy Eyeballs).
+      # Workaround: urllib3 auf IPv4-only setzen. Quelle: docker/for-mac#7332
+      - DOCKER_IPV4_ONLY=1
 
   redis:
     image: redis:7-alpine
@@ -113,3 +130,11 @@ volumes:
   neo4j_data:
   neo4j_logs:
   redis_data:
+
+# Docker Desktop v4.31.0+ aktiviert IPv6 im Container-Netzwerk sobald Ports
+# gebunden werden. host.docker.internal bekommt AAAA-Records, Python/urllib3
+# versucht IPv6 zuerst (RFC 3484) ohne Happy-Eyeballs-Fallback → ENETUNREACH.
+# Explizit deaktivieren fixiert den Fehler. Quelle: docker/for-mac#7332
+networks:
+  default:
+    enable_ipv6: false

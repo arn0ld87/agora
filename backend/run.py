@@ -18,6 +18,14 @@ if sys.platform == 'win32':
 # Add project root directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Docker Desktop v4.31.0+ aktiviert IPv6-DNS im Container wenn Ports gebunden
+# werden. urllib3 versucht IPv6 zuerst (RFC 3484), hat aber kein Happy-Eyeballs-
+# Fallback → ENETUNREACH. Workaround: IPv6 in urllib3 deaktivieren.
+# Quelle: github.com/docker/for-mac/issues/7332 + urllib3/urllib3#797
+if os.environ.get("DOCKER_IPV4_ONLY", "").lower() in ("1", "true", "yes"):
+    import urllib3.util.connection
+    urllib3.util.connection.HAS_IPV6 = False
+
 from app import create_app
 from app.config import Config
 
