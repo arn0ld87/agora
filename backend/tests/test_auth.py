@@ -93,7 +93,7 @@ def test_blueprint_guard_accepts_query_token_in_debug(monkeypatch):
     """?token= funktioniert nur im Debug-Modus (Dev)."""
     monkeypatch.setenv("AGORA_AUTH_TOKEN", "secret-token")
     app = _build_guarded_app()
-    app.config["FLASK_DEBUG"] = True
+    app.config["DEBUG"] = True
     client = app.test_client()
 
     response = client.get("/api/guarded/ping?token=secret-token")
