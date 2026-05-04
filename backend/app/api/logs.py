@@ -25,6 +25,7 @@ from flask import Response, request, stream_with_context
 
 from . import logs_bp
 from ..utils.api_responses import handle_api_errors, json_success
+from ..utils.auth import allow_ticket_auth
 from ..utils.logger import LOG_DIR, get_logger
 
 logger = get_logger('agora.api.logs')
@@ -164,6 +165,7 @@ def get_logs():
 
 
 @logs_bp.route('/stream', methods=['GET'])
+@allow_ticket_auth(lambda: "logs:stream", single_use=False)
 def stream_logs():
     """SSE-Stream auf neue Zeilen ab dem aktuellen Datei-Offset.
 

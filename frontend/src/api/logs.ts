@@ -1,5 +1,5 @@
 // Issue #132 — Backend-Log-Viewer-API.
-import api from './index'
+import api, { getAgoraToken } from './index'
 
 export interface FetchLogsParams {
   tail?: number
@@ -26,22 +26,24 @@ export function fetchLogs({ tail = 200, level = null }: FetchLogsParams = {}): P
   return api.get('/api/logs', { params })
 }
 
-export function logsStreamUrl(
-  token: string | null | undefined,
+export async function buildLogsStreamUrl(
   level: string | null = null,
   offset: number | null = null
-): string {
-  // EventSource kann keine Header setzen → Token via ?token=. SSE-Pfad
-  // entspricht den anderen Stream-Endpoints (vgl. simulation_stream).
-  // ``offset`` wird vom Tail-Endpunkt geliefert und sorgt dafür, dass
-  // der Stream genau dort weiterläuft — ohne ihn gehen Log-Zeilen
-  // verloren, die zwischen Tail-Antwort und Stream-Connect geschrieben
-  // werden (PR #146-Review).
+): Promise<string> {
+  // EventSource kann keine Custom-Header setzen — Auth läuft via signed
+  // ticket (?ticket=…, scope "logs:stream"), analog zu buildSimulationStreamUrl.
+  // Der offset sorgt dafür, dass der Stream genau dort weiterläuft wo
+  // der Tail-Endpunkt aufgehört hat (verhindert Zeilen-Verlust, PR #146).
   const u = new URL('/api/logs/stream', window.location.origin)
-  if (token) u.searchParams.set('token', token)
   if (level) u.searchParams.set('level', level)
   if (Number.isInteger(offset) && offset !== null && offset >= 0) {
     u.searchParams.set('offset', String(offset))
   }
+  if (!getAgoraToken()) return u.toString()
+  try {
+    const res = await api.post('/api/auth/ticket', { scope: 'logs:stream', ttl_seconds: 60 })
+    const ticket = (res as unknown as { data?: { ticket?: string } })?.data?.ticket
+    if (ticket) u.searchParams.set('ticket', ticket)
+  } catch { /* open-mode or ticket-endpoint not reachable — proceed without ticket */ }
   return u.toString()
 }
