@@ -79,7 +79,13 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --tb=short --import-mode=importlib -m 'not llm' --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53"
+# Coverage-Flags bewusst NICHT in `addopts`: Subset-Test-Aufrufe wie
+# `pytest tests/contracts/` (siehe `.github/workflows/contract-gates.yml`)
+# wuerden sonst durch `--cov-fail-under=53` brechen, weil ein Subset
+# nie die Total-Coverage erreicht. Stattdessen aktiviert
+# `.github/workflows/ci.yml::backend`-Job die Coverage-Flags explizit.
+# Lokal manuell: `uv run pytest --cov=app --cov-report=term-missing`.
+addopts = "-ra --tb=short --import-mode=importlib -m 'not llm'"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["."]
@@ -87,6 +93,14 @@ markers = [
     "eval: baseline/eval suite (fixture-driven)",
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
 
 [tool.ruff]
 line-length = 100

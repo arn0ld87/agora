@@ -63,3 +63,24 @@ uv run ruff check app/ tests/
 ```
 
 Alle vier Checks grün.
+
+## Followup nach PR #281 (Gemini-Review)
+
+Initialer Commit (`a960b10`) hat Coverage-Flags in `pyproject.toml` `addopts` gepackt. Folge: `contract-gates.yml` ruft `pytest tests/contracts/` als Subset auf, dadurch greift `--cov-fail-under=53` gegen 14.73 % Subset-Coverage und brach den Workflow `Pydantic-Contract-Tests`.
+
+Gemini-MEDIUM-Finding hatte exakt diese Diagnose. Followup-Commit:
+
+- `pyproject.toml` `addopts` zurück auf `-ra --tb=short --import-mode=importlib -m 'not llm'` (ohne Coverage-Flags). Coverage-Konfiguration in neue Sektionen `[tool.coverage.run]` und `[tool.coverage.report]` ausgelagert (source = `app`, branch = false, show_missing = true).
+- `.github/workflows/ci.yml::backend`-Job: Coverage-Flags explizit am `pytest`-Aufruf (`--cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53`). Step-Name umbenannt in `Run backend tests with coverage gate (M11.2)`.
+
+Verify:
+
+```
+uv run pytest tests/contracts/ -q  → 62 passed (kein cov-Gate, kein Bruch)
+uv run pytest --cov=app --cov-report=term --cov-fail-under=53 -q
+  → 1425 passed, 9 skipped; TOTAL 55.35 % ≥ 53 %
+```
+
+Damit ist der Subset-Workflow wieder grün und der Coverage-Gate nur dort aktiv, wo die volle Suite läuft.
+
+Gemini-HIGH-Finding („ci.yml fehlt im PR") war Halluzination — `gh pr diff 281 --name-only` listete `.github/workflows/ci.yml` schon im Initial-Patch.

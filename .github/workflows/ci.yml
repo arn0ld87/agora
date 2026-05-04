@@ -109,9 +109,13 @@ jobs:
         working-directory: backend
         run: uv sync --group dev
 
-      - name: Run backend tests
+      - name: Run backend tests with coverage gate (M11.2)
         working-directory: backend
-        run: uv run pytest
+        # Coverage-Flags bewusst hier statt in pyproject.toml addopts -- sonst
+        # brechen Subset-Aufrufe wie `pytest tests/contracts/` in
+        # contract-gates.yml. Schwelle 53 % = Startwert (Ist 55.36 %, PLAN-Fallback
+        # `floor(Ist - 2)`). Roadmap +2 Punkte/Monat -> 85 %.
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
