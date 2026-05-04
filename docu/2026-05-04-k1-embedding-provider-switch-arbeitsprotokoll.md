@@ -4,9 +4,10 @@
 **Trigger:** User-Auftrag „Stell im nächsten Schritt das embedding auf
 openai um (text-embedding-3-small)".
 **Foundation:** Commit `a191d09` (`feat(embeddings): support
-openai-compatible embedding endpoints`) hat Provider-Detection,
-Bearer-Header und 1536-dim-Eintrag in `KNOWN_EMBEDDING_DIMS` bereits
-gemerged.
+openai-compatible embedding endpoints`) — war lokal angelegt aber NICHT
+auf `origin/main` gepusht. Wurde im Rahmen dieses Slices via
+`git cherry-pick a191d09` mitgenommen. Gemini-Code-Assist (HIGH-Catch
+auf erstem Doku-only-Push) hat den Foundation-Gap aufgedeckt.
 
 ## Entscheidung
 
