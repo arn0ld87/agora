@@ -52,8 +52,11 @@ services:
       # `compose.ollama.local.yml` als 3. -f-Datei einhängen und URLs
       # dort auf `http://ollama:11434` umbiegen — bewusst NICHT im
       # Repo-Default, weil sonst der Standardpfad bricht.
-      - LLM_BASE_URL=http://host.docker.internal:11434/v1
-      - EMBEDDING_BASE_URL=http://host.docker.internal:11434
+      # `.env`-Werte ueberschreiben den Default — fuer Cloud-Provider
+      # (OpenAI, Together, vLLM) `EMBEDDING_BASE_URL` / `LLM_BASE_URL` in
+      # der `.env` setzen.
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
 
   neo4j:
     ports: !reset []

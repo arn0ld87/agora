@@ -63,12 +63,16 @@ services:
       # Overrides any REDIS_URL in .env so the bus stays pointed at the
       # compose-private service regardless of host-side defaults.
       - REDIS_URL=redis://redis:6379/0
-      # Service discovery for compose-internal Neo4j and host-side Ollama.
-      # These overrides win over .env so dev users can keep localhost defaults
-      # there for `npm run dev` without breaking the compose workflow.
+      # Service discovery for compose-internal Neo4j (always wins over .env —
+      # localhost from .env would not resolve to the compose service).
       - NEO4J_URI=bolt://neo4j:7687
-      - LLM_BASE_URL=http://host.docker.internal:11434/v1
-      - EMBEDDING_BASE_URL=http://host.docker.internal:11434
+      # LLM-/Embedding-Endpoints: Compose-Substitution mit Ollama-Default.
+      # `.env`-Werte gewinnen (z. B. fuer OpenAI-Cloud-Embeddings via
+      # EMBEDDING_BASE_URL=https://api.openai.com/v1). Default-Fallback
+      # bleibt host-Ollama, damit `docker compose up` ohne weiteres Setup
+      # Out-of-the-Box funktioniert (Local-first laut Projekt-Profil).
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
       # Read-only rootfs: don't try to write __pycache__ next to source.
       - PYTHONDONTWRITEBYTECODE=1
       # .venv wurde beim Image-Build via `uv sync --frozen` vollständig
