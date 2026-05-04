@@ -1,17 +1,34 @@
 import importlib.util
+import sys
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+RUNNER_SCRIPTS = (
+    "backend/scripts/run_parallel_simulation.py",
+    "backend/scripts/run_twitter_simulation.py",
+    "backend/scripts/run_reddit_simulation.py",
+)
+
+
 def _load_module(module_name: str, relative_path: str):
     module_path = REPO_ROOT / relative_path
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    parent_dir = str(module_path.parent.resolve())
+    sys_path_added = False
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+        sys_path_added = True
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if sys_path_added and parent_dir in sys.path:
+            sys.path.remove(parent_dir)
 
 
 def test_resolve_model_runtime_settings_cloud(monkeypatch):
@@ -224,3 +241,82 @@ def test_attach_tools_to_agents_wraps_memory_write_records(monkeypatch):
     graph.agent.memory.write_records([DummyRecord()])
 
     assert graph.agent.memory.records == []
+
+
+def test_enforce_memory_token_limit_without_tools(monkeypatch):
+    """enforce_memory_token_limit muss creator._token_limit auch dann
+    anheben, wenn KEIN attach_tools-Pfad benutzt wird. Ohne diese Garantie
+    bleibt CAMELs ScoreBasedContextCreator-Default 8192 stehen, sobald
+    Persona-Workflows ohne Tool-Registry laufen."""
+    module = _load_module("agent_tools_enforce_test", "backend/scripts/agent_tools.py")
+
+    monkeypatch.setenv("LLM_CONTEXT_LIMIT", "262144")
+    monkeypatch.setenv(
+        "LLM_MODEL_CONTEXT_LIMITS_JSON",
+        '{"qwen3-coder-next:cloud": 262144}',
+    )
+
+    class DummyCreator:
+        def __init__(self):
+            self._token_limit = 8192
+
+        @property
+        def token_limit(self):
+            return self._token_limit
+
+    class DummyMemory:
+        def __init__(self):
+            self.creator = DummyCreator()
+
+        def get_context_creator(self):
+            return self.creator
+
+    class DummyModelBackend:
+        def __init__(self):
+            self.model_type = "qwen3-coder-next:cloud"
+
+    class DummyAgent:
+        def __init__(self):
+            self.memory = DummyMemory()
+            self.model_backend = DummyModelBackend()
+
+    class DummyGraph:
+        def __init__(self):
+            self.agent = DummyAgent()
+
+        def get_agents(self):
+            return [(0, self.agent)]
+
+    graph = DummyGraph()
+    patched = module.enforce_memory_token_limit(graph)
+    assert patched == 1
+    assert graph.agent.memory.get_context_creator().token_limit == 262144
+
+
+def test_all_runners_apply_camel_context_floor():
+    """Alle drei OASIS-Runner-Scripts (twitter/reddit/parallel) muessen
+    CAMELs ScoreBasedContextCreator-Default-Floor (8192) auf
+    LLM_CONTEXT_LIMIT hochziehen. Regression-Schutz dafuer, dass der
+    Patch nicht erneut nur in einem Subset der Runner laeuft."""
+    for relative_path in RUNNER_SCRIPTS:
+        text = (REPO_ROOT / relative_path).read_text()
+        assert (
+            "apply_camel_context_floor" in text
+        ), f"{relative_path}: apply_camel_context_floor() not invoked"
+
+
+def test_resolve_memory_token_limit_uses_substring_heuristic_for_unknown_models(monkeypatch):
+    """Bei Frontend-gewaehlten Modell-Strings, die nicht in
+    LLM_MODEL_CONTEXT_LIMITS stehen, soll _resolve_memory_token_limit
+    eine konservative Substring-Heuristik nutzen statt blind auf 262144
+    zu fallen. Gemini-3-Familien koennen 1M Tokens, gpt-oss/llama nur 128k."""
+    module = _load_module("agent_tools_heuristic_test", "backend/scripts/agent_tools.py")
+    monkeypatch.setenv("LLM_CONTEXT_LIMIT", "262144")
+    monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+
+    assert module._resolve_memory_token_limit("gemini-3-pro:cloud") >= 1_000_000
+    assert module._resolve_memory_token_limit("gemini-3-flash:cloud") >= 1_000_000
+    assert module._resolve_memory_token_limit("deepseek-v3.1:cloud") >= 131_072
+    assert module._resolve_memory_token_limit("qwen3-coder-next:cloud") >= 262_144
+    assert module._resolve_memory_token_limit("gpt-oss:120b-cloud") >= 131_072
+    assert module._resolve_memory_token_limit("some-unknown-model") == 262_144

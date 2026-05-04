@@ -83,6 +83,7 @@ _cleanup_done = False
 # Script is fixed in backend/scripts/ directory
 try:
     from ._sim_common import (
+        apply_camel_context_floor,
         build_parallel_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -91,6 +92,7 @@ try:
     )
 except ImportError:  # direct script execution
     from _sim_common import (
+        apply_camel_context_floor,
         build_parallel_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -102,6 +104,8 @@ _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 load_project_env(__file__, verbose=True)
 install_max_tokens_warning_filter()
+_camel_context_floor = apply_camel_context_floor()
+print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
 
 if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     build_parallel_parser().parse_args()
@@ -1068,7 +1072,21 @@ def resolve_model_runtime_settings(model_name: str) -> Dict[str, Any]:
     )
     context_overrides = dict(getattr(Config, "LLM_MODEL_CONTEXT_LIMITS", {}) or {})
     context_overrides.update(_parse_model_context_limits())
-    memory_token_limit = int(context_overrides.get(model_name, default_memory_limit))
+    if model_name in context_overrides:
+        memory_token_limit = int(context_overrides[model_name])
+    else:
+        # Frontend-Modellauswahl: Modell-String steht oft nicht in der env-Map.
+        # Fallback ueber dieselbe Substring-Heuristik wie agent_tools, damit
+        # z. B. ein vom UI gewaehltes "gemini-3-pro:cloud" nicht auf 256 k
+        # gekappt wird, obwohl das Modell 1 M kann.
+        try:
+            from agent_tools import _heuristic_context_limit
+            heuristic = _heuristic_context_limit(str(model_name))
+        except Exception:
+            heuristic = None
+        memory_token_limit = (
+            max(int(heuristic), default_memory_limit) if heuristic else default_memory_limit
+        )
     is_cloud_model = str(model_name).endswith(":cloud")
 
     return {
@@ -1274,6 +1292,16 @@ async def run_twitter_simulation(
         model=model,
         available_actions=TWITTER_ACTIONS,
     )
+
+    # Memory-Token-Limit auch dann anheben, wenn keine Tools attached werden:
+    # CAMELs ScoreBasedContextCreator-Default (8192) wuerde sonst zuschlagen,
+    # bevor attach_tools_to_agents() greift.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            from agent_tools import enforce_memory_token_limit
+            enforce_memory_token_limit(result.agent_graph)
+        except Exception as e:
+            log_info(f"enforce_memory_token_limit (twitter) failed: {e}")
 
     # Native CAMEL function-calling: attach web_search / web_fetch / search_graph
     # to every SocialAgent. OASIS triggers these through its normal LLMAction()
@@ -1514,6 +1542,14 @@ async def run_reddit_simulation(
         model=model,
         available_actions=REDDIT_ACTIONS,
     )
+
+    # Memory-Token-Limit auch ohne Tools auf das resolvte Modell-Budget heben.
+    if AGENT_TOOLS_AVAILABLE:
+        try:
+            from agent_tools import enforce_memory_token_limit
+            enforce_memory_token_limit(result.agent_graph)
+        except Exception as e:
+            log_info(f"enforce_memory_token_limit (reddit) failed: {e}")
 
     # Native CAMEL function-calling for Reddit agents (see Twitter branch).
     if enable_tools and AGENT_TOOLS_AVAILABLE:

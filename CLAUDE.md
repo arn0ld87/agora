@@ -199,3 +199,5 @@ Signalen direkt Opus ziehen:
 - `git push --no-verify` ohne explizite User-Freigabe
 - Auf `main` mergen ohne Gemini-Findings-Sichtung (siehe PR-Workflow oben)
 - Hartkodierte UI-Strings in `Step*.vue` — immer `vue-i18n` (`t(...)`) + Keys in `de.json`+`en.json`
+- **Neue OASIS/CAMEL-Runner-Skripte ohne `apply_camel_context_floor()` + `enforce_memory_token_limit()`-Aufruf nach `generate_*_agent_graph(...)`.** Sonst kappt CAMELs `ScoreBasedContextCreator` jeden Agent-Memory bei 8192 Tokens — unabhängig vom realen Modell-Context. Floor wird zentral in `backend/scripts/_sim_common.py::apply_camel_context_floor()` gepflegt; Pro-Modell-Heuristik in `backend/scripts/agent_tools.py::_heuristic_context_limit()`. User-Override via `LLM_CONTEXT_LIMIT` und `LLM_MODEL_CONTEXT_LIMITS_JSON` (Vorrang vor Heuristik)
+- Hartkodierte `token_limit`-Defaults in CAMEL-/OASIS-Anbindungen (8192, 4096, 16384) — immer aus `_resolve_memory_token_limit(model_name)` lesen, damit Frontend-gewählte Cloud-Modelle (Gemini 3 ≈ 1 M, Qwen3-Coder 256 k, GPT-OSS 128 k) ihren echten Context-Window nutzen können
