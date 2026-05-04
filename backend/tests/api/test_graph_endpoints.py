@@ -3,11 +3,14 @@
 Fokus: jeder Error-Pfad liefert die richtige Envelope-Form
 ``{"success": false, "code": "<code>", "error": "..."}``. Frontend kann
 sich auf ``code`` verlassen, der ``error``-Text bleibt menschenlesbar.
+
+Enthält außerdem Tests für den progress_detail-Batch-Marker (Sub-Slice #137 SUB1).
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+import time
 
 import pytest
 from flask import Flask
@@ -190,3 +193,139 @@ def test_build_graph_when_already_building_returns_graph_build_in_progress(
     assert response.status_code == 409
     assert payload["code"] == "graph_build_in_progress"
     assert payload["task_id"] == "existing-task-id"
+
+
+# --- BATCH-MARKER / progress_detail CONTRACT (#137 SUB1) ---------------------
+
+
+def test_add_text_batches_callback_receives_four_args():
+    """add_text_batches ruft progress_callback mit (msg, ratio, completed, total) auf.
+
+    Verifikation der neuen 4-Arg-Signatur: pro fertigem Chunk wird completed
+    monoton hochgezählt und total bleibt konstant.
+    """
+    from app.services.graph_builder import GraphBuilderService
+
+    storage = MagicMock(name="MockStorage")
+    # add_text returns a fake uuid per chunk
+    storage.add_text.side_effect = ["uuid-1", "uuid-2", "uuid-3"]
+
+    service = GraphBuilderService(storage=storage)
+
+    recorded: list[tuple] = []
+
+    def capture_callback(msg: str, ratio: float, completed: int, total: int) -> None:
+        recorded.append((msg, ratio, completed, total))
+
+    uuids = service.add_text_batches(
+        graph_id="test-graph-id",
+        chunks=["chunk A", "chunk B", "chunk C"],
+        progress_callback=capture_callback,
+    )
+
+    assert len(uuids) == 3
+    assert len(recorded) == 3
+
+    totals = [r[3] for r in recorded]
+    assert all(t == 3 for t in totals), "total_batches muss konstant 3 sein"
+
+    completed_vals = sorted(r[2] for r in recorded)
+    assert completed_vals == [1, 2, 3], "completed muss monoton von 1 bis total steigen"
+
+    ratios = [r[1] for r in recorded]
+    for ratio, completed in zip(ratios, [r[2] for r in recorded]):
+        assert abs(ratio - completed / 3) < 1e-9, "progress_ratio muss completed/total sein"
+
+
+def test_add_progress_callback_sets_progress_detail_on_task_manager():
+    """add_progress_callback in graph.py setzt progress_detail mit Batch-Marker-Feldern.
+
+    Wir patchen TaskManager.update_task und GraphBuilderService.add_text_batches,
+    damit der Build-Thread synchron durchlaufen kann.
+    """
+    from app.models.task import TaskManager
+    from app.models.project import ProjectStatus
+
+    # Captured update_task calls
+    progress_detail_calls: list[dict] = []
+    original_update_task = TaskManager.update_task
+
+    def spy_update_task(self, task_id, **kwargs):
+        if "progress_detail" in kwargs and kwargs["progress_detail"] is not None:
+            progress_detail_calls.append(dict(kwargs["progress_detail"]))
+        original_update_task(self, task_id, **kwargs)
+
+    fake_project = MagicMock()
+    fake_project.status = ProjectStatus.ONTOLOGY_GENERATED
+    fake_project.ontology = {"entity_types": [], "edge_types": []}
+    fake_project.graph_build_task_id = None
+    fake_project.graph_id = None
+    fake_project.name = "Test Project"
+    fake_project.chunk_size = 500
+    fake_project.chunk_overlap = 50
+
+    def fake_add_text_batches(graph_id, chunks, batch_size=3, progress_callback=None):
+        # Simulate two chunks completing
+        if progress_callback:
+            progress_callback("Processed 1/2 chunks...", 0.5, 1, 2)
+            progress_callback("Processed 2/2 chunks...", 1.0, 2, 2)
+        return ["uuid-a", "uuid-b"]
+
+    fake_builder = MagicMock()
+    fake_builder.create_graph.return_value = "graph-123"
+    fake_builder.set_ontology.return_value = None
+    fake_builder.add_text_batches.side_effect = fake_add_text_batches
+    fake_builder.get_graph_data.return_value = {"node_count": 2, "edge_count": 1}
+
+    fake_container = MagicMock()
+    fake_container.neo4j_storage = MagicMock()  # must be non-None
+    fake_container.graph_builder.return_value = fake_builder
+
+    with (
+        patch("app.api.graph.ProjectManager.get_project", return_value=fake_project),
+        patch("app.api.graph.ProjectManager.save_project"),
+        patch("app.api.graph.ProjectManager.get_extracted_text", return_value="some text"),
+        patch("app.api.graph.TaskManager.update_task", spy_update_task),
+        patch("app.api.graph.RunRegistry.create_run", return_value={"run_id": "r1"}),
+        patch("app.api.graph.RunRegistry.update_run"),
+        patch("app.api.graph.get_container", return_value=fake_container),
+        patch("app.api.graph.TextProcessor.split_text", return_value=["chunk1", "chunk2"]),
+        patch("app.api.graph.ArtifactLocator.existing_paths", return_value={}),
+    ):
+        flask_app = Flask(__name__)
+        storage = MagicMock()
+        from app.container import AgoraContainer
+        container = AgoraContainer(neo4j_storage=storage)
+        flask_app.extensions = {"container": container, "neo4j_storage": storage}
+        flask_app.register_blueprint(graph_bp, url_prefix="/api/graph")
+
+        with flask_app.test_client() as client:
+            response = client.post(
+                "/api/graph/build",
+                json={"project_id": VALID_PROJECT_ID},
+            )
+            assert response.status_code == 200, response.get_json()
+
+        # Allow the background thread to finish
+        for _ in range(50):
+            time.sleep(0.05)
+            if progress_detail_calls:
+                break
+
+    assert len(progress_detail_calls) >= 1, (
+        "Es muss mindestens ein update_task mit progress_detail geben"
+    )
+    first = progress_detail_calls[0]
+    assert "batch_count" in first, "progress_detail muss batch_count enthalten"
+    assert "total_batches" in first, "progress_detail muss total_batches enthalten"
+    assert "batch_at" in first, "progress_detail muss batch_at enthalten"
+    assert first["batch_count"] >= 1
+    assert first["total_batches"] == 2
+    assert isinstance(first["batch_at"], float), "batch_at muss ein float (Unix-Epoch) sein"
+
+    # Verify monotonic ordering: completed should never decrease
+    batch_counts = [d["batch_count"] for d in progress_detail_calls]
+    for i in range(1, len(batch_counts)):
+        assert batch_counts[i] >= batch_counts[i - 1], (
+            f"batch_count muss monoton steigen, bekam {batch_counts}"
+        )

@@ -44,7 +44,7 @@
 </template>
 
 <script setup>
-import { ref, toRef, watch } from 'vue'
+import { ref, toRef, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GraphDetailPanel from './GraphDetailPanel.vue'
@@ -61,6 +61,10 @@ const props = defineProps({
   currentPhase: { type: Number, default: null },
   isSimulating: { type: Boolean, default: false },
   showFinishedHint: { type: Boolean, default: false },
+  // Issue #137 SUB2 — forwarded from MainView → GraphPanel → here.
+  // Passed into useGraphRender so Auto-Freeze fires per committed batch.
+  // Shape: { batch_count, total_batches, batch_at } | null
+  batchSignal: { type: Object, default: null },
 })
 
 defineEmits(['dismiss-finished-hint'])
@@ -74,6 +78,10 @@ const expandedSelfLoops = ref(new Set())
 // `selectedItem` wird vom Composable gehalten und hier nur gelesen + zurückgesetzt.
 // `translateLabel` reicht den vue-i18n-Hook in das Composable: Edge-Labels werden
 // gemäß aktueller Locale formatiert (Issue #129).
+// Issue #137 SUB2: batchSignal triggers Auto-Freeze per committed chunk.
+// The prop is typed as Object (plain JS script), but useGraphRender accepts
+// MaybeRefOrGetter<BuildProgressDetail | null> — the shape is compatible.
+const batchSignalRef = computed(() => props.batchSignal ?? null)
 const { selectedItem, render, isPaused, togglePause } = useGraphRender({
   svgRef: graphSvg,
   containerRef: graphContainer,
@@ -81,6 +89,7 @@ const { selectedItem, render, isPaused, togglePause } = useGraphRender({
   entityTypes: toRef(props, 'entityTypes'),
   showEdgeLabels,
   translateLabel: t,
+  batchSignal: batchSignalRef,
 })
 
 // Locale-Wechsel: Edge-Labels frisch durch i18n laufen lassen.

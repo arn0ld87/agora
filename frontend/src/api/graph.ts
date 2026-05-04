@@ -8,6 +8,12 @@ export interface BuildGraphData {
   [key: string]: unknown
 }
 
+export interface BuildProgressDetail {
+  batch_count: number
+  total_batches: number
+  batch_at: number
+}
+
 export interface TaskStatusResponse {
   task_id: string
   status: string
@@ -15,6 +21,7 @@ export interface TaskStatusResponse {
   message?: string
   error?: string | null
   result?: Record<string, unknown> | null
+  progress_detail?: BuildProgressDetail | null
 }
 
 export interface GraphDataResponse {

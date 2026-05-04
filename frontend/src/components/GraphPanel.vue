@@ -22,6 +22,7 @@
       :current-phase="currentPhase"
       :is-simulating="isSimulating"
       :show-finished-hint="showSimulationFinishedHint"
+      :batch-signal="batchSignal"
       @dismiss-finished-hint="dismissFinishedHint"
     />
 
@@ -51,6 +52,9 @@ const props = defineProps({
   loading: Boolean,
   currentPhase: Number,
   isSimulating: Boolean,
+  // Issue #137 SUB2 — batch progress signal forwarded from MainView polling.
+  // Passed through to GraphCanvas → useGraphRender for Auto-Freeze.
+  batchSignal: { type: Object, default: null },
 })
 
 defineEmits(['refresh', 'toggle-maximize'])
