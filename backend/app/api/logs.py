@@ -263,11 +263,15 @@ def stream_logs():
                             if not line:
                                 break
                             if not line.endswith(b'\n'):
-                                # Partial line at EOF (Logger schreibt gerade): offset
-                                # bewusst NICHT vorruecken, nächster Poll-Zyklus
-                                # liest die Zeile vollständig. Andernfalls würden
-                                # wir Multi-Byte-UTF-8-Sequenzen mid-write zer-
-                                # decoden und Daten verlieren.
+                                # Partial line at EOF (Logger schreibt gerade):
+                                # offset bewusst NICHT vorruecken — naechster
+                                # Poll-Zyklus liest die Zeile vollstaendig,
+                                # andernfalls wuerden wir Multi-Byte-UTF-8-
+                                # Sequenzen mid-write zer-decoden.
+                                # Sleep vor break, sonst Hot-Loop: size > offset
+                                # bleibt wahr, der else-Zweig (mit time.sleep)
+                                # wird nie erreicht.
+                                time.sleep(_STREAM_POLL_SEC)
                                 break
                             line_offset = fh.tell()
                             offset = line_offset
