@@ -637,14 +637,37 @@ async function fetchProfilesRealtime() {
     const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
     if (res?.success && Array.isArray(res.data?.profiles)) {
       profiles.value = res.data.profiles
-      if (profiles.value.length) {
-        // Refresh quality heuristics in the background; failures are reported
-        // through personaReview.error and do not block the polling loop.
-        personaReview.refreshQuality(props.simulationId)
-      }
     }
   } catch { /* swallow */ }
 }
+
+// Track whether refreshQuality has already been called for the current sim.
+// Reset whenever simulationId changes so a Sim-Wechsel without unmount triggers
+// a fresh quality fetch for the new simulation's first profile batch.
+const _qualityFetchedForSim = ref(null)
+
+// Reset the quality-fetch guard when the simulation changes (Sim-Wechsel).
+watch(
+  () => props.simulationId,
+  (newId) => {
+    if (newId !== _qualityFetchedForSim.value) {
+      _qualityFetchedForSim.value = null
+    }
+  },
+)
+
+// Fire refreshQuality exactly once per simulation: on the 0 → n>0 transition.
+// The 3-s polling loop (fetchProfilesRealtime) no longer calls refreshQuality.
+watch(
+  () => profiles.value.length,
+  (n, prev) => {
+    if (prev === 0 && n > 0 && _qualityFetchedForSim.value !== props.simulationId) {
+      _qualityFetchedForSim.value = props.simulationId ?? null
+      // Fire-and-forget; failures surface via personaReview.error.
+      personaReview.refreshQuality(props.simulationId)
+    }
+  },
+)
 
 async function fetchConfigRealtime() {
   try {
