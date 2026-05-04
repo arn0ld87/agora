@@ -23,6 +23,7 @@ from .confidence_calculator import compute_confidence
 from .evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
 from .evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from ..contracts import EvidenceMapModel
+from ..contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from .web_tools import WebToolsService
 from ..utils.logger import get_logger
 from ..models.report import (
@@ -941,18 +942,33 @@ class ReportAgent:
             if progress_callback:
                 progress_callback("planning", 80, "Parsing outline structure...")
 
-            # Parse outline
-            sections = []
+            # Parse outline — validate via Pydantic contract first, then
+            # convert to ReportOutline for downstream processing with content.
+            pydantic_sections = []
             for section_data in response.get("sections", []):
-                sections.append(ReportSection(
-                    title=section_data.get("title", ""),
-                    content=""
+                raw_desc = (section_data.get("description") or "").strip()
+                pydantic_sections.append(ReportOutlineSectionModel(
+                    title=(section_data.get("title") or "Section").strip() or "Section",
+                    description=raw_desc if raw_desc else "—",
                 ))
-            
+
+            pydantic_outline = ReportOutlineModel(
+                title=(response.get("title") or "Simulation Analysis Report").strip() or "Simulation Analysis Report",
+                summary=(response.get("summary") or "").strip() or "—",
+                sections=pydantic_sections,
+            )
+
+            sections = [
+                ReportSection(
+                    title=s.title,
+                    description=s.description,
+                )
+                for s in pydantic_outline.sections
+            ]
             outline = ReportOutline(
-                title=response.get("title", "Simulation Analysis Report"),
-                summary=response.get("summary", ""),
-                sections=sections
+                title=pydantic_outline.title,
+                summary=pydantic_outline.summary,
+                sections=sections,
             )
 
             if progress_callback:
@@ -963,14 +979,23 @@ class ReportAgent:
 
         except Exception as e:
             logger.error(f"Outline planning failed: {str(e)}")
-            # Return default outline (3 sections as fallback)
+            # Return default outline (3 sections as fallback) — all descriptions filled.
             return ReportOutline(
                 title="Scenario Evaluation Report",
                 summary="Emerging trends and risk analysis based on simulation observations",
                 sections=[
-                    ReportSection(title="Evaluation Scenario and Core Findings"),
-                    ReportSection(title="Persona Reaction Analysis"),
-                    ReportSection(title="Trend Outlook and Risk Warning")
+                    ReportSection(
+                        title="Evaluation Scenario and Core Findings",
+                        description="Overview of the simulated scenario and main findings",
+                    ),
+                    ReportSection(
+                        title="Persona Reaction Analysis",
+                        description="Analysis of how simulated personas reacted to key events",
+                    ),
+                    ReportSection(
+                        title="Trend Outlook and Risk Warning",
+                        description="Identified trends and potential risk signals from the simulation",
+                    ),
                 ]
             )
     
@@ -2288,9 +2313,13 @@ class ReportManager:
             outline_data = data['outline']
             sections = []
             for s in outline_data.get('sections', []):
+                # Prefer stored description; fall back to content for legacy
+                # entries that predate the description field.
+                stored_desc = s.get('description') or s.get('content') or ""
                 sections.append(ReportSection(
                     title=s['title'],
-                    content=s.get('content', '')
+                    content=s.get('content', ''),
+                    description=stored_desc if stored_desc.strip() else "—",
                 ))
             outline = ReportOutline(
                 title=outline_data['title'],

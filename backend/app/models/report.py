@@ -27,11 +27,13 @@ class ReportSection:
     """Report section"""
     title: str
     content: str = ""
+    description: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "title": self.title,
-            "content": self.content
+            "content": self.content,
+            "description": self.description,
         }
 
     def to_markdown(self, level: int = 2) -> str:
