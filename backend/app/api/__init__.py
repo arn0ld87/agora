@@ -10,6 +10,7 @@ report_bp = Blueprint('report', __name__)
 runs_bp = Blueprint('runs', __name__)
 status_bp = Blueprint('status', __name__)
 logs_bp = Blueprint('logs', __name__)
+llm_bp = Blueprint('llm', __name__)  # Slice E.1 (#213): model-active SSE stream
 
 from .auth import auth_bp  # noqa: E402, F401 -- P0.2b: signed-ticket endpoint
 from .settings import settings_bp  # noqa: E402, F401 -- Issue #133: Settings-UI
@@ -29,3 +30,4 @@ from . import report  # noqa: E402, F401
 from . import runs  # noqa: E402, F401
 from . import status  # noqa: E402, F401
 from . import logs  # noqa: E402, F401 -- Issue #132: Backend-Log-Viewer
+from . import llm  # noqa: E402, F401 -- Slice E.1 (#213): model-active SSE stream

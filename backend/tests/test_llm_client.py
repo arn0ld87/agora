@@ -49,7 +49,7 @@ class TestChatJsonLegacy:
         monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat"):
             captured.append(response_format)
             return '{"result": "ok"}'
 
@@ -68,7 +68,7 @@ class TestChatJsonStrictSchema:
         monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
             captured.append(response_format)
             return '{"x": 5}'
 
@@ -117,7 +117,7 @@ class TestChatJsonStrictSchema:
         call_count = 0
         warning_calls: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -153,7 +153,7 @@ class TestChatJsonStrictSchema:
 
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
             captured.append(response_format)
             return '{"x": 99}'
 
@@ -179,7 +179,7 @@ class TestChatJsonStrictSchema:
         }
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
             captured.append(response_format)
             return '{"name": "Agora"}'
 

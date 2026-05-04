@@ -7,7 +7,8 @@ Supports Ollama num_ctx parameter to prevent prompt truncation
 import json
 import os
 import re
-from typing import Optional, Dict, Any, List, Type, Union
+import time as _time_mod
+from typing import Literal, Optional, Dict, Any, List, Type, Union
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -112,12 +113,70 @@ class LLMClient:
         """Check if we're talking to an Ollama server."""
         return '11434' in (self.base_url or '')
 
+    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "unknown"]:
+        """Infer the LLM provider from base_url and model name.
+
+        Heuristics (in priority order):
+        1. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud proxy).
+        2. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
+        3. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
+        4. Fallback → ``"unknown"``.
+        """
+        model_name = self.model or ""
+        base = self.base_url or ""
+        if model_name.endswith(":cloud"):
+            return "cloud"
+        if "11434" in base:
+            return "ollama"
+        if "openai.com" in base or "api.openai" in base:
+            return "openai"
+        return "unknown"
+
+    def _publish_model_active(
+        self,
+        context: Literal[
+            "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
+        ],
+        *,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> None:
+        """Publish a :class:`ModelActiveEvent` to the module-level bus.
+
+        Fail-safe: any exception is caught and logged as a warning so that LLM
+        calls are never blocked by bus errors.
+        """
+        try:
+            from ..services.model_event_bus import ModelActiveEvent, model_event_bus
+
+            extra: Dict[str, Any] = {}
+            if max_tokens is not None:
+                extra["max_tokens"] = max_tokens
+            if temperature is not None:
+                extra["temperature"] = temperature
+
+            event = ModelActiveEvent(
+                model=self.model or "unknown",
+                context=context,
+                provider=self._detect_provider(),
+                ts=_time_mod.time(),
+                extra=extra if extra else None,
+            )
+            model_event_bus.publish(event)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "model_event_bus.publish failed (LLM call proceeds): %s", exc
+            )
+
     def chat(
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 4096,
-        response_format: Optional[Dict] = None
+        response_format: Optional[Dict] = None,
+        context: Literal[
+            "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
+        ] = "chat",
     ) -> str:
         """
         Send chat request
@@ -127,10 +186,13 @@ class LLMClient:
             temperature: Temperature parameter
             max_tokens: Max token count
             response_format: Response format (e.g., JSON mode)
+            context: Logical call context label for observability (published
+                to :mod:`app.services.model_event_bus` before the API call).
 
         Returns:
             Model response text
         """
+        self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         kwargs = {
             "model": self.model,
             "messages": messages,
@@ -288,6 +350,9 @@ class LLMClient:
         max_tokens: int = 4096,
         schema: Optional[JsonSchemaLike] = None,
         schema_name: str = "structured_response",
+        context: Literal[
+            "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
+        ] = "chat_json",
     ) -> Dict[str, Any]:
         """
         Send chat request and return JSON.
@@ -305,6 +370,8 @@ class LLMClient:
                 field types matching the model.
             schema_name: Name embedded in the strict json_schema request
                 (used by some providers for caching / routing).
+            context: Logical call context label for observability (forwarded
+                to :meth:`chat` which publishes it to the model event bus).
 
         Returns:
             Parsed JSON object (dict).
@@ -353,6 +420,7 @@ class LLMClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     response_format=response_format,
+                    context=context,
                 )
             except Exception as exc:
                 exc_lower = str(exc).lower()
@@ -367,6 +435,7 @@ class LLMClient:
                         temperature=temperature,
                         max_tokens=max_tokens,
                         response_format={"type": "json_object"},
+                        context=context,
                     )
                 else:
                     raise
@@ -376,6 +445,7 @@ class LLMClient:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 response_format=response_format,
+                context=context,
             )
         # Clean markdown code block markers
         cleaned_response = response.strip()
