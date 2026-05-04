@@ -1,33 +1,37 @@
 # Agora Roadmap
 
-> Stand: 2026-05-03. Verbindliche Test-Counts und Layer-Status: [`docu/STATUS.md`](STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](../CLAUDE.md#architektur-layer-status). Operative Tasks: [`PLAN.md`](../PLAN.md). Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
+> Stand: 2026-05-04. Verbindliche Test-Counts und Layer-Status: [`docu/STATUS.md`](STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](../CLAUDE.md#architektur-layer-status). Operative Tasks: [`PLAN.md`](../PLAN.md). Subagent-Mapping pro Slice: [`docu/plan.heuristic.md`](plan.heuristic.md). Versions-Historie und Detail-Backlog: `docu/refactoring-backlog-priorisiert.md`, `docu/p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
 
-## Current State (v0.9.0+ post-tag, Layer 0–6 grün)
+## Current State (v0.9.0+ post-tag, Layer 0–6 grün, Layer 9 überwiegend grün)
 
 Fully local fork on Neo4j CE + Ollama, no Zep Cloud dependency. Core pipeline works end-to-end: upload → graph build → persona generation → multi-agent OASIS simulation → report.
 
-Reader-Honesty-Refactor (Sub-Slices 02–17, Layer 0–5) und Frontend-TypeScript-Migration (Sub-Slices 26–28, Layer 6) sind durch. Die 0.5/0.6-Linien-Historie steht weiter unten unter [§ Historie](#historie-050--06).
+Reader-Honesty-Refactor (Sub-Slices 02–17, Layer 0–5) und Frontend-TypeScript-Migration (Sub-Slices 26–28, Layer 6) sind durch. M9 Prod-Hardening (Layer 9) ist code-seitig überwiegend gelandet: Reverse-Proxy-Sidecar in `deploy/`, Gunicorn `-k gevent`, Bundle-Token-Gate (`ALLOW_BUILD_TIME_TOKEN=false`), `?token=`-Block in Prod, signed tickets im Frontend. Die 0.5/0.6-Linien-Historie steht weiter unten unter [§ Historie](#historie-050--06).
 
 ---
 
 ## Now / Next / Later
 
-### Now — Milestone M9 (Prod-Hardening, Mai 2026, Slices F1–F5)
+### Now — M9 Wrap-up + M10 Start (Mai/Juni 2026)
 
-Übergang von v0.9.0-Release + Reader-Honesty-Refactor zu stabiler Production-Ready-Vorbereitung (Layer 9 Deployment, SSE-Auth, Reverse-Proxy). Detail: [`PLAN.md` § Milestone M9](../PLAN.md).
+Layer-9-Hardening ist überwiegend im Code; offen sind die CI-Beweise und das Auth-Zielbild. Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04).
 
-- **F5 Doku-Sync** (Sub-Slice 44, **diese Woche**): Status.md als Single Source of Truth, ROADMAP v0.9.0+ / 2026-05-03, CONTRIBUTING.md Repo-Root, Inline-Zahlen aus README/CLAUDE.md entfernt.
-- **F1 Reverse-Proxy** (Sub-Slice 45): Saubere Verdrahtung eines Reverse-Proxy (nginx / HAProxy) vor dem Prod-Container; Auth-Token-Termination auf Proxy-Ebene, X-Forwarded-{For,Host,Proto}-Handling, Zero-Downtime-Reload.
-- **F2 Auth-Hardening** (Sub-Slices 46–47): Signed-Ticket-API (`POST /api/auth/ticket`) statt URL-Token-Fallback (#106 Refs); Frontend-Migration auf Ticket-Header; Redis-Session-Store für SSE.
-- **F3 Gunicorn-Gevent** (Sub-Slice 48): Worker-Modell von sync+`--timeout 600` auf `-k gevent` umstellen; OASIS-Subprozess-Entkopplung verifizieren, Fork-Safety-Tests für Neo4j/Redis-Pools.
+- **M9.6 Prod-Stack-Smoke in CI** — neuer Workflow `.github/workflows/prod-stack-smoke.yml`, der den vollen Compose-Stack inkl. Proxy hochzieht und `/healthz`, `/health`, `/`, `/api/auth/ticket` smoket. Ohne diesen Smoke fehlt der CI-Beweis für die F1/F2/F3-Slices.
+- **M9.7 Doku-Sync** — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md`/`docu/plan.heuristic.md` auf realen Code-Stand 2026-05-04 ziehen (= dieser Slice).
+- **M10.1/M10.2 CVE-Monitor + Hardstop** — wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop am 2026-07-30 (Issues #121–#126).
+- **M10.4 Auth-Zielbild-ADR** — `docu/decisions/0001-auth-model.md` entscheidet zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh.
+- **M10.5 Rate-Limit-Konzept** — Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Generation auf App- oder Proxy-Ebene.
 
-### Next — Milestone M10 (Test-Schärfe + CVE-Watch, Juni 2026)
+### Next — M11 Test- und Qualitätsgates härten (Juni–Juli 2026)
 
-Erhöhen der Coverage und automatisierte Security-Überwachung.
+Tests sind nicht nur zahlreich, sondern aussagekräftig.
 
-- **F6 Coverage** (Sub-Slices 49–50): Backend- und Frontend-Coverage auf >85 % heben; untestete Pfade identifizieren und mit gezielten Tests schliessen.
-- **F12 Lint-Tiefe** (Sub-Slice 51): zusätzliche ruff-Rules (Bandit-Integration für Security-Checks), mypy-Strict-Modus für neue Module.
-- **F4 CVE-Monitor** (Sub-Slice 52): Automated pip-audit + npm-audit in CI; CVE-Tracking-Arbeitsprotokoll; Upstream-Pin-Strategie dokumentieren.
+- **M11.1 Evidence-Gate hard** — `--soft` aus `.github/workflows/contract-gates.yml` raus.
+- **M11.2 Backend-Coverage** — `pytest-cov`, Startwert `--cov-fail-under=70`.
+- **M11.3 Frontend-Coverage** — `@vitest/coverage-v8`, Startwert 60 %.
+- **M11.4 Playwright-Smokes** — drei Tests: Health/Login, Upload+Graph-Build, Persona/Simulation/Report-Minimalpfad.
+- **M11.5 Komplexitäts-Gate** — `radon` für Backend, ESLint/size-limit für Frontend, Allowlist für Altlasten.
+- **M11.6 API-Envelope-Gate** — Tests verhindern rohe HTML-/dict-/uneinheitliche Fehlerantworten unter `/api/*`.
 
 ### Later — Milestones M11–M13 (Code-Hotspots, Feature-Welle, v1.0-Vorbereitung)
 

@@ -36,18 +36,31 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 | 5 | Eval/Baseline-Suite | grün |
 | 6 | Frontend-TypeScript-Migration | grün |
 | 7–8 | Graph/Runs/Persona-Review | teilweise |
-| 9 | Prod-Deployment (Reverse-Proxy, gevent, SSE-Auth) | offen |
-| 10 | Security Watchlist | dokumentiert |
+| 9 | Prod-Deployment | teilweise — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅; offen: Prod-Stack-Smoke in CI, Auth-ADR |
+| 10 | Security Watchlist | dokumentiert — CVE-Monitor + Hardstop 2026-07-30 stehen aus |
 
 ## Aktuelles Milestone
 
-**M9 — Prod-Hardening (Mai 2026, 23 Wochen).**
+**M9 — Prod-Hardening (Mai 2026), überwiegend abgeschlossen.**
 
-Detail: [`PLAN.md` § Milestone M9](../PLAN.md).
+Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: [`docu/plan.heuristic.md`](plan.heuristic.md).
 
-Aktive Slices: F5 Doku-Sync, F1 Reverse-Proxy, F2 Auth-Hardening, F3 Gunicorn-Gevent.
+**Erledigt (Code-verifiziert 2026-05-04):**
+- F1 Reverse-Proxy (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`)
+- F2.1 Bundle-Token-Gate (`Dockerfile` `ALLOW_BUILD_TIME_TOKEN=false` Default)
+- F2.2 `?token=` in Prod blockt (`backend/app/utils/auth.py`)
+- F3 Gunicorn `-k gevent`
+- SSE-Auth-Frontend auf signed tickets (`frontend/src/api/stream.ts`)
+
+**Aktiv offen (nächste 3 Slices in Reihenfolge):**
+1. M9.6 Prod-Stack-Smoke in CI — neuer Workflow für den vollen Compose-Stack mit Proxy.
+2. M10.1/M10.2 CVE-Monitor + Hardstop 2026-07-30 — Issues #121–#126.
+3. M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md`.
+
+Mittelfristig: M11.1 Evidence-Gate hard, M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, F7/F8 Hotspot-Splits (#202/#203).
 
 ## Aktualisierungs-Protokoll
 
 - 2026-05-03: Sub-Slice 44 — STATUS.md inaugural, Test-Counts und Versionsstände zentralisiert, Inline-Zahlen aus README/CLAUDE.md entfernt, ROADMAP auf v0.9.0+ / 2026-05-03 geheben.
-- 2026-05-04: F5 Doku-Sync — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
+- 2026-05-04: F5 Doku-Sync (1) — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
+- 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, neue `docu/plan.heuristic.md` als Subagent-Routing-SSoT, User-Drop-Audit-Snapshots nach `docu/history/`.
