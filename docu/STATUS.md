@@ -47,6 +47,39 @@ Begründung der Schwellenwahl: Ist-Wert (55 %) liegt unter der PLAN-Default-Schw
 
 Coverage-Report wird als CI-Artifact `backend-coverage` (14 Tage Retention) hochgeladen und kann von Codecov/Sonar konsumiert werden.
 
+## Frontend-Coverage (M11.3)
+
+Gemessen 2026-05-04 mit `npm run test:coverage` (`vite.config.js` include `src/**/*.{js,ts,vue}`, 24 Spec-Files, 170 Tests passed). Der vollständige `include`-Glob erfasst auch untestete Views (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) — daher fallen die Zahlen niedriger aus als eine rein transitive Messung.
+
+| Metrik | Coverage | Basis |
+|---|---|---|
+| Statements | 37.38 % | 1 570 / 4 199 |
+| Branches | **26.70 %** | 837 / 3 134 |
+| Functions | 27.14 % | 272 / 1 002 |
+| Lines | 39.16 % | 1 478 / 3 774 |
+
+**Aktive CI-Schwelle: 24 %** (alle vier Metriken, `thresholds` in `vite.config.js`).
+
+Begründung der Schwellenwahl: Niedrigster Wert ist `branches` mit 26.70 %. Dieser liegt weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` greift. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
+
+1. Fünf vollständig untestete Views-Dateien (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) werden durch den `include`-Glob erfasst, aber haben 0 % Coverage — sie erfordern Playwright-E2E-Tests (M11.4).
+2. `GraphCanvas.vue` und `GraphPanel.vue` haben 0 % Branches: Canvas-/WebGL-APIs sind in jsdom nicht verfügbar.
+3. `Step2EnvSetup.vue` hat 9.52 % Branches (~200 Conditional-Zweige im Wizard-Flow).
+
+Diese Lücken sind strukturell. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Ziel 80 %.
+
+**Roadmap:**
+
+| Datum | Schwelle | Notizen |
+|---|---|---|
+| 2026-05-04 | 24 % | Startwert (M11.3) |
+| 2026-06-04 | 26 % | +2 Punkte |
+| 2026-07-04 | 28 % | +2 Punkte |
+| … | … | monatlich +2 |
+| Ziel | 80 % | Langfristziel (inkl. Playwright E2E, M11.4+) |
+
+Coverage-Report wird als CI-Artifact `frontend-coverage` (14 Tage Retention) hochgeladen.
+
 ## Layer-Status (Übersicht)
 
 Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer](../CLAUDE.md#architektur-layer-status).
@@ -98,4 +131,5 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-04: M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md` als **Proposed** angelegt mit drei Optionen (Single-User-only-v1 / HttpOnly-Session / Bearer+Refresh). Empfehlung: Option A (Single-User-only-v1 explizit machen). Begründung: Local-first ist Kernprinzip, Hauptangriffsvektoren sind bereits geschlossen (F2.1/F2.2/P0.2/S2/S3), v1.0-Termin erreichbar. Wartet auf User-Sign-off. Folge-Slices nach Accept: README/security-hardening-Update, `auth_mode`-Feld in `/api/status`, Token-Rotation-Prozedur. ADR-Index unter `docu/decisions/README.md` mit Konvention.
 - 2026-05-04: M10.4-Followup — ADR-0001 von **Proposed** auf **Accepted** gehoben (User-Sign-off via Merge PR #277). `backend/app/api/status.py::_get_auth_mode()` returnt jetzt `"single_user_token"` statt `"token"` — der Prefix `single_user_` macht für Operatoren in `/api/status` sichtbar, dass Agora kein Multi-User-Modell hat. Tests in `tests/test_anonymous_in_healthcheck.py` angepasst.
 - 2026-05-04: M11.2 Backend-Coverage-Gate — `pytest-cov>=5.0.0` in beide Dev-Dep-Listen (`[project.optional-dependencies] dev` + `[dependency-groups] dev`). `addopts` um `--cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53` erweitert. Startschwelle 53 % (Ist 55 %, Formel `floor(Ist - 2)`; 70 %-PLAN-Default nicht erreichbar wegen OASIS-Integrationspfad ohne Ollama/Neo4j in CI). Coverage-Report als Artifact `backend-coverage` (14 Tage) in `ci.yml`. Coverage-Sektion in `docu/STATUS.md` mit Roadmap.
+- 2026-05-04: M11.3 Frontend-Coverage-Gate — `@vitest/coverage-v8@4.1.5` in `devDependencies`. `package.json` `test:coverage`-Script neu; `check` auf `test:coverage` umgestellt; `test` bleibt schneller Gate-freier TDD-Pfad. `vite.config.js` Coverage-Block: provider v8, reporters text/lcov/html, include `src/**/*.{js,ts,vue}`, thresholds 24 % (alle vier Metriken). Startschwelle 24 % (Ist-Wert branches 26.70 % ist Bottleneck beim vollständigen `include`-Glob; Fallback-Formel `floor(Ist - 2) = 24`; 60 %-PLAN-Default nicht erreichbar wegen 6 untesteter Views + jsdom-inkompatibler Canvas/D3-Pfade). Coverage-Report als Artifact `frontend-coverage` (14 Tage) in `ci.yml`. Coverage-Sektion in `docu/STATUS.md` mit Roadmap.
 - 2026-05-04: M10.4-Doku-Folge — README.md (DE+EN-Status-Block) auf Single-User-only mit Verweis auf ADR-0001 erweitert. `docu/security-hardening.md` neue Sektion „Auth-Modell v1.0" mit (a) Garantien-Liste (kein User-Konzept, kein Logout, kein Audit, kein Multi-User), (b) Was-schützt-was-nicht-Gegenüberstellung inkl. fehlender Rate-Limits als Hardstop bis M10.5, (c) Token-Rotation-Prozedur als 6-Schritt-Anleitung mit `curl`-Verifikation, (d) Trigger für ADR-Supersedes (Klassenraum, Public-Internet, Compliance), (e) Hardstops-Liste für v1.0. Layer-9 in STATUS damit final auf grün; v1.0-Auth-Story ist closed.
