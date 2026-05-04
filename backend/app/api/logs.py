@@ -169,10 +169,11 @@ def get_logs():
 def stream_logs():
     """SSE-Stream auf neue Zeilen ab dem aktuellen Datei-Offset.
 
-    Auth-Sonderregel: Der Standard-Blueprint-Guard prüft den Header bzw.
-    den ``?token=`` Param schon vor dieser View. Da Browsers bei
-    ``EventSource`` keine Custom-Header setzen können, wird der Token via
-    ``?token=`` mitgegeben (analog zu :mod:`api.simulation_stream`).
+    Auth-Sonderregel: Da ``EventSource`` keine Custom-Header setzen kann,
+    läuft die Auth über ein kurzlebiges signiertes Ticket (``?ticket=``,
+    Scope ``logs:stream``). Der Blueprint-Guard akzeptiert es via
+    ``@allow_ticket_auth`` (``single_use=False``, damit Reconnects
+    innerhalb der TTL ohne neues Ticket funktionieren).
 
     Reconnect-Semantik (RFC 8895 §9.2): Jede Datenzeile trägt ein
     ``id: <byte-offset-nach-zeile>``-Frame. Der Browser sendet bei einem
