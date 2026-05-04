@@ -54,7 +54,11 @@ services:
       # Repo-Default, weil sonst der Standardpfad bricht.
       # `.env`-Werte ueberschreiben den Default — fuer Cloud-Provider
       # (OpenAI, Together, vLLM) `EMBEDDING_BASE_URL` / `LLM_BASE_URL` in
-      # der `.env` setzen.
+      # der `.env` setzen. Falls Ollama auf dem Host genutzt wird, die
+      # Variablen in der `.env` leer lassen oder auskommentieren, damit
+      # der Default (`host.docker.internal`) greift — `localhost` aus der
+      # `.env` wuerde im Container den Container selbst meinen und die
+      # Verbindung kaputt machen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
 
