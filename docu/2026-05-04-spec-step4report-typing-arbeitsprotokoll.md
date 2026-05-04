@@ -31,7 +31,7 @@ Ursache: `VALID_EVIDENCE` (Zeile 111) war als `object` annotiert. `object` ist s
 
 Alle Aenderungen ausschliesslich in `frontend/src/components/__tests__/Step4Report.spec.ts`.
 
-### 1. Import hinzugefuegt (Zeile 14, nach den bestehenden Imports)
+### 1. Import hinzugefuegt (Zeile 13, nach den bestehenden Imports)
 
 ```typescript
 import type { Report, EvidenceMap } from '../../contracts/reportContract'
@@ -47,7 +47,7 @@ const VALID_REPORT = {
 const VALID_REPORT: Report = {
 ```
 
-### 3. VALID_EVIDENCE typisiert (Zeile 113)
+### 3. VALID_EVIDENCE typisiert (Zeile 112)
 
 ```typescript
 // vorher:
@@ -97,6 +97,6 @@ vue-tsc: 0 Fehler. vitest: 158 Tests gruen, 21 Files. vite build: gruen.
 
 ## Geaenderte Dateien
 
-- `frontend/src/components/__tests__/Step4Report.spec.ts` — Zeilen 14 (Import), 99 (VALID_REPORT-Annotation), 113 (VALID_EVIDENCE-Annotation)
+- `frontend/src/components/__tests__/Step4Report.spec.ts` — Zeilen 13 (Import), 99 (VALID_REPORT-Annotation), 112 (VALID_EVIDENCE-Annotation)
 - `CHANGELOG.md` — [Unreleased] Fixed-Sektion ergaenzt
 - `docu/2026-05-04-spec-step4report-typing-arbeitsprotokoll.md` — dieses Protokoll
