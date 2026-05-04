@@ -17,7 +17,6 @@ import {
   stopSimulation,
   closeSimulationEnv,
   getEnvStatus,
-  getRunStatus,
   pauseSimulation,
   resumeSimulation
 } from '../api/simulation'
@@ -51,24 +50,16 @@ const isPaused = ref(false)
 const currentRound = ref(0)
 const totalRounds = ref(0)
 const isPauseToggling = ref(false)
-// Issue #38 — Status- und Graph-Refresh-Polling laufen über das zentrale
-// usePolling-Composable. Cleanup bei Unmount übernimmt usePolling.
-const statusPolling = usePolling(pollGlobalStatus, 3000)
+// Issue #220 (Slice J.2): statusPolling auf /run-status entfernt.
+// Die View bezieht paused/current_round/total_rounds jetzt via
+// update-progress-Event von Step3Simulation (Variante B).
+// Graph-Refresh läuft weiterhin eigenständig.
 const graphRefreshPolling = usePolling(refreshGraph, 30000)
 
-async function pollGlobalStatus() {
-  if (!currentSimulationId.value) return
-  try {
-    const res = await getRunStatus(currentSimulationId.value)
-    if (res?.success && res.data) {
-      isPaused.value = !!res.data.paused
-      currentRound.value = res.data.current_round || 0
-      totalRounds.value = res.data.total_rounds || 0
-      const rs = res.data.runner_status
-      if (rs === 'completed') currentStatus.value = 'completed'
-      else if (rs === 'failed') currentStatus.value = 'error'
-    }
-  } catch { /* swallow */ }
+function updateProgress(p) {
+  isPaused.value = !!p.paused
+  currentRound.value = p.current_round || 0
+  totalRounds.value = p.total_rounds || 0
 }
 
 async function togglePause() {
@@ -184,7 +175,6 @@ onMounted(() => {
   if (maxRounds.value) addLog(`max_rounds = ${maxRounds.value}`)
   if (simulationDays.value) addLog(`simulation_days = ${simulationDays.value}`)
   loadSimulationData()
-  statusPolling.start({ immediate: true })
 })
 // onUnmounted-Cleanup macht usePolling selbst.
 </script>
@@ -256,6 +246,7 @@ onMounted(() => {
           @next-step="handleNextStep"
           @add-log="addLog"
           @update-status="updateStatus"
+          @update-progress="updateProgress"
         />
       </template>
     </WorkspaceSplit>

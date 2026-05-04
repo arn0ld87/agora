@@ -35,7 +35,24 @@ const props = defineProps({
   systemLogs: Array
 })
 
-const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
+const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status', 'update-progress'])
+
+// Letzter emittierter Progress-Snapshot — verhindert unnötige Re-Render
+// wenn sich paused/current_round/total_rounds nicht geändert haben.
+let _lastProgressSnapshot = { paused: false, current_round: -1, total_rounds: -1 }
+
+function maybeEmitProgress() {
+  const paused = !!runStatus.value?.paused
+  const current_round = runStatus.value?.current_round || 0
+  const total_rounds = runStatus.value?.total_rounds || 0
+  if (
+    paused === _lastProgressSnapshot.paused &&
+    current_round === _lastProgressSnapshot.current_round &&
+    total_rounds === _lastProgressSnapshot.total_rounds
+  ) return
+  _lastProgressSnapshot = { paused, current_round, total_rounds }
+  emit('update-progress', { paused, current_round, total_rounds })
+}
 
 const phase = ref(0) // 0 idle, 1 running, 2 done
 const isStarting = ref(false)
@@ -260,12 +277,14 @@ async function doPauseResume() {
       if (res?.success) {
         addLog(t('step3.controls.resume'))
         runStatus.value = { ...runStatus.value, paused: false }
+        maybeEmitProgress()
       }
     } else {
       const res = await pauseSimulation(props.simulationId)
       if (res?.success) {
         addLog(t('step3.controls.pauseHint'))
         runStatus.value = { ...runStatus.value, paused: true }
+        maybeEmitProgress()
       }
     }
   } catch (err) {
@@ -309,6 +328,7 @@ function applyRunStateEvent(data) {
   if (status === 'completed' || status === 'failed') {
     promoteToCompletedPhase(status, data)
   }
+  maybeEmitProgress()
 }
 
 function applyControlEvent(data) {
@@ -316,6 +336,7 @@ function applyControlEvent(data) {
   // Merge pause flag into the visible status so the Pause/Resume button
   // flips on the same tick the backend saw the change.
   runStatus.value = { ...runStatus.value, paused: !!data.paused }
+  maybeEmitProgress()
 }
 
 async function pollStatus() {
@@ -338,10 +359,16 @@ async function pollDetail() {
     // bei Abschluss-Status den gemeinsamen Helper aufrufen.
     const detailStatus = res.data?.runner_status
     if (detailStatus) {
-      runStatus.value = { ...runStatus.value, runner_status: detailStatus, current_round: res.data?.current_round ?? runStatus.value.current_round }
+      runStatus.value = {
+        ...runStatus.value,
+        runner_status: detailStatus,
+        current_round: res.data?.current_round ?? runStatus.value.current_round,
+        total_rounds: res.data?.total_rounds ?? runStatus.value.total_rounds,
+      }
       if (detailStatus === 'completed' || detailStatus === 'failed' || detailStatus === 'stopped') {
         promoteToCompletedPhase(detailStatus, res.data)
       }
+      maybeEmitProgress()
     }
 
     if (Array.isArray(res.data?.all_actions)) {
