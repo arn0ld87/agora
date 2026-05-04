@@ -13,10 +13,12 @@
     "check": "vue-tsc --noEmit && npm run test && npm run build"
   },
   "dependencies": {
+    "@pinia/testing": "^1.0.3",
     "axios": "^1.16.0",
     "d3": "^7.9.0",
     "dompurify": "^3.4.2",
     "marked": "^18.0.3",
+    "pinia": "^3.0.4",
     "vue": "^3.5.33",
     "vue-i18n": "^11.4.0",
     "vue-router": "^5.0.6",
