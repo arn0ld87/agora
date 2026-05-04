@@ -466,6 +466,54 @@ Image-Switch, keine Datenmigration.
 
 ---
 
+## Release-Pipeline (CI/CD)
+
+Die GitHub Actions Workflow-Datei `.github/workflows/docker-image.yml`
+implementiert seit Sub-Slice N1 eine smoke-gegattete Drei-Job-Pipeline.
+Kein Image landet in einer Registry, bevor der End-to-End-Smoke grün ist.
+
+### Job-Reihenfolge
+
+| Trigger | Job-Kette |
+|---|---|
+| `main`-Push | `build-only` → `prod-proxy-smoke` → `publish` (alle drei strikt) |
+| `tag`-Push | `build-only` → `prod-proxy-smoke` (continue-on-error) → `publish` |
+| Workflow-Dispatch | wie `main`-Push |
+
+### Job-Beschreibungen
+
+1. **`build-only`** — Buildx-Build ohne `push: true`. Image wird als
+   `agora-agora:ci-<sha>` getaggt, als `/tmp/image.tar` exportiert und
+   via `actions/upload-artifact@v4` gespeichert. GHA-Cache
+   (`cache-to: type=gha,mode=max`) beschleunigt den Publish-Rebuild.
+
+2. **`prod-proxy-smoke`** — `needs: [build-only]`. Lädt das Artefakt
+   (`actions/download-artifact@v4`), importiert das Image via
+   `docker load -i image.tar`, taggt es als `agora-agora:latest` damit
+   Compose es ohne `--build` aufnimmt, und führt den vollständigen
+   Sidecar-Nginx-Stack-Smoke durch. Bei `tag`-Pushes läuft der Job mit
+   `continue-on-error: true` (externe Abhängigkeiten wie Neo4j-Image-Pull
+   können in GitHub-Hosted-Runnern instabil sein).
+
+3. **`publish`** — `needs: [prod-proxy-smoke]`. Führt den Buildx-Build
+   erneut durch (praktisch instant dank GHA-Cache-Hit) und schreibt mit
+   `push: true` alle konfigurierten Tags in Docker Hub und GHCR.
+
+### Begründung der Artefakt-Variante
+
+`actions/upload-artifact` wurde gegenüber dem reinen Buildx-GHA-Cache-
+Ansatz bevorzugt, weil:
+- Das Artefakt ist deterministisch und benannt — kein Cache-Key-Missverständnis.
+- Parallele Workflow-Runs auf demselben SHA können sich keinen Cache
+  gegenseitig überschreiben.
+- `docker load` ist explizit und auditierbar; ein Cache-only-Ansatz lädt
+  das Image implizit beim Build-Step, was schwerer zu debuggen ist.
+
+Verweis: [PLAN.md N1](../PLAN.md), Arbeitsprotokoll
+[`docu/2026-05-04-n1-docker-publish-order-arbeitsprotokoll.md`](2026-05-04-n1-docker-publish-order-arbeitsprotokoll.md).
+
+---
+
 ## Verweise
 
 - [`deployment-dev.md`](deployment-dev.md) — Dev-Setup ohne Hardening.
