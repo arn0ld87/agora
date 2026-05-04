@@ -243,9 +243,8 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
     Wir patchen TaskManager.update_task und GraphBuilderService.add_text_batches,
     damit der Build-Thread synchron durchlaufen kann.
     """
-    from app.models.task import TaskManager, TaskStatus
+    from app.models.task import TaskManager
     from app.models.project import ProjectStatus
-    from app.services.run_registry import RunRegistry
 
     # Captured update_task calls
     progress_detail_calls: list[dict] = []
@@ -308,7 +307,6 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
             assert response.status_code == 200, response.get_json()
 
         # Allow the background thread to finish
-        import threading
         for _ in range(50):
             time.sleep(0.05)
             if progress_detail_calls:
