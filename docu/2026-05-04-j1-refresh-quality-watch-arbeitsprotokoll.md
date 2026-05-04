@@ -109,3 +109,53 @@ git diff --exit-code schemas/
 - `Step4Report.spec.ts`-TS-Fehler (pre-existing, anderer Slice)
 - Refactor von `usePersonaReview` (explizit verboten laut Task-Spec)
 - Backend-Änderungen
+
+---
+
+## Followup nach Gemini-Review (PR #245)
+
+**Datum:** 2026-05-04
+**Gemini-Inline-Comment-IDs:** 3179364163 (HIGH), 3179364165 (MEDIUM), 3179364167 (MEDIUM)
+
+### Gemini-Findings
+
+1. **HIGH (3179364163) — `Step2EnvSetup.vue:657`:** Sim-Wechsel ohne Unmount setzt `profiles` nicht zurück. Wenn die neue Sim direkt Profile hat (`profiles.value.length > 0`), ist `prev !== 0` → `watch(() => profiles.value.length)` feuert nicht → kein `refreshQuality` für die neue Sim. Die 2-watch-Variante mit separatem Guard-Reset ist damit unvollständig: Der `simulationId`-Watch setzt den Guard zurück, aber der `profiles.length`-Watch triggert nur bei `prev === 0 && n > 0` — was bei schnellem Sim-Wechsel mit direkt vorhandenen Profilen nie eintritt.
+
+2. **MEDIUM (3179364165) — `Step2EnvSetup.vue:670`:** Race-Condition. `props.simulationId` wird im Watch-Callback direkt referenziert, kann sich aber zwischen Guard-Setzung und `refreshQuality`-Call durch eine weitere schnelle Prop-Änderung verändert haben. `simId` sollte einmalig aus dem destrukturierten Callback-Argument bezogen werden.
+
+3. **MEDIUM (3179364167) — `Step2EnvSetup.spec.ts:182`:** Der Sim-Wechsel-Test schiebt manuell `profiles: []` als Zwischen-Tick ein. Dieser leere Tick passiert in der realen Anwendung nicht — der Test deckt damit nur den unrealistischen Pfad ab und maskiert die in Finding 1 beschriebene Lücke.
+
+### Lösung: 1-watch-Variante
+
+Die 2-watch-Variante wurde vollständig durch einen einzelnen kombinierten Watch ersetzt:
+
+```typescript
+watch(
+  () => [props.simulationId, profiles.value.length] as const,
+  ([simId, n]) => {
+    if (!simId) return
+    if (n <= 0) return
+    if (_qualityFetchedForSim.value === simId) return
+    _qualityFetchedForSim.value = simId   // Guard vor dem Call (race-safe)
+    personaReview.refreshQuality(simId)
+  },
+  { immediate: false },
+)
+```
+
+**Warum 1-watch besser ist:**
+
+- **HIGH adressiert:** Beim Sim-Wechsel ändert sich `simId` im Tuple — der Watch feuert unabhängig davon, ob `profiles.value.length` sich geändert hat. Selbst wenn die neue Sim direkt Profile hat, ist `simId !== _qualityFetchedForSim.value` → Trigger.
+- **MEDIUM (Race) adressiert:** `simId` wird einmalig aus den destrukturierten Watch-Argumenten bezogen, nicht erneut von `props.simulationId` gelesen. Guard wird VOR dem `refreshQuality`-Call gesetzt.
+- **MEDIUM (Test) adressiert:** Der Spec-Test wurde auf den realistischen Pfad umgeschrieben — neue Sim antwortet direkt mit Profilen, kein leerer Zwischen-Tick. Zusätzlich neuer Test-Case "Guard hält bei wachsender Profile-Anzahl (3 → 5 → 7)".
+
+### Warum die ursprüngliche 2-watch-Entscheidung retrospektiv suboptimal war
+
+Im Arbeitsprotokoll (Abschnitt "Entscheidung: 2-Watch-Variante") wurde Option B mit dem Argument gewählt, zwei orthogonale Concerns klarer zu trennen. Gemini hat zu Recht aufgezeigt, dass die zwei Handler nicht wirklich orthogonal sind: Der `profiles.length`-Watch hat eine implizite Abhängigkeit von `simulationId` (über den Guard), die in der 2-watch-Variante durch Reihenfolge-Annahmen zwischen den zwei Watches abgesichert wird. Diese Kopplung ist in einer einzigen Watch-Source mit Tuple-Destrukturierung expliziter und atomarer.
+
+### Test-Refactor
+
+- Bestehender "Sim-Wechsel"-Case umgeschrieben: Sim B antwortet direkt mit 5 Profilen.
+- Neuer Case "Guard hält bei 3 → 5 → 7 Profile-Wachstum": verifikation dass `refreshQuality` 1× bleibt.
+- Originaler "5 Ticks → 1 Call"-Case bleibt unverändert.
+- Alle Assertions mit `toHaveBeenCalledTimes(N)` und `toHaveBeenNthCalledWith(K, simId)`.
