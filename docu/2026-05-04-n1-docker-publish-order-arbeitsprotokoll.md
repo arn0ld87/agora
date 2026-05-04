@@ -48,7 +48,7 @@ behandelte Registry-Push und Smoke-Verifikation als unabhängige Schritte.
 - `continue-on-error: ${{ github.ref_type == 'tag' }}`
 - Download: `actions/download-artifact@v4`
 - Image laden: docker load -i image.tar
-- Umtaggen: `docker tag agora-agora:ci-<sha> agora-agora:latest`
+- Umtaggen: docker tag agora-agora:ci-${{ github.sha }} agora-agora:latest
   (Compose erwartet `agora-agora:latest`, weil Projektname `agora` +
   Service `agora` → Default-Image-Name ohne `--build`)
 - `docker compose ... up -d` ohne `--build`
