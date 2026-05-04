@@ -62,29 +62,37 @@ jobs:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
     needs: [build-and-push]
+    # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
+    # Keine echten Secrets nötig: NEO4J_PASSWORD muss nur nicht leer sein
+    # (Compose-Gate), AGORA_AUTH_TOKEN/VITE_AGORA_TOKEN sind Smoke-Dummies.
+    env:
+      NEO4J_PASSWORD: ci_smoke_neo4j
+      AGORA_AUTH_TOKEN: ci_smoke_token
+      VITE_AGORA_TOKEN: ci_smoke_vite_token
+      ALLOW_BUILD_TIME_TOKEN: "true"
+      AGORA_BIND_HOST: "0.0.0.0"
     steps:
       - uses: actions/checkout@v4
 
       - name: Frontend-Bundle bauen
+        # nginx mountet ./frontend/dist als Host-Bind-Mount (docker-compose.prod-with-proxy.yml).
+        # Der Dockerfile-prod-Builder erzeugt dist nur im Image-Kontext, nicht auf dem Host.
+        # Daher muss der Bundle-Build hier explizit auf dem Runner laufen.
         run: |
           cd frontend
           npm ci --no-audit --no-fund
           npm run build
 
       - name: CI-Umgebungsdatei generieren
-        env:
-          VITE_AGORA_TOKEN: ${{ env.VITE_AGORA_TOKEN }}
-          AGORA_AUTH_TOKEN: ${{ env.AGORA_AUTH_TOKEN }}
-          NEO4J_PASSWORD: ${{ env.NEO4J_PASSWORD }}
         run: |
-          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nAGORA_DEBUG=false\n' \
+          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\n' \
             "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" > .env
 
       - name: Compose-Stack starten
-        env:
-          VITE_AGORA_TOKEN: ${{ env.VITE_AGORA_TOKEN }}
-          AGORA_AUTH_TOKEN: ${{ env.AGORA_AUTH_TOKEN }}
-          NEO4J_PASSWORD: ${{ env.NEO4J_PASSWORD }}
+        # ALLOW_BUILD_TIME_TOKEN=true: CI ist Single-User-Tailnet-Variante,
+        # Token-Bundle-Einbrennen ist in diesem Kontext zulässig (N6/F2.1).
+        # AGORA_BIND_HOST=0.0.0.0: Backend muss auf allen Interfaces erreichbar
+        # sein, damit der nginx-Sidecar agora:5001 im Compose-Netz erreicht.
         run: |
           docker compose \
             -f docker-compose.yml \
@@ -101,7 +109,10 @@ jobs:
             fi
             if [ "$i" -eq 60 ]; then
               echo "::error::Healthz-Timeout nach 5 Minuten"
+              docker compose ps -a
               docker compose logs --tail=200
+              docker inspect agora-nginx 2>/dev/null || true
+              docker inspect agora 2>/dev/null || true
               exit 1
             fi
             sleep 5
@@ -113,8 +124,10 @@ jobs:
       - name: Logs sammeln (immer)
         if: always()
         run: |
-          docker compose ps
-          docker compose logs --no-color --tail=50
+          docker compose ps -a
+          docker compose logs --no-color --tail=100
+          docker inspect agora-nginx 2>/dev/null || true
+          docker inspect agora 2>/dev/null || true
 
       - name: Stack abraeumen
         if: always()
