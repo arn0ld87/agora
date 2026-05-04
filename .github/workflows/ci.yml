@@ -113,6 +113,14 @@ jobs:
         working-directory: backend
         run: uv run pytest
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run Ruff (app/ tests/, mirrors npm run lint:backend)
         working-directory: backend
         run: uv run ruff check app/ tests/
