@@ -90,13 +90,6 @@ def setup_oasis_logging(log_dir: str | Path) -> None:
     log_dir_path = Path(log_dir)
     log_dir_path.mkdir(parents=True, exist_ok=True)
 
-    for entry in log_dir_path.iterdir():
-        if entry.is_file() and entry.suffix == ".log":
-            try:
-                entry.unlink()
-            except OSError:
-                pass
-
     formatter = UnicodeFormatter("%(levelname)s - %(asctime)s - %(name)s - %(message)s")
     loggers_config = {
         "social.agent": log_dir_path / "social.agent.log",
