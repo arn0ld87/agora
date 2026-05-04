@@ -46,8 +46,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { fetchLogs, logsStreamUrl } from '../api/logs'
-import { getAgoraToken } from '../api'
+import { fetchLogs, buildLogsStreamUrl } from '../api/logs'
 import { useStickyScroll } from '../composables/useStickyScroll'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 
@@ -110,12 +109,11 @@ function appendLine(line, { bypassPause = false } = {}) {
   nextTick(() => sticky.markAppended(1))
 }
 
-function startStream() {
+async function startStream() {
   stopStream()
   reconnectAttempts = 0
   streamFailed.value = false
-  const token = getAgoraToken?.() || ''
-  const url = logsStreamUrl(token, level.value || null, lastOffset)
+  const url = await buildLogsStreamUrl(level.value || null, lastOffset)
   try {
     _eventSource = new EventSource(url)
     _eventSource.onmessage = (e) => {

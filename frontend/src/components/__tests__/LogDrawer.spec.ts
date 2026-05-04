@@ -28,11 +28,11 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 // --- Mock API-Abhängigkeiten ---
 vi.mock('../../api/logs', () => ({
   fetchLogs: vi.fn().mockResolvedValue({ data: { success: true, data: { lines: [], offset: 0 } } }),
-  logsStreamUrl: vi.fn().mockReturnValue('http://localhost/api/logs/stream'),
+  buildLogsStreamUrl: vi.fn().mockResolvedValue('http://localhost/api/logs/stream'),
 }))
 
 vi.mock('../../api/index', () => ({
-  default: { get: vi.fn().mockResolvedValue({ data: {} }) },
+  default: { get: vi.fn().mockResolvedValue({ data: {} }), post: vi.fn().mockResolvedValue({ data: { ticket: 'mock-ticket' } }) },
   getAgoraToken: vi.fn().mockReturnValue('test-token'),
 }))
 
