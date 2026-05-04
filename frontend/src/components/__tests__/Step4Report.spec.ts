@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
+import type { Report, EvidenceMap } from '../../contracts/reportContract'
 
 // localStorage muss vor allen Modul-Imports gemockt sein,
 // da i18n/index.js bei Import-Zeit localStorage.getItem aufruft.
@@ -95,7 +96,7 @@ const globalStubs = {
 }
 
 // Valides Report-Payload (ReportSchema-konform)
-const VALID_REPORT = {
+const VALID_REPORT: Report = {
   schema_version: 2,
   report_id: 'report_test01',
   simulation_id: 'sim_test01',
@@ -108,7 +109,7 @@ const VALID_REPORT = {
 }
 
 // Valides EvidenceMap-Payload
-const VALID_EVIDENCE: object = {
+const VALID_EVIDENCE: EvidenceMap = {
   schema_version: 2,
   report_id: 'report_test01',
   simulation_id: 'sim_test01',
