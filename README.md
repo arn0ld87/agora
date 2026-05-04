@@ -26,10 +26,14 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 > Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
 > Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
 > JSON-Mode-Aussetzer, Modellwechsel) Fehler produzieren.
-> **Nicht öffentlich erreichbar machen.** Die API hat einen optionalen
-> `AGORA_AUTH_TOKEN`-Guard und restriktive CORS-Defaults, ist aber weiterhin
-> für lokale Single-User-Setups gedacht, nicht für Mehrbenutzer- oder
-> Internet-Betrieb.
+> **Nicht öffentlich erreichbar machen.** Agora v1.0 ist per Architektur-
+> Entscheidung **Single-User-only** ([ADR-0001](docu/decisions/0001-auth-model.md)):
+> ein Shared `AGORA_AUTH_TOKEN`-Bearer ist der einzige Auth-Principal, kein
+> User-Konzept, kein Multi-User-Pfad. CORS ist auf Localhost gelockt, Backend
+> bindet defaultmäßig auf `127.0.0.1`. Für Tailnet/LAN-Deploys: Reverse-Proxy
+> ([`deploy/nginx/`](deploy/nginx/)) und Tailscale/Cloudflare Tunnel — nicht
+> direkt im Internet exponieren. Multi-User-Use-Cases (Klassenraum, Forschungsgruppe)
+> brauchen ein v2-ADR mit echtem Session-/Login-Modell.
 >
 > **Stand `main` nach v0.9.0-Tag:** alle 17 Tasks aus
 > [`PLAN.md`](./PLAN.md) durch (Layer 0 Pydantic-Contracts, Layer 1
@@ -388,9 +392,14 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 > **Status: v0.9.0 (tag) + Layer 0–5 reader-honesty refactor on `main`.**
 > Agora is an active experimental fork. Graph build, simulation, and report
 > pipeline can fail when Ollama is slow, JSON mode misbehaves, or models are
-> switched mid-run. Not production-ready. The HTTP API has an optional
-> `AGORA_AUTH_TOKEN` guard and localhost-locked CORS defaults, but no real
-> multi-user AuthN/AuthZ — run on localhost or inside a trusted network only.
+> switched mid-run. Not production-ready. **Single-User-only by architecture
+> decision** ([ADR-0001](docu/decisions/0001-auth-model.md)): a shared
+> `AGORA_AUTH_TOKEN` bearer is the only auth principal, no user model, no
+> multi-user path. CORS is localhost-locked, backend binds to `127.0.0.1`
+> by default. Run on localhost, Tailnet, or behind a reverse proxy
+> ([`deploy/nginx/`](deploy/nginx/)) — never directly exposed to the public
+> internet. Multi-user use cases (classroom, research group) need a v2 ADR
+> with proper session/login auth.
 > Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
 > `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
 >

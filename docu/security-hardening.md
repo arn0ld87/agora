@@ -222,7 +222,7 @@ F2.2 Sub-Slice 47 für das Hard-Disable des Query-Fallbacks).
 ## Offene Punkte (nach Phase 3 abgearbeitet)
 
 - Upstream-Review-Status aus `SECURITY_REVIEW_SUMMARY.md` ist durch diese Phasen teilweise überholt; der Abschnitt dort wird in einem Follow-up abgeglichen.
-- Langfristig: echte Session-/Login-Auth statt Static-Token. Aktueller Ansatz ist ein Shared-Secret-Bearer, was für Single-User-Dev-Setups OK ist, aber kein Multi-User-Szenario abbildet.
+- ~~Langfristig: echte Session-/Login-Auth statt Static-Token.~~ Durch [ADR-0001](decisions/0001-auth-model.md) (2026-05-04, Accepted) beantwortet: v1.0 bleibt **bewusst Single-User-only**, ein echtes Session-/Login-Modell ist v2-Material. Siehe Sektion „Auth-Modell v1.0" am Ende dieses Dokuments.
 
 ---
 
@@ -336,3 +336,93 @@ Die sechs `pip-audit`-Ignores sind durch feste Upstream-Pins blockiert:
 | `CVE-2024-46455`, `CVE-2025-64712` | `unstructured==0.13.7` | `camel-oasis==0.2.5` pinnt `unstructured==0.13.7`. |
 
 Die Baseline muss beim nächsten `camel-oasis`-/`camel-ai`-Upgrade erneut geprüft und reduziert werden.
+
+---
+
+## Auth-Modell v1.0 (ADR-0001, Accepted 2026-05-04)
+
+**Stand:** 2026-05-04. Siehe [`docu/decisions/0001-auth-model.md`](decisions/0001-auth-model.md) für die volle ADR mit Optionen-Vergleich und Begründung.
+
+### Garantie
+
+Agora v1.0 ist **Single-User-only**. Ein einziger gemeinsamer Bearer-Token (`AGORA_AUTH_TOKEN`) ist der einzige Auth-Principal. Es gibt:
+
+- kein User-Konzept,
+- keine Login-Page,
+- keinen Logout (außer „Token aus dem Frontend-Storage löschen"),
+- keine Token-Rotation ohne Container-Neustart,
+- keinen Audit-Trail wer wann was getan hat,
+- keine Rollen oder Berechtigungen,
+- keine Multi-User-Tenancy.
+
+`/api/status.backend.auth_mode` liefert seit 2026-05-04 explizit `"single_user_token"` (vorher: `"token"`), damit Operatoren sofort sehen, dass dies kein Multi-User-Modell ist.
+
+### Was Auth schützt — und was nicht
+
+**Schützt:**
+
+- Unbefugten API-Zugriff auf `/api/*` ohne Token (`401`).
+- Token-Leak durch URL-bound Endpunkte: `?token=` ist im Non-Debug-Modus geblockt; SSE/Downloads laufen über kurzlebige Signed Tickets (60 s TTL, scope-bound).
+- Token-Leak via Frontend-Bundle: `Dockerfile` baut den Token nicht ein (`ALLOW_BUILD_TIME_TOKEN=false` als Default).
+- Bekannte Konfigurations-Fehler: `Config.validate()` lehnt Start ab bei fehlendem `SECRET_KEY`/`AGORA_AUTH_TOKEN`/`NEO4J_PASSWORD`.
+
+**Schützt nicht:**
+
+- Brute-Force auf den Token. **Es gibt aktuell keine Rate-Limits** (M10.5 in Planung). Bis dahin: niemals direkt im Internet exponieren.
+- Mehrbenutzer-Konflikte: bei zwei Personen mit demselben Token gibt's keine Sitzungstrennung.
+- Audit-Compliance (DSGVO, SOC2, ISO 27001 für Multi-User): nicht erfüllbar in v1.0.
+- Session-Hijacking nach Token-Leak: ohne Logout-Endpunkt muss der Token rotiert werden (Prozedur unten).
+
+### Token-Rotation-Prozedur
+
+Bei Verdacht auf Token-Leak (z.B. Token in Logs aufgetaucht, Frontend-Bundle versehentlich gepublisht, Mitarbeiter-Wechsel mit Wissen über den Token):
+
+1. **Neuen Token generieren:**
+   ```bash
+   AGORA_AUTH_TOKEN_NEW=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+   ```
+2. **`.env` auf dem Server aktualisieren:**
+   ```bash
+   sed -i.bak "s|^AGORA_AUTH_TOKEN=.*|AGORA_AUTH_TOKEN=${AGORA_AUTH_TOKEN_NEW}|" .env
+   ```
+3. **Container neu starten** (Compose wartet, bis Backend `health: healthy` ist):
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+     -f deploy/compose/docker-compose.prod-with-proxy.yml \
+     up -d --force-recreate agora
+   docker compose ps
+   ```
+4. Frontend mit neuem Token versorgen — bei Default-Setup (ALLOW_BUILD_TIME_TOKEN=false) muss der Operator den Token zur Laufzeit über das UI-Eingabefeld im Frontend setzen; ein Rebuild des Frontend-Bundles ist nicht erforderlich. Bei ALLOW_BUILD_TIME_TOKEN=true muss das Frontend-Bundle neu gebaut werden:
+   ```bash
+   ALLOW_BUILD_TIME_TOKEN=true VITE_AGORA_TOKEN="${AGORA_AUTH_TOKEN_NEW}" \
+     docker compose -f docker-compose.yml -f docker-compose.prod.yml build agora
+   docker compose up -d --force-recreate agora
+   ```
+5. **Verifikation:**
+   ```bash
+   curl -fsS -H "X-Agora-Token: ${AGORA_AUTH_TOKEN_NEW}" http://localhost/api/status | jq .
+   # → "auth_mode": "single_user_token"
+   curl -fsS -H "X-Agora-Token: alter_token" http://localhost/api/status
+   # → 401 Unauthorized
+   ```
+6. **Alle aktiven Browser-Sessions abmelden** durch Hard-Reload und Frontend-localStorage-Cleanup; alte Tokens funktionieren ab Neustart sofort nicht mehr.
+
+**Kein File-System-State geht verloren** — Neo4j-Daten, Uploads und Simulationen bleiben unberührt.
+
+### Trigger für ein neues Auth-Modell (ADR-0001 Supersedes)
+
+Wenn **eine** der folgenden Bedingungen wahr wird, ist ein neuer ADR Pflicht (z.B. ADR-0004), der ADR-0001 supersedet:
+
+- Konkreter Multi-User-Use-Case wird beauftragt (Klassenraum, Forschungsgruppe, SaaS-Beta).
+- Public-Internet-Deployment wird beworben.
+- Audit-Trail-Anforderung von außen (DSGVO bei Multi-User-Daten, Compliance-Reviews).
+- Rollen/Permissions-Granularität wird im Frontend gefordert.
+
+Default-Migrationspfad (laut ADR-0001 § Optionen): **Option B — HttpOnly-Session** mit Server-Side-Session-Store in Redis, `flask-login` und User-Tabelle in Neo4j/SQLite.
+
+### Hardstops für v1.0
+
+- Keine Public-Internet-Werbung für Agora bis zu einem v2-ADR mit echtem Auth-Modell.
+- Keine Marketing-Aussagen wie „Multi-User-Simulator".
+- Keine Reaktivierung von `?token=` in Prod (Hardstop ist code-verifiziert in `backend/app/utils/auth.py::_extract_token`).
+- Keine Erweiterung des Tokens auf User-Identität ohne neuen ADR.
