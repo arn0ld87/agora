@@ -18,10 +18,6 @@ from .retry import llm_call_with_retry
 
 logger = get_logger("agora.llm_client")
 
-# Lazily imported to avoid circular imports at module load time.
-# Imported inside _publish_model_active().
-_model_event_bus_imported = False
-
 JsonSchemaLike = Union[Type[BaseModel], Dict[str, Any]]
 
 # Provider error messages that indicate strict json_schema is not supported.
