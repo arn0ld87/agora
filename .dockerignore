@@ -29,5 +29,25 @@ frontend/.vite
 backend/uploads
 backend/logs
 backend/log
+backend/.cache
+backend/.pytest_cache
 *.log
 error.log
+
+# Nicht für den Container-Build nötig; blähen den Context stark auf.
+.git
+.pi
+.playwright-mcp
+.cursor
+.serena
+.claude
+
+# Projekt-Doku/Artefakte sind Laufzeit-unrelevant.
+docu
+design
+media
+PR.pdf
+deep-research-report.md
+plan.md
+plan.heuristic.md
+rolle-du-bist-temporal-otter.md
