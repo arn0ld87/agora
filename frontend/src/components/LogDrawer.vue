@@ -83,6 +83,7 @@ const filteredLines = computed(() => {
 })
 
 let _eventSource = null
+let _streamGeneration = 0
 
 async function reload() {
   try {
@@ -113,7 +114,9 @@ async function startStream() {
   stopStream()
   reconnectAttempts = 0
   streamFailed.value = false
+  const generation = ++_streamGeneration
   const url = await buildLogsStreamUrl(level.value || null, lastOffset)
+  if (generation !== _streamGeneration) return
   try {
     _eventSource = new EventSource(url)
     _eventSource.onmessage = (e) => {
