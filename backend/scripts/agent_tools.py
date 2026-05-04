@@ -1053,7 +1053,8 @@ def enforce_memory_token_limit(agent_graph) -> int:
     patched = 0
     for agent_id, agent in agents_iter:
         try:
-            model_name = str(getattr(getattr(agent, "model_backend", None), "model_type", "") or "")
+            model_backend = getattr(agent, "model_backend", None)
+            model_name = str(getattr(model_backend, "model_type", "") or "")
             ctx_limit = _resolve_memory_token_limit(model_name)
             memory = getattr(agent, "memory", None)
             if memory is None or not hasattr(memory, "get_context_creator"):
