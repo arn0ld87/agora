@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Removed
+- CI: `.github/workflows/claude.yml` und `.github/workflows/claude-code-review.yml` entfernt. Die beiden Anthropic-Boilerplate-Workflows scheiterten auf jedem PR mit *"Claude Code is not installed on this repository"* und tauchten als FAILURE in der Status-Rollup auf, obwohl in CLAUDE.md als ignorierbar markiert. Wer den Service später re-aktivieren möchte: Workflow-Templates aus dem [claude-code-action](https://github.com/anthropics/claude-code-action)-Repo neu beziehen plus `ANTHROPIC_API_KEY`-Secret im Repo setzen.
+
 ### Documentation
 - Incident-Bericht zum Vector-Index Dimension-Drift vom 2026-05-04 angelegt: alte 2560-dim Indexe (qwen3-embedding) blieben nach OpenAI-Switch (1536-dim) bestehen, weil `CREATE VECTOR INDEX … IF NOT EXISTS` nur über den Namen matcht. Manueller Cleanup (Index-Drop + 316 Entity-Delete + 14 Graph-Delete + Container-Restart) ist dokumentiert; Code-Hardening folgt in Issue [#263](https://github.com/arn0ld87/agora/issues/263). Siehe [`docu/2026-05-04-vector-index-dimension-drift-incident.md`](docu/2026-05-04-vector-index-dimension-drift-incident.md).
 
