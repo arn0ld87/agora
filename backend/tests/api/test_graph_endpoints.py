@@ -10,7 +10,6 @@ Enthält außerdem Tests für den progress_detail-Batch-Marker (Sub-Slice #137 S
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-import time
 
 import pytest
 from flask import Flask
@@ -243,16 +242,22 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
     Wir patchen TaskManager.update_task und GraphBuilderService.add_text_batches,
     damit der Build-Thread synchron durchlaufen kann.
     """
+    import threading
+
     from app.models.task import TaskManager
     from app.models.project import ProjectStatus
 
-    # Captured update_task calls
+    # Captured update_task calls + Event, das im Background-Thread gesetzt wird,
+    # sobald der erste progress_detail-Call durchlaeuft. Ersetzt den frueheren
+    # 50x0.05s-Sleep-Loop (Gemini-MEDIUM auf #265, Slice 137-Followup).
     progress_detail_calls: list[dict] = []
+    progress_event = threading.Event()
     original_update_task = TaskManager.update_task
 
     def spy_update_task(self, task_id, **kwargs):
         if "progress_detail" in kwargs and kwargs["progress_detail"] is not None:
             progress_detail_calls.append(dict(kwargs["progress_detail"]))
+            progress_event.set()
         original_update_task(self, task_id, **kwargs)
 
     fake_project = MagicMock()
@@ -306,11 +311,13 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
             )
             assert response.status_code == 200, response.get_json()
 
-        # Allow the background thread to finish
-        for _ in range(50):
-            time.sleep(0.05)
-            if progress_detail_calls:
-                break
+        # Warte bis der Background-Thread mindestens einen progress_detail-
+        # Call abgesetzt hat. threading.Event statt time.sleep-Loop verhindert
+        # Flakiness unter Last und gibt sofort frei (Gemini-MEDIUM auf #265).
+        assert progress_event.wait(timeout=2.5), (
+            "Background-Thread hat innerhalb von 2.5 s keinen "
+            "progress_detail-Call abgesetzt"
+        )
 
     assert len(progress_detail_calls) >= 1, (
         "Es muss mindestens ein update_task mit progress_detail geben"
