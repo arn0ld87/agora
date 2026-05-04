@@ -26,7 +26,7 @@ import threading
 import time
 from typing import Any, Dict, Iterator, Optional
 
-from flask import Response, current_app, stream_with_context
+from flask import Response, current_app, request, stream_with_context
 
 from ..services.event_bus import (
     CHANNEL_CONTROL,
@@ -145,11 +145,25 @@ def _stream(simulation_id: str) -> Iterator[str]:
 @simulation_bp.route('/<simulation_id>/stream', methods=['GET'])
 @allow_ticket_auth(lambda simulation_id: f"sse:{simulation_id}", single_use=False)
 def simulation_stream(simulation_id: str):
-    """SSE endpoint for live run-state + control updates."""
+    """SSE endpoint for live run-state + control updates.
+
+    Last-Event-ID-Hinweis: Wir lesen den Header und loggen ihn, ändern aber
+    das Subscribe-Verhalten nicht — der Bus puffert keine vergangenen Events.
+    Reconnect startet best-effort ab ``now``. Volle Replay-Semantik braucht
+    Persistenz im Bus (eigener Slice).
+    """
     if not validate_simulation_id(simulation_id):
         return json_error(
             ApiErrorCode.INVALID_ID,
             message="Invalid simulation_id format",
+        )
+
+    last_event_id = request.headers.get('Last-Event-ID')
+    if last_event_id:
+        logger.info(
+            "SSE reconnect with Last-Event-ID=%s for sim=%s; bus has no replay, resuming live",
+            last_event_id,
+            simulation_id,
         )
 
     response = Response(

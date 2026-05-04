@@ -171,6 +171,18 @@ def stream_logs():
     den ``?token=`` Param schon vor dieser View. Da Browsers bei
     ``EventSource`` keine Custom-Header setzen können, wird der Token via
     ``?token=`` mitgegeben (analog zu :mod:`api.simulation_stream`).
+
+    Reconnect-Semantik (RFC 8895 §9.2): Jede Datenzeile trägt ein
+    ``id: <byte-offset-nach-zeile>``-Frame. Der Browser sendet bei einem
+    Reconnect automatisch den ``Last-Event-ID``-Header zurück; wir werten
+    ihn aus und setzen ab diesem Offset weiter — das verhindert
+    Datenverlust und Duplikate.
+
+    Priorität: ``Last-Event-ID``-Header > ``?offset=``-Query > Datei-Ende.
+
+    Kein ``event:``-Frame: Das Frontend-Konsument (LogDrawer) lauscht auf
+    den Default-Event-Namen ``message`` via ``onmessage`` — ein expliziter
+    ``event: line``-Frame würde den Konsumenten stumm schalten.
     """
     path = _resolve_log_path()
     level = request.args.get('level')
@@ -179,27 +191,37 @@ def stream_logs():
     # über jede neue Zeile darf nicht jedes Mal das Dictionary neu treffen.
     level_pat = _LEVEL_PATTERNS.get(level.lower()) if level else None
 
+    # Last-Event-ID-Header auswerten — vor dem Generator, da der Header beim
+    # Reconnect vom Browser gesendet wird und sicherer in der Request-Funktion
+    # gelesen wird (nicht im Generator-Body, der erst lazy evaluiert wird).
+    last_event_id = request.headers.get('Last-Event-ID')
+    last_event_offset: int | None = None
+    if last_event_id:
+        try:
+            candidate = int(last_event_id)
+            if candidate >= 0:
+                last_event_offset = candidate
+        except ValueError:
+            # Garbage/Old-Format — silent fallback auf URL-Offset/Tail.
+            pass
+
     @stream_with_context
     def gen():
         # retry-Frame zuerst: teilt dem Browser mit, nach wie vielen ms er bei
         # einem Verbindungsabbruch neu verbinden soll (SSE-Spec, RFC 8895 §9.2).
         yield f'retry: {_SSE_RETRY_MS}\n\n'
-        # FOLLOWUP J.5.1 (Issue #233): Browser-Reconnect nutzt dieselbe URL
-        # ohne aktualisierten ?offset= — bei Reconnect droht entweder Datenverlust
-        # (kein Offset → file_size) oder Duplikate (statischer Offset). Sauber via
-        # ``id: <offset>``-Frames + Last-Event-ID-Header-Auswertung. Out-of-Scope
-        # für Sub-Slice J.5 (das nur retry: setzt + LogDrawer.onerror fixt).
         # Default: am Datei-Ende ansetzen, alte Lines holt der Tail-Endpunkt.
-        # Wenn der Client einen ``?offset=…`` aus dem Tail-Response durchreicht,
-        # starten wir genau dort — sonst gehen Logs verloren, die zwischen
-        # Tail-Antwort und Stream-Verbindung geschrieben wurden.
+        # Priorität: Last-Event-ID > ?offset= > Datei-Ende.
         offset = 0
         if path is not None:
             try:
                 file_size = path.stat().st_size
             except OSError:
                 file_size = 0
-            if requested_offset is not None and requested_offset <= file_size:
+            if last_event_offset is not None and last_event_offset <= file_size:
+                # Last-Event-ID hat höchste Priorität — überstimmt URL-Offset.
+                offset = last_event_offset
+            elif requested_offset is not None and requested_offset <= file_size:
                 offset = requested_offset
             else:
                 offset = file_size
@@ -226,18 +248,27 @@ def stream_logs():
                 try:
                     with current_path.open('r', encoding='utf-8', errors='replace') as fh:
                         fh.seek(offset)
-                        chunk = fh.read()
-                        offset = fh.tell()
+                        # Zeilenweise mit readline() lesen: fh.tell() nach
+                        # jeder Zeile ist direkt der korrekte id:-Wert ohne
+                        # Längen-Rekonstruktion (UTF-8-aware, \r\n-safe).
+                        while True:
+                            line = fh.readline()
+                            if not line:
+                                break
+                            line_stripped = line.rstrip('\r\n')
+                            line_offset = fh.tell()
+                            offset = line_offset
+                            if level_pat is not None and not level_pat.search(line_stripped):
+                                continue
+                            payload = json.dumps({
+                                'line': line_stripped,
+                                'ts': datetime.now(timezone.utc).isoformat(),
+                            })
+                            # id:-Frame vor data: — Browser merkt sich diesen
+                            # Wert und sendet ihn als Last-Event-ID beim Reconnect.
+                            yield f'id: {line_offset}\ndata: {payload}\n\n'
                 except OSError:
-                    chunk = ''
-                for line in chunk.splitlines():
-                    if level_pat is not None and not level_pat.search(line):
-                        continue
-                    payload = json.dumps({
-                        'line': line,
-                        'ts': datetime.now(timezone.utc).isoformat(),
-                    })
-                    yield f'data: {payload}\n\n'
+                    pass
                 last_heartbeat = now
             else:
                 if now - last_heartbeat >= _STREAM_HEARTBEAT_SEC:
