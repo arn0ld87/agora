@@ -44,9 +44,9 @@ Daten-Folge: alle nach dem Switch geschriebenen 1536-dim-Embeddings wurden als P
 ## Diagnose
 
 ```
-SHOW INDEXES YIELD name, type, options
+SHOW INDEXES YIELD name, type, options, state
 WHERE type IN ['VECTOR']
-RETURN name, options.indexConfig.`vector.dimensions` AS dim;
+RETURN name, options.indexConfig['vector.dimensions'] AS dim, state;
 ```
 
 | Index | Dim | State |
