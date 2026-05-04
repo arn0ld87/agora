@@ -37,7 +37,7 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 Wenn am 2026-07-30 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
 
 1. **Upstream released bis dahin** — `--ignore-vuln`-Flags aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) entfernen, Issue schließen, Eintrag nach „Abgeschlossen" verschieben.
-2. **ADR `docu/decisions/0002-cve-upstream-escalation.md`** entscheidet zwischen:
+2. [ADR docu/decisions/0002-cve-upstream-escalation.md](decisions/0002-cve-upstream-escalation.md) entscheidet zwischen:
    - **Vendoring** der betroffenen Subkomponenten,
    - **Soft-Fork** mit Patch-Ringen,
    - **Replacement** durch andere Pakete (z.B. `langgraph` statt `camel-oasis`).
