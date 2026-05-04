@@ -558,6 +558,28 @@
       "security": "Secrets"
     }
   },
+  "activeModel": {
+    "label": "Aktives Modell",
+    "idle": "Bereit",
+    "connecting": "Verbinde…",
+    "failed": "Verbindung verloren",
+    "reload": "Neu verbinden",
+    "provider": {
+      "ollama": "Ollama (lokal)",
+      "cloud": "Cloud",
+      "openai": "OpenAI",
+      "unknown": "Unbekannter Anbieter"
+    },
+    "context": {
+      "chat": "Chat",
+      "chat_json": "Strukturierter Chat",
+      "embedding": "Embedding",
+      "report": "Report",
+      "persona": "Persona",
+      "graph": "Graph",
+      "unknown": "Unbekannter Kontext"
+    }
+  },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
     "backend": "Backend-Fehler.",
