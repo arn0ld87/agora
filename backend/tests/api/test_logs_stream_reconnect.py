@@ -474,3 +474,54 @@ def test_partial_line_at_eof_does_not_advance_offset(client, tmp_path, monkeypat
         f"id muss nach Zeile 1 stehen ({expected_id_after_line1}), nicht am Datei-Ende — "
         f"sonst wuerde der naechste Poll die jetzt vollstaendige Zeile ueberspringen."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test H — Partial-Line-Handling triggert Sleep statt Hot-Loop (Slice K.0.1.1)
+# ---------------------------------------------------------------------------
+
+
+def test_partial_line_yields_sleep_to_avoid_hot_loop(app, tmp_path, monkeypatch):
+    """Bei Partial-Line muss time.sleep(_STREAM_POLL_SEC) gerufen werden.
+
+    Sonst: size > offset bleibt wahr, der else-Zweig (mit dem regulaeren
+    Poll-Sleep) wird nie erreicht — die outer while-True dreht in
+    Endlosschleife mit 100 % CPU, Datei wird unzaehlige Male geoeffnet.
+    """
+    sleep_calls: list[float] = []
+
+    def _spy_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+        # Nach 3 Sleeps künstlich abbrechen, damit der Generator endet.
+        if len(sleep_calls) >= 3:
+            raise RuntimeError("test-stop")
+
+    monkeypatch.setattr('app.api.logs.LOG_DIR', str(tmp_path))
+    monkeypatch.delenv('AGORA_AUTH_TOKEN', raising=False)
+    monkeypatch.setattr('app.api.logs.time.sleep', _spy_sleep)
+
+    from datetime import datetime as _dt
+    log_name = _dt.now().strftime('%Y-%m-%d') + '.log'
+    log_file = tmp_path / log_name
+    # Nur eine Halb-Zeile (kein \n) — exakt der Hot-Loop-Auslöser.
+    log_file.write_bytes(b"halbe Zeile ohne newline")
+
+    client = app.test_client()
+    response = client.get('/api/logs/stream?offset=0', buffered=False)
+    assert response.status_code == 200
+
+    try:
+        for raw in response.response:
+            _ = raw  # SSE-Inhalt egal — wir messen nur die Sleep-Aufrufe.
+    except RuntimeError:
+        pass
+    finally:
+        response.close()
+
+    # Mind. ein Sleep aus dem Partial-Line-Pfad (vor dem Fix waren es 0).
+    from app.api.logs import _STREAM_POLL_SEC
+    assert _STREAM_POLL_SEC in sleep_calls, (
+        f"Erwartet mind. ein time.sleep({_STREAM_POLL_SEC}) aus dem Partial-Line-Pfad. "
+        f"Erhaltene sleep-calls: {sleep_calls!r}. Ohne diesen Sleep liefe der Stream "
+        f"in eine Hot-Loop, weil size > offset wahr bleibt und der else-Zweig nie greift."
+    )

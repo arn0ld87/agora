@@ -41,6 +41,16 @@ while True:
 
 Geminis Snippet 1:1 übernommen.
 
+### Followup im selben PR (Gemini HIGH auf #255)
+
+Erste Version dieses Patches hatte einen Hot-Loop-Bug: bei Partial-Line
+ist `size > offset` weiterhin wahr → der `else`-Zweig (mit dem regulären
+`time.sleep(_STREAM_POLL_SEC)`) wird nie erreicht → outer `while True`
+dreht in Endlosschleife mit 100 % CPU, Datei wird unzählige Male
+geöffnet. Fix: `time.sleep(_STREAM_POLL_SEC)` direkt vor dem `break`.
+Test H (`test_partial_line_yields_sleep_to_avoid_hot_loop`) belegt mit
+einem Sleep-Spy, dass der Sleep aus dem Partial-Line-Pfad gerufen wird.
+
 ## Edge-Cases
 
 - **Letzte Zeile ohne `\n` (abruptes Programmende):** wird nie gestreamt.
