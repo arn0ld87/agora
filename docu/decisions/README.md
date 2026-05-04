@@ -6,7 +6,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 
 | Nr | Titel | Status | Slice |
 |---|---|---|---|
-| [0001](0001-auth-model.md) | Auth-Zielbild für v1.0 | Proposed | M10.4 |
+| [0001](0001-auth-model.md) | Auth-Zielbild für v1.0 | Accepted (2026-05-04) | M10.4 |
 
 ## Geplante ADRs
 

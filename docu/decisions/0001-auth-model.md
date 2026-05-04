@@ -1,7 +1,8 @@
 # ADR-0001 — Auth-Zielbild für v1.0
 
-**Status:** Proposed (wartet auf User-Sign-off)
+**Status:** Accepted (User-Sign-off via Merge PR #277, 2026-05-04)
 **Datum:** 2026-05-04
+**Accepted:** 2026-05-04
 **Slice:** M10.4
 **Autor:** arn0ld87 + Claude Opus 4.7
 **Bezug:** [`PLAN.md § Status-Sync 2026-05-04`](../../PLAN.md#status-sync-2026-05-04), [`docu/plan.heuristic.md § ADR-0001 Local-first`](../plan.heuristic.md), Issue [#106](https://github.com/arn0ld87/agora/issues/106)

@@ -96,7 +96,6 @@ prompts/                    UI-Prompt-Vorlagen
 
 Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle gefixt. Layer-9-Hardening ist überwiegend im Code drin (siehe Layer-Tabelle oben). Aktuelle Baustellen:
 
-- **Auth-Zielbild-ADR** (M10.4): [`docu/decisions/0001-auth-model.md`](docu/decisions/0001-auth-model.md) als **Proposed** angelegt — Empfehlung **Option A: Single-User-only-v1** explizit machen (Local-first, Hauptangriffsvektoren bereits geschlossen, v1.0-Termin erreichbar). Wartet auf User-Sign-off. Bei Accept: README/security-hardening-Update + `auth_mode`-Feld in `/api/status` als Folge-Slices.
 - **Rate-Limit-Konzept** (M10.5): `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen brauchen Limits auf App- oder Proxy-Ebene.
 - **Evidence-Quality-Gate hart schalten** (M11.1): `--soft` aus `.github/workflows/contract-gates.yml` raus, da Layer 5 grün ist.
 - **Coverage-Gates** (M11.2/M11.3): `pytest-cov` + `@vitest/coverage-v8`, Startwerte 70 % Backend / 60 % Frontend.

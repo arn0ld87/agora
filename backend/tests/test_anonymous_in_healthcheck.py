@@ -6,9 +6,11 @@ operator must be able to see that *somewhere* — not just buried in the boot
 log. Slice 12 wires ``backend.auth_mode`` into ``/api/status`` for exactly
 this reason.
 
-This file pins the four documented values (``token``, ``anonymous``,
-``open``, ``misconfigured``) so a future refactor cannot silently demote
-``anonymous`` back into invisibility.
+This file pins the four documented values (``single_user_token``,
+``anonymous``, ``open``, ``misconfigured``) so a future refactor cannot
+silently demote ``anonymous`` back into invisibility. The
+``single_user_token`` value (renamed from ``token`` in M10.4-Followup,
+2026-05-04) reflects ADR-0001's Single-User-only architecture.
 """
 
 from __future__ import annotations
@@ -26,9 +28,9 @@ def _clear_auth_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_auth_mode_token(monkeypatch):
+def test_auth_mode_single_user_token(monkeypatch):
     monkeypatch.setenv("AGORA_AUTH_TOKEN", "abc123")
-    assert _get_auth_mode() == "token"
+    assert _get_auth_mode() == "single_user_token"
 
 
 def test_auth_mode_anonymous(monkeypatch):
@@ -47,7 +49,7 @@ def test_auth_mode_token_takes_precedence_over_anonymous(monkeypatch):
     """Token-set wins regardless of any opt-out flag."""
     monkeypatch.setenv("AGORA_AUTH_TOKEN", "abc123")
     monkeypatch.setenv("AGORA_ALLOW_ANONYMOUS", "true")
-    assert _get_auth_mode() == "token"
+    assert _get_auth_mode() == "single_user_token"
 
 
 def test_auth_mode_open_in_debug(monkeypatch):

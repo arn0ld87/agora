@@ -23,18 +23,24 @@ def _get_auth_mode():
     """Classify which auth posture the API runs under right now.
 
     Values:
-    - ``"token"``: ``AGORA_AUTH_TOKEN`` is set; ``/api/*`` requires it.
+    - ``"single_user_token"``: ``AGORA_AUTH_TOKEN`` is set; ``/api/*``
+      requires it. The ``single_user_`` prefix reflects ADR-0001
+      (``docu/decisions/0001-auth-model.md``): v1.0 is a Single-User-only
+      simulator, the shared bearer token is the only auth principal.
+      Renamed from ``"token"`` 2026-05-04 so operators reading
+      ``/api/status`` see immediately that the app does not have a
+      multi-user model.
     - ``"anonymous"``: ``AGORA_ALLOW_ANONYMOUS=true`` opt-out is active.
     - ``"open"``: no token, no opt-out, but ``FLASK_DEBUG=true`` (dev).
     - ``"misconfigured"``: no token, no opt-out, no debug — `Config.validate()`
       should have blocked this; we surface it loudly so an operator notices.
 
     Operators monitor this via ``/api/status.backend.auth_mode`` to confirm
-    that production is on ``"token"`` and not silently in one of the
-    open modes.
+    that production is on ``"single_user_token"`` and not silently in one
+    of the open modes.
     """
     if os.environ.get("AGORA_AUTH_TOKEN", "").strip():
-        return "token"
+        return "single_user_token"
     if os.environ.get("AGORA_ALLOW_ANONYMOUS", "false").lower() in ("true", "1", "yes"):
         return "anonymous"
     if os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1", "yes"):
