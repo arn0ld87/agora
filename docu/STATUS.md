@@ -22,6 +22,31 @@ Stand: 2026-05-04
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
 _Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Pro Spec-File laufen mehrere `it`-Blöcke; die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
 
+## Backend-Coverage (M11.2)
+
+Gemessen 2026-05-04 mit `uv run pytest --cov=app --cov-report=term -q` (1425 passed, 9 skipped, Marker `-m 'not llm'` aktiv).
+
+| Scope | Coverage | Basis |
+|---|---|---|
+| `app/` gesamt | 55 % | 12 842 Statements, 5 733 missed |
+| `app/services/` | 51 % | 6 964 Statements, 3 427 missed |
+
+**Aktive CI-Schwelle: 53 %** (`--cov-fail-under=53` in `pyproject.toml`).
+
+Begründung der Schwellenwahl: Ist-Wert (55 %) liegt unter der PLAN-Default-Schwelle von 70 %. Daher gilt die Formel `floor(Ist - 2) = floor(53)`. Die 70 %-Marke ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Ziel 85 %.
+
+**Roadmap:**
+
+| Datum | Schwelle | Notizen |
+|---|---|---|
+| 2026-05-04 | 53 % | Startwert (M11.2) |
+| 2026-06-04 | 55 % | +2 Punkte |
+| 2026-07-04 | 57 % | +2 Punkte |
+| … | … | monatlich +2 |
+| Ziel | 85 % | Langfristziel |
+
+Coverage-Report wird als CI-Artifact `backend-coverage` (14 Tage Retention) hochgeladen und kann von Codecov/Sonar konsumiert werden.
+
 ## Layer-Status (Übersicht)
 
 Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer](../CLAUDE.md#architektur-layer-status).
@@ -72,4 +97,5 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-04: M10.1/M10.2/M10.3 CVE-Monitor + Hardstop — Neuer Workflow `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln` und schreibt das Ergebnis in `$GITHUB_STEP_SUMMARY`. Hardstop am 2026-07-30 verdrahtet: ab dann fail bei pip-audit-Findings. `docu/dependency-risk-register.md` um Eskalationspfad-Sektion (Vendoring / Soft-Fork / Replacement / Risikoakzeptanz-PR) und Upstream-Release-Watch-Spalte erweitert (die Owner-Spalte war bereits vorhanden). Layer 10 von „dokumentiert" auf „grün".
 - 2026-05-04: M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md` als **Proposed** angelegt mit drei Optionen (Single-User-only-v1 / HttpOnly-Session / Bearer+Refresh). Empfehlung: Option A (Single-User-only-v1 explizit machen). Begründung: Local-first ist Kernprinzip, Hauptangriffsvektoren sind bereits geschlossen (F2.1/F2.2/P0.2/S2/S3), v1.0-Termin erreichbar. Wartet auf User-Sign-off. Folge-Slices nach Accept: README/security-hardening-Update, `auth_mode`-Feld in `/api/status`, Token-Rotation-Prozedur. ADR-Index unter `docu/decisions/README.md` mit Konvention.
 - 2026-05-04: M10.4-Followup — ADR-0001 von **Proposed** auf **Accepted** gehoben (User-Sign-off via Merge PR #277). `backend/app/api/status.py::_get_auth_mode()` returnt jetzt `"single_user_token"` statt `"token"` — der Prefix `single_user_` macht für Operatoren in `/api/status` sichtbar, dass Agora kein Multi-User-Modell hat. Tests in `tests/test_anonymous_in_healthcheck.py` angepasst.
+- 2026-05-04: M11.2 Backend-Coverage-Gate — `pytest-cov>=5.0.0` in beide Dev-Dep-Listen (`[project.optional-dependencies] dev` + `[dependency-groups] dev`). `addopts` um `--cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53` erweitert. Startschwelle 53 % (Ist 55 %, Formel `floor(Ist - 2)`; 70 %-PLAN-Default nicht erreichbar wegen OASIS-Integrationspfad ohne Ollama/Neo4j in CI). Coverage-Report als Artifact `backend-coverage` (14 Tage) in `ci.yml`. Coverage-Sektion in `docu/STATUS.md` mit Roadmap.
 - 2026-05-04: M10.4-Doku-Folge — README.md (DE+EN-Status-Block) auf Single-User-only mit Verweis auf ADR-0001 erweitert. `docu/security-hardening.md` neue Sektion „Auth-Modell v1.0" mit (a) Garantien-Liste (kein User-Konzept, kein Logout, kein Audit, kein Multi-User), (b) Was-schützt-was-nicht-Gegenüberstellung inkl. fehlender Rate-Limits als Hardstop bis M10.5, (c) Token-Rotation-Prozedur als 6-Schritt-Anleitung mit `curl`-Verifikation, (d) Trigger für ADR-Supersedes (Klassenraum, Public-Internet, Compliance), (e) Hardstops-Liste für v1.0. Layer-9 in STATUS damit final auf grün; v1.0-Auth-Story ist closed.
