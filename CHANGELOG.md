@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- `/api/logs/stream` verwirft Halb-Zeilen bei EOF und rückt `offset` nicht vor (`readline`-Result endet nicht auf `\n` → Retry im nächsten Poll-Zyklus). Verhindert Datenverlust bei Multi-Byte-UTF-8 mid-write (Gemini MEDIUM auf #254, Slice K.0.1).
 - `/api/logs/stream` öffnet die Logdatei jetzt im Binärmodus, damit `tell()` garantiert Byte-Offsets liefert (Gemini HIGH-Finding auf #253, Slice K.0).
 - SSE-Reconnect: `/api/logs/stream` sendet jetzt `id:`-Frames pro Datenzeile und wertet `Last-Event-ID`-Header aus (überstimmt `?offset=`), wodurch Duplikate und Datenverlust beim Browser-Reconnect verschwinden. `/api/simulation/<id>/stream` loggt Reconnect-IDs (Bus-Replay folgt) (Slice J.5.1, #233).
 - SimulationRunView: doppelten `/run-status`-Poll entfernt; Step3Simulation propagiert `paused`/`current_round`/`total_rounds` jetzt via `update-progress`-Event (Slice J.2, #220).

@@ -262,6 +262,13 @@ def stream_logs():
                             line = fh.readline()
                             if not line:
                                 break
+                            if not line.endswith(b'\n'):
+                                # Partial line at EOF (Logger schreibt gerade): offset
+                                # bewusst NICHT vorruecken, nächster Poll-Zyklus
+                                # liest die Zeile vollständig. Andernfalls würden
+                                # wir Multi-Byte-UTF-8-Sequenzen mid-write zer-
+                                # decoden und Daten verlieren.
+                                break
                             line_offset = fh.tell()
                             offset = line_offset
                             line_stripped = line.decode('utf-8', errors='replace').rstrip('\r\n')
