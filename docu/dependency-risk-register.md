@@ -50,7 +50,7 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 1. **Neues Finding:** `pip-audit` oder `npm audit` meldet eine Advisory. Der wöchentliche CVE-Monitor entdeckt neue Findings automatisch.
 2. **Pruefung:** Ist das Finding durch einen Upstream-Pin blockiert?
    - **Ja:** Issue erstellen (Titel: `security: track ignored <CVE> until
-     upstream fix`), ins Register eintragen, Frist +90 Tage, in `ci.yml` `--ignore-vuln`-Flag ergänzen.
+     upstream fix), ins Register eintragen, Frist +90 Tage, in [.github/workflows/ci.yml](../.github/workflows/ci.yml) --ignore-vuln-Flag ergänzen.
    - **Nein:** Sofort fixen, kein Register-Eintrag noetig.
 3. **Wöchentliche Sichtung:** [CVE-Monitor-Workflow](../.github/workflows/cve-monitor.yml) → Workflow-Summary lesen. Wenn ein CVE aus der Baseline verschwindet, ist Upstream gepatcht.
 4. **30-Tage-Inventur:** Register-Inventur. Abgelaufene Fristen → P0 Bug-Ticket.
