@@ -150,7 +150,10 @@ describe('Step2EnvSetup — refreshQuality-Tick-Isolation (J.1, #219)', () => {
     expect(refreshQualitySpy).toHaveBeenCalledWith('sim-test-001')
   })
 
-  it('ruft refreshQuality bei erneutem Sim-Wechsel (simulationId-Änderung) wieder 1× auf', async () => {
+  it('ruft refreshQuality bei Sim-Wechsel wieder 1× auf — neue Sim startet direkt mit Profilen (kein leerer Zwischen-Tick)', async () => {
+    // Real scenario: sim-second already has profiles when simulationId prop changes.
+    // The 1-watch variant must detect simId change (not profile 0→n transition)
+    // and fire refreshQuality(simIdB) exactly once.
     const wrapper = mount(Step2EnvSetup, {
       props: {
         simulationId: 'sim-first',
@@ -166,36 +169,102 @@ describe('Step2EnvSetup — refreshQuality-Tick-Isolation (J.1, #219)', () => {
     const fetchProfilesTask = _capturedPollingTasks[1]
     expect(typeof fetchProfilesTask).toBe('function')
 
-    // Erste Simulation: profiles arrive.
-    _profilesResponse = { success: true, data: { profiles: [{ username: 'x' }] } }
+    // Sim A: 3 profiles arrive → refreshQuality for sim-first.
+    _profilesResponse = {
+      success: true,
+      data: { profiles: [{ username: 'a' }, { username: 'b' }, { username: 'c' }] },
+    }
     await fetchProfilesTask()
     await flushPromises()
     await nextTick()
 
     expect(refreshQualitySpy).toHaveBeenCalledTimes(1)
-    expect(refreshQualitySpy).toHaveBeenCalledWith('sim-first')
+    expect(refreshQualitySpy).toHaveBeenNthCalledWith(1, 'sim-first')
 
-    // Sim-Wechsel: profiles werden leer, simulationId ändert sich.
-    _profilesResponse = { success: true, data: { profiles: [] } }
+    // Sim-Wechsel: simulationId changes, sim-second already returns 5 profiles immediately.
+    // No empty-profiles intermediate tick — this is the realistic production path.
+    _profilesResponse = {
+      success: true,
+      data: {
+        profiles: [
+          { username: 'u' }, { username: 'v' }, { username: 'w' },
+          { username: 'x' }, { username: 'y' },
+        ],
+      },
+    }
     await wrapper.setProps({ simulationId: 'sim-second' })
     await flushPromises()
     await nextTick()
 
-    // Tick: profiles reset to empty → keine refreshQuality.
+    // First poll for sim-second (with profiles already present) must trigger refreshQuality.
     await fetchProfilesTask()
     await flushPromises()
     await nextTick()
 
-    // Tick: neue profiles für sim-second → refreshQuality für sim-second.
-    _profilesResponse = { success: true, data: { profiles: [{ username: 'y' }] } }
-    await fetchProfilesTask()
-    await flushPromises()
-    await nextTick()
-
-    // Gesamt: 1× für sim-first + 1× für sim-second = 2.
+    // Total: 1× for sim-first + 1× for sim-second = 2.
     expect(refreshQualitySpy).toHaveBeenCalledTimes(2)
-    expect(refreshQualitySpy).toHaveBeenLastCalledWith('sim-second')
+    expect(refreshQualitySpy).toHaveBeenNthCalledWith(2, 'sim-second')
 
     wrapper.unmount()
+  })
+
+  it('feuert refreshQuality NICHT erneut wenn Profile-Anzahl innerhalb derselben Sim wächst (Guard hält)', async () => {
+    // Guard must suppress re-triggers when profiles grow (e.g. 3 → 5 → 7) within the same sim.
+    mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-stable',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfig,
+    })
+
+    await flushPromises()
+
+    const fetchProfilesTask = _capturedPollingTasks[1]
+    expect(typeof fetchProfilesTask).toBe('function')
+
+    // First poll: 3 profiles — must trigger refreshQuality once.
+    _profilesResponse = {
+      success: true,
+      data: { profiles: [{ username: 'a' }, { username: 'b' }, { username: 'c' }] },
+    }
+    await fetchProfilesTask()
+    await flushPromises()
+    await nextTick()
+
+    expect(refreshQualitySpy).toHaveBeenCalledTimes(1)
+
+    // Subsequent polls: profile count grows (5, then 7) — guard must block re-triggers.
+    _profilesResponse = {
+      success: true,
+      data: {
+        profiles: [
+          { username: 'a' }, { username: 'b' }, { username: 'c' },
+          { username: 'd' }, { username: 'e' },
+        ],
+      },
+    }
+    await fetchProfilesTask()
+    await flushPromises()
+    await nextTick()
+
+    _profilesResponse = {
+      success: true,
+      data: {
+        profiles: [
+          { username: 'a' }, { username: 'b' }, { username: 'c' },
+          { username: 'd' }, { username: 'e' }, { username: 'f' }, { username: 'g' },
+        ],
+      },
+    }
+    await fetchProfilesTask()
+    await flushPromises()
+    await nextTick()
+
+    // Still exactly 1 call — guard held.
+    expect(refreshQualitySpy).toHaveBeenCalledTimes(1)
+    expect(refreshQualitySpy).toHaveBeenCalledWith('sim-stable')
   })
 })
