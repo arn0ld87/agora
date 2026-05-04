@@ -21,7 +21,18 @@ from ...config import Config
 from ...utils.llm_client import LLMClient
 from ..confidence_calculator import compute_confidence
 from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
+from .evidence import init_evidence_map, record_evidence_item, resolve_embedder
 from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, migrate_v1_to_v2
+from .sections import (
+    attach_provenance,
+    atomize_claim_chunk,
+    build_source_id_anchor,
+    is_atomic_claim,
+    is_claim_candidate,
+    sample_actions_timeseries,
+    section_dedup_check,
+    truncate_text,
+)
 from ..web_tools import WebToolsService
 from ...utils.logger import get_logger
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
@@ -179,48 +190,24 @@ class ReportAgent:
         logger.info(f"ReportAgent initialization complete: graph_id={graph_id}, simulation_id={simulation_id}")
 
     def _init_evidence_map(self, report_id: str) -> None:
-        # S4b: schema_version 2 markiert claim-spezifisches Evidence-Binding.
-        # v1-Reports bleiben lesbar, neue Reports tragen den v2-Tag und
-        # zusätzliche Felder (`match_score`, `supports_claim`).
-        # Layer-0 Boundary: EvidenceMapModel validiert das Dict beim Anlegen.
-        payload = {
-            "schema_version": CURRENT_SCHEMA_VERSION,
-            "report_id": report_id,
-            "simulation_id": self.simulation_id,
-            "global_evidence": self._collect_simulation_evidence_items(),
-            "sections": [],
-        }
-        self.evidence_map = EvidenceMapModel.model_validate(payload).model_dump(mode="json")
+        self.evidence_map = init_evidence_map(
+            report_id=report_id,
+            simulation_id=self.simulation_id,
+            global_evidence=self._collect_simulation_evidence_items(),
+        )
 
     def _truncate(self, text: str, limit: int = 300) -> str:
-        if not text:
-            return ""
-        text = str(text).strip()
-        return text if len(text) <= limit else text[:limit] + "..."
+        return truncate_text(text, limit)
 
     def _record_evidence_item(self, item: Dict[str, Any]) -> None:
-        if not self._active_section_evidence:
-            self._active_section_evidence = []
-        self._active_section_evidence.append(item)
+        self._active_section_evidence = record_evidence_item(
+            self._active_section_evidence,
+            item,
+        )
 
     def _try_get_embedder(self) -> Optional[Callable[[str], List[float]]]:
-        """S4b: liefert eine `embed(text) -> Vector`-Callable oder None.
-
-        Lazy-import von ``EmbeddingService`` damit Tests, die den
-        ReportAgent ohne lebenden Storage instanziieren, nicht durch
-        Ollama-Init scheitern. Cache: einmal pro Agent-Instanz.
-        """
         cached = getattr(self, "_embed_cache", "missing")
-        if cached != "missing":
-            return cached
-        try:
-            from ..storage.embedding_service import EmbeddingService
-
-            service = EmbeddingService()
-            embed_fn = service.embed
-        except Exception as exc:  # pragma: no cover - environment dependent
-            logger.debug(f"EvidenceBinder: kein Embedder verfügbar ({exc!r})")
-            embed_fn = None
+        embed_fn = resolve_embedder(cached=cached, logger=logger)
         self._embed_cache = embed_fn
         return embed_fn
 
@@ -228,46 +215,7 @@ class ReportAgent:
     def _sample_actions_timeseries(
         actions: List[Dict[str, Any]], k: int = 8
     ) -> List[Dict[str, Any]]:
-        """Stratified Sampling ueber round_num (oder created_at als Fallback).
-
-        - len(actions) <= k: alle behalten, KEIN Sampling-Marker im raw.
-        - len(actions) > k: k gleichgrosse Bins ueber den Sortier-Schluessel,
-          aus jedem Bin das chronologisch erste Item. Falls round_num fehlt,
-          fallback auf Index-Reihenfolge (also stratified ueber Position).
-
-        Reader Honesty: Burst-Verzerrung verhindern, ohne Posts zu droppen
-        die einen einzelnen Bin dominieren.
-        """
-        if not actions:
-            return []
-        if len(actions) <= k:
-            return list(actions)
-
-        def sort_key(a: Dict[str, Any]) -> Any:
-            r = a.get("round_num")
-            if r is not None:
-                return (0, r, str(a.get("action_id") or a.get("id") or ""))
-            ts = a.get("created_at") or a.get("timestamp")
-            if ts is not None:
-                return (1, str(ts), "")
-            return (2, 0, "")
-
-        sorted_actions = sorted(actions, key=sort_key)
-        n = len(sorted_actions)
-        sampled: List[Dict[str, Any]] = []
-        for bin_idx in range(k):
-            start = (bin_idx * n) // k
-            end = ((bin_idx + 1) * n) // k
-            if start >= end:
-                continue
-            picked = sorted_actions[start]
-            picked = dict(picked)  # shallow copy, ohne Original zu mutieren
-            raw_marker = picked.setdefault("_sampling", {})
-            raw_marker["bin"] = bin_idx
-            raw_marker["bin_total"] = k
-            raw_marker["sampled_from_total"] = n
-            sampled.append(picked)
-        return sampled
+        return sample_actions_timeseries(actions, k)
 
     def _collect_simulation_evidence_items(self) -> List[Dict[str, Any]]:
         """Collect reusable evidence from existing metrics and simulation actions."""
@@ -451,120 +399,23 @@ class ReportAgent:
 
     @staticmethod
     def _atomize_claim_chunk(chunk: str) -> List[str]:
-        """S3b: Section-Chunk in Einzelsätze splitten.
-
-        Reviewer hatte gefordert: ein Claim = eine prüfbare Aussage.
-        Mehrsatz-Chunks werden in atomare Sätze zerlegt; Trennung über
-        Satzendzeichen + Großbuchstaben-Folgewort. Reicht für DACH-
-        Reports ohne neue NLP-Dependency.
-        """
-        cleaned = (chunk or "").strip()
-        if not cleaned:
-            return []
-        # Lookbehind verlangt einen *Buchstaben* vor dem Satzende-Zeichen,
-        # damit Datums-/Zahlen-Punkte ("am 22. Mai") und einzelne
-        # Initialen-Punkte nicht fälschlich als Satzgrenze gewertet werden.
-        parts = re.split(r"(?<=[a-zäöüß][.!?])\s+(?=[A-ZÄÖÜ])", cleaned)
-        return [p.strip() for p in parts if p.strip()]
-
-    # S3b-Verbliste — finite Verben, die typische Aussagen einleiten.
-    # Bewusst klein gehalten; größere NER-Listen würden falsch-negative
-    # Filter erzeugen, der Filter soll nur grobe Übergangssätze killen.
-    _CLAIM_VERB_HINTS = (
-        " ist ", " sind ", " war ", " waren ", " wird ", " werden ",
-        " soll ", " sollen ", " kann ", " können ", " muss ", " müssen ",
-        " hat ", " haben ", " erklärt", " fordert", " kritisiert",
-        " betont", " sagt", " warnt", " beschloss", " plant",
-        " antwortete", " unterstützt",
-    )
+        return atomize_claim_chunk(chunk)
 
     @staticmethod
     def _is_atomic_claim(text: str) -> bool:
-        """S3b: Atom-Satz-Filter — verlangt minimale Aussage-Substanz."""
-        s = (text or "").strip()
-        if len(s.split()) < 5:
-            return False
-        if s.endswith((".", "!", "?")):
-            return True
-        return any(hint in s.lower() for hint in ReportAgent._CLAIM_VERB_HINTS)
+        return is_atomic_claim(text)
 
     @staticmethod
     def _is_claim_candidate(text: str) -> bool:
-        """S3a: filtert Markdown-Header, Bold-Section-Titel, leere Stellen.
-
-        Externer Review hatte beanstandet, dass Überschriften wie
-        ``**Der Beschluss und seine Architekten**`` als prüfbare Claims
-        in der Evidence-Map landen. Eine Überschrift ist kein Claim,
-        sondern Strukturmarkup. Dieser Filter wirft sie raus, bevor
-        Evidence gebunden wird.
-        """
-        stripped = (text or "").strip()
-        if not stripped:
-            return False
-        if stripped.startswith("#"):
-            return False
-        # Reine Bold-Zeile als Section-Title (kürzer als 8 Wörter).
-        if (
-            stripped.startswith("**")
-            and stripped.endswith("**")
-            and stripped.count("**") == 2
-            and len(stripped.split()) < 8
-        ):
-            return False
-        # Single-bullet bold-only-Heading (`- **Was passiert ist**`).
-        if re.fullmatch(r"[-*]\s*\*\*[^*]+\*\*\s*", stripped):
-            return False
-        return True
+        return is_claim_candidate(text)
 
     @staticmethod
     def _build_source_id_anchor(item: Dict[str, Any]) -> Optional[str]:
-        """Leite einen stabilen Anker fuer das Frontend ab.
-        Reihenfolge: agent_log_ref > raw['url'] > None.
-        """
-        ref = item.get("agent_log_ref") or {}
-        if isinstance(ref, dict):
-            log_id = ref.get("agent_log_id") or ref.get("log_id")
-            entry = ref.get("entry_id") or ref.get("post_id")
-            if log_id and entry:
-                return f"agent-log-{log_id}#entry-{entry}"
-            if log_id:
-                return f"agent-log-{log_id}"
-        raw = item.get("raw") or {}
-        if isinstance(raw, dict):
-            url = raw.get("url") or raw.get("source_url")
-            text = raw.get("text") or raw.get("content") or item.get("snippet") or ""
-            if url:
-                # Word-prefix fuer text-fragment, max 60 chars, urlsafe genug
-                if text:
-                    fragment = text.strip().split("\n", 1)[0][:60]
-                    return f"web:{url}#:~:text={fragment}"
-                return f"web:{url}"
-        return None
+        return build_source_id_anchor(item)
 
     @staticmethod
     def _attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
-        """Idempotenter Mutator: setzt quote + source_id_anchor wenn ableitbar.
-        Existierende Werte werden NICHT ueberschrieben.
-        """
-        if not isinstance(item, dict):
-            return item
-        # quote: bevorzugt raw['text'] / raw['content'], sonst snippet selbst
-        if not item.get("quote"):
-            raw = item.get("raw") or {}
-            candidate = None
-            if isinstance(raw, dict):
-                candidate = raw.get("text") or raw.get("content")
-            candidate = candidate or item.get("snippet")
-            if candidate:
-                quote = str(candidate).strip()
-                if quote:
-                    item["quote"] = quote[:500]
-        # source_id_anchor
-        if not item.get("source_id_anchor"):
-            anchor = ReportAgent._build_source_id_anchor(item)
-            if anchor:
-                item["source_id_anchor"] = anchor[:200]
-        return item
+        return attach_provenance(item)
 
     def _build_claims_for_section(self, content: str) -> List[Dict[str, Any]]:
         raw_chunks = [part.strip() for part in re.split(r"\n\s*\n", (content or "").strip()) if part.strip()]
@@ -672,7 +523,7 @@ class ReportAgent:
         if not claims:
             claims.append(ReportClaim(
                 claim_id="claim_01",
-                claim_text="",
+                claim_text="No claim candidate extracted from this section.",
                 evidence=[],
                 confidence_score=0.0,
                 confidence_label="low",
@@ -683,75 +534,12 @@ class ReportAgent:
     def _section_dedup_check(
         self, new_summary: str, existing: List[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
-        """Prueft ob new_summary fast identisch zu einer bestehenden Section ist.
-
-        Returns ein Audit-Trail-dict (Marker), wenn Match. Sonst None.
-        Reihenfolge:
-        1. Embedder verfuegbar -> cosine-Similarity, threshold 0.92
-        2. Sonst Jaccard auf normalisierten Tokens, threshold 0.85
-        Defensiv: leere/None summary -> None, leere existing -> None,
-        Embedder-Crash -> Jaccard-Fallback.
-        """
-        if not new_summary or not existing:
-            return None
-        new_norm = (new_summary or "").strip()
-        if not new_norm:
-            return None
-        embedder = self._try_get_embedder()
-        if embedder is not None:
-            try:
-                from ..evidence_binder import _cosine
-                new_vec = embedder(new_norm)
-                for sec in existing:
-                    other = (sec.get("section_summary") or "").strip()
-                    if not other:
-                        continue
-                    other_vec = embedder(other)
-                    sim = float(_cosine(new_vec, other_vec))
-                    if sim >= 0.92:
-                        return {
-                            "type": "model_generated_inference",
-                            "source": "section_dedup",
-                            "tool_name": "section_dedup_check",
-                            "snippet": f"duplicate_of_section_{sec.get('section_index')}",
-                            "raw": {
-                                "similarity": round(sim, 4),
-                                "method": "cosine",
-                                "matched_section_index": sec.get("section_index"),
-                            },
-                        }
-            except Exception as exc:
-                logger.warning(f"Section-Dedup cosine fail, jaccard fallback: {exc!r}")
-
-        # Jaccard-Fallback
-        def tokens(s: str) -> set:
-            return {t for t in re.split(r"\W+", (s or "").lower()) if len(t) > 2}
-
-        new_tok = tokens(new_norm)
-        if not new_tok:
-            return None
-        for sec in existing:
-            other_tok = tokens(sec.get("section_summary") or "")
-            if not other_tok:
-                continue
-            inter = len(new_tok & other_tok)
-            union = len(new_tok | other_tok)
-            if union == 0:
-                continue
-            jac = inter / union
-            if jac >= 0.85:
-                return {
-                    "type": "model_generated_inference",
-                    "source": "section_dedup",
-                    "tool_name": "section_dedup_check",
-                    "snippet": f"duplicate_of_section_{sec.get('section_index')}",
-                    "raw": {
-                        "similarity": round(jac, 4),
-                        "method": "jaccard",
-                        "matched_section_index": sec.get("section_index"),
-                    },
-                }
-        return None
+        return section_dedup_check(
+            new_summary,
+            existing,
+            get_embedder=self._try_get_embedder,
+            logger=logger,
+        )
 
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
         if self.evidence_map is None:
