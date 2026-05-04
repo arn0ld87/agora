@@ -113,7 +113,7 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | **M9.7** | ✅ | Doku-Sync 2026-05-04 | `agora-doc-worker` | `/agora-next-task` | Haiku | PR #271 gemerged. `grep "v0.6.0" AGENTS.md` leer. |
 | **M10.1** | ✅ | F4.1 CVE-Monitor cron | `agora-doc-worker` | `/agora-next-task` | Haiku | `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln`, schreibt in `$GITHUB_STEP_SUMMARY`, lädt Output als Artefakt. |
 | **M10.2** | ✅ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `cve-monitor.yml::Hardstop-Gate` failt ab 2026-07-30, wenn Audit non-zero. `ci.yml` Kommentar verweist auf den Hardstop. |
-| **M10.3** | ✅ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | Eskalationspfad-Sektion + Upstream-Release-Watch-Spalte + Owner-Mapping in `docu/dependency-risk-register.md`. |
+| **M10.3** | ✅ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | Eskalationspfad-Sektion + neue Upstream-Release-Watch-Spalte in `docu/dependency-risk-register.md` (Owner-Spalte war bereits vorhanden). |
 | **M10.4** | ⬜ | Auth-Zielbild-ADR | `agora-doc-worker` (+ Lead) | `/agora-next-task` | Haiku + Senior | `ls docu/decisions/0001-auth-model.md` exists |
 | **M10.5** | ⬜ | Rate-Limit-Konzept | `agora-refactor-worker` | `/agora-next-task` | Sonnet | Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen vorhanden |
 | **M11.1** | ⬜ | Evidence-Gate hard schalten | `agora-test-worker` | `/agora-next-task` | Sonnet | `grep -- '--soft' .github/workflows/contract-gates.yml` leer |
