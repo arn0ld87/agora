@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Added
+- M9.6 Prod-Stack-Smoke als PR-Gate: `.github/workflows/docker-image.yml::prod-proxy-smoke` triggert jetzt zusätzlich auf `pull_request: [main]` (Doku-PRs via `paths-ignore` ausgeschlossen — `**.md`, `docu/**`, `CHANGELOG.md`, Issue-/PR-Templates). Damit smoket der vollständige Compose-Stack inkl. `deploy/compose/docker-compose.prod-with-proxy.yml` vor jedem nicht-Doku-PR. `publish`-Job bleibt durch `if: github.event_name != 'pull_request'` gegated und pusht nicht aus PRs. `scripts/verify-deploy.sh` smoket zusätzlich `/api/auth/ticket` via Proxy (POST mit `X-Agora-Token`-Header und `sse:smoke`-Scope, prüft `"ticket"`-Key in JSON-Response). Lokal skippt der Check sauber wenn `AGORA_AUTH_TOKEN` nicht im env steht. Damit ist M9 (Prod-Hardening) abgeschlossen — nächste Slice-Priorität: M10.
+
 ### Removed
 - CI: `.github/workflows/claude.yml` und `.github/workflows/claude-code-review.yml` entfernt. Die beiden Anthropic-Boilerplate-Workflows scheiterten auf jedem PR mit *"Claude Code is not installed on this repository"* und tauchten als FAILURE in der Status-Rollup auf, obwohl in CLAUDE.md als ignorierbar markiert. Wer den Service später re-aktivieren möchte: Workflow-Templates aus dem [claude-code-action](https://github.com/anthropics/claude-code-action)-Repo neu beziehen plus `ANTHROPIC_API_KEY`-Secret im Repo setzen.
 

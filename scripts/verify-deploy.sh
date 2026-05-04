@@ -40,6 +40,22 @@ if [ $PROXY_ACTIVE -eq 1 ]; then
   check "nginx /healthz (Sidecar-eigen)" curl -fsS "http://localhost:${PROXY_PORT}/healthz"
   check "Backend /health (via Proxy)" curl -fsS "http://localhost:${PROXY_PORT}/health"
   check "Frontend / erreichbar (via Proxy)" bash -c "curl -fsS -o /dev/null -w '%{http_code}' \"http://localhost:${PROXY_PORT}/\" | grep -qE '^(200|301|302)$'"
+  # M9.6: signed-ticket-Endpoint smoken. AGORA_AUTH_TOKEN ist im CI-Smoke
+  # gesetzt; lokal kann das Skript ohne Token starten und der Check skippt
+  # dann sauber.
+  if [ -n "${AGORA_AUTH_TOKEN:-}" ]; then
+    _check_ticket() {
+      curl -fsS -X POST \
+        -H "X-Agora-Token: $AGORA_AUTH_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"scope":"sse:smoke"}' \
+        "http://localhost:${PROXY_PORT}/api/auth/ticket" \
+        | grep -q '"ticket"'
+    }
+    check "Auth /api/auth/ticket via Proxy" _check_ticket
+  else
+    echo "  SKIP /api/auth/ticket (kein AGORA_AUTH_TOKEN in env)"
+  fi
 else
   check "Backend /health (direkt)" docker compose exec -T agora curl -fs "http://localhost:${BACKEND_PORT}/health"
 fi

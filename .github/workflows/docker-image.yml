@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
     tags: ["*"]
+  pull_request:
+    branches: [main]
+    # Doku-only-PRs (z.B. Doku-Sync-Slices) sollen den Smoke nicht triggern.
+    # Code-/Compose-/Workflow-Änderungen lösen ihn aus.
+    paths-ignore:
+      - '**.md'
+      - 'docu/**'
+      - 'CHANGELOG.md'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
   workflow_dispatch:
 
 permissions:
