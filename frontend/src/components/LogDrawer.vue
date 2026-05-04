@@ -112,6 +112,7 @@ function appendLine(line, { bypassPause = false } = {}) {
 
 function startStream() {
   stopStream()
+  reconnectAttempts = 0
   streamFailed.value = false
   const token = getAgoraToken?.() || ''
   const url = logsStreamUrl(token, level.value || null, lastOffset)
@@ -142,8 +143,6 @@ function startStream() {
 }
 
 function manualReconnect() {
-  reconnectAttempts = 0
-  streamFailed.value = false
   startStream()
 }
 
