@@ -32,6 +32,7 @@ _cleanup_done = False
 # Add project paths
 try:
     from ._sim_common import (
+        apply_camel_context_floor,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -41,6 +42,7 @@ try:
     )
 except ImportError:  # direct script execution
     from _sim_common import (
+        apply_camel_context_floor,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -53,6 +55,8 @@ _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 load_project_env(__file__)
 install_max_tokens_warning_filter()
+_camel_context_floor = apply_camel_context_floor()
+print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
 
 if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     build_single_platform_parser('OASIS Twitter Simulation').parse_args()
@@ -62,16 +66,9 @@ if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
 try:
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
-    # Monkey-Patch (analog zu run_parallel_simulation.py): heb CAMEL's
-    # ScoreBasedContextCreator-Default von 8192 auf LLM_CONTEXT_LIMIT hoch.
-    from camel.memories.context_creators.score_based import ScoreBasedContextCreator as _SBCC
-    _SBCC_ORIG_INIT = _SBCC.__init__
-    _CTX_LIMIT_OVERRIDE = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
-    def _sbcc_patched_init(self, token_counter, token_limit=None, *args, **kwargs):
-        effective = _CTX_LIMIT_OVERRIDE if (token_limit is None or token_limit < _CTX_LIMIT_OVERRIDE) else token_limit
-        return _SBCC_ORIG_INIT(self, token_counter, effective, *args, **kwargs)
-    _SBCC.__init__ = _sbcc_patched_init
-    print(f"[context-patch] token_limit floor = {_CTX_LIMIT_OVERRIDE}", flush=True)
+    # ScoreBasedContextCreator-Floor wird in apply_camel_context_floor() oben
+    # gesetzt. CAMELs Default-token_limit (8192) wuerde sonst bei 8 k Tokens
+    # truncen, unabhaengig von OLLAMA_NUM_CTX und vom realen Modell-Context.
     import oasis
     from oasis import (
         ActionType,
@@ -605,7 +602,15 @@ class TwitterSimulationRunner:
             model=model,
             available_actions=self.AVAILABLE_ACTIONS,
         )
-        
+
+        # Memory-Token-Limit auch ohne Tool-Attach hochziehen — sonst kappt
+        # CAMELs ScoreBasedContextCreator-Default bei 8192.
+        try:
+            from agent_tools import enforce_memory_token_limit
+            enforce_memory_token_limit(self.agent_graph)
+        except Exception as e:
+            print(f"enforce_memory_token_limit (twitter-single) failed: {e}", flush=True)
+
         # Databasepath
         db_path = self._get_db_path()
         if os.path.exists(db_path):

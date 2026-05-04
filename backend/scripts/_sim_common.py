@@ -69,6 +69,49 @@ def install_max_tokens_warning_filter() -> None:
         root_logger.addFilter(MaxTokensWarningFilter())
 
 
+_DEFAULT_CONTEXT_FLOOR = 262_144
+
+
+def apply_camel_context_floor(default_floor: int = _DEFAULT_CONTEXT_FLOOR) -> int:
+    """Hebe CAMELs ScoreBasedContextCreator-Default-Token-Limit auf
+    LLM_CONTEXT_LIMIT (oder ``default_floor``) an.
+
+    Hintergrund: ``camel.memories.context_creators.score_based.ScoreBasedContextCreator``
+    initialisiert ``token_limit`` per Default auf 8192. Sobald CAMEL einen
+    Agent ohne explizit hochgesetztes Limit anlegt, kappt die Memory-Truncation
+    bei 8 k Tokens — unabhaengig davon, ob das Modell 256 k oder 1 M kann.
+    Diese Funktion patcht ``__init__`` so, dass der Floor als Mindestwert wirkt
+    (groessere Werte aus dem Aufrufer werden respektiert).
+
+    Idempotent: mehrfache Aufrufe sind ein No-op. Gibt den effektiven Floor
+    zurueck, damit der Aufrufer ihn loggen kann.
+    """
+    try:
+        floor = int(os.environ.get("LLM_CONTEXT_LIMIT", str(default_floor)))
+    except ValueError:
+        floor = default_floor
+
+    try:
+        from camel.memories.context_creators.score_based import (
+            ScoreBasedContextCreator,
+        )
+    except ImportError:
+        return floor
+
+    if getattr(ScoreBasedContextCreator, "_agora_context_floor_applied", False):
+        return floor
+
+    original_init = ScoreBasedContextCreator.__init__
+
+    def _patched_init(self, token_counter, token_limit=None, *args, **kwargs):
+        effective = floor if (token_limit is None or token_limit < floor) else token_limit
+        return original_init(self, token_counter, effective, *args, **kwargs)
+
+    ScoreBasedContextCreator.__init__ = _patched_init
+    ScoreBasedContextCreator._agora_context_floor_applied = True
+    return floor
+
+
 class UnicodeFormatter(logging.Formatter):
     """Convert unicode escape sequences to readable characters."""
 

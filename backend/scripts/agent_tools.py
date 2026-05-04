@@ -17,7 +17,7 @@ import os
 import re
 import sqlite3
 import sys
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
 import requests
@@ -963,6 +963,46 @@ def _install_empty_assistant_memory_sanitizer(agent_id: Any, memory: Any) -> Non
     memory._agora_empty_assistant_sanitizer = True
 
 
+# Heuristische Default-Mappings fuer haeufige Cloud-/lokale Modellfamilien.
+# Greift NUR, wenn weder Config.LLM_MODEL_CONTEXT_LIMITS noch
+# LLM_MODEL_CONTEXT_LIMITS_JSON einen exakten Match liefern. Modelle werden
+# inzwischen ueber das Frontend gewaehlt und stehen nicht mehr in der .env,
+# deshalb braucht der Resolver einen sinnvollen Fallback statt blind auf den
+# globalen LLM_CONTEXT_LIMIT zu fallen — sonst kappt CAMEL z. B. einen
+# Gemini-3-Pro-Run mit 1 M Context-Window faelschlich auf 256 k.
+_MODEL_CONTEXT_HEURISTICS: Tuple[Tuple[str, int], ...] = (
+    ("gemini-3", 1_048_576),       # Gemini 3 Pro / Flash: ~1M Tokens
+    ("gemini-2.5", 1_048_576),
+    ("gemini-2", 1_048_576),
+    ("deepseek-v3", 131_072),      # DeepSeek-V3 / V3.1 / V3.2: 128k
+    ("deepseek-v4", 1_048_576),    # DeepSeek-V4 (laut Vendor-Stand 2026)
+    ("deepseek-r1", 131_072),
+    ("qwen3-coder", 262_144),      # Qwen3-Coder / -Coder-Next: 256k
+    ("qwen3", 131_072),
+    ("qwen2.5", 131_072),
+    ("llama-3.3", 131_072),
+    ("llama3.3", 131_072),
+    ("llama-3.1", 131_072),
+    ("gpt-oss", 131_072),          # gpt-oss-Cloud-Familie: 128k
+    ("gpt-4.1", 1_048_576),
+    ("gpt-4o", 131_072),
+    ("claude-opus-4", 200_000),
+    ("claude-sonnet-4", 200_000),
+    ("claude-haiku-4", 200_000),
+)
+
+
+def _heuristic_context_limit(model_name: str) -> Optional[int]:
+    """Best-effort Substring-Match fuer bekannte Modellfamilien."""
+    if not model_name:
+        return None
+    needle = model_name.lower()
+    for prefix, limit in _MODEL_CONTEXT_HEURISTICS:
+        if prefix in needle:
+            return limit
+    return None
+
+
 def _resolve_memory_token_limit(model_name: Optional[str] = None) -> int:
     from app.config import Config
 
@@ -978,10 +1018,64 @@ def _resolve_memory_token_limit(model_name: Optional[str] = None) -> int:
                 overrides.update(parsed)
     default_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", str(Config.LLM_CONTEXT_LIMIT)))
     override = overrides.get(model_name or "")
+    if override is not None:
+        try:
+            return int(override)
+        except (TypeError, ValueError):
+            pass
+    heuristic = _heuristic_context_limit(model_name or "")
+    if heuristic is not None:
+        return max(heuristic, default_limit)
+    return default_limit
+
+
+def enforce_memory_token_limit(agent_graph) -> int:
+    """Hebe creator._token_limit jedes Agents auf das resolved Memory-Budget.
+
+    Komplementaer zur globalen ``apply_camel_context_floor()``-Patch in
+    ``_sim_common.py``: dort wirkt der Floor nur fuer NEU instanzierte
+    ScoreBasedContextCreators. OASIS legt seine SocialAgents jedoch ueber
+    ``generate_*_agent_graph`` an, und CAMEL kann den Creator dabei mit dem
+    *altem* Limit cachen, sobald die Memory-Instanz bereits den Default 8192
+    geerbt hat. Diese Funktion zieht das Live-Limit pro Agent nach — auch
+    wenn KEIN ``attach_tools_to_agents``-Pfad benutzt wird.
+
+    Gibt die Anzahl gepatchter Creator-Instanzen zurueck (fuer Logging).
+    """
+    if agent_graph is None:
+        return 0
     try:
-        return int(override) if override is not None else default_limit
-    except (TypeError, ValueError):
-        return default_limit
+        agents_iter = agent_graph.get_agents()
+    except Exception as exc:  # pragma: no cover — Defensive Hook
+        print(f"[enforce_memory_token_limit] get_agents failed: {exc}", flush=True)
+        return 0
+
+    patched = 0
+    for agent_id, agent in agents_iter:
+        try:
+            model_name = str(getattr(getattr(agent, "model_backend", None), "model_type", "") or "")
+            ctx_limit = _resolve_memory_token_limit(model_name)
+            memory = getattr(agent, "memory", None)
+            if memory is None or not hasattr(memory, "get_context_creator"):
+                continue
+            creator = memory.get_context_creator()
+            if creator is None or not hasattr(creator, "_token_limit"):
+                continue
+            old_limit = getattr(creator, "token_limit", None)
+            if old_limit is None or old_limit < ctx_limit:
+                creator._token_limit = ctx_limit
+                patched += 1
+                print(
+                    f"[enforce_memory_token_limit] agent {agent_id}: "
+                    f"{old_limit} -> {ctx_limit} (model={model_name or '?'})",
+                    flush=True,
+                )
+        except Exception as exc:
+            print(
+                f"[enforce_memory_token_limit] agent {agent_id} patch failed: {exc}",
+                flush=True,
+            )
+    return patched
 
 
 def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
