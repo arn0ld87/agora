@@ -54,13 +54,14 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M9.6 Prod-Stack-Smoke als PR-Gate (`docker-image.yml::prod-proxy-smoke`, `verify-deploy.sh` mit `/healthz`/`/health`/`/`/`/api/auth/ticket`)
 - M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docu/dependency-risk-register.md`)
 - M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docu/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
+- M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
 1. M10.5 Rate-Limit-Konzept — `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen.
-2. M11.1 Evidence-Quality-Gate hard schalten (`--soft` aus `contract-gates.yml`).
-3. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
+2. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
+3. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
 
-Mittelfristig: M11.1 Evidence-Gate hard, M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, F7/F8 Hotspot-Splits (#202/#203).
+Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F7/F8 Hotspot-Splits (#202/#203).
 
 ## Aktualisierungs-Protokoll
 
