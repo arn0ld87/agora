@@ -151,9 +151,17 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
-      - name: Run frontend tests (Vitest)
+      - name: Run frontend tests with coverage gate (M11.3)
         working-directory: frontend
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Run frontend build
         working-directory: frontend
