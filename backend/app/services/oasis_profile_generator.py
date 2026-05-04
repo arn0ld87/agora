@@ -17,6 +17,7 @@ from datetime import datetime
 from openai import OpenAI
 
 from ..config import Config
+from ..contracts import PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
@@ -24,6 +25,11 @@ from .persona_demographics import (
     DACH_NAME_ORIGIN_QUOTAS,
     build_name_quota_prompt_block,
     build_name_quota_prompt_block_en,
+)
+from .persona_quota_defaults import (
+    build_industry_quota_prompt_block,
+    build_industry_quota_prompt_block_en,
+    default_dach_industry_quota,
 )
 
 logger = get_logger('agora.oasis_profile')
@@ -246,6 +252,7 @@ class OasisProfileGenerator:
         storage: Optional[GraphStorage] = None,
         graph_id: Optional[str] = None,
         language: Optional[str] = None,
+        industry_quota_plan: Optional[PersonaQuotaPlan] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
@@ -264,6 +271,13 @@ class OasisProfileGenerator:
         # GraphStorage for hybrid search enrichment
         self.storage = storage
         self.graph_id = graph_id
+
+        # Destatis-WZ-2008-Branchenverteilung für LLM-Prompt-Steuerung (Issue #215).
+        # Wenn kein expliziter Plan übergeben wird, wird der Default-Plan mit
+        # einer realistischen DACH-Verteilung verwendet (IT-Cap ≤ 12 %).
+        self._industry_quota_plan: PersonaQuotaPlan = (
+            industry_quota_plan or default_dach_industry_quota(100)
+        )
     
     def generate_profile_from_entity(
         self,
@@ -805,6 +819,7 @@ class OasisProfileGenerator:
         context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
 
         _quota_block_de = build_name_quota_prompt_block()
+        _industry_block_de = build_industry_quota_prompt_block(self._industry_quota_plan)
 
         if self.language == "de":
             return f"""Erzeuge eine detaillierte Social-Media-Persona für die folgende Entität. Bleibe nah an der bekannten Realität.
@@ -818,6 +833,8 @@ Kontext:
 {context_str}
 
 {_quota_block_de}
+
+{_industry_block_de}
 
 Antworte als JSON mit folgenden Feldern:
 
@@ -855,6 +872,7 @@ Wichtig:
 """
 
         _quota_block_en = build_name_quota_prompt_block_en()
+        _industry_block_en = build_industry_quota_prompt_block_en(self._industry_quota_plan)
 
         return f"""Generate a detailed social media user persona for the entity, maximizing restoration of existing reality.
 
@@ -867,6 +885,8 @@ Context Information:
 {context_str}
 
 {_quota_block_en}
+
+{_industry_block_en}
 
 Please generate JSON containing the following fields:
 
@@ -917,6 +937,7 @@ Important:
         context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
 
         _quota_block_de_grp = build_name_quota_prompt_block()
+        _industry_block_de_grp = build_industry_quota_prompt_block(self._industry_quota_plan)
 
         if self.language == "de":
             return f"""Erzeuge einen realistischen **Menschen**, der als Repräsentantin/Repräsentant oder Mitarbeiter:in für die folgende Organisation / Gruppe auf Social Media spricht — keinen Institutions-Account. Bleibe nah an der bekannten Realität.
@@ -930,6 +951,8 @@ Kontext:
 {context_str}
 
 {_quota_block_de_grp}
+
+{_industry_block_de_grp}
 
 Antworte als JSON mit folgenden Feldern:
 
@@ -968,6 +991,7 @@ Wichtig:
 """
 
         _quota_block_en_grp = build_name_quota_prompt_block_en()
+        _industry_block_en_grp = build_industry_quota_prompt_block_en(self._industry_quota_plan)
 
         return f"""Generate a realistic **human person** who speaks FOR the following organization/group on social media — not an institutional account. The person can be an employee, advocate, official representative, or community member.
 
@@ -980,6 +1004,8 @@ Context Information:
 {context_str}
 
 {_quota_block_en_grp}
+
+{_industry_block_en_grp}
 
 Please generate JSON containing the following fields:
 
