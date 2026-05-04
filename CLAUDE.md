@@ -97,7 +97,6 @@ prompts/                    UI-Prompt-Vorlagen
 Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle gefixt. Layer-9-Hardening ist überwiegend im Code drin (siehe Layer-Tabelle oben). Aktuelle Baustellen:
 
 - **Rate-Limit-Konzept** (M10.5): `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen brauchen Limits auf App- oder Proxy-Ebene.
-- **Evidence-Quality-Gate hart schalten** (M11.1): `--soft` aus `.github/workflows/contract-gates.yml` raus, da Layer 5 grün ist.
 - **Coverage-Gates** (M11.2/M11.3): `pytest-cov` + `@vitest/coverage-v8`, Startwerte 70 % Backend / 60 % Frontend.
 - **gevent ↔ OASIS-Subprozess Smoke:** `subprocess.Popen` läuft bei aktivem `gevent.monkey.patch_all()` standardmäßig durch den Patch — bei jedem Slice, der den OASIS-Pfad anfasst, per `scripts/verify-deploy.sh` smoken.
 - **Init-Logs doppelt** — gunicorn ohne `--preload`. Kein Bug, aber unschön. Folge-Slice braucht Fork-Safety-Verifikation der Neo4j/Redis-Pools vor `--preload`-Aktivierung.

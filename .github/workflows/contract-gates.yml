@@ -56,16 +56,23 @@ jobs:
       - working-directory: backend
         run: uv sync --group dev
       - working-directory: backend
-        # Soft-Schwellen erst, bis Layer 1 fertig ist (--soft).
-        # In Layer 5 wird --soft entfernt und es wird ein harter Gate.
+        # M11.1 (2026-05-04): Hard-Gate.
+        # Layer 5 ist grün → `--soft` entfernt. Schwellen 0.85 / 0.75 / 0.10
+        # werden gegen den Mittelwert über die Good-Case-Fixtures
+        # (`tests/eval/fixtures/good/*.json`) erzwungen. Bad-Case-Fixtures
+        # liegen in `tests/eval/fixtures/bad/` und werden NICHT in den
+        # Hard-Gate-Mittelwert eingerechnet — sie pinnen den Detector
+        # via `tests/eval/test_eval_baselines.py` (Snapshot-Test gegen
+        # `expected_metrics.json`). Damit fängt der Hard-Gate echten
+        # Quality-Drift, ohne von absichtlich schlechten Fixtures
+        # ausgehebelt zu werden.
         run: |
           uv run python scripts/check_evidence_quality.py \
-            --fixtures tests/eval/fixtures \
+            --fixtures tests/eval/fixtures/good \
             --min-evidence-coverage 0.85 \
             --min-claim-support-ratio 0.75 \
             --orphan-claim-rate 0.10 \
-            --require-schema-version 2 \
-            --soft
+            --require-schema-version 2
 
   zod-mirror-drift:
     name: Frontend-Zod muss Backend-Schema spiegeln
