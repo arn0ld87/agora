@@ -6,6 +6,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ## [Unreleased]
 ### Fixed
 - ci: prod-proxy-smoke pipeline repariert — kein doppelter Frontend-Build, ALLOW_BUILD_TIME_TOKEN korrekt durchgereicht, NEO4J_PASSWORD als CI-Test-Wert gesetzt (Closes #227). Details: [`docu/2026-05-04-n3-prod-smoke-env-arbeitsprotokoll.md`](docu/2026-05-04-n3-prod-smoke-env-arbeitsprotokoll.md).
+- test: `test_gevent_importable` prüft nur Importierbarkeit (`gevent.__version__`), kein `patch_all()` im Test-Body (Refs PR #241, Gemini-HIGH). Fix eliminiert `MonkeyPatchWarning` und ruff-F401 auf `gevent.monkey`-Top-Level-Import.
 
 - **Sub-Slice F2.2 (M9-4): `?token=` Query-Parameter in Prod deaktiviert.** `backend/app/utils/auth.py:_extract_token()` ignoriert `?token=<bearer>` jetzt in Nicht-Debug-Umgebungen (FLASK_DEBUG=false). Stattdessen wird ein ERROR geloggt mit Hinweis auf Signed-Tickets (`POST /api/auth/ticket`). Der Query-Token-Pfad war seit P0.2 als Deprecation-Warning markiert, wurde aber weiterhin akzeptiert — ein Sicherheitsrisiko (Token in URL = Browser-History, Server-Logs, Referrer). Tests: `test_blueprint_guard_rejects_query_token_in_prod` (401 bei `?token=` in Prod); `test_blueprint_guard_accepts_query_token_in_debug` (weiterhin 200 in Dev). Arbeitsprotokoll: [`docu/2026-05-03-f22-token-query-prod-arbeitsprotokoll.md`](docu/2026-05-03-f22-token-query-prod-arbeitsprotokoll.md). Refs PLAN.md F2.2.
 
