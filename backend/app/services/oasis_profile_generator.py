@@ -18,6 +18,7 @@ from openai import OpenAI
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
+from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 from ..storage import GraphStorage
@@ -533,6 +534,11 @@ class OasisProfileGenerator:
         """Determine if entity is a group/institutional type"""
         return entity_type.lower() in self.GROUP_ENTITY_TYPES
     
+    @measure_llm_latency(
+        operation='persona_generation',
+        extract_model=lambda self, *a, **kw: getattr(self, 'model_name', None),
+        extract_prompt_chars=None,
+    )
     def _generate_profile_with_llm(
         self,
         entity_name: str,

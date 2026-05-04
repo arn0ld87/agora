@@ -92,6 +92,7 @@ pythonpath = ["."]
 markers = [
     "eval: baseline/eval suite (fixture-driven)",
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
+    "perf: Performance-Budget-Tests (Stufe 1 deterministisch via Mock; Stufe 2 mit -m 'perf and llm' gegen echtes Ollama).",
 ]
 
 [tool.coverage.run]
