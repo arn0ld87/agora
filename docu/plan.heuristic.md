@@ -111,9 +111,9 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | **M9.5** | ✅ | F3 Gunicorn-Gevent | `agora-refactor-worker` + `agora-test-worker` | `/agora-next-task` | Sonnet | `grep -A3 '^CMD' Dockerfile \| grep "gevent"` matches |
 | **M9.6** | ✅ | Prod-Stack-Smoke in CI | `agora-test-worker` | `/agora-next-task` | Sonnet | `docker-image.yml::prod-proxy-smoke` läuft auf `pull_request: [main]` (paths-ignore Doku) und `push: [main, tags]`. `verify-deploy.sh` smoket `/healthz`, `/health`, `/`, `/api/auth/ticket`. |
 | **M9.7** | ✅ | Doku-Sync 2026-05-04 | `agora-doc-worker` | `/agora-next-task` | Haiku | PR #271 gemerged. `grep "v0.6.0" AGENTS.md` leer. |
-| **M10.1** | ⬜ | F4.1 CVE-Monitor cron | `agora-doc-worker` | `/agora-next-task` | Haiku | `gh workflow list \| grep "CVE Monitor"` matches |
-| **M10.2** | ⬜ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `grep "2026-07-30" docu/dependency-risk-register.md .github/workflows/cve-monitor.yml` matches |
-| **M10.3** | ⬜ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | `wc -l docu/dependency-risk-register.md` ≥ 50 |
+| **M10.1** | ✅ | F4.1 CVE-Monitor cron | `agora-doc-worker` | `/agora-next-task` | Haiku | `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln`, schreibt in `$GITHUB_STEP_SUMMARY`, lädt Output als Artefakt. |
+| **M10.2** | ✅ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `cve-monitor.yml::Hardstop-Gate` failt ab 2026-07-30, wenn Audit non-zero. `ci.yml` Kommentar verweist auf den Hardstop. |
+| **M10.3** | ✅ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | Eskalationspfad-Sektion + Upstream-Release-Watch-Spalte + Owner-Mapping in `docu/dependency-risk-register.md`. |
 | **M10.4** | ⬜ | Auth-Zielbild-ADR | `agora-doc-worker` (+ Lead) | `/agora-next-task` | Haiku + Senior | `ls docu/decisions/0001-auth-model.md` exists |
 | **M10.5** | ⬜ | Rate-Limit-Konzept | `agora-refactor-worker` | `/agora-next-task` | Sonnet | Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen vorhanden |
 | **M11.1** | ⬜ | Evidence-Gate hard schalten | `agora-test-worker` | `/agora-next-task` | Sonnet | `grep -- '--soft' .github/workflows/contract-gates.yml` leer |
