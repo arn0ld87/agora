@@ -44,12 +44,15 @@ if [ $PROXY_ACTIVE -eq 1 ]; then
   # gesetzt; lokal kann das Skript ohne Token starten und der Check skippt
   # dann sauber.
   if [ -n "${AGORA_AUTH_TOKEN:-}" ]; then
-    check "Auth /api/auth/ticket via Proxy" bash -c "curl -fsS -X POST \
-      -H 'X-Agora-Token: ${AGORA_AUTH_TOKEN}' \
-      -H 'Content-Type: application/json' \
-      -d '{\"scope\":\"sse:smoke\"}' \
-      \"http://localhost:${PROXY_PORT}/api/auth/ticket\" \
-      | grep -q '\"ticket\"'"
+    _check_ticket() {
+      curl -fsS -X POST \
+        -H "X-Agora-Token: $AGORA_AUTH_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"scope":"sse:smoke"}' \
+        "http://localhost:${PROXY_PORT}/api/auth/ticket" \
+        | grep -q '"ticket"'
+    }
+    check "Auth /api/auth/ticket via Proxy" _check_ticket
   else
     echo "  SKIP /api/auth/ticket (kein AGORA_AUTH_TOKEN in env)"
   fi
