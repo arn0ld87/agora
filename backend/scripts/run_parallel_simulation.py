@@ -81,40 +81,36 @@ _cleanup_done = False
 
 # Add backend directory to path
 # Script is fixed in backend/scripts/ directory
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
-_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
-sys.path.insert(0, _scripts_dir)
-sys.path.insert(0, _backend_dir)
+try:
+    from ._sim_common import (
+        build_parallel_parser,
+        install_max_tokens_warning_filter,
+        install_script_paths,
+        load_project_env,
+        resolve_runtime_paths,
+    )
+except ImportError:  # direct script execution
+    from _sim_common import (
+        build_parallel_parser,
+        install_max_tokens_warning_filter,
+        install_script_paths,
+        load_project_env,
+        resolve_runtime_paths,
+    )
 
-# Load .env file from project root (contains LLM_API_KEY and other configurations)
-from dotenv import load_dotenv
-_env_file = os.path.join(_project_root, '.env')
-if os.path.exists(_env_file):
-    load_dotenv(_env_file)
-    print(f"Loaded environment configuration: {_env_file}")
-else:
-    # Try to load backend/.env
-    _backend_env = os.path.join(_backend_dir, '.env')
-    if os.path.exists(_backend_env):
-        load_dotenv(_backend_env)
-        print(f"Loaded environment configuration: {_backend_env}")
+_runtime_paths = resolve_runtime_paths(__file__)
+_scripts_dir = str(_runtime_paths.scripts_dir)
+_backend_dir = str(_runtime_paths.backend_dir)
+_project_root = str(_runtime_paths.project_root)
+install_script_paths(_runtime_paths)
+load_project_env(__file__, verbose=True)
+install_max_tokens_warning_filter()
+
+if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
+    build_parallel_parser().parse_args()
+    sys.exit(0)
 
 from app.config import Config
-
-
-class MaxTokensWarningFilter(logging.Filter):
-    """Filter out camel-ai max_tokens warnings (we intentionally don't set max_tokens to let the model decide)"""
-
-    def filter(self, record):
-        # Filter out logs containing max_tokens warnings
-        if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
-            return False
-        return True
-
-
-# Add filter immediately when module loads, ensure it takes effect before camel code executes
-logging.getLogger().addFilter(MaxTokensWarningFilter())
 
 
 def disable_oasis_logging():
@@ -1717,36 +1713,7 @@ async def run_reddit_simulation(
 
 
 async def main():
-    parser = argparse.ArgumentParser(description='OASIS Dual-Platform Parallel Simulation')
-    parser.add_argument(
-        '--config', 
-        type=str, 
-        required=True,
-        help='Configuration file path (simulation_config.json)'
-    )
-    parser.add_argument(
-        '--twitter-only',
-        action='store_true',
-        help='Only run Twitter simulation'
-    )
-    parser.add_argument(
-        '--reddit-only',
-        action='store_true',
-        help='Only run Reddit simulation'
-    )
-    parser.add_argument(
-        '--max-rounds',
-        type=int,
-        default=None,
-        help='Maximum simulation rounds (optional, used to truncate long simulations)'
-    )
-    parser.add_argument(
-        '--no-wait',
-        action='store_true',
-        default=False,
-        help='Close environment immediately after simulation completes, do not enter wait mode'
-    )
-    
+    parser = build_parallel_parser()
     args = parser.parse_args()
     
     # Create shutdown event at the start of main function to ensure the whole program can respond to exit signal

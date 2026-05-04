@@ -30,89 +30,36 @@ _shutdown_event = None
 _cleanup_done = False
 
 # Add project paths
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-_backend_dir = os.path.abspath(os.path.join(_scripts_dir, '..'))
-_project_root = os.path.abspath(os.path.join(_backend_dir, '..'))
-sys.path.insert(0, _scripts_dir)
-sys.path.insert(0, _backend_dir)
+try:
+    from ._sim_common import (
+        build_single_platform_parser,
+        install_max_tokens_warning_filter,
+        install_script_paths,
+        load_project_env,
+        resolve_runtime_paths,
+        setup_oasis_logging,
+    )
+except ImportError:  # direct script execution
+    from _sim_common import (
+        build_single_platform_parser,
+        install_max_tokens_warning_filter,
+        install_script_paths,
+        load_project_env,
+        resolve_runtime_paths,
+        setup_oasis_logging,
+    )
 
-# Load .env file from project root (contains LLM_API_KEY and other configurations)
-from dotenv import load_dotenv
-_env_file = os.path.join(_project_root, '.env')
-if os.path.exists(_env_file):
-    load_dotenv(_env_file)
-else:
-    _backend_env = os.path.join(_backend_dir, '.env')
-    if os.path.exists(_backend_env):
-        load_dotenv(_backend_env)
+_runtime_paths = resolve_runtime_paths(__file__)
+_scripts_dir = str(_runtime_paths.scripts_dir)
+_backend_dir = str(_runtime_paths.backend_dir)
+_project_root = str(_runtime_paths.project_root)
+install_script_paths(_runtime_paths)
+load_project_env(__file__)
+install_max_tokens_warning_filter()
 
-
-import re
-
-
-class UnicodeFormatter(logging.Formatter):
-    """Custom formatter to convert Unicode escape sequences to readable characters"""
-    
-    UNICODE_ESCAPE_PATTERN = re.compile(r'\\u([0-9a-fA-F]{4})')
-    
-    def format(self, record):
-        result = super().format(record)
-        
-        def replace_unicode(match):
-            try:
-                return chr(int(match.group(1), 16))
-            except (ValueError, OverflowError):
-                return match.group(0)
-        
-        return self.UNICODE_ESCAPE_PATTERN.sub(replace_unicode, result)
-
-
-class MaxTokensWarningFilter(logging.Filter):
-    """Filter out camel-ai max_tokens warnings (we intentionally don't set max_tokens to let the model decide)"""
-    
-    def filter(self, record):
-        # Filter out logs containing max_tokens warnings
-        if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
-            return False
-        return True
-
-
-# Add filter immediately when module loads, ensure it takes effect before camel code executes
-logging.getLogger().addFilter(MaxTokensWarningFilter())
-
-
-def setup_oasis_logging(log_dir: str):
-    """Configure OASIS logging, use fixed-name log files"""
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Clean up old log files
-    for f in os.listdir(log_dir):
-        old_log = os.path.join(log_dir, f)
-        if os.path.isfile(old_log) and f.endswith('.log'):
-            try:
-                os.remove(old_log)
-            except OSError:
-                pass
-    
-    formatter = UnicodeFormatter("%(levelname)s - %(asctime)s - %(name)s - %(message)s")
-    
-    loggers_config = {
-        "social.agent": os.path.join(log_dir, "social.agent.log"),
-        "social.twitter": os.path.join(log_dir, "social.twitter.log"),
-        "social.rec": os.path.join(log_dir, "social.rec.log"),
-        "oasis.env": os.path.join(log_dir, "oasis.env.log"),
-        "table": os.path.join(log_dir, "table.log"),
-    }
-    
-    for logger_name, log_file in loggers_config.items():
-        logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.DEBUG)
-        logger.handlers.clear()
-        file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='w')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        logger.propagate = False
+if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
+    build_single_platform_parser('OASIS Twitter Simulation').parse_args()
+    sys.exit(0)
 
 
 try:
@@ -868,26 +815,7 @@ class TwitterSimulationRunner:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description='OASIS Twitter Simulation')
-    parser.add_argument(
-        '--config', 
-        type=str, 
-        required=True,
-        help='Configuration file path (simulation_config.json)'
-    )
-    parser.add_argument(
-        '--max-rounds',
-        type=int,
-        default=None,
-        help='Maximum simulation rounds (optional, used to truncate long simulations)'
-    )
-    parser.add_argument(
-        '--no-wait',
-        action='store_true',
-        default=False,
-        help='immediately after simulation completionClose environment，do not enterWait mode'
-    )
-    
+    parser = build_single_platform_parser('OASIS Twitter Simulation')
     args = parser.parse_args()
     
     # Create shutdown event at the start of main function
