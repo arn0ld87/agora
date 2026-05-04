@@ -55,7 +55,7 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 3. **Wöchentliche Sichtung:** [CVE-Monitor-Workflow](../.github/workflows/cve-monitor.yml) → Workflow-Summary lesen. Wenn ein CVE aus der Baseline verschwindet, ist Upstream gepatcht.
 4. **30-Tage-Inventur:** Register-Inventur. Abgelaufene Fristen → P0 Bug-Ticket.
 5. **Abschluss:** Wenn upstream released und Dependency geupdated, Issue
-   schliessen, Register-Eintrag nach `Abgeschlossen` verschieben, `--ignore-vuln`-Flag aus `ci.yml` entfernen.
+   schliessen, Register-Eintrag nach Abgeschlossen verschieben, --ignore-vuln-Flag aus [.github/workflows/ci.yml](../.github/workflows/ci.yml) entfernen.
 
 ---
 
