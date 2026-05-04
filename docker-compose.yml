@@ -68,9 +68,15 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       # LLM-/Embedding-Endpoints: Compose-Substitution mit Ollama-Default.
       # `.env`-Werte gewinnen (z. B. fuer OpenAI-Cloud-Embeddings via
-      # EMBEDDING_BASE_URL=https://api.openai.com/v1). Default-Fallback
-      # bleibt host-Ollama, damit `docker compose up` ohne weiteres Setup
-      # Out-of-the-Box funktioniert (Local-first laut Projekt-Profil).
+      # EMBEDDING_BASE_URL=https://api.openai.com/v1).
+      #
+      # ACHTUNG localhost-Falle: Falls in der `.env` `localhost` steht
+      # (Standard fuer host-side `npm run dev`), wuerde der Wert hier in
+      # den Container leaken — im Container ist `localhost` der Container
+      # selbst, nicht der Mac/Linux-Host. Fuer host-Ollama-Setups die
+      # Variablen in der `.env` auskommentieren oder leer lassen, damit
+      # der Default (`host.docker.internal`) greift. Cloud-Provider (OpenAI,
+      # Together, vLLM) sind unproblematisch, weil sie absolute URLs nutzen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
       # Read-only rootfs: don't try to write __pycache__ next to source.
