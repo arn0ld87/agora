@@ -90,14 +90,14 @@ prompts/                    UI-Prompt-Vorlagen
 | 7 | Graph / Runs / Compare | teilweise — done: 29 (#65), 33 (#62), 35 (#64). Offen: 22 #74 (Graph-Diff), 24 #66 (Compare-API), 25 #67 (Compare-UI), 27 #63 (RunsDashboard) |
 | 8 | Persona Review + UX | teilweise — done: 30 (#141 Sticky-Scroll). Offen: 29 #69 (Persona-Diff), 30 #70 (Approve/Reject/Regenerate), 32 #137 (Graph-Build-Batch-Marker) |
 | 9 | Production Deployment | grün — Reverse-Proxy ✅ (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`), gevent ✅ (`Dockerfile` `prod`-Stage), Bundle-Token-Gate ✅ (`ALLOW_BUILD_TIME_TOKEN=false` Default), `?token=`-Block in Prod ✅ (`utils/auth.py`), signed-tickets-Frontend ✅ (`frontend/src/api/stream.ts`), Prod-Stack-Smoke als PR-Gate ✅ (`docker-image.yml::prod-proxy-smoke`). Offen nur noch Auth-Zielbild-ADR (M10.4). #106 ist closeable. |
-| 10 | Security Watchlist (CVE-Tracking, pip-audit) | dokumentiert (Sub-Slice 31, Refs #121–#126) — Upstream-Pins blockieren weitere Closes. CVE-Monitor-Workflow + Hardstop 2026-07-30 stehen noch aus (M10.1/M10.2). |
+| 10 | Security Watchlist (CVE-Tracking, pip-audit) | grün — CVE-Monitor wöchentlich (`.github/workflows/cve-monitor.yml`, `pip-audit --strict` ohne `--ignore-vuln`), Hardstop 2026-07-30 verdrahtet (Workflow failt ab dann), Risk-Register mit Eskalationspfad (`docu/dependency-risk-register.md`). Issues #121–#126 bleiben open bis Upstream patcht. |
 
 ## Aktive Hot-Spots / offene Hauspflicht
 
 Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle gefixt. Layer-9-Hardening ist überwiegend im Code drin (siehe Layer-Tabelle oben). Aktuelle Baustellen:
 
 - **Auth-Zielbild-ADR** (M10.4): Single-Token-Auth reicht für Tailnet, nicht für öffentlichen Mehrbenutzer-Betrieb. ADR `docu/decisions/0001-auth-model.md` muss zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh entscheiden.
-- **CVE-Monitor + Hardstop** (M10.1/M10.2): wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop 2026-07-30 — Issues #121–#126.
+- **Rate-Limit-Konzept** (M10.5): `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen brauchen Limits auf App- oder Proxy-Ebene.
 - **Evidence-Quality-Gate hart schalten** (M11.1): `--soft` aus `.github/workflows/contract-gates.yml` raus, da Layer 5 grün ist.
 - **Coverage-Gates** (M11.2/M11.3): `pytest-cov` + `@vitest/coverage-v8`, Startwerte 70 % Backend / 60 % Frontend.
 - **gevent ↔ OASIS-Subprozess Smoke:** `subprocess.Popen` läuft bei aktivem `gevent.monkey.patch_all()` standardmäßig durch den Patch — bei jedem Slice, der den OASIS-Pfad anfasst, per `scripts/verify-deploy.sh` smoken.

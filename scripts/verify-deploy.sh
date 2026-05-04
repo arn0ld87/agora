@@ -62,8 +62,17 @@ fi
 
 echo
 echo "S1 (XSS-Fix):"
-check "DOMPurify im node_modules" docker compose exec -T agora test -d frontend/node_modules/dompurify
-check "markdown-Util importiert DOMPurify" docker compose exec -T agora grep -q "DOMPurify" frontend/src/utils/markdown.js
+if [ $PROXY_ACTIVE -eq 1 ]; then
+  # Prod-Image hat kein frontend/node_modules und kein frontend/src — nur das
+  # gebaute Bundle in /app/frontend/dist. DOMPurify-Quelle ist nicht mehr
+  # filesystem-checkbar; stattdessen indirekt über die Bundle-Auslieferung
+  # (das gebaute JS enthält den minifizierten DOMPurify-Code).
+  check "DOMPurify im gebauten Bundle (dist)" \
+    bash -c "docker compose exec -T agora sh -c 'grep -lq \"createSanitizer\\|DOMPurify\" /app/frontend/dist/assets/*.js 2>/dev/null'"
+else
+  check "DOMPurify im node_modules" docker compose exec -T agora test -d frontend/node_modules/dompurify
+  check "markdown-Util importiert DOMPurify" docker compose exec -T agora grep -q "DOMPurify" frontend/src/utils/markdown.js
+fi
 
 echo
 echo "S2-pre (Schema-Fix):"
@@ -79,10 +88,17 @@ echo
 echo "Result: $ok ok, $fail fail"
 
 # N2: Loopback-Bind-Check (auf dem Host, nicht im Container)
+# Im Prod-with-Proxy-Modus ist Backend nicht direkt host-gemapped (nur nginx :80
+# ist exposed), die Vite/Flask-Ports existieren dort gar nicht. Check ist nur
+# für Dev-Compose ohne Proxy sinnvoll.
 echo
 echo "N2 (Loopback-Bind):"
-check "Vite auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_FRONTEND_PORT:-5173}" bash -c "ss -tlnp | grep ':${AGORA_FRONTEND_PORT:-5173}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
-check "Flask auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_BACKEND_PORT:-5001}" bash -c "ss -tlnp | grep ':${AGORA_BACKEND_PORT:-5001}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
+if [ $PROXY_ACTIVE -eq 1 ]; then
+  echo "  SKIP Loopback-Bind-Checks (Prod-with-Proxy: Backend/Vite-Ports nicht host-gemapped)"
+else
+  check "Vite auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_FRONTEND_PORT:-5173}" bash -c "ss -tlnp | grep ':${AGORA_FRONTEND_PORT:-5173}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
+  check "Flask auf ${AGORA_BIND_HOST:-127.0.0.1}:${AGORA_BACKEND_PORT:-5001}" bash -c "ss -tlnp | grep ':${AGORA_BACKEND_PORT:-5001}' | grep -q '${AGORA_BIND_HOST:-127.0.0.1}'"
+fi
 
 if [ $fail -gt 0 ]; then
   echo

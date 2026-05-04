@@ -85,9 +85,15 @@ jobs:
     needs: [build-only]
     # Tag-Pushes: externe Abhängigkeiten (Neo4j-Pull, Ollama) können den
     # Smoke instabil machen. Mit continue-on-error blockiert ein instabiler
-    # Smoke den Release nicht — main-Pushes sind dagegen strikt smoke-gated
-    # (continue-on-error: false ist der Default).
-    continue-on-error: ${{ github.ref_type == 'tag' }}
+    # Smoke den Release nicht — main-Pushes sind dagegen strikt smoke-gated.
+    # PR-Trigger (M9.6): aktuell ebenfalls lenient, weil der Compose-Stack
+    # ohne CI-seitigen Ollama-/LLM-Mock nicht startet (Config.validate()
+    # macht beim Startup eine echte Probe gegen das Embedding-Backend, die
+    # im Runner ohne Ollama scheitert → Restart-Loop). Followup: Embedding-
+    # Probe-Skip-Flag oder Ollama-Mock im Smoke-Compose. Bis dahin sind
+    # PR-Smokes informational. main-Pushes (post-merge auf echtem Server
+    # mit Ollama) bleiben strict.
+    continue-on-error: ${{ github.event_name == 'pull_request' || github.ref_type == 'tag' }}
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
     # Keine echten Secrets nötig: NEO4J_PASSWORD muss nur nicht leer sein
     # (Compose-Gate), AGORA_AUTH_TOKEN/VITE_AGORA_TOKEN sind Smoke-Dummies.
@@ -160,6 +166,25 @@ jobs:
               docker compose logs --tail=200
               docker inspect agora-nginx 2>/dev/null || true
               docker inspect agora 2>/dev/null || true
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Auf Backend-Health warten (Race vor verify-deploy.sh vermeiden)
+        # nginx kommt schneller hoch als gunicorn+gevent+Neo4j-Connection.
+        # Ohne diesen Wait läuft verify-deploy.sh los während Backend noch
+        # "health: starting" ist und /health/api/* via Proxy 502 returnt.
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost/health >/dev/null 2>&1; then
+              echo "Backend bereit (über Proxy)"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::Backend-Health-Timeout nach 5 Minuten"
+              docker compose ps -a
+              docker compose logs --tail=200 agora
               exit 1
             fi
             sleep 5
