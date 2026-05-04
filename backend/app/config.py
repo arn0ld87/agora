@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 KNOWN_EMBEDDING_DIMS = {
     'nomic-embed-text': 768,
     'embeddinggemma:300m': 768,
+    'all-minilm': 384,
+    'bge-m3': 1024,
+    'text-embedding-3-small': 1536,
+    'text-embedding-ada-002': 1536,
+    'text-embedding-3-large': 3072,
     'qwen3-embedding:4b': 2560,
     'qwen3-embedding:8b': 4096,
 }
@@ -106,6 +111,7 @@ class Config:
     # qwen3-embedding:8b: 4096). Falsche Dim → Neo4j-Index stream rejected.
     EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'nomic-embed-text')
     EMBEDDING_BASE_URL = os.environ.get('EMBEDDING_BASE_URL', 'http://localhost:11434')
+    EMBEDDING_API_KEY = os.environ.get('EMBEDDING_API_KEY') or os.environ.get('LLM_API_KEY')
     VECTOR_DIM = int(
         os.environ.get(
             'VECTOR_DIM',
