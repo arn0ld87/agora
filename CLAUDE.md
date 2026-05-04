@@ -89,14 +89,13 @@ prompts/                    UI-Prompt-Vorlagen
 | 6 | Frontend-TypeScript-Migration (API, Composables, Pinia) | grün (26, 27, 28 — #71/#72/#73) |
 | 7 | Graph / Runs / Compare | teilweise — done: 29 (#65), 33 (#62), 35 (#64). Offen: 22 #74 (Graph-Diff), 24 #66 (Compare-API), 25 #67 (Compare-UI), 27 #63 (RunsDashboard) |
 | 8 | Persona Review + UX | teilweise — done: 30 (#141 Sticky-Scroll). Offen: 29 #69 (Persona-Diff), 30 #70 (Approve/Reject/Regenerate), 32 #137 (Graph-Build-Batch-Marker) |
-| 9 | Production Deployment | teilweise — Reverse-Proxy ✅ (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`), gevent ✅ (`Dockerfile` `prod`-Stage), Bundle-Token-Gate ✅ (`ALLOW_BUILD_TIME_TOKEN=false` Default), `?token=`-Block in Prod ✅ (`utils/auth.py`), signed-tickets-Frontend ✅ (`frontend/src/api/stream.ts`). Offen: Prod-Stack-Smoke in CI (M9.6), Auth-Zielbild-ADR (M10.4). #106 ist faktisch closeable. |
+| 9 | Production Deployment | grün — Reverse-Proxy ✅ (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`), gevent ✅ (`Dockerfile` `prod`-Stage), Bundle-Token-Gate ✅ (`ALLOW_BUILD_TIME_TOKEN=false` Default), `?token=`-Block in Prod ✅ (`utils/auth.py`), signed-tickets-Frontend ✅ (`frontend/src/api/stream.ts`), Prod-Stack-Smoke als PR-Gate ✅ (`docker-image.yml::prod-proxy-smoke`). Offen nur noch Auth-Zielbild-ADR (M10.4). #106 ist closeable. |
 | 10 | Security Watchlist (CVE-Tracking, pip-audit) | dokumentiert (Sub-Slice 31, Refs #121–#126) — Upstream-Pins blockieren weitere Closes. CVE-Monitor-Workflow + Hardstop 2026-07-30 stehen noch aus (M10.1/M10.2). |
 
 ## Aktive Hot-Spots / offene Hauspflicht
 
 Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle gefixt. Layer-9-Hardening ist überwiegend im Code drin (siehe Layer-Tabelle oben). Aktuelle Baustellen:
 
-- **Prod-Stack-Smoke in CI fehlt** (M9.6): `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build` läuft lokal, aber CI smoket den Proxy-Stack nicht. Neuer Workflow muss `/healthz`, `/health`, `/`, `/api/auth/ticket` und optional SSE-Connect prüfen.
 - **Auth-Zielbild-ADR** (M10.4): Single-Token-Auth reicht für Tailnet, nicht für öffentlichen Mehrbenutzer-Betrieb. ADR `docu/decisions/0001-auth-model.md` muss zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh entscheiden.
 - **CVE-Monitor + Hardstop** (M10.1/M10.2): wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop 2026-07-30 — Issues #121–#126.
 - **Evidence-Quality-Gate hart schalten** (M11.1): `--soft` aus `.github/workflows/contract-gates.yml` raus, da Layer 5 grün ist.

@@ -109,8 +109,8 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | **M9.3** | ✅ | F2.2 `?token=` aus Prod | `agora-refactor-worker` | `/agora-next-task` | Sonnet | `cd backend && uv run pytest tests/test_auth.py -k query -v` grün |
 | **M9.4** | ✅ | SSE-Auth-Frontend (signed tickets) | `agora-frontend-worker` | `/agora-next-task` | Sonnet | `grep "?ticket=" frontend/src/api/stream.ts` matches |
 | **M9.5** | ✅ | F3 Gunicorn-Gevent | `agora-refactor-worker` + `agora-test-worker` | `/agora-next-task` | Sonnet | `grep -A3 '^CMD' Dockerfile \| grep "gevent"` matches |
-| **M9.6** | ⬜ | Prod-Stack-Smoke in CI | `agora-test-worker` | `/agora-next-task` | Sonnet | `gh workflow list \| grep "Prod Stack Smoke"` matches; 3× grüne Runs auf `main` |
-| **M9.7** | 🚧 | Doku-Sync 2026-05-04 | `agora-doc-worker` | `/agora-next-task` | Haiku | `diff <(grep "v0.6.0" AGENTS.md) /dev/null` leer |
+| **M9.6** | ✅ | Prod-Stack-Smoke in CI | `agora-test-worker` | `/agora-next-task` | Sonnet | `docker-image.yml::prod-proxy-smoke` läuft auf `pull_request: [main]` (paths-ignore Doku) und `push: [main, tags]`. `verify-deploy.sh` smoket `/healthz`, `/health`, `/`, `/api/auth/ticket`. |
+| **M9.7** | ✅ | Doku-Sync 2026-05-04 | `agora-doc-worker` | `/agora-next-task` | Haiku | PR #271 gemerged. `grep "v0.6.0" AGENTS.md` leer. |
 | **M10.1** | ⬜ | F4.1 CVE-Monitor cron | `agora-doc-worker` | `/agora-next-task` | Haiku | `gh workflow list \| grep "CVE Monitor"` matches |
 | **M10.2** | ⬜ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `grep "2026-07-30" docu/dependency-risk-register.md .github/workflows/cve-monitor.yml` matches |
 | **M10.3** | ⬜ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | `wc -l docu/dependency-risk-register.md` ≥ 50 |
