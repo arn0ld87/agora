@@ -29,6 +29,7 @@ from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
+from .persona_quota_defaults import default_dach_industry_quota
 from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
@@ -132,11 +133,15 @@ def _phase_generate_profiles(
 
     # Pass graph_id to enable graph retrieval functionality, get richer context.
     # Per-simulation overrides for model + language come from API request.
+    # Issue #215: Branchenverteilung-Plan für LLM-Prompt — Default Destatis WZ 2008
+    # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
+    industry_plan = default_dach_industry_quota(max(total_entities, 1))
     generator = OasisProfileGenerator(
         storage=storage,
         graph_id=state.graph_id,
         model_name=llm_model,
         language=language,
+        industry_quota_plan=industry_plan,
     )
 
     def profile_progress(current, total, msg):
