@@ -25,6 +25,7 @@ _ALLOWED_SCOPE_PREFIXES = (
     "download:report:",
     "download:simulation_config:",
     "download:simulation_script:",
+    "llm-stream",  # Slice E.1 (#213): model-active SSE stream
 )
 
 
