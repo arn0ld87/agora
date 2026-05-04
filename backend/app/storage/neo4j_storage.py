@@ -109,14 +109,69 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                 pass
             raise
 
+    # ----------------------------------------------------------------
+    # Vector-index dimension guard  (Issue #263)
+    # ----------------------------------------------------------------
+
+    _SHOW_INDEX_DIM_QUERY = (
+        "SHOW INDEXES YIELD name, options "
+        "WHERE name = $name "
+        "RETURN options.indexConfig.`vector.dimensions` AS dim"
+    )
+
+    def _ensure_vector_index_dim(self, session, index_name: str, expected_dim: int) -> None:
+        """Drop a vector index whose stored dimension differs from *expected_dim*.
+
+        Three cases:
+        - Index absent          → no-op (caller's CREATE will handle it).
+        - Index dim == expected → no-op.
+        - Index dim != expected → DROP + log warning; caller will re-CREATE.
+        """
+        result = session.run(self._SHOW_INDEX_DIM_QUERY, name=index_name)
+        row = result.single()
+        if row is None:
+            # Index does not exist yet.
+            return
+        stored_dim = row["dim"]
+        if stored_dim == expected_dim:
+            return
+        logger.warning(
+            "Vector index '%s' has dim=%s, expected_dim=%s -> dropping for recreation",
+            index_name,
+            stored_dim,
+            expected_dim,
+        )
+        session.run(f"DROP INDEX {index_name}")
+
+    _VECTOR_INDEX_NAMES = ("entity_embedding", "fact_embedding")
+
     def _ensure_schema(self):
-        """Create indexes and constraints if they don't exist."""
+        """Create indexes and constraints if they don't exist.
+
+        Vector indexes are checked for dimension-drift before the CREATE
+        statement runs.  If an index already exists with the wrong dimension
+        it is dropped first so the subsequent CREATE builds it correctly.
+        """
         with self._driver.session() as session:
             for query in neo4j_schema.ALL_SCHEMA_QUERIES:
+                # Before each vector-index CREATE, validate stored dimension.
+                for idx_name in self._VECTOR_INDEX_NAMES:
+                    if f"CREATE VECTOR INDEX {idx_name}" in query:
+                        try:
+                            self._ensure_vector_index_dim(
+                                session, idx_name, Config.VECTOR_DIM
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Vector index dimension check for '%s' failed: %s",
+                                idx_name,
+                                e,
+                            )
+                        break
                 try:
                     session.run(query)
                 except Exception as e:
-                    logger.warning(f"Schema query warning: {e}")
+                    logger.warning("Schema query warning: %s", e)
 
     # ----------------------------------------------------------------
     # Health-status properties
