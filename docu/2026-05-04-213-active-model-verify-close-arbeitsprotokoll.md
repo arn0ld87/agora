@@ -10,13 +10,11 @@ Audit durch `agora-evidence-auditor` (read-only). Alle 8 Akzeptanzpunkte erfüll
 
 | # | Akzeptanzpunkt | Beleg | Status |
 |---|---|---|---|
-| 1 | `llm_client.chat()` publiziert `model.active`-Event vor Modell-Call | `backend/app/utils/llm_client.py:195` (Aufruf), `:135–168` (`_publish_model_active`) | ✅ |
-| 2 | SSE-Channel mit Auth via Signed Ticket | `backend/app/api/llm.py:53` (`@allow_ticket_auth(... single_use=False)`), `auth.py:71–87` + `:109` (`signed_ticket.verify()`) — kein `?token=`-Fallback | ✅ |
-| 3 | Pinia-Store `useActiveModelStore` | `frontend/src/store/useActiveModelStore.ts:51` | ✅ |
-| 4 | `ActiveModelBadge.vue` im Header | `frontend/src/components/ActiveModelBadge.vue` + `frontend/src/layouts/WorkspaceHeader.vue:3,15` | ✅ |
-| 5 | Modell + Kontext-Icon, Idle-Fallback nach `STALE_AFTER_MS` | Store: `STALE_AFTER_MS = 30_000` (`:23`), `isStale` (`:61–64`); Badge: `v-else-if="store.isStale"` (`:63`), Provider-Icon (`:71–79`) | ✅ |
-| 6 | `aria-live="polite"` | `ActiveModelBadge.vue:38` (`aria-live="polite"` + `role="status"`) | ✅ |
-| 7 | i18n-Pflicht (alle Strings über `t(...)`, Keys in `de.json` + `en.json`) | Badge `t('activeModel.*')` (`:39,45,59,64,71,77`); `de.json:561`, `en.json:550` mit kompletten `activeModel.*`-Keys | ✅ |
+| 1 | llm_client.chat() publiziert model.active-Event vor Modell-Call | backend/app/utils/llm_client.py:195 (Aufruf), :135–170 (_publish_model_active) | ✅ |
+| 2 | SSE-Channel mit Auth via Signed Ticket | backend/app/api/llm.py:53 (@allow_ticket_auth(... single_use=False)), auth.py:71–87 + :109 (signed_ticket.verify()) — kein ?token=-Fallback | ✅ |
+| 3 | Pinia-Store useActiveModelStore | frontend/src/store/useActiveModelStore.ts:51 | ✅ |
+| 4 | ActiveModelBadge.vue im Header | frontend/src/components/ActiveModelBadge.vue + frontend/src/layouts/WorkspaceHeader.vue:3,15 | ✅ |
+| 5 | Modell + Kontext-Icon, Idle-Fallback nach STALE_AFTER_MS | Store: STALE_AFTER_MS = 30_000 (:23), isStale (:61–64); Badge: v-else-if=
 | 8a | Backend-Tests (Event-Schema, Bus, Publish) | `tests/services/test_model_event_bus.py` (16 Tests), `tests/utils/test_llm_client_publishes_model_active.py` (10 Tests) — 26 grün | ✅ |
 | 8b | Vitest (Store-Wechsel, Idle, Badge-Render) | `frontend/src/store/__tests__/useActiveModelStore.spec.ts` (4), `frontend/src/components/__tests__/ActiveModelBadge.spec.ts` (3) — 7 grün | ✅ |
 
