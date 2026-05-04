@@ -48,6 +48,12 @@ const ontologyProgress = ref(null)
 const buildProgress = ref(null)
 const { systemLogs, addLog } = useSystemLog({ cap: 100 })
 
+// Issue #137 SUB2 — carries the latest batch progress during graph build so
+// GraphCanvas can trigger Auto-Freeze per committed batch.
+// Shape: { batch_count, total_batches, batch_at } | null
+// Reset to null on task completion/failure to avoid phantom triggers.
+const batchSignal = ref(null)
+
 // Issue #38 — Task- und Graph-Polling laufen über das zentrale usePolling-Composable.
 // Cleanup bei Unmount übernimmt usePolling automatisch.
 const currentTaskId = ref(null)
@@ -233,7 +239,15 @@ async function pollTaskStatus(taskId) {
         addLog(task.message)
       }
       buildProgress.value = { progress: task.progress || 0, message: task.message }
+
+      // Issue #137 SUB2 — forward batch progress to GraphCanvas Auto-Freeze.
+      if (task.progress_detail != null) {
+        batchSignal.value = task.progress_detail
+      }
+
       if (task.status === 'completed') {
+        // Clear batch signal so no phantom triggers fire after build ends.
+        batchSignal.value = null
         addLog(t('step1.build.completed'))
         stopPolling()
         stopGraphPolling()
@@ -244,6 +258,8 @@ async function pollTaskStatus(taskId) {
           await loadGraph(projRes.data.graph_id)
         }
       } else if (task.status === 'failed') {
+        // Clear batch signal on failure.
+        batchSignal.value = null
         stopPolling()
         error.value = task.error
         addLog(`Build failed: ${task.error}`)
@@ -315,6 +331,7 @@ onMounted(initProject)
           :graphData="graphData"
           :loading="graphLoading"
           :currentPhase="currentPhase"
+          :batchSignal="batchSignal"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
         />

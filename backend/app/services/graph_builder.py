@@ -135,7 +135,7 @@ class GraphBuilderService:
             # 4. Send data in batches (NER + embedding + Neo4j insert — synchronous)
             episode_uuids = self.add_text_batches(
                 graph_id, chunks, batch_size,
-                lambda msg, prog: self.task_manager.update_task(
+                lambda msg, prog, _completed, _total: self.task_manager.update_task(
                     task_id,
                     progress=20 + int(prog * 0.6),  # 20-80%
                     message=msg
@@ -188,13 +188,19 @@ class GraphBuilderService:
         graph_id: str,
         chunks: List[str],
         batch_size: int = 3,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable[[str, float, int, int], None]] = None
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
         Parallelism is controlled via Config.GRAPH_PARALLEL_CHUNKS (env GRAPH_PARALLEL_CHUNKS).
         Neo4j driver sessions and the OpenAI SDK are thread-safe, so NER/embed/write
         runs concurrently per chunk. batch_size is kept for API compatibility but unused.
+
+        The progress_callback receives four positional arguments:
+          - msg (str): human-readable progress message
+          - progress_ratio (float): 0.0–1.0 completion ratio
+          - completed (int): number of chunks committed so far (monotonically increasing)
+          - total (int): total number of chunks in this build
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -243,6 +249,8 @@ class GraphBuilderService:
                     progress_callback(
                         f"Processed {completed}/{total_chunks} chunks...",
                         completed / total_chunks,
+                        completed,
+                        total_chunks,
                     )
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")

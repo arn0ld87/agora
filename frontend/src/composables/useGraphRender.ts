@@ -18,12 +18,13 @@
  *               leeren (z.B. bei „Detail schließen").
  */
 
-import { onMounted, onUnmounted, ref, toValue, watch, nextTick, type MaybeRefOrGetter, type Ref } from 'vue'
+import { onMounted, onUnmounted, onScopeDispose, ref, toValue, watch, nextTick, type MaybeRefOrGetter, type Ref } from 'vue'
 import * as d3 from 'd3'
 
 import { buildGraphRenderData } from '../components/graph/graphPanelData'
 import { formatEdgeLabel } from '../components/graph/edgeLabelI18n'
 import { getLinkMidpoint, getLinkPath } from '../components/graph/graphPanelGeometry'
+import type { BuildProgressDetail } from '../api/graph'
 
 /** Raw graph data shape consumed by buildGraphRenderData. */
 interface RawGraphData {
@@ -44,6 +45,15 @@ export interface UseGraphRenderArgs {
   entityTypes: MaybeRefOrGetter<EntityTypeEntry[]>
   showEdgeLabels: Ref<boolean>
   translateLabel?: ((key: string) => string) | null
+  /** Optional reactive signal carrying current batch progress during graph build. */
+  batchSignal?: MaybeRefOrGetter<BuildProgressDetail | null>
+  /**
+   * Duration in milliseconds for which the Force-Simulation is frozen when a new
+   * batch is committed during graph build.
+   *
+   * Defaults to 800 ms. Settings-wiring (#133/#212) is a follow-up slice (SUB3).
+   */
+  autoFreezeMs?: number
 }
 
 export interface UseGraphRenderReturn {
@@ -70,6 +80,8 @@ export function useGraphRender({
   entityTypes,
   showEdgeLabels,
   translateLabel = null,
+  batchSignal,
+  autoFreezeMs = 800,
 }: UseGraphRenderArgs): UseGraphRenderReturn {
   const selectedItem = ref<Record<string, unknown> | null>(null)
   const isPaused = ref(false)
@@ -77,6 +89,23 @@ export function useGraphRender({
   let currentSimulation: D3Simulation | null = null
   let linkLabelsRef: D3Selection | null = null
   let linkLabelBgRef: D3Selection | null = null
+
+  /**
+   * Whether a manual pause was initiated by the user (via togglePause/pauseSimulation).
+   * This flag is distinct from `isPaused`: `isPaused` is the effective render state,
+   * `_isManuallyPaused` records the *intent*. When Auto-Freeze runs it temporarily
+   * sets `isPaused=true` but does NOT set `_isManuallyPaused`. If the user manually
+   * pauses during an Auto-Freeze, `_isManuallyPaused` becomes true and the
+   * Auto-Freeze timer must NOT call resumeSimulation when it fires.
+   */
+  let _isManuallyPaused = false
+
+  /**
+   * True while an Auto-Freeze timer is running. Used so the resume-callback can
+   * check whether the user manually paused during the freeze window.
+   */
+  let _autoFreezeActive = false
+  let _autoFreezeTimer: ReturnType<typeof setTimeout> | null = null
 
   const render = () => {
     const svgEl = svgRef.value
@@ -397,13 +426,20 @@ export function useGraphRender({
    * Während des Graph-Aufbaus ist die Animation oft hektisch — Pause
    * friert die aktuelle Position ein, Resume nimmt den Layout-Fluss
    * wieder auf (schwacher Alpha, damit nichts springt).
+   *
+   * Issue #137 SUB2: Diese öffentlichen Methoden markieren einen manuellen
+   * Pause-Intent (`_isManuallyPaused`). Auto-Freeze respektiert diesen Flag
+   * und ruft kein automatisches resumeSimulation, wenn der User bereits
+   * manuell pausiert hat.
    */
   function pauseSimulation() {
+    _isManuallyPaused = true
     isPaused.value = true
     if (currentSimulation) currentSimulation.stop()
   }
 
   function resumeSimulation() {
+    _isManuallyPaused = false
     isPaused.value = false
     if (currentSimulation) {
       currentSimulation.alpha(0.3).alphaTarget(0).restart()
@@ -414,6 +450,59 @@ export function useGraphRender({
     if (isPaused.value) resumeSimulation()
     else pauseSimulation()
   }
+
+  /**
+   * Internal-only auto-freeze: pauses the simulation without setting the
+   * manual-pause flag. After `autoFreezeMs` the simulation auto-resumes
+   * unless the user has manually paused in the meantime.
+   */
+  function _triggerAutoFreeze() {
+    // Clear any previous pending timer to avoid double-resume.
+    if (_autoFreezeTimer !== null) {
+      clearTimeout(_autoFreezeTimer)
+      _autoFreezeTimer = null
+    }
+
+    _autoFreezeActive = true
+    isPaused.value = true
+    if (currentSimulation) currentSimulation.stop()
+
+    _autoFreezeTimer = setTimeout(() => {
+      _autoFreezeTimer = null
+      _autoFreezeActive = false
+      // Only resume if the user has NOT manually paused during the freeze window.
+      if (!_isManuallyPaused) {
+        isPaused.value = false
+        if (currentSimulation) {
+          currentSimulation.alpha(0.3).alphaTarget(0).restart()
+        }
+      }
+    }, autoFreezeMs)
+  }
+
+  // Wire batchSignal → Auto-Freeze when provided.
+  if (batchSignal !== undefined) {
+    watch(
+      () => toValue(batchSignal)?.batch_count,
+      (newCount, oldCount) => {
+        if (newCount === undefined || newCount === null) return
+        if (newCount > (oldCount ?? 0)) {
+          // New batch committed — only trigger if user has not manually paused.
+          if (!_isManuallyPaused) {
+            _triggerAutoFreeze()
+          }
+        }
+      },
+    )
+  }
+
+  // Cancel any pending Auto-Freeze timer when the composable scope is disposed.
+  onScopeDispose(() => {
+    if (_autoFreezeTimer !== null) {
+      clearTimeout(_autoFreezeTimer)
+      _autoFreezeTimer = null
+    }
+  })
 
   return {
     selectedItem,

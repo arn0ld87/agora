@@ -5,6 +5,7 @@ Uses project context mechanism with server-side state persistence
 
 import io
 import os
+import time
 import threading
 from flask import Response, request, current_app
 
@@ -435,13 +436,18 @@ def build_graph():
             )
             builder.set_ontology(graph_id, ontology)
 
-            # Add text (progress_callback signature is (msg, progress_ratio))
-            def add_progress_callback(msg, progress_ratio):
+            # Add text (progress_callback signature is (msg, progress_ratio, completed, total))
+            def add_progress_callback(msg, progress_ratio, completed, total):
                 progress = 15 + int(progress_ratio * 40)  # 15% - 55%
                 task_manager.update_task(
                     task_id,
                     message=msg,
-                    progress=progress
+                    progress=progress,
+                    progress_detail={
+                        "batch_count": completed,
+                        "total_batches": total,
+                        "batch_at": time.time(),
+                    },
                 )
 
             task_manager.update_task(
