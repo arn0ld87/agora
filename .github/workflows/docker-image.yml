@@ -69,6 +69,10 @@ jobs:
       NEO4J_PASSWORD: ci_smoke_neo4j
       AGORA_AUTH_TOKEN: ci_smoke_token
       VITE_AGORA_TOKEN: ci_smoke_vite_token
+      # SECRET_KEY/LLM_API_KEY werden von Config.validate() in non-debug erzwungen.
+      # Werte sind CI-Smoke-Dummies, kein Produktions-Geheimnis.
+      SECRET_KEY: ci_smoke_secret_key_for_prod_proxy_smoke_only_not_a_real_secret
+      LLM_API_KEY: ollama
       ALLOW_BUILD_TIME_TOKEN: "true"
       AGORA_BIND_HOST: "0.0.0.0"
     steps:
@@ -85,8 +89,8 @@ jobs:
 
       - name: CI-Umgebungsdatei generieren
         run: |
-          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\n' \
-            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" > .env
+          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\n' \
+            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" > .env
 
       - name: Compose-Stack starten
         # ALLOW_BUILD_TIME_TOKEN=true: CI ist Single-User-Tailnet-Variante,
