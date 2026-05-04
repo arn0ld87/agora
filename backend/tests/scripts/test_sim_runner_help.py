@@ -19,7 +19,7 @@ spec.loader.exec_module(_sim_common)
 
 
 def test_resolve_runtime_paths_returns_expected_layout():
-    script_path = Path("/tmp/agora/backend/scripts/run_twitter_simulation.py")
+    script_path = SCRIPTS_DIR / "run_twitter_simulation.py"
     resolved_script = script_path.resolve()
     paths = _sim_common.resolve_runtime_paths(script_path)
 

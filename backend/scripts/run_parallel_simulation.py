@@ -99,9 +99,6 @@ except ImportError:  # direct script execution
     )
 
 _runtime_paths = resolve_runtime_paths(__file__)
-_scripts_dir = str(_runtime_paths.scripts_dir)
-_backend_dir = str(_runtime_paths.backend_dir)
-_project_root = str(_runtime_paths.project_root)
 install_script_paths(_runtime_paths)
 load_project_env(__file__, verbose=True)
 install_max_tokens_warning_filter()
