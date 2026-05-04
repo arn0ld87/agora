@@ -17,16 +17,15 @@ from copy import deepcopy
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 
-from ..config import Config
-from ..utils.llm_client import LLMClient
-from .confidence_calculator import compute_confidence
-from .evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
-from .evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
-from ..contracts import EvidenceMapModel
-from ..contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
-from .web_tools import WebToolsService
-from ..utils.logger import get_logger
-from ..models.report import (
+from ...config import Config
+from ...utils.llm_client import LLMClient
+from ..confidence_calculator import compute_confidence
+from ..evidence_binder import bind_evidence_to_claim, detect_contradiction_penalty
+from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, migrate_v1_to_v2
+from ..web_tools import WebToolsService
+from ...utils.logger import get_logger
+from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
+from ...models.report import (
     EvidenceItem,
     Report,
     ReportClaim,
@@ -34,34 +33,34 @@ from ..models.report import (
     ReportSection,
     ReportStatus,
 )
-from .report_logger import ReportLogger, ReportConsoleLogger
-from .tool_schema import (
+from ..report_logger import ReportLogger, ReportConsoleLogger
+from ..tool_schema import (
     TOOL_DESC_INSIGHT_FORGE,
     TOOL_DESC_PANORAMA_SEARCH,
     TOOL_DESC_QUICK_SEARCH,
     TOOL_DESC_INTERVIEW_AGENTS,
 )
-from .tool_validation import (
+from ..tool_validation import (
     VALID_TOOL_NAMES,  # noqa: F401  # re-exported for backwards-compat
     is_valid_tool_call,
     parse_tool_calls,
 )
-from .tool_execution import execute_tool
-from .report_prompts import (
+from ..tool_execution import execute_tool
+from .prompts import (
+    CHAT_OBSERVATION_SUFFIX,
+    CHAT_SYSTEM_PROMPT_TEMPLATE,
     PLAN_SYSTEM_PROMPT_TEMPLATE,
     PLAN_USER_PROMPT_TEMPLATE,
-    SECTION_SYSTEM_PROMPT_TEMPLATE,
-    SECTION_USER_PROMPT_TEMPLATE,
-    REACT_OBSERVATION_TEMPLATE,
+    REACT_FORCE_FINAL_MSG,
     REACT_INSUFFICIENT_TOOLS_MSG,
     REACT_INSUFFICIENT_TOOLS_MSG_ALT,
+    REACT_OBSERVATION_TEMPLATE,
     REACT_TOOL_LIMIT_MSG,
     REACT_UNUSED_TOOLS_HINT,
-    REACT_FORCE_FINAL_MSG,
-    CHAT_SYSTEM_PROMPT_TEMPLATE,
-    CHAT_OBSERVATION_SUFFIX,
+    SECTION_SYSTEM_PROMPT_TEMPLATE,
+    SECTION_USER_PROMPT_TEMPLATE,
 )
-from .graph_tools import (
+from ..graph_tools import (
     GraphToolsService,
     SearchResult,
     InsightForgeResult,
@@ -273,8 +272,8 @@ class ReportAgent:
     def _collect_simulation_evidence_items(self) -> List[Dict[str, Any]]:
         """Collect reusable evidence from existing metrics and simulation actions."""
         try:
-            from .network_analytics import NetworkAnalyticsService
-            from .simulation_runner import SimulationRunner
+            from ..network_analytics import NetworkAnalyticsService
+            from ..simulation_runner import SimulationRunner
 
             actions = SimulationRunner.get_all_actions(self.simulation_id)
             action_dicts = [action.to_dict() for action in actions]
@@ -701,7 +700,7 @@ class ReportAgent:
         embedder = self._try_get_embedder()
         if embedder is not None:
             try:
-                from .evidence_binder import _cosine
+                from ..evidence_binder import _cosine
                 new_vec = embedder(new_norm)
                 for sec in existing:
                     other = (sec.get("section_summary") or "").strip()
