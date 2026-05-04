@@ -160,6 +160,16 @@ def build_industry_quota_prompt_block_en(quota_plan: PersonaQuotaPlan) -> str:
 
     distribution_text = "\n".join(lines)
 
+    it_label = "Information und Kommunikation (J)"
+    it_count = quota_plan.targets.get(it_label, 0)
+    it_pct = round(it_count / total * 100)
+
+    it_hint = (
+        f"Information and Communication / IT roles should cover approx. {it_pct} % of personas."
+        if it_pct > 0
+        else "Information and Communication / IT roles are not intended for this selection."
+    )
+
     return (
         "### Industry Distribution (Destatis WZ 2008)\n"
         "The personas in this simulation reflect the real workforce structure "
@@ -167,8 +177,7 @@ def build_industry_quota_prompt_block_en(quota_plan: PersonaQuotaPlan) -> str:
         "a profession and industry sector matching the following distribution "
         "— NOT predominantly from IT:\n"
         f"{distribution_text}\n"
-        "Choose the persona's sector and profession according to this distribution. "
-        "Information and Communication / IT roles should cover only approx. 12 % of personas."
+        f"Choose the persona's sector and profession according to this distribution. {it_hint}"
     )
 
 
