@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-03
+Stand: 2026-05-04
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -16,7 +16,7 @@ Stand: 2026-05-03
 
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 1330 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 1370 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Spec-Files | 17 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
@@ -50,3 +50,4 @@ Aktive Slices: F5 Doku-Sync, F1 Reverse-Proxy, F2 Auth-Hardening, F3 Gunicorn-Ge
 ## Aktualisierungs-Protokoll
 
 - 2026-05-03: Sub-Slice 44 — STATUS.md inaugural, Test-Counts und Versionsstände zentralisiert, Inline-Zahlen aus README/CLAUDE.md entfernt, ROADMAP auf v0.9.0+ / 2026-05-03 geheben.
+- 2026-05-04: F5 Doku-Sync — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
