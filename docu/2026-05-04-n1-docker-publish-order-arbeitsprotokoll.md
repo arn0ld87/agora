@@ -56,7 +56,7 @@ behandelte Registry-Push und Smoke-Verifikation als unabhängige Schritte.
 
 **`publish`**
 - `needs: [prod-proxy-smoke]`
-- `if: github.event_name != 'pull_request' && (success() || github.ref_type == 'tag')`
+- if: github.event_name != 'pull_request' && (success() || (github.ref_type == 'tag' && needs.prod-proxy-smoke.result == 'failure'))
 - Erneuter Buildx-Build mit `cache-from: type=gha` (praktisch instant)
 - `push: true` — einziger Ort im Workflow mit Push-Berechtigung
 - Tags: `${{ steps.meta.outputs.tags }}` (identisch zu vorher)
