@@ -41,3 +41,39 @@ def test_validate_embedding_configuration_returns_actual_dimension_on_success():
         )
 
     assert actual_dim == 2560
+
+
+def test_validate_embedding_configuration_skip_probe_returns_none():
+    """When skip_probe=True, no network call is made and None is returned."""
+    with patch('app.storage.embedding_service.EmbeddingService.embed') as mock_embed:
+        result = validate_embedding_configuration(
+            model='qwen3-embedding:4b',
+            vector_dim=2560,
+            base_url='http://nonexistent:11434',
+            skip_probe=True,
+        )
+    assert result is None
+    mock_embed.assert_not_called()
+
+
+def test_validate_embedding_configuration_skip_probe_still_rejects_known_dim_mismatch():
+    """skip_probe must not bypass the static KNOWN_EMBEDDING_DIMS check."""
+    with pytest.raises(EmbeddingError, match='VECTOR_DIM=768 does not match known dimension 2560'):
+        validate_embedding_configuration(
+            model='qwen3-embedding:4b',
+            vector_dim=768,
+            base_url='http://nonexistent:11434',
+            skip_probe=True,
+        )
+
+
+def test_validate_embedding_configuration_default_still_probes():
+    """Default behavior (skip_probe omitted/False) preserves the network probe."""
+    with patch('app.storage.embedding_service.EmbeddingService.embed', return_value=[0.0] * 768) as mock_embed:
+        result = validate_embedding_configuration(
+            model='nomic-embed-text',
+            vector_dim=768,
+            base_url='http://localhost:11434',
+        )
+    assert result == 768
+    mock_embed.assert_called_once()

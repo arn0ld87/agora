@@ -63,10 +63,20 @@ def create_app(config_class=Config):
 
     # Fail fast on embedding misconfiguration or unavailable embedding backend.
     # Keep startup checks crisp and local — small nod to alexle135.de.
+    # AGORA_SKIP_EMBEDDING_PROBE=true skips the live network probe (CI/Smoke
+    # contexts without a reachable embedding backend). Static KNOWN_EMBEDDING_DIMS
+    # validation still runs — dimension mismatches are caught even without Ollama.
+    skip_embedding_probe = os.environ.get('AGORA_SKIP_EMBEDDING_PROBE', 'false').lower() in ('true', '1', 'yes')
     from .storage.embedding_service import EmbeddingError, validate_embedding_configuration
     try:
-        actual_embedding_dim = validate_embedding_configuration()
-        if should_log_startup:
+        actual_embedding_dim = validate_embedding_configuration(skip_probe=skip_embedding_probe)
+        if skip_embedding_probe:
+            logger.warning(
+                "Embedding probe skipped via AGORA_SKIP_EMBEDDING_PROBE — only static "
+                "dimension validation ran. Use this only in CI/Smoke contexts without "
+                "a reachable embedding backend."
+            )
+        elif should_log_startup:
             logger.info(
                 "Embedding configuration validated (%s → %s dims)",
                 Config.EMBEDDING_MODEL,

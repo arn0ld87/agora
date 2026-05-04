@@ -85,15 +85,12 @@ jobs:
     needs: [build-only]
     # Tag-Pushes: externe Abhängigkeiten (Neo4j-Pull, Ollama) können den
     # Smoke instabil machen. Mit continue-on-error blockiert ein instabiler
-    # Smoke den Release nicht — main-Pushes sind dagegen strikt smoke-gated.
-    # PR-Trigger (M9.6): aktuell ebenfalls lenient, weil der Compose-Stack
-    # ohne CI-seitigen Ollama-/LLM-Mock nicht startet (Config.validate()
-    # macht beim Startup eine echte Probe gegen das Embedding-Backend, die
-    # im Runner ohne Ollama scheitert → Restart-Loop). Followup: Embedding-
-    # Probe-Skip-Flag oder Ollama-Mock im Smoke-Compose. Bis dahin sind
-    # PR-Smokes informational. main-Pushes (post-merge auf echtem Server
-    # mit Ollama) bleiben strict.
-    continue-on-error: ${{ github.event_name == 'pull_request' || github.ref_type == 'tag' }}
+    # Smoke den Release nicht — main-Pushes und PR-Smokes sind dagegen strikt
+    # smoke-gated, weil AGORA_SKIP_EMBEDDING_PROBE=true die Ollama-Abhängigkeit
+    # beim Container-Startup eliminiert (Issue #276). Die statische
+    # KNOWN_EMBEDDING_DIMS-Validation bleibt aktiv; nur der Live-HTTP-Probe-Call
+    # gegen das Embedding-Backend wird übersprungen.
+    continue-on-error: ${{ github.ref_type == 'tag' }}
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
     # Keine echten Secrets nötig: NEO4J_PASSWORD muss nur nicht leer sein
     # (Compose-Gate), AGORA_AUTH_TOKEN/VITE_AGORA_TOKEN sind Smoke-Dummies.
@@ -107,6 +104,10 @@ jobs:
       LLM_API_KEY: ollama
       ALLOW_BUILD_TIME_TOKEN: "true"
       AGORA_BIND_HOST: "0.0.0.0"
+      # Ollama ist im CI-Runner nicht verfügbar. Skip-Flag verhindert den
+      # Live-HTTP-Probe-Call beim Container-Startup (Issue #276). Die statische
+      # KNOWN_EMBEDDING_DIMS-Validation läuft weiterhin.
+      AGORA_SKIP_EMBEDDING_PROBE: "true"
     steps:
       - uses: actions/checkout@v6
 
@@ -137,8 +138,8 @@ jobs:
 
       - name: CI-Umgebungsdatei generieren
         run: |
-          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\n' \
-            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" > .env
+          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
+            "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" "$AGORA_SKIP_EMBEDDING_PROBE" > .env
 
       - name: Compose-Stack starten
         # Kein --build: das Image ist bereits geladen (docker load oben).

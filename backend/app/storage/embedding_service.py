@@ -22,8 +22,14 @@ def validate_embedding_configuration(
     vector_dim: Optional[int] = None,
     base_url: Optional[str] = None,
     timeout: int = 15,
-) -> int:
-    """Fail fast if the configured embedding model/dimension combination is invalid."""
+    skip_probe: bool = False,
+) -> Optional[int]:
+    """Fail fast if the configured embedding model/dimension combination is invalid.
+
+    When ``skip_probe`` is True, only the static KNOWN_EMBEDDING_DIMS lookup runs
+    (no network call). Returns None in that case. Used in CI environments without
+    a reachable embedding backend (siehe AGORA_SKIP_EMBEDDING_PROBE).
+    """
     effective_model = model or Config.EMBEDDING_MODEL
     effective_dim = vector_dim or Config.VECTOR_DIM
     effective_base_url = base_url or Config.EMBEDDING_BASE_URL
@@ -34,6 +40,9 @@ def validate_embedding_configuration(
             f"VECTOR_DIM={effective_dim} does not match known dimension {expected_dim} "
             f"for EMBEDDING_MODEL='{effective_model}'"
         )
+
+    if skip_probe:
+        return None
 
     service = EmbeddingService(
         model=effective_model,
