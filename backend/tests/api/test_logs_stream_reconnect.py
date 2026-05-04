@@ -430,3 +430,47 @@ def test_id_frames_correct_for_multibyte_utf8_lines(client, tmp_path, monkeypatc
     assert decoded_lines[1] == line2, (
         f"Zeile 2 falsch dekodiert: erwartet {line2!r}, erhalten: {decoded_lines[1]!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test G — Partial-Line bei EOF: offset wird NICHT vorgerueckt (Slice K.0.1)
+# ---------------------------------------------------------------------------
+
+
+def test_partial_line_at_eof_does_not_advance_offset(client, tmp_path, monkeypatch):
+    """Bei einer noch nicht abgeschlossenen Zeile (Logger schreibt gerade)
+    darf der Stream weder die Halb-Zeile ausliefern noch ``offset`` vorruecken.
+
+    Sonst wuerden Multi-Byte-UTF-8-Sequenzen mid-write zer-decoded und der
+    Anfang der vollstaendigen Zeile beim naechsten Poll-Zyklus verloren gehen.
+    """
+    line1 = "vollständige Zeile mit Umlaut"
+    partial = "halbe Zeile ohne newline"
+    content = (line1 + "\n" + partial).encode("utf-8")  # bewusst KEIN \n am Ende
+
+    from datetime import datetime as _dt
+    log_name = _dt.now().strftime('%Y-%m-%d') + '.log'
+    log_file = tmp_path / log_name
+    log_file.write_bytes(content)
+
+    expected_id_after_line1 = len(line1.encode("utf-8")) + 1
+
+    response = client.get('/api/logs/stream?offset=0', buffered=False)
+    assert response.status_code == 200
+
+    # Wir erwarten EXAKT 1 data:-Frame (line1), die Halb-Zeile darf nicht raus.
+    chunks = _collect_sse_frames(response, max_data_frames=1, timeout_sec=1.0)
+    events = _parse_sse_events(chunks)
+    data_events = [e for e in events if 'data' in e]
+
+    assert len(data_events) == 1, (
+        f"Erwartet genau 1 data:-Frame (vollständige Zeile), erhalten {len(data_events)}. "
+        f"Halb-Zeile darf nicht ausgeliefert werden. Chunks: {chunks!r}"
+    )
+
+    decoded = json.loads(data_events[0]['data'])['line']
+    assert decoded == line1
+    assert int(data_events[0]['id']) == expected_id_after_line1, (
+        f"id muss nach Zeile 1 stehen ({expected_id_after_line1}), nicht am Datei-Ende — "
+        f"sonst wuerde der naechste Poll die jetzt vollstaendige Zeile ueberspringen."
+    )
