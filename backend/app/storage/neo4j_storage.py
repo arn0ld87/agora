@@ -6,6 +6,8 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 """
 
 import logging
+import os
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -99,15 +101,54 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
     # (Issue #50, Sub-Slice 2).
 
     def _verify_connectivity(self):
-        """Ensure the driver can actually reach Neo4j."""
-        try:
-            self._driver.verify_connectivity()
-        except Exception:
+        """Ensure the driver can actually reach Neo4j.
+
+        Startup race: ``docker-compose`` brings ``agora-neo4j`` up in parallel
+        with the backend. The compose healthcheck pings HTTP/7474, but Bolt/7687
+        opens slightly later — and ``restart: unless-stopped`` ignores
+        ``depends_on`` on auto-restart. A single transient ``Connection
+        refused`` would otherwise pin ``Neo4jStorage`` to ``None`` for the
+        whole process. Retry transient connect errors before giving up.
+        """
+        # Tunables (env-overridable for tests / slow hosts).
+        max_retries = int(os.environ.get("NEO4J_STARTUP_RETRY_MAX", "5"))
+        delay = float(os.environ.get("NEO4J_STARTUP_RETRY_DELAY", "2.0"))
+        transient = (ServiceUnavailable, SessionExpired, TransientError, OSError)
+
+        attempt = 0
+        while True:
             try:
-                self._driver.close()
+                self._driver.verify_connectivity()
+                if attempt > 0:
+                    logger.info(
+                        "Neo4j connectivity established after %d retr%s",
+                        attempt,
+                        "y" if attempt == 1 else "ies",
+                    )
+                return
+            except transient as exc:
+                if attempt >= max_retries:
+                    try:
+                        self._driver.close()
+                    except Exception:
+                        pass
+                    raise
+                attempt += 1
+                logger.warning(
+                    "Neo4j not reachable yet (attempt %d/%d): %s — retrying in %.1fs",
+                    attempt,
+                    max_retries,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
             except Exception:
-                pass
-            raise
+                # Non-transient (auth, config) — fail fast.
+                try:
+                    self._driver.close()
+                except Exception:
+                    pass
+                raise
 
     def _ensure_schema(self):
         """Create indexes and constraints if they don't exist."""
