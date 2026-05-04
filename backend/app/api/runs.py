@@ -499,7 +499,7 @@ def _restart_simulation_prepare(run: dict):
                 defined_entity_types=None,
                 use_llm_for_profiles=True,
                 progress_callback=progress_callback,
-                parallel_profile_count=5,
+                parallel_profile_count=None,
                 storage=storage,
                 llm_model=config.get("llm_model"),
                 language=config.get("language"),

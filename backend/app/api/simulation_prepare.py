@@ -225,7 +225,7 @@ def prepare_simulation():
     document_text = ProjectManager.get_extracted_text(state.project_id) or ""
     entity_types_list = data.get('entity_types')
     use_llm_for_profiles = data.get('use_llm_for_profiles', True)
-    parallel_profile_count = data.get('parallel_profile_count', 5)
+    parallel_profile_count = data.get('parallel_profile_count') or None
 
     max_agents_raw = data.get('max_agents')
     try:

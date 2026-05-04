@@ -293,7 +293,7 @@ class SimulationManager:
         defined_entity_types: Optional[List[str]] = None,
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
-        parallel_profile_count: int = 3,
+        parallel_profile_count: Optional[int] = None,
         storage: Any = None,
         llm_model: Optional[str] = None,
         language: Optional[str] = None,

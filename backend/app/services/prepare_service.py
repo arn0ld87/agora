@@ -379,7 +379,7 @@ def prepare_simulation(
     defined_entity_types: Optional[List[str]] = None,
     use_llm_for_profiles: bool = True,
     progress_callback: Optional[Callable] = None,
-    parallel_profile_count: int = 3,
+    parallel_profile_count: Optional[int] = None,
     storage: Any = None,
     llm_model: Optional[str] = None,
     language: Optional[str] = None,
@@ -417,6 +417,16 @@ def prepare_simulation(
                 "No entities matching criteria found, "
                 "check if graph is correctly constructed"
             )
+
+        # Resolve parallel_profile_count: None → env AGORA_PARALLEL_PERSONA_COUNT → 10.
+        # Auflösung hier (einmalig), damit _phase_generate_profiles ein konkretes int erhält.
+        if parallel_profile_count is None:
+            try:
+                parallel_profile_count = int(
+                    os.environ.get('AGORA_PARALLEL_PERSONA_COUNT', '10')
+                )
+            except ValueError:
+                parallel_profile_count = 10
 
         # Phase 2: Generate Agent Profiles
         profiles = _phase_generate_profiles(

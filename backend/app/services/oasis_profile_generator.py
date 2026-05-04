@@ -1166,7 +1166,7 @@ Important:
         use_llm: bool = True,
         progress_callback: Optional[callable] = None,
         graph_id: Optional[str] = None,
-        parallel_count: int = 5,
+        parallel_count: Optional[int] = None,
         realtime_output_path: Optional[str] = None,
         output_platform: str = "reddit"
     ) -> List[OasisAgentProfile]:
@@ -1178,7 +1178,11 @@ Important:
             use_llm: Whether to use LLM to generate detailed personas
             progress_callback: Progress callback function (current, total, message)
             graph_id: Knowledge graph ID for knowledge graph search to get richer context
-            parallel_count: Number of parallel generations, default 5
+            parallel_count: Number of parallel LLM-Roundtrips. If None, falls back to
+                env ``AGORA_PARALLEL_PERSONA_COUNT`` (default 10). Cloud-LLM-Setups
+                (Ollama-Bridge gegen gemini-3-flash, qwen3-coder:cloud usw.) vertragen
+                10–15 parallele Requests; lokales Ollama sollte auf 3–5 reduziert werden,
+                um KV-Cache-Trashing zu vermeiden.
             realtime_output_path: Real-time output file path (if provided, write after each generation)
             output_platform: Output platform format ("reddit" or "twitter")
 
@@ -1186,7 +1190,14 @@ Important:
             List of Agent Profiles
         """
         import concurrent.futures
+        import os
         from threading import Lock
+
+        if parallel_count is None:
+            try:
+                parallel_count = int(os.environ.get('AGORA_PARALLEL_PERSONA_COUNT', '10'))
+            except ValueError:
+                parallel_count = 10
         
         # Set graph_id for knowledge graph search
         if graph_id:
