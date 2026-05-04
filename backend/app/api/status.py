@@ -35,7 +35,7 @@ def _get_auth_mode():
     - ``"misconfigured"``: no token, no opt-out, no debug — `Config.validate()`
       should have blocked this; we surface it loudly so an operator notices.
 
-    Operators monitor this via ``/api/status.backend.auth_mode`` to confirm
+    Operators monitor this via backend.auth_mode to confirm
     that production is on ``"single_user_token"`` and not silently in one
     of the open modes.
     """
