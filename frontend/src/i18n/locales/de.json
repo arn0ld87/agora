@@ -495,7 +495,9 @@
       "search": "Suchen…",
       "pause": "Auto-Scroll pausieren",
       "empty": "Noch keine Log-Zeilen.",
-      "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…"
+      "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
+      "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
+      "reconnect": "Erneut verbinden"
     }
   },
   "settings": {

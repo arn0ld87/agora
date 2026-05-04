@@ -19,6 +19,12 @@
         <label class="pause-toggle">
           <input type="checkbox" v-model="paused" /> {{ t('logs.drawer.pause') }}
         </label>
+        <button
+          v-if="streamFailed"
+          class="close-btn reconnect-btn"
+          @click="manualReconnect"
+          :title="t('logs.drawer.reconnect')"
+        >&#x21bb; {{ t('logs.drawer.reconnect') }}</button>
         <button class="close-btn" @click="$emit('close')" :title="t('common.close')">✕</button>
       </div>
     </header>
@@ -55,14 +61,17 @@ const lines = ref([])
 const level = ref('')
 const search = ref('')
 const paused = ref(false)
+const streamFailed = ref(false)
 const scrollEl = ref(null)
 const sticky = useStickyScroll(scrollEl)
 // Letzter Datei-Offset aus dem Tail-Response — geben wir dem Stream als
 // Wiederaufsetzpunkt mit, damit zwischen Tail und Connect geschriebene
 // Lines nicht verloren gehen (PR #146-Review).
 let lastOffset = null
+let reconnectAttempts = 0
 
 const RING_BUFFER_MAX = 5000
+const MAX_RECONNECT_ATTEMPTS = 5
 const ERROR_PATTERN = /(error|exception|traceback|fatal)/i
 function isErrorLine(line) {
   return typeof line === 'string' && ERROR_PATTERN.test(line)
@@ -103,23 +112,39 @@ function appendLine(line, { bypassPause = false } = {}) {
 
 function startStream() {
   stopStream()
+  streamFailed.value = false
   const token = getAgoraToken?.() || ''
   const url = logsStreamUrl(token, level.value || null, lastOffset)
   try {
     _eventSource = new EventSource(url)
     _eventSource.onmessage = (e) => {
+      reconnectAttempts = 0
+      if (streamFailed.value) streamFailed.value = false
       try {
         const payload = JSON.parse(e.data)
         if (payload?.line != null) appendLine(payload.line)
       } catch { /* ignore non-JSON */ }
     }
     _eventSource.onerror = (err) => {
+      reconnectAttempts++
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        stopStream()
+        streamFailed.value = true
+        appendLine(t('logs.drawer.reconnectExhausted'), { bypassPause: true })
+        return
+      }
       console.warn('LogDrawer SSE error', err)
       // Connection-Diagnose muss auch bei pausiertem Auto-Scroll sichtbar
       // sein — bypassPause: true.
       appendLine(t('logs.drawer.connectionError'), { bypassPause: true })
     }
   } catch { /* ignore */ }
+}
+
+function manualReconnect() {
+  reconnectAttempts = 0
+  streamFailed.value = false
+  startStream()
 }
 
 function stopStream() {
@@ -195,6 +220,8 @@ onUnmounted(stopStream)
   cursor: pointer;
 }
 .close-btn:hover { color: var(--fg); border-color: var(--accent); }
+.reconnect-btn { width: auto; padding: 0 10px; color: var(--status-error, #f56565); border-color: var(--status-error, #f56565); }
+.reconnect-btn:hover { color: var(--fg); border-color: var(--accent); }
 
 .drawer-body-wrap {
   position: relative;

@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- Fixed: LogDrawer SSE Reconnect ist jetzt nach 5 Fehlversuchen gecappt; UI bietet einen Reload-Button (Slice J.6, Audit-Empfehlung 7).
 - `docker-compose.yml`/`docker-compose.prod.yml` `LLM_BASE_URL` und `EMBEDDING_BASE_URL` auf `${VAR:-default}`-Substitution umgestellt — `.env`-Werte gewinnen jetzt, Default-Fallback bleibt host-Ollama. Vorher wurden die Werte hardcoded überschrieben, sodass OpenAI-Embedding-Switch via `.env` ins Leere lief und der Container in den Reboot-Loop ging (404 von Ollama auf `text-embedding-3-small`). Slice K.2.
 - `/api/logs/stream` verwirft Halb-Zeilen bei EOF und rückt `offset` nicht vor (`readline`-Result endet nicht auf `\n` → Retry im nächsten Poll-Zyklus). Verhindert Datenverlust bei Multi-Byte-UTF-8 mid-write. Followup: `time.sleep(_STREAM_POLL_SEC)` vor `break` ergänzt, weil `size > offset` wahr bleibt und der reguläre Sleep-Zweig sonst nie erreicht wird (Hot-Loop, 100 % CPU). Gemini MEDIUM #254 + HIGH #255, Slice K.0.1.
 - `/api/logs/stream` öffnet die Logdatei jetzt im Binärmodus, damit `tell()` garantiert Byte-Offsets liefert (Gemini HIGH-Finding auf #253, Slice K.0).
