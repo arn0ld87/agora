@@ -113,7 +113,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         # Tunables (env-overridable for tests / slow hosts).
         max_retries = int(os.environ.get("NEO4J_STARTUP_RETRY_MAX", "5"))
         delay = float(os.environ.get("NEO4J_STARTUP_RETRY_DELAY", "2.0"))
-        transient = (ServiceUnavailable, SessionExpired, TransientError, OSError)
+        transient = (ServiceUnavailable, SessionExpired, TransientError, ConnectionError)
 
         attempt = 0
         while True:
