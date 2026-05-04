@@ -27,6 +27,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Incident-Bericht zum Vector-Index Dimension-Drift vom 2026-05-04 angelegt: alte 2560-dim Indexe (qwen3-embedding) blieben nach OpenAI-Switch (1536-dim) bestehen, weil `CREATE VECTOR INDEX … IF NOT EXISTS` nur über den Namen matcht. Manueller Cleanup (Index-Drop + 316 Entity-Delete + 14 Graph-Delete + Container-Restart) ist dokumentiert; Code-Hardening folgt in Issue [#263](https://github.com/arn0ld87/agora/issues/263). Siehe [`docu/2026-05-04-vector-index-dimension-drift-incident.md`](docu/2026-05-04-vector-index-dimension-drift-incident.md).
 
 ### Fixed
+- Vector-Index Dimension-Drift: `_ensure_schema()` droppt+recreated Indexe bei Dimension-Mismatch (#263, P1).
 - Persona-Default-Branchenverteilung folgt Destatis-WZ-2008; IT-Anteil ≤ 12 %, ≥ 7 Branchen (#215).
 - bug(report): `plan_outline()` baut `ReportOutlineModel` mit `description`-Feld; Frontend-Zod-Validation wieder grün (Closes #274)
 - `test_add_progress_callback_sets_progress_detail_on_task_manager` (Slice 137-Followup): Wartet jetzt via `threading.Event` statt 50×0.05 s `time.sleep`-Loop auf den Background-Thread. Verhindert intermittente Failures unter CI-Last und gibt sofort frei, sobald `progress_detail`-Call durch ist. Gemini-MEDIUM auf #265.
