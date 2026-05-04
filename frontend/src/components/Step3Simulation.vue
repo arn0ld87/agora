@@ -214,6 +214,7 @@ function resetState() {
   isStarting.value = false
   isStopping.value = false
   isPausing.value = false
+  _lastProgressSnapshot = { paused: false, current_round: -1, total_rounds: -1 }
   stopPolling()
 }
 
