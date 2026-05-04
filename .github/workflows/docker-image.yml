@@ -165,6 +165,25 @@ jobs:
             sleep 5
           done
 
+      - name: Auf Backend-Health warten (Race vor verify-deploy.sh vermeiden)
+        # nginx kommt schneller hoch als gunicorn+gevent+Neo4j-Connection.
+        # Ohne diesen Wait läuft verify-deploy.sh los während Backend noch
+        # "health: starting" ist und /health/api/* via Proxy 502 returnt.
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost/health >/dev/null 2>&1; then
+              echo "Backend bereit (über Proxy)"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::Backend-Health-Timeout nach 5 Minuten"
+              docker compose ps -a
+              docker compose logs --tail=200 agora
+              exit 1
+            fi
+            sleep 5
+          done
+
       - name: Verify-Skript ausfuehren
         run: bash scripts/verify-deploy.sh
 
