@@ -1,9 +1,11 @@
 # Agora — Konsolidierter Findings- & Maßnahmenplan
 
-**Stand:** 2026-05-03  
-**Repo:** [`arn0ld87/agora`](https://github.com/arn0ld87/agora) · v0.9.0 (Tag) + Layer 0–6 Reader-Honesty-Refactor auf `main`  
-**Quellen:** GitHub-ZIP (Stand 2026-05-03), GitIngest-Dump, Deep-Research-Voranalyse, vorhandene `PLAN.md` + Slash-Commands + Subagents im Repo  
-**Ziel:** Findings aus Code-Review, Voranalyse und internem Backlog konsolidieren, mit den vorhandenen Slash-Commands (`/agora-next-task`, `/verify-after-subagent`, `/fix-task-*`) und Subagents (`agora-refactor-worker`, `agora-test-worker`, `agora-frontend-worker`, `agora-doc-worker`, `agora-evidence-auditor`) kompatibel halten und in eine umsetzbare Reihenfolge bringen.
+**Stand:** 2026-05-04 (post-tag, M9-Hardening überwiegend im Code)  
+**Repo:** [`arn0ld87/agora`](https://github.com/arn0ld87/agora) · v0.9.0 + Layer-9-Slices auf `main`  
+**Quellen:** Code-Verifikation 2026-05-04 (`Dockerfile`, `docker-compose.prod.yml`, `deploy/`, `backend/app/utils/auth.py`, `frontend/src/api/stream.ts`, `.github/workflows/`), Audit-Snapshot [`docu/history/2026-05-04-plan-update-audit-snapshot.md`](docu/history/2026-05-04-plan-update-audit-snapshot.md), interner Backlog.  
+**Ziel:** Findings aus Code-Review und Audit konsolidieren, mit den vorhandenen Slash-Commands (`/agora-next-task`, `/verify-after-subagent`, `/fix-task-*`) und Subagents (`agora-refactor-worker`, `agora-test-worker`, `agora-frontend-worker`, `agora-doc-worker`, `agora-evidence-auditor`) kompatibel halten und in eine umsetzbare Reihenfolge bringen.
+
+> **Schnellüberblick — Was sich seit 2026-05-03 geändert hat:** F1 (Reverse-Proxy), F2.1 (Bundle-Token-Gate), F2.2 (`?token=` in Prod blockt) und F3 (gevent) sind **code-verifiziert grün**. Frontend-SSE läuft auf signed tickets. Die Detail-F-Sektionen weiter unten beschreiben weiterhin die ursprünglichen Befunde — der konsolidierte Status steht in [§ Status-Sync 2026-05-04](#status-sync-2026-05-04).
 
 ---
 
@@ -22,18 +24,100 @@
 - `backend/app/contracts/__init__.py` exportiert alle 17 Contract-Klassen inkl. `RunSummary`/`RunDetail`/`RunsListResponse` (Sub-Slice 33 ist drin)
 - `frontend/src/composables/` ist zu **10 von 10** TypeScript (#72 abgeschlossen)
 - 41 TS-Dateien vs. 13 JS-Dateien im Frontend; **Layer 6 (#73) ist nicht abgeschlossen**, Hot-Spots: `main.js`, `router/index.js`, `utils/markdown.js`, `components/graph/graphPanel*.js`
+- **Layer-9-Hardening (Verifikation 2026-05-04):**
+  - `Dockerfile` `prod`-Stage `CMD` enthält `-k gevent` → F3 ✅
+  - `Dockerfile` ARG `ALLOW_BUILD_TIME_TOKEN=false` als Default + `docker-compose.prod.yml` reicht den Gate-ARG durch → F2.1 ✅
+  - `backend/app/utils/auth.py::_extract_token` lehnt `?token=` bei `current_app.debug == False` mit Logger-Error ab → F2.2 ✅
+  - `frontend/src/api/stream.ts` holt `?ticket=` via `POST /api/auth/ticket` und nutzt es für SSE → SSE-Auth-Frontend ✅
+  - `deploy/nginx/agora.conf` (SSE-Buffering aus, `/healthz`) + `deploy/compose/docker-compose.prod-with-proxy.yml` → F1 ✅
+  - `docker-compose.yml` bindet per Default `127.0.0.1:${AGORA_BIND_HOST:-...}` → Loopback-Default ✅
 
 ---
 
-## Kurzübersicht der wichtigsten Probleme
+## Status-Sync 2026-05-04
 
-| ID | Cluster | Schweregrad | Ein-Satz-Befund |
-|---|---|---|---|
-| **F1** | Deployment / Prod | **hoch** | Kein lauffähiger Reverse-Proxy-Default im Repo (Issue #106), Prod-Pfad nicht end-to-end reproduzierbar. |
-| **F2** | Auth / Security-Architektur | **hoch** | `VITE_AGORA_TOKEN` einkompiliert Bearer-Token ins Frontend-Bundle; `?token=`-Fallback noch im Code. Kein echtes Session-/Rollenmodell. |
-| **F3** | Runtime / Skalierung | **hoch** | Gunicorn läuft mit **sync** Workern + `--timeout 600` (Workaround Sub-Slice 19); SSE/LLM-Streams blockieren Worker. `gevent` ist als Dep schon im `pyproject.toml`, aber nicht im `CMD`. |
-| **F4** | CVE-Watchlist | **hoch** | 6 ignorierte CVEs (`pip-audit --ignore-vuln`), Frist **2026-07-30** — durch harte Upstream-Pins von `camel-ai`/`camel-oasis`/`sentence-transformers` blockiert. |
-| **F5** | Doku- & Versions-Drift | **mittel** | README sagt 1383 Tests / Layer 0–5; `CLAUDE.md` sagt 1289+141 Tests / Layer 0–6. `pyproject.toml`/`package.json` weiter `0.9.0`, `main` post-tag ohne neuen Marker. ROADMAP nennt noch v0.6.1. |
+Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`docu/history/2026-05-04-plan-update-audit-snapshot.md`](docu/history/2026-05-04-plan-update-audit-snapshot.md), verifiziert per `grep`/`find` 2026-05-04. Die ursprünglichen F-Detail-Sektionen ab [§ Findings im Detail](#findings-im-detail) bleiben als historische Tiefe stehen — Status-Update hier ist autoritativ.
+
+### Erledigt (Code-verifiziert)
+
+| ID | Bereich | Befund |
+|---|---|---|
+| F1 / M9.1 | Reverse-Proxy | `deploy/nginx/agora.conf` und `deploy/compose/docker-compose.prod-with-proxy.yml` existieren. nginx deaktiviert SSE-Buffering und exposiert `/healthz`. |
+| F2.1 / M9.2 | Build-Time-Token | `Dockerfile` ARG `ALLOW_BUILD_TIME_TOKEN=false` als Default. `VITE_AGORA_TOKEN` wird ohne Override **nicht** ins Bundle einkompiliert. |
+| F2.2 / M9.3 | Query-Token | `_extract_token()` lehnt `?token=` im Non-Debug-Modus mit Logger-Error ab. SSE/Downloads müssen signed tickets nutzen. |
+| F3 / M9.5 | Gunicorn | Prod-CMD nutzt `-k gevent`, nicht mehr Sync-Worker. |
+| SSE-Auth-Frontend | Auth | `frontend/src/api/stream.ts` migriert von `?token=` auf `?ticket=` via `POST /api/auth/ticket`. |
+| S1 | XSS | DOMPurify in `frontend/src/utils/markdown.js`. |
+| S2 | Config | `Config.validate()` erzwingt `SECRET_KEY`/`NEO4J_PASSWORD`/`AGORA_AUTH_TOKEN` im Non-Debug, erkennt Placeholder-Werte. |
+| S3 | Docker-Hardening | Loopback-Default, `no-new-privileges`, `cap_drop: ALL`, tmpfs, Pflicht-Passwörter. |
+| S4 | Contracts | Pydantic/Zod-Contract-Gates und Schema-Drift-Checks aktiv. |
+| S5 | Security-CI | `pip-audit`, `npm audit`, Gitleaks in CI vorhanden. |
+| F5a | Status-Doku | `docu/STATUS.md` als zentrale Single Source of Truth aktiv. |
+
+### Aktiv offen
+
+| ID | Priorität | Bereich | Befund |
+|---|---:|---|---|
+| **M9.6** | 🔴 | CI | Prod-Stack-Smoke fehlt — kein CI-Beweis für den Proxy-Stack. Neuer Workflow: `compose up` mit Proxy + `/healthz`/`/health`/`/`/`/api/auth/ticket`-Checks. |
+| **M9.7** | 🟡 | Doku | `AGENTS.md`/`CLAUDE.md` enthielten alte Statusangaben (v0.6/gevent-Workaround/SSE-Token). Slice „Doku-Sync 2026-05-04" adressiert das. |
+| **R1 / F4** | 🔴 | Dependencies | 6 CVEs ignored bis 2026-07-30. CVE-Monitor-Workflow + Hardstop fehlen (M10.1/M10.2). |
+| **R3 / M10.4** | 🔴 | Auth-Zielbild | Single-Token-Auth ist Tailnet-only. ADR `docu/decisions/0001-auth-model.md` muss zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh entscheiden. |
+| **W2 / M11.1** | 🟡 | Test-Qualität | `contract-gates.yml` führt `evidence-quality` weiter mit `--soft` aus. Layer 5 ist grün → Soft-Schalter sollte fallen. |
+| **W3 / M11.2-3** | 🟡 | Coverage | Kein `pytest-cov`, kein Frontend-Coverage-Gate. Startwerte: 70 % Backend / 60 % Frontend. |
+| **W4 / M11.4** | 🟡 | E2E | Keine Playwright/Cypress-Smokes für Kernworkflow. |
+| **W5 / F7-F8** | 🟡 | Code-Hotspots | `report_agent.py` 2400 LOC, `simulation_runner.py` 1904, `Step2EnvSetup.vue` 1804, `Step4Report.vue` 1287 — Issues #202/#203 in Milestone v1.0.0. |
+| **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes werden schrittweise eingeführt, nicht vollständig belegbar. |
+| **N1 / F14.2** | 🟢 | SBOM | Kein SBOM/Third-Party-License-Report. |
+| **N2 / F14.1** | 🟢 | AGPL | Kein App-/API-Hinweis auf Source-Code des laufenden Builds (`/api/version` mit Commit-SHA). |
+| **N3 / M10.5** | 🟢 | Rate Limits | Kein explizites Rate-Limiting für Ticket-, Upload- und LLM-Trigger-Endpunkte. |
+
+### Priorisierte To-do-Liste (operativ)
+
+🔴 **Kritisch:**
+
+1. **Prod-Stack-Smoke in CI** — `.github/workflows/prod-stack-smoke.yml` mit `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build` + Endpoint-Checks.
+2. **CVE-Monitor + Hardstop** — wöchentlicher `pip-audit` ohne `--ignore-vuln`; ab 2026-07-30 keine ignorierten CVEs mehr durchlassen.
+3. **Auth-ADR** — `docu/decisions/0001-auth-model.md` festlegt v1-Scope.
+
+🟡 **Wichtig:** 4. Evidence-Gate `--soft` raus. 5. Coverage-Gates Backend/Frontend. 6. Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport). 7. Komplexitäts-Gate (`radon` Backend, ESLint/size-limit Frontend).
+
+🟢 **Nice-to-have:** 8. SBOM/License-Report. 9. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL). 10. Rate-Limits.
+
+### Arbeitsreihenfolge (PR-by-PR)
+
+1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md`/`docu/plan.heuristic.md` (= dieser Slice). ✅
+2. **PR 2:** `prod-stack-smoke.yml`.
+3. **PR 3:** `cve-monitor.yml` + Dependency Risk Register.
+4. **PR 4:** Evidence-Gate hard + Coverage-Grundlage.
+5. **PR 5:** Auth-ADR + Rate-Limit-Konzept.
+6. **PR 6:** Playwright-Smokes.
+7. **PR 7:** Komplexitäts-Gate + Hotspot-Backlog.
+
+### Definition of Done für v1.0
+
+- Keine ignorierten CVEs ohne aktive Ausnahmefrist in CI.
+- Prod-Proxy-Stack in CI grün.
+- Auth-Zielbild dokumentiert und umgesetzt **oder** bewusst auf Single-User begrenzt.
+- Evidence-Gate hart.
+- Coverage-Gates existieren.
+- Mindestens drei E2E-Smokes grün.
+- Doku-Status nicht widersprüchlich (STATUS.md als Single Source of Truth).
+- Release-Tag mit Changelog.
+- SBOM/License-Report mindestens generierbar.
+
+---
+
+## Kurzübersicht der wichtigsten Probleme (historisch — Stand 2026-05-03)
+
+> Die folgenden F-Sektionen beschreiben den ursprünglichen Audit. Status-Updates siehe oben. F1, F2.1, F2.2, F3 sind code-verifiziert erledigt; die Detail-Texte bleiben als Begründung und Lessons-Learned stehen.
+
+| ID | Cluster | Schweregrad | Ein-Satz-Befund | Status 2026-05-04 |
+|---|---|---|---|---|
+| **F1** | Deployment / Prod | **hoch** | Kein lauffähiger Reverse-Proxy-Default im Repo (Issue #106), Prod-Pfad nicht end-to-end reproduzierbar. | ✅ erledigt — `deploy/`-Pfade existieren |
+| **F2** | Auth / Security-Architektur | **hoch** | `VITE_AGORA_TOKEN` einkompiliert Bearer-Token ins Frontend-Bundle; `?token=`-Fallback noch im Code. Kein echtes Session-/Rollenmodell. | F2.1 ✅, F2.2 ✅, F2.3 (ADR) offen |
+| **F3** | Runtime / Skalierung | **hoch** | Gunicorn läuft mit **sync** Workern + `--timeout 600` (Workaround Sub-Slice 19); SSE/LLM-Streams blockieren Worker. `gevent` ist als Dep schon im `pyproject.toml`, aber nicht im `CMD`. | ✅ erledigt — `Dockerfile` `-k gevent` |
+| **F4** | CVE-Watchlist | **hoch** | 6 ignorierte CVEs (`pip-audit --ignore-vuln`), Frist **2026-07-30** — durch harte Upstream-Pins von `camel-ai`/`camel-oasis`/`sentence-transformers` blockiert. | offen — CVE-Monitor + Hardstop fehlen |
+| **F5** | Doku- & Versions-Drift | **mittel** | README sagt 1383 Tests / Layer 0–5; `CLAUDE.md` sagt 1289+141 Tests / Layer 0–6. `pyproject.toml`/`package.json` weiter `0.9.0`, `main` post-tag ohne neuen Marker. ROADMAP nennt noch v0.6.1. | F5a (`STATUS.md`) ✅; AGENTS.md-Sync 2026-05-04 ✅ |
 | **F6** | Test-Qualität | **mittel** | Keine Coverage-Messung, keine `--cov-fail-under`-Schwelle, keine E2E-Suite. `evidence-quality`-Gate läuft mit `--soft`. |
 | **F7** | Code-Hotspot Backend | **mittel** | `report_agent.py` mit **2400 LOC** trotz Refactor (-31,6 % seit v0.9.0) der größte Knoten; `simulation_runner.py` 1904 LOC, `oasis_profile_generator.py` 1502 LOC, `graph_tools.py` 1492 LOC. |
 | **F8** | Code-Hotspot Frontend | **mittel** | `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC, `Step3Simulation.vue` 877 LOC — Komponenten sind nach den Refactors weiter Multi-Concern. |
@@ -584,9 +668,13 @@ Alle Findings sind **kompatibel** zur bestehenden `/agora-next-task`-Heuristik-T
 
 ---
 
-## Nächste Schritte (genau 3)
+## Nächste Schritte (genau 3, Stand 2026-05-04)
 
-1. **F5 + F1.1 als ersten zusammenhängenden Slice** durchziehen — ROADMAP/STATUS-Sync **und** Reverse-Proxy-Sidecar liefern in einem PR den größten Wahrnehmungs- und Betriebs-Hebel. Dispatch via `/agora-next-task` mit `agora-doc-worker` für Doku, `agora-refactor-worker` für Compose/Conf.
-2. **F3 als zweiten Slice**: gevent-Migration mit Fork-Safety-Tests. Voraussetzung: `agora-test-worker` schreibt zuerst Tests gegen das aktuelle Sync-Verhalten als Spec-Pin, dann `agora-refactor-worker` macht den `CMD`-Switch, dann `/verify-after-subagent`.
-3. **F2.1 + F2.2 parallel zu F3**: Token-Bundle deaktivieren und `?token=` in Prod hart sperren — kein Worktree-Konflikt zu F3, da andere Module. Beide Slices als getrennte PRs, kein Sammel-Commit.
+> Die ursprünglichen drei Schritte (F5 + F1, F3, F2.1/F2.2) sind abgehakt und stehen unter [§ Status-Sync 2026-05-04](#status-sync-2026-05-04) als ✅ markiert. Aktuelle Top-3:
+
+1. **Prod-Stack-Smoke in CI (M9.6)** — Subagent `agora-test-worker` (Sonnet). Neuer Workflow `.github/workflows/prod-stack-smoke.yml`: `compose up` mit Proxy + `/healthz`/`/health`/`/`/`/api/auth/ticket`-Checks. Ohne diesen Smoke fehlt der CI-Beweis, dass die F1/F2/F3-Slices gemeinsam laufen.
+2. **CVE-Monitor + Hardstop (M10.1/M10.2)** — Subagent `agora-doc-worker` (Haiku). Wöchentlicher `pip-audit` ohne `--ignore-vuln`; ab 2026-07-30 darf CI nicht mehr mit den sechs ignorierten Advisories grün werden. Issue-Bezug: #121–#126.
+3. **Auth-ADR (M10.4 / F2.3)** — Subagent `agora-doc-worker` (Haiku) + Lead. ADR `docu/decisions/0001-auth-model.md` legt v1.0-Scope fest: Single-User-only, HttpOnly-Session oder Bearer+Refresh.
+
+Detaillierte Subagent-Zuordnung und Akzeptanzkriterien je Slice: [`docu/plan.heuristic.md`](docu/plan.heuristic.md).
 
