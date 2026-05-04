@@ -392,7 +392,7 @@ Bei Verdacht auf Token-Leak (z.B. Token in Logs aufgetaucht, Frontend-Bundle ver
      up -d --force-recreate agora
    docker compose ps
    ```
-4. **Frontend mit neuem Token versorgen** — bei Default-Setup (`ALLOW_BUILD_TIME_TOKEN=false`) muss der Operator den Token zur Laufzeit per `setAgoraToken()` im Frontend setzen oder das Frontend-Bundle nicht neu bauen. Bei `ALLOW_BUILD_TIME_TOKEN=true` muss das Frontend-Bundle neu gebaut werden:
+4. Frontend mit neuem Token versorgen — bei Default-Setup (ALLOW_BUILD_TIME_TOKEN=false) muss der Operator den Token zur Laufzeit über das UI-Eingabefeld im Frontend setzen; ein Rebuild des Frontend-Bundles ist nicht erforderlich. Bei ALLOW_BUILD_TIME_TOKEN=true muss das Frontend-Bundle neu gebaut werden:
    ```bash
    ALLOW_BUILD_TIME_TOKEN=true VITE_AGORA_TOKEN="${AGORA_AUTH_TOKEN_NEW}" \
      docker compose -f docker-compose.yml -f docker-compose.prod.yml build agora
