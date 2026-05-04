@@ -157,7 +157,7 @@ Agora ist seit der Fork-Linie (MiroFish-Offline → Agora) als **lokal-first**-S
 
 ### Trigger für v2-ADR (= ADR-0001 wird durch v2-ADR ersetzt)
 
-Wenn **eine** der folgenden Bedingungen wahr wird, neuer ADR pflicht:
+Wenn eine der folgenden Bedingungen wahr wird, ist ein neuer ADR Pflicht:
 
 - Konkreter Multi-User-Use-Case (Klassenraum, Forschungsgruppe, SaaS-Beta) wird beauftragt.
 - Public-Internet-Deployment wird beworben.
