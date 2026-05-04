@@ -55,7 +55,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docu/dependency-risk-register.md`)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md`.
+1. M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md` als **Proposed** (Empfehlung Single-User-only-v1) angelegt, wartet auf User-Sign-off.
 2. M10.5 Rate-Limit-Konzept — `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen.
 3. M11.1 Evidence-Quality-Gate hard schalten (`--soft` aus `contract-gates.yml`).
 
@@ -68,3 +68,4 @@ Mittelfristig: M11.1 Evidence-Gate hard, M11.2/M11.3 Coverage-Gates, M11.4 Playw
 - 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, neue `docu/plan.heuristic.md` als Subagent-Routing-SSoT, User-Drop-Audit-Snapshots nach `docu/history/`.
 - 2026-05-04: M9.6 Prod-Stack-Smoke — `docker-image.yml::prod-proxy-smoke` läuft jetzt auch auf `pull_request: [main]` (Doku-PRs ausgeschlossen via `paths-ignore`). `scripts/verify-deploy.sh` smoket zusätzlich `/api/auth/ticket` via Proxy. M9 ist damit code- und CI-seitig grün; nächste Slice-Priorität verschiebt sich auf M10.
 - 2026-05-04: M10.1/M10.2/M10.3 CVE-Monitor + Hardstop — Neuer Workflow `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln` und schreibt das Ergebnis in `$GITHUB_STEP_SUMMARY`. Hardstop am 2026-07-30 verdrahtet: ab dann fail bei pip-audit-Findings. `docu/dependency-risk-register.md` um Eskalationspfad-Sektion (Vendoring / Soft-Fork / Replacement / Risikoakzeptanz-PR) und Upstream-Release-Watch-Spalte erweitert (die Owner-Spalte war bereits vorhanden). Layer 10 von „dokumentiert" auf „grün".
+- 2026-05-04: M10.4 Auth-Zielbild-ADR — `docu/decisions/0001-auth-model.md` als **Proposed** angelegt mit drei Optionen (Single-User-only-v1 / HttpOnly-Session / Bearer+Refresh). Empfehlung: Option A (Single-User-only-v1 explizit machen). Begründung: Local-first ist Kernprinzip, Hauptangriffsvektoren sind bereits geschlossen (F2.1/F2.2/P0.2/S2/S3), v1.0-Termin erreichbar. Wartet auf User-Sign-off. Folge-Slices nach Accept: README/security-hardening-Update, `auth_mode`-Feld in `/api/status`, Token-Rotation-Prozedur. ADR-Index unter `docu/decisions/README.md` mit Konvention.
