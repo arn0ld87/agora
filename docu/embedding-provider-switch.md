@@ -68,7 +68,7 @@ cd backend
 uv run python -c "
 from app.storage.embedding_service import EmbeddingService
 svc = EmbeddingService()
-vec = svc.embed_one('Probe')
+vec = svc.embed('Probe')
 print(f'OK — provider={svc._provider}, model={svc.model}, dim={len(vec)}')
 "
 ```
