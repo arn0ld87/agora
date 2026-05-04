@@ -52,6 +52,7 @@ htmlcov/
 .claude/settings.local.json
 .claude/worktrees/
 .claude/projects/
+.claude/scheduled_tasks.lock
 
 # Local docs and scratch dirs
 mydoc/
