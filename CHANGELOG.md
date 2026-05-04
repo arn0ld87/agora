@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- `/api/logs/stream` öffnet die Logdatei jetzt im Binärmodus, damit `tell()` garantiert Byte-Offsets liefert (Gemini HIGH-Finding auf #253, Slice K.0).
 - SSE-Reconnect: `/api/logs/stream` sendet jetzt `id:`-Frames pro Datenzeile und wertet `Last-Event-ID`-Header aus (überstimmt `?offset=`), wodurch Duplikate und Datenverlust beim Browser-Reconnect verschwinden. `/api/simulation/<id>/stream` loggt Reconnect-IDs (Bus-Replay folgt) (Slice J.5.1, #233).
 - SimulationRunView: doppelten `/run-status`-Poll entfernt; Step3Simulation propagiert `paused`/`current_round`/`total_rounds` jetzt via `update-progress`-Event (Slice J.2, #220).
 - **Slice J.1 (#219, P1): refreshQuality aus 3-s-Tick herausgelöst.** `Step2EnvSetup.vue` rief bei jedem `fetchProfilesRealtime`-Tick (alle 3 s) `personaReview.refreshQuality()` auf — ein versteckter Doppel-HTTP-Call pro Poll-Runde. Fix: Aufruf aus dem Tick-Pfad entfernt; stattdessen `watch(() => profiles.value.length, (n, prev) => { if (prev === 0 && n > 0) ... })` — Trigger exakt einmal beim Übergang 0 → erste Profile. Sim-Wechsel ohne Unmount wird durch zweiten `watch(() => props.simulationId)` abgedeckt, der den Guard zurücksetzt. Vitest: 5 Ticks → exakt 1 `refreshQuality`-Call. Arbeitsprotokoll: [`docu/2026-05-04-j1-refresh-quality-watch-arbeitsprotokoll.md`](docu/2026-05-04-j1-refresh-quality-watch-arbeitsprotokoll.md). (Gemini-Followup auf PR #245: Sim-Wechsel-Trigger-Lücke + Race-Guard, 1-watch-Variante)
