@@ -183,6 +183,13 @@ def stream_logs():
     Kein ``event:``-Frame: Das Frontend-Konsument (LogDrawer) lauscht auf
     den Default-Event-Namen ``message`` via ``onmessage`` — ein expliziter
     ``event: line``-Frame würde den Konsumenten stumm schalten.
+
+    Die Logdatei wird im Binärmodus (``'rb'``) gelesen, weil ``tell()`` im
+    Textmodus laut CPython-Doku einen opaken Cookie liefert, der nicht
+    garantiert dem Byte-Offset entspricht. Im Binärmodus ist ``tell()``
+    immer ein exakter Byte-Offset, der sicher mit ``st_size`` verglichen
+    werden kann. Jede Zeile wird nach dem Lesen mit
+    ``line.decode('utf-8', errors='replace')`` dekodiert.
     """
     path = _resolve_log_path()
     level = request.args.get('level')
@@ -246,18 +253,18 @@ def stream_logs():
                 offset = 0
             if size > offset:
                 try:
-                    with current_path.open('r', encoding='utf-8', errors='replace') as fh:
+                    with current_path.open('rb') as fh:
                         fh.seek(offset)
-                        # Zeilenweise mit readline() lesen: fh.tell() nach
-                        # jeder Zeile ist direkt der korrekte id:-Wert ohne
-                        # Längen-Rekonstruktion (UTF-8-aware, \r\n-safe).
+                        # Binärmodus: tell() liefert garantiert Byte-Offsets —
+                        # im Textmodus wäre tell() ein opaker Cookie, der nicht
+                        # zwingend mit st_size oder requested_offset vergleichbar ist.
                         while True:
                             line = fh.readline()
                             if not line:
                                 break
-                            line_stripped = line.rstrip('\r\n')
                             line_offset = fh.tell()
                             offset = line_offset
+                            line_stripped = line.decode('utf-8', errors='replace').rstrip('\r\n')
                             if level_pat is not None and not level_pat.search(line_stripped):
                                 continue
                             payload = json.dumps({

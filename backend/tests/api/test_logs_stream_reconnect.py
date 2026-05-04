@@ -369,3 +369,64 @@ def test_simulation_stream_logs_last_event_id():
         f"Kein Log-Eintrag mit 'Last-Event-ID' und sim_id={sim_id!r} gefunden. "
         f"Records: {[r.getMessage() for r in captured]!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test F — Multi-Byte-UTF-8: id:-Werte entsprechen Byte-Offsets
+# ---------------------------------------------------------------------------
+
+
+def test_id_frames_correct_for_multibyte_utf8_lines(client, tmp_path, monkeypatch):
+    """Bei UTF-8-Multi-Byte-Zeilen muss id == Byte-Offset in der Datei sein.
+
+    Im alten Textmodus war tell() ein opakes Cookie, das beim Reconnect
+    nicht zuverlässig mit st_size verglichen werden konnte. Mit 'rb' ist
+    tell() garantiert ein Byte-Offset.
+
+    Zwei Zeilen mit Umlauten und Emoji — bewusst Multi-Byte pro Zeichen.
+    """
+    line1 = "Müller-Maße: 42 €"
+    line2 = "Test 🚀 läuft"
+    content = (line1 + "\n" + line2 + "\n").encode("utf-8")
+
+    from datetime import datetime as _dt
+    log_name = _dt.now().strftime('%Y-%m-%d') + '.log'
+    log_file = tmp_path / log_name
+    log_file.write_bytes(content)
+
+    # Erwartete Byte-Offsets: jeweils nach dem abschließenden \n jeder Zeile.
+    expected_id_after_line1 = len(line1.encode("utf-8")) + 1  # +1 für \n
+    expected_id_after_line2 = len(content)
+
+    response = client.get('/api/logs/stream?offset=0', buffered=False)
+    assert response.status_code == 200
+    assert response.mimetype == 'text/event-stream'
+
+    chunks = _collect_sse_frames(response, max_data_frames=2)
+    events = _parse_sse_events(chunks)
+    data_events = [e for e in events if 'data' in e]
+
+    assert len(data_events) >= 2, (
+        f"Erwartet mind. 2 data:-Events für Multi-Byte-Zeilen, "
+        f"erhalten: {len(data_events)}. Chunks: {chunks!r}"
+    )
+
+    ids = [int(e['id']) for e in data_events[:2]]
+
+    assert ids[0] == expected_id_after_line1, (
+        f"id nach Zeile 1: erwartet {expected_id_after_line1} (Byte-Offset), "
+        f"erhalten: {ids[0]}. Zeile enthält Multi-Byte-Zeichen."
+    )
+    assert ids[1] == expected_id_after_line2, (
+        f"id nach Zeile 2: erwartet {expected_id_after_line2} (Byte-Offset = Dateigröße), "
+        f"erhalten: {ids[1]}."
+    )
+
+    # Zeileninhalte müssen korrekt dekodiert ankommen.
+    decoded_lines = [json.loads(e['data'])['line'] for e in data_events[:2]]
+    assert decoded_lines[0] == line1, (
+        f"Zeile 1 falsch dekodiert: erwartet {line1!r}, erhalten: {decoded_lines[0]!r}"
+    )
+    assert decoded_lines[1] == line2, (
+        f"Zeile 2 falsch dekodiert: erwartet {line2!r}, erhalten: {decoded_lines[1]!r}"
+    )
