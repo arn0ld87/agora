@@ -8,6 +8,7 @@ Output dimension depends on the model (see Config.VECTOR_DIM).
 import time
 import logging
 from typing import List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -37,6 +38,7 @@ def validate_embedding_configuration(
     service = EmbeddingService(
         model=effective_model,
         base_url=effective_base_url,
+        api_key=Config.EMBEDDING_API_KEY,
         max_retries=3,
         timeout=timeout,
     )
@@ -59,14 +61,17 @@ class EmbeddingService:
         self,
         model: Optional[str] = None,
         base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         max_retries: int = 3,
         timeout: int = 30,
     ):
         self.model = model or Config.EMBEDDING_MODEL
         self.base_url = (base_url or Config.EMBEDDING_BASE_URL).rstrip('/')
+        self.api_key = api_key or Config.EMBEDDING_API_KEY or ''
         self.max_retries = max_retries
         self.timeout = timeout
-        self._embed_url = f"{self.base_url}/api/embed"
+        self._provider = self._detect_provider()
+        self._embed_url = self._build_embed_url()
 
         # Simple in-memory cache (text -> embedding vector)
         # Using dict instead of lru_cache because lists aren't hashable
@@ -152,18 +157,16 @@ class EmbeddingService:
 
     def _request_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Make HTTP request to Ollama /api/embed endpoint with retry.
+        Make HTTP request to the configured embedding provider.
 
-        Args:
-            texts: List of texts to embed (Ollama supports batch in single request)
-
-        Returns:
-            List of embedding vectors
+        Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings`.
         """
         payload = {
             "model": self.model,
             "input": texts,
         }
+        headers = self._request_headers()
+        provider_label = 'OpenAI-compatible' if self._provider == 'openai' else 'Ollama'
 
         last_error = None
         for attempt in range(self.max_retries):
@@ -171,12 +174,13 @@ class EmbeddingService:
                 response = requests.post(
                     self._embed_url,
                     json=payload,
+                    headers=headers,
                     timeout=self.timeout,
                 )
                 response.raise_for_status()
                 data = response.json()
+                embeddings = self._extract_embeddings(data)
 
-                embeddings = data.get("embeddings", [])
                 if len(embeddings) != len(texts):
                     raise EmbeddingError(
                         f"Expected {len(texts)} embeddings, got {len(embeddings)}"
@@ -187,34 +191,71 @@ class EmbeddingService:
             except requests.exceptions.ConnectionError as e:
                 last_error = e
                 logger.warning(
-                    f"Ollama connection failed (attempt {attempt + 1}/{self.max_retries}): {e}"
+                    f"{provider_label} connection failed (attempt {attempt + 1}/{self.max_retries}): {e}"
                 )
             except requests.exceptions.Timeout as e:
                 last_error = e
                 logger.warning(
-                    f"Ollama request timed out (attempt {attempt + 1}/{self.max_retries})"
+                    f"{provider_label} request timed out (attempt {attempt + 1}/{self.max_retries})"
                 )
             except requests.exceptions.HTTPError as e:
                 last_error = e
-                logger.error(f"Ollama HTTP error: {e.response.status_code} - {e.response.text}")
-                if e.response.status_code >= 500:
-                    # Server error — retry
+                body = e.response.text[:500] if e.response is not None else ''
+                logger.error(
+                    "%s HTTP error: %s - %s",
+                    provider_label,
+                    e.response.status_code if e.response is not None else 'n/a',
+                    body,
+                )
+                if e.response is not None and e.response.status_code >= 500:
                     pass
                 else:
-                    # Client error (4xx) — don't retry
-                    raise EmbeddingError(f"Ollama embedding failed: {e}") from e
-            except (KeyError, ValueError) as e:
-                raise EmbeddingError(f"Invalid Ollama response: {e}") from e
+                    raise EmbeddingError(f"{provider_label} embedding failed: {e}") from e
+            except (KeyError, ValueError, TypeError) as e:
+                raise EmbeddingError(f"Invalid {provider_label} response: {e}") from e
 
-            # Exponential backoff
             if attempt < self.max_retries - 1:
                 wait = 2 ** attempt
                 logger.info(f"Retrying in {wait}s...")
                 time.sleep(wait)
 
         raise EmbeddingError(
-            f"Ollama embedding failed after {self.max_retries} retries: {last_error}"
+            f"{provider_label} embedding failed after {self.max_retries} retries: {last_error}"
         )
+
+    def _detect_provider(self) -> str:
+        """Infer which embeddings API shape to use from the configured base URL/model."""
+        normalized_base = self.base_url.lower()
+        host = urlparse(normalized_base).netloc
+        if (
+            normalized_base.endswith('/v1')
+            or normalized_base.endswith('/v1/')
+            or 'api.openai.com' in host
+            or self.model.startswith('text-embedding-')
+        ):
+            return 'openai'
+        return 'ollama'
+
+    def _build_embed_url(self) -> str:
+        if self._provider == 'openai':
+            if self.base_url.endswith('/v1') or self.base_url.endswith('/v1/'):
+                return f"{self.base_url.rstrip('/')}/embeddings"
+            return f"{self.base_url.rstrip('/')}/v1/embeddings"
+        return f"{self.base_url}/api/embed"
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {'Content-Type': 'application/json'}
+        if self._provider == 'openai':
+            if not self.api_key:
+                raise EmbeddingError('EMBEDDING_API_KEY/LLM_API_KEY is required for OpenAI embeddings')
+            headers['Authorization'] = f'Bearer {self.api_key}'
+        return headers
+
+    def _extract_embeddings(self, data: dict) -> List[List[float]]:
+        if self._provider == 'openai':
+            items = data.get('data', [])
+            return [item['embedding'] for item in items]
+        return data.get('embeddings', [])
 
     def _cache_put(self, text: str, vector: List[float]) -> None:
         """Add to cache, evicting oldest entries if full."""
