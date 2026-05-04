@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Documentation
+- Incident-Bericht zum Vector-Index Dimension-Drift vom 2026-05-04 angelegt: alte 2560-dim Indexe (qwen3-embedding) blieben nach OpenAI-Switch (1536-dim) bestehen, weil `CREATE VECTOR INDEX … IF NOT EXISTS` nur über den Namen matcht. Manueller Cleanup (Index-Drop + 316 Entity-Delete + 14 Graph-Delete + Container-Restart) ist dokumentiert; Code-Hardening folgt in Issue [#263](https://github.com/arn0ld87/agora/issues/263). Siehe [`docu/2026-05-04-vector-index-dimension-drift-incident.md`](docu/2026-05-04-vector-index-dimension-drift-incident.md).
+
 ### Fixed
 - Step4Report-Spec auf Report/EvidenceMap-Types typisiert, um vue-tsc Fehler zu beheben (kein Runtime-Effekt)
 - Fixed: LogDrawer SSE Reconnect ist jetzt nach 5 Fehlversuchen gecappt; UI bietet einen Reload-Button (Slice J.6, Audit-Empfehlung 7).
