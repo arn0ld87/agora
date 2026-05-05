@@ -119,7 +119,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 2. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
 3. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
 
-Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F7/F8 Hotspot-Splits (#202/#203).
+Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F8 Hotspot-Split Frontend (#203). #202 geschlossen 2026-05-05 (report_agent als Package).
 
 ## Aktualisierungs-Protokoll
 

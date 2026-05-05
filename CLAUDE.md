@@ -46,7 +46,7 @@ backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
     contracts/              Layer 0: Single Source of Truth (Pydantic v2)
     api/                    HTTP-Routen (Flask Blueprints)
     services/               Business-Logik
-      report_agent.py       Sub-Slice 02a/02b/02c: schema_version=2, EvidenceMapModel-Validation
+      report_agent/         Package-Split (Sub-Slice M11.13, #202): agent.py, manager.py, planning.py, evidence.py, prompts.py, schemas.py, sections.py, storage.py, tools.py, workflow.py — Layer-0-Boundary in agent.py + planning.py
       evidence_binder.py    Sub-Slice 07: Contradiction-Penalty, kein dekoratives Fallback
       confidence_calculator.py  Sub-Slice 08: Match-Score-Cap + Verified-Quellen-Gate
       oasis_profile_generator.py  voice_register-Pflichtfeld (Sub-Slice 10)
