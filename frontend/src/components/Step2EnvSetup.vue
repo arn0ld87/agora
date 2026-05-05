@@ -1,16 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { usePersonaActions } from '../composables/usePersonaActions'
+import { usePersonaLibrary } from '../composables/usePersonaLibrary'
 import { useSimulationPrepare } from '../composables/useSimulationPrepare'
 import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
-import {
-  addSimulationProfile,
-  deleteSimulationProfile,
-  listPersonaTemplates,
-  savePersonaTemplate,
-  deletePersonaTemplate
-} from '../api/simulation'
 import { useEnvForm } from '../composables/useEnvForm'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
@@ -73,11 +67,6 @@ const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
 const personaSearch = ref('')
 const showAllPersonas = ref(false)
-const personaTemplates = ref([])
-const isLoadingPersonaLibrary = ref(false)
-const personaLibraryError = ref('')
-const savingPersonaKeys = ref(new Set())
-const usingPersonaTemplateIds = ref(new Set())
 
 // Persona review (Slice 2.4): quality badges, approve/reject, inline edit.
 // Extracted to usePersonaActions (Sub-Slice 38, Refs #203).
@@ -118,163 +107,21 @@ const {
   quotaValidationError,
 } = usePersonaQuota({ t })
 
-// Manual persona editor.
-const showAddPersonaModal = ref(false)
-const newPersona = ref({
-  username: '', name: '', bio: '', persona: '',
-  profession: '', country: 'DE', age: null, gender: 'other', mbti: '',
-  interested_topics: ''
+// ----- Persona-Library + CRUD (usePersonaLibrary — Sub-Slice 39, Refs #203) -----
+const {
+  personaTemplates, isLoadingPersonaLibrary, personaLibraryError,
+  savingPersonaKeys, usingPersonaTemplateIds,
+  showAddPersonaModal, newPersona, isSavingPersona,
+  profileKey, profilePayload,
+  resetNewPersona, submitNewPersona,
+  loadPersonaLibrary, savePersona, saveAllPersonas,
+  usePersonaTemplate, removePersonaTemplate, removePersona,
+} = usePersonaLibrary({
+  simulationId: computed(() => props.simulationId),
+  profiles,
+  fetchProfilesRealtime,
+  addLog,
 })
-const isSavingPersona = ref(false)
-
-function resetNewPersona() {
-  newPersona.value = {
-    username: '', name: '', bio: '', persona: '',
-    profession: '', country: 'DE', age: null, gender: 'other', mbti: '',
-    interested_topics: ''
-  }
-}
-
-async function submitNewPersona() {
-  if (!props.simulationId) return
-  const data = { ...newPersona.value }
-  // topics: comma-separated -> array
-  if (typeof data.interested_topics === 'string') {
-    data.interested_topics = data.interested_topics
-      .split(',').map(s => s.trim()).filter(Boolean)
-  }
-  if (data.age === '' || data.age == null) delete data.age
-  isSavingPersona.value = true
-  try {
-    const res = await addSimulationProfile(props.simulationId, data)
-    if (res?.success) {
-      addLog(`Persona hinzugefügt: ${res.data?.profile?.username}`)
-      await fetchProfilesRealtime()
-      showAddPersonaModal.value = false
-      resetNewPersona()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-    }
-  } catch (err) {
-    addLog(err.message)
-  } finally {
-    isSavingPersona.value = false
-  }
-}
-
-function profileKey(profile) {
-  return String(profile?.template_id || profile?.username || profile?.name || profile?.user_id || '')
-}
-
-function profilePayload(profile) {
-  const payload = {}
-  const fields = [
-    'username', 'name', 'bio', 'persona', 'age', 'gender', 'mbti', 'country',
-    'profession', 'interested_topics', 'source_entity_uuid', 'source_entity_type',
-    'language', 'activity_level', 'time_zone', 'location', 'verified'
-  ]
-  for (const field of fields) {
-    const value = profile?.[field]
-    if (value !== undefined && value !== null && value !== '') payload[field] = value
-  }
-  return payload
-}
-
-async function loadPersonaLibrary() {
-  isLoadingPersonaLibrary.value = true
-  personaLibraryError.value = ''
-  try {
-    const res = await listPersonaTemplates()
-    if (res?.success && Array.isArray(res.data?.templates)) {
-      personaTemplates.value = res.data.templates
-    } else {
-      personaLibraryError.value = res?.error || 'Bibliothek konnte nicht geladen werden.'
-    }
-  } catch (err) {
-    personaLibraryError.value = err.message
-  } finally {
-    isLoadingPersonaLibrary.value = false
-  }
-}
-
-async function savePersona(profile) {
-  const key = profileKey(profile)
-  if (!key) return
-  savingPersonaKeys.value = new Set([...savingPersonaKeys.value, key])
-  try {
-    const res = await savePersonaTemplate(profilePayload(profile))
-    if (res?.success) {
-      addLog(`Persona gespeichert: ${res.data?.template?.name || res.data?.template?.username || key}`)
-      await loadPersonaLibrary()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-    }
-  } catch (err) {
-    addLog(err.message)
-  } finally {
-    const next = new Set(savingPersonaKeys.value)
-    next.delete(key)
-    savingPersonaKeys.value = next
-  }
-}
-
-async function saveAllPersonas() {
-  for (const profile of profiles.value) {
-    await savePersona(profile)
-  }
-}
-
-async function usePersonaTemplate(template) {
-  if (!props.simulationId || !template?.template_id) return
-  usingPersonaTemplateIds.value = new Set([...usingPersonaTemplateIds.value, template.template_id])
-  try {
-    const payload = {
-      ...profilePayload(template),
-      source_entity_type: 'library',
-    }
-    const res = await addSimulationProfile(props.simulationId, payload)
-    if (res?.success) {
-      addLog(`Persona wiederverwendet: ${res.data?.profile?.username}`)
-      await fetchProfilesRealtime()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-    }
-  } catch (err) {
-    addLog(err.message)
-  } finally {
-    const next = new Set(usingPersonaTemplateIds.value)
-    next.delete(template.template_id)
-    usingPersonaTemplateIds.value = next
-  }
-}
-
-async function removePersonaTemplate(templateId) {
-  if (!templateId) return
-  if (!confirm('Gespeicherte Persona wirklich löschen?')) return
-  try {
-    const res = await deletePersonaTemplate(templateId)
-    if (res?.success) await loadPersonaLibrary()
-    else addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-  } catch (err) {
-    addLog(err.message)
-  }
-}
-
-async function removePersona(username) {
-  if (!props.simulationId || !username) return
-  if (!confirm(`Persona "${username}" löschen?`)) return
-  try {
-    const res = await deleteSimulationProfile(props.simulationId, username)
-    if (res?.success) {
-      addLog(`Persona gelöscht: ${username}`)
-      await fetchProfilesRealtime()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-    }
-  } catch (err) {
-    addLog(err.message)
-  }
-}
 
 const filteredPersonas = computed(() => {
   const q = personaSearch.value.trim().toLowerCase()
