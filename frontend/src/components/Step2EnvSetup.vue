@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { usePersonaReview } from '../composables/usePersonaReview'
+import { usePersonaActions } from '../composables/usePersonaActions'
 import { useSimulationPrepare } from '../composables/useSimulationPrepare'
 import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
@@ -80,137 +80,30 @@ const savingPersonaKeys = ref(new Set())
 const usingPersonaTemplateIds = ref(new Set())
 
 // Persona review (Slice 2.4): quality badges, approve/reject, inline edit.
-const personaReview = usePersonaReview()
-const editingProfile = ref(null) // editable working copy bound to the detail modal
-const reviewActionPending = ref(false)
-const reviewActionError = ref('')
-const STATUS_VARIANTS = { approved: 'success', pending: 'warn', rejected: 'error', regenerating: 'accent' }
-const SEVERITY_VARIANTS = { error: 'error', warning: 'warn', info: 'plasma' }
-const STATUS_LABELS = { approved: 'freigegeben', pending: 'offen', rejected: 'abgelehnt', regenerating: t('step2.persona.regeneratingPill') }
-
-function statusVariant(status) {
-  return STATUS_VARIANTS[status] || 'ghost'
-}
-function statusLabel(status) {
-  return STATUS_LABELS[status] || status || '—'
-}
-function issueBadgeVariant(severity) {
-  return SEVERITY_VARIANTS[severity] || 'ghost'
-}
-function startEditingSelected() {
-  if (!selectedProfile.value) return
-  const src = selectedProfile.value
-  editingProfile.value = {
-    username: src.username,
-    name: src.name || '',
-    bio: src.bio || '',
-    persona: src.persona || '',
-    profession: src.profession || '',
-    country: src.country || '',
-    age: src.age ?? null,
-    gender: src.gender || 'other',
-    mbti: src.mbti || '',
-    interested_topics: Array.isArray(src.interested_topics)
-      ? src.interested_topics.join(', ')
-      : (src.interested_topics || ''),
-  }
-  reviewActionError.value = ''
-}
-function cancelEditing() {
-  editingProfile.value = null
-  reviewActionError.value = ''
-}
-function applyProfileToList(profile) {
-  if (!profile?.username) return
-  const idx = profiles.value.findIndex((p) => p.username === profile.username)
-  if (idx >= 0) {
-    profiles.value.splice(idx, 1, { ...profiles.value[idx], ...profile })
-  }
-  if (selectedProfile.value?.username === profile.username) {
-    selectedProfile.value = { ...selectedProfile.value, ...profile }
-  }
-}
-async function approveSelected() {
-  if (!selectedProfile.value || !props.simulationId) return
-  reviewActionPending.value = true
-  reviewActionError.value = ''
-  try {
-    const data = await personaReview.approve(props.simulationId, selectedProfile.value.username)
-    applyProfileToList(data?.profile)
-    addLog(`Persona freigegeben: ${selectedProfile.value.username}`)
-    await personaReview.refreshQuality(props.simulationId)
-  } catch (err) {
-    reviewActionError.value = err.message
-  } finally {
-    reviewActionPending.value = false
-  }
-}
-async function rejectSelected() {
-  if (!selectedProfile.value || !props.simulationId) return
-  reviewActionPending.value = true
-  reviewActionError.value = ''
-  try {
-    const data = await personaReview.reject(props.simulationId, selectedProfile.value.username)
-    applyProfileToList(data?.profile)
-    addLog(`Persona abgelehnt: ${selectedProfile.value.username}`)
-    await personaReview.refreshQuality(props.simulationId)
-  } catch (err) {
-    reviewActionError.value = err.message
-  } finally {
-    reviewActionPending.value = false
-  }
-}
-
-const regenerateHint = ref('')
-
-async function regenerateSelected() {
-  if (!selectedProfile.value || !props.simulationId) return
-  reviewActionPending.value = true
-  reviewActionError.value = ''
-  try {
-    const hint = regenerateHint.value.trim() || undefined
-    const data = await personaReview.regenerate(props.simulationId, selectedProfile.value.username, hint)
-    applyProfileToList(data?.profile)
-    addLog(`Persona wird neu generiert: ${selectedProfile.value.username}`)
-    regenerateHint.value = ''
-    await personaReview.refreshQuality(props.simulationId)
-  } catch (err) {
-    reviewActionError.value = err.message
-  } finally {
-    reviewActionPending.value = false
-  }
-}
-
-const hasRegeneratingPersona = computed(() =>
-  profiles.value.some((p) => p.review_status === 'regenerating')
-)
-async function saveEditingProfile() {
-  if (!editingProfile.value || !props.simulationId) return
-  const payload = { ...editingProfile.value }
-  delete payload.username
-  if (typeof payload.interested_topics === 'string') {
-    payload.interested_topics = payload.interested_topics
-      .split(',').map((t) => t.trim()).filter(Boolean)
-  }
-  if (payload.age === '' || payload.age === null) delete payload.age
-  reviewActionPending.value = true
-  reviewActionError.value = ''
-  try {
-    const data = await personaReview.editProfile(
-      props.simulationId,
-      editingProfile.value.username,
-      payload,
-    )
-    applyProfileToList(data?.profile)
-    addLog(`Persona bearbeitet: ${editingProfile.value.username}`)
-    editingProfile.value = null
-    await personaReview.refreshQuality(props.simulationId)
-  } catch (err) {
-    reviewActionError.value = err.message
-  } finally {
-    reviewActionPending.value = false
-  }
-}
+// Extracted to usePersonaActions (Sub-Slice 38, Refs #203).
+const {
+  editingProfile,
+  reviewActionPending,
+  reviewActionError,
+  regenerateHint,
+  statusVariant,
+  statusLabel,
+  issueBadgeVariant,
+  startEditingSelected,
+  cancelEditing,
+  applyProfileToList,
+  approveSelected,
+  rejectSelected,
+  regenerateSelected,
+  saveEditingProfile,
+  hasRegeneratingPersona,
+  personaReview,
+} = usePersonaActions({
+  simulationId: computed(() => props.simulationId),
+  profiles,
+  selectedProfile,
+  addLog,
+})
 
 // Agent-count cap (optional; null = unlimited / all matching entities).
 const STORAGE_MAX_AGENTS = 'agora.maxAgents'
