@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **Persona-Regenerate UI:** Button + State-Pill `regenerating` + Start-Gate-Block in `Step2EnvSetup.vue`, `regenerate()`-Methode in `usePersonaReview`-Composable, `regenerateSimulationProfile()` in API-Client, 4 i18n-Keys (`step2.persona.regenerate/regenerateHint/regeneratingPill/regeneratingBlock`) in de.json + en.json (Sub-Slice 33, Closes #70)
 
 ### Changed
+- **Step2EnvSetup:** Quota-State, LocalStorage-Persistenz und Zod-Validierung nach `usePersonaQuota`-Composable extrahiert (Sub-Slice 35, Refs #203)
 - **Step2EnvSetup:** Simulation-Prepare-Lifecycle nach `useSimulationPrepare`-Composable extrahiert (Sub-Slice 34, Refs #203)
 
 ### Refactored

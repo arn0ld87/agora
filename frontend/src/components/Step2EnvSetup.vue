@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { usePersonaReview } from '../composables/usePersonaReview'
 import { useSimulationPrepare } from '../composables/useSimulationPrepare'
+import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
 import {
   getAvailableModels,
@@ -18,7 +19,6 @@ import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
 import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
 import {
-  PersonaQuotaPlanSchema,
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
 
@@ -277,41 +277,12 @@ const useAgentCap = ref(false)
 const maxAgents = ref(Number(localStorage.getItem(STORAGE_MAX_AGENTS)) || 50)
 watch(maxAgents, (v) => { localStorage.setItem(STORAGE_MAX_AGENTS, String(v)) })
 
-// ----- Persona-Quota-Plan (Sub-Slice 20c, 24 — UI in QuotaPlanEditor.vue) -----
-//
-// useQuotaPlan + quotaEntries sind weiterhin hier, weil triggerPrepare() die
-// Quota-Validierung (Zod, Sub-Slice 20c) und den API-Payload aufbaut,
-// bevor es an useSimulationPrepare.startPrepare() delegiert (Sub-Slice 34).
-// Die eigentliche UI lebt in frontend/src/components/step2/QuotaPlanEditor.vue (Sub-Slice 31).
-const STORAGE_QUOTA_PLAN = 'agora.quotaPlan'
-const useQuotaPlan = ref(false)
-
-function _loadQuotaEntries() {
-  try {
-    const raw = localStorage.getItem(STORAGE_QUOTA_PLAN)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object' || !parsed.targets) return []
-    let counter = 0
-    return Object.entries(parsed.targets).map(([segment, count]) => ({
-      id: `q_${Date.now()}_${++counter}`,
-      segment,
-      count: Number(count) || 1,
-    }))
-  } catch {
-    return []
-  }
-}
-const quotaEntries = ref(_loadQuotaEntries())
-
-watch(
+// ----- Persona-Quota-Plan (Sub-Slice 35: extrahiert nach usePersonaQuota) -----
+const {
+  useQuotaPlan,
   quotaEntries,
-  (entries) => {
-    const plan = buildQuotaPlanFromEntries(entries)
-    localStorage.setItem(STORAGE_QUOTA_PLAN, JSON.stringify(plan))
-  },
-  { deep: true }
-)
+  quotaValidationError,
+} = usePersonaQuota({ t })
 
 // Manual persona editor.
 const showAddPersonaModal = ref(false)
@@ -536,8 +507,7 @@ async function triggerPrepare() {
     emit('update-status', 'error')
     return
   }
-  // Client-seitige Quota-Validierung (Sub-Slice 20c) bleibt in der .vue,
-  // weil sie i18n-Strings und lokalen Quota-State kombiniert.
+  // Quota-Validierung via usePersonaQuota (Sub-Slice 35).
   const payload = {
     simulation_id: props.simulationId,
     use_llm_for_profiles: true,
@@ -550,15 +520,12 @@ async function triggerPrepare() {
     payload.max_agents = maxAgents.value
   }
   if (useQuotaPlan.value) {
-    const plan = buildQuotaPlanFromEntries(quotaEntries.value)
-    const validation = PersonaQuotaPlanSchema.safeParse(plan)
-    if (!validation.success) {
-      const msg = validation.error.issues[0]?.message || t('step2.quota.invalid')
-      addLog(`${t('errors.personaGenFailed')}: ${msg}`)
+    if (quotaValidationError.value) {
+      addLog(`${t('errors.personaGenFailed')}: ${quotaValidationError.value}`)
       emit('update-status', 'error')
       return
     }
-    payload.quota_plan = plan
+    payload.quota_plan = buildQuotaPlanFromEntries(quotaEntries.value)
   }
   await startPrepare({
     payload,
