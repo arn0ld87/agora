@@ -40,6 +40,7 @@ class RunRegistry:
                     cls._instance = super().__new__(cls)
                     cls._instance._cache: Dict[str, Dict[str, Any]] = {}
                     cls._instance._lock = threading.Lock()
+                    cls._instance._dir_ensured: bool = False
                     # Directory creation is deferred to _ensure_registry_dir()
                     # so that a bind-mounted uploads directory without the
                     # correct permissions for the container user does not abort
@@ -51,9 +52,12 @@ class RunRegistry:
 
         Called lazily before any actual file I/O so that a missing or
         not-yet-writable uploads bind-mount does not crash the worker on
-        import/startup.
+        import/startup.  A boolean flag avoids repeated syscalls once the
+        directory has been confirmed to exist.
         """
-        os.makedirs(self.REGISTRY_DIR, exist_ok=True)
+        if not self._dir_ensured:
+            os.makedirs(self.REGISTRY_DIR, exist_ok=True)
+            self._dir_ensured = True
 
     @staticmethod
     def canonical_status(raw_status: Optional[str]) -> str:
