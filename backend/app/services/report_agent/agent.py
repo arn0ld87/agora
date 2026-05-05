@@ -27,7 +27,6 @@ from .sections import (
 )
 from ..web_tools import WebToolsService
 from ...utils.logger import get_logger
-from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import (
     EvidenceItem,
     Report,

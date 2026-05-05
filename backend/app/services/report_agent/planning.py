@@ -4,6 +4,7 @@ import json
 from typing import Any, Callable, Optional
 
 from ...config import Config
+from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
@@ -47,22 +48,37 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
         if progress_callback:
             progress_callback("planning", 80, "Parsing outline structure...")
 
-        sections = []
+        # Parse outline — validate via Pydantic contract first, then
+        # convert to ReportSection for downstream processing with content.
+        pydantic_sections = []
         for section_data in response.get("sections", []):
-            title = (section_data.get("title", "") or "").strip()
-            if title:
-                sections.append(ReportSection(title=title, content=""))
+            raw_desc = (section_data.get("description") or "").strip()
+            pydantic_sections.append(ReportOutlineSectionModel(
+                title=(section_data.get("title") or "Section").strip() or "Section",
+                description=raw_desc if raw_desc else "—",
+            ))
 
-        title = (response.get("title", "Simulation Analysis Report") or "").strip()
-        summary = (response.get("summary", "") or "").strip()
-        if not title or not summary or not (2 <= len(sections) <= 5):
+        pydantic_outline = ReportOutlineModel(
+            title=(response.get("title") or "Simulation Analysis Report").strip() or "Simulation Analysis Report",
+            summary=(response.get("summary") or "").strip() or "—",
+            sections=pydantic_sections,
+        )
+
+        if not (2 <= len(pydantic_outline.sections) <= 5):
             raise ValueError(
-                f"invalid outline response: title={bool(title)} summary={bool(summary)} sections={len(sections)}"
+                f"invalid outline response: sections={len(pydantic_outline.sections)}"
             )
 
+        sections = [
+            ReportSection(
+                title=s.title,
+                description=s.description,
+            )
+            for s in pydantic_outline.sections
+        ]
         outline = ReportOutline(
-            title=title,
-            summary=summary,
+            title=pydantic_outline.title,
+            summary=pydantic_outline.summary,
             sections=sections,
         )
 
@@ -74,13 +90,23 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
 
     except Exception as e:
         logger.error(f"Outline planning failed: {str(e)}")
+        # Return default outline (3 sections as fallback) — all descriptions filled.
         return ReportOutline(
             title="Scenario Evaluation Report",
             summary="Emerging trends and risk analysis based on simulation observations",
             sections=[
-                ReportSection(title="Evaluation Scenario and Core Findings"),
-                ReportSection(title="Persona Reaction Analysis"),
-                ReportSection(title="Trend Outlook and Risk Warning"),
+                ReportSection(
+                    title="Evaluation Scenario and Core Findings",
+                    description="Overview of the simulated scenario and main findings",
+                ),
+                ReportSection(
+                    title="Persona Reaction Analysis",
+                    description="Analysis of how simulated personas reacted to key events",
+                ),
+                ReportSection(
+                    title="Trend Outlook and Risk Warning",
+                    description="Identified trends and potential risk signals from the simulation",
+                ),
             ],
         )
 

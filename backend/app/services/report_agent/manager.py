@@ -474,9 +474,13 @@ class ReportManager:
         if outline_data:
             sections = []
             for s in outline_data.get('sections', []):
+                # Prefer stored description; fall back to content for legacy
+                # entries that predate the description field.
+                stored_desc = s.get('description') or s.get('content') or ""
                 sections.append(ReportSection(
                     title=s['title'],
-                    content=s.get('content', '')
+                    content=s.get('content', ''),
+                    description=stored_desc if stored_desc.strip() else "—",
                 ))
             outline = ReportOutline(
                 title=outline_data['title'],
