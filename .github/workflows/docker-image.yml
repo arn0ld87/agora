@@ -148,6 +148,7 @@ jobs:
         # uploads-Registry auf dem Runner.
         run: |
           mkdir -p backend/uploads/run_registry
+          command -v setfacl >/dev/null 2>&1 || { echo "::error::setfacl fehlt auf dem Runner"; exit 1; }
           setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
 
       - name: Compose-Stack starten
