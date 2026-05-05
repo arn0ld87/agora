@@ -141,6 +141,15 @@ jobs:
           printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
             "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" "$AGORA_SKIP_EMBEDDING_PROBE" > .env
 
+      - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
+        # GitHub-Runner-Workspace gehoert uid 1001, der Prod-Container laeuft als
+        # uid 1000 (`USER agora`). Bei Bind-Mounts bleiben die Host-Rechte
+        # erhalten, daher braucht der Smoke-Test hier eine explizit beschreibbare
+        # uploads-Registry auf dem Runner.
+        run: |
+          mkdir -p backend/uploads/run_registry
+          chmod 0777 backend/uploads backend/uploads/run_registry
+
       - name: Compose-Stack starten
         # Kein --build: das Image ist bereits geladen (docker load oben).
         # ALLOW_BUILD_TIME_TOKEN=true: CI ist Single-User-Tailnet-Variante,
