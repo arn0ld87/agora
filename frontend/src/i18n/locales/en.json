@@ -569,6 +569,52 @@
       "unknown": "Unknown context"
     }
   },
+  "branchCompare": {
+    "title": "Branch Comparison",
+    "simulationLabel": "Simulation",
+    "branchA": "Branch A",
+    "branchB": "Branch B",
+    "deltas": {
+      "echoChamber": "ΔEcho Chamber",
+      "clusters": "ΔClusters",
+      "bridgeAgents": "ΔBridge Agents",
+      "avgEvidence": "ΔAvg Evidence",
+      "contradictionRatio": "ΔContradiction Rate",
+      "interactionDensity": "ΔInteraction Density"
+    },
+    "metrics": {
+      "echoChamberIndex": "Echo Chamber Index",
+      "clusterCount": "Clusters",
+      "bridgeAgents": "Bridge Agents",
+      "totalAgents": "Total Agents",
+      "totalInteractions": "Interactions",
+      "interactionDensity": "Interaction Density",
+      "avgEvidencePerClaim": "Avg Evidence per Claim",
+      "claimsWithoutEvidenceRatio": "Claims without Evidence",
+      "contradictionRatio": "Contradiction Rate",
+      "confidenceDistribution": "Confidence Distribution",
+      "personaReach": "Persona Activation",
+      "dominantClusters": "Dominant Clusters"
+    },
+    "confidence": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "verified": "Verified"
+    },
+    "clustersOnlyInA": "Only in Branch A",
+    "clustersOnlyInB": "Only in Branch B",
+    "clustersChanged": "Changed Clusters",
+    "empty": {
+      "sameBranches": "Please select two different branches.",
+      "selectBranches": "Please select two branches."
+    },
+    "loading": "Loading comparison…",
+    "error": {
+      "generic": "Error loading comparison"
+    },
+    "completedAt": "Completed"
+  },
   "graphDiff": {
     "title": "Graph Snapshot Comparison",
     "snapshotA": "Snapshot A",
