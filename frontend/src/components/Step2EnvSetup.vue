@@ -5,13 +5,13 @@ import { useSimulationPrepare } from '../composables/useSimulationPrepare'
 import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
 import {
-  getAvailableModels,
   addSimulationProfile,
   deleteSimulationProfile,
   listPersonaTemplates,
   savePersonaTemplate,
   deletePersonaTemplate
 } from '../api/simulation'
+import { useEnvForm } from '../composables/useEnvForm'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -33,83 +33,23 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
 
-// ----- Model + language picker (Phase 3 + 5) -----
+// ----- Model + language picker (useEnvForm — Sub-Slice 37, Refs #203) -----
 
-const STORAGE_MODEL = 'agora.lastModel'
-const STORAGE_LANG = 'agora.agentLanguage'
-
-const ollamaModels = ref([])
-const presetModels = ref([])
-const defaultModel = ref('')
-const ollamaReachable = ref(false)
-const agentToolsEnabled = ref(false)
-const maxToolCallsPerAction = ref(2)
-const loadingModels = ref(true)
-const modelOption = ref('default') // 'default' | preset name | 'custom'
-const customModel = ref('')
-const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
-
-async function loadModels() {
-  loadingModels.value = true
-  try {
-    const res = await getAvailableModels()
-    if (res?.success) {
-      ollamaModels.value = res.data?.ollama || []
-      presetModels.value = res.data?.presets || []
-      defaultModel.value = res.data?.current_default || ''
-      ollamaReachable.value = !!res.data?.ollama_reachable
-      agentToolsEnabled.value = !!res.data?.agent_tools_enabled
-      maxToolCallsPerAction.value = res.data?.max_tool_calls_per_action || 2
-      if (res.data?.default_language) {
-        if (!localStorage.getItem(STORAGE_LANG)) language.value = res.data.default_language
-      }
-      const stored = localStorage.getItem(STORAGE_MODEL)
-      if (stored && (
-        stored === 'default' ||
-        stored === 'custom' ||
-        presetModels.value.some(p => p.name === stored) ||
-        ollamaModels.value.some(p => p.name === stored)
-      )) {
-        modelOption.value = stored
-      }
-    }
-  } catch (e) {
-    addLog(t('errors.noLlm') + ' (' + e.message + ')')
-  } finally {
-    loadingModels.value = false
-  }
-}
-
-const modelOptions = computed(() => {
-  const opts = []
-  opts.push({
-    value: 'default',
-    label: `${t('step2.model.default')} — ${defaultModel.value || '?'}`
-  })
-  for (const p of presetModels.value) {
-    opts.push({ value: p.name, label: `${p.label || p.name}` })
-  }
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.name === m.name)) continue
-    opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
-  }
-  opts.push({ value: 'custom', label: t('step2.model.customGroup') })
-  return opts
-})
-
-watch(modelOption, (val) => {
-  localStorage.setItem(STORAGE_MODEL, val)
-})
-
-watch(language, (val) => {
-  localStorage.setItem(STORAGE_LANG, val)
-})
-
-function effectiveModel() {
-  if (modelOption.value === 'default') return null
-  if (modelOption.value === 'custom') return customModel.value.trim() || null
-  return modelOption.value
-}
+const {
+  ollamaModels,
+  presetModels,
+  defaultModel,
+  ollamaReachable,
+  agentToolsEnabled,
+  maxToolCallsPerAction,
+  loadingModels,
+  modelOption,
+  customModel,
+  language,
+  modelOptions,
+  loadModels,
+  effectiveModel,
+} = useEnvForm({ t, onError: (msg) => addLog(msg) })
 
 // ----- Prepare flow (useSimulationPrepare — Sub-Slice 34, Refs #203) -----
 
