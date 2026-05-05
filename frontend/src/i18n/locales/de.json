@@ -580,6 +580,31 @@
       "unknown": "Unbekannter Kontext"
     }
   },
+  "graphDiff": {
+    "title": "Graph-Snapshot-Vergleich",
+    "snapshotA": "Snapshot A",
+    "snapshotB": "Snapshot B",
+    "statsNodes": "ΔKnoten",
+    "statsEdges": "ΔKanten",
+    "statsClusters": "ΔCluster",
+    "statsDensity": "ΔDichte",
+    "legend": {
+      "added": "Hinzugefügt",
+      "removed": "Entfernt",
+      "reinforced": "Verstärkt",
+      "weakened": "Geschwächt"
+    },
+    "clustersOnlyInA": "Nur in Snapshot A",
+    "clustersOnlyInB": "Nur in Snapshot B",
+    "clustersChanged": "Veränderte Cluster",
+    "empty": {
+      "sameSnapshots": "Bitte zwei verschiedene Snapshots wählen."
+    },
+    "loading": "Vergleich wird geladen…",
+    "error": {
+      "generic": "Fehler beim Laden des Vergleichs"
+    }
+  },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
     "backend": "Backend-Fehler.",

@@ -569,6 +569,31 @@
       "unknown": "Unknown context"
     }
   },
+  "graphDiff": {
+    "title": "Graph Snapshot Comparison",
+    "snapshotA": "Snapshot A",
+    "snapshotB": "Snapshot B",
+    "statsNodes": "ΔNodes",
+    "statsEdges": "ΔEdges",
+    "statsClusters": "ΔClusters",
+    "statsDensity": "ΔDensity",
+    "legend": {
+      "added": "Added",
+      "removed": "Removed",
+      "reinforced": "Reinforced",
+      "weakened": "Weakened"
+    },
+    "clustersOnlyInA": "Only in Snapshot A",
+    "clustersOnlyInB": "Only in Snapshot B",
+    "clustersChanged": "Changed Clusters",
+    "empty": {
+      "sameSnapshots": "Please select two different snapshots."
+    },
+    "loading": "Loading comparison…",
+    "error": {
+      "generic": "Error loading comparison"
+    }
+  },
   "errors": {
     "network": "Network error. Is the server reachable?",
     "backend": "Backend error.",
