@@ -222,3 +222,36 @@ backend/app/services/report_agent/
   tools.py         — define_tools, execute_tool_call, parse_tool_calls, is_valid_tool_call
   workflow.py      — generate_report, generate_section_react, chat
 ```
+
+## Followup: Re-Export-Lücke PLAN_*-Templates (2026-05-05, Refs #202)
+
+Nach dem Package-Split zeigte die Vollsuite zwei Failures:
+
+```
+FAILED tests/test_report_prompts.py::test_report_agent_re_exports_identity[PLAN_SYSTEM_PROMPT_TEMPLATE]
+FAILED tests/test_report_prompts.py::test_report_agent_re_exports_identity[PLAN_USER_PROMPT_TEMPLATE]
+```
+
+**Ursache:** `__getattr__` in `__init__.py` durchsuchte nur `.agent`, `.manager`, `.tools`.
+`PLAN_SYSTEM_PROMPT_TEMPLATE` und `PLAN_USER_PROMPT_TEMPLATE` liegen in `.prompts` (das
+Package-interne Re-Export-Modul aus `app.services.report_prompts`). Da `agent.py` diese
+beiden Templates nicht als Klassenattribute hält (nur `SECTION_*`, `REACT_*`, `CHAT_*`),
+waren sie für externe Caller unsichtbar.
+
+**Fix (Variante A):** `.prompts` in den `__getattr__`-Search-Path aufgenommen:
+
+```python
+for module_name in (".agent", ".manager", ".prompts", ".tools"):
+```
+
+Ausserdem alle Prompt-Namen in `__all__` ergänzt (statische Analyse).
+
+**Commit:** e5ce4cc — `fix(report-agent): re-export PLAN_*-Templates aus Package (Refs #202)`
+
+**Verifikation:**
+- `test_report_agent_re_exports_identity`: 12/12 passed
+- Vollsuite: 1424 passed, 9 skipped, 4 deselected
+- Eval: 13 passed
+- Ruff: grün
+- Schema-Drift: keine
+- Import-Smoke: grün
