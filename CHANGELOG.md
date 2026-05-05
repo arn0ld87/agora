@@ -7,6 +7,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Added
 - **Persona-Regenerate UI:** Button + State-Pill `regenerating` + Start-Gate-Block in `Step2EnvSetup.vue`, `regenerate()`-Methode in `usePersonaReview`-Composable, `regenerateSimulationProfile()` in API-Client, 4 i18n-Keys (`step2.persona.regenerate/regenerateHint/regeneratingPill/regeneratingBlock`) in de.json + en.json (Sub-Slice 33, Closes #70)
 
+### Changed
+- **Step2EnvSetup:** Simulation-Prepare-Lifecycle nach `useSimulationPrepare`-Composable extrahiert (Sub-Slice 34, Refs #203)
+
 ### Refactored
 - **Sub-Slice 31 (Phase 1, Refs #203):** `QuotaPlanEditor.vue` aus `Step2EnvSetup.vue` extrahiert. Neues `frontend/src/components/step2/QuotaPlanEditor.vue` (`<script setup lang="ts">`, Props/Emits Zod-typisiert via `personaQuotaContract.ts`, vollständige i18n-Abdeckung). `Step2EnvSetup.vue` von 1817 → 1712 LOC. 6 Vitest-Cases in `step2/__tests__/QuotaPlanEditor.spec.ts` (render valid plan, edit emits update, invalid plan shows error, disabled inputs, add segment, toggle emit). Alle 247 Frontend-Tests grün, `npm run check` grün.
 
