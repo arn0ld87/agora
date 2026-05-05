@@ -73,11 +73,13 @@ def _reverse_lookup(rel_path: str) -> Optional[str]:
             return name
     if rel_path.startswith(f"{_IPC_COMMAND_DIR}/") and rel_path.endswith(".json"):
         cmd_id = rel_path[len(_IPC_COMMAND_DIR) + 1:-5]
-        if cmd_id:
+        # Skip temp files created by write_json_atomic (.tmp-json-* prefix).
+        if cmd_id and not cmd_id.startswith("."):
             return f"{_IPC_COMMAND_PREFIX}{cmd_id}"
     if rel_path.startswith(f"{_IPC_RESPONSE_DIR}/") and rel_path.endswith(".json"):
         resp_id = rel_path[len(_IPC_RESPONSE_DIR) + 1:-5]
-        if resp_id:
+        # Skip temp files created by write_json_atomic (.tmp-json-* prefix).
+        if resp_id and not resp_id.startswith("."):
             return f"{_IPC_RESPONSE_PREFIX}{resp_id}"
     return None
 
@@ -186,7 +188,10 @@ class LocalFilesystemArtifactStore:
                 continue
             with os.scandir(sub_path) as entries:
                 for entry in entries:
-                    if entry.is_file():
+                    # Skip hidden files (e.g. .tmp-json-* temp files from
+                    # write_json_atomic) to avoid spurious ValueError in
+                    # _resolve_relative_path / _subscribe_rpc_commands.
+                    if entry.is_file() and not entry.name.startswith("."):
                         name = _reverse_lookup(f"{sub}/{entry.name}")
                         if name is not None:
                             results.append(name)

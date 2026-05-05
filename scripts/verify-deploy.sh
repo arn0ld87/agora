@@ -82,7 +82,7 @@ check "name->id Lookup im Service" \
 echo
 echo "Diagnose-Run (3 letzte Sims):"
 docker compose exec -T agora uv run --project backend \
-  python backend/scripts/diagnose_metric_snapshot.py --limit 3 --no-write 2>&1 | tail -10
+  python backend/scripts/diagnose_metric_snapshot.py --limit 3 --no-write 2>&1 | tail -10 || true
 
 echo
 echo "Result: $ok ok, $fail fail"
