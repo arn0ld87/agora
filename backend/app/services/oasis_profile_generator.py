@@ -9,6 +9,7 @@ Optimization improvements:
 """
 
 import json
+import os
 import random
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -37,6 +38,43 @@ logger = get_logger('agora.oasis_profile')
 
 # Erlaubte Voice-Register-Werte (gespiegelt aus VoiceRegister Literal in persona_contract.py)
 VOICE_REGISTERS = ("formal-de", "neutral-de", "technical-de", "skeptisch-de")
+
+# Persona-Detail-Level steuert die Output-Größe pro Persona — direkter
+# Hebel auf Cloud-LLM-Inference-Zeit (Output-Tokens dominieren). Issue #217.
+PERSONA_DETAIL_LEVELS = {
+    'compact': {
+        'word_count_de': '300–500 Wörter',
+        'word_count_en': '300–500 words',
+        'context_limit': 1200,
+    },
+    'standard': {
+        'word_count_de': '700–900 Wörter',
+        'word_count_en': '700–900 words',
+        'context_limit': 2000,
+    },
+    'rich': {
+        'word_count_de': '1500–2000 Wörter',
+        'word_count_en': '2000 words',
+        'context_limit': 3000,
+    },
+}
+
+
+def _resolve_persona_detail_level() -> dict:
+    """Resolve persona detail level from env (Issue #217 Stufe 2b).
+
+    AGORA_PERSONA_DETAIL_LEVEL=compact|standard|rich (Default: standard).
+    Unknown values fall back to 'standard' with a warning.
+    """
+    level = os.environ.get('AGORA_PERSONA_DETAIL_LEVEL', 'standard').strip().lower()
+    if level not in PERSONA_DETAIL_LEVELS:
+        logger.warning(
+            "AGORA_PERSONA_DETAIL_LEVEL='%s' unknown, falling back to 'standard'. "
+            "Valid: compact, standard, rich.",
+            level,
+        )
+        level = 'standard'
+    return PERSONA_DETAIL_LEVELS[level]
 
 
 @dataclass
@@ -821,8 +859,9 @@ class OasisProfileGenerator:
     ) -> str:
         """Build detailed persona prompt for individual entities — language-aware."""
 
+        detail = _resolve_persona_detail_level()
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
-        context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
+        context_str = context[:detail['context_limit']] if context else "Keine zusätzlichen Informationen"
 
         _quota_block_de = build_name_quota_prompt_block()
         _industry_block_de = build_industry_quota_prompt_block(self._industry_quota_plan)
@@ -847,7 +886,7 @@ Antworte als JSON mit folgenden Feldern:
 1. display_name: Echter Vor- und Nachname einer Person im DACH-Raum — entsprechend der obigen Namensverteilung. WICHTIG: Nur dann den tatsächlichen Namen einer realen Person nehmen, wenn "{entity_name}" selbst bereits ein Personenname ist UND diese Person in der Realität so heißt. Bei Rollen ("IT-Umschüler"), Themen ("GraphRAG"), Produkten ("Agora") oder Berufsbezeichnungen IMMER einen anderen, frei gewählten Namen nehmen — nicht den Namen einer im Kontext erwähnten Person übernehmen. Jede Persona soll einen EIGENEN Namen haben.
 2. handle: Kurzes Social-Media-Handle in Kleinbuchstaben ohne Leerzeichen (z. B. "lena_hoffmann" oder "marcelschmitz"). Keine Zahlen anhängen — das passiert später.
 3. bio: Social-Media-Bio, max. 200 Zeichen, auf Deutsch.
-4. persona: Ausführliche Personenbeschreibung (rund 1500–2000 Wörter, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
+4. persona: Ausführliche Personenbeschreibung ({detail['word_count_de']}, durchgehend Fließtext, auf Deutsch). Enthalten muss sein:
    - Eckdaten (Alter, Beruf, Bildungsweg, Wohnort)
    - Hintergrund (prägende Erfahrungen, Bezug zu Ereignissen, soziales Umfeld)
    - Persönlichkeit (MBTI, Kernzüge, emotionaler Ausdruck)
@@ -899,7 +938,7 @@ Please generate JSON containing the following fields:
 1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). IMPORTANT: Only use a real person's actual name if "{entity_name}" itself IS a personal name AND matches reality. For roles, topics, products, or job titles ALWAYS pick a different, freshly chosen name — do NOT reuse names of people mentioned in the context. Every persona must have its own unique name.
 2. handle: Short lowercase social handle without spaces (e.g. "lena_hoffmann"). Do not append digits.
 3. bio: Social media bio, 200 characters
-4. persona: Detailed persona description (2000 words of pure text), must include:
+4. persona: Detailed persona description ({detail['word_count_en']} of pure text), must include:
    - Basic information (age, profession, educational background, location)
    - Personal background (important experiences, event associations, social relationships)
    - Personality traits (MBTI type, core personality, emotional expression)
@@ -939,8 +978,9 @@ Important:
     ) -> str:
         """Build detailed persona prompt for group/institutional entities — language-aware."""
 
+        detail = _resolve_persona_detail_level()
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
-        context_str = context[:3000] if context else "Keine zusätzlichen Informationen"
+        context_str = context[:detail['context_limit']] if context else "Keine zusätzlichen Informationen"
 
         _quota_block_de_grp = build_name_quota_prompt_block()
         _industry_block_de_grp = build_industry_quota_prompt_block(self._industry_quota_plan)
@@ -965,7 +1005,7 @@ Antworte als JSON mit folgenden Feldern:
 1. display_name: Echter Vor- und Nachname einer Person — entsprechend der obigen Namensverteilung. KEIN Organisationsname.
 2. handle: Kurzes Social-Media-Handle der Person in Kleinbuchstaben (z. B. "lena_hoffmann"). Keine Zahlen.
 3. bio: Social-Bio der Person, max. 200 Zeichen, Deutsch. Darf die Rolle in der Organisation erwähnen (z. B. "Senior Tech-Recruiter @TalentCore | Karriereberatung für Quereinsteiger").
-4. persona: Ausführliche Personen-Beschreibung (rund 1500–2000 Wörter, Fließtext, Deutsch). Enthalten:
+4. persona: Ausführliche Personen-Beschreibung ({detail['word_count_de']}, Fließtext, Deutsch). Enthalten:
    - Eckdaten (Alter, Bildungsweg, Wohnort)
    - Rolle in/Beziehung zur Organisation "{entity_name}" (Position, Dauer, Aufgaben)
    - Persönlicher Hintergrund (wie kam sie/er dahin, prägende Erfahrungen)
@@ -1018,7 +1058,7 @@ Please generate JSON containing the following fields:
 1. display_name: Realistic first + last name of a person — following the name distribution above (DACH Mikrozensus 2024). NOT the organization's name.
 2. handle: Short lowercase social handle of the person (e.g. "lena_hoffmann"). Do not append digits.
 3. bio: Personal social bio, 200 characters. May reference the role (e.g. "Senior Recruiter @TalentCore | hiring engineers").
-4. persona: Detailed person description (2000 words of pure text), must include:
+4. persona: Detailed person description ({detail['word_count_en']} of pure text), must include:
    - Basic information (age, education, location)
    - Role in / relationship to "{entity_name}" (position, tenure, responsibilities)
    - Personal background (how they got there, formative experiences)
@@ -1190,7 +1230,6 @@ Important:
             List of Agent Profiles
         """
         import concurrent.futures
-        import os
         from threading import Lock
 
         if parallel_count is None:

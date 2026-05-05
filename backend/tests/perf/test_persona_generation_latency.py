@@ -356,3 +356,48 @@ def test_persona_generation_perf_real_llm(parallel_count: int) -> None:
         f'\n[perf] parallel_count={parallel_count} wall_ms={wall_ms:.0f} '
         f'per_call_p50={p50:.0f} per_call_p95={p95:.0f} count={len(latencies)}'
     )
+
+
+# ---------------------------------------------------------------------------
+# Stufe 2b: AGORA_PERSONA_DETAIL_LEVEL-Resolution-Tests (deterministisch, kein LLM)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_persona_detail_level_default_is_standard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default ohne env ist standard."""
+    from app.services.oasis_profile_generator import _resolve_persona_detail_level
+    monkeypatch.delenv('AGORA_PERSONA_DETAIL_LEVEL', raising=False)
+    detail = _resolve_persona_detail_level()
+    assert '700' in detail['word_count_de']
+    assert detail['context_limit'] == 2000
+
+
+@pytest.mark.parametrize('level,expected_word_marker,expected_ctx', [
+    ('compact', '300', 1200),
+    ('standard', '700', 2000),
+    ('rich', '1500', 3000),
+    ('COMPACT', '300', 1200),   # case-insensitive
+    ('  rich  ', '1500', 3000),  # whitespace
+])
+def test_resolve_persona_detail_level_known_values(
+    monkeypatch: pytest.MonkeyPatch,
+    level: str,
+    expected_word_marker: str,
+    expected_ctx: int,
+) -> None:
+    from app.services.oasis_profile_generator import _resolve_persona_detail_level
+    monkeypatch.setenv('AGORA_PERSONA_DETAIL_LEVEL', level)
+    detail = _resolve_persona_detail_level()
+    assert expected_word_marker in detail['word_count_de']
+    assert detail['context_limit'] == expected_ctx
+
+
+def test_resolve_persona_detail_level_unknown_falls_back_to_standard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unbekannter Wert faellt auf 'standard' zurueck."""
+    from app.services.oasis_profile_generator import _resolve_persona_detail_level
+    monkeypatch.setenv('AGORA_PERSONA_DETAIL_LEVEL', 'epic')
+    detail = _resolve_persona_detail_level()
+    assert '700' in detail['word_count_de']
+    assert detail['context_limit'] == 2000
