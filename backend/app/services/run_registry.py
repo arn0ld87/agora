@@ -40,8 +40,20 @@ class RunRegistry:
                     cls._instance = super().__new__(cls)
                     cls._instance._cache: Dict[str, Dict[str, Any]] = {}
                     cls._instance._lock = threading.Lock()
-                    os.makedirs(cls.REGISTRY_DIR, exist_ok=True)
+                    # Directory creation is deferred to _ensure_registry_dir()
+                    # so that a bind-mounted uploads directory without the
+                    # correct permissions for the container user does not abort
+                    # the worker process at import time (PermissionError).
         return cls._instance
+
+    def _ensure_registry_dir(self) -> None:
+        """Create the registry directory if it does not exist yet.
+
+        Called lazily before any actual file I/O so that a missing or
+        not-yet-writable uploads bind-mount does not crash the worker on
+        import/startup.
+        """
+        os.makedirs(self.REGISTRY_DIR, exist_ok=True)
 
     @staticmethod
     def canonical_status(raw_status: Optional[str]) -> str:
@@ -84,6 +96,7 @@ class RunRegistry:
         return deepcopy(data)
 
     def _write_run(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        self._ensure_registry_dir()
         run_id = data["run_id"]
         path = self._run_path(run_id)
         write_json_atomic(path, data)
@@ -264,7 +277,7 @@ class RunRegistry:
         ``offset`` and ``limit`` implement basic pagination over the sorted
         result set.
         """
-        os.makedirs(self.REGISTRY_DIR, exist_ok=True)
+        self._ensure_registry_dir()
 
         # Normalise status filter to a set of canonical values.
         canonical_statuses: Optional[set[str]] = None

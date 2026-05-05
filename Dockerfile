@@ -27,7 +27,7 @@ ENV UV_HTTP_RETRIES=5
 
 WORKDIR /app
 RUN useradd -m -u 1000 agora \
-  && mkdir -p /app/backend/uploads /app/backend/logs \
+  && mkdir -p /app/backend/uploads/run_registry /app/backend/logs \
   && chown -R agora:agora /app
 
 # ---------- dev (default) ----------
