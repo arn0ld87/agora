@@ -396,3 +396,66 @@ def test_list_simulations_route_is_registered():
     assert payload["success"] is True
     assert "data" in payload
     assert "count" in payload
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 31: regenerate endpoint
+# ---------------------------------------------------------------------------
+
+def test_regenerate_returns_regenerating_status():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.post(f"/api/simulation/{sim_id}/profiles/alice/regenerate")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["review_status"] == "regenerating"
+    assert payload["data"]["username"] == "alice"
+
+
+def test_regenerate_with_notes_sets_review_notes():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.post(
+        f"/api/simulation/{sim_id}/profiles/alice/regenerate",
+        json={"notes": "profile too generic"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["data"]["profile"]["review_notes"] == "profile too generic"
+
+
+def test_regenerate_unknown_username_returns_404():
+    sim_id = "sim_abcdef012345"
+    store = InMemoryArtifactStore()
+    store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
+    app = _build_test_app(artifact_store=store)
+    client = app.test_client()
+
+    response = client.post(f"/api/simulation/{sim_id}/profiles/ghost/regenerate")
+
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["success"] is False
+
+
+def test_regenerate_invalid_simulation_id_returns_400():
+    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+    client = app.test_client()
+
+    response = client.post("/api/simulation/not-a-sim/profiles/alice/regenerate")
+
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["error"] == "Invalid simulation_id format"

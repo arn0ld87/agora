@@ -11,6 +11,7 @@ from app.services.persona_review_service import (
     PersonaReviewService,
     REVIEW_STATUS_APPROVED,
     REVIEW_STATUS_PENDING,
+    REVIEW_STATUS_REGENERATING,
     REVIEW_STATUS_REJECTED,
 )
 
@@ -192,3 +193,102 @@ def test_set_status_idempotent():
     second = service.approve(SIM_ID, "alice")
 
     assert first["review_status"] == second["review_status"] == REVIEW_STATUS_APPROVED
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 31: regenerate() state-machine
+# ---------------------------------------------------------------------------
+
+def test_regenerate_from_pending_sets_regenerating():
+    store = _store_with_profiles([{"username": "alice"}])
+    service = PersonaReviewService(store)
+
+    updated = service.regenerate(SIM_ID, "alice")
+
+    assert updated["review_status"] == REVIEW_STATUS_REGENERATING
+    assert updated["reviewed_at"] is not None
+    persisted = store.read_json(SIM_ID, "reddit_profiles")
+    assert persisted[0]["review_status"] == REVIEW_STATUS_REGENERATING
+
+
+def test_regenerate_from_approved_sets_regenerating():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_APPROVED},
+    ])
+    service = PersonaReviewService(store)
+
+    updated = service.regenerate(SIM_ID, "alice")
+
+    assert updated["review_status"] == REVIEW_STATUS_REGENERATING
+
+
+def test_regenerate_from_rejected_sets_regenerating():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_REJECTED},
+    ])
+    service = PersonaReviewService(store)
+
+    updated = service.regenerate(SIM_ID, "alice")
+
+    assert updated["review_status"] == REVIEW_STATUS_REGENERATING
+
+
+def test_regenerate_from_regenerating_is_idempotent():
+    """Re-requesting regeneration while already regenerating is allowed."""
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_REGENERATING},
+    ])
+    service = PersonaReviewService(store)
+
+    updated = service.regenerate(SIM_ID, "alice", notes="second request")
+
+    assert updated["review_status"] == REVIEW_STATUS_REGENERATING
+    assert updated["review_notes"] == "second request"
+
+
+def test_regenerate_unknown_username_raises_not_found():
+    store = _store_with_profiles([{"username": "alice"}])
+    service = PersonaReviewService(store)
+
+    with pytest.raises(PersonaNotFoundError):
+        service.regenerate(SIM_ID, "ghost")
+
+
+def test_regenerate_sets_notes_and_requested_by():
+    store = _store_with_profiles([{"username": "alice"}])
+    service = PersonaReviewService(store)
+
+    updated = service.regenerate(
+        SIM_ID, "alice", notes="thin profile", requested_by="operator@example.com"
+    )
+
+    assert updated["review_notes"] == "thin profile"
+    assert updated["review_requested_by"] == "operator@example.com"
+    assert updated["review_status"] == REVIEW_STATUS_REGENERATING
+
+
+def test_start_gate_blocks_when_any_persona_regenerating():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_APPROVED},
+        {"username": "bob", "review_status": REVIEW_STATUS_REGENERATING},
+    ])
+    service = PersonaReviewService(store)
+
+    gate = service.evaluate_start_gate(SIM_ID)
+
+    assert gate["allowed"] is False
+    assert gate["regenerating"] == ["bob"]
+    assert gate["approved"] == ["alice"]
+
+
+def test_start_gate_allows_when_no_regenerating_pending_rejected():
+    store = _store_with_profiles([
+        {"username": "alice", "review_status": REVIEW_STATUS_APPROVED},
+        {"username": "bob", "is_manual": True},  # manual default = approved
+    ])
+    service = PersonaReviewService(store)
+
+    gate = service.evaluate_start_gate(SIM_ID)
+
+    assert gate["allowed"] is True
+    assert gate["regenerating"] == []

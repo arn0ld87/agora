@@ -1,6 +1,7 @@
 """Persona review state for the Slice 2 review foundation.
 
-Adds a small ``review_status`` lifecycle (``pending``/``approved``/``rejected``)
+Adds a small ``review_status`` lifecycle
+(``pending``/``approved``/``rejected``/``regenerating``)
 on top of the existing ``reddit_profiles.json`` artifact, plus an editing path
 so the UI can fix individual personas before approving them.
 
@@ -8,6 +9,16 @@ The service is deliberately thin: persistence stays in
 :class:`SimulationArtifactStore`, no new on-disk format. The review status is
 only treated as "missing" while the global :data:`Config.PERSONA_REVIEW_ENABLED`
 flag is off; the API still allows explicit transitions for opt-in clients.
+
+State machine::
+
+    pending ──→ approved
+    pending ──→ rejected
+    pending ──→ regenerating
+    approved ──→ regenerating
+    rejected ──→ regenerating
+    regenerating ──→ pending          (after re-generation completes)
+    regenerating ──→ regenerating     (idempotent re-request)
 """
 
 from __future__ import annotations
@@ -20,12 +31,17 @@ from .artifact_store import SimulationArtifactStore, resolve_default_store
 REVIEW_STATUS_PENDING = "pending"
 REVIEW_STATUS_APPROVED = "approved"
 REVIEW_STATUS_REJECTED = "rejected"
+REVIEW_STATUS_REGENERATING = "regenerating"
 
 _VALID_STATUSES = {
     REVIEW_STATUS_PENDING,
     REVIEW_STATUS_APPROVED,
     REVIEW_STATUS_REJECTED,
+    REVIEW_STATUS_REGENERATING,
 }
+
+# Stati that block the simulation start gate (same as pending).
+_BLOCKING_STATUSES = {REVIEW_STATUS_PENDING, REVIEW_STATUS_REGENERATING}
 
 _EDITABLE_FIELDS = {
     "name",
@@ -148,14 +164,39 @@ class PersonaReviewService:
             simulation_id, username, REVIEW_STATUS_REJECTED, notes=notes
         )
 
+    def regenerate(
+        self,
+        simulation_id: str,
+        username: str,
+        *,
+        requested_by: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Mark a persona as queued for re-generation.
+
+        Allowed from any existing status (idempotent when already
+        ``regenerating``).  Does **not** trigger actual generation — that is
+        handled by the generator pipeline in a subsequent step.
+
+        Sets ``review_status`` to ``"regenerating"`` and records audit fields
+        ``reviewed_at``, ``review_notes``, and (when given) ``review_requested_by``.
+        """
+        return self._mutate(
+            simulation_id,
+            username,
+            mutator=lambda profile: self._apply_regenerate(
+                profile, notes=notes, requested_by=requested_by
+            ),
+        )
+
     def evaluate_start_gate(self, simulation_id: str) -> Dict[str, Any]:
         """Decide whether the simulation may start under the current review state.
 
         Returns a serialisable dict the API layer maps onto a 409 envelope.
-        ``allowed`` is True when no persona is still pending or rejected. The
-        caller is responsible for honouring :data:`Config.PERSONA_REVIEW_ENABLED`
-        — the service itself never reads global config so it stays cheap to
-        unit-test.
+        ``allowed`` is True when no persona is still pending, regenerating, or
+        rejected. The caller is responsible for honouring
+        :data:`Config.PERSONA_REVIEW_ENABLED` — the service itself never reads
+        global config so it stays cheap to unit-test.
         """
         profiles = self.list_profiles(simulation_id)
         pending = [
@@ -166,17 +207,22 @@ class PersonaReviewService:
             p["username"] for p in profiles
             if p.get("review_status") == REVIEW_STATUS_REJECTED
         ]
+        regenerating = [
+            p["username"] for p in profiles
+            if p.get("review_status") == REVIEW_STATUS_REGENERATING
+        ]
         approved = [
             p["username"] for p in profiles
             if p.get("review_status") == REVIEW_STATUS_APPROVED
         ]
-        allowed = not pending and not rejected and bool(profiles)
+        allowed = not pending and not rejected and not regenerating and bool(profiles)
         return {
             "allowed": allowed,
             "total": len(profiles),
             "approved": approved,
             "pending": pending,
             "rejected": rejected,
+            "regenerating": regenerating,
         }
 
     def edit(
@@ -221,6 +267,7 @@ class PersonaReviewService:
             enriched["review_status"] = _default_status_for(enriched)
         enriched.setdefault("review_notes", None)
         enriched.setdefault("reviewed_at", None)
+        enriched.setdefault("review_requested_by", None)
         return enriched
 
     @staticmethod
@@ -234,6 +281,22 @@ class PersonaReviewService:
         profile["reviewed_at"] = _now()
         if notes is not None:
             profile["review_notes"] = notes.strip() or None
+        return profile
+
+    @staticmethod
+    def _apply_regenerate(
+        profile: Dict[str, Any],
+        *,
+        notes: Optional[str],
+        requested_by: Optional[str],
+    ) -> Dict[str, Any]:
+        profile = dict(profile)
+        profile["review_status"] = REVIEW_STATUS_REGENERATING
+        profile["reviewed_at"] = _now()
+        if notes is not None:
+            profile["review_notes"] = notes.strip() or None
+        if requested_by is not None:
+            profile["review_requested_by"] = requested_by.strip() or None
         return profile
 
     @staticmethod
@@ -292,4 +355,5 @@ __all__ = [
     "REVIEW_STATUS_PENDING",
     "REVIEW_STATUS_APPROVED",
     "REVIEW_STATUS_REJECTED",
+    "REVIEW_STATUS_REGENERATING",
 ]

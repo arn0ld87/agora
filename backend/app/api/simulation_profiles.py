@@ -479,6 +479,31 @@ def reject_simulation_profile(simulation_id: str, username: str):
     )
 
 
+@simulation_bp.route('/<simulation_id>/profiles/<username>/regenerate', methods=['POST'])
+@handle_api_errors(log_prefix="Failed to regenerate persona")
+def regenerate_simulation_profile(simulation_id: str, username: str):
+    """Queue a reddit persona for re-generation.
+
+    Sets ``review_status`` to ``"regenerating"`` so the start gate blocks until
+    the generator pipeline produces a fresh persona and resets the status back
+    to ``pending``.  Actual generation is NOT triggered here — this endpoint
+    only records the intent (Sub-Slice 31, Refs #70).
+    """
+    data = request.get_json(silent=True) or {}
+    notes = data.get("notes") or data.get("reason")
+    requested_by = data.get("requested_by")
+    return _handle_review_action(
+        simulation_id,
+        username,
+        action=lambda service: service.regenerate(
+            simulation_id,
+            username,
+            notes=notes,
+            requested_by=requested_by,
+        ),
+    )
+
+
 @simulation_bp.route('/<simulation_id>/profiles/<username>/entity-context', methods=['GET'])
 @handle_api_errors(log_prefix="Failed to load persona entity context")
 def get_persona_entity_context(simulation_id: str, username: str):
