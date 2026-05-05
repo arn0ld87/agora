@@ -269,6 +269,28 @@ describe('useSimulationPrepare', () => {
     })
   })
 
+  describe('Case 8 — fetchProfilesRealtime: im Return-Objekt als öffentliche Methode exponiert (Regression Sub-Slice 36, Closes #292)', () => {
+    it('exposes fetchProfilesRealtime als Funktion', () => {
+      const composable = useSimulationPrepare()
+      // MUST remain a function — removing this export causes ReferenceError in Step2EnvSetup.vue
+      expect(typeof composable.fetchProfilesRealtime).toBe('function')
+    })
+
+    it('fetchProfilesRealtime() aktualisiert profiles.value wenn API Erfolg liefert', async () => {
+      const fakeProfiles = [{ username: 'tester' } as ProfileRecord]
+      mockGetProfiles.mockResolvedValue(makeProfilesEnvelope(fakeProfiles) as ProfileRecord[])
+
+      const composable = useSimulationPrepare()
+      // Set a simulationId so the guard passes
+      await composable.probeAlreadyPrepared('sim-100', { onLog: vi.fn(), onStatusChange: vi.fn() })
+
+      await composable.fetchProfilesRealtime()
+
+      expect(mockGetProfiles).toHaveBeenCalled()
+      expect(composable.profiles.value).toEqual(fakeProfiles)
+    })
+  })
+
   describe('Case 7 — reset: setzt alle State-Werte zurück auf Initialwerte', () => {
     it('reset() nach erfolgreichem Start liefert initialen State', async () => {
       mockPrepare.mockResolvedValue(makePrepareEnvelope() as TaskStatusData)

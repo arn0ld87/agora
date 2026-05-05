@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Fixed
+- **`useSimulationPrepare`:** `fetchProfilesRealtime` als öffentliche Methode exposen — beseitigt ReferenceError beim Hinzufügen/Löschen von Personas in Step2EnvSetup (Sub-Slice 36, Closes #292, Regression aus Sub-Slice 34)
+
 ### Added
 - **Persona-Regenerate UI:** Button + State-Pill `regenerating` + Start-Gate-Block in `Step2EnvSetup.vue`, `regenerate()`-Methode in `usePersonaReview`-Composable, `regenerateSimulationProfile()` in API-Client, 4 i18n-Keys (`step2.persona.regenerate/regenerateHint/regeneratingPill/regeneratingBlock`) in de.json + en.json (Sub-Slice 33, Closes #70)
 

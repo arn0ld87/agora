@@ -121,6 +121,7 @@ const {
   profiles,
   expectedTotal,
   simulationConfig,
+  fetchProfilesRealtime,
   startPrepare,
   probeAlreadyPrepared,
 } = useSimulationPrepare()

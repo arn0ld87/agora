@@ -54,6 +54,8 @@ export interface SimulationPrepareState {
 }
 
 export interface UseSimulationPrepareReturn extends SimulationPrepareState {
+  /** Fetch the current profiles list once from the realtime endpoint. */
+  fetchProfilesRealtime: () => Promise<void>
   /** Kick off a prepare run. Returns false if aborted early (e.g. no simulationId). */
   startPrepare: (opts: PrepareOptions) => Promise<boolean>
   /** Probe whether the simulation is already prepared and hydrate state if so. */
@@ -134,7 +136,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   )
 
   const profilesPolling = usePolling(
-    () => _fetchProfilesRealtime(),
+    () => fetchProfilesRealtime(),
     3000,
     { pauseWhenHidden: false },
   )
@@ -154,7 +156,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
 
   // --- Internal fetch helpers ---
 
-  async function _fetchProfilesRealtime(): Promise<void> {
+  async function fetchProfilesRealtime(): Promise<void> {
     if (!_simulationId) return
     try {
       // reason: service interceptor returns raw envelope body at runtime
@@ -181,7 +183,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
   }
 
   async function _loadPreparedData(): Promise<void> {
-    await _fetchProfilesRealtime()
+    await fetchProfilesRealtime()
     await _fetchConfigRealtime()
     phase.value = 3
     _onStatusChange?.('completed')
@@ -341,6 +343,7 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
     simulationConfig,
     error,
     // actions
+    fetchProfilesRealtime,
     startPrepare,
     probeAlreadyPrepared,
     reset,
