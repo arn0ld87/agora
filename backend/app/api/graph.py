@@ -25,6 +25,7 @@ from ..models.graph import GraphDataDTO
 from ..services.run_registry import RunRegistry
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.graph_diff_helpers import build_pydantic_graph_diff
 
 # Get logger
 logger = get_logger('agora.api')
@@ -618,36 +619,66 @@ def get_graph_snapshot(graph_id: str, round_num: int):
     return json_success(snapshot.to_dict())
 
 
-@graph_bp.route('/diff/<graph_id>', methods=['GET'])
+@graph_bp.route('/<graph_id>/diff', methods=['GET'])
 @handle_api_errors
 def get_graph_diff(graph_id: str):
-    """Return added / removed / reinforced edges between two rounds (Issue #10).
+    """Return added / removed / reinforced edges between two rounds (Sub-Slice 22, Closes #74).
 
-    Query params: ``start_round``, ``end_round`` (both required, ints).
+    Query params: ``start_round``, ``end_round`` (both required, ints >= 0).
+    Response is validated against the Layer-0 ``GraphDiff`` Pydantic contract
+    before serialisation.
     """
     if not validate_graph_id(graph_id):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
 
+    raw_start = request.args.get('start_round')
+    raw_end = request.args.get('end_round')
+
+    if raw_start is None or raw_end is None:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="Pflichtparameter: start_round und end_round (int)",
+        )
+
     try:
-        start_round = int(request.args.get('start_round', '0'))
-        end_round = int(request.args.get('end_round', '0'))
+        start_round = int(raw_start)
+        end_round = int(raw_end)
     except (TypeError, ValueError):
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
-            message="start_round and end_round must be integers",
+            message="start_round und end_round müssen ganze Zahlen sein",
+        )
+
+    if start_round < 0 or end_round < 0:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message="start_round und end_round müssen >= 0 sein",
         )
 
     if end_round < start_round:
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
-            message="end_round must be >= start_round",
+            message="end_round muss >= start_round sein",
         )
 
-    service = get_container().temporal_graph()
-    diff = service.compute_diff(graph_id, start_round, end_round)
-    return json_success(diff.to_dict())
+    svc = get_container().temporal_graph()
+    service_diff = svc.compute_diff(graph_id, start_round, end_round)
+    snap_a = svc.get_snapshot(graph_id, start_round)
+    snap_b = svc.get_snapshot(graph_id, end_round)
+
+    graph_diff = build_pydantic_graph_diff(
+        service_diff=service_diff,
+        snap_a=snap_a,
+        snap_b=snap_b,
+        graph_id=graph_id,
+        start_round=start_round,
+        end_round=end_round,
+    )
+    return json_success(graph_diff.model_dump(mode="json"))
 
 
 def _stringify(value):

@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from app.contracts import EdgeData
 from app.services.temporal_graph import TemporalGraphService
+from app.utils.graph_diff_helpers import _edge_to_contract
 
 
 class StubStorage:
@@ -143,6 +145,37 @@ def test_snapshot_rejects_negative_round():
     service = TemporalGraphService(StubStorage())
     with pytest.raises(ValueError):
         service.get_snapshot(GRAPH, -1)
+
+
+def test_compute_diff_added_edges_tracked():
+    """Sub-Slice 22: Pydantic-Contract-Konvertierung edge-dict → EdgeData funktioniert."""
+    raw_edge: Dict[str, Any] = {
+        "uuid": "edge-001",
+        "source_id": "node-A",
+        "target_id": "node-B",
+        "relation_type": "FOLLOWS",
+        "weight": 2.5,
+        "reinforced_count": 3,
+        "some_extra_bool": True,
+        "valid_from_round": 0,
+        "valid_to_round": None,
+        "graph_id": GRAPH,
+    }
+
+    edge_data: EdgeData = _edge_to_contract(raw_edge)
+
+    assert isinstance(edge_data, EdgeData)
+    assert edge_data.uuid == "edge-001"
+    assert edge_data.source_id == "node-A"
+    assert edge_data.target_id == "node-B"
+    assert edge_data.relation_type == "FOLLOWS"
+    assert edge_data.weight == 2.5
+    assert edge_data.reinforced_count == 3
+    # valid_from_round und graph_id dürfen nicht in properties landen
+    assert "valid_from_round" not in edge_data.properties
+    assert "graph_id" not in edge_data.properties
+    # some_extra_bool ist ein bool → landet in properties
+    assert edge_data.properties.get("some_extra_bool") is True
 
 
 def test_snapshot_serializes_to_dict():

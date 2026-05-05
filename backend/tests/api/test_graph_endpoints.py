@@ -80,7 +80,7 @@ def test_get_graph_snapshot_invalid_id_returns_invalid_id_code(client):
 
 
 def test_get_graph_diff_invalid_id_returns_invalid_id_code(client):
-    response = client.get("/api/graph/diff/not-valid?start_round=0&end_round=1")
+    response = client.get("/api/graph/not-valid/diff?start_round=0&end_round=1")
     assert response.status_code == 400
     assert response.get_json()["code"] == "invalid_id"
 
@@ -101,18 +101,15 @@ def test_build_graph_missing_project_id_returns_validation_failed(client):
 
 
 def test_get_graph_snapshot_negative_round_returns_validation_failed(client):
-    # int converter erlaubt negative Werte nicht — daher schicken wir den Pfad
-    # mit gültiger ID und negativer Round-Zahl per JSON-Body-Routenform; da
-    # Flask <int:round_num> negative Werte ablehnt, prüfen wir das semantische
-    # Verhalten in einer separaten Route mit start_round=-1.
-    response = client.get(f"/api/graph/diff/{VALID_GRAPH_ID}?start_round=2&end_round=1")
+    # end_round < start_round → VALIDATION_FAILED
+    response = client.get(f"/api/graph/{VALID_GRAPH_ID}/diff?start_round=2&end_round=1")
     assert response.status_code == 400
     assert response.get_json()["code"] == "validation_failed"
 
 
 def test_get_graph_diff_non_integer_rounds_returns_validation_failed(client):
     response = client.get(
-        f"/api/graph/diff/{VALID_GRAPH_ID}?start_round=abc&end_round=def"
+        f"/api/graph/{VALID_GRAPH_ID}/diff?start_round=abc&end_round=def"
     )
     assert response.status_code == 400
     assert response.get_json()["code"] == "validation_failed"
