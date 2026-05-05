@@ -1,13 +1,13 @@
-<script setup>
+<script setup lang="ts">
 import { useRouter } from 'vue-router'
-import HistoryDatabase from '../components/HistoryDatabase.vue'
+import RunsDashboard from '../components/RunsDashboard.vue'
 import AppFooter from '../components/AppFooter.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 
 const router = useRouter()
 
-function goHome() {
-  router.push('/')
+function goHome(): void {
+  void router.push('/')
 }
 </script>
 
@@ -25,7 +25,7 @@ function goHome() {
 
     <main class="main">
       <section class="section">
-        <HistoryDatabase :show-open-link="false" />
+        <RunsDashboard />
       </section>
     </main>
 

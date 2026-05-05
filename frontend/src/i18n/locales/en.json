@@ -640,6 +640,31 @@
       "generic": "Error loading comparison"
     }
   },
+  "runs": {
+    "dashboard": {
+      "title": "Runs Dashboard",
+      "subtitle": "Live overview of all pipeline runs",
+      "filter": {
+        "all": "All",
+        "active": "Active",
+        "done": "Completed",
+        "failed": "Failed"
+      },
+      "search_placeholder": "Search by run ID, entity or document…",
+      "live_label": "Live ({interval}s)",
+      "empty": "No runs found.",
+      "loading": "Loading runs…",
+      "error": "Error loading: {message}",
+      "columns": {
+        "status": "Status",
+        "type": "Type",
+        "entity": "Entity",
+        "started": "Started",
+        "progress": "Progress"
+      },
+      "back_to_dashboard": "← Back to dashboard"
+    }
+  },
   "errors": {
     "network": "Network error. Is the server reachable?",
     "backend": "Backend error.",

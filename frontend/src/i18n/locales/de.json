@@ -651,6 +651,31 @@
       "generic": "Fehler beim Laden des Vergleichs"
     }
   },
+  "runs": {
+    "dashboard": {
+      "title": "Runs Dashboard",
+      "subtitle": "Live-Übersicht aller Pipeline-Runs",
+      "filter": {
+        "all": "Alle",
+        "active": "Aktiv",
+        "done": "Abgeschlossen",
+        "failed": "Fehlerhaft"
+      },
+      "search_placeholder": "Suche nach Run-ID, Entity oder Dokument…",
+      "live_label": "Live ({interval}s)",
+      "empty": "Keine Runs gefunden.",
+      "loading": "Lade Runs…",
+      "error": "Fehler beim Laden: {message}",
+      "columns": {
+        "status": "Status",
+        "type": "Typ",
+        "entity": "Entity",
+        "started": "Gestartet",
+        "progress": "Fortschritt"
+      },
+      "back_to_dashboard": "← Zurück zum Dashboard"
+    }
+  },
   "errors": {
     "network": "Netzwerkfehler. Server erreichbar?",
     "backend": "Backend-Fehler.",
