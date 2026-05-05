@@ -13,6 +13,7 @@ import Kicker from './ui/Kicker.vue'
 import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
 import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
+import AddPersonaModal from './step2/AddPersonaModal.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
@@ -671,75 +672,14 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Modal: add manual persona -->
-    <div v-if="showAddPersonaModal" class="modal" @click.self="showAddPersonaModal = false">
-      <div class="modal-card">
-        <header class="modal-head">
-          <div>
-            <div class="kicker-mono">№ Neue Persona</div>
-            <h3>Persona manuell anlegen</h3>
-          </div>
-          <button class="x" @click="showAddPersonaModal = false" aria-label="×">×</button>
-        </header>
-
-        <div class="form-grid">
-          <label class="form-row">
-            <span>Username *</span>
-            <input v-model="newPersona.username" type="text" placeholder="z. B. kritische_buergerin" />
-          </label>
-          <label class="form-row">
-            <span>Anzeigename</span>
-            <input v-model="newPersona.name" type="text" placeholder="Anna Meyer" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Bio (kurz)</span>
-            <input v-model="newPersona.bio" type="text" maxlength="150" placeholder="In einem Satz: wer und wofür." />
-          </label>
-          <label class="form-row">
-            <span>Beruf / Rolle</span>
-            <input v-model="newPersona.profession" type="text" placeholder="Stadtplanerin, Aktivist:in, …" />
-          </label>
-          <label class="form-row">
-            <span>Land</span>
-            <input v-model="newPersona.country" type="text" maxlength="4" placeholder="DE" />
-          </label>
-          <label class="form-row">
-            <span>Alter</span>
-            <input v-model.number="newPersona.age" type="number" min="15" max="99" />
-          </label>
-          <label class="form-row">
-            <span>Gender</span>
-            <select v-model="newPersona.gender">
-              <option value="other">other</option>
-              <option value="female">female</option>
-              <option value="male">male</option>
-            </select>
-          </label>
-          <label class="form-row">
-            <span>MBTI</span>
-            <input v-model="newPersona.mbti" type="text" maxlength="4" placeholder="INTJ" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Interessen (Komma-getrennt)</span>
-            <input v-model="newPersona.interested_topics" type="text" placeholder="Überwachung, Datenschutz, Stadtpolitik" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Persona-Beschreibung (lang) — Haltung, Rhetorik, Milieu</span>
-            <textarea v-model="newPersona.persona" rows="6" placeholder="Frei formuliert. Je konkreter, desto charakteristischer reagiert der Agent." />
-          </label>
-        </div>
-
-        <div class="actions">
-          <Btn variant="ghost" @click="showAddPersonaModal = false">Abbrechen</Btn>
-          <Btn
-            variant="primary"
-            :loading="isSavingPersona"
-            :disabled="!newPersona.username.trim() || isSavingPersona"
-            @click="submitNewPersona"
-          >Hinzufügen</Btn>
-        </div>
-      </div>
-    </div>
+    <AddPersonaModal
+      :open="showAddPersonaModal"
+      :persona="newPersona"
+      :saving="isSavingPersona"
+      @update:open="showAddPersonaModal = $event"
+      @update:persona="newPersona = $event"
+      @submit="submitNewPersona"
+    />
   </div>
 </template>
 

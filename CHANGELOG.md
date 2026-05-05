@@ -16,6 +16,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **Step2EnvSetup:** Simulation-Prepare-Lifecycle nach `useSimulationPrepare`-Composable extrahiert (Sub-Slice 34, Refs #203)
 
 ### Refactored
+- Add-Persona-Modal aus Step2EnvSetup.vue in `step2/AddPersonaModal.vue`-Subkomponente extrahiert (Sub-Slice 41, Refs #203). Step2EnvSetup.vue von 1295 LOC → 1235. i18n-Keys unter `step2.addPersona.*` neu (kicker, title, submit, fields.*, placeholders.* in de.json + en.json).
 - Persona-Suche/Filter aus Step2EnvSetup.vue in `usePersonaFilter`-Composable extrahiert (Sub-Slice 40, Refs #203). Step2EnvSetup.vue von 1314 LOC → 1295. Defensive Härtung: `interested_topics`-String-Fallback, Null-safe-Field-Access.
 - Persona-Library + CRUD aus Step2EnvSetup.vue in `usePersonaLibrary`-Composable extrahiert (Sub-Slice 39, Refs #203). Step2EnvSetup.vue von 1467 LOC → 1314.
 - Persona-Review-Aktionen aus `Step2EnvSetup.vue` in `usePersonaActions`-Composable extrahiert (Sub-Slice 38, Refs #203). Step2EnvSetup.vue von 1574 LOC → 1467.

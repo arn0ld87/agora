@@ -237,6 +237,32 @@
       "regeneratingPill": "Regenerating",
       "regeneratingBlock": "Start blocked: persona is being regenerated"
     },
+    "addPersona": {
+      "kicker": "№ New Persona",
+      "title": "Create persona manually",
+      "submit": "Add",
+      "fields": {
+        "username": "Username",
+        "name": "Display name",
+        "bio": "Bio (short)",
+        "profession": "Profession / role",
+        "country": "Country",
+        "age": "Age",
+        "gender": "Gender",
+        "mbti": "MBTI",
+        "topics": "Interests (comma-separated)",
+        "persona": "Persona description (long) — stance, rhetoric, milieu"
+      },
+      "placeholders": {
+        "username": "e.g. critical_citizen",
+        "name": "Anna Meyer",
+        "bio": "In one sentence: who and what for.",
+        "profession": "Urban planner, activist, …",
+        "country": "DE",
+        "topics": "Surveillance, data protection, urban policy",
+        "persona": "Free-form. The more specific, the more distinctive the agent's reactions."
+      }
+    },
     "library": {
       "title": "Persona library",
       "hint": "Saved personas can be reused in any later simulation.",

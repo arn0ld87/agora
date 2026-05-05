@@ -248,6 +248,32 @@
       "regeneratingPill": "Wird neu generiert",
       "regeneratingBlock": "Start blockiert: Persona wird neu generiert"
     },
+    "addPersona": {
+      "kicker": "№ Neue Persona",
+      "title": "Persona manuell anlegen",
+      "submit": "Hinzufügen",
+      "fields": {
+        "username": "Username",
+        "name": "Anzeigename",
+        "bio": "Bio (kurz)",
+        "profession": "Beruf / Rolle",
+        "country": "Land",
+        "age": "Alter",
+        "gender": "Gender",
+        "mbti": "MBTI",
+        "topics": "Interessen (Komma-getrennt)",
+        "persona": "Persona-Beschreibung (lang) — Haltung, Rhetorik, Milieu"
+      },
+      "placeholders": {
+        "username": "z. B. kritische_buergerin",
+        "name": "Anna Meyer",
+        "bio": "In einem Satz: wer und wofür.",
+        "profession": "Stadtplanerin, Aktivist:in, …",
+        "country": "DE",
+        "topics": "Überwachung, Datenschutz, Stadtpolitik",
+        "persona": "Frei formuliert. Je konkreter, desto charakteristischer reagiert der Agent."
+      }
+    },
     "library": {
       "title": "Persona-Bibliothek",
       "hint": "Gespeicherte Personas kannst du in jeder neuen Simulation wiederverwenden.",
