@@ -19,7 +19,7 @@ const TRANSLATION_PREFIX = 'graph.edgeLabels'
  * Beispiele: "Works for" → "WORKS_FOR"; "worksFor" → "WORKS_FOR"; "WORKS_FOR" → "WORKS_FOR".
  * Whitespace und Sonderzeichen werden zu Underscore.
  */
-export function normalizeEdgeKey(raw) {
+export function normalizeEdgeKey(raw: string | null | undefined): string {
   if (!raw || typeof raw !== 'string') return ''
   return raw
     .trim()
@@ -37,7 +37,7 @@ export function normalizeEdgeKey(raw) {
  * "WORKS_FOR" → "Works For"; "RELATES_TO" → "Relates To".
  * Bewusst keine Sprachübersetzung — der Heuristik-Pfad ist nur die letzte Reissleine.
  */
-export function humanizeEdgeKey(normalizedKey) {
+export function humanizeEdgeKey(normalizedKey: string): string {
   if (!normalizedKey) return ''
   return normalizedKey
     .split('_')
@@ -49,11 +49,11 @@ export function humanizeEdgeKey(normalizedKey) {
 /**
  * Formatiert ein Edge-Label für die Anzeige.
  *
- * @param {string} rawName Roh-Label aus dem Graph (`edge.name`).
- * @param {(key: string) => string} t vue-i18n `t`-Funktion (legacy:false → composition API).
- * @returns {string} angezeigter String.
+ * @param rawName Roh-Label aus dem Graph (`edge.name`).
+ * @param t vue-i18n `t`-Funktion (legacy:false → composition API).
+ * @returns angezeigter String.
  */
-export function formatEdgeLabel(rawName, t) {
+export function formatEdgeLabel(rawName: string | null | undefined, t?: (key: string) => string): string {
   if (!rawName || typeof rawName !== 'string') return ''
   const key = normalizeEdgeKey(rawName)
   if (!key) return rawName

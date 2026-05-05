@@ -66,7 +66,7 @@ function makeRouter() {
 
 
 function buildResponses() {
-  fetchSettingsSchema.mockResolvedValueOnce({
+  (fetchSettingsSchema as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
     data: {
       success: true,
       data: {
@@ -81,8 +81,8 @@ function buildResponses() {
         ],
       },
     },
-  })
-  fetchSettings.mockResolvedValueOnce({
+  });
+  (fetchSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
     data: {
       success: true,
       data: {
@@ -181,7 +181,7 @@ describe('SettingsView', () => {
   it('rendert Secret-Field als password-Input ohne Klartext', async () => {
     const wrapper = await mountView()
     await wrapper.findAll('[role="tab"]')[2].trigger('click')
-    const secretInput = wrapper.find('input[type="password"]')
+    const secretInput = wrapper.find<HTMLInputElement>('input[type="password"]')
     expect(secretInput.exists()).toBe(true)
     expect(secretInput.element.value).toBe('')
     // Placeholder zeigt is_set-Status

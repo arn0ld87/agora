@@ -7,7 +7,20 @@ const MIN_CURVE_OFFSET = 35
 const CURVE_OFFSET_BASE_RATIO = 0.25
 const CURVE_OFFSET_PAIR_RATIO = 0.05
 
-function getCurveControlPoint(edge) {
+interface EdgeWithPositions {
+  source: { x: number; y: number }
+  target: { x: number; y: number }
+  curvature: number
+  isSelfLoop: boolean
+  pairTotal?: number
+}
+
+interface Point {
+  x: number
+  y: number
+}
+
+function getCurveControlPoint(edge: EdgeWithPositions): Point {
   const sx = edge.source.x
   const sy = edge.source.y
   const tx = edge.target.x
@@ -27,7 +40,7 @@ function getCurveControlPoint(edge) {
   }
 }
 
-export function getLinkPath(edge) {
+export function getLinkPath(edge: EdgeWithPositions): string {
   const sx = edge.source.x
   const sy = edge.source.y
   const tx = edge.target.x
@@ -49,7 +62,7 @@ export function getLinkPath(edge) {
   return `M${sx},${sy} Q${controlPoint.x},${controlPoint.y} ${tx},${ty}`
 }
 
-export function getLinkMidpoint(edge) {
+export function getLinkMidpoint(edge: EdgeWithPositions): Point {
   const sx = edge.source.x
   const sy = edge.source.y
   const tx = edge.target.x

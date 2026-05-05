@@ -2,10 +2,10 @@ import { createI18n } from 'vue-i18n'
 import de from './locales/de.json'
 import en from './locales/en.json'
 
-const SUPPORTED = ['de', 'en']
+const SUPPORTED: string[] = ['de', 'en']
 const STORAGE_KEY = 'agora.locale'
 
-function detectLocale() {
+function detectLocale(): string {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored && SUPPORTED.includes(stored)) return stored
   // Default: German
@@ -20,14 +20,14 @@ const i18n = createI18n({
   messages: { de, en },
 })
 
-export function setLocale(locale) {
+export function setLocale(locale: string): void {
   if (!SUPPORTED.includes(locale)) return
-  i18n.global.locale.value = locale
+  i18n.global.locale.value = locale as 'de' | 'en'
   localStorage.setItem(STORAGE_KEY, locale)
   document.documentElement.setAttribute('lang', locale)
 }
 
-export function currentLocale() {
+export function currentLocale(): string {
   return i18n.global.locale.value
 }
 

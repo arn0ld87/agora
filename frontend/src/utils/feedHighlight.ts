@@ -16,21 +16,18 @@
 
 const TOKEN_REGEX = /(?<=^|\s)(@[\p{L}\p{N}_.]{0,29}[\p{L}\p{N}_]|#[\p{L}\p{N}_]{1,30})/gu
 
-/**
- * @typedef {{ type: 'text'|'mention'|'hashtag', value: string }} FeedToken
- */
+export interface FeedToken {
+  type: 'text' | 'mention' | 'hashtag'
+  value: string
+}
 
-/**
- * @param {string} text
- * @returns {FeedToken[]}
- */
-export function tokenizeFeedText(text) {
+export function tokenizeFeedText(text: string | null | undefined): FeedToken[] {
   if (!text || typeof text !== 'string') return []
-  const tokens = []
+  const tokens: FeedToken[] = []
   let lastIndex = 0
   for (const match of text.matchAll(TOKEN_REGEX)) {
     const value = match[0]
-    const start = match.index
+    const start = match.index as number
     if (start > lastIndex) {
       tokens.push({ type: 'text', value: text.slice(lastIndex, start) })
     }

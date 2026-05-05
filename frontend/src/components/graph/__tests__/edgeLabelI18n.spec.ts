@@ -11,7 +11,7 @@ import {
   normalizeEdgeKey,
 } from '../edgeLabelI18n'
 
-const fakeT = (map) => (key) => (key in map ? map[key] : key)
+const fakeT = (map: Record<string, string>) => (key: string) => (key in map ? map[key] : key)
 
 describe('normalizeEdgeKey', () => {
   it('normalisiert UPPER_SNAKE-Werte unverändert', () => {

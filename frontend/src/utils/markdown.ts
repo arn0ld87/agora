@@ -11,13 +11,14 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
-marked.setOptions({ gfm: true, breaks: false, mangle: false, headerIds: false })
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+marked.setOptions({ gfm: true, breaks: false } as any)
 
-export function renderMarkdown(text) {
+export function renderMarkdown(text: string | null | undefined): string {
   if (!text) return ''
-  let html
+  let html: string
   try {
-    html = marked.parse(text)
+    html = marked.parse(text) as string
   } catch {
     html = String(text)
   }

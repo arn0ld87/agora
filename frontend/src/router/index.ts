@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 import Home from '../views/Home.vue'
 import MainView from '../views/MainView.vue'
 import SimulationView from '../views/SimulationView.vue'
@@ -8,7 +9,7 @@ import InteractionView from '../views/InteractionView.vue'
 import RunsView from '../views/RunsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Home',

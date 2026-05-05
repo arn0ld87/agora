@@ -1,4 +1,4 @@
-const ENTITY_TYPE_COLORS = [
+const ENTITY_TYPE_COLORS: string[] = [
   'var(--accent)',
   'var(--plasma-600)',
   'var(--plasma-400)',
@@ -11,12 +11,19 @@ const ENTITY_TYPE_COLORS = [
   'var(--status-warn)',
 ]
 
-export function buildEntityTypes(graphData) {
+export interface EntityType {
+  name: string
+  count: number
+  color: string
+}
+
+export function buildEntityTypes(graphData: { nodes?: Array<Record<string, unknown>> } | null | undefined): EntityType[] {
   if (!graphData?.nodes) return []
 
-  const typeMap = {}
+  const typeMap: Record<string, EntityType> = {}
   for (const node of graphData.nodes) {
-    const type = node.labels?.find((label) => label !== 'Entity') || 'Entity'
+    const labels = node.labels as string[] | undefined
+    const type = labels?.find((label) => label !== 'Entity') || 'Entity'
     if (!typeMap[type]) {
       typeMap[type] = {
         name: type,
@@ -30,7 +37,7 @@ export function buildEntityTypes(graphData) {
   return Object.values(typeMap)
 }
 
-export function formatDateTime(dateStr) {
+export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
 
   try {

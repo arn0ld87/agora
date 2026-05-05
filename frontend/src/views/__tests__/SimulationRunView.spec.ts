@@ -13,7 +13,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 // ── vue-i18n minimal stubben ────────────────────────────────────────────────
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (key, vars) =>
+    t: (key: string, vars?: Record<string, unknown>) =>
       vars ? `${key}:${JSON.stringify(vars)}` : key,
   }),
 }))
@@ -55,7 +55,7 @@ vi.mock('../../composables/useWorkspaceMode', () => ({
 }))
 
 vi.mock('../../composables/usePolling', () => ({
-  usePolling: (_fn, _ms) => ({
+  usePolling: (_fn: unknown, _ms: unknown) => ({
     start: vi.fn(),
     stop: vi.fn(),
   }),
@@ -118,7 +118,7 @@ async function mountView(simulationId = 'sim-test-123') {
 beforeEach(() => {
   vi.resetAllMocks()
   // Defaults nach Reset neu setzen
-  getRunStatus.mockResolvedValue({ success: false })
+  ;(getRunStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false })
 })
 
 afterEach(() => {
@@ -154,7 +154,12 @@ describe('SimulationRunView (Slice J.2 / Issue #220)', () => {
     // Mit dem t-Stub ergibt sich:
     //   t('step3.status.paused', { current: 5, total: 10 })
     //   => 'step3.status.paused:{"current":5,"total":10}'
-    const vm = wrapper.vm
+    const vm = wrapper.vm as unknown as {
+      isPaused: boolean
+      currentRound: number
+      totalRounds: number
+      statusText: string
+    }
     expect(vm.isPaused).toBe(true)
     expect(vm.currentRound).toBe(5)
     expect(vm.totalRounds).toBe(10)
