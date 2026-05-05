@@ -242,6 +242,12 @@
       "total": "Total: {count} Personas",
       "invalid": "Quoten-Plan ungültig."
     },
+    "persona": {
+      "regenerate": "Neu generieren",
+      "regenerateHint": "Prompt-Hinweis (optional)",
+      "regeneratingPill": "Wird neu generiert",
+      "regeneratingBlock": "Start blockiert: Persona wird neu generiert"
+    },
     "library": {
       "title": "Persona-Bibliothek",
       "hint": "Gespeicherte Personas kannst du in jeder neuen Simulation wiederverwenden.",

@@ -17,6 +17,7 @@ import {
   editSimulationProfile,
   getSimulationProfilesQuality,
   rejectSimulationProfile,
+  regenerateSimulationProfile,
   type ProfileRecord,
 } from '../api/simulation'
 
@@ -61,6 +62,7 @@ export interface UsePersonaReviewReturn {
   refreshQuality: (simulationId: string) => Promise<QualityEnvelope['data'] | null>
   approve: (simulationId: string, username: string, notes?: string) => Promise<ProfileRecord | undefined>
   reject: (simulationId: string, username: string, reason?: string) => Promise<ProfileRecord | undefined>
+  regenerate: (simulationId: string, username: string, hint?: string) => Promise<ProfileRecord | undefined>
   editProfile: (simulationId: string, username: string, data: Partial<ProfileRecord>) => Promise<ProfileRecord | undefined>
 }
 
@@ -148,6 +150,19 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     return res.data
   }
 
+  async function regenerate(
+    simulationId: string,
+    username: string,
+    hint?: string
+  ): Promise<ProfileRecord | undefined> {
+    // reason: service interceptor returns raw envelope body at runtime
+    const res = (await regenerateSimulationProfile(simulationId, username, hint)) as unknown as ProfileEnvelope
+    if (!res?.success) {
+      throw new Error(res?.error || 'Regenerate fehlgeschlagen.')
+    }
+    return res.data
+  }
+
   async function editProfile(
     simulationId: string,
     username: string,
@@ -176,6 +191,7 @@ export function usePersonaReview(): UsePersonaReviewReturn {
     refreshQuality,
     approve,
     reject,
+    regenerate,
     editProfile,
   }
 }

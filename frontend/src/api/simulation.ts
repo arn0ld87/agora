@@ -472,6 +472,25 @@ export const rejectSimulationProfile = (
 }
 
 /**
+ * Trigger a regeneration of a single persona.
+ * State-machine: pending|approved|rejected → regenerating → pending.
+ * The start-gate blocks while any persona is in regenerating state.
+ * @param simulationId
+ * @param username
+ * @param hint - optional prompt hint for the regeneration
+ */
+export const regenerateSimulationProfile = (
+  simulationId: string,
+  username: string,
+  hint?: string
+): Promise<ProfileRecord> => {
+  return service.post(
+    `/api/simulation/${simulationId}/profiles/${encodeURIComponent(username)}/regenerate`,
+    hint ? { hint } : {}
+  )
+}
+
+/**
  * Quality heuristics report for the personas of a simulation.
  * @param simulationId
  */

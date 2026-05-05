@@ -231,6 +231,12 @@
       "total": "Total: {count} personas",
       "invalid": "Quota plan invalid."
     },
+    "persona": {
+      "regenerate": "Regenerate",
+      "regenerateHint": "Prompt hint (optional)",
+      "regeneratingPill": "Regenerating",
+      "regeneratingBlock": "Start blocked: persona is being regenerated"
+    },
     "library": {
       "title": "Persona library",
       "hint": "Saved personas can be reused in any later simulation.",

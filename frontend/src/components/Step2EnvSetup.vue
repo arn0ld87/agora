@@ -143,9 +143,9 @@ const personaReview = usePersonaReview()
 const editingProfile = ref(null) // editable working copy bound to the detail modal
 const reviewActionPending = ref(false)
 const reviewActionError = ref('')
-const STATUS_VARIANTS = { approved: 'success', pending: 'warn', rejected: 'error' }
+const STATUS_VARIANTS = { approved: 'success', pending: 'warn', rejected: 'error', regenerating: 'accent' }
 const SEVERITY_VARIANTS = { error: 'error', warning: 'warn', info: 'plasma' }
-const STATUS_LABELS = { approved: 'freigegeben', pending: 'offen', rejected: 'abgelehnt' }
+const STATUS_LABELS = { approved: 'freigegeben', pending: 'offen', rejected: 'abgelehnt', regenerating: t('step2.persona.regeneratingPill') }
 
 function statusVariant(status) {
   return STATUS_VARIANTS[status] || 'ghost'
@@ -219,6 +219,30 @@ async function rejectSelected() {
     reviewActionPending.value = false
   }
 }
+
+const regenerateHint = ref('')
+
+async function regenerateSelected() {
+  if (!selectedProfile.value || !props.simulationId) return
+  reviewActionPending.value = true
+  reviewActionError.value = ''
+  try {
+    const hint = regenerateHint.value.trim() || undefined
+    const data = await personaReview.regenerate(props.simulationId, selectedProfile.value.username, hint)
+    applyProfileToList(data?.profile)
+    addLog(`Persona wird neu generiert: ${selectedProfile.value.username}`)
+    regenerateHint.value = ''
+    await personaReview.refreshQuality(props.simulationId)
+  } catch (err) {
+    reviewActionError.value = err.message
+  } finally {
+    reviewActionPending.value = false
+  }
+}
+
+const hasRegeneratingPersona = computed(() =>
+  profiles.value.some((p) => p.review_status === 'regenerating')
+)
 async function saveEditingProfile() {
   if (!editingProfile.value || !props.simulationId) return
   const payload = { ...editingProfile.value }
@@ -961,12 +985,16 @@ onUnmounted(() => {
           <Btn
             variant="primary"
             arrow
-            :disabled="phase < 3"
+            :disabled="phase < 3 || hasRegeneratingPersona"
+            :title="hasRegeneratingPersona ? t('step2.persona.regeneratingBlock') : undefined"
             @click="handleStart"
           >
             {{ t('step3.controls.start') }}
           </Btn>
         </div>
+        <p v-if="hasRegeneratingPersona" class="hint hint--warn">
+          {{ t('step2.persona.regeneratingBlock') }}
+        </p>
       </article>
     </div>
 
@@ -998,6 +1026,12 @@ onUnmounted(() => {
               @click="rejectSelected"
             >Ablehnen</Btn>
             <Btn
+              variant="ghost"
+              :disabled="reviewActionPending"
+              :loading="reviewActionPending && selectedProfile?.review_status === 'regenerating'"
+              @click="regenerateSelected"
+            >{{ t('step2.persona.regenerate') }}</Btn>
+            <Btn
               variant="primary"
               :disabled="reviewActionPending"
               @click="approveSelected"
@@ -1024,6 +1058,15 @@ onUnmounted(() => {
             <span v-if="issue.detail?.missing" class="meta">→ {{ issue.detail.missing.join(', ') }}</span>
           </li>
         </ul>
+        <div v-if="!editingProfile" class="regenerate-hint-row">
+          <input
+            v-model="regenerateHint"
+            type="text"
+            class="regenerate-hint-input"
+            :placeholder="t('step2.persona.regenerateHint')"
+            :disabled="reviewActionPending"
+          />
+        </div>
         <p v-if="reviewActionError" class="meta review-error">{{ reviewActionError }}</p>
 
         <template v-if="!editingProfile">
@@ -1708,5 +1751,30 @@ onUnmounted(() => {
 
 @media (max-width: 720px) {
   .setup-grid { grid-template-columns: 1fr; }
+}
+
+.regenerate-hint-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.regenerate-hint-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+  color: var(--fg);
+  outline: none;
+}
+.regenerate-hint-input:focus { border-bottom-color: var(--accent); }
+.regenerate-hint-input::placeholder { color: var(--fg-muted); }
+.regenerate-hint-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.hint--warn {
+  color: var(--warn, #c89020);
 }
 </style>
