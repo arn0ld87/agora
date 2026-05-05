@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "EntityRelationship": {
+      "additionalProperties": false,
+      "description": "Single relationship from the source entity to a related entity.",
+      "properties": {
+        "relation_type": {
+          "description": "Edge-Typ, z. B. \"WORKS_AT\", \"OPPOSES\"",
+          "title": "Relation Type",
+          "type": "string"
+        },
+        "target_label": {
+          "description": "Human-readable Name des Ziel-Knotens",
+          "title": "Target Label",
+          "type": "string"
+        },
+        "target_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Entity-Type des Zielknotens",
+          "title": "Target Type"
+        },
+        "target_uuid": {
+          "title": "Target Uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "relation_type",
+        "target_uuid",
+        "target_label"
+      ],
+      "title": "EntityRelationship",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/persona-entity-context.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Entity-Kontext fuer eine einzelne Persona.\n\n``entity_properties`` nutzt dict[str, str|int|float|bool] (kein Any) damit\nextra=\"forbid\" konsistent bleibt. Komplexe Werte sollen JSON-stringifiziert\nwerden bevor sie hier ankommen.",
+  "properties": {
+    "entity_label": {
+      "description": "Human-readable Entity-Name",
+      "title": "Entity Label",
+      "type": "string"
+    },
+    "entity_properties": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Entity Properties",
+      "type": "object"
+    },
+    "entity_summary": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity Summary"
+    },
+    "entity_type": {
+      "description": "z. B. \"PERSON\", \"ORGANIZATION\", \"Entity\"",
+      "title": "Entity Type",
+      "type": "string"
+    },
+    "entity_uuid": {
+      "title": "Entity Uuid",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "relationships": {
+      "items": {
+        "$ref": "#/$defs/EntityRelationship"
+      },
+      "title": "Relationships",
+      "type": "array"
+    },
+    "simulation_id": {
+      "title": "Simulation Id",
+      "type": "string"
+    },
+    "source": {
+      "default": "graph",
+      "description": "\"graph\" wenn Entity geladen werden konnte, \"fallback\" wenn nur uuid+type aus dem Profile selbst stammen (Legacy).",
+      "enum": [
+        "graph",
+        "fallback"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "username": {
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "username",
+    "simulation_id",
+    "entity_uuid",
+    "entity_label",
+    "entity_type",
+    "generated_at"
+  ],
+  "title": "PersonaEntityContext",
+  "type": "object"
+}

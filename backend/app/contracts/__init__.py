@@ -51,6 +51,7 @@ from .graph_diff import (
     GraphSnapshot,
     NodePropertyShift,
 )
+from .persona_entity_context import EntityRelationship, PersonaEntityContext
 
 __all__ = [
     "BranchComparison",
@@ -64,6 +65,7 @@ __all__ = [
     "EdgeData",
     "EdgeReinforcement",
     "EdgeWeakening",
+    "EntityRelationship",
     "EvidenceItemModel",
     "EvidenceMapModel",
     "EvidenceType",
@@ -71,6 +73,7 @@ __all__ = [
     "GraphDiffMetrics",
     "GraphSnapshot",
     "NodePropertyShift",
+    "PersonaEntityContext",
     "PersonaModel",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",

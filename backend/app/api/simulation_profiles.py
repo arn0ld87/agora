@@ -5,10 +5,12 @@ Profile, config, branch, and script-download routes split from the main simulati
 import os
 from datetime import datetime, timezone
 
-from flask import request, send_file
+from flask import current_app, request, send_file
 
 from . import simulation_bp
 from ..config import Config
+from ..contracts import PersonaEntityContext
+from ..services.persona_entity_context_service import PersonaEntityContextService
 from ..services.persona_library import PersonaLibrary
 from ..services.persona_quality_service import PersonaQualityService
 from ..services.persona_review_service import (
@@ -475,6 +477,50 @@ def reject_simulation_profile(simulation_id: str, username: str):
             simulation_id, username, notes=notes
         ),
     )
+
+
+@simulation_bp.route('/<simulation_id>/profiles/<username>/entity-context', methods=['GET'])
+@handle_api_errors(log_prefix="Failed to load persona entity context")
+def get_persona_entity_context(simulation_id: str, username: str):
+    """Return the knowledge-graph entity context that fed into a persona profile.
+
+    Issue #69 — EPIC-13-ST-02 Persona-Diff gegen Entity-Kontext.
+    Maps profile.source_entity_uuid -> Neo4j node properties + relationships.
+    """
+    if not validate_simulation_id(simulation_id):
+        return json_error(
+            ApiErrorCode.INVALID_ID,
+            status=400,
+            message="Invalid simulation_id format",
+        )
+
+    review = _persona_review_service()
+    try:
+        profile = review.get_profile(simulation_id, username)
+    except PersonaNotFoundError as exc:
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=str(exc),
+        )
+
+    storage = current_app.extensions.get("neo4j_storage")
+    if storage is None:
+        return json_error(
+            ApiErrorCode.INTERNAL_ERROR,
+            status=500,
+            message="GraphStorage not initialized",
+        )
+
+    service = PersonaEntityContextService(storage)
+    context = service.build_context(
+        simulation_id=simulation_id,
+        username=username,
+        profile=profile,
+    )
+    # Layer-0-Boundary: model_validate vor jsonify
+    payload = PersonaEntityContext.model_validate(context).model_dump(mode="json")
+    return json_success(payload)
 
 
 @simulation_bp.route('/<simulation_id>/config/realtime', methods=['GET'])
