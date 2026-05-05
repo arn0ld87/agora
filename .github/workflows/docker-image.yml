@@ -144,12 +144,19 @@ jobs:
       - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
         # GitHub-Runner-Workspace gehoert uid 1001, der Prod-Container laeuft als
         # uid 1000 (`USER agora`). Bei Bind-Mounts bleiben die Host-Rechte
-        # erhalten, daher braucht der Smoke-Test hier eine explizit beschreibbare
-        # uploads-Registry auf dem Runner.
+        # erhalten; alle bekannten Schreibziele unter uploads/ werden vorab
+        # angelegt und fuer uid 1000 freigegeben.
         run: |
-          mkdir -p backend/uploads/run_registry
+          mkdir -p \
+            backend/uploads/run_registry \
+            backend/uploads/simulations \
+            backend/uploads/reports \
+            backend/uploads/projects
           command -v setfacl >/dev/null 2>&1 || { echo "::error::setfacl fehlt auf dem Runner"; exit 1; }
-          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
+          # -m: access ACL fuer bestehende Verzeichnisse; -dm: default ACL
+          # (vererbt sich auf neu angelegte Unterverzeichnisse).
+          setfacl -Rm u:1000:rwx backend/uploads
+          setfacl -Rdm u:1000:rwx backend/uploads
 
       - name: Compose-Stack starten
         # Kein --build: das Image ist bereits geladen (docker load oben).
