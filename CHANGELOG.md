@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Refactored
+- **Sub-Slice 31 (Phase 1, Refs #203):** `QuotaPlanEditor.vue` aus `Step2EnvSetup.vue` extrahiert. Neues `frontend/src/components/step2/QuotaPlanEditor.vue` (`<script setup lang="ts">`, Props/Emits Zod-typisiert via `personaQuotaContract.ts`, vollständige i18n-Abdeckung). `Step2EnvSetup.vue` von 1817 → 1712 LOC. 6 Vitest-Cases in `step2/__tests__/QuotaPlanEditor.spec.ts` (render valid plan, edit emits update, invalid plan shows error, disabled inputs, add segment, toggle emit). Alle 247 Frontend-Tests grün, `npm run check` grün.
+
 ### Changed
 - **README + Versions-Bump auf `0.9.1-dev`:** README einladender überarbeitet (weg von „Local-first, cloud-kompatibel"-Tagline, hin zu use-case-orientiertem Hero), Layer-Tabelle auf 0–10, neuer „Was ist neu seit 2026-05-04"-Block, Container-Rebuild-Anleitung („Nach größeren Umbauten neu bauen") in den Schnellstart eingebaut, Demo-Video als komprimiertes MP4 + Inline-GIF im Workflow-Schritt 2 (Graph aufbauen), Footer mit Maintainer-Brand-Link auf alexle135.de. Versions-Bump in `backend/pyproject.toml`, `frontend/package.json`, `package.json` (Root) von `0.9.0` auf `0.9.1-dev`. Tag bleibt `v0.9.0` — `0.9.1-dev` signalisiert post-tag Iteration. Neue Assets unter `media/screenshots/graph-build.{mp4,gif}` (komprimiert via ffmpeg: 36 MB MOV → 747 KB MP4 + 5.6 MB GIF). Platzhalter-Pfade `media/logo.png` (überschreiben), `media/screenshots/persona-step.png` (neu) und `media/credits/alexle135-brand.png` (neu) — Bilder folgen vom Maintainer.
 

@@ -20,6 +20,7 @@ import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
 import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
+import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
 import {
   PersonaQuotaPlanSchema,
   buildQuotaPlanFromEntries,
@@ -252,32 +253,23 @@ const useAgentCap = ref(false)
 const maxAgents = ref(Number(localStorage.getItem(STORAGE_MAX_AGENTS)) || 50)
 watch(maxAgents, (v) => { localStorage.setItem(STORAGE_MAX_AGENTS, String(v)) })
 
-// ----- Persona-Quota-Plan (Sub-Slice 20c, 24) -----
+// ----- Persona-Quota-Plan (Sub-Slice 20c, 24 — UI in QuotaPlanEditor.vue) -----
 //
-// Quoten erzwingen N Personas pro Segment, statt "1 Persona pro Entity".
-// Backend-Pipeline (Sub-Slices 20a/20b/22): API-Pass-Through, Persistenz
-// in simulation_config.json, Round-Robin-Expansion vor Phase 2.
-//
-// Sub-Slice 24 (Gemini-Followup auf 20c):
-// - jeder Entry bekommt eine eigene `id` als v-for-Key (idx als Key
-//   verursacht Fokus-Verlust beim Löschen mittlerer Zeilen)
-// - i18n-Strings in step2.quota.*
+// useQuotaPlan + quotaEntries sind weiterhin hier, weil startPrepare() die
+// Validierung und den API-Payload aufbaut. Die eigentliche UI lebt in
+// frontend/src/components/step2/QuotaPlanEditor.vue (Sub-Slice 31).
 const STORAGE_QUOTA_PLAN = 'agora.quotaPlan'
 const useQuotaPlan = ref(false)
-let _quotaEntryCounter = 0
-function _newEntryId() {
-  _quotaEntryCounter += 1
-  return `q_${Date.now()}_${_quotaEntryCounter}`
-}
+
 function _loadQuotaEntries() {
   try {
     const raw = localStorage.getItem(STORAGE_QUOTA_PLAN)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object' || !parsed.targets) return []
-    // Reihenfolge stabil halten — Object.entries macht insertion-order.
+    let counter = 0
     return Object.entries(parsed.targets).map(([segment, count]) => ({
-      id: _newEntryId(),
+      id: `q_${Date.now()}_${++counter}`,
       segment,
       count: Number(count) || 1,
     }))
@@ -286,18 +278,7 @@ function _loadQuotaEntries() {
   }
 }
 const quotaEntries = ref(_loadQuotaEntries())
-const quotaTotal = computed(() =>
-  quotaEntries.value.reduce((acc, e) => acc + (Number(e.count) || 0), 0)
-)
-const quotaValidationError = computed(() => {
-  if (!useQuotaPlan.value) return ''
-  const plan = buildQuotaPlanFromEntries(quotaEntries.value)
-  const result = PersonaQuotaPlanSchema.safeParse(plan)
-  if (result.success) return ''
-  // Erste Issue mit verständlicher Message
-  const issue = result.error.issues[0]
-  return issue?.message || t('step2.quota.invalid')
-})
+
 watch(
   quotaEntries,
   (entries) => {
@@ -306,12 +287,6 @@ watch(
   },
   { deep: true }
 )
-function addQuotaSegment() {
-  quotaEntries.value.push({ id: _newEntryId(), segment: '', count: 5 })
-}
-function removeQuotaSegment(idx) {
-  quotaEntries.value.splice(idx, 1)
-}
 
 // Manual persona editor.
 const showAddPersonaModal = ref(false)
@@ -780,57 +755,13 @@ onUnmounted(() => {
             <p class="hint" v-if="!useAgentCap">Ohne Begrenzung wird pro Entität im Graph ein Agent erzeugt.</p>
           </div>
 
-          <!-- Persona-Quota-Plan (Sub-Slice 20c, 24): Soll-Counts pro Segment -->
+          <!-- Persona-Quota-Plan (Sub-Slice 20c, 24 / 31): UI in QuotaPlanEditor -->
           <div class="setup-cell setup-cell--wide">
-            <label class="agent-cap">
-              <input type="checkbox" v-model="useQuotaPlan" :disabled="isPreparing" />
-              <span>{{ t('step2.quota.toggle') }}</span>
-            </label>
-            <p class="hint" v-if="!useQuotaPlan">{{ t('step2.quota.hintOff') }}</p>
-            <div v-if="useQuotaPlan" class="quota-plan">
-              <p class="hint">{{ t('step2.quota.hintOn') }}</p>
-              <div
-                v-for="(entry, idx) in quotaEntries"
-                :key="entry.id"
-                class="quota-row"
-              >
-                <input
-                  type="text"
-                  v-model.trim="entry.segment"
-                  :placeholder="t('step2.quota.segmentPlaceholder')"
-                  :disabled="isPreparing"
-                  class="quota-segment"
-                />
-                <input
-                  type="number"
-                  v-model.number="entry.count"
-                  min="1"
-                  max="200"
-                  :disabled="isPreparing"
-                  class="quota-count"
-                />
-                <Btn
-                  variant="ghost"
-                  :disabled="isPreparing"
-                  @click="removeQuotaSegment(idx)"
-                >−</Btn>
-              </div>
-              <div class="quota-row">
-                <Btn
-                  variant="ghost"
-                  :disabled="isPreparing"
-                  @click="addQuotaSegment"
-                >{{ t('step2.quota.addSegment') }}</Btn>
-                <span class="meta">{{ t('step2.quota.total', { count: quotaTotal }) }}</span>
-              </div>
-              <p
-                v-if="quotaValidationError"
-                class="hint"
-                style="color: var(--color-err, #d73a49)"
-              >
-                ⚠ {{ quotaValidationError }}
-              </p>
-            </div>
+            <QuotaPlanEditor
+              v-model:enabled="useQuotaPlan"
+              v-model:entries="quotaEntries"
+              :disabled="isPreparing"
+            />
           </div>
         </div>
 
@@ -1332,42 +1263,6 @@ onUnmounted(() => {
   text-align: right;
 }
 .agent-cap-number:focus { border-bottom-color: var(--accent); }
-.quota-plan {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.quota-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.quota-segment {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--rule-strong);
-  font-family: var(--ff-mono);
-  font-size: var(--fs-14);
-  padding: 4px 0;
-  color: var(--fg);
-  outline: none;
-}
-.quota-segment:focus { border-bottom-color: var(--accent); }
-.quota-count {
-  width: 70px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--rule-strong);
-  font-family: var(--ff-mono);
-  font-size: var(--fs-14);
-  padding: 4px 0;
-  color: var(--fg);
-  outline: none;
-  text-align: right;
-}
-.quota-count:focus { border-bottom-color: var(--accent); }
 .hint {
   font-family: var(--ff-mono);
   font-size: 11px;
