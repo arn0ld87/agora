@@ -79,7 +79,12 @@ PLAN.md.bak
 /scripts/logs/
 /.codex
 /.gitleaksignore
-/media/
+# /media/: Default ignored, aber README-relevante Assets (logo, screenshots, credits) re-included.
+# WICHTIG: /media/* statt /media/ — bei Verzeichnis-Match kann man Kinder nicht re-includen.
+/media/*
+!/media/logo.png
+!/media/screenshots/
+!/media/credits/
 /static/image/
 /static/media/
 

@@ -1,19 +1,20 @@
 <div align="center">
 
-<img src="./media/logo.png" alt="Agora" width="100%"/>
+<img src="./media/logo.png" alt="Agora" width="240"/>
 
 # Agora
 
-**Local-first, cloud-kompatibler Persona-basierter Resonanz-Simulator.**
+**Wie reagieren Stakeholder auf dein Dokument? — Frag 132 Personas, bevor du es veröffentlichst.**
+
+Multi-Agenten-Resonanz-Simulator mit Knowledge-Graph-Backbone. Hybrid einsetzbar: lokal mit Ollama oder via Cloud-Endpoints (Ollama Cloud, OpenAI-kompatibel). Deutsche UI als Default.
 
 Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [MiroFish](https://github.com/666ghj/MiroFish).
-
-> **v0.9.0 released 2026-05-01** ([Release Notes](docu/2026-05-01-v0.9.0-release-notes.md)) — auf `main` läuft seither der **Reader-Honesty-Refactor (Layer 0–5)** post-tag: Pydantic-Contract-Architektur, DACH-Voice-Glossar v1, Provenance-Anker, deterministisches Cluster-Naming, Frontend strict-Zod + Confidence-UI, Baseline-Eval-Suite. Aktuelle Test-Counts: [`docu/STATUS.md`](docu/STATUS.md). Vorgänger: [v0.8.0](docu/2026-05-01-v0.8.0-release-notes.md).
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
+[![Version](https://img.shields.io/badge/Version-0.9.1--dev-orange?style=flat-square)](./CHANGELOG.md)
 
 [Deutsch](#deutsch) · [English](#english)
 
@@ -21,38 +22,23 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ---
 
-> ## Status: v0.9.0 (Tag) + Layer 0–5 Reader-Honesty-Refactor (auf `main`)
+> ## Status: v0.9.1-dev (post-tag Iteration auf `main`)
 >
-> Agora ist ein aktiver, **experimenteller Fork**. Graph-Build, Simulation und
-> Report-Pipeline können bei ungünstigen Bedingungen (langsame Ollama-Cloud,
-> JSON-Mode-Aussetzer, Modellwechsel) Fehler produzieren.
-> **Nicht öffentlich erreichbar machen.** Agora v1.0 ist per Architektur-
-> Entscheidung **Single-User-only** ([ADR-0001](docu/decisions/0001-auth-model.md)):
-> ein Shared `AGORA_AUTH_TOKEN`-Bearer ist der einzige Auth-Principal, kein
-> User-Konzept, kein Multi-User-Pfad. CORS ist auf Localhost gelockt, Backend
-> bindet defaultmäßig auf `127.0.0.1`. Für Tailnet/LAN-Deploys: Reverse-Proxy
-> ([`deploy/nginx/`](deploy/nginx/)) und Tailscale/Cloudflare Tunnel — nicht
-> direkt im Internet exponieren. Multi-User-Use-Cases (Klassenraum, Forschungsgruppe)
-> brauchen ein v2-ADR mit echtem Session-/Login-Modell.
+> Tag-Stand: `v0.9.0` vom 2026-05-01 ([Release Notes](docu/2026-05-01-v0.9.0-release-notes.md)).
+> `main` ist seither in aktiver Layer-6-bis-8-Iteration — Frontend TypeScript komplett, Layer 7 (Compare- und Diff-Stack, Runs Dashboard) ausgeliefert, Layer 8 (Persona-Entity-Kontext) angefangen. Aktuelle Test-Counts und Coverage in [`docu/STATUS.md`](docu/STATUS.md).
 >
-> **Stand `main` nach v0.9.0-Tag:** alle 17 Tasks aus
-> [`PLAN.md`](./PLAN.md) durch (Layer 0 Pydantic-Contracts, Layer 1
-> Backend-Hardening, Layer 2 DACH-Voice + Wording-Glossar v1, Layer 3
-> Reader-Honesty, Layer 4 Frontend strict-Zod + Diff/Confidence-UI,
-> Layer 5 Baseline-Eval-Suite). **Kein neuer Release-Tag** — die Versionen
-> in `pyproject.toml` und `package.json` stehen weiter auf `0.9.0`,
-> die Refactor-Schicht ist bewusst Pre-1.0-Iteration.
+> Agora ist ein **experimenteller Fork**. Graph-Build, Simulation und Report-Pipeline können bei langsamer Cloud, JSON-Mode-Aussetzern oder Modellwechseln Fehler produzieren.
 >
-> **Getestet aktuell hauptsächlich mit:**
+> **Nicht öffentlich erreichbar machen.** Auth-Zielbild ist per Architektur-Entscheidung **Single-User-only** ([ADR-0001](docu/decisions/0001-auth-model.md)): ein Shared `AGORA_AUTH_TOKEN`-Bearer plus signed Tickets für SSE/Downloads. Kein Multi-User-Pfad in v1. CORS auf Localhost gelockt, Backend bindet defaultmäßig auf `127.0.0.1`. Für Tailnet/LAN: Reverse-Proxy ([`deploy/nginx/`](deploy/nginx/)) und Tailscale/Cloudflare Tunnel — nicht direkt im Internet exponieren.
+>
+> **Aktuell hauptsächlich getestet mit:**
 >
 > - LLM: `qwen3-coder-next:cloud` (Ollama Cloud)
-> - **Embedding: `qwen3-embedding:4b`** (2560-dim, `VECTOR_DIM=2560` nötig)
+> - Embedding: `qwen3-embedding:4b` (2560-dim, `VECTOR_DIM=2560` nötig)
 >
-> Der frühere Default `nomic-embed-text` (768-dim) funktioniert weiterhin,
-> ist aber nicht mehr der aktiv gepflegte Pfad.
+> Der frühere Default `nomic-embed-text` (768-dim) funktioniert weiterhin, ist aber nicht mehr der aktiv gepflegte Pfad.
 >
-> **Docker Hub:** `docker pull alexle135/agora-agora:latest` |
-> [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
+> **Docker:** `docker pull alexle135/agora-agora:latest` · [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
 
 ---
 
@@ -60,87 +46,55 @@ Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offlin
 
 ### Was ist Agora?
 
-Agora ist eine lokale Multi-Agenten-Simulation für öffentliche Reaktionen, Marktstimmung und soziale Dynamiken.
+Du lädst ein Dokument hoch — einen Pressetext, ein Whitepaper, einen Vertragsentwurf. Agora extrahiert daraus einen Wissensgraphen, erzeugt aus den Entitäten **hunderte Agenten-Personas** mit eigenen Rollen, Haltungen und Aktivitätsmustern, lässt sie auf Social-Media-artigen Plattformen über deinen Inhalt diskutieren, und liefert dir am Ende einen Report mit Originalzitaten, Confidence-Scores und Provenance-Ankern.
 
-Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeugt Agenten-Personas mit Rollen, Haltungen und Aktivitätsprofilen, simuliert Diskussionen auf Social-Media-artigen Plattformen und erstellt danach einen Report. Das System läuft lokal mit Neo4j und Ollama, kann aber auch OpenAI-kompatible Cloud-Endpunkte verwenden.
+Kurz: **Resonanz-Simulation für Texte, bevor sie raus gehen.**
 
-### Engineering-Stand (v0.9.0 + Layer 0–5)
+### Was ist neu seit dem letzten README-Update (2026-05-04)
 
-- **Quality-Gates vorhanden**: `npm run check` führt Backend-Linting (default-strict auf `app/ tests/`), Backend-Tests, Frontend-Lint, Frontend-Tests (Vitest auf `jsdom`) und Frontend-Build aus (Test-Counts in [`docu/STATUS.md`](docu/STATUS.md); 2 Redis-Integrationstests skippen ohne `TEST_REDIS_URL`).
-- **Pydantic-Contract-Architektur (Layer 0)**: `backend/app/contracts/` mit `ReportContractModel`, `ReportModel`, `EvidenceMapModel`, `PersonaModel`, `PersonaQuotaPlan`. JSON-Schemas werden via `python -m app.contracts.dump_schemas` aus den Pydantic-Modellen generiert. Frontend-Spiegel als Zod-Schemas in `frontend/src/contracts/reportContract.ts`. CI-Job `contract-gates` blockt Schema-Drift.
-- **Backend-Hardening (Layer 1)**: `chat_json` mit strict-Schema-Mode (`json_schema`-Response-Format) plus `json_object`-Fallback. `PersonaQuotaPlan`/`PersonaQuotaActual`-Verdrahtung in `prepare_service.py` (Soll/Ist-Validation, ValidationError bei Drift). Anti-Dekorations-Fix: kein `global_items[:2]`-Fallback mehr, orphane Claims bekommen ehrlich `low`-Confidence + Audit-Eintrag. Confidence-Kalibrierung mit Match-Score-Cap (alle Evidenzen <0.55 → max 0.69) und Verified-Quellen-Gate (≥2 unabhängige Quellen). Contradiction-Detector via strukturierte Boolean-Flags + Stance-Konflikte.
-- **DACH-Voice + Wording-Glossar v1 (Layer 2)**: Persona-Generator trägt `voice_register`-Pflichtfeld (`formal-de` / `neutral-de` / `technical-de` / `skeptisch-de`) mit Auto-Fallback. Wording-Glossar v1 (Issue #175) ersetzt englische Forecast-/Marketing-Phrasen (`prediction`, `rehearsal of the future`, `god's eye view`, `high-fidelity digital world`) durch sachliches Persona-Vokabular; Liste in [`docu/glossary-wording.md`](./docu/glossary-wording.md). Voice-Lint (`backend/scripts/check_voice.py`) als CI-Hartmacher in `contract-gates.yml`.
-- **Reader Honesty (Layer 3)**: Evidence-Items tragen seit Layer 3 zwei zusätzliche Felder — `quote` (≤500 chars wörtliches Originalzitat) und `source_id_anchor` (`agent-log-N#entry-X`, `web:URL`, `kg:entity:UUID`). Time-Series-Sampling im Section-Builder ersetzt das alte „erste 8 Actions"-Fenster durch stratifiziertes Sampling über `round_num` (8 Bins, deterministisch). Section-Dedup-Audit (cosine ≥0.92, Jaccard-Fallback ≥0.85) markiert Duplikate, ohne sie zu droppen. Cluster-Labels deterministisch via TF-Top-3 mit DE+EN-Stopword-Filter — kein LLM-Free-Text mehr.
-- **Frontend strict (Layer 4)**: `Step4Report.vue` parst Backend-Antworten via `ReportSchema.parse(...)` / `EvidenceMapSchema.parse(...)` strikt (`.strict()` greift, unbekannte Felder werfen ZodError). Schema-Mismatch zeigt einen Inline-Banner mit Issue-Pfad-Liste. Pro Section ein `ConfidenceBadge` (Pill mit `--ok`/`--warn`/`--err`-Tokens) mit Hover-Popover, das den Section-`audit_trail` listet. Evidence-Quotes rendern als `<blockquote>`; klickbare Source-Anchors springen via `scrollIntoView` zum Agent-Log-Entry oder öffnen Web-URLs in neuem Tab.
-- **Eval-Suite (Layer 5)**: `backend/tests/eval/` mit 3 Fixtures (`clean_small`, `medium_with_dedup`, `orphan_heavy`) plus `expected_metrics.json` als Snapshot-Pin. `check_evidence_quality.py` liefert fünf Metriken: `evidence_coverage`, `claim_support_ratio`, `orphan_claim_rate`, plus die zwei neuen `dedup_rate` und `concentration_index`. Snapshot-Drift wird durch `tests/eval/test_eval_baselines.py` zur Buildtime erkannt.
-- **Domain-Cleanup (v0.9.0)**: Drei Hot-Spot-Module entkernt — `simulation_manager.py` 789→403 LOC (−49 %), `report_agent.py` 3184→2179 LOC (−31,6 %), `neo4j_storage.py` 1127→195 LOC (−82,7 %). Neue Service-Schichten in `backend/app/services/` (Branching, Prepare-Pipeline, Report-Logger/Models/Prompts/Tools, Ingestion-Pipeline). Storage in fünf Module gesplittet: `neo4j_mappings.py` + Read/Write/Search-Mixins. Re-Export-Pattern hält alle Caller stabil — keine Breaking-Changes.
-- **Wire-Identity gepinnt (v0.9.0, Issue #52)**: `models/graph.py` führt Backend-Graph-DTOs ein, deren Schema bit-identisch zum bisherigen Storage-Output ist; jede künftige Schema-Änderung wird durch DTO-Tests ausgelöst, bevor das Frontend kaputt geht.
-- **FSM aktiv konsumiert (v0.9.0, Issue #42)**: Die deklarative State-Machine wird vom `SimulationManager` und allen API-Routen verwendet; `ALLOWED_TRANSITIONS` bleibt Single-Source-of-Truth, ungültige Übergänge werfen `InvalidStatusTransition`. Branching durchläuft jetzt explizit `CREATED → PREPARING → READY`; Force-Restart nutzt `_reset_to_ready(...)` mit Log-Begründung.
-- **Design-System konsolidiert (Slice 1)**: `tokens.css` als Source-of-Truth, UI-Komponenten (`Btn`, `Badge`, `Field`, `Card`, `Select`) auf Tokens umgestellt, harte Farbwerte in Views/Layouts durch Token-Referenzen ersetzt.
-- **Persona Review (Slice 2)**: Generierte Personas sind vor Simulationsstart prüfbar, editierbar und freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität) liefern Badges. `PERSONA_REVIEW_ENABLED=true` blockt Simulationsstart bis alle Personas approved sind.
-- **Run Dashboard (Slice 3)**: Zentrale `/runs`-View mit Status, Datum, Modell, Dokument, Graph-ID, Persona-Anzahl. Detail-Drawer für Fehler, Artefakte und Copy-Buttons. Runs-Persistenz über `RunRegistry`.
-- **Evidence & Confidence (Slice 4)**: Report-Claims tragen `confidence`-Score und strukturierte `evidence`-Blöcke (Graph-Metriken, Agentenaktionen). UI zeigt Confidence-Badges und Evidence-Drawer.
-- **Export Center (Slice 5)**: JSON- und Markdown-Export für Reports, CSV für Polarisationsmetriken, GraphML für Graphen, SVG/PNG/PDF für Graph-Ansicht.
-- **LLM-Resilienz**: `LLMClient.chat` und `describe_image` retryen über `llm_call_with_retry` auf transiente Upstream-Fehler (`APIConnectionError`, `APITimeoutError`, `RateLimitError`, `APIStatusError` mit 5xx/408/429). Schützt v. a. die Ontology-Generierung gegen Ollama-Cloud-5xx-Hickser.
-- **Event-Bus-Transport (#9 + #17)**: `SimulationEventBus`-Port mit In-Memory-, File- und Redis-Adapter. Redis `7-alpine` wird vom `docker-compose.yml` mitgestartet. Live-Kanäle (`control`/`state`) gehen über Redis Pub/Sub mit retained Snapshot. **Seit Issue #17** laufen auch `rpc.command` / `rpc.response.*` hybrid: Backend published parallel auf Redis und File, `_await_response` race't beide Quellen, der Verlierer wird aufgeräumt. Subprocess-Listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) sitzt im OASIS-Eventloop neben dem File-Polling. Backout über `EVENT_BUS_BACKEND=file`.
-- **Frontend Push (#9 Phase C)**: `GET /api/simulation/<id>/stream` (SSE) + `useEventStream`-Composable ersetzen das 2,5-s-Status-Polling in der Simulationsansicht.
-- **Temporal Graph (#10)**: RELATION-Kanten tragen `valid_from_round`/`valid_to_round`/`reinforced_count`; `TemporalGraphService` liefert `/api/graph/snapshot/<gid>/<round>` und `/api/graph/diff/<gid>?start_round=..&end_round=..`. Im UI scrubt der **Round-Slider** im `GraphPanel` durch die Zeitachse (Client-side-Filter, kein extra API-Call beim Scrubben).
-- **Polarisations-Metriken (#12)**: `NetworkAnalyticsService` mit Louvain-Communities, Echo-Chamber-Index und Bridge-Agent-Heuristik; API `GET /api/simulation/<id>/metrics`. Dokumentation in `docu/analytics.md`.
-- **Ontology-Mutation (#11, Phase 1+2)**: `OntologyManager` (thread-safe) + `OntologyMutationService` mit Modi `disabled` / `review_only` / `auto`. **NER → Mutation-Wiring ist live**: `Neo4jStorage.add_text` reicht NER-emittierte unbekannte Entity-Types automatisch an den Service weiter; Service-Exceptions blockieren Ingestion nicht.
-- **DI-Container (#14)**: Alle Kern-Services laufen über `AgoraContainer` — keine Service-Locator-Suche mehr in `app.extensions`.
-- **API-Contract-Härtung Richtung v1.0**: zentrale Success-/Error-Envelopes (`success`, `data`, `error`, `code`) werden schrittweise durchgesetzt. Auth-Fehler, rohe `dict`-Returns in `@handle_api_errors` sowie Framework-404/405 unter `/api/*` liefern konsistente JSON-Responses. Laufende Schritte stehen in `docu/v1-development-log.md`.
-- **Workspace-Layout-Shell (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) sind die gemeinsame Shell für alle 5 Pipeline-Views. `useWorkspaceMode` und `useWorkspaceStatus` ersetzen dupliziertes View-Mode/Status-Boilerplate.
-- **GraphPanel modularisiert (EPIC-04)**: `GraphPanel.vue` von 933 auf 98 Zeilen reduziert (−90 %). D3-Renderlogik nach `useGraphRender`-Composable extrahiert (#35), UI in `GraphHints`, `GraphToolbar` und `GraphCanvas` zerlegt (#34).
-- **Polling zentralisiert (EPIC-05)**: Alle 12 `setInterval`-Stellen im Frontend nutzen jetzt das gemeinsame `usePolling`-Composable (#37, #38). SSE-Stream via `useEventStream` ersetzt Status-Polling in der Simulationsansicht (#9, #40).
-- **Simulation-API entmonolithisiert**: Frühere XXL-Datei `backend/app/api/simulation.py` in fokussierte Module zerlegt (10 Dateien, 48 Routen).
-- **Refactoring-Dokumentation liegt im Repo**: Fortschritt, Audit, Zielarchitektur und Roadmap liegen unter `docu/`.
+Die wichtigsten Veränderungen seit der letzten README-Iteration, sortiert nach User-sichtbarem Impact:
 
-### Was wurde gegenüber MiroFish geändert?
+- **🆚 Compare- und Diff-Stack ausgeliefert** — Graph- und Branch-Vergleiche jetzt mit API + UI
+  - `GET /api/graph/<id>/diff` (#74) — Snapshot-Diff zwischen zwei Runden mit Pydantic-Contract
+  - `GET /api/simulation/<id>/compare` (#66) — Kernmetriken zweier Runs nebeneinander
+  - `GraphDiffPanel.vue` (#76) und `BranchComparePanel.vue` (#67) als Vergleichs-UIs
+- **📊 Runs Dashboard mit Live-Polling** (#63) — neue View `/runs` mit Status-Pills (Aktiv / Abgeschlossen / Fehlerhaft), 5-s-Tab-aware-Polling, Click-through zu Detail-Views (`/runs/:id`)
+- **🧬 Persona-Entity-Kontext-API** (#69, Backend-Hälfte) — `GET /api/simulation/<sim>/profiles/<username>/entity-context` zeigt, welche Knowledge-Graph-Entity in eine Persona eingeflossen ist. Frontend-Diff-UI folgt im nächsten Slice.
+- **🛡️ CI-Hardening abgeschlossen** — Evidence-Quality-Gate hart geschaltet (kein `--soft` mehr), Backend-Coverage-Gate auf 53 %, Frontend-Coverage-Gate auf 24 %, Prod-Stack-Smoke + CVE-Monitor wöchentlich
+- **⚡ Performance-Iteration** (#217) — Persona-Generation parallelisiert (`parallel_count` Default 5/3 → 10), neuer `AGORA_PERSONA_DETAIL_LEVEL` für Output-Größen-Steuerung, `@measure_llm_latency`-Decorator zur Latenz-Beobachtung
+- **🩹 Stabilität** — Vector-Index droppt sich bei Dimension-Mismatch automatisch (#263), Embedding-Crash-Loop in CI gefixt (#276), Neo4j Startup-Retry bei Race-Condition, `/api/logs/stream` auf signed-tickets migriert (F2.2)
+- **🔐 Auth-Zielbild für v1.0 entschieden** — [ADR-0001](docu/decisions/0001-auth-model.md): bewusst Single-User-only mit Shared-Token + Signed-Tickets, kein Multi-User-Pfad in v1
+- **🧹 Refactoring** — `report_agent.py` 2400-LOC-Monolith zu Package-Split (#202), Frontend-TypeScript-Migration abgeschlossen (#73), letzte 14 `.js`-Dateien portiert
 
-| Bereich        | Upstream MiroFish / MiroFish-Offline               | Agora                                                             |
-| -------------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| Sprache/UI     | Chinesischer Ursprung, später englische Migration | Deutsche UI als Default, Englisch als Fallback                    |
-| Graph Memory   | Zep/Graphiti-Ansatz im Ursprung                    | Eigene `GraphStorage`-Abstraktion mit Neo4j 5.18+               |
-| LLMs           | DashScope/OpenAI-orientiert                        | Ollama lokal oder beliebiger OpenAI-kompatibler Endpoint          |
-| Modelle        | Primär per `.env`                               | Modell-Auswahl im Workflow, plus `.env`-Fallback                |
-| Simulation     | Feste KI-Personas                                  | Persona-Limit, manuelle Personas, Sprache/Modell pro Vorbereitung |
-| Report         | ReportAgent mit Graph-Tools                        | Report-Modell wechselbar, Tool-Log sichtbar, optional Webtools    |
-| Agent-Tool-Use | Nicht stabiler Kernpfad                            | Experimentell, opt-in, default aus                                |
-| Region/Zeit    | Upstream China-Kontext                             | DACH / Europe-Berlin Timing-Profil                                |
-
-### Kernfunktionen
-
-- **GraphRAG-Ingest**: PDF, Markdown oder Text hochladen; Entitäten und Beziehungen landen in Neo4j.
-- **Flexible Ontologie-Generierung**: Entitätstypen sind nicht mehr hart auf exakt 10 begrenzt; Defaults sind 8-16 Typen plus Pflicht-Fallbacks `Person` und `Organization` (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
-- **Modellauswahl im Workflow**: Modell und Agentensprache können bereits auf der Start-/Upload-Seite und in der Umgebungsvorbereitung gewählt werden.
-- **Gefrorene Simulation-Config**: Eine vorbereitete Simulation speichert ihr Modell in `simulation_config.json`; spätere `.env`-Änderungen wirken erst bei neuer Vorbereitung.
-- **Persona-Steuerung**: Agentenanzahl begrenzen, Personas durchsuchen, manuelle Personas hinzufügen oder löschen; erzeugte oder manuelle Personas können in einer lokalen Bibliothek gespeichert und später wiederverwendet werden.
-- **Simulation-Laufsteuerung**: Laufdauer in Tagen und optionales Rundenlimit setzen, Start, Stop, Pause/Resume nach Rundenende und rohes Console-Log der OASIS-Subprozesse.
-- **ReportAgent**: Nutzt Graph-Tools, Interviews und Panorama-Suche; Report-Modell kann beim Generieren/Regenerieren gewechselt werden.
-- **Optionaler Live-Web-Kontext**: Mit `TAVILY_API_KEY` kann der ReportAgent aktuelle externe Fakten recherchieren.
-- **Experimenteller Agent-Tool-Use**: Simulationsagenten können vor einer Aktion den Wissensgraphen abfragen, wenn `ENABLE_AGENT_TOOLS=true` gesetzt ist.
-- **Secret-Guardrail**: Neo4j-Passwörter werden nicht in persistierte Simulation-Artefakte serialisiert.
+Vollständige Liste: [`CHANGELOG.md`](./CHANGELOG.md) und [`docu/STATUS.md`](./docu/STATUS.md).
 
 ### Workflow
 
-1. **Upload & Modellwahl**
+So sieht eine Pipeline-Iteration aus:
 
-   Dokumente hochladen, Fragestellung formulieren, LLM-Modell und Agentensprache wählen.
-2. **Graph Build**
+1. **Upload & Modellwahl** — Dokument hochladen, Fragestellung formulieren, LLM-Modell und Agentensprache wählen.
 
-   Agora chunked das Dokument, ruft das LLM für NER/Relation-Extraction auf und schreibt Graphdaten nach Neo4j.
-3. **Environment Setup**
+2. **Graph aufbauen** — Agora chunked das Dokument, ruft das LLM für Named-Entity-Recognition + Relation-Extraction auf und schreibt den Graphen nach Neo4j. Du siehst den Graphen live mit Knoten, Kanten, Entity-Type-Legende und kannst ihn als GraphML / SVG / PNG / PDF exportieren.
 
-   Agenten-Personas und Simulationsparameter werden erzeugt. Modell, Sprache, Agentenlimit, Laufdauer und optional gespeicherte Personas werden in der Simulation eingefroren.
-4. **Simulation**
+   <p align="center">
+   <a href="./media/screenshots/graph-build.mp4">
+   <img src="./media/screenshots/graph-build.gif" alt="Live-Graph-Build mit 133 Knoten, 188 Kanten und 12 Entitätstypen" width="100%"/>
+   </a>
+   <br>
+   <sub><a href="./media/screenshots/graph-build.mp4">▶ MP4 in voller Qualität (747 KB)</a></sub>
+   </p>
 
-   OASIS läuft als Subprozess. Aktionen erscheinen live; Console-Logs helfen beim Debugging. Pause/Resume ist möglich.
-5. **Report**
+3. **Personas erzeugen** — aus dem Graphen werden hunderte Agenten-Personas generiert. Jede mit Biografie, Meinung, Reaktionsgeschwindigkeit, Einfluss-Profil. Persona-Quote pro Segment optional erzwingbar; Limit für Agentenanzahl optional.
 
-   Der ReportAgent durchsucht Graph und Simulation, kann Agenten interviewen und optional Webtools nutzen. Das Report-Modell ist wechselbar.
-6. **Interaction**
+   <p align="center">
+   <img src="./media/screenshots/persona-step.png" alt="Persona-Generation-Schritt mit LLM-Modellwahl, Agentensprache und Live-Counter" width="100%"/>
+   </p>
 
-   Nach der Simulation kannst du mit Agenten oder dem ReportAgent weiterarbeiten.
+4. **Simulation** — OASIS läuft als Subprozess. Aktionen erscheinen live im Console-Log, Pause/Resume nach Rundenende möglich. Laufdauer in Tagen + optionales Rundenlimit.
+
+5. **Report** — der ReportAgent durchsucht Graph und Simulation, kann Agenten interviewen, optional Webtools nutzen. Report-Modell ist beim Generieren wechselbar. Jede Section trägt einen Confidence-Score plus klickbare Source-Anchors.
+
+6. **Compare & Drift** — zwei Runs nebeneinander analysieren: Graph-Diff (welche Kanten sind dazugekommen, welche verstärkt?), Branch-Vergleich (Persona-Drift, Polarisations-Shift), Run-Dashboard mit Live-Status.
 
 ### Demo-Teaser
 
@@ -151,6 +105,51 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 <br>
 <a href="./static/media/agora-teaser.mp4">Teaser als MP4 öffnen</a>
 </div>
+
+### Kernfunktionen
+
+- **GraphRAG-Ingest**: PDF, Markdown oder Text hochladen; Entitäten und Beziehungen landen in Neo4j.
+- **Flexible Ontologie-Generierung**: Entitätstypen sind nicht hart gecappt; Defaults 8–16 Typen plus Pflicht-Fallbacks `Person` und `Organization`.
+- **Modellauswahl im Workflow**: Modell und Agentensprache pro Run wählbar, plus `.env`-Default. Eingefroren in `simulation_config.json` pro Simulation.
+- **Persona Review**: Generierte Personas vor Simulationsstart prüfbar, editierbar, freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität). Mit `PERSONA_REVIEW_ENABLED=true` blockt der Simulationsstart bis alle Personas approved sind.
+- **Run-Steuerung**: Laufdauer in Tagen + optional Rundenlimit, Start/Stop, Pause/Resume nach Rundenende, rohes OASIS-Console-Log.
+- **ReportAgent**: Graph-Tools, Interviews, Panorama-Suche; Report-Modell beim Generieren/Regenerieren wechselbar; optional Tavily-Webtools.
+- **Compare-Stack**: Graph-Diff zwischen Runden (`/api/graph/<id>/diff`), Branch-Compare (`/api/simulation/<id>/compare`), UIs `GraphDiffPanel` + `BranchComparePanel`.
+- **Runs Dashboard**: Zentrale `/runs`-View mit Live-Polling (5 s, Tab-aware-Pause), Status-Pills, Click-through zu Detail.
+- **Export-Center**: JSON + Markdown für Reports, CSV für Polarisationsmetriken, GraphML für Graphen, SVG / PNG / PDF für Graph-Ansicht.
+- **Experimenteller Agent-Tool-Use**: Simulationsagenten können den Wissensgraphen abfragen (`ENABLE_AGENT_TOOLS=true`), default aus.
+- **Secret-Guardrail**: Neo4j-Passwörter werden nicht in persistierte Simulation-Artefakte serialisiert.
+
+### Engineering-Stand (Layer 0–10)
+
+Test-Zahlen und Coverage werden in [`docu/STATUS.md`](docu/STATUS.md) gepflegt — diese README kopiert keine Zahlen mehr inline.
+
+| Layer | Inhalt | Status |
+|---|---|---|
+| 0 | Pydantic-Contracts (`backend/app/contracts/`) + Zod-Spiegel + JSON-Schema-Dump | grün |
+| 1 | Backend-Hardening: `chat_json` strict-Mode, `PersonaQuotaPlan`, Anti-Dekoration, Confidence-Cap | grün |
+| 2 | DACH-Voice + Wording-Glossar v1, Voice-Lint im CI-Hartmacher | grün |
+| 3 | Reader-Honesty: Original-Quotes, Provenance-Anker, Time-Series-Sampling, Section-Dedup | grün |
+| 4 | Frontend strict-Zod, Diff/Confidence-UI, Persona-Quota-Editor | grün |
+| 5 | Eval-Suite mit Snapshot-Pin, 5 Metriken (`evidence_coverage`, `claim_support_ratio`, …) | grün |
+| 6 | Frontend-TypeScript-Migration (#71/#72/#73) — alle `.js` portiert | grün |
+| 7 | Graph-Diff API/UI (#74/#76), Compare API/UI (#66/#67), Runs Dashboard (#63) | grün |
+| 8 | Persona-Review-UX: Persona-Entity-Context API (#69 Backend), UI in Arbeit | teilweise |
+| 9 | Production Hardening: Reverse-Proxy, gevent, Bundle-Token-Gate, signed-tickets, Prod-Stack-Smoke in CI | grün |
+| 10 | Security Watchlist: CVE-Monitor, Hardstop 2026-07-30, Risk-Register | grün |
+
+### Was wurde gegenüber MiroFish geändert?
+
+| Bereich | Upstream MiroFish / MiroFish-Offline | Agora |
+|---|---|---|
+| Sprache / UI | Chinesischer Ursprung, später englische Migration | Deutsche UI als Default, Englisch als Fallback |
+| Graph Memory | Zep / Graphiti-Ansatz im Ursprung | Eigene `GraphStorage`-Abstraktion mit Neo4j 5.18+ |
+| LLMs | DashScope / OpenAI-orientiert | Ollama lokal oder beliebiger OpenAI-kompatibler Endpoint |
+| Modelle | Primär per `.env` | Modell-Auswahl im Workflow + `.env`-Fallback |
+| Simulation | Feste KI-Personas | Persona-Review-Workflow, Quote-Validation, Sprache/Modell pro Vorbereitung |
+| Report | ReportAgent mit Graph-Tools | Report-Modell wechselbar, Confidence-Scores, Provenance-Anker, optional Webtools |
+| Compare | Nicht im Upstream | Graph-Diff, Branch-Compare, Runs Dashboard |
+| Region | China-Kontext | DACH / Europe-Berlin Timing-Profil + Wording-Glossar v1 |
 
 ### Schnellstart
 
@@ -163,7 +162,7 @@ Du lädst ein Dokument hoch, Agora extrahiert daraus einen Wissensgraphen, erzeu
 - Python 3.11+
 - `uv`
 - Neo4j 5.18+
-- Ollama mit mindestens:
+- Ollama (lokal) oder Ollama-Cloud-Account / OpenAI-kompatibler Endpoint
 
 ```bash
 # Default-LLM (lokal) oder Cloud-Variante
@@ -176,7 +175,7 @@ ollama pull qwen3-embedding:4b
 
 #### Option A: Docker Compose (Dev-Default)
 
-Docker Compose startet Agora, Neo4j und Redis. Ollama läuft standardmäßig auf dem Host und wird aus dem Container über `host.docker.internal` erreicht. Der Default-Compose nutzt seit v0.9.0 explizit den **Dev-Stage** (Vite + Flask, Hot-Reload) und bindet alle veröffentlichten Ports auf `127.0.0.1`.
+Compose startet Agora, Neo4j und Redis. Ollama läuft auf dem Host und wird aus dem Container über `host.docker.internal` erreicht. Veröffentlichte Ports binden auf `127.0.0.1`.
 
 ```bash
 git clone https://github.com/arn0ld87/agora.git
@@ -185,17 +184,17 @@ cp .env.example .env
 
 # .env.example defaultet FLASK_DEBUG=false (secure-by-default).
 #
-# Dev: FLASK_DEBUG=true setzen, SECRET_KEY und NEO4J_PASSWORD duerfen
+# Dev: FLASK_DEBUG=true setzen, SECRET_KEY und NEO4J_PASSWORD dürfen
 #      Platzhalter bleiben (Config.validate() warnt, blockt aber nicht).
 #
-# Hardened: FLASK_DEBUG=false lassen, echte Werte fuer SECRET_KEY,
+# Hardened: FLASK_DEBUG=false lassen, echte Werte für SECRET_KEY,
 #   NEO4J_PASSWORD und AGORA_AUTH_TOKEN erzeugen
 #   (Einzeiler in der Sicherheits-Sektion unten).
-# Erst dann:
+
 docker compose up -d --build
 ```
 
-**Was läuft jetzt:**
+**Endpoints:**
 
 | Endpoint | URL | Bind |
 |---|---|---|
@@ -204,29 +203,54 @@ docker compose up -d --build
 | Neo4j Browser | <http://localhost:7474> | `127.0.0.1` |
 | Neo4j Bolt | `bolt://localhost:7687` | `127.0.0.1` |
 
-Wer aus einem anderen Netzsegment (LAN, Tailscale) auf das Frontend zugreifen will, setzt einen Reverse-Proxy davor — direkter Bind auf `0.0.0.0` ist im Default bewusst aus.
+Wer aus einem anderen Netzsegment (LAN, Tailscale) zugreifen will, setzt einen Reverse-Proxy davor — direkter Bind auf `0.0.0.0` ist im Default bewusst aus.
 
-Nützliche Dev-Kommandos:
+#### Nach größeren Umbauten den Container neu bauen
+
+Wenn du Backend-/Frontend-Layer geändert hast (Dependencies, Pydantic-Schemas, Frontend-Bundle), reicht `docker compose up -d --build` manchmal nicht — Layer-Cache hält veraltete Stände. Dann komplett neu bauen, **ohne Daten-Volumes zu verlieren**:
+
+```bash
+cd ~/agora
+
+# Stack stoppen, Daten behalten
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  down --remove-orphans
+
+# Agora-Prod-Image komplett neu bauen
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  build --no-cache agora
+
+# Stack neu starten
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  up -d --force-recreate --remove-orphans
+
+# Status prüfen
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  ps
+```
+
+Named Volumes (Neo4j-Daten, Redis-Persistenz) bleiben erhalten. Nur das `agora`-Image wird ersetzt.
+
+Weitere Dev-Kommandos:
 
 ```bash
 # Container mit Dev-Override neu erstellen
-
 docker compose up -d --force-recreate agora
 
 # Wenn Docker-/Dependency-Layer geändert wurden
-
 docker compose build agora && docker compose up -d --force-recreate --no-deps agora
 
 # Wenn named volumes für Dependencies einmal resettet werden sollen
-
 docker compose down -v && docker compose up -d
 ```
-
-Danach:
-
-- Frontend: [http://localhost:5173](http://localhost:5173)
-- Backend Health: [http://localhost:5001/health](http://localhost:5001/health)
-- Neo4j Browser: [http://localhost:7474](http://localhost:7474)
 
 #### Option B: Lokal ohne Docker
 
@@ -265,6 +289,10 @@ GRAPH_CHUNK_SIZE=1500
 GRAPH_CHUNK_OVERLAP=150
 GRAPH_PARALLEL_CHUNKS=4
 
+# Persona-Generation Performance (#217 Stufe 2)
+AGORA_PERSONA_DETAIL_LEVEL=standard   # minimal | standard | rich
+# parallel_count default: 10 (vorher 5/3)
+
 # Sprache / Region
 AGENT_LANGUAGE=de
 REPORT_LANGUAGE=German
@@ -283,88 +311,67 @@ MAX_TOOL_CALLS_PER_ACTION=2
 
 - `LLM_MODEL_NAME` ist nur der Default.
 - Die UI fragt `/api/simulation/available-models` ab und zeigt kuratierte Presets plus lokal verfügbare Ollama-Modelle.
-- Modellwahl auf der Startseite/Step 2 steuert Persona- und Config-Generierung.
+- Modellwahl auf der Startseite und in Step 2 steuert Persona- und Config-Generierung.
 - Eine vorbereitete Simulation nutzt das Modell aus ihrer `simulation_config.json`.
-- Der ReportAgent akzeptiert ebenfalls ein Modell-Override beim Generieren, Regenerieren und Chatten.
+- Der ReportAgent akzeptiert ein Modell-Override beim Generieren, Regenerieren und Chatten.
 - Wenn du eine bereits vorbereitete Simulation mit einem anderen Modell ausführen willst, bereite sie neu vor.
-
-### Agent-Tool-Use
-
-Agent-Tool-Use ist absichtlich **aus**:
-
-```env
-ENABLE_AGENT_TOOLS=false
-```
-
-Wenn aktiviert, können Simulationsagenten vor einer Aktion Tools wie Graph-Suche oder Recent-Posts nutzen. Das kann bessere kontextuelle Aktionen erzeugen, erhöht aber Latenz, Kosten und Fehlerfläche. Ohne Neo4j-Credentials fällt die Tool-Schleife sauber auf Standard-`LLMAction` zurück.
 
 ### Sicherheit
 
-> **Warnung:** Agora ist explizit für den Betrieb auf `localhost` oder in einem
-> vertrauenswürdigen Netz (Tailscale, Wireguard, internes LAN) gedacht. Der
-> optionale `AGORA_AUTH_TOKEN`-Guard und die CORS-Whitelist reduzieren die
-> Angriffsfläche, ersetzen aber keine echte Mehrbenutzer-Auth. Nicht direkt ins
-> Internet hängen.
+> **Warnung:** Agora ist explizit für `localhost` oder ein vertrauenswürdiges Netz (Tailscale, Wireguard, internes LAN) gedacht. Der `AGORA_AUTH_TOKEN`-Guard und die CORS-Whitelist reduzieren die Angriffsfläche, ersetzen aber keine echte Mehrbenutzer-Auth. Nicht direkt ins Internet hängen.
 
-- Keine echten Secrets committen.
-- `.env` bleibt lokal.
-- `.env.example` enthält nur Beispielwerte (`change-me*`, `agora`, `neo4j`, `password`). `Config.validate()` lehnt diese Platzhalter im Nicht-Debug-Betrieb hart ab.
+- Keine echten Secrets committen, `.env` bleibt lokal.
+- `.env.example` enthält nur Placeholder (`change-me*`, `agora`, `neo4j`, `password`). `Config.validate()` lehnt diese im Nicht-Debug-Betrieb hart ab.
 - Echten `SECRET_KEY` und `AGORA_AUTH_TOKEN` mit einem Einzeiler erzeugen:
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
+  ```bash
+  python -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
 
 - Neo4j-Passwörter werden nicht in `simulation_config.json` oder andere persistierte Simulation-Artefakte geschrieben.
 - `backend/uploads/` ist nicht versioniert.
-- Siehe [`docu/security-hardening.md`](./docu/security-hardening.md) für die aktuelle Sicherheitsbaseline (Auth-Token, CORS-Whitelist, SSRF-Blocker, Vision- und Label-Caps) sowie [`docu/SECURITY_REVIEW_SUMMARY.md`](./docu/SECURITY_REVIEW_SUMMARY.md) für den historischen Review-Stand.
+- Details: [`docu/security-hardening.md`](./docu/security-hardening.md), [`docu/decisions/0001-auth-model.md`](./docu/decisions/0001-auth-model.md), [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md).
 
 ### Architektur
 
 ```text
-Flask API
+Flask API (47+ Routen, modular zerlegt)
   ├─ api/graph.py
   ├─ api/report.py
+  ├─ api/runs.py                      ← Runs Dashboard (#63)
   ├─ api/status.py
-  ├─ api/simulation_common.py
-  ├─ api/simulation_lifecycle.py
-  ├─ api/simulation_prepare.py
-  ├─ api/simulation_profiles.py
-  ├─ api/simulation_run.py
-  ├─ api/simulation_interviews.py
-  ├─ api/simulation_history.py
-  ├─ api/simulation_entities.py
-  ├─ api/simulation_stream.py
-  └─ api/simulation_metrics.py
+  ├─ api/simulation_*.py              ← lifecycle, prepare, profiles, run, …
+  └─ api/simulation_metrics.py        ← Polarisation, Bridge-Agents
         │
         ▼
-Service Layer
+Service Layer (AgoraContainer DI)
   ├─ GraphBuilderService / TemporalGraphService
   ├─ SimulationManager / SimulationRunner
   ├─ OasisProfileGenerator
-  ├─ SimulationConfigGenerator
   ├─ NetworkAnalyticsService / OntologyMutationService
-  ├─ GraphToolsService / WebTools
-  └─ ReportAgent
+  ├─ PersonaEntityContextService      ← neu (#69)
+  ├─ ReportAgent (Package, post-#202) / GraphToolsService / WebTools
+  └─ EventBus (Redis | File | InMemory)
         │
         ▼
 GraphStorage Interface
-  └─ Neo4jStorage
+  └─ Neo4jStorage (Read/Write/Search Mixins)
        ├─ EmbeddingService
        ├─ NERExtractor
        └─ SearchService
 ```
 
-OASIS-Simulationen laufen als separate Subprozesse unter `backend/scripts/`. IPC, Pause/Resume und Run-State laufen über den `SimulationEventBus` (Redis Pub/Sub im Compose-Default, File-Polling als Fallback).
+OASIS-Simulationen laufen als separate Subprozesse unter `backend/scripts/`. IPC, Pause/Resume und Run-State laufen über den `SimulationEventBus` (Redis Pub/Sub im Compose-Default, File-Polling als Fallback). Frontend bekommt Live-Updates per SSE (`/api/simulation/<id>/stream`) und Polling-Composable (`usePolling`, Tab-aware-Pause).
 
 ### Entwicklung
 
 ```bash
 npm run setup:all
 npm run dev
-npm run check
+npm run check         # lint + tests + build (alles)
 cd backend && uv run pytest
 cd backend && uv run python -m compileall app scripts
+cd backend && uv run python -m app.contracts.dump_schemas   # Schemas regenerieren
 ```
 
 Doku-Index (Auswahl):
@@ -372,16 +379,20 @@ Doku-Index (Auswahl):
 - Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
 - Operations: [`docu/operations.md`](./docu/operations.md) · [`docu/backup-restore.md`](./docu/backup-restore.md)
 - Release-Process: [`docu/release-process.md`](./docu/release-process.md)
-- Auth & Security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/security-threat-model.md`](./docu/security-threat-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
+- Auth & Security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/decisions/0001-auth-model.md`](./docu/decisions/0001-auth-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
 - API-Verträge: [`docu/api-contracts.md`](./docu/api-contracts.md)
-- Architektur & Refactoring: [`docu/target-architecture.md`](./docu/target-architecture.md), `docu/p0-*-protokoll.md`, `docu/2026-05-01-*-arbeitsprotokoll.md`
+- Architektur: [`docu/target-architecture.md`](./docu/target-architecture.md)
+- Status / Tests / Coverage: [`docu/STATUS.md`](./docu/STATUS.md)
+- Wording-Glossar v1: [`docu/glossary-wording.md`](./docu/glossary-wording.md)
 
 ### Herkunft und Lizenz
 
-Agora ist ein Fork/Derivat von:
+Agora ist ein Fork / Derivat von:
 
 - [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline)
-- upstream: [666ghj/MiroFish](https://github.com/666ghj/MiroFish)
+- Upstream: [666ghj/MiroFish](https://github.com/666ghj/MiroFish)
+
+Die Simulations-Engine nutzt [OASIS](https://github.com/camel-ai/oasis) von CAMEL-AI.
 
 Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
@@ -389,120 +400,100 @@ Lizenz: AGPL-3.0, siehe [LICENSE](./LICENSE).
 
 ## English
 
-> **Status: v0.9.0 (tag) + Layer 0–5 reader-honesty refactor on `main`.**
-> Agora is an active experimental fork. Graph build, simulation, and report
-> pipeline can fail when Ollama is slow, JSON mode misbehaves, or models are
-> switched mid-run. Not production-ready. **Single-User-only by architecture
-> decision** ([ADR-0001](docu/decisions/0001-auth-model.md)): a shared
-> `AGORA_AUTH_TOKEN` bearer is the only auth principal, no user model, no
-> multi-user path. CORS is localhost-locked, backend binds to `127.0.0.1`
-> by default. Run on localhost, Tailnet, or behind a reverse proxy
-> ([`deploy/nginx/`](deploy/nginx/)) — never directly exposed to the public
-> internet. Multi-user use cases (classroom, research group) need a v2 ADR
-> with proper session/login auth.
-> Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding
-> `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
+> **Status: v0.9.1-dev (post-tag iteration on `main`).**
+> Tag is `v0.9.0` from 2026-05-01 ([release notes](docu/2026-05-01-v0.9.0-release-notes.md)). `main` has been in active layer-6-to-8 iteration since: full TypeScript frontend migration, Layer 7 (compare- and diff-stack, runs dashboard) shipped, Layer 8 (persona-entity-context) started.
+> Agora is an active experimental fork. Graph build, simulation, and report pipeline can fail when Ollama is slow, JSON mode misbehaves, or models are switched mid-run. Not production-ready.
+> **Single-User-only by architecture decision** ([ADR-0001](docu/decisions/0001-auth-model.md)) — shared `AGORA_AUTH_TOKEN` plus signed tickets, no multi-user path in v1. CORS localhost-locked, backend binds to `127.0.0.1` by default.
+> Currently exercised with **LLM `qwen3-coder-next:cloud`** and **embedding `qwen3-embedding:4b` (2560 dim, requires `VECTOR_DIM=2560`)**.
 >
-> **Post-tag state on `main`:** all 17 tasks from [`PLAN.md`](./PLAN.md) are
-> done — Layer 0 Pydantic contracts, Layer 1 backend hardening, Layer 2
-> DACH voice + wording glossary v1, Layer 3 reader honesty, Layer 4
-> frontend strict-zod + diff/confidence UI, Layer 5 baseline eval suite.
-> **No new release tag yet** — version markers stay at `0.9.0`, the refactor
-> layer is deliberately pre-1.0 iteration.
->
-> **Docker Hub:** `docker pull alexle135/agora-agora:latest` |
-> [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
+> **Docker:** `docker pull alexle135/agora-agora:latest` · [GHCR](https://github.com/arn0ld87/agora/pkgs/container/agora)
 
 ### What is Agora?
 
-Agora is a local-first multi-agent simulation engine for public reaction, market sentiment, and social dynamics.
+Upload a document. Agora extracts a knowledge graph from it, generates **hundreds of agent personas** with their own roles, opinions, and activity profiles, lets them discuss your content on social-media-like platforms, and produces a structured report with verbatim quotes, confidence scores, and provenance anchors.
 
-Upload a document, extract a knowledge graph, generate agent personas, simulate social-media-like interactions, and produce a structured report. Agora runs locally with Neo4j and Ollama by default, but can also use any OpenAI-compatible cloud endpoint.
+In short: **resonance simulation for text, before it ships.**
 
-### Engineering status (v0.9.0 + Layer 0–5)
+### What's new since the last README update (2026-05-04)
 
-- **Quality gates are in place** via `npm run check` (backend lint + tests, frontend lint + Vitest on `jsdom`, frontend build; current test counts in [`docu/STATUS.md`](docu/STATUS.md); 2 Redis integration tests skip cleanly without `TEST_REDIS_URL`).
-- **Pydantic contract architecture (Layer 0)**: `backend/app/contracts/` with `ReportContractModel`, `ReportModel`, `EvidenceMapModel`, `PersonaModel`, `PersonaQuotaPlan`. JSON schemas generated via `python -m app.contracts.dump_schemas`; Zod mirror in `frontend/src/contracts/reportContract.ts`. CI job `contract-gates` blocks schema drift.
-- **Backend hardening (Layer 1)**: `chat_json` strict-schema mode (json_schema response format) plus json_object fallback. `PersonaQuotaPlan`/`PersonaQuotaActual` enforced in `prepare_service.py`. Anti-decoration fix: no more `global_items[:2]` filler — orphan claims get an honest `low` confidence + audit entry. Confidence calibration with match-score cap (all evidence <0.55 → max 0.69) and verified-source gate (≥2 independent sources). Contradiction detector via boolean flags + stance conflict.
-- **DACH voice + wording glossary v1 (Layer 2)**: persona generator carries a mandatory `voice_register` field (`formal-de` / `neutral-de` / `technical-de` / `skeptisch-de`) with auto-fallback. Wording glossary v1 (issue #175) replaces English forecast/marketing phrases (`prediction`, `rehearsal of the future`, `god's eye view`, `high-fidelity digital world`) with sober persona vocabulary; full list in [`docu/glossary-wording.md`](./docu/glossary-wording.md). Voice lint (`backend/scripts/check_voice.py`) is enforced as a hard CI gate in `contract-gates.yml`.
-- **Reader honesty (Layer 3)**: evidence items now carry `quote` (≤500 chars verbatim original) and `source_id_anchor` (`agent-log-N#entry-X`, `web:URL`, `kg:entity:UUID`). Time-series sampling in the section builder replaces the old "first 8 actions" window with stratified sampling over `round_num` (8 deterministic bins). Section-dedup audit (cosine ≥0.92, jaccard fallback ≥0.85) flags duplicates without dropping them. Cluster labels are deterministic via TF top-3 with DE+EN stopword filter — no more LLM free-text labeling.
-- **Frontend strict (Layer 4)**: `Step4Report.vue` parses backend payloads strictly through `ReportSchema.parse(...)` / `EvidenceMapSchema.parse(...)` (`.strict()` rejects unknown fields with a ZodError). Schema mismatch shows an inline banner with the issue path. Each section gets a `ConfidenceBadge` (pill with `--ok`/`--warn`/`--err` tokens) plus a hover popover listing the section `audit_trail`. Evidence quotes render as `<blockquote>`; clickable source anchors `scrollIntoView` to the agent-log entry or open web URLs in a new tab.
-- **Eval suite (Layer 5)**: `backend/tests/eval/` ships three fixtures (`clean_small`, `medium_with_dedup`, `orphan_heavy`) plus an `expected_metrics.json` snapshot pin. `check_evidence_quality.py` reports five metrics: `evidence_coverage`, `claim_support_ratio`, `orphan_claim_rate`, plus the new `dedup_rate` and `concentration_index`. Snapshot drift is caught at build time via `tests/eval/test_eval_baselines.py`.
-- **Domain cleanup (v0.9.0)**: three hot-spot modules carved out — `simulation_manager.py` 789→403 LOC (−49%), `report_agent.py` 3184→2179 LOC (−31.6%), `neo4j_storage.py` 1127→195 LOC (−82.7%). New service layers under `backend/app/services/` (branching, prepare pipeline, report logger/models/prompts/tools, ingestion pipeline). Storage split into five modules: `neo4j_mappings.py` + Read/Write/Search mixins. Re-export pattern keeps every caller stable — no breaking changes.
-- **Wire identity pinned (v0.9.0, issue #52)**: `models/graph.py` carries backend graph DTOs whose schema is bit-identical to the previous storage output; future schema drifts trigger DTO tests before they reach the frontend.
-- **FSM actively consumed (v0.9.0, issue #42)**: the declarative state machine is now used by `SimulationManager` and every API route; `ALLOWED_TRANSITIONS` is the single source of truth, invalid transitions raise `InvalidStatusTransition`. Branching now goes through `CREATED → PREPARING → READY`; force-restart uses `_reset_to_ready(...)` with a logged reason.
-- **Design system consolidated (Slice 1)**: `tokens.css` as source of truth, UI components (`Btn`, `Badge`, `Field`, `Card`, `Select`) tokenized, hardcoded colors replaced with token references.
-- **Persona review (Slice 2)**: Generated personas can be inspected, edited, and approved before simulation start. Quality heuristics (duplicates, missing fields, role diversity) provide badges. `PERSONA_REVIEW_ENABLED=true` gates simulation start until all personas are approved.
-- **Run dashboard (Slice 3)**: Central `/runs` view with status, date, model, document, graph ID, persona count. Detail drawer for errors, artifacts, and copy buttons. Run persistence via `RunRegistry`.
-- **Evidence & confidence (Slice 4)**: Report claims carry `confidence` scores and structured `evidence` blocks (graph metrics, agent actions). UI shows confidence badges and evidence drawer.
-- **Export center (Slice 5)**: JSON and Markdown export for reports, CSV for polarization metrics, GraphML for graphs, SVG/PNG/PDF for graph view.
-- **Event bus transport (#9 + #17)** with a Redis-backed default (`docker-compose.yml` ships `redis:7-alpine`) and file-polling fallback. Live channels (`control` / `state`) ride Redis pub/sub with a retained snapshot. **Since issue #17** RPC channels (`rpc.command` / `rpc.response.*`) are hybrid: the backend publishes to Redis and the file IPC layer in parallel, then races both sources for the response (loser is cleaned up). The OASIS subprocess listener `RedisIPCBridge` (`backend/scripts/subprocess_redis_bridge.py`) lives next to the legacy file polling. Backout via `EVENT_BUS_BACKEND=file`. SSE bridge at `GET /api/simulation/<id>/stream` keeps the frontend off run-state polling.
-- **Temporal graph (#10)**: RELATION edges carry `valid_from_round` / `valid_to_round` / `reinforced_count`; `/api/graph/snapshot/<gid>/<round>` and `/api/graph/diff/<gid>` answer time-travel queries. The **round slider** in `GraphPanel` scrubs through the timeline (client-side filter; no extra API call while scrubbing).
-- **Polarization metrics (#12)**: `GET /api/simulation/<id>/metrics` returns Louvain communities, echo-chamber index and bridge agents via `networkx` (see `docu/analytics.md`).
-- **Dynamic ontology mutation (#11, phase 1+2)** with three modes (`disabled` / `review_only` / `auto`), thread-safe manager, pluggable scorer, audit log. The NER → mutation wiring is live — `Neo4jStorage.add_text` forwards novel entity types automatically; service exceptions never block ingestion.
-- **Hand-rolled DI container (#14)** underpins all of the above — long-lived services live on `AgoraContainer`, no more `app.extensions` service-locator hunt.
-- **API contract hardening toward v1.0**: centralized success/error envelopes (`success`, `data`, `error`, `code`) are being enforced incrementally. Auth failures, raw `dict` returns in `@handle_api_errors`, and framework-level `/api/*` 404/405 responses now use consistent JSON payloads. Ongoing steps are tracked in `docu/v1-development-log.md`.
-- **Workspace layout shell + state composables (EPIC-03)**: `WorkspaceLayout` / `WorkspaceHeader` / `WorkspaceSplit` / `WorkspaceModeSwitch` / `WorkspaceStepStatus` / `WorkspaceBrandLink` (`frontend/src/layouts/`) are the shared shell for all five pipeline views. `useWorkspaceMode` and `useWorkspaceStatus` remove duplicated view-mode and status boilerplate.
-- **GraphPanel modularized (EPIC-04)**: `GraphPanel.vue` shrunk from 933 to 98 lines (−90%). D3 render logic extracted into `useGraphRender` composable (#35), UI split into `GraphHints`, `GraphToolbar` and `GraphCanvas` (#34).
-- **Polling centralized (EPIC-05)**: All 12 `setInterval` sites in the frontend now use the shared `usePolling` composable (#37, #38). SSE stream via `useEventStream` replaces status polling in the simulation view (#9, #40).
-- **The simulation API was decomposed** into focused route modules instead of one giant `simulation.py` file (10 files, 48 routes).
-- **Refactor logs live in `docu/`** so architectural decisions are traceable in-repo.
+- **🆚 Compare- and diff-stack shipped** — `GET /api/graph/<id>/diff` (#74), `GET /api/simulation/<id>/compare` (#66), `GraphDiffPanel.vue` (#76), `BranchComparePanel.vue` (#67)
+- **📊 Runs Dashboard with live polling** (#63) — new `/runs` view with status pills (active / done / failed), 5 s tab-aware polling, click-through to detail (`/runs/:id`)
+- **🧬 Persona-entity-context API** (#69 backend) — `GET /api/simulation/<sim>/profiles/<username>/entity-context` shows which knowledge-graph entity fed into a persona. Frontend diff UI follows.
+- **🛡️ CI hardening** — evidence-quality gate hard, backend coverage gate at 53 %, frontend coverage gate at 24 %, prod-stack-smoke and CVE-monitor on schedule
+- **⚡ Performance** (#217) — persona generation parallelized (`parallel_count` 5/3 → 10), `AGORA_PERSONA_DETAIL_LEVEL`, `@measure_llm_latency` decorator
+- **🩹 Stability** — vector-index drops on dim mismatch (#263), embedding-crash-loop fix (#276), Neo4j startup retry, `/api/logs/stream` on signed tickets (F2.2)
+- **🔐 Auth target for v1.0** — [ADR-0001](docu/decisions/0001-auth-model.md): single-user-only, shared token + signed tickets, no multi-user path in v1
+- **🧹 Refactor** — `report_agent.py` 2400-LOC monolith → package split (#202), full TypeScript migration finished (#73)
 
-### Key Features
+Full list: [`CHANGELOG.md`](./CHANGELOG.md), [`docu/STATUS.md`](./docu/STATUS.md).
 
-- **GraphRAG ingest** with Neo4j 5.18+ and Ollama embeddings (`qwen3-embedding:4b` currently exercised, `nomic-embed-text` still supported).
-- **Flexible ontology generation**: entity types are no longer hard-capped at exactly 10; defaults are 8-16 types plus required `Person` and `Organization` fallbacks (`ONTOLOGY_MIN_ENTITY_TYPES`, `ONTOLOGY_MAX_ENTITY_TYPES`).
-- **Model selection in the workflow** for upload/setup and report generation.
-- **Per-simulation frozen config**: prepared simulations keep their selected model and language.
-- **Persona review & control**: cap agent count, inspect, edit and approve/reject generated personas before simulation start. Quality heuristics flag duplicates, missing fields, and low role diversity. Save reusable persona templates locally.
-- **Run dashboard**: central overview of all runs with status, model, document, and persona counts. Detail drawer for errors and artifacts.
-- **Simulation controls**: configure duration in days plus an optional round limit, start, stop, pause/resume after a round, plus raw subprocess console logs.
-- **ReportAgent** with evidence-backed claims, graph tools, agent interviews, panorama search, model override, and optional Tavily web tools.
-- **Export center**: JSON/Markdown for reports, CSV for polarization metrics, GraphML for graphs, SVG/PNG/PDF for graph view.
-- **Experimental agent tool-use**: simulation agents can query the knowledge graph before acting when explicitly enabled.
-- **DACH defaults**: German UI, German agent language by default, and Europe/Berlin activity timing.
-- **Secret guardrails**: Neo4j passwords are not serialized into simulation config artifacts.
+### Workflow
+
+1. **Upload & model selection** — drop a document, formulate the question, pick LLM and agent language.
+2. **Graph build** — Agora chunks the document, calls the LLM for NER + relation extraction, writes to Neo4j. Live graph view with cluster legend; export as GraphML / SVG / PNG / PDF. ([demo clip](./media/screenshots/graph-build.mp4))
+3. **Persona generation** — hundreds of agent personas derived from the graph, each with biography, stance, reaction speed, influence profile.
+4. **Simulation** — OASIS runs as a subprocess. Live action stream, console log, pause/resume after a round.
+5. **Report** — ReportAgent searches graph + simulation, can interview agents, optional web tools. Confidence per section, clickable source anchors.
+6. **Compare & drift** — graph diff between rounds, branch comparison (persona drift, polarization shift), live runs dashboard.
+
+### Engineering status (Layer 0–10)
+
+Test counts and coverage live in [`docu/STATUS.md`](docu/STATUS.md) — this README no longer copies numbers inline.
+
+| Layer | What | Status |
+|---|---|---|
+| 0 | Pydantic contracts + Zod mirror + JSON schema dump | green |
+| 1 | Backend hardening: strict json_schema, persona quotas, anti-decoration, confidence cap | green |
+| 2 | DACH voice + wording glossary v1, voice-lint as hard CI gate | green |
+| 3 | Reader honesty: verbatim quotes, provenance anchors, time-series sampling, section dedup | green |
+| 4 | Frontend strict-zod, diff/confidence UI, persona quota editor | green |
+| 5 | Eval suite with snapshot pin, 5 metrics | green |
+| 6 | Frontend TypeScript migration | green |
+| 7 | Graph-diff API/UI, compare API/UI, runs dashboard | green |
+| 8 | Persona-review UX: persona-entity-context API (#69 backend), UI in progress | partial |
+| 9 | Production hardening: reverse proxy, gevent, bundle-token gate, signed tickets, prod-stack smoke | green |
+| 10 | Security watchlist: CVE monitor, hardstop 2026-07-30, risk register | green |
 
 ### Quick Start
 
-> Full guides with volume layout, reverse-proxy setup and hardening checklist:
-> [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md).
-
-Host Ollama is expected by default:
+> Full guides: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md).
 
 ```bash
+# Pull models on the host
 ollama pull qwen2.5:32b
-# Current embedding (2560 dim, requires VECTOR_DIM=2560):
-ollama pull qwen3-embedding:4b
-# Alternative 768-dim embedding:
-# ollama pull nomic-embed-text
+ollama pull qwen3-embedding:4b   # 2560 dim, requires VECTOR_DIM=2560
 
+# Clone and start
 git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
-# .env.example defaults to FLASK_DEBUG=false (secure-by-default).
-#
-# Dev: set FLASK_DEBUG=true, SECRET_KEY and NEO4J_PASSWORD can stay
-#      as placeholders (Config.validate() warns but does not block).
-#
-# Hardened: keep FLASK_DEBUG=false, generate real values for
-#   SECRET_KEY, NEO4J_PASSWORD and AGORA_AUTH_TOKEN
-#   (see Security section below for the one-liner).
+
+# Dev: set FLASK_DEBUG=true, placeholders are tolerated
+# Hardened: keep FLASK_DEBUG=false, generate real SECRET_KEY,
+#           NEO4J_PASSWORD, AGORA_AUTH_TOKEN
 docker compose up -d --build
 ```
 
-Open:
+Open: [Frontend](http://localhost:5173) · [Backend health](http://localhost:5001/health) · [Neo4j Browser](http://localhost:7474)
 
-- Frontend: [http://localhost:5173](http://localhost:5173)
-- Backend health: [http://localhost:5001/health](http://localhost:5001/health)
-- Neo4j Browser: [http://localhost:7474](http://localhost:7474)
-
-Local development (without Docker):
+Local dev without Docker:
 
 ```bash
 npm run setup:all
 npm run dev
 ```
+
+#### Rebuild the container after larger changes
+
+```bash
+cd ~/agora
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache agora
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+```
+
+Named volumes (Neo4j data, Redis persistence) survive — only the `agora` image is replaced.
 
 ### Configuration Highlights
 
@@ -517,6 +508,7 @@ AGENT_LANGUAGE=de
 REPORT_LANGUAGE=German
 TIME_PROFILE=dach_default
 
+AGORA_PERSONA_DETAIL_LEVEL=standard
 ENABLE_AGENT_TOOLS=false
 MAX_TOOL_CALLS_PER_ACTION=2
 ```
@@ -530,46 +522,36 @@ ENABLE_WEB_TOOLS=true
 
 ### Model Switching
 
-`LLM_MODEL_NAME` is the default only. The UI lists curated presets and locally installed Ollama models. The selected model is passed into simulation preparation and report generation. Prepared simulations keep their own `llm_model` in `simulation_config.json`, so re-prepare a simulation when you want to run it with another model.
+`LLM_MODEL_NAME` is the default only. The UI lists curated presets and locally installed Ollama models. The selected model is passed into simulation preparation and report generation. Prepared simulations keep their own `llm_model` in `simulation_config.json` — re-prepare a simulation when you want to run it with another model.
 
 ### Agent Tool-Use
 
-Agent tool-use is experimental and disabled by default. When enabled, agents may run a limited number of graph/context tool calls before producing an action. This can improve context but increases latency and LLM usage. If Neo4j credentials are unavailable at runtime, the tool-aware loop fails closed and falls back to standard OASIS `LLMAction`.
+Disabled by default. When enabled, agents may run a limited number of graph/context tool calls before producing an action. This can improve context but increases latency and LLM usage. If Neo4j credentials are unavailable at runtime, the tool-aware loop fails closed and falls back to standard OASIS `LLMAction`.
 
 ### GPU / CPU
 
-Agora erkennt die GPU-Nutzung automatisch via Ollama REST API (`/api/ps`) — es ist kein `nvidia-smi` oder NVIDIA Container Toolkit im Container nötig. Das Backend fragt Ollama direkt nach geladenen Modellen und deren VRAM-Nutzung.
+Agora detects GPU usage automatically via the Ollama REST API (`/api/ps`) — no `nvidia-smi` or NVIDIA Container Toolkit required inside the container.
 
-- **GPU aktiv**: `/api/status` zeigt `ollama_uses_gpu: true` mit VRAM-Belegung in GB.
-- **CPU-only**: Wenn Ollama nur Modelle ohne VRAM meldet, zeigt der Status entsprechende Hinweise.
-- **Ollama nicht erreichbar**: Status meldet `ollama_uses_gpu: null`.
+- **GPU active**: `/api/status` reports `ollama_uses_gpu: true` with VRAM usage in GB.
+- **CPU-only**: when Ollama reports models without VRAM, status surfaces a hint.
+- **Ollama unreachable**: status reports `ollama_uses_gpu: null`.
 
-Für GPU-Beschleunigung muss Ollama auf dem Host mit GPU-Zugriff laufen. Optional kann der Container via NVIDIA Container Toolkit GPU-Passthrough bekommen (siehe auskommentierte Sektion in `docker-compose.yml`), das ist aber für die reine Ollama-Nutzung auf dem Host nicht nötig.
+For GPU acceleration, run Ollama on the host with GPU access. Container-side GPU passthrough via NVIDIA Container Toolkit is optional (commented section in `docker-compose.yml`); not needed for host-side Ollama.
 
 ### Architecture snapshot
 
 ```text
-Flask API
-  ├─ api/graph.py
-  ├─ api/report.py
-  ├─ api/status.py
-  ├─ api/simulation_common.py
-  ├─ api/simulation_lifecycle.py
-  ├─ api/simulation_prepare.py
-  ├─ api/simulation_profiles.py
-  ├─ api/simulation_run.py
-  ├─ api/simulation_interviews.py
-  ├─ api/simulation_history.py
-  ├─ api/simulation_entities.py
-  ├─ api/simulation_stream.py
-  └─ api/simulation_metrics.py
+Flask API (modular)
+  ├─ api/graph.py · api/report.py · api/runs.py · api/status.py
+  └─ api/simulation_*.py (lifecycle, prepare, profiles, run, metrics, …)
         │
         ▼
 Service Layer (AgoraContainer DI)
   ├─ GraphBuilderService / TemporalGraphService
   ├─ SimulationManager / SimulationRunner
   ├─ NetworkAnalyticsService / OntologyMutationService
-  ├─ ReportAgent / GraphToolsService / WebTools
+  ├─ PersonaEntityContextService          (new, #69)
+  ├─ ReportAgent (package, post-#202) / GraphToolsService / WebTools
   └─ EventBus (Redis | File | InMemory)
         │
         ▼
@@ -590,12 +572,22 @@ Doc index (selection):
 - Deployment: [`docu/deployment-dev.md`](./docu/deployment-dev.md) · [`docu/deployment-prod-like.md`](./docu/deployment-prod-like.md)
 - Operations: [`docu/operations.md`](./docu/operations.md) · [`docu/backup-restore.md`](./docu/backup-restore.md)
 - Release process: [`docu/release-process.md`](./docu/release-process.md)
-- Auth & security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/security-threat-model.md`](./docu/security-threat-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
+- Auth & security: [`docu/auth.md`](./docu/auth.md) · [`docu/security-hardening.md`](./docu/security-hardening.md) · [`docu/decisions/0001-auth-model.md`](./docu/decisions/0001-auth-model.md) · [`docu/dependency-risk-register.md`](./docu/dependency-risk-register.md)
 - API contracts: [`docu/api-contracts.md`](./docu/api-contracts.md)
-- Architecture & refactor logs: [`docu/target-architecture.md`](./docu/target-architecture.md) plus `docu/2026-05-01-*-arbeitsprotokoll.md`.
+- Architecture: [`docu/target-architecture.md`](./docu/target-architecture.md)
+- Status / tests / coverage: [`docu/STATUS.md`](./docu/STATUS.md)
 
 ### Attribution
 
 Agora is a fork/derivative of [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), which itself is based on [666ghj/MiroFish](https://github.com/666ghj/MiroFish). The simulation engine uses [OASIS](https://github.com/camel-ai/oasis) from CAMEL-AI.
 
 License: AGPL-3.0. See [LICENSE](./LICENSE).
+
+---
+
+<div align="center">
+<sub>Maintained by</sub><br><br>
+<a href="https://alexle135.de">
+<img src="./media/credits/alexle135-brand.png" alt="AlexLE135.de — Systemintegration. Automatisierung. Infrastruktur." width="320"/>
+</a>
+</div>
