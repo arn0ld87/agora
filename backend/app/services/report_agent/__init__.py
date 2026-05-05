@@ -20,11 +20,24 @@ __all__ = [
     "ReportStatus",
     "is_valid_tool_call",
     "parse_tool_calls",
+    # Prompt templates (re-exported from .prompts)
+    "PLAN_SYSTEM_PROMPT_TEMPLATE",
+    "PLAN_USER_PROMPT_TEMPLATE",
+    "SECTION_SYSTEM_PROMPT_TEMPLATE",
+    "SECTION_USER_PROMPT_TEMPLATE",
+    "REACT_OBSERVATION_TEMPLATE",
+    "REACT_INSUFFICIENT_TOOLS_MSG",
+    "REACT_INSUFFICIENT_TOOLS_MSG_ALT",
+    "REACT_TOOL_LIMIT_MSG",
+    "REACT_UNUSED_TOOLS_HINT",
+    "REACT_FORCE_FINAL_MSG",
+    "CHAT_SYSTEM_PROMPT_TEMPLATE",
+    "CHAT_OBSERVATION_SUFFIX",
 ]
 
 
 def __getattr__(name: str) -> Any:
-    for module_name in (".agent", ".manager", ".tools"):
+    for module_name in (".agent", ".manager", ".prompts", ".tools"):
         module = import_module(module_name, __name__)
         if hasattr(module, name):
             value = getattr(module, name)
