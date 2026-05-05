@@ -82,7 +82,7 @@ def test_orphan_claim_gets_low_confidence(monkeypatch) -> None:
     # Embedder liefert leeres bound-Ergebnis
     empty_bound: List[Dict] = []
     monkeypatch.setattr(
-        "app.services.report_agent.bind_evidence_to_claim",
+        "app.services.report_agent.agent.bind_evidence_to_claim",
         lambda *args, **kwargs: empty_bound,
     )
     # _try_get_embedder gibt einen Dummy zurück (nicht None → embedder_ok-Pfad)
@@ -138,7 +138,7 @@ def test_no_global_items_decoration(monkeypatch) -> None:
 
     empty_bound: List[Dict] = []
     monkeypatch.setattr(
-        "app.services.report_agent.bind_evidence_to_claim",
+        "app.services.report_agent.agent.bind_evidence_to_claim",
         lambda *args, **kwargs: empty_bound,
     )
     monkeypatch.setattr(

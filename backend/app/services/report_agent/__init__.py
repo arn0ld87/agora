@@ -24,10 +24,10 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    module = import_module(".agent", __name__)
-    try:
-        value = getattr(module, name)
-    except AttributeError as exc:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
-    globals()[name] = value
-    return value
+    for module_name in (".agent", ".manager", ".tools"):
+        module = import_module(module_name, __name__)
+        if hasattr(module, name):
+            value = getattr(module, name)
+            globals()[name] = value
+            return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

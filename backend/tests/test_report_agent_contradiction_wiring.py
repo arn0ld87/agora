@@ -209,7 +209,7 @@ def test_report_agent_calls_detect_contradiction_penalty_with_evidence_items() -
     # Wir patchen detect_contradiction_penalty innerhalb des report_agent-Moduls
     # und prüfen, dass es mit einem nicht-leeren Evidence-Argument aufgerufen wird.
     with patch(
-        "app.services.report_agent.detect_contradiction_penalty",
+        "app.services.report_agent.agent.detect_contradiction_penalty",
         wraps=detect_contradiction_penalty,
     ) as mock_dcp:
         from app.services.report_agent import ReportAgent

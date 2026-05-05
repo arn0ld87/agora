@@ -47,8 +47,44 @@ def resolve_embedder(
         return None
 
 
+def normalize_claims_for_contract(claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for claim in claims:
+        item = dict(claim)
+        item.pop("claim", None)
+        item.pop("confidence", None)
+        item.pop("evidence_items", None)
+        normalized.append(item)
+    return normalized
+
+
+def normalize_sections_for_contract(sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized_sections: List[Dict[str, Any]] = []
+    for section in sections:
+        item = {k: v for k, v in dict(section).items() if k != "schema_version"}
+        item["section_title"] = (item.get("section_title") or "Recovered section").strip()
+        summary = (item.get("section_summary") or item.get("section_title") or "Recovered summary").strip()
+        item["section_summary"] = summary
+        claims = normalize_claims_for_contract(item.get("claims") or [])
+        if not claims:
+            claims = [{
+                "claim_id": "claim_01",
+                "claim_text": "No claim candidate extracted from this section.",
+                "confidence_score": 0.0,
+                "confidence_label": "low",
+                "evidence": [],
+                "notes": "Recovered section without persisted claims.",
+                "audit_trail": [],
+            }]
+        item["claims"] = claims
+        normalized_sections.append(item)
+    return normalized_sections
+
+
 __all__ = [
     "init_evidence_map",
+    "normalize_claims_for_contract",
+    "normalize_sections_for_contract",
     "record_evidence_item",
     "resolve_embedder",
 ]

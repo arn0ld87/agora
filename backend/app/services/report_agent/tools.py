@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from ..tool_execution import execute_tool
+from ..tool_schema import (
+    TOOL_DESC_INSIGHT_FORGE,
+    TOOL_DESC_INTERVIEW_AGENTS,
+    TOOL_DESC_PANORAMA_SEARCH,
+    TOOL_DESC_QUICK_SEARCH,
+)
+from ..tool_validation import (
+    is_valid_tool_call as _is_valid_tool_call,
+    parse_tool_calls as _parse_tool_calls,
+)
+
+
+def define_tools(agent: Any) -> Dict[str, Dict[str, Any]]:
+    tools: Dict[str, Dict[str, Any]] = {
+        "insight_forge": {
+            "name": "insight_forge",
+            "description": TOOL_DESC_INSIGHT_FORGE,
+            "parameters": {
+                "query": "The question or topic you want to deeply analyze",
+                "report_context": "Context of current report section (optional, helps generate more accurate sub-questions)",
+            },
+        },
+        "panorama_search": {
+            "name": "panorama_search",
+            "description": TOOL_DESC_PANORAMA_SEARCH,
+            "parameters": {
+                "query": "Search query, used for relevance sorting",
+                "include_expired": "Whether to include expired/historical content (default True)",
+            },
+        },
+        "quick_search": {
+            "name": "quick_search",
+            "description": TOOL_DESC_QUICK_SEARCH,
+            "parameters": {
+                "query": "Search query string",
+                "limit": "Number of results to return (optional, default 10)",
+            },
+        },
+        "interview_agents": {
+            "name": "interview_agents",
+            "description": TOOL_DESC_INTERVIEW_AGENTS,
+            "parameters": {
+                "interview_topic": "Interview topic or requirement description (e.g. 'understand students' views on the dorm formaldehyde incident')",
+                "max_agents": "Maximum number of agents to interview (optional, default 5, max 10)",
+            },
+        },
+    }
+
+    if agent.web_tools.is_available():
+        tools["web_search"] = {
+            "name": "web_search",
+            "description": (
+                "Live web search via Tavily. Use for CURRENT, POST-SIMULATION facts "
+                "(news, recent developments, statistics, official sources) that are NOT in the knowledge graph. "
+                "Prefer this over guessing whenever the topic is time-sensitive or external."
+            ),
+            "parameters": {
+                "query": "Search query in natural language (German or English)",
+                "max_results": "Number of results (optional, default 5, max 10)",
+            },
+        }
+        tools["fetch_url"] = {
+            "name": "fetch_url",
+            "description": (
+                "Fetch the main text of a specific URL found via web_search (or one you already know). "
+                "Returns cleaned article content. Use when a search snippet is insufficient."
+            ),
+            "parameters": {
+                "url": "Absolute URL starting with http(s)://",
+            },
+        }
+    return tools
+
+
+def execute_tool_call(agent: Any, tool_name: str, parameters: Dict[str, Any], report_context: str = "") -> str:
+    return execute_tool(
+        tool_name=tool_name,
+        parameters=parameters,
+        report_context=report_context,
+        graph_tools=agent.graph_tools,
+        web_tools=agent.web_tools,
+        graph_id=agent.graph_id,
+        simulation_id=agent.simulation_id,
+        simulation_requirement=agent.simulation_requirement,
+        record_evidence=agent._record_tool_evidence,
+        section_index=agent._current_section_index or 0,
+    )
+
+
+def parse_tool_calls_response(response: str) -> List[Dict[str, Any]]:
+    return _parse_tool_calls(response)
+
+
+def validate_tool_call(data: dict) -> bool:
+    return _is_valid_tool_call(data)
+
+
+# Exact-name re-exports for backwards compatibility and identity-sensitive tests.
+parse_tool_calls = _parse_tool_calls
+is_valid_tool_call = _is_valid_tool_call
+
+
+def describe_tools(tools: Dict[str, Dict[str, Any]]) -> str:
+    desc_parts = ["Available Tools:"]
+    for name, tool in tools.items():
+        params_desc = ", ".join([f"{k}: {v}" for k, v in tool["parameters"].items()])
+        desc_parts.append(f"- {name}: {tool['description']}")
+        if params_desc:
+            desc_parts.append(f"  Parameters: {params_desc}")
+    return "\n".join(desc_parts)
+
+
+__all__ = [
+    "define_tools",
+    "describe_tools",
+    "execute_tool_call",
+    "parse_tool_calls",
+    "parse_tool_calls_response",
+    "is_valid_tool_call",
+    "validate_tool_call",
+]

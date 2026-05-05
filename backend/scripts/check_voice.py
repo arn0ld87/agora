@@ -136,6 +136,8 @@ def collect_paths(
             result.extend(sorted(p.parent.glob(p.name)))
         elif p.is_file():
             result.append(p)
+        elif p.is_dir():
+            result.extend(sorted(p.rglob("*.py")))
         else:
             print(f"::warning::Pfad nicht gefunden / kein File: {raw}", file=sys.stderr)
     return result
@@ -145,9 +147,11 @@ def collect_paths(
 # Default-Scope
 # ---------------------------------------------------------------------------
 
+# report_agent wurde in ein Package umgewandelt (Sub-Slice M11.13, Issue #202).
+# Die Package-Verzeichnis-Expansion findet in expand_paths() statt (is_dir-Zweig).
 _DEFAULT_PATHS = [
     "backend/app/services/report_prompts.py",
-    "backend/app/services/report_agent.py",
+    "backend/app/services/report_agent",
     "prompts/*.md",
 ]
 

@@ -80,10 +80,23 @@ def test_insight_forge_result_text_avoids_forbidden_wording(pattern: str) -> Non
 # Service-Module mit Report-Strings, die in den Output bzw. in Reports
 # wandern. Dateien werden als Text gelesen — die Tests pinnen also auch
 # String-Literale ausserhalb von Modul-Konstanten.
+# report_agent wurde in ein Package umgewandelt (Sub-Slice M11.13, Issue #202).
+# Die Prüfung scannt alle .py-Dateien im Package-Verzeichnis.
+_REPORT_AGENT_PKG = "backend/app/services/report_agent"
 SERVICE_FILES = [
-    "backend/app/services/report_agent.py",
+    _REPORT_AGENT_PKG,
     "backend/app/services/ontology_generator.py",
 ]
+
+
+def _collect_sources(repo_root, rel_path: str) -> str:
+    p = repo_root / rel_path
+    if p.is_dir():
+        parts = []
+        for py_file in sorted(p.rglob("*.py")):
+            parts.append(py_file.read_text(encoding="utf-8"))
+        return "\n".join(parts)
+    return p.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("rel_path", SERVICE_FILES)
@@ -94,7 +107,7 @@ def test_service_file_source_avoids_forbidden_wording(
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / rel_path).read_text(encoding="utf-8")
+    source = _collect_sources(repo_root, rel_path)
     matches = re.findall(pattern, source, flags=re.IGNORECASE)
     assert not matches, (
         f"{rel_path} enthält verbotenes Wording {pattern!r} "
