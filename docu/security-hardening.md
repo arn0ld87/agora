@@ -275,7 +275,6 @@ uvx pip-audit --strict \
   --ignore-vuln CVE-2026-42308 \
   --ignore-vuln CVE-2026-42310 \
   --ignore-vuln CVE-2026-42311 \
-  --ignore-vuln CVE-2025-64712 \
   --ignore-vuln CVE-2025-71176 \
   --ignore-vuln CVE-2026-1839 \
   --ignore-vuln CVE-2024-46455 \
