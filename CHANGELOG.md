@@ -19,6 +19,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **Step2EnvSetup:** Simulation-Prepare-Lifecycle nach `useSimulationPrepare`-Composable extrahiert (Sub-Slice 34, Refs #203)
 
 ### Refactored
+- Persona-Cards-Loop aus Step2EnvSetup.vue in `step2/PersonaCardGrid.vue`-Subkomponente extrahiert (Sub-Slice 44, Refs #203). Step2EnvSetup.vue von 1099 LOC → 1065. i18n-Keys unter `step2.cardGrid.*` neu mit Pluralisierung für Hinweis-Anzahl (de.json + en.json).
 - Persona-Detail-Modal aus Step2EnvSetup.vue in `step2/PersonaDetailModal.vue`-Subkomponente extrahiert (Sub-Slice 42, Refs #203). Step2EnvSetup.vue von 1235 LOC → 1099. i18n-Keys unter `step2.detailModal.*` neu (kicker, reviewActive, actions.{edit,reject,approve,save}, fields.* in de.json + en.json).
 - Add-Persona-Modal aus Step2EnvSetup.vue in `step2/AddPersonaModal.vue`-Subkomponente extrahiert (Sub-Slice 41, Refs #203). Step2EnvSetup.vue von 1295 LOC → 1235. i18n-Keys unter `step2.addPersona.*` neu (kicker, title, submit, fields.*, placeholders.* in de.json + en.json).
 - Persona-Suche/Filter aus Step2EnvSetup.vue in `usePersonaFilter`-Composable extrahiert (Sub-Slice 40, Refs #203). Step2EnvSetup.vue von 1314 LOC → 1295. Defensive Härtung: `interested_topics`-String-Fallback, Null-safe-Field-Access.

@@ -15,6 +15,7 @@ import Select from './ui/Select.vue'
 import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
 import AddPersonaModal from './step2/AddPersonaModal.vue'
 import PersonaDetailModal from './step2/PersonaDetailModal.vue'
+import PersonaCardGrid from './step2/PersonaCardGrid.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
@@ -345,54 +346,19 @@ onMounted(() => {
           </span>
         </div>
 
-        <div class="personas-grid" v-if="visiblePersonas.length">
-          <div
-            v-for="(p, i) in visiblePersonas"
-            :key="p.user_id || i"
-            class="persona persona--card"
-            :class="{ 'persona--manual': p.is_manual }"
-          >
-            <button
-              class="persona-body"
-              type="button"
-              @click="selectedProfile = p"
-            >
-              <span class="persona-name">
-                {{ p.name || p.username || 'agent_' + i }}
-                <span v-if="p.username && p.name && p.username !== p.name" class="persona-handle">@{{ p.username }}</span>
-                <span v-if="p.is_manual" class="persona-tag">manuell</span>
-              </span>
-              <span class="persona-meta-row">
-                <Badge
-                  v-if="p.review_status"
-                  :variant="statusVariant(p.review_status)"
-                  dot
-                >{{ statusLabel(p.review_status) }}</Badge>
-                <Badge
-                  v-if="personaReview.getIssuesFor(p.username).length"
-                  :variant="issueBadgeVariant(personaReview.highestSeverityFor(p.username))"
-                >{{ personaReview.getIssuesFor(p.username).length }} Hinweis<span v-if="personaReview.getIssuesFor(p.username).length > 1">e</span></Badge>
-              </span>
-              <span class="persona-bio">{{ (p.bio || '').slice(0, 90) }}{{ (p.bio || '').length > 90 ? '…' : '' }}</span>
-              <span v-if="p.interested_topics?.length" class="persona-topics">
-                {{ p.interested_topics.slice(0, 3).join(' · ') }}
-              </span>
-            </button>
-            <button
-              class="persona-del"
-              type="button"
-              :title="'Persona löschen'"
-              @click.stop="removePersona(p.username)"
-            >×</button>
-            <button
-              class="persona-save"
-              type="button"
-              :title="t('step2.personas.save')"
-              :disabled="savingPersonaKeys.has(profileKey(p))"
-              @click.stop="savePersona(p)"
-            >↧</button>
-          </div>
-        </div>
+        <PersonaCardGrid
+          :personas="visiblePersonas"
+          :saving-persona-keys="savingPersonaKeys"
+          :status-variant="statusVariant"
+          :status-label="statusLabel"
+          :issue-badge-variant="issueBadgeVariant"
+          :get-issues-for="personaReview.getIssuesFor"
+          :highest-severity-for="personaReview.highestSeverityFor"
+          :profile-key="profileKey"
+          @select="selectedProfile = $event"
+          @remove="removePersona"
+          @save="savePersona"
+        />
 
         <div v-if="phase >= 2" class="persona-actions">
           <Btn variant="ghost" @click="showAddPersonaModal = true">+ Persona hinzufügen</Btn>

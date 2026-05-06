@@ -280,6 +280,12 @@
         "persona": "Frei formuliert. Je konkreter, desto charakteristischer reagiert der Agent."
       }
     },
+    "cardGrid": {
+      "manual": "manuell",
+      "delete": "Persona löschen",
+      "save": "Persona speichern",
+      "hintCount": "kein Hinweis | ein Hinweis | {count} Hinweise"
+    },
     "detailModal": {
       "kicker": "№ Persona",
       "reviewActive": "Review aktiv",

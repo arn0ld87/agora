@@ -269,6 +269,12 @@
         "persona": "Free-form. The more specific, the more distinctive the agent's reactions."
       }
     },
+    "cardGrid": {
+      "manual": "manual",
+      "delete": "Delete persona",
+      "save": "Save persona",
+      "hintCount": "no hint | one hint | {count} hints"
+    },
     "detailModal": {
       "kicker": "№ Persona",
       "reviewActive": "Review active",
