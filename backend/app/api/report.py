@@ -27,12 +27,51 @@ from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.auth import allow_ticket_auth
+from ..utils.api_errors import ApiErrorCode
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.rate_limit import report_rate_limiter
 
 logger = get_logger(__name__)
 run_registry = RunRegistry()
+
+
+_REPORT_RATE_LIMIT_ENDPOINTS = {
+    "report.generate_report",
+    "report.chat_with_report_agent",
+}
+
+
+def _report_rate_limit_key() -> str:
+    remote = request.remote_addr or "unknown"
+    endpoint = request.endpoint or "unknown"
+    return f"report-llm-trigger:{endpoint}:{remote}"
+
+
+@report_bp.before_request
+def _limit_report_llm_endpoints():
+    if request.method != "POST" or request.endpoint not in _REPORT_RATE_LIMIT_ENDPOINTS:
+        return None
+
+    result = report_rate_limiter.check(
+        _report_rate_limit_key(),
+        max_requests=int(current_app.config.get("AGORA_REPORT_RATE_LIMIT_MAX", 10)),
+        window_seconds=int(
+            current_app.config.get("AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS", 60)
+        ),
+    )
+    if result.allowed:
+        return None
+
+    response, status = json_error(
+        ApiErrorCode.RATE_LIMITED,
+        status=429,
+        extra={"retry_after_seconds": result.retry_after_seconds},
+    )
+    response.headers["Retry-After"] = str(result.retry_after_seconds)
+    return response, status
+
 
 # ============== Report Generation Interface ==============
 

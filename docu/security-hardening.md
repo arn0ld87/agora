@@ -371,7 +371,7 @@ Agora v1.0 ist **Single-User-only**. Ein einziger gemeinsamer Bearer-Token (`AGO
 
 **Schützt nicht:**
 
-- Brute-Force auf den Token außerhalb von `POST /api/auth/ticket`. M10.5 hat mit app-seitigen Fixed-Window-Limits für Signed-Ticket-Issuance, den Upload-Pfad `POST /api/graph/ontology/generate` und die Simulation-LLM-Trigger `POST /api/simulation/generate-profiles` + `POST /api/simulation/prepare` begonnen; Report-Generierung bleibt bis zum Folgeslice ohne Rate-Limit. Bis dahin: niemals direkt im Internet exponieren.
+- Brute-Force auf den Token außerhalb von `POST /api/auth/ticket`. M10.5 hat app-seitige Fixed-Window-Limits für Signed-Ticket-Issuance, den Upload-Pfad `POST /api/graph/ontology/generate`, die Simulation-LLM-Trigger `POST /api/simulation/generate-profiles` + `POST /api/simulation/prepare` und die Report-Trigger `POST /api/report/generate` + `POST /api/report/chat` ergänzt. Bis zu einem verteilten Rate-Limiter gilt weiter: niemals direkt im Internet exponieren.
 - Mehrbenutzer-Konflikte: bei zwei Personen mit demselben Token gibt's keine Sitzungstrennung.
 - Audit-Compliance (DSGVO, SOC2, ISO 27001 für Multi-User): nicht erfüllbar in v1.0.
 - Session-Hijacking nach Token-Leak: ohne Logout-Endpunkt muss der Token rotiert werden (Prozedur unten).

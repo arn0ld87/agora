@@ -15,6 +15,7 @@ from app.services.report_agent import (
     ReportSection,
     ReportStatus,
 )
+from app.utils.rate_limit import report_rate_limiter
 
 
 REPORT_ID = "report_abcdef123456"
@@ -28,6 +29,13 @@ def env(tmp_path, monkeypatch):
     app.register_blueprint(report_bp, url_prefix="/api/report")
 
     yield app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def _reset_report_rate_limiter():
+    report_rate_limiter.reset_for_tests()
+    yield
+    report_rate_limiter.reset_for_tests()
 
 
 def _persist_report(*, with_evidence: bool = False) -> None:
@@ -84,6 +92,46 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                 }
             ],
         })
+
+
+def _rate_limited_report_app():
+    app = Flask(__name__)
+    app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 2
+    app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    app.register_blueprint(report_bp, url_prefix="/api/report")
+    return app
+
+
+def test_report_generate_endpoint_rate_limits_requests():
+    client = _rate_limited_report_app().test_client()
+
+    for _ in range(2):
+        response = client.post("/api/report/generate", json={})
+        assert response.status_code == 400
+
+    response = client.post("/api/report/generate", json={})
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    payload = response.get_json()
+    assert payload["code"] == "rate_limited"
+    assert payload["retry_after_seconds"] == 60
+
+
+def test_report_chat_endpoint_rate_limits_requests():
+    client = _rate_limited_report_app().test_client()
+
+    for _ in range(2):
+        response = client.post("/api/report/chat", json={})
+        assert response.status_code == 400
+
+    response = client.post("/api/report/chat", json={})
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    payload = response.get_json()
+    assert payload["code"] == "rate_limited"
+    assert payload["retry_after_seconds"] == 60
 
 
 def test_export_rejects_invalid_report_id(env):
