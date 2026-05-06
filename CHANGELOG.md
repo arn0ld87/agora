@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Changed
+- **CI:** Docker-Image-Build und Reverse-Proxy-Stack-Smoke laufen nicht mehr auf jedem Pull Request; der teure Smoke bleibt auf `main`/Tags und `workflow_dispatch` beschränkt und wird vor dem finalen Release-Gate wieder bewertet.
 - Frontend-Vokabular und README synchronisiert: Knoten→Entitäten, Kanten→Beziehungen, Entitätstypen→Attribute (Sub-Slice 43). Tagline auf Hybrid-Wording „lokal oder Cloud" aktualisiert. Tool-Call-USP („Agenten halluzinieren nicht") als Differenzierungsmerkmal in step3.sub und neuem home.differentiators-Block ergänzt.
 
 ### Fixed

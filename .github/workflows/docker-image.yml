@@ -4,16 +4,9 @@ on:
   push:
     branches: [main]
     tags: ["*"]
-  pull_request:
-    branches: [main]
-    # Doku-only-PRs (z.B. Doku-Sync-Slices) sollen den Smoke nicht triggern.
-    # Code-/Compose-/Workflow-Änderungen lösen ihn aus.
-    paths-ignore:
-      - '**.md'
-      - 'docu/**'
-      - 'CHANGELOG.md'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
+  # PR-Smokes sind vor v1.0 bewusst pausiert: der Reverse-Proxy-Stack-Smoke
+  # dauert pro PR-Iteration ~30 Minuten und wird erst als finales Release-Gate
+  # wieder aktiviert.
   workflow_dispatch:
 
 permissions:
@@ -85,9 +78,9 @@ jobs:
     needs: [build-only]
     # Tag-Pushes: externe Abhängigkeiten (Neo4j-Pull, Ollama) können den
     # Smoke instabil machen. Mit continue-on-error blockiert ein instabiler
-    # Smoke den Release nicht — main-Pushes und PR-Smokes sind dagegen strikt
-    # smoke-gated, weil AGORA_SKIP_EMBEDDING_PROBE=true die Ollama-Abhängigkeit
-    # beim Container-Startup eliminiert (Issue #276). Die statische
+    # Smoke den Release nicht — main-Pushes sind dagegen strikt smoke-gated,
+    # weil AGORA_SKIP_EMBEDDING_PROBE=true die Ollama-Abhängigkeit beim
+    # Container-Startup eliminiert (Issue #276). Die statische
     # KNOWN_EMBEDDING_DIMS-Validation bleibt aktiv; nur der Live-HTTP-Probe-Call
     # gegen das Embedding-Backend wird übersprungen.
     continue-on-error: ${{ github.ref_type == 'tag' }}
@@ -226,9 +219,7 @@ jobs:
     # strikt smoke-gated bleiben.
     runs-on: ubuntu-latest
     needs: [prod-proxy-smoke]
-    if: >-
-      github.event_name != 'pull_request' &&
-      (success() || github.ref_type == 'tag')
+    if: success() || github.ref_type == 'tag'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
