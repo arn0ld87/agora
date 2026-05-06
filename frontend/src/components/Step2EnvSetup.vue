@@ -16,6 +16,7 @@ import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
 import AddPersonaModal from './step2/AddPersonaModal.vue'
 import PersonaDetailModal from './step2/PersonaDetailModal.vue'
 import PersonaCardGrid from './step2/PersonaCardGrid.vue'
+import PersonaLibraryPanel from './step2/PersonaLibraryPanel.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
@@ -366,38 +367,16 @@ onMounted(() => {
             {{ t('step2.personas.saveAll') }}
           </Btn>
         </div>
-        <section v-if="phase >= 2" class="persona-library">
-          <header class="persona-library-head">
-            <div>
-              <span class="kicker-mono">{{ t('step2.library.title') }}</span>
-              <p class="meta">{{ t('step2.library.hint') }}</p>
-            </div>
-            <button class="persona-more-btn" type="button" :disabled="isLoadingPersonaLibrary" @click="loadPersonaLibrary">
-              {{ t('step2.library.refresh') }}
-            </button>
-          </header>
-          <p v-if="personaLibraryError" class="meta">{{ personaLibraryError }}</p>
-          <div v-if="personaTemplates.length" class="persona-library-list">
-            <article v-for="template in personaTemplates" :key="template.template_id" class="persona-template">
-              <div>
-                <strong>{{ template.name || template.username }}</strong>
-                <span v-if="template.username" class="persona-handle">@{{ template.username }}</span>
-                <p>{{ (template.bio || template.persona || '').slice(0, 120) }}{{ (template.bio || template.persona || '').length > 120 ? '…' : '' }}</p>
-              </div>
-              <div class="persona-template-actions">
-                <button
-                  type="button"
-                  :disabled="usingPersonaTemplateIds.has(template.template_id)"
-                  @click="usePersonaTemplate(template)"
-                >
-                  {{ t('step2.library.use') }}
-                </button>
-                <button type="button" @click="removePersonaTemplate(template.template_id)">×</button>
-              </div>
-            </article>
-          </div>
-          <p v-else class="meta">{{ t('step2.library.empty') }}</p>
-        </section>
+        <PersonaLibraryPanel
+          v-if="phase >= 2"
+          :templates="personaTemplates"
+          :loading="isLoadingPersonaLibrary"
+          :error="personaLibraryError"
+          :using-ids="usingPersonaTemplateIds"
+          @refresh="loadPersonaLibrary"
+          @use="usePersonaTemplate"
+          @remove="removePersonaTemplate"
+        />
         <button
           v-if="filteredPersonas.length > 24 && !showAllPersonas && !personaSearch.trim()"
           class="persona-more-btn"
