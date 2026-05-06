@@ -115,7 +115,7 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | **M10.2** | ✅ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `cve-monitor.yml::Hardstop-Gate` failt ab 2026-07-30, wenn Audit non-zero. `ci.yml` Kommentar verweist auf den Hardstop. |
 | **M10.3** | ✅ | Dependency Risk Register erweitern | `agora-doc-worker` | `/agora-next-task` | Haiku | Eskalationspfad-Sektion + neue Upstream-Release-Watch-Spalte in `docu/dependency-risk-register.md` (Owner-Spalte war bereits vorhanden). |
 | **M10.4** | ✅ | Auth-Zielbild-ADR | `agora-doc-worker` (+ Lead) | `/agora-next-task` | Haiku + Senior | `docu/decisions/0001-auth-model.md` **Accepted 2026-05-04** (Option A: Single-User-only-v1). `/api/status` liefert jetzt `auth_mode: "single_user_token"` (Code-Update in `_get_auth_mode()`). Folge: README/security-hardening-Update bleibt offen. |
-| **M10.5** | ⬜ | Rate-Limit-Konzept | `agora-refactor-worker` | `/agora-next-task` | Sonnet | Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen vorhanden |
+| **M10.5** | ✅ | Rate-Limit-Konzept | `agora-refactor-worker` | `/agora-next-task` | Sonnet | Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen vorhanden (PR #303–#306, Issue #302) |
 | **M11.1** | ✅ | Evidence-Gate hard schalten | `agora-test-worker` | `/agora-next-task` | Sonnet | `--soft` aus `.github/workflows/contract-gates.yml` entfernt. Hard-Gate misst über `tests/eval/fixtures/good/` (Schwellen 0.85/0.75/0.10), Bad-Cases nach `tests/eval/fixtures/bad/` verschoben (gepinnt durch Snapshot-Test). 13/13 Eval-Tests grün. |
 | **M11.2** | ⬜ | Backend-Coverage 70 % | `agora-test-worker` | `/agora-next-task` | Sonnet | `cd backend && uv run pytest --cov=app --cov-fail-under=70` grün |
 | **M11.3** | ⬜ | Frontend-Coverage 60 % | `agora-test-worker` | `/agora-next-task` | Sonnet | `cd frontend && npm run test:coverage` ≥ 60 % |
@@ -148,12 +148,12 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | Subagent | Aktive Slices (offen) | Token-Schätzung |
 |---|---|---|
 | `agora-test-worker` | M9.6, M11.1–M11.6 | hoch |
-| `agora-refactor-worker` | M10.5, M12.1, M12.2, M12.6, M12.7, M12.13 | sehr hoch |
+| `agora-refactor-worker` | M12.1, M12.2, M12.6, M12.7, M12.13 | hoch |
 | `agora-frontend-worker` | M12.3, M12.4, M12.5, M12.8, M12.9, M12.10, M12.11, M12.12, M13.1 | hoch |
 | `agora-doc-worker` | M9.7, M10.1, M10.2, M10.3, M10.4, M13.2, M13.3, M13.4, M13.5 | mittel |
 | `agora-evidence-auditor` | nur Audit-Reads bei M11.1 (Evidence-Gate hard) und M12.1 (Snapshot-Stabilität) | niedrig |
 
-Wenn `agora-refactor-worker` zur Engstelle wird, lassen sich M10.5 (Rate-Limit) und M11.5 (Komplexitäts-Gate) in **parallelen Worktrees** vorbereiten — Reviews/Verify bleiben sequenziell beim Lead.
+Wenn `agora-refactor-worker` zur Engstelle wird, lassen sich M12-Refactors und M11.5 (Komplexitäts-Gate) in **parallelen Worktrees** vorbereiten — Reviews/Verify bleiben sequenziell beim Lead.
 
 ---
 
@@ -240,7 +240,7 @@ M9.6 (Prod-Smoke)  →  M9.7 (Doku-Sync, dieser Slice)
 | TD-09 | Vector-Index | mittel | Drift bei Embedding-Modell-Wechsel. | #263 |
 | TD-10 | Compliance | niedrig | Kein SBOM/License-Report. | M13.2 + M13.3 |
 | TD-11 | AGPL Ops | niedrig | Kein laufzeitnaher Source-Link. | M13.1 |
-| TD-12 | Abuse Control | niedrig-mittel | Kein Rate-Limiting. | M10.5 |
+| TD-12 | Abuse Control | erledigt | App-seitige Fixed-Window-Rate-Limits vorhanden; Distributed-Limiter nur bei erweitertem Deployment-Modell erneut bewerten. | M10.5 |
 | TD-13 | Doku-Fragmentierung | niedrig | 130+ Files in `docu/` ohne klare Vorderbühne. | M13.4 |
 
 ---

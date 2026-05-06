@@ -69,7 +69,7 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`do
 | **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes werden schrittweise eingeführt, nicht vollständig belegbar. |
 | **N1 / F14.2** | 🟢 | SBOM | Kein SBOM/Third-Party-License-Report. |
 | **N2 / F14.1** | 🟢 | AGPL | Kein App-/API-Hinweis auf Source-Code des laufenden Builds (`/api/version` mit Commit-SHA). |
-| **N3 / M10.5** | 🟢 | Rate Limits | Kein explizites Rate-Limiting für Ticket-, Upload- und LLM-Trigger-Endpunkte. |
+| **N3 / M10.5** | ✅ | Rate Limits | App-seitige Fixed-Window-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte vorhanden (#302, PR #303–#306). |
 
 ### Priorisierte To-do-Liste (operativ)
 
@@ -81,7 +81,7 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`do
 
 🟡 **Wichtig:** 4. Evidence-Gate `--soft` raus. 5. Coverage-Gates Backend/Frontend. 6. Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport). 7. Komplexitäts-Gate (`radon` Backend, ESLint/size-limit Frontend).
 
-🟢 **Nice-to-have:** 8. SBOM/License-Report. 9. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL). 10. Rate-Limits.
+🟢 **Nice-to-have:** 8. SBOM/License-Report. 9. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL). 10. Rate-Limits ✅ (M10.5 abgeschlossen).
 
 ### Arbeitsreihenfolge (PR-by-PR)
 
@@ -677,4 +677,3 @@ Alle Findings sind **kompatibel** zur bestehenden `/agora-next-task`-Heuristik-T
 3. **Auth-ADR (M10.4 / F2.3)** — Subagent `agora-doc-worker` (Haiku) + Lead. ADR `docu/decisions/0001-auth-model.md` legt v1.0-Scope fest: Single-User-only, HttpOnly-Session oder Bearer+Refresh.
 
 Detaillierte Subagent-Zuordnung und Akzeptanzkriterien je Slice: [`docu/plan.heuristic.md`](docu/plan.heuristic.md).
-
