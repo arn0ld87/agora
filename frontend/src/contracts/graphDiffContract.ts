@@ -108,7 +108,7 @@ export const EdgeReinforcementSchema = z
   .strict()
   .refine((val) => val.weight_after >= val.weight_before, {
     message:
-      "EdgeReinforcement: weight_after muss >= weight_before sein. Kanten mit sinkendem Gewicht bitte in EdgeWeakening eintragen.",
+      "EdgeReinforcement: weight_after muss >= weight_before sein. Beziehungen mit sinkendem Gewicht bitte in EdgeWeakening eintragen.",
     path: ["weight_after"],
   });
 export type EdgeReinforcement = z.infer<typeof EdgeReinforcementSchema>;
@@ -125,7 +125,7 @@ export const EdgeWeakeningSchema = z
   .strict()
   .refine((val) => val.weight_after < val.weight_before, {
     message:
-      "EdgeWeakening: weight_after muss < weight_before sein. Kanten mit steigendem oder gleichem Gewicht bitte in EdgeReinforcement eintragen.",
+      "EdgeWeakening: weight_after muss < weight_before sein. Beziehungen mit steigendem oder gleichem Gewicht bitte in EdgeReinforcement eintragen.",
     path: ["weight_after"],
   });
 export type EdgeWeakening = z.infer<typeof EdgeWeakeningSchema>;

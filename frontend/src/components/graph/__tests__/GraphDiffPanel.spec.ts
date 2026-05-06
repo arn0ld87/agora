@@ -46,8 +46,8 @@ const i18n = createI18n({
         title: "Graph-Snapshot-Vergleich",
         snapshotA: "Snapshot A",
         snapshotB: "Snapshot B",
-        statsNodes: "ΔKnoten",
-        statsEdges: "ΔKanten",
+        statsNodes: "ΔEntitäten",
+        statsEdges: "ΔBeziehungen",
         statsClusters: "ΔCluster",
         statsDensity: "ΔDichte",
         legend: {
@@ -178,8 +178,8 @@ describe("GraphDiffPanel", () => {
       expect(wrapper.find(".diff-stats").exists()).toBe(true);
       const statLabels = wrapper.findAll(".diff-stat-label");
       const texts = statLabels.map((el) => el.text());
-      expect(texts).toContain("ΔKnoten");
-      expect(texts).toContain("ΔKanten");
+      expect(texts).toContain("ΔEntitäten");
+      expect(texts).toContain("ΔBeziehungen");
       expect(texts).toContain("ΔCluster");
       expect(texts).toContain("ΔDichte");
     });

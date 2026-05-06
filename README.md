@@ -74,11 +74,11 @@ So sieht eine Pipeline-Iteration aus:
 
 1. **Upload & Modellwahl** — Dokument hochladen, Fragestellung formulieren, LLM-Modell und Agentensprache wählen.
 
-2. **Graph aufbauen** — Agora chunked das Dokument, ruft das LLM für Named-Entity-Recognition + Relation-Extraction auf und schreibt den Graphen nach Neo4j. Du siehst den Graphen live mit Knoten, Kanten, Entity-Type-Legende und kannst ihn als GraphML / SVG / PNG / PDF exportieren.
+2. **Graph aufbauen** — Agora chunked das Dokument, ruft das LLM für Named-Entity-Recognition + Relation-Extraction auf und schreibt den Graphen nach Neo4j. Du siehst den Graphen live mit Entitäten, Beziehungen, Attribut-Legende und kannst ihn als GraphML / SVG / PNG / PDF exportieren.
 
    <p align="center">
    <a href="./media/screenshots/graph-build.mp4">
-   <img src="./media/screenshots/graph-build.gif" alt="Live-Graph-Build mit 133 Knoten, 188 Kanten und 12 Entitätstypen" width="100%"/>
+   <img src="./media/screenshots/graph-build.gif" alt="Live-Graph-Build mit 133 Entitäten, 188 Beziehungen und 12 Attributen" width="100%"/>
    </a>
    <br>
    <sub><a href="./media/screenshots/graph-build.mp4">▶ MP4 in voller Qualität (747 KB)</a></sub>
@@ -94,7 +94,7 @@ So sieht eine Pipeline-Iteration aus:
 
 5. **Report** — der ReportAgent durchsucht Graph und Simulation, kann Agenten interviewen, optional Webtools nutzen. Report-Modell ist beim Generieren wechselbar. Jede Section trägt einen Confidence-Score plus klickbare Source-Anchors.
 
-6. **Compare & Drift** — zwei Runs nebeneinander analysieren: Graph-Diff (welche Kanten sind dazugekommen, welche verstärkt?), Branch-Vergleich (Persona-Drift, Polarisations-Shift), Run-Dashboard mit Live-Status.
+6. **Compare & Drift** — zwei Runs nebeneinander analysieren: Graph-Diff (welche Beziehungen sind dazugekommen, welche verstärkt?), Branch-Vergleich (Persona-Drift, Polarisations-Shift), Run-Dashboard mit Live-Status.
 
 ### Demo-Teaser
 
@@ -109,7 +109,7 @@ So sieht eine Pipeline-Iteration aus:
 ### Kernfunktionen
 
 - **GraphRAG-Ingest**: PDF, Markdown oder Text hochladen; Entitäten und Beziehungen landen in Neo4j.
-- **Flexible Ontologie-Generierung**: Entitätstypen sind nicht hart gecappt; Defaults 8–16 Typen plus Pflicht-Fallbacks `Person` und `Organization`.
+- **Flexible Ontologie-Generierung**: Attribute sind nicht hart gecappt; Defaults 8–16 Typen plus Pflicht-Fallbacks `Person` und `Organization`.
 - **Modellauswahl im Workflow**: Modell und Agentensprache pro Run wählbar, plus `.env`-Default. Eingefroren in `simulation_config.json` pro Simulation.
 - **Persona Review**: Generierte Personas vor Simulationsstart prüfbar, editierbar, freigebbar. Quality-Heuristiken (Dubletten, fehlende Kernfelder, Rollen-Diversität). Mit `PERSONA_REVIEW_ENABLED=true` blockt der Simulationsstart bis alle Personas approved sind.
 - **Run-Steuerung**: Laufdauer in Tagen + optional Rundenlimit, Start/Stop, Pause/Resume nach Rundenende, rohes OASIS-Console-Log.

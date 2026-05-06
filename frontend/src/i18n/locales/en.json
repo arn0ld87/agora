@@ -1,7 +1,7 @@
 {
   "brand": {
     "name": "Agora",
-    "tagline": "Swarm intelligence, local."
+    "tagline": "Swarm intelligence — local or cloud."
   },
   "nav": {
     "work": "Work",
@@ -82,7 +82,7 @@
       "line2": "A whole world",
       "line3Italic": "out."
     },
-    "lead": "Agora turns your text into a knowledge graph, populates it with hundreds of agents — each with their own biography, stance, bubble — and lets them debate, share, argue. You see in real time how narratives spread, where resistance forms, and which voices tip the discourse. Fully local. Your laptop, your Neo4j, your Ollama.",
+    "lead": "Agora turns your text into a knowledge graph, populates it with hundreds of agents — each with their own biography, stance, bubble — and lets them debate, share, argue. You see in real time how narratives spread, where resistance forms, and which voices tip the discourse. Local with Ollama or via cloud endpoint — your choice.",
     "tags": {
       "engine": "Swarm Engine",
       "version": "v0.9.1-dev"
@@ -114,12 +114,18 @@
     "steps": [
       { "num": "01", "title": "Build graph", "desc": "Extract entities and relations from your document — knowledge graph in Neo4j." },
       { "num": "02", "title": "Environment", "desc": "Generate hundreds of agent personas with personality, bias and reaction profile." },
-      { "num": "03", "title": "Simulation", "desc": "Agents post, reply, argue — round-based, local, observable in real time." },
+      { "num": "03", "title": "Simulation", "desc": "Agents post, reply, argue — round-based, observable in real time." },
       { "num": "04", "title": "Report", "desc": "ReportAgent searches the result, interviews a focus group and writes the report." },
       { "num": "05", "title": "Conversation", "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent." }
     ],
+    "differentiators": [
+      {
+        "title": "Agents that don't hallucinate",
+        "desc": "Instead of fabricating freely, Agora agents use tool calls — they research online and query the knowledge graph before posting or replying."
+      }
+    ],
     "footer": {
-      "credit": "Agora — Swarm intelligence, local.",
+      "credit": "Agora — Swarm intelligence, local or cloud.",
       "fork": "Fork of MiroFish",
       "license": "AGPL-3.0",
       "code": "Source on GitHub",
@@ -158,7 +164,7 @@
     "sub": "GraphRAG extracts entities and relations, writes embeddings to Neo4j. Once the graph is built, you can explore it below.",
     "ontology": {
       "title": "Ontology",
-      "desc": "Which entity types should the extractor expect? Auto-generated from your description.",
+      "desc": "Which attributes should the extractor expect? Auto-generated from your description.",
       "generate": "Generate ontology",
       "regenerate": "Regenerate",
       "addType": "Add type",
@@ -178,8 +184,8 @@
     },
     "graph": {
       "title": "Explore graph",
-      "nodes": "Nodes",
-      "edges": "Edges",
+      "nodes": "Entities",
+      "edges": "Relationships",
       "search": "Search the graph…",
       "noResults": "No matches.",
       "openInBrowser": "Open in Neo4j Browser"
@@ -305,7 +311,7 @@
   "step3": {
     "kicker": "№ 03 — SIMULATION",
     "title": "Run the world.",
-    "sub": "Agents interact round by round on the chosen platform. You watch the actions live.",
+    "sub": "Agents interact round by round on the chosen platform. They don't hallucinate — instead they use tool calls to look things up online or query the knowledge graph before responding. You watch the actions live.",
     "config": {
       "title": "Run parameters",
       "rounds": "Number of rounds",
@@ -439,13 +445,13 @@
   },
   "graph": {
     "panel": "Graph",
-    "search": "Search nodes…",
+    "search": "Search entities…",
     "fit": "Fit",
     "reset": "Reset",
-    "nodeCount": "{count} nodes",
-    "edgeCount": "{count} edges",
+    "nodeCount": "{count} entities",
+    "edgeCount": "{count} relationships",
     "selected": "Selected: {name}",
-    "noSelection": "Click a node to see details.",
+    "noSelection": "Click an entity to see details.",
     "ui": {
       "toggleEdgeLabels": "Edge Labels",
       "pauseLayout": "Pause layout",
@@ -672,8 +678,8 @@
     "title": "Graph Snapshot Comparison",
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B",
-    "statsNodes": "ΔNodes",
-    "statsEdges": "ΔEdges",
+    "statsNodes": "ΔEntities",
+    "statsEdges": "ΔRelationships",
     "statsClusters": "ΔClusters",
     "statsDensity": "ΔDensity",
     "legend": {

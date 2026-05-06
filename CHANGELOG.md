@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Changed
+- Frontend-Vokabular und README synchronisiert: Knoten→Entitäten, Kanten→Beziehungen, Entitätstypen→Attribute (Sub-Slice 43). Tagline auf Hybrid-Wording „lokal oder Cloud" aktualisiert. Tool-Call-USP („Agenten halluzinieren nicht") als Differenzierungsmerkmal in step3.sub und neuem home.differentiators-Block ergänzt.
+
 ### Fixed
 - **`useSimulationPrepare`:** `fetchProfilesRealtime` als öffentliche Methode exposen — beseitigt ReferenceError beim Hinzufügen/Löschen von Personas in Step2EnvSetup (Sub-Slice 36, Closes #292, Regression aus Sub-Slice 34)
 

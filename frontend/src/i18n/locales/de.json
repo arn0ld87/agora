@@ -1,7 +1,7 @@
 {
   "brand": {
     "name": "Agora",
-    "tagline": "Schwarmintelligenz, lokal."
+    "tagline": "Schwarmintelligenz — lokal oder Cloud."
   },
   "nav": {
     "work": "Arbeit",
@@ -82,7 +82,7 @@
       "line2": "Eine Welt",
       "line3Italic": "raus."
     },
-    "lead": "Agora baut aus deinem Text einen Wissensgraphen, bevölkert ihn mit hunderten Agenten — jeder mit eigener Biografie, Haltung, Blase — und lässt sie diskutieren, teilen, streiten. Du siehst in Echtzeit, wie sich Narrative ausbreiten, wo Gegenwind entsteht und welche Stimmen den Diskurs kippen. Vollständig lokal. Dein Laptop, dein Neo4j, dein Ollama.",
+    "lead": "Agora baut aus deinem Text einen Wissensgraphen, bevölkert ihn mit hunderten Agenten — jeder mit eigener Biografie, Haltung, Blase — und lässt sie diskutieren, teilen, streiten. Du siehst in Echtzeit, wie sich Narrative ausbreiten, wo Gegenwind entsteht und welche Stimmen den Diskurs kippen. Lokal mit Ollama oder via Cloud-Endpoint — du entscheidest.",
     "tags": {
       "engine": "Schwarm-Engine",
       "version": "v0.9.1-dev"
@@ -125,12 +125,18 @@
     "steps": [
       { "num": "01", "title": "Graph aufbauen", "desc": "Entitäten und Beziehungen aus deinem Dokument extrahieren — Wissensgraph in Neo4j." },
       { "num": "02", "title": "Umgebung", "desc": "Hunderte Agenten-Personas mit Persönlichkeit, Bias und Reaktionsverhalten erzeugen." },
-      { "num": "03", "title": "Simulation", "desc": "Agenten posten, antworten, streiten — runden­basiert, lokal, beobachtbar in Echtzeit." },
+      { "num": "03", "title": "Simulation", "desc": "Agenten posten, antworten, streiten — runden­basiert, beobachtbar in Echtzeit." },
       { "num": "04", "title": "Report", "desc": "ReportAgent durchsucht das Ergebnis, befragt eine Fokusgruppe und schreibt den Bericht." },
       { "num": "05", "title": "Gespräch", "desc": "Sprich direkt mit den Agenten der simulierten Welt — oder mit dem ReportAgent." }
     ],
+    "differentiators": [
+      {
+        "title": "Agenten, die nicht halluzinieren",
+        "desc": "Statt frei zu fabulieren, nutzen Agora-Agenten Tool-Calls — sie recherchieren online und befragen den Wissensgraphen, bevor sie posten oder antworten."
+      }
+    ],
     "footer": {
-      "credit": "Agora — Schwarmintelligenz lokal.",
+      "credit": "Agora — Schwarmintelligenz, lokal oder Cloud.",
       "fork": "Fork von MiroFish",
       "license": "AGPL-3.0",
       "code": "Quellcode auf GitHub",
@@ -169,7 +175,7 @@
     "sub": "GraphRAG extrahiert Entitäten und Beziehungen, schreibt Embeddings nach Neo4j. Sobald der Graph steht, kannst du ihn unten erkunden.",
     "ontology": {
       "title": "Ontologie",
-      "desc": "Welche Entitätstypen erwartet der Extraktor? Wird automatisch aus deiner Beschreibung generiert.",
+      "desc": "Welche Attribute erwartet der Extraktor? Wird automatisch aus deiner Beschreibung generiert.",
       "generate": "Ontologie generieren",
       "regenerate": "Neu generieren",
       "addType": "Typ hinzufügen",
@@ -189,8 +195,8 @@
     },
     "graph": {
       "title": "Graph erkunden",
-      "nodes": "Knoten",
-      "edges": "Kanten",
+      "nodes": "Entitäten",
+      "edges": "Beziehungen",
       "search": "Suche im Graphen…",
       "noResults": "Keine Treffer.",
       "openInBrowser": "Im Neo4j Browser öffnen"
@@ -316,7 +322,7 @@
   "step3": {
     "kicker": "№ 03 — SIMULATION",
     "title": "Lass die Welt laufen.",
-    "sub": "Agenten interagieren rundenbasiert auf der gewählten Plattform. Du beobachtest die Aktionen live.",
+    "sub": "Agenten interagieren rundenbasiert auf der gewählten Plattform. Sie halluzinieren nicht — sondern nutzen Tool-Calls, um sich online zu informieren oder den Wissensgraphen abzufragen, bevor sie reagieren. Du beobachtest die Aktionen live.",
     "config": {
       "title": "Lauf-Parameter",
       "rounds": "Anzahl Runden",
@@ -450,13 +456,13 @@
   },
   "graph": {
     "panel": "Graph",
-    "search": "Knoten suchen…",
+    "search": "Entitäten suchen…",
     "fit": "Anpassen",
     "reset": "Zurücksetzen",
-    "nodeCount": "{count} Knoten",
-    "edgeCount": "{count} Kanten",
+    "nodeCount": "{count} Entitäten",
+    "edgeCount": "{count} Beziehungen",
     "selected": "Ausgewählt: {name}",
-    "noSelection": "Klick auf einen Knoten, um Details zu sehen.",
+    "noSelection": "Klick auf eine Entität, um Details zu sehen.",
     "ui": {
       "toggleEdgeLabels": "Beziehungslabels",
       "pauseLayout": "Layout pausieren",
@@ -683,8 +689,8 @@
     "title": "Graph-Snapshot-Vergleich",
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B",
-    "statsNodes": "ΔKnoten",
-    "statsEdges": "ΔKanten",
+    "statsNodes": "ΔEntitäten",
+    "statsEdges": "ΔBeziehungen",
     "statsClusters": "ΔCluster",
     "statsDensity": "ΔDichte",
     "legend": {

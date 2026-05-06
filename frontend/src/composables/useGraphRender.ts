@@ -330,7 +330,7 @@ export function useGraphRender({
         }
       })
 
-    // Knoten-Label: bis 14 Zeichen voll, sonst Trunkation mit Ellipsis. Voller Name
+    // Entitäts-Label: bis 14 Zeichen voll, sonst Trunkation mit Ellipsis. Voller Name
     // bleibt im SVG-`<title>` als nativer Browser-Tooltip erreichbar (Issue #129 SUB2).
     const NODE_LABEL_MAX = 14
     const nodeLabels = nodeGroup.selectAll('text')

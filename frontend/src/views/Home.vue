@@ -144,6 +144,7 @@ function scrollToConsole() {
 }
 
 const steps = computed(() => tm('home.steps'))
+const differentiators = computed(() => tm('home.differentiators'))
 </script>
 
 <template>
@@ -244,6 +245,16 @@ const steps = computed(() => tm('home.steps'))
             </ol>
           </div>
         </div>
+      </section>
+
+      <!-- Tool-Call-USP differentiators -->
+      <section class="section differentiators-section">
+        <ol class="differentiators">
+          <li v-for="item in differentiators" :key="item.title" class="differentiator-item">
+            <span class="differentiator-title">{{ item.title }}</span>
+            <span class="differentiator-desc">{{ item.desc }}</span>
+          </li>
+        </ol>
       </section>
 
       <!-- Console: upload + model + prompt + start -->
@@ -565,6 +576,39 @@ const steps = computed(() => tm('home.steps'))
   color: var(--fg);
 }
 .step-desc {
+  font-family: var(--ff-sans);
+  font-size: var(--fs-16);
+  color: var(--fg-body);
+  max-width: 60ch;
+}
+
+/* Differentiators (Tool-Call-USP) */
+.differentiators-section {
+  border-top: 1px solid var(--rule-strong);
+  padding: var(--s-7) 0;
+}
+.differentiators {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+.differentiator-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.differentiator-title {
+  font-family: var(--ff-serif);
+  font-weight: 400;
+  font-size: var(--fs-32);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.differentiator-desc {
   font-family: var(--ff-sans);
   font-size: var(--fs-16);
   color: var(--fg-body);
