@@ -13,7 +13,7 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
-from ..utils.rate_limit import llm_trigger_rate_limiter
+from ..utils.rate_limit import build_rate_limit_key, llm_trigger_rate_limiter
 
 logger = get_logger('agora.api.simulation')
 run_registry = RunRegistry()
@@ -31,9 +31,7 @@ _LLM_TRIGGER_ENDPOINTS = {
 
 
 def _llm_trigger_rate_limit_key() -> str:
-    remote = request.remote_addr or "unknown"
-    endpoint = request.endpoint or "unknown"
-    return f"simulation-llm-trigger:{endpoint}:{remote}"
+    return build_rate_limit_key("simulation-llm-trigger", include_endpoint=True)
 
 
 @simulation_bp.before_request
@@ -43,10 +41,8 @@ def _limit_llm_trigger_endpoints():
 
     result = llm_trigger_rate_limiter.check(
         _llm_trigger_rate_limit_key(),
-        max_requests=int(current_app.config.get("AGORA_LLM_TRIGGER_RATE_LIMIT_MAX", 20)),
-        window_seconds=int(
-            current_app.config.get("AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS", 60)
-        ),
+        max_requests=current_app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"],
+        window_seconds=current_app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"],
     )
     if result.allowed:
         return None

@@ -202,6 +202,11 @@ class Config:
     AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS = int(
         os.environ.get('AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS', '60')
     )
+    AGORA_PROXY_FIX_X_FOR = int(os.environ.get('AGORA_PROXY_FIX_X_FOR', '0'))
+    AGORA_PROXY_FIX_X_PROTO = int(os.environ.get('AGORA_PROXY_FIX_X_PROTO', '0'))
+    AGORA_PROXY_FIX_X_HOST = int(os.environ.get('AGORA_PROXY_FIX_X_HOST', '0'))
+    AGORA_PROXY_FIX_X_PORT = int(os.environ.get('AGORA_PROXY_FIX_X_PORT', '0'))
+    AGORA_PROXY_FIX_X_PREFIX = int(os.environ.get('AGORA_PROXY_FIX_X_PREFIX', '0'))
 
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:

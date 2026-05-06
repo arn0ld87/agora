@@ -36,6 +36,8 @@ VALID_GRAPH_ID = "abcdef0123456789abcdef0123456789"
 def sim_history_client(monkeypatch):
     """Flask test client with simulation blueprint + mocked neo4j storage."""
     app = Flask(__name__)
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 20
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     storage = MagicMock(name="Neo4jStorage")
     app.extensions = {"neo4j_storage": storage}
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")

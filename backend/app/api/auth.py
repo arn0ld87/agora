@@ -15,7 +15,7 @@ from flask import Blueprint, current_app, request
 from ..utils import signed_ticket
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error, json_success
-from ..utils.rate_limit import ticket_rate_limiter
+from ..utils.rate_limit import build_rate_limit_key, ticket_rate_limiter
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -38,8 +38,7 @@ def _scope_is_allowed(scope: str) -> bool:
 
 
 def _ticket_rate_limit_key() -> str:
-    remote = request.remote_addr or "unknown"
-    return f"auth-ticket:{remote}"
+    return build_rate_limit_key("auth-ticket")
 
 
 @auth_bp.before_request
@@ -49,10 +48,8 @@ def _limit_ticket_endpoint():
 
     result = ticket_rate_limiter.check(
         _ticket_rate_limit_key(),
-        max_requests=int(current_app.config.get("AGORA_TICKET_RATE_LIMIT_MAX", 60)),
-        window_seconds=int(
-            current_app.config.get("AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS", 60)
-        ),
+        max_requests=current_app.config["AGORA_TICKET_RATE_LIMIT_MAX"],
+        window_seconds=current_app.config["AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS"],
     )
     if result.allowed:
         return None

@@ -20,6 +20,11 @@ services:
     # Backend-Port wird nicht mehr auf den Host veroeffentlicht.
     # Der Sidecar erreicht agora ueber das Compose-interne Netzwerk (agora:5001).
     ports: !reset []
+    environment:
+      # Der Sidecar-nginx ist genau ein vertrauenswuerdiger Proxy vor Flask.
+      # Nur in dieser Topologie darf Flask X-Forwarded-For/-Proto auswerten.
+      - AGORA_PROXY_FIX_X_FOR=1
+      - AGORA_PROXY_FIX_X_PROTO=1
 
   nginx:
     image: nginx:alpine

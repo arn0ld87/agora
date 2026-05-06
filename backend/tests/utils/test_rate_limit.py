@@ -33,3 +33,14 @@ def test_fixed_window_can_be_disabled():
     for _ in range(3):
         result = limiter.check("client", max_requests=0, window_seconds=60, now=100.0)
         assert result.allowed
+
+
+def test_fixed_window_caps_bucket_count():
+    limiter = FixedWindowRateLimiter(max_buckets=2, sweep_interval_seconds=999)
+
+    assert limiter.check("client-1", max_requests=10, window_seconds=60, now=100.0).allowed
+    assert limiter.check("client-2", max_requests=10, window_seconds=60, now=100.0).allowed
+    assert limiter.check("client-3", max_requests=10, window_seconds=60, now=100.0).allowed
+
+    assert len(limiter._buckets) == 2
+    assert "client-1" not in limiter._buckets

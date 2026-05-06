@@ -37,6 +37,16 @@ def create_app(config_class=Config):
 
     # Setup logging
     logger = setup_logger('agora')
+    from .utils.proxy import apply_proxy_fix
+    if apply_proxy_fix(app):
+        logger.info(
+            "ProxyFix enabled (x_for=%s, x_proto=%s, x_host=%s, x_port=%s, x_prefix=%s)",
+            app.config["AGORA_PROXY_FIX_X_FOR"],
+            app.config["AGORA_PROXY_FIX_X_PROTO"],
+            app.config["AGORA_PROXY_FIX_X_HOST"],
+            app.config["AGORA_PROXY_FIX_X_PORT"],
+            app.config["AGORA_PROXY_FIX_X_PREFIX"],
+        )
 
     # Werkzeug-Access-Log enthält die volle Request-Line inkl. Query-String
     # (z. B. /api/simulation/<id>/stream?ticket=<signed>); ohne Redaction

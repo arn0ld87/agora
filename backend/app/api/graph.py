@@ -26,7 +26,7 @@ from ..services.run_registry import RunRegistry
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.graph_diff_helpers import build_pydantic_graph_diff
-from ..utils.rate_limit import upload_rate_limiter
+from ..utils.rate_limit import build_rate_limit_key, upload_rate_limiter
 
 # Get logger
 logger = get_logger('agora.api')
@@ -63,8 +63,7 @@ def allowed_file(file_storage) -> bool:
 
 
 def _upload_rate_limit_key() -> str:
-    remote = request.remote_addr or "unknown"
-    return f"graph-ontology-upload:{remote}"
+    return build_rate_limit_key("graph-ontology-upload")
 
 
 @graph_bp.before_request
@@ -74,10 +73,8 @@ def _limit_upload_endpoint():
 
     result = upload_rate_limiter.check(
         _upload_rate_limit_key(),
-        max_requests=int(current_app.config.get("AGORA_UPLOAD_RATE_LIMIT_MAX", 10)),
-        window_seconds=int(
-            current_app.config.get("AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS", 60)
-        ),
+        max_requests=current_app.config["AGORA_UPLOAD_RATE_LIMIT_MAX"],
+        window_seconds=current_app.config["AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS"],
     )
     if result.allowed:
         return None

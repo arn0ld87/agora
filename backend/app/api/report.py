@@ -31,7 +31,7 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
-from ..utils.rate_limit import report_rate_limiter
+from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
 
 logger = get_logger(__name__)
 run_registry = RunRegistry()
@@ -44,9 +44,7 @@ _REPORT_RATE_LIMIT_ENDPOINTS = {
 
 
 def _report_rate_limit_key() -> str:
-    remote = request.remote_addr or "unknown"
-    endpoint = request.endpoint or "unknown"
-    return f"report-llm-trigger:{endpoint}:{remote}"
+    return build_rate_limit_key("report-llm-trigger", include_endpoint=True)
 
 
 @report_bp.before_request
@@ -56,10 +54,8 @@ def _limit_report_llm_endpoints():
 
     result = report_rate_limiter.check(
         _report_rate_limit_key(),
-        max_requests=int(current_app.config.get("AGORA_REPORT_RATE_LIMIT_MAX", 10)),
-        window_seconds=int(
-            current_app.config.get("AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS", 60)
-        ),
+        max_requests=current_app.config["AGORA_REPORT_RATE_LIMIT_MAX"],
+        window_seconds=current_app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"],
     )
     if result.allowed:
         return None

@@ -160,6 +160,9 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 | `AGORA_AUTH_TOKEN` | empfohlen | leer | API-Bearer-Token. |
 | `AGORA_EXTRA_ORIGINS` | nein | leer | Zusätzliche CORS-Origins. |
 | `AGORA_CORS_ALLOW_ALL` | nein | `false` | Wildcard-CORS; löst Warning aus. |
+| `AGORA_PROXY_FIX_X_FOR` | nein | `0` | Anzahl vertrauenswürdiger Proxies, deren `X-Forwarded-For` Flask für `request.remote_addr` auswertet. Im Repo-Sidecar-Proxy-Compose auf `1` gesetzt. |
+| `AGORA_PROXY_FIX_X_PROTO` | nein | `0` | Anzahl vertrauenswürdiger Proxies, deren `X-Forwarded-Proto` Flask für das Request-Schema auswertet. Im Repo-Sidecar-Proxy-Compose auf `1` gesetzt. |
+| `AGORA_PROXY_FIX_X_HOST` / `AGORA_PROXY_FIX_X_PORT` / `AGORA_PROXY_FIX_X_PREFIX` | nein | `0` | Weitere Werkzeug-`ProxyFix`-Zähler. Nur setzen, wenn ein vertrauenswürdiger Proxy diese Header kontrolliert. |
 | `VISION_MAX_CALLS_PER_UPLOAD` | nein | `40` | Hartes Cap für Vision-LLM-Calls pro PDF-Upload. |
 
 ---

@@ -12,6 +12,8 @@ def _reset_llm_trigger_limiter():
 def _build_test_app(*, artifact_store=None):
     _reset_llm_trigger_limiter()
     app = Flask(__name__)
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 20
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.extensions = {}
     if artifact_store is not None:
         app.extensions["artifact_store"] = artifact_store
