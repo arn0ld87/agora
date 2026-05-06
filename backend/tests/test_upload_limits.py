@@ -20,15 +20,25 @@ import io
 from pathlib import Path
 
 import pytest
+from flask import Flask
 from werkzeug.datastructures import FileStorage
 
+from app.api import graph_bp
 from app.api.graph import allowed_file
 from app.config import Config
 from app.models.project import ProjectManager
+from app.utils.rate_limit import upload_rate_limiter
 
 
 def _file_storage(filename: str, body: bytes) -> FileStorage:
     return FileStorage(stream=io.BytesIO(body), filename=filename)
+
+
+@pytest.fixture(autouse=True)
+def _reset_upload_limiter():
+    upload_rate_limiter.reset_for_tests()
+    yield
+    upload_rate_limiter.reset_for_tests()
 
 
 # ── Extension / magic-byte gate ─────────────────────────────────────────────
@@ -82,6 +92,32 @@ def test_rejects_filename_without_extension():
 def test_max_content_length_is_50_mb():
     """``Config.MAX_CONTENT_LENGTH`` matches the 50 MB the docs promise."""
     assert Config.MAX_CONTENT_LENGTH == 50 * 1024 * 1024
+
+
+def test_ontology_upload_endpoint_rate_limits_requests():
+    flask_app = Flask(__name__)
+    flask_app.config["AGORA_UPLOAD_RATE_LIMIT_MAX"] = 2
+    flask_app.config["AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    flask_app.register_blueprint(graph_bp, url_prefix="/api/graph")
+
+    with flask_app.test_client() as client:
+        for _ in range(2):
+            response = client.post(
+                "/api/graph/ontology/generate",
+                data={"simulation_requirement": "DACH reaction analysis"},
+            )
+            assert response.status_code == 400
+
+        response = client.post(
+            "/api/graph/ontology/generate",
+            data={"simulation_requirement": "DACH reaction analysis"},
+        )
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    body = response.get_json()
+    assert body["code"] == "rate_limited"
+    assert body["retry_after_seconds"] == 60
 
 
 # ── Path-traversal hardening ────────────────────────────────────────────────

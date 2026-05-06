@@ -71,6 +71,12 @@ class FixedWindowRateLimiter:
 
 
 ticket_rate_limiter = FixedWindowRateLimiter()
+upload_rate_limiter = FixedWindowRateLimiter()
 
 
-__all__ = ["FixedWindowRateLimiter", "RateLimitResult", "ticket_rate_limiter"]
+__all__ = [
+    "FixedWindowRateLimiter",
+    "RateLimitResult",
+    "ticket_rate_limiter",
+    "upload_rate_limiter",
+]
