@@ -2,9 +2,15 @@ from flask import Flask
 
 from app.api import simulation_bp
 from app.services.artifact_store import InMemoryArtifactStore
+from app.utils.rate_limit import llm_trigger_rate_limiter
+
+
+def _reset_llm_trigger_limiter():
+    llm_trigger_rate_limiter.reset_for_tests()
 
 
 def _build_test_app(*, artifact_store=None):
+    _reset_llm_trigger_limiter()
     app = Flask(__name__)
     app.extensions = {}
     if artifact_store is not None:
@@ -72,6 +78,25 @@ def test_prepare_simulation_requires_simulation_id():
     payload = response.get_json()
     assert payload["success"] is False
     assert payload["error"] == "Please provide simulation_id"
+
+
+def test_prepare_simulation_rate_limits_llm_trigger():
+    app = _build_test_app()
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 2
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    client = app.test_client()
+
+    for _ in range(2):
+        response = client.post("/api/simulation/prepare", json={})
+        assert response.status_code == 400
+
+    response = client.post("/api/simulation/prepare", json={})
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    payload = response.get_json()
+    assert payload["code"] == "rate_limited"
+    assert payload["retry_after_seconds"] == 60
 
 
 def test_prepare_status_requires_identifier():
@@ -355,6 +380,25 @@ def test_generate_profiles_requires_graph_id():
     payload = response.get_json()
     assert payload["success"] is False
     assert payload["error"] == "Please provide graph_id"
+
+
+def test_generate_profiles_rate_limits_llm_trigger():
+    app = _build_test_app()
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 2
+    app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
+    client = app.test_client()
+
+    for _ in range(2):
+        response = client.post("/api/simulation/generate-profiles", json={})
+        assert response.status_code == 400
+
+    response = client.post("/api/simulation/generate-profiles", json={})
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    payload = response.get_json()
+    assert payload["code"] == "rate_limited"
+    assert payload["retry_after_seconds"] == 60
 
 
 def test_interview_requires_prompt():

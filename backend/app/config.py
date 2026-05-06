@@ -192,6 +192,12 @@ class Config:
     AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS = int(
         os.environ.get('AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS', '60')
     )
+    AGORA_LLM_TRIGGER_RATE_LIMIT_MAX = int(
+        os.environ.get('AGORA_LLM_TRIGGER_RATE_LIMIT_MAX', '20')
+    )
+    AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS = int(
+        os.environ.get('AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS', '60')
+    )
 
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:

@@ -2,14 +2,18 @@
 Shared helpers for simulation-related API modules.
 """
 
-from flask import current_app
+from flask import current_app, request
 
+from . import simulation_bp
 from ..services.artifact_store import SimulationArtifactStore
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
+from ..utils.api_errors import ApiErrorCode
+from ..utils.api_responses import json_error
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from ..utils.rate_limit import llm_trigger_rate_limiter
 
 logger = get_logger('agora.api.simulation')
 run_registry = RunRegistry()
@@ -19,6 +23,41 @@ INTERVIEW_PROMPT_PREFIX = (
     "Based on your persona, all your past memories and actions, reply directly to me "
     "with text without calling any tools:"
 )
+
+_LLM_TRIGGER_ENDPOINTS = {
+    "simulation.generate_profiles",
+    "simulation.prepare_simulation",
+}
+
+
+def _llm_trigger_rate_limit_key() -> str:
+    remote = request.remote_addr or "unknown"
+    endpoint = request.endpoint or "unknown"
+    return f"simulation-llm-trigger:{endpoint}:{remote}"
+
+
+@simulation_bp.before_request
+def _limit_llm_trigger_endpoints():
+    if request.method != "POST" or request.endpoint not in _LLM_TRIGGER_ENDPOINTS:
+        return None
+
+    result = llm_trigger_rate_limiter.check(
+        _llm_trigger_rate_limit_key(),
+        max_requests=int(current_app.config.get("AGORA_LLM_TRIGGER_RATE_LIMIT_MAX", 20)),
+        window_seconds=int(
+            current_app.config.get("AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS", 60)
+        ),
+    )
+    if result.allowed:
+        return None
+
+    response, status = json_error(
+        ApiErrorCode.RATE_LIMITED,
+        status=429,
+        extra={"retry_after_seconds": result.retry_after_seconds},
+    )
+    response.headers["Retry-After"] = str(result.retry_after_seconds)
+    return response, status
 
 
 def optimize_interview_prompt(prompt: str) -> str:
