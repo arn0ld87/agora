@@ -104,8 +104,8 @@ Verbindliche Detailtabelle: [`CLAUDE.md` § Architektur-Layer](CLAUDE.md#archite
 | 6 | Frontend-TypeScript-Migration (API, Composables, Pinia) | grün |
 | 7 | Graph / Runs / Compare | teilweise — offen: #74, #66, #67, #63 |
 | 8 | Persona Review + UX | teilweise — offen: #69, #70, #137 |
-| 9 | Production Deployment | teilweise — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, ?token=-Block ✅, signed-tickets-Frontend ✅; offen: Prod-Stack-Smoke in CI, Auth-Zielbild-ADR |
-| 10 | Security Watchlist (CVE-Tracking) | dokumentiert — Upstream-Pins blockieren weitere Closes; CVE-Monitor-Workflow + Hardstop 2026-07-30 stehen aus |
+| 9 | Production Deployment | grün mit bewusst pausiertem PR-Smoke — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, ?token=-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke auf `main`/Tags/`workflow_dispatch` ✅; PR-Trigger seit 2026-05-06 wegen ~30 min Laufzeit pausiert und vor Release neu zu bewerten |
+| 10 | Security Watchlist (CVE-Tracking) | grün — CVE-Monitor-Workflow + Hardstop 2026-07-30 aktiv; Upstream-Pins blockieren weitere Closes |
 
 ## Pipeline (Vier-Stufen)
 
@@ -138,7 +138,7 @@ Verbindliche Detailtabelle: [`CLAUDE.md` § Architektur-Layer](CLAUDE.md#archite
 
 ## Production-Deployment (Layer 9)
 
-**Stand 2026-05-04:** Wesentliche Hardening-Pfade sind im Repo aktiv. Was noch fehlt: CI-Smoke gegen den Proxy-Stack und ein dokumentiertes Auth-Zielbild.
+**Stand 2026-05-06:** Wesentliche Hardening-Pfade sind im Repo aktiv. Der Proxy-Stack-Smoke existiert in `docker-image.yml::prod-proxy-smoke` fuer `main`/Tags/`workflow_dispatch`; der PR-Trigger ist wegen ca. 30 Minuten Laufzeit pro Iteration bewusst pausiert und vor dem finalen Release-Gate neu zu bewerten.
 
 ### Aktiv (code-verifiziert)
 
@@ -153,8 +153,7 @@ Verbindliche Detailtabelle: [`CLAUDE.md` § Architektur-Layer](CLAUDE.md#archite
 
 ### Offen / nächster Slice
 
-- **Prod-Stack-Smoke in CI** (M9.6): neuer Workflow startet `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build` und prüft `/healthz`, `/health`, `/`, `/api/auth/ticket` plus optionalen SSE-Connect.
-- **Auth-Zielbild ADR** (M10.4 / F2.3): `docu/decisions/0001-auth-model.md` — Single-User-only-v1, HttpOnly-Session oder Bearer+Refresh.
+- **Final-Release-Smoke-Gate:** PR-Trigger oder Release-Candidate-Trigger fuer `docker-image.yml::prod-proxy-smoke` vor v1.0 neu aktivieren oder durch ein gleichwertiges finales Gate ersetzen.
 - **Rate-Limits** auf App- oder Proxy-Ebene für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Generation (M10.5).
 - **CVE-Monitor + Hardstop** (M10.1/M10.2): wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop am 2026-07-30 — Issues #121–#126.
 

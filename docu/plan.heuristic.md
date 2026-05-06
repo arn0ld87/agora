@@ -66,7 +66,7 @@ Volltext-ADRs gehören nach `docu/decisions/`. Hier die geltenden Kernentscheidu
 
 **Konsequenz:**
 
-- CI muss den kompletten Prod-Stack smoken (M9.6, offen).
+- CI muss den kompletten Prod-Stack smoken (M9.6 vorhanden fuer `main`/Tags/`workflow_dispatch`; PR-Trigger seit 2026-05-06 pausiert und vor Release neu zu bewerten).
 - nginx-Konfiguration ist Teil des Produkts (`deploy/nginx/agora.conf`), nicht Betreiber-Folklore.
 - Proxy-Timeouts und `proxy_buffering off` sind Pflicht für SSE.
 
@@ -109,7 +109,7 @@ Jede Zeile = ein Branch, ein Commit, ein Verify-Gate, ein FF-Push. Reihenfolge f
 | **M9.3** | ✅ | F2.2 `?token=` aus Prod | `agora-refactor-worker` | `/agora-next-task` | Sonnet | `cd backend && uv run pytest tests/test_auth.py -k query -v` grün |
 | **M9.4** | ✅ | SSE-Auth-Frontend (signed tickets) | `agora-frontend-worker` | `/agora-next-task` | Sonnet | `grep "?ticket=" frontend/src/api/stream.ts` matches |
 | **M9.5** | ✅ | F3 Gunicorn-Gevent | `agora-refactor-worker` + `agora-test-worker` | `/agora-next-task` | Sonnet | `grep -A3 '^CMD' Dockerfile \| grep "gevent"` matches |
-| **M9.6** | ✅ | Prod-Stack-Smoke in CI | `agora-test-worker` | `/agora-next-task` | Sonnet | `docker-image.yml::prod-proxy-smoke` läuft auf `pull_request: [main]` (paths-ignore Doku) und `push: [main, tags]`. `verify-deploy.sh` smoket `/healthz`, `/health`, `/`, `/api/auth/ticket`. |
+| **M9.6** | 🟡 | Prod-Stack-Smoke in CI | `agora-test-worker` | `/agora-next-task` | Sonnet | `docker-image.yml::prod-proxy-smoke` läuft auf `push: [main, tags]` und `workflow_dispatch`. PR-Trigger ist seit 2026-05-06 wegen ~30 min Laufzeit pausiert und vor dem finalen Release-Gate neu zu bewerten. `verify-deploy.sh` smoket `/healthz`, `/health`, `/`, `/api/auth/ticket`. |
 | **M9.7** | ✅ | Doku-Sync 2026-05-04 | `agora-doc-worker` | `/agora-next-task` | Haiku | PR #271 gemerged. `grep "v0.6.0" AGENTS.md` leer. |
 | **M10.1** | ✅ | F4.1 CVE-Monitor cron | `agora-doc-worker` | `/agora-next-task` | Haiku | `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln`, schreibt in `$GITHUB_STEP_SUMMARY`, lädt Output als Artefakt. |
 | **M10.2** | ✅ | F4.2 CVE-Hardstop 2026-07-30 | `agora-doc-worker` | `/agora-next-task` | Haiku | `cve-monitor.yml::Hardstop-Gate` failt ab 2026-07-30, wenn Audit non-zero. `ci.yml` Kommentar verweist auf den Hardstop. |
@@ -230,7 +230,7 @@ M9.6 (Prod-Smoke)  →  M9.7 (Doku-Sync, dieser Slice)
 | ID | Bereich | Schwere | Beschreibung | Tracker |
 |---|---|---:|---|---|
 | TD-01 | Dependency Security | hoch | 6 ignorierte CVEs in CI bis 2026-07-30. | #121–#126 / M10.1+M10.2 |
-| TD-02 | CI/Deployment | hoch | Prod-Proxy-Stack nicht in CI bewiesen. | M9.6 |
+| TD-02 | CI/Deployment | mittel | Prod-Proxy-Stack wird auf `main`/Tags/`workflow_dispatch` gesmoked; PR-Trigger ist fuer schnelle Iteration pausiert. | M9.6 / Final-Release-Gate |
 | TD-03 | AuthN/AuthZ | hoch | Shared Token statt User-/Session-Modell. | M10.4 |
 | TD-04 | Test-Qualität | mittel | Evidence-Gate weiterhin `--soft`. | M11.1 |
 | TD-05 | Coverage | mittel | Keine Coverage-Gates. | M11.2 + M11.3 |
@@ -250,7 +250,7 @@ M9.6 (Prod-Smoke)  →  M9.7 (Doku-Sync, dieser Slice)
 | Risiko | Eintritt | Impact | Mitigation |
 |---|---:|---:|---|
 | Upstream-CVEs bleiben ungefixt | mittel | hoch | Monitor (M10.1), Hardstop 2026-07-30 (M10.2), Fork-/Replacement-ADR. |
-| Prod-Stack lokal grün, in CI rot | mittel | hoch | Compose-Proxy-Smoke in CI (M9.6). |
+| Prod-Stack lokal grün, in CI rot | mittel | hoch | Compose-Proxy-Smoke in CI (M9.6) auf `main`/Tags/manuell; PR-Reaktivierung vor Release. |
 | Shared Token leakt | niedrig-mittel | hoch | Signed tickets ✅, `?token=`-Block in Prod ✅, Auth-ADR (M10.4), Rotation-Doku. |
 | LLM-/Embedding-Endpoint instabil | hoch | mittel | Retry, Timeouts, klare Modellprofile, kleinere Testpfade. |
 | Neo4j/Embedding-Dim mismatch | mittel | hoch | Startup-Probe + `VECTOR_DIM`-Validation; Hardening in #263. |
@@ -323,7 +323,7 @@ M9.6 (Prod-Smoke)  →  M9.7 (Doku-Sync, dieser Slice)
 
 ### Geplant (noch nicht angelegt)
 
-- `/fix-task-05-prod-stack-smoke` — M9.6: Prod-Stack-Smoke-Workflow erzeugen.
+- `/fix-task-05-prod-stack-smoke` — M9.6: Prod-Stack-Smoke-Workflow erzeugen bzw. PR-Trigger vor Release reaktivieren.
 - `/fix-task-06-cve-monitor` — M10.1/M10.2: CVE-Monitor + Hardstop.
 - `/fix-task-07-evidence-hard` — M11.1: `--soft` aus Evidence-Gate entfernen.
 
@@ -336,7 +336,7 @@ Wenn ein neuer Slash-Command angelegt wird, dieselbe Struktur nutzen wie `/fix-t
 | Sprint | Slices | Endzustand |
 |---|---|---|
 | **Sprint Doku-Sync** | M9.7 (= dieser Slice) | AGENTS.md/CLAUDE.md/PLAN.md/STATUS.md/heuristic auf realen Code-Stand. |
-| **Sprint 1** | M9.6 (Prod-Smoke) | CI grün gegen den Proxy-Stack, M9 closeable. |
+| **Sprint 1** | M9.6 (Prod-Smoke) | CI grün gegen den Proxy-Stack auf `main`/Tags/manuell; PR-Trigger vor Release neu bewerten. |
 | **Sprint 2** | M10.1 + M10.2 (CVE-Monitor + Hardstop) | Wöchentlicher Audit, Hardstop-Datum aktiv. |
 | **Sprint 3** | M10.4 (Auth-ADR) + M10.5 (Rate-Limits) | v1.0-Auth-Scope steht, Rate-Limits aktiv. |
 | **Sprint 4** | M11.1 + M11.2 + M11.3 (Test-Härtung) | Coverage sichtbar, Evidence-Gate hart. |
@@ -349,7 +349,7 @@ Wenn ein neuer Slash-Command angelegt wird, dieselbe Struktur nutzen wie `/fix-t
 ## 12. Allgemeine Rollback-Heuristik
 
 1. Jeder Slice läuft auf eigenem Feature-Branch (`feat/`, `fix/`, `chore/`, `refactor/`).
-2. **Pflicht-Gate** für M10+: M9.6 muss vorher grün sein, sonst kein Verify möglich für Layer-9-Touchpoints.
+2. **Pflicht-Gate** für M10+: M9.6 muss fuer `main`/Tags/manuell grün sein; fuer Release-Kandidaten PR- oder RC-Smoke reaktivieren.
 3. **3 grüne `main`-Runs** sind Pflicht, bevor ein Slice das Vertrauensmodell der Pipeline verändert (Beispiel: Auth-ADR-Implementierung, CVE-Hardstop-Aktivierung).
 4. Doku-Slices sind reversibel ohne Code-Risiko; trotzdem `git mv` rückwärts dokumentieren.
 5. **Bei Eval-Drift** in M12.1: Refactor sofort revertieren, kein Hotfix-Patching.
