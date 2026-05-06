@@ -154,7 +154,6 @@ Verbindliche Detailtabelle: [`CLAUDE.md` § Architektur-Layer](CLAUDE.md#archite
 ### Offen / nächster Slice
 
 - **Final-Release-Smoke-Gate:** PR-Trigger oder Release-Candidate-Trigger fuer `docker-image.yml::prod-proxy-smoke` vor v1.0 neu aktivieren oder durch ein gleichwertiges finales Gate ersetzen.
-- **Rate-Limits** auf App- oder Proxy-Ebene für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Generation (M10.5).
 - **CVE-Monitor + Hardstop** (M10.1/M10.2): wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop am 2026-07-30 — Issues #121–#126.
 
 ## Commands

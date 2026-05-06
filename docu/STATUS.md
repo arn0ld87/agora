@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-04
+Stand: 2026-05-06
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -99,7 +99,7 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 
 ## Aktuelles Milestone
 
-**M9 abgeschlossen, M10 abgeschlossen (M10.5 Rate-Limits offen).** Übergang zu M11.
+**M9 abgeschlossen, M10 abgeschlossen.** Übergang zu M11.
 
 Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: [`docu/plan.heuristic.md`](plan.heuristic.md).
 
@@ -112,13 +112,13 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M9.6 Prod-Stack-Smoke vorhanden (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`/Tags/`workflow_dispatch`; PR-Trigger bewusst pausiert und vor Final-Release neu zu bewerten, Issue #276)
 - M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docu/dependency-risk-register.md`)
 - M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docu/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
+- M10.5 Rate-Limits für `/api/auth/ticket`, Uploads (`/api/graph/ontology/generate`), Simulation-LLM-Trigger (`/api/simulation/generate-profiles`, `/api/simulation/prepare`) und Report-Trigger (`/api/report/generate`, `/api/report/chat`) (#302)
 - M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. M10.5 Rate-Limit-Konzept — `/api/auth/ticket`, Upload-Pfad `/api/graph/ontology/generate`, Simulation-LLM-Trigger und Report-Trigger rate-limited (#302).
-2. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
-3. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
-4. Final-Release-Gate: Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
+1. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
+2. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
+3. Final-Release-Gate: Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
 
 Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F8 Hotspot-Split Frontend (#203). #202 geschlossen 2026-05-05 (report_agent als Package).
 
@@ -136,3 +136,4 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-04: M10.4-Doku-Folge — README.md (DE+EN-Status-Block) auf Single-User-only mit Verweis auf ADR-0001 erweitert. `docu/security-hardening.md` neue Sektion „Auth-Modell v1.0" mit (a) Garantien-Liste (kein User-Konzept, kein Logout, kein Audit, kein Multi-User), (b) Was-schützt-was-nicht-Gegenüberstellung inkl. fehlender Rate-Limits als Hardstop bis M10.5, (c) Token-Rotation-Prozedur als 6-Schritt-Anleitung mit `curl`-Verifikation, (d) Trigger für ADR-Supersedes (Klassenraum, Public-Internet, Compliance), (e) Hardstops-Liste für v1.0. Layer-9 in STATUS damit final auf grün; v1.0-Auth-Story ist closed.
 - 2026-05-05: Issue #276 Embedding-Probe-Skip — `AGORA_SKIP_EMBEDDING_PROBE=true` in `docker-image.yml::prod-proxy-smoke` eingeführt. `validate_embedding_configuration()` bekommt `skip_probe`-Parameter; bei gesetztem Flag läuft nur die statische KNOWN_EMBEDDING_DIMS-Validation, der Live-HTTP-Probe-Call gegen Ollama entfällt. Container startet im CI-Runner ohne Ollama sauber hoch. `continue-on-error: github.event_name == 'pull_request'`-Workaround aus PR-Trigger entfernt; Tag-Pushes bleiben lenient (externe Image-Pulls instabil).
 - 2026-05-06: PR-Trigger fuer `docker-image.yml` bewusst pausiert. Grund: Docker-Image-Build + Reverse-Proxy-Smoke kostet pro PR-Iteration ca. 30 Minuten. Der Smoke bleibt fuer `main`/Tags/`workflow_dispatch` erhalten und muss vor dem finalen Release-Gate neu bewertet bzw. reaktiviert werden.
+- 2026-05-06: M10.5 Rate-Limits abgeschlossen — app-seitige Fixed-Window-Limits fuer `/api/auth/ticket`, `/api/graph/ontology/generate`, `/api/simulation/generate-profiles`, `/api/simulation/prepare`, `/api/report/generate` und `/api/report/chat`. PRs #303–#306, Issue #302.
