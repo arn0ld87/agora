@@ -14,6 +14,7 @@ import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
 import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
 import AddPersonaModal from './step2/AddPersonaModal.vue'
+import PersonaDetailModal from './step2/PersonaDetailModal.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
@@ -513,165 +514,28 @@ onMounted(() => {
         </p>
       </article>
     </div>
-
-    <!-- Modal: persona detail (editorial marginalia layout) -->
-    <div v-if="selectedProfile" class="modal" @click.self="selectedProfile = null; cancelEditing()">
-      <div class="modal-card">
-        <header class="modal-head">
-          <div>
-            <div class="kicker-mono">№ Persona</div>
-            <h3>{{ selectedProfile.name || selectedProfile.username }}</h3>
-            <div v-if="selectedProfile.username && selectedProfile.name && selectedProfile.username !== selectedProfile.name" class="modal-handle">@{{ selectedProfile.username }}</div>
-          </div>
-          <button class="x" @click="selectedProfile = null; cancelEditing()" aria-label="×">×</button>
-        </header>
-
-        <div class="review-bar">
-          <Badge
-            v-if="selectedProfile.review_status"
-            :variant="statusVariant(selectedProfile.review_status)"
-            dot
-          >{{ statusLabel(selectedProfile.review_status) }}</Badge>
-          <span v-if="personaReview.reviewEnabled.value" class="meta">Review aktiv</span>
-          <span class="review-bar-spacer" />
-          <template v-if="!editingProfile">
-            <Btn variant="ghost" :disabled="reviewActionPending" @click="startEditingSelected">Bearbeiten</Btn>
-            <Btn
-              variant="ghost"
-              :disabled="reviewActionPending"
-              @click="rejectSelected"
-            >Ablehnen</Btn>
-            <Btn
-              variant="ghost"
-              :disabled="reviewActionPending"
-              :loading="reviewActionPending && selectedProfile?.review_status === 'regenerating'"
-              @click="regenerateSelected"
-            >{{ t('step2.persona.regenerate') }}</Btn>
-            <Btn
-              variant="primary"
-              :disabled="reviewActionPending"
-              @click="approveSelected"
-            >Freigeben</Btn>
-          </template>
-          <template v-else>
-            <Btn variant="ghost" :disabled="reviewActionPending" @click="cancelEditing">Abbrechen</Btn>
-            <Btn
-              variant="primary"
-              :loading="reviewActionPending"
-              :disabled="reviewActionPending"
-              @click="saveEditingProfile"
-            >Speichern</Btn>
-          </template>
-        </div>
-
-        <ul v-if="personaReview.getIssuesFor(selectedProfile.username).length" class="review-issues">
-          <li
-            v-for="issue in personaReview.getIssuesFor(selectedProfile.username)"
-            :key="issue.code"
-          >
-            <Badge :variant="issueBadgeVariant(issue.severity)">{{ issue.severity }}</Badge>
-            <span>{{ issue.code }}</span>
-            <span v-if="issue.detail?.missing" class="meta">→ {{ issue.detail.missing.join(', ') }}</span>
-          </li>
-        </ul>
-        <div v-if="!editingProfile" class="regenerate-hint-row">
-          <input
-            v-model="regenerateHint"
-            type="text"
-            class="regenerate-hint-input"
-            :placeholder="t('step2.persona.regenerateHint')"
-            :disabled="reviewActionPending"
-          />
-        </div>
-        <p v-if="reviewActionError" class="meta review-error">{{ reviewActionError }}</p>
-
-        <template v-if="!editingProfile">
-          <p class="modal-bio">{{ selectedProfile.bio }}</p>
-
-          <div class="modal-marginalia">
-            <dl>
-              <div v-if="selectedProfile.age">
-                <dt>Alter</dt>
-                <dd>{{ selectedProfile.age }}</dd>
-              </div>
-              <div v-if="selectedProfile.gender">
-                <dt>Gender</dt>
-                <dd>{{ selectedProfile.gender }}</dd>
-              </div>
-              <div v-if="selectedProfile.mbti">
-                <dt>MBTI</dt>
-                <dd class="mono-big">{{ selectedProfile.mbti }}</dd>
-              </div>
-              <div v-if="selectedProfile.country">
-                <dt>Land</dt>
-                <dd>{{ selectedProfile.country }}</dd>
-              </div>
-              <div v-if="selectedProfile.profession">
-                <dt>Beruf</dt>
-                <dd>{{ selectedProfile.profession }}</dd>
-              </div>
-            </dl>
-            <div class="modal-content">
-              <div v-if="selectedProfile.interested_topics?.length" class="topic-chips">
-                <span class="kicker-mono">{{ t('step5.agent.interests') }}</span>
-                <div class="chips">
-                  <span v-for="topic in selectedProfile.interested_topics" :key="topic" class="chip">
-                    {{ topic }}
-                  </span>
-                </div>
-              </div>
-              <p class="modal-persona" v-if="selectedProfile.persona">
-                {{ selectedProfile.persona }}
-              </p>
-            </div>
-          </div>
-        </template>
-
-        <div v-else class="form-grid">
-          <label class="form-row">
-            <span>Anzeigename</span>
-            <input v-model="editingProfile.name" type="text" />
-          </label>
-          <label class="form-row">
-            <span>Beruf / Rolle</span>
-            <input v-model="editingProfile.profession" type="text" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Bio (kurz)</span>
-            <input v-model="editingProfile.bio" type="text" maxlength="200" />
-          </label>
-          <label class="form-row">
-            <span>Land</span>
-            <input v-model="editingProfile.country" type="text" maxlength="4" />
-          </label>
-          <label class="form-row">
-            <span>Alter</span>
-            <input v-model.number="editingProfile.age" type="number" min="15" max="99" />
-          </label>
-          <label class="form-row">
-            <span>Gender</span>
-            <select v-model="editingProfile.gender">
-              <option value="other">other</option>
-              <option value="female">female</option>
-              <option value="male">male</option>
-            </select>
-          </label>
-          <label class="form-row">
-            <span>MBTI</span>
-            <input v-model="editingProfile.mbti" type="text" maxlength="4" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Interessen (Komma-getrennt)</span>
-            <input v-model="editingProfile.interested_topics" type="text" />
-          </label>
-          <label class="form-row form-row--wide">
-            <span>Persona-Beschreibung</span>
-            <textarea v-model="editingProfile.persona" rows="6" />
-          </label>
-        </div>
-      </div>
-    </div>
-
+    <PersonaDetailModal
+      :selected-profile="selectedProfile"
+      :editing-profile="editingProfile"
+      :review-action-pending="reviewActionPending"
+      :review-action-error="reviewActionError"
+      :regenerate-hint="regenerateHint"
+      :review-enabled="personaReview.reviewEnabled.value"
+      :status-variant="statusVariant"
+      :status-label="statusLabel"
+      :issue-badge-variant="issueBadgeVariant"
+      :get-issues-for="personaReview.getIssuesFor"
+      :highest-severity-for="personaReview.highestSeverityFor"
+      @update:selected-profile="selectedProfile = $event"
+      @update:editing-profile="editingProfile = $event"
+      @update:regenerate-hint="regenerateHint = $event"
+      @start-editing="startEditingSelected"
+      @cancel-editing="cancelEditing"
+      @approve="approveSelected"
+      @reject="rejectSelected"
+      @regenerate="regenerateSelected"
+      @save="saveEditingProfile"
+    />
     <AddPersonaModal
       :open="showAddPersonaModal"
       :persona="newPersona"

@@ -274,6 +274,27 @@
         "persona": "Frei formuliert. Je konkreter, desto charakteristischer reagiert der Agent."
       }
     },
+    "detailModal": {
+      "kicker": "№ Persona",
+      "reviewActive": "Review aktiv",
+      "actions": {
+        "edit": "Bearbeiten",
+        "reject": "Ablehnen",
+        "approve": "Freigeben",
+        "save": "Speichern"
+      },
+      "fields": {
+        "age": "Alter",
+        "gender": "Gender",
+        "mbti": "MBTI",
+        "country": "Land",
+        "profession": "Beruf",
+        "displayName": "Anzeigename",
+        "bioShort": "Bio (kurz)",
+        "topicsCsv": "Interessen (Komma-getrennt)",
+        "personaLong": "Persona-Beschreibung"
+      }
+    },
     "library": {
       "title": "Persona-Bibliothek",
       "hint": "Gespeicherte Personas kannst du in jeder neuen Simulation wiederverwenden.",

@@ -263,6 +263,27 @@
         "persona": "Free-form. The more specific, the more distinctive the agent's reactions."
       }
     },
+    "detailModal": {
+      "kicker": "№ Persona",
+      "reviewActive": "Review active",
+      "actions": {
+        "edit": "Edit",
+        "reject": "Reject",
+        "approve": "Approve",
+        "save": "Save"
+      },
+      "fields": {
+        "age": "Age",
+        "gender": "Gender",
+        "mbti": "MBTI",
+        "country": "Country",
+        "profession": "Profession",
+        "displayName": "Display name",
+        "bioShort": "Bio (short)",
+        "topicsCsv": "Interests (comma-separated)",
+        "personaLong": "Persona description"
+      }
+    },
     "library": {
       "title": "Persona library",
       "hint": "Saved personas can be reused in any later simulation.",
