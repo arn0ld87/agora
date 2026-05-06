@@ -12,6 +12,7 @@ from app.utils.api_responses import (
     json_success,
 )
 from app.utils.auth import allow_ticket_auth, install_blueprint_guard
+from app.utils.rate_limit import ticket_rate_limiter
 
 
 SECRET = "test-secret-do-not-use"
@@ -21,8 +22,10 @@ TOKEN = "deploy-token"
 @pytest.fixture(autouse=True)
 def _reset_consumed_set():
     signed_ticket._reset_seen_for_tests()
+    ticket_rate_limiter.reset_for_tests()
     yield
     signed_ticket._reset_seen_for_tests()
+    ticket_rate_limiter.reset_for_tests()
 
 
 @pytest.fixture(scope="module")
@@ -32,6 +35,8 @@ def app():
     out of per-test fixtures."""
     flask_app = Flask(__name__)
     flask_app.config["SECRET_KEY"] = SECRET
+    flask_app.config["AGORA_TICKET_RATE_LIMIT_MAX"] = 2
+    flask_app.config["AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS"] = 60
     install_api_error_handlers(flask_app)
 
     bp = Blueprint("guarded", __name__)
@@ -67,6 +72,20 @@ def test_ticket_endpoint_requires_token(client):
     response = client.post("/api/auth/ticket", json={"scope": "sse:sim_abc"})
 
     assert response.status_code == 401
+
+
+def test_ticket_endpoint_rate_limits_before_auth_guard(client):
+    for _ in range(2):
+        response = client.post("/api/auth/ticket", json={"scope": "sse:sim_abc"})
+        assert response.status_code == 401
+
+    response = client.post("/api/auth/ticket", json={"scope": "sse:sim_abc"})
+
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "60"
+    body = response.get_json()
+    assert body["code"] == "rate_limited"
+    assert body["retry_after_seconds"] == 60
 
 
 def test_ticket_endpoint_returns_ticket_for_valid_scope(client):

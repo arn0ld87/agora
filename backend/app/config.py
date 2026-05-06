@@ -182,6 +182,13 @@ class Config:
     # Mirrors the AGORA_LOG_FORMAT env var read directly in utils/logger.py at import time.
     AGORA_LOG_FORMAT = os.environ.get('AGORA_LOG_FORMAT', 'text').lower()
 
+    # App-level abuse guard for short-lived signed ticket issuance.
+    # Values <= 0 disable the limiter for local experiments/tests.
+    AGORA_TICKET_RATE_LIMIT_MAX = int(os.environ.get('AGORA_TICKET_RATE_LIMIT_MAX', '60'))
+    AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS = int(
+        os.environ.get('AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS', '60')
+    )
+
     # Ontology mutation (Issue #11) — how to handle novel entity types that
     # the NER pipeline flags during simulation:
     #   disabled (default) → drop the signal, ontology never changes

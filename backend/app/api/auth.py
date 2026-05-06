@@ -13,7 +13,9 @@ from __future__ import annotations
 from flask import Blueprint, current_app, request
 
 from ..utils import signed_ticket
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import json_error, json_success
+from ..utils.rate_limit import ticket_rate_limiter
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -33,6 +35,35 @@ def _scope_is_allowed(scope: str) -> bool:
     if not scope or "." in scope:
         return False
     return any(scope.startswith(prefix) for prefix in _ALLOWED_SCOPE_PREFIXES)
+
+
+def _ticket_rate_limit_key() -> str:
+    remote = request.remote_addr or "unknown"
+    return f"auth-ticket:{remote}"
+
+
+@auth_bp.before_request
+def _limit_ticket_endpoint():
+    if request.endpoint != "auth.issue_ticket" or request.method != "POST":
+        return None
+
+    result = ticket_rate_limiter.check(
+        _ticket_rate_limit_key(),
+        max_requests=int(current_app.config.get("AGORA_TICKET_RATE_LIMIT_MAX", 60)),
+        window_seconds=int(
+            current_app.config.get("AGORA_TICKET_RATE_LIMIT_WINDOW_SECONDS", 60)
+        ),
+    )
+    if result.allowed:
+        return None
+
+    response, status = json_error(
+        ApiErrorCode.RATE_LIMITED,
+        status=429,
+        extra={"retry_after_seconds": result.retry_after_seconds},
+    )
+    response.headers["Retry-After"] = str(result.retry_after_seconds)
+    return response, status
 
 
 @auth_bp.route("/ticket", methods=["POST"])

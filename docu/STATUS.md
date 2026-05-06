@@ -115,7 +115,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. M10.5 Rate-Limit-Konzept — `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Gen.
+1. M10.5 Rate-Limit-Konzept — `/api/auth/ticket` im ersten Slice rate-limited (#302); offen bleiben Uploads, LLM-Trigger, Report-Gen.
 2. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
 3. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
 4. Final-Release-Gate: Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
