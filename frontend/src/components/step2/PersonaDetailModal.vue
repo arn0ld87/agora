@@ -69,6 +69,27 @@ function updateEditField<K extends keyof EditableProfile>(key: K, value: Editabl
   if (!props.editingProfile) return
   emit('update:editingProfile', { ...props.editingProfile, [key]: value })
 }
+
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement).value
+}
+
+function textareaValue(event: Event): string {
+  return (event.target as HTMLTextAreaElement).value
+}
+
+function updateRegenerateHint(event: Event) {
+  emit('update:regenerateHint', inputValue(event))
+}
+
+function updateEditAge(event: Event) {
+  const value = inputValue(event)
+  updateEditField('age', value === '' ? null : Number(value))
+}
+
+function updateEditGender(event: Event) {
+  updateEditField('gender', (event.target as HTMLSelectElement).value)
+}
 </script>
 
 <template>
@@ -133,7 +154,7 @@ function updateEditField<K extends keyof EditableProfile>(key: K, value: Editabl
       <div v-if="!editingProfile" class="regenerate-hint-row">
         <input
           :value="regenerateHint"
-          @input="emit('update:regenerateHint', ($event.target as HTMLInputElement).value)"
+          @input="updateRegenerateHint"
           type="text"
           class="regenerate-hint-input"
           :placeholder="t('step2.persona.regenerateHint')"
@@ -186,27 +207,27 @@ function updateEditField<K extends keyof EditableProfile>(key: K, value: Editabl
       <div v-else class="form-grid">
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.displayName') }}</span>
-          <input :value="editingProfile.name" @input="updateEditField('name', ($event.target as HTMLInputElement).value)" type="text" />
+          <input :value="editingProfile.name" @input="updateEditField('name', inputValue($event))" type="text" />
         </label>
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.profession') }}</span>
-          <input :value="editingProfile.profession" @input="updateEditField('profession', ($event.target as HTMLInputElement).value)" type="text" />
+          <input :value="editingProfile.profession" @input="updateEditField('profession', inputValue($event))" type="text" />
         </label>
         <label class="form-row form-row--wide">
           <span>{{ t('step2.detailModal.fields.bioShort') }}</span>
-          <input :value="editingProfile.bio" @input="updateEditField('bio', ($event.target as HTMLInputElement).value)" type="text" maxlength="200" />
+          <input :value="editingProfile.bio" @input="updateEditField('bio', inputValue($event))" type="text" maxlength="200" />
         </label>
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.country') }}</span>
-          <input :value="editingProfile.country" @input="updateEditField('country', ($event.target as HTMLInputElement).value)" type="text" maxlength="4" />
+          <input :value="editingProfile.country" @input="updateEditField('country', inputValue($event))" type="text" maxlength="4" />
         </label>
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.age') }}</span>
-          <input :value="editingProfile.age ?? ''" @input="updateEditField('age', Number(($event.target as HTMLInputElement).value) || null)" type="number" min="15" max="99" />
+          <input :value="editingProfile.age ?? ''" @input="updateEditAge" type="number" min="15" max="99" />
         </label>
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.gender') }}</span>
-          <select :value="editingProfile.gender" @change="updateEditField('gender', ($event.target as HTMLSelectElement).value)">
+          <select :value="editingProfile.gender" @change="updateEditGender">
             <option value="other">other</option>
             <option value="female">female</option>
             <option value="male">male</option>
@@ -214,15 +235,15 @@ function updateEditField<K extends keyof EditableProfile>(key: K, value: Editabl
         </label>
         <label class="form-row">
           <span>{{ t('step2.detailModal.fields.mbti') }}</span>
-          <input :value="editingProfile.mbti" @input="updateEditField('mbti', ($event.target as HTMLInputElement).value)" type="text" maxlength="4" />
+          <input :value="editingProfile.mbti" @input="updateEditField('mbti', inputValue($event))" type="text" maxlength="4" />
         </label>
         <label class="form-row form-row--wide">
           <span>{{ t('step2.detailModal.fields.topicsCsv') }}</span>
-          <input :value="editingProfile.interested_topics" @input="updateEditField('interested_topics', ($event.target as HTMLInputElement).value)" type="text" />
+          <input :value="editingProfile.interested_topics" @input="updateEditField('interested_topics', inputValue($event))" type="text" />
         </label>
         <label class="form-row form-row--wide">
           <span>{{ t('step2.detailModal.fields.personaLong') }}</span>
-          <textarea :value="editingProfile.persona" @input="updateEditField('persona', ($event.target as HTMLTextAreaElement).value)" rows="6"></textarea>
+          <textarea :value="editingProfile.persona" @input="updateEditField('persona', textareaValue($event))" rows="6"></textarea>
         </label>
       </div>
     </div>

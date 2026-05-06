@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Frontend-Vokabular und README synchronisiert: Knoten→Entitäten, Kanten→Beziehungen, Entitätstypen→Attribute (Sub-Slice 43). Tagline auf Hybrid-Wording „lokal oder Cloud" aktualisiert. Tool-Call-USP („Agenten halluzinieren nicht") als Differenzierungsmerkmal in step3.sub und neuem home.differentiators-Block ergänzt.
 
 ### Fixed
+- **Frontend-CI:** Vue-Template-`as`-Casts in `AddPersonaModal.vue` und `PersonaDetailModal.vue` durch typisierte Event-Handler ersetzt; `npm run lint` ist wieder grün.
 - **`useSimulationPrepare`:** `fetchProfilesRealtime` als öffentliche Methode exposen — beseitigt ReferenceError beim Hinzufügen/Löschen von Personas in Step2EnvSetup (Sub-Slice 36, Closes #292, Regression aus Sub-Slice 34)
 
 ### Added

@@ -45,6 +45,26 @@ function close() {
 function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaForm[K]) {
   emit('update:persona', { ...props.persona, [key]: value })
 }
+
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement).value
+}
+
+function textareaValue(event: Event): string {
+  return (event.target as HTMLTextAreaElement).value
+}
+
+function updateAge(event: Event) {
+  const value = inputValue(event)
+  updateField('age', value === '' ? null : Number(value))
+}
+
+function updateGender(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === 'other' || value === 'female' || value === 'male') {
+    updateField('gender', value)
+  }
+}
 </script>
 
 <template>
@@ -63,7 +83,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.username') }} *</span>
           <input
             :value="persona.username"
-            @input="updateField('username', ($event.target as HTMLInputElement).value)"
+            @input="updateField('username', inputValue($event))"
             type="text"
             :placeholder="t('step2.addPersona.placeholders.username')"
           />
@@ -72,7 +92,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.name') }}</span>
           <input
             :value="persona.name"
-            @input="updateField('name', ($event.target as HTMLInputElement).value)"
+            @input="updateField('name', inputValue($event))"
             type="text"
             :placeholder="t('step2.addPersona.placeholders.name')"
           />
@@ -81,7 +101,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.bio') }}</span>
           <input
             :value="persona.bio"
-            @input="updateField('bio', ($event.target as HTMLInputElement).value)"
+            @input="updateField('bio', inputValue($event))"
             type="text"
             maxlength="150"
             :placeholder="t('step2.addPersona.placeholders.bio')"
@@ -91,7 +111,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.profession') }}</span>
           <input
             :value="persona.profession"
-            @input="updateField('profession', ($event.target as HTMLInputElement).value)"
+            @input="updateField('profession', inputValue($event))"
             type="text"
             :placeholder="t('step2.addPersona.placeholders.profession')"
           />
@@ -100,7 +120,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.country') }}</span>
           <input
             :value="persona.country"
-            @input="updateField('country', ($event.target as HTMLInputElement).value)"
+            @input="updateField('country', inputValue($event))"
             type="text"
             maxlength="4"
             :placeholder="t('step2.addPersona.placeholders.country')"
@@ -110,7 +130,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.age') }}</span>
           <input
             :value="persona.age ?? ''"
-            @input="updateField('age', ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value))"
+            @input="updateAge"
             type="number"
             min="15"
             max="99"
@@ -120,7 +140,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.gender') }}</span>
           <select
             :value="persona.gender"
-            @change="updateField('gender', ($event.target as HTMLSelectElement).value as NewPersonaForm['gender'])"
+            @change="updateGender"
           >
             <option value="other">other</option>
             <option value="female">female</option>
@@ -131,7 +151,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.mbti') }}</span>
           <input
             :value="persona.mbti"
-            @input="updateField('mbti', ($event.target as HTMLInputElement).value)"
+            @input="updateField('mbti', inputValue($event))"
             type="text"
             maxlength="4"
             placeholder="INTJ"
@@ -141,7 +161,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.topics') }}</span>
           <input
             :value="persona.interested_topics"
-            @input="updateField('interested_topics', ($event.target as HTMLInputElement).value)"
+            @input="updateField('interested_topics', inputValue($event))"
             type="text"
             :placeholder="t('step2.addPersona.placeholders.topics')"
           />
@@ -150,7 +170,7 @@ function updateField<K extends keyof NewPersonaForm>(key: K, value: NewPersonaFo
           <span>{{ t('step2.addPersona.fields.persona') }}</span>
           <textarea
             :value="persona.persona"
-            @input="updateField('persona', ($event.target as HTMLTextAreaElement).value)"
+            @input="updateField('persona', textareaValue($event))"
             rows="6"
             :placeholder="t('step2.addPersona.placeholders.persona')"
           />
