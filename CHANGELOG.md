@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Changed
+- **CI Release-Gating:** `docker-image.yml` ist fuer v1.0 gehärtet: globale Permissions sind auf `contents: read` reduziert, Publish-Rechte liegen nur noch am `publish`-Job, Tag-Pushes haben keinen `success() || tag`-Bypass mehr, `latest` wird nur auf dem Default-Branch gesetzt, und der Reverse-Proxy-Smoke validiert das aus dem gebauten Image extrahierte Frontend-Bundle statt eines zweiten Runner-Builds. Release-/RC-Smokes laufen automatisch fuer `release/**` und `rc/**`; normale Feature-PRs bleiben wegen Laufzeit ausgenommen. Drittanbieter-Actions im Workflow sind auf volle Commit-SHAs gepinnt.
 - **CI:** Docker-Image-Build und Reverse-Proxy-Stack-Smoke laufen nicht mehr auf jedem Pull Request; der teure Smoke bleibt auf `main`/Tags und `workflow_dispatch` beschränkt und wird vor dem finalen Release-Gate wieder bewertet.
 - Frontend-Vokabular und README synchronisiert: Knoten→Entitäten, Kanten→Beziehungen, Entitätstypen→Attribute (Sub-Slice 43). Tagline auf Hybrid-Wording „lokal oder Cloud" aktualisiert. Tool-Call-USP („Agenten halluzinieren nicht") als Differenzierungsmerkmal in step3.sub und neuem home.differentiators-Block ergänzt.
 

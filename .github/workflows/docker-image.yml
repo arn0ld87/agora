@@ -2,16 +2,23 @@ name: Build and push Docker image
 
 on:
   push:
+    branches:
+      - main
+      - "release/**"
+      - "rc/**"
+    tags: ["v*"]
+  pull_request:
     branches: [main]
-    tags: ["*"]
-  # PR-Smokes sind vor v1.0 bewusst pausiert: der Reverse-Proxy-Stack-Smoke
-  # dauert pro PR-Iteration ~30 Minuten und wird erst als finales Release-Gate
-  # wieder aktiviert.
   workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Break-glass: publish despite a failed smoke on a manual run"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build-only:
@@ -19,20 +26,23 @@ jobs:
     # Das Image wird als Artefakt gespeichert und im smoke-Job geladen.
     # Damit wird sichergestellt, dass kein kaputtes Image in die Registry
     # gelangt, bevor der End-to-End-Smoke-Test grün ist.
+    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'rc/') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: |
             ${{ secrets.DOCKERHUB_USERNAME }}/agora-agora
@@ -40,11 +50,11 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha,prefix=
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
       - name: Build image (kein Push)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           file: ./Dockerfile
@@ -65,7 +75,7 @@ jobs:
           outputs: type=docker,dest=/tmp/image.tar
 
       - name: Image-Artefakt hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: docker-image
           path: /tmp/image.tar
@@ -76,14 +86,8 @@ jobs:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
     needs: [build-only]
-    # Tag-Pushes: externe Abhängigkeiten (Neo4j-Pull, Ollama) können den
-    # Smoke instabil machen. Mit continue-on-error blockiert ein instabiler
-    # Smoke den Release nicht — main-Pushes sind dagegen strikt smoke-gated,
-    # weil AGORA_SKIP_EMBEDDING_PROBE=true die Ollama-Abhängigkeit beim
-    # Container-Startup eliminiert (Issue #276). Die statische
-    # KNOWN_EMBEDDING_DIMS-Validation bleibt aktiv; nur der Live-HTTP-Probe-Call
-    # gegen das Embedding-Backend wird übersprungen.
-    continue-on-error: ${{ github.ref_type == 'tag' }}
+    permissions:
+      contents: read
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
     # Keine echten Secrets nötig: NEO4J_PASSWORD muss nur nicht leer sein
     # (Compose-Gate), AGORA_AUTH_TOKEN/VITE_AGORA_TOKEN sind Smoke-Dummies.
@@ -102,10 +106,10 @@ jobs:
       # KNOWN_EMBEDDING_DIMS-Validation läuft weiterhin.
       AGORA_SKIP_EMBEDDING_PROBE: "true"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Image-Artefakt herunterladen
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: docker-image
           path: /tmp
@@ -120,14 +124,18 @@ jobs:
           docker load -i /tmp/image.tar
           docker tag agora-agora:ci-${{ github.sha }} agora-agora:latest
 
-      - name: Frontend-Bundle bauen
+      - name: Frontend-Bundle aus gebautem Image extrahieren
         # nginx mountet ./frontend/dist als Host-Bind-Mount (docker-compose.prod-with-proxy.yml).
-        # Der Dockerfile-prod-Builder erzeugt dist nur im Image-Kontext, nicht auf dem Host.
-        # Daher muss der Bundle-Build hier explizit auf dem Runner laufen.
+        # Der Smoke muss exakt das Bundle aus dem bereits gebauten Prod-Image
+        # validieren, nicht einen zweiten Runner-Build.
         run: |
-          cd frontend
-          npm ci --no-audit --no-fund
-          npm run build
+          rm -rf frontend/dist
+          mkdir -p frontend
+          cid="$(docker create agora-agora:ci-${{ github.sha }})"
+          trap 'docker rm "$cid" >/dev/null 2>&1 || true' EXIT
+          docker cp "$cid:/app/frontend/dist" ./frontend/dist
+          docker rm "$cid"
+          trap - EXIT
 
       - name: CI-Umgebungsdatei generieren
         run: |
@@ -211,33 +219,35 @@ jobs:
 
   publish:
     # Schritt 3: Push zu Docker Hub + GHCR — NUR nach erfolgreichem Smoke.
-    # main-Pushes: smoke muss grün sein (needs: prod-proxy-smoke, kein
-    # continue-on-error auf dem publish-Job).
-    # tag-Pushes: prod-proxy-smoke läuft mit continue-on-error: true, deshalb
-    # prüft die if-Bedingung success() || github.ref_type == 'tag', damit
-    # ein instabiler Smoke den Release nicht blockiert, main-Builds aber
-    # strikt smoke-gated bleiben.
+    # Tags haben keinen Bypass mehr. Nur ein manueller workflow_dispatch mit
+    # force_publish=true darf als Break-glass-Pfad publishen, wenn der Smoke rot
+    # war; normale Releases bleiben strikt smoke-gated.
     runs-on: ubuntu-latest
     needs: [prod-proxy-smoke]
-    if: success() || github.ref_type == 'tag'
+    if: ${{ always() && github.event_name != 'pull_request' && (needs.prod-proxy-smoke.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.force_publish == true)) }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -245,7 +255,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: |
             ${{ secrets.DOCKERHUB_USERNAME }}/agora-agora
@@ -253,14 +263,14 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha,prefix=
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
       - name: Build und Push (mit GHA-Cache)
         # Alle Layers sind durch den build-only-Job bereits im GHA-Cache.
         # Dieser Build läuft praktisch instant durch (cache-hit auf alle
         # Layers) und schreibt das fertige Image in beide Registries.
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           file: ./Dockerfile

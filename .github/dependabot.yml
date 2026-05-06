@@ -66,6 +66,9 @@ updates:
       include: "scope"
 
   # --- GitHub Actions Workflows ---
+  # Workflows pin Actions to full commit SHAs with trailing version comments
+  # (for example: `uses: owner/action@<sha> # vN`). Dependabot keeps those refs
+  # updateable while preserving SHA pinning.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

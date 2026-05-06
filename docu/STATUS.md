@@ -94,7 +94,7 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 | 5 | Eval/Baseline-Suite | grün |
 | 6 | Frontend-TypeScript-Migration | grün |
 | 7–8 | Graph/Runs/Persona-Review | teilweise |
-| 9 | Prod-Deployment | grün mit bewusst pausiertem PR-Smoke — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`/Tags/`workflow_dispatch`; PR-Trigger seit 2026-05-06 wegen ~30 min Laufzeit pausiert), Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
+| 9 | Prod-Deployment | grün mit gehärtetem Release-Gate — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`, Tags `v*`, `release/**`, `rc/**`, PRs von `release/**`/`rc/**` und `workflow_dispatch`; normale Feature-PRs bleiben wegen ~30 min Laufzeit ausgenommen), Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
 | 10 | Security Watchlist | grün — CVE-Monitor wöchentlich aktiv (`.github/workflows/cve-monitor.yml`), Hardstop 2026-07-30 verdrahtet, Risk-Register mit Eskalationspfad. Issues #121–#126 weiter open bis Upstream patcht. |
 
 ## Aktuelles Milestone
@@ -109,7 +109,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - F2.2 `?token=` in Prod blockt (`backend/app/utils/auth.py`)
 - F3 Gunicorn `-k gevent`
 - SSE-Auth-Frontend auf signed tickets (`frontend/src/api/stream.ts`)
-- M9.6 Prod-Stack-Smoke vorhanden (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`/Tags/`workflow_dispatch`; PR-Trigger bewusst pausiert und vor Final-Release neu zu bewerten, Issue #276)
+- M9.6 Prod-Stack-Smoke vorhanden und Release-Gate gehärtet (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`, Tags `v*`, `release/**`, `rc/**`, PRs von `release/**`/`rc/**` und `workflow_dispatch`; normale Feature-PRs bewusst ausgenommen, Issue #276)
 - M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docu/dependency-risk-register.md`)
 - M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docu/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
 - M10.5 Rate-Limits für `/api/auth/ticket`, Uploads (`/api/graph/ontology/generate`), Simulation-LLM-Trigger (`/api/simulation/generate-profiles`, `/api/simulation/prepare`) und Report-Trigger (`/api/report/generate`, `/api/report/chat`) (#302)
@@ -118,7 +118,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
 1. M11.2/M11.3 Coverage-Gates Backend (70 %) / Frontend (60 %).
 2. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport).
-3. Final-Release-Gate: Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
+3. Final-Release-Gate: Docker-Image-Build + Reverse-Proxy-Smoke auf Release-Kandidaten validieren und vor v1.0 als Branch-Protection-Pflichtcheck setzen.
 
 Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F8 Hotspot-Split Frontend (#203). #202 geschlossen 2026-05-05 (report_agent als Package).
 
@@ -137,3 +137,4 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-05: Issue #276 Embedding-Probe-Skip — `AGORA_SKIP_EMBEDDING_PROBE=true` in `docker-image.yml::prod-proxy-smoke` eingeführt. `validate_embedding_configuration()` bekommt `skip_probe`-Parameter; bei gesetztem Flag läuft nur die statische KNOWN_EMBEDDING_DIMS-Validation, der Live-HTTP-Probe-Call gegen Ollama entfällt. Container startet im CI-Runner ohne Ollama sauber hoch. `continue-on-error: github.event_name == 'pull_request'`-Workaround aus PR-Trigger entfernt; Tag-Pushes bleiben lenient (externe Image-Pulls instabil).
 - 2026-05-06: PR-Trigger für `docker-image.yml` bewusst pausiert. Grund: Docker-Image-Build + Reverse-Proxy-Smoke kostet pro PR-Iteration ca. 30 Minuten. Der Smoke bleibt für `main`/Tags/`workflow_dispatch` erhalten und muss vor dem finalen Release-Gate neu bewertet bzw. reaktiviert werden.
 - 2026-05-06: M10.5 Rate-Limits abgeschlossen — app-seitige Fixed-Window-Limits für /api/auth/ticket, /api/graph/ontology/generate, /api/simulation/generate-profiles, /api/simulation/prepare, /api/report/generate und /api/report/chat. PRs #303–#306, Issue #302.
+- 2026-05-06: Phase 1 Release-Gating gehärtet — `docker-image.yml` published nicht mehr via `success() || tag`-Bypass, Tag-Smokes sind strikt, `latest` wird nur auf dem Default-Branch gesetzt, der Smoke extrahiert `frontend/dist` aus dem gebauten Image, Actions sind SHA-gepinnt, globale Permissions bleiben bei `contents: read`, Publish-Rechte liegen nur am `publish`-Job. Release-/RC-Smokes laufen automatisch fuer `release/**` und `rc/**`; normale Feature-PRs bleiben aus Laufzeitgruenden ausgenommen.

@@ -1,9 +1,9 @@
 # Release-Process
 
-**Stand:** 2026-05-01, Europe/Berlin
+**Stand:** 2026-05-06, Europe/Berlin
 **Scope:** Wie ein neuer Tag (`vX.Y.Z`) entsteht. Versionsquellen, Reihenfolge,
 Release-Notes, optionaler Container-Build. Linear-Git-Flow gegen `main`,
-keine Release-Branches.
+Release-Candidate-Branches nur als Smoke-Gate (`release/**`, `rc/**`).
 
 Verwandte Dokumente:
 - [`deployment-prod-like.md`](deployment-prod-like.md) — Update- und
@@ -11,6 +11,31 @@ Verwandte Dokumente:
 - [`operations.md`](operations.md) — Healthcheck nach Deployment.
 
 ---
+
+## Release-Gates und Branch Protection
+
+`docker-image.yml` ist das harte Publish-Gate fuer Container-Releases.
+Der Workflow baut zuerst ein lokales Image-Artefakt, extrahiert fuer den
+Reverse-Proxy-Smoke das Frontend-Bundle aus genau diesem Image und pushed erst
+danach zu GHCR/Docker Hub.
+
+Branch-Protection-Regeln fuer `main`:
+
+1. Pull Requests muessen linear gemerged werden; direktes Pushen auf `main` ist
+   nicht erlaubt.
+2. Pflicht-Checks: `ci.yml`, `contract-gates.yml` und fuer Release-Kandidaten
+   `docker-image.yml / Smoke-Test Reverse-Proxy-Stack`.
+3. Teure Docker-Smokes laufen automatisch fuer `main`, Tags `v*`,
+   Branches `release/**` und `rc/**` sowie PRs von `release/**` oder `rc/**`
+   nach `main`. Normale Feature-PRs bleiben vom Docker-Smoke ausgenommen.
+4. `publish` darf nicht aus Pull Requests laufen und hat als einziger Job
+   `packages: write`, `id-token: write` und `attestations: write`.
+5. Tag-Pushes haben keinen Smoke-Bypass mehr. Ein Image-Publish erfolgt nur bei
+   gruenem `prod-proxy-smoke`; `latest` wird nur bei Pushes auf den
+   Default-Branch gesetzt.
+6. `workflow_dispatch.inputs.force_publish=true` ist ein dokumentierter
+   Break-glass-Pfad fuer Maintainer. Er ist nicht Teil des normalen
+   Release-Prozesses und muss im PR-/Release-Protokoll begruendet werden.
 
 ## Versionsquellen
 
@@ -136,26 +161,18 @@ optional.
 
 ### 6. Container-Image (optional)
 
-Nur wenn ein neues Image gepushed wird. Build aus dem Tag-Commit:
+Nur wenn ein neues Image gepushed wird. Der regulaere Pfad ist der
+GitHub-Actions-Workflow `docker-image.yml` aus dem Tag-Commit:
 
 ```bash
-docker buildx build \
-  --target prod \
-  --tag ghcr.io/arn0ld87/agora:"$NEW" \
-  --tag ghcr.io/arn0ld87/agora:latest \
-  --push \
-  .
-
-docker buildx build \
-  --target prod \
-  --tag alexle135/agora-agora:"$NEW" \
-  --tag alexle135/agora-agora:latest \
-  --push \
-  .
+git push origin "v$NEW"
+gh run list --workflow docker-image.yml --limit 3
+gh run watch <RUN_ID> --exit-status
 ```
 
-GHCR-Login per `gh auth token | docker login ghcr.io -u arn0ld87
---password-stdin`. Docker-Hub-Login per Token.
+Der Workflow published nur nach gruenem Reverse-Proxy-Smoke. Manuelle lokale
+`docker buildx --push`-Publishes sind fuer v1.0 nicht der Standardpfad, weil
+sie das Smoke-Gate umgehen wuerden.
 
 ---
 
