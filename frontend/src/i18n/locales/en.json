@@ -312,6 +312,11 @@
     "agentTools": {
       "warning": "Experimental agent tool-use is enabled: agents may run up to {count} tool calls per action. This is slower and adds extra LLM calls."
     },
+    "agentCap": {
+      "label": "Limit max. number of agents",
+      "unit": "Agents",
+      "unlimitedHint": "Without a limit, one agent is created for each entity in the graph."
+    },
     "next": "Next: simulation →"
   },
   "step3": {
@@ -322,6 +327,8 @@
       "title": "Run parameters",
       "rounds": "Number of rounds",
       "days": "Number of days",
+      "automatic": "automatic",
+      "customValue": "custom value",
       "graphMemory": "Update graph memory",
       "graphMemoryHint": "Agent experiences flow back into the knowledge graph during the simulation."
     },

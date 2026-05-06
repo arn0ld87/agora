@@ -323,6 +323,11 @@
     "agentTools": {
       "warning": "Experimenteller Agent-Tool-Use ist aktiv: Agenten können pro Aktion bis zu {count} Tool-Aufrufe ausführen. Das ist langsamer und erzeugt zusätzliche LLM-Aufrufe."
     },
+    "agentCap": {
+      "label": "Max. Anzahl Agenten begrenzen",
+      "unit": "Agenten",
+      "unlimitedHint": "Ohne Begrenzung wird pro Entität im Graph ein Agent erzeugt."
+    },
     "next": "Weiter zur Simulation →"
   },
   "step3": {
@@ -333,6 +338,8 @@
       "title": "Lauf-Parameter",
       "rounds": "Anzahl Runden",
       "days": "Anzahl Tage",
+      "automatic": "automatisch",
+      "customValue": "eigener Wert",
       "graphMemory": "Graph-Memory aktualisieren",
       "graphMemoryHint": "Agenten-Erfahrungen fließen während der Simulation in den Wissensgraphen zurück."
     },
