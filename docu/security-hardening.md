@@ -272,6 +272,9 @@ uv export --frozen --no-dev --no-hashes --no-emit-project \
 uvx pip-audit --strict \
   --ignore-vuln CVE-2026-25990 \
   --ignore-vuln CVE-2026-40192 \
+  --ignore-vuln CVE-2026-42308 \
+  --ignore-vuln CVE-2026-42310 \
+  --ignore-vuln CVE-2026-42311 \
   --ignore-vuln CVE-2025-71176 \
   --ignore-vuln CVE-2026-1839 \
   --ignore-vuln CVE-2024-46455 \
@@ -326,11 +329,11 @@ mehrfach eingelöst werden.
 
 ### Temporäre Baseline
 
-Die sechs `pip-audit`-Ignores sind durch feste Upstream-Pins blockiert:
+Die neun `pip-audit`-Ignores sind durch feste Upstream-Pins blockiert:
 
 | Advisory | Paket | Upstream-Pin |
 |---|---|---|
-| `CVE-2026-25990`, `CVE-2026-40192` | `pillow==10.3.0` | `camel-ai==0.2.78` begrenzt `pillow<11`. |
+| `CVE-2026-25990`, `CVE-2026-40192`, `CVE-2026-42308`, `CVE-2026-42310`, `CVE-2026-42311` | `pillow==10.3.0` | `camel-oasis==0.2.5` pinnt `pillow==10.3.0`; `camel-ai==0.2.78` begrenzt `pillow<11`. |
 | `CVE-2025-71176` | `pytest==8.2.0` | `camel-oasis==0.2.5` pinnt `pytest==8.2.0`. |
 | `CVE-2026-1839` | `transformers==4.57.6` | `sentence-transformers==3.0.0` begrenzt `transformers<5`. |
 | `CVE-2024-46455`, `CVE-2025-64712` | `unstructured==0.13.7` | `camel-oasis==0.2.5` pinnt `unstructured==0.13.7`. |

@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Frontend-Vokabular und README synchronisiert: Knoten→Entitäten, Kanten→Beziehungen, Entitätstypen→Attribute (Sub-Slice 43). Tagline auf Hybrid-Wording „lokal oder Cloud" aktualisiert. Tool-Call-USP („Agenten halluzinieren nicht") als Differenzierungsmerkmal in step3.sub und neuem home.differentiators-Block ergänzt.
 
 ### Fixed
+- **Security-CI:** Neue Pillow-Findings `CVE-2026-42308`, `CVE-2026-42310`, `CVE-2026-42311` als temporäre `pip-audit`-Baseline mit Issues #296–#298, Owner und Hardstop 2026-07-30 aufgenommen; direkter Upgrade bleibt durch `camel-oasis==0.2.5`/`camel-ai==0.2.78` blockiert.
 - **`useSimulationPrepare`:** `fetchProfilesRealtime` als öffentliche Methode exposen — beseitigt ReferenceError beim Hinzufügen/Löschen von Personas in Step2EnvSetup (Sub-Slice 36, Closes #292, Regression aus Sub-Slice 34)
 
 ### Added
