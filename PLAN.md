@@ -53,45 +53,44 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`do
 | S4 | Contracts | Pydantic/Zod-Contract-Gates und Schema-Drift-Checks aktiv. |
 | S5 | Security-CI | `pip-audit`, `npm audit`, Gitleaks in CI vorhanden. |
 | F5a | Status-Doku | `docu/STATUS.md` als zentrale Single Source of Truth aktiv. |
+| M9.6 | Prod-Smoke | `docker-image.yml::prod-proxy-smoke` läuft auf `main`/Tags/`workflow_dispatch`; PR-Trigger bewusst pausiert und vor Final-Release neu zu bewerten. |
+| R1 / M10.1–M10.3 | Dependencies | CVE-Monitor, Hardstop 2026-07-30 und Dependency Risk Register aktiv. |
+| R3 / M10.4 | Auth-Zielbild | ADR-0001 Accepted: Agora v1 bleibt Single-User-only mit Shared Token + signed Tickets. |
+| N3 / M10.5 | Rate Limits | App-seitige Fixed-Window-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte vorhanden (#302, PR #303–#306). |
+| W2 / M11.1 | Evidence-Gate | `contract-gates.yml` führt `evidence-quality` als Hard-Gate aus; Bad-Cases sind Snapshot-gepinnt. |
 
 ### Aktiv offen
 
 | ID | Priorität | Bereich | Befund |
 |---|---:|---|---|
-| **M9.6** | 🔴 | CI | Prod-Stack-Smoke fehlt — kein CI-Beweis für den Proxy-Stack. Neuer Workflow: `compose up` mit Proxy + `/healthz`/`/health`/`/`/`/api/auth/ticket`-Checks. |
 | **M9.7** | 🟡 | Doku | `AGENTS.md`/`CLAUDE.md` enthielten alte Statusangaben (v0.6/gevent-Workaround/SSE-Token). Slice „Doku-Sync 2026-05-04" adressiert das. |
-| **R1 / F4** | 🔴 | Dependencies | 6 CVEs ignored bis 2026-07-30. CVE-Monitor-Workflow + Hardstop fehlen (M10.1/M10.2). |
-| **R3 / M10.4** | 🔴 | Auth-Zielbild | Single-Token-Auth ist Tailnet-only. ADR `docu/decisions/0001-auth-model.md` muss zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh entscheiden. |
-| **W2 / M11.1** | 🟡 | Test-Qualität | `contract-gates.yml` führt `evidence-quality` weiter mit `--soft` aus. Layer 5 ist grün → Soft-Schalter sollte fallen. |
 | **W3 / M11.2-3** | 🟡 | Coverage | Kein `pytest-cov`, kein Frontend-Coverage-Gate. Startwerte: 70 % Backend / 60 % Frontend. |
 | **W4 / M11.4** | 🟡 | E2E | Keine Playwright/Cypress-Smokes für Kernworkflow. |
 | **W5 / F7-F8** | 🟡 | Code-Hotspots | `report_agent.py` 2400 LOC, `simulation_runner.py` 1904, `Step2EnvSetup.vue` 1804, `Step4Report.vue` 1287 — Issues #202/#203 in Milestone v1.0.0. |
 | **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes werden schrittweise eingeführt, nicht vollständig belegbar. |
 | **N1 / F14.2** | 🟢 | SBOM | Kein SBOM/Third-Party-License-Report. |
 | **N2 / F14.1** | 🟢 | AGPL | Kein App-/API-Hinweis auf Source-Code des laufenden Builds (`/api/version` mit Commit-SHA). |
-| **N3 / M10.5** | ✅ | Rate Limits | App-seitige Fixed-Window-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte vorhanden (#302, PR #303–#306). |
 
 ### Priorisierte To-do-Liste (operativ)
 
 🔴 **Kritisch:**
 
-1. **Prod-Stack-Smoke in CI** — `.github/workflows/prod-stack-smoke.yml` mit `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build` + Endpoint-Checks.
-2. **CVE-Monitor + Hardstop** — wöchentlicher `pip-audit` ohne `--ignore-vuln`; ab 2026-07-30 keine ignorierten CVEs mehr durchlassen.
-3. **Auth-ADR** — `docu/decisions/0001-auth-model.md` festlegt v1-Scope.
+1. **Coverage-Gates Backend/Frontend** — Zielpfad M11.2/M11.3; Startschwellen sind aktiv, Zielwerte werden schrittweise angehoben.
+2. **Playwright-Smokes** — Health/Login, Upload+Graph, Minimalreport.
+3. **Final-Release-Gate** — Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
 
-🟡 **Wichtig:** 4. Evidence-Gate `--soft` raus. 5. Coverage-Gates Backend/Frontend. 6. Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport). 7. Komplexitäts-Gate (`radon` Backend, ESLint/size-limit Frontend).
+🟡 **Wichtig:** 4. Komplexitäts-Gate (`radon` Backend, ESLint/size-limit Frontend). 5. API-Envelope abschließen. 6. Frontend-/Backend-Hotspot-Splits weiterführen.
 
-🟢 **Nice-to-have:** 8. SBOM/License-Report. 9. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL). 10. Rate-Limits ✅ (M10.5 abgeschlossen).
+🟢 **Nice-to-have:** 7. SBOM/License-Report. 8. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL).
 
 ### Arbeitsreihenfolge (PR-by-PR)
 
 1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md`/`docu/plan.heuristic.md` (= dieser Slice). ✅
-2. **PR 2:** `prod-stack-smoke.yml`.
-3. **PR 3:** `cve-monitor.yml` + Dependency Risk Register.
-4. **PR 4:** Evidence-Gate hard + Coverage-Grundlage.
-5. **PR 5:** Auth-ADR + Rate-Limit-Konzept.
-6. **PR 6:** Playwright-Smokes.
-7. **PR 7:** Komplexitäts-Gate + Hotspot-Backlog.
+2. **PR 2:** Coverage-Zielwerte schrittweise Richtung Backend 70 % / Frontend 60 % anheben.
+3. **PR 3:** Playwright-Smokes.
+4. **PR 4:** Final-Release-Gate für Docker-Image-Build + Reverse-Proxy-Smoke reaktivieren oder ersetzen.
+5. **PR 5:** Komplexitäts-Gate + Hotspot-Backlog.
+6. **PR 6:** SBOM/License-Report + AGPL-Source-Link.
 
 ### Definition of Done für v1.0
 
@@ -668,12 +667,12 @@ Alle Findings sind **kompatibel** zur bestehenden `/agora-next-task`-Heuristik-T
 
 ---
 
-## Nächste Schritte (genau 3, Stand 2026-05-04)
+## Nächste Schritte (genau 3, Stand 2026-05-06)
 
-> Die ursprünglichen drei Schritte (F5 + F1, F3, F2.1/F2.2) sind abgehakt und stehen unter [§ Status-Sync 2026-05-04](#status-sync-2026-05-04) als ✅ markiert. Aktuelle Top-3:
+> Die ursprünglichen Hardening-Schritte bis M10.5 sind abgehakt und stehen unter [§ Status-Sync 2026-05-04](#status-sync-2026-05-04) als erledigt. Aktuelle Top-3:
 
-1. **Prod-Stack-Smoke in CI (M9.6)** — Subagent `agora-test-worker` (Sonnet). Neuer Workflow `.github/workflows/prod-stack-smoke.yml`: `compose up` mit Proxy + `/healthz`/`/health`/`/`/`/api/auth/ticket`-Checks. Ohne diesen Smoke fehlt der CI-Beweis, dass die F1/F2/F3-Slices gemeinsam laufen.
-2. **CVE-Monitor + Hardstop (M10.1/M10.2)** — Subagent `agora-doc-worker` (Haiku). Wöchentlicher `pip-audit` ohne `--ignore-vuln`; ab 2026-07-30 darf CI nicht mehr mit den sechs ignorierten Advisories grün werden. Issue-Bezug: #121–#126.
-3. **Auth-ADR (M10.4 / F2.3)** — Subagent `agora-doc-worker` (Haiku) + Lead. ADR `docu/decisions/0001-auth-model.md` legt v1.0-Scope fest: Single-User-only, HttpOnly-Session oder Bearer+Refresh.
+1. **Coverage-Gates Richtung Zielwerte anheben (M11.2/M11.3)** — Start-Gates existieren; nächster Schritt ist schrittweise Härtung Richtung Backend 70 % / Frontend 60 %.
+2. **Playwright-Smokes (M11.4)** — drei E2E-Smokes: Health/Login, Upload+Graph, Minimalreport.
+3. **Final-Release-Gate** — Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren oder gleichwertig ersetzen.
 
 Detaillierte Subagent-Zuordnung und Akzeptanzkriterien je Slice: [`docu/plan.heuristic.md`](docu/plan.heuristic.md).
