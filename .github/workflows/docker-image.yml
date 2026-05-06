@@ -147,9 +147,11 @@ jobs:
         # erhalten, daher braucht der Smoke-Test hier eine explizit beschreibbare
         # uploads-Registry auf dem Runner.
         run: |
-          mkdir -p backend/uploads/run_registry
+          mkdir -p backend/uploads/{run_registry,simulations,reports,projects}
           command -v setfacl >/dev/null 2>&1 || { echo "::error::setfacl fehlt auf dem Runner"; exit 1; }
-          setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
+          # Zugriff auf bestehende Verzeichnisse und Vererbung für neu erzeugte Unterordner
+          setfacl -Rm  u:1000:rwx backend/uploads
+          setfacl -Rdm u:1000:rwx backend/uploads
 
       - name: Compose-Stack starten
         # Kein --build: das Image ist bereits geladen (docker load oben).
