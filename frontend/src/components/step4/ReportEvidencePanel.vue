@@ -1,0 +1,204 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Badge from '../ui/Badge.vue'
+import type { EvidenceItem, ReportClaim, ReportSection } from '../../contracts/reportContract'
+
+interface Props {
+  sections: ReportSection[]
+  selectedSection: number | null
+}
+
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  'update:selectedSection': [sectionIndex: number]
+  navigate: [anchor: string]
+}>()
+
+const { t } = useI18n()
+
+const activeEvidenceSection = computed(() => {
+  return props.sections.find((section) => section.section_index === props.selectedSection) || null
+})
+
+function claimConfidenceScore(claim: ReportClaim | null | undefined): number | null {
+  return claim?.confidence_score ?? null
+}
+
+function claimConfidenceLabel(claim: ReportClaim | null | undefined): string {
+  return claim?.confidence_label ?? 'low'
+}
+
+function claimConfidenceText(claim: ReportClaim | null | undefined): string {
+  const label = claimConfidenceLabel(claim)
+  const score = claimConfidenceScore(claim)
+  return score === null ? label : `${Math.round(score * 100)}% · ${label}`
+}
+
+function claimEvidenceItems(claim: ReportClaim | null | undefined): EvidenceItem[] {
+  return Array.isArray(claim?.evidence) ? claim.evidence : []
+}
+
+function evidenceSnippet(item: EvidenceItem | null | undefined): string {
+  return item?.snippet ?? ''
+}
+</script>
+
+<template>
+  <aside class="evidence-panel">
+    <div class="evidence-head">
+      <strong>Evidence Inspector</strong>
+      <span>{{ sections.length }} sections</span>
+    </div>
+    <div class="evidence-sections">
+      <button
+        v-for="section in sections"
+        :key="section.section_index"
+        class="evidence-tab"
+        :class="{ active: selectedSection === section.section_index }"
+        @click="emit('update:selectedSection', section.section_index)"
+      >
+        {{ section.section_index }} · {{ section.section_title }}
+      </button>
+    </div>
+    <div v-if="activeEvidenceSection" class="evidence-body">
+      <p class="meta">{{ activeEvidenceSection.section_summary }}</p>
+      <article
+        v-for="claim in activeEvidenceSection.claims"
+        :key="claim.claim_id"
+        class="claim-card"
+      >
+        <header>
+          <strong>{{ claim.claim_id }}</strong>
+          <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
+            {{ claimConfidenceText(claim) }}
+          </Badge>
+        </header>
+        <p>{{ claim.claim_text }}</p>
+        <div class="evidence-items">
+          <div
+            v-for="(item, idx) in claimEvidenceItems(claim)"
+            :key="`${claim.claim_id}-${idx}`"
+            class="evidence-item"
+          >
+            <div class="evidence-item-head">
+              <Badge variant="ghost">{{ item.type }}</Badge>
+              <span v-if="item.source">{{ item.source }}</span>
+            </div>
+            <blockquote v-if="item.quote" class="evidence-quote">{{ item.quote }}</blockquote>
+            <span v-else>{{ evidenceSnippet(item) }}</span>
+            <button
+              v-if="item.source_id_anchor"
+              type="button"
+              class="evidence-anchor-link"
+              @click="emit('navigate', item.source_id_anchor)"
+            >
+              {{ t('step4.quote.openSource') }}
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+.evidence-panel {
+  border-left: 1px solid var(--rule);
+  padding-left: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.evidence-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.evidence-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.evidence-tab {
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.evidence-tab.active {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.claim-card {
+  border-top: 1px solid var(--rule);
+  padding-top: var(--s-3);
+}
+.claim-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  align-items: center;
+}
+.evidence-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: var(--s-3);
+}
+.evidence-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+}
+.evidence-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
+.evidence-quote {
+  border-left: 3px solid var(--accent);
+  margin: 0.5em 0;
+  padding: 0.4em 0.8em;
+  background: var(--bg-glass);
+  font-style: italic;
+  color: var(--fg-meta);
+  font-size: 0.92em;
+}
+.evidence-anchor-link {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.2em 0.6em;
+  border-radius: var(--r-pill);
+  font-size: 0.85em;
+  cursor: pointer;
+  margin-left: 0.4em;
+}
+.evidence-anchor-link:hover {
+  background: var(--accent-soft);
+}
+@media (max-width: 880px) {
+  .evidence-panel {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-left: 0;
+    padding-top: var(--s-4);
+  }
+}
+</style>
