@@ -32,6 +32,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **Step2EnvSetup:** Simulation-Prepare-Lifecycle nach `useSimulationPrepare`-Composable extrahiert (Sub-Slice 34, Refs #203)
 
 ### Refactored
+- Step4Report.vue unter 800 LOC gebracht: Report-Modellsteuerung, Outline/Sections, Evidence-Inspector, Branch-Controls, Export-/Download-Logik und Agent-Log-Parsing in dedizierte `step4/*`-Komponenten, `useReportExports` und `reportAgentLog` ausgelagert. Aktueller Stand: 795 LOC.
 - Step2EnvSetup.vue unter 800 LOC gebracht (Task 47, Refs #203): tote scoped Styles aus früheren Step2-Subkomponenten-Extraktionen entfernt und verbliebene hartkodierte Setup-/Run-Labels auf i18n umgestellt. Aktueller Stand: 667 LOC.
 - Persona-Library-Section aus Step2EnvSetup.vue in `step2/PersonaLibraryPanel.vue`-Subkomponente extrahiert (Sub-Slice 45, Refs #203). Step2EnvSetup.vue von 1065 LOC → 1044. Existierende `step2.library.*`-i18n-Keys weiterverwendet, keine neuen Keys nötig.
 - Persona-Cards-Loop aus Step2EnvSetup.vue in `step2/PersonaCardGrid.vue`-Subkomponente extrahiert (Sub-Slice 44, Refs #203). Step2EnvSetup.vue von 1099 LOC → 1065. i18n-Keys unter `step2.cardGrid.*` neu mit Pluralisierung für Hinweis-Anzahl (de.json + en.json).
