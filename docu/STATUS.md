@@ -94,7 +94,7 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 | 5 | Eval/Baseline-Suite | grün |
 | 6 | Frontend-TypeScript-Migration | grün |
 | 7–8 | Graph/Runs/Persona-Review | teilweise |
-| 9 | Prod-Deployment | grün mit gehärtetem Release-Gate — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`, Tags `v*`, `release/**`, `rc/**`, PRs von `release/**`/`rc/**` und `workflow_dispatch`; normale Feature-PRs bleiben wegen ~30 min Laufzeit ausgenommen), Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
+| 9 | Prod-Deployment | grün mit gehärtetem Release-Gate — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`, Tags `v*`, Branches `release/**` oder `rc/**`, PRs von `release/**` oder `rc/**` nach `main` und `workflow_dispatch`; normale Feature-PRs bleiben wegen ~30 min Laufzeit ausgenommen), Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
 | 10 | Security Watchlist | grün — CVE-Monitor wöchentlich aktiv (`.github/workflows/cve-monitor.yml`), Hardstop 2026-07-30 verdrahtet, Risk-Register mit Eskalationspfad. Issues #121–#126 weiter open bis Upstream patcht. |
 
 ## Aktuelles Milestone
@@ -109,7 +109,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - F2.2 `?token=` in Prod blockt (`backend/app/utils/auth.py`)
 - F3 Gunicorn `-k gevent`
 - SSE-Auth-Frontend auf signed tickets (`frontend/src/api/stream.ts`)
-- M9.6 Prod-Stack-Smoke vorhanden und Release-Gate gehärtet (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`, Tags `v*`, `release/**`, `rc/**`, PRs von `release/**`/`rc/**` und `workflow_dispatch`; normale Feature-PRs bewusst ausgenommen, Issue #276)
+- M9.6 Prod-Stack-Smoke vorhanden und Release-Gate gehärtet (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`, Tags `v*`, Branches `release/**` oder `rc/**`, PRs von `release/**` oder `rc/**` nach `main` und `workflow_dispatch`; normale Feature-PRs bewusst ausgenommen, Issue #276)
 - M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docu/dependency-risk-register.md`)
 - M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docu/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
 - M10.5 Rate-Limits für `/api/auth/ticket`, Uploads (`/api/graph/ontology/generate`), Simulation-LLM-Trigger (`/api/simulation/generate-profiles`, `/api/simulation/prepare`) und Report-Trigger (`/api/report/generate`, `/api/report/chat`) (#302)
