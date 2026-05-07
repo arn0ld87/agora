@@ -21,10 +21,15 @@ check() {
 _container_running() {
   local service="$1"
   local cid
-  cid="$(docker compose ps -q "$service" 2>/dev/null || true)"
+  cid="$(docker compose ps -a -q "$service" 2>/dev/null || true)"
 
   [ -n "$cid" ] || return 1
-  [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]
+  while IFS= read -r container_id; do
+    [ -n "$container_id" ] || continue
+    [ "$(docker inspect -f '{{.State.Running}}' "$container_id" 2>/dev/null)" = "true" ] && return 0
+  done <<< "$cid"
+
+  return 1
 }
 
 _frontend_bundle_present() {
