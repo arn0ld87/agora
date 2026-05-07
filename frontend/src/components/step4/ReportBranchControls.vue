@@ -28,7 +28,7 @@ const branchForm = ref({
       variant="ghost"
       :loading="branchBusy"
       :disabled="branchBusy"
-      @click="emit('create', branchForm)"
+      @click="emit('create', { ...branchForm })"
     >
       Create Branch
     </Btn>

@@ -33,23 +33,23 @@ export function parseAgentEntry(raw: unknown): AgentLogEntry | null {
   let body = ''
 
   if (action === 'tool_call') {
-    title = `TOOL -> ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
+    title = `TOOL → ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
     const params = (d.parameters as Record<string, unknown>) || {}
     subtitle = Object.entries(params).map(([k, v]) => {
       const str = typeof v === 'string' ? v : JSON.stringify(v)
-      return `${k}=${str.length > 80 ? str.slice(0, 80) + '...' : str}`
+      return `${k}=${str.length > 80 ? str.slice(0, 80) + '…' : str}`
     }).join('  ')
   } else if (action === 'tool_result') {
-    title = `<- ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
+    title = `← ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
     subtitle = `${(d.result_length as number) || 0} chars`
   } else if (action === 'llm_response') {
     title = 'LLM'
     subtitle = `iter ${d.iteration ?? ''} · tool_calls=${d.has_tool_calls} · final=${d.has_final_answer}`
     body = (d.response as string) || ''
   } else if (action === 'section_start') {
-    title = `Section ${obj.section_index ?? ''}: ${(obj.section_title as string) || (d.message as string) || ''}`
+    title = `▶ Section ${obj.section_index ?? ''}: ${(obj.section_title as string) || (d.message as string) || ''}`
   } else if (action === 'section_complete') {
-    title = `Section ${obj.section_index ?? ''}`
+    title = `✓ Section ${obj.section_index ?? ''}`
     subtitle = (d.message as string) || ''
   } else if (action === 'planning_complete') {
     title = 'PLAN'
@@ -57,7 +57,7 @@ export function parseAgentEntry(raw: unknown): AgentLogEntry | null {
     subtitle = `${outline.length} sections`
     body = (d.summary as string) || ''
   } else if (action === 'error') {
-    title = 'ERROR'
+    title = '⚠ ERROR'
     subtitle = (d.message as string) || (d.error as string) || ''
   }
   return {
