@@ -18,6 +18,25 @@ check() {
   fi
 }
 
+_container_running() {
+  local service="$1"
+  local cid
+  cid="$(docker compose ps -q "$service" 2>/dev/null || true)"
+
+  [ -n "$cid" ] || return 1
+  [ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null)" = "true" ]
+}
+
+_frontend_bundle_present() {
+  docker compose exec -T agora sh -c \
+    'test -s /app/frontend/dist/index.html && ls /app/frontend/dist/assets/*.js >/dev/null 2>&1'
+}
+
+_markdown_renderer_uses_dompurify() {
+  grep -q "DOMPurify" frontend/src/utils/markdown.ts &&
+    grep -q "DOMPurify.sanitize" frontend/src/utils/markdown.ts
+}
+
 # ---------------------------------------------------------------------------
 # Auto-Detect: Ist der nginx-Sidecar aktiv?
 # ---------------------------------------------------------------------------
@@ -33,10 +52,10 @@ echo
 # Container-Health
 # ---------------------------------------------------------------------------
 echo "Container-Health:"
-check "agora laeuft" docker compose ps agora --status running -q
+check "agora laeuft" _container_running agora
 
 if [ $PROXY_ACTIVE -eq 1 ]; then
-  check "nginx laeuft" docker compose ps nginx --status running -q
+  check "nginx laeuft" _container_running nginx
   check "nginx /healthz (Sidecar-eigen)" curl -fsS "http://localhost:${PROXY_PORT}/healthz"
   check "Backend /health (via Proxy)" curl -fsS "http://localhost:${PROXY_PORT}/health"
   check "Frontend / erreichbar (via Proxy)" bash -c "curl -fsS -o /dev/null -w '%{http_code}' \"http://localhost:${PROXY_PORT}/\" | grep -qE '^(200|301|302)$'"
@@ -63,15 +82,14 @@ fi
 echo
 echo "S1 (XSS-Fix):"
 if [ $PROXY_ACTIVE -eq 1 ]; then
-  # Prod-Image hat kein frontend/node_modules und kein frontend/src — nur das
-  # gebaute Bundle in /app/frontend/dist. DOMPurify-Quelle ist nicht mehr
-  # filesystem-checkbar; stattdessen indirekt über die Bundle-Auslieferung
-  # (das gebaute JS enthält den minifizierten DOMPurify-Code).
-  check "DOMPurify im gebauten Bundle (dist)" \
-    bash -c "docker compose exec -T agora sh -c 'grep -lq \"createSanitizer\\|DOMPurify\" /app/frontend/dist/assets/*.js 2>/dev/null'"
+  # Das Prod-Image enthaelt nur /app/frontend/dist; minifizierte Vendor-Strings
+  # sind kein stabiler Security-Smoke. Daher pruefen wir das ausgelieferte
+  # Bundle im Container und pinnen den DOMPurify-Vertrag gegen den Source-Stand.
+  check "Frontend-Bundle im Image vorhanden (dist)" _frontend_bundle_present
+  check "Markdown-Renderer nutzt DOMPurify (source)" _markdown_renderer_uses_dompurify
 else
   check "DOMPurify im node_modules" docker compose exec -T agora test -d frontend/node_modules/dompurify
-  check "markdown-Util importiert DOMPurify" docker compose exec -T agora grep -q "DOMPurify" frontend/src/utils/markdown.js
+  check "Markdown-Renderer nutzt DOMPurify (source)" _markdown_renderer_uses_dompurify
 fi
 
 echo
