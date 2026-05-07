@@ -269,6 +269,7 @@ jobs:
             type=ref,event=branch
 
       - name: Build und Push zu GHCR (required)
+        id: build_ghcr
         # Alle Layers sind durch den build-only-Job bereits im GHA-Cache.
         # Dieser Build läuft praktisch instant durch (cache-hit auf alle
         # Layers) und schreibt das fertige Image in die Pflicht-Registry.
@@ -282,6 +283,30 @@ jobs:
           labels: ${{ steps.meta_ghcr.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Generate GHCR build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/agora
+          subject-digest: ${{ steps.build_ghcr.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate GHCR SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/agora@${{ steps.build_ghcr.outputs.digest }}
+          format: spdx-json
+          output-file: agora-image.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Upload GHCR SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agora-ghcr-sbom-spdx
+          path: agora-image.spdx.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Extract Docker Hub metadata (optional mirror)
         id: meta_dockerhub

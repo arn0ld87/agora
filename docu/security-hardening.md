@@ -201,6 +201,38 @@ Image-Groesse im lokalen Vergleich: 747 MB vor Phase 3, 320 MB nach Phase 3
 
 ---
 
+## Supply-Chain-Hardening (v1.0 Phase 4)
+
+**Stand:** 2026-05-07
+
+Neue Gates:
+
+| Workflow | Trigger | Zweck |
+|---|---|---|
+| `.github/workflows/dependency-review.yml` | `pull_request` | Blockiert neue Dependency-Funde ab `high`. |
+| `.github/workflows/codeql.yml` | `push` auf `main`, `pull_request` nach `main`, woechentlich, manuell | CodeQL fuer Python und JavaScript/TypeScript. |
+| `.github/workflows/docker-image.yml::publish` | nur nach gruenem Prod-Smoke | GHCR-Push, Build-Provenance-Attestation und SPDX-JSON-SBOM-Artefakt. |
+
+Alle neu eingefuehrten Actions sind auf volle Commit-SHAs gepinnt. Dependabot
+bleibt fuer `github-actions` aktiv und aktualisiert SHA-Pins mit
+Versionskommentar.
+
+Verifikation einer veroeffentlichten Image-Attestation:
+
+```bash
+gh auth login
+docker login ghcr.io
+gh attestation verify \
+  oci://ghcr.io/arn0ld87/agora:<tag> \
+  --repo arn0ld87/agora \
+  --signer-workflow arn0ld87/agora/.github/workflows/docker-image.yml
+```
+
+Das SBOM liegt im erfolgreichen `publish`-Job als Artefakt
+`agora-ghcr-sbom-spdx`.
+
+---
+
 ## F2.1 — VITE_AGORA_TOKEN per Build-Arg-Gate (Sub-Slice 46)
 
 **Stand:** 2026-05-03

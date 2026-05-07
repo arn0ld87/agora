@@ -108,7 +108,7 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 | 6 | Frontend-TypeScript-Migration | grün |
 | 7–8 | Graph/Runs/Persona-Review | teilweise |
 | 9 | Prod-Deployment | grün mit gehärtetem Release-Gate und Runtime-Image-Hardening — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`, Tags `v*`, Branches `release/**` oder `rc/**`, PRs von `release/**` oder `rc/**` nach `main` und `workflow_dispatch`; normale Feature-PRs bleiben wegen ~30 min Laufzeit ausgenommen), finaler `prod`-Stage ohne Node/npm/curl ✅, `read_only: true` im Prod-Compose ✅, Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
-| 10 | Security Watchlist | grün — CVE-Monitor wöchentlich aktiv (`.github/workflows/cve-monitor.yml`), Hardstop 2026-07-30 verdrahtet, Risk-Register mit Eskalationspfad. Issues #121–#126 weiter open bis Upstream patcht. |
+| 10 | Security Watchlist | grün — CVE-Monitor wöchentlich aktiv (`.github/workflows/cve-monitor.yml`), Hardstop 2026-07-30 verdrahtet, Dependency Review ✅, CodeQL ✅, GHCR Build-Provenance-Attestation ✅, SBOM-Artefakt ✅, Risk-Register mit Eskalationspfad. Issues #121–#126 weiter open bis Upstream patcht. |
 
 ## Aktuelles Milestone
 
@@ -129,9 +129,9 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. v1.0-Hardening Phase 4 Supply Chain (Dependency Review, CodeQL, SBOM, Provenance).
-2. v1.0-Hotspot-Refactors Phase 5 in vier separaten PRs.
-3. M11.4 Playwright-Smokes (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport) plus Coverage-Gate-Anhebung.
+1. v1.0-Hotspot-Refactors Phase 5 in vier separaten PRs.
+2. Contract-Generation + Status-Sync Phase 6.
+3. M11.4 Playwright-Smokes Phase 7 (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport) plus Coverage-Gate-Anhebung.
 
 Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F8 Hotspot-Split Frontend (#203). #202 geschlossen 2026-05-05 (report_agent als Package).
 
@@ -155,3 +155,4 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-07: Phase 1 Publish-Follow-up — `docker-image.yml::publish` trennt den harten GHCR-Publish vom optionalen Docker-Hub-Mirror. Beide bleiben smoke-gated; Docker-Hub-HTTP-400 bei grossen Layern blockiert den GHCR-Release-Pfad bis zur Phase-3-Image-Verkleinerung nicht mehr.
 - 2026-05-07: Phase 2 Static-Analysis-Gates — `ci.yml::backend` blockiert auf `uv run mypy app`, `ci.yml::frontend` blockiert auf `npm run typecheck`. Backend-mypy startet mit strengem Contract-Scope und Legacy-Baseline fuer API-/Service-Pfade; Ruff ist auf `E/F/B/I/UP/SIM` konfiguriert mit expliziter Phase-2-Baseline fuer bestehende Altlasten. Frontend `allowJs=false`; `noUncheckedIndexedAccess`/`exactOptionalPropertyTypes` nach Probelauf noch nicht aktiviert.
 - 2026-05-07: Phase 3 Runtime/Container-Hardening — `Dockerfile` trennt `frontend-build`, `backend-build` und finalen `prod`-Stage. Das finale Image basiert auf `python:3.11-slim`, enthaelt kein Node/npm/curl, installiert Runtime-Dependencies via `uv sync --frozen --no-dev` und nutzt einen Python-Healthcheck. `docker-compose.prod.yml` setzt `read_only: true` mit expliziten tmpfs-Schreibpfaden; DNS und Neo4j-Image-/Memory-Werte sind ueber `.env` parametrierbar. Lokale Image-Groesse: 747 MB -> 320 MB (-57 %).
+- 2026-05-07: Phase 4 Supply Chain — `dependency-review.yml` blockiert PRs bei neuen High-severity Dependency-Funden, `codeql.yml` scannt Python und JavaScript/TypeScript auf `main`, PRs und woechentlichem Schedule. `docker-image.yml::publish` erzeugt nach GHCR-Push eine Build-Provenance-Attestation und ein SPDX-JSON-SBOM-Artefakt.
