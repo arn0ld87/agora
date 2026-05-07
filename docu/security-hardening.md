@@ -225,7 +225,7 @@ docker login ghcr.io
 gh attestation verify \
   oci://ghcr.io/arn0ld87/agora:<tag> \
   --repo arn0ld87/agora \
-  --signer-workflow arn0ld87/agora/.github/workflows/docker-image.yml
+  --signer-workflow .github/workflows/docker-image.yml
 ```
 
 Das SBOM liegt im erfolgreichen `publish`-Job als Artefakt
