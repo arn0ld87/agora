@@ -1,6 +1,6 @@
 # Deployment — Prod-Like
 
-**Stand:** 2026-05-01, Europe/Berlin
+**Stand:** 2026-05-07, Europe/Berlin
 **Scope:** Hardened Single-Tenant-Deployment — kein Multi-User-AuthN, aber
 Loopback-Bind, Gunicorn, Reverse-Proxy, Token-Pflicht und enge CORS. Zielbild
 ist „lokal hinter Tailscale/WireGuard“, **nicht** ein direkt im Internet
@@ -37,7 +37,10 @@ setzt drei Dinge gegenüber dem Default-Compose:
 
 1. **`build.target: prod`** — Multi-Stage-Dockerfile zieht das schlanke
    Runtime-Stage mit gebautem Frontend-Bundle und Gunicorn vor Flask. Kein
-   Vite, kein `npm run dev`, kein Bind-Mount auf Quellcode.
+   Node/npm/curl, kein Vite, kein `npm run dev`, kein Bind-Mount auf
+   Quellcode. Backend-Dependencies entstehen im `backend-build`-Stage per
+   `uv sync --frozen --no-dev`; das finale Image kopiert nur `.venv`,
+   Backend-App/Skripte und `frontend/dist`.
 2. **`agora.ports: !override [...]`** — Vite-Port (`5173`) entfällt; nur der
    Backend-Port (`5001`) bleibt, gebunden auf `127.0.0.1`. Statisches
    Frontend wird vom Backend ausgeliefert (Flask serviert
@@ -47,6 +50,10 @@ setzt drei Dinge gegenüber dem Default-Compose:
    redet weiter über das Compose-Netzwerk mit Neo4j; wer aus Ops-Sicht
    Browser-Zugriff braucht, tunnelt explizit (Tailscale-SSH oder
    `docker compose exec neo4j cypher-shell`).
+4. **`read_only: true`** — der `agora`-Container läuft im Prod-Override mit
+   read-only Root-FS. Schreibpfade sind explizit: `backend/uploads` als
+   Volume, plus tmpfs für `/tmp`, `/app/backend/logs`, `/home/agora/.cache`
+   und `/home/agora/.gunicorn`.
 
 ### Start
 
@@ -114,13 +121,22 @@ aus und reicht API-Calls an den agora-Container durch.
 
 **Voraussetzungen:**
 - Docker Compose 2.24+ (`!reset`-Syntax für Port-Strip)
-- `frontend/dist` lokal gebaut (Bind-Mount, kein Image-internes Bundle)
+- `frontend/dist` lokal gebaut oder aus dem gebauten Image extrahiert
+  (Bind-Mount in den nginx-Sidecar)
 - Repo-Root als Arbeitsverzeichnis beim `docker compose`-Aufruf
 
 **Schritt-für-Schritt:**
-1. Frontend-Bundle bauen (muss vor Stack-Start aktuell sein):
+1. Frontend-Bundle bereitstellen (muss vor Stack-Start aktuell sein).
+   Lokaler Build:
    ```bash
    cd frontend && npm ci && npm run build && cd ..
+   ```
+   Alternativ das exakt im Prod-Image enthaltene Bundle extrahieren:
+   ```bash
+   rm -rf frontend/dist && mkdir -p frontend
+   cid=$(docker create agora-agora:ci-<sha>)
+   docker cp "$cid:/app/frontend/dist" ./frontend/dist
+   docker rm "$cid"
    ```
 2. Drei-File-Stack starten:
    ```bash
@@ -395,6 +411,20 @@ einem injected Secret. Details und Risiko-Vergleich in
 
 ---
 
+## Compose-DNS
+
+Container-DNS ist konfigurierbar, damit Operatoren Host-/Tailnet-Resolver
+erzwingen können, ohne das Compose-File zu patchen:
+
+```env
+AGORA_DNS_PRIMARY=8.8.8.8
+AGORA_DNS_SECONDARY=8.8.4.4
+```
+
+Default bleibt Google-DNS, weil Docker Desktop auf manchen macOS-Versionen
+IPv6-DNS aktiviert, sobald Ports gebunden werden. Für interne Resolver die
+beiden Werte in `.env` überschreiben.
+
 ## Neo4j
 
 Im Prod-Override hat Neo4j keinen Host-Port. Konsequenzen:
@@ -403,10 +433,11 @@ Im Prod-Override hat Neo4j keinen Host-Port. Konsequenzen:
   cypher-shell -u neo4j -p $NEO4J_PASSWORD`. Wer den Browser braucht,
   öffnet den Port temporär oder läuft per SSH-Forward (`ssh -L
   7474:127.0.0.1:7474 …`).
-- **Memory-Settings** sind im Compose hart eingestellt (Pagecache 4 GB,
-  Heap-Max 2 GB). Quelle: `docker-compose.yml`, kein `.env`-Override
-  nötig. Bei kleineren Hosts vor Start anpassen — Source of Truth bleibt
-  das Compose-File.
+- **Image und Memory-Settings** sind per Env parametrierbar. Defaults:
+  `NEO4J_IMAGE=neo4j:5.18-community`,
+  `NEO4J_HEAP_INITIAL=512m`, `NEO4J_HEAP_MAX=2g`,
+  `NEO4J_PAGECACHE_SIZE=4g`. Bei kleineren Hosts vor Start in `.env`
+  überschreiben; nicht direkt im Compose-File patchen.
 - **Backups** über `neo4j-admin database dump` aus dem Container-Kontext;
   zugehörige Cron-/Restore-Strategie ist Folge-Sub-Slice F3 (siehe
   [`2026-05-01-v0.9.0-review-folge-slices-plan.md`](2026-05-01-v0.9.0-review-folge-slices-plan.md)).
@@ -477,8 +508,9 @@ Kein Image landet in einer Registry, bevor der End-to-End-Smoke grün ist.
 | Trigger | Job-Kette |
 |---|---|
 | `main`-Push | `build-only` → `prod-proxy-smoke` → `publish` (alle drei strikt) |
-| `tag`-Push | `build-only` → `prod-proxy-smoke` (continue-on-error) → `publish` |
-| Workflow-Dispatch | wie `main`-Push |
+| `tag`-Push (`v*`) | `build-only` → `prod-proxy-smoke` → `publish` (Smoke strikt) |
+| `release/**` oder `rc/**` | `build-only` → `prod-proxy-smoke`; PRs nach `main` laufen denselben teuren Smoke |
+| Workflow-Dispatch | wie `main`-Push; Publish nur mit grünem Smoke oder explizitem `force_publish=true` |
 
 ### Job-Beschreibungen
 
@@ -490,18 +522,16 @@ Kein Image landet in einer Registry, bevor der End-to-End-Smoke grün ist.
 2. **`prod-proxy-smoke`** — `needs: [build-only]`. Lädt das Artefakt
    (`actions/download-artifact@v4`), importiert das Image via
    `docker load -i image.tar`, taggt es als `agora-agora:latest` damit
-   Compose es ohne `--build` aufnimmt, und führt den vollständigen
-   Sidecar-Nginx-Stack-Smoke durch. Bei `tag`-Pushes läuft der Job mit
-   `continue-on-error: true` (externe Abhängigkeiten wie Neo4j-Image-Pull
-   können in GitHub-Hosted-Runnern instabil sein).
+   Compose es ohne `--build` aufnimmt, extrahiert `frontend/dist` aus genau
+   diesem Image und führt den vollständigen Sidecar-Nginx-Stack-Smoke durch.
+   Tag-Pushes sind strikt; es gibt keinen `success() || tag`-Bypass mehr.
 
 3. **`publish`** — `needs: [prod-proxy-smoke]`. Führt den Buildx-Build
    erneut durch (praktisch instant dank GHA-Cache-Hit), schreibt mit
    `push: true` alle GHCR-Tags als Pflichtpfad und versucht danach denselben
    Tag-Satz als optionalen Docker-Hub-Mirror. Docker-Hub-Fehler blockieren den
-   GHCR-Release-Pfad nicht, werden aber im Workflow sichtbar. Der Mirror bleibt
-   bis zur Phase-3-Image-Verkleinerung optional, weil Docker Hub grosse Layer
-   im GitHub-Runner wiederholt mit HTTP 400 abgewiesen hat.
+   GHCR-Release-Pfad nicht, werden aber im Workflow sichtbar. `latest` wird
+   nur bei Push auf den Default-Branch gesetzt, nicht bei Tags.
 
 ### Begründung der Artefakt-Variante
 

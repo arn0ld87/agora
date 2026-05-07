@@ -47,6 +47,7 @@ dependencies = [
     "networkx>=3.2",
 
     # Production WSGI: gunicorn + gevent worker (non-blocking SSE)
+    "gunicorn>=23.0",
     "gevent>=24.0",
 ]
 

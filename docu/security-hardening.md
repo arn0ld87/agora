@@ -1,6 +1,6 @@
 # Security Hardening — Changelog und Migrations-Hinweise
 
-**Stand:** 2026-04-22, Europe/Berlin
+**Stand:** 2026-05-07, Europe/Berlin
 **Ausgelöst durch:** Veröffentlichung des Repos auf GitHub (`github.com/arn0ld87/agora`). Parallel-Audit durch Claude (general-purpose) und Codex (rescue). Ergebnisberichte sind im Review-Transcript dokumentiert; dieses Dokument listet die daraus umgesetzten Fixes und die nötigen Env-Änderungen für bestehende Deployments.
 
 > Kurzfassung: Der Backend lief vorher als unauthentifizierter, `0.0.0.0`-gebundener Prototyp mit wildcard-CORS, Debug-Defaults, statischem Secret-Key und Default-Neo4j-Passwort. Nach den drei Phasen ist die Angriffsfläche auf ein loopback-gebundenes, token-geschütztes API mit restriktivem CORS, Prod-tauglichen Defaults und SSRF-/Injection-Hardenings reduziert.
@@ -164,6 +164,40 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 | `AGORA_PROXY_FIX_X_PROTO` | nein | `0` | Anzahl vertrauenswürdiger Proxies, deren `X-Forwarded-Proto` Flask für das Request-Schema auswertet. Im Repo-Sidecar-Proxy-Compose auf `1` gesetzt. |
 | `AGORA_PROXY_FIX_X_HOST` / `AGORA_PROXY_FIX_X_PORT` / `AGORA_PROXY_FIX_X_PREFIX` | nein | `0` | Weitere Werkzeug-`ProxyFix`-Zähler. Nur setzen, wenn ein vertrauenswürdiger Proxy diese Header kontrolliert. |
 | `VISION_MAX_CALLS_PER_UPLOAD` | nein | `40` | Hartes Cap für Vision-LLM-Calls pro PDF-Upload. |
+| `AGORA_DNS_PRIMARY` / `AGORA_DNS_SECONDARY` | nein | `8.8.8.8` / `8.8.4.4` | Compose-DNS-Resolver fuer Container. |
+| `NEO4J_IMAGE` | nein | `neo4j:5.18-community` | Neo4j-Image-Pin fuer Compose. |
+| `NEO4J_HEAP_INITIAL` / `NEO4J_HEAP_MAX` / `NEO4J_PAGECACHE_SIZE` | nein | `512m` / `2g` / `4g` | Neo4j-Memory-Tuning ohne Compose-Patch. |
+
+---
+
+## Runtime-Image-Hardening (v1.0 Phase 3)
+
+**Stand:** 2026-05-07
+
+Das finale `prod`-Image erbt nicht mehr vom Build-Stage mit Node/npm/curl.
+Die Build-Kette ist getrennt:
+
+1. `frontend-build` baut `frontend/dist` mit Node/npm.
+2. `backend-build` fuehrt `uv sync --frozen --no-dev` aus.
+3. `prod` basiert auf `python:3.11-slim`, kopiert nur `.venv`,
+   Backend-App/Skripte und `frontend/dist`, laeuft als User `agora` und
+   nutzt einen Python-basierten Healthcheck.
+
+Der Prod-Compose-Pfad setzt fuer `agora` `read_only: true`. Schreibpfade sind
+explizit erlaubt: `backend/uploads` als Volume sowie tmpfs fuer `/tmp`,
+`/app/backend/logs`, `/home/agora/.cache` und `/home/agora/.gunicorn`.
+
+Lokale Verifikation fuer Phase 3:
+
+```bash
+docker build --target prod -t agora-runtime-after-phase3 .
+docker run --rm agora-runtime-after-phase3 which node  # exit != 0
+docker run --rm agora-runtime-after-phase3 python -c "import shutil; print(shutil.which('npm'), shutil.which('curl'))"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml config | grep -A4 'read_only: true'
+```
+
+Image-Groesse im lokalen Vergleich: 747 MB vor Phase 3, 320 MB nach Phase 3
+(-427 MB, -57 %).
 
 ---
 
@@ -171,7 +205,7 @@ Einzelne Vektoren schließen, die auch nach Auth+CORS noch Missbrauchspotenzial 
 
 **Stand:** 2026-05-03
 
-**Problem.** Früher zog das `prod-builder`-Stage des Dockerfile den Wert
+**Problem.** Frueher zog der Frontend-Build-Stage des Dockerfile den Wert
 von `VITE_AGORA_TOKEN` automatisch aus der Build-Env (Compose liest das
 implizit aus `.env`) und brannte ihn als Plaintext ins Frontend-Bundle.
 Wer das Bundle in die Hand bekam (per `docker save`, `docker pull`,

@@ -39,7 +39,11 @@ services:
       # Backend bleibt auf Loopback gebunden — externer Zugriff geht
       # über Reverse-Proxy / Tailscale / SSH-Forward, nicht direkt.
       - "127.0.0.1:${AGORA_BACKEND_PORT:-5001}:5001"
-    tmpfs:
+    read_only: true
+    tmpfs: !override
+      - /tmp:size=128M,mode=1777
+      - /app/backend/logs:size=64M,mode=0700,uid=1000,gid=1000
+      - /home/agora/.cache:size=256M,mode=0700,uid=1000,gid=1000
       - /home/agora/.gunicorn:size=1M,mode=0700,uid=1000,gid=1000
     environment:
       - PYTHONDONTWRITEBYTECODE=1

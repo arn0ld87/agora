@@ -1,6 +1,6 @@
 # Operations
 
-**Stand:** 2026-05-01, Europe/Berlin
+**Stand:** 2026-05-07, Europe/Berlin
 **Scope:** Was ein Ops-Mensch (oder Future-Alex um 02:30 Uhr) wissen muss,
 um den Stack zu beobachten, zu reparieren und zu verstehen, warum etwas
 gerade nicht geht. Single-User-Vertrauensmodell — kein Pager-Setup, keine
@@ -25,9 +25,9 @@ Liveness-Probe. Antwortet immer `200` mit:
 { "status": "ok", "service": "Agora Backend" }
 ```
 
-Kein Auth nötig. Vom Docker-Healthcheck verwendet
-(`HEALTHCHECK CMD curl -f http://localhost:5001/health`). Reverse-Proxy-
-Healthchecks zeigen hierhin.
+Kein Auth nötig. Vom Docker-Healthcheck verwendet. Im finalen Prod-Image
+läuft die Probe ueber Python `urllib`, damit kein `curl` im Runtime-Image
+benoetigt wird. Reverse-Proxy-Healthchecks zeigen ebenfalls hierhin.
 
 ### `GET /api/status` (auth-pflichtig in Prod)
 

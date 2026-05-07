@@ -5,7 +5,7 @@
 #           Enthält Node + uv + alle Dev-Dependencies, lädt das Repo per
 #           Bind-Mount und startet `npm run dev` (Vite + Flask).
 #   prod  — schlanke Runtime: gebautes Frontend-Bundle, gunicorn vor Flask.
-#           Kein Vite, kein npm, kein Bind-Mount erwartet.
+#           Kein Vite, kein npm, kein curl, kein Bind-Mount erwartet.
 #
 # Auswahl im Compose über `target: dev` / `target: prod`. Default-
 # Compose nutzt `dev`. Für Produktions-Setups siehe
@@ -55,8 +55,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 CMD ["npm", "run", "dev"]
 
-# ---------- prod-builder (frontend bundle only) ----------
-FROM base AS prod-builder
+# ---------- frontend-build (frontend bundle only) ----------
+FROM base AS frontend-build
 
 # Build-Time-Token-Gate (F2.1, Sub-Slice 46).
 #
@@ -71,7 +71,7 @@ FROM base AS prod-builder
 # wer das Bundle hat, hat den Token. Niemals fuer Public-Internet-Deploys.
 #
 # Aufruf:
-#   docker build --target prod-builder \
+#   docker build --target frontend-build \
 #     --build-arg ALLOW_BUILD_TIME_TOKEN=true \
 #     --build-arg VITE_AGORA_TOKEN=<token> .
 ARG ALLOW_BUILD_TIME_TOKEN=false
@@ -96,27 +96,40 @@ COPY --chown=agora:agora frontend/ ./frontend/
 RUN export $(cat /tmp/.vite_token_env) && rm /tmp/.vite_token_env && \
     cd frontend && npm run build
 
-# ---------- prod ----------
-FROM base AS prod
+# ---------- backend-build (production Python environment only) ----------
+FROM base AS backend-build
 
 COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
-# Backend-Dependencies installieren ohne Dev-Group; gunicorn als
-# Production-WSGI-Server obendrauf.
-RUN cd backend && uv sync --no-dev \
-  && uv pip install --project backend gunicorn gevent \
+# Backend-Dependencies ohne Dev-Group und strikt aus uv.lock installieren.
+RUN cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
-COPY --chown=agora:agora backend/ ./backend/
-COPY --chown=agora:agora --from=prod-builder /app/frontend/dist ./frontend/dist
+# ---------- prod ----------
+FROM python:3.11-slim AS prod
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    FLASK_HOST=0.0.0.0 \
+    PATH="/app/backend/.venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
+  && mkdir -p /app/backend/uploads /app/backend/logs /app/frontend/dist /home/agora/.cache /home/agora/.gunicorn \
+  && chown -R agora:agora /app /home/agora
+
+COPY --chown=agora:agora --from=backend-build /app/backend/.venv ./backend/.venv
+COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py ./backend/
+COPY --chown=agora:agora backend/app ./backend/app
+COPY --chown=agora:agora backend/scripts ./backend/scripts
+COPY --chown=agora:agora --from=frontend-build /app/frontend/dist ./frontend/dist
 
 USER agora
-
-ENV FLASK_HOST=0.0.0.0
 
 EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5001/health || exit 1
+  CMD ["python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:5001/health', timeout=5).read()"]
 
 # Gunicorn vor Flask mit gevent-Worker (non-blocking SSE).
 # Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem

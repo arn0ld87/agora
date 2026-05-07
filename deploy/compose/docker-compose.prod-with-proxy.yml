@@ -11,8 +11,9 @@
 #   ueber das Compose-Netzwerk auf agora:5001, kein Loopback noetig).
 # - nginx publisht :80 auf Host. Wer HTTPS will, terminiert das davor
 #   (Tailscale-Funnel, Cloudflare-Tunnel, separater nginx auf Port 443).
-# - frontend/dist muss VOR dem Stack-Start gebaut sein (npm run build im
-#   frontend/-Verzeichnis). Ohne Build zeigt nginx die Default-Welcome-Page.
+# - frontend/dist muss VOR dem Stack-Start bereitstehen. Lokal per
+#   `cd frontend && npm run build` bauen oder aus dem gebauten Prod-Image
+#   extrahieren. Ohne Bundle zeigt nginx die Default-Welcome-Page.
 # Closes #106.
 
 services:
@@ -37,7 +38,7 @@ services:
     volumes:
       # nginx-Konfiguration (read-only)
       - ./deploy/nginx/agora.conf:/etc/nginx/conf.d/default.conf:ro
-      # Statisches Frontend-Bundle — muss vorher mit `npm run build` gebaut sein.
+      # Statisches Frontend-Bundle — muss vorher gebaut oder aus dem Prod-Image extrahiert sein.
       # Pfade sind relativ zum Repo-Root (Aufruf-Verzeichnis bei `docker compose -f ...`).
       - ./frontend/dist:/usr/share/nginx/html:ro
     healthcheck:
