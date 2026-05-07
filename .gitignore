@@ -61,6 +61,7 @@ frontend/lcov.info
 # Local docs and scratch dirs
 mydoc/
 mytest/
+errors/
 .alex-eastereggs.local.md
 context.md
 # Lokale Blog-/Test-Dokumente am Repo-Root (User-Content, Pipeline-Fixtures)
