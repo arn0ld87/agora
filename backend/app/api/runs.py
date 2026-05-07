@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import threading
 import traceback
+from collections.abc import Mapping
+from typing import Any
 
 from flask import current_app, request
 
@@ -50,6 +52,16 @@ def _get_run_or_404(run_id: str):
     if not run:
         return None, json_error(f"Run does not exist: {run_id}", status=404)
     return run, None
+
+
+def _linked_or_entity_id(run: Mapping[str, Any], linked_key: str, label: str) -> str:
+    linked_ids = run.get("linked_ids")
+    value = linked_ids.get(linked_key) if isinstance(linked_ids, Mapping) else None
+    if value is None:
+        value = run.get("entity_id")
+    if isinstance(value, str) and value:
+        return value
+    raise ValueError(f"Run is missing {label} linkage")
 
 
 def _resolve_simulation_summary(simulation_id: str, sim_cache: dict) -> dict:
@@ -326,7 +338,7 @@ def stop_run(run_id: str):
 
 
 def _restart_graph_build(run: dict):
-    project_id = run.get("linked_ids", {}).get("project_id") or run.get("entity_id")
+    project_id = _linked_or_entity_id(run, "project_id", "project_id")
     project = ProjectManager.get_project(project_id)
     if not project:
         raise ValueError(f"Project does not exist: {project_id}")
@@ -430,7 +442,7 @@ def _restart_graph_build(run: dict):
 
 
 def _restart_simulation_prepare(run: dict):
-    simulation_id = run.get("linked_ids", {}).get("simulation_id") or run.get("entity_id")
+    simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
@@ -524,7 +536,7 @@ def _restart_simulation_prepare(run: dict):
 
 
 def _resume_or_restart_simulation_run(run: dict):
-    simulation_id = run.get("linked_ids", {}).get("simulation_id") or run.get("entity_id")
+    simulation_id = _linked_or_entity_id(run, "simulation_id", "simulation_id")
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:

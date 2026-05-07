@@ -8,16 +8,16 @@ Stand: 2026-05-07
 
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.0 |
-| Frontend | `frontend/package.json` | 0.9.0 |
-| Root | `package.json` | 0.9.0 |
+| Backend | `backend/pyproject.toml` | 0.9.1-dev |
+| Frontend | `frontend/package.json` | 0.9.1-dev |
+| Root | `package.json` | 0.9.1-dev |
 
 ## Tests
 
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 1370 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Spec-Files | 17 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
+| Backend Tests (collected) | 1567 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Spec-Files | 43 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
 _Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Pro Spec-File laufen mehrere `it`-Blöcke; die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
@@ -49,18 +49,18 @@ Coverage-Report wird als CI-Artifact `backend-coverage` (14 Tage Retention) hoch
 
 ## Frontend-Coverage (M11.3)
 
-Gemessen 2026-05-04 mit `npm run test:coverage` (`vite.config.js` include `src/**/*.{js,ts,vue}`, 24 Spec-Files, 170 Tests passed). Der vollständige `include`-Glob erfasst auch untestete Views (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) — daher fallen die Zahlen niedriger aus als eine rein transitive Messung.
+Gemessen 2026-05-07 mit `npm run test:coverage` (`vite.config.js` include `src/**/*.{js,ts,vue}`, 43 Spec-Files, 449 Tests passed). Der vollständige `include`-Glob erfasst auch untestete Views (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) — daher fallen die Zahlen niedriger aus als eine rein transitive Messung.
 
 | Metrik | Coverage | Basis |
 |---|---|---|
-| Statements | 37.38 % | 1 570 / 4 199 |
-| Branches | **26.70 %** | 837 / 3 134 |
-| Functions | 27.14 % | 272 / 1 002 |
-| Lines | 39.16 % | 1 478 / 3 774 |
+| Statements | 49.32 % | 2 446 / 4 959 |
+| Branches | **38.03 %** | 1 304 / 3 428 |
+| Functions | 38.26 % | 445 / 1 163 |
+| Lines | 51.33 % | 2 296 / 4 473 |
 
-**Aktive CI-Schwelle: 24 %** (alle vier Metriken, `thresholds` in `vite.config.js`).
+**Aktive CI-Schwelle: 24 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Die aktuelle Branch-Coverage liegt bereits ueber 30 %, die formale Gate-Anhebung ist aber bewusst Phase 7 (`tests/playwright-smokes`) zugeordnet.
 
-Begründung der Schwellenwahl: Niedrigster Wert ist `branches` mit 26.70 %. Dieser liegt weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` greift. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
+Historische Begründung der Schwellenwahl: Der M11.3-Startwert war `branches` mit 26.70 %. Dieser lag weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` griff. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
 
 1. Fünf vollständig untestete Views-Dateien (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) werden durch den `include`-Glob erfasst, aber haben 0 % Coverage — sie erfordern Playwright-E2E-Tests (M11.4).
 2. `GraphCanvas.vue` und `GraphPanel.vue` haben 0 % Branches: Canvas-/WebGL-APIs sind in jsdom nicht verfügbar.
@@ -79,6 +79,19 @@ Diese Lücken sind strukturell. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Z
 | Ziel | 80 % | Langfristziel (inkl. Playwright E2E, M11.4+) |
 
 Coverage-Report wird als CI-Artifact `frontend-coverage` (14 Tage Retention) hochgeladen.
+
+## Static-Analysis-Gates (Phase 2)
+
+Stand 2026-05-07:
+
+| Gate | Command | Status |
+|---|---|---|
+| Backend Types | `cd backend && uv run mypy app` | Pflicht in `ci.yml::backend` |
+| Backend Lint | `cd backend && uv run ruff check .` | Ruff-Zielmenge `E/F/B/I/UP/SIM`, Phase-2-Baseline fuer bestehende Import-/pyupgrade-/simplify-Funde |
+| Frontend Types | `cd frontend && npm run typecheck` (`vue-tsc --noEmit`) | Pflicht in `ci.yml::frontend` |
+| Frontend Lint | `cd frontend && npm run lint` | Vue-SFC-`<script>`-Parsing via `@typescript-eslint/parser` |
+
+TypeScript-Optionen: `allowJs=false`, weil unter `frontend/src/` kein JS-Restbestand vorhanden ist. `noUncheckedIndexedAccess` und `exactOptionalPropertyTypes` bleiben vorerst deaktiviert; ein Probelauf am 2026-05-07 erzeugte breite Folgefehler in API-Envelope, Step2-/Graph-Tests und Persona-Library-Composables.
 
 ## Layer-Status (Übersicht)
 
@@ -140,3 +153,4 @@ Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komple
 - 2026-05-06: Phase 1 Release-Gating gehärtet — `docker-image.yml` published nicht mehr via `success() || tag`-Bypass, Tag-Smokes sind strikt, `latest` wird nur auf dem Default-Branch gesetzt, der Smoke extrahiert `frontend/dist` aus dem gebauten Image, Actions sind SHA-gepinnt, globale Permissions bleiben bei `contents: read`, Publish-Rechte liegen nur am `publish`-Job. Release-/RC-Smokes laufen automatisch fuer `release/**` und `rc/**`; normale Feature-PRs bleiben aus Laufzeitgruenden ausgenommen.
 - 2026-05-07: Phase 1 Follow-up — `scripts/verify-deploy.sh` prueft Compose-Container ueber Docker-Running-State aus `docker compose ps -a` mit Container-Namen-Fallback statt Health-Status und ersetzt den DOMPurify-Minifier-Grep durch Runtime-Bundle-Praesenz plus Source-Vertrag gegen `frontend/src/utils/markdown.ts`; Ziel ist ein stabiler `docker-image.yml::prod-proxy-smoke` auf `main`.
 - 2026-05-07: Phase 1 Publish-Follow-up — `docker-image.yml::publish` trennt den harten GHCR-Publish vom optionalen Docker-Hub-Mirror. Beide bleiben smoke-gated; Docker-Hub-HTTP-400 bei grossen Layern blockiert den GHCR-Release-Pfad bis zur Phase-3-Image-Verkleinerung nicht mehr.
+- 2026-05-07: Phase 2 Static-Analysis-Gates — `ci.yml::backend` blockiert auf `uv run mypy app`, `ci.yml::frontend` blockiert auf `npm run typecheck`. Backend-mypy startet mit strengem Contract-Scope und Legacy-Baseline fuer API-/Service-Pfade; Ruff ist auf `E/F/B/I/UP/SIM` konfiguriert mit expliziter Phase-2-Baseline fuer bestehende Altlasten. Frontend `allowJs=false`; `noUncheckedIndexedAccess`/`exactOptionalPropertyTypes` nach Probelauf noch nicht aktiviert.

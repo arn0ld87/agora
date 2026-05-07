@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "check": "vue-tsc --noEmit && npm run test:coverage && npm run build"
+    "typecheck": "vue-tsc --noEmit",
+    "check": "npm run typecheck && npm run test:coverage && npm run build"
   },
   "dependencies": {
     "@pinia/testing": "^1.0.3",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/d3": "^7.4.3",
+    "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vitest/coverage-v8": "^4.1.5",
     "@vue/test-utils": "^2.4.10",

@@ -364,7 +364,11 @@ def get_report_by_simulation(simulation_id: str):
 
     report = ReportManager.get_report_by_simulation(simulation_id)
     if not report:
-        return json_error(f"No report available for this simulation: {simulation_id}", status=404, has_report=False)
+        return json_error(
+            f"No report available for this simulation: {simulation_id}",
+            status=404,
+            extra={"has_report": False},
+        )
     return json_success(report.to_dict())
 
 
@@ -482,7 +486,7 @@ def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]
             )
 
     return ReportContractModel(
-        schema_version=CURRENT_SCHEMA_VERSION,
+        schema_version=2,
         exported_at=datetime.now(timezone.utc),
         report=report,
         evidence=evidence,

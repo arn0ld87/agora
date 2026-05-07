@@ -58,6 +58,7 @@ dev = [
     "pipreqs>=0.5.0",
     "ruff>=0.8.0",
     "mypy>=1.10",
+    "types-requests>=2.32.0",
     "jsonschema>=4.0.0",
     "fakeredis[lua]>=2.30.0",
 ]
@@ -73,6 +74,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
     "mypy>=1.10",
+    "types-requests>=2.32.0",
     "jsonschema>=4.0.0",
     "fakeredis[lua]>=2.30.0",
 ]
@@ -114,13 +116,80 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F"]
-ignore = ["E501"]
+select = ["E", "F", "B", "I", "UP", "SIM"]
+ignore = [
+    "E501",
+    # Phase-2 Baseline: bestehende Altlasten bleiben bis zu den fokussierten
+    # Refactor-Phasen unverändert; neue Regel-Familien sind trotzdem sichtbar.
+    "B007",
+    "B008",
+    "B011",
+    "B023",
+    "B904",
+    "B905",
+    "I001",
+    "SIM102",
+    "SIM103",
+    "SIM105",
+    "SIM108",
+    "SIM114",
+    "SIM115",
+    "SIM117",
+    "SIM118",
+    "SIM300",
+    "UP006",
+    "UP007",
+    "UP015",
+    "UP017",
+    "UP035",
+    "UP037",
+    "UP041",
+    "UP042",
+    "UP045",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/run_parallel_simulation.py" = ["E402", "F401"]
+"scripts/run_reddit_simulation.py" = ["F401"]
+"scripts/run_twitter_simulation.py" = ["F401"]
+"scripts/security_verify.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "silent"
+show_error_codes = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.contracts.*",
+]
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.api.*",
+]
+check_untyped_defs = false
+disallow_any_generics = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_untyped_defs = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = [
+    "app",
+    "app.config",
+    "app.container",
+    "app.models.*",
+    "app.services.*",
+    "app.storage.*",
+    "app.utils.*",
+]
+ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "app.contracts.dump_schemas"

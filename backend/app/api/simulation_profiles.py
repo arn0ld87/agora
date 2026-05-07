@@ -4,6 +4,7 @@ Profile, config, branch, and script-download routes split from the main simulati
 
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from flask import current_app, request, send_file
 
@@ -164,7 +165,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
         )
 
     store = get_artifact_store()
-    profiles = []
+    profiles: list[dict[str, Any]] = []
     file_modified_at = None
 
     if platform == "reddit":
@@ -258,7 +259,7 @@ def add_simulation_profile(simulation_id: str):
             message="Invalid simulation_id format",
         )
 
-    data = request.get_json() or {}
+    data: dict[str, Any] = request.get_json() or {}
     platform = data.get('platform', 'reddit')
     sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
     if not os.path.exists(sim_dir):
@@ -297,7 +298,7 @@ def add_simulation_profile(simulation_id: str):
         karma = 1000
     else:
         try:
-            karma = int(karma_raw)
+            karma = int(str(karma_raw))
         except (ValueError, TypeError):
             karma = 1000
 

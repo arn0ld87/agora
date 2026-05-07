@@ -115,6 +115,10 @@ jobs:
         working-directory: backend
         run: uv sync --group dev
 
+      - name: Run backend typecheck
+        working-directory: backend
+        run: uv run mypy app
+
       - name: Run backend tests with coverage gate (M11.2)
         working-directory: backend
         # Coverage-Flags bewusst hier statt in pyproject.toml addopts -- sonst
@@ -131,9 +135,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Run Ruff (app/ tests/, mirrors npm run lint:backend)
+      - name: Run Ruff
         working-directory: backend
-        run: uv run ruff check app/ tests/
+        run: uv run ruff check .
 
   frontend:
     name: Frontend build + lint
@@ -156,6 +160,10 @@ jobs:
       - name: Run frontend lint
         working-directory: frontend
         run: npm run lint
+
+      - name: Run frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
 
       - name: Run frontend tests with coverage gate (M11.3)
         working-directory: frontend

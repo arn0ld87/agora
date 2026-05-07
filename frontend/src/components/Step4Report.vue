@@ -295,7 +295,7 @@ interface AgentLogEntry {
 
 function parseAgentEntry(raw: unknown): AgentLogEntry | null {
   // Each backend line is a JSON object (or JSON-encoded string). Parse defensively.
-  let obj: Record<string, unknown> | null = null
+  let obj: Record<string, unknown>
   if (typeof raw === 'string') {
     try { obj = JSON.parse(raw) as Record<string, unknown> } catch { obj = { action: 'raw', message: raw } }
   } else if (raw && typeof raw === 'object') {

@@ -10,7 +10,7 @@ normalisiert Roh-Inputs auf die obige Menge (vgl. run_registry.py:47-67).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,10 +50,10 @@ class RunDetail(BaseModel):
     updated_at: str
     completed_at: Optional[str] = None
     branch_label: Optional[str] = None
-    metadata: dict = Field(default_factory=dict)
-    linked_ids: dict = Field(default_factory=dict)
-    artifacts: dict = Field(default_factory=dict)
-    resume_capability: dict = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    linked_ids: dict[str, str] = Field(default_factory=dict)
+    artifacts: dict[str, Any] = Field(default_factory=dict)
+    resume_capability: dict[str, Any] = Field(default_factory=dict)
 
     # Read-path Anreicherung
     summary: Optional[RunSummary] = None
