@@ -1,6 +1,6 @@
 # Release-Process
 
-**Stand:** 2026-05-06, Europe/Berlin
+**Stand:** 2026-05-07, Europe/Berlin
 **Scope:** Wie ein neuer Tag (`vX.Y.Z`) entsteht. Versionsquellen, Reihenfolge,
 Release-Notes, optionaler Container-Build. Linear-Git-Flow gegen `main`,
 Release-Candidate-Branches nur als Smoke-Gate (`release/**`, `rc/**`).
@@ -17,7 +17,10 @@ Verwandte Dokumente:
 `docker-image.yml` ist das harte Publish-Gate fuer Container-Releases.
 Der Workflow baut zuerst ein lokales Image-Artefakt, extrahiert fuer den
 Reverse-Proxy-Smoke das Frontend-Bundle aus genau diesem Image und pushed erst
-danach zu GHCR/Docker Hub.
+danach zu GHCR. Docker Hub ist bis zur Phase-3-Image-Verkleinerung ein
+optionaler Mirror, weil der GitHub-Runner grosse Layer wiederholt mit
+Docker-Hub-HTTP-400 abbrechen liess. Der Docker-Hub-Mirror darf nie vor einem
+gruenen Smoke laufen, blockiert aber den GHCR-Release-Pfad nicht.
 
 Branch-Protection-Regeln fuer `main`:
 
@@ -30,9 +33,10 @@ Branch-Protection-Regeln fuer `main`:
    nach `main`. Normale Feature-PRs bleiben vom Docker-Smoke ausgenommen.
 4. `publish` darf nicht aus Pull Requests laufen und hat als einziger Job
    `packages: write`, `id-token: write` und `attestations: write`.
-5. Tag-Pushes haben keinen Smoke-Bypass mehr. Ein Image-Publish erfolgt nur bei
-   gruenem `prod-proxy-smoke`; `latest` wird nur bei Pushes auf den
-   Default-Branch gesetzt.
+5. Tag-Pushes haben keinen Smoke-Bypass mehr. Ein Image-Publish zu GHCR erfolgt
+   nur bei gruenem `prod-proxy-smoke`; `latest` wird nur bei Pushes auf den
+   Default-Branch gesetzt. Der optionale Docker-Hub-Mirror folgt ebenfalls erst
+   nach gruenem Smoke.
 6. `workflow_dispatch.inputs.force_publish=true` ist ein dokumentierter
    Break-glass-Pfad fuer Maintainer. Er ist nicht Teil des normalen
    Release-Prozesses und muss im PR-/Release-Protokoll begruendet werden.

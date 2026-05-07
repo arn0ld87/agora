@@ -218,7 +218,10 @@ jobs:
         run: docker compose down -v
 
   publish:
-    # Schritt 3: Push zu Docker Hub + GHCR — NUR nach erfolgreichem Smoke.
+    # Schritt 3: Push zu GHCR — NUR nach erfolgreichem Smoke.
+    # Docker Hub bleibt ein optionaler Mirror. Der harte Release-Pfad ist GHCR,
+    # weil Docker Hub grosse Layer im GitHub-Runner wiederholt mit HTTP 400
+    # abweisen kann, obwohl der Reverse-Proxy-Smoke gruen war.
     # Tags haben keinen Bypass mehr. Nur ein manueller workflow_dispatch mit
     # force_publish=true darf als Break-glass-Pfad publishen, wenn der Smoke rot
     # war; normale Releases bleiben strikt smoke-gated.
@@ -240,7 +243,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
-      - name: Log in to Docker Hub
+      - name: Log in to Docker Hub (optional mirror)
+        continue-on-error: true
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -253,30 +257,52 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Extract GHCR metadata
+        id: meta_ghcr
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
-          images: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/agora-agora
-            ghcr.io/${{ github.repository_owner }}/agora
+          images: ghcr.io/${{ github.repository_owner }}/agora
           tags: |
             type=ref,event=tag
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
-      - name: Build und Push (mit GHA-Cache)
+      - name: Build und Push zu GHCR (required)
         # Alle Layers sind durch den build-only-Job bereits im GHA-Cache.
         # Dieser Build läuft praktisch instant durch (cache-hit auf alle
-        # Layers) und schreibt das fertige Image in beide Registries.
+        # Layers) und schreibt das fertige Image in die Pflicht-Registry.
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           file: ./Dockerfile
-          # Einziger Push im Workflow — NUR hier, nach erfolgreichem Smoke.
+          # Erster harter Push im Workflow — NUR nach erfolgreichem Smoke.
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_ghcr.outputs.tags }}
+          labels: ${{ steps.meta_ghcr.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract Docker Hub metadata (optional mirror)
+        id: meta_dockerhub
+        continue-on-error: true
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/agora-agora
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+
+      - name: Build und Push zu Docker Hub (optional mirror)
+        continue-on-error: true
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta_dockerhub.outputs.tags }}
+          labels: ${{ steps.meta_dockerhub.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

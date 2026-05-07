@@ -496,8 +496,12 @@ Kein Image landet in einer Registry, bevor der End-to-End-Smoke grün ist.
    können in GitHub-Hosted-Runnern instabil sein).
 
 3. **`publish`** — `needs: [prod-proxy-smoke]`. Führt den Buildx-Build
-   erneut durch (praktisch instant dank GHA-Cache-Hit) und schreibt mit
-   `push: true` alle konfigurierten Tags in Docker Hub und GHCR.
+   erneut durch (praktisch instant dank GHA-Cache-Hit), schreibt mit
+   `push: true` alle GHCR-Tags als Pflichtpfad und versucht danach denselben
+   Tag-Satz als optionalen Docker-Hub-Mirror. Docker-Hub-Fehler blockieren den
+   GHCR-Release-Pfad nicht, werden aber im Workflow sichtbar. Der Mirror bleibt
+   bis zur Phase-3-Image-Verkleinerung optional, weil Docker Hub grosse Layer
+   im GitHub-Runner wiederholt mit HTTP 400 abgewiesen hat.
 
 ### Begründung der Artefakt-Variante
 
