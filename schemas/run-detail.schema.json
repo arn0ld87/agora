@@ -144,7 +144,9 @@
       "title": "Eta Seconds"
     },
     "linked_ids": {
-      "additionalProperties": true,
+      "additionalProperties": {
+        "type": "string"
+      },
       "title": "Linked Ids",
       "type": "object"
     },
