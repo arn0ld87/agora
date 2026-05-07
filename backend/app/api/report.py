@@ -89,7 +89,7 @@ def generate_report():
     if not state:
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    if not force_regenerate:
+    if _can_reuse_existing_report(force_regenerate, llm_model_override):
         existing_report = ReportManager.get_report_by_simulation(simulation_id)
         if existing_report and existing_report.status == ReportStatus.COMPLETED:
             return json_success({
@@ -259,7 +259,7 @@ def get_generate_status():
                 "progress": run.get("progress", 0),
                 "message": progress_state.get("message") or run.get("message", ""),
                 "error": run.get("error"),
-                "outline": report_obj.outline.to_dict() if report_obj and report_obj.outline else None,
+                "outline": _map_outline_for_contract(report_obj.outline.to_dict()) if report_obj and report_obj.outline else None,
                 "sections": generated_sections,
                 "current_section_index": len(progress_state.get("completed_sections") or []),
             }
@@ -353,7 +353,7 @@ def get_report(report_id: str):
     report = ReportManager.get_report(report_id)
     if not report:
         return json_error(f"Report does not exist: {report_id}", status=404)
-    return json_success(report.to_dict())
+    return json_success(_build_report_contract_model(report).model_dump(mode="json"))
 
 
 @report_bp.route('/by-simulation/<simulation_id>', methods=['GET'])
@@ -369,7 +369,7 @@ def get_report_by_simulation(simulation_id: str):
             status=404,
             extra={"has_report": False},
         )
-    return json_success(report.to_dict())
+    return json_success(_build_report_contract_model(report).model_dump(mode="json"))
 
 
 @report_bp.route('/list', methods=['GET'])
@@ -380,7 +380,10 @@ def list_reports():
         return json_error("Invalid simulation_id format", status=400)
     limit = request.args.get('limit', 50, type=int)
     reports = ReportManager.list_reports(simulation_id=simulation_id, limit=limit)
-    return json_success([r.to_dict() for r in reports], count=len(reports))
+    return json_success(
+        [_build_report_contract_model(r).model_dump(mode="json") for r in reports],
+        count=len(reports),
+    )
 
 
 @report_bp.route('/<report_id>/evidence', methods=['GET'])
@@ -391,7 +394,8 @@ def get_report_evidence(report_id: str):
     evidence_map = ReportManager.get_evidence_map(report_id)
     if not evidence_map:
         return json_error(f"No evidence map available for report: {report_id}", status=404)
-    return json_success(evidence_map)
+    migrated = migrate_v1_to_v2(evidence_map)
+    return json_success(EvidenceMapModel.model_validate(migrated).model_dump(mode="json"))
 
 
 @report_bp.route('/<report_id>/evidence/<int:section_index>', methods=['GET'])
@@ -428,6 +432,11 @@ def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str)
 EXPORT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION
 
 
+def _can_reuse_existing_report(force_regenerate: bool, llm_model_override: Optional[str]) -> bool:
+    """Reuse only when the caller did not request a concrete report model."""
+    return not force_regenerate and not llm_model_override
+
+
 def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Map the dataclass outline shape onto the v2 contract shape.
 
@@ -457,6 +466,13 @@ def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dic
     }
 
 
+def _build_report_contract_model(report_obj) -> ReportModel:
+    report_dict = report_obj.to_dict()
+    report_dict["schema_version"] = CURRENT_SCHEMA_VERSION
+    report_dict["outline"] = _map_outline_for_contract(report_dict.get("outline"))
+    return ReportModel.model_validate(report_dict)
+
+
 def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]]) -> ReportContractModel:
     """Build the v2 export envelope.
 
@@ -466,11 +482,7 @@ def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]
     rather than 500-ing on persisted v1-shaped payloads. Storage-side reshape
     is tracked under Sub-Slice 02b/02c (#107).
     """
-    report_dict = report_obj.to_dict()
-    report_dict["schema_version"] = CURRENT_SCHEMA_VERSION
-    report_dict["outline"] = _map_outline_for_contract(report_dict.get("outline"))
-
-    report = ReportModel.model_validate(report_dict)
+    report = _build_report_contract_model(report_obj)
 
     evidence: Optional[EvidenceMapModel] = None
     migrated = migrate_v1_to_v2(raw_evidence_map) if raw_evidence_map else None

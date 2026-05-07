@@ -94,14 +94,16 @@ function recordSchemaError(where: string, error: unknown): void {
 const resolvedSimulationId = ref(props.simulationId || null)
 
 const STORAGE_REPORT_MODEL = 'agora.reportModel'
+const STORAGE_REPORT_CUSTOM_MODEL = 'agora.reportCustomModel'
 const reportModelOption = ref(localStorage.getItem(STORAGE_REPORT_MODEL) || 'default')
-const customReportModel = ref('')
+const customReportModel = ref(localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL) || '')
 const ollamaModels = ref<Array<{ name: string; label?: string }>>([])
 const presetModels = ref<Array<{ name: string; label?: string }>>([])
 const defaultModel = ref('')
 const isRegenerating = ref(false)
 
 watch(reportModelOption, (val) => { localStorage.setItem(STORAGE_REPORT_MODEL, val) })
+watch(customReportModel, (val) => { localStorage.setItem(STORAGE_REPORT_CUSTOM_MODEL, val) })
 
 const modelOptions = computed(() => {
   const opts = [{ value: 'default', label: `Standard — ${defaultModel.value || '?'}` }]

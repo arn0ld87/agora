@@ -16,6 +16,7 @@ import {
   getSimulationConsoleLog
 } from '../api/simulation'
 import { generateReport } from '../api/report'
+import { STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -425,8 +426,15 @@ async function goReport() {
     // Reuse the model the user picked for Step 2 (Report-specific override
     // can be set in Step 4). 'default' or empty → server uses LLM_MODEL_NAME.
     const payload = { simulation_id: props.simulationId }
-    const stored = localStorage.getItem('agora.reportModel') || localStorage.getItem('agora.lastModel')
-    if (stored && stored !== 'default' && stored !== 'custom') {
+    const stored = localStorage.getItem('agora.reportModel') || localStorage.getItem(STORAGE_MODEL)
+    if (stored === 'custom') {
+      const custom = (
+        localStorage.getItem('agora.reportCustomModel') ||
+        localStorage.getItem(STORAGE_CUSTOM_MODEL) ||
+        ''
+      ).trim()
+      if (custom) payload.llm_model = custom
+    } else if (stored && stored !== 'default') {
       payload.llm_model = stored
     }
     const res = await generateReport(payload)

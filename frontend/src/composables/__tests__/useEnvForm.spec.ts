@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { useEnvForm, STORAGE_MODEL, STORAGE_LANG } from '../useEnvForm'
+import { useEnvForm, STORAGE_CUSTOM_MODEL, STORAGE_MODEL, STORAGE_LANG } from '../useEnvForm'
 
 // ---------------------------------------------------------------------------
 // Mock t() — identity function; tests check key suffixes, not translated text
@@ -354,6 +354,22 @@ describe('useEnvForm', () => {
       // Simulate new mount by creating a new composable instance
       const f2 = useEnvForm({ t })
       expect(f2.modelOption.value).toBe('gemma3')
+    })
+
+    it('customModel wird persistiert und beim nächsten Mount wieder geladen', async () => {
+      const f1 = useEnvForm({ t })
+      f1.modelOption.value = 'custom'
+      f1.customModel.value = 'deepseek-v3.2:cloud'
+
+      await nextTick()
+      await nextTick()
+
+      expect(localStorageStub.getItem(STORAGE_CUSTOM_MODEL)).toBe('deepseek-v3.2:cloud')
+
+      const f2 = useEnvForm({ t })
+      expect(f2.modelOption.value).toBe('custom')
+      expect(f2.customModel.value).toBe('deepseek-v3.2:cloud')
+      expect(f2.effectiveModel()).toBe('deepseek-v3.2:cloud')
     })
   })
 })

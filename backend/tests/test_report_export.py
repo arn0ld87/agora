@@ -8,6 +8,7 @@ import pytest
 from flask import Flask
 
 from app.api import report_bp
+from app.api.report import _can_reuse_existing_report
 from app.services.report_agent import (
     Report,
     ReportManager,
@@ -148,6 +149,27 @@ def test_export_rejects_unknown_format(env):
 def test_export_returns_404_when_report_missing(env):
     response = env.get(f"/api/report/{REPORT_ID}/export?format=json")
     assert response.status_code == 404
+
+
+def test_get_report_returns_contract_shaped_payload(env):
+    _persist_report()
+    response = env.get(f"/api/report/{REPORT_ID}")
+    assert response.status_code == 200
+
+    payload = response.get_json()["data"]
+    assert payload["schema_version"] == 2
+    assert payload["report_id"] == REPORT_ID
+    assert payload["outline"]["sections"][0] == {
+        "title": "Intro",
+        "description": "Body",
+    }
+    assert "content" not in payload["outline"]["sections"][0]
+
+
+def test_explicit_model_override_disables_existing_report_reuse():
+    assert _can_reuse_existing_report(False, None) is True
+    assert _can_reuse_existing_report(False, "gemini-3-flash-preview:cloud") is False
+    assert _can_reuse_existing_report(True, None) is False
 
 
 def test_export_md_returns_markdown_attachment(env):

@@ -70,6 +70,7 @@ vi.mock('../../composables/useEventStream', () => ({
 
 import Step3Simulation from '../Step3Simulation.vue'
 import { useEventStream } from '../../composables/useEventStream'
+import { generateReport } from '../../api/report'
 
 const i18n = createI18n({
   legacy: false,
@@ -157,6 +158,7 @@ describe('Step3Simulation — mount smoketest (Aktion 7, PR #207-Followup)', () 
 describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     _capturedStateCallback = null
     // Reset useEventStream mock zurück auf Standardimplementation.
     ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
@@ -277,5 +279,32 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
 
     // Nach doStart (mit success=false): resetState wurde aufgerufen → phase=0 → Start-Button sichtbar.
     expect(wrapper.findAll('button').map(b => b.text()).some(t => t.includes('step3.controls.start'))).toBe(true)
+  })
+
+  it('sendet ein persistiertes Custom-Modell beim Reportstart', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { report_id: 'report_test123456' },
+    })
+    localStorage.setItem('agora.lastModel', 'custom')
+    localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(_capturedStateCallback).not.toBeNull()
+    _capturedStateCallback!({ payload: { runner_status: 'completed', current_round: 5 } })
+    await wrapper.vm.$nextTick()
+
+    const reportBtn = wrapper.findAll('button').find(b => b.text().includes('step3.next'))
+    expect(reportBtn).toBeTruthy()
+    await reportBtn!.trigger('click')
+    await flushPromises()
+
+    expect(generateReport).toHaveBeenCalledWith({
+      simulation_id: 'sim_test_smoke',
+      llm_model: 'deepseek-v3.2:cloud',
+    })
   })
 })

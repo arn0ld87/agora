@@ -32,6 +32,7 @@ import { getAvailableModels } from '../api/simulation'
 // ---------------------------------------------------------------------------
 
 export const STORAGE_MODEL = 'agora.lastModel'
+export const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
 export const STORAGE_LANG = 'agora.agentLanguage'
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,14 @@ function _loadStoredModel(): string {
   }
 }
 
+function _loadStoredCustomModel(): string {
+  try {
+    return localStorage.getItem(STORAGE_CUSTOM_MODEL) || ''
+  } catch {
+    return ''
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
@@ -106,7 +115,7 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
   const maxToolCallsPerAction = ref<number>(2)
   const loadingModels = ref<boolean>(true)
   const modelOption = ref<string>(_loadStoredModel())
-  const customModel = ref<string>('')
+  const customModel = ref<string>(_loadStoredCustomModel())
   const language = ref<string>(_loadStoredLang())
 
   // --- Computed ---
@@ -133,6 +142,14 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
   watch(modelOption, (val) => {
     try {
       localStorage.setItem(STORAGE_MODEL, val)
+    } catch {
+      // ignore — storage may be unavailable in some environments
+    }
+  })
+
+  watch(customModel, (val) => {
+    try {
+      localStorage.setItem(STORAGE_CUSTOM_MODEL, val)
     } catch {
       // ignore — storage may be unavailable in some environments
     }
