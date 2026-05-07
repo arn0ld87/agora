@@ -54,7 +54,7 @@ jobs:
             type=ref,event=branch
 
       - name: Build image (kein Push)
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           file: ./Dockerfile
@@ -273,7 +273,7 @@ jobs:
         # Alle Layers sind durch den build-only-Job bereits im GHA-Cache.
         # Dieser Build läuft praktisch instant durch (cache-hit auf alle
         # Layers) und schreibt das fertige Image in die Pflicht-Registry.
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           file: ./Dockerfile
@@ -322,7 +322,7 @@ jobs:
 
       - name: Build und Push zu Docker Hub (optional mirror)
         continue-on-error: true
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           context: .
           file: ./Dockerfile
