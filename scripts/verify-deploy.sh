@@ -22,6 +22,12 @@ _container_running() {
   local service="$1"
   local cid
   cid="$(docker compose ps -a -q "$service" 2>/dev/null || true)"
+  if [ -z "$cid" ]; then
+    cid="$(docker ps -a -q --filter "name=^agora-${service}$" 2>/dev/null || true)"
+  fi
+  if [ -z "$cid" ]; then
+    cid="$(docker ps -a -q --filter "name=^${service}$" 2>/dev/null || true)"
+  fi
 
   [ -n "$cid" ] || return 1
   while IFS= read -r container_id; do
