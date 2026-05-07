@@ -293,16 +293,22 @@ interface AgentLogEntry {
   [key: string]: unknown
 }
 
+function parseAgentObject(raw: unknown): Record<string, unknown> | null {
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return { action: 'raw', message: raw }
+    }
+  }
+  if (raw && typeof raw === 'object') return raw as Record<string, unknown>
+  return null
+}
+
 function parseAgentEntry(raw: unknown): AgentLogEntry | null {
   // Each backend line is a JSON object (or JSON-encoded string). Parse defensively.
-  let obj: Record<string, unknown>
-  if (typeof raw === 'string') {
-    try { obj = JSON.parse(raw) as Record<string, unknown> } catch { obj = { action: 'raw', message: raw } }
-  } else if (raw && typeof raw === 'object') {
-    obj = raw as Record<string, unknown>
-  } else {
-    return null
-  }
+  const obj = parseAgentObject(raw)
+  if (!obj) return null
   const ts = obj.timestamp ? String(obj.timestamp).slice(11, 19) : ''
   const stage = (obj.stage as string) || ''
   const action = (obj.action as string) || ''

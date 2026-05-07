@@ -7,7 +7,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional, cast
 
 from flask import Response, request, send_file, current_app
 from pydantic import ValidationError
@@ -486,7 +486,7 @@ def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]
             )
 
     return ReportContractModel(
-        schema_version=2,
+        schema_version=cast(Literal[2], CURRENT_SCHEMA_VERSION),
         exported_at=datetime.now(timezone.utc),
         report=report,
         evidence=evidence,
