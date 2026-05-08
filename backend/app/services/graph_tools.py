@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional
 from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
 from ..storage import GraphStorage
+import app.services.graph.graph_reader as _reader
 
 # Re-Export der Dataclasses aus dem ausgegliederten Submodul
 # (M11 Phase 5b PR 1 — siehe app/services/graph/graph_dtos.py)
@@ -31,23 +32,15 @@ from .graph.graph_dtos import InterviewResult as InterviewResult  # noqa: PLC041
 logger = get_logger('agora.graph_tools')
 
 class GraphToolsService:
-    """
-    Graph Retrieval Tools Service (via GraphStorage / Neo4j)
+    """Graph Retrieval Tools Service (via GraphStorage / Neo4j).
 
-    [Core Retrieval Tools - Optimized]
-    1. insight_forge - Deep Insight Retrieval (Most powerful, auto-generates sub-questions, multi-dimensional retrieval)
-    2. panorama_search - Breadth Search (Get comprehensive view, including expired content)
-    3. quick_search - Simple Search (Quick retrieval)
-    4. interview_agents - Deep Interview (Interview simulated Agents, obtain multi-perspective insights)
+    Basic Tools (bodies in app.services.graph.graph_reader — M11 Phase 5b PR 2):
+        search_graph, get_all_nodes, get_all_edges, get_node_detail,
+        get_node_edges, get_entities_by_type, get_entity_summary,
+        get_graph_statistics, get_simulation_context.
 
-    [Basic Tools]
-    - search_graph - Graph semantic search
-    - get_all_nodes - Get all nodes in graph
-    - get_all_edges - Get all edges in graph (with temporal information)
-    - get_node_detail - Get detailed node information
-    - get_node_edges - Get edges related to a node
-    - get_entities_by_type - Get entities by type
-    - get_entity_summary - Get entity relationship summary
+    Core Tools (implemented here):
+        insight_forge, panorama_search, quick_search, interview_agents.
     """
 
     def __init__(self, storage: GraphStorage, llm_client: Optional[LLMClient] = None):
@@ -62,401 +55,74 @@ class GraphToolsService:
             self._llm_client = LLMClient()
         return self._llm_client
 
-    # ========== Basic Tools ==========
+    # ========== Basic Tools (delegating to app.services.graph.graph_reader) ==========
+    #
+    # Bodies live in graph_reader.py (M11 Phase 5b PR 2).
+    # These thin wrappers preserve the public API so existing call-sites and
+    # Monkeypatch-Stubs in tests continue to work without modification.
 
     def search_graph(
         self,
         graph_id: str,
         query: str,
         limit: int = 10,
-        scope: str = "edges"
+        scope: str = "edges",
     ) -> SearchResult:
-        """
-        Graph semantic search (hybrid: vector + BM25 via Neo4j)
-
-        Args:
-            graph_id: Graph ID
-            query: Search query
-            limit: Number of results to return
-            scope: Search scope, "edges" or "nodes" or "both"
-
-        Returns:
-            SearchResult
-        """
-        logger.info(f"Graph search: graph_id={graph_id}, query={query[:50]}...")
-
-        try:
-            search_results = self.storage.search(
-                graph_id=graph_id,
-                query=query,
-                limit=limit,
-                scope=scope,
-            )
-
-            facts = []
-            edges = []
-            nodes = []
-
-            # Parse edge results
-            if hasattr(search_results, 'edges'):
-                edge_list = search_results.edges
-            elif isinstance(search_results, dict) and 'edges' in search_results:
-                edge_list = search_results['edges']
-            else:
-                edge_list = []
-
-            for edge in edge_list:
-                if isinstance(edge, dict):
-                    fact = edge.get('fact', '')
-                    if fact:
-                        facts.append(fact)
-                    edges.append({
-                        "uuid": edge.get('uuid', ''),
-                        "name": edge.get('name', ''),
-                        "fact": fact,
-                        "source_node_uuid": edge.get('source_node_uuid', ''),
-                        "target_node_uuid": edge.get('target_node_uuid', ''),
-                    })
-
-            # Parse node results
-            if hasattr(search_results, 'nodes'):
-                node_list = search_results.nodes
-            elif isinstance(search_results, dict) and 'nodes' in search_results:
-                node_list = search_results['nodes']
-            else:
-                node_list = []
-
-            for node in node_list:
-                if isinstance(node, dict):
-                    nodes.append({
-                        "uuid": node.get('uuid', ''),
-                        "name": node.get('name', ''),
-                        "labels": node.get('labels', []),
-                        "summary": node.get('summary', ''),
-                    })
-                    summary = node.get('summary', '')
-                    if summary:
-                        facts.append(f"[{node.get('name', '')}]: {summary}")
-
-            logger.info(f"Search complete: Found {len(facts)} related facts")
-
-            return SearchResult(
-                facts=facts,
-                edges=edges,
-                nodes=nodes,
-                query=query,
-                total_count=len(facts)
-            )
-
-        except Exception as e:
-            logger.warning(f"Graph search failed, degrading to local search: {str(e)}")
-            return self._local_search(graph_id, query, limit, scope)
+        """Graph semantic search (hybrid: vector + BM25 via Neo4j)."""
+        return _reader.search_graph(
+            graph_id, query, storage=self.storage, llm=self.llm, limit=limit, scope=scope
+        )
 
     def _local_search(
         self,
         graph_id: str,
         query: str,
         limit: int = 10,
-        scope: str = "edges"
+        scope: str = "edges",
     ) -> SearchResult:
-        """
-        Local keyword matching search (fallback approach)
-        """
-        logger.info(f"Using local search: query={query[:30]}...")
-
-        facts = []
-        edges_result = []
-        nodes_result = []
-
-        query_lower = query.lower()
-        keywords = [w.strip() for w in query_lower.replace(',', ' ').replace('，', ' ').split() if len(w.strip()) > 1]
-
-        def match_score(text: str) -> int:
-            if not text:
-                return 0
-            text_lower = text.lower()
-            if query_lower in text_lower:
-                return 100
-            score = 0
-            for keyword in keywords:
-                if keyword in text_lower:
-                    score += 10
-            return score
-
-        try:
-            if scope in ["edges", "both"]:
-                all_edges = self.storage.get_all_edges(graph_id)
-                scored_edges = []
-                for edge in all_edges:
-                    score = match_score(edge.get("fact", "")) + match_score(edge.get("name", ""))
-                    if score > 0:
-                        scored_edges.append((score, edge))
-
-                scored_edges.sort(key=lambda x: x[0], reverse=True)
-
-                for score, edge in scored_edges[:limit]:
-                    fact = edge.get("fact", "")
-                    if fact:
-                        facts.append(fact)
-                    edges_result.append({
-                        "uuid": edge.get("uuid", ""),
-                        "name": edge.get("name", ""),
-                        "fact": fact,
-                        "source_node_uuid": edge.get("source_node_uuid", ""),
-                        "target_node_uuid": edge.get("target_node_uuid", ""),
-                    })
-
-            if scope in ["nodes", "both"]:
-                all_nodes = self.storage.get_all_nodes(graph_id)
-                scored_nodes = []
-                for node in all_nodes:
-                    score = match_score(node.get("name", "")) + match_score(node.get("summary", ""))
-                    if score > 0:
-                        scored_nodes.append((score, node))
-
-                scored_nodes.sort(key=lambda x: x[0], reverse=True)
-
-                for score, node in scored_nodes[:limit]:
-                    nodes_result.append({
-                        "uuid": node.get("uuid", ""),
-                        "name": node.get("name", ""),
-                        "labels": node.get("labels", []),
-                        "summary": node.get("summary", ""),
-                    })
-                    summary = node.get("summary", "")
-                    if summary:
-                        facts.append(f"[{node.get('name', '')}]: {summary}")
-
-            logger.info(f"Local search complete: Found {len(facts)} related facts")
-
-        except Exception as e:
-            logger.error(f"Local search failed: {str(e)}")
-
-        return SearchResult(
-            facts=facts,
-            edges=edges_result,
-            nodes=nodes_result,
-            query=query,
-            total_count=len(facts)
+        """Local keyword-matching search (fallback approach)."""
+        return _reader.local_search(
+            graph_id, query, storage=self.storage, limit=limit, scope=scope
         )
 
     def get_all_nodes(self, graph_id: str) -> List[NodeInfo]:
-        """Get all nodes in the graph"""
-        logger.info(f"Getting all nodes in graph {graph_id}...")
-
-        raw_nodes = self.storage.get_all_nodes(graph_id)
-
-        result = []
-        for node in raw_nodes:
-            result.append(NodeInfo(
-                uuid=node.get("uuid", ""),
-                name=node.get("name", ""),
-                labels=node.get("labels", []),
-                summary=node.get("summary", ""),
-                attributes=node.get("attributes", {})
-            ))
-
-        logger.info(f"Retrieved {len(result)} nodes")
-        return result
+        """Get all nodes in the graph."""
+        return _reader.get_all_nodes(graph_id, storage=self.storage)
 
     def get_all_edges(self, graph_id: str, include_temporal: bool = True) -> List[EdgeInfo]:
-        """Get all edges in the graph (with temporal information)"""
-        logger.info(f"Getting all edges in graph {graph_id}...")
-
-        raw_edges = self.storage.get_all_edges(graph_id)
-
-        result = []
-        for edge in raw_edges:
-            edge_info = EdgeInfo(
-                uuid=edge.get("uuid", ""),
-                name=edge.get("name", ""),
-                fact=edge.get("fact", ""),
-                source_node_uuid=edge.get("source_node_uuid", ""),
-                target_node_uuid=edge.get("target_node_uuid", "")
-            )
-
-            if include_temporal:
-                edge_info.created_at = edge.get("created_at")
-                edge_info.valid_at = edge.get("valid_at")
-                edge_info.invalid_at = edge.get("invalid_at")
-                edge_info.expired_at = edge.get("expired_at")
-
-            result.append(edge_info)
-
-        logger.info(f"Retrieved {len(result)} edges")
-        return result
+        """Get all edges in the graph (with temporal information)."""
+        return _reader.get_all_edges(graph_id, storage=self.storage, include_temporal=include_temporal)
 
     def get_node_detail(self, node_uuid: str) -> Optional[NodeInfo]:
-        """Get detailed information about a single node"""
-        logger.info(f"Getting node details: {node_uuid[:8]}...")
-
-        try:
-            node = self.storage.get_node(node_uuid)
-            if not node:
-                return None
-
-            return NodeInfo(
-                uuid=node.get("uuid", ""),
-                name=node.get("name", ""),
-                labels=node.get("labels", []),
-                summary=node.get("summary", ""),
-                attributes=node.get("attributes", {})
-            )
-        except Exception as e:
-            logger.error(f"Failed to get node details: {str(e)}")
-            return None
+        """Get detailed information about a single node."""
+        return _reader.get_node_detail(node_uuid, storage=self.storage)
 
     def get_node_edges(self, graph_id: str, node_uuid: str) -> List[EdgeInfo]:
-        """
-        Get all edges related to a node
+        """Get all edges related to a node."""
+        return _reader.get_node_edges(graph_id, node_uuid, storage=self.storage)
 
-        Optimized: uses storage.get_node_edges() (O(degree) Cypher)
-        instead of loading ALL edges and filtering.
-        """
-        logger.info(f"Getting edges related to node {node_uuid[:8]}...")
+    def get_entities_by_type(self, graph_id: str, entity_type: str) -> List[NodeInfo]:
+        """Get entities by type."""
+        return _reader.get_entities_by_type(graph_id, entity_type, storage=self.storage)
 
-        try:
-            raw_edges = self.storage.get_node_edges(node_uuid)
-
-            result = []
-            for edge in raw_edges:
-                result.append(EdgeInfo(
-                    uuid=edge.get("uuid", ""),
-                    name=edge.get("name", ""),
-                    fact=edge.get("fact", ""),
-                    source_node_uuid=edge.get("source_node_uuid", ""),
-                    target_node_uuid=edge.get("target_node_uuid", ""),
-                    created_at=edge.get("created_at"),
-                    valid_at=edge.get("valid_at"),
-                    invalid_at=edge.get("invalid_at"),
-                    expired_at=edge.get("expired_at"),
-                ))
-
-            logger.info(f"Found {len(result)} edges related to the node")
-            return result
-
-        except Exception as e:
-            logger.warning(f"Failed to get node edges: {str(e)}")
-            return []
-
-    def get_entities_by_type(
-        self,
-        graph_id: str,
-        entity_type: str
-    ) -> List[NodeInfo]:
-        """Get entities by type"""
-        logger.info(f"Getting entities of type {entity_type}...")
-
-        # Use optimized label-based query from storage
-        raw_nodes = self.storage.get_nodes_by_label(graph_id, entity_type)
-
-        result = []
-        for node in raw_nodes:
-            result.append(NodeInfo(
-                uuid=node.get("uuid", ""),
-                name=node.get("name", ""),
-                labels=node.get("labels", []),
-                summary=node.get("summary", ""),
-                attributes=node.get("attributes", {})
-            ))
-
-        logger.info(f"Found {len(result)} entities of type {entity_type}")
-        return result
-
-    def get_entity_summary(
-        self,
-        graph_id: str,
-        entity_name: str
-    ) -> Dict[str, Any]:
-        """Get relationship summary for a specific entity"""
-        logger.info(f"Getting relationship summary for entity {entity_name}...")
-
-        search_result = self.search_graph(
-            graph_id=graph_id,
-            query=entity_name,
-            limit=20
-        )
-
-        all_nodes = self.get_all_nodes(graph_id)
-        entity_node = None
-        for node in all_nodes:
-            if node.name.lower() == entity_name.lower():
-                entity_node = node
-                break
-
-        related_edges = []
-        if entity_node:
-            related_edges = self.get_node_edges(graph_id, entity_node.uuid)
-
-        return {
-            "entity_name": entity_name,
-            "entity_info": entity_node.to_dict() if entity_node else None,
-            "related_facts": search_result.facts,
-            "related_edges": [e.to_dict() for e in related_edges],
-            "total_relations": len(related_edges)
-        }
+    def get_entity_summary(self, graph_id: str, entity_name: str) -> Dict[str, Any]:
+        """Get relationship summary for a specific entity."""
+        return _reader.get_entity_summary(graph_id, entity_name, storage=self.storage)
 
     def get_graph_statistics(self, graph_id: str) -> Dict[str, Any]:
-        """Get statistics for the graph"""
-        logger.info(f"Getting statistics for graph {graph_id}...")
-
-        nodes = self.get_all_nodes(graph_id)
-        edges = self.get_all_edges(graph_id)
-
-        entity_types = {}
-        for node in nodes:
-            for label in node.labels:
-                if label not in ["Entity", "Node"]:
-                    entity_types[label] = entity_types.get(label, 0) + 1
-
-        relation_types = {}
-        for edge in edges:
-            relation_types[edge.name] = relation_types.get(edge.name, 0) + 1
-
-        return {
-            "graph_id": graph_id,
-            "total_nodes": len(nodes),
-            "total_edges": len(edges),
-            "entity_types": entity_types,
-            "relation_types": relation_types
-        }
+        """Get statistics for the graph."""
+        return _reader.get_graph_statistics(graph_id, storage=self.storage)
 
     def get_simulation_context(
         self,
         graph_id: str,
         simulation_requirement: str,
-        limit: int = 30
+        limit: int = 30,
     ) -> Dict[str, Any]:
-        """Get simulation-related context information"""
-        logger.info(f"Getting simulation context: {simulation_requirement[:50]}...")
-
-        search_result = self.search_graph(
-            graph_id=graph_id,
-            query=simulation_requirement,
-            limit=limit
+        """Get simulation-related context information."""
+        return _reader.get_simulation_context(
+            graph_id, simulation_requirement, storage=self.storage, llm=self._llm_client, limit=limit
         )
-
-        stats = self.get_graph_statistics(graph_id)
-
-        all_nodes = self.get_all_nodes(graph_id)
-
-        entities = []
-        for node in all_nodes:
-            custom_labels = [la for la in node.labels if la not in ["Entity", "Node"]]
-            if custom_labels:
-                entities.append({
-                    "name": node.name,
-                    "type": custom_labels[0],
-                    "summary": node.summary
-                })
-
-        return {
-            "simulation_requirement": simulation_requirement,
-            "related_facts": search_result.facts,
-            "graph_statistics": stats,
-            "entities": entities[:limit],
-            "total_entities": len(entities)
-        }
 
     # ========== Core Retrieval Tools (Optimized) ==========
 
