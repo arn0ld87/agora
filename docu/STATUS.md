@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-07
+Stand: 2026-05-08
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -127,16 +127,28 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docu/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
 - M10.5 Rate-Limits für `/api/auth/ticket`, Uploads (`/api/graph/ontology/generate`), Simulation-LLM-Trigger (`/api/simulation/generate-profiles`, `/api/simulation/prepare`) und Report-Trigger (`/api/report/generate`, `/api/report/chat`) (#302)
 - M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
+- M11 Phase 1 Release-Gating gehärtet (`docker-image.yml` SHA-gepinnt, strikter Tag-Smoke, latest nur Default-Branch)
+- M11 Phase 2 Static-Analysis-Gates (`mypy app` + `npm run typecheck` blockierend)
+- M11 Phase 3 Runtime-Image-Hardening (Multi-Stage, slim ohne Node/npm/curl, `read_only: true`, 747 MB → 320 MB)
+- M11 Phase 4 Supply Chain (`dependency-review.yml`, `codeql.yml`, Build-Provenance-Attestation, SPDX-JSON-SBOM)
+- M11 Phase 5 (`simulation_runner.py`-Refactor, 5 PRs)
+- M11 Phase 5b (`graph_tools.py`-Refactor, 3 PRs)
+- M11.2 Backend-Coverage-Gate (`--cov-fail-under=53`)
+- M11.3 Frontend-Coverage-Gate (Threshold 24 %)
+- ADR-0001 Single-User-only-v1 Accepted (M10.4)
+- M10.5 Rate-Limits (PRs #303–#306, Issue #302)
 
 **Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. v1.0-Hotspot-Refactors Phase 5 in vier separaten PRs.
-2. Contract-Generation + Status-Sync Phase 6.
-3. M11.4 Playwright-Smokes Phase 7 (3 E2E-Tests: Health/Login, Upload+Graph, Minimalreport) plus Coverage-Gate-Anhebung.
+1. P1-A Dependabot-Aufräumen — PR #323 (`mistune`) + PR #326 (`pygments`).
+2. Phase 6 Contract-Generation + Status-Sync (Contract-Dump reproduzierbar, Zod-Spiegel CI-geprüft, `scripts/sync-status.sh` Pflicht).
+3. Phase 7 / M11.4 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
 
-Mittelfristig: M11.2/M11.3 Coverage-Gates, M11.4 Playwright-Smokes, M11.5 Komplexitäts-Gate, F8 Hotspot-Split Frontend (#203). #202 geschlossen 2026-05-05 (report_agent als Package).
+Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 53 → 70 %, Frontend 24 → 60 %), M11.5 Komplexitäts-Gate, M11.6 API-Envelope, F8 Hotspot-Split Frontend (#203). Phase 5/5b abgeschlossen 2026-05-08, #202 geschlossen 2026-05-05.
 
 ## Aktualisierungs-Protokoll
 
+- 2026-05-08: M11 Phase 5 + Phase 5b — Hotspot-Refactors abgeschlossen. Phase 5 (`simulation_runner.py`): 5 PRs, Helfer `run_state_store`/`action_log_reader`/`monitor_thread`/`interview_client`/`process_manager` extrahiert (Commits ff52643, 2142e0a, b177cd9, ef9f5b6, db2c0f8). Phase 5b (`graph_tools.py`): 3 PRs, Helfer `graph_dtos`/`graph_reader`/`insight_forge_tool` extrahiert (Commits 8ce5ecb, 7abd3df, b8493b8). Verhalten unverändert, Tests grün. Arbeitsprotokolle unter `docu/2026-05-08-m11-phase5*-arbeitsprotokoll.md`.
+- 2026-05-08: Doku-Sync — `AGENTS.md` Status-Zeile (Layer 9–10 grün, M11 Phase 1–5b durch), `CLAUDE.md` „Aktive Hot-Spots" auf realen M11-Stand, `PLAN.md` Status-Sync 2026-05-08 mit aktualisierter Erledigt-/Offen-Tabelle und neuer PR-Reihenfolge, `docu/STATUS.md` aktuelles Milestone auf Phase 6/7/CVE-Aufräumen.
 - 2026-05-03: Sub-Slice 44 — STATUS.md inaugural, Test-Counts und Versionsstände zentralisiert, Inline-Zahlen aus README/CLAUDE.md entfernt, ROADMAP auf v0.9.0+ / 2026-05-03 geheben.
 - 2026-05-04: F5 Doku-Sync (1) — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
 - 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, neue `docu/plan.heuristic.md` als Subagent-Routing-SSoT, User-Drop-Audit-Snapshots nach `docu/history/`.

@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Documentation
+- docs(plan): sync M11-Status auf 2026-05-08 — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` an realen Code-Stand angeglichen (M11 Phase 1–5b abgeschlossen, M11.2/M11.3 Coverage-Gates aktiv, ADR-0001 Accepted, Layer 9–10 grün).
+
 ### Added
 - docs(m11): add `graph_tools.py` Phase-5b cut analysis (Refs F7)
 - **M11 Phase 5 Vorbereitung:** Schnittanalyse für `backend/app/services/simulation_runner.py` (1904 LOC) unter [`docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md`](docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md). Dokumentiert Verantwortlichkeiten, externe Call-Sites, Test-Coverage und fünf Extraktionskandidaten mit empfohlener PR-Reihenfolge (read-only Doku, kein Code-Edit). Refs F7.

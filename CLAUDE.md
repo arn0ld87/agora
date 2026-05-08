@@ -47,6 +47,8 @@ backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
     api/                    HTTP-Routen (Flask Blueprints)
     services/               Business-Logik
       report_agent/         Package-Split (Sub-Slice M11.13, #202): agent.py, manager.py, planning.py, evidence.py, prompts.py, schemas.py, sections.py, storage.py, tools.py, workflow.py — Layer-0-Boundary in agent.py + planning.py
+      sim/                  M11 Phase 5 Hotspot-Refactor (2026-05-08, 5 PRs): run_state_store, action_log_reader, monitor, interview_client, process_manager extrahiert. `simulation_runner.py` orchestriert nur noch.
+      graph/                M11 Phase 5b Hotspot-Refactor (2026-05-08, 3 PRs): graph_dtos, graph_reader, insight_forge_tool extrahiert. `graph_tools.py` orchestriert.
       evidence_binder.py    Sub-Slice 07: Contradiction-Penalty, kein dekoratives Fallback
       confidence_calculator.py  Sub-Slice 08: Match-Score-Cap + Verified-Quellen-Gate
       oasis_profile_generator.py  voice_register-Pflichtfeld (Sub-Slice 10)
@@ -89,16 +91,23 @@ prompts/                    UI-Prompt-Vorlagen
 | 6 | Frontend-TypeScript-Migration (API, Composables, Pinia) | grün (26, 27, 28 — #71/#72/#73) |
 | 7 | Graph / Runs / Compare | teilweise — done: 29 (#65), 33 (#62), 35 (#64). Offen: 22 #74 (Graph-Diff), 24 #66 (Compare-API), 25 #67 (Compare-UI), 27 #63 (RunsDashboard) |
 | 8 | Persona Review + UX | teilweise — done: 30 (#141 Sticky-Scroll). Offen: 29 #69 (Persona-Diff), 30 #70 (Approve/Reject/Regenerate), 32 #137 (Graph-Build-Batch-Marker) |
-| 9 | Production Deployment | grün mit bewusst pausiertem PR-Smoke — Reverse-Proxy ✅ (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`), gevent ✅ (`Dockerfile` `prod`-Stage), Bundle-Token-Gate ✅ (`ALLOW_BUILD_TIME_TOKEN=false` Default), `?token=`-Block in Prod ✅ (`utils/auth.py`), signed-tickets-Frontend ✅ (`frontend/src/api/stream.ts`), Prod-Stack-Smoke auf `main`/Tags/`workflow_dispatch` ✅ (`docker-image.yml::prod-proxy-smoke`). PR-Trigger seit 2026-05-06 wegen ~30 min Laufzeit pausiert und vor Release neu zu bewerten. |
-| 10 | Security Watchlist (CVE-Tracking, pip-audit) | grün — CVE-Monitor wöchentlich (`.github/workflows/cve-monitor.yml`, `pip-audit --strict` ohne `--ignore-vuln`), Hardstop 2026-07-30 verdrahtet (Workflow failt ab dann), Risk-Register mit Eskalationspfad (`docu/dependency-risk-register.md`). Issues #121–#126 bleiben open bis Upstream patcht. |
+| 9 | Production Deployment | grün — M11 Phase 1–4 Hardening (Release-Gating, Static-Analysis-Gates, Multi-Stage `prod`-Image ohne Node/npm/curl + `read_only: true`, Supply Chain) abgeschlossen 2026-05-07. Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block in Prod ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke auf `main`/Tags/`workflow_dispatch` ✅ (`docker-image.yml::prod-proxy-smoke`). PR-Trigger seit 2026-05-06 wegen ~30 min Laufzeit pausiert und vor Release neu zu bewerten. |
+| 10 | Security Watchlist (CVE-Tracking, pip-audit) | grün — CVE-Monitor wöchentlich (`.github/workflows/cve-monitor.yml`, `pip-audit --strict` ohne `--ignore-vuln`), Hardstop 2026-07-30 verdrahtet (Workflow failt ab dann), Risk-Register mit Eskalationspfad (`docu/dependency-risk-register.md`). Issues #121–#126 bleiben open bis Upstream patcht. Zusätzlich CVE-Tracker #296/#297/#298 seit 2026-05-07 unter Beobachtung. Phase 4 Supply Chain (`dependency-review.yml`, `codeql.yml`, GHCR Build-Provenance-Attestation, SPDX-JSON-SBOM-Artefakt) zusätzlich aktiv. |
 
 ## Aktive Hot-Spots / offene Hauspflicht
 
-Die ursprünglichen Layer-0–6-Hot-Spots aus dem ChatGPT-Audit sind alle gefixt. Layer-9-Hardening ist überwiegend im Code drin (siehe Layer-Tabelle oben). Aktuelle Baustellen:
+Layer-0–6 + 9–10 sind durch. Aktuelle M11-Baustellen:
 
-- **Coverage-Gates** (M11.2/M11.3): `pytest-cov` + `@vitest/coverage-v8`, Startwerte 70 % Backend / 60 % Frontend.
+- **Coverage-Gate-Anhebung** (M11.2/M11.3): Aktuelle Schwellen Backend 53 % / Frontend 24 %. Ziel Backend 70 % / Frontend 60 % schrittweise. Coverage-Reports als Artifacts `backend-coverage` / `frontend-coverage` (14 Tage Retention) in `ci.yml`.
+- **Phase 6 Contract-Generation + Status-Sync:** Contract-Dump reproduzierbar machen, Frontend-Zod-Spiegel automatisiert gegen Pydantic prüfen, `scripts/sync-status.sh` als CI-Pflichtschritt.
+- **Phase 7 / M11.4 Playwright-Smokes:** Drei stabile E2E-Smokes — Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide.
+- **M11.5 Komplexitäts-Gate:** `radon` Backend, ESLint/size-limit Frontend.
+- **M11.6 API-Envelope:** Error-/Success-Envelopes vollständig durchziehen.
+- **Frontend-Hotspots (Issue #203):** `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC — analog zu Backend-Phase 5/5b zerschneiden.
 - **gevent ↔ OASIS-Subprozess Smoke:** `subprocess.Popen` läuft bei aktivem `gevent.monkey.patch_all()` standardmäßig durch den Patch — bei jedem Slice, der den OASIS-Pfad anfasst, per `scripts/verify-deploy.sh` smoken.
-- **Init-Logs doppelt** — gunicorn ohne `--preload`. Kein Bug, aber unschön. Folge-Slice braucht Fork-Safety-Verifikation der Neo4j/Redis-Pools vor `--preload`-Aktivierung.
+- **Init-Logs doppelt:** Folge-Slice braucht Fork-Safety-Verifikation der Neo4j/Redis-Pools vor `--preload`-Aktivierung.
+- **Dependabot-Aufräumen:** Offene PRs #323 (`mistune` 3.1.4 → 3.2.1), #326 (`pygments` 2.19.2 → 2.20.0). PR #315 (`camel-ai`) bleibt blockiert durch `camel-oasis==0.2.5` hard pin.
+- **Live-Settings #212 (P2):** Erst nach M11-Stabilisierung.
 
 ## Kommandos (immer diese)
 

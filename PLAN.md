@@ -1,6 +1,6 @@
 # Agora — Konsolidierter Findings- & Maßnahmenplan
 
-**Stand:** 2026-05-04 (post-tag, M9-Hardening überwiegend im Code)  
+**Stand:** 2026-05-08 (M9/M10 abgeschlossen, M11 Phase 1–5b durch)  
 **Repo:** [`arn0ld87/agora`](https://github.com/arn0ld87/agora) · v0.9.0 + Layer-9-Slices auf `main`  
 **Quellen:** Code-Verifikation 2026-05-04 (`Dockerfile`, `docker-compose.prod.yml`, `deploy/`, `backend/app/utils/auth.py`, `frontend/src/api/stream.ts`, `.github/workflows/`), Audit-Snapshot [`docu/history/2026-05-04-plan-update-audit-snapshot.md`](docu/history/2026-05-04-plan-update-audit-snapshot.md), interner Backlog.  
 **Ziel:** Findings aus Code-Review und Audit konsolidieren, mit den vorhandenen Slash-Commands (`/agora-next-task`, `/verify-after-subagent`, `/fix-task-*`) und Subagents (`agora-refactor-worker`, `agora-test-worker`, `agora-frontend-worker`, `agora-doc-worker`, `agora-evidence-auditor`) kompatibel halten und in eine umsetzbare Reihenfolge bringen.
@@ -34,9 +34,9 @@
 
 ---
 
-## Status-Sync 2026-05-04
+## Status-Sync 2026-05-08
 
-Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`docu/history/2026-05-04-plan-update-audit-snapshot.md`](docu/history/2026-05-04-plan-update-audit-snapshot.md), verifiziert per `grep`/`find` 2026-05-04. Die ursprünglichen F-Detail-Sektionen ab [§ Findings im Detail](#findings-im-detail) bleiben als historische Tiefe stehen — Status-Update hier ist autoritativ.
+Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2026-05-07-Einträge, Recent commits (M11 Phase 5/5b), offene PRs/Issues #123–#326, verifikation per `ls`/`grep` 2026-05-08. Die ursprünglichen F-Detail-Sektionen ab [§ Findings im Detail](#findings-im-detail) bleiben als historische Tiefe stehen — Status-Update hier ist autoritativ.
 
 ### Erledigt (Code-verifiziert)
 
@@ -58,39 +58,55 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quelle: Audit-Snapshot [`do
 | R3 / M10.4 | Auth-Zielbild | ADR-0001 Accepted: Agora v1 bleibt Single-User-only mit Shared Token + signed Tickets. |
 | N3 / M10.5 | Rate Limits | App-seitige Fixed-Window-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte vorhanden (#302, PR #303–#306). |
 | W2 / M11.1 | Evidence-Gate | `contract-gates.yml` führt `evidence-quality` als Hard-Gate aus; Bad-Cases sind Snapshot-gepinnt. |
+| M11.2 | Backend-Coverage | `pytest-cov` mit `--cov-fail-under=53` aktiv, `backend-coverage`-Artifact in `ci.yml` (14 Tage). Startschwelle 53 %, Ziel 70 % schrittweise. |
+| M11.3 | Frontend-Coverage | `@vitest/coverage-v8@4.1.5` mit Threshold 24 % aktiv, `frontend-coverage`-Artifact in `ci.yml` (14 Tage). Ziel 60 % schrittweise. |
+| M11 Phase 1 | Release-Gating | `docker-image.yml` mit SHA-gepinnten Actions, striktem Tag-Smoke, `latest` nur auf Default-Branch, Smoke extrahiert `frontend/dist`, Release-/RC-Smokes für `release/**`/`rc/**`. |
+| M11 Phase 2 | Static-Analysis | `ci.yml::backend` blockiert auf `uv run mypy app` (Contract-Scope strict + Legacy-Baseline), `ci.yml::frontend` blockiert auf `npm run typecheck`. Ruff `E/F/B/I/UP/SIM` mit Phase-2-Baseline. |
+| M11 Phase 3 | Container-Hardening | Multi-Stage-Dockerfile, finaler `prod`-Stage auf `python:3.11-slim` ohne Node/npm/curl, Python-Healthcheck. `docker-compose.prod.yml` mit `read_only: true` + tmpfs. Image 747 MB → 320 MB (-57 %). |
+| M11 Phase 4 | Supply Chain | `dependency-review.yml` (PR-Block bei High), `codeql.yml` (Python + JS/TS, weekly), `docker-image.yml::publish` Build-Provenance-Attestation + SPDX-JSON-SBOM-Artefakt. |
+| M11 Phase 5 | Hotspot `simulation_runner` | 5 PRs durch: run_state_store, action_log_reader, monitor_thread, interview_client, process_manager extrahiert. |
+| M11 Phase 5b | Hotspot `graph_tools` | 3 PRs durch: graph_dtos, graph_reader, insight_forge_tool extrahiert. |
+| #202 / F7 | Hotspot `report_agent` | Closed 2026-05-05 als Package-Split. |
 
 ### Aktiv offen
 
 | ID | Priorität | Bereich | Befund |
 |---|---:|---|---|
-| **M9.7** | 🟡 | Doku | `AGENTS.md`/`CLAUDE.md` enthielten alte Statusangaben (v0.6/gevent-Workaround/SSE-Token). Slice „Doku-Sync 2026-05-04" adressiert das. |
-| **W3 / M11.2-3** | 🟡 | Coverage | Kein `pytest-cov`, kein Frontend-Coverage-Gate. Startwerte: 70 % Backend / 60 % Frontend. |
-| **W4 / M11.4** | 🟡 | E2E | Keine Playwright/Cypress-Smokes für Kernworkflow. |
-| **W5 / F7-F8** | 🟡 | Code-Hotspots | `report_agent.py` 2400 LOC, `simulation_runner.py` 1904, `Step2EnvSetup.vue` 1804, `Step4Report.vue` 1287 — Issues #202/#203 in Milestone v1.0.0. |
-| **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes werden schrittweise eingeführt, nicht vollständig belegbar. |
-| **N1 / F14.2** | 🟢 | SBOM | Kein SBOM/Third-Party-License-Report. |
-| **N2 / F14.1** | 🟢 | AGPL | Kein App-/API-Hinweis auf Source-Code des laufenden Builds (`/api/version` mit Commit-SHA). |
+| **P1-A** | 🟡 | Dependencies | Dependabot-Aufräumen: PR #323 (`mistune` 3.1.4→3.2.1) und PR #326 (`pygments` 2.19.2→2.20.0) prüfen + mergen, falls CI/contract-gates/dependency-review/CodeQL grün. |
+| **M11 Phase 6** | 🟡 | Contract-Sync | Contract-Dump reproduzierbar machen, Frontend-Zod-Spiegel automatisierte Prüfung, `scripts/sync-status.sh` als CI-Pflichtschritt. |
+| **M11.4 / Phase 7** | 🟡 | E2E | Drei stabile Playwright-Smokes: Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide. |
+| **W3 / M11.2-3** | 🟢 | Coverage-Anhebung | Startschwellen aktiv (Backend 53 %, Frontend 24 %). Schrittweise Anhebung Richtung 70 %/60 %. |
+| **M11.5** | 🟡 | Komplexitäts-Gate | `radon` Backend, ESLint/size-limit Frontend. |
+| **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes vollständig durchziehen. |
+| **F8 / #203** | 🟡 | Frontend-Hotspots | `Step2EnvSetup.vue` (1804 LOC) und `Step4Report.vue` (1287 LOC) analog zu Backend-Phase 5/5b zerschneiden. |
+| **#199** | 🟡 | Python 3.14 | Docker-Image blockiert von tiktoken-wheel-Lag. |
+| **#296/#297/#298** | 🟡 | CVE-Tracker | Neue Watchlist-Issues seit 2026-05-07 zusätzlich zu #121–#126. |
+| **N1 / F14.2** | 🟢 | SBOM | SBOM-Artefakt seit Phase 4 in `docker-image.yml::publish`. Operationalisierung (Veröffentlichung pro Release) noch offen. |
+| **N2 / F14.1** | 🟢 | AGPL | `/api/version` mit Commit-SHA + Source-URL noch offen. |
+| **#212** | 🟢 | Live-Settings | P2 — nach M11-Stabilisierung. |
 
 ### Priorisierte To-do-Liste (operativ)
 
 🔴 **Kritisch:**
 
-1. **Coverage-Gates Backend/Frontend** — Zielpfad M11.2/M11.3; Startschwellen sind aktiv, Zielwerte werden schrittweise angehoben.
-2. **Playwright-Smokes** — Health/Login, Upload+Graph, Minimalreport.
-3. **Final-Release-Gate** — Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren.
+1. **Dependabot-Aufräumen** — PR #323/#326 prüfen + mergen oder begründet schließen.
+2. **Phase 6 Contract-Generation + Status-Sync** — Contract-Dump reproduzierbar, Zod-Spiegel CI-geprüft, `scripts/sync-status.sh` Pflicht.
+3. **Phase 7 / M11.4 Playwright-Smokes** — drei stabile E2E-Tests.
 
-🟡 **Wichtig:** 4. Komplexitäts-Gate (`radon` Backend, ESLint/size-limit Frontend). 5. API-Envelope abschließen. 6. Frontend-/Backend-Hotspot-Splits weiterführen.
+🟡 **Wichtig:** 4. Coverage-Schwellen schrittweise auf 70 %/60 % heben. 5. M11.5 Komplexitäts-Gate. 6. M11.6 API-Envelope abschließen. 7. F8 Frontend-Hotspots `Step2EnvSetup.vue`/`Step4Report.vue` (#203). 8. CVE-Watchlist #296/#297/#298 + Issue #199.
 
-🟢 **Nice-to-have:** 7. SBOM/License-Report. 8. AGPL-Operationalisierung (`/api/version` mit SHA + Source-URL).
+🟢 **Nice-to-have:** 9. N1 SBOM-Operationalisierung pro Release. 10. N2 AGPL `/api/version`-Endpoint mit Commit-SHA. 11. P2 Live-Settings (#212) nach M11-Stabilisierung.
 
 ### Arbeitsreihenfolge (PR-by-PR)
 
-1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md`/`docu/plan.heuristic.md` (= dieser Slice). ✅
-2. **PR 2:** Coverage-Zielwerte schrittweise Richtung Backend 70 % / Frontend 60 % anheben.
-3. **PR 3:** Playwright-Smokes.
-4. **PR 4:** Final-Release-Gate für Docker-Image-Build + Reverse-Proxy-Smoke reaktivieren oder ersetzen.
-5. **PR 5:** Komplexitäts-Gate + Hotspot-Backlog.
-6. **PR 6:** SBOM/License-Report + AGPL-Source-Link.
+1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` (= dieser Slice). ✅
+2. **PR 2:** Dependabot-Aufräumen — #323 (`mistune`) und #326 (`pygments`) entscheiden.
+3. **PR 3:** M11 Phase 6 Contract-Generation + Status-Sync.
+4. **PR 4:** M11.4 / Phase 7 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
+5. **PR 5:** Coverage-Schwellen-Anhebung (Backend 53 → 60 → 70 %, Frontend 24 → 40 → 60 %).
+6. **PR 6:** M11.5 Komplexitäts-Gate.
+7. **PR 7:** M11.6 API-Envelope abschließen.
+8. **PR 8:** F8 Frontend-Hotspots (#203).
 
 ### Definition of Done für v1.0
 
