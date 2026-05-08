@@ -36,6 +36,14 @@ from .sim.run_state_store import save_run_state as _save_run_state_fn
 from .sim.run_state_store import read_console_log
 from .sim.run_state_store import cleanup_run_logs
 
+# M11 Phase 5 PR 2 — re-export action-log-reader module functions.
+# The five class-method wrappers below delegate to these for backward-compat.
+from .sim.action_log_reader import read_action_log_chunk as _read_action_log_chunk
+from .sim.action_log_reader import check_all_platforms_completed as _check_all_platforms_completed_fn
+from .sim.action_log_reader import read_actions_from_file as _read_actions_from_file_fn
+from .sim.action_log_reader import get_all_actions as _get_all_actions_fn
+from .sim.action_log_reader import get_actions as _get_actions_fn
+
 
 def _store():
     """Return the active SimulationArtifactStore (Issue #13).
@@ -524,140 +532,32 @@ class SimulationRunner:
     
     @classmethod
     def _read_action_log(
-        cls, 
-        log_path: str, 
-        position: int, 
+        cls,
+        log_path: str,
+        position: int,
         state: SimulationRunState,
-        platform: str
+        platform: str,
     ) -> int:
+        """Delegate to ``action_log_reader.read_action_log_chunk``.
+
+        M11 Phase 5 PR 2 — body extracted; wrapper kept for Monkeypatch-compat.
         """
-        Read action log file
-        
-        Args:
-            log_path: Action log file path
-            position: Last read position
-            state: Run state object
-            platform: Platform name (twitter/reddit)
-            
-        Returns:
-            New read position
-        """
-        # Check if graph memory update is enabled
-        graph_memory_enabled = cls._graph_memory_enabled.get(state.simulation_id, False)
-        graph_updater = None
-        if graph_memory_enabled:
-            graph_updater = GraphMemoryManager.get_updater(state.simulation_id)
-        
-        try:
-            with open(log_path, 'r', encoding='utf-8') as f:
-                f.seek(position)
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            action_data = json.loads(line)
-                            
-                            # Handle event type entries
-                            if "event_type" in action_data:
-                                event_type = action_data.get("event_type")
-                                
-                                # Detect simulation_end event, mark platform completed
-                                if event_type == "simulation_end":
-                                    if platform == "twitter":
-                                        state.twitter_completed = True
-                                        state.twitter_running = False
-                                        logger.info(f"Twitter simulation completed: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
-                                    elif platform == "reddit":
-                                        state.reddit_completed = True
-                                        state.reddit_running = False
-                                        logger.info(f"Reddit simulation completed: {state.simulation_id}, total_rounds={action_data.get('total_rounds')}, total_actions={action_data.get('total_actions')}")
-                                    
-                                    # Check if all enabled platforms are completed
-                                    # If only one platform is running, check only that platform
-                                    # If both platforms are running, need both to complete
-                                    all_completed = cls._check_all_platforms_completed(state)
-                                    if all_completed:
-                                        state.runner_status = RunnerStatus.COMPLETED
-                                        state.completed_at = datetime.now().isoformat()
-                                        logger.info(f"All platform simulations completed: {state.simulation_id}")
-                                
-                                # Update round information (from round_end event)
-                                elif event_type == "round_end":
-                                    round_num = action_data.get("round", 0)
-                                    simulated_hours = action_data.get("simulated_hours", 0)
-                                    
-                                    # Update per-platform independent rounds and time
-                                    if platform == "twitter":
-                                        if round_num > state.twitter_current_round:
-                                            state.twitter_current_round = round_num
-                                        state.twitter_simulated_hours = simulated_hours
-                                    elif platform == "reddit":
-                                        if round_num > state.reddit_current_round:
-                                            state.reddit_current_round = round_num
-                                        state.reddit_simulated_hours = simulated_hours
-                                    
-                                    # Overall rounds take maximum of both platforms
-                                    if round_num > state.current_round:
-                                        state.current_round = round_num
-                                    # Overall time takes maximum of both platforms
-                                    state.simulated_hours = max(state.twitter_simulated_hours, state.reddit_simulated_hours)
-                                
-                                continue
-                            
-                            action = AgentAction(
-                                round_num=action_data.get("round", 0),
-                                timestamp=action_data.get("timestamp", datetime.now().isoformat()),
-                                platform=platform,
-                                agent_id=action_data.get("agent_id", 0),
-                                agent_name=action_data.get("agent_name", ""),
-                                action_type=action_data.get("action_type", ""),
-                                action_args=action_data.get("action_args", {}),
-                                result=action_data.get("result"),
-                                success=action_data.get("success", True),
-                            )
-                            state.add_action(action)
-                            
-                            # Update rounds
-                            if action.round_num and action.round_num > state.current_round:
-                                state.current_round = action.round_num
-                            
-                            # If graph memory update enabled, send activity to graph
-                            if graph_updater:
-                                graph_updater.add_activity_from_dict(action_data, platform)
-                            
-                        except json.JSONDecodeError:
-                            pass
-                return f.tell()
-        except Exception as e:
-            logger.warning(f"Failed to read action log: {log_path}, error={e}")
-            return position
+        return _read_action_log_chunk(
+            log_path,
+            position,
+            state,
+            platform,
+            graph_memory_enabled=cls._graph_memory_enabled.get(state.simulation_id, False),
+        )
     
     @classmethod
     def _check_all_platforms_completed(cls, state: SimulationRunState) -> bool:
-        """
-        Check if all enabled platforms have completed simulation
-        
-        Judge whether a platform is enabled by checking if corresponding actions.jsonl file exists
-        
-        Returns:
-            True if all enabled platforms are completed
+        """Delegate to ``action_log_reader.check_all_platforms_completed``.
+
+        M11 Phase 5 PR 2 — body extracted; wrapper kept for Monkeypatch-compat.
         """
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
-        twitter_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
-        reddit_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
-        
-        # Check which platforms are enabled (by file existence)
-        twitter_enabled = os.path.exists(twitter_log)
-        reddit_enabled = os.path.exists(reddit_log)
-        
-        # If platform is enabled but not completed, return False
-        if twitter_enabled and not state.twitter_completed:
-            return False
-        if reddit_enabled and not state.reddit_completed:
-            return False
-        
-        # At least one platform is enabled and completed
-        return twitter_enabled or reddit_enabled
+        return _check_all_platforms_completed_fn(state, base_dir=sim_dir)
     
     @classmethod
     def _terminate_process(cls, process: subprocess.Popen, simulation_id: str, timeout: int = 10):
@@ -773,67 +673,19 @@ class SimulationRunner:
         default_platform: Optional[str] = None,
         platform_filter: Optional[str] = None,
         agent_id: Optional[int] = None,
-        round_num: Optional[int] = None
+        round_num: Optional[int] = None,
     ) -> List[AgentAction]:
+        """Delegate to ``action_log_reader.read_actions_from_file``.
+
+        M11 Phase 5 PR 2 — body extracted; wrapper kept for Monkeypatch-compat.
         """
-        Read actions from single action file
-        
-        Args:
-            file_path: Action log file path
-            default_platform: Default platform (used when action record lacks platform field)
-            platform_filter: Filter platform
-            agent_id: Filter Agent ID
-            round_num: Filter round
-        """
-        if not os.path.exists(file_path):
-            return []
-        
-        actions = []
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                try:
-                    data = json.loads(line)
-                    
-                    # Skip non-action records (such as simulation_start, round_start, round_end events)
-                    if "event_type" in data:
-                        continue
-                    
-                    # Skip records without agent_id (non-Agent actions)
-                    if "agent_id" not in data:
-                        continue
-                    
-                    # Get platform: prefer platform in record, otherwise use default platform
-                    record_platform = data.get("platform") or default_platform or ""
-                    
-                    # Filter
-                    if platform_filter and record_platform != platform_filter:
-                        continue
-                    if agent_id is not None and data.get("agent_id") != agent_id:
-                        continue
-                    if round_num is not None and data.get("round") != round_num:
-                        continue
-                    
-                    actions.append(AgentAction(
-                        round_num=data.get("round", 0),
-                        timestamp=data.get("timestamp", ""),
-                        platform=record_platform,
-                        agent_id=data.get("agent_id", 0),
-                        agent_name=data.get("agent_name", ""),
-                        action_type=data.get("action_type", ""),
-                        action_args=data.get("action_args", {}),
-                        result=data.get("result"),
-                        success=data.get("success", True),
-                    ))
-                    
-                except json.JSONDecodeError:
-                    continue
-        
-        return actions
+        return _read_actions_from_file_fn(
+            file_path,
+            default_platform=default_platform,
+            platform_filter=platform_filter,
+            agent_id=agent_id,
+            round_num=round_num,
+        )
     
     @classmethod
     def get_all_actions(
@@ -841,60 +693,20 @@ class SimulationRunner:
         simulation_id: str,
         platform: Optional[str] = None,
         agent_id: Optional[int] = None,
-        round_num: Optional[int] = None
+        round_num: Optional[int] = None,
     ) -> List[AgentAction]:
+        """Delegate to ``action_log_reader.get_all_actions``.
+
+        M11 Phase 5 PR 2 — body extracted; wrapper kept for Monkeypatch-compat
+        (``monkeypatch.setattr(SimulationRunner, "get_all_actions", …)``).
         """
-        Get complete action history for all platforms (no pagination limit)
-        
-        Args:
-            simulation_id: Simulation ID
-            platform: Filter platform (twitter/reddit)
-            agent_id: Filter Agent
-            round_num: Filter round
-            
-        Returns:
-            Complete action list (sorted by timestamp, newest first)
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        actions = []
-        
-        # Read Twitter action file (auto-set platform to twitter based on file path)
-        twitter_actions_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
-        if not platform or platform == "twitter":
-            actions.extend(cls._read_actions_from_file(
-                twitter_actions_log,
-                default_platform="twitter",  # Auto-fill platform field
-                platform_filter=platform,
-                agent_id=agent_id, 
-                round_num=round_num
-            ))
-        
-        # Read Reddit action file (auto-set platform to reddit based on file path)
-        reddit_actions_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
-        if not platform or platform == "reddit":
-            actions.extend(cls._read_actions_from_file(
-                reddit_actions_log,
-                default_platform="reddit",  # Auto-fill platform field
-                platform_filter=platform,
-                agent_id=agent_id,
-                round_num=round_num
-            ))
-        
-        # If per-platform files do not exist, try reading old single file format
-        if not actions:
-            actions_log = os.path.join(sim_dir, "actions.jsonl")
-            actions = cls._read_actions_from_file(
-                actions_log,
-                default_platform=None,  # Old format files should have platform field
-                platform_filter=platform,
-                agent_id=agent_id,
-                round_num=round_num
-            )
-        
-        # Sort by timestamp (newest first)
-        actions.sort(key=lambda x: x.timestamp, reverse=True)
-        
-        return actions
+        return _get_all_actions_fn(
+            simulation_id,
+            cls.RUN_STATE_DIR,
+            platform=platform,
+            agent_id=agent_id,
+            round_num=round_num,
+        )
     
     @classmethod
     def get_actions(
@@ -904,31 +716,21 @@ class SimulationRunner:
         offset: int = 0,
         platform: Optional[str] = None,
         agent_id: Optional[int] = None,
-        round_num: Optional[int] = None
+        round_num: Optional[int] = None,
     ) -> List[AgentAction]:
+        """Delegate to ``action_log_reader.get_actions``.
+
+        M11 Phase 5 PR 2 — body extracted; wrapper kept for Monkeypatch-compat.
         """
-        Get action history (with pagination)
-        
-        Args:
-            simulation_id: Simulation ID
-            limit: Return count limit
-            offset: Offset
-            platform: Filter platform
-            agent_id: Filter Agent
-            round_num: Filter round
-            
-        Returns:
-            Action list
-        """
-        actions = cls.get_all_actions(
-            simulation_id=simulation_id,
+        return _get_actions_fn(
+            simulation_id,
+            cls.RUN_STATE_DIR,
+            limit=limit,
+            offset=offset,
             platform=platform,
             agent_id=agent_id,
-            round_num=round_num
+            round_num=round_num,
         )
-        
-        # Pagination
-        return actions[offset:offset + limit]
     
     @classmethod
     def get_timeline(
