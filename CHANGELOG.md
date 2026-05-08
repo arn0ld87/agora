@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Added
+- **M11 Phase 5 Vorbereitung:** Schnittanalyse für `backend/app/services/simulation_runner.py` (1904 LOC) unter [`docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md`](docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md). Dokumentiert Verantwortlichkeiten, externe Call-Sites, Test-Coverage und fünf Extraktionskandidaten mit empfohlener PR-Reihenfolge (read-only Doku, kein Code-Edit). Refs F7.
+
 ### Changed
 - **Container Runtime Hardening:** `Dockerfile` trennt `frontend-build`, `backend-build` und finalen `prod`-Runtime-Stage. Das finale Prod-Image basiert auf `python:3.11-slim`, enthaelt kein Node/npm/curl mehr, installiert Backend-Dependencies via `uv sync --frozen --no-dev` aus `uv.lock`, nutzt einen Python-basierten Healthcheck und kopiert nur `.venv`, Backend-App/Skripte und `frontend/dist`. `docker-compose.prod.yml` setzt fuer `agora` jetzt `read_only: true` mit expliziten tmpfs-Mounts fuer Runtime-Schreibpfade. Image-Groesse lokal: 747 MB -> 320 MB (-427 MB, -57 %).
 - **CI Static-Analysis-Gates:** `ci.yml` blockiert jetzt explizit auf `uv run mypy app` im Backend und `npm run typecheck` (`vue-tsc --noEmit`) im Frontend. Backend-mypy startet mit strengem Contract-Scope und dokumentierter Legacy-Baseline fuer API-/Service-Pfade; Ruff ist auf `E/F/B/I/UP/SIM` konfiguriert, bestehende Import-/pyupgrade-/simplify-Altlasten sind als Phase-2-Baseline markiert. Frontend-TS laeuft ohne JS-Restbestand (`allowJs=false`) und ESLint parst Vue-SFC-`<script>`-Bloecke ueber `@typescript-eslint/parser`.
