@@ -163,12 +163,16 @@ class TestPromptSemantics:
     def test_graph_tools_to_text_has_no_forecast_marketing(self):
         """Sub-Slice 09 Erweiterung: InsightForgeResult.to_text() Heading-Block (Z. 168–177).
 
-        Source-Scan-Test: Prüft den echten Code aus graph_tools.py.
+        Source-Scan-Test: Prüft den echten Code aus graph_tools.py UND
+        graph/graph_dtos.py (M11 Phase 5b PR 1 — DTOs wurden ausgegliedert).
         Die to_text()-Methode wird im LLM-Context für Scenario-Analyse genutzt.
         """
         from pathlib import Path
         from app.services import graph_tools
-        src = Path(graph_tools.__file__).read_text(encoding="utf-8")
+        from app.services.graph import graph_dtos as _graph_dtos
+        src_graph_tools = Path(graph_tools.__file__).read_text(encoding="utf-8")
+        src_graph_dtos = Path(_graph_dtos.__file__).read_text(encoding="utf-8")
+        src = src_graph_tools + "\n" + src_graph_dtos
 
         forbidden_phrases = [
             "Future Prediction Deep Analysis",
@@ -178,11 +182,12 @@ class TestPromptSemantics:
         ]
         for phrase in forbidden_phrases:
             assert phrase not in src, (
-                f"Forbidden phrase {phrase!r} still in graph_tools.py "
+                f"Forbidden phrase {phrase!r} still in graph_tools.py or graph_dtos.py "
                 "(Sub-Slice 09 Erweiterung — scenario-Vokabular Pflicht)."
             )
 
         # Positive: neuer Wortlaut muss vorhanden sein (Wording-Glossar v1, Slice B)
+        # Nach M11 Phase 5b PR 1 leben diese Strings in graph_dtos.py
         assert "Scenario Evaluation Deep Analysis" in src
         assert "Evaluation Scenario:" in src
         assert "Evaluation Data Statistics" in src

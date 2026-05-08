@@ -9,6 +9,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **M11 Phase 5 Vorbereitung:** Schnittanalyse für `backend/app/services/simulation_runner.py` (1904 LOC) unter [`docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md`](docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md). Dokumentiert Verantwortlichkeiten, externe Call-Sites, Test-Coverage und fünf Extraktionskandidaten mit empfohlener PR-Reihenfolge (read-only Doku, kein Code-Edit). Refs F7.
 
 ### Changed
+- refactor(graph): extract `graph_dtos` (7 Dataclasses) from `graph_tools.py` to `app.services.graph.graph_dtos` — Wording-Audit auf neuen Pfad erweitert (Refs F7, M11 Phase 5b PR 1)
 - refactor(sim): extract `process_manager` (start/stop/cleanup/register_cleanup, _compute_oasis_db_path, _inject_oasis_db_env) from `SimulationRunner` to `app.services.sim.process_manager` — schließt M11 Phase 5 (Refs F7, M11 Phase 5 PR 5)
 - refactor(sim): extract `interview_client` (8 IPC-/Interview-Methoden) from `SimulationRunner` to `app.services.sim.interview_client` (Refs F7, M11 Phase 5 PR 4)
 - refactor(sim): extract `monitor_thread` (`_monitor_simulation`, `get_timeline`, `get_agent_stats`) from `SimulationRunner` to `app.services.sim.monitor` (Refs F7, M11 Phase 5 PR 3)
