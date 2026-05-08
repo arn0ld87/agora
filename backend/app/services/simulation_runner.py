@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import sys
 import json
-import time
 import threading
 import subprocess
 import signal
@@ -43,6 +42,12 @@ from .sim.action_log_reader import check_all_platforms_completed as _check_all_p
 from .sim.action_log_reader import read_actions_from_file as _read_actions_from_file_fn
 from .sim.action_log_reader import get_all_actions as _get_all_actions_fn
 from .sim.action_log_reader import get_actions as _get_actions_fn
+
+# M11 Phase 5 PR 3 — re-export monitor module functions.
+# The three class-method wrappers below delegate to these for backward-compat.
+from .sim.monitor import monitor_simulation as _monitor_simulation_fn
+from .sim.monitor import get_timeline as _get_timeline_fn
+from .sim.monitor import get_agent_stats as _get_agent_stats_fn
 
 
 def _store():
@@ -425,110 +430,23 @@ class SimulationRunner:
     
     @classmethod
     def _monitor_simulation(cls, simulation_id: str):
-        """Monitor simulation process and parse action logs"""
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        
-        # New log structure: per-platform action logs
-        twitter_actions_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
-        reddit_actions_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
-        
-        process = cls._processes.get(simulation_id)
-        state = cls.get_run_state(simulation_id)
-        
-        if not process or not state:
-            return
-        
-        twitter_position = 0
-        reddit_position = 0
-        
-        try:
-            while process.poll() is None:  # Process still running
-                # Read Twitter action log
-                if os.path.exists(twitter_actions_log):
-                    twitter_position = cls._read_action_log(
-                        twitter_actions_log, twitter_position, state, "twitter"
-                    )
-                
-                # Read Reddit action log
-                if os.path.exists(reddit_actions_log):
-                    reddit_position = cls._read_action_log(
-                        reddit_actions_log, reddit_position, state, "reddit"
-                    )
-                
-                # Update status
-                cls._save_run_state(state)
-                time.sleep(2)
-            
-            # After process ends, read logs one more time
-            if os.path.exists(twitter_actions_log):
-                cls._read_action_log(twitter_actions_log, twitter_position, state, "twitter")
-            if os.path.exists(reddit_actions_log):
-                cls._read_action_log(reddit_actions_log, reddit_position, state, "reddit")
-            
-            # Process ended
-            exit_code = process.returncode
-            
-            if exit_code == 0:
-                state.runner_status = RunnerStatus.COMPLETED
-                state.completed_at = datetime.now().isoformat()
-                logger.info(
-                    f"Simulation completed: {simulation_id}",
-                    extra={'simulation_id': simulation_id},
-                )
-            else:
-                state.runner_status = RunnerStatus.FAILED
-                # Read error info from main log file
-                main_log_path = os.path.join(sim_dir, "simulation.log")
-                error_info = ""
-                try:
-                    if os.path.exists(main_log_path):
-                        with open(main_log_path, 'r', encoding='utf-8') as f:
-                            error_info = f.read()[-2000:]  # Take last 2000 characters
-                except Exception:
-                    pass
-                state.error = f"Process exit code: {exit_code}, error: {error_info}"
-                logger.error(
-                    f"Simulation failed: {simulation_id}, error={state.error}",
-                    extra={'simulation_id': simulation_id},
-                )
-            
-            state.twitter_running = False
-            state.reddit_running = False
-            cls._save_run_state(state)
-            
-        except Exception as e:
-            logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
-            state.runner_status = RunnerStatus.FAILED
-            state.error = str(e)
-            cls._save_run_state(state)
-        
-        finally:
-            # Stop graph memory updater
-            if cls._graph_memory_enabled.get(simulation_id, False):
-                try:
-                    GraphMemoryManager.stop_updater(simulation_id)
-                    logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
-                except Exception as e:
-                    logger.error(f"Failed to stop graph memory updater: {e}")
-                cls._graph_memory_enabled.pop(simulation_id, None)
-            
-            # Clean up process resources
-            cls._processes.pop(simulation_id, None)
-            cls._action_queues.pop(simulation_id, None)
-            
-            # Close log file handle
-            if simulation_id in cls._stdout_files:
-                try:
-                    cls._stdout_files[simulation_id].close()
-                except Exception:
-                    pass
-                cls._stdout_files.pop(simulation_id, None)
-            if simulation_id in cls._stderr_files and cls._stderr_files[simulation_id]:
-                try:
-                    cls._stderr_files[simulation_id].close()
-                except Exception:
-                    pass
-                cls._stderr_files.pop(simulation_id, None)
+        """Delegate to ``monitor.monitor_simulation``.
+
+        M11 Phase 5 PR 3 — body extracted; wrapper kept so that
+        ``threading.Thread(target=cls._monitor_simulation, args=(simulation_id,))``
+        continues to work unchanged and Monkeypatch-Stubs still apply.
+        """
+        _monitor_simulation_fn(
+            simulation_id,
+            run_state_dir=cls.RUN_STATE_DIR,
+            processes=cls._processes,
+            graph_memory_enabled=cls._graph_memory_enabled,
+            action_queues=cls._action_queues,
+            stdout_files=cls._stdout_files,
+            stderr_files=cls._stderr_files,
+            get_run_state=cls.get_run_state,
+            save_state=cls._save_run_state,
+        )
     
     @classmethod
     def _read_action_log(
@@ -737,114 +655,26 @@ class SimulationRunner:
         cls,
         simulation_id: str,
         start_round: int = 0,
-        end_round: Optional[int] = None
+        end_round: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        """Delegate to ``monitor.get_timeline``.
+
+        M11 Phase 5 PR 3 — body extracted; wrapper kept for Monkeypatch-compat.
         """
-        Get simulation timeline (summarized by rounds)
-        
-        Args:
-            simulation_id: Simulation ID
-            start_round: Start round
-            end_round: End round
-            
-        Returns:
-            Summary information for each round
-        """
-        actions = cls.get_actions(simulation_id, limit=10000)
-        
-        # Group by round
-        rounds: Dict[int, Dict[str, Any]] = {}
-        
-        for action in actions:
-            round_num = action.round_num
-            
-            if round_num < start_round:
-                continue
-            if end_round is not None and round_num > end_round:
-                continue
-            
-            if round_num not in rounds:
-                rounds[round_num] = {
-                    "round_num": round_num,
-                    "twitter_actions": 0,
-                    "reddit_actions": 0,
-                    "active_agents": set(),
-                    "action_types": {},
-                    "first_action_time": action.timestamp,
-                    "last_action_time": action.timestamp,
-                }
-            
-            r = rounds[round_num]
-            
-            if action.platform == "twitter":
-                r["twitter_actions"] += 1
-            else:
-                r["reddit_actions"] += 1
-            
-            r["active_agents"].add(action.agent_id)
-            r["action_types"][action.action_type] = r["action_types"].get(action.action_type, 0) + 1
-            r["last_action_time"] = action.timestamp
-        
-        # Convert to list
-        result = []
-        for round_num in sorted(rounds.keys()):
-            r = rounds[round_num]
-            result.append({
-                "round_num": round_num,
-                "twitter_actions": r["twitter_actions"],
-                "reddit_actions": r["reddit_actions"],
-                "total_actions": r["twitter_actions"] + r["reddit_actions"],
-                "active_agents_count": len(r["active_agents"]),
-                "active_agents": list(r["active_agents"]),
-                "action_types": r["action_types"],
-                "first_action_time": r["first_action_time"],
-                "last_action_time": r["last_action_time"],
-            })
-        
-        return result
+        return _get_timeline_fn(
+            simulation_id,
+            cls.RUN_STATE_DIR,
+            start_round=start_round,
+            end_round=end_round,
+        )
     
     @classmethod
     def get_agent_stats(cls, simulation_id: str) -> List[Dict[str, Any]]:
+        """Delegate to ``monitor.get_agent_stats``.
+
+        M11 Phase 5 PR 3 — body extracted; wrapper kept for Monkeypatch-compat.
         """
-        Get statistics for each Agent
-        
-        Returns:
-            Agent statistics list
-        """
-        actions = cls.get_actions(simulation_id, limit=10000)
-        
-        agent_stats: Dict[int, Dict[str, Any]] = {}
-        
-        for action in actions:
-            agent_id = action.agent_id
-            
-            if agent_id not in agent_stats:
-                agent_stats[agent_id] = {
-                    "agent_id": agent_id,
-                    "agent_name": action.agent_name,
-                    "total_actions": 0,
-                    "twitter_actions": 0,
-                    "reddit_actions": 0,
-                    "action_types": {},
-                    "first_action_time": action.timestamp,
-                    "last_action_time": action.timestamp,
-                }
-            
-            stats = agent_stats[agent_id]
-            stats["total_actions"] += 1
-            
-            if action.platform == "twitter":
-                stats["twitter_actions"] += 1
-            else:
-                stats["reddit_actions"] += 1
-            
-            stats["action_types"][action.action_type] = stats["action_types"].get(action.action_type, 0) + 1
-            stats["last_action_time"] = action.timestamp
-        
-        # Sort by total actions
-        result = sorted(agent_stats.values(), key=lambda x: x["total_actions"], reverse=True)
-        
-        return result
+        return _get_agent_stats_fn(simulation_id, cls.RUN_STATE_DIR)
     
     @classmethod
     def cleanup_simulation_logs(cls, simulation_id: str) -> Dict[str, Any]:
