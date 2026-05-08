@@ -14,9 +14,7 @@ import subprocess
 import signal
 import atexit
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from queue import Queue
 
 from ..utils.logger import get_logger
@@ -25,6 +23,18 @@ from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
 from .simulation_ipc import SimulationIPCClient
+
+# M11 Phase 5 PR 1 — re-export from extracted sub-module for backward-compat.
+# All callers that import these symbols from simulation_runner continue to work.
+# Aliased imports satisfy mypy's no-implicit-reexport check (PEP 484 §re-exports).
+from .sim.run_state_store import AgentAction as AgentAction  # noqa: PLC0414
+from .sim.run_state_store import RoundSummary as RoundSummary  # noqa: PLC0414
+from .sim.run_state_store import RunnerStatus as RunnerStatus  # noqa: PLC0414
+from .sim.run_state_store import SimulationRunState as SimulationRunState  # noqa: PLC0414
+from .sim.run_state_store import load_run_state
+from .sim.run_state_store import save_run_state as _save_run_state_fn
+from .sim.run_state_store import read_console_log
+from .sim.run_state_store import cleanup_run_logs
 
 
 def _store():
@@ -44,166 +54,6 @@ _cleanup_registered = False
 # Platform detection
 IS_WINDOWS = sys.platform == 'win32'
 
-
-class RunnerStatus(str, Enum):
-    """Runner status"""
-    IDLE = "idle"
-    STARTING = "starting"
-    RUNNING = "running"
-    PAUSED = "paused"
-    STOPPING = "stopping"
-    STOPPED = "stopped"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    READY = "ready"  # legacy alias for idle
-
-
-@dataclass
-class AgentAction:
-    """Agent action record"""
-    round_num: int
-    timestamp: str
-    platform: str  # twitter / reddit
-    agent_id: int
-    agent_name: str
-    action_type: str  # CREATE_POST, LIKE_POST, etc.
-    action_args: Dict[str, Any] = field(default_factory=dict)
-    result: Optional[str] = None
-    success: bool = True
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "round_num": self.round_num,
-            "timestamp": self.timestamp,
-            "platform": self.platform,
-            "agent_id": self.agent_id,
-            "agent_name": self.agent_name,
-            "action_type": self.action_type,
-            "action_args": self.action_args,
-            "result": self.result,
-            "success": self.success,
-        }
-
-
-@dataclass
-class RoundSummary:
-    """Round summary"""
-    round_num: int
-    start_time: str
-    end_time: Optional[str] = None
-    simulated_hour: int = 0
-    twitter_actions: int = 0
-    reddit_actions: int = 0
-    active_agents: List[int] = field(default_factory=list)
-    actions: List[AgentAction] = field(default_factory=list)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "round_num": self.round_num,
-            "start_time": self.start_time,
-            "end_time": self.end_time,
-            "simulated_hour": self.simulated_hour,
-            "twitter_actions": self.twitter_actions,
-            "reddit_actions": self.reddit_actions,
-            "active_agents": self.active_agents,
-            "actions_count": len(self.actions),
-            "actions": [a.to_dict() for a in self.actions],
-        }
-
-
-@dataclass
-class SimulationRunState:
-    """Simulation run state (real-time)"""
-    simulation_id: str
-    runner_status: RunnerStatus = RunnerStatus.IDLE
-
-    # Progress information
-    current_round: int = 0
-    total_rounds: int = 0
-    simulated_hours: int = 0
-    total_simulation_hours: int = 0
-
-    # Per-platform independent rounds and simulated time (for dual-platform parallel display)
-    twitter_current_round: int = 0
-    reddit_current_round: int = 0
-    twitter_simulated_hours: int = 0
-    reddit_simulated_hours: int = 0
-
-    # Platform status
-    twitter_running: bool = False
-    reddit_running: bool = False
-    twitter_actions_count: int = 0
-    reddit_actions_count: int = 0
-
-    # Platform completion status (detected via simulation_end events in actions.jsonl)
-    twitter_completed: bool = False
-    reddit_completed: bool = False
-
-    # Round summary
-    rounds: List[RoundSummary] = field(default_factory=list)
-
-    # Recent actions (for frontend real-time display)
-    recent_actions: List[AgentAction] = field(default_factory=list)
-    max_recent_actions: int = 50
-
-    # Timestamps
-    started_at: Optional[str] = None
-    updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    completed_at: Optional[str] = None
-
-    # Error message
-    error: Optional[str] = None
-
-    # Process ID (for stopping)
-    process_pid: Optional[int] = None
-    
-    def add_action(self, action: AgentAction):
-        """Add action to recent actions list"""
-        self.recent_actions.insert(0, action)
-        if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[:self.max_recent_actions]
-        
-        if action.platform == "twitter":
-            self.twitter_actions_count += 1
-        else:
-            self.reddit_actions_count += 1
-        
-        self.updated_at = datetime.now().isoformat()
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "simulation_id": self.simulation_id,
-            "runner_status": self.runner_status.value,
-            "current_round": self.current_round,
-            "total_rounds": self.total_rounds,
-            "simulated_hours": self.simulated_hours,
-            "total_simulation_hours": self.total_simulation_hours,
-            "progress_percent": round(self.current_round / max(self.total_rounds, 1) * 100, 1),
-            # Per-platform independent rounds and time
-            "twitter_current_round": self.twitter_current_round,
-            "reddit_current_round": self.reddit_current_round,
-            "twitter_simulated_hours": self.twitter_simulated_hours,
-            "reddit_simulated_hours": self.reddit_simulated_hours,
-            "twitter_running": self.twitter_running,
-            "reddit_running": self.reddit_running,
-            "twitter_completed": self.twitter_completed,
-            "reddit_completed": self.reddit_completed,
-            "twitter_actions_count": self.twitter_actions_count,
-            "reddit_actions_count": self.reddit_actions_count,
-            "total_actions_count": self.twitter_actions_count + self.reddit_actions_count,
-            "started_at": self.started_at,
-            "updated_at": self.updated_at,
-            "completed_at": self.completed_at,
-            "error": self.error,
-            "process_pid": self.process_pid,
-        }
-
-    def to_detail_dict(self) -> Dict[str, Any]:
-        """Details with recent actions"""
-        result = self.to_dict()
-        result["recent_actions"] = [a.to_dict() for a in self.recent_actions]
-        result["rounds_count"] = len(self.rounds)
-        return result
 
 
 # Sub-Slice 21 — OASIS-DB-Pfad pro Sim, damit OASIS keine DB ins
@@ -275,10 +125,14 @@ class SimulationRunner:
         The subprocess in start_simulation pipes stdout+stderr to
         `{sim_dir}/simulation.log`. This reader returns an incremental slice
         for client-side polling (same shape as ReportManager.get_console_log).
+
+        Delegates I/O to :func:`~app.services.sim.run_state_store.read_console_log`.
         """
-        log_path = os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log")
+        all_lines = read_console_log(simulation_id, cls.RUN_STATE_DIR)
 
-        if not os.path.exists(log_path):
+        if not all_lines and not os.path.exists(
+            os.path.join(cls.RUN_STATE_DIR, simulation_id, "simulation.log")
+        ):
             return {
                 "lines": [],
                 "total_lines": 0,
@@ -287,24 +141,8 @@ class SimulationRunner:
                 "has_more": False,
             }
 
-        lines: List[str] = []
-        total_lines = 0
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
-                for i, line in enumerate(f):
-                    total_lines = i + 1
-                    if i >= from_line:
-                        lines.append(line.rstrip('\n\r'))
-        except Exception as exc:
-            logger.warning(f"Failed to read simulation.log for {simulation_id}: {exc}")
-            return {
-                "lines": [],
-                "total_lines": 0,
-                "from_line": from_line,
-                "next_line": from_line,
-                "has_more": False,
-                "error": str(exc),
-            }
+        total_lines = len(all_lines)
+        lines = all_lines[from_line:]
 
         return {
             "lines": lines,
@@ -328,75 +166,24 @@ class SimulationRunner:
     
     @classmethod
     def _load_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
-        """Load run state from file"""
-        store = _store()
-        if not store.exists(simulation_id, "run_state"):
-            return None
+        """Load run state from file.
 
-        try:
-            data = store.read_json(simulation_id, "run_state", default=None)
-            if not data:
-                return None
-
-            state = SimulationRunState(
-                simulation_id=simulation_id,
-                runner_status=RunnerStatus(data.get("runner_status", "idle")),
-                current_round=data.get("current_round", 0),
-                total_rounds=data.get("total_rounds", 0),
-                simulated_hours=data.get("simulated_hours", 0),
-                total_simulation_hours=data.get("total_simulation_hours", 0),
-                # Per-platform independent rounds and time
-                twitter_current_round=data.get("twitter_current_round", 0),
-                reddit_current_round=data.get("reddit_current_round", 0),
-                twitter_simulated_hours=data.get("twitter_simulated_hours", 0),
-                reddit_simulated_hours=data.get("reddit_simulated_hours", 0),
-                twitter_running=data.get("twitter_running", False),
-                reddit_running=data.get("reddit_running", False),
-                twitter_completed=data.get("twitter_completed", False),
-                reddit_completed=data.get("reddit_completed", False),
-                twitter_actions_count=data.get("twitter_actions_count", 0),
-                reddit_actions_count=data.get("reddit_actions_count", 0),
-                started_at=data.get("started_at"),
-                updated_at=data.get("updated_at", datetime.now().isoformat()),
-                completed_at=data.get("completed_at"),
-                error=data.get("error"),
-                process_pid=data.get("process_pid"),
-            )
-
-            # Load recent actions
-            actions_data = data.get("recent_actions", [])
-            for a in actions_data:
-                state.recent_actions.append(AgentAction(
-                    round_num=a.get("round_num", 0),
-                    timestamp=a.get("timestamp", ""),
-                    platform=a.get("platform", ""),
-                    agent_id=a.get("agent_id", 0),
-                    agent_name=a.get("agent_name", ""),
-                    action_type=a.get("action_type", ""),
-                    action_args=a.get("action_args", {}),
-                    result=a.get("result"),
-                    success=a.get("success", True),
-                ))
-            
-            return state
-        except Exception as e:
-            logger.error(f"Failed to load run state: {str(e)}")
-            return None
+        Delegates to :func:`~app.services.sim.run_state_store.load_run_state`.
+        """
+        return load_run_state(simulation_id, cls.RUN_STATE_DIR)
     
     @classmethod
-    def _save_run_state(cls, state: SimulationRunState):
-        """Save run state to file"""
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
-        os.makedirs(sim_dir, exist_ok=True)  # keep dir for log-pipe / shutil consumers
+    def _save_run_state(cls, state: SimulationRunState) -> None:
+        """Save run state to file.
 
-        data = state.to_detail_dict()
-        _store().write_json(state.simulation_id, "run_state", data)
-
-        # Issue #9 Phase B — mirror the snapshot to the bus so live
-        # subscribers (frontend SSE in Phase C, future analytics workers)
-        # get a push instead of polling run_state.json. Best-effort:
-        # a broken bus must not poison state persistence.
-        try:
+        Delegates pure I/O to :func:`~app.services.sim.run_state_store.save_run_state`.
+        Side-effects (event-bus publish, run-registry sync) are passed as
+        callbacks so ``run_state_store`` stays free of those imports.
+        """
+        def _publish(data: Dict[str, Any]) -> None:
+            # Issue #9 Phase B — mirror the snapshot to the bus so live
+            # subscribers (frontend SSE in Phase C, future analytics workers)
+            # get a push instead of polling run_state.json.
             bus = resolve_default_event_bus()
             bus.publish(
                 CHANNEL_STATE,
@@ -407,13 +194,12 @@ class SimulationRunner:
                     ts=data.get("updated_at", datetime.now().isoformat()),
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Event bus state publish skipped: %s", exc)
 
-        cls._run_states[state.simulation_id] = state
-        try:
+        def _registry_sync(simulation_id: str, data: Dict[str, Any]) -> None:
             registry = RunRegistry()
-            run = registry.get_latest_by_linked_id("simulation_id", state.simulation_id, run_type="simulation_run")
+            run = registry.get_latest_by_linked_id(
+                "simulation_id", simulation_id, run_type="simulation_run"
+            )
             if run:
                 registry.update_run(
                     run["run_id"],
@@ -422,13 +208,24 @@ class SimulationRunner:
                     message=f"Runner status: {state.runner_status.value}",
                     artifacts={
                         "simulation": {
-                            "run_state": os.path.join(cls.RUN_STATE_DIR, state.simulation_id, "run_state.json"),
-                            "simulation_log": os.path.join(cls.RUN_STATE_DIR, state.simulation_id, "simulation.log"),
+                            "run_state": os.path.join(
+                                cls.RUN_STATE_DIR, simulation_id, "run_state.json"
+                            ),
+                            "simulation_log": os.path.join(
+                                cls.RUN_STATE_DIR, simulation_id, "simulation.log"
+                            ),
                         }
                     },
                 )
-        except Exception as exc:
-            logger.debug(f"Run registry sync skipped for {state.simulation_id}: {exc}")
+
+        _save_run_state_fn(
+            state,
+            cls.RUN_STATE_DIR,
+            event_bus_publish=_publish,
+            run_registry_sync=_registry_sync,
+        )
+        # Keep in-memory cache in sync
+        cls._run_states[state.simulation_id] = state
     
     @classmethod
     def start_simulation(
@@ -1250,81 +1047,26 @@ class SimulationRunner:
     @classmethod
     def cleanup_simulation_logs(cls, simulation_id: str) -> Dict[str, Any]:
         """
-        Clean up simulation run logs (for force restart)
-        
-        Will delete the following files:
-        - run_state.json
-        - twitter/actions.jsonl
-        - reddit/actions.jsonl
-        - simulation.log
-        - stdout.log / stderr.log
-        - twitter_simulation.db (simulation database)
-        - reddit_simulation.db (simulation database)
-        - env_status.json (environment status)
-        
-        Note: Does not delete config files (simulation_config.json) and profile files
-        
+        Clean up simulation run logs (for force restart).
+
+        Delegates file deletion to
+        :func:`~app.services.sim.run_state_store.cleanup_run_logs` and
+        additionally evicts the in-memory run-state cache entry.
+
+        Note: Does not delete config files (simulation_config.json) and profile files.
+
         Args:
             simulation_id: Simulation ID
-            
+
         Returns:
             Cleanup result information
         """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        
-        if not os.path.exists(sim_dir):
-            return {"success": True, "message": "Simulation directory does not exist, no cleanup needed"}
-        
-        cleaned_files = []
-        errors = []
-        
-        # Files to delete (including database files)
-        files_to_delete = [
-            "run_state.json",
-            "simulation.log",
-            "stdout.log",
-            "stderr.log",
-            "twitter_simulation.db",  # Twitter platform database
-            "reddit_simulation.db",   # Reddit platform database
-            "env_status.json",        # Environment status file
-        ]
-        
-        # Directories to delete (contains action logs)
-        dirs_to_clean = ["twitter", "reddit"]
-        
-        # Delete files
-        for filename in files_to_delete:
-            file_path = os.path.join(sim_dir, filename)
-            if os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                    cleaned_files.append(filename)
-                except Exception as e:
-                    errors.append(f"Failed to delete {filename}: {str(e)}")
-        
-        # Clean up action logs in platform directories
-        for dir_name in dirs_to_clean:
-            dir_path = os.path.join(sim_dir, dir_name)
-            if os.path.exists(dir_path):
-                actions_file = os.path.join(dir_path, "actions.jsonl")
-                if os.path.exists(actions_file):
-                    try:
-                        os.remove(actions_file)
-                        cleaned_files.append(f"{dir_name}/actions.jsonl")
-                    except Exception as e:
-                        errors.append(f"Failed to delete {dir_name}/actions.jsonl: {str(e)}")
-        
-        # Clean up in-memory run state
-        if simulation_id in cls._run_states:
-            del cls._run_states[simulation_id]
-        
-        logger.info(f"Cleanup simulation logs completed: {simulation_id}, deleted files: {cleaned_files}")
-        
-        return {
-            "success": len(errors) == 0,
-            "cleaned_files": cleaned_files,
-            "errors": errors if errors else None
-        }
+        result = cleanup_run_logs(simulation_id, cls.RUN_STATE_DIR)
+
+        # Evict in-memory cache so next get_run_state() re-reads from disk
+        cls._run_states.pop(simulation_id, None)
+
+        return result
     
     # Flag to prevent duplicate cleanup
     _cleanup_done = False
