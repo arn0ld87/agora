@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 import sys
-import json
 import threading
 import subprocess
 import signal
@@ -21,8 +20,6 @@ from .artifact_store import resolve_default_store
 from .event_bus import CHANNEL_STATE, SimulationEvent, resolve_default_event_bus
 from .run_registry import RunRegistry
 from .graph_memory_updater import GraphMemoryManager
-from .simulation_ipc import SimulationIPCClient
-
 # M11 Phase 5 PR 1 — re-export from extracted sub-module for backward-compat.
 # All callers that import these symbols from simulation_runner continue to work.
 # Aliased imports satisfy mypy's no-implicit-reexport check (PEP 484 §re-exports).
@@ -48,6 +45,17 @@ from .sim.action_log_reader import get_actions as _get_actions_fn
 from .sim.monitor import monitor_simulation as _monitor_simulation_fn
 from .sim.monitor import get_timeline as _get_timeline_fn
 from .sim.monitor import get_agent_stats as _get_agent_stats_fn
+
+# M11 Phase 5 PR 4 — re-export interview/IPC module functions.
+# The eight class-method wrappers below delegate to these for backward-compat.
+from .sim.interview_client import check_env_alive as _check_env_alive_fn
+from .sim.interview_client import get_env_status_detail as _get_env_status_detail_fn
+from .sim.interview_client import interview_agent as _interview_agent_fn
+from .sim.interview_client import interview_agents_batch as _interview_agents_batch_fn
+from .sim.interview_client import interview_all_agents as _interview_all_agents_fn
+from .sim.interview_client import close_simulation_env as _close_simulation_env_fn
+from .sim.interview_client import _get_interview_history_from_db as _get_hist_from_db_fn
+from .sim.interview_client import get_interview_history as _get_interview_history_fn
 
 
 def _store():
@@ -886,53 +894,17 @@ class SimulationRunner:
         return running
     
     # ============== Interview functionality ==============
-    
+    # M11 Phase 5 PR 4 — thin delegations to app.services.sim.interview_client.
+
     @classmethod
     def check_env_alive(cls, simulation_id: str) -> bool:
-        """
-        Check if simulation environment is alive (can receive Interview commands)
-
-        Args:
-            simulation_id: Simulation ID
-
-        Returns:
-            True means environment is alive, False means environment is closed
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        if not os.path.exists(sim_dir):
-            return False
-
-        ipc_client = SimulationIPCClient(sim_dir)
-        return ipc_client.check_env_alive()
+        """Check if the simulation environment is alive (can receive Interview commands)."""
+        return _check_env_alive_fn(simulation_id, run_state_dir=cls.RUN_STATE_DIR)
 
     @classmethod
     def get_env_status_detail(cls, simulation_id: str) -> Dict[str, Any]:
-        """
-        Get detailed status information of simulation environment
-
-        Args:
-            simulation_id: Simulation ID
-
-        Returns:
-            Status details dict, contains status, twitter_available, reddit_available, timestamp
-        """
-        default_status = {
-            "status": "stopped",
-            "twitter_available": False,
-            "reddit_available": False,
-            "timestamp": None
-        }
-
-        store = _store()
-        status = store.read_json(simulation_id, "env_status", default=None)
-        if not status:
-            return default_status
-        return {
-            "status": status.get("status", "stopped"),
-            "twitter_available": status.get("twitter_available", False),
-            "reddit_available": status.get("reddit_available", False),
-            "timestamp": status.get("timestamp")
-        }
+        """Return detailed status information for a simulation environment."""
+        return _get_env_status_detail_fn(simulation_id)
 
     @classmethod
     def interview_agent(
@@ -940,339 +912,75 @@ class SimulationRunner:
         simulation_id: str,
         agent_id: int,
         prompt: str,
-        platform: str = None,
-        timeout: float = 60.0
+        platform: Optional[str] = None,
+        timeout: float = 60.0,
     ) -> Dict[str, Any]:
-        """
-        Interview single Agent
-
-        Args:
-            simulation_id: Simulation ID
-            agent_id: Agent ID
-            prompt: Interview question
-            platform: Specify platform (optional)
-                - "twitter": only interview Twitter platform
-                - "reddit": only interview Reddit platform
-                - None: interview both platforms simultaneously in dual-platform simulations, return integrated results
-            timeout: Timeout (seconds)
-
-        Returns:
-            Interview result dict
-
-        Raises:
-            ValueError: Simulation does not exist or environment not running
-            TimeoutError: Timeout waiting for response
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        if not os.path.exists(sim_dir):
-            raise ValueError(f"Simulation does not exist: {simulation_id}")
-
-        ipc_client = SimulationIPCClient(sim_dir)
-
-        if not ipc_client.check_env_alive():
-            raise ValueError(f"Simulation environment not running or closed, cannot execute Interview: {simulation_id}")
-
-        logger.info(f"Send Interview command: simulation_id={simulation_id}, agent_id={agent_id}, platform={platform}")
-
-        response = ipc_client.send_interview(
-            agent_id=agent_id,
-            prompt=prompt,
-            platform=platform,
-            timeout=timeout
+        """Interview a single agent via IPC."""
+        return _interview_agent_fn(
+            simulation_id, agent_id, prompt, platform, timeout,
+            run_state_dir=cls.RUN_STATE_DIR,
         )
 
-        if response.status.value == "completed":
-            return {
-                "success": True,
-                "agent_id": agent_id,
-                "prompt": prompt,
-                "result": response.result,
-                "timestamp": response.timestamp
-            }
-        else:
-            return {
-                "success": False,
-                "agent_id": agent_id,
-                "prompt": prompt,
-                "error": response.error,
-                "timestamp": response.timestamp
-            }
-    
     @classmethod
     def interview_agents_batch(
         cls,
         simulation_id: str,
         interviews: List[Dict[str, Any]],
-        platform: str = None,
-        timeout: float = 120.0
+        platform: Optional[str] = None,
+        timeout: float = 120.0,
     ) -> Dict[str, Any]:
-        """
-        Batch interview multiple Agents
-
-        Args:
-            simulation_id: Simulation ID
-            interviews: List of interviews, each element contains {"agent_id": int, "prompt": str, "platform": str(optional)}
-            platform: Default platform (optional, overridden by each interview item's platform)
-                - "twitter": default only interview Twitter platform
-                - "reddit": default only interview Reddit platform
-                - None: interview each Agent on both platforms simultaneously in dual-platform simulations
-            timeout: Timeout (seconds)
-
-        Returns:
-            Batch interview result dict
-
-        Raises:
-            ValueError: Simulation does not exist or environment not running
-            TimeoutError: Timeout waiting for response
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        if not os.path.exists(sim_dir):
-            raise ValueError(f"Simulation does not exist: {simulation_id}")
-
-        ipc_client = SimulationIPCClient(sim_dir)
-
-        if not ipc_client.check_env_alive():
-            raise ValueError(f"Simulation environment not running or closed, cannot execute Interview: {simulation_id}")
-
-        logger.info(f"Send batch Interview command: simulation_id={simulation_id}, count={len(interviews)}, platform={platform}")
-
-        response = ipc_client.send_batch_interview(
-            interviews=interviews,
-            platform=platform,
-            timeout=timeout
+        """Batch-interview multiple agents via IPC."""
+        return _interview_agents_batch_fn(
+            simulation_id, interviews, platform, timeout,
+            run_state_dir=cls.RUN_STATE_DIR,
         )
 
-        if response.status.value == "completed":
-            return {
-                "success": True,
-                "interviews_count": len(interviews),
-                "result": response.result,
-                "timestamp": response.timestamp
-            }
-        else:
-            return {
-                "success": False,
-                "interviews_count": len(interviews),
-                "error": response.error,
-                "timestamp": response.timestamp
-            }
-    
     @classmethod
     def interview_all_agents(
         cls,
         simulation_id: str,
         prompt: str,
-        platform: str = None,
-        timeout: float = 180.0
+        platform: Optional[str] = None,
+        timeout: float = 180.0,
     ) -> Dict[str, Any]:
-        """
-        Interview all Agents (global interview)
-
-        Interview all Agents in the simulation using the same question
-
-        Args:
-            simulation_id: Simulation ID
-            prompt: Interview question (all Agents use the same question)
-            platform: Specify platform (optional)
-                - "twitter": only interview Twitter platform
-                - "reddit": only interview Reddit platform
-                - None: interview each Agent on both platforms simultaneously in dual-platform simulations
-            timeout: Timeout (seconds)
-
-        Returns:
-            Global interview result dict
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        if not os.path.exists(sim_dir):
-            raise ValueError(f"Simulation does not exist: {simulation_id}")
-
-        # Get all Agent information from config file
-        store = _store()
-        if not store.exists(simulation_id, "simulation_config"):
-            raise ValueError(f"Simulation config does not exist: {simulation_id}")
-
-        config = store.read_json(simulation_id, "simulation_config", default=None)
-        if not config:
-            raise ValueError(f"Simulation config is unreadable: {simulation_id}")
-
-        agent_configs = config.get("agent_configs", [])
-        if not agent_configs:
-            raise ValueError(f"No agents in simulation config: {simulation_id}")
-
-        # Build batch interview list
-        interviews = []
-        for agent_config in agent_configs:
-            agent_id = agent_config.get("agent_id")
-            if agent_id is not None:
-                interviews.append({
-                    "agent_id": agent_id,
-                    "prompt": prompt
-                })
-
-        logger.info(f"Send global Interview command: simulation_id={simulation_id}, agent_count={len(interviews)}, platform={platform}")
-
-        return cls.interview_agents_batch(
-            simulation_id=simulation_id,
-            interviews=interviews,
-            platform=platform,
-            timeout=timeout
+        """Interview all agents in a simulation using the same prompt."""
+        return _interview_all_agents_fn(
+            simulation_id, prompt, platform, timeout,
+            run_state_dir=cls.RUN_STATE_DIR,
         )
-    
+
     @classmethod
     def close_simulation_env(
         cls,
         simulation_id: str,
-        timeout: float = 30.0
+        timeout: float = 30.0,
     ) -> Dict[str, Any]:
-        """
-        Close simulation environment (not stop simulation process)
-        
-        Send close environment command to simulation to gracefully exit command wait mode
-        
-        Args:
-            simulation_id: Simulation ID
-            timeout: Timeout (seconds)
-            
-        Returns:
-            Operation result dict
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        if not os.path.exists(sim_dir):
-            raise ValueError(f"Simulation does not exist: {simulation_id}")
-        
-        ipc_client = SimulationIPCClient(sim_dir)
-        
-        if not ipc_client.check_env_alive():
-            return {
-                "success": True,
-                "message": "Environment already closed"
-            }
-        
-        logger.info(f"Send close environment command: simulation_id={simulation_id}")
-        
-        try:
-            response = ipc_client.send_close_env(timeout=timeout)
-            
-            return {
-                "success": response.status.value == "completed",
-                "message": "Close environment command sent",
-                "result": response.result,
-                "timestamp": response.timestamp
-            }
-        except TimeoutError:
-            # Timeout may be because environment is closing
-            return {
-                "success": True,
-                "message": "Close environment command sent (timeout waiting for response, environment may be closing)"
-            }
-    
+        """Send a close-environment command to a running simulation."""
+        return _close_simulation_env_fn(
+            simulation_id, timeout, run_state_dir=cls.RUN_STATE_DIR,
+        )
+
     @classmethod
     def _get_interview_history_from_db(
         cls,
         db_path: str,
         platform_name: str,
         agent_id: Optional[int] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Get Interview history from single database"""
-        import sqlite3
-        
-        if not os.path.exists(db_path):
-            return []
-        
-        results = []
-        
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            if agent_id is not None:
-                cursor.execute("""
-                    SELECT user_id, info, created_at
-                    FROM trace
-                    WHERE action = 'interview' AND user_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                """, (agent_id, limit))
-            else:
-                cursor.execute("""
-                    SELECT user_id, info, created_at
-                    FROM trace
-                    WHERE action = 'interview'
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                """, (limit,))
-            
-            for user_id, info_json, created_at in cursor.fetchall():
-                try:
-                    info = json.loads(info_json) if info_json else {}
-                except json.JSONDecodeError:
-                    info = {"raw": info_json}
-                
-                results.append({
-                    "agent_id": user_id,
-                    "response": info.get("response", info),
-                    "prompt": info.get("prompt", ""),
-                    "timestamp": created_at,
-                    "platform": platform_name
-                })
-            
-            conn.close()
-            
-        except Exception as e:
-            logger.error(f"Failed to read Interview history ({platform_name}): {e}")
-        
-        return results
+        """Read interview history from a single platform SQLite database."""
+        return _get_hist_from_db_fn(db_path, platform_name, agent_id, limit)
 
     @classmethod
     def get_interview_history(
         cls,
         simulation_id: str,
-        platform: str = None,
+        platform: Optional[str] = None,
         agent_id: Optional[int] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """
-        Get Interview history records (read from database)
-        
-        Args:
-            simulation_id: Simulation ID
-            platform: Platform type (reddit/twitter/None)
-                - "reddit": only get Reddit platform history
-                - "twitter": only get Twitter platform history
-                - None: get all history from both platforms
-            agent_id: Specify Agent ID (optional, only get history for that Agent)
-            limit: Return count limit per platform
-            
-        Returns:
-            Interview history records list
-        """
-        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
-        
-        results = []
-        
-        # Determine platforms to query
-        if platform in ("reddit", "twitter"):
-            platforms = [platform]
-        else:
-            # When platform not specified, query both platforms
-            platforms = ["twitter", "reddit"]
-        
-        for p in platforms:
-            db_path = os.path.join(sim_dir, f"{p}_simulation.db")
-            platform_results = cls._get_interview_history_from_db(
-                db_path=db_path,
-                platform_name=p,
-                agent_id=agent_id,
-                limit=limit
-            )
-            results.extend(platform_results)
-        
-        # Sort by time in descending order
-        results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-        
-        # If queried multiple platforms, limit total count
-        if len(platforms) > 1 and len(results) > limit:
-            results = results[:limit]
-        
-        return results
+        """Return interview history records for a simulation."""
+        return _get_interview_history_fn(
+            simulation_id, platform, agent_id, limit,
+            run_state_dir=cls.RUN_STATE_DIR,
+        )
