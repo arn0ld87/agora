@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Added
+- docs(m11): add `graph_tools.py` Phase-5b cut analysis (Refs F7)
 - **M11 Phase 5 Vorbereitung:** Schnittanalyse für `backend/app/services/simulation_runner.py` (1904 LOC) unter [`docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md`](docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md). Dokumentiert Verantwortlichkeiten, externe Call-Sites, Test-Coverage und fünf Extraktionskandidaten mit empfohlener PR-Reihenfolge (read-only Doku, kein Code-Edit). Refs F7.
 
 ### Changed
