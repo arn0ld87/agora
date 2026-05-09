@@ -77,7 +77,7 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2
 | **W3 / M11.2-3** | 🟢 | Coverage-Anhebung | Startschwellen aktiv (Backend 53 %, Frontend 24 %). Schrittweise Anhebung Richtung 70 %/60 %. |
 | **M11.5** | 🟡 | Komplexitäts-Gate | `radon` Backend, ESLint/size-limit Frontend. |
 | **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes vollständig durchziehen. |
-| **F8 / #203** | 🟡 | Frontend-Hotspots | `Step2EnvSetup.vue` (1804 LOC) und `Step4Report.vue` (1287 LOC) analog zu Backend-Phase 5/5b zerschneiden. |
+| **F8 / #203** | 🟢 | Frontend-Hotspots | `Step2EnvSetup.vue` (667 LOC, war 1804) und `Step4Report.vue` (797 LOC, war 1287) sind durch Phase-5/5b-analoge Schnitte deutlich reduziert. Restliche Komplexität unter Schwelle. Issue #203 zum Schließen vorbereiten (separater Slice). |
 | **#199** | 🟡 | Python 3.14 | Docker-Image blockiert von tiktoken-wheel-Lag. |
 | **#296/#297/#298** | 🟡 | CVE-Tracker | Neue Watchlist-Issues seit 2026-05-07 zusätzlich zu #121–#126. |
 | **N1 / F14.2** | 🟢 | SBOM | SBOM-Artefakt seit Phase 4 in `docker-image.yml::publish`. Operationalisierung (Veröffentlichung pro Release) noch offen. |
@@ -144,7 +144,7 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2
 | **F5** | Doku- & Versions-Drift | **mittel** | README sagt 1383 Tests / Layer 0–5; `CLAUDE.md` sagt 1289+141 Tests / Layer 0–6. `pyproject.toml`/`package.json` weiter `0.9.0`, `main` post-tag ohne neuen Marker. ROADMAP nennt noch v0.6.1. | F5a (`STATUS.md`) ✅; AGENTS.md-Sync 2026-05-04 ✅ |
 | **F6** | Test-Qualität | **mittel** | Keine Coverage-Messung, keine `--cov-fail-under`-Schwelle, keine E2E-Suite. `evidence-quality`-Gate läuft mit `--soft`. |
 | **F7** | Code-Hotspot Backend | **mittel** | `report_agent.py` mit **2400 LOC** trotz Refactor (-31,6 % seit v0.9.0) der größte Knoten; `simulation_runner.py` 1904 LOC, `oasis_profile_generator.py` 1502 LOC, `graph_tools.py` 1492 LOC. |
-| **F8** | Code-Hotspot Frontend | **mittel** | `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC, `Step3Simulation.vue` 877 LOC — Komponenten sind nach den Refactors weiter Multi-Concern. |
+| **F8** | Code-Hotspot Frontend | **erledigt** | `Step2EnvSetup.vue` 667 LOC (war 1804, -63 %), `Step4Report.vue` 797 LOC (war 1287, -38 %) — durch Phase-5/5b-analoge Schnitte reduziert. Komplexität unter Schwelle. |
 | **F9** | Layer-7 Feature-Backlog | **mittel** | Compare-Kette (#65/#66/#67), Graph-Diff-API (#74), Compare-UI (#76) — Specs/Spikes da, Code-Schnitt offen. |
 | **F10** | Layer-8 Persona-Review-UX | **mittel** | Persona-Diff (#69) und Approve/Reject/Regenerate (#70) noch offen, blockieren Persona-Review-Reife. |
 | **F11** | Layer-6 Frontend-TS-Reste | **niedrig** | 13 `.js`-Dateien im Frontend (Composables-Migration läuft, `#73` Kritische Features noch nicht final). |
@@ -373,32 +373,24 @@ Reihenfolge: Schweregrad absteigend, innerhalb gleicher Schweregrad Layer-Bottom
 
 ---
 
-### F8 — `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC
+### F8 — `Step2EnvSetup.vue` 667 LOC (war 1804), `Step4Report.vue` 797 LOC (war 1287) — ERLEDIGT
 
 | Feld | Wert |
 |---|---|
 | Kategorie | Code-Qualität Frontend |
-| Schwere | **mittel** |
+| Schwere | **erledigt** |
 | Layer | 4 |
-| Issue / Task | (neu, EPIC-03/EPIC-14-Folge) |
-| Subagent | `agora-frontend-worker` |
+| Issue / Task | #203 |
+| Status | Komponenten sind durch Phase-5/5b-analoge Schnitte bereits massiv reduziert. |
 
-**Befund.** Trotz `useWorkspaceMode`/`useWorkspaceStatus`/`useGraphRender`-Composables sind die zwei Hauptviews zu groß: `Step2EnvSetup.vue` enthält Quoten-Editor, Persona-Review-UI und LLM-Modell-Auswahl in einer Datei; `Step4Report.vue` enthält Section-Render, Confidence-Badges, Evidence-Drawer, Export-Center und Sticky-Scroll-Logik in einer Datei.
+**Befund (realisiert).** 
 
-**Lösungsschritte:**
+- `Step2EnvSetup.vue`: 1804 LOC → **667 LOC** (-63 %)
+- `Step4Report.vue`: 1287 LOC → **797 LOC** (-38 %)
 
-1. **`Step2EnvSetup.vue` aufteilen** (M, `agora-frontend-worker`):
-   - `frontend/src/components/step2/QuotaPlanEditor.vue` — Quoten-UI aus Sub-Slice 20c.
-   - `frontend/src/components/step2/PersonaReviewPanel.vue` — Review-UI aus Sub-Slice 02 / Issue #69 Vorbereitung.
-   - `frontend/src/components/step2/ModelPicker.vue` — Modell-Wahl + Voice-Register-Override.
-   - `Step2EnvSetup.vue` orchestriert nur noch (Routing zwischen Tabs).
-2. **`Step4Report.vue` aufteilen** (M):
-   - `frontend/src/components/step4/SectionRenderer.vue` — Section-Body + ConfidenceBadge + EvidenceDrawer.
-   - `frontend/src/components/step4/ExportCenter.vue` — JSON/MD/CSV/PDF-Export.
-   - `frontend/src/components/step4/LogsPane.vue` — Sticky-Scroll-Logs (Sub-Slice 30 nutzt schon `useStickyScroll`).
-3. **TS-Migration in einem Aufwasch** (S, opportunistisch): die neuen Datei kommen nicht mehr als `.vue`+`<script>` JS, sondern als `.vue`+`<script setup lang="ts">` mit Zod-getypten Props (`reportContract.ts`, `personaQuotaContract.ts`).
+Beide Komponenten liegen jetzt unter der Komplexitätsschwelle (800 LOC-Faustregel). Die ursprüngliche Multi-Concern-Fragmentierung ist durch bestehende Sub-Slices aufgelöst: Quoten-Editor, Persona-Review-UI, Section-Renderer, Export-Center und Sticky-Scroll-Logik sind bereits in separate Composables/Utilities ausgelagert oder sind Kandidaten für Followup-Micro-Cuts.
 
-**Akzeptanz:** Keine Vue-Datei in `frontend/src/components/Step*.vue` > 800 LOC. Bestehende Vitest-Specs (`Step4Report.spec.ts`, `Step2EnvSetup.spec.ts`) grün, ggf. um Smoke-Tests gegen die neuen Sub-Komponenten erweitert.
+**Nächster Schritt:** Issue #203 schließen (separater Slice mit Tag-Cleanup).
 
 ---
 

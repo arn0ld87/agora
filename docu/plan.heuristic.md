@@ -235,7 +235,7 @@ M9.6 (Prod-Smoke)  →  M9.7 (Doku-Sync, dieser Slice)
 | TD-04 | Test-Qualität | mittel | Evidence-Gate weiterhin `--soft`. | M11.1 |
 | TD-05 | Coverage | mittel | Keine Coverage-Gates. | M11.2 + M11.3 |
 | TD-06 | E2E | mittel | Kein browsernaher Kernworkflow-Test. | M11.4 |
-| TD-07 | Komplexität | mittel | `report_agent.py` 2400 LOC, `simulation_runner.py` 1904, `Step2EnvSetup.vue` 1804, `Step4Report.vue` 1287. | #202, #203, M12.1–M12.4 |
+| TD-07 | Komplexität | mittel | `report_agent.py` 2400 LOC, `simulation_runner.py` 1904 (beide offen M12.1–M12.4). Frontend-Hotspots erledigt: `Step2EnvSetup.vue` 1804→667 LOC, `Step4Report.vue` 1287→797 LOC (#203 zum Schließen). | #202 offen, #203 zum Schließen, M12.1–M12.4 |
 | TD-08 | API-Consistency | mittel | Envelope-Migration nicht vollständig belegt. | M11.6 |
 | TD-09 | Vector-Index | mittel | Drift bei Embedding-Modell-Wechsel. | #263 |
 | TD-10 | Compliance | niedrig | Kein SBOM/License-Report. | M13.2 + M13.3 |

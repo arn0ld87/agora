@@ -56,7 +56,7 @@ Erst nach Findings-Sichtung mergen — `git checkout main && git merge --ff-only
 
   **Fallback auf `rg`/`grep`/`Read`** nur wenn der Graph die Frage nicht abdeckt: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Der Graph parst Code-Symbole — bei Nicht-Code-Files ist Direkt-Lesen korrekt.
 
-  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in Hot-Spots (F8 `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC) `get_hub_nodes_tool` für Schnitt-Grenzen.
+  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in verbleibenden Hot-Spots `get_hub_nodes_tool` für Schnitt-Grenzen. F8 Frontend-Hotspots sind bereits unter Schwelle (667 LOC / 797 LOC).
 
 - **context7** — bei jeder Task, die Bibliotheken/Frameworks/SDKs/CLIs/Cloud-Services berührt (Flask, Pydantic v2, Vue 3, Vite, Pinia, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …): aktuelle Docs prüfen, **bevor** Code geschrieben wird.
 - **GitHub-Suche / `gh`** — Debugging von Third-Party-Verhalten (OASIS-Eigenheiten, Neo4j-Vector-Search-Kanten, Ollama-Tool-Call-Payloads, Qwen/GPT-OSS-Reasoning-Blöcke, CAMEL-Memory-/Context-Edge-Cases) zuerst gegen Upstream-Issues/PRs spiegeln.
@@ -97,7 +97,7 @@ frontend/                   Vue 3 + TS + Pinia + Vitest + Zod
       reportContract.ts        Sub-Slice 02b
     api/                    index.ts, graph.ts, simulation.ts, report.ts, runs.ts, stream.ts (signed tickets)
     composables/            10/10 TypeScript (#72 grün) — useEventStream, usePolling, useWorkspaceMode, …
-    components/Step*.vue    Pipeline-Steps (1804/1287/877 LOC — F8 Refactor offen)
+    components/Step*.vue    Pipeline-Steps (667/797/877 LOC — Step2/4 erledigt per F8, Step3 noch offen)
     layouts/Workspace*.vue  Workspace-Shell (EPIC-03)
 schemas/                    auto-generiert via `python -m app.contracts.dump_schemas`
 deploy/

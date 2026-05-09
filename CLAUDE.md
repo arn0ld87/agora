@@ -103,7 +103,7 @@ Layer-0–6 + 9–10 sind durch. Aktuelle M11-Baustellen:
 - **Phase 7 / M11.4 Playwright-Smokes:** Drei stabile E2E-Smokes — Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide.
 - **M11.5 Komplexitäts-Gate:** `radon` Backend, ESLint/size-limit Frontend.
 - **M11.6 API-Envelope:** Error-/Success-Envelopes vollständig durchziehen.
-- **Frontend-Hotspots (Issue #203):** `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC — analog zu Backend-Phase 5/5b zerschneiden.
+- **Frontend-Hotspots (Issue #203):** `Step2EnvSetup.vue` 667 LOC (war 1804, -63 %), `Step4Report.vue` 797 LOC (war 1287, -38 %) — bereits durch Phase-5/5b-analoge Schnitte reduziert, unter Schwelle. Issue #203 zum Schließen vorbereiten (separater Slice).
 - **gevent ↔ OASIS-Subprozess Smoke:** `subprocess.Popen` läuft bei aktivem `gevent.monkey.patch_all()` standardmäßig durch den Patch — bei jedem Slice, der den OASIS-Pfad anfasst, per `scripts/verify-deploy.sh` smoken.
 - **Init-Logs doppelt:** Folge-Slice braucht Fork-Safety-Verifikation der Neo4j/Redis-Pools vor `--preload`-Aktivierung.
 - **Dependabot-Aufräumen:** Offene PRs #323 (`mistune` 3.1.4 → 3.2.1), #326 (`pygments` 2.19.2 → 2.20.0). PR #315 (`camel-ai`) bleibt blockiert durch `camel-oasis==0.2.5` hard pin.
@@ -152,7 +152,7 @@ git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 
   **Fallback auf `rg`/`grep`/`Read`** nur wenn der Graph die Frage nicht abdeckt: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Der Graph parst Code-Symbole — bei Nicht-Code-Files ist Direkt-Lesen korrekt.
 
-  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in Hot-Spots (F8 `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC) `get_hub_nodes_tool` für Schnitt-Grenzen.
+  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in verbleibenden Hot-Spots `get_hub_nodes_tool` für Schnitt-Grenzen. F8 Frontend-Hotspots sind bereits unter Schwelle (667 LOC / 797 LOC).
 
 - **context7** — bei jeder Task, die Bibliotheken/Frameworks/SDKs/CLIs/Cloud-Services berührt (Flask, Pydantic v2, Vue 3, Vite, Pinia, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …): aktuelle Docs prüfen, **bevor** Code geschrieben wird.
 
