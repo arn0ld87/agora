@@ -66,6 +66,17 @@
 
 ---
 
+## Followup auf Gemini-Review PR #341
+
+Adressiert nach Gemini-MEDIUM-Findings (2026-05-09):
+
+- **Finding 1 (PEP-8 Imports):** Lokale `import re`, `import json`, `import pathlib` aus Funktionskörpern entfernt; alle drei als Modul-Top-Level-Imports in `llm_e2e_stub.py` verschoben.
+- **Finding 2 (`_STUB_TOOL_RETURNS` als dict):** `dict[str, str]`-JSON-Strings durch typisierte `dict[str, dict[str, Any]]`-Literal ersetzt; `_STUB_TOOL_DEFAULT` analog auf `dict[str, Any]` umgestellt.
+- **Finding 3 (Tool-Call-Regex robust):** Fragiles `r'<tool_call>\s*\{[^}]*"name"...'` durch `r"<tool_call>\s*(\{.*?\})\s*</tool_call>"` mit `re.DOTALL` ersetzt; Match-JSON via `json.loads` geparst, dann `name` ausgelesen — funktioniert auch bei `{"parameters":{}, "name": "x"}`.
+- **Finding 4 (Cleanup `_get_tool_response`):** Tool-Return-Dispatch in `e2e_stub_response` reduziert auf `_STUB_TOOL_RETURNS.get(tool_name, _STUB_TOOL_DEFAULT)` — kein `json.loads`, kein `dict()`-Cast, kein `# type: ignore`.
+- **Finding 5 (Test-Bug):** `test_stub_passes_pydantic_class_as_schema` übergibt jetzt `schema=ReportV3` (Klasse, nicht `None`) und validiert die Antwort via `ReportV3.model_validate(resp)`.
+- **STATUS.md-Sync:** `bash scripts/sync-status.sh` aktualisiert Backend-Test-Count 1683 → 1695 (weitere Tests seit letztem Sync zugekommen); `--check` bestätigt kein Drift.
+
 ## Followup-Risiken (Gemini-Vorausblick)
 
 1. **ReACT-Erkennung fragil:** `_detect_react_tool_call` parst `<tool_call>` via Regex — könnte bei veränderten Prompt-Templates false-negative ergeben. Für M11.4b (Upload+Graph-Smoke) reicht es, da der ReACT-Loop im Smoke-Pfad nicht aktiv ist. Falls M11.4c (Minimalreport-Smoke) den ReACT-Pfad triggert, sollte der Pattern erweitert werden.

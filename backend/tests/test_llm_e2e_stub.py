@@ -87,9 +87,8 @@ class TestStubValidatesAgainstReportV3DTO:
 
     def test_stub_passes_pydantic_class_as_schema(self) -> None:
         """e2e_stub_response akzeptiert Pydantic-Klasse direkt (nicht nur dict)."""
-        # Intern normalisiert llm_client.py auf dict, aber stub unterstützt auch None
-        resp = e2e_stub_response(schema=None, messages=_minimal_messages())
-        assert resp == {"ok": True, "stub": True}
+        resp = e2e_stub_response(schema=ReportV3, messages=_minimal_messages())
+        ReportV3.model_validate(resp)
 
     def test_stub_with_pydantic_dict_schema_produces_valid_report(self) -> None:
         """Wenn schema das ReportV3-JSON-Schema als dict ist, valides ReportV3 zurück."""

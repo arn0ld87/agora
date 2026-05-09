@@ -14,7 +14,9 @@ Liefert:
 """
 from __future__ import annotations
 
+import json
 import pathlib
+import re
 from typing import Any
 
 # Snapshot-Pfad — Single Source of Truth für Pflichtabschnitte
@@ -207,37 +209,62 @@ def _stub_report_v3() -> dict[str, Any]:
 # Deterministischer Tool-Return für ReACT-Schleife.
 # Nur die vier Tools, die report_agent/tools.py tatsächlich registriert:
 # insight_forge, panorama_search, quick_search, interview_agents.
-_STUB_TOOL_RETURNS: dict[str, str] = {
-    "insight_forge": (
-        '{"insights": ["Stub-Insight: Zielgruppe reagiert positiv auf transparente Kommunikation."], '
-        '"confidence": "medium", "evidence_refs": ["ev-stub-01"]}'
-    ),
-    "panorama_search": (
-        '{"results": [{"id": "ev-stub-01", "title": "Stub-Dokument", '
-        '"snippet": "Stub-Inhalt für E2E-Tests.", "relevance": 0.8}]}'
-    ),
-    "quick_search": (
-        '{"results": [{"id": "ev-stub-01", "title": "Stub-Dokument", '
-        '"snippet": "Stub-Inhalt.", "relevance": 0.7}]}'
-    ),
-    "interview_agents": (
-        '{"interviews": [{"agent_id": "stub-agent-01", "response": '
-        '"Stub-Interview-Antwort für E2E-Tests."}]}'
-    ),
+_STUB_TOOL_RETURNS: dict[str, dict[str, Any]] = {
+    "insight_forge": {
+        "insights": [
+            "Stub-Insight: Zielgruppe reagiert positiv auf transparente Kommunikation."
+        ],
+        "confidence": "medium",
+        "evidence_refs": ["ev-stub-01"],
+    },
+    "panorama_search": {
+        "results": [
+            {
+                "id": "ev-stub-01",
+                "title": "Stub-Dokument",
+                "snippet": "Stub-Inhalt für E2E-Tests.",
+                "relevance": 0.8,
+            }
+        ]
+    },
+    "quick_search": {
+        "results": [
+            {
+                "id": "ev-stub-01",
+                "title": "Stub-Dokument",
+                "snippet": "Stub-Inhalt.",
+                "relevance": 0.7,
+            }
+        ]
+    },
+    "interview_agents": {
+        "interviews": [
+            {
+                "agent_id": "stub-agent-01",
+                "response": "Stub-Interview-Antwort für E2E-Tests.",
+            }
+        ]
+    },
 }
 
-_STUB_TOOL_DEFAULT = '{"ok": true, "stub": true}'
+_STUB_TOOL_DEFAULT: dict[str, Any] = {"ok": True, "stub": True}
 
 
 def _detect_react_tool_call(messages: list[dict[str, Any]]) -> str | None:
     """Erkennt Tool-Call in Messages und gibt Tool-Namen zurück, oder None."""
     for msg in messages:
         content = str(msg.get("content", ""))
-        # ReACT-Pattern: <tool_call>{"name": "tool_name", ...}</tool_call>
-        import re
-        match = re.search(r'<tool_call>\s*\{[^}]*"name"\s*:\s*"([^"]+)"', content)
+        # ReACT-Pattern: <tool_call>{...}</tool_call> — robust gegen nested JSON
+        match = re.search(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", content, re.DOTALL)
         if match:
-            return match.group(1)
+            try:
+                payload = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict):
+                name = payload.get("name")
+                if name:
+                    return str(name)
         # Auch OpenAI-Tool-Call-Format
         tool_calls = msg.get("tool_calls")
         if tool_calls and isinstance(tool_calls, list):
@@ -269,9 +296,7 @@ def e2e_stub_response(
     # 1. ReACT-Tool-Call?
     tool_name = _detect_react_tool_call(messages)
     if tool_name is not None:
-        import json
-        raw = _STUB_TOOL_RETURNS.get(tool_name, _STUB_TOOL_DEFAULT)
-        return dict(json.loads(raw))  # type: ignore[arg-type]
+        return _STUB_TOOL_RETURNS.get(tool_name, _STUB_TOOL_DEFAULT)
 
     # 2. ReportV3-Schema?
     resolved_schema: dict[str, Any] | None = None
