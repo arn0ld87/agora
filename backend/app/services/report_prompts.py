@@ -168,6 +168,37 @@ Your task is to:
    - Don't add information that doesn't exist in the simulation
    - If information is insufficient in some aspects, state it truthfully
 
+5. [Mandatory Quote Format for Simulated Persona Statements — MUST FOLLOW]
+   Every simulated persona statement or reaction MUST be wrapped in the
+   following XML tag — no exceptions:
+
+   <simulated_quote persona_id="<persona_id>" seed_anchor="<evidence_id_or_seed_doc>">…statement text…</simulated_quote>
+
+   Attribute rules (BOTH attributes are REQUIRED — a quote without them is invalid):
+   - persona_id: The ID of the simulated persona from the scenario plan (e.g. "persona_03").
+     This MUST reference an actual persona that participates in the simulation.
+   - seed_anchor: Either an evidence identifier from the EvidenceMap
+     (e.g. "ev_kg_042") OR a seed document reference using the prefix
+     "seed_doc:" followed by the document ID (e.g. "seed_doc:interview_transcript_07").
+     The "seed_doc:" prefix is accepted as an opaque reference without further lookup.
+
+   ✅ Correct example:
+   <simulated_quote persona_id="persona_03" seed_anchor="ev_kg_042">
+   Ich sehe keinen überzeugenden Mehrwert gegenüber bestehenden Angeboten.
+   </simulated_quote>
+
+   ❌ Invalid — missing persona_id:
+   <simulated_quote seed_anchor="ev_kg_042">Text</simulated_quote>
+
+   ❌ Invalid — missing seed_anchor:
+   <simulated_quote persona_id="persona_03">Text</simulated_quote>
+
+   ❌ Invalid — plain Markdown quote without XML tag:
+   > "Persona statement without anchor."
+
+   Note: This tagging requirement applies specifically to simulated persona
+   statements. General analytical observations do not require this tag.
+
 ═══════════════════════════════════════════════════════════════
 [⚠️ Format Specification - Extremely Important!]
 ═══════════════════════════════════════════════════════════════
@@ -291,6 +322,11 @@ Completed Section Content (Please Read Carefully to Avoid Duplication):
 - ❌ Don't write "{section_title}" as the opening
 - ✅ Section titles are added automatically by the system
 - ✅ Write the body directly, use **bold** instead of sub-section titles
+
+[⚠️ Quote Format Reminder — Mandatory]
+Every simulated persona statement MUST use the XML tag with BOTH attributes:
+<simulated_quote persona_id="<persona_id>" seed_anchor="<ev_id_or_seed_doc:...>">statement</simulated_quote>
+Plain Markdown quotes (> "...") for persona statements are NOT accepted.
 
 Please start:
 1. First think (Thought) what information this section needs

@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ...config import Config
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
+from .evidence import validate_quote_anchors
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
 from .schemas import (
@@ -17,6 +18,31 @@ from .schemas import (
 )
 
 logger = get_logger('agora.report_agent')
+
+# M11.8e — Section-Typen, die Persona-Zitate enthalten können/sollen.
+# Für diese Sections wird validate_quote_anchors mit strict-Repair-Retry ausgeführt.
+# Meta-Sections (Plan, Executive Summary, Datenlücken) sind ausgenommen.
+_QUOTE_REQUIRED_SECTION_KEYWORDS = frozenset({
+    "persona",
+    "personas",
+    "zielgrupp",
+    "segment",
+    "multipli",
+    "multiplier",
+    "friction",
+    "reibung",
+    "trust",
+    "vertrauen",
+    "interview",
+    "reaktion",
+    "reaction",
+})
+
+
+def _section_expects_quotes(section_title: str) -> bool:
+    """Gibt True zurück wenn der Abschnittstyp Persona-Zitate erwarten lässt."""
+    lower = section_title.lower()
+    return any(kw in lower for kw in _QUOTE_REQUIRED_SECTION_KEYWORDS)
 
 
 def generate_section_react(
@@ -416,6 +442,68 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
                 section_index=section_num,
             )
+            # M11.8e: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
+            # Nur bei Section-Typen, die Persona-Zitate erwarten (nicht Plan/Meta-Sections).
+            if _section_expects_quotes(section.title):
+                evidence_map_for_validation = agent.evidence_map or {}
+                persona_ids_for_validation: List[str] = getattr(agent, "persona_ids", []) or []
+                quote_result = validate_quote_anchors(
+                    section_content,
+                    evidence_map_for_validation,
+                    persona_ids_for_validation,
+                )
+                if not quote_result.valid:
+                    # Strict-Mode: einmaliger Repair-Retry mit konkretem Fehler-Hinweis
+                    repair_hint = (
+                        f"Korrigiere die Persona-Zitate: "
+                        f"invalid_quotes={quote_result.invalid_quotes!r}, "
+                        f"unbound_evidence_refs={quote_result.unbound_evidence_refs!r}. "
+                        f"Jedes Zitat MUSS <simulated_quote persona_id=\"...\" seed_anchor=\"...\">...</simulated_quote> "
+                        f"mit gültigen Attributen verwenden."
+                    )
+                    logger.warning(
+                        "quote_anchor_validation: section=%d title=%r — "
+                        "invalid quotes detected, attempting repair retry. "
+                        "invalid_quotes=%r unbound_refs=%r",
+                        section_num,
+                        section.title,
+                        quote_result.invalid_quotes,
+                        quote_result.unbound_evidence_refs,
+                    )
+                    repair_content = generate_section_react(
+                        agent,
+                        section=section,
+                        outline=outline,
+                        previous_sections=generated_sections,
+                        progress_callback=None,
+                        section_index=section_num,
+                    )
+                    repair_result = validate_quote_anchors(
+                        repair_content,
+                        evidence_map_for_validation,
+                        persona_ids_for_validation,
+                    )
+                    if repair_result.valid:
+                        section_content = repair_content
+                        logger.info(
+                            "quote_anchor_validation: section=%d repair successful",
+                            section_num,
+                        )
+                    else:
+                        # Repair fehlgeschlagen — Section trotzdem weiter, aber Flag setzen
+                        logger.error(
+                            "quote_anchor_validation: section=%d repair retry also failed. "
+                            "Setting quote_validation_failed=True. "
+                            "repair_invalid_quotes=%r repair_unbound=%r",
+                            section_num,
+                            repair_result.invalid_quotes,
+                            repair_result.unbound_evidence_refs,
+                        )
+                        if not hasattr(section, "metadata") or section.metadata is None:
+                            section.metadata = {}
+                        section.metadata["quote_validation_failed"] = True
+                        section_content = repair_content
+                        _ = repair_hint  # consumed in log above
             # M11.8d: Strukturierte Metadaten-Extraktion via strict-schema chat_json.
             # Fehler blockieren nicht die Hauptgenerierung (generate_section_metadata
             # gibt bei Exception {} zurück). Metadaten werden im Report-Logger
