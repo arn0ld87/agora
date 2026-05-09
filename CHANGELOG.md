@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Fixed
+- fix(e2e): test_event_bus.test_request_response_correlation Timeout 2.0 s → 5.0 s (M11.4a-Followup #8) — CI-Failure 25595884772 zeigte sporadische TimeoutError auf Shared-Filesystem-Runnern; lokale Reproduktion stabil, keine echte Race-Condition. 5.0 s ergibt ~100 Poll-Zyklen statt 40.
+- fix(e2e): scripts/e2e-up.sh legt `backend/uploads/{run_registry,simulations}` mit Container-User-Permissions an (chown 1000:1000 als root, chmod 0777 als Dev-User), bevor Compose-Stack startet. Adressiert PermissionError aus CI-Failure 25595884785 (RunRegistry konnte beim Boot nicht in Bind-Mount-Source schreiben, weil Docker-Daemon das Verzeichnis als root erzeugt hatte). M11.4a-Followup #8.
 
 ### Documentation
 - docs(plan): F8 Frontend-Hotspot-Status auf grün gesynced. `Step2EnvSetup.vue` 1804→667 LOC (-63 %), `Step4Report.vue` 1287→797 LOC (-38 %), beide unter Schwelle. Issue #203 vorbereitet zum Schließen.

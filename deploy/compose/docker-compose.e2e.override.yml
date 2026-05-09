@@ -5,7 +5,7 @@
 #   /tmp, /app/backend/logs, /home/agora/.cache, /home/agora/.gunicorn
 #
 # Für die Smokes braucht das Backend jedoch Schreibzugriff auf
-# /app/uploads (run_registry, simulations/), weil RunRegistry beim
+# /app/backend/uploads (run_registry, simulations/), weil RunRegistry beim
 # Boot `os.makedirs(REGISTRY_DIR, exist_ok=True)` aufruft. Das wurde
 # in M11 Phase 3 nicht in tmpfs abgebildet, weil Prod nur read-only
 # Smokes über curl macht und die Schreibpfade per Bind-Mount kommen.
@@ -13,6 +13,11 @@
 # Lösung für M11.4: read_only=false NUR für den E2E-Stack. Dieses
 # Override wird ausschließlich in scripts/e2e-up.sh geladen, nicht
 # in docker-compose.prod.yml. Prod-Hardening bleibt unangetastet.
+#
+# Followup #8: Zusätzlich legt scripts/e2e-up.sh den Bind-Mount-Source
+# `./backend/uploads/run_registry` mit UID 1000 (Container-User `agora`)
+# an, weil sonst der Docker-Daemon das Verzeichnis als root anlegt und
+# der Container-User nicht reinschreiben kann (CI-Failure 25595884785).
 services:
   agora:
     read_only: false

@@ -45,10 +45,25 @@ fi
 } >> "${REPO_ROOT}/.env"
 echo "[e2e-up] runtime credentials appended to .env" >&2
 
+# Followup #8: Bind-Mount-Source mit Container-User-UID anlegen, sonst
+# erzeugt der Docker-Daemon das Verzeichnis als root und das Backend
+# (User `agora`, UID 1000) kann nicht reinschreiben — RunRegistry.__new__
+# bricht dann mit PermissionError ab (CI-Failure 25595884785).
+mkdir -p "${REPO_ROOT}/backend/uploads/run_registry" "${REPO_ROOT}/backend/uploads/simulations"
+if [[ "$(id -u)" == "0" ]]; then
+  # CI-Runner laufen oft als root — explizit auf Container-User chownen.
+  chown -R 1000:1000 "${REPO_ROOT}/backend/uploads"
+else
+  # Lokaler Mac/Linux-Dev — chmod auf weltweit beschreibbar reicht, weil
+  # der Bind-Mount-Source dem Dev-User gehört, nicht UID 1000.
+  chmod -R 0777 "${REPO_ROOT}/backend/uploads"
+fi
+echo "[e2e-up] backend/uploads prepared with writable permissions" >&2
+
 echo "[e2e-up] starting compose stack on port ${PROXY_PORT}..." >&2
 # E2E-Override hebt read_only=true aus M11 Phase 3 auf, weil RunRegistry
-# beim Boot auf /app/uploads/run_registry schreibt — nicht in den tmpfs.
-# Prod-Hardening bleibt unangetastet (override wird nur hier geladen).
+# beim Boot auf /app/backend/uploads/run_registry schreibt — nicht in den
+# tmpfs. Prod-Hardening bleibt unangetastet (override wird nur hier geladen).
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
