@@ -1,5 +1,5 @@
 import { test, expect, request } from '@playwright/test';
-import { injectAuthToken, bearerHeader } from './helpers/auth';
+import { injectAuthToken, authHeader } from './helpers/auth';
 
 test.describe('M11.4a · Health-Smoke', () => {
   test('1 · Reverse-Proxy /healthz returns 200', async ({ baseURL }) => {
