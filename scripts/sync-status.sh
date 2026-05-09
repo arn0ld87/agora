@@ -110,7 +110,7 @@ if not pattern.search(text):
     sys.exit(1)
 
 new_block = f"{begin}\n{new_content}\n{end}"
-new_text  = pattern.sub(new_block, text)
+new_text  = pattern.sub(lambda m: new_block, text)
 pathlib.Path(file_path).write_text(new_text, encoding="utf-8")
 PYEOF
 }
