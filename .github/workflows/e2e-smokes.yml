@@ -1,0 +1,70 @@
+name: e2e-smokes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/**'
+      - 'frontend/tests/e2e/**'
+      - 'frontend/playwright.config.ts'
+      - 'frontend/package*.json'
+      - 'backend/app/api/**'
+      - 'backend/app/services/report_agent/**'
+      - 'backend/app/utils/llm_client.py'
+      - 'backend/app/utils/llm_e2e_stub.py'
+      - 'docker-compose*.yml'
+      - 'Dockerfile'
+      - 'deploy/**'
+      - 'scripts/e2e-*.sh'
+      - '.github/workflows/e2e-smokes.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  health-smoke:
+    name: Playwright Health-Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AGORA_PROXY_PORT: '80'
+      AGORA_E2E_BASE_URL: http://127.0.0.1:80
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Generate ephemeral E2E credentials
+        # Werte werden zur Runtime generiert, NICHT als Strings in der Datei
+        # gehalten — sonst triggert GitGuardian / Gitleaks bei jedem PR.
+        # Reichen für die Smoke-Tests aus, da der Compose-Stack mit denselben
+        # Werten gestartet wird (Backend liest AGORA_AUTH_TOKEN aus dem env).
+        run: |
+          {
+            echo "AGORA_AUTH_TOKEN=$(openssl rand -hex 24)"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browsers (Chromium-only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright Health-Smoke
+        working-directory: frontend
+        run: npx playwright test health.spec.ts --reporter=list,github
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: frontend/test-results/
+          retention-days: 14
