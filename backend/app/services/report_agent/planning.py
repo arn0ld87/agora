@@ -78,6 +78,17 @@ def plan_outline(
             )
             for s in pydantic_outline.sections
         ]
+
+        # M11.8a-Followup auf Gemini-MEDIUM (PR #335): Section-Cap (Min 2 / Max 5)
+        # ist entfernt, aber ein leeres Outline-Array darf nicht durchgehen — ein
+        # Report ohne Sections ist trivial invalid. Harter Vertrag (len ==
+        # len(required_sections)) folgt erst in M11.8d (Strict-Schema-Forced-Output).
+        if not result_sections:
+            raise ValueError(
+                "plan_outline() received empty sections from LLM; refusing to "
+                "build an outline with zero entries (M11.8a)."
+            )
+
         outline = ReportOutline(
             title=pydantic_outline.title,
             summary=pydantic_outline.summary,

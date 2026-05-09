@@ -174,6 +174,33 @@ def test_plan_outline_fallback_on_llm_exception():
 
 
 # ---------------------------------------------------------------------------
+# Test 3b: M11.8a-Followup — leeres LLM-Outline triggert Fallback
+# ---------------------------------------------------------------------------
+
+def test_plan_outline_empty_sections_triggers_fallback():
+    """M11.8a-Followup auf Gemini-MEDIUM (PR #335).
+
+    Section-Cap (Min 2 / Max 5) wurde in M11.8a entfernt. Ein leeres
+    sections-Array vom LLM darf dadurch NICHT als valide Outline
+    durchgehen. plan_outline() muss in den Default-Fallback wechseln,
+    statt eine kaputte Zero-Section-Outline zurückzugeben.
+    """
+    agent = _make_agent()
+    agent.llm.chat_json.return_value = {
+        "title": "Empty",
+        "summary": "Empty",
+        "sections": [],
+    }
+
+    outline = agent.plan_outline()
+
+    assert len(outline.sections) >= 2, (
+        "Empty-Sections-Response muss Fallback-Outline triggern, nicht "
+        "leer durchgehen (M11.8a-Followup)."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Test 4: Rauch-Test — to_dict() emittiert 'description' fuer jede Section
 # ---------------------------------------------------------------------------
 
