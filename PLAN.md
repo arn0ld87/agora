@@ -72,9 +72,8 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2
 
 | ID | Priorität | Bereich | Befund |
 |---|---:|---|---|
-| **P1-A** | 🟡 | Dependencies | Dependabot-Aufräumen: PR #323 (`mistune` 3.1.4→3.2.1) und PR #326 (`pygments` 2.19.2→2.20.0) prüfen + mergen, falls CI/contract-gates/dependency-review/CodeQL grün. |
-| **M11 Phase 6** | 🟡 | Contract-Sync | Contract-Dump reproduzierbar machen, Frontend-Zod-Spiegel automatisierte Prüfung, `scripts/sync-status.sh` als CI-Pflichtschritt. |
-| **M11.4 / Phase 7** | 🟡 | E2E | Drei stabile Playwright-Smokes: Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide. |
+| **M11.8** | 🔴 | Output-Vertrag | Externer Bewertungs-Score 5,8/10 (siehe `docu/2026-05-09-output-vertrag-bewertung-evidence-quality.md`). Root-Cause: `report_prompts.py:53-57` deckelt LLM auf 2–5 Sections, blockt strukturell den 11-Pflichtabschnitt-User-Prompt. `report_agent/schemas.py` 10 LOC — keine Pydantic-DTOs für Persona/Claim/Segment/FrictionPoint/TrustSignal. Fünf Sub-Slices a–e (siehe „Arbeitsreihenfolge"). |
+| **M11.4 / Phase 7** | 🟡 | E2E | Drei stabile Playwright-Smokes: Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide. **Nach M11.8** — sonst sichern Smokes einen falschen Output-Vertrag ab. |
 | **W3 / M11.2-3** | 🟢 | Coverage-Anhebung | Startschwellen aktiv (Backend 53 %, Frontend 24 %). Schrittweise Anhebung Richtung 70 %/60 %. |
 | **M11.5** | 🟡 | Komplexitäts-Gate | `radon` Backend, ESLint/size-limit Frontend. |
 | **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes vollständig durchziehen. |
@@ -89,24 +88,34 @@ Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2
 
 🔴 **Kritisch:**
 
-1. **Dependabot-Aufräumen** — PR #323/#326 prüfen + mergen oder begründet schließen.
-2. **Phase 6 Contract-Generation + Status-Sync** — Contract-Dump reproduzierbar, Zod-Spiegel CI-geprüft, `scripts/sync-status.sh` Pflicht.
-3. **Phase 7 / M11.4 Playwright-Smokes** — drei stabile E2E-Tests.
+1. **M11.8a Quick-Win: Section-Cap raus** — `report_prompts.py:53-57` `Minimum 2 / maximum 5 sections` durch `{required_sections}`-Variable ersetzen. Aufwand S, höchster Score-Hebel pro LOC.
+2. **M11.8b Eval-Fixture** — `agora_bewertung_komplett.md`, `agora_1.pdf`, `seed.md`, `prompt.md`, `agora-report-…-evidence.json` als `tests/eval/fixtures/external/2026-05-09-bewertung-5-8/` einchecken; Snapshot-Test gegen Pflichtabschnitt-Liste + Persona-Mengengerüst.
+3. **M11.8c ReportV3-Contract** — Pydantic-DTOs für alle 11 Pflichtabschnitte in `report_agent/schemas.py` (Persona, Segment, Claim, Multiplier, FrictionPoint, TrustSignal, ChangeRecommendation, ProjectImpact, PositioningVariant, ContentIdea, DataGap), Re-Export via `app.contracts`.
+4. **M11.8d Strict-Schema-Forced-Output** — `chat_json` mit `response_format: json_schema` (statt `json_object`); JSON-Schema aus M11.8c-DTO injizieren.
+5. **M11.8e Quote+Evidence-Anchors** — XML-Tag `<simulated_quote persona_id seed_anchor>` als Output-Pflicht; Per-Claim-`evidence_refs` als Pflichtfeld; Validator blockiert PDF-Render bei fehlender Bindung.
+6. **Phase 7 / M11.4 Playwright-Smokes** — drei stabile E2E-Tests. Erst nach M11.8 grün.
 
-🟡 **Wichtig:** 4. Coverage-Schwellen schrittweise auf 70 %/60 % heben. 5. M11.5 Komplexitäts-Gate. 6. M11.6 API-Envelope abschließen. 7. F8 Frontend-Hotspots `Step2EnvSetup.vue`/`Step4Report.vue` (#203). 8. CVE-Watchlist #296/#297/#298 + Issue #199.
+🟡 **Wichtig:** 7. Coverage-Schwellen schrittweise auf 70 %/60 % heben. 8. M11.5 Komplexitäts-Gate. 9. M11.6 API-Envelope abschließen. 10. F8 Frontend-Hotspots `Step2EnvSetup.vue`/`Step4Report.vue` (#203). 11. CVE-Watchlist #296/#297/#298 + Issue #199.
 
-🟢 **Nice-to-have:** 9. N1 SBOM-Operationalisierung pro Release. 10. N2 AGPL `/api/version`-Endpoint mit Commit-SHA. 11. P2 Live-Settings (#212) nach M11-Stabilisierung.
+🟢 **Nice-to-have:** 12. N1 SBOM-Operationalisierung pro Release. 13. N2 AGPL `/api/version`-Endpoint mit Commit-SHA. 14. P2 Live-Settings (#212) nach M11-Stabilisierung.
 
 ### Arbeitsreihenfolge (PR-by-PR)
 
-1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` (= dieser Slice). ✅
-2. **PR 2:** Dependabot-Aufräumen — #323 (`mistune`) und #326 (`pygments`) entscheiden.
-3. **PR 3:** M11 Phase 6 Contract-Generation + Status-Sync.
-4. **PR 4:** M11.4 / Phase 7 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
-5. **PR 5:** Coverage-Schwellen-Anhebung (Backend 53 → 60 → 70 %, Frontend 24 → 40 → 60 %).
-6. **PR 6:** M11.5 Komplexitäts-Gate.
-7. **PR 7:** M11.6 API-Envelope abschließen.
-8. **PR 8:** F8 Frontend-Hotspots (#203).
+1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` (Sub-Slice 2026-05-08). ✅
+2. **PR 2:** Dependabot-Aufräumen — #323 (`mistune`) und #326 (`pygments`). ✅
+3. **PR 3:** M11 Phase 6 Contract-Generation + Status-Sync (`scripts/sync-status.sh` Marker-basiert + CI-Gate). ✅
+4. **PR 4:** Doku-Sync `code-review-graph` als MCP-First-Stop in CLAUDE.md/AGENTS.md. ✅
+5. **PR 5:** Doku-Sync M11.8 Output-Vertrag-Block in PLAN.md (= dieser Slice).
+6. **PR 6:** M11.8a Quick-Win — Section-Cap raus, `{required_sections}`-Variable rein.
+7. **PR 7:** M11.8b Eval-Fixture — Bewertungs-Korpus + Snapshot-Test.
+8. **PR 8:** M11.8c ReportV3-Contract — Pydantic-DTOs für 11 Pflichtabschnitte.
+9. **PR 9:** M11.8d Strict-Schema-Forced-Output — `chat_json` JSON-Schema-Mode.
+10. **PR 10:** M11.8e Quote+Evidence-Anchors — XML-Tags + Validator-Block.
+11. **PR 11:** M11.4 / Phase 7 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
+12. **PR 12:** Coverage-Schwellen-Anhebung (Backend 53 → 60 → 70 %, Frontend 24 → 40 → 60 %).
+13. **PR 13:** M11.5 Komplexitäts-Gate.
+14. **PR 14:** M11.6 API-Envelope abschließen.
+15. **PR 15:** F8 Frontend-Hotspots (#203).
 
 ### Definition of Done für v1.0
 
