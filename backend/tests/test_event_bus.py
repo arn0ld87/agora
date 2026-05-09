@@ -235,15 +235,17 @@ def test_in_memory_state_events_are_ordered():
 def test_request_response_correlation(bus):
     """Command goes out, responder matches by correlation_id, client receives it.
 
-    Timeouts auf 5.0 s gesetzt (statt 2.0 s): Bei poll_interval=0.05 ergibt das
-    ~100 Poll-Zyklen — robust gegen IO-Stau auf Shared-Filesystem-CI-Runnern,
-    wo der ursprüngliche 2.0-s-Wert (40 Zyklen) sporadisch in TimeoutError
-    lief (siehe CI-Run 25595884772). Lokale Reproduktion stabil, Race-Free.
+    Timeouts auf 10.0 s gesetzt (Historie: 2.0 → 5.0 → 10.0). Bei
+    poll_interval=0.05 ergibt das ~200 Poll-Zyklen — robust gegen IO-Stau
+    auf Shared-Filesystem-CI-Runnern. 5.0 s reichten ab CI-Run 25599430790
+    nicht mehr zuverlässig (TimeoutError bei interview-correlation_id).
+    Lokale Reproduktion bleibt sub-second; der Bump trifft nur den
+    Worst-Case-CI-Pfad und kostet kein Test-Wallclock im Happy Path.
     """
 
     def responder() -> None:
         for cmd in bus.subscribe(
-            SIM_ID, CHANNEL_RPC_COMMAND, timeout=5.0, poll_interval=0.05
+            SIM_ID, CHANNEL_RPC_COMMAND, timeout=10.0, poll_interval=0.05
         ):
             assert cmd.correlation_id, "Commands must carry correlation_id"
             response_channel = rpc_response_channel(cmd.correlation_id)
@@ -265,10 +267,10 @@ def test_request_response_correlation(bus):
         SIM_ID,
         command_type="interview",
         args={"agent_id": 7, "prompt": "hello"},
-        timeout=5.0,
+        timeout=10.0,
         poll_interval=0.05,
     )
-    t.join(timeout=6.0)
+    t.join(timeout=11.0)
 
     assert response.payload["status"] == "completed"
     assert response.payload["result"]["echo"]["agent_id"] == 7
