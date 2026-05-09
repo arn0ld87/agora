@@ -134,6 +134,34 @@ docker exec agora curl -fsS http://localhost:5001/health
 git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 ```
 
+## Erwartete Tool-Nutzung (proaktiv)
+
+- **code-review-graph** — Pflicht-First-Stop bei Code-Exploration, *bevor* `rg`/`grep`/`Read`/`Glob`. Tree-sitter-basierter persistenter Knowledge-Graph mit strukturellem Kontext (Caller, Dependents, Test-Coverage). Tool-Routing:
+
+  | Frage | Graph-Tool | Statt |
+  |---|---|---|
+  | Code-Review eines Diff | `detect_changes` + `get_review_context` | komplette Files via `Read` |
+  | Blast-Radius einer Änderung | `get_impact_radius` | manuelles Import-Tracing |
+  | Welche Flows sind betroffen? | `get_affected_flows` | `rg` durch alle Service-Files |
+  | Wer ruft `<symbol>` auf? | `query_graph` mit `pattern=callers_of` | `rg "<symbol>"` |
+  | Caller/Callee/Tests für `<symbol>` | `query_graph` mit `pattern=callees_of` / `tests_for` | `rg` |
+  | Funktion/Klasse finden | `semantic_search_nodes` | `rg "def <name>"` |
+  | Architektur-Überblick | `get_architecture_overview` + `list_communities` | mehrere `Read` über `__init__.py` |
+  | Refactor-Hot-Spots | `find_large_functions_tool` + `get_hub_nodes_tool` | manuelle `git grep` |
+  | Refactor-Planung (Renames, Dead-Code) | `refactor_tool` | manuelle Cross-Repo-Suche |
+
+  **Fallback auf `rg`/`grep`/`Read`** nur wenn der Graph die Frage nicht abdeckt: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Der Graph parst Code-Symbole — bei Nicht-Code-Files ist Direkt-Lesen korrekt.
+
+  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in Hot-Spots (F8 `Step2EnvSetup.vue` 1804 LOC, `Step4Report.vue` 1287 LOC) `get_hub_nodes_tool` für Schnitt-Grenzen.
+
+- **context7** — bei jeder Task, die Bibliotheken/Frameworks/SDKs/CLIs/Cloud-Services berührt (Flask, Pydantic v2, Vue 3, Vite, Pinia, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …): aktuelle Docs prüfen, **bevor** Code geschrieben wird.
+
+- **GitHub-Suche / `gh`** — Debugging von Third-Party-Verhalten (OASIS-Eigenheiten, Neo4j-Vector-Search-Kanten, Ollama-Tool-Call-Payloads, Qwen/GPT-OSS-Reasoning-Blöcke, CAMEL-Memory-/Context-Edge-Cases) zuerst gegen Upstream-Issues/PRs spiegeln.
+
+- **sequential-thinking** — automatisch für Multi-File-Refactors, pipelinespannende Änderungen (graph → env → simulation → report), Debugging über die Flask↔OASIS-Subprozess-Grenze, oder Tasks mit unklarem Lösungspfad.
+
+Defaults, keine Eskalation. Wenn du eins davon überspringst, notiere kurz warum.
+
 ## Verifikations-Disziplin
 
 Bevor du Variablen umbenennst oder Pfade anlegst, **immer erst** `rg`-prüfen:
