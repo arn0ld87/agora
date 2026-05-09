@@ -6,18 +6,22 @@ Stand: 2026-05-08
 
 ## Versionen
 
+<!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
 | Backend | `backend/pyproject.toml` | 0.9.1-dev |
 | Frontend | `frontend/package.json` | 0.9.1-dev |
 | Root | `package.json` | 0.9.1-dev |
+<!-- END_AUTOGEN_VERSIONS -->
 
 ## Tests
 
+<!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 1567 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Spec-Files | 43 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
+| Backend Tests (collected) | 1612 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Spec-Files | 44 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
+<!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
 _Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Pro Spec-File laufen mehrere `it`-Blöcke; die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
