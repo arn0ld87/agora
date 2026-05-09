@@ -7,8 +7,12 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 PROXY_PORT="${AGORA_PROXY_PORT:-80}"
-HEALTH_URL="http://127.0.0.1:${PROXY_PORT}/healthz"
-TIMEOUT_S="${AGORA_E2E_HEALTH_TIMEOUT_S:-180}"
+# Reverse-Proxy-Health (statisches nginx-200) + App-Health (proxied -> Backend).
+# Beide müssen pass sein, sonst startet Playwright zu früh und sieht 502 Bad
+# Gateway, weil nginx hochgekommen ist, das Backend aber noch im Boot.
+HEALTHZ_URL="http://127.0.0.1:${PROXY_PORT}/healthz"
+HEALTH_URL="http://127.0.0.1:${PROXY_PORT}/health"
+TIMEOUT_S="${AGORA_E2E_HEALTH_TIMEOUT_S:-360}"
 
 cd "$REPO_ROOT"
 
@@ -34,17 +38,30 @@ docker compose \
   -f deploy/compose/docker-compose.prod-with-proxy.yml \
   up -d --build
 
-echo "[e2e-up] waiting for ${HEALTH_URL} (timeout ${TIMEOUT_S}s)..." >&2
+wait_for() {
+  local url="$1"
+  local label="$2"
+  local local_deadline="$3"
+  while true; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      echo "[e2e-up] ${label} OK" >&2
+      return 0
+    fi
+    if [[ $(date +%s) -ge $local_deadline ]]; then
+      echo "::error::[e2e-up] ${label} timeout (url=${url})" >&2
+      docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=80 >&2 || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 deadline=$(( $(date +%s) + TIMEOUT_S ))
-while true; do
-  if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
-    echo "[e2e-up] healthz OK" >&2
-    exit 0
-  fi
-  if [[ $(date +%s) -ge $deadline ]]; then
-    echo "::error::[e2e-up] healthz timeout after ${TIMEOUT_S}s" >&2
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50 >&2 || true
-    exit 1
-  fi
-  sleep 2
-done
+
+echo "[e2e-up] waiting for reverse-proxy ${HEALTHZ_URL}..." >&2
+wait_for "$HEALTHZ_URL" "/healthz" "$deadline" || exit 1
+
+echo "[e2e-up] waiting for backend ${HEALTH_URL} (proxied through nginx)..." >&2
+wait_for "$HEALTH_URL" "/health" "$deadline" || exit 1
+
+echo "[e2e-up] stack ready (proxy + backend healthy)" >&2
