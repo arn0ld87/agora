@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - ci(status): `scripts/sync-status.sh` Marker-basiert (HTML-Comment-Marker `BEGIN_AUTOGEN_VERSIONS`/`BEGIN_AUTOGEN_TESTS`); ersetzt nur dynamische Versions- und Test-Count-Tabellen, lässt Layer-Status, Coverage-Sektion, Aktualisierungs-Protokoll und Aktuelles Milestone unangetastet. Neuer CI-Job `contract-gates.yml::status-sync-drift` blockiert auf `--check`.
 
 ### Documentation
+- docs(tools): code-review-graph als MCP-First-Stop in CLAUDE.md/AGENTS.md verankert. Tool-Routing-Tabelle für Code-Exploration, Code-Review, Impact-Analysis und Refactor-Planung; `rg`/`grep`/`Read` werden zum Fallback für Nicht-Code-Files (Bash, yml, Markdown, Config). Graph-Updates automatisch via Hooks; Workflow zeigt Rich-Snippets mit `get_review_context` statt komplette Files zu lesen.
 - docs(plan): sync M11-Status auf 2026-05-08 — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` an realen Code-Stand angeglichen (M11 Phase 1–5b abgeschlossen, M11.2/M11.3 Coverage-Gates aktiv, ADR-0001 Accepted, Layer 9–10 grün).
 
 ### Added
