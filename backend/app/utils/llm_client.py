@@ -381,6 +381,26 @@ class LLMClient:
             pydantic.ValidationError: Parsed JSON does not match *schema*
                 when *schema* is a Pydantic model.
         """
+        # E2E-Stub-Pfad — nur aktiv wenn AGORA_E2E_LLM_MODE=stub gesetzt.
+        # Muss VOR Cache-Lookup, Token-Counter, Retry und allen LLM-Calls liegen.
+        if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            from app.utils.llm_e2e_stub import e2e_stub_response
+            logger.info(
+                "LLMClient.chat_json: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
+                context,
+            )
+            # schema kann Pydantic-Klasse oder dict sein — Stub normalisiert intern
+            schema_for_stub: Optional[Dict[str, Any]] = None
+            if schema is not None:
+                if isinstance(schema, type) and issubclass(schema, BaseModel):
+                    schema_for_stub = schema.model_json_schema()
+                elif isinstance(schema, dict):
+                    schema_for_stub = schema
+            return e2e_stub_response(
+                schema=schema_for_stub,
+                messages=list(messages),
+            )
+
         disable_json_mode = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
 
         if schema is not None:
