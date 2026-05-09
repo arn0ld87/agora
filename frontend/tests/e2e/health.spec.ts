@@ -30,7 +30,7 @@ test.describe('M11.4a · Health-Smoke', () => {
   });
 
   test('4 · /api/status returns 200 with auth_mode single_user_token', async ({ baseURL }) => {
-    const ctx = await request.newContext({ extraHTTPHeaders: bearerHeader() });
+    const ctx = await request.newContext({ extraHTTPHeaders: authHeader() });
     const res = await ctx.get(`${baseURL}/api/status`);
     expect(res.status()).toBe(200);
     const body = await res.json();
