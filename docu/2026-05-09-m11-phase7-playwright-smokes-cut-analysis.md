@@ -98,23 +98,66 @@ on:
     branches: [main]
     paths:
       - 'frontend/src/**'
+      - 'frontend/tests/e2e/**'
+      - 'frontend/playwright.config.ts'
       - 'backend/app/api/**'
       - 'backend/app/services/report_agent/**'
+      - 'backend/app/utils/llm_client.py'
+      - 'backend/app/utils/llm_e2e_stub.py'
       - 'docker-compose*.yml'
       - 'Dockerfile'
       - 'deploy/**'
+      - '.github/workflows/e2e-smokes.yml'
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'  # nightly
 ```
 
-PR-Trigger hier mit `paths`-Filter — nur wenn der E2E-Pfad realistisch betroffen ist, sonst `paths-ignore` analog Doku-Slices.
+PR-Trigger hier mit `paths`-Filter — nur wenn der E2E-Pfad realistisch betroffen ist, sonst `paths-ignore` analog Doku-Slices. Wichtig: Die Test-Files (`frontend/tests/e2e/**`), die Playwright-Konfig (`playwright.config.ts`), der LLM-Stub-Pfad (`backend/app/utils/llm_e2e_stub.py`) und der Workflow selbst (`e2e-smokes.yml`) müssen mit drin sein — sonst wird ein Edit am Test- oder Stub-Verhalten nie via E2E-Smoke validiert.
 
 ### 4.2 Backend-Stack-Strategie
 
-**Vorschlag:** Reuse `scripts/verify-deploy.sh`-Compose-Stack. Playwright bekommt `baseURL: http://localhost:8080` (oder welcher Port der Reverse-Proxy bindet) und läuft gegen den hochgefahrenen Stack.
+**Vorschlag:** Reuse `scripts/verify-deploy.sh`-Compose-Stack über ein dediziertes Setup-Skript (`scripts/e2e-up.sh` / `scripts/e2e-down.sh`), **nicht** über Playwrights `webServer`-Hook.
 
-**LLM-Mock:** **Neu zu bauen.** Es gibt aktuell keinen `MOCK_LLM=true`-Modus im Backend. Empfehlung: ein einfacher Test-Stub in `app.utils.llm_client.chat_json` der bei `os.environ.get("AGORA_E2E_LLM_MODE") == "stub"` deterministische, schema-konforme JSON-Antworten liefert (Outline mit 11 Sections, Section-Body, ReACT-Tool-Decisions). 
+**Begründung gegen `webServer`-Hook:**
+
+`docker compose up -d` startet im Hintergrund und gibt sofort die Kontrolle zurück. Playwright kann den Lebenszyklus dieser Container nicht erkennen oder verwalten — der Prozess bleibt nach `playwright test` aktiv, und Re-Runs treffen auf einen schon laufenden Stack mit unvollständig gecleantem State.
+
+**Alternative Pattern (verbindlich für M11.4a):**
+
+```ts
+// playwright.config.ts
+export default defineConfig({
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
+  use: { baseURL: process.env.AGORA_E2E_BASE_URL ?? 'http://127.0.0.1:80' },
+  // KEIN webServer-Hook
+});
+```
+
+`global-setup.ts` ruft `bash scripts/e2e-up.sh` (Compose-Up + Wait-for-Health-Probe), `global-teardown.ts` ruft `bash scripts/e2e-down.sh` (Compose-Down inkl. Volumes). Damit ist der Container-Lifecycle deterministisch und bei Test-Abbruch (Ctrl-C, CI-Timeout) sauber abgewickelt.
+
+**baseURL-Strategie (Localhost-Falle):**
+
+| Umgebung | baseURL | Begründung |
+|---|---|---|
+| Lokal-Entwickler (macOS/Linux) | `http://127.0.0.1:${AGORA_PROXY_PORT:-80}` | Reverse-Proxy bindet Default auf Port 80, Override via `.env` |
+| GitHub Actions Runner (Ubuntu) | `http://127.0.0.1:${AGORA_PROXY_PORT:-80}` | Stack läuft direkt auf dem Runner, kein Container-im-Container |
+| Playwright IM Container (z.B. `mcr.microsoft.com/playwright`) | `http://host.docker.internal:${AGORA_PROXY_PORT:-80}` | Docker-internes DNS; macOS/Windows out-of-the-box, Linux braucht `--add-host=host.docker.internal:host-gateway` |
+
+baseURL ist immer aus `process.env.AGORA_E2E_BASE_URL` zu lesen, mit `127.0.0.1`-Default. Das macht den späteren Container-Modus-Schwenk eine Env-Variable, kein Code-Change.
+
+**LLM-Mock:** **Neu zu bauen,** aber **getrennt** vom Production-Code.
+
+Statt einer Verzweigung in `app.utils.llm_client.chat_json` (vermischt Test-Logik mit Prod, Risiko unbeabsichtigter Aktivierung in Prod):
+
+- Neue Datei `backend/app/utils/llm_e2e_stub.py` mit deterministischem Stub.
+- Neue Provider-Schicht: `app.utils.llm_client._select_backend()` returnt entweder den echten Ollama/OpenAI-Backend oder das Stub-Backend.
+- Stub-Backend wird **ausschließlich** aktiviert, wenn ALLE drei Bedingungen erfüllt sind:
+  1. `os.environ.get("AGORA_E2E_LLM_MODE") == "stub"`
+  2. `current_app.debug` oder `app.config["TESTING"]` ist `True` (nicht in Prod-Mode)
+  3. `os.environ.get("FLASK_ENV", "production") != "production"`
+- Bei Prod-Default und gesetztem `AGORA_E2E_LLM_MODE=stub` → Logger-Error + Fallback auf echten Backend (fail-safe).
 
 **Out-of-Scope für M11.4a (Health):** kein LLM-Mock nötig.  
 **In-Scope für M11.4b/c:** LLM-Stub als eigener Sub-Slice **vor** M11.4b — sonst nondeterministisch.
@@ -146,7 +189,7 @@ PR-Trigger hier mit `paths`-Filter — nur wenn der E2E-Pfad realistisch betroff
 
 ```
 frontend/
-├── playwright.config.ts          # NEU
+├── playwright.config.ts          # NEU — globalSetup/globalTeardown statt webServer
 ├── tests/
 │   └── e2e/
 │       ├── fixtures/
@@ -154,10 +197,16 @@ frontend/
 │       ├── helpers/
 │       │   ├── auth.ts           # localStorage-Setup, Bearer-Header
 │       │   └── stack.ts          # Health-Probe, Backend-Ready-Check
+│       ├── global-setup.ts       # bash scripts/e2e-up.sh + wait-for-health
+│       ├── global-teardown.ts    # bash scripts/e2e-down.sh
 │       ├── health.spec.ts        # M11.4a
 │       ├── upload-graph.spec.ts  # M11.4b
 │       └── minimal-report.spec.ts # M11.4c
 └── package.json                   # devDeps: @playwright/test, playwright
+
+scripts/
+├── e2e-up.sh                     # NEU — docker compose up -d + wait-for-/healthz
+└── e2e-down.sh                   # NEU — docker compose down -v
 ```
 
 ---
@@ -169,7 +218,10 @@ frontend/
 **Aufwand:** M  
 **Files:**
 - `frontend/package.json` — `@playwright/test`, `playwright` als devDeps
-- `frontend/playwright.config.ts` — webServer-Hook (`docker compose up -d`), baseURL, Chromium-only, 1 Worker, no-retries-Budget
+- `frontend/playwright.config.ts` — `globalSetup`/`globalTeardown`-Hooks (kein `webServer`), baseURL aus `process.env.AGORA_E2E_BASE_URL ?? 'http://127.0.0.1:80'`, Chromium-only, 1 Worker, 0 Retries
+- `frontend/tests/e2e/global-setup.ts` + `global-teardown.ts`
+- `scripts/e2e-up.sh` (Compose-Up + Health-Wait via `/healthz`-Polling, kein `sleep`)
+- `scripts/e2e-down.sh` (Compose-Down inkl. `-v` für Volume-Cleanup)
 - `frontend/tests/e2e/helpers/auth.ts` + `helpers/stack.ts`
 - `frontend/tests/e2e/health.spec.ts` — 4 Assertions:
   1. `GET /healthz` → 200 (Reverse-Proxy)
