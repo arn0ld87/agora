@@ -6,7 +6,7 @@ import type { BrowserContext } from '@playwright/test';
 const STORAGE_KEY = 'agora_token';
 
 export async function injectAuthToken(context: BrowserContext, token?: string): Promise<void> {
-  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'e2e-test-token-fixed-for-ci';
+  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'placeholder-not-used-in-ci';
   // Token vor jeder Navigation injizieren, damit der erste Request den Bearer-Header
   // mitschickt. addInitScript wird vor dem Page-Load ausgeführt.
   await context.addInitScript(([k, v]: [string, string]) => {
@@ -15,6 +15,6 @@ export async function injectAuthToken(context: BrowserContext, token?: string): 
 }
 
 export function bearerHeader(token?: string): Record<string, string> {
-  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'e2e-test-token-fixed-for-ci';
+  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'placeholder-not-used-in-ci';
   return { Authorization: `Bearer ${value}` };
 }
