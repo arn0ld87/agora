@@ -62,6 +62,13 @@ jobs:
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
+      - name: Build frontend bundle
+        # nginx-Sidecar mountet frontend/dist als statisches Volume
+        # (deploy/compose/docker-compose.prod-with-proxy.yml). Ohne Build
+        # ist der Mount leer und nginx antwortet 403 Forbidden auf GET /
+        # — das schlug in Health-Smoke Test 3 als Page-Title durch.
+        working-directory: frontend
+        run: npm run build
       - name: Install Playwright browsers (Chromium-only)
         working-directory: frontend
         run: npx playwright install --with-deps chromium
