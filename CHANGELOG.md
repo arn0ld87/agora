@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- fix(e2e): Health-Smoke Test 4 prüft `body.backend.auth_mode` statt `body.auth_mode` — `/api/status` liefert die Felder nested unter `backend` im `json_success`-Envelope (siehe `backend/app/api/status.py::_get_backend_status`). Test 4 war seit M11.4a (#338) konstant rot auf main.
+- fix(e2e): Health-Smoke Test 3 wartet auf das erste Kind-Element von `#app` (statt nur auf den leeren Wrapper-Div) und nutzt `waitUntil:'networkidle'` + 15s Timeout. `#app` ohne intrinsische Höhe fiel in CI-Headless durch `toBeVisible()`, bevor Vue gemountet hatte.
+- fix(status): STATUS.md Drift-Check → Backend-Tests 1619 → 1683 (nach M11.8c/d/e), Frontend Specs 44 → 45 gesynced via `scripts/sync-status.sh`. Blockierte `contract-gates::status-sync-drift` auf PRs gegen main.
 - fix(e2e): test_event_bus.test_request_response_correlation Timeout 2.0 s → 5.0 s (M11.4a-Followup #8) — CI-Failure 25595884772 zeigte sporadische TimeoutError auf Shared-Filesystem-Runnern; lokale Reproduktion stabil, keine echte Race-Condition. 5.0 s ergibt ~100 Poll-Zyklen statt 40.
 - fix(e2e): scripts/e2e-up.sh legt `backend/uploads/{run_registry,simulations}` mit Container-User-Permissions an (chown 1000:1000 als root, chmod 0777 als Dev-User), bevor Compose-Stack startet. Adressiert PermissionError aus CI-Failure 25595884785 (RunRegistry konnte beim Boot nicht in Bind-Mount-Source schreiben, weil Docker-Daemon das Verzeichnis als root erzeugt hatte). M11.4a-Followup #8.
 

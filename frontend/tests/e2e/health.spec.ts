@@ -22,10 +22,13 @@ test.describe('M11.4a · Health-Smoke', () => {
     await injectAuthToken(context);
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
-    await page.goto('/');
-    // App-Mount-Anker: <div id="app"> in frontend/index.html (Zeile 27).
-    // Vue mounted in main.ts via app.mount('#app').
-    await expect(page.locator('#app')).toBeVisible();
+    await page.goto('/', { waitUntil: 'networkidle' });
+    // App-Mount-Anker: <div id="app"> in frontend/index.html.
+    // Vue mounted in main.ts via app.mount('#app'). Warten auf das erste
+    // gerenderte Kind-Element — der äußere div hat in CI initial keine
+    // intrinsische Höhe und schlägt toBeVisible() fehl, bevor Vue gemountet
+    // hat. 15s Timeout für ressourcenarmes CI-Headless.
+    await expect(page.locator('#app').locator(':scope > *').first()).toBeVisible({ timeout: 15000 });
     expect(errors, `Page errors: ${errors.join(', ')}`).toHaveLength(0);
   });
 
@@ -34,7 +37,9 @@ test.describe('M11.4a · Health-Smoke', () => {
     const res = await ctx.get(`${baseURL}/api/status`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.auth_mode).toBe('single_user_token');
+    // /api/status liefert backend.auth_mode (nested in json_success-Envelope),
+    // siehe backend/app/api/status.py::_get_backend_status.
+    expect(body.backend?.auth_mode).toBe('single_user_token');
     await ctx.dispose();
   });
 });
