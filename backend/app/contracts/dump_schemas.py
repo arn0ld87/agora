@@ -19,6 +19,7 @@ from app.contracts.graph_diff import GraphDiff
 from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
+from app.contracts.report_v3 import ReportV3
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
@@ -33,6 +34,7 @@ CONTRACTS: dict[str, type] = {
     "evidence-map.schema.json": EvidenceMapModel,
     "persona.schema.json": PersonaModel,
     "persona-quota-plan.schema.json": PersonaQuotaPlan,
+    "report-v3.schema.json": ReportV3,
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
     "run-detail.schema.json": RunDetail,

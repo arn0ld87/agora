@@ -52,6 +52,20 @@ from .graph_diff import (
     NodePropertyShift,
 )
 from .persona_entity_context import EntityRelationship, PersonaEntityContext
+from .report_v3 import (
+    Claim,
+    ChangeRecommendation,
+    ContentIdea,
+    DataGap,
+    FrictionPoint,
+    Multiplier,
+    Persona,
+    PositioningVariant,
+    ProjectImpact,
+    ReportV3,
+    Segment,
+    TrustSignal,
+)
 
 __all__ = [
     "BranchComparison",
@@ -91,4 +105,17 @@ __all__ = [
     "RunSummary",
     "SegmentReach",
     "VoiceRegister",
+    # ReportV3 — 11 Pflichtabschnitt-DTOs
+    "Claim",
+    "ChangeRecommendation",
+    "ContentIdea",
+    "DataGap",
+    "FrictionPoint",
+    "Multiplier",
+    "Persona",
+    "PositioningVariant",
+    "ProjectImpact",
+    "ReportV3",
+    "Segment",
+    "TrustSignal",
 ]

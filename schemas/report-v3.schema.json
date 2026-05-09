@@ -1,0 +1,677 @@
+{
+  "$defs": {
+    "ChangeRecommendation": {
+      "additionalProperties": false,
+      "description": "Konkrete Handlungsempfehlung mit Priorit\u00e4t und Umsetzungsaufwand.",
+      "properties": {
+        "aufwand": {
+          "enum": [
+            "S",
+            "M",
+            "L"
+          ],
+          "title": "Aufwand",
+          "type": "string"
+        },
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "titel": {
+          "minLength": 1,
+          "title": "Titel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "titel",
+        "beschreibung",
+        "priority",
+        "aufwand"
+      ],
+      "title": "ChangeRecommendation",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "description": "Evidenz-gest\u00fctzter Befund aus der Szenarienanalyse.",
+      "properties": {
+        "aggregation_basis": {
+          "enum": [
+            "seed",
+            "persona",
+            "aggregat",
+            "datenluecke"
+          ],
+          "title": "Aggregation Basis",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "description": "Pflicht: mind. 1 Evidenz-Anker",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "persona_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Persona Ids",
+          "type": "array"
+        },
+        "statement": {
+          "minLength": 8,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "evidence_refs",
+        "confidence",
+        "aggregation_basis"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ContentIdea": {
+      "additionalProperties": false,
+      "description": "Content-Idee mit Format-Empfehlung und Persona-Bezug.",
+      "properties": {
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "format": {
+          "enum": [
+            "blog",
+            "video",
+            "podcast",
+            "social",
+            "whitepaper",
+            "webinar",
+            "other"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "persona_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Persona Ids",
+          "type": "array"
+        },
+        "titel": {
+          "minLength": 1,
+          "title": "Titel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "titel",
+        "format"
+      ],
+      "title": "ContentIdea",
+      "type": "object"
+    },
+    "DataGap": {
+      "additionalProperties": false,
+      "description": "Datenl\u00fccke, die Einsch\u00e4tzungsqualit\u00e4t einschr\u00e4nkt.",
+      "properties": {
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "suggested_fixes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suggested Fixes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "beschreibung",
+        "severity"
+      ],
+      "title": "DataGap",
+      "type": "object"
+    },
+    "FrictionPoint": {
+      "additionalProperties": false,
+      "description": "Hindernis oder Reibungspunkt, der Adoption oder Akzeptanz verringert.",
+      "properties": {
+        "affected_persona_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Persona Ids",
+          "type": "array"
+        },
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "beschreibung",
+        "severity"
+      ],
+      "title": "FrictionPoint",
+      "type": "object"
+    },
+    "Multiplier": {
+      "additionalProperties": false,
+      "description": "Wachstums- oder Wirkungshebel entlang der Customer-Journey-Stufen.",
+      "properties": {
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kategorie": {
+          "enum": [
+            "awareness",
+            "consideration",
+            "conversion",
+            "retention"
+          ],
+          "title": "Kategorie",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "reichweite_score": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Reichweite Score",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kategorie",
+        "reichweite_score"
+      ],
+      "title": "Multiplier",
+      "type": "object"
+    },
+    "Persona": {
+      "additionalProperties": false,
+      "description": "Zielgruppen-Persona mit DACH-orientierter Demografie.",
+      "properties": {
+        "alter_range": {
+          "description": "z. B. '35\u201350'",
+          "minLength": 1,
+          "title": "Alter Range",
+          "type": "string"
+        },
+        "beruf": {
+          "minLength": 1,
+          "title": "Beruf",
+          "type": "string"
+        },
+        "bildungsgrad": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bildungsgrad"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "haushaltseinkommen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Haushaltseinkommen"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "needs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Needs",
+          "type": "array"
+        },
+        "region": {
+          "description": "z. B. 'Bayern', 'DACH', 'Nordrhein-Westfalen'",
+          "minLength": 1,
+          "title": "Region",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        },
+        "voice_register": {
+          "enum": [
+            "formal-de",
+            "neutral-de",
+            "technical-de",
+            "skeptisch-de"
+          ],
+          "title": "Voice Register",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "voice_register",
+        "alter_range",
+        "beruf",
+        "region"
+      ],
+      "title": "Persona",
+      "type": "object"
+    },
+    "PositioningVariant": {
+      "additionalProperties": false,
+      "description": "Positionierungs-Variante f\u00fcr eine spezifische Persona-Gruppe.",
+      "properties": {
+        "claim_text": {
+          "minLength": 1,
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "titel": {
+          "minLength": 1,
+          "title": "Titel",
+          "type": "string"
+        },
+        "ziel_persona_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Ziel Persona Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "titel",
+        "claim_text"
+      ],
+      "title": "PositioningVariant",
+      "type": "object"
+    },
+    "ProjectImpact": {
+      "additionalProperties": false,
+      "description": "Einsch\u00e4tzung der Auswirkung des Projekts auf Segmente.",
+      "properties": {
+        "affected_segments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Segments",
+          "type": "array"
+        },
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "beschreibung",
+        "confidence"
+      ],
+      "title": "ProjectImpact",
+      "type": "object"
+    },
+    "Segment": {
+      "additionalProperties": false,
+      "description": "Markt-/Zielgruppensegment, das mehrere Personas b\u00fcndelt.",
+      "properties": {
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kontaktwahrscheinlichkeit_prozent": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kontaktwahrscheinlichkeit Prozent"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "persona_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Persona Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "beschreibung"
+      ],
+      "title": "Segment",
+      "type": "object"
+    },
+    "TrustSignal": {
+      "additionalProperties": false,
+      "description": "Vertrauenssignal nach Cialdini-Kategorien (DACH-kontext).",
+      "properties": {
+        "beschreibung": {
+          "minLength": 1,
+          "title": "Beschreibung",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "signal_type": {
+          "enum": [
+            "social_proof",
+            "authority",
+            "consistency",
+            "reciprocity",
+            "scarcity",
+            "liking"
+          ],
+          "title": "Signal Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "beschreibung",
+        "signal_type"
+      ],
+      "title": "TrustSignal",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/report-v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Container f\u00fcr alle 11 Pflichtabschnitte des strukturierten Reports v3.\n\nschema_version=3 ist als Literal festgelegt \u2014 verhindert Versions-Drift\nanalog zu ReportContractModel(schema_version=2).",
+  "properties": {
+    "change_recommendations": {
+      "items": {
+        "$ref": "#/$defs/ChangeRecommendation"
+      },
+      "title": "Change Recommendations",
+      "type": "array"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "content_ideas": {
+      "items": {
+        "$ref": "#/$defs/ContentIdea"
+      },
+      "title": "Content Ideas",
+      "type": "array"
+    },
+    "data_gaps": {
+      "items": {
+        "$ref": "#/$defs/DataGap"
+      },
+      "title": "Data Gaps",
+      "type": "array"
+    },
+    "friction_points": {
+      "items": {
+        "$ref": "#/$defs/FrictionPoint"
+      },
+      "title": "Friction Points",
+      "type": "array"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "multipliers": {
+      "items": {
+        "$ref": "#/$defs/Multiplier"
+      },
+      "title": "Multipliers",
+      "type": "array"
+    },
+    "personas": {
+      "items": {
+        "$ref": "#/$defs/Persona"
+      },
+      "title": "Personas",
+      "type": "array"
+    },
+    "positioning_variants": {
+      "items": {
+        "$ref": "#/$defs/PositioningVariant"
+      },
+      "title": "Positioning Variants",
+      "type": "array"
+    },
+    "project_impacts": {
+      "items": {
+        "$ref": "#/$defs/ProjectImpact"
+      },
+      "title": "Project Impacts",
+      "type": "array"
+    },
+    "report_id": {
+      "minLength": 1,
+      "title": "Report Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 3,
+      "default": 3,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "segments": {
+      "items": {
+        "$ref": "#/$defs/Segment"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "trust_signals": {
+      "items": {
+        "$ref": "#/$defs/TrustSignal"
+      },
+      "title": "Trust Signals",
+      "type": "array"
+    }
+  },
+  "required": [
+    "report_id",
+    "generated_at"
+  ],
+  "title": "ReportV3",
+  "type": "object"
+}
