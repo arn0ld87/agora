@@ -38,6 +38,10 @@ fi
   [[ -n "${SECRET_KEY:-}" ]] && echo "SECRET_KEY=${SECRET_KEY}"
   [[ -n "${NEO4J_PASSWORD:-}" ]] && echo "NEO4J_PASSWORD=${NEO4J_PASSWORD}"
   [[ -n "${AGORA_PROXY_PORT:-}" ]] && echo "AGORA_PROXY_PORT=${AGORA_PROXY_PORT}"
+  # Ollama gibt es im CI-Stack nicht — Backend-Boot würde sonst an der
+  # Live-Embedding-Probe scheitern (Issue #276). Statische Dimension-Check
+  # läuft weiter.
+  [[ -n "${AGORA_SKIP_EMBEDDING_PROBE:-}" ]] && echo "AGORA_SKIP_EMBEDDING_PROBE=${AGORA_SKIP_EMBEDDING_PROBE}"
 } >> "${REPO_ROOT}/.env"
 echo "[e2e-up] runtime credentials appended to .env" >&2
 
