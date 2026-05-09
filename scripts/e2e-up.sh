@@ -17,10 +17,7 @@ TIMEOUT_S="${AGORA_E2E_HEALTH_TIMEOUT_S:-360}"
 cd "$REPO_ROOT"
 
 # .env wird von docker-compose erwartet, ist aber per .gitignore in CI-Checkouts
-# nicht vorhanden. Falls sie fehlt, .env.example als Default-Vorlage kopieren —
-# kritische Werte (AGORA_AUTH_TOKEN, SECRET_KEY, NEO4J_PASSWORD, AGORA_PROXY_PORT)
-# werden ohnehin via Process-Env vom Runner überschrieben (docker-compose
-# bevorzugt Process-Env vor .env).
+# nicht vorhanden. Falls sie fehlt, .env.example als Default-Vorlage kopieren.
 if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   if [[ -f "${REPO_ROOT}/.env.example" ]]; then
     echo "[e2e-up] no .env found, seeding from .env.example" >&2
@@ -30,6 +27,19 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
     exit 1
   fi
 fi
+
+# Kritische Werte aus dem Runner-Env in die .env appenden — docker compose
+# variable substitution liest .env mit Vorrang vor Process-Env, daher reicht
+# Export auf Runner-Ebene NICHT. Letzte Definition gewinnt; das überschreibt
+# die Placeholder aus .env.example. Backend's Config.validate() lehnt
+# Placeholder-Werte mit RuntimeError ab.
+{
+  [[ -n "${AGORA_AUTH_TOKEN:-}" ]] && echo "AGORA_AUTH_TOKEN=${AGORA_AUTH_TOKEN}"
+  [[ -n "${SECRET_KEY:-}" ]] && echo "SECRET_KEY=${SECRET_KEY}"
+  [[ -n "${NEO4J_PASSWORD:-}" ]] && echo "NEO4J_PASSWORD=${NEO4J_PASSWORD}"
+  [[ -n "${AGORA_PROXY_PORT:-}" ]] && echo "AGORA_PROXY_PORT=${AGORA_PROXY_PORT}"
+} >> "${REPO_ROOT}/.env"
+echo "[e2e-up] runtime credentials appended to .env" >&2
 
 echo "[e2e-up] starting compose stack on port ${PROXY_PORT}..." >&2
 docker compose \
