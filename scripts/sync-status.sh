@@ -50,7 +50,7 @@ if command -v uv &>/dev/null; then
     TIMEOUT_CMD=()
   fi
   COLLECT_TMP=$(mktemp)
-  if ${TIMEOUT_CMD[@]+"${TIMEOUT_CMD[@]}"} bash -c "cd '$REPO_ROOT/backend' && uv run pytest --collect-only -q 2>/dev/null | tail -3" > "$COLLECT_TMP" 2>&1; then
+  if ${TIMEOUT_CMD[@]+${TIMEOUT_CMD[@]}} bash -c "cd '$REPO_ROOT/backend' && uv run pytest --collect-only -q | tail -3" > "$COLLECT_TMP" 2>&1; then
     MATCH=$(grep -oE '[0-9]+ tests collected' "$COLLECT_TMP" | grep -oE '[0-9]+' | head -1 || true)
     if [[ -n "$MATCH" ]]; then
       BACKEND_TESTS="$MATCH"
