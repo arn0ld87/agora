@@ -14,7 +14,7 @@ export async function injectAuthToken(context: BrowserContext, token?: string): 
   }, [STORAGE_KEY, value] as [string, string]);
 }
 
-export function bearerHeader(token?: string): Record<string, string> {
-  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'placeholder-not-used-in-ci';
-  return { Authorization: `Bearer ${value}` };
+export function authHeader(token?: string): Record<string, string> {
+  const value = token ?? process.env.AGORA_AUTH_TOKEN ?? 'e2e-test-token-fixed-for-ci';
+  return { 'X-Agora-Token': value };
 }
