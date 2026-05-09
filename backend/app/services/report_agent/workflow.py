@@ -9,7 +9,12 @@ from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
-from .schemas import CURRENT_SCHEMA_VERSION, EvidenceMapModel, migrate_v1_to_v2
+from .schemas import (
+    CURRENT_SCHEMA_VERSION,
+    EvidenceMapModel,
+    _section_schema_for,
+    migrate_v1_to_v2,
+)
 
 logger = get_logger('agora.report_agent')
 
@@ -250,6 +255,72 @@ def generate_section_react(
     return final_answer
 
 
+def generate_section_metadata(
+    agent: Any,
+    section_title: str,
+    section_content: str,
+    section_index: int,
+) -> Dict[str, Any]:
+    """Extrahiert strukturierte Metadaten aus einem fertig generierten Abschnitt.
+
+    Wählt via :func:`_section_schema_for` das passende ReportV3-DTO aus
+    und übergibt es als ``schema=`` an :meth:`LLMClient.chat_json`.
+    Bei nicht-strict-fähigen Providern greift llm_client.py automatisch
+    auf json_object zurück — kein manueller Fallback nötig.
+
+    Args:
+        agent: Report-Agent-Instanz mit ``llm``-Attribut.
+        section_title: Titel des Abschnitts (steuert DTO-Auswahl).
+        section_content: Markdown-Text des generierten Abschnitts.
+        section_index: 1-basierter Abschnittsindex (für Logging).
+
+    Returns:
+        Validiertes dict aus dem gewählten DTO (via model_dump).
+        Bei Fehler leeres dict — die Hauptgenerierung ist nicht blockiert.
+    """
+    schema_cls = _section_schema_for(section_title)
+    schema_name = f"section_metadata_{schema_cls.__name__.lower()}"
+
+    system_msg = (
+        "Du bist ein Analyse-Assistent. Extrahiere strukturierte Metadaten "
+        f"aus dem folgenden Report-Abschnitt. Halte dich streng an das "
+        f"vorgegebene JSON-Schema ({schema_cls.__name__}). "
+        "Verwende nur Informationen, die explizit im Text stehen. "
+        "Erfinde keine Daten."
+    )
+    user_msg = (
+        f"## Abschnittstitel\n{section_title}\n\n"
+        f"## Inhalt\n{section_content[:6000]}"
+    )
+
+    try:
+        result = agent.llm.chat_json(
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.2,
+            schema=schema_cls,
+            schema_name=schema_name,
+            context="report",
+        )
+        logger.info(
+            "generate_section_metadata: section=%d title=%r schema=%s",
+            section_index,
+            section_title,
+            schema_cls.__name__,
+        )
+        return result
+    except Exception as exc:
+        logger.warning(
+            "generate_section_metadata: section=%d schema=%s extraction failed: %r",
+            section_index,
+            schema_cls.__name__,
+            exc,
+        )
+        return {}
+
+
 def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, str], None]] = None, report_id: Optional[str] = None) -> Report:
     import uuid
 
@@ -345,6 +416,22 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
                 section_index=section_num,
             )
+            # M11.8d: Strukturierte Metadaten-Extraktion via strict-schema chat_json.
+            # Fehler blockieren nicht die Hauptgenerierung (generate_section_metadata
+            # gibt bei Exception {} zurück). Metadaten werden im Report-Logger
+            # für Provenance-Tracking gespeichert.
+            section_meta = generate_section_metadata(
+                agent,
+                section_title=section.title,
+                section_content=section_content,
+                section_index=section_num,
+            )
+            if section_meta and agent.report_logger and hasattr(agent.report_logger, "log_section_metadata"):
+                agent.report_logger.log_section_metadata(
+                    section_title=section.title,
+                    section_index=section_num,
+                    metadata=section_meta,
+                )
             section.content = section_content
             generated_sections.append(f"## {section.title}\n\n{section_content}")
             ReportManager.save_section(report_id, section_num, section)
@@ -463,5 +550,6 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 __all__ = [
     "chat",
     "generate_report",
+    "generate_section_metadata",
     "generate_section_react",
 ]

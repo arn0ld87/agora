@@ -9,6 +9,7 @@ from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
 from ..report_prompts import DEFAULT_REPORT_SECTIONS, format_required_sections
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
+from .schemas import PlanResponse
 
 logger = get_logger('agora.report_agent')
 
@@ -44,12 +45,17 @@ def plan_outline(
     )
 
     try:
+        # M11.8d: strict json_schema mode — PlanResponse DTO erzwingt Struktur.
+        # Bei nicht-strict-fähigen Providern macht llm_client.py automatisch
+        # Fallback auf json_object (kein Inline-Schema-String nötig).
         response = agent.llm.chat_json(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
+            schema=PlanResponse,
+            schema_name="report_plan",
         )
 
         if progress_callback:
@@ -57,6 +63,7 @@ def plan_outline(
 
         # Parse outline — validate via Pydantic contract first, then
         # convert to ReportSection for downstream processing with content.
+        # chat_json already validated response against PlanResponse; safe to use .get().
         pydantic_sections = []
         for section_data in response.get("sections", []):
             raw_desc = (section_data.get("description") or "").strip()
