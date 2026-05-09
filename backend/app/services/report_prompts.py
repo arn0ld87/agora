@@ -18,6 +18,33 @@ re-exportiert die Namen und nutzt sie unverändert in den
 `chat_with_report`-Pfaden.
 """
 
+# ── Default-Pflichtabschnitte für DACH-Reports ──────────────────────
+# Quelle: agora_bewertung_komplett.md / docu/2026-05-09-output-vertrag-...
+# Wenn das User-Prompt-Frontend keine eigene required_sections-Liste
+# durchreicht, wird diese 11-Abschnitt-Default-Struktur verwendet.
+DEFAULT_REPORT_SECTIONS: list[tuple[str, str]] = [
+    ("Executive Summary", "Maximal 12 Sätze, was die Simulation gezeigt hat."),
+    ("Segment-Tabelle", "Persona-Segmente mit Größe, Goal, Trust-Score-Aggregat."),
+    ("Persona-Tabelle", "Vollständige Liste der simulierten Personas mit Reaktionen, Drop-off, Decision."),
+    ("Multiplikator-Auswertung", "Multiplikator-Profile mit Reichweite, Wirkung, Reaktion."),
+    ("Top 10 Reibungspunkte", "Stärkste negative Auslöser mit Persona-Refs."),
+    ("Top 10 Vertrauenssignale", "Stärkste positive Auslöser mit Persona-Refs."),
+    ("Top 10 Änderungen", "Konkrete Empfehlungen, priorisiert."),
+    ("Projektwirkung", "Pro Projekt: Wirkung, Glaubwürdigkeit, Risiken."),
+    ("Positionierung", "Drei Positionierungsvarianten mit Trade-offs."),
+    ("Content-Ideen", "Konkrete Themen-/Format-Vorschläge."),
+    ("Datenlücken", "Was die Simulation nicht beantworten kann."),
+]
+
+
+def format_required_sections(sections: list[tuple[str, str]]) -> str:
+    """Rendert eine Section-Liste als nummerierte Markdown-Liste für PLAN_USER_PROMPT_TEMPLATE."""
+    return "\n".join(
+        f"{idx}. **{title}** — {desc}"
+        for idx, (title, desc) in enumerate(sections, start=1)
+    )
+
+
 # ── 1. Planning — Outline ───────────────────────────────────────────
 
 PLAN_SYSTEM_PROMPT_TEMPLATE = """\
@@ -39,11 +66,12 @@ Write a "scenario evaluation report" that answers:
 - ❌ Not an analysis of the current state of the real world
 - ❌ Not a general overview of public sentiment
 
-[Section Number Limit]
-- Minimum 2 sections, maximum 5 sections
-- No subsections needed, each section directly writes complete content
-- Content should be concise, focused on core evaluation findings
-- Section structure is designed independently based on the evaluation results
+[Section Requirements]
+- The exact section list is provided in `required_sections` (variable injected from the user prompt context).
+- All listed sections are mandatory: do not omit, merge, or rename them.
+- Output JSON must contain one outline entry per required section, in the listed order.
+- No subsections needed; each section directly writes complete content.
+- Section descriptions should be concise and reflect what data the section will contain.
 
 Please output the report outline in JSON format as follows:
 {
@@ -57,7 +85,7 @@ Please output the report outline in JSON format as follows:
     ]
 }
 
-Note: sections array must have at least 2 and at most 5 elements!
+Note: sections array must contain exactly the entries listed in `required_sections`, in order.
 IMPORTANT: The entire report outline (title, summary, section titles and descriptions) MUST be written in {language}. Do not switch to any other language."""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
@@ -73,14 +101,16 @@ Variable (simulation requirement) injected into the simulated environment: {simu
 [Sample of Persona Observations Produced by the Simulation]
 {related_facts_json}
 
+[Required Sections]
+The outline must contain exactly these sections, in order:
+{required_sections}
+
 Please examine this scenario evaluation from an analytical observer perspective:
 1. What state does the scenario present under the conditions we set?
 2. How do various groups (agents) react and act?
 3. What emerging trends does this simulation reveal that deserve attention?
 
-Based on the evaluation results, design the most appropriate report section structure.
-
-[Reminder] Report section count: minimum 2, maximum 5, content should be concise and focused on core evaluation findings."""
+Based on the evaluation results, write a description for each required section that reflects what simulation data it will contain."""
 
 
 # ── 2. Sections — Body Generation ───────────────────────────────────
@@ -340,6 +370,9 @@ __all__ = [
     # Planning
     "PLAN_SYSTEM_PROMPT_TEMPLATE",
     "PLAN_USER_PROMPT_TEMPLATE",
+    # Planning helpers
+    "DEFAULT_REPORT_SECTIONS",
+    "format_required_sections",
     # Sections
     "SECTION_SYSTEM_PROMPT_TEMPLATE",
     "SECTION_USER_PROMPT_TEMPLATE",

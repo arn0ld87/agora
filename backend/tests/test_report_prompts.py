@@ -22,6 +22,7 @@ PROMPT_SPECS = [
         "{entity_types}",
         "{total_entities}",
         "{related_facts_json}",
+        "{required_sections}",
     ]),
     # Sections
     ("SECTION_SYSTEM_PROMPT_TEMPLATE", [
@@ -90,7 +91,11 @@ def test_prompt_carries_expected_placeholders(name, placeholders):
 
 
 def test_all_prompt_names_in_dunder_all():
-    expected = {spec[0] for spec in PROMPT_SPECS}
+    # Template constants from PROMPT_SPECS plus planning helpers (M11.8a)
+    expected = {spec[0] for spec in PROMPT_SPECS} | {
+        "DEFAULT_REPORT_SECTIONS",
+        "format_required_sections",
+    }
     assert set(report_prompts.__all__) == expected
 
 
@@ -207,8 +212,11 @@ class TestPromptSemantics:
     def test_plan_system_demands_json_outline(self):
         assert "JSON" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
         assert "sections" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE
-        assert "minimum 2" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower() or \
-               "at least 2" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower()
+        # M11.8a: Section-Cap (Min 2 / Max 5) entfernt; Pflichtabschnitte kommen
+        # über required_sections-Variable aus dem User-Prompt.
+        assert "required_sections" in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower()
+        assert "minimum 2" not in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower()
+        assert "maximum 5 sections" not in report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE.lower()
 
     def test_section_system_forbids_markdown_headers(self):
         # Kern-Constraint: keine ## innerhalb der Section
@@ -248,6 +256,7 @@ class TestFormatCallability:
             entity_types=["a"],
             total_entities=3,
             related_facts_json="[]",
+            required_sections="1. **Test** — desc",
         )
         assert "x" in out
 
@@ -292,3 +301,25 @@ class TestFormatCallability:
         )
         assert '{"name": "Tool Name"' in out
         assert "rc" in out
+
+
+def test_default_report_sections_has_eleven_entries():
+    """M11.8a: Default-Pflichtabschnitt-Liste muss 11 DACH-Report-Standardabschnitte enthalten."""
+    sections = report_prompts.DEFAULT_REPORT_SECTIONS
+    assert len(sections) == 11
+    titles = [t for t, _ in sections]
+    assert "Executive Summary" in titles
+    assert "Persona-Tabelle" in titles
+    assert "Datenlücken" in titles
+    # Jede Entry muss Tuple[str, str] mit non-empty desc sein
+    for title, desc in sections:
+        assert isinstance(title, str) and len(title) > 0
+        assert isinstance(desc, str) and len(desc) > 0
+
+
+def test_format_required_sections_renders_numbered_markdown():
+    """M11.8a: format_required_sections() muss nummerierte Markdown-Liste produzieren."""
+    sections = [("A", "alpha"), ("B", "beta")]
+    out = report_prompts.format_required_sections(sections)
+    assert "1. **A** — alpha" in out
+    assert "2. **B** — beta" in out

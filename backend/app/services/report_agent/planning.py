@@ -7,12 +7,17 @@ from ...config import Config
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
+from ..report_prompts import DEFAULT_REPORT_SECTIONS, format_required_sections
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
 
 logger = get_logger('agora.report_agent')
 
 
-def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> ReportOutline:
+def plan_outline(
+    agent: Any,
+    progress_callback: Optional[Callable] = None,
+    required_sections: Optional[list[tuple[str, str]]] = None,
+) -> ReportOutline:
     logger.info("Starting to plan report outline...")
 
     if progress_callback:
@@ -26,6 +31,7 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
     if progress_callback:
         progress_callback("planning", 30, "Generating report outline...")
 
+    sections = required_sections if required_sections is not None else DEFAULT_REPORT_SECTIONS
     system_prompt = PLAN_SYSTEM_PROMPT_TEMPLATE.replace("{language}", Config.REPORT_LANGUAGE)
     user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,
@@ -34,6 +40,7 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
         entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
         total_entities=context.get('total_entities', 0),
         related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
+        required_sections=format_required_sections(sections),
     )
 
     try:
@@ -64,12 +71,7 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
             sections=pydantic_sections,
         )
 
-        if not (2 <= len(pydantic_outline.sections) <= 5):
-            raise ValueError(
-                f"invalid outline response: sections={len(pydantic_outline.sections)}"
-            )
-
-        sections = [
+        result_sections = [
             ReportSection(
                 title=s.title,
                 description=s.description,
@@ -79,13 +81,13 @@ def plan_outline(agent: Any, progress_callback: Optional[Callable] = None) -> Re
         outline = ReportOutline(
             title=pydantic_outline.title,
             summary=pydantic_outline.summary,
-            sections=sections,
+            sections=result_sections,
         )
 
         if progress_callback:
             progress_callback("planning", 100, "Outline planning completed")
 
-        logger.info(f"Outline planning completed: {len(sections)} sections")
+        logger.info(f"Outline planning completed: {len(result_sections)} sections")
         return outline
 
     except Exception as e:

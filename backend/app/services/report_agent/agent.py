@@ -561,9 +561,14 @@ class ReportAgent:
 
     def plan_outline(
         self,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        required_sections: Optional[list[tuple[str, str]]] = None,
     ) -> ReportOutline:
-        return plan_outline_impl(self, progress_callback=progress_callback)
+        return plan_outline_impl(
+            self,
+            progress_callback=progress_callback,
+            required_sections=required_sections,
+        )
 
     def _generate_section_react(
         self,
