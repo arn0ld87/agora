@@ -46,10 +46,14 @@ fi
 echo "[e2e-up] runtime credentials appended to .env" >&2
 
 echo "[e2e-up] starting compose stack on port ${PROXY_PORT}..." >&2
+# E2E-Override hebt read_only=true aus M11 Phase 3 auf, weil RunRegistry
+# beim Boot auf /app/uploads/run_registry schreibt — nicht in den tmpfs.
+# Prod-Hardening bleibt unangetastet (override wird nur hier geladen).
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
   -f deploy/compose/docker-compose.prod-with-proxy.yml \
+  -f deploy/compose/docker-compose.e2e.override.yml \
   up -d --build
 
 wait_for() {
