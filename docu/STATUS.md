@@ -19,7 +19,7 @@ Stand: 2026-05-08
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 1707 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 1713 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Spec-Files | 45 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
