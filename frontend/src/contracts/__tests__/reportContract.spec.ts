@@ -14,6 +14,8 @@ import {
   EvidenceItemSchema,
   ReportOutlineSchema,
   ReportSchema,
+  ReportSectionSchema,
+  ReportSectionDataGapSchema,
   ReportSectionHypothesisSchema,
 } from '../reportContract';
 import reportContractJson from '../../../../schemas/report-contract.schema.json';
@@ -58,6 +60,7 @@ const VALID_PAYLOAD = {
             suggested_evidence: ['weitere Persona-Quote'],
           },
         ],
+        data_gaps: [],
         claims: [
           {
             claim_id: 'claim_01',
@@ -124,6 +127,8 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     expect(shapeKeys(ReportSchema)).toEqual(propertyKeys(defs.ReportModel));
     expect(shapeKeys(ReportOutlineSchema)).toEqual(propertyKeys(defs.ReportOutlineModel));
     expect(shapeKeys(EvidenceMapSchema)).toEqual(propertyKeys(defs.EvidenceMapModel));
+    expect(shapeKeys(ReportSectionSchema)).toEqual(propertyKeys(defs.ReportSectionModel));
+    expect(shapeKeys(ReportSectionDataGapSchema)).toEqual(propertyKeys(defs.ReportSectionDataGapModel));
   });
 
   it('parst incomplete-Reports mit missing_sections aus dem Backend', () => {
@@ -176,6 +181,18 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
           supports_claim: true,
         },
       ],
+      audit_trail: [],
+    };
+    expect(ReportClaimSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('rejects non-low claim without evidence (P2.1)', () => {
+    const bad = {
+      claim_id: 'claim_44',
+      claim_text: 'Lange genug für min(8)',
+      confidence_label: 'medium',
+      confidence_score: 0.45,
+      evidence: [],
       audit_trail: [],
     };
     expect(ReportClaimSchema.safeParse(bad).success).toBe(false);
@@ -237,6 +254,33 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
       hypothesis_text: 'Indizien legen einen weiteren Reibungspunkt nahe.',
       rationale: 'Die Ableitung ist plausibel, aber nicht direkt belegt.',
       suggested_evidence: ['zweite Stakeholder-Gruppe befragen'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('parses section data gap without claim as dedicated slot', () => {
+    const result = ReportSectionSchema.safeParse({
+      section_index: 1,
+      section_title: 'Datenlücken',
+      section_summary: 'Nicht belegte Claim-Kandidaten wurden ausgelagert.',
+      claims: [],
+      hypotheses: [
+        {
+          hypothesis_id: 'hypothesis_02',
+          hypothesis_text: 'Indizien legen einen weiteren Reibungspunkt nahe.',
+          rationale: 'Die Ableitung ist plausibel, aber nicht direkt belegt.',
+          suggested_evidence: ['zweite Stakeholder-Gruppe befragen'],
+        },
+      ],
+      data_gaps: [
+        {
+          gap_id: 'gap_02',
+          claim_text: 'Indizien legen einen weiteren Reibungspunkt nahe.',
+          gap_reason: 'no_evidence_bound',
+          suggested_fix: 'zweite Stakeholder-Gruppe befragen',
+        },
+      ],
     });
 
     expect(result.success).toBe(true);

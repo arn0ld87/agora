@@ -145,6 +145,19 @@ class ReportClaimModel(BaseModel):
     notes: Optional[str] = None
 
     @model_validator(mode="after")
+    def non_low_claims_need_evidence(self) -> "ReportClaimModel":
+        # P2.1: Jeder Claim oberhalb von low braucht mindestens einen
+        # nachvollziehbaren Evidence-Anker. Low-Orphans bleiben fuer alte
+        # Artefakte lesbar, werden beim Schreiben aber in hypotheses/data_gaps
+        # geroutet.
+        if self.confidence_label != ConfidenceLabel.low and not self.evidence:
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' verlangt mindestens "
+                "eine Evidence mit nachvollziehbarem Anker."
+            )
+        return self
+
+    @model_validator(mode="after")
     def verified_needs_strong_match(self) -> "ReportClaimModel":
         # Schwelle aus confidence_calculator.py-Kommentar: verified nur ab match_score >= 0.85
         if self.confidence_label == ConfidenceLabel.verified:
@@ -221,13 +234,25 @@ class ReportSectionHypothesisModel(BaseModel):
     suggested_evidence: list[str] = Field(default_factory=list, max_length=5)
 
 
+class ReportSectionDataGapModel(BaseModel):
+    """P2.1: Maschinenlesbare Luecke fuer nicht belegbare Claim-Kandidaten."""
+
+    model_config = _STRICT
+
+    gap_id: str = Field(pattern=r"^gap_\d{2,}$")
+    claim_text: str = Field(min_length=8, max_length=1000)
+    gap_reason: str = Field(min_length=1, max_length=200)
+    suggested_fix: Optional[str] = Field(default=None, min_length=1, max_length=500)
+
+
 class ReportSectionModel(BaseModel):
     model_config = _STRICT
     section_index: int = Field(ge=1)
     section_title: str = Field(min_length=3)
     section_summary: str = Field(min_length=1)
-    claims: list[ReportClaimModel] = Field(default_factory=list, min_length=1)
+    claims: list[ReportClaimModel] = Field(default_factory=list)
     hypotheses: list[ReportSectionHypothesisModel] = Field(default_factory=list)
+    data_gaps: list[ReportSectionDataGapModel] = Field(default_factory=list)
 
 
 class ReportOutlineSectionModel(BaseModel):

@@ -168,3 +168,44 @@ def test_save_evidence_section_round_trip(tmp_path):
     assert re_validated.schema_version == 2
     assert len(re_validated.sections) == 1
     assert re_validated.sections[0].section_index == 1
+
+
+def test_save_evidence_section_routes_orphans_to_gaps(tmp_path):
+    """P2.1: Low-Orphans werden vor Persistenz aus claims[] entfernt."""
+    agent = _make_agent(tmp_path)
+    agent._collect_simulation_evidence_items = MagicMock(return_value=[])
+    agent.evidence_map = {
+        "schema_version": CURRENT_SCHEMA_VERSION,
+        "report_id": "report_abc123",
+        "simulation_id": "sim_test",
+        "global_evidence": [],
+        "sections": [],
+    }
+    agent._build_claims_for_section = MagicMock(return_value=[
+        {
+            "claim_id": "claim_01",
+            "claim_text": "Die Personas reagieren vermutlich skeptisch auf die Kampagne.",
+            "confidence_label": "low",
+            "confidence_score": 0.15,
+            "evidence": [],
+            "audit_trail": [
+                {
+                    "type": "model_generated_inference",
+                    "source": "validator",
+                    "snippet": "no_direct_evidence_bound",
+                }
+            ],
+        }
+    ])
+
+    with patch("app.services.report_agent.ReportManager.save_evidence_map") as mock_save:
+        agent._save_evidence_section(
+            "report_abc123", 1, "Erster Eindruck", "Ausführlicher Abschnitt-Text."
+        )
+        persisted_payload = mock_save.call_args[0][1]
+
+    section = EvidenceMapModel.model_validate(persisted_payload).sections[0]
+    assert section.claims == []
+    assert len(section.hypotheses) == 1
+    assert len(section.data_gaps) == 1
+    assert section.data_gaps[0].gap_reason == "no_evidence_bound"

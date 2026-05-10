@@ -504,6 +504,50 @@
       "title": "ReportOutlineSectionModel",
       "type": "object"
     },
+    "ReportSectionDataGapModel": {
+      "additionalProperties": false,
+      "description": "P2.1: Maschinenlesbare Luecke fuer nicht belegbare Claim-Kandidaten.",
+      "properties": {
+        "claim_text": {
+          "maxLength": 1000,
+          "minLength": 8,
+          "title": "Claim Text",
+          "type": "string"
+        },
+        "gap_id": {
+          "pattern": "^gap_\\d{2,}$",
+          "title": "Gap Id",
+          "type": "string"
+        },
+        "gap_reason": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Gap Reason",
+          "type": "string"
+        },
+        "suggested_fix": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suggested Fix"
+        }
+      },
+      "required": [
+        "gap_id",
+        "claim_text",
+        "gap_reason"
+      ],
+      "title": "ReportSectionDataGapModel",
+      "type": "object"
+    },
     "ReportSectionHypothesisModel": {
       "additionalProperties": false,
       "description": "ADR-0002 hypothesis slot \u2014 reasoning without evidence, not a claim.\n\nHypothesen duerfen nicht in ``claims[]`` formuliert werden, weil sie keine\nEvidence tragen. Dieses DTO macht den separaten Slot maschinenlesbar, ohne\ndie bestehenden Claim-/Evidence-Validatoren zu schwaechen.",
@@ -549,8 +593,14 @@
           "items": {
             "$ref": "#/$defs/ReportClaimModel"
           },
-          "minItems": 1,
           "title": "Claims",
+          "type": "array"
+        },
+        "data_gaps": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionDataGapModel"
+          },
+          "title": "Data Gaps",
           "type": "array"
         },
         "hypotheses": {

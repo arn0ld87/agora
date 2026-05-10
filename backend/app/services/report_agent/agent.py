@@ -494,6 +494,58 @@ class ReportAgent:
             ).to_dict())
         return claims
 
+    @staticmethod
+    def _suggested_evidence_from_claim_audit(claim: Dict[str, Any]) -> List[str]:
+        suggestions: List[str] = []
+        for entry in claim.get("audit_trail") or []:
+            if not isinstance(entry, dict):
+                continue
+            reason = entry.get("snippet") or entry.get("source") or entry.get("type")
+            if reason == "no_direct_evidence_bound":
+                suggestions.append("Direkte Evidence per Graph- oder Agent-Tool nachreichen.")
+            elif reason:
+                suggestions.append(str(reason)[:200])
+        return suggestions[:5] or ["Direkte Evidence per Graph- oder Agent-Tool nachreichen."]
+
+    def _finalize_section_claims(
+        self,
+        claims: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        finalized_claims: List[Dict[str, Any]] = []
+        hypotheses: List[Dict[str, Any]] = []
+        data_gaps: List[Dict[str, Any]] = []
+
+        for claim in normalize_claims_for_contract(claims):
+            evidence = claim.get("evidence") or []
+            score = float(claim.get("confidence_score") or 0.0)
+            if not evidence and score < 0.4:
+                index = len(hypotheses) + 1
+                claim_text = (
+                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                    or "No evidence-bound claim text available."
+                )
+                claim_text = self._truncate(claim_text, 1000)
+                suggestions = self._suggested_evidence_from_claim_audit(claim)
+                hypotheses.append({
+                    "hypothesis_id": f"hypothesis_{index:02d}",
+                    "hypothesis_text": claim_text,
+                    "rationale": (
+                        "Keine direkte Evidence gebunden; deshalb nicht als "
+                        "validierter Claim persistiert."
+                    ),
+                    "suggested_evidence": suggestions,
+                })
+                data_gaps.append({
+                    "gap_id": f"gap_{index:02d}",
+                    "claim_text": claim_text,
+                    "gap_reason": "no_evidence_bound",
+                    "suggested_fix": suggestions[0],
+                })
+                continue
+            finalized_claims.append(claim)
+
+        return finalized_claims, hypotheses, data_gaps
+
     def _section_dedup_check(
         self, new_summary: str, existing: List[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
@@ -511,13 +563,16 @@ class ReportAgent:
         self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
         # schema_version gehört nur auf Map-Ebene, nicht auf Section-Ebene
         # (ReportSectionModel hat das Feld nicht).
+        claims, hypotheses, data_gaps = self._finalize_section_claims(
+            self._build_claims_for_section(content)
+        )
         section_entry = {
             "section_index": section_index,
             "section_title": section_title,
             "section_summary": self._truncate(content, 400),
-            "claims": normalize_claims_for_contract(
-                self._build_claims_for_section(content)
-            ),
+            "claims": claims,
+            "hypotheses": hypotheses,
+            "data_gaps": data_gaps,
         }
         # schema_version auf Section-Ebene entfernen — Überbleibsel von
         # migrate_v1_to_v2 oder alten Persistierungen; ReportSectionModel

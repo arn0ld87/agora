@@ -126,6 +126,31 @@ def test_low_confidence_no_supports_claim_required():
     assert claim.confidence_label == ConfidenceLabel.low
 
 
+def test_medium_claim_without_evidence_is_rejected():
+    """P2.1: Claims oberhalb von low brauchen mindestens einen Evidence-Anker."""
+    with pytest.raises(ValidationError, match="mindestens eine Evidence"):
+        ReportClaimModel(
+            claim_id="claim_04",
+            claim_text="Test claim text long enough",
+            confidence_label=ConfidenceLabel.medium,
+            confidence_score=0.45,
+            evidence=[],
+        )
+
+
+def test_low_claim_without_evidence_remains_legacy_readable():
+    """P2.1: Alte Low-Orphans bleiben lesbar; Writer routet neue in data_gaps."""
+    claim = ReportClaimModel(
+        claim_id="claim_05",
+        claim_text="Test claim text long enough",
+        confidence_label=ConfidenceLabel.low,
+        confidence_score=0.15,
+        evidence=[],
+    )
+
+    assert claim.evidence == []
+
+
 def test_claim_id_pattern():
     with pytest.raises(ValidationError):
         ReportClaimModel(

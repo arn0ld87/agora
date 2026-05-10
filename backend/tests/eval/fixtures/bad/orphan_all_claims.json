@@ -1,0 +1,40 @@
+{
+  "claims": [
+    {
+      "claim_id": "claim_01",
+      "claim_text": "Die erste Zielgruppe reagiert vermutlich skeptisch auf die Botschaft.",
+      "confidence_label": "low",
+      "confidence_score": 0.15,
+      "evidence": [],
+      "audit_trail": [
+        {
+          "type": "model_generated_inference",
+          "source": "validator",
+          "tool_name": "evidence_validator",
+          "snippet": "no_direct_evidence_bound",
+          "raw": {
+            "reason": "no_direct_evidence_bound"
+          }
+        }
+      ]
+    },
+    {
+      "claim_id": "claim_02",
+      "claim_text": "Die zweite Zielgruppe priorisiert wahrscheinlich Datenschutzbedenken.",
+      "confidence_label": "low",
+      "confidence_score": 0.2,
+      "evidence": [],
+      "audit_trail": [
+        {
+          "type": "model_generated_inference",
+          "source": "validator",
+          "tool_name": "evidence_validator",
+          "snippet": "no_direct_evidence_bound",
+          "raw": {
+            "reason": "no_direct_evidence_bound"
+          }
+        }
+      ]
+    }
+  ]
+}

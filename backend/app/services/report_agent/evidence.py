@@ -191,18 +191,9 @@ def normalize_sections_for_contract(sections: List[Dict[str, Any]]) -> List[Dict
         item["section_title"] = (item.get("section_title") or "Recovered section").strip()
         summary = (item.get("section_summary") or item.get("section_title") or "Recovered summary").strip()
         item["section_summary"] = summary
-        claims = normalize_claims_for_contract(item.get("claims") or [])
-        if not claims:
-            claims = [{
-                "claim_id": "claim_01",
-                "claim_text": "No claim candidate extracted from this section.",
-                "confidence_score": 0.0,
-                "confidence_label": "low",
-                "evidence": [],
-                "notes": "Recovered section without persisted claims.",
-                "audit_trail": [],
-            }]
-        item["claims"] = claims
+        item["claims"] = normalize_claims_for_contract(item.get("claims") or [])
+        item["hypotheses"] = list(item.get("hypotheses") or [])
+        item["data_gaps"] = list(item.get("data_gaps") or [])
         normalized_sections.append(item)
     return normalized_sections
 

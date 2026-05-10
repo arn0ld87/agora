@@ -92,6 +92,13 @@ export const ReportClaimSchema = z.object({
   audit_trail: z.array(z.record(z.string(), z.unknown())).default([]),
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
+  // Spiegelt ReportClaimModel.non_low_claims_need_evidence
+  if (value.confidence_label !== "low" && value.evidence.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,
+    });
+  }
   // Spiegelt ReportClaimModel.verified_needs_strong_match
   if (value.confidence_label === "verified") {
     const top = Math.max(0, ...value.evidence.map((e) => e.match_score ?? 0));
@@ -153,12 +160,21 @@ export const ReportSectionHypothesisSchema = z.object({
 }).strict();
 export type ReportSectionHypothesis = z.infer<typeof ReportSectionHypothesisSchema>;
 
+export const ReportSectionDataGapSchema = z.object({
+  gap_id: z.string().regex(/^gap_\d{2,}$/),
+  claim_text: z.string().min(8).max(1000),
+  gap_reason: z.string().min(1).max(200),
+  suggested_fix: z.string().min(1).max(500).optional().nullable(),
+}).strict();
+export type ReportSectionDataGap = z.infer<typeof ReportSectionDataGapSchema>;
+
 export const ReportSectionSchema = z.object({
   section_index: z.number().int().min(1),
   section_title: z.string().min(3),
   section_summary: z.string().min(1),
-  claims: z.array(ReportClaimSchema).min(1),
+  claims: z.array(ReportClaimSchema).default([]),
   hypotheses: z.array(ReportSectionHypothesisSchema).default([]),
+  data_gaps: z.array(ReportSectionDataGapSchema).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
