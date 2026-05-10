@@ -55,11 +55,11 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 - **Pinning-Source:** `sentence-transformers==3.0.0` (limits `transformers<5`)
 - **Risk:** Medium — HuggingFace-Transformers, genutzt indirekt über sentence-transformers für Embeddings (Knowledge-Graph-Indizierung, Evidence-Binder, Cluster-Naming).
 - **Betroffen in Agora:** `backend/app/services/evidence_binder.py` (Embed-Funktion), Cluster-Embeddings im `network_analytics`-Pfad.
-- **Target-Version:** `transformers>=4.58.0`, sobald sentence-transformers den Pin lockert.
-- **Deadline:** 2026-07-30 (+90 Tage)
+- **Target-Version:** `transformers>=4.58.0` once sentence-transformers relaxes the pin.
+- **Deadline:** 2026-07-30 (+90 days)
 - **Action:**
-  - Monitor: PyPI `sentence-transformers`-Releases (UKPLab/sentence-transformers).
-  - Re-run-Trigger: nach jedem sentence-transformers-Bump erneut `uv run pip-audit`.
+  - Monitor sentence-transformers releases for transformers pin relaxation.
+  - Re-run pip-audit after each dependency update.
 
 ### CVE-2024-46455 (Issue #125) — unstructured
 

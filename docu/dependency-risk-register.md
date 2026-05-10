@@ -31,7 +31,7 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 |---|---|---|---|
 | `pillow` | `10.3.0` | `camel-oasis==0.2.5`, `camel-ai==0.2.78` | `camel-oasis` pinnt `pillow==10.3.0`; `camel-ai` limitiert `pillow<11`. |
 | `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. |
-| `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
+| `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. Target: `transformers>=4.58.0`. Aktion: Monitoring von `sentence-transformers`-Releases auf Pin-Lockerung; Re-Audit nach jedem Dependency-Update. |
 | `unstructured` | `0.13.7` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `unstructured==0.13.7`. |
 
 ---
