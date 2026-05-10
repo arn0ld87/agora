@@ -186,10 +186,21 @@ class LocalFilesystemArtifactStore:
                 continue
             with os.scandir(sub_path) as entries:
                 for entry in entries:
-                    if entry.is_file():
-                        name = _reverse_lookup(f"{sub}/{entry.name}")
-                        if name is not None:
-                            results.append(name)
+                    if not entry.is_file():
+                        continue
+                    # Skip tempfiles from atomic writes (.tmp-json-*.json).
+                    # Analogous guard to run_registry.py:281. Without this,
+                    # the Polling-Loop picks up the dot-prefixed tmp name,
+                    # passes it to _resolve_relative_path, and receives a
+                    # ValueError (cmd_id.startswith(".")), aborting the whole
+                    # poll round — the real IPC command is never seen until
+                    # the next tick, causing cumulative TimeoutErrors under
+                    # rapid atomic-write traffic (M11.4-Followup-5).
+                    if entry.name.startswith(".") or not entry.name.endswith(".json"):
+                        continue
+                    name = _reverse_lookup(f"{sub}/{entry.name}")
+                    if name is not None:
+                        results.append(name)
         if prefix:
             results = [n for n in results if n.startswith(prefix)]
         results.sort()

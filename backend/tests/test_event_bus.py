@@ -14,6 +14,8 @@ Semantics convention:
 
 from __future__ import annotations
 
+import os
+import tempfile
 import threading
 import time
 from typing import Callable, List
@@ -235,17 +237,16 @@ def test_in_memory_state_events_are_ordered():
 def test_request_response_correlation(bus):
     """Command goes out, responder matches by correlation_id, client receives it.
 
-    Timeouts auf 10.0 s gesetzt (Historie: 2.0 → 5.0 → 10.0). Bei
-    poll_interval=0.05 ergibt das ~200 Poll-Zyklen — robust gegen IO-Stau
-    auf Shared-Filesystem-CI-Runnern. 5.0 s reichten ab CI-Run 25599430790
-    nicht mehr zuverlässig (TimeoutError bei interview-correlation_id).
-    Lokale Reproduktion bleibt sub-second; der Bump trifft nur den
-    Worst-Case-CI-Pfad und kostet kein Test-Wallclock im Happy Path.
+    M11.4-Followup-5: tmp-File-Race im Polling-Loop gefixt (artifact_store.py).
+    Timeout-Workaround (war 2.0 → 5.0 → 10.0) zurückgedreht auf 5.0 s.
+    Wenn dieser Test erneut rot wird, ist es kein Timeout-Problem, sondern
+    ein neuer Race — den Timeout erhöhen löst das nicht, stattdessen Root
+    Cause suchen.
     """
 
     def responder() -> None:
         for cmd in bus.subscribe(
-            SIM_ID, CHANNEL_RPC_COMMAND, timeout=10.0, poll_interval=0.05
+            SIM_ID, CHANNEL_RPC_COMMAND, timeout=5.0, poll_interval=0.05
         ):
             assert cmd.correlation_id, "Commands must carry correlation_id"
             response_channel = rpc_response_channel(cmd.correlation_id)
@@ -267,10 +268,10 @@ def test_request_response_correlation(bus):
         SIM_ID,
         command_type="interview",
         args={"agent_id": 7, "prompt": "hello"},
-        timeout=10.0,
+        timeout=5.0,
         poll_interval=0.05,
     )
-    t.join(timeout=11.0)
+    t.join(timeout=6.0)
 
     assert response.payload["status"] == "completed"
     assert response.payload["result"]["echo"]["agent_id"] == 7
@@ -289,6 +290,83 @@ def test_request_response_times_out(bus):
         )
     elapsed = time.monotonic() - start
     assert elapsed < 1.5, f"Timeout took {elapsed:.2f}s (expected ~0.3s)"
+
+
+# ---------------------------------------------------------------------------
+# Regression: tmp-file race in polling loop (M11.4-Followup-5)
+# ---------------------------------------------------------------------------
+
+
+def test_tmp_files_do_not_disrupt_file_polling(tmp_path):
+    """Atomic-write tmp-files in ipc_commands/ must not break the Polling-Loop.
+
+    Root-Cause (M11.4-Followup-5): write_json_atomic creates
+    ``.tmp-json-XXXXXX.json`` in the target directory. When those files are
+    present during a poll tick, the Polling-Loop must skip them silently.
+    Previously they caused a ValueError in _resolve_relative_path (cmd_id
+    starts with "."), aborting the entire poll round — the real IPC command
+    was invisible until the next tick, causing cumulative TimeoutErrors.
+
+    This test proves the fix: even with several tmp-files occupying
+    ipc_commands/, request_response completes successfully.
+    """
+    store = LocalFilesystemArtifactStore(simulations_root=str(tmp_path))
+    bus = FilePollingEventBus(store=store)
+
+    # Pre-create the ipc_commands directory so tmp-files land in the right place.
+    commands_dir = tmp_path / SIM_ID / "ipc_commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+
+    # Drop several tmp-files that simulate mid-atomic-write state.
+    tmp_handles = []
+    for _ in range(5):
+        fd, _path = tempfile.mkstemp(
+            prefix=".tmp-json-", suffix=".json", dir=str(commands_dir)
+        )
+        tmp_handles.append((fd, _path))
+
+    def responder() -> None:
+        for cmd in bus.subscribe(
+            SIM_ID, CHANNEL_RPC_COMMAND, timeout=5.0, poll_interval=0.05
+        ):
+            assert cmd.correlation_id, "Commands must carry correlation_id"
+            bus.publish(
+                rpc_response_channel(cmd.correlation_id),
+                SimulationEvent(
+                    type="rpc.response.completed",
+                    simulation_id=SIM_ID,
+                    payload={"status": "completed", "result": {"ok": True}},
+                    correlation_id=cmd.correlation_id,
+                ),
+            )
+            return
+
+    t = threading.Thread(target=responder, daemon=True)
+    t.start()
+
+    # request_response must succeed despite the tmp-files.
+    response = bus.request_response(
+        SIM_ID,
+        command_type="interview",
+        args={"agent_id": 42, "prompt": "race"},
+        timeout=5.0,
+        poll_interval=0.05,
+    )
+    t.join(timeout=6.0)
+
+    assert response.payload["status"] == "completed"
+    assert response.payload["result"]["ok"] is True
+
+    # Cleanup: close and remove the tmp-files we left open.
+    for fd, path in tmp_handles:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
 
 
 # ---------------------------------------------------------------------------
