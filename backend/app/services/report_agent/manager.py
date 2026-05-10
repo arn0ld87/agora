@@ -54,17 +54,17 @@ logger = get_logger('agora.report_agent')
 # ohne UI-Render erkennbar, dass es sich um simulierte Persona-O-Töne handelt
 # (Anti-Halluzinations-Disziplin, ADR-0004).
 _SIMULATED_QUOTE_TAG_RE = re.compile(
-    r"<simulated_quote\s+([^>]+?)>(.*?)</simulated_quote>",
+    r"<simulated_quote(?:\s+([^>]*?))?>(.*?)</simulated_quote>",
     re.DOTALL,
 )
-_SIMULATED_QUOTE_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
+_SIMULATED_QUOTE_ATTR_RE = re.compile(r'(\w+)\s*=\s*["\']([^"\']*)["\']')
 
 
 def _render_simulated_quote_blocks(content: str) -> str:
     """Ersetzt <simulated_quote>-Tags durch Markdown-Blockquotes mit Anker-Header."""
 
     def _replace(match: "re.Match[str]") -> str:
-        attrs = dict(_SIMULATED_QUOTE_ATTR_RE.findall(match.group(1)))
+        attrs = dict(_SIMULATED_QUOTE_ATTR_RE.findall(match.group(1) or ""))
         text = match.group(2).strip()
         persona_id = attrs.get("persona_id", "unbekannt")
         seed_anchor = attrs.get("seed_anchor", "unbekannt")
