@@ -1,5 +1,5 @@
 import type { ComputedRef, Ref } from 'vue'
-import { exportReport } from '../api/report'
+import { exportReport, fetchReportCsv } from '../api/report'
 import { parseReportContract, type EvidenceMap } from '../contracts/reportContract'
 
 interface UseReportExportsOptions {
@@ -148,9 +148,63 @@ export function useReportExports(options: UseReportExportsOptions) {
     }
   }
 
+  /**
+   * Lädt eine einzelne CSV-Tabelle (Sub-Slice P4.2).
+   * @param table - 'personas' | 'segments' | 'claims'
+   * @param filename - optionaler Dateiname; Standard: agora-report-<id>-<table>.csv
+   */
+  async function downloadCsv(
+    table: 'personas' | 'segments' | 'claims',
+    filename?: string
+  ) {
+    const reportId = options.reportId()
+    if (!reportId) return
+    try {
+      const blob = await fetchReportCsv(reportId, table)
+      triggerDownload(blob, filename ?? `agora-report-${reportId}-${table}.csv`)
+    } catch (e) {
+      options.addLog(
+        `CSV-Export (${table}) fehlgeschlagen: ` + ((e as Error)?.message || String(e))
+      )
+    }
+  }
+
+  /**
+   * Lädt alle drei CSV-Tabellen als Einzeldownloads (Sub-Slice P4.2).
+   *
+   * TODO(jszip): Bundle als ZIP sobald jszip installiert ist.
+   * Refs: CHANGELOG.md [Unreleased] P4.2-Eintrag.
+   */
+  async function downloadCsvBundle() {
+    const reportId = options.reportId()
+    if (!reportId) return
+    const tables: Array<'personas' | 'segments' | 'claims'> = ['personas', 'segments', 'claims']
+    const results = await Promise.allSettled(
+      tables.map((t) => fetchReportCsv(reportId, t))
+    )
+    let anyError = false
+    for (let i = 0; i < tables.length; i++) {
+      const result = results[i]
+      if (result.status === 'fulfilled') {
+        triggerDownload(result.value, `agora-report-${reportId}-${tables[i]}.csv`)
+      } else {
+        anyError = true
+        options.addLog(
+          `CSV-Bundle: ${tables[i]} fehlgeschlagen: ` +
+            ((result.reason as Error)?.message || String(result.reason))
+        )
+      }
+    }
+    if (!anyError) {
+      options.addLog('CSV-Bundle: alle drei Tabellen heruntergeladen.')
+    }
+  }
+
   return {
     copyMarkdown,
     downloadCombinedJson,
+    downloadCsv,
+    downloadCsvBundle,
     downloadEvidence,
     downloadHtml,
     downloadMarkdown,

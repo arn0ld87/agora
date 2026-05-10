@@ -154,6 +154,22 @@ export const exportReport = (
 }
 
 /**
+ * CSV-Export einer strukturierten Tabelle (Sub-Slice P4.2).
+ * @param reportId
+ * @param table - 'personas' | 'segments' | 'claims'
+ * @returns Blob mit text/csv-Inhalt
+ */
+export const fetchReportCsv = (
+  reportId: string,
+  table: 'personas' | 'segments' | 'claims'
+): Promise<Blob> => {
+  return service.get(`/api/report/${reportId}/export`, {
+    params: { format: 'csv', table },
+    responseType: 'blob',
+  })
+}
+
+/**
  * Chat with Report Agent
  * @param data - { simulation_id, message, chat_history? }
  */

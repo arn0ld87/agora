@@ -20,6 +20,7 @@ from ..contracts import (
 )
 from ..services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
+from ..services.report_agent.csv_export import claims_to_csv, personas_to_csv, segments_to_csv
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -526,26 +527,50 @@ def _build_export_envelope(report_obj, raw_evidence_map: Optional[dict[str, Any]
     )
 
 
+_CSV_TABLES = frozenset({"personas", "segments", "claims"})
+
+
 @report_bp.route('/<report_id>/export', methods=['GET'])
 @allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
 @handle_api_errors(log_prefix="Failed to export report")
 def export_report(report_id: str):
-    """Unified report export (Slice 5.1, contract-bound in Sub-Slice 02b).
+    """Unified report export (Slice 5.1 + P4.2, contract-bound in Sub-Slice 02b).
 
     Query params:
-      * ``format`` — ``md`` (default) or ``json``.
+      * ``format`` — ``md`` (default), ``json``, or ``csv``.
+      * ``table``  — required when ``format=csv``: ``personas``, ``segments``, or ``claims``.
 
     ``md`` returns the rendered markdown as attachment.
     ``json`` returns a ``ReportContractModel``-shaped envelope
     ``{schema_version, exported_at, report, evidence}``. The envelope is built
     from ``app.contracts``; ``schema_version`` is locked to v2 by the contract.
+    ``csv`` returns RFC-4180-konformes CSV für die angegebene Tabelle.
     """
     if not validate_report_id(report_id):
         return json_error("Invalid report_id format", status=400)
 
     fmt = (request.args.get('format') or 'md').strip().lower()
-    if fmt not in ('md', 'json'):
-        return json_error("format must be 'md' or 'json'", status=400)
+    if fmt not in ('md', 'json', 'csv'):
+        return json_error("format must be 'md', 'json', or 'csv'", status=400)
+
+    # --- CSV branch (Sub-Slice P4.2) ---
+    if fmt == 'csv':
+        table = (request.args.get('table') or '').strip().lower()
+        if table not in _CSV_TABLES:
+            return json_error(
+                f"table must be one of: {', '.join(sorted(_CSV_TABLES))}",
+                status=400,
+            )
+
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return json_error(f"Report does not exist: {report_id}", status=404)
+
+        csv_body = _build_csv_export(report_id, table)
+        filename = f"agora-report-{report_id}-{table}.csv"
+        response = Response(csv_body, mimetype="text/csv; charset=utf-8")
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     report = ReportManager.get_report(report_id)
     if not report:
@@ -573,6 +598,27 @@ def export_report(report_id: str):
     response = Response(body, mimetype='application/json; charset=utf-8')
     response.headers['Content-Disposition'] = f'attachment; filename="agora-report-{report_id}.json"'
     return response
+
+
+def _build_csv_export(report_id: str, table: str) -> str:
+    """Lädt die passende Datenquelle und gibt RFC-4180-CSV zurück.
+
+    Datenquellen:
+    - personas / segments: report-v3.json (falls vorhanden), sonst leere Liste.
+    - claims: evidence-map.json sections[].claims[].
+
+    Kein hartes Coupling auf ReportV3 — falls P3.1 später landet,
+    kann die Quelle per Folge-Slice umgestellt werden.
+    """
+    if table in ("personas", "segments"):
+        report_v3 = ReportManager.get_report_v3(report_id) or {}
+        if table == "personas":
+            return personas_to_csv(report_v3.get("personas") or [])
+        return segments_to_csv(report_v3.get("segments") or [])
+
+    # table == "claims"
+    evidence_map = ReportManager.get_evidence_map(report_id) or {}
+    return claims_to_csv(evidence_map.get("sections") or [])
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])
