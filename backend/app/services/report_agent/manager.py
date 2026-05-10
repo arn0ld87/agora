@@ -73,7 +73,7 @@ def _render_simulated_quote_blocks(content: str) -> str:
             f"(persona_id: {persona_id}, seed_anchor: {seed_anchor})"
         )
         body_lines = [f"> {line}" if line else ">" for line in text.split("\n")]
-        return "\n".join([header, *body_lines])
+        return "\n\n" + "\n".join([header, *body_lines]) + "\n\n"
 
     return _SIMULATED_QUOTE_TAG_RE.sub(_replace, content)
 
