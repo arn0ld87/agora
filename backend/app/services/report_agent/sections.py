@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from html import escape
 from typing import Any, Callable, Dict, List, Optional
 
 from ..evidence_binder import _cosine
@@ -132,6 +133,52 @@ def attach_provenance(item: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
+def _format_confidence_score(value: Any) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _claim_text_for_markdown(claim: Dict[str, Any]) -> str:
+    text = str(claim.get("claim_text") or claim.get("claim") or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    return escape(truncate_text(text, 1000), quote=False) or "Claim-Text nicht verfügbar."
+
+
+def render_claim_to_markdown(claim: Dict[str, Any]) -> str:
+    """Render sichtbare Confidence-Marker fuer Markdown-/Print-Export."""
+    label = str(claim.get("confidence_label") or claim.get("confidence") or "").lower()
+    score = _format_confidence_score(claim.get("confidence_score"))
+    text = _claim_text_for_markdown(claim)
+
+    if label == "low":
+        return (
+            '> <span class="conf-badge conf-low">'
+            f"⚠️ Low-Confidence-Hinweis (score={score})"
+            f"</span>: {text}"
+        )
+    if label == "medium":
+        return (
+            f'- {text} <span class="conf-badge conf-medium">'
+            f"medium-confidence (score={score})"
+            "</span>"
+        )
+    return ""
+
+
+def render_confidence_markers_for_section(section: Optional[Dict[str, Any]]) -> str:
+    if not section:
+        return ""
+    rendered = [
+        marker for claim in section.get("claims") or []
+        if (marker := render_claim_to_markdown(claim))
+    ]
+    if not rendered:
+        return ""
+    return "\n".join(["**Konfidenz-Hinweise**", "", *rendered])
+
+
 def section_dedup_check(
     new_summary: str,
     existing: List[Dict[str, Any]],
@@ -205,6 +252,8 @@ __all__ = [
     "build_source_id_anchor",
     "is_atomic_claim",
     "is_claim_candidate",
+    "render_claim_to_markdown",
+    "render_confidence_markers_for_section",
     "sample_actions_timeseries",
     "section_dedup_check",
     "truncate_text",

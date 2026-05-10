@@ -27,6 +27,7 @@ from .storage import (
     write_outline,
     write_section_markdown,
 )
+from .sections import render_confidence_markers_for_section
 
 logger = get_logger('agora.report_agent')
 
@@ -285,8 +286,18 @@ class ReportManager:
         
         # sequentiallyReadallSectionfile
         sections = cls.get_generated_sections(report_id)
+        evidence_sections = {
+            int(section.get("section_index", 0)): section
+            for section in (cls.get_evidence_map(report_id) or {}).get("sections", [])
+            if section.get("section_index") is not None
+        }
         for section_info in sections:
             md_content += section_info["content"]
+            confidence_markers = render_confidence_markers_for_section(
+                evidence_sections.get(int(section_info.get("section_index", 0)))
+            )
+            if confidence_markers:
+                md_content = md_content.rstrip() + f"\n\n{confidence_markers}\n\n"
         
         # post-processing：clean entireReporttitlequestion
         md_content = cls._post_process_report(md_content, outline)

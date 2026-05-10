@@ -294,3 +294,55 @@ def test_evidence_map_round_trip_updates_report_meta(tmp_path, monkeypatch):
     assert ReportManager.get_evidence_map(report_id)["sections"][0]["claims"][0]["confidence_score"] == 0.62
     assert loaded.has_evidence is True
     assert loaded.evidence_sections == 1
+
+
+def test_assemble_full_report_renders_confidence_markers(tmp_path, monkeypatch):
+    """P2.2: Low-/Medium-Confidence-Claims sind im exportierten Markdown sichtbar."""
+    monkeypatch.setattr(ReportManager, 'REPORTS_DIR', str(tmp_path))
+    report_id = 'report_abcdef123456'
+    outline = ReportOutline(
+        title='Demo',
+        summary='Summary',
+        sections=[ReportSection(title='Intro', content='Body')],
+    )
+    ReportManager.save_section(
+        report_id,
+        1,
+        ReportSection(title='Intro', content='Abschnittstext.'),
+    )
+    ReportManager.save_evidence_map(report_id, {
+        "schema_version": 2,
+        "report_id": report_id,
+        "simulation_id": "sim_abcdef123456",
+        "global_evidence": [],
+        "sections": [{
+            "section_index": 1,
+            "section_title": "Intro",
+            "section_summary": "Abschnittstext.",
+            "claims": [
+                {
+                    "claim_id": "claim_01",
+                    "claim_text": "Eine schwach belegte Beobachtung bleibt sichtbar markiert.",
+                    "confidence_label": "low",
+                    "confidence_score": 0.15,
+                    "evidence": [],
+                    "audit_trail": [],
+                },
+                {
+                    "claim_id": "claim_02",
+                    "claim_text": "Eine mittel belegte Beobachtung bekommt einen dezenten Marker.",
+                    "confidence_label": "medium",
+                    "confidence_score": 0.55,
+                    "evidence": [{"type": "graph_metric", "source": "s", "snippet": "metric"}],
+                    "audit_trail": [],
+                },
+            ],
+        }],
+    })
+
+    markdown = ReportManager.assemble_full_report(report_id, outline)
+
+    assert markdown.count("Low-Confidence-Hinweis") == 1
+    assert "score=0.15" in markdown
+    assert "medium-confidence" in markdown
+    assert "score=0.55" in markdown

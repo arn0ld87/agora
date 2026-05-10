@@ -514,7 +514,15 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
             claim_text: 'Zweiter Claim mit ausreichend Text für Validierung',
             confidence_label: 'medium',
             confidence_score: 0.5,
-            evidence: [],
+            evidence: [
+              {
+                type: 'graph_fact',
+                source: 'neo4j',
+                snippet: 'Graph-Fakt B',
+                supports_claim: true,
+                match_score: 0.6,
+              },
+            ],
             audit_trail: [{ source: 'agent_log', snippet: 'Audit B' }],
           },
         ],

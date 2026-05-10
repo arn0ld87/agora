@@ -64,4 +64,14 @@ describe('renderMarkdown', () => {
     expect(html).toMatch(/<pre>.*<code/s)
     expect(html).toContain('console.log')
   })
+
+  it('rendert Confidence-Marker als Badge-Spans', () => {
+    const html = renderMarkdown(
+      '<span class="conf-badge conf-low">⚠️ Low-Confidence-Hinweis (score=0.15)</span>: Claim'
+    )
+
+    expect(html).toContain('conf-badge')
+    expect(html).toContain('conf-low')
+    expect(html).toContain('Low-Confidence-Hinweis')
+  })
 })

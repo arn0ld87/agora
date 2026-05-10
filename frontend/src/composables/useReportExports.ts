@@ -22,7 +22,7 @@ function triggerDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 500)
 }
 
-function buildStandaloneHtml(title: string, bodyHtml: string) {
+export function buildStandaloneHtml(title: string, bodyHtml: string) {
   return `<!doctype html>
 <html lang="de"><head><meta charset="utf-8" />
 <title>${title}</title>
@@ -41,6 +41,10 @@ function buildStandaloneHtml(title: string, bodyHtml: string) {
   pre code { background: transparent; color: inherit; padding: 0; }
   table { border-collapse: collapse; margin: 1em 0; }
   th, td { border: 1px solid #ccc; padding: 6px 10px; }
+  .conf-badge { display: inline-block; border-radius: 4px; padding: 1px 6px; font-family: system-ui, sans-serif; font-size: 0.82em; font-weight: 700; line-height: 1.5; }
+  .conf-low { background: #fff3cd; color: #7a4b00; border: 1px solid #e7b84f; }
+  .conf-medium { background: #e7f0ff; color: #174ea6; border: 1px solid #9bbcff; }
+  .conf-high { background: #e6f6ed; color: #17633a; border: 1px solid #90d3aa; }
   hr { border: 0; border-top: 1px solid #ccc; margin: 2em 0; }
   @media print { body { margin: 0; padding: 24px; } }
 </style>
