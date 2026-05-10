@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
+from .settings_layer import get_default_service as _get_settings
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
@@ -500,12 +501,9 @@ def prepare_simulation(
         # Resolve parallel_profile_count: None → env AGORA_PARALLEL_PERSONA_COUNT → 10.
         # Auflösung hier (einmalig), damit _phase_generate_profiles ein konkretes int erhält.
         if parallel_profile_count is None:
-            try:
-                parallel_profile_count = int(
-                    os.environ.get('AGORA_PARALLEL_PERSONA_COUNT', '10')
-                )
-            except ValueError:
-                parallel_profile_count = 10
+            parallel_profile_count = int(
+                _get_settings().effective_value('AGORA_PARALLEL_PERSONA_COUNT')
+            )
 
         quota_plan = _apply_persona_floor_to_quota_plan(quota_plan)
 

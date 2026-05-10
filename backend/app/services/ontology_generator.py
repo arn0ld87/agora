@@ -3,10 +3,10 @@ Ontology generation service
 Interface 1: Analyze text content and generate entity and relationship type definitions suitable for social simulation
 """
 
-import os
 from typing import Dict, Any, List, Optional
 from ..config import Config
 from ..utils.llm_client import LLMClient
+from .settings_layer import get_default_service as _get_settings
 
 
 # System prompt for ontology generation
@@ -201,7 +201,7 @@ class OntologyGenerator:
         # and the chat_json layer surfaced "Invalid JSON format from LLM" in
         # the UI. chat_json still best-effort-repairs trailing truncation as a
         # safety net for outliers.
-        max_tokens = int(os.environ.get('ONTOLOGY_MAX_TOKENS', '12288'))
+        max_tokens = int(_get_settings().effective_value('ONTOLOGY_MAX_TOKENS'))
         result = self.llm_client.chat_json(
             messages=messages,
             temperature=0.3,

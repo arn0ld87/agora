@@ -265,6 +265,8 @@ def start_simulation(
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
         # Build subprocess environment
+        # env-only: os.environ.copy() vererbt das vollständige Prozess-Environment
+        # an den OASIS-Subprozess — kein settings_layer-Kandidat.
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
@@ -516,10 +518,11 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
     if _cleanup_registered:
         return
 
+    # env-only: werkzeug/subprocess intern, kein settings_layer-Kandidat
     is_reloader_process = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
     is_debug_mode = (
-        os.environ.get("FLASK_DEBUG") == "1"
-        or os.environ.get("WERKZEUG_RUN_MAIN") is not None
+        os.environ.get("FLASK_DEBUG") == "1"  # env-only: werkzeug/subprocess intern
+        or os.environ.get("WERKZEUG_RUN_MAIN") is not None  # env-only: werkzeug/subprocess intern
     )
 
     # In debug mode, only register in reloader child process;

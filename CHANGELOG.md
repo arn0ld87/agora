@@ -12,6 +12,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - feat(report-agent): Pflichtabschnitt-Validator erzwungen (Sub-Slice P1.1). `validate_required_sections()` in `contract_validator.py` prüft case-insensitiv und whitespace-tolerant. `ReportOutlineModel` wirft `ValidationError` bei fehlenden Default-Sections. `workflow.generate_report()` blockt nach `plan_outline()` und setzt `ReportStatus.INCOMPLETE` + `missing_sections[]`, ohne `report.md` zu schreiben. `GET /api/report/<id>` liefert `status` und `missing_sections[]` strukturiert aus.
 
 ### Changed
+- refactor(services): `os.getenv` via `settings_layer` für AGORA_PARALLEL_PERSONA_COUNT, AGORA_PERSONA_DETAIL_LEVEL, ONTOLOGY_MAX_TOKENS — schließt Issue #212 (Refs #212).
 - docs(p3.4): Print/PDF-Export ist offiziell als Browser-Print dokumentiert (P3.4). Button-Label in Step4Report.vue auf i18n-Key `step4.view.printPdf` migriert. Abschnitt „Report-Export & PDF" in `deployment-prod-like.md` ergänzt; Mini-Abschnitt in `README.md` (DE + EN). Kein server-seitiges PDF, keine Headless-Chrome-Pipeline.
 - chore(status): STATUS.md test-count nach P1.1 syncen (1722 → 1725 Backend Tests collected).
 - **Layer 2 / Report Agent:** Evidence-Gating-Prompt-Block in `SECTION_SYSTEM_PROMPT_TEMPLATE` eingeführt (Sub-Slice M11.7a). LLM klassifiziert Claims jetzt nach vier Provenance-Stufen (hypothesis, seed_only, agent_grounded, cross_stakeholder) mit Confidence-Gating und Hedge-Word-Regeln. Forward-kompatibel zu `EvidenceSourceKind` Enum (Slice B).
