@@ -185,8 +185,8 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         )
         # Strict validation: alphanumeric and underscores only, max 50 chars.
         # This prevents Cypher injection in the dynamic DROP INDEX query.
-        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,49}$", index_name):
-            raise ValueError(f"Invalid index name for DROP INDEX: {index_name}")
+        if not re.fullmatch(r"^[A-Za-z_][A-Za-z0-9_]{0,49}$", index_name):
+            raise ValueError(f"Invalid index name: {index_name}")
 
         session.run(f"DROP INDEX {index_name}")
 
