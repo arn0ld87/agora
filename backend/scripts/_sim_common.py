@@ -26,6 +26,45 @@ def _is_ollama_route(model: str, base_url: str) -> bool:
     return False
 
 
+def uses_max_completion_tokens(model: str) -> bool:
+    """True wenn das Modell ``max_completion_tokens`` statt ``max_tokens`` verlangt.
+
+    Hintergrund: Die OpenAI GPT-5-Familie und die Reasoning-Modelle
+    ``o1`` / ``o3`` / ``o4`` haben ``max_tokens`` deprecated und
+    antworten 400 ``Unsupported parameter: 'max_tokens' is not supported
+    with this model. Use 'max_completion_tokens' instead.``, sobald der
+    Parameter im Request-Body landet. Ältere OpenAI-Modelle (``gpt-4o``,
+    ``gpt-4-turbo``, ``gpt-3.5-turbo``) sowie alle nicht-OpenAI-Backends
+    (Qwen, Llama, Claude, DeepSeek, Mistral, Ollama-Modelle) nutzen
+    weiterhin ``max_tokens``.
+
+    Heuristik: Modellname (case-insensitiv, getrimmt) beginnt mit
+    ``gpt-5`` oder einem ``o<n>``-Prefix gefolgt von ``-`` oder Ende.
+    """
+    lowered = model.strip().lower()
+    if lowered.startswith("gpt-5"):
+        return True
+    for prefix in ("o1", "o3", "o4"):
+        if lowered == prefix or lowered.startswith(f"{prefix}-"):
+            return True
+    return False
+
+
+def build_camel_completion_params(
+    *,
+    model: str,
+    completion_max_tokens: int,
+) -> dict[str, Any]:
+    """Baut den Token-Limit-Block für ``ModelFactory.create()``.
+
+    Liefert ``{"max_completion_tokens": N}`` für GPT-5/o1/o3/o4 und
+    ``{"max_tokens": N}`` für alle anderen Modelle. Genau ein Schlüssel
+    pro Aufruf — OpenAI lehnt unbekannte Parameter strikt ab.
+    """
+    key = "max_completion_tokens" if uses_max_completion_tokens(model) else "max_tokens"
+    return {key: completion_max_tokens}
+
+
 def build_camel_extra_body(
     *,
     model: str,
