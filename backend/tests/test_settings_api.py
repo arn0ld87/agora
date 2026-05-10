@@ -34,6 +34,11 @@ def app(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         'app.api.settings.get_default_service', lambda: service
     )
+    changed_events = []
+    monkeypatch.setattr(
+        'app.api.settings.publish_settings_changed',
+        lambda keys, *, source: changed_events.append((sorted(keys), source)),
+    )
 
     app = Flask(__name__)
     install_api_error_handlers(app)
@@ -47,6 +52,7 @@ def app(monkeypatch, tmp_path: Path):
     install_blueprint_guard(bp)
     app.register_blueprint(bp, url_prefix='/api/settings')
     app.config['service'] = service
+    app.config['changed_events'] = changed_events
     return app
 
 
@@ -183,6 +189,14 @@ def test_put_settings_persists_and_returns_updated_state(client, app):
     assert data == {'LLM_MODEL_NAME': 'qwen2.5:14b'}
 
 
+def test_put_settings_broadcasts_settings_changed_event(client, app):
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'qwen2.5:14b'})
+    assert res.status_code == 200
+    assert app.config['changed_events'] == [
+        (['LLM_MODEL_NAME'], 'settings')
+    ]
+
+
 def test_put_settings_response_reflects_new_source(client):
     res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'qwen2.5:14b'})
     fields = res.get_json()['data']['fields']
@@ -238,6 +252,7 @@ def test_put_settings_all_or_nothing_no_partial_persist(client, app):
     assert res.status_code == 400
     # File darf nicht angelegt worden sein
     assert not app.config['service'].instance_path.exists()
+    assert app.config['changed_events'] == []
 
 
 def test_put_settings_rejects_secrets_on_regular_endpoint(client):
@@ -325,6 +340,18 @@ def test_put_secrets_persists_with_confirm(client, app):
     # Aber das File enthält den Klartext (Issue-Akzeptanz)
     data = json.loads(app.config['service'].instance_path.read_text(encoding='utf-8'))
     assert data['NEO4J_PASSWORD'] == 'new-pw'
+
+
+def test_put_secrets_broadcasts_settings_changed_event_without_values(client, app):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'NEO4J_PASSWORD': 'new-pw'},
+    })
+    assert res.status_code == 200
+    assert app.config['changed_events'] == [
+        (['NEO4J_PASSWORD'], 'settings.secrets')
+    ]
+    assert b'new-pw' not in res.data
 
 
 def test_put_secrets_rejects_non_secret_field(client):

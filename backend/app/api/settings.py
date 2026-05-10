@@ -31,11 +31,14 @@ from flask import Blueprint, request
 
 from ..services.settings_layer import get_default_service
 from ..services.settings_schema import SECTIONS, field_by_key
+from ..services.settings_event_bus import publish_settings_changed
 from ..services.settings_validator import validate_payload
 from ..utils.api_responses import handle_api_errors, json_error, json_success
+from ..utils.logger import get_logger
 
 
 settings_bp = Blueprint('settings', __name__)
+logger = get_logger('agora.api.settings')
 
 
 @settings_bp.route('', methods=['GET'])
@@ -136,6 +139,7 @@ def put_settings():
         return _validation_error_response(errors)
 
     service.apply_payload(validated, persist=True)
+    _publish_settings_changed(validated.keys(), source='settings')
     return json_success({
         'sections': list(SECTIONS),
         'fields': service.get_all_grouped(),
@@ -203,6 +207,7 @@ def put_settings_secrets():
 
     service = get_default_service()
     service.apply_payload(validated, persist=True)
+    _publish_settings_changed(validated.keys(), source='settings.secrets')
     return json_success({
         'sections': list(SECTIONS),
         'fields': service.get_all_grouped(),
@@ -219,3 +224,10 @@ def _validation_error_response(errors):
     }
     from flask import jsonify
     return jsonify(payload), 400
+
+
+def _publish_settings_changed(keys, *, source):
+    try:
+        publish_settings_changed(keys, source=source)
+    except Exception as exc:
+        logger.warning("settings.changed publish failed: %s", exc)
