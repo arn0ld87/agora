@@ -11,6 +11,7 @@ from app.contracts.report_contract import (
     ConfidenceLabel,
     EvidenceItemModel,
     EvidenceMapModel,
+    EvidenceSourceKind,
     EvidenceType,
     ReportClaimModel,
     ReportContractModel,
@@ -71,13 +72,30 @@ def test_verified_requires_strong_match():
         )
 
 
+def _agent_quote_evidence(group: str, score: float = 0.88) -> EvidenceItemModel:
+    """Helfer fuer high/verified-Tests nach ADR-0002 Anker 4 (Sub-Slice M11.7b)."""
+    return EvidenceItemModel(
+        type=EvidenceType.agent_interview,
+        source="agent-log",
+        snippet=f"Aussage aus {group}.",
+        match_score=score,
+        supports_claim=True,
+        source_kind=EvidenceSourceKind.agent_quote,
+        persona_stakeholder_group=group,
+    )
+
+
 def test_verified_with_strong_match_passes():
+    # ADR-0002 Anker 4: verified verlangt zwei Stakeholder-Gruppen via agent_quote.
     claim = ReportClaimModel(
         claim_id="claim_01",
         claim_text="Test claim text long enough",
         confidence_label=ConfidenceLabel.verified,
         confidence_score=0.92,
-        evidence=[_make_evidence(0.88, True)],
+        evidence=[
+            _agent_quote_evidence("Geschaeftsfuehrung", score=0.88),
+            _agent_quote_evidence("Vertrieb", score=0.86),
+        ],
     )
     assert claim.confidence_label == ConfidenceLabel.verified
 
@@ -235,13 +253,28 @@ def test_full_contract_round_trip():
                     "claim_text": "Die Personas reagieren skeptisch.",
                     "confidence_label": "high",
                     "confidence_score": 0.78,
-                    "evidence": [{
-                        "type": "agent_action",
-                        "source": "agent_log",
-                        "snippet": "Persona kmu_ceo äußerte Bedenken.",
-                        "match_score": 0.7,
-                        "supports_claim": True,
-                    }],
+                    # ADR-0002 Anker 4 (Sub-Slice M11.7b): high verlangt
+                    # agent_quote-Evidence aus mindestens 2 Stakeholder-Gruppen.
+                    "evidence": [
+                        {
+                            "type": "agent_interview",
+                            "source": "agent_log",
+                            "snippet": "Persona kmu_ceo äußerte Bedenken.",
+                            "match_score": 0.7,
+                            "supports_claim": True,
+                            "source_kind": "agent_quote",
+                            "persona_stakeholder_group": "Geschaeftsfuehrung",
+                        },
+                        {
+                            "type": "agent_interview",
+                            "source": "agent_log",
+                            "snippet": "Persona it_lead bestaetigte das Problem.",
+                            "match_score": 0.72,
+                            "supports_claim": True,
+                            "source_kind": "agent_quote",
+                            "persona_stakeholder_group": "IT-Abteilung",
+                        },
+                    ],
                     "audit_trail": [],
                 }],
             }],

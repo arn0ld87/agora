@@ -77,7 +77,11 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                             "claim_id": "claim_01",
                             "claim_text": "Demo claim text long enough",
                             "confidence_score": 0.8,
-                            "confidence_label": "high",
+                            # ADR-0002 Anker 4 (Sub-Slice M11.7b): high verlangt
+                            # 2 Stakeholder-Gruppen via agent_quote — Demo-Fixture
+                            # bleibt auf medium, ein Cross-Stakeholder-Setup ist
+                            # nicht im Scope des Export-Tests.
+                            "confidence_label": "medium",
                             "evidence": [
                                 {
                                     "type": "graph_metric",

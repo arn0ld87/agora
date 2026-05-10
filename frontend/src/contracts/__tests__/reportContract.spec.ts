@@ -44,13 +44,26 @@ const VALID_PAYLOAD = {
             claim_text: 'Die Personas reagieren skeptisch.',
             confidence_label: 'high',
             confidence_score: 0.78,
+            // ADR-0002 Anker 4 (Sub-Slice M11.7b): high verlangt agent_quote-
+            // Evidence aus mindestens 2 Stakeholder-Gruppen.
             evidence: [
               {
-                type: 'agent_action',
+                type: 'agent_interview',
                 source: 'agent_log',
                 snippet: 'Persona kmu_ceo äußerte Bedenken.',
                 match_score: 0.7,
                 supports_claim: true,
+                source_kind: 'agent_quote',
+                persona_stakeholder_group: 'Geschaeftsfuehrung',
+              },
+              {
+                type: 'agent_interview',
+                source: 'agent_log',
+                snippet: 'Persona it_lead bestaetigte das Problem.',
+                match_score: 0.72,
+                supports_claim: true,
+                source_kind: 'agent_quote',
+                persona_stakeholder_group: 'IT-Abteilung',
               },
             ],
             audit_trail: [],

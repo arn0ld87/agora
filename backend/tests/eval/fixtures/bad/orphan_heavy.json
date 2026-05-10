@@ -7,7 +7,7 @@
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
-      "match_score": 0.70,
+      "match_score": 0.7,
       "supports_claim": true
     },
     {
@@ -48,14 +48,14 @@
         {
           "claim_id": "claim_01",
           "claim_text": "Die Netzwerkdichte liegt bei 0,34 im Kernsegment.",
-          "confidence_label": "high",
-          "confidence_score": 0.70,
+          "confidence_label": "medium",
+          "confidence_score": 0.7,
           "evidence": [
             {
               "type": "graph_fact",
               "source": "neo4j-graph",
               "snippet": "Netzwerkdichte: 0.34 im Kernsegment.",
-              "match_score": 0.70,
+              "match_score": 0.7,
               "supports_claim": true
             }
           ],

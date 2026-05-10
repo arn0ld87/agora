@@ -7,7 +7,7 @@
       "type": "graph_fact",
       "source": "neo4j-graph",
       "snippet": "Segment Einzelhandel: 42 % der Befragten bevorzugen Online-Kauf.",
-      "match_score": 0.80,
+      "match_score": 0.8,
       "supports_claim": true
     },
     {
@@ -35,7 +35,7 @@
       "type": "entity_summary",
       "source": "knowledge-base",
       "snippet": "Stationaerer Handel verliert Marktanteile seit 2020.",
-      "match_score": 0.70,
+      "match_score": 0.7,
       "supports_claim": true
     },
     {
@@ -69,14 +69,14 @@
         {
           "claim_id": "claim_01",
           "claim_text": "42 Prozent der Befragten bevorzugen den Online-Kauf.",
-          "confidence_label": "high",
-          "confidence_score": 0.80,
+          "confidence_label": "medium",
+          "confidence_score": 0.8,
           "evidence": [
             {
               "type": "graph_fact",
               "source": "neo4j-graph",
               "snippet": "Segment Einzelhandel: 42 % der Befragten bevorzugen Online-Kauf.",
-              "match_score": 0.80,
+              "match_score": 0.8,
               "supports_claim": true
             }
           ],
@@ -92,7 +92,7 @@
               "type": "entity_summary",
               "source": "knowledge-base",
               "snippet": "Stationaerer Handel verliert Marktanteile seit 2020.",
-              "match_score": 0.70,
+              "match_score": 0.7,
               "supports_claim": true
             }
           ],
@@ -109,7 +109,7 @@
           "claim_id": "claim_03",
           "claim_text": "Viele Personen kaufen weiterhin stationaer wegen des haptischen Erlebnisses.",
           "confidence_label": "medium",
-          "confidence_score": 0.60,
+          "confidence_score": 0.6,
           "evidence": [
             {
               "type": "agent_interview",
@@ -159,7 +159,7 @@
         {
           "claim_id": "claim_05",
           "claim_text": "E-Commerce ist 2024 um 8,3 Prozent gewachsen.",
-          "confidence_label": "high",
+          "confidence_label": "medium",
           "confidence_score": 0.72,
           "evidence": [
             {
@@ -198,7 +198,7 @@
         {
           "claim_id": "claim_07",
           "claim_text": "Die Preisakzeptanz im Premium-Segment ist um 12 Prozent gestiegen.",
-          "confidence_label": "high",
+          "confidence_label": "medium",
           "confidence_score": 0.76,
           "evidence": [
             {

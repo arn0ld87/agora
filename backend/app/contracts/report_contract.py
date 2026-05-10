@@ -48,6 +48,20 @@ class EvidenceType(str, Enum):
     model_generated_inference = "model_generated_inference"
 
 
+class EvidenceSourceKind(str, Enum):
+    """ADR-0002 Anker 3 — Quellengattung pro Evidence-Item.
+
+    Wird von den Cross-Stakeholder-/Inferred-Validators auf
+    ``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).
+    Drift-Guard: Genau diese 4 Werte sind im Prompt-Block
+    ``backend/app/services/report_prompts.py`` referenziert (Anker 1).
+    """
+    seed_corpus = "seed_corpus"
+    agent_quote = "agent_quote"
+    graph_relation = "graph_relation"
+    inferred = "inferred"
+
+
 # Diese Typen sind im audit_trail erlaubt, nicht im evidence-Array
 FORBIDDEN_EVIDENCE_TYPES = {"model_generated_inference", "section_synthesis"}
 
@@ -86,6 +100,15 @@ class EvidenceItemModel(BaseModel):
     source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     supports_claim: Optional[bool] = None
+    # ADR-0002 Anker 3 (Sub-Slice M11.7b): Default seed_corpus sichert die
+    # Backward-Compat fuer alte Fixtures, die das Feld nicht mitschicken.
+    source_kind: EvidenceSourceKind = EvidenceSourceKind.seed_corpus
+    # Pflicht nur fuer source_kind=agent_quote — durchgesetzt im Validator
+    # ``agent_quote_needs_stakeholder_group``. Die Cross-Stakeholder-Regel
+    # auf ReportClaimModel zaehlt unterschiedliche Werte dieses Feldes.
+    persona_stakeholder_group: Optional[str] = Field(
+        default=None, min_length=1, max_length=200
+    )
 
     @model_validator(mode="after")
     def reject_inference_in_evidence(self) -> "EvidenceItemModel":
@@ -95,6 +118,17 @@ class EvidenceItemModel(BaseModel):
             raise ValueError(
                 f"EvidenceType '{self.type.value}' ist nur im audit_trail erlaubt, "
                 f"nicht im evidence-Array (siehe report_agent.py S5-Kommentar)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def agent_quote_needs_stakeholder_group(self) -> "EvidenceItemModel":
+        # ADR-0002 Anker 3 (Sub-Slice M11.7b): agent_quote ohne Stakeholder-Gruppe
+        # waere fuer den Cross-Stakeholder-Validator unbrauchbar — also hart
+        # ablehnen, statt spaeter mit leerem Set zu arbeiten.
+        if self.source_kind == EvidenceSourceKind.agent_quote and not self.persona_stakeholder_group:
+            raise ValueError(
+                "source_kind=agent_quote verlangt persona_stakeholder_group."
             )
         return self
 
@@ -131,6 +165,37 @@ class ReportClaimModel(BaseModel):
                     f"Label '{self.confidence_label.value}' verlangt mindestens "
                     f"eine Evidence mit supports_claim=True."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def cross_stakeholder_for_high(self) -> "ReportClaimModel":
+        # ADR-0002 Anker 4 (Sub-Slice M11.7b): high/verified verlangt agent_quote-
+        # Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.
+        # Definitions-Reihenfolge nach reject_orphan_high_confidence ist
+        # bewusst — orphan-Test feuert zuerst, daher bleibt die bestehende
+        # Fehlermeldung "supports_claim=True" unverändert.
+        if self.confidence_label not in (ConfidenceLabel.high, ConfidenceLabel.verified):
+            return self
+        agent_quotes = [e for e in self.evidence if e.source_kind == EvidenceSourceKind.agent_quote]
+        groups = {e.persona_stakeholder_group for e in agent_quotes if e.persona_stakeholder_group}
+        if len(groups) < 2:
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' verlangt agent_quote-Evidence aus "
+                f"mindestens 2 unterschiedlichen Stakeholder-Gruppen. "
+                f"Gefunden: {sorted(groups) if groups else '∅'}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def reject_inferred_in_high_confidence(self) -> "ReportClaimModel":
+        # ADR-0002 Anker 5 (Sub-Slice M11.7b): high/verified duldet keine
+        # source_kind=inferred-Evidence (Anti-Halluzinations-Regel).
+        if self.confidence_label not in (ConfidenceLabel.high, ConfidenceLabel.verified):
+            return self
+        if any(e.source_kind == EvidenceSourceKind.inferred for e in self.evidence):
+            raise ValueError(
+                f"Label '{self.confidence_label.value}' duldet keine source_kind=inferred-Evidence."
+            )
         return self
 
 

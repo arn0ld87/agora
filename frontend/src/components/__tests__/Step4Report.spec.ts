@@ -212,7 +212,9 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
           {
             claim_id: 'claim_01',
             claim_text: 'Claim-Text mit ausreichend Zeichen fuer Zod',
-            confidence_label: 'high',
+            // ADR-0002 Anker 4 (Sub-Slice M11.7b): high braeuchte 2 Stakeholder-
+            // Gruppen — fuer den Quote/Anchor-Test nicht relevant, daher medium.
+            confidence_label: 'medium',
             confidence_score: 0.85,
             evidence: [
               {
@@ -246,7 +248,8 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
           {
             claim_id: 'claim_01',
             claim_text: 'Claim-Text mit ausreichend Zeichen fuer Zod',
-            confidence_label: 'high',
+            // ADR-0002 Anker 4 (Sub-Slice M11.7b): siehe oben.
+            confidence_label: 'medium',
             confidence_score: 0.85,
             evidence: [
               {
@@ -464,7 +467,9 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
           {
             claim_id: 'claim_01',
             claim_text: 'Erster Claim mit genug Länge für Zod-Validierung',
-            confidence_label: 'high',
+            // ADR-0002 Anker 4 (Sub-Slice M11.7b): high braeuchte 2 Stakeholder-
+            // Gruppen — fuer den ConfidenceBadge-Render-Test ist medium aequivalent.
+            confidence_label: 'medium',
             confidence_score: 0.8,
             evidence: [
               {

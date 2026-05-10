@@ -26,6 +26,16 @@ export const EvidenceTypeSchema = z.enum([
 ]);
 export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;
 
+// ADR-0002 Anker 3 (Sub-Slice M11.7b): Quellengattung pro Evidence-Item.
+// Spiegelt EvidenceSourceKind aus backend/app/contracts/report_contract.py.
+export const EvidenceSourceKindSchema = z.enum([
+  "seed_corpus",
+  "agent_quote",
+  "graph_relation",
+  "inferred",
+]);
+export type EvidenceSourceKind = z.infer<typeof EvidenceSourceKindSchema>;
+
 export const ReportStatusSchema = z.enum([
   "pending", "planning", "generating", "completed", "failed",
 ]);
@@ -52,12 +62,22 @@ export const EvidenceItemSchema = z.object({
   supports_claim: z.boolean().optional().nullable(),
   quote: z.string().min(1).max(500).optional().nullable(),
   source_id_anchor: z.string().min(1).max(200).optional().nullable(),
+  // ADR-0002 Anker 3 (Sub-Slice M11.7b)
+  source_kind: EvidenceSourceKindSchema.default("seed_corpus"),
+  persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt EvidenceItemModel.reject_inference_in_evidence
   if (FORBIDDEN_EVIDENCE_TYPES.has(value.type)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `EvidenceType '${value.type}' nur im audit_trail erlaubt, nicht in evidence.`,
+    });
+  }
+  // ADR-0002 Anker 3 (Sub-Slice M11.7b): agent_quote braucht Stakeholder-Gruppe.
+  if (value.source_kind === "agent_quote" && !value.persona_stakeholder_group) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "source_kind=agent_quote verlangt persona_stakeholder_group.",
     });
   }
 });
@@ -88,6 +108,30 @@ export const ReportClaimSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit supports_claim=true`,
+      });
+    }
+  }
+  // ADR-0002 Anker 4 (Sub-Slice M11.7b): high/verified verlangt agent_quote-
+  // Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.
+  if (value.confidence_label === "high" || value.confidence_label === "verified") {
+    const groups = new Set(
+      value.evidence
+        .filter((e) => e.source_kind === "agent_quote" && e.persona_stakeholder_group)
+        .map((e) => e.persona_stakeholder_group as string),
+    );
+    if (groups.size < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Label '${value.confidence_label}' verlangt agent_quote-Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen. Gefunden: ${groups.size === 0 ? "∅" : Array.from(groups).sort().join(", ")}.`,
+      });
+    }
+  }
+  // ADR-0002 Anker 5 (Sub-Slice M11.7b): high/verified duldet keine inferred-Evidence.
+  if (value.confidence_label === "high" || value.confidence_label === "verified") {
+    if (value.evidence.some((e) => e.source_kind === "inferred")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Label '${value.confidence_label}' duldet keine source_kind=inferred-Evidence.`,
       });
     }
   }
