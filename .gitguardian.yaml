@@ -16,4 +16,4 @@ secret:
     - backend/tests/test_settings_validator.py
     - backend/tests/test_settings_api.py
     - backend/tests/test_settings_persistence.py
-    - frontend/src/store/__tests__/settings.spec.js
+    - frontend/src/store/__tests__/settings.spec.ts
