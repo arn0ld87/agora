@@ -120,11 +120,21 @@ def _render_generic_table(title: str, rows: list[list[object]], headers: list[st
     return f"## {title}\n\n" + _table(headers, rows, f"Keine Eintraege fuer {title}.")
 
 
+_MODE_BANNER: dict[str, str] = {
+    "strict": "> **Report-Modus:** strict — Nur belegte Claims, harter Anchor-Validator.",
+    "balanced": "> **Report-Modus:** balanced — Belegte Claims plus markierte Hypothesen.",
+    "explorative": "> **Report-Modus:** explorative — Alle Claims durch, EXPLORATIVE-Modus.",
+}
+
+
 def render_report_v3(report: ReportV3) -> str:
+    mode = getattr(report, "report_mode", "balanced") or "balanced"
+    banner = _MODE_BANNER.get(mode, _MODE_BANNER["balanced"])
     parts = [
         "# Agora ReportV3",
         f"Report-ID: `{_cell(report.report_id)}`",
         f"Generiert: `{report.generated_at.isoformat()}`",
+        banner,
         "## Persona-Tabelle",
         render_persona_table(report.personas),
         "## Segment-Tabelle",

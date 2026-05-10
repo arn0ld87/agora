@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-**Stand:** 2026-05-10, Europe/Berlin
+**Stand:** 2026-05-11, Europe/Berlin
 **Ausgeloest durch:** Repo-Review PR4 — CVE-Baseline aktiv abbauen.
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
@@ -30,8 +30,8 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
 | `pillow` | `10.3.0` | `camel-oasis==0.2.5`, `camel-ai==0.2.78` | `camel-oasis` pinnt `pillow==10.3.0`; `camel-ai` limitiert `pillow<11`. |
-| `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. |
-| transformers | 4.57.6 | sentence-transformers==3.0.0 | sentence-transformers limits transformers < 5. Target: transformers >= 4.58.0. Action: Monitor sentence-transformers releases for pin relaxation; re-audit after each dependency update. |
+| `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. Fix: `>=9.0.3`. |
+| `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
 | `unstructured` | `0.13.7` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `unstructured==0.13.7`. |
 
 ---

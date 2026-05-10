@@ -664,9 +664,11 @@ class ReportAgent:
     def generate_report(
         self,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
-        report_id: Optional[str] = None
+        report_id: Optional[str] = None,
+        *,
+        report_mode: str = "balanced",
     ) -> Report:
-        return generate_report_impl(self, progress_callback=progress_callback, report_id=report_id)
+        return generate_report_impl(self, progress_callback=progress_callback, report_id=report_id, report_mode=report_mode)  # type: ignore[arg-type]
 
     def chat(
         self,

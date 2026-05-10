@@ -142,9 +142,9 @@ const FIVE_RUNS = [
 ]
 
 // ---- Helper: mount component ----
-function mountDashboard() {
+function mountDashboard(props: { pollIntervalMs?: number } = {}) {
   return mount(RunsDashboard, {
-    props: { pollIntervalMs: 5000 },
+    props: { pollIntervalMs: 5000, ...props },
     global: {
       plugins: [router, i18n],
     },
@@ -221,6 +221,24 @@ describe('RunsDashboard (Sub-Slice 28, #63)', () => {
 
     // Nach 5 s: zweiter Tick
     vi.advanceTimersByTime(5000)
+    await flushPromises()
+    expect(listRunsMock).toHaveBeenCalledTimes(2)
+
+    wrapper.unmount()
+  })
+
+  it('test_polling_reacts_to_live_interval_prop_changes', async () => {
+    const listRunsMock = listRuns as ReturnType<typeof vi.fn>
+    listRunsMock.mockResolvedValue(makeListResponse([]))
+
+    const wrapper = mountDashboard({ pollIntervalMs: 5000 })
+    await flushPromises()
+    expect(listRunsMock).toHaveBeenCalledTimes(1)
+
+    await wrapper.setProps({ pollIntervalMs: 1000 })
+    await flushPromises()
+
+    vi.advanceTimersByTime(1000)
     await flushPromises()
     expect(listRunsMock).toHaveBeenCalledTimes(2)
 

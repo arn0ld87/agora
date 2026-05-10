@@ -408,6 +408,21 @@
     },
     "next": "Weiter zum Report →"
   },
+  "reportMode": {
+    "label": "Report-Modus",
+    "strict": {
+      "label": "Strikt",
+      "hint": "Nur belegte Claims. Keine Hypothesen. Harter Anchor-Validator."
+    },
+    "balanced": {
+      "label": "Ausgewogen (Standard)",
+      "hint": "Belegte Claims plus markierte Hypothesen. (Standard)"
+    },
+    "explorative": {
+      "label": "Explorativ",
+      "hint": "Alle Claims, EXPLORATIVE-Banner. Brainstorming-/Discovery-Modus."
+    }
+  },
   "step4": {
     "kicker": "№ 04 — REPORT",
     "title": "Bericht erstellen.",
@@ -638,13 +653,14 @@
       "ontology": "Ontology",
       "hybrid_search": "Hybrid Search",
       "agent_tools": "Agent Tools",
-      "event_bus": "Event Bus",
-      "logging": "Logging",
-      "locale": "Locale",
-      "webtools": "Webtools",
-      "oasis": "OASIS",
-      "security": "Secrets"
-    }
+        "event_bus": "Event Bus",
+        "logging": "Logging",
+        "locale": "Locale",
+        "ui": "UI",
+        "webtools": "Webtools",
+        "oasis": "OASIS",
+        "security": "Secrets"
+      }
   },
   "activeModel": {
     "label": "Aktives Modell",

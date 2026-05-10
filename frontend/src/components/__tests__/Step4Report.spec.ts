@@ -27,7 +27,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 
 // Mock die gesamte API-Schicht
 vi.mock('../../api/report', () => ({
-  generateReport: vi.fn(),
+  generateReport: vi.fn().mockResolvedValue({ success: true, data: { report_id: 'report_test01' } }),
   getAgentLog: vi.fn().mockResolvedValue(null),
   getConsoleLog: vi.fn().mockResolvedValue(null),
   getReport: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
   }
 })
 
-import { getReport, getReportStatus, getReportEvidence } from '../../api/report'
+import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
 import Step4Report from '../Step4Report.vue'
 
@@ -72,6 +72,13 @@ const i18n = createI18n({
       'common.running': 'Laufend',
       'common.ready': 'Bereit',
       'errors.reportFailed': 'Fehler',
+      'reportMode.label': 'Report-Modus',
+      'reportMode.strict.label': 'Strikt',
+      'reportMode.strict.hint': 'Nur belegte Claims.',
+      'reportMode.balanced.label': 'Ausgewogen (Standard)',
+      'reportMode.balanced.hint': 'Belegte Claims plus markierte Hypothesen.',
+      'reportMode.explorative.label': 'Explorativ',
+      'reportMode.explorative.hint': 'Alle Claims, EXPLORATIVE-Banner.',
     },
   },
 })
@@ -573,5 +580,66 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
 
     const badges = wrapper.findAllComponents({ name: 'ConfidenceBadge' })
     expect(badges.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+// P4.1 Frontend-Teil: localStorage-Round-Trip + generateReport-Mode-Übergabe
+describe('Step4Report — Report-Modus-Persistenz und API-Übergabe (P4.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE,
+    })
+  })
+
+  it('liest reportMode aus localStorage und schreibt bei Änderung zurück', async () => {
+    localStorageMock.setItem('agora.reportMode', 'strict')
+
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    // Wert aus localStorage muss initial "strict" sein
+    const vm = wrapper.vm as unknown as { reportMode: string }
+    expect(vm.reportMode).toBe('strict')
+
+    // Änderung schreibt zurück
+    ;(vm as unknown as { reportMode: string }).reportMode = 'explorative'
+    await wrapper.vm.$nextTick()
+    expect(localStorageMock.getItem('agora.reportMode')).toBe('explorative')
+  })
+
+  it('fällt auf "balanced" zurück wenn localStorage-Wert ungültig', async () => {
+    localStorageMock.setItem('agora.reportMode', 'invalid_mode')
+
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    const vm = wrapper.vm as unknown as { reportMode: string }
+    expect(vm.reportMode).toBe('balanced')
+  })
+
+  it('übergibt reportMode als mode-Parameter an generateReport', async () => {
+    localStorageMock.setItem('agora.reportMode', 'strict')
+
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await wrapper.vm.$nextTick()
+
+    // regenerateWithModel direkt aufrufen
+    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
+    await wrapper.vm.$nextTick()
+
+    expect(generateReport).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'strict' })
+    )
   })
 })

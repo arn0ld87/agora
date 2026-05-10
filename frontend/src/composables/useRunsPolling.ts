@@ -21,7 +21,7 @@ export interface UseRunsPollingReturn {
   refresh: () => Promise<void>
 }
 
-export function useRunsPolling(intervalMs = 5000): UseRunsPollingReturn {
+export function useRunsPolling(intervalMs: number | Ref<number> = 5000): UseRunsPollingReturn {
   const runs = ref<RunDetail[]>([])
   const loading = ref(false)
   const error = ref('')

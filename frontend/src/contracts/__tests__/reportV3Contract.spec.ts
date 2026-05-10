@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseReportV3,
   ReportV3Schema,
+  ReportModeSchema,
   ClaimSchema,
   PersonaV3Schema,
 } from "../reportV3Contract";
@@ -27,6 +28,7 @@ const MINIMAL_REPORT_V3 = {
   schema_version: 3,
   report_id: "rep-001",
   generated_at: "2026-05-09T12:00:00Z",
+  report_mode: "balanced",
   personas: [
     {
       id: "p1",
@@ -148,6 +150,31 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     expect(shapeKeys(ReportV3Schema)).toEqual(propertyKeys(reportV3Json));
     expect(shapeKeys(PersonaV3Schema)).toEqual(propertyKeys(reportV3Json.$defs.Persona));
     expect(shapeKeys(ClaimSchema)).toEqual(propertyKeys(reportV3Json.$defs.Claim));
+  });
+
+  it("report_mode defaults to 'balanced' when absent", () => {
+    const withoutMode = {
+      schema_version: 3,
+      report_id: "r-no-mode",
+      generated_at: "2026-05-11T00:00:00Z",
+    };
+    const result = ReportV3Schema.safeParse(withoutMode);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.report_mode).toBe("balanced");
+    }
+  });
+
+  it("report_mode accepts strict and explorative", () => {
+    for (const mode of ["strict", "explorative"] as const) {
+      const result = ReportModeSchema.safeParse(mode);
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("report_mode rejects unknown values", () => {
+    const result = ReportModeSchema.safeParse("nuclear");
+    expect(result.success).toBe(false);
   });
 
   it("parses minimal report with empty section lists", () => {

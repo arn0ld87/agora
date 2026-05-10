@@ -3,6 +3,16 @@
 The Settings API persists operator changes immediately. This bus publishes a
 small metadata-only event after successful writes so in-process consumers can
 refresh cached runtime settings without polling.
+
+Two consumers exist:
+
+  - Frontend SSE clients via ``GET /api/settings/stream`` — they receive the
+    event serialised through :meth:`SettingsChangedEvent.to_dict`, which uses
+    the ``updated_keys``/ISO-``ts`` shape that the Zod contract in
+    ``frontend/src/contracts/settingsContract.ts`` expects.
+  - In-process subscribers (planned) that call :meth:`SettingsEventBus.subscribe`
+    directly and read the richer Pydantic event (``keys`` + ``source`` + float
+    ``ts``).
 """
 
 from __future__ import annotations
@@ -12,6 +22,7 @@ import threading
 import time
 from collections.abc import Iterable
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Generator, Iterator, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -32,6 +43,19 @@ class SettingsChangedEvent(BaseModel):
     keys: list[str]
     source: Literal["settings", "settings.secrets"]
     ts: float
+
+    def to_dict(self) -> dict[str, object]:
+        """SSE-friendly projection matching the frontend Zod contract.
+
+        ``source`` is intentionally omitted to keep the public stream payload
+        minimal — secret writes already use ``source='settings.secrets'`` for
+        in-process logging, but external consumers only need the changed keys.
+        """
+        return {
+            "type": self.type,
+            "updated_keys": list(self.keys),
+            "ts": datetime.fromtimestamp(self.ts, tz=timezone.utc).isoformat(),
+        }
 
 
 class SettingsEventBus:

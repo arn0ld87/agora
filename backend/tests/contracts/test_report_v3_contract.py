@@ -502,3 +502,66 @@ def test_re_export_from_schemas_module():
     """ReportV3 ist über app.services.report_agent.schemas als Alias verfügbar."""
     from app.services.report_agent.schemas import ReportV3 as RV3_alias  # noqa: PLC0415
     assert RV3_alias is ReportV3
+
+
+# ---- report_mode: Default, Enum-Validation, Roundtrip (P4.1) ----
+
+def test_report_mode_default_is_balanced():
+    """ReportV3 ohne explizites report_mode-Feld → Default 'balanced'."""
+    r = ReportV3(
+        report_id="r-mode-default",
+        generated_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+    )
+    assert r.report_mode == "balanced"
+
+
+def test_report_mode_strict_accepted():
+    """report_mode='strict' ist ein gültiger Literal-Wert."""
+    r = ReportV3(
+        report_id="r-mode-strict",
+        generated_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+        report_mode="strict",
+    )
+    assert r.report_mode == "strict"
+
+
+def test_report_mode_explorative_accepted():
+    """report_mode='explorative' ist ein gültiger Literal-Wert."""
+    r = ReportV3(
+        report_id="r-mode-explorative",
+        generated_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+        report_mode="explorative",
+    )
+    assert r.report_mode == "explorative"
+
+
+def test_report_mode_invalid_rejected():
+    """Ungültiger report_mode → ValidationError (Literal-Constraint)."""
+    with pytest.raises(ValidationError):
+        ReportV3.model_validate({
+            "report_id": "r-bad-mode",
+            "generated_at": "2026-05-11T00:00:00Z",
+            "report_mode": "nuclear",
+        })
+
+
+def test_report_mode_roundtrip():
+    """report_mode wird via model_dump_json / model_validate_json korrekt erhalten."""
+    original = ReportV3(
+        report_id="r-mode-rt",
+        generated_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+        report_mode="strict",
+    )
+    json_str = original.model_dump_json()
+    restored = ReportV3.model_validate_json(json_str)
+    assert restored.report_mode == "strict"
+
+
+def test_report_mode_re_exported_from_contracts():
+    """ReportMode und DEFAULT_REPORT_MODE sind über app.contracts importierbar."""
+    from app.contracts import ReportMode, DEFAULT_REPORT_MODE  # noqa: PLC0415
+    assert DEFAULT_REPORT_MODE == "balanced"
+    # Literal-Werte überprüfbar über __args__ (typing.get_args)
+    import typing  # noqa: PLC0415
+    args = typing.get_args(ReportMode)
+    assert set(args) == {"strict", "balanced", "explorative"}

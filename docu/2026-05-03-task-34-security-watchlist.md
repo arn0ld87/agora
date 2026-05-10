@@ -1,4 +1,4 @@
-# Security-Watchlist — ignorierte CVEs (Stand 2026-05-10)
+# Security-Watchlist — ignorierte CVEs (Stand 2026-05-11)
 
 **Refs:** #121 #122 #123 #124 #125 #126
 **Status:** Watchlist konsolidiert. Issues bleiben offen, bis Upstream-Pins gelöst sind.
@@ -34,8 +34,10 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 
 - **Paket:** `pillow==10.3.0` (gleicher Pin wie #121, separate CVE)
 - **Pinning-Source:** `camel-ai==0.2.78` (limits `pillow<11`)
-- **Risk:** Medium — gleiche Begründung wie #121.
-- **Target-Version, Deadline, Action:** s. #121 — wird mit derselben camel-ai-Pin-Lockerung geschlossen.
+- **Risk:** Medium — image processing library; Agora nutzt Pillow im PDF-Vision-Pipeline-Downscaling und für Format-Konvertierung.
+- **Target-Version:** Upgrade auf pillow>=10.4.0 oder pillow>=11.0.0, sobald camel-ai den Pin lockert.
+- **Deadline:** 2026-07-30 (+90 Tage)
+- **Action:** Überwachung von camel-ai Releases auf Lockerung des Pillow-Pins. Erneutes Ausführen von pip-audit nach jedem Dependency-Update.
 
 ### CVE-2025-71176 (Issue #123) — pytest
 
@@ -43,7 +45,7 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 - **Pinning-Source:** `camel-oasis==0.2.5` (pins `pytest==8.2.0`)
 - **Risk:** Low — Test-Runner, nicht im Prod-Runtime aktiv. Nur in `backend/tests/` und CI relevant.
 - **Betroffen in Agora:** Test-Suite (`backend/tests/`); kein Impact auf laufende Simulationen.
-- **Target-Version:** `pytest>=8.3.0`, sobald camel-oasis den Pin lockert.
+- **Target-Version:** `pytest>=9.0.3` (Fix-Version laut pip-audit), sobald camel-oasis den Pin lockert.
 - **Deadline:** 2026-07-30 (+90 Tage)
 - **Action:**
   - Monitor: PyPI `camel-oasis`-Releases.
@@ -90,7 +92,7 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 - KEINE Workarounds (z. B. Pillow-SIMD statt Pillow, eigener PDF-Parser statt unstructured) — bei Hardstop-Trigger separater Slice.
 - KEIN Fork von camel-ai/camel-oasis — separater Architektur-Entscheid, nicht Watchlist-Scope.
 
-## Verifikation (Stand 2026-05-10)
+## Verifikation (Stand 2026-05-11)
 
 - [x] Alle 6 Issues konsolidiert
 - [x] uv.lock-Versionen aus `backend/uv.lock` verifiziert (pillow 10.3.0, pytest 8.2.0, transformers 4.57.6, unstructured 0.13.7, camel-ai 0.2.78, camel-oasis 0.2.5, sentence-transformers 3.0.0)

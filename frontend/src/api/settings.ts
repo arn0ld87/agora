@@ -4,7 +4,7 @@
 // gemeinsame Axios-Instanz mit Auth-Header und Envelope-Handling, die
 // auch alle anderen API-Module nutzen.
 
-import service from './index'
+import service, { getAgoraToken } from './index'
 
 export interface SettingsResponse {
   settings: Record<string, unknown>
@@ -17,6 +17,19 @@ export interface SettingsSchemaResponse {
 }
 
 export type SecretsPayload = Record<string, string>
+
+interface TicketApiResponse {
+  data?: {
+    ticket?: string
+  }
+}
+
+export interface SettingsStreamHandlers {
+  changed?: (payload: unknown) => void
+  hello?: (payload: unknown) => void
+  ping?: (payload: unknown) => void
+  error?: (event: Event) => void
+}
 
 export function fetchSettings(): Promise<SettingsResponse> {
   return service.get('/api/settings')
@@ -44,4 +57,44 @@ export function putSecrets(
     confirm: true,
     fields: secretsPayload || {},
   })
+}
+
+export async function buildSettingsStreamUrl(): Promise<string> {
+  const base = import.meta.env.VITE_API_BASE_URL || ''
+  const path = `${base}/api/settings/stream`
+  if (!getAgoraToken()) return path
+  const res = await service.post('/api/auth/ticket', {
+    scope: 'settings-stream',
+    ttl_seconds: 60,
+  })
+  const ticket = (res as unknown as TicketApiResponse)?.data?.ticket
+  return ticket ? `${path}?ticket=${encodeURIComponent(ticket)}` : path
+}
+
+export async function openSettingsStream(
+  handlers: SettingsStreamHandlers = {}
+): Promise<EventSource> {
+  const url = await buildSettingsStreamUrl()
+  const source = new EventSource(url)
+
+  const namedEvents = ['settings.changed', 'hello', 'ping'] as const
+  for (const name of namedEvents) {
+    const mappedName = name === 'settings.changed' ? 'changed' : name
+    const handler = handlers[mappedName]
+    if (typeof handler === 'function') {
+      source.addEventListener(name, (ev: MessageEvent) => {
+        try {
+          ;(handler as (payload: unknown) => void)(JSON.parse(ev.data as string))
+        } catch (err) {
+          console.warn(`[settings-stream] dropped malformed ${name} event`, err)
+        }
+      })
+    }
+  }
+
+  if (typeof handlers.error === 'function') {
+    source.onerror = handlers.error
+  }
+
+  return source
 }

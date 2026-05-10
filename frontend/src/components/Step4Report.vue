@@ -14,6 +14,7 @@ import Kicker from './ui/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import ReportBranchControls from './step4/ReportBranchControls.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
+import ReportModeControls from './step4/ReportModeControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
 import { useReportExports } from '../composables/useReportExports'
@@ -31,6 +32,11 @@ import {
   type ReportOutline,
   type EvidenceMap,
 } from '../contracts/reportContract'
+import {
+  ReportModeSchema,
+  DEFAULT_REPORT_MODE,
+  type ReportMode,
+} from '../contracts/reportV3Contract'
 
 interface StatusData {
   message?: string
@@ -109,6 +115,18 @@ const isRegenerating = ref(false)
 watch(reportModelOption, (val) => { localStorage.setItem(STORAGE_REPORT_MODEL, val) })
 watch(customReportModel, (val) => { localStorage.setItem(STORAGE_REPORT_CUSTOM_MODEL, val) })
 
+const STORAGE_REPORT_MODE = 'agora.reportMode'
+function resolveStoredReportMode(): ReportMode {
+  const raw = localStorage.getItem(STORAGE_REPORT_MODE)
+  if (raw) {
+    const parsed = ReportModeSchema.safeParse(raw)
+    if (parsed.success) return parsed.data
+  }
+  return DEFAULT_REPORT_MODE
+}
+const reportMode = ref<ReportMode>(resolveStoredReportMode())
+watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
+
 const modelOptions = computed(() => {
   const opts = [{ value: 'default', label: `Standard — ${defaultModel.value || '?'}` }]
   for (const p of presetModels.value) opts.push({ value: p.name, label: p.label || p.name })
@@ -148,6 +166,7 @@ async function regenerateWithModel() {
     const payload: Record<string, unknown> = {
       simulation_id: simId,
       force_regenerate: true,
+      mode: reportMode.value,
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
@@ -157,7 +176,7 @@ async function regenerateWithModel() {
     }
     const runtimeProvider = runtimeLlmPayloadFromStorage()
     if (runtimeProvider) payload.llm_provider = runtimeProvider
-    addLog(`Report neu generieren${m ? ` mit ${m}` : ''}…`)
+    addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
       // Reset local UI state, then re-hydrate with the new report.
@@ -442,6 +461,11 @@ onUnmounted(stopPolling)
           :model-options="modelOptions"
           :is-regenerating="isRegenerating"
           @regenerate="regenerateWithModel"
+        />
+        <ReportModeControls
+          v-if="resolvedSimulationId || simulationId"
+          v-model="reportMode"
+          :disabled="isRegenerating || phase === 1"
         />
       </article>
 
