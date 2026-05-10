@@ -3,8 +3,17 @@ EmbeddingService — local embedding via Ollama API
 
 Replaces Zep Cloud's built-in embedding with a local Ollama embedding model.
 Output dimension depends on the model (see Config.VECTOR_DIM).
+
+Stub-Modus (AGORA_E2E_LLM_MODE=stub):
+    embed() und embed_batch() liefern deterministischen Vector ohne Netzwerkaufruf.
+    Dimension: Config.VECTOR_DIM (identisch mit Prod-Konfiguration).
+    Determinismus: hash(text)-basiert, L2-normalisiert — Cosine-Similarity ist
+    textspezifisch (nicht konstant 1.0), um Section-Dedup-Fehler nicht zu verschleiern.
+    health_check() gibt True zurück.
 """
 
+import math
+import os
 import time
 import logging
 from typing import List, Optional
@@ -66,6 +75,9 @@ def validate_embedding_configuration(
 class EmbeddingService:
     """Generate embeddings using local Ollama server."""
 
+    # Class-level flag: stub-mode log wird nur einmal ausgegeben (alle Instanzen).
+    _stub_mode_logged: bool = False
+
     def __init__(
         self,
         model: Optional[str] = None,
@@ -87,6 +99,37 @@ class EmbeddingService:
         self._cache: dict[str, List[float]] = {}
         self._cache_max_size = 2000
 
+    # ------------------------------------------------------------------
+    # Stub-Modus Helpers (AGORA_E2E_LLM_MODE=stub)
+    # ------------------------------------------------------------------
+
+    def _stub_vector(self, text: str) -> List[float]:
+        """Erzeugt einen deterministischen, L2-normierten Vector für den Stub-Modus.
+
+        Formel: vec[i] = ((hash(text) + i) % 1000 - 500) / 500.0, dann L2-normiert.
+        Jeder Text liefert einen einzigartigen Vector — Cosine-Similarity ist NICHT
+        konstant 1.0, sodass Section-Dedup-Fehler nicht verschleiert werden.
+
+        Dimension: Config.VECTOR_DIM (identisch mit Prod-Konfiguration).
+        """
+        if not EmbeddingService._stub_mode_logged:
+            logger.info(
+                "EmbeddingService: stub-mode aktiv, dim=%d (AGORA_E2E_LLM_MODE=stub)",
+                Config.VECTOR_DIM,
+            )
+            EmbeddingService._stub_mode_logged = True
+
+        h = hash(text)
+        dim = Config.VECTOR_DIM
+        vec = [((h + i) % 1000 - 500) / 500.0 for i in range(dim)]
+
+        # L2-Normalisierung: verhindert konstante Cosine-Similarity = 1.0
+        norm = math.sqrt(sum(v * v for v in vec))
+        if norm > 0.0:
+            vec = [v / norm for v in vec]
+
+        return vec
+
     def embed(self, text: str) -> List[float]:
         """
         Generate embedding for a single text.
@@ -104,6 +147,13 @@ class EmbeddingService:
             raise EmbeddingError("Cannot embed empty text")
 
         text = text.strip()
+
+        # Stub-Modus: kein Netzwerkaufruf, deterministischer Vector.
+        # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub (CI-Umgebung).
+        if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            stub_vec = self._stub_vector(text)
+            self._cache_put(text, stub_vec)
+            return stub_vec
 
         # Check cache
         if text in self._cache:
@@ -132,6 +182,14 @@ class EmbeddingService:
         """
         if not texts:
             return []
+
+        # Stub-Modus: kein Netzwerkaufruf, deterministischer Vector pro Text.
+        # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub (CI-Umgebung).
+        if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            return [
+                self._stub_vector(t.strip()) if (t and t.strip()) else [0.0] * Config.VECTOR_DIM
+                for t in texts
+            ]
 
         results: List[Optional[List[float]]] = [None] * len(texts)
         uncached_indices: List[int] = []
@@ -276,7 +334,13 @@ class EmbeddingService:
         self._cache[text] = vector
 
     def health_check(self) -> bool:
-        """Check if Ollama embedding endpoint is reachable."""
+        """Check if Ollama embedding endpoint is reachable.
+
+        Im Stub-Modus (AGORA_E2E_LLM_MODE=stub) wird kein Netzwerkaufruf gemacht
+        — health_check() gibt immer True zurück.
+        """
+        if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            return True
         try:
             vec = self.embed("health check")
             return len(vec) > 0

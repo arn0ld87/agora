@@ -91,7 +91,9 @@ def _eleven_required_sections() -> list[str]:
 _REQUIRED_SECTIONS: list[str] = _eleven_required_sections()
 
 _stub_logger.info(
-    "llm_e2e_stub: Modul importiert. AGORA_E2E_LLM_MODE=%s, %d Pflichtabschnitte geladen.",
+    "llm_e2e_stub: Modul importiert. AGORA_E2E_LLM_MODE=%s, %d Pflichtabschnitte geladen. "
+    "Embedding-Service stubt separat via EmbeddingService._stub_vector() "
+    "(app.storage.embedding_service — kein Netzwerkaufruf im Stub-Modus).",
     os.environ.get("AGORA_E2E_LLM_MODE", "<nicht gesetzt>"),
     len(_REQUIRED_SECTIONS),
 )

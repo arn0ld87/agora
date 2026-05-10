@@ -422,8 +422,8 @@
           "items": {
             "$ref": "#/$defs/ReportOutlineSectionModel"
           },
-          "maxItems": 5,
-          "minItems": 2,
+          "maxItems": 15,
+          "minItems": 1,
           "title": "Sections",
           "type": "array"
         },

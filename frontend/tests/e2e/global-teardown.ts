@@ -44,8 +44,12 @@ function dumpContainerLogs(repoRoot: string): void {
         timeout: 30_000,
       });
     } catch (err) {
-      // Service evtl. nicht gestartet (z. B. bei frühem Stack-Fehler)
-      console.error(`[e2e-globalTeardown] logs ${name} fehlgeschlagen (non-fatal):`, err);
+      // Service evtl. nicht gestartet (z. B. bei frühem Stack-Fehler) oder
+      // Container bereits heruntergefahren — non-fatal, Status loggen statt Trace.
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(
+        `[e2e-globalTeardown] logs ${name} not available (container down or not started): ${message}`,
+      );
     }
   }
   console.log('\n========== [e2e-globalTeardown] END CONTAINER LOGS ==========\n');

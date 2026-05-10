@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.config import infer_vector_dim_for_model
-from app.storage.embedding_service import EmbeddingError, validate_embedding_configuration
+from app.config import Config, infer_vector_dim_for_model
+from app.storage.embedding_service import EmbeddingError, EmbeddingService, validate_embedding_configuration
 
 
 def test_infer_vector_dim_for_known_models():
@@ -77,3 +77,98 @@ def test_validate_embedding_configuration_default_still_probes():
         )
     assert result == 768
     mock_embed.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Stub-Modus Tests (AGORA_E2E_LLM_MODE=stub)
+# ---------------------------------------------------------------------------
+
+class TestEmbeddingServiceStubMode:
+    """EmbeddingService im Stub-Modus liefert deterministischen Vector ohne Netzwerk."""
+
+    def test_stub_embed_returns_correct_dimension(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """embed() im Stub-Modus liefert Vector mit len == Config.VECTOR_DIM."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False  # Zustand zurücksetzen
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        vec = svc.embed("hallo welt")
+
+        assert len(vec) == Config.VECTOR_DIM, (
+            f"Stub-Vector muss dim={Config.VECTOR_DIM} haben, war {len(vec)}"
+        )
+
+    def test_stub_embed_is_deterministic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """embed() im Stub-Modus ist bytewise deterministisch (gleicher Text → gleicher Vector)."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        v1 = svc.embed("deterministic text")
+        v2 = svc.embed("deterministic text")
+
+        assert v1 == v2, "Gleicher Text muss gleichen Stub-Vector liefern"
+
+    def test_stub_embed_different_texts_produce_different_vectors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """embed() im Stub-Modus liefert verschiedene Vektoren für verschiedene Texte.
+
+        Verhindert, dass Cosine-Similarity konstant 1.0 ist und Section-Dedup-Fehler
+        verschleiert werden.
+        """
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        v1 = svc.embed("text alpha")
+        v2 = svc.embed("text beta")
+
+        assert v1 != v2, "Verschiedene Texte müssen verschiedene Stub-Vektoren liefern"
+
+    def test_stub_embed_batch_returns_correct_count_and_dimension(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """embed_batch() im Stub-Modus liefert Liste mit korrekter Länge und Dimension."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        batch = svc.embed_batch(["a", "b", "c"])
+
+        assert len(batch) == 3
+        for vec in batch:
+            assert len(vec) == Config.VECTOR_DIM, (
+                f"Stub-Batch-Vector muss dim={Config.VECTOR_DIM} haben, war {len(vec)}"
+            )
+
+    def test_stub_health_check_returns_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """health_check() im Stub-Modus gibt True ohne Netzwerkaufruf."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        assert svc.health_check() is True
+
+    def test_stub_no_network_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Im Stub-Modus wird _request_embeddings() niemals aufgerufen."""
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+
+        with patch.object(svc, "_request_embeddings") as mock_req:
+            svc.embed("kein netzwerk bitte")
+            svc.embed_batch(["a", "b"])
+            mock_req.assert_not_called()
+
+    def test_stub_vector_is_l2_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Stub-Vector ist L2-normiert (|v|₂ ≈ 1.0)."""
+        import math
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+        EmbeddingService._stub_mode_logged = False
+
+        svc = EmbeddingService(model="nomic-embed-text", base_url="http://x:11434")
+        vec = svc.embed("normalization test")
+
+        norm = math.sqrt(sum(v * v for v in vec))
+        assert abs(norm - 1.0) < 1e-9, f"Stub-Vector ist nicht L2-normiert: |v|₂={norm}"

@@ -150,7 +150,9 @@ test.describe('M11.4b · Upload + Graph-Smoke', () => {
       // ruft loadGraph(graph_id) auf, sobald project.graph_id vorhanden ist.
       // Da das Backend synchron antworten muss, reicht networkidle als Signal.
       // =================================================================
-      await page.goto(`/process/${projectId}`, { waitUntil: 'networkidle' });
+      // timeout=60_000: Stub-Modus + Embedding-Stub sind schnell, aber CI-Cold-Start
+      // variiert. Explizit gesetzt statt implizitem Default (30 s) für Transparenz.
+      await page.goto(`/process/${projectId}`, { waitUntil: 'networkidle', timeout: 60_000 });
 
       // GraphPanel muss den Completed-Zustand anzeigen — kein "Waiting"-Fallback
       const graphView = page.locator('.graph-view');

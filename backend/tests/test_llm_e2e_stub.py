@@ -17,10 +17,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.contracts.report_contract import ReportOutlineModel
 from app.contracts.report_v3 import ReportV3
 from app.utils.llm_e2e_stub import (
     _REQUIRED_SECTIONS,
     _eleven_required_sections,
+    _stub_plan_response,
     e2e_stub_response,
 )
 
@@ -203,3 +205,44 @@ class TestStubReACTToolReturnsDeterministic:
         ]
         result = e2e_stub_response(schema=None, messages=messages_with_tool)
         assert result == {"ok": True, "stub": True}
+
+
+# ---------------------------------------------------------------------------
+# Test 6: Outline-Validation — _stub_plan_response validiert gegen ReportOutlineModel
+# ---------------------------------------------------------------------------
+
+class TestStubPlanResponseValidatesAgainstReportOutlineModel:
+    """_stub_plan_response() muss durch ReportOutlineModel.model_validate() gehen.
+
+    Regression-Test für M11.4b-Followup-2:
+    ReportOutlineModel.sections hatte max_length=5, Stub liefert 11 Abschnitte.
+    Fix: max_length auf 15 angehoben (planning.py hatte M11.8a-Followup bereits
+    den LLM-Prompt-Cap entfernt, aber der Contract blieb inkonsistent).
+    """
+
+    def test_stub_plan_response_has_eleven_sections(self) -> None:
+        """_stub_plan_response() liefert genau 11 Abschnitte (Snapshot-Pflicht)."""
+        raw = _stub_plan_response()
+        assert len(raw["sections"]) == 11, (
+            f"_stub_plan_response() muss 11 Abschnitte liefern, war {len(raw['sections'])}"
+        )
+
+    def test_stub_plan_response_validates_against_report_outline_model(self) -> None:
+        """ReportOutlineModel.model_validate(_stub_plan_response()) darf nicht werfen.
+
+        Regression für CI-Fehler M11.4b-Followup-2:
+        'Outline planning failed: 1 validation error for ReportOutlineModel'
+        """
+        raw = _stub_plan_response()
+        # Darf keine ValidationError werfen
+        outline = ReportOutlineModel.model_validate(raw)
+        assert len(outline.sections) == 11
+
+    def test_stub_plan_response_all_required_sections_present(self) -> None:
+        """Alle 11 Pflichtabschnittsnamen aus dem Snapshot sind im Stub vorhanden."""
+        raw = _stub_plan_response()
+        section_titles = {s["title"] for s in raw["sections"]}
+        for required in _REQUIRED_SECTIONS:
+            assert required in section_titles, (
+                f"Pflichtabschnitt '{required}' fehlt im _stub_plan_response()"
+            )

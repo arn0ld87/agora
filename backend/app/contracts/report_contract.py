@@ -152,7 +152,12 @@ class ReportOutlineModel(BaseModel):
     model_config = _STRICT
     title: str = Field(min_length=3)
     summary: str = Field(min_length=1)
-    sections: list[ReportOutlineSectionModel] = Field(min_length=2, max_length=5)
+    # M11.4b-Followup-2: max_length auf 15 angehoben (war 5).
+    # planning.py M11.8a entfernte den Section-Cap bei min=2/max=5 im LLM-Prompt,
+    # aber ReportOutlineModel blieb auf max_length=5 — ließ 11 Pflichtabschnitte
+    # im Stub-Modus (und bei echten Providern mit vollständigem Outline) fehlschlagen.
+    # 15 bietet großzügigen Puffer für alle 11 Pflichtabschnitte + Spielraum.
+    sections: list[ReportOutlineSectionModel] = Field(min_length=1, max_length=15)
 
 
 class ReportStatus(str, Enum):
