@@ -10,7 +10,7 @@ Agora ist ein **lokal-first** Multi-Agent-Simulator für DACH-Zielgruppenreaktio
 
 **Stack:** Flask (Python 3.11) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Redis (Pub/Sub-IPC) + Ollama. Package-Manager: `uv` fürs Backend, `npm` fürs Frontend.
 
-**Status:** v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–8 teilweise · Layer 9–10 grün · M11 Phase 1–5b durch. Test-Counts und Layer-Status laufen ausschließlich über [`docu/STATUS.md`](docu/STATUS.md) — keine Inline-Zahlen mehr in README/CLAUDE.md/AGENTS.md.
+**Status:** v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–8 teilweise · Layer 9–10 grün · M11 Phase 1–5b durch. **v1.0-Output-Vertrag-Plan** ([`PLAN.md`](PLAN.md)): Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün; offen P3.2-Verdrahtung, P4.1, P4.3, P4.4. Test-Counts und Layer-Status laufen ausschließlich über [`docu/STATUS.md`](docu/STATUS.md) — keine Inline-Zahlen mehr in README/CLAUDE.md/AGENTS.md.
 
 ## Sofort wichtig
 

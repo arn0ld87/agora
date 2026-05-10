@@ -1,6 +1,6 @@
 # Agora — Releaseplan v1.0
 
-**Stand:** 2026-05-10 (post-Phase-1, P2.2/P3.3/P3.4 grün)
+**Stand:** 2026-05-10 (post-Phase-1, P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün)
 **Quelle:** `agora_bewertung_komplett.md` (Score 5,8/10), Code-Verifikation gegen `main` (`backend/app/`, `frontend/src/`, `schemas/`, `.github/workflows/`), `report3.json` als realer Pipeline-Output.
 **Ziel:** Agora schrittweise in einen releasefähigen Zustand bringen. Output-Vertrag erzwingen, Evidence härten, Tabellen rendern, Vertrauensmodi einführen.
 
@@ -8,26 +8,26 @@
 
 ## Status-Snapshot (2026-05-10)
 
-Code-Verifikation gegen `main` (HEAD `c6f33bb`):
+Code-Verifikation gegen `main` (HEAD `c06563e`):
 
 | Slice | Status | Anker im Code |
 |---|---|---|
 | P1.1 Pflichtabschnitt-Validator | ✅ done | `contract_validator.py`, `ReportOutlineModel.require_default_sections`, `workflow.py:466-486` |
 | P1.2 Persona-Mindestanzahl | ✅ done | `MIN_PERSONA_TABLE_ROWS` in `contract_constants.py`, `prepare_service.py:34/362/385`, `workflow.py:488-499` |
 | P1.3 Schema-Drift-Gate | ✅ done | `app.contracts.dump_schemas`, `.github/workflows/contract-gates.yml::schema-drift` |
-| P2.1 Evidence-Anker-Pflicht | ❌ offen | `ReportClaimModel.evidence` hat `default_factory=list` ohne `min_length`/Validator |
+| P2.1 Evidence-Anker-Pflicht | ✅ done | Commit `16bd51c`. `ReportClaimModel.non_low_claims_need_evidence`, `agent.py::_finalize_section_claims` data-gap-Routing, `migrate_legacy_claims_to_anchored` für Bestandsreports. 10 Routing-Tests. |
 | P2.2 Low-Confidence-Marker | ✅ done | `render_claim_to_markdown` rendert ⚠️ Hinweis (`sections.py:149-167`) |
 | P2.3 Hypotheses-Slot | ⚠️ in Arbeit | `render_hypotheses_for_section` da; Worktree `feat/m11-7c-report-hypotheses` aktiv für Frontend/JSON-Vollständigkeit |
-| P3.1 ReportV3-Persistenz | ❌ offen | `evidence_migrations.CURRENT_SCHEMA_VERSION=2`, kein `migrate_v2_to_v3`, `write_report_v3` fehlt |
-| P3.2 Markdown-Renderer | ⚠️ teilweise | `markdown_renderer.render_report_v3()` vollständig; Manager-Hook + Frontend-Default-Switch offen |
+| P3.1 ReportV3-Persistenz | ✅ done | Commit `84aa04b`. `migrate_v2_to_v3` + `write_report_v3`/`read_report_v3` (atomar via `os.replace`). Manager-Hook (`build_report_v3`/`save_report_v3`) war bereits verdrahtet. 6 neue Contract-Tests. `CURRENT_SCHEMA_VERSION` bleibt 2 (Evidence-Map-Schema). |
+| P3.2 Markdown-Renderer | ⚠️ teilweise | `markdown_renderer.render_report_v3()` vollständig; Manager-Hook (`report-v3.md` schreiben) + Frontend-Default-Switch auf v3 noch offen |
 | P3.3 Quote-Source-Marker | ✅ done | Commit `66af4d2 feat(report): render simulated_quote tags as marked blockquote` |
 | P3.4 PDF-Print-Doku | ✅ done | Commit `58cd667 docs(report): document browser-print as canonical PDF path` |
 | P4.1 Report-Modi | ❌ offen | kein `report_mode` auf `ReportV3`, kein API-Param |
-| P4.2 CSV-Export | ❌ offen | kein `format=csv`-Endpoint, kein `downloadCsvBundle` |
-| P4.3 ZIP-Bundle | ❌ offen | abhängig von P4.2 |
+| P4.2 CSV-Export | ✅ done | Commit `c06563e`. `GET /api/report/<id>/export?format=csv&table=…` (RFC-4180), `csv_export.py` Helper, `fetchReportCsv`/`downloadCsv`/`downloadCsvBundle` im Frontend (jszip nicht installiert → 3 Einzeldownloads, ZIP als Followup). 18 Backend- + 7 Frontend-Tests. |
+| P4.3 ZIP-Bundle | ❌ offen | abhängig von P4.2 (jszip-Install + ZIP-on-the-fly-Endpoint) |
 | P4.4 E2E-Smokes Modi | ❌ offen | abhängig von P4.1 |
 
-**Restarbeit bis v1.0:** P2.1, P3.1, P3.2-Verdrahtung, P4.1, P4.2, P4.3, P4.4. P2.3 läuft separat im Worktree.
+**Restarbeit bis v1.0:** P3.2-Verdrahtung, P4.1, P4.3, P4.4. P2.3 läuft separat im Worktree.
 
 ---
 
@@ -364,14 +364,16 @@ Reihenfolge ist linear sicher; PR 4 und PR 7 sind die zwei Engstellen.
 
 ---
 
-## 8. Nächste Schritte (Stand 2026-05-10)
+## 8. Nächste Schritte (Stand 2026-05-10, post-Push)
 
-Phase 1 ist auf `main` durch. Kommende Engstellen:
+Phase 1, P2.1, P3.1 und P4.2 sind auf `main` durch. Verbleibende Engstellen:
 
-1. **P2.1 Evidence-Anker-Pflicht** — `ReportClaimModel.evidence` Validator + `agent.py::_finalize_section_claims` Hypotheses-Routing + `workflow.py::data_gaps`. Blockiert P3.1, P4.1.
-2. **P3.1 ReportV3 als Persistenz** — `evidence_migrations.CURRENT_SCHEMA_VERSION=3` + `migrate_v2_to_v3` + `storage.write_report_v3` + `manager.finalize_report`-Hook. Blockiert P3.2-Verdrahtung, P4.1, P4.2.
-3. **P4.2 CSV-Export** — `GET /api/report/<id>/export?format=csv&table=…` + Frontend `downloadCsvBundle()`. File-disjunkt zu P2.1/P3.1, semantisch besser nach P3.1.
-4. **P3.2-Verdrahtung** — `manager.finalize_report` ruft `render_report_v3()`, schreibt `report-v3.md`, Frontend-Default-Download wechselt auf v3.
-5. **P4.1 Report-Modi** — nach P3.1 + P2.1.
-6. **P4.3/P4.4** — abschließend.
+1. **P3.2-Verdrahtung** — `manager.finalize_report` ruft `render_report_v3()`, schreibt `report-v3.md` neben `report-v3.json`, Frontend `useReportExports.ts` wechselt Default-MD-Download auf v3 mit Fallback auf v2. Klein, aber Voraussetzung für P4.1.
+2. **P4.1 Report-Modi `strict`/`balanced`/`explorative`** — `ReportV3.report_mode` + `?mode=`-Param + Manager-Verhalten + Frontend-Selector. Setzt P3.2 voraus.
+3. **P4.3 ZIP-Bundle** — jszip als npm-Dependency installieren ODER server-seitiges ZIP-on-the-fly aus `report-v3.md`/`report-v3.json`/`evidence-map.json`/Personas-/Segmente-/Claims-CSV. Setzt P4.2 voraus (durch).
+4. **P4.4 E2E-Smokes Modi** — drei Playwright-Smokes über die drei Modi. Setzt P4.1 voraus.
+5. **Followups aus den letzten drei Slices**:
+   - P3.1: Personas/Segments/FrictionPoints/TrustSignals werden derzeit als leere Listen aggregiert. Folge-Slice zieht echte Daten aus Persona-Storage + Segment-Aggregation.
+   - P4.2: jszip-Install nachziehen (separater Slice mit `npm install jszip` und `downloadCsvBundle()`-Refactor auf echtes ZIP).
+   - P2.3 läuft im Worktree `feat/m11-7c-report-hypotheses` und wird dort fertiggestellt.
 3. **PR 7 vorbereiten:** v2→v3-Migration spec'en, bevor die Pipeline umgestellt wird (Migrationspfad ist die einzige Stelle, an der Bestandsdaten kippen können).

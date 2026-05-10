@@ -4,7 +4,7 @@
 
 Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
 Stack: **Flask + Pydantic v2 + Vue 3 + Neo4j + Ollama + OASIS** (CAMEL-AI Subprozess).
-Status: v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–10 in Arbeit · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md).
+Status: v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–10 in Arbeit · v1.0-Output-Vertrag-Plan in [`PLAN.md`](PLAN.md) (Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün; offen: P3.2-Verdrahtung, P4.1, P4.3, P4.4) · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md).
 
 ## Sofort wichtig
 
@@ -96,7 +96,7 @@ prompts/                    UI-Prompt-Vorlagen
 
 ## Aktive Hot-Spots / offene Hauspflicht
 
-Layer-0–6 + 9–10 sind durch. Aktuelle M11-Baustellen:
+Layer-0–6 + 9–10 sind durch. **v1.0-Output-Vertrag-Pfad** (PLAN.md): Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 stehen, **offen sind P3.2-Verdrahtung, P4.1 (Report-Modi), P4.3 (ZIP-Bundle), P4.4 (E2E-Smokes)**. P2.3 läuft separat im Worktree `feat/m11-7c-report-hypotheses`. Daneben aktuelle M11-Baustellen:
 
 - **Coverage-Gate-Anhebung** (M11.2/M11.3): Aktuelle Schwellen Backend 53 % / Frontend 24 %. Ziel Backend 70 % / Frontend 60 % schrittweise. Coverage-Reports als Artifacts `backend-coverage` / `frontend-coverage` (14 Tage Retention) in `ci.yml`.
 - **Phase 6 Contract-Generation + Status-Sync:** Contract-Dump reproduzierbar machen, Frontend-Zod-Spiegel automatisiert gegen Pydantic prüfen, `scripts/sync-status.sh` als CI-Pflichtschritt.
