@@ -31,7 +31,7 @@ Code-Verifikation gegen `main` (HEAD `a2acaed`):
 
 ### Followups aus den frischen Slices
 
-- **P3.1**: `migrate_v2_to_v3` aggregiert Personas/Segmente/FrictionPoints/TrustSignals derzeit als leere Listen. Folge-Slice zieht echte Daten aus Persona-Storage + Segment-Aggregation.
+- **P3.1-Followup**: ✅ done (2026-05-11). `migrate_v2_to_v3` aggregiert Personas aus `reddit_profiles` via optionalem `artifact_store`-Parameter, Segments per Gruppen-Aggregation, FrictionPoints/TrustSignals per Section-Titel-Keyword-Matching. DataGap-Fallback bleibt wenn keine Daten.
 - **P4.2**: jszip ist nicht installiert; `downloadCsvBundle` lädt drei Dateien einzeln. Mit P4.3 (server-seitiges ZIP) entfällt der jszip-Install-Bedarf — `downloadAllBundle()` deckt das ab.
 
 ---
