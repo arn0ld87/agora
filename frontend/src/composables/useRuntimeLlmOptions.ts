@@ -5,10 +5,15 @@ export const STORAGE_LLM_PROVIDER = 'agora.runtimeLlm.provider'
 export const STORAGE_LLM_BASE_URL = 'agora.runtimeLlm.baseUrl'
 export const SESSION_LLM_API_KEY = 'agora.runtimeLlm.apiKey'
 
-type RuntimeProvider = 'default' | 'google' | 'openai' | 'custom_openai'
+export type RuntimeProvider = 'default' | 'google' | 'openai' | 'custom_openai'
 
 interface Option {
   value: RuntimeProvider
+  label: string
+}
+
+interface RuntimeModelOption {
+  value: string
   label: string
 }
 
@@ -25,6 +30,28 @@ const DEFAULT_BASE_URLS: Record<Exclude<RuntimeProvider, 'default'>, string> = {
   google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
   openai: 'https://api.openai.com/v1',
   custom_openai: '',
+}
+
+export const GOOGLE_GEMINI_MODEL_OPTIONS: RuntimeModelOption[] = [
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview (Google)' },
+  { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview (Google)' },
+  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite (Google)' },
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Google)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Google)' },
+  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (Google)' },
+]
+
+export function runtimeModelOptionsForProvider(provider: RuntimeProvider | string): RuntimeModelOption[] {
+  if (provider === 'google') return GOOGLE_GEMINI_MODEL_OPTIONS
+  return []
+}
+
+export function defaultRuntimeModelForProvider(provider: RuntimeProvider | string): string | null {
+  return runtimeModelOptionsForProvider(provider)[0]?.value ?? null
+}
+
+export function isRuntimeModelForProvider(provider: RuntimeProvider | string, model: string): boolean {
+  return runtimeModelOptionsForProvider(provider).some((option) => option.value === model)
 }
 
 function safeLocalGet(key: string, fallback = ''): string {

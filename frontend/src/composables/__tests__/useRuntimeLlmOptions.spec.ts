@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import {
+  defaultRuntimeModelForProvider,
+  runtimeModelOptionsForProvider,
   runtimeLlmPayloadFromStorage,
   runtimeProviderMissingApiKeyFromStorage,
   SESSION_LLM_API_KEY,
@@ -61,5 +63,14 @@ describe('runtimeLlmPayloadFromStorage', () => {
 
     expect(runtimeLlmPayloadFromStorage()).toBeNull()
     expect(runtimeProviderMissingApiKeyFromStorage()).toBe(true)
+  })
+
+  it('liefert Gemini-Modelloptionen für den Google-Provider', () => {
+    const options = runtimeModelOptionsForProvider('google')
+
+    expect(options.map((option) => option.value)).toContain('gemini-3-flash-preview')
+    expect(options.map((option) => option.value)).toContain('gemini-3.1-pro-preview')
+    expect(options.map((option) => option.value)).toContain('gemini-2.5-flash')
+    expect(defaultRuntimeModelForProvider('google')).toBe('gemini-3-flash-preview')
   })
 })

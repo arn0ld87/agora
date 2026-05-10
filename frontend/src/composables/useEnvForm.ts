@@ -26,6 +26,12 @@
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { getAvailableModels } from '../api/simulation'
+import {
+  defaultRuntimeModelForProvider,
+  isRuntimeModelForProvider,
+  runtimeModelOptionsForProvider,
+  type RuntimeProvider,
+} from './useRuntimeLlmOptions'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -70,6 +76,8 @@ export interface UseEnvFormOptions {
   t: (key: string, params?: Record<string, unknown>) => string
   /** Called when loadModels() encounters a network/API error. */
   onError?: (msg: string) => void
+  /** Runtime provider override; when active, model options must match that provider. */
+  runtimeProvider?: Ref<RuntimeProvider>
 }
 
 export interface UseEnvFormReturn {
@@ -120,7 +128,7 @@ function _loadStoredCustomModel(): string {
 // Composable
 // ---------------------------------------------------------------------------
 
-export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn {
+export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): UseEnvFormReturn {
   // --- State ---
 
   const ollamaModels = ref<ModelPreset[]>([])
@@ -137,6 +145,13 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
   // --- Computed ---
 
   const modelOptions = computed<ModelOption[]>(() => {
+    if (runtimeProvider?.value && runtimeProvider.value !== 'default') {
+      const providerModels = runtimeModelOptionsForProvider(runtimeProvider.value)
+      return [
+        ...providerModels,
+        { value: 'custom', label: t('step2.model.customGroup') },
+      ]
+    }
     const opts: ModelOption[] = []
     opts.push({
       value: 'default',
@@ -178,6 +193,24 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
       // ignore
     }
   })
+
+  if (runtimeProvider) {
+    watch(runtimeProvider, (provider, previousProvider) => {
+      const providerDefault = defaultRuntimeModelForProvider(provider)
+      if (provider !== 'default') {
+        if (
+          modelOption.value !== 'custom' &&
+          !isRuntimeModelForProvider(provider, modelOption.value)
+        ) {
+          modelOption.value = providerDefault || 'custom'
+        }
+        return
+      }
+      if (previousProvider && isRuntimeModelForProvider(previousProvider, modelOption.value)) {
+        modelOption.value = 'default'
+      }
+    }, { immediate: true })
+  }
 
   // --- Actions ---
 
@@ -221,12 +254,18 @@ export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn 
             return null
           }
         })()
+        const runtimeProviderActive = runtimeProvider?.value && runtimeProvider.value !== 'default'
+        const storedMatchesRuntimeProvider = runtimeProviderActive
+          ? (stored === 'custom' || isRuntimeModelForProvider(runtimeProvider.value, stored || ''))
+          : false
         if (
           stored &&
-          (stored === 'default' ||
-            stored === 'custom' ||
-            presetModels.value.some((p) => p.name === stored) ||
-            ollamaModels.value.some((p) => p.name === stored))
+          (runtimeProviderActive
+            ? storedMatchesRuntimeProvider
+            : (stored === 'default' ||
+              stored === 'custom' ||
+              presetModels.value.some((p) => p.name === stored) ||
+              ollamaModels.value.some((p) => p.name === stored)))
         ) {
           modelOption.value = stored
         }

@@ -11,8 +11,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useEnvForm, STORAGE_CUSTOM_MODEL, STORAGE_MODEL, STORAGE_LANG } from '../useEnvForm'
+import type { RuntimeProvider } from '../useRuntimeLlmOptions'
 
 // ---------------------------------------------------------------------------
 // Mock t() — identity function; tests check key suffixes, not translated text
@@ -153,6 +154,22 @@ describe('useEnvForm', () => {
       expect(opts).toHaveLength(2)
       expect(opts[0].value).toBe('default')
       expect(opts[1].value).toBe('custom')
+    })
+
+    it('zeigt bei Google-Runtime-Provider Gemini-Modelle statt Ollama-Modelle', async () => {
+      localStorage.setItem(STORAGE_MODEL, 'gemma3:31b')
+      const runtimeProvider = ref<RuntimeProvider>('google')
+      const f = useEnvForm({ t, runtimeProvider })
+      f.defaultModel.value = 'gemma3:31b'
+      f.ollamaModels.value = [{ name: 'gemma3:31b', label: 'Gemma 3 31B' }]
+
+      await nextTick()
+
+      const opts = f.modelOptions.value
+      expect(opts.map((o) => o.value)).toContain('gemini-3-flash-preview')
+      expect(opts.map((o) => o.value)).toContain('gemini-2.5-flash')
+      expect(opts.map((o) => o.value)).not.toContain('gemma3:31b')
+      expect(f.modelOption.value).toBe('gemini-3-flash-preview')
     })
   })
 

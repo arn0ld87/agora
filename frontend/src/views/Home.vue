@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
@@ -12,7 +12,12 @@ import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import { getAvailableModels } from '../api/simulation'
 import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
-import { useRuntimeLlmOptions } from '../composables/useRuntimeLlmOptions'
+import {
+  defaultRuntimeModelForProvider,
+  isRuntimeModelForProvider,
+  runtimeModelOptionsForProvider,
+  useRuntimeLlmOptions,
+} from '../composables/useRuntimeLlmOptions'
 import { setPendingUpload } from '../store/pendingUpload'
 
 const { t, tm } = useI18n()
@@ -73,6 +78,12 @@ async function loadStatus() {
 }
 
 const modelOptions = computed(() => {
+  if (runtimeProviderEnabled.value) {
+    return [
+      ...runtimeModelOptionsForProvider(runtimeProvider.value),
+      { value: 'custom', label: t('step2.model.customGroup') },
+    ]
+  }
   const opts = [{ value: 'default', label: `${t('step2.model.default')} — ${defaultModel.value || '?'}` }]
   for (const p of presetModels.value) {
     opts.push({ value: p.name, label: p.label || p.name })
@@ -85,7 +96,10 @@ const modelOptions = computed(() => {
   return opts
 })
 
-const servicesReady = computed(() => neo4jReachable.value && (ollamaReachable.value || modelOption.value === 'custom'))
+const servicesReady = computed(() => (
+  neo4jReachable.value &&
+  (ollamaReachable.value || runtimeProviderEnabled.value || modelOption.value === 'custom')
+))
 
 const canSubmit = computed(() => {
   return (
@@ -146,6 +160,22 @@ onMounted(() => {
   const stored = localStorage.getItem(STORAGE_CUSTOM_MODEL) || localStorage.getItem('agora.customModel')
   if (stored) customModel.value = stored
 })
+
+watch(runtimeProvider, (provider, previousProvider) => {
+  const providerDefault = defaultRuntimeModelForProvider(provider)
+  if (provider !== 'default') {
+    if (
+      modelOption.value !== 'custom' &&
+      !isRuntimeModelForProvider(provider, modelOption.value)
+    ) {
+      modelOption.value = providerDefault || 'custom'
+    }
+    return
+  }
+  if (previousProvider && isRuntimeModelForProvider(previousProvider, modelOption.value)) {
+    modelOption.value = 'default'
+  }
+}, { immediate: true })
 
 function scrollToConsole() {
   document.getElementById('console')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -333,7 +363,7 @@ const differentiators = computed(() => tm('home.differentiators'))
               :label="t('step2.model.label')"
               :options="modelOptions"
             />
-            <p v-if="!ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
+            <p v-if="!runtimeProviderEnabled && !ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
           </div>
