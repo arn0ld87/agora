@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from ...config import Config
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -401,7 +402,13 @@ def generate_section_metadata(
         return {}
 
 
-def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, str], None]] = None, report_id: Optional[str] = None) -> Report:
+def generate_report(
+    agent: Any,
+    progress_callback: Optional[Callable[[str, int, str], None]] = None,
+    report_id: Optional[str] = None,
+    *,
+    report_mode: ReportMode = DEFAULT_REPORT_MODE,
+) -> Report:
     import uuid
 
     if not report_id:
@@ -531,9 +538,13 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
                 section_index=section_num,
             )
-            # M11.8e: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
+            # M11.8e + P4.1: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
             # Nur bei Section-Typen, die Persona-Zitate erwarten (nicht Plan/Meta-Sections).
-            if _section_expects_quotes(section.title):
+            # explorative: Validierung vollständig überspringen.
+            # balanced: Best-Effort-Repair-Retry (aktuelles Verhalten).
+            # strict: Hart — fehlgeschlagener Repair setzt quota_validation_failed=True
+            #         und wird prominent geloggt; kein weiteres Fallback.
+            if _section_expects_quotes(section.title) and report_mode != "explorative":
                 evidence_map_for_validation = agent.evidence_map or {}
                 persona_ids_for_validation: List[str] = getattr(agent, "persona_ids", []) or []
                 quote_result = validate_quote_anchors(
@@ -542,7 +553,6 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                     persona_ids_for_validation,
                 )
                 if not quote_result.valid:
-                    # Strict-Mode: einmaliger Repair-Retry mit konkretem Fehler-Hinweis
                     repair_hint = (
                         f"Korrigiere die Persona-Zitate: "
                         f"invalid_quotes={quote_result.invalid_quotes!r}, "
@@ -551,11 +561,12 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                         f"mit gültigen Attributen verwenden."
                     )
                     logger.warning(
-                        "quote_anchor_validation: section=%d title=%r — "
+                        "quote_anchor_validation: section=%d title=%r mode=%s — "
                         "invalid quotes detected, attempting repair retry. "
                         "invalid_quotes=%r unbound_refs=%r",
                         section_num,
                         section.title,
+                        report_mode,
                         quote_result.invalid_quotes,
                         quote_result.unbound_evidence_refs,
                     )
@@ -579,12 +590,14 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
                             section_num,
                         )
                     else:
-                        # Repair fehlgeschlagen — Section trotzdem weiter, aber Flag setzen
-                        logger.error(
-                            "quote_anchor_validation: section=%d repair retry also failed. "
+                        # Repair fehlgeschlagen — Section trotzdem weiter, Flag setzen
+                        log_fn = logger.error if report_mode == "strict" else logger.warning
+                        log_fn(
+                            "quote_anchor_validation: section=%d mode=%s repair retry also failed. "
                             "Setting quote_validation_failed=True. "
                             "repair_invalid_quotes=%r repair_unbound=%r",
                             section_num,
+                            report_mode,
                             repair_result.invalid_quotes,
                             repair_result.unbound_evidence_refs,
                         )

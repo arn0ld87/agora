@@ -19,6 +19,21 @@ from pydantic import BaseModel, ConfigDict, Field
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+ReportMode = Literal["strict", "balanced", "explorative"]
+"""Vertrauensmodus für den Report-Output (PLAN.md §5.1, Slice P4.1).
+
+- ``strict``: Claims ohne Evidence-Anker werden gedroppt (nicht in Hypotheses).
+  Quote-Anchor-Validator hart. ``confidence_label="low"``-Claims werden gedroppt.
+- ``balanced`` (Default): Phase-2-Verhalten — Hypotheses-Routing für
+  Evidence-lose Claims, Low-Confidence sichtbar markiert.
+- ``explorative``: alle Claims/Quotes durch, sichtbar als ``EXPLORATIVE``-Banner
+  im Report-Header — für Brainstorming-/Discovery-Kontexte.
+"""
+
+
+DEFAULT_REPORT_MODE: ReportMode = "balanced"
+
+
 class Persona(BaseModel):
     """Zielgruppen-Persona mit DACH-orientierter Demografie."""
 
@@ -178,6 +193,10 @@ class ReportV3(BaseModel):
     schema_version: Literal[3] = 3
     report_id: str = Field(min_length=1)
     generated_at: datetime
+    report_mode: ReportMode = Field(
+        default=DEFAULT_REPORT_MODE,
+        description="Vertrauensmodus (PLAN.md §5.1). Default 'balanced'.",
+    )
     personas: list[Persona] = Field(default_factory=list)
     segments: list[Segment] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)

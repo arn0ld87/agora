@@ -17,8 +17,10 @@ from pydantic import ValidationError
 
 from . import report_bp
 from ..contracts import (
+    DEFAULT_REPORT_MODE,
     EvidenceMapModel,
     ReportContractModel,
+    ReportMode,
     ReportModel,
 )
 from ..services.evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
@@ -75,6 +77,29 @@ def _limit_report_llm_endpoints():
     return response, status
 
 
+_VALID_REPORT_MODES: tuple[str, ...] = ("strict", "balanced", "explorative")
+
+
+def _resolve_report_mode() -> ReportMode:
+    """Liest den optionalen ``?mode=``-Query-Parameter und validiert ihn.
+
+    - Kein Parameter → ``DEFAULT_REPORT_MODE`` ('balanced').
+    - Gültiger Literal-Wert → wird als ``ReportMode`` zurückgegeben.
+    - Ungültiger Wert → ``ValueError`` (wird im Caller zu HTTP 400).
+
+    Muss innerhalb eines Request-Kontexts aufgerufen werden.
+    """
+    raw = request.args.get("mode")
+    if raw is None:
+        return DEFAULT_REPORT_MODE
+    if raw not in _VALID_REPORT_MODES:
+        raise ValueError(
+            f"Ungültiger mode-Wert: {raw!r}. "
+            f"Erlaubt: {', '.join(_VALID_REPORT_MODES)}."
+        )
+    return raw  # type: ignore[return-value]
+
+
 # ============== Report Generation Interface ==============
 
 @report_bp.route('/generate', methods=['POST'])
@@ -87,6 +112,11 @@ def generate_report():
 
     if not validate_simulation_id(simulation_id):
         return json_error("Invalid simulation_id format", status=400)
+
+    try:
+        report_mode = _resolve_report_mode()
+    except ValueError as mode_exc:
+        return json_error(str(mode_exc), status=400)
 
     force_regenerate = data.get('force_regenerate', False)
     llm_model_override = (data.get('llm_model') or '').strip() or None
@@ -183,8 +213,8 @@ def generate_report():
             )
             def progress_callback(stage, progress, message):
                 task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
-            report = agent.generate_report(progress_callback=progress_callback, report_id=report_id)
-            ReportManager.save_report(report)
+            report = agent.generate_report(progress_callback=progress_callback, report_id=report_id, report_mode=report_mode)
+            ReportManager.save_report(report, report_mode=report_mode)
             if report.status == ReportStatus.COMPLETED:
                 run_registry.update_run(
                     run_record["run_id"],

@@ -647,6 +647,17 @@
       "title": "Report Id",
       "type": "string"
     },
+    "report_mode": {
+      "default": "balanced",
+      "description": "Vertrauensmodus (PLAN.md \u00a75.1). Default 'balanced'.",
+      "enum": [
+        "strict",
+        "balanced",
+        "explorative"
+      ],
+      "title": "Report Mode",
+      "type": "string"
+    },
     "schema_version": {
       "const": 3,
       "default": 3,

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
-from ...contracts.report_v3 import ReportV3
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -236,7 +236,13 @@ class ReportManager:
         return ref.strip() or f"section_{section_index}:{claim_id}:evidence_{item_index:02d}"
 
     @classmethod
-    def build_report_v3(cls, report: Report, evidence_map: Dict[str, Any]) -> ReportV3:
+    def build_report_v3(
+        cls,
+        report: Report,
+        evidence_map: Dict[str, Any],
+        *,
+        report_mode: ReportMode = DEFAULT_REPORT_MODE,
+    ) -> ReportV3:
         claims: List[ReportV3Claim] = []
         data_gaps: List[ReportV3DataGap] = []
         for section in evidence_map.get("sections") or []:
@@ -257,6 +263,8 @@ class ReportManager:
                     for index, item in enumerate(claim.get("evidence") or [], 1)
                     if isinstance(item, dict)
                 ]
+                # balanced/explorative: Claims ohne Evidence → überspringen (kein Evidence-Anker)
+                # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
                 if not evidence_refs:
                     continue
                 statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
@@ -269,6 +277,9 @@ class ReportManager:
                     confidence = "medium"
                 if confidence not in {"low", "medium", "high"}:
                     confidence = "low"
+                # strict: Low-confidence Claims werden gedroppt
+                if report_mode == "strict" and confidence == "low":
+                    continue
                 claims.append(ReportV3Claim(
                     id=claim_id,
                     statement=statement,
@@ -314,6 +325,7 @@ class ReportManager:
         return ReportV3(
             report_id=report.report_id,
             generated_at=datetime.now(timezone.utc),
+            report_mode=report_mode,
             claims=claims,
             data_gaps=data_gaps,
         )
@@ -618,28 +630,33 @@ class ReportManager:
         return '\n'.join(result_lines)
     
     @classmethod
-    def save_report(cls, report: Report) -> None:
+    def save_report(
+        cls,
+        report: Report,
+        *,
+        report_mode: ReportMode = DEFAULT_REPORT_MODE,
+    ) -> None:
         """SavereportmetainformationandcompleteReport"""
         cls._ensure_report_folder(report.report_id)
 
         evidence_map = cls.get_evidence_map(report.report_id)
         report.has_evidence = bool(evidence_map and evidence_map.get("sections"))
         report.evidence_sections = len((evidence_map or {}).get("sections", []))
-        
+
         # savemetainformationJSON
         cls._write_json_atomic(cls._get_report_path(report.report_id), report.to_dict())
-        
+
         # saveoutline
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
-        
+
         # saveCompleteMarkdownReport
         if report.status != ReportStatus.INCOMPLETE and report.markdown_content:
             with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
                 f.write(report.markdown_content)
         if report.status == ReportStatus.COMPLETED and evidence_map:
             try:
-                cls.save_report_v3(cls.build_report_v3(report, evidence_map))
+                cls.save_report_v3(cls.build_report_v3(report, evidence_map, report_mode=report_mode))
             except ValidationError as exc:
                 logger.warning(f"report-v3 artifact skipped for {report.report_id}: {exc}")
         

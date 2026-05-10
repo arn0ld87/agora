@@ -185,12 +185,18 @@ export const DataGapSchema = z
   .strict();
 export type DataGap = z.infer<typeof DataGapSchema>;
 
+// === ReportMode ===
+export const ReportModeSchema = z.enum(["strict", "balanced", "explorative"]);
+export type ReportMode = z.infer<typeof ReportModeSchema>;
+export const DEFAULT_REPORT_MODE: ReportMode = "balanced";
+
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
     schema_version: z.literal(3),
     report_id: z.string().min(1),
     generated_at: z.string().datetime(),
+    report_mode: ReportModeSchema.default("balanced"),
     personas: z.array(PersonaV3Schema).default([]),
     segments: z.array(SegmentSchema).default([]),
     claims: z.array(ClaimSchema).default([]),
