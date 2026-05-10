@@ -428,7 +428,8 @@
       "tools": "Tool calls",
       "raw": "Raw output",
       "exportMd": "Export as Markdown",
-      "exportPdf": "Export as PDF"
+      "exportPdf": "Export as PDF",
+      "printPdf": "Print as PDF (browser)"
     },
     "quote": {
       "openSource": "Open source"

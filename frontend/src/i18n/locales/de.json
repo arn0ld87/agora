@@ -439,7 +439,8 @@
       "tools": "Werkzeug-Aufrufe",
       "raw": "Rohausgabe",
       "exportMd": "Als Markdown exportieren",
-      "exportPdf": "Als PDF exportieren"
+      "exportPdf": "Als PDF exportieren",
+      "printPdf": "Als PDF drucken (Browser)"
     },
     "quote": {
       "openSource": "Quelle öffnen"

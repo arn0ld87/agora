@@ -548,6 +548,27 @@ Verweis: [PLAN.md N1](../PLAN.md), Arbeitsprotokoll
 
 ---
 
+## Report-Export & PDF
+
+Markdown-, HTML- und JSON-Export laufen direkt aus der UI; kein Backend-Aufruf,
+keine zusätzliche Dependency.
+
+PDF wird **nicht server-seitig** erzeugt. Kanonischer PDF-Pfad:
+
+1. Button „Als PDF drucken (Browser)" in Step 4 anklicken.
+2. Der Composable `useReportExports::printReport` baut ein Standalone-HTML-Dokument
+   (`buildStandaloneHtml`) und öffnet ein neues Browserfenster.
+3. `window.print()` öffnet den Browser-Print-Dialog.
+4. Nutzer wählt „Als PDF speichern" im Druckdialog des Betriebssystems.
+
+Das Print-CSS enthält Confidence-Badges (`.conf-low`, `.conf-medium`,
+`.conf-high`) und Quote-Marker — beide bleiben im erzeugten PDF sichtbar.
+
+Es gibt keine Headless-Chrome-Pipeline und keine zusätzliche
+Backend-Dependency für PDF-Erzeugung.
+
+---
+
 ## Verweise
 
 - [`deployment-dev.md`](deployment-dev.md) — Dev-Setup ohne Hardening.

@@ -55,6 +55,10 @@ Typische Einsätze:
 5. **Report**: ReportAgent verbindet Graph, Simulation, Interviews und optional Webtools zu einem belegbaren DACH-Report.
 6. **Compare**: Graph-Diff, Branch-Compare und Runs Dashboard zeigen Drift, Verstärkung und Status über Runs hinweg.
 
+### PDF-Export
+
+PDF wird ausschließlich über den Browser-Print-Dialog erzeugt — Button „Als PDF drucken (Browser)" in Step 4 öffnet ein Standalone-HTML mit Print-CSS; kein server-seitiges PDF, keine Headless-Chrome-Pipeline.
+
 <p align="center">
   <a href="./media/screenshots/graph-build.mp4">
     <img src="./media/screenshots/graph-build.gif" alt="Agora Graph-Build Demo" width="100%"/>
@@ -278,6 +282,10 @@ Agora v1 is **single-user-only** by architecture decision. Do not expose it dire
 4. Run OASIS as a subprocess and stream simulation state.
 5. Generate a report from graph evidence, simulation traces, interviews, and optional web context.
 6. Compare runs through graph diff, branch compare, and the runs dashboard.
+
+### PDF export
+
+PDF is generated exclusively through the browser print dialog — the "Print as PDF (browser)" button in Step 4 opens a standalone HTML with print CSS; no server-side PDF, no headless-Chrome pipeline.
 
 ### Quick start
 

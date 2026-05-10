@@ -523,7 +523,7 @@ onUnmounted(stopPolling)
             <Btn variant="ghost" @click="downloadMarkdown">.md</Btn>
             <Btn variant="ghost" @click="downloadCombinedJson">.json</Btn>
             <Btn variant="ghost" @click="downloadHtml">.html</Btn>
-            <Btn variant="ghost" @click="printReport">Drucken / PDF</Btn>
+            <Btn variant="ghost" @click="printReport">{{ t('step4.view.printPdf') }}</Btn>
             <Btn v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Btn>
           </div>
         </header>
