@@ -68,6 +68,8 @@ class RuntimeLlmConfig:
         }
         if self.base_url:
             env["LLM_BASE_URL"] = self.base_url
+            env["OPENAI_BASE_URL"] = self.base_url
+            env["OPENAI_API_BASE"] = self.base_url
             env["OPENAI_API_BASE_URL"] = self.base_url
         if model:
             env["LLM_MODEL_NAME"] = model

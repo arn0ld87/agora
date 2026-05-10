@@ -1149,6 +1149,8 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         raise ValueError("Missing API Key configuration, please set LLM_API_KEY in .env file in project root")
     
     if llm_base_url:
+        os.environ["OPENAI_BASE_URL"] = llm_base_url
+        os.environ["OPENAI_API_BASE"] = llm_base_url
         os.environ["OPENAI_API_BASE_URL"] = llm_base_url
     
     runtime_settings = resolve_model_runtime_settings(llm_model)

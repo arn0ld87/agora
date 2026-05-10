@@ -63,7 +63,7 @@ if command -v uv &>/dev/null; then
   rm -f "$COLLECT_TMP"
 fi
 
-FRONTEND_SPEC_FILES=$(find "$REPO_ROOT/frontend/src" \( -name '*.spec.ts' -o -name '*.spec.js' \) 2>/dev/null | wc -l | tr -d ' ')
+FRONTEND_TEST_FILES=$(find "$REPO_ROOT/frontend/src" \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \) 2>/dev/null | wc -l | tr -d ' ')
 
 # ---------------------------------------------------------------------------
 # Build replacement blocks (content between markers, without the marker lines)
@@ -77,7 +77,7 @@ VERSIONS_BLOCK="| Komponente | Pfad | Version |
 TESTS_BLOCK="| Kategorie | Anzahl | Methode |
 |---|---|---|
 | Backend Tests (collected) | $BACKEND_TESTS | \`cd backend && uv run pytest --collect-only -q\` |
-| Frontend Spec-Files | $FRONTEND_SPEC_FILES | \`find frontend/src \\( -name '*.spec.ts' -o -name '*.spec.js' \\)\` |"
+| Frontend Test-Files | $FRONTEND_TEST_FILES | \`find frontend/src \\( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \\)\` |"
 
 # ---------------------------------------------------------------------------
 # replace_block: replaces content between BEGIN/END markers using Python3.

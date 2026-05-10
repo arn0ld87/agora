@@ -476,6 +476,8 @@ class RedditSimulationRunner:
             raise ValueError("Missing API Key configuration, please set LLM_API_KEY in .env file in project root")
         
         if llm_base_url:
+            os.environ["OPENAI_BASE_URL"] = llm_base_url
+            os.environ["OPENAI_API_BASE"] = llm_base_url
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
         
         print(f"LLM configuration: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
@@ -860,4 +862,3 @@ if __name__ == "__main__":
         pass
     finally:
         print("Simulation process exited")
-
