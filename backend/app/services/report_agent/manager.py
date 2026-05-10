@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Literal, Optional
 
+from pydantic import ValidationError
+
+from ...contracts.report_v3 import Claim as ReportV3Claim
+from ...contracts.report_v3 import DataGap as ReportV3DataGap
+from ...contracts.report_v3 import ReportV3
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -19,6 +24,7 @@ from .storage import (
     get_report_folder,
     get_report_markdown_path,
     get_report_path,
+    get_report_v3_path,
     get_section_path,
     read_agent_log,
     read_console_log,
@@ -64,6 +70,11 @@ class ReportManager:
     def _get_report_markdown_path(cls, report_id: str) -> str:
         """getcompletereportMarkdownfile path"""
         return get_report_markdown_path(cls.REPORTS_DIR, report_id)
+
+    @classmethod
+    def _get_report_v3_path(cls, report_id: str) -> str:
+        """getstructuredReportV3file path"""
+        return get_report_v3_path(cls.REPORTS_DIR, report_id)
     
     @classmethod
     def _get_outline_path(cls, report_id: str) -> str:
@@ -149,6 +160,98 @@ class ReportManager:
     @classmethod
     def get_evidence_map(cls, report_id: str) -> Optional[Dict[str, Any]]:
         return cls._read_json_safe(cls._get_evidence_map_path(report_id))
+
+    @classmethod
+    def save_report_v3(cls, report_v3: ReportV3) -> None:
+        cls._ensure_report_folder(report_v3.report_id)
+        cls._write_json_atomic(
+            cls._get_report_v3_path(report_v3.report_id),
+            report_v3.model_dump(mode="json"),
+        )
+
+    @classmethod
+    def get_report_v3(cls, report_id: str) -> Optional[Dict[str, Any]]:
+        return cls._read_json_safe(cls._get_report_v3_path(report_id))
+
+    @classmethod
+    def _evidence_ref_for_item(
+        cls,
+        item: Dict[str, Any],
+        *,
+        section_index: int,
+        claim_id: str,
+        item_index: int,
+    ) -> str:
+        ref = str(
+            item.get("source_id_anchor")
+            or item.get("anchor")
+            or item.get("source")
+            or f"section_{section_index}:{claim_id}:evidence_{item_index:02d}"
+        )
+        return ref.strip() or f"section_{section_index}:{claim_id}:evidence_{item_index:02d}"
+
+    @classmethod
+    def build_report_v3(cls, report: Report, evidence_map: Dict[str, Any]) -> ReportV3:
+        claims: List[ReportV3Claim] = []
+        data_gaps: List[ReportV3DataGap] = []
+        for section in evidence_map.get("sections") or []:
+            if not isinstance(section, dict):
+                continue
+            section_index = int(section.get("section_index") or 0)
+            for claim in section.get("claims") or []:
+                if not isinstance(claim, dict):
+                    continue
+                claim_id = str(claim.get("claim_id") or f"claim_{len(claims) + 1:02d}")
+                evidence_refs = [
+                    cls._evidence_ref_for_item(
+                        item,
+                        section_index=section_index,
+                        claim_id=claim_id,
+                        item_index=index,
+                    )
+                    for index, item in enumerate(claim.get("evidence") or [], 1)
+                    if isinstance(item, dict)
+                ]
+                if not evidence_refs:
+                    continue
+                statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                if len(statement) < 8:
+                    continue
+                label = str(claim.get("confidence_label") or "low")
+                confidence: Literal["low", "medium", "high"]
+                confidence = "high" if label in {"high", "verified"} else "low"
+                if label == "medium":
+                    confidence = "medium"
+                if confidence not in {"low", "medium", "high"}:
+                    confidence = "low"
+                claims.append(ReportV3Claim(
+                    id=claim_id,
+                    statement=statement,
+                    evidence_refs=evidence_refs,
+                    confidence=confidence,
+                    aggregation_basis="persona",
+                ))
+            for gap in section.get("data_gaps") or []:
+                if not isinstance(gap, dict):
+                    continue
+                gap_id = str(gap.get("gap_id") or f"gap_{len(data_gaps) + 1:02d}")
+                claim_text = str(gap.get("claim_text") or gap.get("gap_reason") or "")
+                reason = str(gap.get("gap_reason") or "").strip()
+                description = claim_text if not reason else f"{claim_text} ({reason})"
+                description = description.strip() or "Datenluecke ohne Claim-Text."
+                suggested_fix = gap.get("suggested_fix")
+                data_gaps.append(ReportV3DataGap(
+                    id=gap_id,
+                    beschreibung=description,
+                    severity="medium",
+                    suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
+                ))
+        return ReportV3(
+            report_id=report.report_id,
+            generated_at=datetime.now(timezone.utc),
+            claims=claims,
+            data_gaps=data_gaps,
+        )
     
     @classmethod
     def save_outline(cls, report_id: str, outline: ReportOutline) -> None:
@@ -465,6 +568,11 @@ class ReportManager:
         if report.status != ReportStatus.INCOMPLETE and report.markdown_content:
             with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
                 f.write(report.markdown_content)
+        if report.status == ReportStatus.COMPLETED and evidence_map:
+            try:
+                cls.save_report_v3(cls.build_report_v3(report, evidence_map))
+            except ValidationError as exc:
+                logger.warning(f"report-v3 artifact skipped for {report.report_id}: {exc}")
         
         logger.info(f"reportsaved: {report.report_id}")
     

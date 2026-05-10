@@ -211,6 +211,72 @@ def test_minimal_report_v3_roundtrip():
     assert len(restored.data_gaps) == 1
 
 
+def test_persisted_v3_validates(tmp_path, monkeypatch):
+    """P3.1: finalisierte Reports schreiben ein valides report-v3.json Artefakt."""
+    from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
+
+    monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
+    report_id = "report_abcdef123456"
+    ReportManager.save_evidence_map(report_id, {
+        "schema_version": 2,
+        "report_id": report_id,
+        "simulation_id": "sim_abcdef123456",
+        "global_evidence": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Executive Summary",
+                "section_summary": "Initial framing",
+                "claims": [
+                    {
+                        "claim_id": "claim_01",
+                        "claim_text": "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor.",
+                        "confidence_label": "medium",
+                        "confidence_score": 0.64,
+                        "evidence": [
+                            {
+                                "type": "graph_metric",
+                                "source": "simulation_metrics",
+                                "snippet": "echo_chamber_index: 0.42",
+                                "source_id_anchor": "kg:metric:echo_chamber_index",
+                                "supports_claim": True,
+                            }
+                        ],
+                        "audit_trail": [],
+                    }
+                ],
+                "data_gaps": [
+                    {
+                        "gap_id": "gap_01",
+                        "claim_text": "Preisbereitschaft ist im Seed-Korpus nicht belegt.",
+                        "gap_reason": "no_evidence_bound",
+                        "suggested_fix": "Preisbereitschaft per Interview nacherheben.",
+                    }
+                ],
+            }
+        ],
+    })
+    ReportManager.save_report(
+        Report(
+            report_id=report_id,
+            simulation_id="sim_abcdef123456",
+            graph_id="graph_abcdef123456",
+            simulation_requirement="Test requirement",
+            status=ReportStatus.COMPLETED,
+            markdown_content="# Demo",
+        )
+    )
+
+    report_v3_path = tmp_path / "reports" / report_id / "report-v3.json"
+    raw = json.loads(report_v3_path.read_text(encoding="utf-8"))
+    restored = ReportV3.model_validate(raw)
+
+    assert restored.schema_version == 3
+    assert restored.report_id == report_id
+    assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
+    assert restored.data_gaps[0].id == "gap_01"
+
+
 # ---- JSON-Schema-Generierung ----
 
 def test_json_schema_generates_without_error():
