@@ -11,6 +11,7 @@ import {
   ReportContractSchema,
   ReportClaimSchema,
   EvidenceItemSchema,
+  ReportOutlineSchema,
 } from '../reportContract';
 
 const VALID_PAYLOAD = {
@@ -172,5 +173,54 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
       expect(result.data.quote).toBeUndefined();
       expect(result.data.source_id_anchor).toBeUndefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ReportOutlineSchema — Regression-Tests für max-sections-Drift
+// M11.4b-Followup-4: Zod hatte .max(5), Backend schon .max_length=15 seit Followup-2.
+// Stub erzeugt 11 Pflichtabschnitte → Zod-Parse warf → ol.outline nie gerendert.
+// ---------------------------------------------------------------------------
+describe('ReportOutlineSchema (Drift-Guard max-sections)', () => {
+  const makeSection = (title: string) => ({
+    title,
+    description: `Beschreibung für ${title}.`,
+  });
+
+  it('akzeptiert 11 Sections (Stub-Pflichtabschnitte)', () => {
+    const outline = {
+      title: 'Stub-Report',
+      summary: 'Zusammenfassung.',
+      sections: Array.from({ length: 11 }, (_, i) => makeSection(`Abschnitt ${i + 1}`)),
+    };
+    const result = ReportOutlineSchema.safeParse(outline);
+    expect(result.success, `Zod lehnte 11 Sections ab: ${JSON.stringify(result)}`).toBe(true);
+  });
+
+  it('akzeptiert 15 Sections (Backend max_length=15)', () => {
+    const outline = {
+      title: 'Langer Report',
+      summary: 'Zusammenfassung.',
+      sections: Array.from({ length: 15 }, (_, i) => makeSection(`Abschnitt ${i + 1}`)),
+    };
+    expect(ReportOutlineSchema.safeParse(outline).success).toBe(true);
+  });
+
+  it('lehnt 16 Sections ab (über Backend-Grenze)', () => {
+    const outline = {
+      title: 'Zu langer Report',
+      summary: 'Zusammenfassung.',
+      sections: Array.from({ length: 16 }, (_, i) => makeSection(`Abschnitt ${i + 1}`)),
+    };
+    expect(ReportOutlineSchema.safeParse(outline).success).toBe(false);
+  });
+
+  it('lehnt leere sections-Liste ab (min=1)', () => {
+    const outline = {
+      title: 'Leerer Report',
+      summary: 'Zusammenfassung.',
+      sections: [],
+    };
+    expect(ReportOutlineSchema.safeParse(outline).success).toBe(false);
   });
 });

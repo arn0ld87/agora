@@ -110,7 +110,11 @@ export const ReportOutlineSectionSchema = z.object({
 export const ReportOutlineSchema = z.object({
   title: z.string().min(3),
   summary: z.string().min(1),
-  sections: z.array(ReportOutlineSectionSchema).min(2).max(5),
+  // M11.4b-Followup-4: max auf 15 angehoben — spiegelt backend/app/contracts/report_contract.py
+  // ReportOutlineModel.sections (min_length=1, max_length=15, angehoben in M11.4b-Followup-2).
+  // War 5: Stub liefert 11 Pflichtabschnitte, Zod-Parse warf → schemaError gesetzt →
+  // reportOutline blieb null → ol.outline nie gerendert → E2E-Smoke schlug fehl.
+  sections: z.array(ReportOutlineSectionSchema).min(1).max(15),
 }).strict();
 export type ReportOutline = z.infer<typeof ReportOutlineSchema>;
 

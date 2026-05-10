@@ -99,6 +99,10 @@ backend/logs/
 # Playwright-MCP test artefacts (Konsolenlogs, Page-Snapshots)
 .playwright-mcp/
 
+# CI-Trace-Artefakte (Failure-Snapshots, error-context.md, trace.zip)
+# Lokal hilfreich zum Debuggen, aber nie einchecken.
+.ci-trace/
+
 # Persistent caches mounted into the agora container
 backend/.cache/
 
