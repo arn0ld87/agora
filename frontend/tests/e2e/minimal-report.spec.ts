@@ -130,6 +130,12 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
   test(
     '1 · Graph-Setup → Report generieren → 11 Sections + Persona-Tabelle sichtbar',
     async ({ page, context, baseURL }) => {
+      // M11.4b-Followup-3: Test-Total-Timeout auf 5 Min anheben.
+      // Report-Generation (11 Sections × 4 ReACT-Iterationen im Stub) plus
+      // Graph-Build-Vorlauf dauern länger als Playwright-Default (30 s).
+      // test.setTimeout ist targeted (nur dieser Test), kein Global-Bump in playwright.config.ts.
+      test.setTimeout(300_000);
+
       // =======================================================================
       // Schritt 1: Auth-Token injizieren
       // localStorage-Key 'agora_token' (frontend/src/api/index.ts:41).
@@ -226,7 +232,11 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // aufruft und ReportSchema.parse() ausführt.
         // Bei status="completed" wird fullReport gesetzt und reportHtml gerendert.
         // ===================================================================
-        await page.goto(`/report/${report_id}`, { waitUntil: 'networkidle' });
+        // M11.4b-Followup-3: waitUntil: 'domcontentloaded' statt 'networkidle'.
+        // SPAs mit Pinia-State-Polling erreichen niemals networkidle (>=500 ms ohne Request).
+        // 'domcontentloaded': HTML-Parser durch, Inline-Scripts ausgeführt — deterministisch.
+        // Nachfolgende expect(outlineList).toBeVisible() ist der Mount-Indikator via Auto-Wait.
+        await page.goto(`/report/${report_id}`, { waitUntil: 'domcontentloaded' });
 
         // Outline-Panel muss sichtbar sein
         // ReportOutlinePanel.vue:50 — article.card mit ol.outline

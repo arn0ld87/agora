@@ -61,6 +61,10 @@ test.describe('M11.4b · Upload + Graph-Smoke', () => {
     context,
     baseURL,
   }) => {
+    // M11.4b-Followup-3: Test-Total-Timeout auf 3 Min anheben.
+    // Upload + Ontology + Graph-Build + Cold-Start dauern länger als Playwright-Default (30 s).
+    // test.setTimeout ist targeted (nur dieser Test), kein Global-Bump in playwright.config.ts.
+    test.setTimeout(180_000);
     // =====================================================================
     // Schritt 1: Auth-Token injizieren (localStorage-Pfad verifiziert via
     // frontend/src/api/index.ts:41 — localStorage.getItem('agora_token'))
@@ -148,11 +152,14 @@ test.describe('M11.4b · Upload + Graph-Smoke', () => {
       //
       // Nach dem Navigieren pollt MainView fetchGraphData() alle 10 s und
       // ruft loadGraph(graph_id) auf, sobald project.graph_id vorhanden ist.
-      // Da das Backend synchron antworten muss, reicht networkidle als Signal.
+      // 'domcontentloaded' als waitUntil — networkidle wäre Anti-Pattern für SPAs mit Polling.
       // =================================================================
-      // timeout=60_000: Stub-Modus + Embedding-Stub sind schnell, aber CI-Cold-Start
-      // variiert. Explizit gesetzt statt implizitem Default (30 s) für Transparenz.
-      await page.goto(`/process/${projectId}`, { waitUntil: 'networkidle', timeout: 60_000 });
+      // M11.4b-Followup-3: waitUntil: 'domcontentloaded' statt 'networkidle'.
+      // SPAs mit Polling/SSE erreichen niemals den networkidle-State (>=500 ms ohne Request).
+      // 'domcontentloaded' ist deterministisch: HTML-Parser durch, Inline-Scripts ausgeführt.
+      // Nachfolgende expect(...).toBeVisible() nutzen Playwrights Auto-Wait als Mount-Indikator.
+      // timeout=60_000: Action-Timeout defensiv explizit (Default 30 s wäre zu knapp für CI).
+      await page.goto(`/process/${projectId}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
       // GraphPanel muss den Completed-Zustand anzeigen — kein "Waiting"-Fallback
       const graphView = page.locator('.graph-view');
