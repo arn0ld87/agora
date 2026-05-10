@@ -43,6 +43,10 @@ function claimEvidenceItems(claim: ReportClaim | null | undefined): EvidenceItem
 function evidenceSnippet(item: EvidenceItem | null | undefined): string {
   return item?.snippet ?? ''
 }
+
+function sectionHypotheses(section: ReportSection | null | undefined) {
+  return Array.isArray(section?.hypotheses) ? section.hypotheses : []
+}
 </script>
 
 <template>
@@ -64,6 +68,33 @@ function evidenceSnippet(item: EvidenceItem | null | undefined): string {
     </div>
     <div v-if="activeEvidenceSection" class="evidence-body">
       <p class="meta">{{ activeEvidenceSection.section_summary }}</p>
+      <section
+        v-if="sectionHypotheses(activeEvidenceSection).length"
+        class="hypothesis-list"
+        aria-label="Hypothesen ohne Evidence"
+      >
+        <h3>Hypothesen ohne Evidence</h3>
+        <article
+          v-for="hypothesis in sectionHypotheses(activeEvidenceSection)"
+          :key="hypothesis.hypothesis_id"
+          class="hypothesis-card"
+        >
+          <header>
+            <strong>{{ hypothesis.hypothesis_id }}</strong>
+            <Badge variant="ghost">hypothesis</Badge>
+          </header>
+          <p>{{ hypothesis.hypothesis_text }}</p>
+          <small>{{ hypothesis.rationale }}</small>
+          <ul v-if="hypothesis.suggested_evidence.length" class="hypothesis-evidence">
+            <li
+              v-for="item in hypothesis.suggested_evidence"
+              :key="`${hypothesis.hypothesis_id}-${item}`"
+            >
+              {{ item }}
+            </li>
+          </ul>
+        </article>
+      </section>
       <article
         v-for="claim in activeEvidenceSection.claims"
         :key="claim.claim_id"
@@ -141,11 +172,47 @@ function evidenceSnippet(item: EvidenceItem | null | undefined): string {
   border-top: 1px solid var(--rule);
   padding-top: var(--s-3);
 }
-.claim-card header {
+.claim-card header,
+.hypothesis-card header {
   display: flex;
   justify-content: space-between;
   gap: var(--s-3);
   align-items: center;
+}
+.hypothesis-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  border-top: 1px solid var(--rule);
+  padding-top: var(--s-3);
+}
+.hypothesis-list h3 {
+  margin: 0;
+  color: var(--fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.hypothesis-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--status-warn, #b7791f) 8%, var(--bg-elevated));
+  border: 1px solid var(--rule);
+}
+.hypothesis-card p {
+  margin: 0;
+}
+.hypothesis-card small {
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+.hypothesis-evidence {
+  margin: 0.2em 0 0;
+  padding-left: 1.2em;
+  color: var(--fg-muted);
 }
 .evidence-items {
   display: flex;

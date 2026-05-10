@@ -248,6 +248,12 @@ def test_full_contract_round_trip():
                 "section_index": 1,
                 "section_title": "Erster Eindruck",
                 "section_summary": "Zusammenfassung",
+                "hypotheses": [{
+                    "hypothesis_id": "hypothesis_01",
+                    "hypothesis_text": "Indizien legen eine zweite Zielgruppe nahe.",
+                    "rationale": "Es gibt Signale im Abschnitt, aber noch keine direkte Evidence.",
+                    "suggested_evidence": ["weitere Persona-Quote"],
+                }],
                 "claims": [{
                     "claim_id": "claim_01",
                     "claim_text": "Die Personas reagieren skeptisch.",
@@ -284,3 +290,4 @@ def test_full_contract_round_trip():
     assert contract.schema_version == 2
     assert contract.evidence is not None
     assert len(contract.evidence.sections) == 1
+    assert contract.evidence.sections[0].hypotheses[0].hypothesis_id == "hypothesis_01"

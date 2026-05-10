@@ -205,12 +205,29 @@ class ReportClaimModel(BaseModel):
         return self
 
 
+class ReportSectionHypothesisModel(BaseModel):
+    """ADR-0002 hypothesis slot — reasoning without evidence, not a claim.
+
+    Hypothesen duerfen nicht in ``claims[]`` formuliert werden, weil sie keine
+    Evidence tragen. Dieses DTO macht den separaten Slot maschinenlesbar, ohne
+    die bestehenden Claim-/Evidence-Validatoren zu schwaechen.
+    """
+
+    model_config = _STRICT
+
+    hypothesis_id: str = Field(pattern=r"^hypothesis_\d{2,}$")
+    hypothesis_text: str = Field(min_length=8, max_length=1000)
+    rationale: str = Field(min_length=8, max_length=1000)
+    suggested_evidence: list[str] = Field(default_factory=list, max_length=5)
+
+
 class ReportSectionModel(BaseModel):
     model_config = _STRICT
     section_index: int = Field(ge=1)
     section_title: str = Field(min_length=3)
     section_summary: str = Field(min_length=1)
     claims: list[ReportClaimModel] = Field(default_factory=list, min_length=1)
+    hypotheses: list[ReportSectionHypothesisModel] = Field(default_factory=list)
 
 
 class ReportOutlineSectionModel(BaseModel):
