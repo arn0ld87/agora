@@ -5,6 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 ### Fixed
+- fix(e2e): Stub-Snapshot fehlte im prod-Image — `Dockerfile` kopiert `backend/tests/eval/snapshots` ins prod-Stage, `llm_e2e_stub._eleven_required_sections()` wirft kein `ImportError` mehr sondern fällt auf eingebettete Konstante zurück. Root-Cause für 500 in `Upload+Graph`/`Minimalreport`-Smokes (Runs 25621119693/25621557226). Container-Logs werden ab sofort von `global-teardown.ts` in CI gedumpt. Sub-Slice M11.4b-Followup-1.
 - fix(e2e): Health-Smoke Test 4 prüft `body.backend.auth_mode` statt `body.auth_mode` — `/api/status` liefert die Felder nested unter `backend` im `json_success`-Envelope (siehe `backend/app/api/status.py::_get_backend_status`). Test 4 war seit M11.4a (#338) konstant rot auf main.
 - fix(e2e): Health-Smoke Test 3 wartet auf das erste Kind-Element von `#app` (statt nur auf den leeren Wrapper-Div) und nutzt `waitUntil:'networkidle'` + 15s Timeout. `#app` ohne intrinsische Höhe fiel in CI-Headless durch `toBeVisible()`, bevor Vue gemountet hatte.
 - fix(status): STATUS.md Drift-Check → Backend-Tests 1619 → 1683 (nach M11.8c/d/e), Frontend Specs 44 → 45 gesynced via `scripts/sync-status.sh`. Blockierte `contract-gates::status-sync-drift` auf PRs gegen main.

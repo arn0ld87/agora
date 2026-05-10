@@ -55,6 +55,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { test, expect, request } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
+import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
 import { triggerReport, pollReportReady } from './helpers/report';
@@ -144,6 +145,13 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
       page.on('pageerror', (err) => pageErrors.push(err.message));
 
       try {
+        // ===================================================================
+        // Diagnostik: Stub-Mode-Status vor dem ersten API-Call loggen.
+        // Kein hartes Assert — nur informatives Logging für CI-Debugging.
+        // Container-Logs (global-teardown.ts) zeigen ob llm_e2e_stub importiert.
+        // ===================================================================
+        await assertStubModeActive(apiCtx, baseURL!);
+
         // ===================================================================
         // Schritt 2+3: Markdown hochladen → Ontologie generieren
         // POST /api/graph/ontology/generate

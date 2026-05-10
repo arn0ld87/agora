@@ -18,11 +18,19 @@ Liefert:
 from __future__ import annotations
 
 import json
+import logging
+import os
 import pathlib
 import re
 from typing import Any
 
-# Snapshot-Pfad — Single Source of Truth für Pflichtabschnitte
+_stub_logger = logging.getLogger("agora.llm_e2e_stub")
+
+# Snapshot-Pfad — Single Source of Truth für Pflichtabschnitte.
+# Der prod-Container kopiert backend/app (ohne backend/tests), daher wird
+# der Pfad zu backend/tests/eval/snapshots/ dort nicht existieren.
+# _eleven_required_sections() fällt in diesem Fall auf den eingebetteten
+# Fallback zurück, anstatt ImportError zu werfen (CI-Root-Cause M11.4b-Followup-1).
 _SNAPSHOT_PATH = (
     pathlib.Path(__file__).parent.parent.parent
     / "tests"
@@ -31,25 +39,62 @@ _SNAPSHOT_PATH = (
     / "output-contract-required-sections.txt"
 )
 
+# Eingebetteter Fallback — gespiegelt aus backend/tests/eval/snapshots/output-contract-required-sections.txt.
+# Muss mit der Snapshot-Datei synchron bleiben (M11.8b).
+# Wird aktiviert wenn die Snapshot-Datei im Container nicht vorhanden ist
+# (prod-Image kopiert backend/tests nicht).
+_FALLBACK_REQUIRED_SECTIONS: list[str] = [
+    "Executive Summary",
+    "Segment-Tabelle",
+    "Persona-Tabelle",
+    "Multiplikator-Auswertung",
+    "Top 10 Reibungspunkte",
+    "Top 10 Vertrauenssignale",
+    "Top 10 Änderungen",
+    "Projektwirkung",
+    "Positionierung",
+    "Content-Ideen",
+    "Datenlücken",
+]
+
+
 # Einmalig beim Import geladen (Pure Python, kein I/O danach)
 def _eleven_required_sections() -> list[str]:
     """Liest die 11 Pflichtabschnittsnamen aus dem Snapshot.
 
-    Die Datei ist Single Source of Truth (M11.8b).
-    ImportError mit erklärender Message, wenn Datei fehlt.
+    Primär: Snapshot-Datei backend/tests/eval/snapshots/output-contract-required-sections.txt.
+    Fallback: eingebettete Liste _FALLBACK_REQUIRED_SECTIONS — aktiv wenn die Datei
+    im Container nicht vorhanden ist (prod-Image enthält backend/tests nicht).
+    Warnt via logging wenn Fallback aktiv ist, damit CI-Logs die Ursache zeigen.
     """
-    if not _SNAPSHOT_PATH.exists():
-        raise ImportError(
-            f"Pflichtabschnitt-Snapshot fehlt: {_SNAPSHOT_PATH}\n"
-            "Bitte sicherstellen, dass M11.8b (Snapshot-Generierung) ausgeführt wurde."
+    if _SNAPSHOT_PATH.exists():
+        lines = _SNAPSHOT_PATH.read_text(encoding="utf-8").splitlines()
+        sections = [line.strip() for line in lines if line.strip()]
+        _stub_logger.info(
+            "llm_e2e_stub: Snapshot geladen von %s (%d Abschnitte)",
+            _SNAPSHOT_PATH,
+            len(sections),
         )
-    lines = _SNAPSHOT_PATH.read_text(encoding="utf-8").splitlines()
-    sections = [line.strip() for line in lines if line.strip()]
-    return sections
+        return sections
+
+    _stub_logger.warning(
+        "llm_e2e_stub: Snapshot-Datei fehlt (%s) — verwende eingebetteten Fallback "
+        "(%d Abschnitte). Prod-Image kopiert backend/tests nicht; Fallback ist "
+        "im E2E-Stub-Modus valide.",
+        _SNAPSHOT_PATH,
+        len(_FALLBACK_REQUIRED_SECTIONS),
+    )
+    return list(_FALLBACK_REQUIRED_SECTIONS)
 
 
 # Geladen einmalig beim Modulimport
 _REQUIRED_SECTIONS: list[str] = _eleven_required_sections()
+
+_stub_logger.info(
+    "llm_e2e_stub: Modul importiert. AGORA_E2E_LLM_MODE=%s, %d Pflichtabschnitte geladen.",
+    os.environ.get("AGORA_E2E_LLM_MODE", "<nicht gesetzt>"),
+    len(_REQUIRED_SECTIONS),
+)
 
 # Deterministischer Zeitstempel für alle Stub-Antworten
 _STUB_TIMESTAMP = "2026-01-01T00:00:00+00:00"
