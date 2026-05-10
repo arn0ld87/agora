@@ -12,6 +12,7 @@ import {
   ReportClaimSchema,
   EvidenceItemSchema,
   ReportOutlineSchema,
+  ReportSectionHypothesisSchema,
 } from '../reportContract';
 
 const VALID_PAYLOAD = {
@@ -38,6 +39,14 @@ const VALID_PAYLOAD = {
         section_index: 1,
         section_title: 'Erster Eindruck',
         section_summary: 'Zusammenfassung',
+        hypotheses: [
+          {
+            hypothesis_id: 'hypothesis_01',
+            hypothesis_text: 'Indizien legen eine zweite Zielgruppe nahe.',
+            rationale: 'Es gibt Signale im Abschnitt, aber noch keine direkte Evidence.',
+            suggested_evidence: ['weitere Persona-Quote'],
+          },
+        ],
         claims: [
           {
             claim_id: 'claim_01',
@@ -81,6 +90,7 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     if (result.ok) {
       expect(result.data.schema_version).toBe(2);
       expect(result.data.evidence?.sections[0].claims[0].claim_id).toBe('claim_01');
+      expect(result.data.evidence?.sections[0].hypotheses[0].hypothesis_id).toBe('hypothesis_01');
     }
   });
 
@@ -186,6 +196,28 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
       expect(result.data.quote).toBeUndefined();
       expect(result.data.source_id_anchor).toBeUndefined();
     }
+  });
+
+  it('parses section hypothesis without evidence as dedicated slot', () => {
+    const result = ReportSectionHypothesisSchema.safeParse({
+      hypothesis_id: 'hypothesis_02',
+      hypothesis_text: 'Indizien legen einen weiteren Reibungspunkt nahe.',
+      rationale: 'Die Ableitung ist plausibel, aber nicht direkt belegt.',
+      suggested_evidence: ['zweite Stakeholder-Gruppe befragen'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects malformed hypothesis_id', () => {
+    const result = ReportSectionHypothesisSchema.safeParse({
+      hypothesis_id: 'hyp_02',
+      hypothesis_text: 'Indizien legen einen weiteren Reibungspunkt nahe.',
+      rationale: 'Die Ableitung ist plausibel, aber nicht direkt belegt.',
+      suggested_evidence: [],
+    });
+
+    expect(result.success).toBe(false);
   });
 });
 

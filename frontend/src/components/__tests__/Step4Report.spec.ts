@@ -208,6 +208,14 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
         section_index: 1,
         section_title: 'Abschnitt mit Quote',
         section_summary: 'Zusammenfassung mit Quote-Evidence',
+        hypotheses: [
+          {
+            hypothesis_id: 'hypothesis_01',
+            hypothesis_text: 'Indizien legen eine zweite Zielgruppe nahe.',
+            rationale: 'Es fehlt noch direkte Evidence aus einer zweiten Stakeholder-Gruppe.',
+            suggested_evidence: ['Persona-Interview aus Gruppe B ergänzen'],
+          },
+        ],
         claims: [
           {
             claim_id: 'claim_01',
@@ -314,6 +322,17 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
 
     const btn = wrapper.find('button.evidence-anchor-link')
     expect(btn.exists()).toBe(true)
+  })
+
+  it('rendert hypotheses separat von Claims', async () => {
+    const wrapper = mountWithEvidence(EVIDENCE_WITH_QUOTE)
+    await waitForRender(wrapper)
+
+    const hypothesis = wrapper.find('.hypothesis-card')
+    expect(hypothesis.exists()).toBe(true)
+    expect(hypothesis.text()).toContain('hypothesis_01')
+    expect(hypothesis.text()).toContain('zweite Zielgruppe')
+    expect(hypothesis.text()).toContain('Persona-Interview')
   })
 
   it('click auf web-anchor ruft window.open auf', async () => {

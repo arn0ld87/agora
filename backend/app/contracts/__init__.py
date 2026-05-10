@@ -16,6 +16,7 @@ from .report_contract import (
     ReportContractModel,
     ReportModel,
     ReportOutlineModel,
+    ReportSectionHypothesisModel,
     ReportSectionModel,
     ReportStatus,
 )
@@ -97,6 +98,7 @@ __all__ = [
     "ReportContractModel",
     "ReportModel",
     "ReportOutlineModel",
+    "ReportSectionHypothesisModel",
     "ReportSectionModel",
     "ReportStatus",
     "RunDetail",

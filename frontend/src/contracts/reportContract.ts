@@ -145,11 +145,20 @@ export const ReportClaimSchema = z.object({
 });
 export type ReportClaim = z.infer<typeof ReportClaimSchema>;
 
+export const ReportSectionHypothesisSchema = z.object({
+  hypothesis_id: z.string().regex(/^hypothesis_\d{2,}$/),
+  hypothesis_text: z.string().min(8).max(1000),
+  rationale: z.string().min(8).max(1000),
+  suggested_evidence: z.array(z.string()).max(5).default([]),
+}).strict();
+export type ReportSectionHypothesis = z.infer<typeof ReportSectionHypothesisSchema>;
+
 export const ReportSectionSchema = z.object({
   section_index: z.number().int().min(1),
   section_title: z.string().min(3),
   section_summary: z.string().min(1),
   claims: z.array(ReportClaimSchema).min(1),
+  hypotheses: z.array(ReportSectionHypothesisSchema).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
