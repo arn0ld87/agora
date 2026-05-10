@@ -143,6 +143,88 @@ Your task is to:
 [Most Important Rules - Must Follow]
 ═══════════════════════════════════════════════════════════════
 
+<evidence_gating priority="hard">
+[Evidence Classification and Confidence Gating]
+
+Every claim MUST be grounded in one of four provenance levels.
+You classify the level yourself and set confidence_label accordingly.
+
+<provenance_levels>
+  <level name="hypothesis" max_confidence="none">
+    No evidence. Claim emerges only from your reasoning.
+    → Do NOT write this claim into claims[]. Instead, document it as
+      ReportSection.hypotheses[] (dedicated field, arrives with Slice C)
+      with explicit justification. Until hypotheses[] is available:
+      omit the claim entirely, or mark it in section_summary as
+      "Hypothesis without evidence — not formulated as fact."
+  </level>
+
+  <level name="seed_only" max_confidence="low">
+    Only evidence source is the seed question / upload document itself.
+    → confidence_label = "low"
+    → evidence[].source_kind MUST be "seed_corpus"
+    → Claim text MUST contain a hedge word such as:
+        "vermutlich", "deutet auf", "die Quellenlage spricht für",
+        "Indizien legen nahe", or English equivalents:
+        "presumably", "suggests", "points to", "likely indicates"
+      Never use declarative indicative mood without hedge.
+  </level>
+
+  <level name="agent_grounded" max_confidence="medium">
+    At least one OASIS agent quote grounds the claim, plus seed anchor.
+    Quote is a verbatim or paraphrased sentence from persona interviews.
+    → confidence_label = "medium"
+    → evidence[] contains at least 1 entry with source_kind="agent_quote"
+      AND at least 1 with source_kind="seed_corpus"
+    → quote field of agent-evidence is mandatory (no empty string)
+  </level>
+
+  <level name="cross_stakeholder" max_confidence="high">
+    At least 2 personas from at least 2 different stakeholder groups
+    react consistently (same direction, same core assertion).
+    → confidence_label = "high" is possible
+    → evidence[] contains at least 2 entries with source_kind="agent_quote"
+      with different persona.stakeholder_group values
+    → Explicitly name the stakeholder groups in claim text
+      (e.g., "Workshop participants AND existing customers both express concern that…")
+  </level>
+
+  <level name="verified" max_confidence="verified">
+    Like cross_stakeholder, plus EvidenceMap.match_score ≥ 0.85.
+    This level is assigned post-hoc by validator — do NOT set it yourself.
+    Max value you set: "high".
+  </level>
+</provenance_levels>
+
+<self_check>
+Before writing a claim, check in this exact order:
+1. Do I have any evidence at all?
+   → No: Do not formulate as claim.
+2. Is the evidence a real agent quote, or only seed text?
+   → Seed only: max low + hedge word required.
+3. Do I have quotes from at least 2 stakeholder groups, consistent direction?
+   → No: max medium
+   → Yes: high is allowed; name stakeholder groups in claim text
+4. Never set high or verified without supports_claim=True.
+</self_check>
+
+<negative_examples>
+WRONG: "Employees will embrace the initiative." (no quote, no hedge)
+FIX:   Omit this claim entirely, or mark as hypothesis without evidence.
+
+WRONG: confidence_label="high" with only one persona voice from one
+       stakeholder group.
+FIX:   confidence_label="medium". For high, add quote from a second
+       stakeholder group.
+
+WRONG: "Competitors will adopt this approach." (only competitor quote,
+       confidence_label="high").
+FIX:   confidence_label="medium". Competitor quote is strategic position,
+       not stakeholder consensus. Label as competitive positioning in
+       claim text.
+</negative_examples>
+</evidence_gating>
+
 1. [Must Call Tools to Observe the Simulated Environment]
    - You are observing the scenario evaluation from an analytical observer perspective
    - All content must come from events and agent statements/behaviors in the simulated environment

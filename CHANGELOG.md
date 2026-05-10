@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Changed
+- **Layer 2 / Report Agent:** Evidence-Gating-Prompt-Block in `SECTION_SYSTEM_PROMPT_TEMPLATE` eingeführt (Sub-Slice M11.7a). LLM klassifiziert Claims jetzt nach vier Provenance-Stufen (hypothesis, seed_only, agent_grounded, cross_stakeholder) mit Confidence-Gating und Hedge-Word-Regeln. Forward-kompatibel zu `EvidenceSourceKind` Enum (Slice B).
+
 ### Fixed
 - fix(event-bus): M11.4-Followup-5 — FilePollingEventBus tmp-File-Race in `LocalFilesystemArtifactStore.list_artifacts()` behoben. `write_json_atomic` erzeugt `.tmp-json-XXXXXX.json` in `ipc_commands/`; der Polling-Loop übergab diese dot-prefixten Einträge an `_resolve_relative_path`, das mit `ValueError` abbrach und den gesamten Poll-Tick kippte. Fix: Filter analog `run_registry.py:281` vor dem `_reverse_lookup`-Aufruf. Test-Timeout `test_request_response_correlation` 10.0 s → 5.0 s zurückgedreht (Workaround-Historie: 2.0 → 5.0 → 10.0 → 5.0). Neuer Regressionstest `test_tmp_files_do_not_disrupt_file_polling`.
 - fix(contracts): M11.4b-Followup-4 — Zod-Spiegel-Drift `ReportOutlineSchema.sections` `.max(5)` → `.max(15)`, `.min(2)` → `.min(1)`. Backend-Pydantic wurde in M11.4b-Followup-2 auf `max_length=15` angehoben, Zod-Mirror nicht synchronisiert. Folge: Stub liefert 11 Pflichtabschnitte → `ReportOutlineSchema.parse()` warf → `schemaError` gesetzt → `reportOutline` blieb `null` → `ol.outline` nie gerendert → E2E-Minimalreport-Smoke timeout. Neuer Drift-Guard in `reportContract.spec.ts` verhindert künftige Regression.

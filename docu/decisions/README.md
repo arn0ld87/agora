@@ -7,13 +7,14 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | Nr | Titel | Status | Slice |
 |---|---|---|---|
 | [0001](0001-auth-model.md) | Auth-Zielbild für v1.0 | Accepted (2026-05-04) | M10.4 |
+| [0002](0002-evidence-gating.md) | Evidence-Gating für Report-Generation | Accepted (2026-05-10) | M11.7 |
 
 ## Geplante ADRs
 
 | Nr | Titel | Bezug |
 |---|---|---|
-| 0002 | CVE-Upstream-Eskalation (Vendoring / Soft-Fork / Replacement) | Hardstop 2026-07-30, [`docu/dependency-risk-register.md`](../dependency-risk-register.md) |
-| 0003 | Prod-Observability (JSON-Logs, Request-IDs, Metrics, Trace-Korrelation) | M13-Vorbereitung |
+| 0003 | CVE-Upstream-Eskalation (Vendoring / Soft-Fork / Replacement) | Hardstop 2026-07-30, [`docu/dependency-risk-register.md`](../dependency-risk-register.md) |
+| 0004 | Prod-Observability (JSON-Logs, Request-IDs, Metrics, Trace-Korrelation) | M13-Vorbereitung |
 
 ## Konvention
 
