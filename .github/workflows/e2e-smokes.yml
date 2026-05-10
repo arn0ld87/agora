@@ -131,3 +131,55 @@ jobs:
           name: playwright-trace-upload-graph
           path: frontend/test-results/
           retention-days: 14
+
+  minimal-report-smoke:
+    name: Playwright Minimalreport-Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AGORA_PROXY_PORT: '80'
+      AGORA_E2E_BASE_URL: http://127.0.0.1:80
+      # Embedding-Probe wie im health-smoke überspringen (Issue #276)
+      AGORA_SKIP_EMBEDDING_PROBE: 'true'
+      # LLM-Stub: plan_outline + generate_section_react + tool-execution
+      # laufen deterministisch ohne Ollama. Aktiviert ausschließlich via
+      # Env-Var — Prod-Verhalten bleibt unverändert.
+      # Stub-Vertrag:
+      #   chat_json(PlanResponse)  → _stub_plan_response() → 11 Sections
+      #   chat()                   → e2e_stub_chat_response() → Tool-Calls + Final Answer
+      #   (backend/app/utils/llm_e2e_stub.py + llm_client.py)
+      AGORA_E2E_LLM_MODE: 'stub'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Generate ephemeral E2E credentials
+        # Gleiche Credential-Generierung wie im health-smoke Job.
+        run: |
+          {
+            echo "AGORA_AUTH_TOKEN=$(openssl rand -hex 24)"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: npm run build
+      - name: Install Playwright browsers (Chromium-only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright Minimalreport-Smoke
+        working-directory: frontend
+        run: npx playwright test minimal-report.spec.ts --reporter=list,github
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace-minimal-report
+          path: frontend/test-results/
+          retention-days: 14

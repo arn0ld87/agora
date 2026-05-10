@@ -193,6 +193,16 @@ class LLMClient:
             Model response text
         """
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
+        # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
+        # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
+        # Liefert deterministischen ReACT-Loop-String (Tool-Call oder Final Answer).
+        if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            from app.utils.llm_e2e_stub import e2e_stub_chat_response
+            logger.info(
+                "LLMClient.chat: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
+                context,
+            )
+            return e2e_stub_chat_response(messages=messages)
         kwargs = {
             "model": self.model,
             "messages": messages,

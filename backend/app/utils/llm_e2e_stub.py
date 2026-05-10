@@ -11,6 +11,9 @@ Liefert:
 - Valides ReportV3-Objekt, wenn schema auf ReportV3-Struktur hindeutet.
 - Deterministischen Tool-Return für die vier registrierten Report-Agent-Tools.
 - Generisches {"ok": true, "stub": true} als Fallback.
+- e2e_stub_chat_response: deterministischer String-Return für chat()-Aufrufe
+  (ReACT-Loop in generate_section_react — min_tool_calls=3 wird durch
+  Zählen der assistant-Nachrichten in der Message-History erfüllt).
 """
 from __future__ import annotations
 
@@ -50,6 +53,40 @@ _REQUIRED_SECTIONS: list[str] = _eleven_required_sections()
 
 # Deterministischer Zeitstempel für alle Stub-Antworten
 _STUB_TIMESTAMP = "2026-01-01T00:00:00+00:00"
+
+
+def _is_plan_response_schema(schema: dict[str, Any]) -> bool:
+    """Erkennt ob schema ein PlanResponse-JSON-Schema ist.
+
+    Heuristiken:
+    1. title enthält "PlanResponse" oder "plan_response".
+    2. properties enthält "sections" und mindestens eines von "title"/"summary".
+    """
+    if not isinstance(schema, dict):
+        return False
+    title = str(schema.get("title", "")).lower()
+    if "planresponse" in title or "plan_response" in title:
+        return True
+    props = set(schema.get("properties", {}).keys())
+    if "sections" in props and ("title" in props or "summary" in props):
+        return True
+    return False
+
+
+def _stub_plan_response() -> dict[str, Any]:
+    """Erzeugt ein deterministisches PlanResponse-Objekt mit allen 11 Pflichtabschnitten.
+
+    Liefert exakt die 11 Section-Titel aus dem Snapshot — damit der Report-Agent
+    einen vollständigen Outline produziert, der in der UI assertiert werden kann.
+    """
+    return {
+        "title": "E2E-Smoke-Stub-Report — Deterministische Scenario-Evaluierung",
+        "summary": "Stub-Zusammenfassung für E2E-CI-Smokes. Keine echten LLM-Daten.",
+        "sections": [
+            {"title": section, "description": f"Stub-Beschreibung für {section}."}
+            for section in _REQUIRED_SECTIONS
+        ],
+    }
 
 
 def _is_report_v3_schema(schema: dict[str, Any]) -> bool:
@@ -277,6 +314,59 @@ def _detect_react_tool_call(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _count_assistant_messages(messages: list[dict[str, Any]]) -> int:
+    """Zählt die assistant-Nachrichten in der Message-History.
+
+    Wird in e2e_stub_chat_response genutzt, um den ReACT-Loop-Fortschritt
+    zu erkennen: nach ≥ 3 assistant-Nachrichten (= 3 Tool-Calls) wird
+    "Final Answer:" zurückgegeben, sonst ein Tool-Call-String.
+    """
+    return sum(1 for m in messages if m.get("role") == "assistant")
+
+
+# Deterministischer Tool-Call-String für den ReACT-Loop.
+# Die vier registrierten Tools rotieren nach Runde (0-basiert):
+# Runde 0 → panorama_search, Runde 1 → quick_search, Runde 2 → insight_forge.
+_STUB_TOOL_CALL_SEQUENCE: list[str] = [
+    '<tool_call>{"name": "panorama_search", "parameters": {"query": "E2E-Smoke-Stub-Query"}}</tool_call>',
+    '<tool_call>{"name": "quick_search", "parameters": {"query": "E2E-Smoke-Stub-Query-2"}}</tool_call>',
+    '<tool_call>{"name": "insight_forge", "parameters": {"query": "E2E-Smoke-Stub-Insight"}}</tool_call>',
+]
+
+# Deterministischer Final-Answer-Text — enthält den Section-Titel als Platzhalter.
+# Kein Persona-Zitat: Cite-Validation schlägt im Stub-Modus nicht an,
+# weil persona_ids_for_validation leer ist (kein echter Graph in CI).
+_STUB_FINAL_ANSWER_TEMPLATE = (
+    "Final Answer: Stub-Abschnitt für E2E-Smoke-Tests. "
+    "Dieser Text wurde deterministisch durch den llm_e2e_stub erzeugt. "
+    "Keine echten LLM-Daten in diesem Lauf."
+)
+
+
+def e2e_stub_chat_response(
+    *,
+    messages: list[dict[str, Any]],
+    **kwargs: Any,
+) -> str:
+    """Deterministischer String-Return für LLMClient.chat() im Stub-Modus.
+
+    Entscheidungslogik für den ReACT-Loop in generate_section_react:
+    - Die erste ≥ min_tool_calls (= 3) Iterationen geben Tool-Call-Strings zurück.
+    - Ab der vierten Iteration wird "Final Answer:" zurückgegeben.
+
+    Die Entscheidung basiert auf dem Zählen vorhandener assistant-Nachrichten
+    in der Message-History — kein globaler Zustand nötig.
+
+    Kein I/O, kein Sleep, kein Random.
+    """
+    assistant_count = _count_assistant_messages(messages)
+    # MIN_TOOL_CALLS im Workflow = 3 — wir brauchen 3 Tool-Calls bevor Final Answer
+    if assistant_count < 3:
+        idx = assistant_count % len(_STUB_TOOL_CALL_SEQUENCE)
+        return _STUB_TOOL_CALL_SEQUENCE[idx]
+    return _STUB_FINAL_ANSWER_TEMPLATE
+
+
 def e2e_stub_response(
     *,
     schema: dict[str, Any] | None,
@@ -311,6 +401,10 @@ def e2e_stub_response(
 
     if resolved_schema is not None and _is_report_v3_schema(resolved_schema):
         return _stub_report_v3()
+
+    # 2b. PlanResponse-Schema?
+    if resolved_schema is not None and _is_plan_response_schema(resolved_schema):
+        return _stub_plan_response()
 
     # 3. Generischer Fallback
     return {"ok": True, "stub": True}
