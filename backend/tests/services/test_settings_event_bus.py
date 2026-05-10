@@ -27,7 +27,7 @@ def _event(**overrides) -> SettingsChangedEvent:
 
 def test_settings_changed_event_rejects_extra_fields():
     try:
-        SettingsChangedEvent(keys=["A"], source="settings", ts=1.0, value="secret")
+        SettingsChangedEvent(keys=["A"], source="settings", ts=1.0, value="extra")
     except ValidationError as exc:
         assert "Extra inputs are not permitted" in str(exc)
     else:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from collections.abc import Iterable
 from contextlib import contextmanager
 from typing import Generator, Iterator, Literal
 
@@ -84,13 +85,12 @@ class SettingsEventBus:
         with self._managed_queue() as q:
             deadline = None if timeout is None else time.monotonic() + timeout
             while True:
+                if deadline is None:
+                    yield q.get()
+                    continue
                 if deadline is not None and time.monotonic() >= deadline:
                     return
-                remaining = (
-                    poll_interval
-                    if deadline is None
-                    else min(poll_interval, max(0.0, deadline - time.monotonic()))
-                )
+                remaining = min(poll_interval, max(0.0, deadline - time.monotonic()))
                 try:
                     yield q.get(timeout=remaining)
                 except queue.Empty:
@@ -106,7 +106,7 @@ settings_event_bus: SettingsEventBus = SettingsEventBus()
 
 
 def publish_settings_changed(
-    keys: list[str] | tuple[str, ...] | set[str],
+    keys: Iterable[str],
     *,
     source: Literal["settings", "settings.secrets"],
 ) -> None:
