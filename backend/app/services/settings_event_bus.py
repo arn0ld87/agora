@@ -79,22 +79,22 @@ class SettingsEventBus:
         self,
         *,
         timeout: float | None = None,
-        poll_interval: float = 0.2,
     ) -> Iterator[SettingsChangedEvent]:
         """Yield settings change events until *timeout* expires."""
         with self._managed_queue() as q:
-            deadline = None if timeout is None else time.monotonic() + timeout
-            while True:
-                if deadline is None:
+            if timeout is None:
+                while True:
                     yield q.get()
-                    continue
-                if deadline is not None and time.monotonic() >= deadline:
+
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     return
-                remaining = min(poll_interval, max(0.0, deadline - time.monotonic()))
                 try:
                     yield q.get(timeout=remaining)
                 except queue.Empty:
-                    continue
+                    return
 
     @property
     def subscriber_count(self) -> int:
