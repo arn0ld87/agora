@@ -18,10 +18,19 @@ export async function triggerReport(
   simulationId: string,
   baseURL: string,
   authHeader: Record<string, string>,
+  options: { mode?: 'strict' | 'balanced' | 'explorative'; forceRegenerate?: boolean } = {},
 ): Promise<{ report_id: string; task_id: string; run_id: string }> {
-  const res = await ctx.post(`${baseURL}/api/report/generate`, {
+  // mode wandert als Query-Parameter, force_regenerate in den Body — exakte
+  // Vertragsentsprechung zu backend/app/api/report.py::_resolve_report_mode
+  // (request.args.get("mode")) und ::generate_report (data.get("force_regenerate")).
+  const url = options.mode
+    ? `${baseURL}/api/report/generate?mode=${options.mode}`
+    : `${baseURL}/api/report/generate`;
+  const body: Record<string, unknown> = { simulation_id: simulationId };
+  if (options.forceRegenerate) body.force_regenerate = true;
+  const res = await ctx.post(url, {
     headers: { ...authHeader, 'Content-Type': 'application/json' },
-    data: { simulation_id: simulationId },
+    data: body,
   });
 
   if (!res.ok()) {
