@@ -346,3 +346,20 @@ def test_assemble_full_report_renders_confidence_markers(tmp_path, monkeypatch):
     assert "score=0.15" in markdown
     assert "medium-confidence" in markdown
     assert "score=0.55" in markdown
+
+
+def test_clean_section_content_renders_simulated_quote_marker() -> None:
+    content = (
+        '<simulated_quote persona_id="persona_10" '
+        'seed_anchor="seed_doc:robert_krasniqi_statement">'
+        'Meine Generation will keine 5-Tage-Woche mehr.'
+        '</simulated_quote>'
+    )
+
+    cleaned = ReportManager._clean_section_content(content, "Persona-O-Ton")
+
+    assert "**Simulierter Persona-O-Ton**" in cleaned
+    assert "persona_id: persona_10" in cleaned
+    assert "seed_anchor: seed_doc:robert_krasniqi_statement" in cleaned
+    assert "Meine Generation will keine 5-Tage-Woche mehr." in cleaned
+    assert "<simulated_quote" not in cleaned

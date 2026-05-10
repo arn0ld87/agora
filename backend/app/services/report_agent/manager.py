@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
@@ -41,6 +42,41 @@ from .sections import (
 )
 
 logger = get_logger('agora.report_agent')
+
+
+# ---------------------------------------------------------------------------
+# Slice P3.3 — Quote-Marker-Render
+# ---------------------------------------------------------------------------
+#
+# Wandelt rohe `<simulated_quote persona_id="..." seed_anchor="...">…</simulated_quote>`
+# Tags vor der Section-Persistenz in lesbare Markdown-Blockquotes mit explizit
+# sichtbarem Persona- und Seed-Anker-Header. Damit ist im exportierten Markdown
+# ohne UI-Render erkennbar, dass es sich um simulierte Persona-O-Töne handelt
+# (Anti-Halluzinations-Disziplin, ADR-0004).
+_SIMULATED_QUOTE_TAG_RE = re.compile(
+    r"<simulated_quote\s+([^>]+?)>(.*?)</simulated_quote>",
+    re.DOTALL,
+)
+_SIMULATED_QUOTE_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
+
+
+def _render_simulated_quote_blocks(content: str) -> str:
+    """Ersetzt <simulated_quote>-Tags durch Markdown-Blockquotes mit Anker-Header."""
+
+    def _replace(match: "re.Match[str]") -> str:
+        attrs = dict(_SIMULATED_QUOTE_ATTR_RE.findall(match.group(1)))
+        text = match.group(2).strip()
+        persona_id = attrs.get("persona_id", "unbekannt")
+        seed_anchor = attrs.get("seed_anchor", "unbekannt")
+        header = (
+            f"> **Simulierter Persona-O-Ton** "
+            f"(persona_id: {persona_id}, seed_anchor: {seed_anchor})"
+        )
+        body_lines = [f"> {line}" if line else ">" for line in text.split("\n")]
+        return "\n".join([header, *body_lines])
+
+    return _SIMULATED_QUOTE_TAG_RE.sub(_replace, content)
+
 
 class ReportManager:
     """Persistence and retrieval facade for generated reports."""
@@ -307,22 +343,26 @@ class ReportManager:
     def _clean_section_content(cls, content: str, section_title: str) -> str:
         """
         cleanSectioncontent
-        
-        1. removecontentbeginningandSection TitleduplicateMarkdowntitlerow
-        2. convertall ### and below levelstitleconvert toboldtext
-        
+
+        1. <simulated_quote>-Tags zu lesbaren Persona-O-Ton-Blockquotes rendern
+           (Slice P3.3, ADR-0004 Quote-Marker)
+        2. removecontentbeginningandSection TitleduplicateMarkdowntitlerow
+        3. convertall ### and below levelstitleconvert toboldtext
+
         Args:
             content: originalcontent
             section_title: Section Title
-            
+
         Returns:
             after cleaningcontent
         """
         import re
-        
+
         if not content:
             return content
-        
+
+        content = _render_simulated_quote_blocks(content)
+
         content = content.strip()
         lines = content.split('\n')
         cleaned_lines = []
