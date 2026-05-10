@@ -41,6 +41,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - **M11 Phase 5 Vorbereitung:** Schnittanalyse für `backend/app/services/simulation_runner.py` (1904 LOC) unter [`docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md`](docu/2026-05-07-m11-phase5-simulation-runner-cut-analysis.md). Dokumentiert Verantwortlichkeiten, externe Call-Sites, Test-Coverage und fünf Extraktionskandidaten mit empfohlener PR-Reihenfolge (read-only Doku, kein Code-Edit). Refs F7.
 
 ### Changed
+- ci(coverage): Coverage-Schwellen Backend 53 → 55 %, Frontend 24 → 26 % vorgezogen (war 2026-06-04 geplant; Ist-Werte 2026-05-10: Backend 61.41 %, Frontend branches 39.56 % / statements 50.46 % / functions 38.59 % / lines 52.50 % decken beide Schwellen). Nächste Anhebung: 2026-06-10 → Backend 57 %, Frontend 28 %.
 - feat(report): Pflichtabschnitt-Liste über `{required_sections}`-Variable im PLAN-Prompt; harter Section-Cap (Min 2 / Max 5) raus aus `report_prompts.PLAN_SYSTEM_PROMPT_TEMPLATE`. Default `DEFAULT_REPORT_SECTIONS` enthält die 11 DACH-Report-Standardabschnitte (Executive Summary bis Datenlücken). Adressiert externen Bewertungs-Befund 5,8/10 zur Prompt-Erfüllung. M11.8a Quick-Win.
 - refactor(graph): extract `insight_forge_tool` (LLM-gestuetzte Retrieval-Pipeline) from `graph_tools.py` to `app.services.graph.insight_forge_tool` (Refs F7, M11 Phase 5b PR 3)
 - refactor(graph): extract `graph_reader` (10 Storage-Reader-Methoden) from `graph_tools.py` to `app.services.graph.graph_reader` (Refs F7, M11 Phase 5b PR 2)

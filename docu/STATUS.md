@@ -35,17 +35,18 @@ Gemessen 2026-05-04 mit `uv run pytest --cov=app --cov-report=term -q` (1425 pas
 | `app/` gesamt | 55 % | 12 842 Statements, 5 733 missed |
 | `app/services/` | 51 % | 6 964 Statements, 3 427 missed |
 
-**Aktive CI-Schwelle: 53 %** (`--cov-fail-under=53` in `pyproject.toml`).
+**Aktive CI-Schwelle: 55 %** (`--cov-fail-under=55` in `.github/workflows/ci.yml`).
 
-Begründung der Schwellenwahl: Ist-Wert (55 %) liegt unter der PLAN-Default-Schwelle von 70 %. Daher gilt die Formel `floor(Ist - 2) = floor(53)`. Die 70 %-Marke ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Ziel 85 %.
+Begründung der Schwellenwahl: Ist-Wert (61.41 %, gemessen 2026-05-10) liegt deutlich über der neuen Schwelle. Die PLAN-Default-Schwelle von 70 % ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte bis Ziel 85 %.
 
 **Roadmap:**
 
 | Datum | Schwelle | Notizen |
 |---|---|---|
 | 2026-05-04 | 53 % | Startwert (M11.2) |
-| 2026-06-04 | 55 % | +2 Punkte |
-| 2026-07-04 | 57 % | +2 Punkte |
+| 2026-05-10 | 55 % | vorgezogen, Ist deckt (Followup-5 stabil) |
+| 2026-06-10 | 57 % | +2 Punkte |
+| 2026-07-10 | 59 % | +2 Punkte |
 | … | … | monatlich +2 |
 | Ziel | 85 % | Langfristziel |
 
@@ -62,7 +63,7 @@ Gemessen 2026-05-07 mit `npm run test:coverage` (`vite.config.js` include `src/*
 | Functions | 38.23 % | 445 / 1 164 |
 | Lines | 51.29 % | 2 296 / 4 476 |
 
-**Aktive CI-Schwelle: 24 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Die aktuelle Branch-Coverage liegt bereits ueber 30 %, die formale Gate-Anhebung ist aber bewusst Phase 7 (`tests/playwright-smokes`) zugeordnet.
+**Aktive CI-Schwelle: 26 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Angehoben 2026-05-10 (vorgezogen, war 2026-06-04 geplant). Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier deutlich über 26 %.
 
 Historische Begründung der Schwellenwahl: Der M11.3-Startwert war `branches` mit 26.70 %. Dieser lag weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` griff. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
 
@@ -77,8 +78,9 @@ Diese Lücken sind strukturell. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Z
 | Datum | Schwelle | Notizen |
 |---|---|---|
 | 2026-05-04 | 24 % | Startwert (M11.3) |
-| 2026-06-04 | 26 % | +2 Punkte |
-| 2026-07-04 | 28 % | +2 Punkte |
+| 2026-05-10 | 26 % | vorgezogen, Ist deckt (Followup-5 stabil) |
+| 2026-06-10 | 28 % | +2 Punkte |
+| 2026-07-10 | 30 % | +2 Punkte |
 | … | … | monatlich +2 |
 | Ziel | 80 % | Langfristziel (inkl. Playwright E2E, M11.4+) |
 
@@ -137,8 +139,8 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 - M11 Phase 4 Supply Chain (`dependency-review.yml`, `codeql.yml`, Build-Provenance-Attestation, SPDX-JSON-SBOM)
 - M11 Phase 5 (`simulation_runner.py`-Refactor, 5 PRs)
 - M11 Phase 5b (`graph_tools.py`-Refactor, 3 PRs)
-- M11.2 Backend-Coverage-Gate (`--cov-fail-under=53`)
-- M11.3 Frontend-Coverage-Gate (Threshold 24 %)
+- M11.2 Backend-Coverage-Gate (`--cov-fail-under=55`, vorgezogen 2026-05-10 von 53 %)
+- M11.3 Frontend-Coverage-Gate (Threshold 26 %, vorgezogen 2026-05-10 von 24 %)
 - ADR-0001 Single-User-only-v1 Accepted (M10.4)
 - M10.5 Rate-Limits (PRs #303–#306, Issue #302)
 
@@ -147,7 +149,7 @@ Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04)
 2. Phase 6 Contract-Generation + Status-Sync (Contract-Dump reproduzierbar, Zod-Spiegel CI-geprüft, `scripts/sync-status.sh` Pflicht).
 3. Phase 7 / M11.4 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
 
-Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 53 → 70 %, Frontend 24 → 60 %), M11.5 Komplexitäts-Gate, M11.6 API-Envelope, F8 Hotspot-Split Frontend (#203). Phase 5/5b abgeschlossen 2026-05-08, #202 geschlossen 2026-05-05.
+Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 55 → 70 %, Frontend 26 → 60 %, monatlich +2), M11.5 Komplexitäts-Gate, M11.6 API-Envelope, F8 Hotspot-Split Frontend (#203). Phase 5/5b abgeschlossen 2026-05-08, #202 geschlossen 2026-05-05.
 
 ## Aktualisierungs-Protokoll
 

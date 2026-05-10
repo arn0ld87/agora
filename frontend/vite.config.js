@@ -36,15 +36,15 @@ export default defineConfig({
         'src/router/**',
         'src/types/**',
       ],
-      // Historische Startschwelle M11.3: Ist-Wert branches=26.70% war Bottleneck-Metrik
-      // (vollständiger include: src/**/*.{js,ts,vue} erfasst auch untestete Views).
-      // PLAN-Default 60 % nicht erreichbar (viele Vue-SFCs ohne Browsertest-Pfad).
-      // Fallback-Formel: floor(26.70 - 2) = 24. Formale Anhebung folgt in Phase 7.
+      // M11.3 Step1 (2026-05-10): Schwellen auf 26 % angehoben (vorgezogen, war
+      // 2026-06-04 geplant). Ist-Werte 2026-05-10: statements=50.46 %,
+      // branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier
+      // deutlich ueber 26 %. Naechste Anhebung: 2026-06-10 → 28 %.
       thresholds: {
-        lines: 24,
-        functions: 24,
-        branches: 24,
-        statements: 24,
+        lines: 26,
+        functions: 26,
+        branches: 26,
+        statements: 26,
       },
     },
   }
