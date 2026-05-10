@@ -33,6 +33,7 @@ _cleanup_done = False
 try:
     from ._sim_common import (
         apply_camel_context_floor,
+        build_camel_completion_params,
         build_camel_extra_body,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
@@ -44,6 +45,7 @@ try:
 except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
+        build_camel_completion_params,
         build_camel_extra_body,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
@@ -481,7 +483,12 @@ class TwitterSimulationRunner:
             num_ctx=ctx_limit,
             think=think_on,
         )
-        model_cfg: dict = {"max_tokens": 8192}
+        # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`, alle anderen
+        # Modelle akzeptieren `max_tokens`.
+        model_cfg: dict = build_camel_completion_params(
+            model=llm_model,
+            completion_max_tokens=8192,
+        )
         if extra_body:
             model_cfg["extra_body"] = extra_body
 

@@ -1181,7 +1181,7 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
         print(f"[attach_tools] sanity: agent {first_id} max_iteration = {getattr(first_agent, 'max_iteration', '?')}", flush=True)
         print(f"[attach_tools] sanity: agent {first_id} memory_token_limit = {memory_limit}", flush=True)
         print(
-            f"[attach_tools] sanity: agent {first_id} completion_max_tokens = {model_cfg.get('max_tokens', '?')}",
+            f"[attach_tools] sanity: agent {first_id} completion_max_tokens = {model_cfg.get('max_completion_tokens', model_cfg.get('max_tokens', '?'))}",
             flush=True,
         )
     except Exception as e:

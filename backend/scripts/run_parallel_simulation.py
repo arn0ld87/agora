@@ -84,6 +84,7 @@ _cleanup_done = False
 try:
     from ._sim_common import (
         apply_camel_context_floor,
+        build_camel_completion_params,
         build_camel_extra_body,
         build_parallel_parser,
         install_max_tokens_warning_filter,
@@ -94,6 +95,7 @@ try:
 except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
+        build_camel_completion_params,
         build_camel_extra_body,
         build_parallel_parser,
         install_max_tokens_warning_filter,
@@ -1175,9 +1177,13 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         num_ctx=runtime_settings["ollama_num_ctx"],
         think=think_on,
     )
-    model_cfg: Dict[str, Any] = {
-        "max_tokens": runtime_settings["completion_max_tokens"],
-    }
+    # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`; ältere Modelle
+    # akzeptieren weiterhin `max_tokens`. build_camel_completion_params
+    # liefert genau einen passenden Schlüssel.
+    model_cfg: Dict[str, Any] = build_camel_completion_params(
+        model=llm_model,
+        completion_max_tokens=runtime_settings["completion_max_tokens"],
+    )
     if extra_body:
         model_cfg["extra_body"] = extra_body
 
