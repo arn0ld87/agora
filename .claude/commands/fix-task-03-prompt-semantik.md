@@ -1,76 +1,83 @@
 ---
-description: Layer 2 - "future prediction" / "rehearsal of the future" / "god's eye view" aus report_prompts.py rausoperieren
-allowed-tools: Read, Edit, Grep, Bash
+description: Layer 2 - "future prediction" / "rehearsal of the future" / "god's eye view" aus report_prompts.py rausoperieren (via Codex)
+allowed-tools: Read, Bash, Grep, Agent
 ---
 
-# /fix-task-03 — Prompt-Semantik entschärfen
+# /fix-task-03 — Prompt-Semantik entschärfen (Codex-Dispatch)
 
-## Vorab-Verifikation (im Code bestätigt)
+String-/Prompt-Last → günstiger Codex-Run mit `--effort low` und `--model gpt-5.3-codex-spark`.
+
+## Vorab-Verifikation
 
 ```bash
-# 8 Treffer in report_prompts.py:
+cd /Volumes/T7/Projekte/agora
 rg -n "future prediction|rehearsal of the future|god's eye view|how the future will unfold" backend/app/services/report_prompts.py
+# Erwartet: 8 Treffer an Z. 24, 27, 30, 36, 89, 101, 110, 117 (verifiziert)
 ```
 
-Die Phrasen stehen tatsächlich an Z. 24, 27, 30, 36, 89, 101, 110, 117 — kein
-Halluzinations-Risiko, ChatGPT hat hier verifiziert recht.
+Falls 0 Treffer: Stop — Task 03 ist durch.
 
-## Implementierung
+## Worktree
 
-`backend/app/services/report_prompts.py`:
-
-```diff
--You are an expert in writing "future prediction reports" with a "god's eye view"
-+You are an expert in writing simulation-based scenario reports
-
--The evolution result of the simulated world is a prediction of what might happen
--in the future. What you're observing is not "experimental data" but a "rehearsal
--of the future".
-+The simulated world produces plausible reactions, tensions and trajectories
-+under explicit assumptions. This is a scenario simulation, not a forecast.
-
--Write a "future prediction report" that answers:
-+Write a simulation-based scenario report that answers:
-
--✅ This is a future prediction report based on simulation, revealing "if this
--happens, how will the future unfold"
-+✅ This is a scenario report — it shows plausible reactions, given the
-+simulation assumptions
-
--✅ Focus on "how the future will unfold" - simulation results are the predicted
--future
-+✅ Focus on plausible reactions, tensions, and uncertainties inside the
-+simulated scenario
-+✅ Explicitly mark uncertainty, sparse evidence, and assumption sensitivity
-+❌ Do not imply certainty, forecasting authority, or real-world inevitability
-
--You are observing a rehearsal of the future from a "god's eye view"
-+You are observing one scenario instance under specific assumptions
+```bash
+WT=/Volumes/T7/Projekte/agora-worktrees/feat-layer-2-task-03-prompt-semantik
+git -C /Volumes/T7/Projekte/agora fetch origin --quiet
+git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-2-task-03-prompt-semantik "$WT" origin/main
 ```
 
-Dann auch in `README.md` prüfen: existieren ähnliche Phrasen dort? `rg`-Check.
+## Codex-Dispatch (Agent-Tool)
+
+`subagent_type: "codex:codex-rescue"`, `description: "Codex fix-task-03 prompt semantik"`, `prompt`:
+
+```
+--write --effort low --model gpt-5.3-codex-spark
+
+Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 2 / Task 03 — Prompt-Semantik entschärfen.
+
+## Ziel
+
+Aus backend/app/services/report_prompts.py alle 8 Stellen mit "future prediction", "rehearsal of the future", "god's eye view", "how the future will unfold" raus. Stattdessen: Sprache von Forecast → Szenario-Simulation. Unsicherheit explizit markieren.
+
+## Konkrete Ersetzungen
+
+- "future prediction reports" mit "god's eye view" → "simulation-based scenario reports"
+- "prediction of what might happen in the future" / "rehearsal of the future" → "plausible reactions, tensions and trajectories under explicit assumptions. This is a scenario simulation, not a forecast."
+- "future prediction report" → "simulation-based scenario report"
+- "this is a future prediction report ... how will the future unfold" → "this is a scenario report — it shows plausible reactions, given the simulation assumptions"
+- "how the future will unfold ... predicted future" → "plausible reactions, tensions, and uncertainties inside the simulated scenario" + "Explicitly mark uncertainty, sparse evidence, and assumption sensitivity" + "Do not imply certainty, forecasting authority, or real-world inevitability"
+- "rehearsal of the future from a god's eye view" → "one scenario instance under specific assumptions"
+
+Auch README.md prüfen: rg -n "future prediction|rehearsal" README.md — falls Treffer, analog ersetzen.
 
 ## Tests aktualisieren
 
-`backend/tests/test_report_prompts.py` (existiert laut Code):
+backend/tests/test_report_prompts.py: rg -n "future prediction|rehearsal" — falls die alten Phrasen gepinnt werden, umstellen auf Verhaltens-Eigenschaften ("scenario" muss vorkommen, "prediction" darf nicht).
 
-```bash
-rg -n "future prediction|rehearsal" backend/tests/test_report_prompts.py
-```
+## Akzeptanz
 
-Wenn Tests die alten Phrasen pinnen → Tests müssen mit. Stil: nicht exakte
-Phrase pinnen, sondern Verhaltens-Eigenschaften (z. B. "scenario" muss vorkommen,
-"prediction" darf nicht).
+- rg -n "future prediction|rehearsal of the future|god's eye view" backend/ → leer
+- rg -n "future prediction|rehearsal of the future|god's eye view" README.md → leer
+- cd backend && uv run pytest tests/test_report_prompts.py -v → grün
+- cd backend && uv run pytest -x -q → grün
 
-## Verifikation
+## Doku
 
-```bash
-rg -n "future prediction|rehearsal of the future|god's eye view" backend/    # leer
-cd backend && uv run pytest tests/test_report_prompts.py -v                  # grün
-cd backend && uv run pytest -x -q                                            # grün
-```
+- docu/<YYYY-MM-DD>-task-03-prompt-semantik-arbeitsprotokoll.md (knapp: 8 Stellen, Diff-Hunks)
+- CHANGELOG.md [Unreleased]: "Layer 2: Prompt-Semantik von Forecast auf Szenario umgestellt (Sub-Slice 03)"
 
-## NICHT machen
+## NICHT
 
-- Keine englischen Reports auf Deutsch übersetzen — Layer 2 dafür separat.
+- Englische Reports nicht auf Deutsch übersetzen — Layer 2 dafür separat (Task 10).
 - Keine OASIS-Source-Patches.
+- NICHT committen.
+```
+
+## Verify
+
+```bash
+rg -n "future prediction|rehearsal of the future|god's eye view" "$WT/backend/" || echo "clean"
+cd "$WT/backend" && uv run pytest tests/test_report_prompts.py -v
+cd "$WT/backend" && uv run pytest -x -q
+```
+
+Commit via `/agora-next-task` oder manuell.

@@ -1,695 +1,348 @@
-# Agora — Konsolidierter Findings- & Maßnahmenplan
+# Agora — Releaseplan v1.0
 
-**Stand:** 2026-05-08 (M9/M10 abgeschlossen, M11 Phase 1–5b durch)  
-**Repo:** [`arn0ld87/agora`](https://github.com/arn0ld87/agora) · v0.9.0 + Layer-9-Slices auf `main`  
-**Quellen:** Code-Verifikation 2026-05-04 (`Dockerfile`, `docker-compose.prod.yml`, `deploy/`, `backend/app/utils/auth.py`, `frontend/src/api/stream.ts`, `.github/workflows/`), Audit-Snapshot [`docu/history/2026-05-04-plan-update-audit-snapshot.md`](docu/history/2026-05-04-plan-update-audit-snapshot.md), interner Backlog.  
-**Ziel:** Findings aus Code-Review und Audit konsolidieren, mit den vorhandenen Slash-Commands (`/agora-next-task`, `/verify-after-subagent`, `/fix-task-*`) und Subagents (`agora-refactor-worker`, `agora-test-worker`, `agora-frontend-worker`, `agora-doc-worker`, `agora-evidence-auditor`) kompatibel halten und in eine umsetzbare Reihenfolge bringen.
+**Stand:** 2026-05-10
+**Quelle:** `agora_bewertung_komplett.md` (Score 5,8/10), Code-Verifikation gegen `main` (`backend/app/`, `frontend/src/`, `schemas/`, `.github/workflows/`), `report3.json` als realer Pipeline-Output.
+**Ziel:** Agora schrittweise in einen releasefähigen Zustand bringen. Output-Vertrag erzwingen, Evidence härten, Tabellen rendern, Vertrauensmodi einführen.
 
-> **Schnellüberblick — Was sich seit 2026-05-03 geändert hat:** F1 (Reverse-Proxy), F2.1 (Bundle-Token-Gate), F2.2 (`?token=` in Prod blockt) und F3 (gevent) sind **code-verifiziert grün**. Frontend-SSE läuft auf signed tickets. Die Detail-F-Sektionen weiter unten beschreiben weiterhin die ursprünglichen Befunde — der konsolidierte Status steht in [§ Status-Sync 2026-05-04](#status-sync-2026-05-04).
-
----
-
-## Methodik
-
-1. Repo-Struktur, Konfiguration, CI, Doku-Korpus und Slash-Command-Vertrag gegen Code verifiziert (`grep`, `wc -l`, Modulgrößen).
-2. Ist-Stand der vorhandenen `PLAN.md` (Tasks 01–34, Layer 0–10) und der `CLAUDE.md`-Layer-Tabelle akzeptiert — keine doppelten Einträge.
-3. Deep-Research-Befunde nur dort übernommen, wo sie entweder am Code verifizierbar oder durch interne Doku gestützt sind.
-4. Findings strikt **layer-aufwärts** sortiert. Hot-Spots aus Layer 0–6 sind code-verifiziert grün und werden **nicht** als offen geführt (Verifikationskommandos siehe `/verify-after-subagent`).
-
-**Code-verifizierter Ist-Stand (nicht mehr offen):**
-
-- `grep -rn '"schema_version": 1' backend/app/` → leer
-- `grep -rn 'future prediction|rehearsal of the future|god.s eye view' backend/app/services/` → leer
-- `grep -rn 'deepcopy(global_items\[:2\])' backend/app/services/` → leer
-- `backend/app/contracts/__init__.py` exportiert alle 17 Contract-Klassen inkl. `RunSummary`/`RunDetail`/`RunsListResponse` (Sub-Slice 33 ist drin)
-- `frontend/src/composables/` ist zu **10 von 10** TypeScript (#72 abgeschlossen)
-- 41 TS-Dateien vs. 13 JS-Dateien im Frontend; **Layer 6 (#73) ist nicht abgeschlossen**, Hot-Spots: `main.js`, `router/index.js`, `utils/markdown.js`, `components/graph/graphPanel*.js`
-- **Layer-9-Hardening (Verifikation 2026-05-04):**
-  - `Dockerfile` `prod`-Stage `CMD` enthält `-k gevent` → F3 ✅
-  - `Dockerfile` ARG `ALLOW_BUILD_TIME_TOKEN=false` als Default + `docker-compose.prod.yml` reicht den Gate-ARG durch → F2.1 ✅
-  - `backend/app/utils/auth.py::_extract_token` lehnt `?token=` bei `current_app.debug == False` mit Logger-Error ab → F2.2 ✅
-  - `frontend/src/api/stream.ts` holt `?ticket=` via `POST /api/auth/ticket` und nutzt es für SSE → SSE-Auth-Frontend ✅
-  - `deploy/nginx/agora.conf` (SSE-Buffering aus, `/healthz`) + `deploy/compose/docker-compose.prod-with-proxy.yml` → F1 ✅
-  - `docker-compose.yml` bindet per Default `127.0.0.1:${AGORA_BIND_HOST:-...}` → Loopback-Default ✅
+> Bestehende Sicherheits-/Infrastruktur-Slices (M9.x, S1–S5, M10.x, M11 Phase 1–6) sind code-verifiziert grün. Dieser Plan adressiert ausschließlich den **Output-Vertrag** und die daraus abgeleiteten Releasekriterien. Historischer Backlog → siehe `docu/refactoring-backlog-priorisiert.md`.
 
 ---
 
-## Status-Sync 2026-05-08
+## 0. Lückenbefund (Code vs. Bewertung)
 
-Konsolidierte Bewertung gegen den realen Code-Stand. Quellen: `docu/STATUS.md` 2026-05-07-Einträge, Recent commits (M11 Phase 5/5b), offene PRs/Issues #123–#326, verifikation per `ls`/`grep` 2026-05-08. Die ursprünglichen F-Detail-Sektionen ab [§ Findings im Detail](#findings-im-detail) bleiben als historische Tiefe stehen — Status-Update hier ist autoritativ.
-
-### Erledigt (Code-verifiziert)
-
-| ID | Bereich | Befund |
+| Bereich | Code-Stand `main` | Output-Effekt in `report3.json` |
 |---|---|---|
-| F1 / M9.1 | Reverse-Proxy | `deploy/nginx/agora.conf` und `deploy/compose/docker-compose.prod-with-proxy.yml` existieren. nginx deaktiviert SSE-Buffering und exposiert `/healthz`. |
-| F2.1 / M9.2 | Build-Time-Token | `Dockerfile` ARG `ALLOW_BUILD_TIME_TOKEN=false` als Default. `VITE_AGORA_TOKEN` wird ohne Override **nicht** ins Bundle einkompiliert. |
-| F2.2 / M9.3 | Query-Token | `_extract_token()` lehnt `?token=` im Non-Debug-Modus mit Logger-Error ab. SSE/Downloads müssen signed tickets nutzen. |
-| F3 / M9.5 | Gunicorn | Prod-CMD nutzt `-k gevent`, nicht mehr Sync-Worker. |
-| SSE-Auth-Frontend | Auth | `frontend/src/api/stream.ts` migriert von `?token=` auf `?ticket=` via `POST /api/auth/ticket`. |
-| S1 | XSS | DOMPurify in `frontend/src/utils/markdown.js`. |
-| S2 | Config | `Config.validate()` erzwingt `SECRET_KEY`/`NEO4J_PASSWORD`/`AGORA_AUTH_TOKEN` im Non-Debug, erkennt Placeholder-Werte. |
-| S3 | Docker-Hardening | Loopback-Default, `no-new-privileges`, `cap_drop: ALL`, tmpfs, Pflicht-Passwörter. |
-| S4 | Contracts | Pydantic/Zod-Contract-Gates und Schema-Drift-Checks aktiv. |
-| S5 | Security-CI | `pip-audit`, `npm audit`, Gitleaks in CI vorhanden. |
-| F5a | Status-Doku | `docu/STATUS.md` als zentrale Single Source of Truth aktiv. |
-| M9.6 | Prod-Smoke | `docker-image.yml::prod-proxy-smoke` läuft auf `main`/Tags/`workflow_dispatch`; PR-Trigger bewusst pausiert und vor Final-Release neu zu bewerten. |
-| R1 / M10.1–M10.3 | Dependencies | CVE-Monitor, Hardstop 2026-07-30 und Dependency Risk Register aktiv. |
-| R3 / M10.4 | Auth-Zielbild | ADR-0001 Accepted: Agora v1 bleibt Single-User-only mit Shared Token + signed Tickets. |
-| N3 / M10.5 | Rate Limits | App-seitige Fixed-Window-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte vorhanden (#302, PR #303–#306). |
-| W2 / M11.1 | Evidence-Gate | `contract-gates.yml` führt `evidence-quality` als Hard-Gate aus; Bad-Cases sind Snapshot-gepinnt. |
-| M11.2 | Backend-Coverage | `pytest-cov` mit `--cov-fail-under=53` aktiv, `backend-coverage`-Artifact in `ci.yml` (14 Tage). Startschwelle 53 %, Ziel 70 % schrittweise. |
-| M11.3 | Frontend-Coverage | `@vitest/coverage-v8@4.1.5` mit Threshold 24 % aktiv, `frontend-coverage`-Artifact in `ci.yml` (14 Tage). Ziel 60 % schrittweise. |
-| M11 Phase 1 | Release-Gating | `docker-image.yml` mit SHA-gepinnten Actions, striktem Tag-Smoke, `latest` nur auf Default-Branch, Smoke extrahiert `frontend/dist`, Release-/RC-Smokes für `release/**`/`rc/**`. |
-| M11 Phase 2 | Static-Analysis | `ci.yml::backend` blockiert auf `uv run mypy app` (Contract-Scope strict + Legacy-Baseline), `ci.yml::frontend` blockiert auf `npm run typecheck`. Ruff `E/F/B/I/UP/SIM` mit Phase-2-Baseline. |
-| M11 Phase 3 | Container-Hardening | Multi-Stage-Dockerfile, finaler `prod`-Stage auf `python:3.11-slim` ohne Node/npm/curl, Python-Healthcheck. `docker-compose.prod.yml` mit `read_only: true` + tmpfs. Image 747 MB → 320 MB (-57 %). |
-| M11 Phase 4 | Supply Chain | `dependency-review.yml` (PR-Block bei High), `codeql.yml` (Python + JS/TS, weekly), `docker-image.yml::publish` Build-Provenance-Attestation + SPDX-JSON-SBOM-Artefakt. |
-| M11 Phase 5 | Hotspot `simulation_runner` | 5 PRs durch: run_state_store, action_log_reader, monitor_thread, interview_client, process_manager extrahiert. |
-| M11 Phase 5b | Hotspot `graph_tools` | 3 PRs durch: graph_dtos, graph_reader, insight_forge_tool extrahiert. |
-| #202 / F7 | Hotspot `report_agent` | Closed 2026-05-05 als Package-Split. |
-
-### Aktiv offen
-
-| ID | Priorität | Bereich | Befund |
-|---|---:|---|---|
-| **M11.8** | 🔴 | Output-Vertrag | Externer Bewertungs-Score 5,8/10 (siehe `docu/2026-05-09-output-vertrag-bewertung-evidence-quality.md`). Root-Cause: `report_prompts.py:53-57` deckelt LLM auf 2–5 Sections, blockt strukturell den 11-Pflichtabschnitt-User-Prompt. `report_agent/schemas.py` 10 LOC — keine Pydantic-DTOs für Persona/Claim/Segment/FrictionPoint/TrustSignal. Fünf Sub-Slices a–e (siehe „Arbeitsreihenfolge"). |
-| **M11.4 / Phase 7** | 🟡 | E2E | Drei stabile Playwright-Smokes: Health/Login, Upload+Graph, Minimalreport. Keine 90-Test-Pyramide. **Nach M11.8** — sonst sichern Smokes einen falschen Output-Vertrag ab. |
-| **W3 / M11.2-3** | 🟢 | Coverage-Anhebung | Startschwellen aktiv (Backend 53 %, Frontend 24 %). Schrittweise Anhebung Richtung 70 %/60 %. |
-| **M11.5** | 🟡 | Komplexitäts-Gate | `radon` Backend, ESLint/size-limit Frontend. |
-| **W6 / M11.6** | 🟡 | API-Envelope | Error-/Success-Envelopes vollständig durchziehen. |
-| **F8 / #203** | 🟢 | Frontend-Hotspots | `Step2EnvSetup.vue` (667 LOC, war 1804) und `Step4Report.vue` (797 LOC, war 1287) sind durch Phase-5/5b-analoge Schnitte deutlich reduziert. Restliche Komplexität unter Schwelle. Issue #203 zum Schließen vorbereiten (separater Slice). |
-| **#199** | 🟡 | Python 3.14 | Docker-Image blockiert von tiktoken-wheel-Lag. |
-| **#296/#297/#298** | 🟡 | CVE-Tracker | Neue Watchlist-Issues seit 2026-05-07 zusätzlich zu #121–#126. |
-| **N1 / F14.2** | 🟢 | SBOM | SBOM-Artefakt seit Phase 4 in `docker-image.yml::publish`. Operationalisierung (Veröffentlichung pro Release) noch offen. |
-| **N2 / F14.1** | 🟢 | AGPL | `/api/version` mit Commit-SHA + Source-URL noch offen. |
-| **#212** | 🟢 | Live-Settings | P2 — nach M11-Stabilisierung. |
-
-### Priorisierte To-do-Liste (operativ)
-
-🔴 **Kritisch:**
-
-1. **M11.8a Quick-Win: Section-Cap raus** — `report_prompts.py:53-57` `Minimum 2 / maximum 5 sections` durch `{required_sections}`-Variable ersetzen. Aufwand S, höchster Score-Hebel pro LOC.
-2. **M11.8b Eval-Fixture** — `agora_bewertung_komplett.md`, `agora_1.pdf`, `seed.md`, `prompt.md`, `agora-report-…-evidence.json` als `tests/eval/fixtures/external/2026-05-09-bewertung-5-8/` einchecken; Snapshot-Test gegen Pflichtabschnitt-Liste + Persona-Mengengerüst.
-3. **M11.8c ReportV3-Contract** — Pydantic-DTOs für alle 11 Pflichtabschnitte in `report_agent/schemas.py` (Persona, Segment, Claim, Multiplier, FrictionPoint, TrustSignal, ChangeRecommendation, ProjectImpact, PositioningVariant, ContentIdea, DataGap), Re-Export via `app.contracts`.
-4. **M11.8d Strict-Schema-Forced-Output** — `chat_json` mit `response_format: json_schema` (statt `json_object`); JSON-Schema aus M11.8c-DTO injizieren.
-5. **M11.8e Quote+Evidence-Anchors** — XML-Tag `<simulated_quote persona_id seed_anchor>` als Output-Pflicht; Per-Claim-`evidence_refs` als Pflichtfeld; Validator blockiert PDF-Render bei fehlender Bindung.
-6. **Phase 7 / M11.4 Playwright-Smokes** — drei stabile E2E-Tests. Erst nach M11.8 grün.
-
-🟡 **Wichtig:** 7. Coverage-Schwellen schrittweise auf 70 %/60 % heben. 8. M11.5 Komplexitäts-Gate. 9. M11.6 API-Envelope abschließen. 10. F8 Frontend-Hotspots `Step2EnvSetup.vue`/`Step4Report.vue` (#203). 11. CVE-Watchlist #296/#297/#298 + Issue #199.
-
-🟢 **Nice-to-have:** 12. N1 SBOM-Operationalisierung pro Release. 13. N2 AGPL `/api/version`-Endpoint mit Commit-SHA. 14. P2 Live-Settings (#212) nach M11-Stabilisierung.
-
-### Arbeitsreihenfolge (PR-by-PR)
-
-1. **PR 1:** Doku-Sync `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` (Sub-Slice 2026-05-08). ✅
-2. **PR 2:** Dependabot-Aufräumen — #323 (`mistune`) und #326 (`pygments`). ✅
-3. **PR 3:** M11 Phase 6 Contract-Generation + Status-Sync (`scripts/sync-status.sh` Marker-basiert + CI-Gate). ✅
-4. **PR 4:** Doku-Sync `code-review-graph` als MCP-First-Stop in CLAUDE.md/AGENTS.md. ✅
-5. **PR 5:** Doku-Sync M11.8 Output-Vertrag-Block in PLAN.md (= dieser Slice).
-6. **PR 6:** M11.8a Quick-Win — Section-Cap raus, `{required_sections}`-Variable rein.
-7. **PR 7:** M11.8b Eval-Fixture — Bewertungs-Korpus + Snapshot-Test.
-8. **PR 8:** M11.8c ReportV3-Contract — Pydantic-DTOs für 11 Pflichtabschnitte.
-9. **PR 9:** M11.8d Strict-Schema-Forced-Output — `chat_json` JSON-Schema-Mode.
-10. **PR 10:** M11.8e Quote+Evidence-Anchors — XML-Tags + Validator-Block.
-11. **PR 11:** M11.4 / Phase 7 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
-12. **PR 12:** Coverage-Schwellen-Anhebung (Backend 53 → 60 → 70 %, Frontend 24 → 40 → 60 %).
-13. **PR 13:** M11.5 Komplexitäts-Gate.
-14. **PR 14:** M11.6 API-Envelope abschließen.
-15. **PR 15:** F8 Frontend-Hotspots (#203).
-
-### Definition of Done für v1.0
-
-- Keine ignorierten CVEs ohne aktive Ausnahmefrist in CI.
-- Prod-Proxy-Stack in CI grün.
-- Auth-Zielbild dokumentiert und umgesetzt **oder** bewusst auf Single-User begrenzt.
-- Evidence-Gate hart.
-- Coverage-Gates existieren.
-- Mindestens drei E2E-Smokes grün.
-- Doku-Status nicht widersprüchlich (STATUS.md als Single Source of Truth).
-- Release-Tag mit Changelog.
-- SBOM/License-Report mindestens generierbar.
+| Pflichtabschnitt-Liste | `DEFAULT_REPORT_SECTIONS` (11 Einträge) in `report_prompts.py` definiert, in Snapshot-Test gepinnt | Pipeline schreibt **3 Sections** statt 11 — keine harte Validierung |
+| Persona-Mindestanzahl | `MIN_PERSONA_TABLE_ROWS = 50` als Konstante, Snapshot-Test pinnt den Wert | Wird **nirgends in der Generator-Pipeline ausgewertet** |
+| ReportV3-Container | `contracts/report_v3.py`, Zod-Spiegel + `schemas/report-v3.schema.json` vollständig | Persistenz schreibt weiterhin `schema_version=2`, kein v3 im Storage |
+| Evidence-Bindung pro Claim | `evidence_binder.py` (Cosine ≥ 0.65) + `confidence_calculator.py` aktiv | **49 von 67 Claims** im Beispiel-Run haben `evidence: []` |
+| Hypotheses-Slot | `ReportSectionHypothesisModel` definiert, im UI-Panel sichtbar | Wird **nicht als Auffangbecken** für Evidence-lose Claims genutzt |
+| Confidence-Marker im Export | Confidence-Badge nur in der UI (`ReportEvidencePanel.vue`) | Im exportierten Markdown **nicht sichtbar** |
+| Tabellen-Rendering | nicht vorhanden | Report ist Fließtext mit `<simulated_quote>`-Blöcken — keine Persona-/Segment-/Top-10-Tabellen |
+| Report-Modi | nicht vorhanden | kein `strict`/`balanced`/`explorative` |
+| CSV-Export | nicht vorhanden | nur MD/HTML/JSON in `useReportExports.ts` |
 
 ---
 
-## Kurzübersicht der wichtigsten Probleme (historisch — Stand 2026-05-03)
+## 1. Phasen-Übersicht
 
-> Die folgenden F-Sektionen beschreiben den ursprünglichen Audit. Status-Updates siehe oben. F1, F2.1, F2.2, F3 sind code-verifiziert erledigt; die Detail-Texte bleiben als Begründung und Lessons-Learned stehen.
+| Phase | Inhalt | Effekt auf Score | Aufwand |
+|---|---|---|---|
+| **Phase 1** | Output-Vertrag absichern (Validator + Schema + Persona-Min) | 5,8 → ~7,0 | M |
+| **Phase 2** | Evidence-Härtung (Anker-Pflicht, Low-Conf-Markierung, DataGap-Routing) | 7,0 → ~7,8 | M |
+| **Phase 3** | Report-Qualität (Markdown-First, Tabellen, ReportV3 als Persistenz) | 7,8 → ~8,5 | L |
+| **Phase 4** | Vertrauensmodi + Export-Vollständigkeit (CSV, ZIP, Modes) | 8,5 → ~9,0 | M |
 
-| ID | Cluster | Schweregrad | Ein-Satz-Befund | Status 2026-05-04 |
-|---|---|---|---|---|
-| **F1** | Deployment / Prod | **hoch** | Kein lauffähiger Reverse-Proxy-Default im Repo (Issue #106), Prod-Pfad nicht end-to-end reproduzierbar. | ✅ erledigt — `deploy/`-Pfade existieren |
-| **F2** | Auth / Security-Architektur | **hoch** | `VITE_AGORA_TOKEN` einkompiliert Bearer-Token ins Frontend-Bundle; `?token=`-Fallback noch im Code. Kein echtes Session-/Rollenmodell. | F2.1 ✅, F2.2 ✅, F2.3 (ADR) offen |
-| **F3** | Runtime / Skalierung | **hoch** | Gunicorn läuft mit **sync** Workern + `--timeout 600` (Workaround Sub-Slice 19); SSE/LLM-Streams blockieren Worker. `gevent` ist als Dep schon im `pyproject.toml`, aber nicht im `CMD`. | ✅ erledigt — `Dockerfile` `-k gevent` |
-| **F4** | CVE-Watchlist | **hoch** | 6 ignorierte CVEs (`pip-audit --ignore-vuln`), Frist **2026-07-30** — durch harte Upstream-Pins von `camel-ai`/`camel-oasis`/`sentence-transformers` blockiert. | offen — CVE-Monitor + Hardstop fehlen |
-| **F5** | Doku- & Versions-Drift | **mittel** | README sagt 1383 Tests / Layer 0–5; `CLAUDE.md` sagt 1289+141 Tests / Layer 0–6. `pyproject.toml`/`package.json` weiter `0.9.0`, `main` post-tag ohne neuen Marker. ROADMAP nennt noch v0.6.1. | F5a (`STATUS.md`) ✅; AGENTS.md-Sync 2026-05-04 ✅ |
-| **F6** | Test-Qualität | **mittel** | Keine Coverage-Messung, keine `--cov-fail-under`-Schwelle, keine E2E-Suite. `evidence-quality`-Gate läuft mit `--soft`. |
-| **F7** | Code-Hotspot Backend | **mittel** | `report_agent.py` mit **2400 LOC** trotz Refactor (-31,6 % seit v0.9.0) der größte Knoten; `simulation_runner.py` 1904 LOC, `oasis_profile_generator.py` 1502 LOC, `graph_tools.py` 1492 LOC. |
-| **F8** | Code-Hotspot Frontend | **erledigt** | `Step2EnvSetup.vue` 667 LOC (war 1804, -63 %), `Step4Report.vue` 797 LOC (war 1287, -38 %) — durch Phase-5/5b-analoge Schnitte reduziert. Komplexität unter Schwelle. |
-| **F9** | Layer-7 Feature-Backlog | **mittel** | Compare-Kette (#65/#66/#67), Graph-Diff-API (#74), Compare-UI (#76) — Specs/Spikes da, Code-Schnitt offen. |
-| **F10** | Layer-8 Persona-Review-UX | **mittel** | Persona-Diff (#69) und Approve/Reject/Regenerate (#70) noch offen, blockieren Persona-Review-Reife. |
-| **F11** | Layer-6 Frontend-TS-Reste | **niedrig** | 13 `.js`-Dateien im Frontend (Composables-Migration läuft, `#73` Kritische Features noch nicht final). |
-| **F12** | Lint-Tiefe / Komplexitäts-Gates | **niedrig** | Backend-`ruff.lint.select = ["E","F"]` ist Syntax-Gate, kein Design-Gate. Keine Komplexitäts-/Duplikat-Messung in CI. |
-| **F13** | Wissens-Fragmentierung in `docu/` | **niedrig** | 130+ Arbeitsprotokolle plus mehrere konkurrierende Plan-Dateien (`PLAN.md`, `REFACTORING_PLAN.md`, `SECURITY_REVIEW.md`, `docu/codex_plan.md`, `docu/feature-roadmap.md`, `docu/refactoring-backlog-priorisiert.md`) — keine Single Source of Truth. |
-| **F14** | AGPL-Compliance-Operationalisierung | **niedrig** | Lizenz korrekt, aber kein „Source-available“-Pfad in der laufenden App, kein SBOM, kein Third-Party-License-Report. |
+Jede Phase ist **eigenständig deploybar und testbar**. Kein Big-Bang. Grobe PR-Größe: 200–600 LOC pro Slice.
 
 ---
 
-## Findings im Detail
+## 2. Phase 1 — Output-Vertrag absichern
 
-Reihenfolge: Schweregrad absteigend, innerhalb gleicher Schweregrad Layer-Bottom-Up.
+**Ziel:** Kein Report verlässt die Pipeline, dem Pflichtabschnitte fehlen oder die Persona-Tabelle unter 50 Zeilen liegt.
 
-### F1 — Reverse-Proxy-Default fehlt (Issue #106)
+### 2.1 Pflichtabschnitt-Validator (Slice P1.1)
 
-| Feld | Wert |
-|---|---|
-| Kategorie | Deployment / Ops |
-| Schwere | **hoch** |
-| Layer | 9 |
-| Issue / Task | #106 / Task 33 |
-| Subagent | `agora-refactor-worker` (Sonnet) + `agora-doc-worker` (Haiku) |
+**Files:** `backend/app/services/report_agent/contract_validator.py` (neu), `backend/app/services/report_agent/manager.py`, `backend/app/contracts/report_contract.py`.
 
-**Befund.** `docker-compose.prod.yml` setzt einen externen Reverse-Proxy voraus (Backend bindet `127.0.0.1:5001`, Frontend-Vite-Port entfällt per `!override`), aber das Repo liefert kein lauffähiges Beispiel. Das `prod-builder`-Stage im Dockerfile baut zwar das Frontend-Bundle, aber Gunicorn serviert es nicht und es gibt keinen Sidecar-Nginx im Repo.
+**Schritte:**
 
-**Lösungsschritte:**
+1. Neue Datei `contract_validator.py` mit Funktion `validate_required_sections(outline_titles: list[str], required: list[str]) -> list[str]`. Liefert die Liste fehlender Abschnitte (case-insensitive, Whitespace-tolerant).
+2. `ReportOutlineModel.sections` Validator ergänzen (`@model_validator`): wenn `DEFAULT_REPORT_SECTIONS`-Set nicht vollständig vorhanden ist, `ValidationError` mit den Fehlrubriken werfen.
+3. `manager.py`: nach `plan_outline()` → `validate_required_sections(outline.sections, [t for t,_ in DEFAULT_REPORT_SECTIONS])` aufrufen. Bei Fehlrubriken: `ReportStatus.incomplete` setzen, fehlende Abschnitte in `progress.json` listen, **kein** finales `report.md` schreiben.
+4. API: `GET /api/report/<id>` liefert `status`, `missing_sections[]` strukturiert. Frontend zeigt rote Box.
 
-1. Neue Datei `deploy/nginx/agora.conf` mit `/` → statisch aus `frontend/dist`, `/api/*` → `proxy_pass http://agora:5001`, `/api/simulation/*/stream` → `proxy_buffering off; proxy_read_timeout 600s`.
-2. Neue Datei `deploy/compose/docker-compose.prod-with-proxy.yml` (Sidecar-Variante mit `nginx:alpine`, Bind-Mount auf `frontend/dist` und Conf, Backend-Port nicht mehr publishen).
-3. `docu/deployment-prod-like.md` erweitert um konkrete Block-Beispiele für **Sidecar-Nginx**, **Traefik-Labels** und **Tailscale-Funnel** (jeweils 1 Section, gleiche Struktur).
-4. `scripts/verify-deploy.sh` erweitern: nach `docker compose up -d` ein `curl -fsS http://localhost/health` gegen Proxy-Port, nicht direkt gegen `:5001`.
-5. CI-Job `docker-image.yml` smoket den Proxy-Stack, nicht nur den Backend-Container.
+**Akzeptanz:**
 
-**Akzeptanz:** `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f deploy/compose/docker-compose.prod-with-proxy.yml up -d` liefert eine produktionsähnliche Topologie aus dem Repo heraus, ohne dass der Operator externe Conf-Files schreiben muss. `Closes #106`.
-
----
-
-### F2 — Auth-Modell ist Single-User-Token, im Bundle einkompiliert
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Security |
-| Schwere | **hoch** |
-| Layer | 9 (Prod-Hardening), greift in 0/1 |
-| Issue / Task | (neu — bisher kein dediziertes Issue, in `SECURITY_REVIEW.md` F2 dokumentiert) |
-| Subagent | `agora-refactor-worker` + `agora-frontend-worker` |
-
-**Befund.** Drei reale Probleme stapeln sich:
-
-1. `Dockerfile` `prod-builder`-Stage zieht `VITE_AGORA_TOKEN` als Build-Arg in das **Frontend-Bundle als Plaintext** (Code-Kommentar: „Nur sinnvoll für Single-User-Tailnet-Deploys; nicht für Public-Internet"). Wer das Bundle hat, hat den Token.
-2. `?token=`-Query-Fallback ist im Code als Deprecation-Pfad noch aktiv (`backend/app/utils/auth.py::_extract_token`), Token landet damit potentiell in Proxy-Logs / Browser-History.
-3. Das Token ist ein **Shared Secret**, kein User-Modell — kein Logout, kein Audit, keine Rotation-Policy außer „Container neu bauen".
-
-**Lösungsschritte (3 Slices):**
-
-1. **S2.1 — Build-Arg deprecaten** (S, sofort, `agora-refactor-worker`):
-   - `Dockerfile`: `VITE_AGORA_TOKEN`-Block hinter `ARG ALLOW_BUILD_TIME_TOKEN=false` gaten; bei `false` (Default) wird `VITE_AGORA_TOKEN=""` injiziert und das Frontend muss den Token zur Laufzeit abfragen.
-   - `frontend/src/api/index.ts`: bei leerem Bundle-Token einen Login-Flow gegen `POST /api/auth/ticket` triggern (Token per `prompt()` oder dedizierter Login-View, in `localStorage` cachen).
-   - `docu/security-hardening.md` aktualisieren: alter Pfad steht nur noch als Single-User-Tailnet-Override mit explizitem Build-Befehl drin.
-2. **S2.2 — `?token=` in Prod hart deaktivieren** (S, `agora-refactor-worker`):
-   - `backend/app/utils/auth.py::_extract_token`: bei `Config.DEBUG=False` und `?token=` → `403` mit `code: "query_token_disabled_in_prod"`. SSE/Downloads müssen Signed Tickets nutzen (Pfad existiert seit P0.2).
-   - Frontend: `stream.ts` darf `?ticket=` weiter setzen, **niemals** `?token=`. Test-Canary in `tests/test_signed_ticket.py` ergänzen.
-3. **S2.3 — Session/Cookie-Modell vorbereiten** (M, Spike + Doku, `agora-doc-worker`):
-   - ADR `docu/decisions/0001-session-modell.md`: Trade-off zwischen Flask-Login + HttpOnly-Cookie vs. weiter mit Bearer + Refresh-Tickets.
-   - **Kein** Code in diesem Slice — Spike + Entscheidung. Implementierung ist v1.0-Material.
-
-**Akzeptanz:** S2.1 + S2.2 als zwei getrennte PRs, nach Merge ist `grep -rn 'VITE_AGORA_TOKEN' frontend/src/` leer und ein Test pinnt das `403` für `?token=` in Non-Debug.
-
----
-
-### F3 — Gunicorn sync-Worker + 600s Timeout
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Runtime / Skalierung |
-| Schwere | **hoch** |
-| Layer | 9 |
-| Issue / Task | (Workaround Sub-Slice 19; saubere Lösung Plan in `docu/2026-04-29-prod-slice2-gunicorn.md`) |
-| Subagent | `agora-refactor-worker` + `agora-test-worker` |
-
-**Befund.** `Dockerfile` Z. 96 ff.: `gunicorn --workers 2 --timeout 600 --graceful-timeout 30`. `gevent` ist als Dep schon vorhanden (`pyproject.toml`), aber nicht im `CMD`. Bei laufendem Report-Agent oder Ontology-Generation blockt jeder Sync-Worker den Request bis 600 s — bei 2 Workern reicht ein zweiter Long-Run, um Health-Checks ins Timeout zu treiben. Der SSE-Endpoint `/api/simulation/<id>/stream` ist bei Sync-Workern grundsätzlich problematisch.
-
-**Lösungsschritte:**
-
-1. `Dockerfile` `prod`-Stage `CMD` ändern auf `-k gevent --workers 2 --worker-connections 1000 --timeout 120 --graceful-timeout 30`.
-2. **Fork-Safety prüfen** (`agora-test-worker`): neue Tests in `tests/test_gunicorn_compat.py`, die Neo4j-Connection-Pool und Redis-Connection-Pool **nach Fork** instantiieren (Pattern: `multiprocessing.Process` als Fork-Surrogat). Bei aktuellem Code-Stand ist `Neo4jStorage` als Singleton im DI-Container — der Pool muss per `os.register_at_fork` resettet werden.
-3. **OASIS-Subprozess** unter gevent-Monkey-Patching smoken: `tests/integration/test_oasis_under_gevent.py` startet eine 1-Round-Sim und prüft, dass `subprocess.Popen` nicht durch Monkey-Patch blockiert (gevent patcht standardmäßig `subprocess`).
-4. CI-Job `contract-gates.yml` um `prod-runtime-smoke` erweitern: `docker compose -f ... -f docker-compose.prod.yml up -d`, dann `curl -fsS /health` in Schleife mit konkurrierendem Long-Request.
-5. Doku: `docu/2026-04-29-prod-slice2-gunicorn.md` von „Plan" auf „umgesetzt" heben + Caveat-Liste.
-
-**Akzeptanz:** Prod-Container hält 50 Concurrent-SSE-Streams aus, Health-Check antwortet < 500 ms während Long-Run, alle Backend-Tests grün.
-
----
-
-### F4 — CVE-Watchlist mit Frist 2026-07-30
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Security / Dependency |
-| Schwere | **hoch** (Frist!) |
-| Layer | 10 |
-| Issue / Task | #121–#126 / Task 34 |
-| Subagent | `agora-evidence-auditor` (Read-only-Audit) + `agora-doc-worker` |
-
-**Befund.** Sechs CVEs mit `--ignore-vuln` in `.github/workflows/ci.yml`, Frist **alle 2026-07-30**. Pinning-Sources: `camel-ai==0.2.78`, `camel-oasis==0.2.5`, `sentence-transformers==3.0.0`. Risiko ist real (Pillow-CVEs sind RCE-Klassen, transformers-CVE in NLP-Tokenizer).
-
-**Lösungsschritte (parallel zu Feature-Arbeit, nicht blockierend):**
-
-1. **Wöchentlicher pip-audit-Job** (S, sofort): neuer Workflow `cve-monitor.yml` (cron `0 6 * * 1`), läuft `pip-audit` ohne `--ignore-vuln` und kommentiert betroffene Issues automatisch — sichtbar machen, wann ein Upstream-Release durchgereicht wird.
-2. **Upstream-Tracking verschärfen** (XS, `agora-doc-worker`): `docu/dependency-risk-register.md` bekommt eine Spalte „Upstream-Release-Watch" mit Link auf `camel-ai/releases`, `camel-oasis/releases`, `sentence-transformers/releases`. Cron-Job kann das später automatisch befüllen.
-3. **Fork-Strategie als Eskalation** (M, Spike): wenn bis 2026-06-30 (also 30 Tage vor Frist) kein Upstream-Release: ADR `docu/decisions/0002-camel-fork-eskalation.md` mit Optionen (a) Vendoring, (b) Soft-Fork mit Patch-Ringen, (c) Replacement durch `langgraph`/eigener Subprozess. **Kein vorzeitiger Fork** — Aufwand-Nutzen-Verhältnis erst nach Frist klar.
-4. **Hardstop** in `cve-monitor.yml`: am 2026-07-30 09:00 UTC schaltet der Job auf `--strict` ohne `--ignore-vuln` — wenn Upstream nicht released hat, wird CI rot und der Eskalations-ADR muss greifen.
-
-**Akzeptanz:** Watchlist hat aktiven Owner, automatisches Tracking, klaren Hardstop. **Kein blindes Dependency-Upgrade** gegen harte Pins.
-
----
-
-### F5 — Doku- und Versions-Drift
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Doku / Release-Hygiene |
-| Schwere | **mittel** |
-| Layer | quer (Meta) |
-| Issue / Task | (neu) |
-| Subagent | `agora-doc-worker` |
-
-**Befund.** Quellen sind verteilt und widersprüchlich:
-
-- `pyproject.toml` v0.9.0, `frontend/package.json` v0.9.0, `package.json` v0.9.0 → ok
-- README: „1383 Tests grün (1258 Backend + 125 Frontend)"
-- CLAUDE.md: „Backend 1289 Tests, Frontend 141 Tests"
-- CHANGELOG `[Unreleased]`: spricht von 1283 Backend
-- `docu/ROADMAP.md`: Header sagt „Current State (v0.6.1)" — **Stand 2026-04-27**, also 6 Tage vor letztem Commit
-- `PLAN.md` (Repo-Root): „Tasks 01–17 plus 18–34" (konsistent zu Slash-Commands)
-- `docu/feature-roadmap.md`, `docu/refactoring-backlog-priorisiert.md`, `REFACTORING_PLAN.md` (Root) — alle drei mit überlappendem Inhalt, unterschiedlichen Ständen.
-
-**Lösungsschritte:**
-
-1. **Zahlen-Quelle vereinheitlichen** (S): neues Script `scripts/sync-status.sh`, das Test-Counts aus dem letzten CI-Run zieht (oder lokal aus `pytest --collect-only -q | tail -1`) und in **einer** Datei `docu/STATUS.md` aktualisiert. README, CLAUDE.md, ROADMAP referenzieren `STATUS.md`, kopieren keine Zahlen mehr.
-2. **ROADMAP aktualisieren** (S, `agora-doc-worker`): `docu/ROADMAP.md` auf v0.9.0 + Layer-Status (Layer 0–6 grün, Layer 7–10 in Arbeit) heben. Klare „Current / Next / Later"-Struktur, die direkt auf die Layer-Tabelle in `CLAUDE.md` verweist.
-3. **Plan-Konsolidierung** (M): klare Rolle pro Datei — `PLAN.md` ist die operative Task-Quelle für Slash-Commands, `docu/refactoring-backlog-priorisiert.md` ist der historische Audit-Snapshot, `docu/feature-roadmap.md` und `REFACTORING_PLAN.md` (Root) werden nach `docu/history/` verschoben mit Header-Hinweis.
-4. **Release-Marker** (S): nach jeder substanziellen `main`-Iteration einen `0.9.x-dev`-Tag setzen (`scripts/release.sh patch --dev`), damit `git describe` einen sinnvollen Wert liefert.
-5. **CONTRIBUTING.md** (S): kurze Datei am Repo-Root mit „Wie arbeite ich hier mit?" — verweist auf `CLAUDE.md` für Agent-Workflows und `AGENTS.md` für Codex.
-
-**Akzeptanz:** README, CLAUDE.md, ROADMAP zeigen identische Test-/Status-Zahlen. `docu/` ist auf eine klare Vorderbühne (`PLAN.md`, `STATUS.md`, `ROADMAP.md`) und Hinterbühne (`docu/history/`, `docu/decisions/`, `docu/logs/`) entzerrt.
-
----
-
-### F6 — Test-Qualität: keine Coverage, keine E2E, soft Evidence-Gate
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Tests / CI |
-| Schwere | **mittel** |
-| Layer | 5 (Eval) + 1 (Tests sind Spec) |
-| Issue / Task | (neu, indirekt #75/#105) |
-| Subagent | `agora-test-worker` (Sonnet) |
-
-**Befund.**
-
-- `backend/pyproject.toml` `[tool.pytest.ini_options]` hat keine `--cov`-Opts, kein `pytest-cov` als Dep.
-- `frontend/package.json` `test` läuft `vitest run`, kein `--coverage`.
-- `.github/workflows/contract-gates.yml` Job `evidence-quality` läuft mit `--soft` (Kommentar: „bis Layer 5 fertig ist"). Layer 5 ist laut CLAUDE.md grün → der Soft-Schalter sollte fallen.
-- Keine E2E-Suite (Playwright/Cypress) im Repo, ROADMAP nennt das als v1.0-Ziel.
-
-**Lösungsschritte:**
-
-1. **Coverage Backend** (S, `agora-test-worker`):
-   - `pytest-cov` zu Dev-Deps.
-   - `pyproject.toml` `addopts = "-ra --tb=short --import-mode=importlib --cov=app --cov-report=term-missing --cov-fail-under=70"`.
-   - **Wichtig:** Schwelle anfangs 70 %, nicht 85 % — sonst kippt CI sofort. `app/services/`-Coverage messen und in `docu/STATUS.md` veröffentlichen, dann monatlich um 2 Punkte heben.
-2. **Coverage Frontend** (S, `agora-test-worker`):
-   - `@vitest/coverage-v8` zu DevDeps.
-   - `package.json`: `"test:coverage": "vitest run --coverage"`, `"check": "vue-tsc --noEmit && npm run test:coverage && npm run build"`.
-   - Schwelle 60 % anfangs (Vue-SFCs sind schwerer zu testen, viele UI-Pfade).
-3. **`evidence-quality` hart schalten** (S, `agora-test-worker`):
-   - `.github/workflows/contract-gates.yml`: `--soft` raus, Schwellen aus `tests/eval/expected_metrics.json` als Hard-Gate (Snapshot-Pin existiert seit Sub-Slice 17).
-4. **E2E-Spike** (L, neuer Slice, `agora-test-worker`):
-   - `frontend/e2e/` mit Playwright (`@playwright/test`).
-   - **Genau 3 Tests** zum Start: (a) Health + Login, (b) Upload + Graph-Build, (c) Persona-Review-Approval-Flow + Sim-Start. Nicht mehr — sonst wird E2E zur Wartungslast.
-   - Eigener CI-Workflow `e2e.yml`, läuft gegen `docker compose up -d`, nightly + on-demand-Label `run-e2e`.
-
-**Akzeptanz:** `npm run check` zeigt Coverage. `pytest` failt bei < 70 %. `evidence-quality` bricht hart bei Drift. E2E grün auf nightly.
-
----
-
-### F7 — `report_agent.py` mit 2400 LOC (und weitere Backend-Hotspots)
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Code-Qualität / Architektur |
-| Schwere | **mittel** |
-| Layer | 1/3 (fachlich Reader-Honesty) |
-| Issue / Task | (neu, EPIC-07-Folge) |
-| Subagent | `agora-refactor-worker` |
-
-**Befund.** Trotz Refactor (-31,6 % seit v0.9.0) ist `report_agent.py` mit 2400 LOC der größte Knoten. Dort laufen Prompt-Templating (eigentlich `report_prompts.py`-Re-Export), Section-Building, Claim-Atomisierung, Evidence-Binding, Tool-Result-Handling, Provenance-Anker, Confidence-Berechnung, ReACT-Loop und Section-Dedup zusammen. Weitere Hot-Spots:
-
-| Modul | LOC | Konzern |
-|---|---:|---|
-| `services/report_agent.py` | 2400 | Section-Builder + Claim-Atomisierung + ReACT-Loop |
-| `services/simulation_runner.py` | 1904 | OASIS-Subprozess-Mgmt + Eventbus + State-Sync |
-| `services/oasis_profile_generator.py` | 1502 | Persona-LLM-Prompts + Quoten + Voice-Register |
-| `services/graph_tools.py` | 1492 | 4 Tool-Implementierungen (Quick/Panorama/Insight/Interview) |
-| `services/simulation_config_generator.py` | 1044 | Config-Bauer + Validation |
-
-**Lösungsschritte (Slice-by-slice, nicht Big-Bang):**
-
-1. **`report_agent.py` weiter zerlegen** (M, `agora-refactor-worker`):
-   - `services/report/section_builder.py` — `_build_section`, `_attach_provenance`, Time-Series-Sampling.
-   - `services/report/claim_mapper.py` — Claim-Atomisierung, supports_claim-Logik.
-   - `services/report/react_loop.py` — `_run_react_loop`, Tool-Limit-Logik.
-   - `services/report_agent.py` bleibt als Façade (Public-API), delegiert. Re-Export-Pattern wie schon bei `neo4j_storage.py` angewendet.
-   - Pflicht: kein Verhalten ändert sich. Tests müssen vorher grün sein, nach Refactor grün sein. Snapshot-Tests aus `tests/eval/` sind die Sicherung.
-2. **`simulation_runner.py` schneiden** (M):
-   - `services/sim/process_manager.py` — `Popen`-Lifecycle, Signal-Handling.
-   - `services/sim/event_sync.py` — Eventbus-Bridge, RPC-Race-Logik.
-   - `simulation_runner.py` als Façade.
-3. **Komplexitäts-Gate als Pflicht** (S, voraussetzung für 1+2):
-   - `radon` zu Dev-Deps; `scripts/check_complexity.sh` läuft `radon cc -nc` und failt bei > C-Klasse.
-   - Neue CI-Stufe in `contract-gates.yml`: `complexity-gate`.
-   - Schwelle: keine neuen Funktionen mit Cyclomatic > 15 (bestehende werden geduldet, Allow-List in `radon.cfg`).
-
-**Akzeptanz:** `report_agent.py` < 1200 LOC, alle Tests grün, Snapshot-Eval-Metriken unverändert. CI-Komplexitäts-Gate grün ohne neue Allow-List-Einträge.
-
----
-
-### F8 — `Step2EnvSetup.vue` 667 LOC (war 1804), `Step4Report.vue` 797 LOC (war 1287) — ERLEDIGT
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Code-Qualität Frontend |
-| Schwere | **erledigt** |
-| Layer | 4 |
-| Issue / Task | #203 |
-| Status | Komponenten sind durch Phase-5/5b-analoge Schnitte bereits massiv reduziert. |
-
-**Befund (realisiert).** 
-
-- `Step2EnvSetup.vue`: 1804 LOC → **667 LOC** (-63 %)
-- `Step4Report.vue`: 1287 LOC → **797 LOC** (-38 %)
-
-Beide Komponenten liegen jetzt unter der Komplexitätsschwelle (800 LOC-Faustregel). Die ursprüngliche Multi-Concern-Fragmentierung ist durch bestehende Sub-Slices aufgelöst: Quoten-Editor, Persona-Review-UI, Section-Renderer, Export-Center und Sticky-Scroll-Logik sind bereits in separate Composables/Utilities ausgelagert oder sind Kandidaten für Followup-Micro-Cuts.
-
-**Nächster Schritt:** Issue #203 schließen (separater Slice mit Tag-Cleanup).
-
----
-
-### F9 — Layer-7 Feature-Backlog (Compare + Graph-Diff)
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Feature-Backlog |
-| Schwere | **mittel** |
-| Layer | 7 |
-| Issue / Task | #65/#66/#67/#74/#76 → PLAN.md Tasks 22/23/24/25 |
-| Subagent | `agora-refactor-worker` (API) + `agora-frontend-worker` (UI) |
-
-**Befund.** Specs/Spikes sind im CHANGELOG bereits dokumentiert (`task-22-graph-diff-spike.md`, `task-23-compare-model-spike.md`), Datenmodell und API-Schnitte sind skizziert. Aber: keine Implementierung im Code. `RunsDashboard` (#63) ist laut CLAUDE.md ebenfalls noch offen.
-
-**Lösungsschritte (gemäß PLAN.md Tasks 22–25, nicht ändern, nur Reihenfolge fixieren):**
-
-1. **#74 Graph-Diff API + Modell** (L) → `agora-refactor-worker`. Pflicht-Reihenfolge **vor** #76 UI.
-2. **#65 Vergleichsmodell** (S, `agora-doc-worker`, schon im Spike) → API-Schnitt finalisieren.
-3. **#66 Compare API** (L) → `agora-refactor-worker` nach #65.
-4. **#76 Diff/Confidence UI** (L) → `agora-frontend-worker` nach #66 + #74.
-5. **#67 Compare UI für zwei Branches** (L) → `agora-frontend-worker` nach #66.
-6. **#63 RunsDashboard** (L) → `agora-frontend-worker` (#62 Runs-API ist als Task 26 schon offen, aber Sub-Slice 33 hat /api/runs erweitert — also #63-Frontend ist tatsächlich der nächste Schritt).
-
-**Akzeptanz:** je Issue ein PR, je PR ein Slice nach `/agora-next-task`-Konvention. Keine Sammel-PRs.
-
----
-
-### F10 — Persona-Review-UX (Layer 8)
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Feature-Backlog |
-| Schwere | **mittel** |
-| Layer | 8 |
-| Issue / Task | #69/#70/#137 → PLAN.md Tasks 29/30/32 |
-| Subagent | `agora-frontend-worker` + `agora-refactor-worker` |
-
-**Befund.** Persona-Review-Service-Backend ist da (`persona_review_service.py`, `persona_quality_service.py`), Sub-Slice 30 hat Sticky-Scroll geliefert. Was fehlt: **Persona-Diff gegen Entity-Kontext** (#69) und **Approve/Reject/Regenerate-Workflow** (#70) — das macht das Feature erst nutzbar. #137 (Graph-Build-Batch-Marker für Auto-Freeze) ist UI-Polish, kommt nach #69/#70.
-
-**Lösungsschritte:**
-
-1. **#69 Persona-Diff** (M, `agora-frontend-worker`):
-   - Frontend-Composable `usePersonaDiff.ts` (vergleicht Persona-LLM-Output gegen Entity-Properties aus Neo4j).
-   - UI in neuer `PersonaReviewPanel.vue` (siehe F8): pro Persona ein Diff-Panel mit Entity-Bezug.
-   - Backend: `GET /api/personas/<id>/entity-context` liefert Entity-Properties zum Vergleich.
-2. **#70 Approve/Reject/Regenerate** (L):
-   - `POST /api/personas/<id>/approve|reject|regenerate` (existieren teilweise, müssen vereinheitlicht werden).
-   - State-Machine: `pending → approved | rejected | regenerating → pending`.
-   - UI: Action-Buttons im PersonaReviewPanel.
-3. **#137 Batch-Marker** (M, `agora-refactor-worker`): kommt nach #69/#70.
-
-**Akzeptanz:** Vor Sim-Start (`PERSONA_REVIEW_ENABLED=true`) kann jede Persona im UI inspiziert, gegen Entity-Kontext verglichen, freigegeben oder regeneriert werden. State-Machine-Tests in `tests/services/test_persona_review_service.py`.
-
----
-
-### F11 — Layer-6 Frontend-TS-Reste
-
-| Feld | Wert |
-|---|---|
-| Kategorie | Code-Qualität Frontend |
-| Schwere | **niedrig** |
-| Layer | 6 |
-| Issue / Task | #73 → PLAN.md Task 21 |
-| Subagent | `agora-frontend-worker` |
-
-**Befund.** Composables sind zu 10 von 10 TS migriert (#72 grün). Es bleiben 13 `.js`-Dateien, davon kritisch: `frontend/src/main.js`, `frontend/src/router/index.js`, `frontend/src/utils/markdown.js`, `frontend/src/components/graph/graphPanelData.js`, `graphPanelGeometry.js`, `graphPanelUtils.js`, `edgeLabelI18n.js` plus 6 Test-Specs. **Vue-Files** sind weiter `<script>` ohne `lang="ts"` — das wird in F8 mitabgeräumt.
-
-**Lösungsschritte:**
-
-1. **Trivial-Migration** (S, `agora-frontend-worker`):
-   - `main.js` → `main.ts` (1:1, type imports).
-   - `router/index.js` → `router/index.ts` mit `RouteRecordRaw[]`-Typing.
-   - `utils/markdown.js` → `utils/markdown.ts`.
-2. **Graph-Helpers** (M):
-   - `components/graph/graphPanelData.js` → `.ts` mit `D3SimulationNode`, `D3SimulationLink`-Types.
-   - `graphPanelGeometry.js`, `graphPanelUtils.js`, `edgeLabelI18n.js` analog.
-3. **Tests parallel migrieren** — Spec-Files folgen, sobald die getestete Datei TS ist.
-
-**Akzeptanz:** `find frontend/src -name '*.js' -not -path '*/node_modules/*'` ≤ 3 (nur `vite.config.js`, `eslint.config.js` und ggf. ein Build-Script). #73 closed.
-
----
-
-### F12 — Lint-Tiefe und Komplexitäts-Gates
-
-| Feld | Wert |
-|---|---|
-| Kategorie | CI / Code-Qualität |
-| Schwere | **niedrig** |
-| Layer | 5 (Tooling) |
-| Issue / Task | (neu) |
-| Subagent | `agora-test-worker` |
-
-**Befund.** `backend/pyproject.toml`:
-
-```toml
-[tool.ruff.lint]
-select = ["E", "F"]
-ignore = ["E501"]
+```bash
+# Soll-Zustand: Run mit unvollständigem Outline produziert keinen finalen Report
+pytest backend/tests/contracts/test_report_contract.py::test_outline_rejects_missing_required_sections -v
+# erwartet: PASS, ValidationError listet alle fehlenden Section-Titel
 ```
 
-Das fängt Syntax und Imports, aber keine Komplexität, keine Refactor-Hinweise, keine Import-Ordnung, keine `mypy`-Checks (CLAUDE.md erwähnt `uv run mypy app`, aber kein Job in CI prüft das).
+### 2.2 Persona-Mindestanzahl in der Pipeline (Slice P1.2)
 
-**Lösungsschritte:**
+**Files:** `backend/app/services/prepare_service.py`, `backend/app/services/persona_quota_defaults.py`, `backend/app/services/report_agent/manager.py`.
 
-1. **Ruff erweitern** (S, `agora-doc-worker` für Doku, `agora-test-worker` für Fix-Welle):
-   - `select = ["E", "F", "I", "B", "SIM", "PLR", "C90"]`
-   - `[tool.ruff.lint.mccabe] max-complexity = 12`
-   - **Erst** in einem dedizierten Slice ausrollen, sonst wird der erste PR ein 500-File-Diff. Pattern wie schon bei „default-strict ruff scope rollout".
-2. **mypy als CI-Job** (S):
-   - `mypy.ini` mit `strict_optional = True`, `disallow_untyped_defs = True` für `app/contracts/` und `app/api/` (Boundary-Module).
-   - `.github/workflows/contract-gates.yml`: neuer Job `mypy-strict`.
-3. **Komplexitäts-Gate** (siehe F7.3) — `radon` läuft als CI-Step.
-4. **`jscpd` für Frontend** (S): Duplikat-Erkennung in `frontend/src/`, Schwelle 5 % Duplikat-Anteil. Häufige Duplikate (Status-Badges, Toast-Calls) auf gemeinsame UI-Atome heben.
+**Schritte:**
 
-**Akzeptanz:** `ruff check`, `mypy app/contracts app/api`, `radon cc -nc`, `jscpd frontend/src` laufen alle als CI-Gates.
+1. `prepare_service.py::_resolve_total_personas()`: harter Floor auf `MIN_PERSONA_TABLE_ROWS` (Import aus `report_agent`). Wenn der User-Wert < 50 ist, auf 50 anheben + Log-Eintrag „persona-floor angewendet".
+2. `manager.py::finalize_report()`: prüft `len(personas)` gegen `MIN_PERSONA_TABLE_ROWS`. Bei Unterschreitung: `ReportStatus.incomplete`, Eintrag in `data_gaps`.
+3. Frontend: `Step3Simulation.vue` Persona-Slider bekommt `min={50}` mit Tooltip „Mindestmenge für DACH-Persona-Tabelle".
 
----
+**Akzeptanz:**
 
-### F13 — `docu/`-Fragmentierung
+```bash
+# Default-Run muss 50 Personas erzeugen
+curl -s http://localhost:5001/api/runs/<id> | jq '.summary.persona_count'
+# erwartet: ≥ 50
+```
 
-| Feld | Wert |
-|---|---|
-| Kategorie | Doku-Hygiene |
-| Schwere | **niedrig** |
-| Layer | quer |
-| Issue / Task | (neu) |
-| Subagent | `agora-doc-worker` |
+### 2.3 JSON-Schema-Drift-Gate (Slice P1.3)
 
-**Befund.** `ls docu/ \| wc -l` → 130+ Dateien. Davon ~110 Arbeitsprotokolle, ~10 strategische Dokumente, ~10 sonstige (Logs, Plans). Mehrere konkurrierende Plan-Files (`PLAN.md` Root + `docu/feature-roadmap.md` + `docu/refactoring-backlog-priorisiert.md` + `REFACTORING_PLAN.md` Root + `docu/codex_plan.md` + `docu/plan_0.4.md` + `docu/2026-04-29-prod-setup-plan.md`). Für neue Contributors ist nicht klar, was die Quelle der Wahrheit ist.
+**Files:** `backend/app/contracts/dump_schemas.py`, `schemas/`, neue CI-Job-Stage.
 
-**Lösungsschritte:**
+**Schritte:**
 
-1. **Verzeichnisstruktur fixieren** (S, `agora-doc-worker`):
-   - `docu/decisions/` — ADRs (gibt's noch nicht, aber Skill-Vorlage in `agora-doc-worker.md`).
-   - `docu/design/` — Design-Docs (existiert).
-   - `docu/history/` — Arbeitsprotokolle, ältere Pläne (existiert).
-   - `docu/logs/` — CI/Audit-Logs (existiert).
-   - **Hauptbühne** auf 5 Dateien beschränken: `README.md`, `target-architecture.md`, `refactoring-backlog-priorisiert.md` (Audit-Snapshot), `ROADMAP.md`, `STATUS.md` (neu, aus F5).
-2. **Arbeitsprotokoll-Migration** (M, automatisierbar): Script `scripts/move-protocols-to-history.sh` verschiebt `docu/2026-04-*-arbeitsprotokoll.md` und `docu/2026-05-*-arbeitsprotokoll.md` nach `docu/history/`. Aktuelles Protokoll bleibt nur in `[Unreleased]` referenziert.
-3. **Plan-Konsolidierung** (siehe F5.3) — Root-Files `REFACTORING_PLAN.md`, `agora_*.md` (Stand 2026-04-2x) nach `docu/history/`.
-4. **CONTRIBUTING.md** (siehe F5.5) — Top-Level-Datei mit „Welche Datei für was?".
+1. `dump_schemas.py` erweitern, sodass `report-v3.schema.json`, `persona.schema.json`, `evidence-map.schema.json`, `report-contract.schema.json` aus den Pydantic-DTOs neu erzeugt werden.
+2. CI-Job `contract-gates.yml::schema-drift` läuft `python -m app.contracts.dump_schemas --check` (existiert bereits konzeptionell — verifizieren). Drift → CI rot.
+3. Frontend Zod-Schemas (`reportV3Contract.ts` etc.) bekommen einen Property-Roundtrip-Test gegen die JSON-Schema-Dateien (Snapshot-Vergleich auf Property-Set).
 
-**Akzeptanz:** `ls docu/ \| wc -l` ≤ 25 Top-Level-Files; alle Arbeitsprotokolle in `docu/history/`; eine `CONTRIBUTING.md` am Repo-Root.
+**Akzeptanz:** `npm run test:contracts && pytest backend/tests/contracts/` grün, Drift in einem der Dumps wird blockiert.
+
+### 2.4 Phase-1-Definition-of-Done
+
+- [ ] Pflichtabschnitt-Validator blockt unvollständige Reports mit explizit gelisteten Fehlrubriken.
+- [ ] Persona-Mindestanzahl 50 wird Pipeline-seitig erzwungen, im Frontend als Slider-Floor sichtbar.
+- [ ] JSON-Schema-Dump-Gate verhindert Drift zwischen Backend-DTOs, JSON-Schemas und Frontend-Zod-Schemas.
+- [ ] Smoke-Test `tests/eval/test_output_contract_snapshot.py` und `tests/contracts/test_report_v3_contract.py` grün.
 
 ---
 
-### F14 — AGPL-Operationalisierung
+## 3. Phase 2 — Evidence-Härtung
 
-| Feld | Wert |
-|---|---|
-| Kategorie | Recht / Compliance |
-| Schwere | **niedrig** |
-| Layer | quer |
-| Issue / Task | (neu) |
-| Subagent | `agora-doc-worker` |
+**Ziel:** Jeder Claim trägt mindestens einen nachvollziehbaren Anker. Was keinen Anker hat, wandert in `hypotheses[]` oder `data_gaps[]`. Low-Confidence wird im Output sichtbar.
 
-**Befund.** Lizenz ist konsistent AGPL-3.0 (Root, Backend, README, LICENSE), Fork-Linie zu `nikmcfly/MiroFish-Offline` ist sauber. Aber: keine „Source-available"-Anzeige in der laufenden App, kein SBOM, kein Third-Party-License-Report. Bei AGPL-konformer Bereitstellung über Netzwerk wäre das Pflicht.
+### 3.1 Evidence-Anker als Pflichtfeld erzwingen (Slice P2.1)
 
-**Lösungsschritte:**
+**Files:** `backend/app/services/report_agent/agent.py`, `backend/app/services/report_agent/workflow.py`, `backend/app/contracts/report_contract.py`.
 
-1. **UI-Footer-Hinweis** (XS, `agora-frontend-worker`): in `WorkspaceHeader.vue` oder neuer `AppFooter.vue` ein „Source: github.com/arn0ld87/agora · v0.9.0 · AGPL-3.0"-Link. Backend liefert `GET /api/version` mit Commit-SHA.
-2. **SBOM** (S, `agora-doc-worker`): `cyclonedx-py` als Dev-Dep + CI-Job, der `sbom.cdx.json` in den Release-Artifacts ablegt. Frontend-SBOM via `cyclonedx-npm`.
-3. **Third-Party-License-Report** (S): `pip-licenses --format=markdown > docu/THIRD-PARTY-LICENSES.md`, im CI nach `uv sync` regeneriert + `git diff --exit-code` als Drift-Check.
+**Schritte:**
 
-**Akzeptanz:** UI zeigt Source-Link + Version + SHA. SBOM ist Teil jeder Release. Third-Party-License-Report wird CI-gepflegt.
+1. `ReportClaimModel`: `evidence` von `default_factory=list` umstellen auf `min_length=1`, oder neuen Validator: wenn `evidence == []` und `confidence_label != "low"` → ValidationError. Migrationspfad für Bestandsreports über `evidence_migrations.py::migrate_v2_to_v3`.
+2. `agent.py::_finalize_section_claims()`: Vor Persistenz Filter — Claim ohne Evidence + `confidence_score < 0.4` → in `hypotheses[]` umschreiben (`hypothesis_id`, `rationale`, `suggested_evidence` aus `audit_trail`-Hinweisen).
+3. `workflow.py::generate_section()`: `data_gaps[]` der Section-Metadata bekommt automatisch alle Claim-Texte ohne Evidence-Bindung als `gap_reason="no_evidence_bound"`.
 
----
+**Akzeptanz:** In `tests/eval/fixtures/bad/` wird ein synthetischer Run gepinnt, dessen Claims allesamt Evidence-leer sind. Test prüft: `claims=0, hypotheses=N, data_gaps=N`.
 
-## Roadmap — logische Umsetzungsreihenfolge
+### 3.2 Low-Confidence-Markierung im Markdown-Export (Slice P2.2)
 
-Die Reihenfolge ergibt sich aus zwei Prinzipien:
+**Files:** `backend/app/services/report_agent/sections.py`, `frontend/src/utils/markdown.js`.
 
-1. **Layer-Bottom-Up bleibt verbindlich** (CLAUDE.md, PLAN.md, `/agora-next-task`).
-2. **Risiko × Wirkung** zuerst — Prod-Deployability + Auth-Modell + Doku-Sync sind höhere Hebel als zusätzliche Features.
+**Schritte:**
 
-### Milestone M9 — Prod-Hardening (Mai 2026, ~2–3 Wochen)
+1. `sections.py::render_claim_to_markdown()` ergänzen: bei `confidence_label in ("low",)` Hedging-Präfix ergänzen — z. B. `> ⚠️ Low-Confidence-Hinweis (score=0.15): {claim_text}`.
+2. Bei `confidence_label="medium"` ein dezenter Marker `_(medium-confidence)_` am Satzende.
+3. Frontend `markdown.js` rendert die Confidence-Marker als CSS-Badges (`.conf-low`, `.conf-medium`, `.conf-high`).
+4. Print-CSS in `useReportExports.ts::buildStandaloneHtml` bekommt die Badge-Styles dazu, damit PDF-Print sie sichtbar zeigt.
 
-> Fokus: das System für reale Single-Tenant-Deploys belastbar machen.
+**Akzeptanz:**
 
-| # | Slice | Aufwand | Subagent | Bezug |
-|---|---|---|---|---|
-| 1 | F5 Doku-Sync (`STATUS.md`-Skript, ROADMAP-Update, `CONTRIBUTING.md`) | S+S | `agora-doc-worker` (Haiku) | F5 |
-| 2 | F1.1 Reverse-Proxy-Sidecar (Nginx-Conf + Compose-Override + Doku) | M | `agora-refactor-worker` + `agora-doc-worker` | #106, F1 |
-| 3 | F2.1 `VITE_AGORA_TOKEN` per `ARG` gaten + Frontend-Login-Flow | S | `agora-refactor-worker` + `agora-frontend-worker` | F2 |
-| 4 | F2.2 `?token=` in Prod hart deaktivieren | S | `agora-refactor-worker` | F2 |
-| 5 | F3 Gunicorn-Gevent-Migration + Fork-Safety-Tests | M | `agora-refactor-worker` + `agora-test-worker` | F3, Sub-Slice 19 |
-| 6 | F1.2 `verify-deploy.sh` smoket Proxy-Stack | S | `agora-test-worker` | F1, F3 |
+```bash
+# Soll-Zustand: jeder Low-Confidence-Claim trägt ein sichtbares ⚠️-Marker im exportierten MD
+grep -c "Low-Confidence-Hinweis" agora-report-<id>.md
+# erwartet: == Anzahl der confidence_label="low" Claims
+```
 
-**Exit:** Repo liefert reproduzierbares Prod-Setup, Auth-Bundle-Pfad ist defaultmäßig zu, gevent-Worker laufen mit OASIS-Subprozess kompatibel.
+### 3.3 Hypotheses-Slot vollständig integrieren (Slice P2.3)
 
-### Milestone M10 — Test-Schärfe + CVE-Watch (Juni 2026, ~2 Wochen)
+**Files:** `backend/app/services/report_agent/sections.py`, `frontend/src/components/step4/ReportEvidencePanel.vue`, `frontend/src/utils/markdown.js`.
 
-> Fokus: Qualitäts-Gates härten, CVE-Backlog aktiv überwachen.
+**Schritte:**
 
-| # | Slice | Aufwand | Subagent | Bezug |
-|---|---|---|---|---|
-| 7 | F6.1 Coverage Backend (`pytest-cov`, Schwelle 70 %) | S | `agora-test-worker` | F6 |
-| 8 | F6.2 Coverage Frontend (`@vitest/coverage-v8`, Schwelle 60 %) | S | `agora-test-worker` | F6 |
-| 9 | F6.3 `evidence-quality` `--soft` raus | S | `agora-test-worker` | F6, Sub-Slice 17 |
-| 10 | F12 Ruff-Erweiterung + mypy-Strict-Job + Radon-Komplexitäts-Gate | M | `agora-test-worker` | F12 |
-| 11 | F4.1 `cve-monitor.yml` (wöchentlich, ohne `--ignore-vuln`) | S | `agora-doc-worker` | #121–#126, F4 |
-| 12 | F4.2 Dependency-Risk-Register-Erweiterung + Hardstop-Logik | S | `agora-doc-worker` | F4 |
+1. Markdown-Render: pro Section `### Hypothesen ohne Evidence`-Subsection mit `hypotheses[]` rendern (rationale + suggested_evidence-Liste).
+2. UI bekommt eigenen Hypothesen-Tab im `ReportEvidencePanel` (existiert teilweise — verifizieren und Layout-Vollständigkeit prüfen).
+3. JSON-Export führt `hypotheses[]` mit auf, kein Drop.
 
-**Exit:** CI-Gates sind hart, Coverage sichtbar, CVE-Watch aktiv mit klarer Eskalation.
+**Akzeptanz:** `tests/api/test_report_export.py::test_hypotheses_in_markdown_and_json` — beide Pfade enthalten den Hypothesen-Block.
 
-### Milestone M11 — Code-Hotspots zerschneiden (Juni–Juli 2026, ~3 Wochen)
+### 3.4 Phase-2-Definition-of-Done
 
-> Fokus: Wartbarkeit für die nächste Feature-Welle vorbereiten.
-
-| # | Slice | Aufwand | Subagent | Bezug |
-|---|---|---|---|---|
-| 13 | F7.1 `report_agent.py` → `services/report/{section_builder,claim_mapper,react_loop}.py` | M | `agora-refactor-worker` | F7 |
-| 14 | F7.2 `simulation_runner.py` → `services/sim/{process_manager,event_sync}.py` | M | `agora-refactor-worker` | F7 |
-| 15 | F8.1 `Step2EnvSetup.vue` aufteilen (3 Sub-Komponenten) | M | `agora-frontend-worker` | F8, EPIC-03 |
-| 16 | F8.2 `Step4Report.vue` aufteilen (3 Sub-Komponenten) | M | `agora-frontend-worker` | F8 |
-| 17 | F11 TS-Migration der verbleibenden 13 `.js`-Dateien | S+M | `agora-frontend-worker` | #73, Task 21, F11 |
-
-**Exit:** Kein Backend-Modul > 1500 LOC, keine Vue-Datei > 800 LOC, Frontend praktisch durchgängig TS.
-
-### Milestone M12 — Feature-Welle Compare/Diff/Persona (Juli–August 2026, ~4–6 Wochen)
-
-> Fokus: konkreter Produktwert — Branch-Vergleich, Persona-Review-UX, Runs-Dashboard.
-
-| # | Slice | Aufwand | Subagent | Bezug |
-|---|---|---|---|---|
-| 18 | #74 / Task 22 Graph-Diff Modell + API | L | `agora-refactor-worker` | F9 |
-| 19 | #66 / Task 24 Compare-API für Kernmetriken | L | `agora-refactor-worker` | F9 |
-| 20 | #76 / Task 16b Diff-/Confidence-UI (nach #74+#66+#75) | L | `agora-frontend-worker` | F9 |
-| 21 | #67 / Task 25 Compare-UI für zwei Branches | L | `agora-frontend-worker` | F9 |
-| 22 | #63 / Task 27 RunsDashboard.vue | L | `agora-frontend-worker` | F9 |
-| 23 | #69 / Task 29 Persona-Diff gegen Entity-Kontext | M | `agora-frontend-worker` + `agora-refactor-worker` | F10 |
-| 24 | #70 / Task 30 Approve/Reject/Regenerate-Workflow | L | `agora-frontend-worker` | F10 |
-| 25 | #64 / Task 28 Resume/Restart-Aktionen aus UI | M | `agora-refactor-worker` + `agora-frontend-worker` | F9 |
-| 26 | #137 / Task 32 Graph-Build Batch-Marker + Auto-Freeze | M | `agora-refactor-worker` + `agora-frontend-worker` | F10 |
-
-**Exit:** Layer 7 + Layer 8 grün laut CLAUDE.md-Tabelle. v1.0-Releasekandidat realistisch.
-
-### Milestone M13 — v1.0-Vorbereitung (August–September 2026, ~3 Wochen)
-
-> Fokus: Compliance, E2E, Doku-Endausbau.
-
-| # | Slice | Aufwand | Subagent | Bezug |
-|---|---|---|---|---|
-| 27 | F6.4 E2E-Spike mit Playwright (3 Tests, nightly) | L | `agora-test-worker` | F6 |
-| 28 | F13 Doku-Konsolidierung + Arbeitsprotokoll-Migration | M | `agora-doc-worker` | F13 |
-| 29 | F14.1 UI-Source-Link + `/api/version` mit SHA | XS | `agora-frontend-worker` | F14 |
-| 30 | F14.2 SBOM (cyclonedx) + Third-Party-License-Report | S | `agora-doc-worker` | F14 |
-| 31 | F2.3 Spike + ADR Session/Cookie-Modell | M | `agora-doc-worker` | F2 |
-| 32 | Release v1.0.0 (Tag, Release Notes, Changelog-Migration) | S | `agora-doc-worker` | (Release) |
-
-**Exit:** v1.0-Release mit reproduzierbarem Deploy, hartem CI, dokumentierter Compliance, klarer Wartungsbasis.
+- [ ] Claims ohne Evidence sind im Output unmöglich — sie sind entweder `hypothesis` oder `data_gap`.
+- [ ] Low-Confidence-Claims sind im exportierten Markdown sichtbar markiert (⚠️-Badge).
+- [ ] Hypothesen-Block ist in MD, HTML, JSON und im UI gleichwertig sichtbar.
+- [ ] Snapshot-Tests in `tests/eval/snapshots/` für Hypothesen-Routing aktualisiert.
 
 ---
 
-## Slash-Command-Anbindung
+## 4. Phase 3 — Report-Qualität: Markdown-First + Tabellen
 
-Alle Findings sind **kompatibel** zur bestehenden `/agora-next-task`-Heuristik-Tabelle. Die F-IDs lassen sich direkt als Subaufgaben unter PLAN.md-Tasks 18–34 einreihen, ohne `.claude/commands/agora-next-task.md` umzuschreiben — der Command kann weiterhin Layer-Bottom-Up arbeiten.
+**Ziel:** Strukturierte Rohdaten zuerst, daraus deterministisch gerendertes Markdown, daraus Browser-Print-PDF. Tabellen für Personas, Segmente, Top-10-Listen.
 
-| F-ID | Verwendet |
-|---|---|
-| F1, F3 | PLAN.md Task 33 (#106), Sub-Slice 19 (gunicorn) |
-| F2 | neuer Layer-9-Slice, kein Issue offen, würde als Task 35 ergänzt |
-| F4 | PLAN.md Task 34 (#121–#126) |
-| F5, F13 | Quer, Doku-Worker-Slices |
-| F6, F12 | erweitert PLAN.md Layer 5 / EPIC-01 |
-| F7 | EPIC-07-Folge (`report_agent.py` weiter) |
-| F8 | EPIC-03-Folge |
-| F9 | PLAN.md Tasks 22–28 |
-| F10 | PLAN.md Tasks 29, 30, 32 |
-| F11 | PLAN.md Task 21 (#73) |
-| F14 | neuer Layer-10-Slice (Compliance) |
+### 4.1 ReportV3 als Persistenz-Format (Slice P3.1)
 
-**Empfehlung:** in `.claude/commands/agora-next-task.md` Schritt 2 den bereits dokumentierten Block aus `PLAN.md` Teil E.3 (Tasks 18–34) übernehmen, sobald Task 17 abgeschlossen ist (laut CLAUDE.md ist das bereits der Fall, aber der Command spiegelt das noch nicht). F2 + F14 als neue Tasks 35/36 anhängen.
+**Files:** `backend/app/services/evidence_migrations.py`, `backend/app/services/report_agent/storage.py`, `backend/app/services/report_agent/manager.py`, `backend/app/contracts/report_v3.py`.
+
+**Schritte:**
+
+1. `evidence_migrations.py`: `CURRENT_SCHEMA_VERSION = 3`, neue Funktion `migrate_v2_to_v3(raw)` — übernimmt `sections[].claims[]` 1:1, baut zusätzlich aggregierte `personas[]`, `segments[]`, `friction_points[]`, `trust_signals[]` etc. aus den existierenden Section-Inhalten.
+2. `storage.py::write_report_v3(report_id, ReportV3)` neu — schreibt ein zusätzliches Artefakt `report-v3.json` neben `evidence-map.json`. v2 bleibt vorerst parallel (Read-Modell für Bestandsreports).
+3. `manager.py::finalize_report()` ruft am Ende die v3-Aggregation auf, sobald alle Sections vorhanden sind.
+4. CI-Gate: `tests/contracts/test_report_v3_contract.py::test_persisted_v3_validates` neu — lädt das geschriebene Artefakt und parst es gegen `ReportV3`.
+
+**Akzeptanz:** Nach jedem grünen Run liegen `report.json` (v2) **und** `report-v3.json` parallel im Storage. v3 valide gegen Pydantic-Modell.
+
+### 4.2 Markdown-Renderer aus ReportV3 (Slice P3.2)
+
+**Files:** `backend/app/services/report_agent/markdown_renderer.py` (neu), `backend/app/services/report_agent/manager.py`.
+
+**Schritte:**
+
+1. Neue Datei `markdown_renderer.py` mit reinen Funktionen:
+   - `render_persona_table(personas: list[Persona]) -> str` — vollständige Markdown-Tabelle, alle 50+ Zeilen.
+   - `render_segment_table(segments: list[Segment]) -> str`.
+   - `render_top10_list(items: list[FrictionPoint|TrustSignal|ChangeRecommendation]) -> str` — sortiert nach `severity`/`priority`.
+   - `render_data_gaps(gaps: list[DataGap]) -> str`.
+   - `render_report_v3(report: ReportV3) -> str` — orchestriert alle Pflichtabschnitte in der Default-Reihenfolge.
+2. `manager.py`: nach v3-Aggregation den Renderer aufrufen, Ergebnis zusätzlich als `report-v3.md` schreiben. v2-`report.md` bleibt für Bestandskompatibilität.
+3. Frontend `useReportExports.ts`: Default-MD-Download wechselt auf `report-v3.md`, Fallback auf `report.md` wenn v3 fehlt.
+
+**Akzeptanz:**
+
+```bash
+# Persona-Tabelle muss exakt MIN_PERSONA_TABLE_ROWS Zeilen haben
+grep -c "^| P[0-9]" agora-report-<id>-v3.md
+# erwartet: ≥ 50
+```
+
+### 4.3 Quote-Source-Markierung verfeinern (Slice P3.3)
+
+**Files:** `backend/app/services/report_agent/sections.py`, `frontend/src/utils/markdown.js`.
+
+**Schritte:**
+
+1. `<simulated_quote persona_id seed_anchor>` wird im finalen Markdown zu einem Blockquote mit explizitem Marker:
+   ```markdown
+   > **Simulierter Persona-O-Ton** (persona_10, seed_anchor: robert_krasniqi_statement)
+   > „Meine Generation will keine 5-Tage-Woche mehr. […]"
+   ```
+2. Frontend `markdown.js` kennt das Pattern und rendert eine farbige Markierung links („SIM").
+3. Validator: `validate_quote_anchors` (existiert bereits laut `workflow.py`) muss in `strict`-Modus jedes Quote auf `seed_anchor`-Existenz im `seed_evidence_index` prüfen. Strict-Modus ist Voraussetzung für Phase 4.
+
+**Akzeptanz:** Kein Quote im Markdown ohne explizit sichtbaren `(persona_id, seed_anchor)`-Header.
+
+### 4.4 PDF nur als Browser-Print dokumentieren (Slice P3.4)
+
+**Files:** `docu/deployment-prod-like.md`, `README.md`, `useReportExports.ts`.
+
+**Schritte:**
+
+1. `useReportExports.ts::printReport` prominenter platzieren (Button-Label „Als PDF drucken (Browser)").
+2. Doku ergänzen: kein server-seitiges PDF, keine Headless-Chrome-Pipeline. Print-CSS ist die kanonische PDF-Quelle.
+3. Print-CSS um Confidence-Badges aus Phase 2.2 ergänzen (siehe oben).
+
+**Akzeptanz:** Browser-Print eines erzeugten Reports liefert vollständige Persona-Tabelle, Top-10-Listen und Confidence-Badges.
+
+### 4.5 Phase-3-Definition-of-Done
+
+- [ ] `report-v3.json` liegt nach jedem Run im Storage und valide gegen `ReportV3`.
+- [ ] `report-v3.md` enthält alle 11 Pflichtabschnitte als deterministisch gerenderte Tabellen/Listen.
+- [ ] Persona-Tabelle ≥ 50 Zeilen, Segment-Tabelle, Top-10-Listen vollständig.
+- [ ] Print-PDF zeigt sichtbare Confidence-Badges und Quote-Marker.
 
 ---
 
-## Hardstops (gelten weiterhin)
+## 5. Phase 4 — Vertrauensmodi + Export
 
-Übernommen aus PLAN.md Teil K, mit Erweiterung für die neuen Findings:
+**Ziel:** Drei Berichtsmodi mit unterschiedlicher Strenge, vollständiger Export in MD/JSON/CSV/PDF, optional ZIP-Bundle.
 
-- Kein Sammel-PR über mehrere Layer.
-- Kein `Closes #N`, wenn der Issue nur vorbereitet wurde.
-- Kein Dependency-Upgrade gegen harte Third-Party-Pins ohne Testlauf (gilt explizit für F4).
-- Kein Frontend-TypeScript-Big-Bang vor stabilen API-Schemas (Layer 0 ist stabil → F11 ist sicher).
-- Kein Prod-Deployment-Slice zusammen mit Report-Refactor.
-- Kein Auto-Fix-Loop nach rotem Verify. Fehler reporten, Worktree stehen lassen.
-- **Neu:** Kein Big-Bang-Refactor an `report_agent.py` ohne Snapshot-Eval-Tests grün vor + nach (F7, abgesichert durch Sub-Slice 17 Eval-Suite).
-- **Neu:** Kein gevent-Switch ohne Fork-Safety-Tests für Neo4j+Redis-Pools (F3).
-- **Neu:** Kein Ruff-Regel-Bump als Sammel-Diff — gescopter Rollout wie beim ersten Default-Strict-Move (F12).
+### 5.1 Report-Modi `strict`/`balanced`/`explorative` (Slice P4.1)
+
+**Files:** `backend/app/api/report.py`, `backend/app/services/report_agent/manager.py`, `backend/app/contracts/report_v3.py`, `frontend/src/views/ReportView.vue`.
+
+**Schritte:**
+
+1. `ReportV3.report_mode: Literal["strict","balanced","explorative"] = "balanced"` ergänzen.
+2. API `POST /api/report` akzeptiert `?mode=strict|balanced|explorative`, default `balanced`.
+3. Manager-Verhalten:
+   - **strict**: Claims ohne Evidence werden gedroppt (nicht in Hypotheses umgewandelt). Quote-Anchor-Validator hart. `confidence_label="low"` Claims werden gedroppt.
+   - **balanced** (default): Phase-2-Verhalten — Hypotheses-Routing, Low-Confidence sichtbar markiert.
+   - **explorative**: alle Claims durch, alle Quotes durch, sichtbar als `EXPLORATIVE`-Banner im Header.
+4. Frontend `ReportView.vue`: Mode-Selector im Header (`<select>` mit drei Optionen + Tooltip-Erklärung).
+5. Markdown-Renderer ergänzt einen Header-Block:
+   ```markdown
+   > **Report-Modus:** balanced — Belegte Claims plus markierte Hypothesen.
+   ```
+
+**Akzeptanz:** Drei Reports vom selben Run mit den drei Modi unterscheiden sich messbar in `claim_count`, `hypothesis_count` und Header-Banner.
+
+### 5.2 CSV-Export für strukturierte Tabellen (Slice P4.2)
+
+**Files:** `backend/app/api/report.py`, `frontend/src/composables/useReportExports.ts`, `frontend/src/api/report.ts`.
+
+**Schritte:**
+
+1. Backend-Endpoint `GET /api/report/<id>/export?format=csv&table=personas|segments|claims`. Liefert RFC-4180-konformes CSV.
+2. `useReportExports.ts::downloadCsvBundle()` lädt alle drei Tabellen, packt sie in ein ZIP via `JSZip` (bereits npm-paket-tauglich, sonst lokal als drei Einzeldownloads).
+3. Frontend-Button „CSV herunterladen" mit Dropdown (Personas / Segmente / Alle).
+
+**Akzeptanz:**
+
+```bash
+curl -s "http://localhost:5001/api/report/<id>/export?format=csv&table=personas" \
+  | head -1
+# erwartet: id,voice_register,alter_range,beruf,region,…
+```
+
+### 5.3 ZIP-Bundle-Export (Slice P4.3)
+
+**Files:** `frontend/src/composables/useReportExports.ts`.
+
+**Schritte:**
+
+1. `downloadAllBundle()` zieht serverseitig vorbereitetes ZIP (`GET /api/report/<id>/export?format=zip`) — enthält `report-v3.md`, `report-v3.json`, `evidence-map.json`, `personas.csv`, `segments.csv`, `claims.csv`.
+2. Backend-Seite: kein neues Storage, ZIP wird on-the-fly aus existierenden Artefakten gebaut.
+
+**Akzeptanz:** ZIP entpackt enthält 6 Dateien, alle gegen ihre Schemas valide.
+
+### 5.4 E2E-Smokes für die Modi (Slice P4.4)
+
+**Files:** `frontend/tests/e2e/report-modes.spec.ts` (neu).
+
+**Schritte:**
+
+1. Drei Playwright-Smokes (Health/Login → Run-Trigger → Mode-Auswahl → Export).
+2. Snapshot-Vergleich auf den Mode-Banner im exportierten Markdown.
+
+**Akzeptanz:** `npm run test:e2e -- --grep report-modes` grün auf allen drei Modi.
+
+### 5.5 Phase-4-Definition-of-Done
+
+- [ ] Drei Modi sind UI-seitig wählbar, server-seitig durchgeschleift.
+- [ ] CSV-Export für Personas, Segmente, Claims funktioniert standalone und im ZIP-Bundle.
+- [ ] PDF-Export bleibt Browser-Print, ist aber im Mode-Header markiert.
+- [ ] E2E-Smokes blockieren Regressionen in CI.
 
 ---
 
-## Nächste Schritte (genau 3, Stand 2026-05-06)
+## 6. Definition of Done für v1.0
 
-> Die ursprünglichen Hardening-Schritte bis M10.5 sind abgehakt und stehen unter [§ Status-Sync 2026-05-04](#status-sync-2026-05-04) als erledigt. Aktuelle Top-3:
+- [ ] **Phase 1 grün:** Pflichtabschnitt-Validator + Persona-Floor + Schema-Drift-Gate.
+- [ ] **Phase 2 grün:** Evidence-Anker-Pflicht + Low-Confidence-Marker + Hypotheses-Routing.
+- [ ] **Phase 3 grün:** ReportV3 als Persistenz + Markdown-Tabellen-Renderer + Quote-Marker.
+- [ ] **Phase 4 grün:** Drei Modi + CSV/ZIP-Export + E2E-Smokes.
+- [ ] Externe Re-Bewertung gegen `agora_bewertung_komplett.md` Score ≥ 8,5/10.
+- [ ] Alle Coverage-Gates (Backend ≥ 70 %, Frontend ≥ 60 %) grün.
+- [ ] CI inklusive Schema-Drift, Contract-Gates, E2E-Smokes grün auf `release/**`.
+- [ ] Release-Tag `v1.0.0` mit Changelog, SBOM, License-Report.
 
-1. **Coverage-Gates Richtung Zielwerte anheben (M11.2/M11.3)** — Start-Gates existieren; nächster Schritt ist schrittweise Härtung Richtung Backend 70 % / Frontend 60 %.
-2. **Playwright-Smokes (M11.4)** — drei E2E-Smokes: Health/Login, Upload+Graph, Minimalreport.
-3. **Final-Release-Gate** — Docker-Image-Build + Reverse-Proxy-Smoke für PRs oder Release-Kandidaten wieder aktivieren oder gleichwertig ersetzen.
+---
 
-Detaillierte Subagent-Zuordnung und Akzeptanzkriterien je Slice: [`docu/plan.heuristic.md`](docu/plan.heuristic.md).
+## 7. Arbeitsreihenfolge (PR-by-PR)
+
+| PR | Slice | Aufwand | Blockiert |
+|---|---|---|---|
+| 1 | P1.1 Pflichtabschnitt-Validator | M | — |
+| 2 | P1.2 Persona-Mindestanzahl | S | — |
+| 3 | P1.3 Schema-Drift-Gate | S | — |
+| 4 | P2.1 Evidence-Anker-Pflicht | M | PR 1 |
+| 5 | P2.2 Low-Confidence-Marker | S | PR 4 |
+| 6 | P2.3 Hypotheses-Slot | S | PR 4 |
+| 7 | P3.1 ReportV3 als Persistenz | L | PR 1, PR 4 |
+| 8 | P3.2 Markdown-Renderer | L | PR 7 |
+| 9 | P3.3 Quote-Marker | S | PR 8 |
+| 10 | P3.4 PDF-Print-Doku | S | PR 8 |
+| 11 | P4.1 Report-Modi | M | PR 7, PR 8 |
+| 12 | P4.2 CSV-Export | M | PR 7 |
+| 13 | P4.3 ZIP-Bundle | S | PR 12 |
+| 14 | P4.4 E2E-Smokes Modi | M | PR 11, PR 13 |
+
+Reihenfolge ist linear sicher; PR 4 und PR 7 sind die zwei Engstellen.
+
+---
+
+## 8. Nächste Schritte
+
+1. **PR 1 starten:** `contract_validator.py` + `ReportOutlineModel`-Validator + Manager-Hook. Aufwand M, höchster Score-Hebel pro LOC.
+2. **PR 2 parallel:** Persona-Floor in `prepare_service.py` + Frontend-Slider-Min. Kein Konflikt mit PR 1.
+3. **PR 7 vorbereiten:** v2→v3-Migration spec'en, bevor die Pipeline umgestellt wird (Migrationspfad ist die einzige Stelle, an der Bestandsdaten kippen können).
