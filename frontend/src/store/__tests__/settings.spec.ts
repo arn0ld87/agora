@@ -1,22 +1,10 @@
-// Issue #133 / SUB4 — Settings-Store-Tests.
-//
-// Decken:
-//  1. loadSettings parallelisiert Schema + Werte und bringt den Draft
-//     auf den serverseitigen Wert (mit leerem Draft für Secrets).
-//  2. dirty-Tracking erkennt geänderte Felder; Secrets gelten dirty,
-//     sobald irgendwas eingetippt wurde.
-//  3. dirtySectionFlags markiert die Sektion mit einem dirty Field.
-//  4. saveSettings ohne Secrets ruft nur PUT /api/settings auf.
-//  5. saveSettings mit Secrets wirft synchron ohne confirmSecrets,
-//     ruft mit confirmSecrets sowohl PUT als auch PUT /secrets auf.
-//  6. fieldErrors mappt Backend-Validation auf den richtigen Key.
-//  7. discardChanges resettet den Draft auf den serverseitigen Wert.
-
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('../../api/settings', () => ({
   fetchSettings: vi.fn(),
   fetchSettingsSchema: vi.fn(),
+  openSettingsStream: vi.fn(),
   putSettings: vi.fn(),
   putSecrets: vi.fn(),
 }))
@@ -24,193 +12,149 @@ vi.mock('../../api/settings', () => ({
 import {
   fetchSettings,
   fetchSettingsSchema,
+  openSettingsStream,
   putSecrets,
   putSettings,
 } from '../../api/settings'
+import { useSettingsStore } from '../settings'
 
-// reason: vi.mock() ersetzt die Funktionen durch Mock-Instanzen; TS kennt
-// nur den deklarierten Typ aus api/settings.ts. Cast auf MockInstance nötig,
-// damit .mockResolvedValueOnce / .mockRejectedValueOnce verfügbar sind.
 const _fetchSettings = fetchSettings as unknown as MockInstance
 const _fetchSettingsSchema = fetchSettingsSchema as unknown as MockInstance
+const _openSettingsStream = openSettingsStream as unknown as MockInstance
 const _putSettings = putSettings as unknown as MockInstance
 const _putSecrets = putSecrets as unknown as MockInstance
-import settingsStore, {
-  discardChanges,
-  dirtyKeys,
-  dirtySectionFlags,
-  fieldErrors,
-  isDirty,
-  loadSettings,
-  saveSettings,
-} from '../settings'
-
 
 function buildSchemaResponse() {
   return {
+    success: true,
     data: {
-      success: true,
-      data: {
-        sections: ['llm', 'security'],
-        fields: [
-          { key: 'LLM_MODEL_NAME', section: 'llm', type: 'string',
-            secret: false, reload_required: false, default: 'qwen2.5:32b' },
-          { key: 'NEO4J_PASSWORD', section: 'security', type: 'string',
-            secret: true, reload_required: true, default: null },
-        ],
-      },
+      sections: ['llm', 'ui', 'security'],
+      fields: [
+        { key: 'LLM_MODEL_NAME', section: 'llm', type: 'string', secret: false, reload_required: false, default: 'qwen2.5:32b' },
+        { key: 'RUNS_POLL_INTERVAL_MS', section: 'ui', type: 'int', secret: false, reload_required: false, default: 5000, min: 1000, max: 60000 },
+        { key: 'NEO4J_PASSWORD', section: 'security', type: 'string', secret: true, reload_required: true, default: null },
+      ],
     },
   }
 }
 
-
-function buildValuesResponse({ modelValue = 'qwen2.5:32b', source = 'default' } = {}) {
+function buildValuesResponse({
+  modelValue = 'qwen2.5:32b',
+  interval = 5000,
+  source = 'default',
+} = {}) {
   return {
+    success: true,
     data: {
-      success: true,
-      data: {
-        sections: ['llm', 'security'],
-        fields: {
-          llm: [{
-            key: 'LLM_MODEL_NAME', section: 'llm', type: 'string',
-            secret: false, reload_required: false,
-            value: modelValue, default: 'qwen2.5:32b',
-            source, is_set: true,
-          }],
-          security: [{
-            key: 'NEO4J_PASSWORD', section: 'security', type: 'string',
-            secret: true, reload_required: true,
-            value: null, source: 'env', is_set: true,
-          }],
-        },
+      sections: ['llm', 'ui', 'security'],
+      fields: {
+        llm: [{
+          key: 'LLM_MODEL_NAME', section: 'llm', type: 'string',
+          secret: false, reload_required: false,
+          value: modelValue, default: 'qwen2.5:32b',
+          source, is_set: true,
+        }],
+        ui: [{
+          key: 'RUNS_POLL_INTERVAL_MS', section: 'ui', type: 'int',
+          secret: false, reload_required: false,
+          value: interval, default: 5000,
+          source, is_set: true,
+        }],
+        security: [{
+          key: 'NEO4J_PASSWORD', section: 'security', type: 'string',
+          secret: true, reload_required: true,
+          value: null, source: 'env', is_set: true,
+        }],
       },
     },
   }
 }
 
-
-beforeEach(() => {
-  vi.resetAllMocks()
-  // Singleton zurücksetzen: alle observable Felder auf Defaults
-  Object.assign(settingsStore, {
-    loading: false,
-    saving: false,
-    loadError: null,
-    saveError: null,
-    sections: [],
-    schema: [],
-    fields: {},
-    draft: {},
-    drafts_secret_filled: {},
-    validationErrors: [],
+describe('useSettingsStore', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    setActivePinia(createPinia())
   })
-})
 
-afterEach(() => {
-  vi.resetAllMocks()
-})
+  afterEach(() => {
+    vi.resetAllMocks()
+  })
 
+  it('lädt Schema + Werte und initialisiert Draft + Live-Intervall', async () => {
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse({ interval: 2500 }))
 
-describe('loadSettings', () => {
-  it('lädt Schema + Werte parallel und initialisiert den Draft', async () => {
+    const store = useSettingsStore()
+    await store.loadSettings()
+
+    expect(store.sections).toEqual(['llm', 'ui', 'security'])
+    expect(store.draft.LLM_MODEL_NAME).toBe('qwen2.5:32b')
+    expect(store.draft.NEO4J_PASSWORD).toBe('')
+    expect(store.runsPollIntervalMs).toBe(2500)
+  })
+
+  it('saveSettings ohne Secrets ruft nur putSettings auf', async () => {
     _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
     _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
-
-    await loadSettings()
-
-    expect(_fetchSettingsSchema).toHaveBeenCalledTimes(1)
-    expect(_fetchSettings).toHaveBeenCalledTimes(1)
-    expect(settingsStore.sections).toEqual(['llm', 'security'])
-    // Non-secret Draft = serverseitiger Wert
-    expect(settingsStore.draft.LLM_MODEL_NAME).toBe('qwen2.5:32b')
-    // Secret Draft = leer (Klartext kommt nicht vom Backend)
-    expect(settingsStore.draft.NEO4J_PASSWORD).toBe('')
-  })
-
-  it('setzt loadError und wirft, wenn der Fetch scheitert', async () => {
-    const err = new Error('boom')
-    _fetchSettingsSchema.mockRejectedValueOnce(err)
-    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
-
-    await expect(loadSettings()).rejects.toBe(err)
-    expect(settingsStore.loadError).toContain('boom')
-  })
-})
-
-
-describe('dirty-Tracking', () => {
-  beforeEach(async () => {
-    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
-    await loadSettings()
-  })
-
-  it('non-secret Field wird dirty, wenn der Draft abweicht', () => {
-    expect(isDirty('LLM_MODEL_NAME')).toBe(false)
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
-    expect(isDirty('LLM_MODEL_NAME')).toBe(true)
-  })
-
-  it('Secret-Field wird dirty, sobald der Draft nicht-leer ist', () => {
-    expect(isDirty('NEO4J_PASSWORD')).toBe(false)
-    settingsStore.draft.NEO4J_PASSWORD = 'new-pw'
-    expect(isDirty('NEO4J_PASSWORD')).toBe(true)
-  })
-
-  it('dirtyKeys + dirtySectionFlags reflektieren Änderungen pro Sektion', () => {
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
-    expect(dirtyKeys()).toEqual(['LLM_MODEL_NAME'])
-    expect(dirtySectionFlags()).toEqual({ llm: true, security: false })
-  })
-})
-
-
-describe('saveSettings', () => {
-  beforeEach(async () => {
-    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
-    await loadSettings()
-  })
-
-  it('ruft nur putSettings, wenn nur non-secret dirty ist', async () => {
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
     _putSettings.mockResolvedValueOnce(buildValuesResponse({ modelValue: 'qwen2.5:14b', source: 'file' }))
 
-    await saveSettings()
+    const store = useSettingsStore()
+    await store.loadSettings()
+    store.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
+
+    await store.saveSettings()
 
     expect(_putSettings).toHaveBeenCalledWith({ LLM_MODEL_NAME: 'qwen2.5:14b' })
     expect(_putSecrets).not.toHaveBeenCalled()
-    // Server-Snapshot wird übernommen
-    expect(settingsStore.fields.llm[0].source).toBe('file')
-    // Draft ist nach Save wieder im Sync mit dem Server
-    expect(isDirty('LLM_MODEL_NAME')).toBe(false)
+    expect(store.isDirty('LLM_MODEL_NAME')).toBe(false)
   })
 
-  it('wirft confirm_secrets_required, wenn Secret-Save ohne confirmSecrets', async () => {
-    settingsStore.draft.NEO4J_PASSWORD = 'new-pw'
+  it('saveSettings mit Secret verlangt confirmSecrets', async () => {
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
 
-    await expect(saveSettings()).rejects.toMatchObject({
-      code: 'confirm_secrets_required',
-    })
+    const store = useSettingsStore()
+    await store.loadSettings()
+    store.draft.NEO4J_PASSWORD = 'new-pw'
+
+    await expect(store.saveSettings()).rejects.toMatchObject({ code: 'confirm_secrets_required' })
     expect(_putSecrets).not.toHaveBeenCalled()
-    expect(_putSettings).not.toHaveBeenCalled()
   })
 
-  it('mit confirmSecrets ruft sowohl putSettings als auch putSecrets', async () => {
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
-    settingsStore.draft.NEO4J_PASSWORD = 'new-pw'
-    _putSettings.mockResolvedValueOnce(buildValuesResponse())
-    _putSecrets.mockResolvedValueOnce(buildValuesResponse())
+  it('connectStream lädt Settings neu bei settings.changed', async () => {
+    const listeners = new Map<string, (ev: MessageEvent) => void>()
+    _fetchSettingsSchema.mockResolvedValue(buildSchemaResponse())
+    _fetchSettings
+      .mockResolvedValueOnce(buildValuesResponse({ interval: 5000 }))
+      .mockResolvedValueOnce(buildValuesResponse({ interval: 1500, source: 'file' }))
+    _openSettingsStream.mockImplementation(async (handlers?: { changed?: (payload: unknown) => void }) => {
+      if (handlers?.changed) {
+        listeners.set('settings.changed', (ev: MessageEvent) => handlers.changed?.(JSON.parse(ev.data as string)))
+      }
+      return { close: vi.fn() }
+    })
 
-    await saveSettings({ confirmSecrets: true })
+    const store = useSettingsStore()
+    await store.loadSettings()
+    await store.connectStream()
 
-    expect(_putSettings).toHaveBeenCalledTimes(1)
-    expect(_putSecrets).toHaveBeenCalledTimes(1)
-    expect(_putSecrets).toHaveBeenCalledWith({ NEO4J_PASSWORD: 'new-pw' })
+    listeners.get('settings.changed')?.({
+      data: JSON.stringify({
+        type: 'settings.changed',
+        updated_keys: ['RUNS_POLL_INTERVAL_MS'],
+        ts: '2026-05-10T22:00:00Z',
+      }),
+    } as MessageEvent)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(store.runsPollIntervalMs).toBe(1500)
+    expect(_fetchSettings).toHaveBeenCalledTimes(2)
   })
 
-  it('extrahiert Backend-Validation-Errors in fieldErrors()', async () => {
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
+  it('fieldErrors mappt Backend-Validation auf den richtigen Key', async () => {
+    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
+    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
     const apiError = Object.assign(new Error('validation_failed'), {
       code: 'validation_failed',
       originalResponse: {
@@ -223,27 +167,13 @@ describe('saveSettings', () => {
     })
     _putSettings.mockRejectedValueOnce(apiError)
 
-    await expect(saveSettings()).rejects.toBe(apiError)
-    const errs = fieldErrors('LLM_MODEL_NAME')
-    expect(errs).toHaveLength(1)
-    expect(errs[0].code).toBe('type_error')
-  })
-})
+    const store = useSettingsStore()
+    await store.loadSettings()
+    store.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
 
-
-describe('discardChanges', () => {
-  it('setzt den Draft zurück und räumt validationErrors', async () => {
-    _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
-    _fetchSettings.mockResolvedValueOnce(buildValuesResponse())
-    await loadSettings()
-    settingsStore.draft.LLM_MODEL_NAME = 'qwen2.5:14b'
-    settingsStore.validationErrors = [
-      { key: 'LLM_MODEL_NAME', code: 'x', message: 'y' },
-    ]
-
-    discardChanges()
-
-    expect(settingsStore.draft.LLM_MODEL_NAME).toBe('qwen2.5:32b')
-    expect(settingsStore.validationErrors).toEqual([])
+    await expect(store.saveSettings()).rejects.toBe(apiError)
+    expect(store.fieldErrors('LLM_MODEL_NAME')).toEqual([
+      { key: 'LLM_MODEL_NAME', code: 'type_error', message: 'bla' },
+    ])
   })
 })

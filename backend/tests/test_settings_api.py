@@ -1,8 +1,8 @@
-"""Tests für die Settings-API (Issue #133, SUB1 + SUB2).
+"""Tests für die Settings-API (Issue #133, SUB1 + SUB2; Issue #212 stream).
 
 Pinnt die HTTP-Verträge der vier Routen, inklusive Auth-Guard,
-Sektions-Gruppierung, Secret-Maske im GET-Response und
-All-or-Nothing-Verhalten der PUT-Validierung.
+Sektions-Gruppierung, Secret-Maske im GET-Response, All-or-Nothing-
+Verhalten der PUT-Validierung und das ``settings.changed``-Broadcast.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from app.api.settings import (
     get_settings_schema,
     put_settings,
     put_settings_secrets,
+    stream_settings,
 )
 from app.services.settings_layer import SettingsService
 from app.services.settings_schema import SECTIONS, SETTINGS_FIELDS
@@ -34,7 +35,7 @@ def app(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         'app.api.settings.get_default_service', lambda: service
     )
-    changed_events = []
+    changed_events: list[tuple[list[str], str]] = []
     monkeypatch.setattr(
         'app.api.settings.publish_settings_changed',
         lambda keys, *, source: changed_events.append((sorted(keys), source)),
@@ -49,6 +50,7 @@ def app(monkeypatch, tmp_path: Path):
     bp.add_url_rule('', view_func=put_settings, methods=['PUT'])
     bp.add_url_rule('/', view_func=put_settings, methods=['PUT'])
     bp.add_url_rule('/secrets', view_func=put_settings_secrets, methods=['PUT'])
+    bp.add_url_rule('/stream', view_func=stream_settings, methods=['GET'])
     install_blueprint_guard(bp)
     app.register_blueprint(bp, url_prefix='/api/settings')
     app.config['service'] = service
@@ -309,6 +311,17 @@ def test_put_settings_rejects_non_dict_body(client):
     assert res.get_json()['code'] == 'invalid_payload'
 
 
+def test_put_settings_pydantic_contract_forbids_nested_objects(client):
+    """Issue #212: Pydantic-Pre-Validation muss verschachtelte
+    Objekte ablehnen, bevor der Domain-Validator sie sieht.
+    """
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': {'nested': 'nope'}})
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body['code'] == 'validation_failed'
+    assert any(err['key'] == 'LLM_MODEL_NAME' for err in body['errors'])
+
+
 # ---------------------------------------------------------------------------
 # PUT /api/settings/secrets
 # ---------------------------------------------------------------------------
@@ -380,6 +393,16 @@ def test_put_secrets_response_does_not_leak_plaintext(client):
         'fields': {'NEO4J_PASSWORD': 'response-canary-value'},
     })
     assert b'response-canary-value' not in res.data
+
+
+def test_put_secrets_contract_forbids_extra_nested_keys(client):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'NEO4J_PASSWORD': 'pw', 'BOGUS_SECRET': 'x'},
+    })
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body['code'] == 'non_secret_field'
 
 
 def test_put_settings_auth_required(app, monkeypatch):

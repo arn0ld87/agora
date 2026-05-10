@@ -32,6 +32,7 @@ SECTIONS: tuple[str, ...] = (
     'event_bus',
     'logging',
     'locale',
+    'ui',
     'webtools',
     'oasis',
     'security',
@@ -149,6 +150,10 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
               enum_values=('de', 'en')),
     FieldSpec('TIME_PROFILE', 'locale', 'string', default='dach_default'),
     FieldSpec('REPORT_LANGUAGE', 'locale', 'string', default='German'),
+
+    # ===== UI =====
+    FieldSpec('RUNS_POLL_INTERVAL_MS', 'ui', 'int', default=5000,
+              min_value=1000, max_value=60000),
 
     # ===== Webtools (ReportAgent) =====
     FieldSpec('ENABLE_WEB_TOOLS', 'webtools', 'bool', default=False),

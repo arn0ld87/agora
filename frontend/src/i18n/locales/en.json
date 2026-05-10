@@ -627,13 +627,14 @@
       "ontology": "Ontology",
       "hybrid_search": "Hybrid Search",
       "agent_tools": "Agent Tools",
-      "event_bus": "Event Bus",
-      "logging": "Logging",
-      "locale": "Locale",
-      "webtools": "Webtools",
-      "oasis": "OASIS",
-      "security": "Secrets"
-    }
+        "event_bus": "Event Bus",
+        "logging": "Logging",
+        "locale": "Locale",
+        "ui": "UI",
+        "webtools": "Webtools",
+        "oasis": "OASIS",
+        "security": "Secrets"
+      }
   },
   "activeModel": {
     "label": "Active model",

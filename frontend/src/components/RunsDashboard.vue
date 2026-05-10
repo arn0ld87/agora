@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useRunsPolling } from '../composables/useRunsPolling'
@@ -17,7 +17,7 @@ const router = useRouter()
 
 // ---- Polling ----
 const { runs, loading, error, isRunning, start, stop, refresh } = useRunsPolling(
-  props.pollIntervalMs,
+  toRef(props, 'pollIntervalMs'),
 )
 
 onMounted(() => void start())
