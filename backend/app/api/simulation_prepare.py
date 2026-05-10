@@ -54,11 +54,15 @@ def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
 
 def _resolve_max_agents_with_floor(raw_value: object) -> int | None:
     """Parse optional max_agents and enforce the report persona floor."""
+    if raw_value is None or raw_value == "" or raw_value == 0:
+        return None
+    if not isinstance(raw_value, (str, int, float)):
+        return None
     try:
-        parsed = int(raw_value) if raw_value not in (None, "", 0) else None
+        parsed = int(raw_value)
     except (TypeError, ValueError):
         return None
-    if parsed is None or parsed <= 0:
+    if parsed <= 0:
         return None
     if parsed < MIN_PERSONA_TABLE_ROWS:
         logger.info(
