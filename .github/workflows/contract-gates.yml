@@ -121,3 +121,22 @@ jobs:
         # Marketing-Phrasen aus report_prompts.py und report_agent.py entfernt.
         # --soft ist nicht mehr noetig -- Exit != 0 bei Treffern.
         run: uv run python scripts/check_voice.py
+
+  complexity-gate:
+    name: Komplexitaets-Gate (radon)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+      - name: Install backend deps (inkl. radon)
+        working-directory: backend
+        run: uv sync --group dev
+      - name: Complexity-Gate ausfuehren
+        # Schwelle: Class D+ (cc >= 21). Bestands-Hot-Spots in backend/radon-allowlist.txt.
+        # Neue D/E/F-Funktionen ausserhalb der Allow-List → Exit 1.
+        run: bash scripts/check_complexity.sh

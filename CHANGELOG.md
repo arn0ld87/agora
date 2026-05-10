@@ -20,6 +20,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - docs(plan): F8 Frontend-Hotspot-Status auf grün gesynced. `Step2EnvSetup.vue` 1804→667 LOC (-63 %), `Step4Report.vue` 1287→797 LOC (-38 %), beide unter Schwelle. Issue #203 vorbereitet zum Schließen.
 
 ### Tooling
+- ci(complexity): M11.5a — Cyclomatic-Complexity-Gate (radon). `radon>=6.0.1` als Dev-Dep in beiden Listen (`[project.optional-dependencies] dev` + `[dependency-groups] dev`). `scripts/check_complexity.sh` misst alle D/E/F-Klassen-Funktionen (cc >= 21) in `backend/app/`; neue Einträge außerhalb `backend/radon-allowlist.txt` → Exit 1. Bestands-Allow-List: 27 Funktionen (1 × F, 4 × E, 22 × D). Neuer CI-Job `contract-gates.yml::complexity-gate` (timeout-minutes: 5).
 - ci(status): `scripts/sync-status.sh` Marker-basiert (HTML-Comment-Marker `BEGIN_AUTOGEN_VERSIONS`/`BEGIN_AUTOGEN_TESTS`); ersetzt nur dynamische Versions- und Test-Count-Tabellen, lässt Layer-Status, Coverage-Sektion, Aktualisierungs-Protokoll und Aktuelles Milestone unangetastet. Neuer CI-Job `contract-gates.yml::status-sync-drift` blockiert auf `--check`.
 
 ### Documentation
