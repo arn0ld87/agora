@@ -113,16 +113,23 @@ export const ReportClaimSchema = z.object({
   }
   // ADR-0002 Anker 4 (Sub-Slice M11.7b): high/verified verlangt agent_quote-
   // Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.
+  // Nur supports_claim=true zählt — widersprechende Quotes dürfen ein
+  // high-Label nicht rechtfertigen (Gemini-Followup PR #343).
   if (value.confidence_label === "high" || value.confidence_label === "verified") {
     const groups = new Set(
       value.evidence
-        .filter((e) => e.source_kind === "agent_quote" && e.persona_stakeholder_group && e.supports_claim === true)
+        .filter(
+          (e) =>
+            e.source_kind === "agent_quote"
+            && e.supports_claim === true
+            && e.persona_stakeholder_group,
+        )
         .map((e) => e.persona_stakeholder_group as string),
     );
     if (groups.size < 2) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Label '${value.confidence_label}' verlangt agent_quote-Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen. Gefunden: ${groups.size === 0 ? "∅" : Array.from(groups).sort().join(", ")}.`,
+        message: `Label '${value.confidence_label}' verlangt unterstützende agent_quote-Evidence (supports_claim=true) aus mindestens 2 unterschiedlichen Stakeholder-Gruppen. Gefunden: ${groups.size === 0 ? "∅" : Array.from(groups).sort().join(", ")}.`,
       });
     }
   }

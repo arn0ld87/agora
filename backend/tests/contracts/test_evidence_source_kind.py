@@ -126,6 +126,40 @@ def test_high_needs_two_stakeholder_groups() -> None:
     assert claim_verified.confidence_label == ConfidenceLabel.verified
 
 
+def test_contradicting_quotes_dont_satisfy_cross_stakeholder() -> None:
+    """Gemini-Followup PR #343: nur supports_claim=True zaehlt zur 2-Gruppen-Schwelle.
+
+    Zwei agent_quotes aus unterschiedlichen Gruppen, beide mit supports_claim=False,
+    duerfen ein high-Label nicht rechtfertigen. Sonst koennte das Evidence-Gate
+    durch widersprechende Stimmen umgangen werden.
+    """
+    with pytest.raises(ValidationError, match="supports_claim=True"):
+        ReportClaimModel(
+            claim_id="claim_71",
+            claim_text="High-Claim, der nur durch widersprechende Quotes gestuetzt waere.",
+            confidence_label=ConfidenceLabel.high,
+            confidence_score=0.78,
+            evidence=[
+                _seed_evidence(supports=True),  # erfuellt orphan-Test
+                _agent_quote("Geschaeftsfuehrung", supports=False),
+                _agent_quote("IT-Abteilung", supports=False),
+            ],
+        )
+
+    # Mix: 1 unterstuetzend + 1 widersprechend reicht nicht.
+    with pytest.raises(ValidationError, match="supports_claim=True"):
+        ReportClaimModel(
+            claim_id="claim_72",
+            claim_text="Nur eine Gruppe stuetzt — die andere widerspricht.",
+            confidence_label=ConfidenceLabel.high,
+            confidence_score=0.78,
+            evidence=[
+                _agent_quote("Geschaeftsfuehrung", supports=True),
+                _agent_quote("IT-Abteilung", supports=False),
+            ],
+        )
+
+
 def test_high_rejects_inferred_evidence() -> None:
     """high/verified darf keine source_kind=inferred-Evidence enthalten."""
     with pytest.raises(ValidationError, match="source_kind=inferred"):

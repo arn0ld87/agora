@@ -171,17 +171,23 @@ class ReportClaimModel(BaseModel):
     def cross_stakeholder_for_high(self) -> "ReportClaimModel":
         # ADR-0002 Anker 4 (Sub-Slice M11.7b): high/verified verlangt agent_quote-
         # Evidence aus mindestens 2 unterschiedlichen Stakeholder-Gruppen.
-        # Definitions-Reihenfolge nach reject_orphan_high_confidence ist
-        # bewusst — orphan-Test feuert zuerst, daher bleibt die bestehende
-        # Fehlermeldung "supports_claim=True" unverändert.
+        # Nur supports_claim=True zählt — widersprechende Quotes (auch aus
+        # verschiedenen Gruppen) dürfen ein high-Label nicht rechtfertigen
+        # (Gemini-Followup PR #343).
         if self.confidence_label not in (ConfidenceLabel.high, ConfidenceLabel.verified):
             return self
-        agent_quotes = [e for e in self.evidence if e.source_kind == EvidenceSourceKind.agent_quote]
-        groups = {e.persona_stakeholder_group for e in agent_quotes if e.persona_stakeholder_group}
+        groups = {
+            e.persona_stakeholder_group
+            for e in self.evidence
+            if e.source_kind == EvidenceSourceKind.agent_quote
+            and e.supports_claim
+            and e.persona_stakeholder_group
+        }
         if len(groups) < 2:
             raise ValueError(
-                f"Label '{self.confidence_label.value}' verlangt agent_quote-Evidence aus "
-                f"mindestens 2 unterschiedlichen Stakeholder-Gruppen. "
+                f"Label '{self.confidence_label.value}' verlangt unterstützende "
+                f"agent_quote-Evidence (supports_claim=True) aus mindestens 2 "
+                f"unterschiedlichen Stakeholder-Gruppen. "
                 f"Gefunden: {sorted(groups) if groups else '∅'}."
             )
         return self
