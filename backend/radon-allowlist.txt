@@ -45,3 +45,4 @@ app/services/report_agent/agent.py::ReportAgent._build_claims_for_section
 app/services/report_agent/workflow.py::generate_report
 app/services/report_agent/workflow.py::generate_section_react
 app/services/report_agent/manager.py::ReportManager._post_process_report
+app/services/report_agent/manager.py::ReportManager.build_report_v3

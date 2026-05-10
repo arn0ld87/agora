@@ -55,7 +55,12 @@ def _make_agent() -> object:
     agent._active_section_evidence = []
     agent._current_section_index = None
     agent._embed_cache = None
-    agent.persona_ids = ["persona_01"]
+    # MIN_PERSONA_TABLE_ROWS = 50 (Slice P1.2). Bei < 50 Personas markiert
+    # generate_report den Run als INCOMPLETE und kehrt früh zurück, bevor
+    # generate_section_react aufgerufen wird. Quote-Validation-Tests brauchen
+    # also einen vollwertigen Persona-Pool, damit der Workflow bis zum
+    # Section-Generation-Loop läuft.
+    agent.persona_ids = [f"persona_{i:02d}" for i in range(1, 51)]
 
     # ReportAgent-Klassen und Methoden-Stubs
     agent.ReportLogger = MagicMock()
