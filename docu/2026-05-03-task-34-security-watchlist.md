@@ -1,4 +1,4 @@
-# Security-Watchlist — ignorierte CVEs (Stand 2026-05-03)
+# Security-Watchlist — ignorierte CVEs (Stand 2026-05-10)
 
 **Refs:** #121 #122 #123 #124 #125 #126
 **Status:** Watchlist konsolidiert. Issues bleiben offen, bis Upstream-Pins gelöst sind.
@@ -21,7 +21,7 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 ### CVE-2026-25990 (Issue #121) — pillow
 
 - **Paket:** `pillow==10.3.0`
-- **Pinning-Source:** `camel-ai==0.2.78` (limits `pillow<11`)
+- **Pinning-Source:** `camel-ai==0.2.78` (pinned by `camel-oasis==0.2.5`)
 - **Risk:** Medium — image processing library; Agora nutzt Pillow im PDF-Vision-Pipeline-Downscaling und für Format-Konvertierung.
 - **Betroffen in Agora:** PDF-Embedding-Pipeline (Vision-Workflows), Resampling und Format-Normalisierung.
 - **Target-Version:** `pillow>=10.4.0` oder `>=11.0.0`, sobald camel-ai den Pin lockert.
@@ -90,7 +90,7 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 - KEINE Workarounds (z. B. Pillow-SIMD statt Pillow, eigener PDF-Parser statt unstructured) — bei Hardstop-Trigger separater Slice.
 - KEIN Fork von camel-ai/camel-oasis — separater Architektur-Entscheid, nicht Watchlist-Scope.
 
-## Verifikation (Stand 2026-05-03)
+## Verifikation (Stand 2026-05-10)
 
 - [x] Alle 6 Issues konsolidiert
 - [x] uv.lock-Versionen aus `backend/uv.lock` verifiziert (pillow 10.3.0, pytest 8.2.0, transformers 4.57.6, unstructured 0.13.7, camel-ai 0.2.78, camel-oasis 0.2.5, sentence-transformers 3.0.0)
