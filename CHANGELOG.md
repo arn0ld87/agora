@@ -8,6 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - feat(report-agent): Pflichtabschnitt-Validator erzwungen (Sub-Slice P1.1). `validate_required_sections()` in `contract_validator.py` prüft case-insensitiv und whitespace-tolerant. `ReportOutlineModel` wirft `ValidationError` bei fehlenden Default-Sections. `workflow.generate_report()` blockt nach `plan_outline()` und setzt `ReportStatus.INCOMPLETE` + `missing_sections[]`, ohne `report.md` zu schreiben. `GET /api/report/<id>` liefert `status` und `missing_sections[]` strukturiert aus.
 
 ### Changed
+- chore(status): STATUS.md test-count nach P1.1 syncen (1722 → 1725 Backend Tests collected).
 - **Layer 2 / Report Agent:** Evidence-Gating-Prompt-Block in `SECTION_SYSTEM_PROMPT_TEMPLATE` eingeführt (Sub-Slice M11.7a). LLM klassifiziert Claims jetzt nach vier Provenance-Stufen (hypothesis, seed_only, agent_grounded, cross_stakeholder) mit Confidence-Gating und Hedge-Word-Regeln. Forward-kompatibel zu `EvidenceSourceKind` Enum (Slice B).
 
 ### Fixed
