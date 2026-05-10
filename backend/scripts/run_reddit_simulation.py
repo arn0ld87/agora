@@ -33,6 +33,7 @@ _cleanup_done = False
 try:
     from ._sim_common import (
         apply_camel_context_floor,
+        build_camel_extra_body,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -43,6 +44,7 @@ try:
 except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
+        build_camel_extra_body,
         build_single_platform_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -481,17 +483,25 @@ class RedditSimulationRunner:
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
         
         print(f"LLM configuration: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
-        
+
+        # `think` und `options.num_ctx` sind Ollama-only. OpenAI/Anthropic
+        # antworten 400 sobald `think` in extra_body landet.
+        think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
+        ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
+        extra_body = build_camel_extra_body(
+            model=llm_model,
+            base_url=llm_base_url,
+            num_ctx=ctx_limit,
+            think=think_on,
+        )
+        model_cfg: dict = {"max_tokens": 8192}
+        if extra_body:
+            model_cfg["extra_body"] = extra_body
+
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
-            model_config_dict={
-                "max_tokens": 8192,
-                "extra_body": {
-                    "think": os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes"),
-                    "options": {"num_ctx": int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))},
-                },
-            },
+            model_config_dict=model_cfg,
         )
     
     def _get_active_agents_for_round(
