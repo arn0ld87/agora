@@ -21,7 +21,6 @@ from app.services.report_agent.schemas import (
     _section_schema_for,
 )
 from app.contracts.report_v3 import (
-    Claim,
     ContentIdea,
     DataGap,
     FrictionPoint,
@@ -185,25 +184,16 @@ class TestPlanOutlineStrictSchema:
 
 class TestSectionSchemaFor:
     @pytest.mark.parametrize("title,expected_cls", [
-        ("Zielgruppen-Personas", Persona),
-        ("Persona-Übersicht", Persona),
-        ("Marktsegmente", Segment),
-        ("Segment-Analyse", Segment),
-        ("Zentrale Claims", Claim),
-        ("Befunde aus der Simulation", Claim),
-        ("Wachstumshebel und Multiplikatoren", Multiplier),
-        ("Reibungspunkte und Hindernisse", FrictionPoint),
-        ("Friction-Analyse", FrictionPoint),
-        ("Vertrauenssignale nach Cialdini", TrustSignal),
-        ("Trust-Building-Massnahmen", TrustSignal),
-        ("Handlungsempfehlungen", ChangeRecommendation),
-        ("Change Recommendations", ChangeRecommendation),
-        ("Projektwirkung und Impact", ProjectImpact),
-        ("Auswirkungen auf die Markteinführung", ProjectImpact),
-        ("Positionierungsvarianten", PositioningVariant),
-        ("Content-Ideen für Social Media", ContentIdea),
-        ("Datenlücken und Limitierungen", DataGap),
-        ("Data Gaps", DataGap),
+        ("Persona-Tabelle", Persona),
+        ("Segment-Tabelle", Segment),
+        ("Multiplikator-Auswertung", Multiplier),
+        ("Top 10 Reibungspunkte", FrictionPoint),
+        ("Top 10 Vertrauenssignale", TrustSignal),
+        ("Top 10 Änderungen", ChangeRecommendation),
+        ("Projektwirkung", ProjectImpact),
+        ("Positionierung", PositioningVariant),
+        ("Content-Ideen", ContentIdea),
+        ("Datenlücken", DataGap),
     ])
     def test_schema_mapping(self, title: str, expected_cls: type):
         result = _section_schema_for(title)
@@ -219,8 +209,12 @@ class TestSectionSchemaFor:
 
     def test_case_insensitive_matching(self):
         """Matching ist case-insensitiv."""
-        assert _section_schema_for("PERSONA-Analyse") is Persona
-        assert _section_schema_for("trust signals") is TrustSignal
+        assert _section_schema_for("PERSONA-TABELLE") is Persona
+        assert _section_schema_for("top 10 vertrauenssignale") is TrustSignal
+
+    def test_free_persona_analysis_title_uses_generic_metadata(self):
+        """Freie 3-Section-Fallback-Titel dürfen kein volles Persona-DTO erzwingen."""
+        assert _section_schema_for("Persona Reaction Analysis") is SectionMetadata
 
 
 # ---------------------------------------------------------------------------
@@ -253,8 +247,8 @@ class TestGenerateSectionMetadata:
         assert call_kwargs.get("schema") is SectionMetadata
         assert "section_metadata" in call_kwargs.get("schema_name", "")
 
-    def test_passes_persona_schema_for_persona_section(self):
-        """generate_section_metadata() wählt Persona-DTO für Persona-Abschnitt."""
+    def test_passes_persona_schema_for_required_persona_table(self):
+        """generate_section_metadata() wählt Persona-DTO für den Pflichtabschnitt."""
         from app.services.report_agent.workflow import generate_section_metadata
 
         agent = _make_agent()
@@ -265,7 +259,7 @@ class TestGenerateSectionMetadata:
 
         result = generate_section_metadata(
             agent,
-            section_title="Zielgruppen-Personas",
+            section_title="Persona-Tabelle",
             section_content="Persona Alpha ist 35-50 Jahre alt.",
             section_index=2,
         )

@@ -208,6 +208,23 @@ class SettingsService:
                     snapshot[spec.key] = value
             return snapshot
 
+    def effective_value(self, key: str, *, include_secret: bool = False) -> Any:
+        """Return the effective runtime value for a single settings key.
+
+        Secrets are withheld unless ``include_secret=True`` is passed by a
+        trusted in-process caller. API routes must continue to use
+        :meth:`get_field_state`, which masks secret values.
+        """
+        spec = field_by_key(key)
+        if spec is None:
+            return None
+        if spec.secret and not include_secret:
+            return None
+        with self._lock:
+            file_layer = self._read_file_layer()
+            value, _, _ = self._resolve_field(spec, file_layer)
+            return value
+
     def get_schema(self) -> list[dict[str, Any]]:
         """Liefert nur Meta-Daten (kein Wert, keine Source) — für das
         Frontend-Form-Render. Defaults sind dabei bewusst enthalten,

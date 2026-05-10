@@ -12,7 +12,6 @@ the service reports itself as disabled and the tools are simply not registered.
 from __future__ import annotations
 
 import ipaddress
-import os
 import socket
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -26,6 +25,23 @@ logger = get_logger('agora.web_tools')
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
 DEFAULT_TIMEOUT = 25.0
+
+
+def _setting_value(key: str, *, include_secret: bool = False) -> Any:
+    """Best-effort runtime settings lookup without making startup depend on it."""
+    try:
+        from .settings_layer import get_default_service
+
+        return get_default_service().effective_value(key, include_secret=include_secret)
+    except Exception as exc:
+        logger.debug("Settings lookup failed for %s: %s", key, exc)
+        return None
+
+
+def _bool_enabled(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("0", "false", "no", "off", "")
 
 
 def _is_public_url(url: str) -> tuple[bool, str]:
@@ -76,9 +92,13 @@ class WebToolsService:
     """Thin wrapper around the Tavily REST API."""
 
     def __init__(self, api_key: Optional[str] = None, enabled: Optional[bool] = None):
-        self.api_key = api_key or os.environ.get("TAVILY_API_KEY", "").strip() or None
-        env_enabled = os.environ.get("ENABLE_WEB_TOOLS", "true").strip().lower() not in ("0", "false", "no", "off")
-        self.enabled = bool(self.api_key) and (env_enabled if enabled is None else enabled)
+        settings_api_key = _setting_value("TAVILY_API_KEY", include_secret=True)
+        self.api_key = (api_key or settings_api_key or "").strip() or None
+        settings_enabled = _setting_value("ENABLE_WEB_TOOLS")
+        configured_enabled = _bool_enabled(settings_enabled)
+        self.enabled = bool(self.api_key) and (
+            configured_enabled if enabled is None else bool(enabled)
+        )
 
     def is_available(self) -> bool:
         return self.enabled

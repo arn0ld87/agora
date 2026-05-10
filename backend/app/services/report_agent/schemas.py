@@ -99,48 +99,28 @@ class SectionMetadata(BaseModel):
 # Section-type → DTO mapper (M11.8d)
 # ---------------------------------------------------------------------------
 
-_SECTION_KEYWORD_MAP: dict[str, type[BaseModel]] = {
+_SECTION_TITLE_MAP: dict[str, type[BaseModel]] = {
     # ReportV3 Pflichtabschnitt-DTOs
-    "persona": Persona,
-    "personas": Persona,
-    "zielgrupp": Persona,
-    "segment": Segment,
-    "segments": Segment,
-    "claim": Claim,
-    "claims": Claim,
-    "befund": Claim,
-    "multipli": Multiplier,
-    "multiplier": Multiplier,
-    "hebel": Multiplier,
-    "friction": FrictionPoint,
-    "reibung": FrictionPoint,
-    "hindernis": FrictionPoint,
-    "trust": TrustSignal,
-    "vertrauen": TrustSignal,
-    "empfehlung": ChangeRecommendation,
-    "recommendation": ChangeRecommendation,
-    "handlung": ChangeRecommendation,
-    "impact": ProjectImpact,
-    "auswirkung": ProjectImpact,
-    "wirkung": ProjectImpact,
-    "position": PositioningVariant,
+    "segment-tabelle": Segment,
+    "persona-tabelle": Persona,
+    "multiplikator-auswertung": Multiplier,
+    "top 10 reibungspunkte": FrictionPoint,
+    "top 10 vertrauenssignale": TrustSignal,
+    "top 10 änderungen": ChangeRecommendation,
+    "projektwirkung": ProjectImpact,
     "positionierung": PositioningVariant,
-    "content": ContentIdea,
-    "inhalt": ContentIdea,
-    "datenlücke": DataGap,
+    "content-ideen": ContentIdea,
     "datenlücken": DataGap,
-    "data gap": DataGap,
-    "data_gap": DataGap,
-    "datagap": DataGap,
-    "lücke": DataGap,
 }
 
 
 def _section_schema_for(section_title: str) -> type[BaseModel]:
     """Liefert das passende Pydantic-DTO für einen Abschnittstitel.
 
-    Sucht case-insensitiv nach Schlüsselwörtern im Titel.
-    Fallback: :class:`SectionMetadata` (allgemeine Metadaten).
+    Mappt nur bekannte Pflichtabschnitt-Titel auf ReportV3-DTOs. Freie
+    Abschnittstitel wie ``Persona Reaction Analysis`` bekommen bewusst das
+    generische :class:`SectionMetadata`, statt ein vollständiges Persona-Objekt
+    zu erzwingen.
 
     Args:
         section_title: Titel des generierten Abschnitts.
@@ -149,9 +129,9 @@ def _section_schema_for(section_title: str) -> type[BaseModel]:
         Pydantic-Modell-Klasse, die als ``schema=`` an ``chat_json`` übergeben
         werden kann.
     """
-    lower = section_title.lower()
-    for keyword, schema_cls in _SECTION_KEYWORD_MAP.items():
-        if keyword in lower:
+    lower = section_title.strip().lower()
+    for title, schema_cls in _SECTION_TITLE_MAP.items():
+        if lower == title:
             return schema_cls
     return SectionMetadata
 

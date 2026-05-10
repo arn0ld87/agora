@@ -277,6 +277,29 @@ def test_request_response_correlation(bus):
     assert response.payload["result"]["echo"]["agent_id"] == 7
 
 
+def test_file_adapter_writes_legacy_rpc_command_fields(tmp_path):
+    """File IPC consumers still read command_type/args directly."""
+    store = LocalFilesystemArtifactStore(simulations_root=str(tmp_path))
+    bus = FilePollingEventBus(store=store)
+
+    bus.publish(
+        CHANNEL_RPC_COMMAND,
+        SimulationEvent(
+            type="batch_interview",
+            simulation_id=SIM_ID,
+            payload={"interviews": [{"agent_id": 7, "prompt": "hello"}]},
+            correlation_id="cmd-123",
+        ),
+    )
+
+    raw = store.read_json(SIM_ID, "ipc_command/cmd-123", default={})
+    assert raw["type"] == "batch_interview"
+    assert raw["payload"]["interviews"][0]["agent_id"] == 7
+    assert raw["command_id"] == "cmd-123"
+    assert raw["command_type"] == "batch_interview"
+    assert raw["args"]["interviews"][0]["prompt"] == "hello"
+
+
 def test_request_response_times_out(bus):
     """No responder → request_response raises TimeoutError within the window."""
     start = time.monotonic()

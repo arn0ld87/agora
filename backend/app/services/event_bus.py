@@ -264,6 +264,8 @@ class FilePollingEventBus:
         payload = {
             **event.to_dict(),
             "command_id": event.correlation_id,  # legacy field for IPC consumers
+            "command_type": event.type,
+            "args": event.payload,
         }
         self._store.write_json(
             event.simulation_id,
