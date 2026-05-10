@@ -11,6 +11,8 @@ import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import { getAvailableModels } from '../api/simulation'
+import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
+import { useRuntimeLlmOptions } from '../composables/useRuntimeLlmOptions'
 import { setPendingUpload } from '../store/pendingUpload'
 
 const { t, tm } = useI18n()
@@ -26,9 +28,6 @@ const errorMsg = ref('')
 const ALLOWED = ['.pdf', '.md', '.txt', '.markdown']
 
 // ---- Model + language selection (persisted) ----
-const STORAGE_MODEL = 'agora.lastModel'
-const STORAGE_LANG = 'agora.agentLanguage'
-
 const ollamaModels = ref([])
 const presetModels = ref([])
 const defaultModel = ref('')
@@ -40,6 +39,14 @@ const loadingModels = ref(true)
 const modelOption = ref(localStorage.getItem(STORAGE_MODEL) || 'default')
 const customModel = ref('')
 const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
+const showRuntimeOptions = ref(false)
+const {
+  runtimeProvider,
+  runtimeApiKey,
+  runtimeBaseUrl,
+  runtimeProviderOptions,
+  runtimeProviderEnabled,
+} = useRuntimeLlmOptions(t)
 
 async function loadStatus() {
   loadingModels.value = true
@@ -85,7 +92,8 @@ const canSubmit = computed(() => {
     simulationPrompt.value.trim() !== '' &&
     files.value.length > 0 &&
     servicesReady.value &&
-    (modelOption.value !== 'custom' || customModel.value.trim() !== '')
+    (modelOption.value !== 'custom' || customModel.value.trim() !== '') &&
+    (!runtimeProviderEnabled.value || runtimeApiKey.value.trim() !== '')
   )
 })
 
@@ -120,7 +128,7 @@ async function startSimulation() {
     // Persist selection so Step2 picks it up.
     localStorage.setItem(STORAGE_MODEL, modelOption.value)
     if (modelOption.value === 'custom') {
-      localStorage.setItem('agora.customModel', customModel.value.trim())
+      localStorage.setItem(STORAGE_CUSTOM_MODEL, customModel.value.trim())
     }
     localStorage.setItem(STORAGE_LANG, language.value)
 
@@ -135,7 +143,7 @@ async function startSimulation() {
 
 onMounted(() => {
   loadStatus()
-  const stored = localStorage.getItem('agora.customModel')
+  const stored = localStorage.getItem(STORAGE_CUSTOM_MODEL) || localStorage.getItem('agora.customModel')
   if (stored) customModel.value = stored
 })
 
@@ -350,6 +358,38 @@ const differentiators = computed(() => tm('home.differentiators'))
           :placeholder="t('step2.model.customPlaceholder')"
         />
 
+        <button
+          type="button"
+          class="runtime-toggle"
+          :aria-expanded="showRuntimeOptions"
+          @click="showRuntimeOptions = !showRuntimeOptions"
+        >
+          <span>{{ t('step2.runtimeProvider.toggle') }}</span>
+          <span class="console-meta">
+            {{ runtimeProviderEnabled ? t('step2.runtimeProvider.active') : t('step2.runtimeProvider.default') }}
+          </span>
+        </button>
+        <div v-if="showRuntimeOptions" class="runtime-panel">
+          <Select
+            v-model="runtimeProvider"
+            :label="t('step2.runtimeProvider.label')"
+            :options="runtimeProviderOptions"
+          />
+          <Field
+            v-if="runtimeProviderEnabled"
+            v-model="runtimeApiKey"
+            type="password"
+            :label="t('step2.runtimeProvider.apiKey')"
+            :placeholder="t('step2.runtimeProvider.apiKeyPlaceholder')"
+          />
+          <Field
+            v-if="runtimeProviderEnabled"
+            v-model="runtimeBaseUrl"
+            :label="t('step2.runtimeProvider.baseUrl')"
+            :placeholder="t('step2.runtimeProvider.baseUrlPlaceholder')"
+          />
+        </div>
+
         <!-- Prompt -->
         <div class="console-head">
           <Kicker num="06" accent>{{ t('home.console.promptKicker') }}</Kicker>
@@ -382,6 +422,9 @@ const differentiators = computed(() => tm('home.differentiators'))
           </span>
           <span v-else-if="!servicesReady" class="console-warning">
             Dienste nicht bereit (Neo4j/Ollama). {{ neo4jError || ollamaError || '' }}
+          </span>
+          <span v-else-if="runtimeProviderEnabled && !runtimeApiKey.trim()" class="console-warning">
+            {{ t('step2.runtimeProvider.missingKey') }}
           </span>
         </div>
         <p v-if="errorMsg" class="error-line">{{ errorMsg }}</p>
@@ -791,8 +834,37 @@ const differentiators = computed(() => tm('home.differentiators'))
   grid-template-columns: 1fr 1fr;
   gap: var(--s-5) var(--s-7);
 }
+.runtime-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--ctl-h-md);
+  padding: 0 var(--ctl-pad-x);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-1);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.runtime-toggle:hover { border-color: color-mix(in oklch, var(--fg) 30%, transparent); }
+.runtime-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  background: var(--bg-subtle);
+}
 @media (max-width: 720px) {
   .model-grid { grid-template-columns: 1fr; }
+  .runtime-panel { grid-template-columns: 1fr; }
 }
 
 /* Responsive */
