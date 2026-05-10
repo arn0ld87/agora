@@ -33,7 +33,7 @@ import json
 import time
 
 from flask import Blueprint, Response, request, stream_with_context
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ..contracts.settings_contract import (
     RuntimeSettingsAnyFieldsModel,
@@ -256,7 +256,7 @@ def _validation_error_response(errors):
     return jsonify(payload), 400
 
 
-def _collect_pydantic_validation_errors(model: type, payload: dict):
+def _collect_pydantic_validation_errors(model: type[BaseModel], payload: dict):
     """Pre-Validate gegen Pydantic, bevor der Domain-Validator läuft.
 
     Unbekannte Keys oder grobe Typfehler fangen wir hier mit
