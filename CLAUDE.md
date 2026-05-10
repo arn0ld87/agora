@@ -4,7 +4,7 @@
 
 Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
 Stack: **Flask + Pydantic v2 + Vue 3 + Neo4j + Ollama + OASIS** (CAMEL-AI Subprozess).
-Status: v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–10 in Arbeit · v1.0-Output-Vertrag-Plan in [`PLAN.md`](PLAN.md) (Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün; offen: P3.2-Verdrahtung, P4.1, P4.3, P4.4) · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md).
+Status: **v1.0.0 (2026-05-11)** · alle 14 PR-Slices der v1.0-Output-Vertrag-Roadmap aus [`PLAN.md`](PLAN.md) durch · Layer 0–10 grün · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md) · [Release Notes](docu/2026-05-11-v1.0.0-release-notes.md).
 
 ## Sofort wichtig
 

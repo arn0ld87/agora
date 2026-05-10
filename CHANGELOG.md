@@ -4,6 +4,16 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+
+(Keine Einträge — nächste Version öffnet den Block.)
+
+## [1.0.0] - 2026-05-11
+
+Output-Vertrag-Release. Alle 14 PR-Slices der v1.0-Roadmap aus [PLAN.md](PLAN.md) sind durch.
+Schwerpunkt: Pflichtabschnitt-Validator, Evidence-Härtung, ReportV3-Persistenz + Markdown-Renderer,
+drei Vertrauensmodi, Export-Vollständigkeit (CSV/ZIP), End-to-End-Smokes. Siehe ausführliche
+[Release Notes](docu/2026-05-11-v1.0.0-release-notes.md).
+
 ### Added
 - test(e2e): Playwright-Smokes für die drei Report-Modi strict/balanced/explorative (Sub-Slice P4.4, Refs PLAN.md §5.4). `frontend/tests/e2e/report-modes.spec.ts` (185 LOC) triggert pro Modus einen Report via `?mode=`-Query-Param + `force_regenerate=true` und prüft (1) Mode-Banner-Prefix `**Report-Modus:**` plus Mode-Name im Markdown-Export, (2) `report_mode`-Feld im JSON-Export, (3) Default ohne Mode-Param == `balanced`. `helpers/report.ts::triggerReport` um optionale `mode`+`forceRegenerate`-Optionen erweitert. `test.describe.serial`, damit `force_regenerate` nicht in parallele Status-Files schreibt. Schließt v1.0-DoD Phase 4.
 - feat(report): Frontend Mode-Selector für strict/balanced/explorative — localStorage-Persistenz, i18n, Backend-Übergabe via POST /api/report/generate (PLAN.md §5.1 Frontend-Teil).
