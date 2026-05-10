@@ -42,6 +42,11 @@ jobs:
       # läuft, der Live-HTTP-Probe-Call entfällt.
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
@@ -97,6 +102,11 @@ jobs:
       # bleibt unverändert (backend/app/utils/llm_e2e_stub.py + llm_client.py:386).
       AGORA_E2E_LLM_MODE: 'stub'
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
@@ -150,6 +160,11 @@ jobs:
       #   (backend/app/utils/llm_e2e_stub.py + llm_client.py)
       AGORA_E2E_LLM_MODE: 'stub'
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
