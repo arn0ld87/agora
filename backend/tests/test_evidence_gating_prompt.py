@@ -96,19 +96,6 @@ def test_source_kind_field_naming():
     Source-Kind-Feld ist mit korrekten Enum-Werten referenziert.
     (Zukunfts-Sicherung für Slice B: forward-compatible naming)
     """
-    required_source_kinds = [
-        "seed_corpus",
-        "agent_quote",
-        "graph_relation",
-        "inferred"
-    ]
-    prompt_lower = SECTION_SYSTEM_PROMPT_TEMPLATE.lower()
-    for source_kind in required_source_kinds:
-        # Prüfe, dass mindestens zwei dieser Werte erwähnt sind
-        # (Slice B wird alle vier einführen, aber dieser Slice muss
-        # mindestens die ersten zwei korrekt referenzieren)
-        pass
-
     # Aktuelle Assertion: mindestens "seed_corpus" und "agent_quote" sind genannt
     assert "seed_corpus" in SECTION_SYSTEM_PROMPT_TEMPLATE
     assert "agent_quote" in SECTION_SYSTEM_PROMPT_TEMPLATE
