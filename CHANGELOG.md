@@ -6,6 +6,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ## [Unreleased]
 ### Added
 - feat(report): ReportV3 als zusätzliche Persistenz-Schicht (Sub-Slice P3.1, Refs PLAN.md §4.1). `migrate_v2_to_v3()` in `evidence_migrations.py` wandelt v2-Report-dicts in `ReportV3`-valide Struktur. `write_report_v3()` + `read_report_v3()` in `storage.py` atomar. `ReportManager.save_report()` schreibt `report-v3.json` additiv neben `meta.json` bei `COMPLETED`-Reports. `CURRENT_SCHEMA_VERSION` bleibt 2 (Evidence-Map-Version). 6 neue Contract-Tests.
+- feat(report): Evidence-Anker als Pflicht für medium/high/verified Claims (Sub-Slice P2.1, Refs PLAN.md §3.1). `ReportClaimModel.non_low_claims_need_evidence` verwirft Claims ohne Evidence-Anker. `_finalize_section_claims` routet medium/high/verified-Orphans in `data_gaps[]` statt `claims[]`. `migrate_legacy_claims_to_anchored()` in `evidence_migrations.py` überführt bestehende `evidence-map.json`-Dateien beim Reload. 10 neue Tests in `tests/eval/test_evidence_routing.py`.
 - feat(report-agent): Pflichtabschnitt-Validator erzwungen (Sub-Slice P1.1). `validate_required_sections()` in `contract_validator.py` prüft case-insensitiv und whitespace-tolerant. `ReportOutlineModel` wirft `ValidationError` bei fehlenden Default-Sections. `workflow.generate_report()` blockt nach `plan_outline()` und setzt `ReportStatus.INCOMPLETE` + `missing_sections[]`, ohne `report.md` zu schreiben. `GET /api/report/<id>` liefert `status` und `missing_sections[]` strukturiert aus.
 
 ### Changed

@@ -1,12 +1,16 @@
-"""Evidence-Map-Migration v1 -> v2 und Report-Dict-Migration v2 -> v3.
+"""Evidence-Map-Migration v1 -> v2, P2.1-Anker-Migration und v2 -> ReportV3.
 
 Sub-Slice 02a — Refs #107.
+Sub-Slice P2.1 — Evidence-Anker-Pflicht für medium/high-Claims.
 Sub-Slice P3.1 — ReportV3-Persistenz (PLAN.md §4.1).
 
-migrate_v1_to_v2 hebt persistierte Evidence-Maps auf schema_version=2.
-migrate_v2_to_v3 baut aus einem v2-Report-Dict ein dict, das
-ReportV3.model_validate() besteht. CURRENT_SCHEMA_VERSION bleibt 2 —
-es ist die Evidence-Map-Version, nicht der Report-Container-Version.
+- ``migrate_v1_to_v2`` hebt persistierte Evidence-Maps auf schema_version=2.
+- ``migrate_legacy_claims_to_anchored`` entfernt orphan Claims VOR Validator,
+  damit Bestands-evidence-map.json nicht beim Reload an
+  ``ReportClaimModel.non_low_claims_need_evidence`` scheitern.
+- ``migrate_v2_to_v3`` baut aus einem v2-Report-Dict ein dict, das
+  ``ReportV3.model_validate()`` besteht. ``CURRENT_SCHEMA_VERSION`` bleibt 2 —
+  es ist die Evidence-Map-Schema-Version, NICHT die Report-Container-Version.
 """
 
 from __future__ import annotations
@@ -15,6 +19,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 CURRENT_SCHEMA_VERSION = 2
+
+# Confidence-Labels, die einen Evidence-Anker erfordern (P2.1).
+_ANCHOR_REQUIRED_LABELS = frozenset({"medium", "high", "verified"})
 
 
 def migrate_v1_to_v2(raw: Optional[dict]) -> Optional[dict]:
@@ -36,6 +43,66 @@ def migrate_v1_to_v2(raw: Optional[dict]) -> Optional[dict]:
     for section in sections:
         if isinstance(section, dict):
             section["schema_version"] = CURRENT_SCHEMA_VERSION
+    return raw
+
+
+def migrate_legacy_claims_to_anchored(raw: Optional[dict]) -> Optional[dict]:
+    """P2.1: Überführt Claims ohne Evidence-Anker in data_gaps.
+
+    Verhindert, dass alte ``evidence-map.json``-Dateien beim Reload durch
+    den ``ReportClaimModel``-Validator (``non_low_claims_need_evidence``)
+    abgelehnt werden.
+
+    Regeln (spiegeln ``_finalize_section_claims`` in agent.py):
+    - Claim ohne Evidence + ``confidence_label`` in {medium, high, verified}
+      → entfernen aus ``claims[]``, anhängen an ``data_gaps[]`` mit
+      ``gap_reason="no_evidence_bound"``.
+    - Claim ohne Evidence + ``confidence_label=low`` oder kein Label
+      → unverändert lassen (Validator erlaubt das).
+    - Hypotheses- und Data-Gaps-Felder werden initialisiert, falls sie
+      in der Section noch nicht existieren.
+
+    Gibt ``None`` zurück, wenn ``raw`` None ist. Mutiert das übergebene Dict.
+    """
+    if raw is None:
+        return None
+
+    sections = raw.get("sections") or []
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+
+        section.setdefault("hypotheses", [])
+        section.setdefault("data_gaps", [])
+
+        claims = section.get("claims") or []
+        surviving_claims = []
+
+        for claim in claims:
+            if not isinstance(claim, dict):
+                surviving_claims.append(claim)
+                continue
+
+            evidence = claim.get("evidence") or []
+            label = str(claim.get("confidence_label") or "").lower()
+
+            if not evidence and label in _ANCHOR_REQUIRED_LABELS:
+                index = len(section["data_gaps"]) + 1
+                claim_text = (
+                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                    or "Legacy claim ohne Evidence-Text."
+                )[:1000]
+                section["data_gaps"].append({
+                    "gap_id": f"gap_{index:02d}",
+                    "claim_text": claim_text,
+                    "gap_reason": "no_evidence_bound",
+                    "suggested_fix": "Evidence per Graph- oder Agent-Tool nachreichen.",
+                })
+            else:
+                surviving_claims.append(claim)
+
+        section["claims"] = surviving_claims
+
     return raw
 
 
@@ -167,7 +234,6 @@ def migrate_v2_to_v3(
                 }
             )
 
-    # Wenn keine Personas aus dem v2-Dict ableitbar sind, DataGap als Hinweis
     if not raw.get("personas"):
         hint = "Persona-Daten nicht in v2-Persistenz enthalten"
         if simulation_id:

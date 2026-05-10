@@ -1,0 +1,28 @@
+{
+  "claims": [
+    {
+      "claim_id": "claim_01",
+      "claim_text": "Die Zielgruppe reagiert skeptisch auf transparente Preisgestaltung.",
+      "confidence_label": "medium",
+      "confidence_score": 0.55,
+      "evidence": [],
+      "audit_trail": []
+    },
+    {
+      "claim_id": "claim_02",
+      "claim_text": "Entscheidungsträger bevorzugen klar strukturierte Produktpräsentationen.",
+      "confidence_label": "high",
+      "confidence_score": 0.72,
+      "evidence": [],
+      "audit_trail": []
+    },
+    {
+      "claim_id": "claim_03",
+      "claim_text": "Datenschutzbedenken sind zentral für die Kaufentscheidung in dieser Gruppe.",
+      "confidence_label": "low",
+      "confidence_score": 0.18,
+      "evidence": [],
+      "audit_trail": []
+    }
+  ]
+}

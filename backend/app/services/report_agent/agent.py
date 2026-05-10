@@ -518,7 +518,9 @@ class ReportAgent:
         for claim in normalize_claims_for_contract(claims):
             evidence = claim.get("evidence") or []
             score = float(claim.get("confidence_score") or 0.0)
+            label = str(claim.get("confidence_label") or "").lower()
             if not evidence and score < 0.4:
+                # Low-confidence ohne Evidence → hypothesis + data_gap
                 index = len(hypotheses) + 1
                 claim_text = (
                     str(claim.get("claim_text") or claim.get("claim") or "").strip()
@@ -540,6 +542,23 @@ class ReportAgent:
                     "claim_text": claim_text,
                     "gap_reason": "no_evidence_bound",
                     "suggested_fix": suggestions[0],
+                })
+                continue
+            if not evidence and label in ("medium", "high", "verified"):
+                # P2.1: medium/high/verified ohne Evidence darf nicht in claims[]
+                # (würde ReportClaimModel-Validator verletzen). Stattdessen data_gap.
+                index = len(data_gaps) + 1
+                claim_text = (
+                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                    or "No evidence-bound claim text available."
+                )
+                claim_text = self._truncate(claim_text, 1000)
+                suggestions = self._suggested_evidence_from_claim_audit(claim)
+                data_gaps.append({
+                    "gap_id": f"gap_{index:02d}",
+                    "claim_text": claim_text,
+                    "gap_reason": "no_evidence_bound",
+                    "suggested_fix": suggestions[0] if suggestions else None,
                 })
                 continue
             finalized_claims.append(claim)
