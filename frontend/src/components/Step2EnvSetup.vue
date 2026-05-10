@@ -33,6 +33,22 @@ const props = defineProps({
 
 const emit = defineEmits(['go-back', 'next-step', 'add-log', 'update-status'])
 
+const useCustomRounds = ref(false)
+const customMaxRounds = ref(40)
+const useCustomDays = ref(false)
+const customSimulationDays = ref(3)
+const selectedProfile = ref(null)
+const showRuntimeOptions = ref(false)
+
+const {
+  runtimeProvider,
+  runtimeApiKey,
+  runtimeBaseUrl,
+  runtimeProviderOptions,
+  runtimeProviderEnabled,
+  runtimePayload,
+} = useRuntimeLlmOptions(t)
+
 // ----- Model + language picker (useEnvForm — Sub-Slice 37, Refs #203) -----
 
 const {
@@ -49,7 +65,7 @@ const {
   modelOptions,
   loadModels,
   effectiveModel,
-} = useEnvForm({ t, onError: (msg) => addLog(msg) })
+} = useEnvForm({ t, onError: (msg) => addLog(msg), runtimeProvider })
 
 // ----- Prepare flow (useSimulationPrepare — Sub-Slice 34, Refs #203) -----
 
@@ -65,22 +81,6 @@ const {
   startPrepare,
   probeAlreadyPrepared,
 } = useSimulationPrepare()
-
-const useCustomRounds = ref(false)
-const customMaxRounds = ref(40)
-const useCustomDays = ref(false)
-const customSimulationDays = ref(3)
-const selectedProfile = ref(null)
-const showRuntimeOptions = ref(false)
-
-const {
-  runtimeProvider,
-  runtimeApiKey,
-  runtimeBaseUrl,
-  runtimeProviderOptions,
-  runtimeProviderEnabled,
-  runtimePayload,
-} = useRuntimeLlmOptions(t)
 
 // Persona review (Slice 2.4): quality badges, approve/reject, inline edit.
 // Extracted to usePersonaActions (Sub-Slice 38, Refs #203).
@@ -263,7 +263,7 @@ onMounted(() => {
               :options="modelOptions"
             />
             <p class="hint" v-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
-            <p class="hint" v-else-if="!ollamaReachable">{{ t('step2.model.noOllama') }}</p>
+            <p class="hint" v-else-if="!runtimeProviderEnabled && !ollamaReachable">{{ t('step2.model.noOllama') }}</p>
           </div>
 
           <!-- Custom model input (when 'custom' chosen) -->

@@ -22,6 +22,20 @@ Prepare, Start und Report als Request-Body-Feld `llm_provider.api_key` an den
 lokalen Backend-Prozess gesendet. `localStorage` speichert nur Provider und
 Base-URL.
 
+Wenn ein Runtime-Provider aktiv ist, zeigt die Modellauswahl providerpassende
+Modelle statt lokaler Ollama-Modelle. Für `Google Gemini` sind die textfähigen
+OpenAI-kompatiblen IDs aus der Gemini-Dokumentation hinterlegt:
+
+- `gemini-3-flash-preview`
+- `gemini-3.1-pro-preview`
+- `gemini-3.1-flash-lite`
+- `gemini-2.5-pro`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
+
+`Custom` bleibt verfügbar, falls Google neue Modell-IDs veröffentlicht, bevor
+Agora aktualisiert wurde.
+
 ## Backend
 
 `backend/app/services/llm_runtime.py` validiert `llm_provider` zentral. API-Keys
