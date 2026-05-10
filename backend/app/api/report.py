@@ -25,7 +25,9 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
+from ..services.llm_runtime import parse_runtime_llm_config
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.llm_client import LLMClient
 from ..utils.auth import allow_ticket_auth
 from ..utils.api_errors import ApiErrorCode
 from ..utils.logger import get_logger
@@ -84,12 +86,16 @@ def generate_report():
 
     force_regenerate = data.get('force_regenerate', False)
     llm_model_override = (data.get('llm_model') or '').strip() or None
+    try:
+        llm_runtime = parse_runtime_llm_config(data)
+    except ValueError as exc:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
         return json_error(f"Simulation does not exist: {simulation_id}", status=404)
 
-    if _can_reuse_existing_report(force_regenerate, llm_model_override):
+    if _can_reuse_existing_report(force_regenerate, llm_model_override, llm_runtime.enabled):
         existing_report = ReportManager.get_report_by_simulation(simulation_id)
         if existing_report and existing_report.status == ReportStatus.COMPLETED:
             return json_success({
@@ -141,6 +147,7 @@ def generate_report():
             # Persist the model override so _resume_report_generate in runs.py
             # can reconstruct the same ReportAgent when the run is resumed. (Sub-Slice C)
             "llm_model": llm_model_override,
+            "llm_provider": llm_runtime.redacted_metadata() or None,
         },
     )
     task_id = task_manager.create_task(
@@ -163,6 +170,11 @@ def generate_report():
                 simulation_id=simulation_id,
                 simulation_requirement=simulation_requirement,
                 graph_tools=graph_tools,
+                llm_client=(
+                    LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+                    if llm_runtime.enabled
+                    else None
+                ),
                 model_name=llm_model_override,
             )
             def progress_callback(stage, progress, message):
@@ -432,9 +444,13 @@ def get_report_evidence_claim(report_id: str, section_index: int, claim_id: str)
 EXPORT_SCHEMA_VERSION = CURRENT_SCHEMA_VERSION
 
 
-def _can_reuse_existing_report(force_regenerate: bool, llm_model_override: Optional[str]) -> bool:
-    """Reuse only when the caller did not request a concrete report model."""
-    return not force_regenerate and not llm_model_override
+def _can_reuse_existing_report(
+    force_regenerate: bool,
+    llm_model_override: Optional[str],
+    runtime_provider_override: bool = False,
+) -> bool:
+    """Reuse only when the caller did not request concrete LLM runtime settings."""
+    return not force_regenerate and not llm_model_override and not runtime_provider_override
 
 
 def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:

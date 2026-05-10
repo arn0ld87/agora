@@ -1,4 +1,5 @@
 import service, { requestWithRetry } from './index'
+import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
 
 // --- Local types --------------------------------------------------------
@@ -19,6 +20,10 @@ export interface PrepareSimulationData {
   parallel_profile_count?: number
   force_regenerate?: boolean
   quota_plan?: PersonaQuotaPlan
+  llm_model?: string
+  llm_provider?: LlmRuntimePayload
+  language?: string
+  max_agents?: number
 }
 
 export interface TaskStatusData {
@@ -36,6 +41,9 @@ export interface StartSimulationData {
   max_rounds?: number
   simulation_days?: number
   enable_graph_memory_update?: boolean
+  llm_model?: string
+  llm_provider?: LlmRuntimePayload
+  force?: boolean
 }
 
 export interface StopSimulationData {

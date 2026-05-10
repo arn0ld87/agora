@@ -14,6 +14,7 @@ from ..config import Config
 from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
+from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_errors import ApiErrorCode
@@ -186,12 +187,21 @@ def prepare_simulation():
         )
 
     force_regenerate = data.get('force_regenerate', False)
+    llm_model_override = (data.get('llm_model') or '').strip() or None
+    try:
+        llm_runtime = parse_runtime_llm_config(data)
+    except ValueError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
     logger.info(
         f"Start processing /prepare Request: simulation_id={simulation_id}, force_regenerate={force_regenerate}",
         extra={'simulation_id': simulation_id},
     )
 
-    if not force_regenerate:
+    if not force_regenerate and not llm_model_override and not llm_runtime.enabled:
         logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
         is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
         logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")
@@ -247,7 +257,6 @@ def prepare_simulation():
             message=f"Invalid quota_plan: {exc}",
         )
 
-    llm_model_override = (data.get('llm_model') or '').strip() or None
     agent_language_override = (data.get('language') or '').strip().lower() or None
     if agent_language_override and agent_language_override not in ('de', 'en'):
         agent_language_override = None
@@ -384,6 +393,7 @@ def prepare_simulation():
                 parallel_profile_count=parallel_profile_count,
                 storage=storage,
                 llm_model=llm_model_override,
+                llm_runtime=llm_runtime,
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,

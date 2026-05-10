@@ -16,7 +16,11 @@ import {
   getSimulationConsoleLog
 } from '../api/simulation'
 import { generateReport } from '../api/report'
-import { STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
+import { storedEffectiveModel, STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
+import {
+  runtimeLlmPayloadFromStorage,
+  runtimeProviderMissingApiKeyFromStorage,
+} from '../composables/useRuntimeLlmOptions'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -232,6 +236,15 @@ async function doStart() {
     }
     if (props.maxRounds) params.max_rounds = props.maxRounds
     if (props.simulationDays) params.simulation_days = props.simulationDays
+    const model = storedEffectiveModel()
+    if (model) params.llm_model = model
+    if (runtimeProviderMissingApiKeyFromStorage()) {
+      addLog(t('step2.runtimeProvider.missingKey'))
+      emit('update-status', 'error')
+      return
+    }
+    const runtimeProvider = runtimeLlmPayloadFromStorage()
+    if (runtimeProvider) params.llm_provider = runtimeProvider
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {
@@ -426,17 +439,15 @@ async function goReport() {
     // Reuse the model the user picked for Step 2 (Report-specific override
     // can be set in Step 4). 'default' or empty → server uses LLM_MODEL_NAME.
     const payload = { simulation_id: props.simulationId }
-    const stored = localStorage.getItem('agora.reportModel') || localStorage.getItem(STORAGE_MODEL)
-    if (stored === 'custom') {
-      const custom = (
-        localStorage.getItem('agora.reportCustomModel') ||
-        localStorage.getItem(STORAGE_CUSTOM_MODEL) ||
-        ''
-      ).trim()
-      if (custom) payload.llm_model = custom
-    } else if (stored && stored !== 'default') {
-      payload.llm_model = stored
+    const model = storedEffectiveModel('agora.reportModel', 'agora.reportCustomModel')
+      || storedEffectiveModel(STORAGE_MODEL, STORAGE_CUSTOM_MODEL)
+    if (model) payload.llm_model = model
+    if (runtimeProviderMissingApiKeyFromStorage()) {
+      addLog(t('step2.runtimeProvider.missingKey'))
+      return
     }
+    const runtimeProvider = runtimeLlmPayloadFromStorage()
+    if (runtimeProvider) payload.llm_provider = runtimeProvider
     const res = await generateReport(payload)
     if (res?.success && res.data?.report_id) {
       router.push({ name: 'Report', params: { reportId: res.data.report_id } })

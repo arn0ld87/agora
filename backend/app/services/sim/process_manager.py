@@ -149,6 +149,7 @@ def start_simulation(
     config_exists: Callable[[str], bool],
     setup_graph_memory: Callable[[str], None],
     max_rounds: Optional[int] = None,
+    runtime_env: Optional[Dict[str, str]] = None,
 ) -> SimulationRunState:
     """Start an OASIS simulation: validate, init state, launch subprocess, start monitor.
 
@@ -267,6 +268,8 @@ def start_simulation(
         env = os.environ.copy()
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
+        if runtime_env:
+            env.update({k: v for k, v in runtime_env.items() if v})
         # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
         _inject_oasis_db_env(env, sim_dir)
 

@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
+from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
 from .simulation_config_generator import SimulationConfigGenerator
@@ -103,6 +104,7 @@ def _phase_generate_profiles(
     sim_dir: str,
     *,
     llm_model: Optional[str],
+    llm_runtime: Optional[RuntimeLlmConfig] = None,
     language: Optional[str],
     use_llm_for_profiles: bool,
     parallel_profile_count: int,
@@ -137,6 +139,8 @@ def _phase_generate_profiles(
     # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
     industry_plan = default_dach_industry_quota(max(total_entities, 1))
     generator = OasisProfileGenerator(
+        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
+        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
         storage=storage,
         graph_id=state.graph_id,
         model_name=llm_model,
@@ -222,6 +226,7 @@ def _phase_generate_config(
     filtered,
     *,
     llm_model: Optional[str],
+    llm_runtime: Optional[RuntimeLlmConfig] = None,
     language: Optional[str],
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
@@ -246,6 +251,8 @@ def _phase_generate_config(
         )
 
     config_generator = SimulationConfigGenerator(
+        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
+        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
         model_name=llm_model,
         language=language,
     )
@@ -382,6 +389,7 @@ def prepare_simulation(
     parallel_profile_count: Optional[int] = None,
     storage: Any = None,
     llm_model: Optional[str] = None,
+    llm_runtime: Optional[RuntimeLlmConfig] = None,
     language: Optional[str] = None,
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
@@ -435,6 +443,7 @@ def prepare_simulation(
             filtered,
             sim_dir,
             llm_model=llm_model,
+            llm_runtime=llm_runtime,
             language=language,
             use_llm_for_profiles=use_llm_for_profiles,
             parallel_profile_count=parallel_profile_count,
@@ -455,6 +464,7 @@ def prepare_simulation(
             document_text,
             filtered,
             llm_model=llm_model,
+            llm_runtime=llm_runtime,
             language=language,
             progress_callback=progress_callback,
             quota_plan=quota_plan,

@@ -18,6 +18,7 @@ from . import branching_service, prepare_service
 
 if TYPE_CHECKING:
     from ..contracts import PersonaQuotaPlan
+    from .llm_runtime import RuntimeLlmConfig
 # simulation_state_machine importiert ``SimulationStatus`` aus diesem Modul,
 # daher Lazy-Import in ``_set_status`` (vermeidet Zirkularität).
 
@@ -296,6 +297,7 @@ class SimulationManager:
         parallel_profile_count: Optional[int] = None,
         storage: Any = None,
         llm_model: Optional[str] = None,
+        llm_runtime: Optional["RuntimeLlmConfig"] = None,
         language: Optional[str] = None,
         max_agents: Optional[int] = None,
         quota_plan: Optional["PersonaQuotaPlan"] = None,
@@ -311,6 +313,7 @@ class SimulationManager:
             parallel_profile_count=parallel_profile_count,
             storage=storage,
             llm_model=llm_model,
+            llm_runtime=llm_runtime,
             language=language,
             max_agents=max_agents,
             quota_plan=quota_plan,

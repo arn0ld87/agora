@@ -225,6 +225,20 @@
       "noOllama": "Keine Verbindung zu Ollama. Custom-Eingabe nutzen oder Ollama starten.",
       "default": "Standard aus .env"
     },
+    "runtimeProvider": {
+      "toggle": "Provider-Optionen",
+      "label": "Provider",
+      "default": "Server-Standard",
+      "active": "Override aktiv",
+      "google": "Google Gemini",
+      "openai": "OpenAI",
+      "customOpenAi": "OpenAI-kompatibel",
+      "apiKey": "API-Key",
+      "apiKeyPlaceholder": "Nur für diese Browser-Sitzung",
+      "baseUrl": "Base-URL",
+      "baseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "missingKey": "Provider-Override ist aktiv, aber der API-Key fehlt."
+    },
     "personas": {
       "title": "Personas generieren",
       "count": "Anzahl Agenten",
