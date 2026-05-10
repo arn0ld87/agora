@@ -1,10 +1,11 @@
 import { computed, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { exportReport, fetchReportCsv } from '../../api/report'
+import { exportReport, fetchReportBundle, fetchReportCsv } from '../../api/report'
 import { buildStandaloneHtml, useReportExports } from '../useReportExports'
 
 vi.mock('../../api/report', () => ({
   exportReport: vi.fn(),
+  fetchReportBundle: vi.fn(),
   fetchReportCsv: vi.fn(),
 }))
 
@@ -142,5 +143,41 @@ describe('useReportExports', () => {
     await exportsApi.downloadCsvBundle()
 
     expect(addLog).toHaveBeenCalledWith(expect.stringContaining('Segment-Fehler'))
+  })
+
+  it('downloadAllBundle ruft /export?format=zip auf und triggert Download', async () => {
+    vi.mocked(fetchReportBundle).mockResolvedValue(
+      new Blob(['PK...'], { type: 'application/zip' })
+    )
+
+    const exportsApi = makeExportsApi()
+    await exportsApi.downloadAllBundle()
+
+    expect(fetchReportBundle).toHaveBeenCalledWith('report_abcdef123456')
+    expect(createObjectUrlSpy).toHaveBeenCalled()
+    expect(click).toHaveBeenCalled()
+    expect(anchor.download).toBe('agora-report-report_abcdef123456-bundle.zip')
+  })
+
+  it('downloadAllBundle akzeptiert optionalen Dateinamen', async () => {
+    vi.mocked(fetchReportBundle).mockResolvedValue(
+      new Blob(['PK...'], { type: 'application/zip' })
+    )
+
+    const exportsApi = makeExportsApi()
+    await exportsApi.downloadAllBundle('mein-bundle.zip')
+
+    expect(anchor.download).toBe('mein-bundle.zip')
+  })
+
+  it('downloadAllBundle loggt Fehler bei fehlgeschlagenem Fetch', async () => {
+    vi.mocked(fetchReportBundle).mockRejectedValue(new Error('Netzwerk-ZIP-Fehler'))
+
+    const addLog = vi.fn()
+    const exportsApi = makeExportsApi(addLog)
+    await exportsApi.downloadAllBundle()
+
+    expect(addLog).toHaveBeenCalledWith(expect.stringContaining('Netzwerk-ZIP-Fehler'))
+    expect(click).not.toHaveBeenCalled()
   })
 })

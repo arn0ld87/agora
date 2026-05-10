@@ -1,5 +1,5 @@
 import type { ComputedRef, Ref } from 'vue'
-import { exportReport, fetchReportCsv } from '../api/report'
+import { exportReport, fetchReportBundle, fetchReportCsv } from '../api/report'
 import { parseReportContract, type EvidenceMap } from '../contracts/reportContract'
 
 interface UseReportExportsOptions {
@@ -170,10 +170,27 @@ export function useReportExports(options: UseReportExportsOptions) {
   }
 
   /**
+   * Lädt alle Report-Artefakte als serverseitig gebautes ZIP (Sub-Slice P4.3).
+   * Enthält report-v3.md, report-v3.json, evidence-map.json,
+   * personas.csv, segments.csv, claims.csv.
+   * Kein jszip-Install nötig — ZIP wird auf dem Server via Python-stdlib gebaut.
+   */
+  async function downloadAllBundle(filename?: string): Promise<void> {
+    const reportId = options.reportId()
+    if (!reportId) return
+    try {
+      const blob = await fetchReportBundle(reportId)
+      triggerDownload(blob, filename ?? `agora-report-${reportId}-bundle.zip`)
+    } catch (e) {
+      options.addLog(
+        'ZIP-Bundle-Export fehlgeschlagen: ' + ((e as Error)?.message || String(e))
+      )
+    }
+  }
+
+  /**
    * Lädt alle drei CSV-Tabellen als Einzeldownloads (Sub-Slice P4.2).
-   *
-   * TODO(jszip): Bundle als ZIP sobald jszip installiert ist.
-   * Refs: CHANGELOG.md [Unreleased] P4.2-Eintrag.
+   * Für einen gebündelten ZIP-Download steht downloadAllBundle() bereit.
    */
   async function downloadCsvBundle() {
     const reportId = options.reportId()
@@ -202,6 +219,7 @@ export function useReportExports(options: UseReportExportsOptions) {
 
   return {
     copyMarkdown,
+    downloadAllBundle,
     downloadCombinedJson,
     downloadCsv,
     downloadCsvBundle,

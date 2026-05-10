@@ -3,9 +3,12 @@ Report API Routes
 Provides interfaces for simulation report generation, retrieval, and conversation
 """
 
+import io
+import json
 import os
 import threading
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, cast
 
@@ -550,8 +553,23 @@ def export_report(report_id: str):
         return json_error("Invalid report_id format", status=400)
 
     fmt = (request.args.get('format') or 'md').strip().lower()
-    if fmt not in ('md', 'json', 'csv'):
-        return json_error("format must be 'md', 'json', or 'csv'", status=400)
+    if fmt not in ('md', 'json', 'csv', 'zip'):
+        return json_error("format must be 'md', 'json', 'csv', or 'zip'", status=400)
+
+    # --- ZIP branch (Sub-Slice P4.3) ---
+    if fmt == 'zip':
+        report = ReportManager.get_report(report_id)
+        if not report:
+            return json_error(f"Report does not exist: {report_id}", status=404)
+        v3_path = ReportManager._get_report_v3_path(report_id)
+        md_path = ReportManager._get_report_v3_markdown_path(report_id)
+        if not os.path.exists(v3_path) and not os.path.exists(md_path):
+            return json_error("report_not_finalised", status=404)
+        zip_bytes = _build_zip_bundle(report_id, report)
+        filename = f"agora-report-{report_id}-bundle.zip"
+        response = Response(zip_bytes, mimetype="application/zip")
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     # --- CSV branch (Sub-Slice P4.2) ---
     if fmt == 'csv':
@@ -619,6 +637,61 @@ def _build_csv_export(report_id: str, table: str) -> str:
     # table == "claims"
     evidence_map = ReportManager.get_evidence_map(report_id) or {}
     return claims_to_csv(evidence_map.get("sections") or [])
+
+
+def _build_zip_bundle(report_id: str, report: Any) -> bytes:
+    """Baut ein ZIP-Archiv mit allen Report-Artefakten im Speicher.
+
+    Enthält:
+    - agora-report-<id>/report-v3.md    (Pflicht, falls vorhanden)
+    - agora-report-<id>/report-v3.json  (Pflicht, falls vorhanden)
+    - agora-report-<id>/evidence-map.json
+    - agora-report-<id>/personas.csv
+    - agora-report-<id>/segments.csv
+    - agora-report-<id>/claims.csv
+
+    Sub-Slice P4.3 — Refs PLAN.md §5.3
+    """
+    prefix = f"agora-report-{report_id}"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # --- report-v3.md ---
+        md_path = ReportManager._get_report_v3_markdown_path(report_id)
+        if os.path.exists(md_path):
+            with open(md_path, encoding="utf-8") as fh:
+                zf.writestr(f"{prefix}/report-v3.md", fh.read())
+        elif getattr(report, "markdown_content", None):
+            zf.writestr(f"{prefix}/report-v3.md", report.markdown_content)
+
+        # --- report-v3.json ---
+        v3_path = ReportManager._get_report_v3_path(report_id)
+        if os.path.exists(v3_path):
+            with open(v3_path, encoding="utf-8") as fh:
+                zf.writestr(f"{prefix}/report-v3.json", fh.read())
+
+        # --- evidence-map.json ---
+        evidence_map = ReportManager.get_evidence_map(report_id) or {}
+        zf.writestr(
+            f"{prefix}/evidence-map.json",
+            json.dumps(evidence_map, ensure_ascii=False, indent=2),
+        )
+
+        # --- CSV-Tabellen ---
+        report_v3 = ReportManager.get_report_v3(report_id) or {}
+        zf.writestr(
+            f"{prefix}/personas.csv",
+            personas_to_csv(report_v3.get("personas") or []),
+        )
+        zf.writestr(
+            f"{prefix}/segments.csv",
+            segments_to_csv(report_v3.get("segments") or []),
+        )
+        zf.writestr(
+            f"{prefix}/claims.csv",
+            claims_to_csv(evidence_map.get("sections") or []),
+        )
+
+    return buf.getvalue()
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])

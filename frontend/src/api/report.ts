@@ -170,6 +170,21 @@ export const fetchReportCsv = (
 }
 
 /**
+ * ZIP-Bundle-Export aller Report-Artefakte (Sub-Slice P4.3).
+ * Enthält report-v3.md, report-v3.json, evidence-map.json,
+ * personas.csv, segments.csv, claims.csv — serverseitig gebaut,
+ * kein jszip-Install nötig.
+ * @param reportId
+ * @returns Blob mit application/zip-Inhalt
+ */
+export const fetchReportBundle = (reportId: string): Promise<Blob> => {
+  return service.get(`/api/report/${reportId}/export`, {
+    params: { format: 'zip' },
+    responseType: 'blob',
+  })
+}
+
+/**
  * Chat with Report Agent
  * @param data - { simulation_id, message, chat_history? }
  */
