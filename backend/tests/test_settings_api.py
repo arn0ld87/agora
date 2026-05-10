@@ -34,6 +34,11 @@ def app(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(
         'app.api.settings.get_default_service', lambda: service
     )
+    changed_events = []
+    monkeypatch.setattr(
+        'app.api.settings.publish_settings_changed',
+        lambda keys, *, source: changed_events.append((sorted(keys), source)),
+    )
 
     app = Flask(__name__)
     install_api_error_handlers(app)
@@ -47,6 +52,7 @@ def app(monkeypatch, tmp_path: Path):
     install_blueprint_guard(bp)
     app.register_blueprint(bp, url_prefix='/api/settings')
     app.config['service'] = service
+    app.config['changed_events'] = changed_events
     return app
 
 
@@ -88,7 +94,7 @@ def test_get_settings_field_payload_shape(client):
 
 
 def test_get_settings_masks_secret_values(client, monkeypatch):
-    monkeypatch.setenv('NEO4J_PASSWORD', 'secret-actual-password')
+    monkeypatch.setenv('NEO4J_PASSWORD', 'masked-value')
     res = client.get('/api/settings')
     fields = res.get_json()['data']['fields']
     pw = next(item for item in fields['neo4j'] if item['key'] == 'NEO4J_PASSWORD')
@@ -97,7 +103,7 @@ def test_get_settings_masks_secret_values(client, monkeypatch):
     assert pw['is_set'] is True
     # Ein Plaintext-Leak im Response-Body wäre der schlimmste Fall —
     # wir suchen das Secret als Substring im gesamten Response-JSON.
-    assert b'secret-actual-password' not in res.data
+    assert b'masked-value' not in res.data
 
 
 def test_get_settings_secret_unset_is_marked(client, monkeypatch):
@@ -140,13 +146,13 @@ def test_get_schema_payload(client):
 
 
 def test_get_schema_does_not_leak_secret_defaults(client, monkeypatch):
-    monkeypatch.setenv('NEO4J_PASSWORD', 'leak-me-not')
+    monkeypatch.setenv('NEO4J_PASSWORD', 'schema-masked-value')
     res = client.get('/api/settings/schema')
     fields = res.get_json()['data']['fields']
     pw = next(e for e in fields if e['key'] == 'NEO4J_PASSWORD')
     assert pw['default'] is None
     assert pw['secret'] is True
-    assert b'leak-me-not' not in res.data
+    assert b'schema-masked-value' not in res.data
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +187,14 @@ def test_put_settings_persists_and_returns_updated_state(client, app):
     assert instance_path.exists()
     data = json.loads(instance_path.read_text(encoding='utf-8'))
     assert data == {'LLM_MODEL_NAME': 'qwen2.5:14b'}
+
+
+def test_put_settings_broadcasts_settings_changed_event(client, app):
+    res = client.put('/api/settings', json={'LLM_MODEL_NAME': 'qwen2.5:14b'})
+    assert res.status_code == 200
+    assert app.config['changed_events'] == [
+        (['LLM_MODEL_NAME'], 'settings')
+    ]
 
 
 def test_put_settings_response_reflects_new_source(client):
@@ -238,10 +252,11 @@ def test_put_settings_all_or_nothing_no_partial_persist(client, app):
     assert res.status_code == 400
     # File darf nicht angelegt worden sein
     assert not app.config['service'].instance_path.exists()
+    assert app.config['changed_events'] == []
 
 
 def test_put_settings_rejects_secrets_on_regular_endpoint(client):
-    res = client.put('/api/settings', json={'NEO4J_PASSWORD': 'pw'})
+    res = client.put('/api/settings', json={'NEO4J_PASSWORD': 'field-value'})
     assert res.status_code == 400
     body = res.get_json()
     assert any(
@@ -301,7 +316,7 @@ def test_put_settings_rejects_non_dict_body(client):
 
 def test_put_secrets_requires_confirm_flag(client):
     res = client.put('/api/settings/secrets', json={
-        'fields': {'NEO4J_PASSWORD': 'new-pw'},
+        'fields': {'NEO4J_PASSWORD': 'rotation-value'},
     })
     assert res.status_code == 400
     assert res.get_json()['code'] == 'confirm_required'
@@ -310,7 +325,7 @@ def test_put_secrets_requires_confirm_flag(client):
 def test_put_secrets_persists_with_confirm(client, app):
     res = client.put('/api/settings/secrets', json={
         'confirm': True,
-        'fields': {'NEO4J_PASSWORD': 'new-pw'},
+        'fields': {'NEO4J_PASSWORD': 'rotation-value'},
     })
     assert res.status_code == 200
     body = res.get_json()
@@ -324,7 +339,19 @@ def test_put_secrets_persists_with_confirm(client, app):
     assert pw_field['is_set'] is True
     # Aber das File enthält den Klartext (Issue-Akzeptanz)
     data = json.loads(app.config['service'].instance_path.read_text(encoding='utf-8'))
-    assert data['NEO4J_PASSWORD'] == 'new-pw'
+    assert data['NEO4J_PASSWORD'] == 'rotation-value'
+
+
+def test_put_secrets_broadcasts_settings_changed_event_without_values(client, app):
+    res = client.put('/api/settings/secrets', json={
+        'confirm': True,
+        'fields': {'NEO4J_PASSWORD': 'rotation-value'},
+    })
+    assert res.status_code == 200
+    assert app.config['changed_events'] == [
+        (['NEO4J_PASSWORD'], 'settings.secrets')
+    ]
+    assert b'rotation-value' not in res.data
 
 
 def test_put_secrets_rejects_non_secret_field(client):
@@ -350,9 +377,9 @@ def test_put_secrets_rejects_unknown_field(client):
 def test_put_secrets_response_does_not_leak_plaintext(client):
     res = client.put('/api/settings/secrets', json={
         'confirm': True,
-        'fields': {'NEO4J_PASSWORD': 'super-secret-leak-canary'},
+        'fields': {'NEO4J_PASSWORD': 'response-canary-value'},
     })
-    assert b'super-secret-leak-canary' not in res.data
+    assert b'response-canary-value' not in res.data
 
 
 def test_put_settings_auth_required(app, monkeypatch):
