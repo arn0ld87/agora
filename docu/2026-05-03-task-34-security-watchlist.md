@@ -34,10 +34,10 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 
 - **Paket:** `pillow==10.3.0` (gleicher Pin wie #121, separate CVE)
 - **Pinning-Source:** `camel-ai==0.2.78` (limits `pillow<11`)
-- **Risk:** Medium — image processing library, Agora uses Pillow for PDF vision pipeline downscaling/format conversion.
-- **Target-Version:** Upgrade to `pillow>=10.4.0` or `pillow>=11.0.0` once camel-ai relaxes the pin.
-- **Deadline:** 2026-07-30 (+90 days)
-- **Action:** Monitor camel-ai releases for Pillow pin relaxation. Re-run pip-audit after each dependency update.
+- **Risk:** Medium — image processing library; Agora nutzt Pillow im PDF-Vision-Pipeline-Downscaling und für Format-Konvertierung.
+- **Target-Version:** Upgrade auf pillow>=10.4.0 oder pillow>=11.0.0, sobald camel-ai den Pin lockert.
+- **Deadline:** 2026-07-30 (+90 Tage)
+- **Action:** Überwachung von camel-ai Releases auf Lockerung des Pillow-Pins. Erneutes Ausführen von pip-audit nach jedem Dependency-Update.
 
 ### CVE-2025-71176 (Issue #123) — pytest
 
