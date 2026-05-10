@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ...contracts.report_v3 import ReportV3
+
+_storage_logger = logging.getLogger("agora.report_agent.storage")
 
 
 def ensure_reports_dir(reports_dir: str) -> None:
@@ -157,10 +163,80 @@ __all__ = [
     "read_agent_log",
     "read_console_log",
     "read_json_safe",
+    "read_report_v3",
     "write_json_atomic",
     "write_outline",
+    "write_report_v3",
     "write_section_markdown",
 ]
+
+
+def write_report_v3(
+    report_id: str,
+    report_v3: "ReportV3",
+    reports_dir: Optional[str] = None,
+) -> str:
+    """Schreibt report-v3.json atomar in den Report-Ordner.
+
+    Args:
+        report_id: Report-ID (wird als Unterordner unter reports_dir genutzt).
+        report_v3: Valides ReportV3-Objekt.
+        reports_dir: Optionaler Override des Report-Verzeichnisses (für Tests).
+
+    Returns:
+        Absoluter Pfad zur geschriebenen ``report-v3.json``.
+    """
+    from ...config import Config  # Import hier, um zirkuläre Imports zu vermeiden
+
+    base_dir = reports_dir or os.path.join(Config.UPLOAD_FOLDER, "reports")
+    folder = ensure_report_folder(base_dir, report_id)
+    path = get_report_v3_path(base_dir, report_id)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=".tmp-report-v3-", suffix=".json", dir=folder
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(report_v3.model_dump_json(indent=2, by_alias=False))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+    _storage_logger.info("report-v3.json geschrieben: %s", path)
+    return path
+
+
+def read_report_v3(
+    report_id: str,
+    reports_dir: Optional[str] = None,
+) -> "Optional[ReportV3]":
+    """Liest report-v3.json und liefert ein valides ReportV3-Objekt oder None.
+
+    Args:
+        report_id: Report-ID.
+        reports_dir: Optionaler Override des Report-Verzeichnisses (für Tests).
+
+    Returns:
+        ``ReportV3`` wenn vorhanden und valide, sonst ``None``.
+    """
+    from ...config import Config  # Import hier, um zirkuläre Imports zu vermeiden
+    from ...contracts.report_v3 import ReportV3
+    from pydantic import ValidationError
+
+    base_dir = reports_dir or os.path.join(Config.UPLOAD_FOLDER, "reports")
+    path = get_report_v3_path(base_dir, report_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        return ReportV3.model_validate(raw)
+    except (json.JSONDecodeError, OSError, ValidationError) as exc:
+        _storage_logger.warning(
+            "report-v3.json nicht lesbar für %s: %s", report_id, exc
+        )
+        return None
 
 
 def write_outline(path: str, outline: Dict[str, Any]) -> None:

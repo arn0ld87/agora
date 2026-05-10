@@ -280,6 +280,155 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown.read_text(encoding="utf-8")
 
 
+# ---- migrate_v2_to_v3 Unit-Tests ----
+
+def test_migrate_v2_to_v3_minimal():
+    """migrate_v2_to_v3 erzeugt ein ReportV3-valides dict aus einem minimalen v2-dict."""
+    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
+
+    v2 = {
+        "report_id": "rep-migration-001",
+        "sections": [
+            {
+                "section_index": 1,
+                "claims": [
+                    {
+                        "claim_id": "c01",
+                        "claim_text": "Nachhaltige Mobilität ist ein zentrales Thema.",
+                        "confidence_label": "medium",
+                        "evidence": [
+                            {
+                                "source_id_anchor": "kg:node:mobility-001",
+                                "type": "graph_node",
+                            }
+                        ],
+                    }
+                ],
+                "data_gaps": [
+                    {
+                        "gap_id": "g01",
+                        "claim_text": "Regionale Unterschiede nicht abgedeckt.",
+                        "gap_reason": "insufficient_data",
+                        "suggested_fix": "Regionale Studie beauftragen.",
+                    }
+                ],
+            }
+        ],
+    }
+    result = migrate_v2_to_v3(v2)
+    report_v3 = ReportV3.model_validate(result)
+
+    assert report_v3.schema_version == 3
+    assert report_v3.report_id == "rep-migration-001"
+    assert len(report_v3.claims) == 1
+    assert report_v3.claims[0].confidence == "medium"
+    assert report_v3.claims[0].evidence_refs == ["kg:node:mobility-001"]
+    # DataGap aus Claim + DataGap aus Migration-Hinweis (keine Personas)
+    gap_ids = {dg.id for dg in report_v3.data_gaps}
+    assert "g01" in gap_ids
+    assert "dg-migration-personas" in gap_ids
+
+
+def test_migrate_v2_to_v3_empty_sections_produces_valid_v3():
+    """migrate_v2_to_v3 mit leerer Sections-Liste → valide ReportV3 mit leeren Listen."""
+    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
+
+    result = migrate_v2_to_v3({"report_id": "rep-empty", "sections": []})
+    report_v3 = ReportV3.model_validate(result)
+
+    assert report_v3.report_id == "rep-empty"
+    assert report_v3.claims == []
+    assert len(report_v3.data_gaps) == 1  # Nur der Personas-Hinweis
+    assert report_v3.data_gaps[0].id == "dg-migration-personas"
+
+
+def test_migrate_v2_to_v3_simulation_id_in_hint():
+    """simulation_id taucht im DataGap-Hinweis auf."""
+    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
+
+    result = migrate_v2_to_v3(
+        {"report_id": "rep-x", "sections": []},
+        simulation_id="sim_test_123",
+    )
+    report_v3 = ReportV3.model_validate(result)
+    hint_gap = next(
+        (dg for dg in report_v3.data_gaps if dg.id == "dg-migration-personas"),
+        None,
+    )
+    assert hint_gap is not None
+    assert "sim_test_123" in hint_gap.beschreibung
+
+
+def test_migrate_v2_to_v3_skips_claims_without_evidence():
+    """Claims ohne evidence_refs werden nicht in v3 übernommen."""
+    from app.services.evidence_migrations import migrate_v2_to_v3  # noqa: PLC0415
+
+    v2 = {
+        "report_id": "rep-no-ev",
+        "sections": [
+            {
+                "section_index": 1,
+                "claims": [
+                    {
+                        "claim_id": "c_no_ev",
+                        "claim_text": "Ein Claim ohne Evidence-Belege.",
+                        "confidence_label": "high",
+                        "evidence": [],
+                    }
+                ],
+            }
+        ],
+    }
+    result = migrate_v2_to_v3(v2)
+    report_v3 = ReportV3.model_validate(result)
+    assert report_v3.claims == []
+
+
+def test_write_and_read_report_v3_roundtrip(tmp_path):
+    """write_report_v3 + read_report_v3 Roundtrip ist identisch."""
+    from app.services.report_agent.storage import write_report_v3, read_report_v3  # noqa: PLC0415
+
+    reports_dir = str(tmp_path / "reports")
+    report_id = "rep-rw-001"
+    original = ReportV3(
+        report_id=report_id,
+        generated_at=datetime(2026, 5, 10, 10, 0, 0, tzinfo=timezone.utc),
+        claims=[
+            Claim(
+                id="c1",
+                statement="Sicherheitsbedenken hemmen die Adoption sichtbar.",
+                evidence_refs=["ev-001"],
+                confidence="high",
+                aggregation_basis="persona",
+            )
+        ],
+        data_gaps=[
+            DataGap(
+                id="dg1",
+                beschreibung="Preisbereitschaft nicht belegt.",
+                severity="medium",
+            )
+        ],
+    )
+    written_path = write_report_v3(report_id, original, reports_dir=reports_dir)
+    assert written_path.endswith("report-v3.json")
+
+    restored = read_report_v3(report_id, reports_dir=reports_dir)
+    assert restored is not None
+    assert restored.schema_version == 3
+    assert restored.report_id == report_id
+    assert restored.claims[0].evidence_refs == ["ev-001"]
+    assert restored.data_gaps[0].id == "dg1"
+
+
+def test_read_report_v3_returns_none_when_missing(tmp_path):
+    """read_report_v3 liefert None wenn keine report-v3.json existiert."""
+    from app.services.report_agent.storage import read_report_v3  # noqa: PLC0415
+
+    result = read_report_v3("nonexistent", reports_dir=str(tmp_path / "reports"))
+    assert result is None
+
+
 # ---- JSON-Schema-Generierung ----
 
 def test_json_schema_generates_without_error():
