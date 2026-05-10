@@ -292,3 +292,15 @@ def test_hypotheses_in_markdown_and_json(env):
     hypothesis = payload["evidence"]["sections"][0]["hypotheses"][0]
     assert hypothesis["hypothesis_id"] == "hypothesis_01"
     assert hypothesis["suggested_evidence"] == ["weitere Persona-Quote"]
+
+
+def test_export_md_prefers_report_v3_markdown(env):
+    _persist_report(with_evidence=True)
+    report_v3_md = ReportManager._get_report_v3_markdown_path(REPORT_ID)
+    with open(report_v3_md, "w", encoding="utf-8") as handle:
+        handle.write("# ReportV3\n\nv3 artifact")
+
+    response = env.get(f"/api/report/{REPORT_ID}/export?format=md")
+
+    assert response.status_code == 200
+    assert response.data.decode("utf-8") == "# ReportV3\n\nv3 artifact"

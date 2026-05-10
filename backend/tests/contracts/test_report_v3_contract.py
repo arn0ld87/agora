@@ -212,7 +212,7 @@ def test_minimal_report_v3_roundtrip():
 
 
 def test_persisted_v3_validates(tmp_path, monkeypatch):
-    """P3.1: finalisierte Reports schreiben ein valides report-v3.json Artefakt."""
+    """P3.1/P3.2: finalisierte Reports schreiben valide v3-Artefakte."""
     from app.services.report_agent import Report, ReportManager, ReportStatus  # noqa: PLC0415
 
     monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
@@ -270,11 +270,14 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     report_v3_path = tmp_path / "reports" / report_id / "report-v3.json"
     raw = json.loads(report_v3_path.read_text(encoding="utf-8"))
     restored = ReportV3.model_validate(raw)
+    report_v3_markdown = tmp_path / "reports" / report_id / "report-v3.md"
 
     assert restored.schema_version == 3
     assert restored.report_id == report_id
     assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
     assert restored.data_gaps[0].id == "gap_01"
+    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown.read_text(encoding="utf-8")
+    assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown.read_text(encoding="utf-8")
 
 
 # ---- JSON-Schema-Generierung ----

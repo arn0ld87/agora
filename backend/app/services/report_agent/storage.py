@@ -32,6 +32,10 @@ def get_report_v3_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "report-v3.json")
 
 
+def get_report_v3_markdown_path(reports_dir: str, report_id: str) -> str:
+    return os.path.join(get_report_folder(reports_dir, report_id), "report-v3.md")
+
+
 def get_outline_path(reports_dir: str, report_id: str) -> str:
     return os.path.join(get_report_folder(reports_dir, report_id), "outline.json")
 
@@ -148,6 +152,7 @@ __all__ = [
     "get_report_markdown_path",
     "get_report_path",
     "get_report_v3_path",
+    "get_report_v3_markdown_path",
     "get_section_path",
     "read_agent_log",
     "read_console_log",

@@ -553,7 +553,9 @@ def export_report(report_id: str):
 
     if fmt == 'md':
         download_name = f"agora-report-{report_id}.md"
-        md_path = ReportManager._get_report_markdown_path(report_id)
+        md_path = ReportManager._get_report_v3_markdown_path(report_id)
+        if not os.path.exists(md_path):
+            md_path = ReportManager._get_report_markdown_path(report_id)
         if os.path.exists(md_path):
             return send_file(
                 md_path,

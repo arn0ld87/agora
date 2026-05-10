@@ -56,12 +56,22 @@ ${bodyHtml}
 }
 
 export function useReportExports(options: UseReportExportsOptions) {
-  function downloadMarkdown() {
+  async function downloadMarkdown() {
     const md = options.reportMarkdown.value
     const reportId = options.reportId()
-    if (!md || !reportId) return
+    if (!reportId) return
+    let blob: Blob
+    try {
+      blob = await exportReport(reportId, 'md')
+    } catch (e) {
+      if (!md) {
+        options.addLog('Markdown-Export fehlgeschlagen: ' + ((e as Error)?.message || String(e)))
+        return
+      }
+      blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    }
     triggerDownload(
-      new Blob([md], { type: 'text/markdown;charset=utf-8' }),
+      blob,
       `agora-report-${reportId}.md`
     )
   }

@@ -25,6 +25,7 @@ from .storage import (
     get_report_markdown_path,
     get_report_path,
     get_report_v3_path,
+    get_report_v3_markdown_path,
     get_section_path,
     read_agent_log,
     read_console_log,
@@ -33,6 +34,7 @@ from .storage import (
     write_outline,
     write_section_markdown,
 )
+from .markdown_renderer import render_report_v3
 from .sections import (
     render_confidence_markers_for_section,
     render_hypotheses_for_section,
@@ -75,6 +77,11 @@ class ReportManager:
     def _get_report_v3_path(cls, report_id: str) -> str:
         """getstructuredReportV3file path"""
         return get_report_v3_path(cls.REPORTS_DIR, report_id)
+
+    @classmethod
+    def _get_report_v3_markdown_path(cls, report_id: str) -> str:
+        """getstructuredReportV3Markdownfile path"""
+        return get_report_v3_markdown_path(cls.REPORTS_DIR, report_id)
     
     @classmethod
     def _get_outline_path(cls, report_id: str) -> str:
@@ -168,6 +175,8 @@ class ReportManager:
             cls._get_report_v3_path(report_v3.report_id),
             report_v3.model_dump(mode="json"),
         )
+        with open(cls._get_report_v3_markdown_path(report_v3.report_id), "w", encoding="utf-8") as handle:
+            handle.write(render_report_v3(report_v3))
 
     @classmethod
     def get_report_v3(cls, report_id: str) -> Optional[Dict[str, Any]]:
@@ -245,6 +254,26 @@ class ReportManager:
                     beschreibung=description,
                     severity="medium",
                     suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
+                ))
+            for hypothesis in section.get("hypotheses") or []:
+                if not isinstance(hypothesis, dict):
+                    continue
+                hypothesis_id = str(
+                    hypothesis.get("hypothesis_id")
+                    or f"hypothesis_{len(data_gaps) + 1:02d}"
+                )
+                text = str(hypothesis.get("hypothesis_text") or "").strip()
+                if not text:
+                    continue
+                data_gaps.append(ReportV3DataGap(
+                    id=hypothesis_id,
+                    beschreibung=text,
+                    severity="low",
+                    suggested_fixes=[
+                        str(item)
+                        for item in (hypothesis.get("suggested_evidence") or [])
+                        if str(item).strip()
+                    ],
                 ))
         return ReportV3(
             report_id=report.report_id,
