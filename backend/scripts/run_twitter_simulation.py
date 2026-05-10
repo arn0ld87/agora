@@ -485,9 +485,12 @@ class TwitterSimulationRunner:
         )
         # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`, alle anderen
         # Modelle akzeptieren `max_tokens`.
+        # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`, alle anderen
+        # Modelle akzeptieren `max_tokens`.
+        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "8192"))
         model_cfg: dict = build_camel_completion_params(
             model=llm_model,
-            completion_max_tokens=8192,
+            completion_max_tokens=completion_max_tokens,
         )
         if extra_body:
             model_cfg["extra_body"] = extra_body
