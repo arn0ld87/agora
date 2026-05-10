@@ -10,6 +10,11 @@ jobs:
     name: Schema-Drift verhindern
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
@@ -27,6 +32,11 @@ jobs:
     name: STATUS.md Drift-Check
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
@@ -43,6 +53,11 @@ jobs:
     name: Pydantic-Contract-Tests
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
@@ -57,6 +72,11 @@ jobs:
     name: Evidence-Quality-Gate
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
@@ -87,6 +107,11 @@ jobs:
     name: Frontend-Zod muss Backend-Schema spiegeln
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
@@ -101,6 +126,11 @@ jobs:
     name: Voice-Lint (DACH-Voice + Anti-Forecast)
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
@@ -120,6 +150,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
