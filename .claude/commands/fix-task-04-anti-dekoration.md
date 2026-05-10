@@ -25,10 +25,9 @@ git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-1-task-04-anti-deko
 
 ## Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-04 anti-dekoration"`, `prompt`:
+`subagent_type: "agora-refactor-worker"`, `description: "fix-task-04 anti-dekoration"`, `prompt`:
 
 ```
---write --effort medium
 
 Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 1 / Task 04 — Anti-Dekorations-Fix.
 

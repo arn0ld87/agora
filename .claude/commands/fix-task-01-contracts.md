@@ -33,10 +33,9 @@ echo "WT=$WT"
 
 ## Schritt 3: Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-01 contracts"`, `prompt`:
+`subagent_type: "agora-refactor-worker"`, `description: "fix-task-01 contracts"`, `prompt`:
 
 ```
---write --effort medium
 
 Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 0 / Task 01 — Pydantic-Contracts anlegen + Schema-Drift fixen.
 
@@ -97,7 +96,7 @@ cd "$WT" && git diff --stat schemas/
 rg -n '"schema_version".*1' backend/app/ || echo "clean"
 ```
 
-Bei rot: Fehler an User reporten, optional einmaligen Re-Dispatch an `sonnet:sonnet-rescue` mit konkretem Fehler-Brief.
+Bei rot: Fehler an User reporten, optional einmaligen Re-Dispatch an `agora-refactor-worker` mit konkretem Fehler-Brief.
 
 ## Schritt 5: Commit (manuell oder via /agora-next-task)
 

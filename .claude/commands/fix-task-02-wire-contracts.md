@@ -5,7 +5,7 @@ allowed-tools: Read, Bash, Grep, Glob, Agent
 
 # /fix-task-02 — Contracts in API verdrahten (Sonnet-Dispatch)
 
-Orchestrator-Pattern wie `/fix-task-01`: Vorab → Worktree → Sonnet-Dispatch → Verify. Implementer ist **Sonnet** via `sonnet:sonnet-rescue`.
+Orchestrator-Pattern wie `/fix-task-01`: Vorab → Worktree → Sonnet-Dispatch → Verify. Implementer ist **Sonnet** via `agora-refactor-worker`.
 
 ## Vorab
 
@@ -26,10 +26,9 @@ git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-0-task-02-wire "$WT
 
 ## Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-02 wire contracts"`, `prompt`:
+`subagent_type: "agora-refactor-worker"`, `description: "fix-task-02 wire contracts"`, `prompt`:
 
 ```
---write --effort medium
 
 Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 0 / Task 02 — Contracts in API + Generator verdrahten.
 
