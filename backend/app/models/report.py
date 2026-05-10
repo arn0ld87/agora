@@ -8,7 +8,7 @@ Reine-Daten-vs-Verhalten-Grenze.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +18,7 @@ class ReportStatus(str, Enum):
     PENDING = "pending"
     PLANNING = "planning"
     GENERATING = "generating"
+    INCOMPLETE = "incomplete"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -77,6 +78,7 @@ class Report:
     status: ReportStatus
     outline: Optional[ReportOutline] = None
     markdown_content: str = ""
+    missing_sections: List[str] = field(default_factory=list)
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
@@ -92,6 +94,7 @@ class Report:
             "status": self.status.value,
             "outline": self.outline.to_dict() if self.outline else None,
             "markdown_content": self.markdown_content,
+            "missing_sections": list(self.missing_sections),
             "created_at": self.created_at,
             "completed_at": self.completed_at,
             "error": self.error,

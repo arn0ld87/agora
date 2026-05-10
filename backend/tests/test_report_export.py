@@ -16,6 +16,7 @@ from app.services.report_agent import (
     ReportSection,
     ReportStatus,
 )
+from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 from app.utils.rate_limit import report_rate_limiter
 
 
@@ -50,8 +51,8 @@ def _persist_report(*, with_evidence: bool = False) -> None:
             title="Demo",
             summary="Summary",
             sections=[
-                ReportSection(title="Intro", content="Body"),
-                ReportSection(title="Outlook", content="Trend"),
+                ReportSection(title=title, content=description)
+                for title, description in DEFAULT_REPORT_SECTIONS
             ],
         ),
         markdown_content="# Demo\n\nBody",
@@ -164,8 +165,8 @@ def test_get_report_returns_contract_shaped_payload(env):
     assert payload["schema_version"] == 2
     assert payload["report_id"] == REPORT_ID
     assert payload["outline"]["sections"][0] == {
-        "title": "Intro",
-        "description": "Body",
+        "title": "Executive Summary",
+        "description": "Maximal 12 Sätze, was die Simulation gezeigt hat.",
     }
     assert "content" not in payload["outline"]["sections"][0]
 

@@ -15,6 +15,8 @@ from app.contracts.report_contract import (
     EvidenceType,
     ReportClaimModel,
     ReportContractModel,
+    ReportOutlineModel,
+    ReportOutlineSectionModel,
 )
 
 
@@ -136,6 +138,35 @@ def test_claim_id_pattern():
 
 
 # ---- ReportContractModel: Schema-Version-Drift unmöglich ----
+
+
+def test_outline_rejects_missing_required_sections() -> None:
+    """Sub-Slice P1.1: ReportOutlineModel listet fehlende Default-Sections explizit."""
+    from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
+
+    first_default_title = DEFAULT_REPORT_SECTIONS[0][0]
+    with pytest.raises(ValidationError) as exc_info:
+        ReportOutlineModel(
+            title="Test-Outline",
+            summary="Nur ein Abschnitt, sonst nichts.",
+            sections=[
+                ReportOutlineSectionModel(title=first_default_title, description="Stub"),
+            ],
+        )
+    msg = str(exc_info.value)
+    for title, _ in DEFAULT_REPORT_SECTIONS[1:]:
+        assert title in msg, f"Erwartet '{title}' in ValidationError-Message"
+
+
+def test_validate_required_sections_case_insensitive() -> None:
+    from app.services.report_agent.contract_validator import validate_required_sections
+
+    assert validate_required_sections(
+        ["  Cover  ", "EXECUTIVE summary"],
+        ["Cover", "Executive Summary", "Datenlage"],
+    ) == ["Datenlage"]
+    assert validate_required_sections([], ["A", "B"]) == ["A", "B"]
+    assert validate_required_sections(["A"], ["A"]) == []
 
 def test_schema_version_must_be_2():
     """Literal[2] verhindert dass jemand schema_version=1 setzt."""

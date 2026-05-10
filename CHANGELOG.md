@@ -4,6 +4,9 @@ Alle nennenswerten Änderungen an Agora werden hier dokumentiert.
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Added
+- feat(report-agent): Pflichtabschnitt-Validator erzwungen (Sub-Slice P1.1). `validate_required_sections()` in `contract_validator.py` prüft case-insensitiv und whitespace-tolerant. `ReportOutlineModel` wirft `ValidationError` bei fehlenden Default-Sections. `workflow.generate_report()` blockt nach `plan_outline()` und setzt `ReportStatus.INCOMPLETE` + `missing_sections[]`, ohne `report.md` zu schreiben. `GET /api/report/<id>` liefert `status` und `missing_sections[]` strukturiert aus.
+
 ### Changed
 - **Layer 2 / Report Agent:** Evidence-Gating-Prompt-Block in `SECTION_SYSTEM_PROMPT_TEMPLATE` eingeführt (Sub-Slice M11.7a). LLM klassifiziert Claims jetzt nach vier Provenance-Stufen (hypothesis, seed_only, agent_grounded, cross_stakeholder) mit Confidence-Gating und Hedge-Word-Regeln. Forward-kompatibel zu `EvidenceSourceKind` Enum (Slice B).
 
@@ -33,6 +36,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - docs(plan): sync M11-Status auf 2026-05-08 — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` an realen Code-Stand angeglichen (M11 Phase 1–5b abgeschlossen, M11.2/M11.3 Coverage-Gates aktiv, ADR-0001 Accepted, Layer 9–10 grün).
 
 ### Added
+- Pflichtabschnitt-Validator (`contract_validator.validate_required_sections`) blockt unvollständige Outlines mit `ReportStatus.incomplete` und strukturiertem `missing_sections[]` (Sub-Slice P1.1, PLAN.md §2.1).
 - feat(contracts): M11.7c — `ReportSectionModel.hypotheses[]` als separater Slot fuer Hypothesen ohne Evidence. Backend-Pydantic und Frontend-Zod spiegeln `ReportSectionHypothesisModel` (`hypothesis_id`, `hypothesis_text`, `rationale`, `suggested_evidence`), `ReportEvidencePanel` rendert Hypothesen getrennt von belegten Claims, und neue Contract-/Vitest-Guards pinnen das Verhalten.
 - `EvidenceSourceKind`-Enum + `EvidenceItemModel.source_kind` + Cross-Stakeholder/Inferred-Validators (ADR-0002 Anker 3–5, Sub-Slice M11.7b).
 - feat(e2e): M11.4c — Minimalreport-Smoke: `frontend/tests/e2e/minimal-report.spec.ts` testet Graph-Setup → Simulation anlegen → `POST /api/report/generate` → Polling bis `completed` → alle 11 Section-Header aus `output-contract-required-sections.txt` als `span.outline-title` sichtbar. Neuer Helper `helpers/report.ts` (`triggerReport`, `pollReportReady`). CI-Job `minimal-report-smoke` in `e2e-smokes.yml` (timeout-minutes: 25). Stub-Erweiterung: `chat_json(PlanResponse)` → `_stub_plan_response()` liefert alle 11 Sections; `chat()` → `e2e_stub_chat_response()` liefert deterministischen ReACT-Loop (3 Tool-Calls + Final Answer).

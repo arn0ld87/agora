@@ -247,12 +247,28 @@ class ReportOutlineModel(BaseModel):
     # 15 bietet großzügigen Puffer für alle 11 Pflichtabschnitte + Spielraum.
     sections: list[ReportOutlineSectionModel] = Field(min_length=1, max_length=15)
 
+    @model_validator(mode="after")
+    def require_default_sections(self) -> "ReportOutlineModel":
+        from app.services.report_agent.contract_validator import validate_required_sections
+        from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
+
+        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
+        outline_titles = [section.title for section in self.sections]
+        missing = validate_required_sections(outline_titles, required_titles)
+        if missing:
+            raise ValueError(
+                "ReportOutlineModel fehlt Pflichtabschnitte: "
+                + ", ".join(missing)
+            )
+        return self
+
 
 class ReportStatus(str, Enum):
     """Spiegelt models/report.py:ReportStatus 1:1."""
     pending = "pending"
     planning = "planning"
     generating = "generating"
+    INCOMPLETE = "incomplete"
     completed = "completed"
     failed = "failed"
 
@@ -268,6 +284,7 @@ class ReportModel(BaseModel):
     status: ReportStatus
     outline: Optional[ReportOutlineModel] = None
     markdown_content: str = ""
+    missing_sections: list[str] = Field(default_factory=list)
     created_at: Optional[str] = None
     completed_at: Optional[str] = None
     error: Optional[str] = None

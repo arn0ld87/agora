@@ -59,6 +59,7 @@
         "pending",
         "planning",
         "generating",
+        "incomplete",
         "completed",
         "failed"
       ],
@@ -127,6 +128,13 @@
       "default": "",
       "title": "Markdown Content",
       "type": "string"
+    },
+    "missing_sections": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Sections",
+      "type": "array"
     },
     "outline": {
       "anyOf": [

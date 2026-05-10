@@ -442,7 +442,7 @@ class ReportManager:
             cls.save_outline(report.report_id, report.outline)
         
         # saveCompleteMarkdownReport
-        if report.markdown_content:
+        if report.status != ReportStatus.INCOMPLETE and report.markdown_content:
             with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
                 f.write(report.markdown_content)
         
@@ -505,6 +505,7 @@ class ReportManager:
             status=ReportStatus(data['status']),
             outline=outline,
             markdown_content=markdown_content,
+            missing_sections=list(data.get('missing_sections') or []),
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
             error=data.get('error'),
@@ -588,4 +589,3 @@ class ReportManager:
             deleted = True
         
         return deleted
-

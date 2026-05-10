@@ -271,6 +271,7 @@ def get_generate_status():
                 "progress": run.get("progress", 0),
                 "message": progress_state.get("message") or run.get("message", ""),
                 "error": run.get("error"),
+                "missing_sections": list(getattr(report_obj, "missing_sections", []) or []),
                 "outline": _map_outline_for_contract(report_obj.outline.to_dict()) if report_obj and report_obj.outline else None,
                 "sections": generated_sections,
                 "current_section_index": len(progress_state.get("completed_sections") or []),
@@ -485,7 +486,11 @@ def _map_outline_for_contract(outline: Optional[dict[str, Any]]) -> Optional[dic
 def _build_report_contract_model(report_obj) -> ReportModel:
     report_dict = report_obj.to_dict()
     report_dict["schema_version"] = CURRENT_SCHEMA_VERSION
-    report_dict["outline"] = _map_outline_for_contract(report_dict.get("outline"))
+    report_dict["missing_sections"] = list(report_dict.get("missing_sections") or [])
+    if report_dict.get("status") == ReportStatus.INCOMPLETE.value:
+        report_dict["outline"] = None
+    else:
+        report_dict["outline"] = _map_outline_for_contract(report_dict.get("outline"))
     return ReportModel.model_validate(report_dict)
 
 
@@ -550,7 +555,12 @@ def export_report(report_id: str):
         download_name = f"agora-report-{report_id}.md"
         md_path = ReportManager._get_report_markdown_path(report_id)
         if os.path.exists(md_path):
-            return send_file(md_path, as_attachment=True, download_name=download_name)
+            return send_file(
+                md_path,
+                as_attachment=True,
+                download_name=download_name,
+                mimetype="text/markdown; charset=utf-8",
+            )
         body = report.markdown_content or ""
         response = Response(body, mimetype='text/markdown; charset=utf-8')
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
@@ -582,7 +592,12 @@ def download_report(report_id: str):
             temp_path = f.name
         return send_file(temp_path, as_attachment=True, download_name=f"{report_id}.md")
 
-    return send_file(md_path, as_attachment=True, download_name=f"{report_id}.md")
+    return send_file(
+        md_path,
+        as_attachment=True,
+        download_name=f"{report_id}.md",
+        mimetype="text/markdown; charset=utf-8",
+    )
 
 
 @report_bp.route('/<report_id>', methods=['DELETE'])

@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 from ...config import Config
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
+from ..report_prompts import DEFAULT_REPORT_SECTIONS
+from .contract_validator import validate_required_sections
 from .evidence import validate_quote_anchors
 from .manager import ReportManager
 from .planning import plan_outline as plan_outline_impl
@@ -408,6 +410,28 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
         report.outline = outline
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, total{len(outline.sections)}sections", completed_sections=[])
         ReportManager.save_report(report)
+
+        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
+        outline_titles = [section.title for section in outline.sections]
+        missing = validate_required_sections(outline_titles, required_titles)
+        if missing:
+            report.status = ReportStatus.INCOMPLETE
+            report.missing_sections = missing
+            message = f"Fehlende Pflichtabschnitte: {', '.join(missing)}"
+            ReportManager.update_progress(
+                report_id,
+                "incomplete",
+                0,
+                message,
+                completed_sections=[],
+            )
+            ReportManager.save_report(report)
+            if progress_callback:
+                progress_callback("incomplete", 0, message)
+            if agent.console_logger:
+                agent.console_logger.close()
+                agent.console_logger = None
+            return report
 
         report.status = ReportStatus.GENERATING
         total_sections = len(outline.sections)

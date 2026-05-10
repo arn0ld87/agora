@@ -20,6 +20,7 @@ from app.services.report_agent.schemas import (
     SectionMetadata,
     _section_schema_for,
 )
+from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 from app.contracts.report_v3 import (
     ContentIdea,
     DataGap,
@@ -67,6 +68,12 @@ def _make_agent() -> object:
     agent._embed_cache = None
     return agent
 
+
+def _default_response_sections(description: str = "Pflichtabschnitt") -> list[dict[str, str]]:
+    return [
+        {"title": title, "description": f"{description}: {title}"}
+        for title, _ in DEFAULT_REPORT_SECTIONS
+    ]
 
 # ---------------------------------------------------------------------------
 # 1. PlanResponse DTO — Struktur
@@ -122,10 +129,7 @@ class TestPlanOutlineStrictSchema:
         agent.llm.chat_json.return_value = {
             "title": "Strikter Report",
             "summary": "Zusammenfassung",
-            "sections": [
-                {"title": "Kontext", "description": "Hintergrund"},
-                {"title": "Befunde", "description": "Ergebnisse"},
-            ],
+            "sections": _default_response_sections("Hintergrund"),
         }
 
         agent.plan_outline()
@@ -153,17 +157,13 @@ class TestPlanOutlineStrictSchema:
         agent.llm.chat_json.return_value = {
             "title": "DACH Marktanalyse",
             "summary": "Einschätzung der Marktdynamik",
-            "sections": [
-                {"title": "Zielgruppen", "description": "Persona-Übersicht"},
-                {"title": "Reibungspunkte", "description": "Adoptionshindernisse"},
-                {"title": "Empfehlungen", "description": "Handlungsempfehlungen"},
-            ],
+            "sections": _default_response_sections("Analyse"),
         }
 
         outline = agent.plan_outline()
 
         assert outline.title == "DACH Marktanalyse"
-        assert len(outline.sections) == 3
+        assert len(outline.sections) == len(DEFAULT_REPORT_SECTIONS)
 
     def test_plan_outline_fallback_on_llm_error_still_stable(self):
         """Fallback-Outline ist stabil wenn chat_json raised."""

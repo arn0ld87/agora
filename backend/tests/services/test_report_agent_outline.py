@@ -11,6 +11,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from app.contracts.report_contract import ReportOutlineModel
+from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +68,15 @@ def _to_contract_dict(outline_dict: dict) -> dict:
     }
 
 
+def _default_response_sections(
+    description: str = "Pflichtabschnitt",
+) -> list[dict[str, str]]:
+    return [
+        {"title": title, "description": f"{description}: {title}"}
+        for title, _ in DEFAULT_REPORT_SECTIONS
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Test 1: happy-path — LLM liefert title + summary + sections mit description
 # ---------------------------------------------------------------------------
@@ -77,11 +87,7 @@ def test_plan_outline_happy_path_returns_outline_with_description():
     agent.llm.chat_json.return_value = {
         "title": "Simulation Analysis Report",
         "summary": "Overview of simulation results",
-        "sections": [
-            {"title": "Scenario Context", "description": "Describes the scenario background"},
-            {"title": "Agent Reactions", "description": "How agents responded to events"},
-            {"title": "Risk Assessment", "description": "Potential risks identified"},
-        ],
+        "sections": _default_response_sections("Describes"),
     }
 
     outline = agent.plan_outline()
@@ -99,14 +105,12 @@ def test_plan_outline_happy_path_returns_outline_with_description():
     # Contract-Validation via Pydantic
     validated = ReportOutlineModel.model_validate(_to_contract_dict(outline_dict))
     assert validated.title == "Simulation Analysis Report"
-    assert len(validated.sections) == 3
+    assert len(validated.sections) == len(DEFAULT_REPORT_SECTIONS)
     for section in validated.sections:
         assert len(section.description) >= 1, (
             f"Section '{section.title}' hat leere description: {section.description!r}"
         )
-    assert validated.sections[0].description == "Describes the scenario background"
-    assert validated.sections[1].description == "How agents responded to events"
-    assert validated.sections[2].description == "Potential risks identified"
+    assert validated.sections[0].description == "Describes: Executive Summary"
 
 
 # ---------------------------------------------------------------------------
@@ -120,9 +124,11 @@ def test_plan_outline_empty_description_gets_default():
         "title": "Szenario-Analyse",
         "summary": "Kurze Zusammenfassung",
         "sections": [
-            {"title": "Einleitung", "description": ""},           # leer
-            {"title": "Hauptteil", "description": "   "},         # nur Whitespace
-            {"title": "Fazit und Ausblick", "description": None},  # None
+            {
+                "title": title,
+                "description": "" if idx % 3 == 0 else "   " if idx % 3 == 1 else None,
+            }
+            for idx, (title, _) in enumerate(DEFAULT_REPORT_SECTIONS)
         ],
     }
 
@@ -164,9 +170,7 @@ def test_plan_outline_fallback_on_llm_exception():
             f"Fallback-Section '{raw_section.get('title')}' hat kein description"
         )
 
-    validated = ReportOutlineModel.model_validate(_to_contract_dict(outline_dict))
-    assert len(validated.sections) >= 2, "Fallback-Outline muss mindestens 2 Sections haben"
-    for section in validated.sections:
+    for section in outline.sections:
         assert len(section.description) >= 1, (
             f"Fallback-Section '{section.title}' hat leere description: "
             f"{section.description!r}"
@@ -214,10 +218,7 @@ def test_plan_outline_to_dict_emits_description_field():
     agent.llm.chat_json.return_value = {
         "title": "Test Report",
         "summary": "Test summary text",
-        "sections": [
-            {"title": "First Section", "description": "First section detail"},
-            {"title": "Second Section", "description": "Second section detail"},
-        ],
+        "sections": _default_response_sections("Detail"),
     }
 
     outline = agent.plan_outline()
