@@ -7,6 +7,7 @@ import { useSimulationPrepare } from '../composables/useSimulationPrepare'
 import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
 import { useEnvForm } from '../composables/useEnvForm'
+import { useRuntimeLlmOptions } from '../composables/useRuntimeLlmOptions'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -70,6 +71,16 @@ const customMaxRounds = ref(40)
 const useCustomDays = ref(false)
 const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
+const showRuntimeOptions = ref(false)
+
+const {
+  runtimeProvider,
+  runtimeApiKey,
+  runtimeBaseUrl,
+  runtimeProviderOptions,
+  runtimeProviderEnabled,
+  runtimePayload,
+} = useRuntimeLlmOptions(t)
 
 // Persona review (Slice 2.4): quality badges, approve/reject, inline edit.
 // Extracted to usePersonaActions (Sub-Slice 38, Refs #203).
@@ -182,6 +193,13 @@ async function triggerPrepare() {
   }
   const m = effectiveModel()
   if (m) payload.llm_model = m
+  if (runtimeProviderEnabled.value && !runtimeApiKey.value.trim()) {
+    addLog(t('step2.runtimeProvider.missingKey'))
+    emit('update-status', 'error')
+    return
+  }
+  const provider = runtimePayload()
+  if (provider) payload.llm_provider = provider
   if (useAgentCap.value && maxAgents.value > 0) {
     payload.max_agents = maxAgents.value
   }
@@ -255,6 +273,40 @@ onMounted(() => {
               :label="t('step2.model.customLabel')"
               :placeholder="t('step2.model.customPlaceholder')"
             />
+          </div>
+
+          <div class="setup-cell setup-cell--wide">
+            <button
+              type="button"
+              class="runtime-toggle"
+              :aria-expanded="showRuntimeOptions"
+              @click="showRuntimeOptions = !showRuntimeOptions"
+            >
+              <span>{{ t('step2.runtimeProvider.toggle') }}</span>
+              <span class="meta">
+                {{ runtimeProviderEnabled ? t('step2.runtimeProvider.active') : t('step2.runtimeProvider.default') }}
+              </span>
+            </button>
+            <div v-if="showRuntimeOptions" class="runtime-panel">
+              <Select
+                v-model="runtimeProvider"
+                :label="t('step2.runtimeProvider.label')"
+                :options="runtimeProviderOptions"
+              />
+              <Field
+                v-if="runtimeProviderEnabled"
+                v-model="runtimeApiKey"
+                type="password"
+                :label="t('step2.runtimeProvider.apiKey')"
+                :placeholder="t('step2.runtimeProvider.apiKeyPlaceholder')"
+              />
+              <Field
+                v-if="runtimeProviderEnabled"
+                v-model="runtimeBaseUrl"
+                :label="t('step2.runtimeProvider.baseUrl')"
+                :placeholder="t('step2.runtimeProvider.baseUrlPlaceholder')"
+              />
+            </div>
           </div>
 
           <!-- Agent language -->
@@ -536,6 +588,35 @@ onMounted(() => {
 .setup-cell { display: flex; flex-direction: column; gap: var(--s-2); }
 .setup-cell--wide { grid-column: 1 / -1; }
 
+.runtime-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--ctl-h-md);
+  padding: 0 var(--ctl-pad-x);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-1);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.runtime-toggle:hover { border-color: color-mix(in oklch, var(--fg) 30%, transparent); }
+.runtime-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  background: var(--bg-subtle);
+}
+
 .agent-cap {
   display: flex;
   align-items: center;
@@ -659,6 +740,7 @@ onMounted(() => {
 
 @media (max-width: 720px) {
   .setup-grid { grid-template-columns: 1fr; }
+  .runtime-panel { grid-template-columns: 1fr; }
 }
 
 .hint--warn {

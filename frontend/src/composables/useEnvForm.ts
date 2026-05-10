@@ -35,6 +35,22 @@ export const STORAGE_MODEL = 'agora.lastModel'
 export const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
 export const STORAGE_LANG = 'agora.agentLanguage'
 
+export function storedEffectiveModel(
+  modelKey = STORAGE_MODEL,
+  customModelKey = STORAGE_CUSTOM_MODEL,
+): string | null {
+  try {
+    const stored = localStorage.getItem(modelKey)
+    if (!stored || stored === 'default') return null
+    if (stored === 'custom') {
+      return (localStorage.getItem(customModelKey) || '').trim() || null
+    }
+    return stored
+  } catch {
+    return null
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import service, { requestWithRetry } from './index'
 import type { ApiEnvelope } from './envelope'
+import type { LlmRuntimePayload } from './llmRuntime'
 import type { Report, EvidenceMap, ReportSection, EvidenceItem } from '../contracts/reportContract'
 
 // --- Local payload/data types -------------------------------------------
@@ -9,6 +10,7 @@ export interface GenerateReportData {
   simulation_id: string
   force_regenerate?: boolean
   llm_model?: string
+  llm_provider?: LlmRuntimePayload
   [key: string]: unknown
 }
 

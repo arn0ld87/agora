@@ -10,6 +10,7 @@ from . import simulation_bp
 from ..config import Config
 from ..models.project import ProjectManager
 from ..services.persona_review_service import PersonaReviewService
+from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
@@ -73,6 +74,15 @@ def start_simulation():
     platform = data.get('platform', 'parallel')
     max_rounds = data.get('max_rounds')
     simulation_days = data.get('simulation_days')
+    llm_model_override = (data.get('llm_model') or '').strip() or None
+    try:
+        llm_runtime = parse_runtime_llm_config(data)
+    except ValueError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
     enable_graph_memory_update = data.get('enable_graph_memory_update', False)
     force = data.get('force', False)
 
@@ -185,7 +195,7 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
-    if simulation_days is not None:
+    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
         store = get_artifact_store()
         config = store.read_json(simulation_id, "simulation_config", default=None)
         if not config:
@@ -194,9 +204,14 @@ def start_simulation():
                 status=404,
                 message="Simulation configuration does not exist. Please call /prepare first",
             )
-        time_config = dict(config.get("time_config") or {})
-        time_config["total_simulation_hours"] = simulation_days * 24
-        config["time_config"] = time_config
+        if simulation_days is not None:
+            time_config = dict(config.get("time_config") or {})
+            time_config["total_simulation_hours"] = simulation_days * 24
+            config["time_config"] = time_config
+        if llm_model_override:
+            config["llm_model"] = llm_model_override
+        if llm_runtime.enabled:
+            config["llm_base_url"] = llm_runtime.base_url
         store.write_json(simulation_id, "simulation_config", config)
 
     run_state = SimulationRunner.start_simulation(
@@ -205,6 +220,7 @@ def start_simulation():
         max_rounds=max_rounds,
         enable_graph_memory_update=enable_graph_memory_update,
         graph_id=graph_id,
+        runtime_env=llm_runtime.subprocess_env(model=llm_model_override),
     )
 
     manager._set_status(state, SimulationStatus.RUNNING)
@@ -226,6 +242,8 @@ def start_simulation():
             "root_simulation_id": state.root_simulation_id,
             "branch_name": state.branch_name,
             "branch_depth": state.branch_depth,
+            "llm_model": llm_model_override,
+            "llm_provider": llm_runtime.redacted_metadata() or None,
         },
     )
 

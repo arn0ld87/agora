@@ -208,6 +208,7 @@ class SimulationRunner:
         enable_graph_memory_update: bool = False,
         graph_id: str = None,
         storage: Any = None,
+        runtime_env: Optional[Dict[str, str]] = None,
     ) -> SimulationRunState:
         """Start simulation.
 
@@ -246,6 +247,7 @@ class SimulationRunner:
                 s, enable_graph_memory_update, graph_id, storage
             ),
             max_rounds=max_rounds,
+            runtime_env=runtime_env,
         )
 
     @classmethod

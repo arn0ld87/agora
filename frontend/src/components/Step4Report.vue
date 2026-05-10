@@ -17,6 +17,10 @@ import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
 import { useReportExports } from '../composables/useReportExports'
+import {
+  runtimeLlmPayloadFromStorage,
+  runtimeProviderMissingApiKeyFromStorage,
+} from '../composables/useRuntimeLlmOptions'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
@@ -147,6 +151,12 @@ async function regenerateWithModel() {
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
+    if (runtimeProviderMissingApiKeyFromStorage()) {
+      addLog(t('step2.runtimeProvider.missingKey'))
+      return
+    }
+    const runtimeProvider = runtimeLlmPayloadFromStorage()
+    if (runtimeProvider) payload.llm_provider = runtimeProvider
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''}…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
