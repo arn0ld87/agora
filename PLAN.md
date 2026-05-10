@@ -1,10 +1,33 @@
 # Agora — Releaseplan v1.0
 
-**Stand:** 2026-05-10
+**Stand:** 2026-05-10 (post-Phase-1, P2.2/P3.3/P3.4 grün)
 **Quelle:** `agora_bewertung_komplett.md` (Score 5,8/10), Code-Verifikation gegen `main` (`backend/app/`, `frontend/src/`, `schemas/`, `.github/workflows/`), `report3.json` als realer Pipeline-Output.
 **Ziel:** Agora schrittweise in einen releasefähigen Zustand bringen. Output-Vertrag erzwingen, Evidence härten, Tabellen rendern, Vertrauensmodi einführen.
 
 > Bestehende Sicherheits-/Infrastruktur-Slices (M9.x, S1–S5, M10.x, M11 Phase 1–6) sind code-verifiziert grün. Dieser Plan adressiert ausschließlich den **Output-Vertrag** und die daraus abgeleiteten Releasekriterien. Historischer Backlog → siehe `docu/refactoring-backlog-priorisiert.md`.
+
+## Status-Snapshot (2026-05-10)
+
+Code-Verifikation gegen `main` (HEAD `c6f33bb`):
+
+| Slice | Status | Anker im Code |
+|---|---|---|
+| P1.1 Pflichtabschnitt-Validator | ✅ done | `contract_validator.py`, `ReportOutlineModel.require_default_sections`, `workflow.py:466-486` |
+| P1.2 Persona-Mindestanzahl | ✅ done | `MIN_PERSONA_TABLE_ROWS` in `contract_constants.py`, `prepare_service.py:34/362/385`, `workflow.py:488-499` |
+| P1.3 Schema-Drift-Gate | ✅ done | `app.contracts.dump_schemas`, `.github/workflows/contract-gates.yml::schema-drift` |
+| P2.1 Evidence-Anker-Pflicht | ❌ offen | `ReportClaimModel.evidence` hat `default_factory=list` ohne `min_length`/Validator |
+| P2.2 Low-Confidence-Marker | ✅ done | `render_claim_to_markdown` rendert ⚠️ Hinweis (`sections.py:149-167`) |
+| P2.3 Hypotheses-Slot | ⚠️ in Arbeit | `render_hypotheses_for_section` da; Worktree `feat/m11-7c-report-hypotheses` aktiv für Frontend/JSON-Vollständigkeit |
+| P3.1 ReportV3-Persistenz | ❌ offen | `evidence_migrations.CURRENT_SCHEMA_VERSION=2`, kein `migrate_v2_to_v3`, `write_report_v3` fehlt |
+| P3.2 Markdown-Renderer | ⚠️ teilweise | `markdown_renderer.render_report_v3()` vollständig; Manager-Hook + Frontend-Default-Switch offen |
+| P3.3 Quote-Source-Marker | ✅ done | Commit `66af4d2 feat(report): render simulated_quote tags as marked blockquote` |
+| P3.4 PDF-Print-Doku | ✅ done | Commit `58cd667 docs(report): document browser-print as canonical PDF path` |
+| P4.1 Report-Modi | ❌ offen | kein `report_mode` auf `ReportV3`, kein API-Param |
+| P4.2 CSV-Export | ❌ offen | kein `format=csv`-Endpoint, kein `downloadCsvBundle` |
+| P4.3 ZIP-Bundle | ❌ offen | abhängig von P4.2 |
+| P4.4 E2E-Smokes Modi | ❌ offen | abhängig von P4.1 |
+
+**Restarbeit bis v1.0:** P2.1, P3.1, P3.2-Verdrahtung, P4.1, P4.2, P4.3, P4.4. P2.3 läuft separat im Worktree.
 
 ---
 
@@ -341,8 +364,14 @@ Reihenfolge ist linear sicher; PR 4 und PR 7 sind die zwei Engstellen.
 
 ---
 
-## 8. Nächste Schritte
+## 8. Nächste Schritte (Stand 2026-05-10)
 
-1. **PR 1 starten:** `contract_validator.py` + `ReportOutlineModel`-Validator + Manager-Hook. Aufwand M, höchster Score-Hebel pro LOC.
-2. **PR 2 parallel:** Persona-Floor in `prepare_service.py` + Frontend-Slider-Min. Kein Konflikt mit PR 1.
+Phase 1 ist auf `main` durch. Kommende Engstellen:
+
+1. **P2.1 Evidence-Anker-Pflicht** — `ReportClaimModel.evidence` Validator + `agent.py::_finalize_section_claims` Hypotheses-Routing + `workflow.py::data_gaps`. Blockiert P3.1, P4.1.
+2. **P3.1 ReportV3 als Persistenz** — `evidence_migrations.CURRENT_SCHEMA_VERSION=3` + `migrate_v2_to_v3` + `storage.write_report_v3` + `manager.finalize_report`-Hook. Blockiert P3.2-Verdrahtung, P4.1, P4.2.
+3. **P4.2 CSV-Export** — `GET /api/report/<id>/export?format=csv&table=…` + Frontend `downloadCsvBundle()`. File-disjunkt zu P2.1/P3.1, semantisch besser nach P3.1.
+4. **P3.2-Verdrahtung** — `manager.finalize_report` ruft `render_report_v3()`, schreibt `report-v3.md`, Frontend-Default-Download wechselt auf v3.
+5. **P4.1 Report-Modi** — nach P3.1 + P2.1.
+6. **P4.3/P4.4** — abschließend.
 3. **PR 7 vorbereiten:** v2→v3-Migration spec'en, bevor die Pipeline umgestellt wird (Migrationspfad ist die einzige Stelle, an der Bestandsdaten kippen können).
