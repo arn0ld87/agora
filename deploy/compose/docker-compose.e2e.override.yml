@@ -21,3 +21,11 @@
 services:
   agora:
     read_only: false
+    environment:
+      # E2E-Stub-Modus: ersetzt alle LLM-Calls durch deterministische
+      # Fixture-Antworten (llm_client.py:386). Nur gesetzt wenn der Runner
+      # AGORA_E2E_LLM_MODE=stub exportiert hat — sonst leer, kein Effekt.
+      # Notwendig, weil docker compose .env mit Vorrang vor Process-Env liest
+      # und Job-Level-env ohne .env-Append den Container nicht erreicht.
+      # e2e-up.sh appended den Wert zusätzlich in .env (doppelte Absicherung).
+      - AGORA_E2E_LLM_MODE=${AGORA_E2E_LLM_MODE:-}

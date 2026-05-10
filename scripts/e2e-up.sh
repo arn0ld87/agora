@@ -42,6 +42,11 @@ fi
   # Live-Embedding-Probe scheitern (Issue #276). Statische Dimension-Check
   # läuft weiter.
   [[ -n "${AGORA_SKIP_EMBEDDING_PROBE:-}" ]] && echo "AGORA_SKIP_EMBEDDING_PROBE=${AGORA_SKIP_EMBEDDING_PROBE}"
+  # docker compose liest .env mit Vorrang vor Process-Env; daher reicht
+  # Job-Level `env: AGORA_E2E_LLM_MODE: stub` allein NICHT. Hier appenden,
+  # damit der Backend-Container den Stub-Pfad in llm_client.py:386 aktiviert
+  # und keinen Live-Ollama-Call versucht (es gibt im CI-Stack keinen Ollama).
+  [[ -n "${AGORA_E2E_LLM_MODE:-}" ]] && echo "AGORA_E2E_LLM_MODE=${AGORA_E2E_LLM_MODE}"
 } >> "${REPO_ROOT}/.env"
 echo "[e2e-up] runtime credentials appended to .env" >&2
 
