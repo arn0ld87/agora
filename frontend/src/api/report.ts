@@ -2,6 +2,7 @@ import service, { requestWithRetry } from './index'
 import type { ApiEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { Report, EvidenceMap, ReportSection, EvidenceItem } from '../contracts/reportContract'
+import type { ReportMode } from '../contracts/reportV3Contract'
 
 // --- Local payload/data types -------------------------------------------
 // These describe the `data` field inside the API envelope, not the envelope itself.
@@ -11,6 +12,8 @@ export interface GenerateReportData {
   force_regenerate?: boolean
   llm_model?: string
   llm_provider?: LlmRuntimePayload
+  /** Report-Modus — wird als ?mode=<value> Query-Parameter übergeben (Backend: request.args.get("mode")). */
+  mode?: ReportMode
   [key: string]: unknown
 }
 
@@ -60,13 +63,23 @@ export interface ChatData {
 // returns response.data (the full envelope) unchanged for success: true cases.
 
 /**
- * Start report generation
- * @param data - { simulation_id, force_regenerate?, llm_model? }
+ * Start report generation.
+ * @param data - { simulation_id, force_regenerate?, llm_model?, mode? }
+ *
+ * Das Backend liest `mode` als Query-Parameter (?mode=strict|balanced|explorative),
+ * alle anderen Felder kommen als JSON-Body.
  */
 export const generateReport = (
   data: GenerateReportData | Record<string, unknown>
 ): Promise<ApiEnvelope<ReportStatusData>> => {
-  return requestWithRetry(() => service.post('/api/report/generate', data), 3, 1000)
+  const { mode, ...body } = data as GenerateReportData
+  const params: Record<string, string> = {}
+  if (mode) params['mode'] = mode
+  return requestWithRetry(
+    () => service.post('/api/report/generate', body, { params }),
+    3,
+    1000
+  )
 }
 
 /**

@@ -397,6 +397,21 @@
     },
     "next": "Next: report →"
   },
+  "reportMode": {
+    "label": "Report mode",
+    "strict": {
+      "label": "Strict",
+      "hint": "Only verified claims. No hypotheses. Hard anchor validator."
+    },
+    "balanced": {
+      "label": "Balanced (default)",
+      "hint": "Verified claims plus marked hypotheses. (Default)"
+    },
+    "explorative": {
+      "label": "Explorative",
+      "hint": "All claims, EXPLORATIVE banner. Brainstorming / discovery mode."
+    }
+  },
   "step4": {
     "kicker": "№ 04 — REPORT",
     "title": "Generate report.",

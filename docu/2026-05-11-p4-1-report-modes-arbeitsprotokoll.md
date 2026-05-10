@@ -84,3 +84,64 @@ Bewusste Entscheidung gegen Strategy-Pattern: Der Switch ist schmal und lokalisi
 | `test_report_modes_workflow.py` (neu) | 11 | grün |
 | `reportV3Contract.spec.ts` (3 neu) | 13 gesamt | grün |
 | Backend gesamt | 1866 passed, 9 skipped | grün |
+
+---
+
+## Frontend-Teil (P4.1 — 2026-05-11)
+
+### Neue Dateien
+
+**`frontend/src/components/step4/ReportModeControls.vue`**
+- Props: `modelValue: ReportMode` (v-model), `disabled?: boolean`
+- Emits: `update:modelValue`
+- UI: `<Select>`-Wrapper (analog `ReportModelControls.vue`) mit drei Optionen + Hint-Text je Modus
+- i18n: alle Strings über `t('reportMode.*')` — Keys in `de.json` + `en.json` ergänzt
+- Default-Value aus `DEFAULT_REPORT_MODE` in `reportV3Contract.ts`
+
+**`frontend/src/components/step4/__tests__/ReportModeControls.spec.ts`** (neu)
+- 7 Tests: drei Optionen gerendert, Default balanced, emit strict/explorative, i18n-Label vorhanden, Hint-Text, disabled-Klasse
+
+### Geänderte Dateien
+
+**`frontend/src/components/Step4Report.vue`**
+- Import: `ReportModeControls`, `ReportModeSchema`, `DEFAULT_REPORT_MODE`, `ReportMode`
+- `STORAGE_REPORT_MODE = 'agora.reportMode'`
+- `resolveStoredReportMode()`: Zod-Validierung des localStorage-Werts, Fallback auf `'balanced'`
+- `reportMode = ref<ReportMode>(resolveStoredReportMode())`
+- `watch(reportMode, ...)` → schreibt in localStorage
+- `regenerateWithModel`: `mode: reportMode.value` in Payload
+- Template: `<ReportModeControls v-model="reportMode" :disabled="isRegenerating || phase === 1" />` direkt nach `<ReportModelControls />`
+
+**`frontend/src/api/report.ts`**
+- `GenerateReportData`: `mode?: ReportMode` ergänzt
+- `generateReport`: destrukturiert `mode` aus `data`, übergibt es als `?mode=`-Query-Parameter an Axios (Backend erwartet `request.args.get("mode")`, nicht Body)
+
+**`frontend/src/i18n/locales/de.json` + `en.json`**
+- Neuer Top-Level-Key `reportMode` mit `label`, `strict.*`, `balanced.*`, `explorative.*` (label + hint)
+
+**`frontend/src/components/__tests__/Step4Report.spec.ts`**
+- i18n-Stub um `reportMode.*`-Keys erweitert
+- `generateReport`-Mock liefert jetzt `{ success: true, data: { report_id: '...' } }`
+- Neue Describe-Suite `P4.1`: localStorage-Round-Trip, Fallback bei ungültigem Wert, `generateReport`-Aufruf mit `mode`-Parameter
+
+### Technische Entscheidung: Query-Param statt Body
+
+Das Backend-Endpoint `POST /api/report/generate` liest den Mode via `request.args.get("mode")` (Query-Parameter), nicht aus dem JSON-Body. Die `generateReport`-API-Funktion im Frontend destrukturiert `mode` und übergibt es als Axios-`params`-Option — alle anderen Felder gehen weiterhin als Body.
+
+### localStorage-Key
+
+`agora.reportMode`
+
+### i18n-Keys ergänzt
+
+```
+reportMode.label
+reportMode.strict.label
+reportMode.strict.hint
+reportMode.balanced.label
+reportMode.balanced.hint
+reportMode.explorative.label
+reportMode.explorative.hint
+```
+
+(In `de.json` und `en.json`)
