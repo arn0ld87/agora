@@ -3,6 +3,7 @@
 **Stand:** 2026-05-06, Europe/Berlin
 **Ausgeloest durch:** Repo-Review PR4 — CVE-Baseline aktiv abbauen.
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
+Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings. Jedes Ignored-
 CVE hat ein GitHub-Issue, eine Frist und einen Owner. Neue Findings duerfen
