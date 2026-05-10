@@ -30,7 +30,7 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
 | `pillow` | `10.3.0` | `camel-oasis==0.2.5`, `camel-ai==0.2.78` | `camel-oasis` pinnt `pillow==10.3.0`; `camel-ai` limitiert `pillow<11`. |
-| `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. |
+| `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. Fix: `>=9.0.3`. |
 | `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
 | `unstructured` | `0.13.7` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `unstructured==0.13.7`. |
 

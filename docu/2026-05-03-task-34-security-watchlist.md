@@ -45,7 +45,7 @@ Alle Versionen aus `backend/uv.lock` (Stand 2026-05-03) verifiziert. Pinning-Sou
 - **Pinning-Source:** `camel-oasis==0.2.5` (pins `pytest==8.2.0`)
 - **Risk:** Low — Test-Runner, nicht im Prod-Runtime aktiv. Nur in `backend/tests/` und CI relevant.
 - **Betroffen in Agora:** Test-Suite (`backend/tests/`); kein Impact auf laufende Simulationen.
-- **Target-Version:** `pytest>=8.3.0`, sobald camel-oasis den Pin lockert.
+- **Target-Version:** `pytest>=9.0.3` (Fix-Version laut pip-audit), sobald camel-oasis den Pin lockert.
 - **Deadline:** 2026-07-30 (+90 Tage)
 - **Action:**
   - Monitor: PyPI `camel-oasis`-Releases.
