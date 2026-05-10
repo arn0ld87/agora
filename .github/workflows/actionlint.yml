@@ -1,0 +1,45 @@
+# Statische Workflow-Validierung via actionlint.
+#
+# Fängt typische GitHub-Actions-Fallen vor dem Merge ab:
+#   - Shell-Injection-Pattern in `run:`-Blöcken (${{ ... }} unquoted)
+#   - Deprecated/falsche `uses:`-Versionen, ungültige Syntax
+#   - Unbekannte `${{ ... }}`-Kontexte, Tippfehler in Secrets/Vars
+#
+# Phase 10 Supply-Chain-Hardening: ergänzt CodeQL/dependency-review/gitleaks
+# um eine Workflow-Layer-Statik-Analyse, bevor Workflow-Bugs in main landen.
+name: actionlint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+permissions:
+  contents: read
+  # reviewdog veröffentlicht Findings als PR-Review-Kommentare.
+  pull-requests: write
+
+jobs:
+  actionlint:
+    name: Lint GitHub-Actions-Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@6fb7acc99f4a1008869fa8a0f09cfca740837d9d # v1.72.0
+        with:
+          # Findings als PR-Review-Kommentare (auf push: branches main keine
+          # Kommentare, da kein PR-Kontext — der Step failt aber weiterhin).
+          reporter: github-pr-review
+          # Findings sind harte Fehler. Workflow-YAML-Bugs sollen nicht in
+          # main landen.
+          fail_on_error: true
+          level: error
