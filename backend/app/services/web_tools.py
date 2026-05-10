@@ -41,7 +41,7 @@ def _setting_value(key: str, *, include_secret: bool = False) -> Any:
 def _bool_enabled(value: Any) -> bool:
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() not in ("0", "false", "no", "off", "")
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _is_public_url(url: str) -> tuple[bool, str]:

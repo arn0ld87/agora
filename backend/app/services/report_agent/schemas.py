@@ -130,10 +130,7 @@ def _section_schema_for(section_title: str) -> type[BaseModel]:
         werden kann.
     """
     lower = section_title.strip().lower()
-    for title, schema_cls in _SECTION_TITLE_MAP.items():
-        if lower == title:
-            return schema_cls
-    return SectionMetadata
+    return _SECTION_TITLE_MAP.get(lower, SectionMetadata)
 
 
 __all__ = [
