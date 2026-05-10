@@ -9,6 +9,15 @@ import {
   PersonaQuotaPlanSchema,
   buildQuotaPlanFromEntries,
 } from "../personaQuotaContract";
+import personaQuotaSchemaJson from "../../../../schemas/persona-quota-plan.schema.json";
+
+function propertyKeys(schema: { properties?: Record<string, unknown> }) {
+  return Object.keys(schema.properties ?? {}).sort();
+}
+
+function shapeKeys(schema: { shape: Record<string, unknown> }) {
+  return Object.keys(schema.shape).sort();
+}
 
 describe("PersonaQuotaPlanSchema", () => {
   it("akzeptiert konsistenten Plan", () => {
@@ -67,6 +76,10 @@ describe("PersonaQuotaPlanSchema", () => {
       extra: "should-fail",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("spiegelt die Backend-JSON-Schema-Properties", () => {
+    expect(shapeKeys(PersonaQuotaPlanSchema)).toEqual(propertyKeys(personaQuotaSchemaJson));
   });
 });
 

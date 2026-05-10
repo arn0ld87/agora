@@ -31,6 +31,7 @@ from .entity_reader import EntityReader
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
+from .report_agent import MIN_PERSONA_TABLE_ROWS
 from .simulation_config_generator import SimulationConfigGenerator
 
 if TYPE_CHECKING:
@@ -123,6 +124,8 @@ def _phase_generate_profiles(
     Entity" unverändert.
     """
     entities = _expand_entities_for_quota(filtered.entities, quota_plan)
+    if quota_plan is None:
+        entities = _apply_persona_floor_to_entities(entities)
     total_entities = len(entities)
 
     if progress_callback:
@@ -353,6 +356,74 @@ def _expand_entities_for_quota(
     return expanded
 
 
+def _apply_persona_floor_to_entities(
+    entities: List[Any],
+    *,
+    minimum: int = MIN_PERSONA_TABLE_ROWS,
+) -> List[Any]:
+    """Ensure the generation pool can yield the report persona-table floor.
+
+    The generator creates a distinct profile per input position. When the graph
+    has fewer entities than the output contract requires, repeat the existing
+    entity pool in deterministic round-robin order instead of inventing
+    synthetic entities.
+    """
+    if not entities or len(entities) >= minimum:
+        return entities
+
+    logger.info(
+        "persona-floor angewendet: generation_pool=%s floor=%s",
+        len(entities),
+        minimum,
+    )
+    return [entities[i % len(entities)] for i in range(minimum)]
+
+
+def _apply_persona_floor_to_quota_plan(
+    plan: Optional[PersonaQuotaPlan],
+    *,
+    minimum: int = MIN_PERSONA_TABLE_ROWS,
+) -> Optional[PersonaQuotaPlan]:
+    """Raise an explicit quota plan to the report persona floor.
+
+    Segment proportions are preserved via largest-remainder allocation. The
+    adjusted plan is used consistently for generation, validation and persisted
+    config, so downstream quota checks stay exact.
+    """
+    if plan is None or plan.total >= minimum:
+        return plan
+
+    raw_targets = {
+        segment: (target / plan.total) * minimum
+        for segment, target in plan.targets.items()
+    }
+    targets = {
+        segment: max(1, int(raw_value))
+        for segment, raw_value in raw_targets.items()
+    }
+    remaining = minimum - sum(targets.values())
+    if remaining > 0:
+        ranked_segments = sorted(
+            raw_targets,
+            key=lambda segment: (
+                raw_targets[segment] - int(raw_targets[segment]),
+                plan.targets[segment],
+                segment,
+            ),
+            reverse=True,
+        )
+        for segment in ranked_segments[:remaining]:
+            targets[segment] += 1
+
+    logger.info(
+        "persona-floor angewendet: quota_total=%s floor=%s targets=%s",
+        plan.total,
+        minimum,
+        targets,
+    )
+    return PersonaQuotaPlan(targets=targets, total=minimum)
+
+
 def _validate_persona_quota(
     plan: PersonaQuotaPlan,
     profiles: List[OasisAgentProfile],
@@ -436,6 +507,8 @@ def prepare_simulation(
             except ValueError:
                 parallel_profile_count = 10
 
+        quota_plan = _apply_persona_floor_to_quota_plan(quota_plan)
+
         # Phase 2: Generate Agent Profiles
         profiles = _phase_generate_profiles(
             state,
@@ -493,4 +566,9 @@ def prepare_simulation(
         raise
 
 
-__all__ = ["prepare_simulation", "_validate_persona_quota"]
+__all__ = [
+    "prepare_simulation",
+    "_apply_persona_floor_to_entities",
+    "_apply_persona_floor_to_quota_plan",
+    "_validate_persona_quota",
+]

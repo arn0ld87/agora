@@ -19,16 +19,9 @@ jobs:
       - name: Sync backend deps
         working-directory: backend
         run: uv sync --group dev
-      - name: Generate schemas from Pydantic models
+      - name: Check generated schemas from Pydantic models
         working-directory: backend
-        run: uv run python -m app.contracts.dump_schemas
-      - name: Fail on schema diff
-        run: |
-          # Wenn Backend-Pydantic geändert wurde, müssen Schemas committet werden.
-          if ! git diff --exit-code schemas/; then
-            echo "::error::JSON-Schemas haben gedriftet. Lokal 'uv run python -m app.contracts.dump_schemas' und committen."
-            exit 1
-          fi
+        run: uv run python -m app.contracts.dump_schemas --check
 
   status-sync-drift:
     name: STATUS.md Drift-Check

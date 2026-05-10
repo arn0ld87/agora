@@ -13,6 +13,15 @@ import {
   ClaimSchema,
   PersonaV3Schema,
 } from "../reportV3Contract";
+import reportV3Json from "../../../../schemas/report-v3.schema.json";
+
+function propertyKeys(schema: { properties?: Record<string, unknown> }) {
+  return Object.keys(schema.properties ?? {}).sort();
+}
+
+function shapeKeys(schema: { shape: Record<string, unknown> }) {
+  return Object.keys(schema.shape).sort();
+}
 
 const MINIMAL_REPORT_V3 = {
   schema_version: 3,
@@ -133,6 +142,12 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     for (const key of expected) {
       expect(key in schema).toBe(true);
     }
+  });
+
+  it("spiegelt die ReportV3-Backend-JSON-Schema-Properties", () => {
+    expect(shapeKeys(ReportV3Schema)).toEqual(propertyKeys(reportV3Json));
+    expect(shapeKeys(PersonaV3Schema)).toEqual(propertyKeys(reportV3Json.$defs.Persona));
+    expect(shapeKeys(ClaimSchema)).toEqual(propertyKeys(reportV3Json.$defs.Claim));
   });
 
   it("parses minimal report with empty section lists", () => {

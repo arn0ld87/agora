@@ -8,12 +8,23 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseReportContract,
+  EvidenceMapSchema,
   ReportContractSchema,
   ReportClaimSchema,
   EvidenceItemSchema,
   ReportOutlineSchema,
+  ReportSchema,
   ReportSectionHypothesisSchema,
 } from '../reportContract';
+import reportContractJson from '../../../../schemas/report-contract.schema.json';
+
+function propertyKeys(schema: { properties?: Record<string, unknown> }) {
+  return Object.keys(schema.properties ?? {}).sort();
+}
+
+function shapeKeys(schema: { shape: Record<string, unknown> }) {
+  return Object.keys(schema.shape).sort();
+}
 
 const VALID_PAYLOAD = {
   schema_version: 2,
@@ -105,6 +116,28 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
       evidence: { ...VALID_PAYLOAD.evidence, schema_version: 1 },
     };
     expect(ReportContractSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('spiegelt die Backend-JSON-Schema-Properties', () => {
+    const defs = reportContractJson.$defs;
+    expect(shapeKeys(ReportContractSchema)).toEqual(propertyKeys(reportContractJson));
+    expect(shapeKeys(ReportSchema)).toEqual(propertyKeys(defs.ReportModel));
+    expect(shapeKeys(ReportOutlineSchema)).toEqual(propertyKeys(defs.ReportOutlineModel));
+    expect(shapeKeys(EvidenceMapSchema)).toEqual(propertyKeys(defs.EvidenceMapModel));
+  });
+
+  it('parst incomplete-Reports mit missing_sections aus dem Backend', () => {
+    const result = ReportSchema.safeParse({
+      schema_version: 2,
+      report_id: 'report_incomplete',
+      simulation_id: 'sim_incomplete',
+      graph_id: 'graph_incomplete',
+      simulation_requirement: 'Output-Vertrag prüfen',
+      status: 'incomplete',
+      markdown_content: '',
+      missing_sections: ['Persona-Mindestanzahl nicht erreicht: 12/50 Personas vorhanden.'],
+    });
+    expect(result.success).toBe(true);
   });
 
   it('rejects claim_id that does not match the Pydantic regex', () => {

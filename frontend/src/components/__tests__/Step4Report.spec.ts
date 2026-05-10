@@ -104,6 +104,7 @@ const VALID_REPORT: Report = {
   simulation_requirement: 'Test-Anforderung fuer Vitest',
   status: 'completed',
   markdown_content: '# Testbericht\n\nInhalt.',
+  missing_sections: [],
   has_evidence: false,
   evidence_sections: 0,
 }

@@ -37,7 +37,7 @@ export const EvidenceSourceKindSchema = z.enum([
 export type EvidenceSourceKind = z.infer<typeof EvidenceSourceKindSchema>;
 
 export const ReportStatusSchema = z.enum([
-  "pending", "planning", "generating", "completed", "failed",
+  "pending", "planning", "generating", "incomplete", "completed", "failed",
 ]);
 
 const FORBIDDEN_EVIDENCE_TYPES = new Set(["model_generated_inference", "section_synthesis"]);
@@ -187,6 +187,7 @@ export const ReportSchema = z.object({
   status: ReportStatusSchema,
   outline: ReportOutlineSchema.optional().nullable(),
   markdown_content: z.string().default(""),
+  missing_sections: z.array(z.string()).default([]),
   created_at: z.string().optional().nullable(),
   completed_at: z.string().optional().nullable(),
   error: z.string().optional().nullable(),

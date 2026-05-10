@@ -138,3 +138,34 @@ def test_expand_entities_empty_targets_returns_empty_list():
     plan = PersonaQuotaPlan(targets={"other": 1}, total=1)
     with pytest.raises(ValueError):
         _expand_entities_for_quota(pool, plan)
+
+
+def test_apply_persona_floor_to_entities_round_robin_to_contract_minimum():
+    """P1.2: Default-Pfad erzeugt mindestens 50 Profile aus kleinem Entity-Pool."""
+    from app.services.prepare_service import _apply_persona_floor_to_entities
+    from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
+
+    pool = [
+        _make_entity("u0", "kmu", "KMU0"),
+        _make_entity("u1", "kmu", "KMU1"),
+    ]
+
+    expanded = _apply_persona_floor_to_entities(pool)
+
+    assert len(expanded) == MIN_PERSONA_TABLE_ROWS
+    assert [entity.uuid for entity in expanded[:5]] == ["u0", "u1", "u0", "u1", "u0"]
+
+
+def test_apply_persona_floor_to_quota_plan_preserves_total_and_segments():
+    """P1.2: Kleine Quota-Pläne werden proportional auf 50 angehoben."""
+    from app.services.prepare_service import _apply_persona_floor_to_quota_plan
+    from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
+
+    plan = PersonaQuotaPlan(targets={"kmu": 2, "admin": 1}, total=3)
+
+    adjusted = _apply_persona_floor_to_quota_plan(plan)
+
+    assert adjusted is not None
+    assert adjusted.total == MIN_PERSONA_TABLE_ROWS
+    assert sum(adjusted.targets.values()) == MIN_PERSONA_TABLE_ROWS
+    assert adjusted.targets == {"kmu": 33, "admin": 17}

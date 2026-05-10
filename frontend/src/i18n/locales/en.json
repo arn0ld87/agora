@@ -329,6 +329,7 @@
     "agentCap": {
       "label": "Limit max. number of agents",
       "unit": "Agents",
+      "minimumHint": "Minimum for the DACH persona table: 50 agents.",
       "unlimitedHint": "Without a limit, one agent is created for each entity in the graph."
     },
     "next": "Next: simulation →"

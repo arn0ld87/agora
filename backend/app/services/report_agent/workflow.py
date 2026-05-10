@@ -7,7 +7,9 @@ from typing import Any, Callable, Dict, List, Optional
 from ...config import Config
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
+from ..artifact_store import resolve_default_store
 from ..report_prompts import DEFAULT_REPORT_SECTIONS
+from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import validate_required_sections
 from .evidence import validate_quote_anchors
 from .manager import ReportManager
@@ -45,6 +47,56 @@ def _section_expects_quotes(section_title: str) -> bool:
     """Gibt True zurück wenn der Abschnittstyp Persona-Zitate erwarten lässt."""
     lower = section_title.lower()
     return any(kw in lower for kw in _QUOTE_REQUIRED_SECTION_KEYWORDS)
+
+
+def _load_persona_count(agent: Any) -> int:
+    """Best-effort count of generated personas for the report contract gate."""
+    for attr in ("personas", "profiles", "persona_ids"):
+        value = getattr(agent, attr, None)
+        if isinstance(value, list):
+            return len(value)
+
+    try:
+        profiles = resolve_default_store().read_json(
+            agent.simulation_id,
+            "reddit_profiles",
+            default=[],
+        )
+    except Exception as exc:
+        logger.warning(
+            "persona-floor check: failed to read profiles for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return 0
+    return len(profiles) if isinstance(profiles, list) else 0
+
+
+def _mark_incomplete_for_persona_floor(
+    report: Report,
+    *,
+    report_id: str,
+    persona_count: int,
+    progress_callback: Optional[Callable[[str, int, str], None]] = None,
+) -> Report:
+    report.status = ReportStatus.INCOMPLETE
+    message = (
+        "Persona-Mindestanzahl nicht erreicht: "
+        f"{persona_count}/{MIN_PERSONA_TABLE_ROWS} Personas vorhanden."
+    )
+    report.missing_sections = [message]
+    report.error = message
+    ReportManager.update_progress(
+        report_id,
+        "incomplete",
+        0,
+        message,
+        completed_sections=[],
+    )
+    ReportManager.save_report(report)
+    if progress_callback:
+        progress_callback("incomplete", 0, message)
+    return report
 
 
 def generate_section_react(
@@ -428,6 +480,19 @@ def generate_report(agent: Any, progress_callback: Optional[Callable[[str, int, 
             ReportManager.save_report(report)
             if progress_callback:
                 progress_callback("incomplete", 0, message)
+            if agent.console_logger:
+                agent.console_logger.close()
+                agent.console_logger = None
+            return report
+
+        persona_count = _load_persona_count(agent)
+        if persona_count < MIN_PERSONA_TABLE_ROWS:
+            report = _mark_incomplete_for_persona_floor(
+                report,
+                report_id=report_id,
+                persona_count=persona_count,
+                progress_callback=progress_callback,
+            )
             if agent.console_logger:
                 agent.console_logger.close()
                 agent.console_logger = None

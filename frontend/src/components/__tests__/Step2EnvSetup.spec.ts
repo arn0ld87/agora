@@ -267,4 +267,28 @@ describe('Step2EnvSetup — refreshQuality-Tick-Isolation (J.1, #219)', () => {
     expect(refreshQualitySpy).toHaveBeenCalledTimes(1)
     expect(refreshQualitySpy).toHaveBeenCalledWith('sim-stable')
   })
+
+  it('setzt den Agenten-Cap-Slider auf den Output-Contract-Floor 50', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-floor',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfig,
+    })
+
+    await flushPromises()
+
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    await checkbox.setValue(true)
+    await nextTick()
+
+    expect(wrapper.find('input[type="range"]').attributes('min')).toBe('50')
+    expect(wrapper.find('input[type="number"]').attributes('min')).toBe('50')
+    expect(wrapper.find('input[type="range"]').attributes('title')).toContain('minimumHint')
+
+    wrapper.unmount()
+  })
 })

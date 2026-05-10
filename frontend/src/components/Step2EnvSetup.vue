@@ -201,7 +201,7 @@ async function triggerPrepare() {
   const provider = runtimePayload()
   if (provider) payload.llm_provider = provider
   if (useAgentCap.value && maxAgents.value > 0) {
-    payload.max_agents = maxAgents.value
+    payload.max_agents = Math.max(50, maxAgents.value)
   }
   if (useQuotaPlan.value) {
     if (quotaValidationError.value) {
@@ -336,6 +336,7 @@ onMounted(() => {
                 max="500"
                 step="5"
                 :disabled="isPreparing"
+                :title="t('step2.agentCap.minimumHint')"
               />
               <input
                 type="number"
@@ -344,6 +345,7 @@ onMounted(() => {
                 max="2000"
                 :disabled="isPreparing"
                 class="agent-cap-number"
+                :title="t('step2.agentCap.minimumHint')"
               />
               <span class="meta">{{ t('step2.agentCap.unit') }}</span>
             </div>
