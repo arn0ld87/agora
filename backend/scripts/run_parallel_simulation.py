@@ -84,6 +84,7 @@ _cleanup_done = False
 try:
     from ._sim_common import (
         apply_camel_context_floor,
+        build_camel_extra_body,
         build_parallel_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -93,6 +94,7 @@ try:
 except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
+        build_camel_extra_body,
         build_parallel_parser,
         install_max_tokens_warning_filter,
         install_script_paths,
@@ -1163,14 +1165,21 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     )
 
     # Suppress reasoning output on Qwen3/Nemotron/DeepSeek/GPT-OSS etc.
-    # so that `content` isn't starved by `reasoning` tokens.
+    # so that `content` isn't starved by `reasoning` tokens. `think` ist
+    # ein Ollama-only-Parameter; OpenAI/Anthropic kennen ihn nicht und
+    # antworten 400. build_camel_extra_body filtert provider-aware.
     think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-    model_cfg = {
+    extra_body = build_camel_extra_body(
+        model=llm_model,
+        base_url=llm_base_url,
+        num_ctx=runtime_settings["ollama_num_ctx"],
+        think=think_on,
+    )
+    model_cfg: Dict[str, Any] = {
         "max_tokens": runtime_settings["completion_max_tokens"],
-        "extra_body": {"think": think_on},
     }
-    if runtime_settings["ollama_num_ctx"] is not None:
-        model_cfg["extra_body"]["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
+    if extra_body:
+        model_cfg["extra_body"] = extra_body
 
     return ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,

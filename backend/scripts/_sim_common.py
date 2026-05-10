@@ -7,9 +7,46 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from dotenv import load_dotenv
+
+
+def _is_ollama_route(model: str, base_url: str) -> bool:
+    """True wenn das Modell über Ollama (lokal oder Cloud) läuft.
+
+    Heuristik analog zu :class:`app.utils.llm_client.LLMClient._detect_provider`:
+    - Modellname endet auf ``:cloud`` → Ollama Cloud
+    - Base-URL enthält Port ``11434`` → lokale Ollama-Instanz
+    """
+    if model.endswith(":cloud"):
+        return True
+    if "11434" in (base_url or ""):
+        return True
+    return False
+
+
+def build_camel_extra_body(
+    *,
+    model: str,
+    base_url: str,
+    num_ctx: int | None,
+    think: bool,
+) -> dict[str, Any]:
+    """Baut den ``extra_body``-Block für ``ModelFactory.create()``.
+
+    Ollama-spezifische Parameter (``think``, ``options.num_ctx``) werden
+    NUR für Ollama-Routen gesetzt. OpenAI/Anthropic/Mistral kennen den
+    ``think``-Parameter nicht und antworten 400 ``Unknown parameter``,
+    sobald er in ``extra_body`` landet.
+    """
+    if not _is_ollama_route(model, base_url):
+        return {}
+
+    body: dict[str, Any] = {"think": think}
+    if num_ctx is not None:
+        body["options"] = {"num_ctx": num_ctx}
+    return body
 
 
 @dataclass(frozen=True)
