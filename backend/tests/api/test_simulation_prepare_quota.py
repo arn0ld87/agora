@@ -17,7 +17,8 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from app.api.simulation_prepare import _parse_quota_plan
+from app.api.simulation_prepare import _parse_quota_plan, _resolve_max_agents_with_floor
+from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
 from app.contracts import PersonaQuotaPlan
 from app.services import prepare_service
 from app.services.simulation_manager import SimulationManager
@@ -79,6 +80,14 @@ def test_parse_quota_plan_rejects_non_dict_payload():
     payload = {"quota_plan": "not-a-dict"}
     with pytest.raises(ValidationError):
         _parse_quota_plan(payload)
+
+
+def test_resolve_max_agents_with_floor_enforces_minimum():
+    assert _resolve_max_agents_with_floor(1) == MIN_PERSONA_TABLE_ROWS
+    assert _resolve_max_agents_with_floor("25") == MIN_PERSONA_TABLE_ROWS
+    assert _resolve_max_agents_with_floor(MIN_PERSONA_TABLE_ROWS + 5) == MIN_PERSONA_TABLE_ROWS + 5
+    assert _resolve_max_agents_with_floor(None) is None
+    assert _resolve_max_agents_with_floor("invalid") is None
 
 
 # ---- SimulationManager.prepare_simulation pass-through ---------------------

@@ -15,6 +15,7 @@ from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.report_agent import MIN_PERSONA_TABLE_ROWS
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_errors import ApiErrorCode
@@ -49,6 +50,24 @@ def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
     if isinstance(raw, dict) and not raw:
         return None
     return PersonaQuotaPlan.model_validate(raw)
+
+
+def _resolve_max_agents_with_floor(raw_value: object) -> int | None:
+    """Parse optional max_agents and enforce the report persona floor."""
+    try:
+        parsed = int(raw_value) if raw_value not in (None, "", 0) else None
+    except (TypeError, ValueError):
+        return None
+    if parsed is None or parsed <= 0:
+        return None
+    if parsed < MIN_PERSONA_TABLE_ROWS:
+        logger.info(
+            "Applying persona floor for max_agents: requested=%s floor=%s",
+            parsed,
+            MIN_PERSONA_TABLE_ROWS,
+        )
+        return MIN_PERSONA_TABLE_ROWS
+    return parsed
 
 
 def _check_simulation_prepared(simulation_id: str) -> tuple:
@@ -237,11 +256,7 @@ def prepare_simulation():
     use_llm_for_profiles = data.get('use_llm_for_profiles', True)
     parallel_profile_count = data.get('parallel_profile_count') or None
 
-    max_agents_raw = data.get('max_agents')
-    try:
-        max_agents = int(max_agents_raw) if max_agents_raw not in (None, '', 0) else None
-    except (TypeError, ValueError):
-        max_agents = None
+    max_agents = _resolve_max_agents_with_floor(data.get("max_agents"))
 
     # Sub-Slice 20a: optional PersonaQuotaPlan aus Body. ValidationError →
     # HTTP 400 mit Pydantic-Fehlermessage; sonst wird der Plan an den

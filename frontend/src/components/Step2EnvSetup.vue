@@ -332,7 +332,7 @@ onMounted(() => {
               <input
                 type="range"
                 v-model.number="maxAgents"
-                min="5"
+                min="50"
                 max="500"
                 step="5"
                 :disabled="isPreparing"
@@ -340,7 +340,7 @@ onMounted(() => {
               <input
                 type="number"
                 v-model.number="maxAgents"
-                min="1"
+                min="50"
                 max="2000"
                 :disabled="isPreparing"
                 class="agent-cap-number"
