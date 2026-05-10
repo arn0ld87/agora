@@ -20,11 +20,11 @@ Stand: 2026-05-08
 | Kategorie | Anzahl | Methode |
 |---|---|---|
 | Backend Tests (collected) | 1722 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Spec-Files | 46 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' \)` |
+| Frontend Test-Files | 46 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
-_Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Pro Spec-File laufen mehrere `it`-Blöcke; die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
+_Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Gezählt werden Vitest-Pattern `*.spec.{js,ts}` und `*.test.{js,ts}`; pro Test-File laufen mehrere `it`-Blöcke. Die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
 
 ## Backend-Coverage (M11.2)
 

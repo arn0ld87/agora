@@ -13,6 +13,8 @@ def test_google_runtime_uses_openai_compatible_base_url():
         "LLM_API_KEY": "gemini-key",
         "OPENAI_API_KEY": "gemini-key",
         "LLM_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "OPENAI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "OPENAI_API_BASE": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "OPENAI_API_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "LLM_MODEL_NAME": "gemini-2.5-flash",
     }

@@ -34,4 +34,7 @@ werden nur nicht-geheime Werte:
 
 Für den OASIS-Subprozess injiziert `/api/simulation/start` die Runtime-Werte als
 Environment (`LLM_API_KEY`, `OPENAI_API_KEY`, `LLM_BASE_URL`,
-`OPENAI_API_BASE_URL`) nur für diesen Prozess.
+`OPENAI_BASE_URL`, `OPENAI_API_BASE`, `OPENAI_API_BASE_URL`) nur für diesen
+Prozess. Die drei OpenAI-Base-URL-Aliase werden parallel gesetzt, damit
+CAMEL/OASIS-Skripte und OpenAI-kompatible Clients mit unterschiedlichen
+Konventionen dieselbe Runtime-Auswahl nutzen.
