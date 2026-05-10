@@ -9,7 +9,7 @@ cross-field rules.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, create_model
 
@@ -25,31 +25,23 @@ _TYPE_MAP: dict[str, type[Any]] = {
 
 
 def _build_patch_model(*, secret: bool | None) -> type[BaseModel]:
-    fields: dict[str, tuple[Any, None]] = {}
+    fields: dict[str, Any] = {}
     for spec in SETTINGS_FIELDS:
         if secret is not None and spec.secret is not secret:
             continue
         fields[spec.key] = (_TYPE_MAP.get(spec.type, str) | None, None)
-    return create_model(
-        (
-            'RuntimeSettingsSecretFieldsModel'
-            if secret is True
-            else 'RuntimeSettingsPatchModel'
-            if secret is False
-            else 'RuntimeSettingsAnyFieldsModel'
-        ),
+    name = (
+        'RuntimeSettingsSecretFieldsModel'
+        if secret is True
+        else 'RuntimeSettingsAnyFieldsModel'
+    )
+    model = create_model(
+        name,
         __config__=ConfigDict(extra='forbid'),
         **fields,
     )
+    return cast('type[BaseModel]', model)
 
 
-RuntimeSettingsPatchModel = _build_patch_model(secret=False)
 RuntimeSettingsAnyFieldsModel = _build_patch_model(secret=None)
 RuntimeSettingsSecretFieldsModel = _build_patch_model(secret=True)
-
-
-class RuntimeSettingsSecretsPayloadModel(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-
-    confirm: bool
-    fields: RuntimeSettingsSecretFieldsModel
