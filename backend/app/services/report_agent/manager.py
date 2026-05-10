@@ -27,7 +27,10 @@ from .storage import (
     write_outline,
     write_section_markdown,
 )
-from .sections import render_confidence_markers_for_section
+from .sections import (
+    render_confidence_markers_for_section,
+    render_hypotheses_for_section,
+)
 
 logger = get_logger('agora.report_agent')
 
@@ -293,11 +296,14 @@ class ReportManager:
         }
         for section_info in sections:
             md_content += section_info["content"]
+            evidence_section = evidence_sections.get(int(section_info.get("section_index", 0)))
+            hypotheses = render_hypotheses_for_section(evidence_section)
             confidence_markers = render_confidence_markers_for_section(
-                evidence_sections.get(int(section_info.get("section_index", 0)))
+                evidence_section
             )
-            if confidence_markers:
-                md_content = md_content.rstrip() + f"\n\n{confidence_markers}\n\n"
+            annotations = [item for item in (hypotheses, confidence_markers) if item]
+            if annotations:
+                md_content = md_content.rstrip() + "\n\n" + "\n\n".join(annotations) + "\n\n"
         
         # post-processing：clean entireReporttitlequestion
         md_content = cls._post_process_report(md_content, outline)
@@ -396,6 +402,9 @@ class ReportManager:
                         processed_lines.append(f"**{title}**")
                         processed_lines.append("")
                         prev_was_heading = False
+                elif level == 3 and title == "Hypothesen ohne Evidence":
+                    processed_lines.append(line)
+                    prev_was_heading = True
                 else:
                     # ### and below levelstitleconvert toboldtext
                     processed_lines.append(f"**{title}**")

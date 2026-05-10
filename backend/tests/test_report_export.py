@@ -100,6 +100,58 @@ def _persist_report(*, with_evidence: bool = False) -> None:
         })
 
 
+def _persist_report_with_hypotheses() -> None:
+    outline = ReportOutline(
+        title="Demo",
+        summary="Summary",
+        sections=[
+            ReportSection(title=title, content=description)
+            for title, description in DEFAULT_REPORT_SECTIONS
+        ],
+    )
+    ReportManager.save_section(
+        REPORT_ID,
+        1,
+        ReportSection(title="Executive Summary", content="Body"),
+    )
+    ReportManager.save_evidence_map(REPORT_ID, {
+        "schema_version": 2,
+        "report_id": REPORT_ID,
+        "simulation_id": "sim_abcdef123456",
+        "global_evidence": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Executive Summary",
+                "section_summary": "Initial framing",
+                "claims": [],
+                "hypotheses": [
+                    {
+                        "hypothesis_id": "hypothesis_01",
+                        "hypothesis_text": "Indizien legen eine zweite Zielgruppe nahe.",
+                        "rationale": "Es gibt Signale im Abschnitt, aber noch keine direkte Evidence.",
+                        "suggested_evidence": ["weitere Persona-Quote"],
+                    }
+                ],
+                "data_gaps": [],
+            }
+        ],
+    })
+    markdown = ReportManager.assemble_full_report(REPORT_ID, outline)
+    report = Report(
+        report_id=REPORT_ID,
+        simulation_id="sim_abcdef123456",
+        graph_id="graph_abcdef123456",
+        simulation_requirement="Test requirement",
+        status=ReportStatus.COMPLETED,
+        outline=outline,
+        markdown_content=markdown,
+        created_at="2026-04-29T10:00:00",
+        completed_at="2026-04-29T10:05:00",
+    )
+    ReportManager.save_report(report)
+
+
 def _rate_limited_report_app():
     app = Flask(__name__)
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 2
@@ -222,3 +274,21 @@ def test_export_json_without_evidence_returns_null_evidence(env):
     payload = json.loads(response.data)
     assert payload["report"]["report_id"] == REPORT_ID
     assert payload["evidence"] is None
+
+
+def test_hypotheses_in_markdown_and_json(env):
+    _persist_report_with_hypotheses()
+
+    md_response = env.get(f"/api/report/{REPORT_ID}/export?format=md")
+    assert md_response.status_code == 200
+    markdown = md_response.data.decode("utf-8")
+    assert "Hypothesen ohne Evidence" in markdown
+    assert "hypothesis_01" in markdown
+    assert "weitere Persona-Quote" in markdown
+
+    json_response = env.get(f"/api/report/{REPORT_ID}/export?format=json")
+    assert json_response.status_code == 200
+    payload = json.loads(json_response.data)
+    hypothesis = payload["evidence"]["sections"][0]["hypotheses"][0]
+    assert hypothesis["hypothesis_id"] == "hypothesis_01"
+    assert hypothesis["suggested_evidence"] == ["weitere Persona-Quote"]

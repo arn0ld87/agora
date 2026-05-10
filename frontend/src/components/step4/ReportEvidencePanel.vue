@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '../ui/Badge.vue'
 import type { EvidenceItem, ReportClaim, ReportSection } from '../../contracts/reportContract'
@@ -17,9 +17,23 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const activeDetailTab = ref<'claims' | 'hypotheses'>('claims')
 
 const activeEvidenceSection = computed(() => {
   return props.sections.find((section) => section.section_index === props.selectedSection) || null
+})
+
+const activeHypotheses = computed(() => sectionHypotheses(activeEvidenceSection.value))
+const activeClaims = computed(() => activeEvidenceSection.value?.claims ?? [])
+
+watch(activeEvidenceSection, () => {
+  activeDetailTab.value = 'claims'
+})
+
+watch(activeHypotheses, (hypotheses) => {
+  if (activeDetailTab.value === 'hypotheses' && hypotheses.length === 0) {
+    activeDetailTab.value = 'claims'
+  }
 })
 
 function claimConfidenceScore(claim: ReportClaim | null | undefined): number | null {
@@ -68,14 +82,34 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
     </div>
     <div v-if="activeEvidenceSection" class="evidence-body">
       <p class="meta">{{ activeEvidenceSection.section_summary }}</p>
+      <div class="evidence-detail-tabs" role="tablist" aria-label="Evidence-Ansicht">
+        <button
+          type="button"
+          class="evidence-detail-tab"
+          :class="{ active: activeDetailTab === 'claims' }"
+          @click="activeDetailTab = 'claims'"
+        >
+          Claims · {{ activeClaims.length }}
+        </button>
+        <button
+          v-if="activeHypotheses.length"
+          type="button"
+          class="evidence-detail-tab"
+          :class="{ active: activeDetailTab === 'hypotheses' }"
+          data-testid="hypotheses-tab"
+          @click="activeDetailTab = 'hypotheses'"
+        >
+          Hypothesen · {{ activeHypotheses.length }}
+        </button>
+      </div>
       <section
-        v-if="sectionHypotheses(activeEvidenceSection).length"
+        v-if="activeDetailTab === 'hypotheses'"
         class="hypothesis-list"
         aria-label="Hypothesen ohne Evidence"
       >
         <h3>Hypothesen ohne Evidence</h3>
         <article
-          v-for="hypothesis in sectionHypotheses(activeEvidenceSection)"
+          v-for="hypothesis in activeHypotheses"
           :key="hypothesis.hypothesis_id"
           class="hypothesis-card"
         >
@@ -95,41 +129,43 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
           </ul>
         </article>
       </section>
-      <article
-        v-for="claim in activeEvidenceSection.claims"
-        :key="claim.claim_id"
-        class="claim-card"
-      >
-        <header>
-          <strong>{{ claim.claim_id }}</strong>
-          <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
-            {{ claimConfidenceText(claim) }}
-          </Badge>
-        </header>
-        <p>{{ claim.claim_text }}</p>
-        <div class="evidence-items">
-          <div
-            v-for="(item, idx) in claimEvidenceItems(claim)"
-            :key="`${claim.claim_id}-${idx}`"
-            class="evidence-item"
-          >
-            <div class="evidence-item-head">
-              <Badge variant="ghost">{{ item.type }}</Badge>
-              <span v-if="item.source">{{ item.source }}</span>
-            </div>
-            <blockquote v-if="item.quote" class="evidence-quote">{{ item.quote }}</blockquote>
-            <span v-else>{{ evidenceSnippet(item) }}</span>
-            <button
-              v-if="item.source_id_anchor"
-              type="button"
-              class="evidence-anchor-link"
-              @click="emit('navigate', item.source_id_anchor)"
+      <div v-else class="claim-list">
+        <article
+          v-for="claim in activeClaims"
+          :key="claim.claim_id"
+          class="claim-card"
+        >
+          <header>
+            <strong>{{ claim.claim_id }}</strong>
+            <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
+              {{ claimConfidenceText(claim) }}
+            </Badge>
+          </header>
+          <p>{{ claim.claim_text }}</p>
+          <div class="evidence-items">
+            <div
+              v-for="(item, idx) in claimEvidenceItems(claim)"
+              :key="`${claim.claim_id}-${idx}`"
+              class="evidence-item"
             >
-              {{ t('step4.quote.openSource') }}
-            </button>
+              <div class="evidence-item-head">
+                <Badge variant="ghost">{{ item.type }}</Badge>
+                <span v-if="item.source">{{ item.source }}</span>
+              </div>
+              <blockquote v-if="item.quote" class="evidence-quote">{{ item.quote }}</blockquote>
+              <span v-else>{{ evidenceSnippet(item) }}</span>
+              <button
+                v-if="item.source_id_anchor"
+                type="button"
+                class="evidence-anchor-link"
+                @click="emit('navigate', item.source_id_anchor)"
+              >
+                {{ t('step4.quote.openSource') }}
+              </button>
+            </div>
           </div>
-        </div>
-      </article>
+        </article>
+      </div>
     </div>
   </aside>
 </template>
@@ -167,6 +203,32 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
 .evidence-tab.active {
   border-color: var(--accent);
   background: var(--bg-elevated);
+}
+.evidence-detail-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.evidence-detail-tab {
+  border: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--fg-muted);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+}
+.evidence-detail-tab.active {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+.claim-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
 }
 .claim-card {
   border-top: 1px solid var(--rule);

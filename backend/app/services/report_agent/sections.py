@@ -179,6 +179,45 @@ def render_confidence_markers_for_section(section: Optional[Dict[str, Any]]) -> 
     return "\n".join(["**Konfidenz-Hinweise**", "", *rendered])
 
 
+def _hypothesis_text_for_markdown(value: Any) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    return escape(truncate_text(text, 1000), quote=False)
+
+
+def render_hypotheses_for_section(section: Optional[Dict[str, Any]]) -> str:
+    if not section:
+        return ""
+    hypotheses = section.get("hypotheses") or []
+    if not hypotheses:
+        return ""
+
+    lines = ["### Hypothesen ohne Evidence", ""]
+    for hypothesis in hypotheses:
+        if not isinstance(hypothesis, dict):
+            continue
+        hypothesis_id = _hypothesis_text_for_markdown(
+            hypothesis.get("hypothesis_id") or "hypothesis"
+        )
+        hypothesis_text = _hypothesis_text_for_markdown(
+            hypothesis.get("hypothesis_text")
+        )
+        rationale = _hypothesis_text_for_markdown(hypothesis.get("rationale"))
+        if not hypothesis_text:
+            continue
+        lines.append(f"- **{hypothesis_id}:** {hypothesis_text}")
+        if rationale:
+            lines.append(f"  - Rationale: {rationale}")
+        suggestions = [
+            _hypothesis_text_for_markdown(item)
+            for item in (hypothesis.get("suggested_evidence") or [])
+            if _hypothesis_text_for_markdown(item)
+        ]
+        if suggestions:
+            lines.append(f"  - Suggested Evidence: {', '.join(suggestions)}")
+    return "\n".join(lines) if len(lines) > 2 else ""
+
+
 def section_dedup_check(
     new_summary: str,
     existing: List[Dict[str, Any]],
@@ -254,6 +293,7 @@ __all__ = [
     "is_claim_candidate",
     "render_claim_to_markdown",
     "render_confidence_markers_for_section",
+    "render_hypotheses_for_section",
     "sample_actions_timeseries",
     "section_dedup_check",
     "truncate_text",

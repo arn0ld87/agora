@@ -329,6 +329,11 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
     const wrapper = mountWithEvidence(EVIDENCE_WITH_QUOTE)
     await waitForRender(wrapper)
 
+    const hypothesisTab = wrapper.find('[data-testid="hypotheses-tab"]')
+    expect(hypothesisTab.exists()).toBe(true)
+    await hypothesisTab.trigger('click')
+    await wrapper.vm.$nextTick()
+
     const hypothesis = wrapper.find('.hypothesis-card')
     expect(hypothesis.exists()).toBe(true)
     expect(hypothesis.text()).toContain('hypothesis_01')
