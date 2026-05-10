@@ -1,12 +1,12 @@
 ---
-description: Layer 0 - Pydantic-Contracts anlegen und Schema-Drift im echten Code fixen (Implementierung via Codex)
+description: Layer 0 - Pydantic-Contracts anlegen und Schema-Drift im echten Code fixen (Implementierung via Sonnet)
 allowed-tools: Read, Bash, Grep, Glob, Agent
 argument-hint: (keine)
 ---
 
-# /fix-task-01 — Pydantic-Contracts (Layer 0, Codex-Dispatch)
+# /fix-task-01 — Pydantic-Contracts (Layer 0, Sonnet-Dispatch)
 
-Du bist Orchestrator. **Codex** macht die Implementierung via `codex:codex-rescue`. Du machst Vorab-Check, Worktree, Dispatch, Verify.
+Du bist Orchestrator. **Sonnet** macht die Implementierung via `agora-refactor-worker`. Du machst Vorab-Check, Worktree, Dispatch, Verify.
 
 ## Schritt 1: Vorab-Verifikation (Haupt-Claude, Bash)
 
@@ -31,9 +31,9 @@ git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-0-task-01-contracts
 echo "WT=$WT"
 ```
 
-## Schritt 3: Codex-Dispatch (Agent-Tool)
+## Schritt 3: Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "codex:codex-rescue"`, `description: "Codex fix-task-01 contracts"`, `prompt`:
+`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-01 contracts"`, `prompt`:
 
 ```
 --write --effort medium
@@ -97,7 +97,7 @@ cd "$WT" && git diff --stat schemas/
 rg -n '"schema_version".*1' backend/app/ || echo "clean"
 ```
 
-Bei rot: Fehler an User reporten, optional `Agent(codex:codex-rescue, prompt: "--resume <konkreter Fehler>")` einmalig.
+Bei rot: Fehler an User reporten, optional einmaligen Re-Dispatch an `sonnet:sonnet-rescue` mit konkretem Fehler-Brief.
 
 ## Schritt 5: Commit (manuell oder via /agora-next-task)
 

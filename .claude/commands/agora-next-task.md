@@ -1,11 +1,11 @@
 ---
-description: Master-Orchestrator — pickt nächsten offenen Sub-Slice aus PLAN.md, dispatched Codex (via codex:codex-rescue) als Implementer, verifiziert, committet, pusht.
+description: Master-Orchestrator — pickt nächsten offenen Sub-Slice aus PLAN.md, dispatched Sonnet (via sonnet:sonnet-rescue) als Implementer, verifiziert, committet, pusht.
 allowed-tools: Read, Bash, Grep, Glob, Edit, Write, TodoWrite, Agent, AskUserQuestion
 ---
 
 # /agora-next-task — Plan-Orchestrator (Codex-Dispatch)
 
-Du bist der **Orchestrator**, nicht der Implementer. Du wählst den nächsten Slice, schreibst einen knappen Plan, dispatched **Codex** (via `codex:codex-rescue` Subagent) als Implementer, verifizierst, committest, pusht und meldest. Der Haupt-Claude editiert *nicht* selber Code — das ist Aufgabe von Codex im Worktree.
+Du bist der **Orchestrator**, nicht der Implementer. Du wählst den nächsten Slice, schreibst einen knappen Plan, dispatched **Sonnet** (via `sonnet:sonnet-rescue` Subagent) als Implementer, verifizierst, committest, pusht und meldest. Der Haupt-Claude editiert *nicht* selber Code — das ist Aufgabe von Sonnet im Worktree.
 
 Hardstops: kein Auto-Fix-Loop bei rotem Verify, keine Layer-Sprünge gegen die Tabelle, keine Force-Pushes auf `main`.
 
@@ -19,7 +19,7 @@ Pfade & Default:
 - PLAN.md: `/Volumes/T7/Projekte/agora/PLAN.md` (autoritativ)
 - Verify-Slash: `/verify-after-subagent`
 - Default-Branch-Ziel: `main` (FF-Push, kein PR)
-- Implementer: **Codex** via `codex:codex-rescue` Subagent (siehe Schritt 4)
+- Implementer: **Sonnet** via `sonnet:sonnet-rescue` Subagent (siehe Schritt 4)
 - User-Trait-Sticky: Deutsch, knapp, direkt; ein Sub-Slice = ein Commit + ein Arbeitsprotokoll unter `docu/<datum>-<slice>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
 
 Lies sofort die ersten ~120 Zeilen von `PLAN.md` (Teile A + B), damit du die Task-Tabelle im Kopf hast.
@@ -114,7 +114,7 @@ Reihenfolge — strikt **Layer-Bottom-Up**, innerhalb eines Layers **Aufwand S v
 | 14 | 4 | 16 | Diff/Confidence-UI (#76) | L | high | default |
 | 15 | 5 | 17 | Baseline-Eval-Suite + Snapshots | L | high | default |
 
-**Cost-Mix-Begründung**: Architektur-Reasoning bleibt im Haupt-Claude (Opus). Implementierung an Codex (gpt-5.4-codex). Refactor- und Test-Tasks → `--effort medium`. String-/Prompt-/Voice-Tasks → `--effort low` + ggf. `--model gpt-5.3-codex-spark` (das ist `spark`). Größere, mehrschrittige Tasks → `--effort high`. Verify bleibt Bash-only und läuft im Haupt-Claude.
+**Cost-Mix-Begründung**: Architektur-Reasoning bleibt im Haupt-Claude (Opus). Implementierung an Sonnet (claude-sonnet-4). Refactor- und Test-Tasks → `--effort medium`. String-/Prompt-/Voice-Tasks → `--effort low` + ggf. `--model claude-sonnet-4` (das ist `sonnet`). Größere, mehrschrittige Tasks → `--effort high`. Verify bleibt Bash-only und läuft im Haupt-Claude.
 
 **Edge-Cases**:
 
@@ -138,7 +138,7 @@ Schreibe inline:
 - Test-Set:
   - tests/contracts/, tests/test_<scope>.py
 - Refs / Closes: <Issue-Nummer>
-- Implementer: Codex (Effort <low/medium/high>, Modell <default/spark>)
+- Implementer: Sonnet (Effort <low/medium/high>, Modell <default/sonnet>)
 - Aufwand laut PLAN.md: <S/M/L>
 - Commit-Pattern:
   <typ>(<scope>): <kurz> (Sub-Slice <ID>, Refs #<N> | Closes #<N>)
@@ -159,7 +159,7 @@ WT=/Volumes/T7/Projekte/agora-worktrees/<branch>
 git worktree add -b <branch> "$WT" origin/main
 ```
 
-**4.2 Codex via Agent-Tool dispatchen** mit `subagent_type: "codex:codex-rescue"`.
+**4.2 Sonnet via Agent-Tool dispatchen** mit `subagent_type: "sonnet:sonnet-rescue"`.
 
 Der `prompt` ist ein vollständig selbstständiger Codex-Brief und enthält:
 
@@ -174,8 +174,8 @@ Der `prompt` ist ein vollständig selbstständiger Codex-Brief und enthält:
 **4.3 Beispiel-Aufruf** (innerhalb des Agent-Tools):
 
 ```
-description: "Codex dispatch <task-id>"
-subagent_type: "codex:codex-rescue"
+description: "Sonnet dispatch <task-id>"
+subagent_type: "sonnet:sonnet-rescue"
 prompt: |
   --write --effort medium
   Arbeite im Worktree <WT>. Ziel: Sub-Slice <ID> · <Titel>.
@@ -196,7 +196,7 @@ prompt: |
   NICHT: committen, pushen, --no-verify, Force-Pushes, Layer-Sprünge.
 ```
 
-Codex-Output erwartest du als knappen Bericht (was geändert, welche Tests gelaufen, sind alle grün, Stage-Status). Wird `verbatim` durchgereicht — keine Paraphrasierung.
+Sonnet-Output erwartest du als knappen Bericht (was geändert, welche Tests gelaufen, sind alle grün, Stage-Status). Wird `verbatim` durchgereicht — keine Paraphrasierung.
 
 ---
 
@@ -245,7 +245,7 @@ git commit -m "$(cat <<'EOF'
 
 <Body — was, warum, Tests, Akzeptanz>
 
-Co-Authored-By: Codex (gpt-5.4-codex) <noreply@openai.com>
+Co-Authored-By: Sonnet (claude-sonnet-4) <noreply@anthropic.com>
 EOF
 )"
 
@@ -268,7 +268,7 @@ Bei `Closes #N`: nach erfolgreichem Push verifizieren mit `gh issue view <N>` da
 - Commit: <SHA>
 - Issue: <Closes/Refs #N>
 - Tests: <X passed, Y skipped>
-- Implementer: Codex (Effort <low/medium/high>, Modell <default/spark>)
+- Implementer: Sonnet (Effort <low/medium/high>, Modell <default/sonnet>)
 
 Nächster Sub-Slice (Heuristik):
 - Reihe <K>: Task <ID> · <Titel> · Aufwand <S/M/L> · Codex-Effort <low/medium/high>
@@ -294,8 +294,8 @@ Bei rot oder abgebrochen: Worktree **stehen lassen**, damit der User per Hand fi
 
 ## NICHT machen
 
-- Kein Edit am Code im **Haupt-Claude** während Codex läuft. Edits nur durch Codex im Worktree.
-- Kein zweiter, paralleler Codex-Dispatch auf denselben Worktree.
+- Kein Edit am Code im **Haupt-Claude** während Sonnet läuft. Edits nur durch Sonnet im Worktree.
+- Kein zweiter, paralleler Sonnet-Dispatch auf denselben Worktree.
 - Kein `--no-verify`, kein `--force` auf main, kein Amend gepushter Commits.
 - Keine ZIPs, `.playwright-mcp/`, `__pycache__/` stagen (sind in `.gitignore`, aber stage-Filter prüfen).
 - Keine Layer-Sprünge gegen die Heuristik-Tabelle ohne explizite User-Anweisung.
@@ -312,7 +312,7 @@ Bei rot oder abgebrochen: Worktree **stehen lassen**, damit der User per Hand fi
 
 - PLAN.md (Teile A–H)
 - bestehende Slash-Commands `.claude/commands/fix-task-*.md` als Codex-Brief-Vorlage
-- `codex:codex-rescue` Subagent-Vertrag (`plugins/codex/agents/codex-rescue.md`)
-- `codex-cli-runtime` und `gpt-5-4-prompting` Skills für Brief-Qualität
+- `sonnet:sonnet-rescue` Subagent-Vertrag (`plugins/sonnet/agents/sonnet-rescue.md`)
+- `anthropic-cli-runtime` und `claude-sonnet-4-prompting` Skills für Brief-Qualität
 - `verify-after-subagent.md` als verbindlicher Verify-Gate
 - letzte 10 Commits auf `origin/main` als Stil-Anker (Commit-Sprache, Slice-Granularität)

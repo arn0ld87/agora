@@ -1,11 +1,11 @@
 ---
-description: Layer 2 - "future prediction" / "rehearsal of the future" / "god's eye view" aus report_prompts.py rausoperieren (via Codex)
+description: Layer 2 - "future prediction" / "rehearsal of the future" / "god's eye view" aus report_prompts.py rausoperieren (via Sonnet)
 allowed-tools: Read, Bash, Grep, Agent
 ---
 
-# /fix-task-03 — Prompt-Semantik entschärfen (Codex-Dispatch)
+# /fix-task-03 — Prompt-Semantik entschärfen (Sonnet-Dispatch)
 
-String-/Prompt-Last → günstiger Codex-Run mit `--effort low` und `--model gpt-5.3-codex-spark`.
+String-/Prompt-Last → günstiger Sonnet-Run mit `--effort low` und `--model claude-sonnet-4`.
 
 ## Vorab-Verifikation
 
@@ -25,12 +25,12 @@ git -C /Volumes/T7/Projekte/agora fetch origin --quiet
 git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-2-task-03-prompt-semantik "$WT" origin/main
 ```
 
-## Codex-Dispatch (Agent-Tool)
+## Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "codex:codex-rescue"`, `description: "Codex fix-task-03 prompt semantik"`, `prompt`:
+`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-03 prompt semantik"`, `prompt`:
 
 ```
---write --effort low --model gpt-5.3-codex-spark
+--write --effort low --model claude-sonnet-4
 
 Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 2 / Task 03 — Prompt-Semantik entschärfen.
 

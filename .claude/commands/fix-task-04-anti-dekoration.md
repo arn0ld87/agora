@@ -1,15 +1,15 @@
 ---
-description: Layer 1 - dekorative Evidence-Fallbacks entfernen, Confidence ehrlich machen (Implementierung via Codex)
+description: Layer 1 - dekorative Evidence-Fallbacks entfernen, Confidence ehrlich machen (Implementierung via Sonnet)
 allowed-tools: Read, Bash, Grep, Agent
 ---
 
-# /fix-task-04 — Anti-Dekorations-Fix (Codex-Dispatch)
+# /fix-task-04 — Anti-Dekorations-Fix (Sonnet-Dispatch)
 
 ## Vorab-Verifikation
 
 ```bash
 cd /Volumes/T7/Projekte/agora
-rg -n "deepcopy\(global_items\[:2\]\)" backend/app/services/report_agent.py
+rg -n "deepcopy\\(global_items\\[:2\\]\\)" backend/app/services/report_agent.py
 # Erwartet: Z. 524 (verifiziert)
 ```
 
@@ -23,9 +23,9 @@ git -C /Volumes/T7/Projekte/agora fetch origin --quiet
 git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-1-task-04-anti-deko "$WT" origin/main
 ```
 
-## Codex-Dispatch (Agent-Tool)
+## Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "codex:codex-rescue"`, `description: "Codex fix-task-04 anti-dekoration"`, `prompt`:
+`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-04 anti-dekoration"`, `prompt`:
 
 ```
 --write --effort medium
@@ -85,7 +85,7 @@ def test_orphan_claim_gets_low_confidence():
 
 ## Akzeptanz
 
-- rg -n "deepcopy\(global_items\[:2\]\)" backend/app/services/report_agent.py → leer
+- rg -n "deepcopy\\(global_items\\[:2\\]\\)" backend/app/services/report_agent.py → leer
 - cd backend && uv run pytest tests/services/test_evidence_dedup.py -v → grün
 - cd backend && uv run pytest -x -q → grün
 - (Smoke) cd backend && uv run python scripts/check_evidence_quality.py --fixtures tests/eval/fixtures --orphan-claim-rate 0.10 → exit 0
@@ -105,7 +105,7 @@ def test_orphan_claim_gets_low_confidence():
 ## Verify
 
 ```bash
-rg -n "deepcopy\(global_items\[:2\]\)" "$WT/backend/app/services/report_agent.py" || echo "clean"
+rg -n "deepcopy\\(global_items\\[:2\\]\\)" "$WT/backend/app/services/report_agent.py" || echo "clean"
 cd "$WT/backend" && uv run pytest tests/services/test_evidence_dedup.py -v
 cd "$WT/backend" && uv run pytest -x -q
 cd "$WT/backend" && uv run python scripts/check_evidence_quality.py --fixtures tests/eval/fixtures --orphan-claim-rate 0.10

@@ -1,11 +1,11 @@
 ---
-description: Verdrahtet Pydantic-Contracts in api/report.py und report_agent.py (Implementierung via Codex)
+description: Verdrahtet Pydantic-Contracts in api/report.py und report_agent.py (Implementierung via Sonnet)
 allowed-tools: Read, Bash, Grep, Glob, Agent
 ---
 
-# /fix-task-02 — Contracts in API verdrahten (Codex-Dispatch)
+# /fix-task-02 — Contracts in API verdrahten (Sonnet-Dispatch)
 
-Orchestrator-Pattern wie `/fix-task-01`: Vorab → Worktree → Codex-Dispatch → Verify. Implementer ist **Codex** via `codex:codex-rescue`.
+Orchestrator-Pattern wie `/fix-task-01`: Vorab → Worktree → Sonnet-Dispatch → Verify. Implementer ist **Sonnet** via `sonnet:sonnet-rescue`.
 
 ## Vorab
 
@@ -24,9 +24,9 @@ git -C /Volumes/T7/Projekte/agora fetch origin --quiet
 git -C /Volumes/T7/Projekte/agora worktree add -b feat/layer-0-task-02-wire "$WT" origin/main
 ```
 
-## Codex-Dispatch (Agent-Tool)
+## Sonnet-Dispatch (Agent-Tool)
 
-`subagent_type: "codex:codex-rescue"`, `description: "Codex fix-task-02 wire contracts"`, `prompt`:
+`subagent_type: "sonnet:sonnet-rescue"`, `description: "Sonnet fix-task-02 wire contracts"`, `prompt`:
 
 ```
 --write --effort medium
