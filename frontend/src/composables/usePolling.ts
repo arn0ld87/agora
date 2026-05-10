@@ -1,4 +1,4 @@
-import { onUnmounted, ref, type Ref } from 'vue'
+import { onUnmounted, ref, unref, watch, type Ref } from 'vue'
 
 export interface UsePollingOptions {
   immediate?: boolean
@@ -31,7 +31,7 @@ export interface UsePollingReturn {
 
 export function usePolling(
   task: () => Promise<void> | void,
-  intervalMs: number,
+  intervalMs: number | Ref<number>,
   options: UsePollingOptions = {}
 ): UsePollingReturn {
   const {
@@ -66,7 +66,7 @@ export function usePolling(
     if (timerId) return
     timerId = setInterval(() => {
       void tick()
-    }, intervalMs)
+    }, unref(intervalMs))
   }
 
   function _stopInterval(): void {
@@ -124,6 +124,16 @@ export function usePolling(
   }
 
   onUnmounted(stop)
+
+  watch(
+    () => unref(intervalMs),
+    () => {
+      if (!isRunning.value) return
+      _stopInterval()
+      if (pauseWhenHidden && document.hidden) return
+      _startInterval()
+    }
+  )
 
   return {
     isRunning,

@@ -1,10 +1,27 @@
 <script setup lang="ts">
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSettingsStore } from '../store/settings'
 import RunsDashboard from '../components/RunsDashboard.vue'
 import AppFooter from '../components/AppFooter.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 
 const router = useRouter()
+const settingsStore = useSettingsStore()
+const pollIntervalMs = computed(() => settingsStore.runsPollIntervalMs)
+
+onMounted(async () => {
+  try {
+    await settingsStore.ensureLoaded()
+    await settingsStore.connectStream()
+  } catch {
+    // RunsDashboard keeps its local fallback interval if settings cannot load.
+  }
+})
+
+onUnmounted(() => {
+  settingsStore.disconnectStream()
+})
 
 function goHome(): void {
   void router.push('/')
@@ -25,7 +42,7 @@ function goHome(): void {
 
     <main class="main">
       <section class="section">
-        <RunsDashboard />
+        <RunsDashboard :poll-interval-ms="pollIntervalMs" />
       </section>
     </main>
 
