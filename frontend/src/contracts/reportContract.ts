@@ -116,7 +116,7 @@ export const ReportClaimSchema = z.object({
   if (value.confidence_label === "high" || value.confidence_label === "verified") {
     const groups = new Set(
       value.evidence
-        .filter((e) => e.source_kind === "agent_quote" && e.persona_stakeholder_group)
+        .filter((e) => e.source_kind === "agent_quote" && e.persona_stakeholder_group && e.supports_claim === true)
         .map((e) => e.persona_stakeholder_group as string),
     );
     if (groups.size < 2) {
