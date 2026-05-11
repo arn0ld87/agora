@@ -20,7 +20,7 @@ Pfade & Default:
 - Verify-Slash: `/verify-after-subagent`
 - Default-Branch-Ziel: `main` (FF-Push, kein PR)
 - Default-Implementer: **`agora-refactor-worker`** (Sonnet). Andere Subagents je nach Slice (siehe Tabelle Schritt 2): `agora-test-worker`, `agora-frontend-worker`, `agora-evidence-auditor`, `agora-doc-worker`.
-- User-Trait-Sticky: Deutsch, knapp, direkt; ein Sub-Slice = ein Commit + ein Arbeitsprotokoll unter `docs/<datum>-<slice>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
+- User-Trait-Sticky: Deutsch, knapp, direkt; ein Sub-Slice = ein Commit + ein Arbeitsprotokoll unter `docs/archive/worklogs/<datum>-<slice>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
 
 Lies sofort die ersten ~120 Zeilen von `PLAN.md` (Teile A + B), damit du die Task-Tabelle im Kopf hast.
 
@@ -167,7 +167,7 @@ Der `prompt` ist ein vollständig selbstständiger Brief und enthält:
 - **Konkrete Edits** mit `Pfad:Linie` aus PLAN.md
 - **Akzeptanz** aus Sub-Slice-Plan (rg/grep-Patterns, die nach dem Run erfüllt sein müssen)
 - **Test-Set** mit pytest-Aufrufen (der Subagent muss diese selbst grün laufen lassen)
-- **Doku-Pflicht**: Arbeitsprotokoll unter `docs/<datum>-<slice>-arbeitsprotokoll.md` + `CHANGELOG.md` `[Unreleased]`-Eintrag
+- **Doku-Pflicht**: Arbeitsprotokoll unter `docs/archive/worklogs/<datum>-<slice>-arbeitsprotokoll.md` + `CHANGELOG.md` `[Unreleased]`-Eintrag
 - **Commit-Pattern als Vorgabe**, aber: der Subagent **committet nicht selbst**. Stage-Status sauber lassen, alle Edits unstaged oder staged liegen lassen, damit der Haupt-Claude in Schritt 6 committet.
 
 **4.3 Beispiel-Aufruf** (innerhalb des Agent-Tools):
@@ -188,7 +188,7 @@ prompt: |
   - …
 
   Doku:
-  - docs/<datum>-<slice>-arbeitsprotokoll.md anlegen (knapp: was/warum/Tests)
+  - docs/archive/worklogs/<datum>-<slice>-arbeitsprotokoll.md anlegen (knapp: was/warum/Tests)
   - CHANGELOG.md [Unreleased] Eintrag
 
   NICHT: committen, pushen, --no-verify, Force-Pushes, Layer-Sprünge.

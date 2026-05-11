@@ -61,7 +61,7 @@ backend/tests/test_report_prompts.py: rg -n "future prediction|rehearsal" — fa
 
 ## Doku
 
-- docs/<YYYY-MM-DD>-task-03-prompt-semantik-arbeitsprotokoll.md (knapp: 8 Stellen, Diff-Hunks)
+- docs/archive/worklogs/<YYYY-MM-DD>-task-03-prompt-semantik-arbeitsprotokoll.md (knapp: 8 Stellen, Diff-Hunks)
 - CHANGELOG.md [Unreleased]: "Layer 2: Prompt-Semantik von Forecast auf Szenario umgestellt (Sub-Slice 03)"
 
 ## NICHT

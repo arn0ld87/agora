@@ -81,7 +81,7 @@ In report_agent.py: Funktion migrate_v1_to_v2(raw: dict) -> dict. Konvertiert v1
 
 ## Doku
 
-- docs/<YYYY-MM-DD>-task-02-wire-contracts-arbeitsprotokoll.md
+- docs/archive/worklogs/<YYYY-MM-DD>-task-02-wire-contracts-arbeitsprotokoll.md
 - CHANGELOG.md [Unreleased]: "Layer 0: Contracts in API verdrahtet (Sub-Slice 02)"
 
 ## NICHT
