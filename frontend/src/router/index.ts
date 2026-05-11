@@ -110,6 +110,38 @@ const routes: RouteRecordRaw[] = [
     component: InteractionView,
     props: true,
   },
+
+  // v4 step shell wrappers (Slice H) — /v4/* prefix
+  {
+    path: '/v4/graph-build/:projectId',
+    name: 'StepGraphBuild',
+    component: () => import('../views/v4/steps/StepGraphBuildView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/env-setup/:projectId',
+    name: 'StepEnvSetup',
+    component: () => import('../views/v4/steps/StepEnvSetupView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/simulation/:simulationId',
+    name: 'StepSimulation',
+    component: () => import('../views/v4/steps/StepSimulationView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/report/:reportId',
+    name: 'StepReport',
+    component: () => import('../views/v4/steps/StepReportView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/interaction/:reportId',
+    name: 'StepInteraction',
+    component: () => import('../views/v4/steps/StepInteractionView.vue'),
+    props: true,
+  },
 ]
 
 const router = createRouter({
