@@ -3,6 +3,7 @@ Run-control and live-status routes split from the main simulation API module.
 """
 
 import os
+import uuid
 
 from flask import jsonify, request
 
@@ -11,6 +12,7 @@ from ..config import Config
 from ..models.project import ProjectManager
 from ..services.persona_review_service import PersonaReviewService
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.secret_resolver import register_run_api_key
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
@@ -195,7 +197,8 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
-    run_id = f"sim_{simulation_id}"
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    register_run_api_key(run_id, llm_runtime.provider, llm_runtime.api_key)
     from ..services.stage_model_router import StageModelRouter
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import StageLLMRoute
@@ -267,6 +270,7 @@ def start_simulation():
     run_record = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
+        run_id=run_id,
         status="processing",
         progress=0,
         message="Simulation run started",

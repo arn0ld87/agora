@@ -108,6 +108,7 @@ backend/.cache/
 
 # Upload folder
 backend/uploads/
+instance/runs/
 
 # Docker data
 data/backend/venv311/

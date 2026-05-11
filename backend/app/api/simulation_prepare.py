@@ -4,6 +4,7 @@ Preparation-related simulation API routes split from the main module.
 
 import os
 import threading
+import uuid
 from typing import Any, Optional
 
 from flask import request
@@ -16,6 +17,7 @@ from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.report_agent import MIN_PERSONA_TABLE_ROWS
+from ..services.secret_resolver import register_run_api_key
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_errors import ApiErrorCode
@@ -281,7 +283,8 @@ def prepare_simulation():
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
-    run_id = f"sim_{simulation_id}"
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    register_run_api_key(run_id, llm_runtime.provider, llm_runtime.api_key)
     config_service = RuntimeRunConfig(run_id)
 
     # Initialize or update runtime config
@@ -346,6 +349,7 @@ def prepare_simulation():
     run_record = run_registry.create_run(
         run_type="simulation_prepare",
         entity_id=simulation_id,
+        run_id=run_id,
         status="pending",
         progress=0,
         message="Simulation preparation queued",

@@ -9,21 +9,28 @@ from ..services.run_registry import RunRegistry
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.logger import get_logger
+from ..utils.validation import validate_run_id
 from pydantic import ValidationError
 
 logger = get_logger("agora.api.llm_routing")
 run_registry = RunRegistry()
 
-def _get_run_state(run_id: str):
+
+def _get_run_or_error(run_id: str):
+    if not validate_run_id(run_id):
+        return None, json_error("Invalid run_id format", status=400)
     run = run_registry.get_run(run_id)
     if not run:
-        return None
-    return run.get("status")
+        return None, json_error(f"Run does not exist: {run_id}", status=404)
+    return run, None
 
 @runs_bp.route("/<run_id>/llm-routing", methods=["GET"])
 @handle_api_errors(logger=logger)
 def get_run_llm_routing(run_id: str):
     """Get runtime LLM routing for a run."""
+    _, error = _get_run_or_error(run_id)
+    if error:
+        return error
     config_service = RuntimeRunConfig(run_id)
     config = config_service.load_config()
 
@@ -44,7 +51,10 @@ def get_run_llm_routing(run_id: str):
 @handle_api_errors(logger=logger)
 def update_run_llm_routing(run_id: str):
     """Replace runtime LLM routing for a run."""
-    status = _get_run_state(run_id)
+    run, error = _get_run_or_error(run_id)
+    if error:
+        return error
+    status = run.get("status")
     if status in ("completed", "failed", "stopped"):
         return json_error("Cannot update routing for a finished run", status=409)
 
@@ -67,6 +77,9 @@ def update_run_llm_routing(run_id: str):
 @handle_api_errors(logger=logger)
 def patch_stage_llm_routing(run_id: str, stage_id: str):
     """Update routing for a specific stage."""
+    _, error = _get_run_or_error(run_id)
+    if error:
+        return error
     # Validate stage_id
     import typing
     if stage_id not in typing.get_args(StageId):

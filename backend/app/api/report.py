@@ -32,6 +32,7 @@ from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.secret_resolver import register_run_api_key
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
 from ..utils.auth import allow_ticket_auth
@@ -156,6 +157,9 @@ def generate_report():
     simulation_requirement = project.simulation_requirement
     if not simulation_requirement:
         return json_error("Missing simulation requirement description", status=400)
+    project_llm_model = getattr(project, "llm_model", None)
+    if not isinstance(project_llm_model, str) or not project_llm_model.strip():
+        project_llm_model = None
 
     report_id = f"report_{uuid.uuid4().hex[:12]}"
 
@@ -168,20 +172,21 @@ def generate_report():
     _RuntimeRunConfig = RuntimeRunConfig
     _StageModelRouter = StageModelRouter
 
-    run_id = f"report_{report_id}"
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    register_run_api_key(run_id, llm_runtime.provider, llm_runtime.api_key)
     config_service = _RuntimeRunConfig(run_id)
 
     # Initialize runtime config
     if llm_runtime.enabled:
         default_route = StageLLMRoute(
             provider_id=llm_runtime.provider,
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
+            model=llm_model_override or project_llm_model or Config.LLM_MODEL_NAME,
             base_url=llm_runtime.base_url
         )
     else:
         default_route = StageLLMRoute(
             provider_id="ollama_local",
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
+            model=llm_model_override or project_llm_model or Config.LLM_MODEL_NAME,
             base_url=Config.LLM_BASE_URL
         )
 
@@ -200,6 +205,7 @@ def generate_report():
     run_record = run_registry.create_run(
         run_type="report_generate",
         entity_id=report_id,
+        run_id=run_id,
         status="pending",
         progress=0,
         message="Report generation queued",

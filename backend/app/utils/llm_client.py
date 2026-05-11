@@ -140,7 +140,7 @@ class LLMClient:
     ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route and secret resolver."""
         from ..services.secret_resolver import SecretResolver
-        resolver = secret_resolver or SecretResolver()
+        resolver = secret_resolver or SecretResolver(run_id=run_id)
 
         # 1. Resolve provider type (needed for api key resolution)
         # We need to know the type, but ResolvedRoute only has provider_id.

@@ -32,7 +32,7 @@ def test_runtime_metadata_redacts_api_key():
     )
 
     assert cfg.redacted_metadata() == {
-        "provider": "custom_openai",
+        "provider": "openai_compatible",
         "base_url": "https://example.test/v1",
         "api_key_set": True,
     }
