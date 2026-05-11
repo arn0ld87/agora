@@ -6,7 +6,7 @@ Structured JSONL logging of LLM calls, ensuring secret hygiene.
 import os
 import json
 import time
-from typing import Optional, Dict, Any
+from typing import Optional
 from ..utils.artifact_locator import ArtifactLocator
 from .secret_resolver import SecretResolver
 

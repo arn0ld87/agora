@@ -1,8 +1,7 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from flask import Flask
 from app.api import llm_bp, runs_bp
-from app.utils.api_responses import handle_api_errors
 
 @pytest.fixture
 def app():

@@ -102,11 +102,8 @@ class LLMClient:
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
 
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY not configured")
-
         self.client = OpenAI(
-            api_key=self.api_key,
+            api_key=self.api_key or "no-key-set",
             base_url=self.base_url,
             timeout=timeout,
         )
@@ -358,6 +355,9 @@ class LLMClient:
         Returns:
             Model response text
         """
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY not configured")
+
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
@@ -515,6 +515,8 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 1024,
     ) -> str:
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY not configured")
         """
         Send a single image + prompt to a vision-capable model and return a
         plain-text description.

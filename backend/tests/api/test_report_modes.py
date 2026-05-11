@@ -113,6 +113,8 @@ def _patched_generate():
         patch("app.api.report.TaskManager") as mock_tm,
         patch("app.api.report.run_registry") as mock_rr,
         patch("app.api.report.threading.Thread") as mock_thread,
+        patch("app.api.report._RuntimeRunConfig") as mock_rc,
+        patch("app.api.report._StageModelRouter") as mock_smr,
     ):
         mock_sim_mgr.return_value.get_simulation.return_value = mock_state
         mock_pm.get_project.return_value = mock_project

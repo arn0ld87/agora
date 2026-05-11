@@ -5,7 +5,6 @@ Handle persistence of runtime_llm_routing.json and stage snapshots.
 
 import os
 import json
-from datetime import datetime
 from typing import Optional, Dict, Any
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
@@ -37,13 +36,6 @@ class RuntimeRunConfig:
             base_url=Config.LLM_BASE_URL
         )
         return RuntimeLlmRouting(default_route=default_route)
-
-    def save_config(self, config: RuntimeLlmRouting) -> None:
-        """Persist runtime configuration."""
-        os.makedirs(self.run_dir, exist_ok=True)
-        # Monotonicity check for routing_version should happen in service/api layer
-        with open(self.config_path, "w") as f:
-            f.write(config.model_dump_json(indent=2))
 
     def load_stage_snapshot(self, stage_id: StageId) -> Optional[Dict[str, Any]]:
         """Load stage-specific LLM route snapshot."""

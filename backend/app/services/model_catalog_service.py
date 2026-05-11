@@ -5,7 +5,7 @@ Live /models discovery, normalization, cache, source-badge.
 
 import time
 import requests
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Literal
 from pydantic import BaseModel, ConfigDict
 from ..utils.logger import get_logger
 
@@ -19,8 +19,6 @@ class ModelEntry(BaseModel):
     provider_id: str
     source: Literal["live", "cached", "fallback", "custom"]
     refreshed_at: float
-
-from typing import Literal
 
 class ModelCatalogService:
     """Service for discovering and normalizing models from different providers."""

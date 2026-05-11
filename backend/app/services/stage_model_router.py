@@ -8,8 +8,7 @@ from typing import Optional
 from ..contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ResolvedRoute,
-    StageId,
-    StageLLMRoute
+    StageId
 )
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver

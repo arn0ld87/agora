@@ -198,7 +198,7 @@ def start_simulation():
     run_id = f"sim_{simulation_id}"
     from ..services.stage_model_router import StageModelRouter
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+    from ..contracts.llm_routing_contract import StageLLMRoute
 
     # 0. Initialise or update runtime routing
     config_service = RuntimeRunConfig(run_id)
@@ -215,7 +215,7 @@ def start_simulation():
              runtime_routing.default_route.model = llm_model_override
              runtime_routing.routing_version += 1
         config_service.save_config(runtime_routing)
-    except:
+    except Exception:
         # Synthesis happens in load_config fallback
         pass
 

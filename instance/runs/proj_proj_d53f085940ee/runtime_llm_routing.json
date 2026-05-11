@@ -1,0 +1,11 @@
+{
+  "default_route": {
+    "provider_id": "ollama_local",
+    "model": "qwen2.5:32b",
+    "base_url": "http://localhost:11434/v1",
+    "reasoning_effort": "none",
+    "provider_options": {}
+  },
+  "stage_overrides": {},
+  "routing_version": 1
+}

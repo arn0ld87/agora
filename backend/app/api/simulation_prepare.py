@@ -298,7 +298,7 @@ def prepare_simulation():
         elif llm_model_override:
              runtime_routing.default_route.model = llm_model_override
              runtime_routing.routing_version += 1
-    except:
+    except Exception:
         # Create new config
         if llm_runtime.enabled:
             default_route = StageLLMRoute(

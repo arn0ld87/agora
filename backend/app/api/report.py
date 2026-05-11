@@ -40,6 +40,7 @@ from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
+from ..config import Config
 
 logger = get_logger(__name__)
 run_registry = RunRegistry()
@@ -49,6 +50,10 @@ _REPORT_RATE_LIMIT_ENDPOINTS = {
     "report.generate_report",
     "report.chat_with_report_agent",
 }
+
+# For patching in tests
+_RuntimeRunConfig = None
+_StageModelRouter = None
 
 
 def _report_rate_limit_key() -> str:
@@ -159,8 +164,12 @@ def generate_report():
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
+    global _RuntimeRunConfig, _StageModelRouter
+    _RuntimeRunConfig = RuntimeRunConfig
+    _StageModelRouter = StageModelRouter
+
     run_id = f"report_{report_id}"
-    config_service = RuntimeRunConfig(run_id)
+    config_service = _RuntimeRunConfig(run_id)
 
     # Initialize runtime config
     if llm_runtime.enabled:
@@ -179,7 +188,7 @@ def generate_report():
     runtime_routing = RuntimeLlmRouting(default_route=default_route)
     config_service.save_config(runtime_routing)
 
-    router = StageModelRouter(run_id)
+    router = _StageModelRouter(run_id)
     # Lock evaluation stage
     eval_route = router.resolve("evaluation")
     router.lock_stage("evaluation", eval_route)

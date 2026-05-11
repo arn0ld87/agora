@@ -23,7 +23,7 @@ export const StageLLMRouteSchema = z.object({
   model: z.string(),
   base_url: z.string().optional().nullable(),
   reasoning_effort: ReasoningEffortSchema.default("none"),
-  provider_options: z.record(z.any()).default(() => ({})),
+  provider_options: z.record(z.string(), z.any()).default(() => ({})),
 }).strict();
 export type StageLLMRoute = z.infer<typeof StageLLMRouteSchema>;
 
@@ -50,7 +50,7 @@ export const ResolvedRouteSchema = z.object({
   base_url_sanitized: z.string().optional().nullable(),
   reasoning_effort: ReasoningEffortSchema.default("none"),
   routing_version: z.number().int(),
-  provider_options: z.record(z.any()).default(() => ({})),
+  provider_options: z.record(z.string(), z.any()).default(() => ({})),
   started_at: z.string().optional().nullable(),
 }).strict();
 export type ResolvedRoute = z.infer<typeof ResolvedRouteSchema>;

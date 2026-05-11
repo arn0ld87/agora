@@ -1,0 +1,10 @@
+{
+  "stage": "ontology_generation",
+  "provider_id": "openai",
+  "model": "gpt-5-mini",
+  "base_url_sanitized": "https://api.openai.com/v1",
+  "reasoning_effort": "none",
+  "routing_version": 1,
+  "provider_options": {},
+  "started_at": "2026-05-11T05:18:19.997147"
+}

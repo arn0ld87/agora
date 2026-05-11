@@ -29,7 +29,6 @@ from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
 from .settings_layer import get_default_service as _get_settings
-from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
