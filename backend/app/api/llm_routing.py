@@ -2,11 +2,10 @@
 LLM Routing API.
 """
 
-import typing
-
 from flask import request
 from . import runs_bp
 from ..services.runtime_run_config import RuntimeRunConfig
+from ..services.stage_model_router import StageModelRouter
 from ..services.run_registry import RunRegistry
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -15,8 +14,6 @@ from pydantic import ValidationError
 
 logger = get_logger("agora.api.llm_routing")
 run_registry = RunRegistry()
-
-_VALID_STAGE_IDS = typing.get_args(StageId)
 
 def _get_run_state(run_id: str):
     run = run_registry.get_run(run_id)
@@ -32,8 +29,11 @@ def get_run_llm_routing(run_id: str):
     config = config_service.load_config()
 
     # Also include snapshots for started stages
+    router = StageModelRouter(run_id)
     snapshots = {}
-    for stage in _VALID_STAGE_IDS:
+    from ..contracts.llm_routing_contract import StageId
+    import typing
+    for stage in typing.get_args(StageId):
         snap = config_service.load_stage_snapshot(stage)
         if snap:
             snapshots[stage] = snap
@@ -70,7 +70,10 @@ def update_run_llm_routing(run_id: str):
 @handle_api_errors(logger=logger)
 def patch_stage_llm_routing(run_id: str, stage_id: str):
     """Update routing for a specific stage."""
-    if stage_id not in _VALID_STAGE_IDS:
+    # Validate stage_id
+    from ..contracts.llm_routing_contract import StageId
+    import typing
+    if stage_id not in typing.get_args(StageId):
         return json_error(f"Invalid stage_id: {stage_id}", status=400)
 
     typed_stage_id = typing.cast(StageId, stage_id)

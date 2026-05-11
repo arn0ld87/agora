@@ -57,20 +57,14 @@ class ProviderDescriptor(BaseModel):
 
 
 class ResolvedRoute(BaseModel):
-    """The final resolved configuration for an LLM call inside a stage.
-
-    ``base_url`` is the runtime URL used for the actual LLM call. Callers must
-    never embed secrets (userinfo, query-string keys) into provider URLs; the
-    invocation logger and snapshot writer apply defensive sanitization when
-    emitting URLs to logs/disk via ``SecretResolver.sanitize_url``.
-    """
+    """The final resolved configuration for an LLM call inside a stage."""
 
     model_config = _STRICT
 
     stage: StageId
     provider_id: str
     model: str
-    base_url: Optional[str] = None
+    base_url_sanitized: Optional[str] = None
     reasoning_effort: ReasoningEffort = "none"
     routing_version: int
     provider_options: Dict[str, Any] = Field(default_factory=dict)

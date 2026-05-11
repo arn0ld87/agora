@@ -5,7 +5,6 @@ Run-control and live-status routes split from the main simulation API module.
 import os
 
 from flask import jsonify, request
-from pydantic import ValidationError
 
 from . import simulation_bp
 from ..config import Config
@@ -199,31 +198,26 @@ def start_simulation():
     run_id = f"sim_{simulation_id}"
     from ..services.stage_model_router import StageModelRouter
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import StageLLMRoute
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
-    # 0. Initialise or update runtime routing. ``load_config`` already provides a
-    # legacy fallback; recoverable load/parse errors are logged and we skip
-    # mutating the persisted config rather than aborting the run.
+    # 0. Initialise or update runtime routing
     config_service = RuntimeRunConfig(run_id)
     try:
         runtime_routing = config_service.load_config()
         if llm_runtime.enabled:
-            runtime_routing.default_route = StageLLMRoute(
-                provider_id=llm_runtime.provider,
-                model=llm_model_override or Config.LLM_MODEL_NAME,
-                base_url=llm_runtime.base_url,
-            )
-            runtime_routing.routing_version += 1
+             runtime_routing.default_route = StageLLMRoute(
+                 provider_id=llm_runtime.provider,
+                 model=llm_model_override or Config.LLM_MODEL_NAME,
+                 base_url=llm_runtime.base_url
+             )
+             runtime_routing.routing_version += 1
         elif llm_model_override:
-            runtime_routing.default_route.model = llm_model_override
-            runtime_routing.routing_version += 1
+             runtime_routing.default_route.model = llm_model_override
+             runtime_routing.routing_version += 1
         config_service.save_config(runtime_routing)
-    except (OSError, ValueError, ValidationError) as exc:
-        logger.warning(
-            "Failed to update runtime routing config for %s, leaving fallback in place: %s",
-            run_id,
-            exc,
-        )
+    except:
+        # Synthesis happens in load_config fallback
+        pass
 
     router = StageModelRouter(run_id)
     rounds_route = router.resolve("simulation_rounds")

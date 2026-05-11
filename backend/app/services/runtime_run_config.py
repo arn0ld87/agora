@@ -5,6 +5,7 @@ Handle persistence of runtime_llm_routing.json and stage snapshots.
 
 import os
 import json
+from datetime import datetime
 from typing import Optional, Dict, Any
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
@@ -37,6 +38,13 @@ class RuntimeRunConfig:
         )
         return RuntimeLlmRouting(default_route=default_route)
 
+    def save_config(self, config: RuntimeLlmRouting) -> None:
+        """Persist runtime configuration."""
+        os.makedirs(self.run_dir, exist_ok=True)
+        # Monotonicity check for routing_version should happen in service/api layer
+        with open(self.config_path, "w") as f:
+            f.write(config.model_dump_json(indent=2))
+
     def load_stage_snapshot(self, stage_id: StageId) -> Optional[Dict[str, Any]]:
         """Load stage-specific LLM route snapshot."""
         path = os.path.join(self.stages_dir, f"{stage_id}_llm_route_snapshot.json")
@@ -46,37 +54,34 @@ class RuntimeRunConfig:
         return None
 
     def save_stage_snapshot(self, stage_id: StageId, snapshot: Dict[str, Any]) -> None:
-        """Persist stage-specific LLM route snapshot with defensive sanitization."""
+        """Persist stage-specific LLM route snapshot."""
         os.makedirs(self.stages_dir, exist_ok=True)
         path = os.path.join(self.stages_dir, f"{stage_id}_llm_route_snapshot.json")
 
+        # Ensure no secrets in snapshot
         snapshot = self._sanitize_deep(snapshot)
 
         with open(path, "w") as f:
             json.dump(snapshot, f, indent=2)
 
     def _sanitize_deep(self, data: Any) -> Any:
-        """Recursively strip secret-bearing keys and sanitize URLs in snapshots."""
-        from .secret_resolver import SecretResolver
-
+        """Recursively remove keys that might contain secrets."""
         if isinstance(data, dict):
-            cleaned: Dict[str, Any] = {}
-            for k, v in data.items():
-                if k.lower() in ("api_key", "apikey", "secret", "password", "token"):
-                    continue
-                if k == "base_url" and isinstance(v, str):
-                    cleaned[k] = SecretResolver().sanitize_url(v)
-                    continue
-                cleaned[k] = self._sanitize_deep(v)
-            return cleaned
+            return {
+                k: self._sanitize_deep(v)
+                for k, v in data.items()
+                if k.lower() not in ("api_key", "apikey", "secret", "password", "token")
+            }
         if isinstance(data, list):
             return [self._sanitize_deep(v) for v in data]
         return data
 
     def save_config(self, config: RuntimeLlmRouting) -> None:
-        """Persist runtime configuration with defensive sanitization."""
+        """Persist runtime configuration."""
         os.makedirs(self.run_dir, exist_ok=True)
+        # Monotonicity check for routing_version should happen in service/api layer
 
+        # Sanitize deep before saving
         data = self._sanitize_deep(config.model_dump(mode="json"))
 
         with open(self.config_path, "w") as f:

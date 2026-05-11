@@ -1,3 +1,4 @@
+import pytest
 import os
 from unittest.mock import patch, MagicMock
 from app.services.llm_provider_registry import LlmProviderRegistry

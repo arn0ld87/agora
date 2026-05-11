@@ -148,14 +148,6 @@ def fake_client(monkeypatch):
     # Non-Ollama base_url → kein force-stream-Pfad.
     obj.base_url = "https://api.openai.com/v1"
     obj.client = _FakeOpenAI()
-    # Routing/observability attributes — normally set in __init__, but tests
-    # bypass it via __new__. chat() references them unconditionally.
-    obj.stage = None
-    obj.provider_id = None
-    obj.routing_version = 0
-    obj.reasoning_effort = "none"
-    obj.provider_options = {}
-    obj._invocation_logger = None
     # Deaktiviere Streaming-Force-Pfad explizit (für alle Tests in diesem Modul).
     monkeypatch.setenv("LLM_FORCE_STREAM", "false")
     # E2E-Stub muss aus sein.

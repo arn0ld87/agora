@@ -3,7 +3,6 @@ LLM Provider Registry.
 Public provider metadata only — no secrets.
 """
 
-import os
 from typing import List, Optional
 from ..contracts.llm_routing_contract import ProviderDescriptor
 from ..config import Config
@@ -69,3 +68,5 @@ class LlmProviderRegistry:
 
         # Fallback
         return "missing"
+
+import os

@@ -1,54 +1,36 @@
-# Bestands-Hot-Spots cc >= 21 (Class D+), geduldet bis individuelle Refactor-Slices.
-# Neue Einträge nur nach Sub-Slice mit Architektur-Begründung im Arbeitsprotokoll.
-# Format: <rel-path>::<func>  (rel-path relativ zu backend/, func = radon-Ausgabe-Name)
-#
-# Gemessen: 2026-05-11, radon 6.0.1, radon cc -n D app/
-# Anzahl Einträge: 29 (5 x Class E/F, 24 x Class D)
-#
-# Top-5 nach Cyclomatic Complexity:
-#   F (cc=50)  app/services/evidence_migrations.py::migrate_v2_to_v3
-#   F (cc=44)  app/api/report.py::get_generate_status
-#   E (cc=38)  app/services/report_agent/workflow.py::generate_report
-#   E (cc=33)  app/api/simulation_run.py::start_simulation
-#   E (cc=33)  app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities
-#
-# Refactor-Kandidaten (eigene Sub-Slices nötig):
-#   - app/api/report.py (F/E): Kandidat für API-Envelope-Refactor (M11.6)
-#   - app/services/report_agent/workflow.py (E/D): Kandidat für Report-Agent-Refactor
-#   - app/api/simulation_run.py (E): Kandidat für Sim-Run-Refactor
-#   - app/services/oasis_profile_generator.py (E): Kandidat für OASIS-Profil-Refactor
-#   - app/services/evidence_migrations.py (F/D): aus P3.1-Followup (Commit 83b7488),
-#     echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation. Eigener
-#     Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper splitten,
-#     Persona-Mapper als eigenes Modul).
-
+app/__init__.py::create_app
 app/config.py::Config
 app/config.py::Config.validate
-app/__init__.py::create_app
-app/utils/file_parser.py::FileParser._extract_from_pdf
-app/utils/llm_client.py::LLMClient.chat_json
-app/api/simulation_profiles.py::add_simulation_profile
-app/api/simulation_run.py::start_simulation
-app/api/simulation_prepare.py::prepare_simulation
-app/api/runs.py::_build_run_summary
-app/api/report.py::get_generate_status
-app/services/branching_service.py::create_branch
+app/services/graph_tools.py::GraphToolsService.interview_agents
+app/services/run_registry.py::RunRegistry.list_runs
+app/services/run_registry.py::RunRegistry.update_run
+app/services/evidence_migrations.py::migrate_v2_to_v3
+app/services/evidence_migrations.py::_map_profile_to_persona
+app/services/tool_execution.py::execute_tool
 app/services/persona_demographics.py::classify_name_origin
 app/services/compare_service.py::CompareService._build_metrics
 app/services/oasis_profile_generator.py::OasisProfileGenerator.generate_profiles_from_entities
 app/services/oasis_profile_generator.py::OasisProfileGenerator._build_entity_context
 app/services/oasis_profile_generator.py::OasisProfileGenerator._generate_profile_with_llm
-app/services/run_registry.py::RunRegistry.list_runs
-app/services/run_registry.py::RunRegistry.update_run
-app/services/graph_tools.py::GraphToolsService.interview_agents
-app/services/tool_execution.py::execute_tool
+app/services/branching_service.py::create_branch
 app/services/ontology_generator.py::OntologyGenerator._validate_and_process
 app/services/graph/insight_forge_tool.py::insight_forge
+app/services/report_agent/manager.py::ReportManager.build_report_v3
+app/services/report_agent/manager.py::ReportManager._post_process_report
 app/services/report_agent/agent.py::ReportAgent._record_tool_evidence
 app/services/report_agent/agent.py::ReportAgent._build_claims_for_section
 app/services/report_agent/workflow.py::generate_report
 app/services/report_agent/workflow.py::generate_section_react
-app/services/report_agent/manager.py::ReportManager._post_process_report
-app/services/report_agent/manager.py::ReportManager.build_report_v3
-app/services/evidence_migrations.py::migrate_v2_to_v3
-app/services/evidence_migrations.py::_map_profile_to_persona
+app/api/report.py::get_generate_status
+app/api/report.py::generate_report
+app/api/simulation_profiles.py::add_simulation_profile
+app/api/graph.py::generate_ontology
+app/api/graph.py::build_graph
+app/api/simulation_prepare.py::prepare_simulation
+app/api/runs.py::_build_run_summary
+app/api/simulation_run.py::start_simulation
+app/utils/file_parser.py::FileParser._extract_from_pdf
+app/utils/llm_client.py::LLMClient.chat
+app/utils/llm_client.py::LLMClient.chat_json
+app/utils/llm_client.py::LLMClient.__init__
+app/utils/retry.py::llm_call_with_retry

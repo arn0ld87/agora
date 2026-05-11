@@ -525,39 +525,28 @@ def build_graph():
     project.graph_build_task_id = task_id
     ProjectManager.save_project(project)
 
-    # Stage 3: graph_build — resolve and lock the route at the boundary, but
-    # defer the actual ``LLMClient`` construction into the worker thread so a
-    # missing ``LLM_API_KEY`` only fails the background task, not the API
-    # response that just queues the build.
+    # Stage 3: graph_build
     router = StageModelRouter(run_id)
     build_route = router.resolve("graph_build")
     router.lock_stage("graph_build", build_route)
+
+    # NER-Override pro Build: wenn der Request (oder das Projekt-Default)
+    # ein Frontend-Modell vorgibt, bauen wir einen dedizierten NERExtractor,
+    # damit Phase-1-Extraktion das gewählte Modell nutzt — ohne den
+    # globalen Storage-Singleton-NER zu mutieren.
+    ner_llm_client = LLMClient.from_route(build_route, run_id=run_id)
+    ner_override = NERExtractor(llm_client=ner_llm_client)
+    logger.info(
+        "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s, version=%d",
+        ner_llm_client.model,
+        build_route.provider_id,
+        build_route.routing_version
+    )
 
     # Start background task
     def build_task():
         build_logger = get_logger('agora.build')
         try:
-            # NER-Override pro Build: wenn der Request (oder das Projekt-Default)
-            # ein Frontend-Modell vorgibt, bauen wir einen dedizierten NERExtractor,
-            # damit Phase-1-Extraktion das gewählte Modell nutzt — ohne den
-            # globalen Storage-Singleton-NER zu mutieren. Fehlt die LLM-
-            # Konfiguration (z.B. in Test-/Air-Gap-Setups), fällt der Builder
-            # auf den Storage-Default-NER zurück, statt den Build abzubrechen.
-            ner_override: NERExtractor | None = None
-            try:
-                ner_llm_client = LLMClient.from_route(build_route, run_id=run_id)
-                ner_override = NERExtractor(llm_client=ner_llm_client)
-                build_logger.info(
-                    "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s, version=%d",
-                    ner_llm_client.model,
-                    build_route.provider_id,
-                    build_route.routing_version,
-                )
-            except ValueError as exc:
-                build_logger.warning(
-                    "NER-LLM-Override not available, using storage default: %s",
-                    exc,
-                )
             build_logger.info(f"[{task_id}] Starting graph build...")
             task_manager.update_task(
                 task_id,

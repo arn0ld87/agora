@@ -93,11 +93,6 @@ PLAN.md.bak
 backend/logs/
 *.log
 
-# Runtime instance dir (pytest writes runtime_llm_routing.json + stage
-# snapshots there via ArtifactLocator.run_dir when AGORA_INSTANCE_DIR is
-# unset). Test artefacts only — never committed.
-/instance/
-
 # Archives / Snapshots (kein Backup im Repo)
 *.zip
 

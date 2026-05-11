@@ -20,11 +20,7 @@ from app.container import AgoraContainer
 
 
 @pytest.fixture
-def app(monkeypatch, tmp_path):
-    # Isolate per-run routing artifacts (runtime_llm_routing.json + stage
-    # snapshots) so tests don't read previous-test state from the shared
-    # instance dir. Each test gets its own ``AGORA_INSTANCE_DIR``.
-    monkeypatch.setenv("AGORA_INSTANCE_DIR", str(tmp_path))
+def app(monkeypatch):
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)
     flask_app = Flask(__name__)
@@ -51,8 +47,9 @@ def _make_project_mock():
     Falle: ``MagicMock(name=...)`` setzt den Mock-Repr-Namen, **nicht** das
     ``.name``-Attribut. Daher alle felder explizit zugewiesen.
     """
+    import uuid
     mock = MagicMock()
-    mock.project_id = "proj_abcdef012345"
+    mock.project_id = f"proj_{uuid.uuid4().hex[:12]}"
     mock.name = "Test"
     mock.files = []
     mock.total_text_length = 42
@@ -117,20 +114,18 @@ def test_ontology_generate_uses_frontend_llm_model_and_provider(
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["success"] is True
 
-    # LLMClient.from_route muss mit dem Frontend-Modell + Provider-Override
-    # aus der gelockten ``ResolvedRoute`` aufgerufen worden sein.
+    # LLMClient muss mit dem Frontend-Modell + Provider-Override instanziiert sein.
+    # Nach Refactor wird .from_route() verwendet.
     llm_client_cls.from_route.assert_called_once()
-    resolved_route = llm_client_cls.from_route.call_args.args[0]
-    assert resolved_route.model == "gpt-5-mini"
-    assert resolved_route.provider_id == "openai"
-    assert resolved_route.base_url == "https://api.openai.com/v1"
+    route = llm_client_cls.from_route.call_args.args[0]
+    assert route.model == "gpt-5-mini"
+    assert route.provider_id == "openai"
+    # base_url wird im SecretResolver/from_route aufgelöst, hier prüfen wir die Route
+    assert route.base_url_sanitized == "https://api.openai.com/v1"
 
     # OntologyGenerator muss den injizierten Client bekommen.
     ontology_generator_cls.assert_called_once()
-    assert (
-        ontology_generator_cls.call_args.kwargs.get("llm_client")
-        is llm_client_cls.from_route.return_value
-    )
+    assert ontology_generator_cls.call_args.kwargs.get("llm_client") is llm_client_cls.from_route.return_value
 
 
 @patch("app.api.graph.LLMClient")
@@ -168,11 +163,11 @@ def test_ontology_generate_without_overrides_uses_server_default(
     )
 
     assert response.status_code == 200, response.get_json()
-    # Ohne Runtime-Provider routet der Endpoint auf den ``ollama_local``-Default
-    # und reicht die resolved Route an ``LLMClient.from_route`` weiter.
     llm_client_cls.from_route.assert_called_once()
-    resolved_route = llm_client_cls.from_route.call_args.args[0]
-    assert resolved_route.provider_id == "ollama_local"
+    route = llm_client_cls.from_route.call_args.args[0]
+    # Standard-Modell aus Config
+    from app.config import Config
+    assert route.model == Config.LLM_MODEL_NAME
 
 
 def test_ontology_generate_rejects_invalid_llm_provider_json(client):
