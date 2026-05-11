@@ -5,7 +5,7 @@ import {
   ResolvedRoute,
   StageLLMRoute
 } from "../contracts/llmRoutingContract";
-import { SuccessEnvelope } from "./envelope";
+import { ApiSuccessEnvelope as SuccessEnvelope } from "./envelope";
 
 export async function listLlmProviders(): Promise<ProviderDescriptor[]> {
   const resp = await service.get<SuccessEnvelope<ProviderDescriptor[]>>("/llm/providers");
