@@ -113,6 +113,28 @@ class LLMClient:
         """Check if we're talking to an Ollama server."""
         return '11434' in (self.base_url or '')
 
+    @staticmethod
+    def _uses_max_completion_tokens(model: str) -> bool:
+        # GPT-5 / o1 / o3 / o4 verlangen max_completion_tokens; OpenAI antwortet
+        # sonst 400 "Unsupported parameter: 'max_tokens'". Heuristik gespiegelt
+        # aus backend/scripts/_sim_common.py::uses_max_completion_tokens —
+        # Single Source of Truth bleibt dort, hier nur die zweite Stelle.
+        lowered = (model or "").strip().lower()
+        if lowered.startswith("gpt-5"):
+            return True
+        for prefix in ("o1", "o3", "o4"):
+            if lowered == prefix or lowered.startswith(f"{prefix}-"):
+                return True
+        return False
+
+    def _completion_token_kwargs(self, max_tokens: int) -> Dict[str, int]:
+        key = (
+            "max_completion_tokens"
+            if self._uses_max_completion_tokens(self.model or "")
+            else "max_tokens"
+        )
+        return {key: max_tokens}
+
     def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "unknown"]:
         """Infer the LLM provider from base_url and model name.
 
@@ -203,12 +225,12 @@ class LLMClient:
                 context,
             )
             return e2e_stub_chat_response(messages=messages)
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+        kwargs.update(self._completion_token_kwargs(max_tokens))
 
         if response_format:
             kwargs["response_format"] = response_format
@@ -314,8 +336,14 @@ class LLMClient:
             "model": vision_model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+        # Vision-Pfad nutzt evtl. ein anderes Modell als self.model → eigene Auflösung.
+        token_key = (
+            "max_completion_tokens"
+            if self._uses_max_completion_tokens(vision_model or "")
+            else "max_tokens"
+        )
+        kwargs[token_key] = max_tokens
         if self._is_ollama():
             extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
             extra_body["think"] = False  # never want reasoning noise in vision output
