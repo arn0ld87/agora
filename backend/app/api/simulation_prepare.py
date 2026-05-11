@@ -461,12 +461,11 @@ def prepare_simulation():
                 parallel_profile_count=parallel_profile_count,
                 storage=storage,
                 llm_model=persona_route.model,
-                llm_runtime=persona_route, # manager handles ResolvedRoute or RuntimeLlmConfig?
-                # Need to check SimulationManager.prepare_simulation signature
+                llm_runtime=persona_route,
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,
-                run_id=run_id, # Pass run_id for LLMClient creation inside manager
+                run_id=run_id,
             )
 
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())
