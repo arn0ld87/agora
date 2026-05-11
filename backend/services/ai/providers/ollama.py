@@ -16,8 +16,13 @@ class OllamaClient:
     """Spricht ``/api/chat`` auf einem lokalen oder LAN-Ollama-Daemon.
 
     ``OLLAMA_BASE_URL`` darf gesetzt sein; Default ist
-    ``http://localhost:11434``. Es gibt keinen API-Key — wer den Endpunkt
-    nicht erreicht, bekommt eine sprechende Fehlermeldung mit Basis-URL.
+    ``http://localhost:11434`` (Repo-Konvention, identisch zu
+    ``LLM_BASE_URL``/``EMBEDDING_BASE_URL``). **In Docker-Setups muss
+    ``OLLAMA_BASE_URL=http://host.docker.internal:11434`` gesetzt werden**,
+    sonst löst ``localhost`` auf den Container selbst auf — siehe
+    ``.env.example``-Sektion „Docker-mode overrides".
+    Es gibt keinen API-Key; wer den Endpunkt nicht erreicht, bekommt eine
+    sprechende Fehlermeldung mit Basis-URL.
     """
 
     name = "ollama"
