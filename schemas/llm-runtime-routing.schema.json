@@ -4,7 +4,19 @@
       "additionalProperties": false,
       "description": "Configuration for a single stage route.",
       "properties": {
-        "base_url": {
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "model": {
           "anyOf": [
             {
               "type": "string"
@@ -14,15 +26,19 @@
             }
           ],
           "default": null,
-          "title": "Base Url"
-        },
-        "model": {
-          "title": "Model",
-          "type": "string"
+          "title": "Model"
         },
         "provider_id": {
-          "title": "Provider Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Id"
         },
         "provider_options": {
           "additionalProperties": true,
@@ -30,22 +46,58 @@
           "type": "object"
         },
         "reasoning_effort": {
-          "default": "none",
-          "enum": [
-            "none",
-            "minimal",
-            "low",
-            "medium",
-            "high"
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Reasoning Effort",
-          "type": "string"
+          "default": "none",
+          "title": "Reasoning Effort"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "document_ingest",
+                "ontology_generation",
+                "graph_build",
+                "persona_generation",
+                "simulation_rounds",
+                "report_generation",
+                "evaluation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
         }
       },
-      "required": [
-        "provider_id",
-        "model"
-      ],
       "title": "StageLLMRoute",
       "type": "object"
     }
@@ -55,7 +107,7 @@
   "additionalProperties": false,
   "description": "Runtime LLM routing configuration for a run.",
   "properties": {
-    "default_route": {
+    "global_default": {
       "$ref": "#/$defs/StageLLMRoute"
     },
     "routing_version": {
@@ -83,7 +135,7 @@
     }
   },
   "required": [
-    "default_route"
+    "global_default"
   ],
   "title": "RuntimeLlmRouting",
   "type": "object"
