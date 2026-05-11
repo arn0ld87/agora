@@ -197,4 +197,35 @@ const { t } = useI18n()
   text-transform: uppercase;
   color: var(--accent);
 }
+
+/* Design v3 persona cards. */
+.persona {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-6, var(--r-1));
+}
+.persona:hover {
+  background: var(--surface-hover, var(--bg-panel-2));
+  border-color: var(--hairline-strong, var(--rule-strong));
+}
+.persona-name,
+.persona-topics,
+.persona-tag {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.persona-name {
+  color: var(--text-secondary, var(--fg-muted));
+  font-weight: 600;
+}
+.persona-bio {
+  font-family: var(--font-sans, var(--ff-sans));
+  color: var(--text-primary, var(--fg));
+}
+.persona-tag {
+  background: var(--accent-tint-bg, var(--accent));
+  color: var(--accent-tint-text, var(--accent-ink));
+  font-weight: 600;
+}
 </style>

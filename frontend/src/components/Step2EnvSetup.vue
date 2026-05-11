@@ -751,4 +751,75 @@ onMounted(() => {
 .hint--warn {
   color: var(--warn, #c89020);
 }
+
+/* Design v3 shell pass: Apple grouped controls and sans-only typography. */
+.step-panel {
+  background: var(--surface-canvas, var(--bg));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.scroll {
+  padding: var(--sp-6, var(--s-6));
+  gap: var(--sp-5, var(--s-5));
+}
+.card {
+  background: var(--surface-elevated, var(--bg));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-7, var(--r-1));
+  box-shadow: var(--shadow-1);
+}
+.card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-tint-bg, var(--accent-soft)), var(--shadow-1);
+}
+.card-head,
+.persona-actions,
+.rounds,
+.persona-search {
+  border-color: var(--separator, var(--rule));
+}
+.card-desc,
+.hint,
+.meta {
+  color: var(--text-secondary, var(--fg-muted));
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.setup-cell,
+.runtime-panel,
+.rounds-radio {
+  background: var(--surface-inset, var(--bg-elevated));
+  border-radius: var(--r-6, var(--r-1));
+}
+.runtime-panel {
+  border: 1px solid var(--hairline, var(--rule));
+  padding: var(--sp-4, var(--s-4));
+}
+.rounds-input,
+.persona-search-input,
+.agent-cap-number {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border: 1px solid var(--hairline, var(--rule-strong));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  padding: 7px 10px;
+}
+.rounds-input:focus,
+.persona-search-input:focus,
+.agent-cap-number:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+}
+.persona-more-btn {
+  border-style: solid;
+  border-color: var(--hairline, var(--rule-strong));
+  border-radius: var(--r-5, var(--r-1));
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+  background: var(--surface-elevated, transparent);
+}
 </style>

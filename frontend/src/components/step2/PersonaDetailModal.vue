@@ -481,4 +481,66 @@ function updateEditGender(event: Event) {
   text-transform: uppercase;
   color: var(--fg-muted);
 }
+
+/* Design v3 modal and form polish. */
+.modal {
+  background: color-mix(in srgb, var(--surface-base, var(--bg)) 72%, transparent);
+}
+.modal-card {
+  background: var(--surface-elevated, var(--bg));
+  border-color: var(--hairline, var(--rule-strong));
+  border-radius: var(--r-8, var(--r-1));
+  box-shadow: var(--shadow-4, var(--shadow-modal));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.modal-head,
+.review-bar,
+.modal-marginalia {
+  border-color: var(--separator, var(--rule));
+}
+.kicker-mono,
+.meta,
+.form-row,
+.chip {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.modal-handle,
+.modal-bio,
+.form-row textarea {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.modal-handle {
+  color: var(--text-primary, var(--fg));
+}
+.modal-bio,
+.modal-persona {
+  color: var(--text-secondary, var(--fg-body));
+}
+.form-row {
+  color: var(--text-secondary, var(--fg-muted));
+  font-weight: 590;
+}
+.form-row input,
+.form-row select,
+.form-row textarea,
+.regenerate-hint-input {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus,
+.regenerate-hint-input:focus {
+  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+}
+.chip {
+  background: var(--surface-inset, transparent);
+  border-color: var(--hairline, var(--rule-strong));
+  color: var(--text-secondary, var(--fg));
+}
 </style>
