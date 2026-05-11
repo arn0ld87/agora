@@ -33,7 +33,13 @@ class GraphStorage(ABC):
     # --- Add data ---
 
     @abstractmethod
-    def add_text(self, graph_id: str, text: str, round_num: Optional[int] = None) -> str:
+    def add_text(
+        self,
+        graph_id: str,
+        text: str,
+        round_num: Optional[int] = None,
+        ner_extractor: Optional[Any] = None,
+    ) -> str:
         """
         Process text: NER/RE → create nodes/edges → return episode_id.
         This is synchronous (unlike Zep Cloud's async episodes).
@@ -42,6 +48,12 @@ class GraphStorage(ABC):
         ``valid_from_round``. Pass ``0`` for the initial document ingest
         and the current OASIS round for live simulation updates; leave
         ``None`` for legacy callers where temporal tracking is not needed.
+
+        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model"):
+        optionaler NER-Override pro Aufruf. Erlaubt dem Build-Pfad, einen
+        frontend-LLM-gesteuerten Extractor durchzureichen, ohne den
+        Storage-Singleton-Default zu mutieren. ``None`` greift den
+        konfigurierten Default-Extractor.
         """
 
     @abstractmethod
@@ -52,8 +64,13 @@ class GraphStorage(ABC):
         batch_size: int = 3,
         progress_callback: Optional[Callable] = None,
         round_num: Optional[int] = None,
+        ner_extractor: Optional[Any] = None,
     ) -> List[str]:
-        """Batch-add text chunks. Returns list of episode_ids."""
+        """Batch-add text chunks. Returns list of episode_ids.
+
+        ``ner_extractor`` wird an jedes ``add_text`` durchgereicht (Override
+        pro Run). Ohne Override greift der Storage-Default-NER.
+        """
 
     @abstractmethod
     def wait_for_processing(

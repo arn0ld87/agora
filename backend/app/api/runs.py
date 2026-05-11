@@ -31,6 +31,7 @@ from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..utils.api_responses import handle_api_errors, json_error, json_success
+from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 from ..utils.validation import validate_run_id
@@ -598,7 +599,14 @@ def _resume_report_generate(run: dict):
     storage = current_app.extensions.get("neo4j_storage")
     if not storage:
         raise ValueError("GraphStorage not initialized")
-    graph_tools = GraphToolsService(storage=storage)
+    # Resume-Pfad teilt denselben LLMClient zwischen Agent und GraphTools
+    # — api_key bleibt redacted (Secrets nicht persistiert), aber das Modell
+    # kommt sauber aus der Run-Metadata durch. Vorher hat GraphTools beim
+    # Lazy-Init Config-Default genommen.
+    shared_llm_client = (
+        LLMClient(model=llm_model_override) if llm_model_override else None
+    )
+    graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     task_manager = TaskManager()
     task_id = task_manager.create_task(
@@ -614,6 +622,7 @@ def _resume_report_generate(run: dict):
                 simulation_id=simulation_id,
                 simulation_requirement=project.simulation_requirement or "",
                 graph_tools=graph_tools,
+                llm_client=shared_llm_client,
                 model_name=llm_model_override,
             )
 

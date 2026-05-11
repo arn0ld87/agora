@@ -23,13 +23,16 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..services.ingestion_pipeline import (
     embed_entities_and_relations,
     extract_entities_and_relations,
 )
 from .neo4j_mappings import edge_to_dict, sanitize_label
+
+if TYPE_CHECKING:
+    from .ner_extractor import NERExtractor
 
 logger = logging.getLogger("agora.neo4j_storage")
 
@@ -152,7 +155,13 @@ class Neo4jWriteMixin:
 
     # ── Add data (NER → nodes/edges) ────────────────────────────────
 
-    def add_text(self, graph_id: str, text: str, round_num: Optional[int] = None) -> str:
+    def add_text(
+        self,
+        graph_id: str,
+        text: str,
+        round_num: Optional[int] = None,
+        ner_extractor: Optional["NERExtractor"] = None,
+    ) -> str:
         """Process text in three phases — NER, embed, persist.
 
         Phase 1 (``extract_entities_and_relations``) + Phase 2
@@ -164,13 +173,20 @@ class Neo4jWriteMixin:
         ``valid_from_round``. ``None`` keeps the legacy behaviour (property
         absent); ``0`` means "present since the initial ingest"; any positive
         value means the edge was learned during that OASIS round.
+
+        ``ner_extractor`` (Sub-Slice „build-respects-frontend-model"): wenn
+        gesetzt, wird **dieser** Extractor statt der Storage-Default-Instanz
+        (``self._ner``) für Phase 1 verwendet. Damit kann der Build-Pfad
+        einen pro-Request gebauten Extractor mit Frontend-LLM-Override
+        durchreichen, ohne den Storage-Singleton anzufassen.
         """
         episode_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
         # Phase 1 — NER + Relation-Extraction
         ontology = self.get_ontology(graph_id)
-        extraction = extract_entities_and_relations(self._ner, text, ontology)
+        ner = ner_extractor if ner_extractor is not None else self._ner
+        extraction = extract_entities_and_relations(ner, text, ontology)
         entities = extraction.get("entities", [])
         relations = extraction.get("relations", [])
 
@@ -373,15 +389,23 @@ class Neo4jWriteMixin:
         batch_size: int = 3,
         progress_callback: Optional[Callable] = None,
         round_num: Optional[int] = None,
+        ner_extractor: Optional["NERExtractor"] = None,
     ) -> List[str]:
-        """Batch-add text chunks with progress reporting."""
+        """Batch-add text chunks with progress reporting.
+
+        ``ner_extractor`` wird an jedes ``add_text`` durchgereicht — damit
+        kann der Build-Pfad einen LLM-Override-NER pro Run verwenden, ohne
+        die globale ``Neo4jStorage._ner``-Instanz zu mutieren.
+        """
         episode_ids = []
         total = len(chunks)
 
         for i, chunk in enumerate(chunks):
             if not chunk or not chunk.strip():
                 continue
-            episode_id = self.add_text(graph_id, chunk, round_num=round_num)
+            episode_id = self.add_text(
+                graph_id, chunk, round_num=round_num, ner_extractor=ner_extractor
+            )
             episode_ids.append(episode_id)
 
             if progress_callback:

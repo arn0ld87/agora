@@ -194,7 +194,17 @@ def generate_report():
     storage = current_app.extensions.get('neo4j_storage')
     if not storage:
         return json_error("GraphStorage not initialized — check Neo4j connection", status=500)
-    graph_tools = GraphToolsService(storage=storage)
+
+    # Bug-Fix: ReportAgent und GraphToolsService müssen denselben LLMClient
+    # teilen, sonst nutzt GraphToolsService.llm beim Lazy-Init ``LLMClient()``
+    # mit Config-Default — egal welches Modell der User für den Report gewählt
+    # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
+    shared_llm_client = (
+        LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+        if (llm_runtime.enabled or llm_model_override)
+        else None
+    )
+    graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     def run_generate():
         try:
@@ -204,11 +214,7 @@ def generate_report():
                 simulation_id=simulation_id,
                 simulation_requirement=simulation_requirement,
                 graph_tools=graph_tools,
-                llm_client=(
-                    LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
-                    if llm_runtime.enabled
-                    else None
-                ),
+                llm_client=shared_llm_client,
                 model_name=llm_model_override,
             )
             def progress_callback(stage, progress, message):
