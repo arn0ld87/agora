@@ -199,7 +199,6 @@ def start_simulation():
     run_id = f"sim_{simulation_id}"
     from ..services.stage_model_router import StageModelRouter, build_default_route
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import StageLLMRoute
 
     # 0. Initialise or update runtime routing. ``load_config`` already provides a
     # legacy fallback; recoverable load/parse errors are logged and we skip

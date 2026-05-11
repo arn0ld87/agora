@@ -277,9 +277,9 @@ def prepare_simulation():
         )
 
     # 0. Runtime routing integration
-    from ..services.stage_model_router import StageModelRouter
+    from ..services.stage_model_router import StageModelRouter, build_default_route
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting
 
     run_id = f"sim_{simulation_id}"
     config_service = RuntimeRunConfig(run_id)
@@ -288,18 +288,11 @@ def prepare_simulation():
     # synthesize from the current request. ``ValidationError``/``json`` failures
     # on a legacy file fall back to fresh construction (same as the legacy path),
     # but ``SystemExit``/``KeyboardInterrupt`` must propagate.
-    if llm_runtime.enabled:
-        default_route = StageLLMRoute(
-            provider_id=llm_runtime.provider,
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=llm_runtime.base_url,
-        )
-    else:
-        default_route = StageLLMRoute(
-            provider_id="ollama_local",
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL,
-        )
+    default_route = build_default_route(
+        llm_runtime,
+        model=llm_model_override or Config.LLM_MODEL_NAME,
+        fallback_base_url=Config.LLM_BASE_URL,
+    )
 
     try:
         runtime_routing = config_service.load_config()
