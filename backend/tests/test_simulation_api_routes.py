@@ -1,6 +1,7 @@
 from flask import Flask
 
 from app.api import simulation_bp
+from app.api.simulation_lifecycle import _detect_default_provider
 from app.services.artifact_store import InMemoryArtifactStore
 from app.utils.rate_limit import llm_trigger_rate_limiter
 
@@ -31,6 +32,23 @@ def test_available_models_route_is_registered():
     payload = response.get_json()
     assert payload["success"] is True
     assert "current_default" in payload["data"]
+    assert "default_provider" in payload["data"]
+
+
+def test_detect_default_provider_openai(monkeypatch):
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_BASE_URL', 'https://api.openai.com/v1')
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_MODEL_NAME', 'gpt-5.4-mini')
+
+    assert _detect_default_provider() == 'openai'
+
+
+
+def test_detect_default_provider_ollama_cloud(monkeypatch):
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_BASE_URL', 'https://example.test/v1')
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_MODEL_NAME', 'qwen3-coder-next:cloud')
+
+    assert _detect_default_provider() == 'cloud'
+
 
 
 def test_available_models_surfaces_startup_neo4j_error():

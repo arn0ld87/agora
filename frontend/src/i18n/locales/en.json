@@ -212,6 +212,7 @@
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
       "noOllama": "No connection to Ollama. Use custom input or start Ollama.",
+      "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env"
     },
     "runtimeProvider": {

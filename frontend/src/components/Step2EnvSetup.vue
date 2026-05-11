@@ -55,6 +55,8 @@ const {
   ollamaModels,
   presetModels,
   defaultModel,
+  defaultProvider,
+  serverDefaultRequiresOllama,
   ollamaReachable,
   agentToolsEnabled,
   maxToolCallsPerAction,
@@ -263,7 +265,8 @@ onMounted(() => {
               :options="modelOptions"
             />
             <p class="hint" v-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
-            <p class="hint" v-else-if="!runtimeProviderEnabled && !ollamaReachable">{{ t('step2.model.noOllama') }}</p>
+            <p class="hint" v-else-if="!runtimeProviderEnabled && serverDefaultRequiresOllama && !ollamaReachable">{{ t('step2.model.noOllama') }}</p>
+            <p class="hint" v-else-if="!runtimeProviderEnabled && defaultProvider === 'openai'">{{ t('step2.model.openAiDefault') }}</p>
           </div>
 
           <!-- Custom model input (when 'custom' chosen) -->

@@ -185,6 +185,7 @@ describe('useEnvForm', () => {
           ollama: [{ name: 'llama3', label: 'Llama 3' }],
           presets: [{ name: 'gemma3', label: 'Gemma 3' }],
           current_default: 'gemma3',
+          default_provider: 'ollama',
           ollama_reachable: true,
           agent_tools_enabled: false,
           max_tool_calls_per_action: 3,
@@ -197,10 +198,34 @@ describe('useEnvForm', () => {
       expect(f.ollamaModels.value).toEqual([{ name: 'llama3', label: 'Llama 3' }])
       expect(f.presetModels.value).toEqual([{ name: 'gemma3', label: 'Gemma 3' }])
       expect(f.defaultModel.value).toBe('gemma3')
+      expect(f.defaultProvider.value).toBe('ollama')
+      expect(f.serverDefaultRequiresOllama.value).toBe(true)
       expect(f.ollamaReachable.value).toBe(true)
       expect(f.agentToolsEnabled.value).toBe(false)
       expect(f.maxToolCallsPerAction.value).toBe(3)
       expect(f.loadingModels.value).toBe(false)
+    })
+
+    it('setzt bei OpenAI-Default kein lokales Ollama als Pflicht voraus', async () => {
+      mockedGetAvailableModels.mockResolvedValue({
+        success: true,
+        data: {
+          ollama: [],
+          presets: [],
+          current_default: 'gpt-5.4-mini',
+          default_provider: 'openai',
+          ollama_reachable: false,
+          agent_tools_enabled: false,
+          max_tool_calls_per_action: 2,
+        },
+      } as never)
+
+      const f = useEnvForm({ t })
+      await f.loadModels()
+
+      expect(f.defaultProvider.value).toBe('openai')
+      expect(f.serverDefaultRequiresOllama.value).toBe(false)
+      expect(f.ollamaReachable.value).toBe(false)
     })
 
     it('setzt language aus default_language wenn STORAGE_LANG noch nicht gesetzt', async () => {
@@ -210,6 +235,7 @@ describe('useEnvForm', () => {
           ollama: [],
           presets: [],
           current_default: '',
+          default_provider: 'unknown',
           ollama_reachable: false,
           agent_tools_enabled: false,
           max_tool_calls_per_action: 2,
@@ -234,6 +260,7 @@ describe('useEnvForm', () => {
           ollama: [],
           presets: [],
           current_default: '',
+          default_provider: 'unknown',
           ollama_reachable: false,
           agent_tools_enabled: false,
           max_tool_calls_per_action: 2,
@@ -257,6 +284,7 @@ describe('useEnvForm', () => {
           ollama: [],
           presets: [{ name: 'gemma3', label: 'Gemma 3' }],
           current_default: 'gemma3',
+          default_provider: 'ollama',
           ollama_reachable: true,
           agent_tools_enabled: false,
           max_tool_calls_per_action: 2,

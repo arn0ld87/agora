@@ -36,6 +36,7 @@ const ALLOWED = ['.pdf', '.md', '.txt', '.markdown']
 const ollamaModels = ref([])
 const presetModels = ref([])
 const defaultModel = ref('')
+const defaultProvider = ref('unknown')
 const ollamaReachable = ref(false)
 const ollamaError = ref(null)
 const neo4jReachable = ref(false)
@@ -61,6 +62,7 @@ async function loadStatus() {
       ollamaModels.value = res.data?.ollama || []
       presetModels.value = res.data?.presets || []
       defaultModel.value = res.data?.current_default || ''
+      defaultProvider.value = res.data?.default_provider || 'unknown'
       ollamaReachable.value = !!res.data?.ollama_reachable
       ollamaError.value = res.data?.ollama_error || null
       neo4jReachable.value = !!res.data?.neo4j_reachable
@@ -96,9 +98,18 @@ const modelOptions = computed(() => {
   return opts
 })
 
+const serverDefaultRequiresOllama = computed(() => defaultProvider.value === 'ollama')
+const llmStatusOk = computed(() => !serverDefaultRequiresOllama.value || ollamaReachable.value)
+const llmStatusLabel = computed(() => {
+  if (serverDefaultRequiresOllama.value) return 'Ollama'
+  if (defaultProvider.value === 'openai') return 'OpenAI'
+  if (defaultProvider.value === 'cloud') return 'Cloud-LLM'
+  return 'LLM'
+})
+
 const servicesReady = computed(() => (
   neo4jReachable.value &&
-  (ollamaReachable.value || runtimeProviderEnabled.value || modelOption.value === 'custom')
+  (!serverDefaultRequiresOllama.value || ollamaReachable.value || runtimeProviderEnabled.value || modelOption.value === 'custom')
 ))
 
 const canSubmit = computed(() => {
@@ -304,15 +315,15 @@ const differentiators = computed(() => tm('home.differentiators'))
             <span class="status-dot" :class="neo4jReachable ? 'status-dot--done' : 'status-dot--error'" />
             Neo4j {{ loadingModels ? '…' : (neo4jReachable ? 'verbunden' : 'aus') }}
           </span>
-          <span class="status-pill" :class="{ ok: ollamaReachable, bad: !ollamaReachable && !loadingModels }">
-            <span class="status-dot" :class="ollamaReachable ? 'status-dot--done' : 'status-dot--error'" />
-            Ollama {{ loadingModels ? '…' : (ollamaReachable ? 'verbunden' : 'aus') }}
+          <span class="status-pill" :class="{ ok: llmStatusOk, bad: !llmStatusOk && !loadingModels }">
+            <span class="status-dot" :class="llmStatusOk ? 'status-dot--done' : 'status-dot--error'" />
+            {{ llmStatusLabel }} {{ loadingModels ? '…' : (llmStatusOk ? 'bereit' : 'aus') }}
           </span>
           <button v-if="!loadingModels" class="status-refresh" @click="loadStatus" :title="t('common.refresh')">↻</button>
         </div>
         <div v-if="!loadingModels && !servicesReady" class="status-warn">
           {{ neo4jReachable ? '' : `Neo4j nicht erreichbar — ${neo4jError || 'prüfe NEO4J_URI / NEO4J_PASSWORD und dass Neo4j läuft'}. ` }}
-          {{ ollamaReachable ? '' : `Ollama nicht erreichbar — ${ollamaError || 'starte: ollama serve'}.` }}
+          {{ (!serverDefaultRequiresOllama || ollamaReachable) ? '' : `Ollama nicht erreichbar — ${ollamaError || 'starte: ollama serve'}.` }}
         </div>
 
         <div class="console-head">
@@ -363,7 +374,7 @@ const differentiators = computed(() => tm('home.differentiators'))
               :label="t('step2.model.label')"
               :options="modelOptions"
             />
-            <p v-if="!runtimeProviderEnabled && !ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
+            <p v-if="!runtimeProviderEnabled && serverDefaultRequiresOllama && !ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
           </div>
@@ -451,7 +462,7 @@ const differentiators = computed(() => tm('home.differentiators'))
             {{ t('home.console.needPrompt') }}
           </span>
           <span v-else-if="!servicesReady" class="console-warning">
-            Dienste nicht bereit (Neo4j/Ollama). {{ neo4jError || ollamaError || '' }}
+            Dienste nicht bereit. {{ neo4jError || (serverDefaultRequiresOllama ? ollamaError : '') || '' }}
           </span>
           <span v-else-if="runtimeProviderEnabled && !runtimeApiKey.trim()" class="console-warning">
             {{ t('step2.runtimeProvider.missingKey') }}

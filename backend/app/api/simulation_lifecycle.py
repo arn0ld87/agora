@@ -16,6 +16,26 @@ from ..utils.validation import validate_graph_id, validate_project_id, validate_
 from .simulation_common import logger
 
 
+def _detect_default_provider() -> str:
+    """Infer the configured server-side LLM provider for UI gating.
+
+    Matches the heuristics used by ``LLMClient._detect_provider``:
+    - model suffix ``:cloud`` => Ollama Cloud
+    - base URL contains ``11434`` => local Ollama
+    - base URL contains ``openai.com`` or ``api.openai`` => OpenAI
+    - otherwise => unknown
+    """
+    model_name = (Config.LLM_MODEL_NAME or '').strip()
+    base_url = (Config.LLM_BASE_URL or '').strip()
+    if model_name.endswith(':cloud'):
+        return 'cloud'
+    if '11434' in base_url:
+        return 'ollama'
+    if 'openai.com' in base_url or 'api.openai' in base_url:
+        return 'openai'
+    return 'unknown'
+
+
 @simulation_bp.route('/available-models', methods=['GET'])
 def get_available_models():
     """
@@ -66,6 +86,7 @@ def get_available_models():
         "ollama": ollama_models,
         "presets": presets,
         "current_default": Config.LLM_MODEL_NAME,
+        "default_provider": _detect_default_provider(),
         "ollama_base_url": base,
         "ollama_reachable": ollama_error is None,
         "ollama_error": ollama_error,

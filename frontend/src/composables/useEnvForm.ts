@@ -84,6 +84,8 @@ export interface UseEnvFormReturn {
   ollamaModels: Ref<ModelPreset[]>
   presetModels: Ref<ModelPreset[]>
   defaultModel: Ref<string>
+  defaultProvider: Ref<'ollama' | 'cloud' | 'openai' | 'unknown'>
+  serverDefaultRequiresOllama: ComputedRef<boolean>
   ollamaReachable: Ref<boolean>
   agentToolsEnabled: Ref<boolean>
   maxToolCallsPerAction: Ref<number>
@@ -134,6 +136,8 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
   const ollamaModels = ref<ModelPreset[]>([])
   const presetModels = ref<ModelPreset[]>([])
   const defaultModel = ref<string>('')
+  const defaultProvider = ref<'ollama' | 'cloud' | 'openai' | 'unknown'>('unknown')
+  const serverDefaultRequiresOllama = computed<boolean>(() => defaultProvider.value === 'ollama')
   const ollamaReachable = ref<boolean>(false)
   const agentToolsEnabled = ref<boolean>(false)
   const maxToolCallsPerAction = ref<number>(2)
@@ -224,6 +228,7 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
           ollama?: ModelPreset[]
           presets?: ModelPreset[]
           current_default?: string
+          default_provider?: 'ollama' | 'cloud' | 'openai' | 'unknown'
           ollama_reachable?: boolean
           agent_tools_enabled?: boolean
           max_tool_calls_per_action?: number
@@ -234,6 +239,7 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
         ollamaModels.value = res.data?.ollama || []
         presetModels.value = res.data?.presets || []
         defaultModel.value = res.data?.current_default || ''
+        defaultProvider.value = res.data?.default_provider || 'unknown'
         ollamaReachable.value = !!res.data?.ollama_reachable
         agentToolsEnabled.value = !!res.data?.agent_tools_enabled
         maxToolCallsPerAction.value = res.data?.max_tool_calls_per_action || 2
@@ -290,6 +296,8 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
     ollamaModels,
     presetModels,
     defaultModel,
+    defaultProvider,
+    serverDefaultRequiresOllama,
     ollamaReachable,
     agentToolsEnabled,
     maxToolCallsPerAction,
