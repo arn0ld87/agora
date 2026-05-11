@@ -6,13 +6,23 @@ from flask import request
 from . import runs_bp
 from ..services.runtime_run_config import RuntimeRunConfig
 from ..services.run_registry import RunRegistry
-from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.logger import get_logger
 from pydantic import ValidationError
 
 logger = get_logger("agora.api.llm_routing")
 run_registry = RunRegistry()
+
+ALL_STAGE_IDS: tuple[StageId, ...] = (
+    "document_ingest",
+    "ontology_generation",
+    "graph_build",
+    "persona_generation",
+    "simulation_rounds",
+    "report_generation",
+    "evaluation",
+)
 
 def _get_run_state(run_id: str):
     run = run_registry.get_run(run_id)
@@ -29,7 +39,7 @@ def get_run_llm_routing(run_id: str):
 
     # Also include snapshots for started stages
     snapshots = {}
-    for stage in ["document_ingest", "ontology_generation", "graph_build", "persona_generation", "simulation_rounds", "report_generation", "evaluation"]:
+    for stage in ALL_STAGE_IDS:
         snap = config_service.load_stage_snapshot(stage)
         if snap:
             snapshots[stage] = snap
@@ -60,12 +70,20 @@ def update_run_llm_routing(run_id: str):
 
         return json_success(new_config.model_dump(mode="json"))
     except ValidationError as exc:
-        return json_error(exc.errors(), status=400)
+        return json_error(
+            "Validation failed",
+            status=400,
+            code="validation_failed",
+            extra={"details": exc.errors()},
+        )
 
 @runs_bp.route("/<run_id>/llm-routing/stages/<stage_id>", methods=["PATCH"])
 @handle_api_errors(logger=logger)
 def patch_stage_llm_routing(run_id: str, stage_id: str):
     """Update routing for a specific stage."""
+    if stage_id not in ALL_STAGE_IDS:
+        return json_error("Invalid stage_id", status=400, code="invalid_stage_id")
+
     # 1. Check if stage already started/locked
     config_service = RuntimeRunConfig(run_id)
     if config_service.load_stage_snapshot(stage_id):
@@ -87,4 +105,9 @@ def patch_stage_llm_routing(run_id: str, stage_id: str):
         config_service.save_config(config)
         return json_success(config.model_dump(mode="json"))
     except ValidationError as exc:
-        return json_error(exc.errors(), status=400)
+        return json_error(
+            "Validation failed",
+            status=400,
+            code="validation_failed",
+            extra={"details": exc.errors()},
+        )
