@@ -11,6 +11,13 @@ from ..errors import MissingCredentialError, ProviderHTTPError
 
 DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
+# Reasoning-Familien lehnen ``max_tokens`` ab. Stand 2026-05: o1/o3/o4-Slugs.
+_REASONING_PREFIXES: tuple[str, ...] = ("o1", "o3", "o4")
+
+
+def _is_reasoning_model(model: str) -> bool:
+    return model.lower().startswith(_REASONING_PREFIXES)
+
 
 class OpenAIClient:
     """Minimaler OpenAI-Client für Chat-Completions.
@@ -61,9 +68,13 @@ class OpenAIClient:
         if temperature is not None:
             body["temperature"] = temperature
         if max_tokens is not None:
-            # o-Modelle erwarten ``max_completion_tokens`` — Auto-Fallback
-            # behandeln wir im UnifiedClient/Retry, hier bleibt es schlank.
-            body["max_tokens"] = max_tokens
+            # o-Familien (o1/o3/o4) lehnen ``max_tokens`` mit HTTP 400 ab und
+            # verlangen ``max_completion_tokens``. Wir setzen den passenden
+            # Key direkt — kein Retry-Loop nötig.
+            if _is_reasoning_model(model):
+                body["max_completion_tokens"] = max_tokens
+            else:
+                body["max_tokens"] = max_tokens
 
         resp = await self._client.post(
             f"{self._base_url}/v1/chat/completions",

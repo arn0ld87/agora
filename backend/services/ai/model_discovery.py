@@ -178,6 +178,10 @@ def _map_gemini(item: dict[str, Any]) -> ModelInfo | None:
 
 
 async def _fetch_ollama(http: httpx.AsyncClient) -> list[ModelInfo]:
+    # Default ``localhost`` ist Repo-Konvention (vgl. ``LLM_BASE_URL`` und
+    # ``EMBEDDING_BASE_URL``). Docker-User setzen
+    # ``OLLAMA_BASE_URL=http://host.docker.internal:11434`` — siehe
+    # ``.env.example`` „Docker-mode overrides".
     base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     url = f"{base}/api/tags"
     try:
