@@ -46,7 +46,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </template>
 
 <style>
-/* Reset only — design tokens live in src/assets/styles/tokens.css
+/* Reset only — design tokens live in src/assets/styles/tokens-v3.css
    App-wide layout helpers in src/assets/styles/global.css */
 * {
   margin: 0;

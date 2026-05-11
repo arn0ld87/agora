@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ThemeToggle from '../components/ui/ThemeToggle.vue'
 import ActiveModelBadge from '../components/ActiveModelBadge.vue'
 </script>
 
@@ -14,7 +13,6 @@ import ActiveModelBadge from '../components/ActiveModelBadge.vue'
     <div class="workspace-status">
       <ActiveModelBadge class="workspace-model-badge" />
       <slot name="status" />
-      <ThemeToggle class="workspace-theme-toggle" />
     </div>
   </header>
 </template>
