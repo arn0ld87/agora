@@ -43,6 +43,16 @@ Entfernen des Layers wuerde nicht vollstaendig migrierte Komponenten visuell
 brechen. Der alte v2-Default ist dennoch entfernt: `main.ts` importiert nur noch
 `tokens-v3.css`.
 
+Das finale GitHub-Gate machte ausserdem drei vorbestehende Wartungsdrifts
+sichtbar, die im selben PR eng behoben wurden:
+
+- `backend/app/api/llm_routing.py`: mypy-kompatible StageId-Validierung und
+  ValidationError-Envelope
+- `docu/STATUS.md`: Backend-Testcount per `scripts/sync-status.sh`
+  aktualisiert
+- `backend/radon-allowlist.txt`: `app/api/graph.py::build_graph` als
+  vorbestehenden Class-D-Orchestrator-Hotspot mit Refactor-Hinweis aufgenommen
+
 ## Lokale Gates
 
 Bislang lokal gruen:

@@ -21,6 +21,10 @@
 #     echte Persona/Segment/FrictionPoint/TrustSignal-Aggregation. Eigener
 #     Refactor-Slice nach v1.0 (Aufgabenkatalog: Aggregations-Helper splitten,
 #     Persona-Mapper als eigenes Modul).
+#   - app/api/graph.py::build_graph (D): vorbestehender API-Orchestrator-Hotspot,
+#     im Design-v3-PR nur als finales CI-Gate sichtbar geworden. Eigener
+#     Refactor-Slice nach Design-v3-Merge: Request-Validation, Task-Dispatch und
+#     Response-Mapping extrahieren.
 
 app/config.py::Config
 app/config.py::Config.validate
@@ -52,3 +56,4 @@ app/services/report_agent/manager.py::ReportManager._post_process_report
 app/services/report_agent/manager.py::ReportManager.build_report_v3
 app/services/evidence_migrations.py::migrate_v2_to_v3
 app/services/evidence_migrations.py::_map_profile_to_persona
+app/api/graph.py::build_graph
