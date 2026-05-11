@@ -20,14 +20,7 @@ from app.container import AgoraContainer
 
 
 @pytest.fixture
-def app(monkeypatch, tmp_path):
-    from app.api import graph as graph_module
-    from app.services.run_registry import RunRegistry
-
-    monkeypatch.setenv("AGORA_INSTANCE_DIR", str(tmp_path / "instance"))
-    monkeypatch.setattr(RunRegistry, "REGISTRY_DIR", str(tmp_path / "run_registry"))
-    graph_module.run_registry._cache = {}
-
+def app(monkeypatch):
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)
     flask_app = Flask(__name__)
@@ -120,14 +113,11 @@ def test_ontology_generate_uses_frontend_llm_model_and_provider(
     # --- Assert ---
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["success"] is True
-    run_id = response.get_json()["data"]["run_id"]
-    assert run_id.startswith("run_")
 
     # LLMClient muss mit dem Frontend-Modell + Provider-Override instanziiert sein.
     # Nach Refactor wird .from_route() verwendet.
     llm_client_cls.from_route.assert_called_once()
     route = llm_client_cls.from_route.call_args.args[0]
-    assert llm_client_cls.from_route.call_args.kwargs["run_id"] == run_id
     assert route.model == "gpt-5-mini"
     assert route.provider_id == "openai"
     # base_url wird im SecretResolver/from_route aufgelöst, hier prüfen wir die Route

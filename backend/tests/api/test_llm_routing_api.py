@@ -29,35 +29,18 @@ def test_list_provider_models(mock_get_models, client):
     assert resp.status_code == 200
 
 def test_get_run_llm_routing(client):
-    with (
-        patch("app.api.llm_routing.run_registry.get_run", return_value={"status": "processing"}),
-        patch("app.services.runtime_run_config.RuntimeRunConfig.load_config") as mock_load,
-    ):
+    with patch("app.services.runtime_run_config.RuntimeRunConfig.load_config") as mock_load:
         from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
         mock_load.return_value = RuntimeLlmRouting(
             default_route=StageLLMRoute(provider_id="o", model="m")
         )
-        resp = client.get("/api/runs/run_abcdef012345/llm-routing")
+        resp = client.get("/api/runs/proj_123/llm-routing")
         assert resp.status_code == 200
         assert "runtime_config" in resp.json["data"]
 
 def test_patch_stage_llm_routing_locked(client):
-    with (
-        patch("app.api.llm_routing.run_registry.get_run", return_value={"status": "processing"}),
-        patch("app.services.runtime_run_config.RuntimeRunConfig.load_stage_snapshot") as mock_snap,
-    ):
+    with patch("app.services.runtime_run_config.RuntimeRunConfig.load_stage_snapshot") as mock_snap:
         mock_snap.return_value = {"locked": True}
-        resp = client.patch("/api/runs/run_abcdef012345/llm-routing/stages/graph_build", json={})
+        resp = client.patch("/api/runs/proj_123/llm-routing/stages/graph_build", json={})
         assert resp.status_code == 409
         assert resp.json["code"] == "stage_already_started"
-
-
-def test_get_run_llm_routing_rejects_entity_id(client):
-    resp = client.get("/api/runs/proj_abcdef012345/llm-routing")
-    assert resp.status_code == 400
-
-
-def test_get_run_llm_routing_requires_existing_run(client):
-    with patch("app.api.llm_routing.run_registry.get_run", return_value=None):
-        resp = client.get("/api/runs/run_abcdef012345/llm-routing")
-    assert resp.status_code == 404

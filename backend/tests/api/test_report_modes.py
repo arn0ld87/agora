@@ -98,6 +98,7 @@ def _make_mock_project():
     project = MagicMock()
     project.graph_id = VALID_GRAPH_ID
     project.simulation_requirement = "Test requirement"
+    project.llm_model = None
     return project
 
 
@@ -113,8 +114,8 @@ def _patched_generate():
         patch("app.api.report.TaskManager") as mock_tm,
         patch("app.api.report.run_registry") as mock_rr,
         patch("app.api.report.threading.Thread") as mock_thread,
-        patch("app.api.report._RuntimeRunConfig") as mock_rc,
-        patch("app.api.report._StageModelRouter") as mock_smr,
+        patch("app.api.report.RuntimeRunConfig"),
+        patch("app.api.report.StageModelRouter") as mock_smr,
     ):
         mock_sim_mgr.return_value.get_simulation.return_value = mock_state
         mock_pm.get_project.return_value = mock_project
@@ -122,6 +123,18 @@ def _patched_generate():
         mock_rr.create_run.return_value = {"run_id": "run_001"}
         mock_tm.return_value.create_task.return_value = "task_001"
         mock_thread.return_value.start.return_value = None
+
+        # Mock StageModelRouter.resolve() to return a mock with string attributes
+        mock_route = MagicMock()
+        mock_route.provider_id = "ollama_local"
+        mock_route.model = "test-model"
+        mock_route.base_url_sanitized = "http://localhost:11434/v1"
+        mock_route.reasoning_effort = "none"
+        mock_route.provider_options = {}
+        mock_route.routing_version = 1
+        mock_route.stage = "report_generation"
+        mock_smr.return_value.resolve.return_value = mock_route
+
         yield
 
 

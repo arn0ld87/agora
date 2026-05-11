@@ -23,9 +23,9 @@ _PROVIDER_ALIASES = {
     "google": "google",
     "gemini": "google",
     "openai": "openai",
-    "custom": "openai_compatible",
-    "custom_openai": "openai_compatible",
-    "openai_compatible": "openai_compatible",
+    "custom": "custom_openai",
+    "custom_openai": "custom_openai",
+    "openai_compatible": "custom_openai",
 }
 
 
@@ -87,7 +87,7 @@ def parse_runtime_llm_config(data: Mapping[str, Any]) -> RuntimeLlmConfig:
     provider = _PROVIDER_ALIASES.get(provider_raw)
     if provider is None:
         raise ValueError(
-            "llm_provider.provider must be one of: default, google, openai, custom_openai, openai_compatible"
+            "llm_provider.provider must be one of: default, google, openai, custom_openai"
         )
     if provider == "default":
         return RuntimeLlmConfig()
@@ -100,7 +100,7 @@ def parse_runtime_llm_config(data: Mapping[str, Any]) -> RuntimeLlmConfig:
     if not base_url:
         base_url = PROVIDER_DEFAULT_BASE_URLS.get(provider, "")
     if not base_url:
-        raise ValueError("llm_provider.base_url is required for openai_compatible")
+        raise ValueError("llm_provider.base_url is required for custom_openai")
 
     parsed = urlparse(base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:

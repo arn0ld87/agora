@@ -140,7 +140,7 @@ class LLMClient:
     ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route and secret resolver."""
         from ..services.secret_resolver import SecretResolver
-        resolver = secret_resolver or SecretResolver(run_id=run_id)
+        resolver = secret_resolver or SecretResolver()
 
         # 1. Resolve provider type (needed for api key resolution)
         # We need to know the type, but ResolvedRoute only has provider_id.
@@ -398,7 +398,8 @@ class LLMClient:
             and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
 
-        _t0 = _time_mod.monotonic()
+        import time as _time
+        _t0 = _time.monotonic()
 
         def _create(call_kwargs: Dict[str, Any]):
             """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
@@ -414,7 +415,8 @@ class LLMClient:
                 logger_inst = getattr(self, "_invocation_logger", None)
                 if logger_inst:
                     # Log failure before re-raising
-                    latency = (_time_mod.monotonic() - _t0) * 1000
+                    import time as _t
+                    latency = (_t.monotonic() - _t0) * 1000
                     status_code = getattr(exc, "status_code", None)
                     if status_code is None:
                         response = getattr(exc, "response", None)
@@ -480,7 +482,7 @@ class LLMClient:
             usage = getattr(response, "usage", None)
             completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
             content = choice.message.content or ""
-        elapsed = _time_mod.monotonic() - _t0
+        elapsed = _time.monotonic() - _t0
         logger.info(
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,

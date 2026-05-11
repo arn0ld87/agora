@@ -14,7 +14,6 @@ from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
 from ..services.llm_runtime import parse_runtime_llm_config
-from ..services.secret_resolver import register_run_api_key
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
 from ..services.text_processor import TextProcessor
@@ -245,24 +244,13 @@ def generate_ontology():
     project = ProjectManager.create_project(name=project_name)
     project.simulation_requirement = simulation_requirement
     logger.info(f"Project created: {project.project_id}")
-    run_record = run_registry.create_run(
-        run_type="ontology_generate",
-        entity_id=project.project_id,
-        status="processing",
-        progress=0,
-        message="Ontology generation started",
-        linked_ids={"project_id": project.project_id},
-        artifacts={},
-        metadata={"project_name": project_name},
-    )
 
     # 0. Initialise runtime routing for the project/run
     from ..services.stage_model_router import StageModelRouter
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
-    run_id = run_record["run_id"]
-    register_run_api_key(run_id, llm_runtime.provider, llm_runtime.api_key)
+    run_id = f"proj_{project.project_id}" # Mapping project to a run_id for routing
     config_service = RuntimeRunConfig(run_id)
 
     # Resolve default route
@@ -313,12 +301,6 @@ def generate_ontology():
 
     if not document_texts:
         ProjectManager.delete_project(project.project_id)
-        run_registry.update_run(
-            run_id,
-            status="failed",
-            message="No documents successfully processed",
-            error="No documents successfully processed",
-        )
         return json_error(
             ApiErrorCode.UNSUPPORTED_FORMAT,
             status=400,
@@ -370,16 +352,9 @@ def generate_ontology():
     project.llm_model = llm_model_override
     project.llm_provider = llm_runtime.redacted_metadata() or None
     ProjectManager.save_project(project)
-    run_registry.update_run(
-        run_id,
-        status="completed",
-        progress=100,
-        message="Ontology generation completed",
-    )
     logger.info(f"=== Ontology generation completed === Project ID: {project.project_id}")
 
     return json_success({
-        "run_id": run_id,
         "project_id": project.project_id,
         "project_name": project.name,
         "ontology": project.ontology,
@@ -465,32 +440,10 @@ def build_graph():
         project.graph_build_task_id = None
         project.error = None
 
+    run_id = f"proj_{project.project_id}"
     from ..services.stage_model_router import StageModelRouter
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import StageLLMRoute
-
-    # Get configuration
-    graph_name = data.get('graph_name', project.name or 'Agora Graph')
-    chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
-    chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
-
-    # Create async task and the canonical run before routing is persisted.
-    task_manager = TaskManager()
-    run_record = run_registry.create_run(
-        run_type="graph_build",
-        entity_id=project_id,
-        status="pending",
-        progress=0,
-        message="Graph build queued",
-        linked_ids={"project_id": project_id},
-        artifacts=ArtifactLocator.existing_paths({
-            "project_dir": ProjectManager._get_project_dir(project_id),
-        }),
-        resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
-        metadata={"graph_name": graph_name},
-    )
-    run_id = run_record["run_id"]
-    register_run_api_key(run_id, llm_runtime.provider, llm_runtime.api_key)
 
     # 0. Update runtime config if new provider passed
     if llm_provider_payload or llm_model_override:
@@ -507,6 +460,11 @@ def build_graph():
 
         config.routing_version += 1
         config_service.save_config(config)
+
+    # Get configuration
+    graph_name = data.get('graph_name', project.name or 'Agora Graph')
+    chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
+    chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
 
     # Update project configuration
     project.chunk_size = chunk_size
@@ -541,6 +499,21 @@ def build_graph():
             message="GraphStorage not initialized",
         )
 
+    # Create async task
+    task_manager = TaskManager()
+    run_record = run_registry.create_run(
+        run_type="graph_build",
+        entity_id=project_id,
+        status="pending",
+        progress=0,
+        message="Graph build queued",
+        linked_ids={"project_id": project_id},
+        artifacts=ArtifactLocator.existing_paths({
+            "project_dir": ProjectManager._get_project_dir(project_id),
+        }),
+        resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
+        metadata={"graph_name": graph_name},
+    )
     task_id = task_manager.create_task(
         f"Build graph: {graph_name}",
         metadata={"project_id": project_id, "run_id": run_record["run_id"]},
