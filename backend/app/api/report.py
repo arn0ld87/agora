@@ -156,26 +156,18 @@ def generate_report():
     report_id = f"report_{uuid.uuid4().hex[:12]}"
 
     # 0. Runtime routing integration
-    from ..services.stage_model_router import StageModelRouter
+    from ..services.stage_model_router import StageModelRouter, build_default_route
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting
 
     run_id = f"report_{report_id}"
     config_service = RuntimeRunConfig(run_id)
 
-    # Initialize runtime config
-    if llm_runtime.enabled:
-        default_route = StageLLMRoute(
-            provider_id=llm_runtime.provider,
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
-            base_url=llm_runtime.base_url
-        )
-    else:
-        default_route = StageLLMRoute(
-            provider_id="ollama_local",
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL
-        )
+    default_route = build_default_route(
+        llm_runtime,
+        model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
+        fallback_base_url=Config.LLM_BASE_URL,
+    )
 
     runtime_routing = RuntimeLlmRouting(default_route=default_route)
     config_service.save_config(runtime_routing)

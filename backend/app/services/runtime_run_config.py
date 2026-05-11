@@ -9,8 +9,12 @@ from typing import Optional, Dict, Any
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
+from .secret_resolver import SecretResolver
 
 logger = get_logger("agora.runtime_run_config")
+
+_SECRET_RESOLVER = SecretResolver()
+_SECRET_KEYS = frozenset(("api_key", "apikey", "secret", "password", "token"))
 
 class RuntimeRunConfig:
     """Manages runtime configuration for a run."""
@@ -56,16 +60,19 @@ class RuntimeRunConfig:
             json.dump(snapshot, f, indent=2)
 
     def _sanitize_deep(self, data: Any) -> Any:
-        """Recursively strip secret-bearing keys and sanitize URLs in snapshots."""
-        from .secret_resolver import SecretResolver
+        """Recursively strip secret-bearing keys and sanitize URLs in snapshots.
 
+        The ``SecretResolver`` is reused from a module-level singleton — the
+        previous implementation instantiated it per recursive call, which was
+        wasteful for nested provider_options dicts.
+        """
         if isinstance(data, dict):
             cleaned: Dict[str, Any] = {}
             for k, v in data.items():
-                if k.lower() in ("api_key", "apikey", "secret", "password", "token"):
+                if k.lower() in _SECRET_KEYS:
                     continue
                 if k == "base_url" and isinstance(v, str):
-                    cleaned[k] = SecretResolver().sanitize_url(v)
+                    cleaned[k] = _SECRET_RESOLVER.sanitize_url(v)
                     continue
                 cleaned[k] = self._sanitize_deep(v)
             return cleaned

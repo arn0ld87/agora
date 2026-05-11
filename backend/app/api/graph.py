@@ -246,27 +246,18 @@ def generate_ontology():
     logger.info(f"Project created: {project.project_id}")
 
     # 0. Initialise runtime routing for the project/run
-    from ..services.stage_model_router import StageModelRouter
+    from ..services.stage_model_router import StageModelRouter, build_default_route
     from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting
 
     run_id = f"proj_{project.project_id}" # Mapping project to a run_id for routing
     config_service = RuntimeRunConfig(run_id)
 
-    # Resolve default route
-    if llm_runtime.enabled:
-        default_route = StageLLMRoute(
-            provider_id=llm_runtime.provider,
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=llm_runtime.base_url
-        )
-    else:
-        default_route = StageLLMRoute(
-            provider_id="ollama_local",
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL
-        )
-
+    default_route = build_default_route(
+        llm_runtime,
+        model=llm_model_override or Config.LLM_MODEL_NAME,
+        fallback_base_url=Config.LLM_BASE_URL,
+    )
     runtime_routing = RuntimeLlmRouting(default_route=default_route)
     config_service.save_config(runtime_routing)
 
@@ -441,25 +432,11 @@ def build_graph():
         project.error = None
 
     run_id = f"proj_{project.project_id}"
-    from ..services.stage_model_router import StageModelRouter
-    from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import StageLLMRoute
+    from ..services.stage_model_router import StageModelRouter, update_default_route
 
-    # 0. Update runtime config if new provider passed
-    if llm_provider_payload or llm_model_override:
-        config_service = RuntimeRunConfig(run_id)
-        config = config_service.load_config()
-        if llm_runtime.enabled:
-            config.default_route = StageLLMRoute(
-                provider_id=llm_runtime.provider,
-                model=llm_model_override or config.default_route.model,
-                base_url=llm_runtime.base_url
-            )
-        elif llm_model_override:
-             config.default_route.model = llm_model_override
-
-        config.routing_version += 1
-        config_service.save_config(config)
+    # 0. Update persisted runtime config when the request changes the provider
+    # or model. Helper is a no-op otherwise — keeps the endpoint flat.
+    update_default_route(run_id, llm_runtime, llm_model_override)
 
     # Get configuration
     graph_name = data.get('graph_name', project.name or 'Agora Graph')
