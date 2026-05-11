@@ -731,10 +731,12 @@ onUnmounted(() => {
 .stat:last-child { border-right: 0; }
 .stat-value {
   display: block;
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 .stat-label {
   display: block;

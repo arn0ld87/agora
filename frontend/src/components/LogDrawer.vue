@@ -241,5 +241,5 @@ onUnmounted(stopStream)
 }
 .log-line { padding: 1px 0; }
 .log-line.is-error { color: var(--status-error, #f56565); }
-.meta { color: var(--fg-muted); font-style: italic; }
+.meta { color: var(--fg-muted); }
 </style>

@@ -616,7 +616,7 @@ onUnmounted(stopPolling)
 .report-body {
   max-width: 72ch;
   margin: 0 auto;
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   color: var(--fg);
   font-size: var(--fs-18, 17px);
   line-height: 1.75;
@@ -634,12 +634,12 @@ onUnmounted(stopPolling)
 .markdown-body :deep(h2),
 .markdown-body :deep(h3),
 .markdown-body :deep(h4) {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   color: var(--fg);
   line-height: 1.25;
   margin: 1.8em 0 0.4em;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .markdown-body :deep(h1) { font-size: 2em; border-bottom: 1px solid var(--rule); padding-bottom: 0.3em; }
 .markdown-body :deep(h2) { font-size: 1.5em; color: var(--accent); }
@@ -655,7 +655,6 @@ onUnmounted(stopPolling)
   margin: 1em 0;
   padding: 0.2em 1em;
   color: var(--fg-muted);
-  font-style: italic;
 }
 .markdown-body :deep(code) {
   background: var(--bg-elevated);
@@ -784,7 +783,7 @@ onUnmounted(stopPolling)
   word-break: break-word;
   padding: 4px 0 0 12px;
   border-left: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: 12px;
   line-height: 1.6;
 }

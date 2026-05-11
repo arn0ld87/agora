@@ -221,7 +221,8 @@ const intervalSeconds = computed(() => Math.round(props.pollIntervalMs / 1000))
 }
 
 .dashboard-title {
-  font-family: var(--ff-serif, serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 1.5rem;
   letter-spacing: -0.01em;
   margin: 0;
