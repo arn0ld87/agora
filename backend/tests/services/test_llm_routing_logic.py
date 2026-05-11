@@ -1,10 +1,8 @@
 import pytest
-import os
-import shutil
+from unittest.mock import patch
 from app.services.runtime_run_config import RuntimeRunConfig
 from app.services.stage_model_router import StageModelRouter
-from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, ResolvedRoute
-from app.utils.artifact_locator import ArtifactLocator
+from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
 @pytest.fixture
 def temp_run_dir(tmp_path):
@@ -15,24 +13,22 @@ def temp_run_dir(tmp_path):
     with patch("app.utils.artifact_locator.ArtifactLocator.run_dir", return_value=str(run_dir)):
         yield run_id
 
-from unittest.mock import patch
-
 def test_runtime_run_config_persistence(temp_run_dir):
     service = RuntimeRunConfig(temp_run_dir)
-    default_route = StageLLMRoute(provider_id="ollama", model="qwen")
-    config = RuntimeLlmRouting(default_route=default_route, routing_version=1)
+    global_default = StageLLMRoute(provider_id="ollama", model="qwen")
+    config = RuntimeLlmRouting(global_default=global_default, routing_version=1)
 
     service.save_config(config)
     loaded = service.load_config()
     assert loaded.routing_version == 1
-    assert loaded.default_route.provider_id == "ollama"
+    assert loaded.global_default.provider_id == "ollama"
 
 def test_stage_model_router_resolution(temp_run_dir):
     service = RuntimeRunConfig(temp_run_dir)
-    default_route = StageLLMRoute(provider_id="openai", model="gpt-4o")
+    global_default = StageLLMRoute(provider_id="openai", model="gpt-4o")
     override_route = StageLLMRoute(provider_id="ollama", model="qwen")
     config = RuntimeLlmRouting(
-        default_route=default_route,
+        global_default=global_default,
         stage_overrides={"graph_build": override_route},
         routing_version=1
     )
@@ -52,8 +48,8 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     service = RuntimeRunConfig(temp_run_dir)
     router = StageModelRouter(temp_run_dir)
 
-    default_route = StageLLMRoute(provider_id="openai", model="gpt-4o")
-    config = RuntimeLlmRouting(default_route=default_route, routing_version=1)
+    global_default = StageLLMRoute(provider_id="openai", model="gpt-4o")
+    config = RuntimeLlmRouting(global_default=global_default, routing_version=1)
     service.save_config(config)
 
     # 1. Resolve and lock stage
@@ -61,8 +57,8 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     router.lock_stage("document_ingest", resolved)
 
     # 2. Update runtime config
-    new_default = StageLLMRoute(provider_id="ollama", model="qwen")
-    new_config = RuntimeLlmRouting(default_route=new_default, routing_version=2)
+    new_global_default = StageLLMRoute(provider_id="ollama", model="qwen")
+    new_config = RuntimeLlmRouting(global_default=new_global_default, routing_version=2)
     service.save_config(new_config)
 
     # 3. Resolve again - should still return the locked version

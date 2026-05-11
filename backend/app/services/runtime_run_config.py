@@ -5,7 +5,6 @@ Handle persistence of runtime_llm_routing.json and stage snapshots.
 
 import os
 import json
-from datetime import datetime
 from typing import Optional, Dict, Any
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
@@ -31,12 +30,16 @@ class RuntimeRunConfig:
 
         # Legacy fallback: synthesize from global Config or existing run metadata
         from ..config import Config
-        default_route = StageLLMRoute(
+        provider_options: Dict[str, Any] = {}
+        if Config.LLM_BASE_URL:
+            provider_options["base_url"] = Config.LLM_BASE_URL
+
+        global_default = StageLLMRoute(
             provider_id="ollama_local",
             model=Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL
+            provider_options=provider_options,
         )
-        return RuntimeLlmRouting(default_route=default_route)
+        return RuntimeLlmRouting(global_default=global_default)
 
     def save_config(self, config: RuntimeLlmRouting) -> None:
         """Persist runtime configuration."""

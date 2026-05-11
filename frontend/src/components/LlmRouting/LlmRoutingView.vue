@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   listLlmProviders,
   getRunLlmRouting,
   updateRunLlmRouting,
-  patchStageLlmRouting,
-  listProviderModels
+  patchStageLlmRouting
 } from '../../api/llmRouting';
 import {
   ProviderDescriptor,
@@ -41,7 +40,7 @@ const STAGES: StageId[] = [
 const REASONING_EFFORTS: ReasoningEffort[] = ["none", "minimal", "low", "medium", "high"];
 
 async function load() {
-  loading.ref = true;
+  loading.value = true;
   try {
     const [p, r] = await Promise.all([
       listLlmProviders(),
@@ -82,10 +81,6 @@ async function saveStage(stageId: StageId, route: StageLLMRoute) {
   }
 }
 
-function getProvider(id: string) {
-  return providers.value.find(p => p.id === id);
-}
-
 const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
 
 </script>
@@ -101,15 +96,15 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
         <h3>{{ t('llm.routing.global_default') }}</h3>
         <div class="card">
           <label>{{ t('llm.provider') }}</label>
-          <select v-model="routing.default_route.provider_id">
-            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+          <select v-model="routing.global_default.provider_id">
+            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
           </select>
 
           <label>{{ t('llm.model') }}</label>
-          <input v-model="routing.default_route.model" />
+          <input v-model="routing.global_default.model" />
 
           <label>{{ t('llm.reasoning_effort') }}</label>
-          <select v-model="routing.default_route.reasoning_effort">
+          <select v-model="routing.global_default.reasoning_effort">
             <option v-for="e in REASONING_EFFORTS" :key="e" :value="e">{{ e }}</option>
           </select>
 
@@ -126,17 +121,17 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
           <div class="stage-controls">
             <label>{{ t('llm.provider') }}</label>
             <select
-              :value="routing.stage_overrides[stage]?.provider_id || routing.default_route.provider_id"
+              :value="routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id"
               @change="(e: any) => {
                 if (!routing) return;
                 if (!routing.stage_overrides[stage]) {
-                  routing.stage_overrides[stage] = { ...routing.default_route };
+                  routing.stage_overrides[stage] = { ...routing.global_default };
                 }
                 routing.stage_overrides[stage].provider_id = e.target.value;
               }"
               :disabled="isStageLocked(stage)"
             >
-              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
             </select>
 
             <button

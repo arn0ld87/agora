@@ -5,9 +5,8 @@ LLM Routing API.
 from flask import request
 from . import runs_bp
 from ..services.runtime_run_config import RuntimeRunConfig
-from ..services.stage_model_router import StageModelRouter
 from ..services.run_registry import RunRegistry
-from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
+from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.logger import get_logger
 from pydantic import ValidationError
@@ -29,9 +28,7 @@ def get_run_llm_routing(run_id: str):
     config = config_service.load_config()
 
     # Also include snapshots for started stages
-    router = StageModelRouter(run_id)
     snapshots = {}
-    from ..contracts.llm_routing_contract import StageId
     for stage in ["document_ingest", "ontology_generation", "graph_build", "persona_generation", "simulation_rounds", "report_generation", "evaluation"]:
         snap = config_service.load_stage_snapshot(stage)
         if snap:
