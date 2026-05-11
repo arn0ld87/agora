@@ -31,6 +31,7 @@ const router = createRouter({
     { path: '/', name: 'Home', component: { template: '<div/>' } },
     { path: '/runs', name: 'Runs', component: { template: '<div/>' } },
     { path: '/settings', name: 'Settings', component: { template: '<div/>' } },
+    { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: { template: '<div/>' } },
   ],
 })
 

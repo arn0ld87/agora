@@ -31,6 +31,11 @@ const routes: RouteRecordRaw[] = [
     component: SettingsView
   },
   {
+    path: '/settings/llm-routing',
+    name: 'SettingsLlmRouting',
+    component: () => import('../views/Settings/LlmRoutingView.vue'),
+  },
+  {
     path: '/process/:projectId',
     name: 'Process',
     component: MainView,

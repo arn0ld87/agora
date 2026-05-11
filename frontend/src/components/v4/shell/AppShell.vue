@@ -62,14 +62,22 @@ const activeRoute = computed<string>(() => {
   const n = String(name).toLowerCase()
   if (n === 'home') return 'dashboard'
   if (n === 'runs' || n === 'rundetail') return 'runs'
-  if (n === 'settings') return 'settings'
+  if (n === 'settings' || n.startsWith('settings')) return 'settings'
   return n
 })
 
-// Derive active settings sub-tab from query param
+// Derive active settings sub-tab from query param or route name
 const activeSubRoute = computed<string>(() => {
   const tab = route.query['tab']
   if (typeof tab === 'string') return tab
+  // Named Settings-sub-routes: SettingsLlmRouting → 'llm-routing'
+  const routeName = String(route.name ?? '')
+  if (routeName.startsWith('Settings') && routeName !== 'Settings') {
+    // e.g. 'SettingsLlmRouting' → 'llm-routing'
+    return routeName
+      .replace(/^Settings/, '')
+      .replace(/([A-Z])/g, (m, c, i) => (i === 0 ? c.toLowerCase() : '-' + c.toLowerCase()))
+  }
   return ''
 })
 </script>

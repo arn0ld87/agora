@@ -34,6 +34,7 @@ const router = createRouter({
     { path: '/', name: 'Home', component: stubComponent },
     { path: '/runs', name: 'Runs', component: stubComponent },
     { path: '/settings', name: 'Settings', component: stubComponent },
+    { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: stubComponent },
   ],
 })
 
