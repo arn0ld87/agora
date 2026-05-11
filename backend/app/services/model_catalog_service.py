@@ -87,7 +87,6 @@ class ModelCatalogService:
                     return [m["id"] for m in data.get("data", [])]
             except Exception as exc:
                 logger.debug("OpenAI-compatible /v1/models discovery failed: %s", exc)
-                pass
 
             # Try native Ollama /api/tags as fallback
             # We need to strip /v1 if it was added to base_url for OpenAI compat
