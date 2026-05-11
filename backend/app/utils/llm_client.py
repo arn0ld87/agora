@@ -119,18 +119,29 @@ class LLMClient:
         # sonst 400 "Unsupported parameter: 'max_tokens'". Heuristik gespiegelt
         # aus backend/scripts/_sim_common.py::uses_max_completion_tokens —
         # Single Source of Truth bleibt dort, hier nur die zweite Stelle.
+        # Striktes Prefix-Matching ("gpt-5", "gpt-5-…") verhindert
+        # Mismatches wie hypothetisches "gpt-500".
         lowered = (model or "").strip().lower()
-        if lowered.startswith("gpt-5"):
-            return True
-        for prefix in ("o1", "o3", "o4"):
+        for prefix in ("gpt-5", "o1", "o3", "o4"):
             if lowered == prefix or lowered.startswith(f"{prefix}-"):
                 return True
         return False
 
-    def _completion_token_kwargs(self, max_tokens: int) -> Dict[str, int]:
+    def _completion_token_kwargs(
+        self, max_tokens: int, model: Optional[str] = None
+    ) -> Dict[str, int]:
+        """Wire-Key für das Token-Limit pro Modell.
+
+        Liefert ``{"max_completion_tokens": N}`` für GPT-5/o1/o3/o4 und
+        ``{"max_tokens": N}`` für alle anderen Modelle. ``model`` überschreibt
+        ``self.model`` — nötig im Vision-Pfad, der ein anderes Modell als das
+        Default-Chat-Modell nutzen kann (z. B. ``gemini-3-flash-preview:cloud``
+        bei einer GPT-5-Chat-Session).
+        """
+        target_model = model if model is not None else (self.model or "")
         key = (
             "max_completion_tokens"
-            if self._uses_max_completion_tokens(self.model or "")
+            if self._uses_max_completion_tokens(target_model)
             else "max_tokens"
         )
         return {key: max_tokens}
@@ -337,13 +348,7 @@ class LLMClient:
             "messages": messages,
             "temperature": temperature,
         }
-        # Vision-Pfad nutzt evtl. ein anderes Modell als self.model → eigene Auflösung.
-        token_key = (
-            "max_completion_tokens"
-            if self._uses_max_completion_tokens(vision_model or "")
-            else "max_tokens"
-        )
-        kwargs[token_key] = max_tokens
+        kwargs.update(self._completion_token_kwargs(max_tokens, model=vision_model))
         if self._is_ollama():
             extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
             extra_body["think"] = False  # never want reasoning noise in vision output
