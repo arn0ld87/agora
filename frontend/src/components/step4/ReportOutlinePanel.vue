@@ -134,16 +134,18 @@ function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['audi
   color: var(--fg-muted);
 }
 .outline-title {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-20);
   color: var(--fg);
+  letter-spacing: -0.01em;
 }
 .outline-body {
   margin-top: var(--s-3);
   padding-left: 32px;
 }
 .section-content {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-16);
   line-height: 1.7;
   color: var(--fg);
@@ -156,11 +158,12 @@ function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['audi
 .markdown-body :deep(h2),
 .markdown-body :deep(h3),
 .markdown-body :deep(h4) {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   color: var(--fg);
   line-height: 1.25;
   margin: 1.8em 0 0.4em;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .markdown-body :deep(p) {
   margin: 0.9em 0;
@@ -175,7 +178,6 @@ function sectionConfidenceAuditTrail(idx: number): SectionConfidenceResult['audi
   margin: 1em 0;
   padding: 0.2em 1em;
   color: var(--fg-muted);
-  font-style: italic;
 }
 .markdown-body :deep(code) {
   background: var(--bg-elevated);

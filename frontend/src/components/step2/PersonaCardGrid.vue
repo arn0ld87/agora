@@ -183,9 +183,9 @@ const { t } = useI18n()
   color: var(--fg-muted);
 }
 .persona-bio {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-16);
-  line-height: 1.3;
+  line-height: 1.45;
   color: var(--fg);
 }
 .persona-topics {

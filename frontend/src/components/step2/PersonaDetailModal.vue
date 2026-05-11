@@ -289,10 +289,10 @@ function updateEditGender(event: Event) {
   margin-bottom: var(--s-2);
 }
 .modal-head h3 {
-  font-family: var(--ff-serif);
-  font-weight: 400;
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 1.05;
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--fg);
@@ -361,11 +361,10 @@ function updateEditGender(event: Event) {
 .regenerate-hint-input::placeholder { color: var(--fg-muted); }
 .regenerate-hint-input:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-bio {
-  font-family: var(--ff-serif);
-  font-style: italic;
+  font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-24);
-  line-height: 1.35;
+  font-size: var(--fs-18);
+  line-height: 1.5;
   color: var(--fg-body);
   margin: 0;
   border-left: 2px solid var(--accent);
@@ -467,7 +466,7 @@ function updateEditGender(event: Event) {
   letter-spacing: normal;
   outline: none;
 }
-.form-row textarea { resize: vertical; font-family: var(--ff-serif); line-height: 1.4; }
+.form-row textarea { resize: vertical; font-family: var(--ff-sans); line-height: 1.4; }
 .form-row input:focus,
 .form-row select:focus,
 .form-row textarea:focus { border-color: var(--accent); }
