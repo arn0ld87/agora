@@ -197,7 +197,7 @@ def start_simulation():
         )
 
     run_id = f"sim_{simulation_id}"
-    from ..services.stage_model_router import StageModelRouter
+    from ..services.stage_model_router import StageModelRouter, build_default_route
     from ..services.runtime_run_config import RuntimeRunConfig
     from ..contracts.llm_routing_contract import StageLLMRoute
 
