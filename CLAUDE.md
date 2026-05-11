@@ -1,51 +1,51 @@
-# Agora — Onboarding für Claude Code
+# Agora - Onboarding fuer Claude Code
 
-Diese Datei bleibt fachlich synchron zu [AGENTS.md](AGENTS.md). Ausführliche Runbooks liegen unter [docs/runbooks/](docs/runbooks/).
+Diese Datei bleibt fachlich synchron zu [AGENTS.md](AGENTS.md). Ausfuehrliche Runbooks liegen unter [docs/runbooks/](docs/runbooks/).
 
 ## Projekt
 
-Agora ist ein lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
+Agora ist ein lokal-first Multi-Agent-Simulator fuer DACH-Zielgruppenreaktionen.
 
-Pipeline: Dokument hochladen -> Wissensgraph extrahieren -> Personas spawnen -> OASIS/CAMEL-Simulation ausführen -> belegbaren DACH-Report erzeugen -> Runs/Graphen vergleichen.
+Pipeline: Dokument hochladen -> Wissensgraph extrahieren -> Personas spawnen -> OASIS/CAMEL-Simulation ausfuehren -> belegbaren DACH-Report erzeugen -> Runs/Graphen vergleichen.
 
 Stack: Flask + Pydantic v2 + Vue 3 + Vite + Pinia + Zod + Neo4j 5.18+ + Redis + Ollama/OpenAI-kompatible Endpunkte + OASIS/CAMEL.
 
 ## Wichtige Einstiege
 
-- [README.md](README.md) — Projektüberblick und Quickstart
-- [docs/status.md](docs/status.md) — Versionen, Tests, Coverage, Milestone-Status
-- [PLAN.md](PLAN.md) — operativer Findings- und Maßnahmenplan
-- [docs/architecture.md](docs/architecture.md) — Systemarchitektur
-- [docs/development.md](docs/development.md) — Entwicklung, Tests, Schema-Drift
-- [docs/security.md](docs/security.md) — Security-Hardening
-- [docs/runbooks/agent-workflows.md](docs/runbooks/agent-workflows.md) — Agenten- und Worktree-Workflow
-- [docs/runbooks/code-review.md](docs/runbooks/code-review.md) — Review- und PR-Regeln
+- [README.md](README.md) - Projektueberblick und Quickstart
+- [docs/status.md](docs/status.md) - Versionen, Tests, Coverage, Milestone-Status
+- [PLAN.md](PLAN.md) - operativer Findings- und Massnahmenplan
+- [docs/architecture.md](docs/architecture.md) - Systemarchitektur
+- [docs/development.md](docs/development.md) - Entwicklung, Tests, Schema-Drift
+- [docs/security.md](docs/security.md) - Security-Hardening
+- [docs/runbooks/agent-workflows.md](docs/runbooks/agent-workflows.md) - Agenten- und Worktree-Workflow
+- [docs/runbooks/code-review.md](docs/runbooks/code-review.md) - Review- und PR-Regeln
 
 ## Harte Regeln
 
 - Nie direkt auf `main` arbeiten oder pushen.
 - Feature-/Fix-Branches verwenden: `feat/<scope>-<slug>`, `fix/<scope>-<slug>`, `chore/<scope>-<slug>`.
 - Slice-Arbeit in separatem Worktree unter `/private/tmp/agora-<slice-id>/`.
-- Keine funktionalen Änderungen ohne passende Tests oder begründeten Smoke-Check.
+- Keine funktionalen Aenderungen ohne passende Tests oder begruendeten Smoke-Check.
 - Tests sind die Spec; Pflichttests vor Refactors lesen.
 - Keine Secrets in Logs, Code, Diffs, Issues, PRs oder Commit-Messages.
-- Linux-Pakete mit `nala` statt `apt`; Python-Dependencies über `uv`.
-- Keine neuen Query-Tokens (`?token=`); URL-bound Auth läuft über signed Tickets (`?ticket=`).
-- Keine Dataclasses für API-Verträge; API-Verträge über Pydantic v2 mit `extra="forbid"`.
+- Linux-Pakete mit `nala` statt `apt`; Python-Dependencies ueber `uv`.
+- Keine neuen Query-Tokens (`?token=`); URL-bound Auth laeuft ueber signed Tickets (`?ticket=`).
+- Keine Dataclasses fuer API-Vertraege; API-Vertraege ueber Pydantic v2 mit `extra="forbid"`.
 - Keine inline kopierten JSON-Schemas; Schemas aus Pydantic ableiten und dumpen.
 - Keine hartkodierten UI-Strings in `Step*.vue`; `vue-i18n` Keys verwenden.
 - Keine neuen CVE-Ignores ohne Issue, Owner, Deadline und Hardstop.
 
 ## Tool-Preflight
 
-Vor Code- oder Architekturänderungen:
+Vor Code- oder Architektur-Aenderungen:
 
-1. `code-review-graph::get_minimal_context_tool` für minimalen Kontext und Risikoeinschätzung.
+1. `code-review-graph::get_minimal_context_tool` fuer minimalen Kontext und Risikoeinschaetzung.
 2. Live-Doku-Tooling bei Libraries/Frameworks/SDKs/CLIs.
-3. `sequential-thinking` bei Multi-File-Refactors, pipeline-übergreifendem Debugging oder unklarer Spec.
+3. `sequential-thinking` bei Multi-File-Refactors, pipeline-uebergreifendem Debugging oder unklarer Spec.
 4. Erst danach `rg`, Datei-Reads und Shell.
 
-Fallback auf Standardtools ist okay für Markdown, Bash, YAML, Configs und generierte Artefakte.
+Fallback auf Standardtools ist okay fuer Markdown, Bash, YAML, Configs und generierte Artefakte.
 
 ## Commands
 
@@ -92,7 +92,15 @@ gh api repos/arn0ld87/agora/pulls/<NR>/reviews  --jq '.[] | {author, body, state
 gh api repos/arn0ld87/agora/pulls/<NR>/comments --jq '.[] | {path, line, body}'
 ```
 
-HIGH-Findings vor Merge adressieren, MEDIUM bewusst entscheiden, LOW nur mit Begründung out of scope lassen.
+HIGH-Findings vor Merge adressieren, MEDIUM bewusst entscheiden, LOW nur mit Begruendung out of scope lassen.
+
+## Aktive Epics
+
+- **Design Language v4 - App-Shell-Port** laeuft auf Integration-Branch `feat/design-v4-epic`.
+  Spec: [docs/design/2026-05-11-design-v4-app-shell-epic.md](docs/design/2026-05-11-design-v4-app-shell-epic.md).
+  JSX-Quellen liegen unter [design/v3-source/](design/v3-source/).
+  Neue v4-Komponenten bleiben in `frontend/src/components/v4/{shell,forms,data,steps}/`.
+- **v1.0-Output-Vertrag** wird ueber [PLAN.md](PLAN.md) und [docs/status.md](docs/status.md) verfolgt.
 
 ## Verweise
 
