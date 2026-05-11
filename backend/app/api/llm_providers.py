@@ -32,7 +32,7 @@ def list_provider_models(provider_id: str):
     if not provider:
         return json_error(f"Provider not found: {provider_id}", status=404)
 
-    base_url = request.args.get("base_url") or provider.default_base_url
+    base_url = request.args.get("base_url") or provider.base_url
     if not base_url:
         return json_error("base_url is required for this provider", status=400)
 
@@ -52,7 +52,7 @@ def test_provider(provider_id: str):
         return json_error(f"Provider not found: {provider_id}", status=404)
 
     data = request.get_json() or {}
-    base_url = data.get("base_url") or provider.default_base_url
+    base_url = data.get("base_url") or provider.base_url
     api_key = data.get("api_key") # Allow explicit key for testing
 
     if not base_url:

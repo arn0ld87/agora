@@ -1,8 +1,7 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from flask import Flask
 from app.api import llm_bp, runs_bp
-from app.utils.api_responses import handle_api_errors
 
 @pytest.fixture
 def app():
@@ -33,7 +32,7 @@ def test_get_run_llm_routing(client):
     with patch("app.services.runtime_run_config.RuntimeRunConfig.load_config") as mock_load:
         from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
         mock_load.return_value = RuntimeLlmRouting(
-            default_route=StageLLMRoute(provider_id="o", model="m")
+            global_default=StageLLMRoute(provider_id="o", model="m")
         )
         resp = client.get("/api/runs/proj_123/llm-routing")
         assert resp.status_code == 200
