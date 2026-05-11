@@ -22,6 +22,11 @@ from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
 from app.contracts.report_v3 import ReportV3
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
+from app.contracts.llm_routing_contract import (
+    RuntimeLlmRouting,
+    ProviderDescriptor,
+    ResolvedRoute,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -39,6 +44,9 @@ CONTRACTS: dict[str, type] = {
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
     "run-detail.schema.json": RunDetail,
+    "llm-runtime-routing.schema.json": RuntimeLlmRouting,
+    "llm-provider-descriptor.schema.json": ProviderDescriptor,
+    "llm-resolved-route.schema.json": ResolvedRoute,
 }
 
 

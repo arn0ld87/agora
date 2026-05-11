@@ -335,6 +335,27 @@
     },
     "next": "Next: simulation →"
   },
+  "llm": {
+    "provider": "Provider",
+    "model": "Model",
+    "reasoning_effort": "Reasoning Effort",
+    "stages": {
+      "document_ingest": "Document Ingest",
+      "ontology_generation": "Ontology Generation",
+      "graph_build": "Graph Build",
+      "persona_generation": "Persona Generation",
+      "simulation_rounds": "Simulation Rounds",
+      "report_generation": "Report Generation",
+      "evaluation": "Evaluation"
+    },
+    "routing": {
+      "global_default": "Global Default",
+      "stage_overrides": "Stage Overrides",
+      "locked": "Locked",
+      "active_snapshots": "Active Snapshots",
+      "no_snapshots_yet": "No snapshots yet."
+    }
+  },
   "step3": {
     "kicker": "№ 03 — SIMULATION",
     "title": "Run the world.",

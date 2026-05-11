@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "StageLLMRoute": {
+      "additionalProperties": false,
+      "description": "Configuration for a single stage route.",
+      "properties": {
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "provider_options": {
+          "additionalProperties": true,
+          "title": "Provider Options",
+          "type": "object"
+        },
+        "reasoning_effort": {
+          "default": "none",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Reasoning Effort",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id",
+        "model"
+      ],
+      "title": "StageLLMRoute",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/llm-runtime-routing.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Runtime LLM routing configuration for a run.",
+  "properties": {
+    "default_route": {
+      "$ref": "#/$defs/StageLLMRoute"
+    },
+    "routing_version": {
+      "default": 1,
+      "title": "Routing Version",
+      "type": "integer"
+    },
+    "stage_overrides": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLLMRoute"
+      },
+      "propertyNames": {
+        "enum": [
+          "document_ingest",
+          "ontology_generation",
+          "graph_build",
+          "persona_generation",
+          "simulation_rounds",
+          "report_generation",
+          "evaluation"
+        ]
+      },
+      "title": "Stage Overrides",
+      "type": "object"
+    }
+  },
+  "required": [
+    "default_route"
+  ],
+  "title": "RuntimeLlmRouting",
+  "type": "object"
+}

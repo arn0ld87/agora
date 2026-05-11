@@ -29,6 +29,8 @@ from . import simulation_compare  # noqa: E402, F401 -- Sub-Slice 24 (#66): Bran
 from . import simulation  # noqa: E402, F401
 from . import report  # noqa: E402, F401
 from . import runs  # noqa: E402, F401
+from . import llm_routing  # noqa: E402, F401
 from . import status  # noqa: E402, F401
 from . import logs  # noqa: E402, F401 -- Issue #132: Backend-Log-Viewer
 from . import llm  # noqa: E402, F401 -- Slice E.1 (#213): model-active SSE stream
+from . import llm_providers  # noqa: E402, F401

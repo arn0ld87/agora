@@ -13,6 +13,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 
 from ..config import Config
+from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
 from .logger import get_logger
 from .retry import llm_call_with_retry
 
@@ -82,11 +83,15 @@ class LLMClient:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: float = 300.0
+        timeout: float = 300.0,
+        reasoning_effort: Optional[ReasoningEffort] = None,
+        provider_options: Optional[Dict[str, Any]] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
+        self.reasoning_effort = reasoning_effort or "none"
+        self.provider_options = provider_options or {}
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -98,16 +103,27 @@ class LLMClient:
         )
 
         # Ollama context window size — prevents prompt truncation.
-        # Read from env OLLAMA_NUM_CTX, default 8192 (Ollama default is only 2048).
-        self._num_ctx = int(os.environ.get('OLLAMA_NUM_CTX', '8192'))
-        # Ollama thinking toggle (Gemma 4, Qwen3, DeepSeek-R1, GPT-OSS).
-        # Default false to keep latency low on long prompts.
-        self._think = os.environ.get('OLLAMA_THINKING', 'false').lower() in ('1', 'true', 'yes')
+        # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
+        self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
+        # Ollama thinking toggle (mapped from reasoning_effort).
+        self._think = self.reasoning_effort != "none"
 
         # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
         self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
         self._retry_initial_delay = float(os.environ.get('LLM_RETRY_INITIAL_DELAY', '1.0'))
         self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
+
+    @classmethod
+    def from_route(cls, route: ResolvedRoute, api_key: str, timeout: float = 300.0) -> "LLMClient":
+        """Factory: create LLMClient from a resolved stage route."""
+        return cls(
+            api_key=api_key,
+            base_url=route.base_url_sanitized, # Caller must provide secret base_url if needed
+            model=route.model,
+            timeout=timeout,
+            reasoning_effort=route.reasoning_effort,
+            provider_options=route.provider_options,
+        )
 
     def _is_ollama(self) -> bool:
         """Check if we're talking to an Ollama server."""

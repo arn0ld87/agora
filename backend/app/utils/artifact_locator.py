@@ -32,6 +32,18 @@ class ArtifactLocator:
         return os.path.join(cls.reports_dir(), report_id)
 
     @classmethod
+    def runs_dir(cls) -> str:
+        # AGORA_INSTANCE_DIR fallback ensures we don't break logic-first code
+        base = os.environ.get("AGORA_INSTANCE_DIR") or os.path.join(
+            os.path.dirname(__file__), "../../../instance"
+        )
+        return os.path.join(base, "runs")
+
+    @classmethod
+    def run_dir(cls, run_id: str) -> str:
+        return os.path.join(cls.runs_dir(), run_id)
+
+    @classmethod
     def simulation_file(cls, simulation_id: str, filename: str) -> str:
         return os.path.join(cls.simulation_dir(simulation_id), filename)
 

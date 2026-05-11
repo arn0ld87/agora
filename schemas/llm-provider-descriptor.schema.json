@@ -1,0 +1,55 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-provider-descriptor.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata about an LLM provider.",
+  "properties": {
+    "auth_status": {
+      "default": "missing",
+      "enum": [
+        "configured",
+        "missing",
+        "session_required"
+      ],
+      "title": "Auth Status",
+      "type": "string"
+    },
+    "default_base_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Base Url"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "ollama_local",
+        "openai",
+        "google",
+        "openai_compatible"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "type"
+  ],
+  "title": "ProviderDescriptor",
+  "type": "object"
+}
