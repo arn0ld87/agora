@@ -58,7 +58,8 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/', name: 'Home', component: { template: '<div />' } },
-      { path: '/settings', name: 'Settings', component: { template: '<div />' } },
+      { path: '/settings', name: 'Settings', redirect: '/settings/general' },
+      { path: '/settings/general', name: 'SettingsGeneral', component: { template: '<div />' } },
       { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: LlmRoutingView },
     ],
   })

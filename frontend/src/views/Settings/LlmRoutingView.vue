@@ -8,7 +8,7 @@ import StageOverridesCard from './llmRouting/StageOverridesCard.vue'
 import CustomModelCard from './llmRouting/CustomModelCard.vue'
 
 const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'Settings' } },
+  { label: 'Settings', to: { name: 'SettingsGeneral' } },
   { label: 'LLM Routing' },
 ]
 </script>
