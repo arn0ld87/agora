@@ -15,7 +15,7 @@ class LlmProviderRegistry:
         pass
 
     def get_providers(self, session_api_keys: Optional[dict] = None) -> List[ProviderDescriptor]:
-        """Return list of available providers and public metadata."""
+        """Return static public provider metadata (no auth status computation)."""
         providers = [
             ProviderDescriptor(
                 id="ollama_local",
