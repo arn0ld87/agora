@@ -287,10 +287,12 @@ function phaseVariant(phase) {
 .stat:last-child { border-right: 0; }
 .stat-value {
   display: block;
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 .stat-label {
   display: block;
@@ -328,10 +330,12 @@ function phaseVariant(phase) {
 }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); }
 .detail-name {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-20);
   color: var(--fg);
   margin-left: var(--s-2);
+  letter-spacing: -0.01em;
 }
 .detail-desc { color: var(--fg-body); margin: 0; }
 .detail-section { display: flex; flex-direction: column; gap: var(--s-2); }

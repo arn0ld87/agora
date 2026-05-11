@@ -529,11 +529,12 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   padding-bottom: var(--s-3);
 }
 .target {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   margin: var(--s-2) 0 0;
+  letter-spacing: -0.02em;
 }
 .sub {
   font-family: var(--ff-sans);
@@ -569,7 +570,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   margin-bottom: var(--s-2);
 }
 .msg .body {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-18);
   line-height: 1.55;
   color: var(--fg);
@@ -614,9 +615,8 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   color: var(--fg-muted);
 }
 .profile-bio {
-  font-family: var(--ff-serif);
-  font-style: italic;
-  font-size: var(--fs-18);
+  font-family: var(--ff-sans);
+  font-size: var(--fs-16);
   color: var(--fg-body);
   margin: var(--s-3) 0 0;
 }
@@ -664,9 +664,9 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   text-transform: uppercase;
   color: var(--fg);
 }
-.survey-bio { display: block; margin-bottom: var(--s-2); font-style: italic; }
+.survey-bio { display: block; margin-bottom: var(--s-2); color: var(--fg-body); }
 .survey-answer {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-18);
   line-height: 1.55;
   color: var(--fg);
