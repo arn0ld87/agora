@@ -9,9 +9,15 @@ import InteractionView from '../views/InteractionView.vue'
 import SettingsView from '../views/SettingsView.vue'
 
 const routes: RouteRecordRaw[] = [
-  // Landing (bleibt unveraendert)
+  // Root → Dashboard (v4-AppShell ist Default-Einstieg)
   {
     path: '/',
+    redirect: { name: 'Dashboard' },
+  },
+
+  // Landing (alte Editorial-Home unter /home erreichbar fuer Marketing/Fallback)
+  {
+    path: '/home',
     name: 'Home',
     component: Home,
   },
