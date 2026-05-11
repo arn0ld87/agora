@@ -4,6 +4,7 @@ LLM Routing API.
 
 import json
 import os
+from collections import deque
 
 from flask import request
 from pydantic import ValidationError
@@ -42,7 +43,7 @@ def _load_invocation_events(run_id: str, limit: int = 200) -> list[dict]:
     if not os.path.exists(log_path):
         return []
 
-    events: list[dict] = []
+    events = deque(maxlen=limit if limit > 0 else None)
     with open(log_path, "r", encoding="utf-8") as handle:
         for line in handle:
             payload = line.strip()
@@ -55,9 +56,7 @@ def _load_invocation_events(run_id: str, limit: int = 200) -> list[dict]:
                 continue
             if isinstance(parsed, dict):
                 events.append(parsed)
-    if limit > 0:
-        return events[-limit:]
-    return events
+    return list(events)
 
 @runs_bp.route("/<run_id>/llm-routing", methods=["GET"])
 @handle_api_errors(logger=logger)

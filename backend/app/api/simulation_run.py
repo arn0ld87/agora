@@ -258,7 +258,11 @@ def start_simulation():
         max_rounds=max_rounds,
         enable_graph_memory_update=enable_graph_memory_update,
         graph_id=graph_id,
-        runtime_env=build_route_subprocess_env(resolved_route, resolved_api_key),
+        runtime_env=build_route_subprocess_env(
+            resolved_route,
+            resolved_api_key,
+            run_record["run_id"],
+        ),
     )
 
     manager._set_status(state, SimulationStatus.RUNNING)

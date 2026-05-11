@@ -6,6 +6,7 @@ All tests are mock-only — no live LLM call is made.
 from __future__ import annotations
 
 import logging
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -67,6 +68,19 @@ class TestDetectProvider:
         client.base_url = "http://some-other-host:8080/v1"
         client.model = "some-model"
         assert client._detect_provider() == "unknown"
+
+
+class TestRunIdInitialization:
+    def test_init_reads_run_id_from_env_when_not_passed(self, monkeypatch):
+        monkeypatch.setenv("AGORA_RUN_ID", "run_env_123")
+        monkeypatch.setattr("app.utils.llm_client.OpenAI", lambda **_kwargs: MagicMock())
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", "env-key")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_BASE_URL", "https://api.openai.com/v1")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", "gpt-4o-mini")
+
+        client = LLMClient()
+
+        assert client.run_id == "run_env_123"
 
 
 # ---------------------------------------------------------------------------

@@ -98,9 +98,15 @@ def build_runtime_llm_config(route: ResolvedRoute, api_key: Optional[str]) -> Ru
     )
 
 
-def build_route_subprocess_env(route: ResolvedRoute, api_key: Optional[str]) -> dict[str, str]:
+def build_route_subprocess_env(
+    route: ResolvedRoute,
+    api_key: Optional[str],
+    run_id: Optional[str] = None,
+) -> dict[str, str]:
     """Translate a resolved route into the subprocess env contract used by OASIS."""
     env: dict[str, str] = {"LLM_MODEL_NAME": route.model}
+    if run_id:
+        env["AGORA_RUN_ID"] = run_id
     if api_key:
         env["LLM_API_KEY"] = api_key
         env["OPENAI_API_KEY"] = api_key

@@ -96,7 +96,7 @@ class LLMClient:
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
-        self.run_id = run_id
+        self.run_id = run_id or os.environ.get("AGORA_RUN_ID")
         self.routing_version = routing_version
         self.route_stage = route_stage
         self.route_provider_id = route_provider_id
