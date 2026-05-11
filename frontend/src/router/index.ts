@@ -142,6 +142,19 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/steps/StepInteractionView.vue'),
     props: true,
   },
+
+  // v4 compare + history (Slice I)
+  {
+    path: '/v4/compare/:simulationId',
+    name: 'CompareV4',
+    component: () => import('../views/v4/CompareView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/history',
+    name: 'HistoryV4',
+    component: () => import('../views/v4/HistoryView.vue'),
+  },
 ]
 
 const router = createRouter({
