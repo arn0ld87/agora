@@ -8,9 +8,9 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+import { makeTestRouter } from '@/components/v4/shell/__tests__/testRouter'
 
 // localStorage-Mock (benoetigt von useShellStore)
 const lsMock = (() => {
@@ -35,16 +35,9 @@ vi.mock('@/components/HistoryDatabase.vue', () => ({
 import HistoryView from '../HistoryView.vue'
 
 const stubComponent = { template: '<div/>' }
-// Sidebar referenziert Runs + Settings — beide muessen im Test-Router stehen
-const router = createRouter({
-  history: createMemoryHistory(),
-  routes: [
-    { path: '/', name: 'Home', component: stubComponent },
-    { path: '/runs', name: 'Runs', component: stubComponent },
-    { path: '/settings', name: 'Settings', component: stubComponent },
-    { path: '/v4/history', name: 'HistoryV4', component: stubComponent },
-  ],
-})
+const router = makeTestRouter([
+  { path: '/v4/history', name: 'HistoryV4', component: stubComponent },
+])
 
 const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: {}, en: {} } })
 
