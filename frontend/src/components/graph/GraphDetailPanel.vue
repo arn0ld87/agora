@@ -462,4 +462,30 @@ const hasLabels = computed(() => Array.isArray(props.item.data.labels) && props.
   padding: 3px 6px;
   font-size: 9px;
 }
+
+/* Design v3 detail panel polish. */
+.graph-detail-panel,
+.detail-row,
+.self-loop-item,
+.episode-tag {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.self-loop-item-content,
+.self-loop-item {
+  border-color: var(--separator, var(--rule));
+}
+.self-loop-toggle {
+  background: var(--surface-inset, var(--rule-strong));
+  color: var(--text-secondary, var(--fg-muted));
+}
+.self-loop-item.expanded .self-loop-toggle {
+  background: var(--accent-tint-bg, var(--mono-600));
+  color: var(--accent-tint-text, var(--fg-body));
+}
+.detail-label {
+  color: var(--text-secondary, var(--fg-muted));
+}
+.detail-value {
+  color: var(--text-primary, var(--fg));
+}
 </style>

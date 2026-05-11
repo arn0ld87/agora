@@ -68,4 +68,26 @@ defineProps({
 .legend-label {
   white-space: nowrap;
 }
+
+/* Design v3 legend. */
+.graph-legend {
+  background: var(--surface-translucent, var(--bg));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-6, var(--r-1));
+  box-shadow: var(--shadow-2);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+.legend-title,
+.legend-item {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.legend-title {
+  color: var(--text-secondary, var(--accent));
+}
+.legend-item {
+  color: var(--text-primary, var(--fg-body));
+}
 </style>
