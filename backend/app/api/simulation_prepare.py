@@ -14,9 +14,15 @@ from ..config import Config
 from ..contracts import PersonaQuotaPlan
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
+from ..services.llm_routing_seed import (
+    build_runtime_llm_config,
+    resolve_route_api_key,
+    seed_run_stage_routing,
+)
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.report_agent import MIN_PERSONA_TABLE_ROWS
 from ..services.simulation_manager import SimulationManager, SimulationStatus
+from ..services.stage_model_router import StageModelRouter
 from ..utils.validation import validate_simulation_id, validate_task_id
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -322,6 +328,8 @@ def prepare_simulation():
             "root_simulation_id": state.root_simulation_id,
             "branch_name": state.branch_name,
             "branch_depth": state.branch_depth,
+            "llm_model": llm_model_override,
+            "llm_provider": llm_runtime.redacted_metadata() or None,
         },
     )
     task_id = task_manager.create_task(
@@ -332,6 +340,17 @@ def prepare_simulation():
             "run_id": run_record["run_id"],
         },
     )
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "persona_generation",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("persona_generation")
+    route_router.lock_stage("persona_generation", resolved_route)
+    resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
+    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
 
     manager._set_status(state, SimulationStatus.PREPARING)
 
@@ -411,8 +430,8 @@ def prepare_simulation():
                 progress_callback=progress_callback,
                 parallel_profile_count=parallel_profile_count,
                 storage=storage,
-                llm_model=llm_model_override,
-                llm_runtime=llm_runtime,
+                llm_model=resolved_route.model,
+                llm_runtime=effective_llm_runtime,
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,

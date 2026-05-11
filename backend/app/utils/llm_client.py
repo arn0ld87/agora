@@ -86,12 +86,20 @@ class LLMClient:
         timeout: float = 300.0,
         reasoning_effort: Optional[ReasoningEffort] = None,
         provider_options: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        routing_version: Optional[int] = None,
+        route_stage: Optional[str] = None,
+        route_provider_id: Optional[str] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
+        self.run_id = run_id
+        self.routing_version = routing_version
+        self.route_stage = route_stage
+        self.route_provider_id = route_provider_id
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -114,15 +122,25 @@ class LLMClient:
         self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
 
     @classmethod
-    def from_route(cls, route: ResolvedRoute, api_key: str, timeout: float = 300.0) -> "LLMClient":
+    def from_route(
+        cls,
+        route: ResolvedRoute,
+        api_key: Optional[str],
+        timeout: float = 300.0,
+        run_id: Optional[str] = None,
+    ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route."""
         return cls(
             api_key=api_key,
-            base_url=route.base_url_sanitized, # Caller must provide secret base_url if needed
+            base_url=route.base_url_sanitized,  # Caller must provide secret base_url if needed
             model=route.model,
             timeout=timeout,
             reasoning_effort=route.reasoning_effort,
             provider_options=route.provider_options,
+            run_id=run_id,
+            routing_version=route.routing_version,
+            route_stage=route.stage,
+            route_provider_id=route.provider_id,
         )
 
     def _is_ollama(self) -> bool:
@@ -269,6 +287,39 @@ class LLMClient:
                 "model_event_bus.publish failed (LLM call proceeds): %s", exc
             )
 
+    def _log_invocation_event(
+        self,
+        *,
+        stage: str,
+        latency_ms: float,
+        success: bool,
+        error_type: Optional[str] = None,
+        http_status: Optional[int] = None,
+        remote_request_id: Optional[str] = None,
+    ) -> None:
+        """Persist LLM call telemetry for routed runs without blocking execution."""
+        if not getattr(self, "run_id", None):
+            return
+
+        try:
+            from ..services.llm_invocation_logger import LlmInvocationLogger
+
+            logger_service = LlmInvocationLogger(self.run_id)
+            logger_service.log_event(
+                stage=getattr(self, "route_stage", None) or stage,
+                provider_id=getattr(self, "route_provider_id", None) or self._detect_provider(),
+                model=self.model or "unknown",
+                base_url=self.base_url,
+                routing_version=getattr(self, "routing_version", None) or 0,
+                latency_ms=latency_ms,
+                success=success,
+                error_type=error_type,
+                http_status=http_status,
+                remote_request_id=remote_request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("llm invocation logging failed (LLM call proceeds): %s", exc)
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -367,36 +418,52 @@ class LLMClient:
                 )
                 return _create(swapped)
 
-        if force_stream:
-            kwargs["stream"] = True
-            stream = _call_with_token_key_fallback(kwargs)
-            chunks: List[str] = []
-            finish_reason = None
-            completion_tokens = None
-            for event in stream:
-                if not event.choices:
-                    continue
-                delta = event.choices[0].delta
-                piece = getattr(delta, "content", None)
-                if piece:
-                    chunks.append(piece)
-                if event.choices[0].finish_reason:
-                    finish_reason = event.choices[0].finish_reason
-                usage = getattr(event, "usage", None)
-                if usage and getattr(usage, "completion_tokens", None) is not None:
-                    completion_tokens = usage.completion_tokens
-            content = "".join(chunks)
-        else:
-            response = _call_with_token_key_fallback(kwargs)
-            choice = response.choices[0]
-            finish_reason = getattr(choice, "finish_reason", None)
-            usage = getattr(response, "usage", None)
-            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            content = choice.message.content or ""
+        try:
+            if force_stream:
+                kwargs["stream"] = True
+                stream = _call_with_token_key_fallback(kwargs)
+                chunks: List[str] = []
+                finish_reason = None
+                completion_tokens = None
+                for event in stream:
+                    if not event.choices:
+                        continue
+                    delta = event.choices[0].delta
+                    piece = getattr(delta, "content", None)
+                    if piece:
+                        chunks.append(piece)
+                    if event.choices[0].finish_reason:
+                        finish_reason = event.choices[0].finish_reason
+                    usage = getattr(event, "usage", None)
+                    if usage and getattr(usage, "completion_tokens", None) is not None:
+                        completion_tokens = usage.completion_tokens
+                content = "".join(chunks)
+            else:
+                response = _call_with_token_key_fallback(kwargs)
+                choice = response.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                usage = getattr(response, "usage", None)
+                completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+                content = choice.message.content or ""
+        except Exception as exc:  # noqa: BLE001
+            elapsed = _time.monotonic() - _t0
+            self._log_invocation_event(
+                stage=context,
+                latency_ms=elapsed * 1000,
+                success=False,
+                error_type=exc.__class__.__name__,
+                http_status=getattr(exc, "status_code", None),
+            )
+            raise
         elapsed = _time.monotonic() - _t0
         logger.info(
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
+        )
+        self._log_invocation_event(
+            stage=context,
+            latency_ms=elapsed * 1000,
+            success=True,
         )
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()

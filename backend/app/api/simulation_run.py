@@ -10,9 +10,15 @@ from . import simulation_bp
 from ..config import Config
 from ..models.project import ProjectManager
 from ..services.persona_review_service import PersonaReviewService
+from ..services.llm_routing_seed import (
+    build_route_subprocess_env,
+    resolve_route_api_key,
+    seed_run_stage_routing,
+)
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
+from ..services.stage_model_router import StageModelRouter
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
@@ -195,42 +201,12 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
-    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
-        store = get_artifact_store()
-        config = store.read_json(simulation_id, "simulation_config", default=None)
-        if not config:
-            return json_error(
-                ApiErrorCode.SIMULATION_NOT_PREPARED,
-                status=404,
-                message="Simulation configuration does not exist. Please call /prepare first",
-            )
-        if simulation_days is not None:
-            time_config = dict(config.get("time_config") or {})
-            time_config["total_simulation_hours"] = simulation_days * 24
-            config["time_config"] = time_config
-        if llm_model_override:
-            config["llm_model"] = llm_model_override
-        if llm_runtime.enabled:
-            config["llm_base_url"] = llm_runtime.base_url
-        store.write_json(simulation_id, "simulation_config", config)
-
-    run_state = SimulationRunner.start_simulation(
-        simulation_id=simulation_id,
-        platform=platform,
-        max_rounds=max_rounds,
-        enable_graph_memory_update=enable_graph_memory_update,
-        graph_id=graph_id,
-        runtime_env=llm_runtime.subprocess_env(model=llm_model_override),
-    )
-
-    manager._set_status(state, SimulationStatus.RUNNING)
-
     run_record = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
-        status="processing",
+        status="pending",
         progress=0,
-        message="Simulation run started",
+        message="Simulation run queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
         artifacts=_simulation_run_artifacts(simulation_id),
         resume_capability=_simulation_resume_capability(simulation_id, state),
@@ -245,6 +221,53 @@ def start_simulation():
             "llm_model": llm_model_override,
             "llm_provider": llm_runtime.redacted_metadata() or None,
         },
+    )
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "simulation_rounds",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("simulation_rounds")
+    route_router.lock_stage("simulation_rounds", resolved_route)
+    resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
+
+    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
+        store = get_artifact_store()
+        config = store.read_json(simulation_id, "simulation_config", default=None)
+        if not config:
+            return json_error(
+                ApiErrorCode.SIMULATION_NOT_PREPARED,
+                status=404,
+                message="Simulation configuration does not exist. Please call /prepare first",
+            )
+        if simulation_days is not None:
+            time_config = dict(config.get("time_config") or {})
+            time_config["total_simulation_hours"] = simulation_days * 24
+            config["time_config"] = time_config
+        if llm_model_override:
+            config["llm_model"] = resolved_route.model
+        if llm_runtime.enabled and resolved_route.base_url_sanitized:
+            config["llm_base_url"] = resolved_route.base_url_sanitized
+        store.write_json(simulation_id, "simulation_config", config)
+
+    run_state = SimulationRunner.start_simulation(
+        simulation_id=simulation_id,
+        platform=platform,
+        max_rounds=max_rounds,
+        enable_graph_memory_update=enable_graph_memory_update,
+        graph_id=graph_id,
+        runtime_env=build_route_subprocess_env(resolved_route, resolved_api_key),
+    )
+
+    manager._set_status(state, SimulationStatus.RUNNING)
+    run_registry.update_run(
+        run_record["run_id"],
+        status="processing",
+        progress=0,
+        message="Simulation run started",
+        resume_capability=_simulation_resume_capability(simulation_id, state),
     )
 
     response_data = run_state.to_dict()

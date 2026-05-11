@@ -13,9 +13,11 @@ from flask import Response, request, current_app
 from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
+from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
+from ..services.stage_model_router import StageModelRouter
 from ..services.text_processor import TextProcessor
 from ..storage.ner_extractor import NERExtractor
 from ..utils.file_parser import FileParser
@@ -485,19 +487,17 @@ def _create_build_run_record(project_id: str, project, graph_name: str, task_man
     return run_record, task_id
 
 
-def _make_ner_override(llm_runtime, llm_model_override: str | None) -> NERExtractor | None:
-    """Build a dedicated NERExtractor for the requested LLM model/provider.
-
-    Returns ``None`` when no override is needed (falls back to server default).
-    """
-    if not (llm_runtime.enabled or llm_model_override):
-        return None
-
-    ner_llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+def _make_ner_override_from_route(run_id: str, resolved_route, llm_runtime) -> NERExtractor:
+    """Build a dedicated NERExtractor from the resolved per-run route."""
+    ner_llm_client = LLMClient.from_route(
+        resolved_route,
+        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        run_id=run_id,
+    )
     logger.info(
-        "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s",
+        "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s",
         ner_llm_client.model,
-        llm_runtime.provider,
+        resolved_route.provider_id,
     )
     return NERExtractor(llm_client=ner_llm_client)
 
@@ -545,8 +545,21 @@ def build_graph():
 
     task_manager = TaskManager()
     run_record, task_id = _create_build_run_record(project_id, project, graph_name, task_manager)
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "graph_build",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("graph_build")
+    route_router.lock_stage("graph_build", resolved_route)
 
-    ner_override: NERExtractor | None = _make_ner_override(llm_runtime, llm_model_override)
+    ner_override: NERExtractor = _make_ner_override_from_route(
+        run_record["run_id"],
+        resolved_route,
+        llm_runtime,
+    )
 
     # Start background task
     def build_task():

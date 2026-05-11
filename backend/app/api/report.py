@@ -31,7 +31,9 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
+from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.stage_model_router import StageModelRouter
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
 from ..utils.auth import allow_ticket_auth
@@ -188,6 +190,15 @@ def generate_report():
         task_type="report_generate",
         metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
     )
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "report_generation",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("report_generation")
+    route_router.lock_stage("report_generation", resolved_route)
 
     # Initialize graph_tools in Flask context BEFORE spawning thread
     # (current_app is not available inside background threads)
@@ -199,10 +210,10 @@ def generate_report():
     # teilen, sonst nutzt GraphToolsService.llm beim Lazy-Init ``LLMClient()``
     # mit Config-Default — egal welches Modell der User für den Report gewählt
     # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
-    shared_llm_client = (
-        LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
-        if (llm_runtime.enabled or llm_model_override)
-        else None
+    shared_llm_client = LLMClient.from_route(
+        resolved_route,
+        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        run_id=run_record["run_id"],
     )
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
@@ -215,7 +226,7 @@ def generate_report():
                 simulation_requirement=simulation_requirement,
                 graph_tools=graph_tools,
                 llm_client=shared_llm_client,
-                model_name=llm_model_override,
+                model_name=resolved_route.model,
             )
             def progress_callback(stage, progress, message):
                 task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")

@@ -353,7 +353,13 @@
       "stage_overrides": "Stage Overrides",
       "locked": "Locked",
       "active_snapshots": "Active Snapshots",
-      "no_snapshots_yet": "No snapshots yet."
+      "no_snapshots_yet": "No snapshots yet.",
+      "call_events": "LLM Calls",
+      "no_call_events_yet": "No LLM calls recorded yet.",
+      "success": "OK",
+      "failed": "Failed",
+      "latency": "Latency",
+      "error_type": "Error Type"
     }
   },
   "step3": {
