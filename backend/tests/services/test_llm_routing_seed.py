@@ -93,8 +93,9 @@ def test_build_route_subprocess_env_uses_resolved_route_values():
         provider_options={"num_ctx": 32768},
     )
 
-    env = build_route_subprocess_env(route, api_key="server-key")
+    env = build_route_subprocess_env(route, api_key="server-key", run_id="run_telemetry")
 
+    assert env["AGORA_RUN_ID"] == "run_telemetry"
     assert env["LLM_API_KEY"] == "server-key"
     assert env["OPENAI_API_KEY"] == "server-key"
     assert env["LLM_BASE_URL"] == "https://api.openai.com/v1"
