@@ -10,8 +10,8 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { makeTestRouter } from './testRouter'
 
 // localStorage-Mock
 const lsMock = (() => {
@@ -27,16 +27,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: tru
 
 import AppShell from '../AppShell.vue'
 
-const stubComponent = { template: '<div/>' }
-const router = createRouter({
-  history: createMemoryHistory(),
-  routes: [
-    { path: '/', name: 'Home', component: stubComponent },
-    { path: '/runs', name: 'Runs', component: stubComponent },
-    { path: '/settings', name: 'Settings', component: stubComponent },
-    { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: stubComponent },
-  ],
-})
+const router = makeTestRouter()
 
 describe('AppShell', () => {
   beforeEach(() => {

@@ -9,8 +9,8 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { makeTestRouter } from './testRouter'
 
 const lsMock = (() => {
   const s: Record<string, string> = {}
@@ -25,15 +25,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: tru
 
 import Sidebar from '../Sidebar.vue'
 
-const router = createRouter({
-  history: createMemoryHistory(),
-  routes: [
-    { path: '/', name: 'Home', component: { template: '<div/>' } },
-    { path: '/runs', name: 'Runs', component: { template: '<div/>' } },
-    { path: '/settings', name: 'Settings', component: { template: '<div/>' } },
-    { path: '/settings/llm-routing', name: 'SettingsLlmRouting', component: { template: '<div/>' } },
-  ],
-})
+const router = makeTestRouter()
 
 describe('Sidebar', () => {
   beforeEach(() => {
