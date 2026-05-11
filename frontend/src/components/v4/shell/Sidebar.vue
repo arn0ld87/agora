@@ -101,7 +101,7 @@ function onSettingsGroupToggle(value: boolean): void {
 }
 
 const navWorkspace: NavItem[] = [
-  { id: 'dashboard', icon: 'home',   label: 'Dashboard',  to: { name: 'Home' } },
+  { id: 'dashboard', icon: 'home',   label: 'Dashboard',  to: { name: 'Dashboard' } },
   { id: 'runs',      icon: 'branch', label: 'Runs',       to: { name: 'Runs' } },
   { id: 'projects',  icon: 'folder', label: 'Projects',   to: { path: '#projects' } },
   { id: 'datasets',  icon: 'layers', label: 'Datasets',   to: { path: '#datasets' } },
@@ -110,12 +110,12 @@ const navWorkspace: NavItem[] = [
 ]
 
 const navSettings: NavSettingsItem[] = [
-  { id: 'general',       label: 'General',       to: { name: 'Settings', query: { tab: 'general' } } },
-  { id: 'integrations',  label: 'Integrations',  to: { name: 'Settings', query: { tab: 'integrations' } } },
-  { id: 'users-teams',   label: 'Users & Teams', to: { name: 'Settings', query: { tab: 'users' } } },
-  { id: 'api-keys',      label: 'API Keys',      to: { name: 'Settings', query: { tab: 'api-keys' } } },
+  { id: 'general',       label: 'General',       to: { name: 'SettingsGeneral' } },
+  { id: 'integrations',  label: 'Integrations',  to: { name: 'SettingsIntegrations' } },
+  { id: 'users-teams',   label: 'Users & Teams', to: { name: 'SettingsUsersTeams' } },
+  { id: 'api-keys',      label: 'API Keys',      to: { name: 'SettingsApiKeys' } },
   { id: 'llm-routing',   label: 'LLM Routing',   to: { name: 'SettingsLlmRouting' } },
-  { id: 'audit',         label: 'Audit Logs',    to: { name: 'Settings', query: { tab: 'audit' } } },
+  { id: 'audit',         label: 'Audit Logs',    to: { name: 'SettingsAuditLogs' } },
 ]
 </script>
 

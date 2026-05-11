@@ -60,8 +60,8 @@ const activeRoute = computed<string>(() => {
   const name = route.name
   if (!name) return ''
   const n = String(name).toLowerCase()
-  if (n === 'home') return 'dashboard'
-  if (n === 'runs' || n === 'rundetail') return 'runs'
+  if (n === 'home' || n === 'dashboard') return 'dashboard'
+  if (n === 'runs' || n === 'rundetail' || n === 'runsappshell' || n === 'rundetailappshell') return 'runs'
   if (n === 'settings' || n.startsWith('settings')) return 'settings'
   return n
 })
