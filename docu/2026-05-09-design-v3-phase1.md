@@ -97,8 +97,11 @@ gh api repos/arn0ld87/agora/pulls/<NR>/reviews ...
   - `vitest run` → **45 Files / 461 Tests passed**
   - `vite build` → 911 Module, 1.68 s, kein Drift im Default-Bundle
   - `VITE_DESIGN_V3=true vite build` → emittiert `tokens-v3.css` zusätzlich (9.17 kB)
-- [ ] Commit + Push
-- [ ] PR + Gemini-Review
+- [x] Commit + Push (`736d841`, Follow-up `b7ed379`)
+- [x] PR + Gemini-Review:
+  - PR #339 gemerged am 2026-05-09
+  - Gemini-HIGH Follow-up in PR #340 adressiert und gemerged
+  - Phase 2–6 laufen seit 2026-05-11 gesammelt in Draft-PR #401
 
 ## Verifikation lokal
 
