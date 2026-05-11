@@ -32,6 +32,7 @@ SECTIONS: tuple[str, ...] = (
     'event_bus',
     'logging',
     'locale',
+    'ui',
     'webtools',
     'oasis',
     'security',
@@ -150,25 +151,20 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec('TIME_PROFILE', 'locale', 'string', default='dach_default'),
     FieldSpec('REPORT_LANGUAGE', 'locale', 'string', default='German'),
 
+    # ===== UI =====
+    FieldSpec('RUNS_POLL_INTERVAL_MS', 'ui', 'int', default=5000,
+              min_value=1000, max_value=60000),
+
     # ===== Webtools (ReportAgent) =====
     FieldSpec('ENABLE_WEB_TOOLS', 'webtools', 'bool', default=False),
     FieldSpec('TAVILY_API_KEY', 'webtools', 'string', default='',
               secret=True),
-
-    # ===== Ontology (erweitert) =====
-    FieldSpec('ONTOLOGY_MAX_TOKENS', 'ontology', 'int', default=12288,
-              min_value=1024, max_value=131072),
 
     # ===== OASIS / CAMEL =====
     FieldSpec('OPENAI_API_KEY', 'oasis', 'string', default='ollama',
               secret=True),
     FieldSpec('OPENAI_API_BASE_URL', 'oasis', 'string',
               default='http://localhost:11434/v1'),
-    FieldSpec('AGORA_PARALLEL_PERSONA_COUNT', 'oasis', 'int', default=10,
-              min_value=1, max_value=50),
-    FieldSpec('AGORA_PERSONA_DETAIL_LEVEL', 'oasis', 'enum',
-              default='standard',
-              enum_values=('compact', 'standard', 'rich')),
 
     # ===== Security / Secrets =====
     FieldSpec('SECRET_KEY', 'security', 'string', default='',

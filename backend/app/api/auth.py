@@ -24,6 +24,7 @@ _MAX_TTL_SECONDS = 300
 
 _ALLOWED_SCOPE_PREFIXES = (
     "sse:",
+    "settings-stream",
     "download:report:",
     "download:simulation_config:",
     "download:simulation_script:",

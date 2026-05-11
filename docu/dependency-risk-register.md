@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-**Stand:** 2026-05-10, Europe/Berlin
+**Stand:** 2026-05-06, Europe/Berlin
 **Ausgeloest durch:** Repo-Review PR4 — CVE-Baseline aktiv abbauen.
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
@@ -15,8 +15,8 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 
 | CVE | Paket | Version | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|
-| CVE-2026-25990 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open (tracked) | [#121](https://github.com/arn0ld87/agora/issues/121) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
-| CVE-2026-40192 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open (tracked) | [#122](https://github.com/arn0ld87/agora/issues/122) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
+| CVE-2026-25990 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open | [#121](https://github.com/arn0ld87/agora/issues/121) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
+| CVE-2026-40192 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open | [#122](https://github.com/arn0ld87/agora/issues/122) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
 | CVE-2026-42308 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#296](https://github.com/arn0ld87/agora/issues/296) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
 | CVE-2026-42310 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#297](https://github.com/arn0ld87/agora/issues/297) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
 | CVE-2026-42311 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#298](https://github.com/arn0ld87/agora/issues/298) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |

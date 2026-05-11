@@ -12,52 +12,50 @@
 // dazukommen (z. B. Multi-Select für CORS-Origins), darf das
 // extrahiert werden.
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AppFooter from '../components/AppFooter.vue'
 import Badge from '../components/ui/Badge.vue'
 import Btn from '../components/ui/Btn.vue'
-import settingsStore, {
-  discardChanges,
-  dirtyKeys,
-  dirtySectionFlags,
-  fieldErrors,
-  isDirty,
-  loadSettings,
-  saveSettings,
-} from '../store/settings'
+import { useSettingsStore } from '../store/settings'
 
 const { t } = useI18n()
 const router = useRouter()
+const settingsStore = useSettingsStore()
+const { sections, schema, fields, dirtyKeys, dirtySectionFlags } = storeToRefs(settingsStore)
 
 const activeSection = ref('llm')
 const showSecretsModal = ref(false)
 const flashMessage = ref('')
 
-const sections = computed(() => settingsStore.sections)
-
 const currentFields = computed(
-  () => settingsStore.fields?.[activeSection.value] || []
+  () => fields.value?.[activeSection.value] || []
 )
 
-const dirtySections = computed(() => dirtySectionFlags())
-const totalDirty = computed(() => dirtyKeys().length)
+const dirtySections = computed(() => dirtySectionFlags.value)
+const totalDirty = computed(() => dirtyKeys.value.length)
 
 const hasDirtySecrets = computed(() => {
-  return dirtyKeys().some((key) => {
-    const spec = settingsStore.schema.find((s) => s.key === key)
+  return dirtyKeys.value.some((key) => {
+    const spec = schema.value.find((s) => s.key === key)
     return Boolean(spec?.secret)
   })
 })
 
 onMounted(async () => {
   try {
-    await loadSettings()
+    await settingsStore.ensureLoaded()
+    await settingsStore.connectStream()
   } catch {
     // Fehler steht bereits im Store; UI zeigt loadError-Banner.
   }
+})
+
+onUnmounted(() => {
+  settingsStore.disconnectStream()
 })
 
 function setActive(section) {
@@ -75,7 +73,7 @@ async function handleSave() {
       showSecretsModal.value = true
       return
     }
-    await saveSettings({ confirmSecrets: false })
+    await settingsStore.saveSettings({ confirmSecrets: false })
     flashMessage.value = t('settings.saved')
   } catch {
     // Validation-Fehler werden inline pro Field gerendert.
@@ -85,7 +83,7 @@ async function handleSave() {
 async function confirmSecretSave() {
   flashMessage.value = ''
   try {
-    await saveSettings({ confirmSecrets: true })
+    await settingsStore.saveSettings({ confirmSecrets: true })
     showSecretsModal.value = false
     flashMessage.value = t('settings.savedReloadHint')
   } catch {
@@ -187,7 +185,7 @@ function sourceVariant(source) {
               <tr
                 v-for="field in currentFields"
                 :key="field.key"
-                :class="{ 'row--dirty': isDirty(field.key), 'row--secret': field.secret }"
+                :class="{ 'row--dirty': settingsStore.isDirty(field.key), 'row--secret': field.secret }"
               >
                 <th scope="row" class="cell-key">
                   <code>{{ field.key }}</code>
@@ -248,7 +246,7 @@ function sourceVariant(source) {
                   </template>
 
                   <p
-                    v-for="err in fieldErrors(field.key)"
+                    v-for="err in settingsStore.fieldErrors(field.key)"
                     :key="err.code"
                     class="hint hint--error"
                   >{{ err.message }}</p>
@@ -270,7 +268,7 @@ function sourceVariant(source) {
           <span v-else class="flash flash--muted">
             {{ t('settings.dirtyCount', totalDirty, { count: totalDirty }) }}
           </span>
-          <Btn variant="ghost" :disabled="totalDirty === 0 || settingsStore.saving" @click="discardChanges">
+          <Btn variant="ghost" :disabled="totalDirty === 0 || settingsStore.saving" @click="settingsStore.discardChanges()">
             {{ t('settings.discard') }}
           </Btn>
           <Btn

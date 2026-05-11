@@ -1,14 +1,14 @@
 # Agora — Releaseplan v1.0
 
-**Stand:** 2026-05-11 (Phase 1 + P2.1/P2.2/P3.1/P3.2/P3.3/P3.4/P4.2/P4.3 grün; P4.1 offen — Code-Audit 2026-05-11 hat fehlende `ReportMode`-Verdrahtung aufgedeckt; P4.4 blockiert auf P4.1)
+**Stand:** 2026-05-10 (Phase 1 + P2.1/P2.2/P3.1/P3.2/P3.3/P3.4/P4.1/P4.2 grün; P4.3 in Arbeit, P4.4 offen)
 **Quelle:** `agora_bewertung_komplett.md` (Score 5,8/10), Code-Verifikation gegen `main` (`backend/app/`, `frontend/src/`, `schemas/`, `.github/workflows/`), `report3.json` als realer Pipeline-Output.
 **Ziel:** Agora schrittweise in einen releasefähigen Zustand bringen. Output-Vertrag erzwingen, Evidence härten, Tabellen rendern, Vertrauensmodi einführen.
 
 > Bestehende Sicherheits-/Infrastruktur-Slices (M9.x, S1–S5, M10.x, M11 Phase 1–6) sind code-verifiziert grün. Dieser Plan adressiert ausschließlich den **Output-Vertrag** und die daraus abgeleiteten Releasekriterien. Historischer Backlog → siehe `docu/refactoring-backlog-priorisiert.md`.
 
-## Status-Snapshot (2026-05-11)
+## Status-Snapshot (2026-05-10)
 
-Code-Verifikation gegen `main` (HEAD `83b7488`):
+Code-Verifikation gegen `main` (HEAD `a2acaed`):
 
 | Slice | Status | Anker im Code |
 |---|---|---|
@@ -22,16 +22,16 @@ Code-Verifikation gegen `main` (HEAD `83b7488`):
 | P3.2 Markdown-Renderer | ✅ done | `markdown_renderer.render_report_v3()` vollständig (`markdown_renderer.py:129`); Manager schreibt `report-v3.md` in `save_report` (`manager.py:214-215`); Backend-Endpoint `export_report?format=md` bevorzugt `report-v3.md` mit Fallback auf v2 (`api/report.py:614-625`); Test `test_export_md_prefers_report_v3_markdown` deckt Vorrang ab |
 | P3.3 Quote-Source-Marker | ✅ done | Commit `66af4d2 feat(report): render simulated_quote tags as marked blockquote` |
 | P3.4 PDF-Print-Doku | ✅ done | Commit `58cd667 docs(report): document browser-print as canonical PDF path` |
-| P4.1 Report-Modi | ❌ offen | Code-Audit 2026-05-11: `ReportMode`-Literal fehlt in `report_v3.py`, `report_mode`-Feld nicht im ReportV3-Schema, kein `_resolve_report_mode` in `api/report.py`. Frontend `ReportModelControls.vue` ist LLM-Modellauswahl (default/custom/Modellname), kein strict/balanced/explorative-Selektor. Der PLAN.md-Status vom 2026-05-10 (Commit `5d318af`) war voreilig — Code wurde nie verdrahtet. |
+| P4.1 Report-Modi | ✅ done | `ReportMode = Literal["strict","balanced","explorative"]` + `ReportV3.report_mode` (`report_v3.py:20/182`); API-Resolver `_resolve_report_mode` (`api/report.py:47-65`); Manager + Workflow propagieren `report_mode` (`manager.py:317`, `workflow.py:419/537/596`); Frontend `ReportModelControls.vue` + Persistenz in `Step4Report.vue:60-119` |
 | P4.2 CSV-Export | ✅ done | Commit `c06563e`. `GET /api/report/<id>/export?format=csv&table=…` (RFC-4180), `csv_export.py` Helper, `fetchReportCsv`/`downloadCsv`/`downloadCsvBundle` im Frontend (jszip nicht installiert → 3 Einzeldownloads). 18 Backend- + 7 Frontend-Tests. |
-| P4.3 ZIP-Bundle | ✅ done | Commit `831ad81`. Server-seitiges ZIP-on-the-fly via Python-stdlib `zipfile`, kein jszip. `format=zip` auf `export_report`, Frontend `downloadAllBundle()`. |
-| P4.4 E2E-Smokes Modi | ❌ blockiert | setzt P4.1 voraus (Code-Audit 2026-05-11: offen). Datei `frontend/tests/e2e/report-modes.spec.ts` fehlt. Erst dispatchbar wenn P4.1 echt verdrahtet ist. |
+| P4.3 ZIP-Bundle | ⏳ in Arbeit | Worktree `feat/p4-3-zip-bundle`. Server-seitiges ZIP-on-the-fly via Python-stdlib `zipfile`, kein jszip. `format=zip` auf `export_report`, Frontend `downloadAllBundle()`. |
+| P4.4 E2E-Smokes Modi | ❌ offen | drei Playwright-Smokes für strict/balanced/explorative; setzt P4.1 voraus (durch). Datei `frontend/tests/e2e/report-modes.spec.ts` fehlt. |
 
-**Restarbeit bis v1.0:** P4.1 (echt bauen), P4.4 (blockiert auf P4.1). P2.3 läuft separat im Worktree.
+**Restarbeit bis v1.0:** P4.3 (in Arbeit), P4.4. P2.3 läuft separat im Worktree.
 
 ### Followups aus den frischen Slices
 
-- **P3.1-Followup**: ✅ done (2026-05-11). `migrate_v2_to_v3` aggregiert Personas aus `reddit_profiles` via optionalem `artifact_store`-Parameter, Segments per Gruppen-Aggregation, FrictionPoints/TrustSignals per Section-Titel-Keyword-Matching. DataGap-Fallback bleibt wenn keine Daten.
+- **P3.1**: `migrate_v2_to_v3` aggregiert Personas/Segmente/FrictionPoints/TrustSignals derzeit als leere Listen. Folge-Slice zieht echte Daten aus Persona-Storage + Segment-Aggregation.
 - **P4.2**: jszip ist nicht installiert; `downloadCsvBundle` lädt drei Dateien einzeln. Mit P4.3 (server-seitiges ZIP) entfällt der jszip-Install-Bedarf — `downloadAllBundle()` deckt das ab.
 
 ---
@@ -369,13 +369,13 @@ Reihenfolge ist linear sicher; PR 4 und PR 7 sind die zwei Engstellen.
 
 ---
 
-## 8. Nächste Schritte (Stand 2026-05-11, post-Audit-Korrektur)
+## 8. Nächste Schritte (Stand 2026-05-10, post-P4.1-Verifikation)
 
-Code-Audit 2026-05-11 hat aufgedeckt, dass der PLAN.md-Status vom 2026-05-10 zu P4.1 (Report-Modi) **falsch** war — `ReportMode`-Literal, `ReportV3.report_mode`-Feld und API-Resolver sind im Code nicht vorhanden. Der Eintrag in Commit `5d318af docs(plan): P3.2 + P4.1 als grün markiert` war voreilig. Verbleibende Engstellen bis v1.0:
+Code-Audit hat aufgedeckt, dass P3.2 (Markdown-Renderer + Manager-Hook + Backend-Export-Default mit v2-Fallback) und P4.1 (Report-Modi durchgängig) bereits vor dem letzten Slice-Cycle auf `main` verdrahtet waren. Verbleibende Engstellen bis v1.0:
 
-1. **P4.1 Report-Modi echt bauen** — `ReportMode = Literal["strict","balanced","explorative"]` in `backend/app/contracts/report_v3.py`, `report_mode`-Feld im ReportV3-Container, `_resolve_report_mode` in `backend/app/api/report.py`, Manager/Workflow-Propagierung, Frontend-Mode-Selektor (eigene Komponente, nicht die bestehende `ReportModelControls.vue` für LLM-Auswahl). Aufwand M, Cross-Layer (Backend + Frontend). Setzt nichts voraus.
-2. **P4.4 E2E-Smokes Modi** — drei Playwright-Smokes (`frontend/tests/e2e/report-modes.spec.ts`) über strict/balanced/explorative inklusive Mode-Banner-Snapshot. Setzt P4.1 voraus (nach 1).
+1. **P4.3 ZIP-Bundle** — server-seitiges ZIP-on-the-fly via Python-stdlib `zipfile` aus `report-v3.md`/`report-v3.json`/`evidence-map.json`/Personas-/Segmente-/Claims-CSV. Aktuell im Worktree `feat/p4-3-zip-bundle` durch `agora-refactor-worker`. Kein jszip-Install nötig.
+2. **P4.4 E2E-Smokes Modi** — drei Playwright-Smokes (`frontend/tests/e2e/report-modes.spec.ts`) über strict/balanced/explorative inklusive Mode-Banner-Snapshot. Setzt P4.1 voraus (durch).
 3. **Followups**:
-   - P3.1: echte Persona/Segment-Aggregation in `migrate_v2_to_v3` — ✅ done in Commit `83b7488` (2026-05-11).
+   - P3.1: echte Persona/Segment-Aggregation in `migrate_v2_to_v3` (statt leerer Listen).
    - P2.3 läuft separat im Worktree `feat/m11-7c-report-hypotheses` und wird dort fertiggestellt.
-4. **PR 7 vorbereiten:** v2→v3-Migration spec'en, bevor die Pipeline umgestellt wird (Migrationspfad ist die einzige Stelle, an der Bestandsdaten kippen können).
+3. **PR 7 vorbereiten:** v2→v3-Migration spec'en, bevor die Pipeline umgestellt wird (Migrationspfad ist die einzige Stelle, an der Bestandsdaten kippen können).

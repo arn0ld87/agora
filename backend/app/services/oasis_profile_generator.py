@@ -9,6 +9,7 @@ Optimization improvements:
 """
 
 import json
+import os
 import random
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -18,7 +19,6 @@ from openai import OpenAI
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
-from .settings_layer import get_default_service as _get_settings
 from ..utils.llm_latency import measure_llm_latency
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
@@ -61,12 +61,12 @@ PERSONA_DETAIL_LEVELS = {
 
 
 def _resolve_persona_detail_level() -> dict:
-    """Resolve persona detail level from settings_layer (Issue #212 / #217 Stufe 2b).
+    """Resolve persona detail level from env (Issue #217 Stufe 2b).
 
     AGORA_PERSONA_DETAIL_LEVEL=compact|standard|rich (Default: standard).
     Unknown values fall back to 'standard' with a warning.
     """
-    level = str(_get_settings().effective_value('AGORA_PERSONA_DETAIL_LEVEL')).strip().lower()
+    level = os.environ.get('AGORA_PERSONA_DETAIL_LEVEL', 'standard').strip().lower()
     if level not in PERSONA_DETAIL_LEVELS:
         logger.warning(
             "AGORA_PERSONA_DETAIL_LEVEL='%s' unknown, falling back to 'standard'. "
@@ -1233,9 +1233,10 @@ Important:
         from threading import Lock
 
         if parallel_count is None:
-            parallel_count = int(
-                _get_settings().effective_value('AGORA_PARALLEL_PERSONA_COUNT')
-            )
+            try:
+                parallel_count = int(os.environ.get('AGORA_PARALLEL_PERSONA_COUNT', '10'))
+            except ValueError:
+                parallel_count = 10
         
         # Set graph_id for knowledge graph search
         if graph_id:

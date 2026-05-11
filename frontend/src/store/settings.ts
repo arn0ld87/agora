@@ -1,68 +1,28 @@
-// Issue #133 — Settings-Store.
-//
-// Reactive Container für den Schema-Cache (1× pro Session geladen,
-// danach stabil) und den aktuellen Sektions-Snapshot, plus die dirty-
-// Tracking-Logik der Settings-View.
-//
-// Bewusst kein Pinia/Vuex: das Repo nutzt einfache reactive-Singletons
-// (siehe ``store/pendingUpload.ts``) und das passt hier ebenfalls — die
-// Daten leben nur in der Settings-View.
+import { computed, reactive, ref } from 'vue'
+import { defineStore } from 'pinia'
 
-import { reactive } from 'vue'
 import {
   fetchSettings,
   fetchSettingsSchema,
+  openSettingsStream,
   putSecrets,
   putSettings,
 } from '../api/settings'
 import type { SecretsPayload } from '../api/settings'
+import {
+  parseSettingsChangedEvent,
+  parseSettingsEnvelope,
+  parseSettingsSchemaEnvelope,
+  type SettingsFieldMeta,
+  type SettingsFieldSpec,
+} from '../contracts/settingsContract'
 
-// FieldSpec beschreibt die Schema-Beschreibung eines Feldes (kein Laufzeit-Wert).
-export interface FieldSpec {
-  key: string
-  section?: string
-  type?: string
-  secret: boolean
-  reload_required?: boolean
-  default?: unknown
-}
-
-// FieldMeta beschreibt einen einzelnen Einstellungs-Wert wie er vom
-// Backend in der /api/settings-Antwort geliefert wird.
-export interface FieldMeta {
-  key: string
-  section: string
-  type: string
-  secret: boolean
-  reload_required: boolean
-  value: unknown
-  default: unknown
-  source?: string
-  is_set?: boolean
-}
-
-// ValidationError ist ein einzelner Validierungsfehler vom Backend.
 export interface ValidationError {
   key: string
   code: string
   message: string
 }
 
-interface SettingsState {
-  loading: boolean
-  saving: boolean
-  loadError: string | null
-  saveError: string | null
-  sections: string[]
-  schema: FieldSpec[]
-  fields: Record<string, FieldMeta[]>
-  draft: Record<string, unknown>
-  drafts_secret_filled: Record<string, boolean>
-  validationErrors: ValidationError[]
-}
-
-// Erweiterter Error-Typ für Backend-Validierungsfehler, die zusätzlich
-// `code` und `originalResponse` tragen.
 interface SettingsApiError extends Error {
   code?: string
   originalResponse?: {
@@ -70,227 +30,247 @@ interface SettingsApiError extends Error {
   }
 }
 
-// Die API-Funktionen in api/settings.ts deklarieren breite Record-Returns.
-// Die tatsächliche Envelope-Shape, auf die der Store zugreift, ist:
-//   apiResponse.data  →  { success: true, data: { ... } }
-//   apiResponse.data.data.sections / .fields
-// reason: Vollständige Zod-Validierung dieser Responses ist Layer-4-Scope (#76).
-// reason: Test-Mocks liefern axios-ähnliche Struktur { data: { data: { ... } } };
-//   in production gibt der Interceptor den Envelope-Body direkt zurück.
-//   Die .data.data-Doppeltiefe spiegelt die bestehende, funktionierende Logik.
-type SettingsApiResponse = {
-  data: {
-    data: {
-      sections: string[]
-      fields: Record<string, FieldMeta[]>
-    }
+function resetRecord(target: Record<string, unknown>, next: Record<string, unknown> = {}): void {
+  for (const key of Object.keys(target)) {
+    delete target[key]
   }
-}
-type SchemaApiResponse = {
-  data: {
-    data: {
-      fields: FieldSpec[]
-    }
-  }
+  Object.assign(target, next)
 }
 
-const state = reactive<SettingsState>({
-  loading: false,
-  saving: false,
-  loadError: null,
-  saveError: null,
-  // Liste der Sektions-IDs in UI-Reihenfolge (vom Backend geliefert).
-  sections: [],
-  // Reine Schema-Beschreibung (Field-Specs ohne aktuelle Werte).
-  schema: [],
-  // Aktueller Wert + Source pro Field, gruppiert nach Sektion.
-  fields: {},
-  // Form-State pro Field-Key (entspricht dem im Input gerenderten
-  // Wert). Wird beim Load aus ``fields`` initialisiert; dirty-
-  // Tracking vergleicht gegen ``fields[*].value``.
-  draft: {},
-  // Fields, deren `is_set: true` ist — wichtig für Secret-UI:
-  // „aktuell gesetzt" vs. „leer" rendert anders, und ein leeres
-  // Secret-Input darf nicht versehentlich auf "" zurückspringen.
-  drafts_secret_filled: {},
-  // Letzter Validation-Error vom Backend (Liste von {key,code,message}).
-  validationErrors: [],
-})
+export const useSettingsStore = defineStore('settings', () => {
+  const loading = ref(false)
+  const saving = ref(false)
+  const loadError = ref<string | null>(null)
+  const saveError = ref<string | null>(null)
+  const sections = ref<string[]>([])
+  const schema = ref<SettingsFieldSpec[]>([])
+  const fields = ref<Record<string, SettingsFieldMeta[]>>({})
+  const draft = reactive<Record<string, unknown>>({})
+  const validationErrors = ref<ValidationError[]>([])
+  const streamState = ref<'idle' | 'connecting' | 'open' | 'failed'>('idle')
+  let eventSource: EventSource | null = null
 
+  function _findSpec(key: string): SettingsFieldSpec | null {
+    return schema.value.find((item) => item.key === key) || null
+  }
 
-function _resetDraftFromFields(): void {
-  state.draft = {}
-  for (const section of state.sections) {
-    for (const item of state.fields[section] || []) {
-      // Secret-Felder kriegen einen leeren Draft — das Input ist
-      // ein Passwort-Field, das beim Tippen vom leeren String aus
-      // startet. Der "is_set"-Status zeigt separat an, dass schon
-      // ein Wert existiert.
-      if (item.secret) {
-        state.draft[item.key] = ''
-      } else {
-        state.draft[item.key] = item.value
+  function _findFieldMeta(key: string): SettingsFieldMeta | null {
+    for (const section of sections.value) {
+      for (const item of fields.value[section] || []) {
+        if (item.key === key) return item
       }
     }
+    return null
   }
-}
 
+  function _resetDraftFromFields(): void {
+    const nextDraft: Record<string, unknown> = {}
+    for (const section of sections.value) {
+      for (const item of fields.value[section] || []) {
+        nextDraft[item.key] = item.secret ? '' : item.value
+      }
+    }
+    resetRecord(draft, nextDraft)
+  }
 
-export async function loadSettings(): Promise<void> {
-  state.loading = true
-  state.loadError = null
-  try {
-    const [schemaRes, valuesRes] = await Promise.all([
-      fetchSettingsSchema(),
-      fetchSettings(),
-    ])
-    // reason: api/settings.ts deklariert breite Record-Returns; tatsächliche
-    // Envelope-Shape ist SchemaApiResponse / SettingsApiResponse.
-    // Zod-Strict-Validierung ist Layer-4-Scope (#76).
-    const schemaBody = schemaRes as unknown as SchemaApiResponse
-    const valuesBody = valuesRes as unknown as SettingsApiResponse
-    state.sections = valuesBody.data.data.sections
-    state.schema = schemaBody.data.data.fields
-    state.fields = valuesBody.data.data.fields
+  function _applyServerState(nextSchema: SettingsFieldSpec[], nextValues: Record<string, SettingsFieldMeta[]>, nextSections: string[]): void {
+    schema.value = nextSchema
+    fields.value = nextValues
+    sections.value = nextSections
     _resetDraftFromFields()
-  } catch (err) {
-    const e = err as Error
-    state.loadError = e?.message || 'Fehler beim Laden der Einstellungen.'
-    throw err
-  } finally {
-    state.loading = false
   }
-}
 
-
-export function isDirty(key: string): boolean {
-  // Secrets gelten als dirty, sobald der Draft nicht-leer ist —
-  // egal ob der serverseitige Wert schon gesetzt ist (Klartext kennen
-  // wir im Frontend ohnehin nicht).
-  const spec = _findSpec(key)
-  if (spec?.secret) {
-    return ((state.draft[key] as string) || '') !== ''
-  }
-  const meta = _findFieldMeta(key)
-  if (!meta) return false
-  return state.draft[key] !== meta.value
-}
-
-
-export function dirtyKeys(): string[] {
-  const keys: string[] = []
-  for (const section of state.sections) {
-    for (const item of state.fields[section] || []) {
-      if (isDirty(item.key)) keys.push(item.key)
+  async function loadSettings(): Promise<void> {
+    loading.value = true
+    loadError.value = null
+    try {
+      const [schemaRes, valuesRes] = await Promise.all([
+        fetchSettingsSchema(),
+        fetchSettings(),
+      ])
+      const parsedSchema = parseSettingsSchemaEnvelope(schemaRes)
+      const parsedValues = parseSettingsEnvelope(valuesRes)
+      if (!parsedSchema.success) {
+        throw new Error(`Schema-Drift settings/schema: ${parsedSchema.error.issues[0]?.message ?? 'unbekannt'}`)
+      }
+      if (!parsedValues.success) {
+        throw new Error(`Schema-Drift settings: ${parsedValues.error.issues[0]?.message ?? 'unbekannt'}`)
+      }
+      _applyServerState(
+        parsedSchema.data.data.fields,
+        parsedValues.data.data.fields,
+        parsedValues.data.data.sections,
+      )
+    } catch (err) {
+      const e = err as Error
+      loadError.value = e?.message || 'Fehler beim Laden der Einstellungen.'
+      throw err
+    } finally {
+      loading.value = false
     }
   }
-  return keys
-}
 
-
-export function dirtySectionFlags(): Record<string, boolean> {
-  // Helper: pro Sektion ein bool, ob mindestens ein Field dirty ist.
-  // Wird vom Tab-Renderer für Indikator-Punkte genutzt.
-  const out: Record<string, boolean> = {}
-  for (const section of state.sections) {
-    out[section] = (state.fields[section] || []).some((item) => isDirty(item.key))
+  async function ensureLoaded(): Promise<void> {
+    if (sections.value.length > 0 || loading.value) return
+    await loadSettings()
   }
-  return out
-}
 
-
-function _findSpec(key: string): FieldSpec | null {
-  return state.schema.find((s) => s.key === key) || null
-}
-
-
-function _findFieldMeta(key: string): FieldMeta | null {
-  for (const section of state.sections) {
-    for (const item of state.fields[section] || []) {
-      if (item.key === key) return item
-    }
-  }
-  return null
-}
-
-
-function _splitDirtyByKind(): { nonSecrets: Record<string, unknown>; secrets: SecretsPayload } {
-  const nonSecrets: Record<string, unknown> = {}
-  const secrets: SecretsPayload = {}
-  for (const key of dirtyKeys()) {
+  function isDirty(key: string): boolean {
     const spec = _findSpec(key)
     if (spec?.secret) {
-      secrets[key] = state.draft[key] as string
-    } else {
-      nonSecrets[key] = state.draft[key]
+      return ((draft[key] as string) || '') !== ''
     }
-  }
-  return { nonSecrets, secrets }
-}
-
-
-export async function saveSettings({ confirmSecrets = false }: { confirmSecrets?: boolean } = {}): Promise<unknown> {
-  // Erwartung: View ruft ``saveSettings({ confirmSecrets: true })`` erst,
-  // nachdem die Operatorin den Modal-Dialog für Secrets bestätigt hat.
-  // Wenn dirty-Set Secrets enthält, ohne ``confirmSecrets``, werfen wir
-  // synchron — die View behandelt das als „Modal öffnen, nicht senden".
-  state.saveError = null
-  state.validationErrors = []
-  const { nonSecrets, secrets } = _splitDirtyByKind()
-  const hasSecrets = Object.keys(secrets).length > 0
-  const hasNonSecrets = Object.keys(nonSecrets).length > 0
-
-  if (hasSecrets && !confirmSecrets) {
-    const err = Object.assign(new Error('confirm_secrets_required'), {
-      code: 'confirm_secrets_required',
-    })
-    throw err
+    const meta = _findFieldMeta(key)
+    if (!meta) return false
+    return draft[key] !== meta.value
   }
 
-  state.saving = true
-  try {
-    // reason: api/settings.ts Returns sind breite Records; tatsächliche
-    // Envelope-Shape ist SettingsApiResponse. Zod-Strict-Validierung ist Layer-4.
-    let lastResponse: SettingsApiResponse | null = null
-    if (hasNonSecrets) {
-      lastResponse = await putSettings(nonSecrets) as unknown as SettingsApiResponse
+  const dirtyKeys = computed<string[]>(() => {
+    const keys: string[] = []
+    for (const section of sections.value) {
+      for (const item of fields.value[section] || []) {
+        if (isDirty(item.key)) keys.push(item.key)
+      }
     }
-    if (hasSecrets) {
-      lastResponse = await putSecrets(secrets) as unknown as SettingsApiResponse
+    return keys
+  })
+
+  const dirtySectionFlags = computed<Record<string, boolean>>(() => {
+    const out: Record<string, boolean> = {}
+    for (const section of sections.value) {
+      out[section] = (fields.value[section] || []).some((item) => isDirty(item.key))
     }
-    if (lastResponse) {
-      // Beide Endpunkte liefern den frischen Sektions-Snapshot —
-      // wir adoptieren ihn direkt, statt einen GET nachzuschicken.
-      state.sections = lastResponse.data.data.sections
-      state.fields = lastResponse.data.data.fields
-      _resetDraftFromFields()
+    return out
+  })
+
+  function _splitDirtyByKind(): { nonSecrets: Record<string, unknown>; secrets: SecretsPayload } {
+    const nonSecrets: Record<string, unknown> = {}
+    const secrets: SecretsPayload = {}
+    for (const key of dirtyKeys.value) {
+      const spec = _findSpec(key)
+      if (spec?.secret) {
+        secrets[key] = String(draft[key] ?? '')
+      } else {
+        nonSecrets[key] = draft[key]
+      }
     }
-    return lastResponse?.data || null
-  } catch (err) {
-    const e = err as SettingsApiError
-    state.saveError = e?.message || 'Fehler beim Speichern.'
-    // Validation-Fehler liefert das Backend als Liste — die View
-    // rendert sie pro Field als Inline-Hint.
-    if (e?.originalResponse?.errors) {
-      state.validationErrors = e.originalResponse.errors
-    }
-    throw err
-  } finally {
-    state.saving = false
+    return { nonSecrets, secrets }
   }
-}
 
+  async function saveSettings(
+    { confirmSecrets = false }: { confirmSecrets?: boolean } = {},
+  ): Promise<unknown> {
+    saveError.value = null
+    validationErrors.value = []
+    const { nonSecrets, secrets } = _splitDirtyByKind()
+    const hasSecrets = Object.keys(secrets).length > 0
+    const hasNonSecrets = Object.keys(nonSecrets).length > 0
 
-export function discardChanges(): void {
-  _resetDraftFromFields()
-  state.validationErrors = []
-  state.saveError = null
-}
+    if (hasSecrets && !confirmSecrets) {
+      const err = Object.assign(new Error('confirm_secrets_required'), {
+        code: 'confirm_secrets_required',
+      })
+      throw err
+    }
 
+    saving.value = true
+    try {
+      let lastResponse: unknown = null
+      if (hasNonSecrets) {
+        lastResponse = await putSettings(nonSecrets)
+      }
+      if (hasSecrets) {
+        lastResponse = await putSecrets(secrets)
+      }
+      if (lastResponse) {
+        const parsedValues = parseSettingsEnvelope(lastResponse)
+        if (!parsedValues.success) {
+          throw new Error(`Schema-Drift settings: ${parsedValues.error.issues[0]?.message ?? 'unbekannt'}`)
+        }
+        _applyServerState(
+          schema.value,
+          parsedValues.data.data.fields,
+          parsedValues.data.data.sections,
+        )
+      }
+      return lastResponse
+    } catch (err) {
+      const e = err as SettingsApiError
+      saveError.value = e?.message || 'Fehler beim Speichern.'
+      if (e?.originalResponse?.errors) {
+        validationErrors.value = e.originalResponse.errors
+      }
+      throw err
+    } finally {
+      saving.value = false
+    }
+  }
 
-export function fieldErrors(key: string): ValidationError[] {
-  return state.validationErrors.filter((e) => e.key === key)
-}
+  function discardChanges(): void {
+    _resetDraftFromFields()
+    validationErrors.value = []
+    saveError.value = null
+  }
 
+  function fieldErrors(key: string): ValidationError[] {
+    return validationErrors.value.filter((item) => item.key === key)
+  }
 
-export default state
+  async function connectStream(): Promise<void> {
+    if (eventSource !== null || streamState.value === 'connecting') return
+    streamState.value = 'connecting'
+    try {
+      eventSource = await openSettingsStream({
+        changed: async (payload: unknown) => {
+          const parsed = parseSettingsChangedEvent(payload)
+          if (!parsed.success || saving.value) return
+          await loadSettings()
+        },
+        error: () => {
+          streamState.value = 'failed'
+        },
+      })
+      streamState.value = 'open'
+    } catch {
+      streamState.value = 'failed'
+    }
+  }
+
+  function disconnectStream(): void {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+    streamState.value = 'idle'
+  }
+
+  const runsPollIntervalMs = computed<number>(() => {
+    const field = (fields.value.ui || []).find((item) => item.key === 'RUNS_POLL_INTERVAL_MS')
+    const value = field?.value
+    return typeof value === 'number' && Number.isFinite(value) ? value : 5000
+  })
+
+  return {
+    loading,
+    saving,
+    loadError,
+    saveError,
+    sections,
+    schema,
+    fields,
+    draft,
+    validationErrors,
+    streamState,
+    dirtyKeys,
+    dirtySectionFlags,
+    runsPollIntervalMs,
+    ensureLoaded,
+    loadSettings,
+    saveSettings,
+    discardChanges,
+    fieldErrors,
+    isDirty,
+    connectStream,
+    disconnectStream,
+  }
+})
