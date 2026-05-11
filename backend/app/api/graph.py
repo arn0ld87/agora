@@ -4,6 +4,7 @@ Uses project context mechanism with server-side state persistence
 """
 
 import io
+import json
 import os
 import time
 import threading
@@ -12,11 +13,13 @@ from flask import Response, request, current_app
 from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
+from ..services.llm_runtime import parse_runtime_llm_config
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..utils.validation import validate_project_id, validate_graph_id, validate_task_id
 from ..models.task import TaskManager, TaskStatus
@@ -201,6 +204,32 @@ def generate_ontology():
             message="Please provide simulation requirement description (simulation_requirement)",
         )
 
+    # LLM-Override aus dem Frontend (Modell + optionaler Runtime-Provider).
+    # `MainView.handleNewProject` hängt `llm_model` und `llm_provider` (als
+    # JSON-String) ans FormData; ohne diese Felder fällt der LLMClient auf
+    # den Server-Default zurück.
+    llm_model_override = (request.form.get('llm_model') or '').strip() or None
+    llm_provider_raw = request.form.get('llm_provider')
+    if llm_provider_raw:
+        try:
+            llm_provider_payload = json.loads(llm_provider_raw)
+        except json.JSONDecodeError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="llm_provider must be a valid JSON object",
+            )
+    else:
+        llm_provider_payload = None
+    try:
+        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+    except ValueError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
+
     # Get uploaded files
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or all(not f.filename for f in uploaded_files):
@@ -256,8 +285,13 @@ def generate_ontology():
     logger.info(f"Text extraction completed, total {len(all_text)} characters")
 
     # Generate ontology
-    logger.info("Calling LLM to generate ontology definition...")
-    generator = OntologyGenerator()
+    llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+    logger.info(
+        "Calling LLM to generate ontology definition (model=%s, runtime_provider=%s)",
+        llm_client.model,
+        llm_runtime.provider,
+    )
+    generator = OntologyGenerator(llm_client=llm_client)
     ontology = generator.generate(
         document_texts=document_texts,
         simulation_requirement=simulation_requirement,
@@ -275,6 +309,11 @@ def generate_ontology():
     }
     project.analysis_summary = ontology.get("analysis_summary", "")
     project.status = ProjectStatus.ONTOLOGY_GENERATED
+    # Modellauswahl pro Projekt persistieren — Folgestufen (Build/Persona/
+    # Report) können sie als Default verwenden, wenn der jeweilige Request
+    # keinen Override mitschickt. Secrets bleiben ausserhalb (redacted_metadata).
+    project.llm_model = llm_model_override
+    project.llm_provider = llm_runtime.redacted_metadata() or None
     ProjectManager.save_project(project)
     logger.info(f"=== Ontology generation completed === Project ID: {project.project_id}")
 

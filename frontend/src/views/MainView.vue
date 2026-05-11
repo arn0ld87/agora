@@ -16,6 +16,8 @@ import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import { usePolling } from '../composables/usePolling'
 import { useSystemLog } from '../composables/useSystemLog'
 import { useWorkspaceMode } from '../composables/useWorkspaceMode'
+import { storedEffectiveModel } from '../composables/useEnvForm'
+import { runtimeLlmPayloadFromStorage } from '../composables/useRuntimeLlmOptions'
 
 const route = useRoute()
 const router = useRouter()
@@ -125,6 +127,14 @@ async function handleNewProject() {
     const formData = new FormData()
     pending.files.forEach((f) => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
+    // Frontend-Modellauswahl pro Run an Ontology-Endpoint anhängen, damit
+    // alle nachgelagerten LLM-Aufrufe (Ontology, Build, Persona, Report)
+    // dasselbe Modell verwenden. Helper kommen aus Step2/3/4 — gleiche
+    // localStorage-/sessionStorage-Keys wie dort, kein neuer Pinia-Store.
+    const selectedModel = storedEffectiveModel()
+    if (selectedModel) formData.append('llm_model', selectedModel)
+    const runtimeProvider = runtimeLlmPayloadFromStorage()
+    if (runtimeProvider) formData.append('llm_provider', JSON.stringify(runtimeProvider))
     const res = await generateOntology(formData)
     if (res.success) {
       clearPendingUpload()

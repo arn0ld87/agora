@@ -49,6 +49,18 @@ class Project:
     chunk_size: int = 500
     chunk_overlap: int = 50
 
+    # LLM-Auswahl, die der Benutzer im Frontend für diesen Projekt-Run
+    # gewählt hat (Sub-Slice „ontology-respects-frontend-model"). Wird beim
+    # Ontology-Generate aus dem Request persistiert und kann von späteren
+    # Stufen (Build/Persona/Report) als Default herangezogen werden, ohne
+    # dass das Frontend bei jedem Folge-Request denselben Wert erneut
+    # mitschicken muss. `llm_provider` enthält **keine** Secrets — der
+    # API-Key bleibt bei der ``llm_runtime``-Konvention session-local; hier
+    # wird nur ``redacted_metadata()`` (Provider + Base-URL + api_key_set)
+    # abgelegt.
+    llm_model: Optional[str] = None
+    llm_provider: Optional[Dict[str, Any]] = None
+
     # Error information
     error: Optional[str] = None
 
@@ -69,6 +81,8 @@ class Project:
             "simulation_requirement": self.simulation_requirement,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
+            "llm_model": self.llm_model,
+            "llm_provider": self.llm_provider,
             "error": self.error
         }
     
@@ -94,6 +108,8 @@ class Project:
             simulation_requirement=data.get('simulation_requirement'),
             chunk_size=data.get('chunk_size', 500),
             chunk_overlap=data.get('chunk_overlap', 50),
+            llm_model=data.get('llm_model'),
+            llm_provider=data.get('llm_provider'),
             error=data.get('error')
         )
 
