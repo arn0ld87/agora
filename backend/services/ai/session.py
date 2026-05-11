@@ -8,7 +8,7 @@ auf der API-Ebene (Flask-Route oder Frontend-Store).
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
