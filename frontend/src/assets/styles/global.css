@@ -599,7 +599,7 @@ button { font: inherit; cursor: pointer; }
    ============================================================ */
 .logo {
   display: inline-flex; align-items: center; gap: 10px;
-  font-family: var(--ff-serif); font-weight: 500;
+  font-family: var(--ff-sans); font-weight: 600;
   font-size: 20px; letter-spacing: -0.02em;
   color: var(--fg); text-decoration: none;
 }
@@ -669,8 +669,8 @@ button { font: inherit; cursor: pointer; }
   color: var(--fg-muted);
 }
 .kpi .value {
-  font-family: var(--ff-serif); font-size: 40px;
-  line-height: 1; letter-spacing: var(--ls-display);
+  font-family: var(--ff-sans); font-weight: 600; font-size: 40px;
+  line-height: 1; letter-spacing: -0.02em;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
@@ -721,7 +721,7 @@ button { font: inherit; cursor: pointer; }
   border-radius: 50%;
   background: linear-gradient(135deg, var(--brand-iris), var(--brand-violet));
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--ff-serif); font-size: 22px; font-weight: 400;
+  font-family: var(--ff-sans); font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
   color: white;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.3),
               0 4px 12px -2px color-mix(in oklch, var(--brand-iris) 30%, transparent);
@@ -738,7 +738,7 @@ button { font: inherit; cursor: pointer; }
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 .persona.is-active .avatar .ring { opacity: 1; }
-.persona .name      { font-family: var(--ff-serif); font-size: var(--fs-18); line-height: 1.15; color: var(--fg); }
+.persona .name      { font-family: var(--ff-sans); font-weight: 600; font-size: var(--fs-18); line-height: 1.25; color: var(--fg); letter-spacing: -0.01em; }
 .persona .meta-line { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-wide); text-transform: uppercase; color: var(--fg-meta); margin-top: 4px; }
 .persona .traits    { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .persona .traits .tag {
@@ -809,8 +809,8 @@ button { font: inherit; cursor: pointer; }
   -webkit-backdrop-filter: blur(12px);
 }
 .nav .brand {
-  font-family: var(--ff-serif);
-  font-weight: 500;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--fg);
@@ -938,13 +938,13 @@ button { font: inherit; cursor: pointer; }
   color: var(--fg-muted);
 }
 .stepper .step .head .n, .ws-stepper .ws-step .head .n {
-  font-family: var(--ff-serif); font-weight: 400;
+  font-family: var(--ff-sans); font-weight: 600;
   font-size: 28px; color: var(--fg);
-  line-height: 1; letter-spacing: var(--ls-display); margin-right: 4px;
+  line-height: 1; letter-spacing: -0.02em; margin-right: 4px;
 }
 .stepper .step .lbl, .ws-stepper .ws-step .lbl {
-  font-family: var(--ff-serif); font-weight: 400;
-  font-size: var(--fs-18); line-height: 1.2; color: var(--fg);
+  font-family: var(--ff-sans); font-weight: 600;
+  font-size: var(--fs-18); line-height: 1.25; color: var(--fg); letter-spacing: -0.01em;
 }
 .stepper .step .meta-line, .ws-stepper .ws-step .meta-line {
   font-family: var(--ff-mono); font-size: var(--fs-11);
@@ -969,8 +969,8 @@ button { font: inherit; cursor: pointer; }
   color: var(--fg-muted);
 }
 .stepper .step .label {
-  font-family: var(--ff-serif); font-size: var(--fs-20);
-  font-weight: 400; line-height: 1.2;
+  font-family: var(--ff-sans); font-size: var(--fs-20);
+  font-weight: 600; line-height: 1.25; letter-spacing: -0.01em;
   color: var(--fg);
 }
 .stepper .step.active { background: var(--accent-soft); position: relative; }
@@ -996,10 +996,10 @@ button { font: inherit; cursor: pointer; }
 }
 .section-head .left { display: flex; flex-direction: column; gap: var(--s-3); }
 .section-head .num {
-  font-family: var(--ff-serif);
-  font-weight: 300;
-  font-size: clamp(84px, 10vw, 140px);
-  line-height: 0.88;
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(64px, 8vw, 104px);
+  line-height: 0.95;
   letter-spacing: -0.04em;
   color: var(--fg);
 }
@@ -1011,9 +1011,9 @@ button { font: inherit; cursor: pointer; }
   color: var(--accent);
 }
 .section-head h2 {
-  font-family: var(--ff-serif);
-  font-weight: 400;
-  font-size: clamp(32px, 4vw, 52px);
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0;
@@ -1080,7 +1080,7 @@ button { font: inherit; cursor: pointer; }
 }
 .card-work:hover { background: var(--bg-panel); padding-left: var(--s-3); }
 .card-work .idx { font-family: var(--ff-mono); font-size: var(--fs-14); color: var(--fg-meta); letter-spacing: var(--ls-mono-tight); }
-.card-work .title { font-family: var(--ff-serif); font-weight: 400; font-size: var(--fs-32); line-height: 1.15; letter-spacing: -0.01em; color: var(--fg); }
+.card-work .title { font-family: var(--ff-sans); font-weight: 600; font-size: var(--fs-32); line-height: 1.2; letter-spacing: -0.02em; color: var(--fg); }
 .card-work .title .sub { display: block; font-family: var(--ff-sans); font-size: var(--fs-14); color: var(--fg-muted); letter-spacing: 0; margin-top: 6px; }
 .card-work .meta { font-family: var(--ff-mono); font-size: var(--fs-12); letter-spacing: var(--ls-mono-tight); text-transform: uppercase; color: var(--fg-meta); }
 
@@ -1119,8 +1119,8 @@ button { font: inherit; cursor: pointer; }
 }
 .footer .col { display: flex; flex-direction: column; gap: var(--s-2); }
 .footer .brand-line {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-18);
   letter-spacing: -0.01em;
   color: var(--fg);
@@ -1154,7 +1154,7 @@ button { font: inherit; cursor: pointer; }
 .muted { color: var(--fg-muted); }
 .meta { font-family: var(--ff-mono); font-size: var(--fs-12); letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); }
 .meta-mono { font-family: var(--ff-mono); font-size: var(--fs-11); letter-spacing: var(--ls-mono-tight); text-transform: uppercase; color: var(--fg-meta); }
-.serif { font-family: var(--ff-serif); }
+.serif { font-family: var(--ff-sans); }
 .mono  { font-family: var(--ff-mono); }
 
 .text-center { text-align: center; }
