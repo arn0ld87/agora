@@ -5,6 +5,7 @@ Handle persistence of runtime_llm_routing.json and stage snapshots.
 
 import os
 import json
+from urllib.parse import urlparse
 from typing import Optional, Dict, Any
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
@@ -15,14 +16,17 @@ logger = get_logger("agora.runtime_run_config")
 
 def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[str]) -> str:
     """Best-effort mapping from legacy server config to routing provider IDs."""
-    normalized_base = (base_url or "").strip().lower()
+    normalized_base = (base_url or "").strip()
     normalized_model = (model_name or "").strip().lower()
+    parsed = urlparse(normalized_base) if normalized_base else None
+    hostname = (parsed.hostname or "").lower() if parsed else ""
+    port = parsed.port if parsed else None
 
-    if normalized_model.endswith(":cloud") or "11434" in normalized_base:
+    if normalized_model.endswith(":cloud") or port == 11434:
         return "ollama_local"
-    if "generativelanguage.googleapis.com" in normalized_base or "gemini" in normalized_model:
+    if hostname == "generativelanguage.googleapis.com" or "gemini" in normalized_model:
         return "google"
-    if "openai.com" in normalized_base or "api.openai" in normalized_base:
+    if hostname in {"api.openai.com", "openai.com"}:
         return "openai"
     return "openai_compatible"
 
