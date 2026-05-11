@@ -9,7 +9,7 @@ resolution-markers = [
 
 [[package]]
 name = "agora-backend"
-version = "0.9.1.dev0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "camel-ai" },

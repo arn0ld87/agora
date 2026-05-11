@@ -12,7 +12,7 @@ Dokument hochladen, Wissensgraph extrahieren, Personas ableiten, Social-Media-Re
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
-[![Version](https://img.shields.io/badge/Version-0.9.1--dev-orange?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen?style=flat-square)](./CHANGELOG.md)
 
 [Deutsch](#deutsch) · [English](#english) · [Status](./docu/STATUS.md) · [Security](./docu/security-hardening.md)
 
@@ -20,10 +20,13 @@ Dokument hochladen, Wissensgraph extrahieren, Personas ableiten, Social-Media-Re
 
 ---
 
-> ## Status: v0.9.1-dev auf `main`
+> ## Status: v1.0.0 auf `main`
 >
-> Letzter Tag: `v0.9.0` vom 2026-05-01 ([Release Notes](docu/2026-05-01-v0.9.0-release-notes.md)).
-> Aktueller Stand laut [`docu/STATUS.md`](docu/STATUS.md): M9 und M10 abgeschlossen, M11 läuft. Rate-Limits für Ticket-, Upload-, Simulation-LLM- und Report-Trigger-Endpunkte sind umgesetzt und nach Gemini-Followups gehärtet.
+> Releasedatum: **2026-05-11** ([Release Notes](docu/2026-05-11-v1.0.0-release-notes.md)).
+> Alle 14 PR-Slices der v1.0-Output-Vertrag-Roadmap aus [`PLAN.md`](PLAN.md) sind durch:
+> Pflichtabschnitt-Validator, Persona-Mindestanzahl, Evidence-Anker-Pflicht, Low-Confidence-Marker,
+> ReportV3-Persistenz mit Markdown-Renderer, Quote-Source-Marker, drei Vertrauensmodi
+> (`strict`/`balanced`/`explorative`), CSV/ZIP-Export und E2E-Smokes über die drei Modi.
 >
 > Agora ist ein **experimenteller Fork**. Graph-Build, Simulation und Report-Pipeline hängen stark an Modellqualität, JSON-Verhalten, Neo4j, Redis und OASIS-Subprozessen.
 >
@@ -67,16 +70,18 @@ PDF wird ausschließlich über den Browser-Print-Dialog erzeugt — Button „Al
   <sub><a href="./media/screenshots/graph-build.mp4">Graph-Build als MP4 öffnen</a></sub>
 </p>
 
-### Highlights seit v0.9.0
+### Highlights v1.0.0
 
-- **Compare- und Diff-Stack**: Graph-Diff API/UI, Simulation-Compare API/UI und Runs Dashboard.
-- **Persona-Entity-Kontext**: Backend-API zeigt, welche Graph-Entity in eine Persona eingeflossen ist.
-- **ReportAgent-Refactor**: der frühere Monolith ist in ein Package aufgeteilt.
-- **Frontend-TypeScript-Migration**: API, Stores, Composables und kritische Views sind in TypeScript/Zod abgesichert.
-- **Production-Hardening**: Reverse-Proxy-Sidecar, gevent, Bundle-Token-Gate, signed Tickets, Prod-Smoke auf `main`/Tags/`workflow_dispatch`.
-- **M10.5 Rate-Limits**: app-seitige Fixed-Window-Limits für `/api/auth/ticket`, `/api/graph/ontology/generate`, `/api/simulation/generate-profiles`, `/api/simulation/prepare`, `/api/report/generate`, `/api/report/chat`.
-- **Security-Watchlist**: CVE-Monitor, Hardstop 2026-07-30 und Dependency Risk Register.
-- **Coverage-Gates**: Backend- und Frontend-Coverage-Gates sind aktiv; Zielwerte werden in M11 schrittweise angehoben.
+- **Output-Vertrag erzwungen**: Pflichtabschnitt-Validator + Persona-Floor (≥50) + Schema-Drift-Gate. Kein Report verlässt die Pipeline ohne Pflichtabschnitte oder mit zu wenig Personas.
+- **Evidence-Härtung**: Jeder Claim außerhalb `low` braucht Evidence-Anker. Evidence-lose Claims wandern automatisch in `hypotheses[]` oder `data_gaps[]`. Low-Confidence ist im Markdown sichtbar markiert.
+- **ReportV3-Persistenz + Markdown-Renderer**: Strukturierte Aggregation (Personas, Segmente, FrictionPoints, TrustSignals) aus dem `artifact_store`, deterministisches Markdown mit `simulated_quote`-Blockzitaten und Mode-Banner als Header.
+- **Drei Vertrauensmodi**: `strict` (nur belegte Claims, harter Anchor-Validator), `balanced` (Default — belegte Claims + markierte Hypothesen), `explorative` (alles durch, EXPLORATIVE-Modus). Frontend-Selektor mit localStorage-Persistenz und i18n.
+- **Export-Vollständigkeit**: Markdown, JSON, CSV (Personas/Segmente/Claims, RFC-4180), ZIP-Bundle (serverseitig via Python-stdlib, kein jszip), Browser-Print-PDF.
+- **Live-Settings**: `GET`/`PUT /api/settings` mit Pydantic-Validierung, Secret-Redaction, `settings.changed`-Event-Bus. Services lesen via `settings_layer.get_*()` — Live-Übernahme ohne Container-Restart (`AGORA_PARALLEL_PERSONA_COUNT`, `AGORA_PERSONA_DETAIL_LEVEL`, `ONTOLOGY_MAX_TOKENS`).
+- **CI-Hardening**: `step-security/harden-runner` (audit-mode) in 9 Workflows, `aquasecurity/trivy-action` für Container-Scans, `ossf/scorecard-action` für Supply-Chain-Score.
+- **Compare- und Diff-Stack** (aus v0.9.x übernommen): Graph-Diff, Simulation-Compare, Runs Dashboard.
+- **Production-Hardening** (aus v0.9.x übernommen): Reverse-Proxy-Sidecar, gevent, Bundle-Token-Gate, signed Tickets, Prod-Smoke auf `main`/Tags/`workflow_dispatch`.
+- **Security-Watchlist**: CVE-Monitor wöchentlich, Hardstop 2026-07-30, Dependency Risk Register mit Eskalationspfad.
 
 ### Architektur auf einen Blick
 
@@ -270,7 +275,7 @@ It is built for careful local experimentation: Neo4j for graph memory, Flask/Pyd
 
 ### Current status
 
-`main` is at `v0.9.1-dev`. M9 and M10 are complete; M11 is active. Rate limits, signed tickets, reverse-proxy hardening, CVE monitoring, coverage gates, and the production smoke path are documented in [`docu/STATUS.md`](docu/STATUS.md).
+`main` is at **v1.0.0** (released 2026-05-11, see [Release Notes](docu/2026-05-11-v1.0.0-release-notes.md)). All 14 PR slices of the v1.0 output-contract roadmap are merged: required-sections validator, persona-minimum floor, evidence-anchor requirement, low-confidence markers, ReportV3 persistence with Markdown renderer, quote-source markers, three trust modes (`strict`/`balanced`/`explorative`), CSV/ZIP export, and E2E mode smokes. Production hardening (reverse-proxy sidecar, gevent, signed tickets), CVE monitoring with the 2026-07-30 hardstop, and coverage gates are documented in [`docu/STATUS.md`](docu/STATUS.md).
 
 Agora v1 is **single-user-only** by architecture decision. Do not expose it directly to the public internet.
 

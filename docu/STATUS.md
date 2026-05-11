@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-10
+Stand: 2026-05-11 (v1.0.0)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -9,9 +9,9 @@ Stand: 2026-05-10
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 0.9.1-dev |
-| Frontend | `frontend/package.json` | 0.9.1-dev |
-| Root | `package.json` | 0.9.1-dev |
+| Backend | `backend/pyproject.toml` | 1.0.0 |
+| Frontend | `frontend/package.json` | 1.0.0 |
+| Root | `package.json` | 1.0.0 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 ## Tests
@@ -19,8 +19,8 @@ Stand: 2026-05-10
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 1855 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 47 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 1882 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 49 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
