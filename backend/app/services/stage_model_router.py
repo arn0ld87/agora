@@ -9,10 +9,8 @@ from ..contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ResolvedRoute,
     StageId,
-    StageLLMRoute
 )
 from .runtime_run_config import RuntimeRunConfig
-from .secret_resolver import SecretResolver
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.stage_model_router")
@@ -35,13 +33,14 @@ class StageModelRouter:
         cfg = runtime_cfg or self.config_service.load_config()
         route = cfg.stage_overrides.get(stage_id) or cfg.default_route
 
-        # 3. Create new snapshot (but don't persist yet - caller should do that on stage start)
-        resolver = SecretResolver()
+        # 3. Create new snapshot (but don't persist yet - caller should do that on stage start).
+        # ``base_url`` carries the runtime URL untouched; sanitization happens when the
+        # snapshot is written to disk or emitted via the observability logger.
         resolved = ResolvedRoute(
             stage=stage_id,
             provider_id=route.provider_id,
             model=route.model,
-            base_url_sanitized=resolver.sanitize_url(route.base_url),
+            base_url=route.base_url,
             reasoning_effort=route.reasoning_effort,
             routing_version=cfg.routing_version,
             provider_options=route.provider_options,

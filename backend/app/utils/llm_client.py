@@ -132,6 +132,18 @@ class LLMClient:
         self._retry_initial_delay = float(os.environ.get('LLM_RETRY_INITIAL_DELAY', '1.0'))
         self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
 
+    _PROVIDER_TYPE_BY_ID: Dict[str, str] = {
+        "openai": "openai",
+        "google": "google",
+        "ollama_local": "ollama_local",
+    }
+
+    _DEFAULT_BASE_URLS: Dict[str, str] = {
+        "openai": "https://api.openai.com/v1",
+        "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "ollama_local": "http://localhost:11434/v1",
+    }
+
     @classmethod
     def from_route(
         cls,
@@ -140,41 +152,19 @@ class LLMClient:
         run_id: Optional[str] = None,
         timeout: float = 300.0
     ) -> "LLMClient":
-        """Factory: create LLMClient from a resolved stage route and secret resolver."""
+        """Factory: create LLMClient from a resolved stage route and secret resolver.
+
+        ``route.base_url`` is the runtime URL — used verbatim for the actual API
+        call. Callers must keep secrets out of URLs; the observability logger and
+        snapshot writer sanitize defensively when emitting to logs/disk.
+        """
         from ..services.secret_resolver import SecretResolver
         resolver = secret_resolver or SecretResolver()
 
-        # 1. Resolve provider type (needed for api key resolution)
-        # We need to know the type, but ResolvedRoute only has provider_id.
-        # For now, we try to infer it or use a default.
-        # In a more robust implementation, ResolvedRoute might carry provider_type.
-        provider_type = "openai_compatible"
-        if route.provider_id == "openai":
-            provider_type = "openai"
-        elif route.provider_id == "google":
-            provider_type = "google"
-        elif route.provider_id == "ollama_local":
-            provider_type = "ollama_local"
-
-        # 2. Resolve secrets
+        provider_type = cls._PROVIDER_TYPE_BY_ID.get(route.provider_id, "openai_compatible")
         api_key = resolver.get_api_key(route.provider_id, provider_type)
 
-        # For base_url, we need the ORIGINAL URL if it was overridden,
-        # but ResolvedRoute only has base_url_sanitized.
-        # This is a gap in the contract: if we use a custom base_url,
-        # where do we get the non-sanitized one?
-        # Requirement 5 says: "do not use base_url_sanitized as the actual invocation URL if the original route URL is needed for execution"
-        # However, secrets are not allowed in URLs anyway by our sanitization logic (userinfo, query).
-        # If the original base_url was in Config, we can get it.
-        # If it was a per-stage override, we might need to recover it.
-
-        base_url = route.base_url_sanitized
-        if route.provider_id == "openai" and not route.base_url_sanitized:
-             base_url = "https://api.openai.com/v1"
-        elif route.provider_id == "google" and not route.base_url_sanitized:
-             base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        elif route.provider_id == "ollama_local" and not route.base_url_sanitized:
-             base_url = "http://localhost:11434/v1"
+        base_url = route.base_url or cls._DEFAULT_BASE_URLS.get(route.provider_id)
 
         return cls(
             api_key=api_key,
@@ -397,8 +387,7 @@ class LLMClient:
             and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
 
-        import time as _time
-        _t0 = _time.monotonic()
+        _t0 = _time_mod.monotonic()
 
         def _create(call_kwargs: Dict[str, Any]):
             """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
@@ -413,8 +402,7 @@ class LLMClient:
             except Exception as exc:
                 if self._invocation_logger:
                     # Log failure before re-raising
-                    import time as _t
-                    latency = (_t.monotonic() - _t0) * 1000
+                    latency = (_time_mod.monotonic() - _t0) * 1000
                     status_code = getattr(exc, "status_code", None)
                     if status_code is None:
                         response = getattr(exc, "response", None)
@@ -480,7 +468,7 @@ class LLMClient:
             usage = getattr(response, "usage", None)
             completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
             content = choice.message.content or ""
-        elapsed = _time.monotonic() - _t0
+        elapsed = _time_mod.monotonic() - _t0
         logger.info(
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,

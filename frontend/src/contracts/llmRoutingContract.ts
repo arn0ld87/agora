@@ -23,13 +23,13 @@ export const StageLLMRouteSchema = z.object({
   model: z.string(),
   base_url: z.string().url().optional().nullable(),
   reasoning_effort: ReasoningEffortSchema.default("none"),
-  provider_options: z.record(z.any()).default({}),
+  provider_options: z.record(z.string(), z.any()).default(() => ({})),
 }).strict();
 export type StageLLMRoute = z.infer<typeof StageLLMRouteSchema>;
 
 export const RuntimeLlmRoutingSchema = z.object({
   default_route: StageLLMRouteSchema,
-  stage_overrides: z.record(StageIdSchema, StageLLMRouteSchema).default({}),
+  stage_overrides: z.record(StageIdSchema, StageLLMRouteSchema).default(() => ({}) as Record<StageId, StageLLMRoute>),
   routing_version: z.number().int().min(1).default(1),
 }).strict();
 export type RuntimeLlmRouting = z.infer<typeof RuntimeLlmRoutingSchema>;
@@ -47,10 +47,10 @@ export const ResolvedRouteSchema = z.object({
   stage: StageIdSchema,
   provider_id: z.string(),
   model: z.string(),
-  base_url_sanitized: z.string().optional().nullable(),
+  base_url: z.string().optional().nullable(),
   reasoning_effort: ReasoningEffortSchema.default("none"),
   routing_version: z.number().int(),
-  provider_options: z.record(z.any()).default({}),
+  provider_options: z.record(z.string(), z.any()).default(() => ({})),
   started_at: z.string().optional().nullable(),
 }).strict();
 export type ResolvedRoute = z.infer<typeof ResolvedRouteSchema>;

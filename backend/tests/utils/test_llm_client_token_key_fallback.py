@@ -131,6 +131,14 @@ def fake_client(monkeypatch):
     obj.api_key = "test"
     obj.base_url = "https://api.openai.com/v1"
     obj.model = "gpt-4o"  # Heuristik sagt max_tokens
+    # Routing/observability attributes are normally set in __init__ but we
+    # bypass it here; the chat() call paths reference them unconditionally.
+    obj.stage = None
+    obj.provider_id = None
+    obj.routing_version = 0
+    obj.reasoning_effort = "none"
+    obj.provider_options = {}
+    obj._invocation_logger = None
     monkeypatch.setenv("LLM_FORCE_STREAM", "false")
     monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
     return obj
@@ -214,6 +222,12 @@ def test_chat_streaming_path_also_falls_back(monkeypatch) -> None:
     obj.api_key = "test"
     obj.base_url = "http://localhost:11434/v1"  # Ollama → force_stream
     obj.model = "qwen2.5:32b"
+    obj.stage = None
+    obj.provider_id = None
+    obj.routing_version = 0
+    obj.reasoning_effort = "none"
+    obj.provider_options = {}
+    obj._invocation_logger = None
     monkeypatch.setenv("LLM_FORCE_STREAM", "true")
     monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 

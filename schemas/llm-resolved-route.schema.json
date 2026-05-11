@@ -2,9 +2,9 @@
   "$id": "https://alexle135.de/schemas/llm-resolved-route.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The final resolved configuration for an LLM call inside a stage.",
+  "description": "The final resolved configuration for an LLM call inside a stage.\n\n``base_url`` is the runtime URL used for the actual LLM call. Callers must\nnever embed secrets (userinfo, query-string keys) into provider URLs; the\ninvocation logger and snapshot writer apply defensive sanitization when\nemitting URLs to logs/disk via ``SecretResolver.sanitize_url``.",
   "properties": {
-    "base_url_sanitized": {
+    "base_url": {
       "anyOf": [
         {
           "type": "string"
@@ -14,7 +14,7 @@
         }
       ],
       "default": null,
-      "title": "Base Url Sanitized"
+      "title": "Base Url"
     },
     "model": {
       "title": "Model",

@@ -16,6 +16,7 @@ from flask import Response, request, send_file, current_app
 from pydantic import ValidationError
 
 from . import report_bp
+from ..config import Config
 from ..contracts import (
     DEFAULT_REPORT_MODE,
     EvidenceMapModel,
