@@ -245,6 +245,33 @@ def generate_ontology():
     project.simulation_requirement = simulation_requirement
     logger.info(f"Project created: {project.project_id}")
 
+    # 0. Initialise runtime routing for the project/run
+    from ..services.stage_model_router import StageModelRouter
+    from ..services.runtime_run_config import RuntimeRunConfig
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+
+    run_id = f"proj_{project.project_id}" # Mapping project to a run_id for routing
+    config_service = RuntimeRunConfig(run_id)
+
+    # Resolve default route
+    if llm_runtime.enabled:
+        default_route = StageLLMRoute(
+            provider_id=llm_runtime.provider,
+            model=llm_model_override or Config.LLM_MODEL_NAME,
+            base_url=llm_runtime.base_url
+        )
+    else:
+        default_route = StageLLMRoute(
+            provider_id="ollama_local",
+            model=llm_model_override or Config.LLM_MODEL_NAME,
+            base_url=Config.LLM_BASE_URL
+        )
+
+    runtime_routing = RuntimeLlmRouting(default_route=default_route)
+    config_service.save_config(runtime_routing)
+
+    router = StageModelRouter(run_id)
+
     # Save files and extract text
     document_texts = []
     all_text = ""
@@ -286,11 +313,20 @@ def generate_ontology():
     logger.info(f"Text extraction completed, total {len(all_text)} characters")
 
     # Generate ontology
-    llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+    # Stage 1: document_ingest (Implicitly used during extraction if needed, but here we lock it)
+    ingest_route = router.resolve("document_ingest")
+    router.lock_stage("document_ingest", ingest_route)
+
+    # Stage 2: ontology_generation
+    ontology_route = router.resolve("ontology_generation")
+    router.lock_stage("ontology_generation", ontology_route)
+
+    llm_client = LLMClient.from_route(ontology_route, run_id=run_id)
     logger.info(
-        "Calling LLM to generate ontology definition (model=%s, runtime_provider=%s)",
+        "Calling LLM to generate ontology definition (model=%s, provider=%s, version=%d)",
         llm_client.model,
-        llm_runtime.provider,
+        ontology_route.provider_id,
+        ontology_route.routing_version
     )
     generator = OntologyGenerator(llm_client=llm_client)
     ontology = generator.generate(
@@ -404,6 +440,27 @@ def build_graph():
         project.graph_build_task_id = None
         project.error = None
 
+    run_id = f"proj_{project.project_id}"
+    from ..services.stage_model_router import StageModelRouter
+    from ..services.runtime_run_config import RuntimeRunConfig
+    from ..contracts.llm_routing_contract import StageLLMRoute
+
+    # 0. Update runtime config if new provider passed
+    if llm_provider_payload or llm_model_override:
+        config_service = RuntimeRunConfig(run_id)
+        config = config_service.load_config()
+        if llm_runtime.enabled:
+            config.default_route = StageLLMRoute(
+                provider_id=llm_runtime.provider,
+                model=llm_model_override or config.default_route.model,
+                base_url=llm_runtime.base_url
+            )
+        elif llm_model_override:
+             config.default_route.model = llm_model_override
+
+        config.routing_version += 1
+        config_service.save_config(config)
+
     # Get configuration
     graph_name = data.get('graph_name', project.name or 'Agora Graph')
     chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
@@ -468,19 +525,23 @@ def build_graph():
     project.graph_build_task_id = task_id
     ProjectManager.save_project(project)
 
+    # Stage 3: graph_build
+    router = StageModelRouter(run_id)
+    build_route = router.resolve("graph_build")
+    router.lock_stage("graph_build", build_route)
+
     # NER-Override pro Build: wenn der Request (oder das Projekt-Default)
     # ein Frontend-Modell vorgibt, bauen wir einen dedizierten NERExtractor,
     # damit Phase-1-Extraktion das gewählte Modell nutzt — ohne den
     # globalen Storage-Singleton-NER zu mutieren.
-    ner_override: NERExtractor | None = None
-    if llm_runtime.enabled or llm_model_override:
-        ner_llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
-        ner_override = NERExtractor(llm_client=ner_llm_client)
-        logger.info(
-            "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s",
-            ner_llm_client.model,
-            llm_runtime.provider,
-        )
+    ner_llm_client = LLMClient.from_route(build_route, run_id=run_id)
+    ner_override = NERExtractor(llm_client=ner_llm_client)
+    logger.info(
+        "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s, version=%d",
+        ner_llm_client.model,
+        build_route.provider_id,
+        build_route.routing_version
+    )
 
     # Start background task
     def build_task():

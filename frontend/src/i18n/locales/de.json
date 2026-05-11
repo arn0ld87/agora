@@ -364,7 +364,18 @@
       "stage_overrides": "Stage-Overrides",
       "locked": "Gesperrt",
       "active_snapshots": "Aktive Snapshots",
-      "no_snapshots_yet": "Noch keine Snapshots vorhanden."
+      "no_snapshots_yet": "Noch keine Snapshots vorhanden.",
+      "routing_version": "Routing-Version",
+      "version_divergence": "Konfiguriert v{configured} vs Aktiv v{active}",
+      "custom_model": "Eigenes Modell",
+      "provider_options": "Provider-Optionen (JSON)",
+      "locked_explanation": "Diese Phase hat bereits begonnen. Die Route ist gesperrt und kann nicht mehr geändert werden.",
+      "source_badges": {
+        "live": "Live",
+        "cached": "Cache",
+        "fallback": "Fallback",
+        "custom": "Eigener"
+      }
     }
   },
   "step3": {

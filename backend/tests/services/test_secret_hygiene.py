@@ -1,0 +1,74 @@
+import pytest
+import os
+import json
+from app.services.runtime_run_config import RuntimeRunConfig
+from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, ResolvedRoute
+from unittest.mock import patch
+
+@pytest.fixture
+def temp_run_dir(tmp_path):
+    run_id = "proj_secret_test"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    with patch("app.utils.artifact_locator.ArtifactLocator.run_dir", return_value=str(run_dir)):
+        yield run_id, run_dir
+
+def test_recursive_secret_scrubbing(temp_run_dir):
+    run_id, run_dir = temp_run_dir
+    service = RuntimeRunConfig(run_id)
+
+    # Create a config with secrets in provider_options (nested)
+    default_route = StageLLMRoute(
+        provider_id="ollama",
+        model="qwen",
+        provider_options={
+            "api_key": "secret123",
+            "nested": {
+                "password": "pass",
+                "safe": "value"
+            }
+        }
+    )
+    config = RuntimeLlmRouting(default_route=default_route, routing_version=1)
+
+    # Save config
+    service.save_config(config)
+
+    # Check the file content manually
+    config_path = run_dir / "runtime_llm_routing.json"
+    with open(config_path, "r") as f:
+        data = json.load(f)
+
+    def check_no_secrets(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                assert k.lower() not in ("api_key", "password", "secret")
+                check_no_secrets(v)
+        elif isinstance(obj, list):
+            for i in obj:
+                check_no_secrets(i)
+
+    check_no_secrets(data)
+    assert data["default_route"]["provider_options"]["nested"]["safe"] == "value"
+
+def test_stage_snapshot_secret_scrubbing(temp_run_dir):
+    run_id, run_dir = temp_run_dir
+    service = RuntimeRunConfig(run_id)
+
+    snapshot = {
+        "stage": "graph_build",
+        "provider_id": "openai",
+        "api_key": "SK-12345",
+        "provider_options": {
+            "token": "TOK-555"
+        }
+    }
+
+    service.save_stage_snapshot("graph_build", snapshot)
+
+    snapshot_path = run_dir / "stages" / "graph_build_llm_route_snapshot.json"
+    with open(snapshot_path, "r") as f:
+        data = json.load(f)
+
+    assert "api_key" not in data
+    assert "token" not in data["provider_options"]

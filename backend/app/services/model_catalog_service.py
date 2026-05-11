@@ -78,40 +78,55 @@ class ModelCatalogService:
 
     def _fetch_live(self, provider_type: str, base_url: str, api_key: Optional[str]) -> List[str]:
         """Discovery implementation per provider type."""
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         if provider_type == "ollama_local":
             # Ollama has /api/tags (native) and /v1/models (OpenAI compatible)
-            # We prefer /api/tags for full metadata if available
+            models = set()
+
+            # 1. Try OpenAI compatible /v1/models
             try:
-                # Try OpenAI compatible first as it's the standard Agora uses
-                resp = requests.get(f"{base_url.rstrip('/')}/v1/models", timeout=5)
+                v1_url = f"{base_url.rstrip('/')}/v1/models"
+                resp = requests.get(v1_url, headers=headers, timeout=5)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return [m["id"] for m in data.get("data", [])]
-            except:
-                 pass
+                    for m in data.get("data", []):
+                        models.add(m["id"])
+            except Exception as e:
+                logger.debug("Ollama /v1/models failed: %s", e)
 
-            # Try native Ollama /api/tags as fallback
-            # We need to strip /v1 if it was added to base_url for OpenAI compat
-            native_url = base_url.replace("/v1", "").rstrip("/")
-            resp = requests.get(f"{native_url}/api/tags", timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                return [m["name"] for m in data.get("models", [])]
+            # 2. Try native Ollama /api/tags
+            try:
+                native_url = base_url.replace("/v1", "").rstrip("/") + "/api/tags"
+                resp = requests.get(native_url, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for m in data.get("models", []):
+                        models.add(m["name"])
+            except Exception as e:
+                logger.debug("Ollama /api/tags failed: %s", e)
+
+            return sorted(list(models))
 
         elif provider_type in ("openai", "google", "openai_compatible"):
-            headers = {}
-            if api_key:
-                headers["Authorization"] = f"Bearer {api_key}"
+            # Normalize OpenAI/Gemini/OpenAI-compatible data[] model responses
+            endpoints = [
+                f"{base_url.rstrip('/')}/models",
+                f"{base_url.rstrip('/')}/v1/models"
+            ]
 
-            resp = requests.get(f"{base_url.rstrip('/')}/models", headers=headers, timeout=5)
-            if resp.status_code != 200:
-                 # Try /v1/models if /models failed
-                 resp = requests.get(f"{base_url.rstrip('/')}/v1/models", headers=headers, timeout=5)
-
-            if resp.status_code == 200:
-                data = resp.json()
-                # OpenAI and Google (OpenAI-shim) both use data[]
-                return [m["id"] for m in data.get("data", [])]
+            for url in endpoints:
+                try:
+                    resp = requests.get(url, headers=headers, timeout=5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        # Both OpenAI and Gemini-OpenAI-shim use "data" list
+                        if "data" in data and isinstance(data["data"], list):
+                            return [m["id"] for m in data["data"] if "id" in m]
+                except Exception as e:
+                    logger.debug("Discovery failed for %s: %s", url, e)
 
         return []
 

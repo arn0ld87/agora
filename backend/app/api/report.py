@@ -154,6 +154,39 @@ def generate_report():
 
     report_id = f"report_{uuid.uuid4().hex[:12]}"
 
+    # 0. Runtime routing integration
+    from ..services.stage_model_router import StageModelRouter
+    from ..services.runtime_run_config import RuntimeRunConfig
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+
+    run_id = f"report_{report_id}"
+    config_service = RuntimeRunConfig(run_id)
+
+    # Initialize runtime config
+    if llm_runtime.enabled:
+        default_route = StageLLMRoute(
+            provider_id=llm_runtime.provider,
+            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
+            base_url=llm_runtime.base_url
+        )
+    else:
+        default_route = StageLLMRoute(
+            provider_id="ollama_local",
+            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
+            base_url=Config.LLM_BASE_URL
+        )
+
+    runtime_routing = RuntimeLlmRouting(default_route=default_route)
+    config_service.save_config(runtime_routing)
+
+    router = StageModelRouter(run_id)
+    # Lock evaluation stage
+    eval_route = router.resolve("evaluation")
+    router.lock_stage("evaluation", eval_route)
+    # Lock report generation stage
+    report_route = router.resolve("report_generation")
+    router.lock_stage("report_generation", report_route)
+
     task_manager = TaskManager()
     run_record = run_registry.create_run(
         run_type="report_generate",
@@ -196,14 +229,8 @@ def generate_report():
         return json_error("GraphStorage not initialized — check Neo4j connection", status=500)
 
     # Bug-Fix: ReportAgent und GraphToolsService müssen denselben LLMClient
-    # teilen, sonst nutzt GraphToolsService.llm beim Lazy-Init ``LLMClient()``
-    # mit Config-Default — egal welches Modell der User für den Report gewählt
-    # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
-    shared_llm_client = (
-        LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
-        if (llm_runtime.enabled or llm_model_override)
-        else None
-    )
+    # teilen. Wir nutzen nun den Snapshot-basierten Client.
+    shared_llm_client = LLMClient.from_route(report_route, run_id=run_id)
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     def run_generate():

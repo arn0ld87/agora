@@ -57,10 +57,32 @@ class RuntimeRunConfig:
         """Persist stage-specific LLM route snapshot."""
         os.makedirs(self.stages_dir, exist_ok=True)
         path = os.path.join(self.stages_dir, f"{stage_id}_llm_route_snapshot.json")
+
         # Ensure no secrets in snapshot
-        if "api_key" in snapshot:
-            snapshot = dict(snapshot)
-            del snapshot["api_key"]
+        snapshot = self._sanitize_deep(snapshot)
 
         with open(path, "w") as f:
             json.dump(snapshot, f, indent=2)
+
+    def _sanitize_deep(self, data: Any) -> Any:
+        """Recursively remove keys that might contain secrets."""
+        if isinstance(data, dict):
+            return {
+                k: self._sanitize_deep(v)
+                for k, v in data.items()
+                if k.lower() not in ("api_key", "apikey", "secret", "password", "token")
+            }
+        if isinstance(data, list):
+            return [self._sanitize_deep(v) for v in data]
+        return data
+
+    def save_config(self, config: RuntimeLlmRouting) -> None:
+        """Persist runtime configuration."""
+        os.makedirs(self.run_dir, exist_ok=True)
+        # Monotonicity check for routing_version should happen in service/api layer
+
+        # Sanitize deep before saving
+        data = self._sanitize_deep(config.model_dump(mode="json"))
+
+        with open(self.config_path, "w") as f:
+            json.dump(data, f, indent=2)

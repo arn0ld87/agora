@@ -195,6 +195,45 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
+    run_id = f"sim_{simulation_id}"
+    from ..services.stage_model_router import StageModelRouter
+    from ..services.runtime_run_config import RuntimeRunConfig
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+
+    # 0. Initialise or update runtime routing
+    config_service = RuntimeRunConfig(run_id)
+    try:
+        runtime_routing = config_service.load_config()
+        if llm_runtime.enabled:
+             runtime_routing.default_route = StageLLMRoute(
+                 provider_id=llm_runtime.provider,
+                 model=llm_model_override or Config.LLM_MODEL_NAME,
+                 base_url=llm_runtime.base_url
+             )
+             runtime_routing.routing_version += 1
+        elif llm_model_override:
+             runtime_routing.default_route.model = llm_model_override
+             runtime_routing.routing_version += 1
+        config_service.save_config(runtime_routing)
+    except:
+        # Synthesis happens in load_config fallback
+        pass
+
+    router = StageModelRouter(run_id)
+    rounds_route = router.resolve("simulation_rounds")
+    router.lock_stage("simulation_rounds", rounds_route)
+
+    # Reconstruct effective RuntimeLlmConfig for subprocess_env (OASIS compat)
+    from ..services.llm_runtime import RuntimeLlmConfig
+    from ..utils.llm_client import LLMClient
+
+    rounds_client = LLMClient.from_route(rounds_route, run_id=run_id)
+    effective_runtime = RuntimeLlmConfig(
+        provider=rounds_route.provider_id,
+        api_key=rounds_client.api_key,
+        base_url=rounds_client.base_url
+    )
+
     if simulation_days is not None or llm_model_override or llm_runtime.enabled:
         store = get_artifact_store()
         config = store.read_json(simulation_id, "simulation_config", default=None)
@@ -208,10 +247,10 @@ def start_simulation():
             time_config = dict(config.get("time_config") or {})
             time_config["total_simulation_hours"] = simulation_days * 24
             config["time_config"] = time_config
-        if llm_model_override:
-            config["llm_model"] = llm_model_override
-        if llm_runtime.enabled:
-            config["llm_base_url"] = llm_runtime.base_url
+
+        # Lock simulation_config to use the snapshot model/url
+        config["llm_model"] = rounds_route.model
+        config["llm_base_url"] = rounds_client.base_url
         store.write_json(simulation_id, "simulation_config", config)
 
     run_state = SimulationRunner.start_simulation(
@@ -220,7 +259,7 @@ def start_simulation():
         max_rounds=max_rounds,
         enable_graph_memory_update=enable_graph_memory_update,
         graph_id=graph_id,
-        runtime_env=llm_runtime.subprocess_env(model=llm_model_override),
+        runtime_env=effective_runtime.subprocess_env(model=rounds_route.model),
     )
 
     manager._set_status(state, SimulationStatus.RUNNING)

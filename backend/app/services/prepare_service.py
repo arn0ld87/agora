@@ -106,8 +106,9 @@ def _phase_generate_profiles(
     sim_dir: str,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[Any] = None,
     language: Optional[str],
+    run_id: Optional[str] = None,
     use_llm_for_profiles: bool,
     parallel_profile_count: int,
     progress_callback: Optional[Callable] = None,
@@ -142,9 +143,23 @@ def _phase_generate_profiles(
     # Issue #215: Branchenverteilung-Plan für LLM-Prompt — Default Destatis WZ 2008
     # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
     industry_plan = default_dach_industry_quota(max(total_entities, 1))
+
+    # Resolve secrets if llm_runtime is a ResolvedRoute
+    from ..contracts.llm_routing_contract import ResolvedRoute
+    from ..utils.llm_client import LLMClient
+    api_key = None
+    base_url = None
+    if isinstance(llm_runtime, ResolvedRoute):
+        client = LLMClient.from_route(llm_runtime, run_id=run_id)
+        api_key = client.api_key
+        base_url = client.base_url
+    elif llm_runtime and getattr(llm_runtime, "enabled", False):
+        api_key = getattr(llm_runtime, "api_key", None)
+        base_url = getattr(llm_runtime, "base_url", None)
+
     generator = OasisProfileGenerator(
-        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
-        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
+        api_key=api_key,
+        base_url=base_url,
         storage=storage,
         graph_id=state.graph_id,
         model_name=llm_model,
@@ -230,8 +245,9 @@ def _phase_generate_config(
     filtered,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[Any] = None,
     language: Optional[str],
+    run_id: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> None:
@@ -254,9 +270,22 @@ def _phase_generate_config(
             total=3,
         )
 
+    # Resolve secrets if llm_runtime is a ResolvedRoute
+    from ..contracts.llm_routing_contract import ResolvedRoute
+    from ..utils.llm_client import LLMClient
+    api_key = None
+    base_url = None
+    if isinstance(llm_runtime, ResolvedRoute):
+        client = LLMClient.from_route(llm_runtime, run_id=run_id)
+        api_key = client.api_key
+        base_url = client.base_url
+    elif llm_runtime and getattr(llm_runtime, "enabled", False):
+        api_key = getattr(llm_runtime, "api_key", None)
+        base_url = getattr(llm_runtime, "base_url", None)
+
     config_generator = SimulationConfigGenerator(
-        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
-        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
+        api_key=api_key,
+        base_url=base_url,
         model_name=llm_model,
         language=language,
     )
@@ -461,10 +490,11 @@ def prepare_simulation(
     parallel_profile_count: Optional[int] = None,
     storage: Any = None,
     llm_model: Optional[str] = None,
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[Any] = None,
     language: Optional[str] = None,
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
+    run_id: Optional[str] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -520,6 +550,7 @@ def prepare_simulation(
             parallel_profile_count=parallel_profile_count,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
+            run_id=run_id,
         )
 
         # Optional quota check: ValidationError propagates → FAILED state.
@@ -539,6 +570,7 @@ def prepare_simulation(
             language=language,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
+            run_id=run_id,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to

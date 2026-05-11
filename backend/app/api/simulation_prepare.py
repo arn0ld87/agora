@@ -276,6 +276,47 @@ def prepare_simulation():
             message=f"Invalid quota_plan: {exc}",
         )
 
+    # 0. Runtime routing integration
+    from ..services.stage_model_router import StageModelRouter
+    from ..services.runtime_run_config import RuntimeRunConfig
+    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+
+    run_id = f"sim_{simulation_id}"
+    config_service = RuntimeRunConfig(run_id)
+
+    # Initialize or update runtime config
+    try:
+        runtime_routing = config_service.load_config()
+        # If it was a legacy fallback, we might want to update it with current request info
+        if llm_runtime.enabled:
+             runtime_routing.default_route = StageLLMRoute(
+                 provider_id=llm_runtime.provider,
+                 model=llm_model_override or Config.LLM_MODEL_NAME,
+                 base_url=llm_runtime.base_url
+             )
+             runtime_routing.routing_version += 1
+        elif llm_model_override:
+             runtime_routing.default_route.model = llm_model_override
+             runtime_routing.routing_version += 1
+    except:
+        # Create new config
+        if llm_runtime.enabled:
+            default_route = StageLLMRoute(
+                provider_id=llm_runtime.provider,
+                model=llm_model_override or Config.LLM_MODEL_NAME,
+                base_url=llm_runtime.base_url
+            )
+        else:
+            default_route = StageLLMRoute(
+                provider_id="ollama_local",
+                model=llm_model_override or Config.LLM_MODEL_NAME,
+                base_url=Config.LLM_BASE_URL
+            )
+        runtime_routing = RuntimeLlmRouting(default_route=default_route)
+
+    config_service.save_config(runtime_routing)
+    router = StageModelRouter(run_id)
+
     agent_language_override = (data.get('language') or '').strip().lower() or None
     if agent_language_override and agent_language_override not in ('de', 'en'):
         agent_language_override = None
@@ -402,6 +443,10 @@ def prepare_simulation():
                     progress_detail=progress_detail_data,
                 )
 
+            # Resolve and lock stage route for persona generation
+            persona_route = router.resolve("persona_generation")
+            router.lock_stage("persona_generation", persona_route)
+
             result_state = manager.prepare_simulation(
                 simulation_id=simulation_id,
                 simulation_requirement=simulation_requirement,
@@ -411,11 +456,13 @@ def prepare_simulation():
                 progress_callback=progress_callback,
                 parallel_profile_count=parallel_profile_count,
                 storage=storage,
-                llm_model=llm_model_override,
-                llm_runtime=llm_runtime,
+                llm_model=persona_route.model,
+                llm_runtime=persona_route, # manager handles ResolvedRoute or RuntimeLlmConfig?
+                # Need to check SimulationManager.prepare_simulation signature
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,
+                run_id=run_id, # Pass run_id for LLMClient creation inside manager
             )
 
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())

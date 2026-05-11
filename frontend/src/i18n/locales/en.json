@@ -353,7 +353,18 @@
       "stage_overrides": "Stage Overrides",
       "locked": "Locked",
       "active_snapshots": "Active Snapshots",
-      "no_snapshots_yet": "No snapshots yet."
+      "no_snapshots_yet": "No snapshots yet.",
+      "routing_version": "Routing Version",
+      "version_divergence": "Configured v{configured} vs Active v{active}",
+      "custom_model": "Custom model",
+      "provider_options": "Provider Options (JSON)",
+      "locked_explanation": "This stage has already started. The route is locked and cannot be changed.",
+      "source_badges": {
+        "live": "Live",
+        "cached": "Cached",
+        "fallback": "Fallback",
+        "custom": "Custom"
+      }
     }
   },
   "step3": {

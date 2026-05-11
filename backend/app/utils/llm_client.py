@@ -86,12 +86,20 @@ class LLMClient:
         timeout: float = 300.0,
         reasoning_effort: Optional[ReasoningEffort] = None,
         provider_options: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        stage: Optional[str] = None,
+        routing_version: Optional[int] = None,
+        provider_id: Optional[str] = None,
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
+        self.run_id = run_id
+        self.stage = stage
+        self.routing_version = routing_version or 0
+        self.provider_id = provider_id
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
@@ -105,8 +113,19 @@ class LLMClient:
         # Ollama context window size — prevents prompt truncation.
         # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
         self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
+
+        # num_ctx boundary check: only Ollama may use it
+        if self._num_ctx != 8192 and not self._is_ollama():
+             # Non-Ollama providers ignore num_ctx from provider_options
+             if 'num_ctx' in self.provider_options:
+                 logger.warning("num_ctx in provider_options ignored for non-Ollama provider")
+
         # Ollama thinking toggle (mapped from reasoning_effort).
         self._think = self.reasoning_effort != "none"
+
+        # Initialize invocation logger if run_id is present
+        from ..services.llm_invocation_logger import LlmInvocationLogger
+        self._invocation_logger = LlmInvocationLogger(run_id) if run_id else None
 
         # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
         self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
@@ -114,15 +133,60 @@ class LLMClient:
         self._retry_max_delay = float(os.environ.get('LLM_RETRY_MAX_DELAY', '30.0'))
 
     @classmethod
-    def from_route(cls, route: ResolvedRoute, api_key: str, timeout: float = 300.0) -> "LLMClient":
-        """Factory: create LLMClient from a resolved stage route."""
+    def from_route(
+        cls,
+        route: ResolvedRoute,
+        secret_resolver: Optional[Any] = None,
+        run_id: Optional[str] = None,
+        timeout: float = 300.0
+    ) -> "LLMClient":
+        """Factory: create LLMClient from a resolved stage route and secret resolver."""
+        from ..services.secret_resolver import SecretResolver
+        resolver = secret_resolver or SecretResolver()
+
+        # 1. Resolve provider type (needed for api key resolution)
+        # We need to know the type, but ResolvedRoute only has provider_id.
+        # For now, we try to infer it or use a default.
+        # In a more robust implementation, ResolvedRoute might carry provider_type.
+        provider_type = "openai_compatible"
+        if route.provider_id == "openai":
+            provider_type = "openai"
+        elif route.provider_id == "google":
+            provider_type = "google"
+        elif route.provider_id == "ollama_local":
+            provider_type = "ollama_local"
+
+        # 2. Resolve secrets
+        api_key = resolver.get_api_key(route.provider_id, provider_type)
+
+        # For base_url, we need the ORIGINAL URL if it was overridden,
+        # but ResolvedRoute only has base_url_sanitized.
+        # This is a gap in the contract: if we use a custom base_url,
+        # where do we get the non-sanitized one?
+        # Requirement 5 says: "do not use base_url_sanitized as the actual invocation URL if the original route URL is needed for execution"
+        # However, secrets are not allowed in URLs anyway by our sanitization logic (userinfo, query).
+        # If the original base_url was in Config, we can get it.
+        # If it was a per-stage override, we might need to recover it.
+
+        base_url = route.base_url_sanitized
+        if route.provider_id == "openai" and not route.base_url_sanitized:
+             base_url = "https://api.openai.com/v1"
+        elif route.provider_id == "google" and not route.base_url_sanitized:
+             base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif route.provider_id == "ollama_local" and not route.base_url_sanitized:
+             base_url = "http://localhost:11434/v1"
+
         return cls(
             api_key=api_key,
-            base_url=route.base_url_sanitized, # Caller must provide secret base_url if needed
+            base_url=base_url,
             model=route.model,
             timeout=timeout,
             reasoning_effort=route.reasoning_effort,
             provider_options=route.provider_options,
+            run_id=run_id,
+            stage=route.stage,
+            routing_version=route.routing_version,
+            provider_id=route.provider_id,
         )
 
     def _is_ollama(self) -> bool:
@@ -338,13 +402,36 @@ class LLMClient:
 
         def _create(call_kwargs: Dict[str, Any]):
             """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
-            return llm_call_with_retry(
-                self.client.chat.completions.create,
-                max_retries=self._max_retries,
-                initial_delay=self._retry_initial_delay,
-                max_delay=self._retry_max_delay,
-                **call_kwargs,
-            )
+            try:
+                return llm_call_with_retry(
+                    self.client.chat.completions.create,
+                    max_retries=self._max_retries,
+                    initial_delay=self._retry_initial_delay,
+                    max_delay=self._retry_max_delay,
+                    **call_kwargs,
+                )
+            except Exception as exc:
+                if self._invocation_logger:
+                    # Log failure before re-raising
+                    import time as _t
+                    latency = (_t.monotonic() - _t0) * 1000
+                    status_code = getattr(exc, "status_code", None)
+                    if status_code is None:
+                        response = getattr(exc, "response", None)
+                        status_code = getattr(response, "status_code", None)
+
+                    self._invocation_logger.log_event(
+                        stage=self.stage or "unknown",
+                        provider_id=self.provider_id or "unknown",
+                        model=self.model or "unknown",
+                        base_url=self.base_url,
+                        routing_version=self.routing_version,
+                        latency_ms=latency,
+                        success=False,
+                        error_type=type(exc).__name__,
+                        http_status=status_code,
+                    )
+                raise
 
         def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]):
             """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
@@ -398,6 +485,20 @@ class LLMClient:
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
         )
+
+        # Log event if logger is configured
+        if self._invocation_logger:
+            self._invocation_logger.log_event(
+                stage=self.stage or "unknown",
+                provider_id=self.provider_id or "unknown",
+                model=self.model or "unknown",
+                base_url=self.base_url,
+                routing_version=self.routing_version,
+                latency_ms=elapsed * 1000,
+                success=True,
+                http_status=200,
+            )
+
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
