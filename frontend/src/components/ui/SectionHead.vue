@@ -24,48 +24,50 @@ defineProps({
 /* See global.css .section-head — but scoped variant for nested use */
 .section-head {
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: var(--s-7);
+  grid-template-columns: minmax(120px, 0.42fr) 1fr;
+  gap: var(--sp-7, var(--s-7));
   align-items: start;
-  padding-bottom: var(--s-7);
-  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: var(--sp-6, var(--s-6));
+  border-bottom: 1px solid var(--hairline-strong, var(--rule-strong));
 }
 .left {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
+  gap: var(--sp-3, var(--s-3));
 }
 .num {
-  font-family: var(--ff-serif);
-  font-weight: 300;
-  font-size: clamp(84px, 10vw, 140px);
-  line-height: 0.88;
-  letter-spacing: -0.04em;
-  color: var(--fg);
+  font-family: var(--font-sans, var(--ff-sans));
+  font-weight: 600;
+  font-size: clamp(42px, 5vw, 72px);
+  line-height: 0.95;
+  letter-spacing: 0;
+  color: var(--text-primary, var(--fg));
+  font-variant-numeric: tabular-nums;
 }
 .k {
-  font-family: var(--ff-mono);
-  font-size: var(--fs-12);
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--accent);
+  font-family: var(--font-sans, var(--ff-sans));
+  font-size: var(--fs-caption-1, var(--fs-12));
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary, var(--fg-muted));
+  font-weight: 600;
 }
 h2 {
-  font-family: var(--ff-serif);
-  font-weight: 400;
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  font-family: var(--font-sans, var(--ff-sans));
+  font-weight: 600;
+  font-size: clamp(28px, 3vw, 44px);
+  line-height: 1.08;
+  letter-spacing: 0;
   margin: 0;
-  color: var(--fg);
+  color: var(--text-primary, var(--fg));
 }
 .sub {
-  font-family: var(--ff-sans);
-  font-size: var(--fs-18);
-  line-height: 1.6;
-  color: var(--fg-body);
+  font-family: var(--font-sans, var(--ff-sans));
+  font-size: var(--fs-body, var(--fs-16));
+  line-height: var(--lh-body, 1.55);
+  color: var(--text-secondary, var(--fg-body));
   max-width: 54ch;
-  margin: var(--s-5) 0 0;
+  margin: var(--sp-4, var(--s-4)) 0 0;
 }
 @media (max-width: 720px) {
   .section-head { grid-template-columns: 1fr; }
