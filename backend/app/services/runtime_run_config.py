@@ -12,6 +12,21 @@ from ..utils.logger import get_logger
 
 logger = get_logger("agora.runtime_run_config")
 
+
+def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[str]) -> str:
+    """Best-effort mapping from legacy server config to routing provider IDs."""
+    normalized_base = (base_url or "").strip().lower()
+    normalized_model = (model_name or "").strip().lower()
+
+    if normalized_model.endswith(":cloud") or "11434" in normalized_base:
+        return "ollama_local"
+    if "generativelanguage.googleapis.com" in normalized_base or "gemini" in normalized_model:
+        return "google"
+    if "openai.com" in normalized_base or "api.openai" in normalized_base:
+        return "openai"
+    return "openai_compatible"
+
+
 class RuntimeRunConfig:
     """Manages runtime configuration for a run."""
 
@@ -33,7 +48,7 @@ class RuntimeRunConfig:
         provider_options: Dict[str, Any] = {"base_url": Config.LLM_BASE_URL} if Config.LLM_BASE_URL else {}
 
         global_default = StageLLMRoute(
-            provider_id="ollama_local",
+            provider_id=_detect_default_provider_id(Config.LLM_BASE_URL, Config.LLM_MODEL_NAME),
             model=Config.LLM_MODEL_NAME,
             provider_options=provider_options,
         )
@@ -44,7 +59,7 @@ class RuntimeRunConfig:
         os.makedirs(self.run_dir, exist_ok=True)
         # Monotonicity check for routing_version should happen in service/api layer
         with open(self.config_path, "w") as f:
-            f.write(config.model_dump_json(indent=2))
+            f.write(config.model_dump_json(indent=2, exclude_none=True, exclude_defaults=True))
 
     def load_stage_snapshot(self, stage_id: StageId) -> Optional[Dict[str, Any]]:
         """Load stage-specific LLM route snapshot."""

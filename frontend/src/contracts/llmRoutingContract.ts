@@ -58,3 +58,19 @@ export const ResolvedRouteSchema = z.object({
   started_at: z.string().optional().nullable(),
 }).strict();
 export type ResolvedRoute = z.infer<typeof ResolvedRouteSchema>;
+
+export const LlmInvocationEventSchema = z.object({
+  run_id: z.string(),
+  stage: z.string(),
+  provider_id: z.string(),
+  model: z.string(),
+  base_url_sanitized: z.string().optional().nullable(),
+  routing_version: z.number().int(),
+  timestamp: z.number(),
+  latency_ms: z.number(),
+  success: z.boolean(),
+  error_type: z.string().optional().nullable(),
+  http_status: z.number().int().optional().nullable(),
+  remote_request_id: z.string().optional().nullable(),
+}).strict();
+export type LlmInvocationEvent = z.infer<typeof LlmInvocationEventSchema>;

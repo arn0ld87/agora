@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   listLlmProviders,
+  listProviderModels,
   getRunLlmRouting,
   updateRunLlmRouting,
   patchStageLlmRouting
@@ -12,7 +13,8 @@ import {
   RuntimeLlmRouting,
   StageLLMRoute,
   StageId,
-  ReasoningEffort
+  ReasoningEffort,
+  LlmInvocationEvent,
 } from '../../contracts/llmRoutingContract';
 
 const props = defineProps<{
@@ -24,6 +26,8 @@ const { t } = useI18n();
 const providers = ref<ProviderDescriptor[]>([]);
 const routing = ref<RuntimeLlmRouting | null>(null);
 const snapshots = ref<Record<string, any>>({});
+const invocationEvents = ref<LlmInvocationEvent[]>([]);
+const modelOptions = ref<Record<string, Array<{ id: string; name: string }>>>({});
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -49,6 +53,23 @@ async function load() {
     providers.value = p;
     routing.value = r.runtime_config;
     snapshots.value = r.snapshots;
+    invocationEvents.value = [...(r.invocation_events || [])].reverse();
+
+    const discoveries = await Promise.allSettled(
+      p
+        .filter((provider) => !!provider.base_url)
+        .map(async (provider) => ({
+          providerId: provider.id,
+          models: await listProviderModels(provider.id, provider.base_url || undefined),
+        })),
+    );
+
+    const nextOptions: Record<string, Array<{ id: string; name: string }>> = {};
+    for (const result of discoveries) {
+      if (result.status !== 'fulfilled') continue;
+      nextOptions[result.value.providerId] = result.value.models || [];
+    }
+    modelOptions.value = nextOptions;
   } catch (e: any) {
     error.value = e.message;
   } finally {
@@ -82,6 +103,12 @@ async function saveStage(stageId: StageId, route: StageLLMRoute) {
 }
 
 const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
+const formatLatency = (latencyMs: number) => `${Math.round(latencyMs)} ms`;
+const formatTimestamp = (timestamp: number) => new Date(timestamp * 1000).toLocaleString();
+const modelsFor = (providerId?: string | null) => {
+  if (!providerId) return [];
+  return modelOptions.value[providerId] || [];
+};
 
 </script>
 
@@ -101,7 +128,12 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
           </select>
 
           <label>{{ t('llm.model') }}</label>
-          <input v-model="routing.global_default.model" />
+          <select v-if="modelsFor(routing.global_default.provider_id).length > 0" v-model="routing.global_default.model">
+            <option v-for="model in modelsFor(routing.global_default.provider_id)" :key="model.id" :value="model.id">
+              {{ model.name }}
+            </option>
+          </select>
+          <input v-else v-model="routing.global_default.model" />
 
           <label>{{ t('llm.reasoning_effort') }}</label>
           <select v-model="routing.global_default.reasoning_effort">
@@ -134,6 +166,40 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
               <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
             </select>
 
+            <label>{{ t('llm.model') }}</label>
+            <select
+              v-if="modelsFor(routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id).length > 0"
+              :value="routing.stage_overrides[stage]?.model || routing.global_default.model"
+              @change="(e: any) => {
+                if (!routing) return;
+                if (!routing.stage_overrides[stage]) {
+                  routing.stage_overrides[stage] = { ...routing.global_default };
+                }
+                routing.stage_overrides[stage].model = e.target.value;
+              }"
+              :disabled="isStageLocked(stage)"
+            >
+              <option
+                v-for="model in modelsFor(routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id)"
+                :key="model.id"
+                :value="model.id"
+              >
+                {{ model.name }}
+              </option>
+            </select>
+            <input
+              v-else
+              :value="routing.stage_overrides[stage]?.model || routing.global_default.model"
+              @input="(e: any) => {
+                if (!routing) return;
+                if (!routing.stage_overrides[stage]) {
+                  routing.stage_overrides[stage] = { ...routing.global_default };
+                }
+                routing.stage_overrides[stage].model = e.target.value;
+              }"
+              :disabled="isStageLocked(stage)"
+            />
+
             <button
               v-if="routing.stage_overrides[stage]"
               @click="saveStage(stage, routing.stage_overrides[stage])"
@@ -160,6 +226,26 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
             <p><strong>{{ t('llm.model') }}:</strong> {{ snap.model }}</p>
             <p><strong>{{ t('llm.provider') }}:</strong> {{ snap.provider_id }}</p>
             <p class="timestamp">{{ snap.started_at }}</p>
+          </div>
+        </div>
+
+        <h3>{{ t('llm.routing.call_events') }}</h3>
+        <div v-if="invocationEvents.length === 0" class="empty-hint">
+          {{ t('llm.routing.no_call_events_yet') }}
+        </div>
+        <div v-for="(event, index) in invocationEvents" :key="`${event.timestamp}-${index}`" class="snapshot-card card">
+          <div class="snap-header">
+            <strong>{{ event.stage }}</strong>
+            <span class="version" :class="event.success ? 'version--ok' : 'version--error'">
+              {{ event.success ? t('llm.routing.success') : t('llm.routing.failed') }}
+            </span>
+          </div>
+          <div class="snap-body">
+            <p><strong>{{ t('llm.model') }}:</strong> {{ event.model }}</p>
+            <p><strong>{{ t('llm.provider') }}:</strong> {{ event.provider_id }}</p>
+            <p><strong>{{ t('llm.routing.latency') }}:</strong> {{ formatLatency(event.latency_ms) }}</p>
+            <p v-if="event.error_type"><strong>{{ t('llm.routing.error_type') }}:</strong> {{ event.error_type }}</p>
+            <p class="timestamp">{{ formatTimestamp(event.timestamp) }}</p>
           </div>
         </div>
       </div>
@@ -200,6 +286,14 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
   padding: 2px 6px;
   border-radius: 10px;
   font-size: 0.7rem;
+}
+.version--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+.version--error {
+  background: #fee2e2;
+  color: #991b1b;
 }
 .timestamp {
   font-size: 0.7rem;

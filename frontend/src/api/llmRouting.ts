@@ -3,7 +3,8 @@ import {
   ProviderDescriptor,
   RuntimeLlmRouting,
   ResolvedRoute,
-  StageLLMRoute
+  StageLLMRoute,
+  LlmInvocationEvent,
 } from "../contracts/llmRoutingContract";
 import { ApiSuccessEnvelope } from "./envelope";
 
@@ -20,11 +21,13 @@ export async function listProviderModels(providerId: string, baseUrl?: string): 
 
 export async function getRunLlmRouting(runId: string): Promise<{
   runtime_config: RuntimeLlmRouting,
-  snapshots: Record<string, ResolvedRoute>
+  snapshots: Record<string, ResolvedRoute>,
+  invocation_events: LlmInvocationEvent[],
 }> {
   const resp = await service.get<ApiSuccessEnvelope<{
     runtime_config: RuntimeLlmRouting,
-    snapshots: Record<string, ResolvedRoute>
+    snapshots: Record<string, ResolvedRoute>,
+    invocation_events: LlmInvocationEvent[],
   }>>(`/runs/${runId}/llm-routing`);
   return (resp as any).data;
 }

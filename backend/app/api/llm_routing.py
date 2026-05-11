@@ -2,14 +2,19 @@
 LLM Routing API.
 """
 
+import json
+import os
+
 from flask import request
+from pydantic import ValidationError
+
 from . import runs_bp
 from ..services.runtime_run_config import RuntimeRunConfig
 from ..services.run_registry import RunRegistry
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
-from pydantic import ValidationError
 
 logger = get_logger("agora.api.llm_routing")
 run_registry = RunRegistry()
@@ -30,6 +35,30 @@ def _get_run_state(run_id: str):
         return None
     return run.get("status")
 
+
+def _load_invocation_events(run_id: str, limit: int = 200) -> list[dict]:
+    """Read structured LLM call events for a run, newest last."""
+    log_path = os.path.join(ArtifactLocator.run_dir(run_id), "llm_call_events.jsonl")
+    if not os.path.exists(log_path):
+        return []
+
+    events: list[dict] = []
+    with open(log_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            payload = line.strip()
+            if not payload:
+                continue
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed llm_call_events line for run %s", run_id)
+                continue
+            if isinstance(parsed, dict):
+                events.append(parsed)
+    if limit > 0:
+        return events[-limit:]
+    return events
+
 @runs_bp.route("/<run_id>/llm-routing", methods=["GET"])
 @handle_api_errors(logger=logger)
 def get_run_llm_routing(run_id: str):
@@ -46,7 +75,8 @@ def get_run_llm_routing(run_id: str):
 
     return json_success({
         "runtime_config": config.model_dump(mode="json"),
-        "snapshots": snapshots
+        "snapshots": snapshots,
+        "invocation_events": _load_invocation_events(run_id),
     })
 
 @runs_bp.route("/<run_id>/llm-routing", methods=["PUT"])
