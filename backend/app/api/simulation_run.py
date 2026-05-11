@@ -208,10 +208,10 @@ def start_simulation():
     try:
         runtime_routing = config_service.load_config()
         if llm_runtime.enabled:
-            runtime_routing.default_route = StageLLMRoute(
-                provider_id=llm_runtime.provider,
+            runtime_routing.default_route = build_default_route(
+                llm_runtime,
                 model=llm_model_override or Config.LLM_MODEL_NAME,
-                base_url=llm_runtime.base_url,
+                fallback_base_url=Config.LLM_BASE_URL,
             )
             runtime_routing.routing_version += 1
         elif llm_model_override:
