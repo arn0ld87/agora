@@ -1,10 +1,28 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: 'agora-design-v3-showcase-index',
+      configureServer(server) {
+        server.middlewares.use('/design/v3/', (req, res, next) => {
+          if (req.url && req.url !== '/') {
+            next()
+            return
+          }
+          const file = resolve(server.config.publicDir, 'design/v3/index.html')
+          res.setHeader('Content-Type', 'text/html;charset=utf-8')
+          res.end(readFileSync(file, 'utf-8'))
+        })
+      },
+    },
+  ],
   server: {
     port: 5173,
     open: true,
