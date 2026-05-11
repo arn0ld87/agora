@@ -202,7 +202,15 @@ async function startBuildGraph() {
     currentPhase.value = 1
     buildProgress.value = { progress: 0, message: t('step1.build.running') }
     addLog(t('step1.build.running'))
-    const res = await buildGraph({ project_id: currentProjectId.value })
+    // Frontend-Modell pro Build-Run mitgeben — NER-Extraktion läuft sonst
+    // mit dem Server-Default. Backend fällt auf den am Projekt
+    // persistierten Modellnamen zurück, wenn das Feld hier fehlt.
+    const buildPayload = { project_id: currentProjectId.value }
+    const selectedModel = storedEffectiveModel()
+    if (selectedModel) buildPayload.llm_model = selectedModel
+    const runtimeProvider = runtimeLlmPayloadFromStorage()
+    if (runtimeProvider) buildPayload.llm_provider = runtimeProvider
+    const res = await buildGraph(buildPayload)
     if (res.success) {
       addLog(`Build task: ${res.data.task_id}`)
       startGraphPolling()

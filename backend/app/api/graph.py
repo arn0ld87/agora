@@ -17,6 +17,7 @@ from ..services.llm_runtime import parse_runtime_llm_config
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
 from ..services.text_processor import TextProcessor
+from ..storage.ner_extractor import NERExtractor
 from ..utils.file_parser import FileParser
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
@@ -361,6 +362,23 @@ def build_graph():
             message=f"Project does not exist: {project_id}",
         )
 
+    # LLM-Override für den Build-Pfad (Sub-Slice „build-respects-frontend-model").
+    # Reihenfolge: explizit im Request > persistiert am Projekt aus dem
+    # Ontology-Schritt > Server-Default. Secrets (api_key) sind im Projekt
+    # nicht persistiert (redacted_metadata) — daher kann der Build den
+    # Provider-Override nur dann rekonstruieren, wenn der Request ihn
+    # erneut mitschickt. Modell-Name allein wird vom Projekt-Default geerbt.
+    llm_model_override = (data.get('llm_model') or '').strip() or project.llm_model or None
+    llm_provider_payload = data.get('llm_provider')
+    try:
+        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+    except ValueError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
+
     # Check project status
     force = data.get('force', False)  # Force rebuild
 
@@ -450,6 +468,20 @@ def build_graph():
     project.graph_build_task_id = task_id
     ProjectManager.save_project(project)
 
+    # NER-Override pro Build: wenn der Request (oder das Projekt-Default)
+    # ein Frontend-Modell vorgibt, bauen wir einen dedizierten NERExtractor,
+    # damit Phase-1-Extraktion das gewählte Modell nutzt — ohne den
+    # globalen Storage-Singleton-NER zu mutieren.
+    ner_override: NERExtractor | None = None
+    if llm_runtime.enabled or llm_model_override:
+        ner_llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+        ner_override = NERExtractor(llm_client=ner_llm_client)
+        logger.info(
+            "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s",
+            ner_llm_client.model,
+            llm_runtime.provider,
+        )
+
     # Start background task
     def build_task():
         build_logger = get_logger('agora.build')
@@ -527,7 +559,8 @@ def build_graph():
                 graph_id,
                 chunks,
                 batch_size=3,
-                progress_callback=add_progress_callback
+                progress_callback=add_progress_callback,
+                ner_extractor=ner_override,
             )
 
             # Neo4j processing is synchronous, no need to wait

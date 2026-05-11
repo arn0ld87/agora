@@ -265,8 +265,12 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
     fake_project.name = "Test Project"
     fake_project.chunk_size = 500
     fake_project.chunk_overlap = 50
+    fake_project.llm_model = None
+    fake_project.llm_provider = None
 
-    def fake_add_text_batches(graph_id, chunks, batch_size=3, progress_callback=None):
+    def fake_add_text_batches(
+        graph_id, chunks, batch_size=3, progress_callback=None, ner_extractor=None
+    ):
         # Simulate two chunks completing
         if progress_callback:
             progress_callback("Processed 1/2 chunks...", 0.5, 1, 2)

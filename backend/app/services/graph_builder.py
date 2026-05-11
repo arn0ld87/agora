@@ -15,6 +15,13 @@ from ..models.task import TaskManager, TaskStatus
 from ..storage import GraphStorage
 from .text_processor import TextProcessor
 
+# Forward-import nur fürs Type-Hint — der konkrete Extractor wird vom
+# Aufrufer (api/graph.py::build_graph) gebaut und durchgereicht, damit
+# der Storage-Singleton-NER unangetastet bleibt.
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..storage.ner_extractor import NERExtractor
+
 logger = logging.getLogger('agora.graph_builder')
 
 
@@ -52,7 +59,8 @@ class GraphBuilderService:
         graph_name: str = "Agora Graph",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
-        batch_size: int = 3
+        batch_size: int = 3,
+        ner_extractor: Optional["NERExtractor"] = None,
     ) -> str:
         """
         Build graph asynchronously
@@ -64,6 +72,10 @@ class GraphBuilderService:
             chunk_size: Text chunk size
             chunk_overlap: Chunk overlap size
             batch_size: Number of chunks to send per batch
+            ner_extractor: optionaler NER-Override pro Build-Run (Sub-Slice
+                „build-respects-frontend-model"). Wenn gesetzt, wird er an
+                ``storage.add_text`` durchgereicht — der Storage-Singleton-NER
+                bleibt unverändert für andere Pfade.
 
         Returns:
             Task ID
@@ -81,7 +93,7 @@ class GraphBuilderService:
         # Execute build in background thread
         thread = threading.Thread(
             target=self._build_graph_worker,
-            args=(task_id, text, ontology, graph_name, chunk_size, chunk_overlap, batch_size)
+            args=(task_id, text, ontology, graph_name, chunk_size, chunk_overlap, batch_size, ner_extractor)
         )
         thread.daemon = True
         thread.start()
@@ -96,7 +108,8 @@ class GraphBuilderService:
         graph_name: str,
         chunk_size: int,
         chunk_overlap: int,
-        batch_size: int
+        batch_size: int,
+        ner_extractor: Optional["NERExtractor"] = None,
     ):
         """Graph build worker thread"""
         try:
@@ -139,7 +152,8 @@ class GraphBuilderService:
                     task_id,
                     progress=20 + int(prog * 0.6),  # 20-80%
                     message=msg
-                )
+                ),
+                ner_extractor=ner_extractor,
             )
 
             # 5. Wait for processing (no-op for Neo4j — already synchronous)
@@ -188,7 +202,8 @@ class GraphBuilderService:
         graph_id: str,
         chunks: List[str],
         batch_size: int = 3,
-        progress_callback: Optional[Callable[[str, float, int, int], None]] = None
+        progress_callback: Optional[Callable[[str, float, int, int], None]] = None,
+        ner_extractor: Optional["NERExtractor"] = None,
     ) -> List[str]:
         """Add text chunks to graph in parallel, return uuid list of all episodes.
 
@@ -201,6 +216,9 @@ class GraphBuilderService:
           - progress_ratio (float): 0.0–1.0 completion ratio
           - completed (int): number of chunks committed so far (monotonically increasing)
           - total (int): total number of chunks in this build
+
+        ``ner_extractor`` wird an jedes ``storage.add_text`` durchgereicht
+        (Override pro Run). Ohne Override greift der Storage-Singleton-NER.
         """
         total_chunks = len(chunks)
         if total_chunks == 0:
@@ -224,7 +242,9 @@ class GraphBuilderService:
                 # Issue #10 — initial document ingest stamps round 0 so later
                 # time-travel diffs can distinguish document knowledge from
                 # edges learned during simulation.
-                episode_id = self.storage.add_text(graph_id, chunk, round_num=0)
+                episode_id = self.storage.add_text(
+                    graph_id, chunk, round_num=0, ner_extractor=ner_extractor
+                )
                 elapsed = time.time() - t0
                 logger.info(
                     f"[graph_build] Chunk {idx + 1}/{total_chunks} done in {elapsed:.1f}s"
