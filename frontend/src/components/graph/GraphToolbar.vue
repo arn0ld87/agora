@@ -147,4 +147,19 @@ defineEmits([
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Design v3 toolbar. */
+.tool-btn {
+  background: var(--surface-elevated, var(--bg));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-secondary, var(--fg-muted));
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: var(--shadow-control, none);
+}
+.tool-btn:hover {
+  background: var(--surface-hover, transparent);
+}
 </style>

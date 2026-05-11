@@ -678,4 +678,35 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   .layout { grid-template-columns: 1fr; }
   .picker { border-right: none; border-bottom: 1px solid var(--rule); max-height: 280px; }
 }
+
+/* Design v3 interaction surface polish. */
+.layout,
+.picker,
+.survey-panel,
+.survey-results {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.survey-panel {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-radius: var(--r-7, var(--r-1));
+  box-shadow: var(--shadow-1);
+}
+.survey-row,
+.survey-row:last-child,
+.picker {
+  border-color: var(--separator, var(--rule));
+}
+.survey-name,
+.survey-answer {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.survey-name {
+  color: var(--text-secondary, var(--fg));
+  font-weight: 600;
+}
+.survey-answer {
+  color: var(--text-primary, var(--fg));
+}
 </style>

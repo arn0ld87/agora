@@ -392,6 +392,22 @@ input:checked + .slider:before {
 
 .toggle-label {
   font-size: 12px;
-  color: var(--fg-meta);
+  color: var(--text-secondary, var(--fg-meta));
+}
+
+/* Design v3 graph controls. */
+.slider {
+  background-color: var(--gray-5, var(--rule-strong));
+}
+.slider:before {
+  background-color: var(--surface-base, var(--mono-50));
+  box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.06);
+}
+input:checked + .slider {
+  background-color: var(--accent);
+}
+.toggle-label {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
 }
 </style>

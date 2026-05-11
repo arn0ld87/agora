@@ -869,4 +869,31 @@ function formatDate(iso: string): string {
   white-space: nowrap;
   opacity: 0.8;
 }
+
+/* Design v3 compare panel polish. */
+.branch-compare-panel,
+.cluster-list,
+.cluster-item {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.cluster-item {
+  border-radius: var(--r-5, var(--r-sm, 4px));
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+}
+.cluster-only-a {
+  background: var(--status-red-bg, #fee2e2);
+  color: var(--status-red, #b91c1c);
+  border-color: color-mix(in srgb, var(--status-red, #b91c1c) 35%, transparent);
+}
+.cluster-only-b {
+  background: var(--status-green-bg, #dcfce7);
+  color: var(--status-green, #15803d);
+  border-color: color-mix(in srgb, var(--status-green, #15803d) 35%, transparent);
+}
+.cluster-changed {
+  background: var(--accent-tint-bg, #dbeafe);
+  color: var(--accent-tint-text, #1d4ed8);
+  border-color: color-mix(in srgb, var(--accent, #1d4ed8) 35%, transparent);
+}
 </style>

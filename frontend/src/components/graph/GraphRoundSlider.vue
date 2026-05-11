@@ -130,4 +130,30 @@ function reset() {
 .slider-btn:not(:disabled):hover {
   background: var(--bg-elevated);
 }
+
+/* Design v3 round slider. */
+.graph-round-slider {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.slider-value,
+.slider-total {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.slider-value {
+  color: var(--text-primary, var(--fg-body));
+}
+.slider-total {
+  color: var(--text-secondary, var(--fg-muted));
+}
+.slider-btn {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-secondary, var(--fg-body));
+}
+.slider-btn:not(:disabled):hover {
+  background: var(--surface-hover, var(--bg-elevated));
+}
 </style>

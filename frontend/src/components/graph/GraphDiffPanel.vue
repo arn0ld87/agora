@@ -632,4 +632,23 @@ function deltaClass(n: number): string {
   font-size: 11px;
   opacity: 0.7;
 }
+
+/* Design v3 diff panel polish. */
+.diff-cluster-group {
+  background: var(--surface-elevated, transparent);
+  border-color: var(--hairline, var(--rule, #e5e7eb));
+  border-radius: var(--r-6, var(--r-md, 8px));
+}
+.diff-cluster-title,
+.diff-cluster-item {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.diff-cluster-title {
+  color: var(--text-secondary, var(--fg-muted, #6b7280));
+}
+.diff-cluster-item {
+  color: var(--text-primary, var(--fg));
+}
 </style>

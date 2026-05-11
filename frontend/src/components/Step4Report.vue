@@ -828,4 +828,30 @@ onUnmounted(stopPolling)
   transition: background 0.4s ease-in-out;
 }
 
+/* Design v3 report surface polish. */
+.schema-error,
+.agent-entry,
+.report-layout,
+.logs-grid {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.schema-error {
+  background: var(--status-red-bg, color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent));
+  border-color: var(--status-red, var(--status-error, #c0392b));
+  border-radius: var(--r-6, var(--r-1));
+  color: var(--text-primary, var(--fg));
+}
+.agent-entry,
+.agent-title,
+.agent-body {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+}
+.agent-entry.is-highlighted {
+  background: var(--accent-tint-bg, var(--accent-soft));
+}
+.agent-entry.action-tool_result .agent-title { color: var(--status-green, var(--status-success)); }
+.agent-entry.action-error .agent-title { color: var(--status-red, var(--status-error)); }
+.agent-entry.action-section_start .agent-title,
+.agent-entry.action-section_complete .agent-title { color: var(--status-orange, var(--status-warn)); }
 </style>
