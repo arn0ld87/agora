@@ -1,10 +1,10 @@
+from unittest.mock import patch
+
 import pytest
-import os
-import shutil
 from app.services.runtime_run_config import RuntimeRunConfig
 from app.services.stage_model_router import StageModelRouter
-from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, ResolvedRoute
-from app.utils.artifact_locator import ArtifactLocator
+from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
+
 
 @pytest.fixture
 def temp_run_dir(tmp_path):
@@ -15,7 +15,6 @@ def temp_run_dir(tmp_path):
     with patch("app.utils.artifact_locator.ArtifactLocator.run_dir", return_value=str(run_dir)):
         yield run_id
 
-from unittest.mock import patch
 
 def test_runtime_run_config_persistence(temp_run_dir):
     service = RuntimeRunConfig(temp_run_dir)

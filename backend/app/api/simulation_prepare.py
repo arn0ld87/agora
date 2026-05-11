@@ -284,34 +284,37 @@ def prepare_simulation():
     run_id = f"sim_{simulation_id}"
     config_service = RuntimeRunConfig(run_id)
 
-    # Initialize or update runtime config
+    # Initialize or update runtime config — load existing if persisted, otherwise
+    # synthesize from the current request. ``ValidationError``/``json`` failures
+    # on a legacy file fall back to fresh construction (same as the legacy path),
+    # but ``SystemExit``/``KeyboardInterrupt`` must propagate.
+    if llm_runtime.enabled:
+        default_route = StageLLMRoute(
+            provider_id=llm_runtime.provider,
+            model=llm_model_override or Config.LLM_MODEL_NAME,
+            base_url=llm_runtime.base_url,
+        )
+    else:
+        default_route = StageLLMRoute(
+            provider_id="ollama_local",
+            model=llm_model_override or Config.LLM_MODEL_NAME,
+            base_url=Config.LLM_BASE_URL,
+        )
+
     try:
         runtime_routing = config_service.load_config()
-        # If it was a legacy fallback, we might want to update it with current request info
         if llm_runtime.enabled:
-             runtime_routing.default_route = StageLLMRoute(
-                 provider_id=llm_runtime.provider,
-                 model=llm_model_override or Config.LLM_MODEL_NAME,
-                 base_url=llm_runtime.base_url
-             )
-             runtime_routing.routing_version += 1
+            runtime_routing.default_route = default_route
+            runtime_routing.routing_version += 1
         elif llm_model_override:
-             runtime_routing.default_route.model = llm_model_override
-             runtime_routing.routing_version += 1
-    except:
-        # Create new config
-        if llm_runtime.enabled:
-            default_route = StageLLMRoute(
-                provider_id=llm_runtime.provider,
-                model=llm_model_override or Config.LLM_MODEL_NAME,
-                base_url=llm_runtime.base_url
-            )
-        else:
-            default_route = StageLLMRoute(
-                provider_id="ollama_local",
-                model=llm_model_override or Config.LLM_MODEL_NAME,
-                base_url=Config.LLM_BASE_URL
-            )
+            runtime_routing.default_route.model = llm_model_override
+            runtime_routing.routing_version += 1
+    except (OSError, ValueError, ValidationError) as exc:
+        logger.warning(
+            "Failed to load runtime routing config for %s, recreating: %s",
+            run_id,
+            exc,
+        )
         runtime_routing = RuntimeLlmRouting(default_route=default_route)
 
     config_service.save_config(runtime_routing)
@@ -457,12 +460,11 @@ def prepare_simulation():
                 parallel_profile_count=parallel_profile_count,
                 storage=storage,
                 llm_model=persona_route.model,
-                llm_runtime=persona_route, # manager handles ResolvedRoute or RuntimeLlmConfig?
-                # Need to check SimulationManager.prepare_simulation signature
+                llm_runtime=persona_route,
                 language=agent_language_override,
                 max_agents=max_agents,
                 quota_plan=quota_plan,
-                run_id=run_id, # Pass run_id for LLMClient creation inside manager
+                run_id=run_id,
             )
 
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())

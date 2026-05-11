@@ -98,6 +98,10 @@ def _make_mock_project():
     project = MagicMock()
     project.graph_id = VALID_GRAPH_ID
     project.simulation_requirement = "Test requirement"
+    # Routing pulls a real string from these via ``or Config.LLM_MODEL_NAME``;
+    # explicit None prevents MagicMock leaking into Pydantic validation.
+    project.llm_model = None
+    project.llm_provider = None
     return project
 
 
