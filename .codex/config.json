@@ -1,0 +1,22 @@
+{
+  "provider": "ollama",
+  "model": "llama3",
+  "updated_at": "2026-05-11T03:52:00Z",
+  "providers": {
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "env_key": "OPENAI_API_KEY",
+      "model_filter": "gpt|o[1-9]|codex"
+    },
+    "gemini": {
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "env_key": "GEMINI_API_KEY",
+      "model_filter": "gemini"
+    },
+    "ollama": {
+      "base_url": "http://localhost:11434",
+      "env_key": null,
+      "model_filter": ".*"
+    }
+  }
+}
