@@ -305,7 +305,7 @@ def _stream_settings_events():
     als idle killen.
     """
     yield f'retry: {_SSE_RETRY_MS}\n\n'
-    yield f'event: hello\ndata: {json.dumps({"ts": time.time()})}\n\n'
+    yield f'event: hello\ndata: {json.dumps({"ts": datetime.fromtimestamp(time.time(), tz=timezone.utc).isoformat()})}\n\n'
     last_heartbeat = time.monotonic()
     while True:
         delivered = False
