@@ -52,12 +52,32 @@ def test_models_that_require_max_completion_tokens(model: str) -> None:
         "deepseek-v4-flash:cloud",
         "gemini-3-flash-preview",
         "llama3.1:70b",
+        # Strikt-Prefix-Matching: hypothetische Namen, die "gpt-5" nur als
+        # Substring-Anfang ohne Trennzeichen enthalten, sind KEIN GPT-5.
+        "gpt-500",
+        "gpt-50",
+        "o10-experimental",
+        "o42-mini",
         "",          # leerer Modellname → Fallback auf max_tokens
         "   ",
     ],
 )
 def test_models_that_keep_max_tokens(model: str) -> None:
     assert LLMClient._uses_max_completion_tokens(model) is False
+
+
+def test_completion_token_kwargs_override_model() -> None:
+    """Vision-Pfad: explizites `model` überschreibt self.model."""
+    obj = LLMClient.__new__(LLMClient)
+    obj.model = "qwen2.5:32b"
+    assert obj._completion_token_kwargs(1024, model="gpt-5-vision") == {
+        "max_completion_tokens": 1024
+    }
+    # Umgekehrt: self.model GPT-5, override auf gpt-4o → max_tokens.
+    obj.model = "gpt-5-mini"
+    assert obj._completion_token_kwargs(2048, model="gpt-4o") == {
+        "max_tokens": 2048
+    }
 
 
 def test_completion_token_kwargs_gpt5() -> None:
