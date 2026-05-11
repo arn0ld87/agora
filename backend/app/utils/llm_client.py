@@ -127,6 +127,58 @@ class LLMClient:
                 return True
         return False
 
+    @staticmethod
+    def _is_token_key_400(exc: Exception) -> bool:
+        """True wenn ein OpenAI-/Proxy-400 auf eine Token-Limit-Key-Inkompatibilität hindeutet.
+
+        Erkennt beide Richtungen, je nachdem welcher Schlüssel im Request stand:
+        - „'max_tokens' is not supported with this model. Use 'max_completion_tokens'"
+        - „'max_completion_tokens' is not supported …" / Unsupported parameter
+
+        Wird von ``chat()`` als Fallback-Retry-Trigger genutzt — Heuristik
+        kann z. B. bei einem neuen OpenAI-kompatiblen Proxy daneben liegen,
+        und dann reicht der Wortlaut der Antwort als Fallback.
+        """
+        try:
+            from openai import APIStatusError
+        except ImportError:
+            APIStatusError = ()  # type: ignore[assignment]
+
+        if APIStatusError and isinstance(exc, APIStatusError):
+            status = getattr(exc, "status_code", None)
+            if status is None:
+                response = getattr(exc, "response", None)
+                status = getattr(response, "status_code", None)
+            if status != 400:
+                return False
+        msg = str(exc).lower()
+        if "max_tokens" not in msg and "max_completion_tokens" not in msg:
+            return False
+        return (
+            "not supported" in msg
+            or "unsupported parameter" in msg
+            or "use 'max_completion_tokens'" in msg
+            or "use 'max_tokens'" in msg
+            or "use max_completion_tokens" in msg
+            or "use max_tokens" in msg
+        )
+
+    @staticmethod
+    def _swap_token_kwargs(kwargs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Liefert eine Kopie von *kwargs* mit getauschtem Token-Limit-Schlüssel,
+        oder ``None`` wenn keiner der beiden Schlüssel gesetzt ist.
+        """
+        swapped = dict(kwargs)
+        if "max_tokens" in swapped:
+            value = swapped.pop("max_tokens")
+            swapped["max_completion_tokens"] = value
+            return swapped
+        if "max_completion_tokens" in swapped:
+            value = swapped.pop("max_completion_tokens")
+            swapped["max_tokens"] = value
+            return swapped
+        return None
+
     def _completion_token_kwargs(
         self, max_tokens: int, model: Optional[str] = None
     ) -> Dict[str, int]:
@@ -267,15 +319,41 @@ class LLMClient:
 
         import time as _time
         _t0 = _time.monotonic()
-        if force_stream:
-            kwargs["stream"] = True
-            stream = llm_call_with_retry(
+
+        def _create(call_kwargs: Dict[str, Any]):
+            """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
+            return llm_call_with_retry(
                 self.client.chat.completions.create,
                 max_retries=self._max_retries,
                 initial_delay=self._retry_initial_delay,
                 max_delay=self._retry_max_delay,
-                **kwargs,
+                **call_kwargs,
             )
+
+        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]):
+            """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
+            einmalig den anderen Schlüssel verwenden. Heuristik in
+            ``_uses_max_completion_tokens`` deckt die bekannten Familien ab; der
+            Fallback schützt vor neuen Modellen/Proxies, die wir noch nicht kennen.
+            """
+            try:
+                return _create(call_kwargs)
+            except Exception as exc:  # noqa: BLE001 — wir filtern selbst
+                if not self._is_token_key_400(exc):
+                    raise
+                swapped = self._swap_token_kwargs(call_kwargs)
+                if swapped is None:
+                    raise
+                logger.warning(
+                    "LLM 400 on token-limit key — retrying once with swapped key (model=%s, msg=%s)",
+                    self.model,
+                    str(exc)[:200],
+                )
+                return _create(swapped)
+
+        if force_stream:
+            kwargs["stream"] = True
+            stream = _call_with_token_key_fallback(kwargs)
             chunks: List[str] = []
             finish_reason = None
             completion_tokens = None
@@ -293,13 +371,7 @@ class LLMClient:
                     completion_tokens = usage.completion_tokens
             content = "".join(chunks)
         else:
-            response = llm_call_with_retry(
-                self.client.chat.completions.create,
-                max_retries=self._max_retries,
-                initial_delay=self._retry_initial_delay,
-                max_delay=self._retry_max_delay,
-                **kwargs,
-            )
+            response = _call_with_token_key_fallback(kwargs)
             choice = response.choices[0]
             finish_reason = getattr(choice, "finish_reason", None)
             usage = getattr(response, "usage", None)
@@ -354,13 +426,28 @@ class LLMClient:
             extra_body["think"] = False  # never want reasoning noise in vision output
             kwargs["extra_body"] = extra_body
 
-        response = llm_call_with_retry(
-            self.client.chat.completions.create,
-            max_retries=self._max_retries,
-            initial_delay=self._retry_initial_delay,
-            max_delay=self._retry_max_delay,
-            **kwargs,
-        )
+        def _create_vision(call_kwargs: Dict[str, Any]):
+            return llm_call_with_retry(
+                self.client.chat.completions.create,
+                max_retries=self._max_retries,
+                initial_delay=self._retry_initial_delay,
+                max_delay=self._retry_max_delay,
+                **call_kwargs,
+            )
+
+        try:
+            response = _create_vision(kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if not self._is_token_key_400(exc):
+                raise
+            swapped = self._swap_token_kwargs(kwargs)
+            if swapped is None:
+                raise
+            logger.warning(
+                "Vision LLM 400 on token-limit key — retrying once with swapped key (model=%s)",
+                vision_model,
+            )
+            response = _create_vision(swapped)
         content = response.choices[0].message.content or ""
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
