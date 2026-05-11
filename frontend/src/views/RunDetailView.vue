@@ -6,6 +6,7 @@ import { getRun } from '../api/runs'
 import { ApiError } from '../api/envelope'
 import { RunDetailSchema } from '../contracts/runsContract'
 import type { RunDetail } from '../contracts/runsContract'
+import LlmRoutingView from '../components/LlmRouting/LlmRoutingView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -123,6 +124,12 @@ onMounted(() => void loadRun())
             <dd>{{ String(val) }}</dd>
           </template>
         </dl>
+      </section>
+
+      <!-- LLM Routing -->
+      <section class="detail-section">
+        <h2 class="section-title">LLM Routing</h2>
+        <LlmRoutingView :run-id="runId" />
       </section>
 
       <!-- Artifacts -->

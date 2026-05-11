@@ -1,0 +1,82 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-resolved-route.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The final resolved configuration for an LLM call inside a stage.",
+  "properties": {
+    "base_url_sanitized": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url Sanitized"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "provider_options": {
+      "additionalProperties": true,
+      "title": "Provider Options",
+      "type": "object"
+    },
+    "reasoning_effort": {
+      "default": "none",
+      "enum": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Reasoning Effort",
+      "type": "string"
+    },
+    "routing_version": {
+      "title": "Routing Version",
+      "type": "integer"
+    },
+    "stage": {
+      "enum": [
+        "document_ingest",
+        "ontology_generation",
+        "graph_build",
+        "persona_generation",
+        "simulation_rounds",
+        "report_generation",
+        "evaluation"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    }
+  },
+  "required": [
+    "stage",
+    "provider_id",
+    "model",
+    "routing_version"
+  ],
+  "title": "ResolvedRoute",
+  "type": "object"
+}

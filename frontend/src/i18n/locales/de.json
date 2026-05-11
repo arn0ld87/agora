@@ -346,6 +346,27 @@
     },
     "next": "Weiter zur Simulation →"
   },
+  "llm": {
+    "provider": "Provider",
+    "model": "Modell",
+    "reasoning_effort": "Denkleistung",
+    "stages": {
+      "document_ingest": "Dokument-Ingest",
+      "ontology_generation": "Ontologie-Generierung",
+      "graph_build": "Graph-Aufbau",
+      "persona_generation": "Persona-Generierung",
+      "simulation_rounds": "Simulations-Runden",
+      "report_generation": "Bericht-Erstellung",
+      "evaluation": "Evaluierung"
+    },
+    "routing": {
+      "global_default": "Globaler Standard",
+      "stage_overrides": "Stage-Overrides",
+      "locked": "Gesperrt",
+      "active_snapshots": "Aktive Snapshots",
+      "no_snapshots_yet": "Noch keine Snapshots vorhanden."
+    }
+  },
   "step3": {
     "kicker": "№ 03 — SIMULATION",
     "title": "Lass die Welt laufen.",
