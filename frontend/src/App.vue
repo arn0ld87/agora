@@ -1,12 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import AuroraBackground from './components/ui/AuroraBackground.vue'
 import LogDrawer from './components/LogDrawer.vue'
-import { useTheme } from './composables/useTheme'
-
-// Mount the theme watcher early so the persisted theme is applied before
-// the first child component reads any token-driven style.
-useTheme()
 
 const STORAGE_KEY = 'agora.ui.logDrawer.open'
 function loadOpen() {
@@ -28,7 +22,6 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
 </script>
 
 <template>
-  <AuroraBackground />
   <router-view v-slot="{ Component }">
     <transition name="fade" mode="out-in">
       <component :is="Component" />
@@ -82,19 +75,19 @@ onUnmounted(() => window.removeEventListener('keydown', handleHotkey))
   bottom: 12px;
   right: 12px;
   z-index: 95;
-  background: var(--bg-elevated);
-  color: var(--fg-muted);
-  border: 1px solid var(--rule);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--hairline);
   border-radius: var(--r-pill);
   padding: 6px 14px;
-  font-family: var(--ff-mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.log-drawer-fab:hover { opacity: 1; color: var(--fg); border-color: var(--accent); }
-.log-drawer-fab.active { color: var(--accent); border-color: var(--accent); opacity: 1; }
+.log-drawer-fab:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--hairline-strong); }
+.log-drawer-fab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-tint-bg); }
+.log-drawer-fab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 </style>
