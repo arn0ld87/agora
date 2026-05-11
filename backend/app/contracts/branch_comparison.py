@@ -8,7 +8,7 @@ Datenquellen:
 - backend/app/services/network_analytics.py  (NetworkAnalyticsService, PolarizationMetrics)
 - backend/app/services/confidence_calculator.py  (compute_confidence)
 - backend/app/models/report.py  (Report, ReportSection, ReportClaim)
-- docu/2026-05-03-task-23-compare-model-spike.md § 3+4 (autoritatives Spec-Dokument)
+- docs/archive/history/2026-05-03-task-23-compare-model-spike.md § 3+4 (autoritatives Spec-Dokument)
 
 Designentscheidungen (Abweichungen vom Spike-Pseudocode):
 - confidence_distribution: dict[Literal["low", "medium", "high", "verified"], int] statt

@@ -1,69 +1,47 @@
 # Security Policy
 
-Agora ist ein lokal-first Multi-Agent-Simulator (Python/Flask + Vue 3 +
-Neo4j + Ollama, OASIS via Subprozess). Diese Datei beschreibt, wie
-Sicherheitslücken vertraulich gemeldet werden und welcher Stand für
-Updates gepflegt wird.
+Agora ist ein lokal-first Multi-Agent-Simulator für Single-User-Setups. Diese Datei ist der kurze Security-Einstieg. Details stehen in [docs/security.md](docs/security.md), [docs/security-threat-model.md](docs/security-threat-model.md) und [docs/adr/0001-auth-model.md](docs/adr/0001-auth-model.md).
+
+## Security-Modell
+
+- Agora v1 ist **Single-User-only**.
+- Der API-Schutz basiert auf einem geteilten `AGORA_AUTH_TOKEN`.
+- Es gibt keinen vollständigen Multi-User-AuthN/AuthZ-Stack.
+- Nicht direkt ins öffentliche Internet stellen.
+- Betrieb nur hinter Reverse Proxy, Tunnel oder Tailnet.
+- Non-Debug-Setups brauchen echte Werte für `SECRET_KEY`, `NEO4J_PASSWORD` und `AGORA_AUTH_TOKEN`.
+- `?token=` ist im Non-Debug-Modus blockiert; SSE und Downloads nutzen signed Tickets (`?ticket=`).
+
+## Secrets
+
+- Keine echten Tokens, Keys, `.env`-Dateien oder Provider-Secrets in Issues, PRs, Logs, Screenshots oder Diffs posten.
+- Beispiele immer über `.env.example` oder Platzhalter dokumentieren.
+- Rotationen und Deployment-Härtung sind in [docs/security.md](docs/security.md) beschrieben.
 
 ## Supported Versions
 
-Solo-Maintainer-Projekt im aktiven Sprint. Sicherheits-Fixes nur für die
-jeweils aktuelle Minor-Version auf `main`.
+Sicherheits-Fixes werden für die aktuelle Version auf `main` gepflegt.
 
-| Version | Unterstützt        |
-| ------- | ------------------ |
-| 0.9.x   | :white_check_mark: |
-| < 0.9   | :x:                |
+| Version | Unterstützt |
+|---|---|
+| 1.0.x | ja |
+| < 1.0 | nein |
 
 ## Reporting a Vulnerability
 
-**Bevorzugt:** Private Mail an
-**[schneider@alexle135.de](mailto:schneider@alexle135.de)**
-mit Betreff `[Agora Security] <kurzbeschreibung>`.
+Bevorzugt: private Mail an [schneider@alexle135.de](mailto:schneider@alexle135.de) mit Betreff `[Agora Security] <kurzbeschreibung>`.
 
-Optional: GitHub Private Vulnerability Reporting via
-[Security Advisories](https://github.com/arn0ld87/Agora/security/advisories/new).
+Optional: GitHub Private Vulnerability Reporting über [Security Advisories](https://github.com/arn0ld87/Agora/security/advisories/new).
 
 Bitte enthalten:
 
-- Betroffene Komponente / Pfad / Version
-- Reproduktions-Schritte oder PoC
-- Beobachteter und erwarteter Effekt
-- Optional: Vorschlag für Mitigation
+- betroffene Komponente, Pfad und Version
+- Reproduktionsschritte oder PoC
+- beobachteter und erwarteter Effekt
+- optionaler Mitigation-Vorschlag
 
-**Bitte NICHT:**
+Bitte keine Public-Issues für noch nicht gefixte Schwachstellen anlegen.
 
-- Public-Issue für noch nicht gefixte Schwachstellen anlegen
-- Findings auf Twitter/Mastodon/o.ä. veröffentlichen, bevor ein Fix
-  oder eine Veröffentlichungs-Absprache existiert
+## Watchlist
 
-## Response-SLA (informell)
-
-| Schritt                              | Ziel-Frist        |
-| ------------------------------------ | ----------------- |
-| Eingangsbestätigung                  | 72 Stunden        |
-| Erste Einschätzung (Severity, Scope) | 7 Tage            |
-| Fix oder dokumentiertes Tracking     | 30 Tage (Best Effort) |
-| Public Disclosure                    | nach Absprache    |
-
-Da es sich um ein privates Open-Source-Projekt ohne SLA-Vertrag handelt,
-sind Fristen Best-Effort. Kritische Funde (RCE, Auth-Bypass,
-Datenexfiltration) priorisiere ich vor allen Feature-Slices.
-
-## Bekannte Watchlist (Upstream-blockierte CVEs)
-
-Einige CVEs in transitiven Abhängigkeiten sind dokumentiert und
-gepinnt-getrackt, weil ein Upstream-Fix noch aussteht. Tracking-Issues:
-
-- [#121–#126 Security-Watchlist](https://github.com/arn0ld87/Agora/issues?q=label%3Asecurity)
-- Dokumentation: [`docu/`](docu/) — Sub-Slice 31 (Layer 10)
-
-Sobald Upstream patcht, zieht Dependabot automatisch (siehe
-[`.github/dependabot.yml`](.github/dependabot.yml)).
-
-## Lizenz / Disclosure-Hinweis
-
-Agora steht unter **AGPL-3.0**. Wer einen Fork als Service betreibt,
-muss Sourcen offen halten — das gilt auch für sicherheitsrelevante
-Patches. Embargo-Zeiträume zwischen Fix-Merge und Public Disclosure
-werden im Einzelfall mit Reporter abgestimmt.
+Upstream-blockierte CVEs und Dependency-Risiken werden in [docs/dependency-risk-register.md](docs/dependency-risk-register.md) und den GitHub-Security-Issues getrackt. Der CVE-Monitor läuft über GitHub Actions.

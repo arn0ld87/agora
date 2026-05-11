@@ -2,7 +2,7 @@
 Contract-Tests für branch_comparison.py — gegen den echten Vertrag,
 nicht gegen die Implementierung.
 
-Datenquelle für Fixtures: docu/2026-05-03-task-23-compare-model-spike.md § 4
+Datenquelle für Fixtures: docs/archive/history/2026-05-03-task-23-compare-model-spike.md § 4
 (JSON-Response-Beispiel, leicht vereinfacht für Unit-Tests).
 """
 from __future__ import annotations

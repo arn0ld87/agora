@@ -1,36 +1,15 @@
-# `docu/` — Arbeits-, Refactoring- und Architekturdokumentation
+# docu/ ist archiviert
 
-Diese Ablage enthält die **laufende Projektdokumentation** für Agora.
+Die aktive Projektdokumentation liegt unter [`../docs/`](../docs/).
 
-## Zweck
+Wichtige Einstiege:
 
-Hier liegen insbesondere:
+- Status: [`../docs/status.md`](../docs/status.md)
+- Architektur: [`../docs/architecture.md`](../docs/architecture.md)
+- Development: [`../docs/development.md`](../docs/development.md)
+- Dev-Deployment: [`../docs/deployment-dev.md`](../docs/deployment-dev.md)
+- Prod-Deployment: [`../docs/deployment-prod.md`](../docs/deployment-prod.md)
+- Security: [`../docs/security.md`](../docs/security.md)
+- Arbeitsprotokolle: [`../docs/archive/worklogs/`](../docs/archive/worklogs/)
 
-- Audit- und Bestandsaufnahmen
-- Refactoring-Backlogs
-- Zielarchitektur-Dokumente
-- Arbeitsprotokolle für P0/P1-Schritte
-- Verlauf / historische Notizen unter `docu/history/`
-- spezielle Teilprotokolle, z.B. für:
-  - Simulation-API-Split
-  - GraphPanel-Modularisierung
-  - Embedding-/Config-Härtung
-  - Polling-Composable
-
-## Wichtige Dateien zum Einstieg
-
-- `2026-04-22-refactoring-produkt-audit.md`
-- `refactoring-backlog-priorisiert.md`
-- `target-architecture.md`
-- `feature-roadmap.md`
-- `p0-arbeitsprotokoll.md`
-
-## Konvention
-
-- **`docu/`** = aktive Projekt-, Refactoring- und Verlaufsdokumentation
-- **`docu/history/`** = ältere Pläne, Berichte und verschobene Root-Notizen
-
-Wenn du den aktuellen technischen Stand verstehen willst, beginne mit:
-1. `target-architecture.md`
-2. `refactoring-backlog-priorisiert.md`
-3. `p0-arbeitsprotokoll.md`
+Neue Doku gehört nach `docs/`. Dieses Verzeichnis bleibt nur als Kompatibilitätshinweis bestehen.

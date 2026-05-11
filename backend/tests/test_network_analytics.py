@@ -159,7 +159,7 @@ def test_interactions_without_target_ignored():
 #
 # OASIS schreibt Target-Identitäten als *Strings* (`*_author_name`,
 # `target_user_name`), nicht als numerische IDs. Diese Tests fixieren das
-# Schema, das die Diagnose in `docu/2026-05-01-metric-snapshot-diagnose.md`
+# Schema, das die Diagnose in `docs/archive/history/2026-05-01-metric-snapshot-diagnose.md`
 # dokumentiert hat.
 
 

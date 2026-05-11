@@ -14,7 +14,7 @@ Usage:
     uv run python backend/scripts/diagnose_metric_snapshot.py --limit 10
 
 Ausgabe: stdout-Zusammenfassung + Markdown-Bericht unter
-``docu/2026-05-01-metric-snapshot-diagnose.md``.
+``docs/archive/history/2026-05-01-metric-snapshot-diagnose.md``.
 
 Read-only. Triggert keinen Sim-Run, keine LLM-Calls, keinen Neo4j-Zugriff.
 """

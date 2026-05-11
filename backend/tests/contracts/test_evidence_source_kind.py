@@ -6,7 +6,7 @@ Pinnt:
 - ``cross_stakeholder_for_high`` auf ReportClaimModel (Anker 4).
 - ``reject_inferred_in_high_confidence`` auf ReportClaimModel (Anker 5).
 
-Spec: docu/decisions/0002-evidence-gating.md.
+Spec: docs/adr/0002-evidence-gating.md.
 """
 from __future__ import annotations
 

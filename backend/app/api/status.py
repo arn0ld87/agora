@@ -25,7 +25,7 @@ def _get_auth_mode():
     Values:
     - ``"single_user_token"``: ``AGORA_AUTH_TOKEN`` is set; ``/api/*``
       requires it. The ``single_user_`` prefix reflects ADR-0001
-      (``docu/decisions/0001-auth-model.md``): v1.0 is a Single-User-only
+      (``docs/adr/0001-auth-model.md``): v1.0 is a Single-User-only
       simulator, the shared bearer token is the only auth principal.
       Renamed from ``"token"`` 2026-05-04 so operators reading
       ``/api/status`` see immediately that the app does not have a

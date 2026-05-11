@@ -19,7 +19,8 @@ re-exportiert die Namen und nutzt sie unverändert in den
 """
 
 # ── Default-Pflichtabschnitte für DACH-Reports ──────────────────────
-# Quelle: agora_bewertung_komplett.md / docu/2026-05-09-output-vertrag-...
+# Quelle: docs/archive/old-plans/agora_bewertung_komplett.md /
+# docs/archive/reviews/2026-05-09-output-vertrag-bewertung-evidence-quality.md
 # Wenn das User-Prompt-Frontend keine eigene required_sections-Liste
 # durchreicht, wird diese 11-Abschnitt-Default-Struktur verwendet.
 DEFAULT_REPORT_SECTIONS: list[tuple[str, str]] = [

@@ -5,7 +5,7 @@ Modelliert den Diff zwischen zwei Graph-Snapshots (Round-to-Round oder Branch-Di
 Datenquellen:
 - backend/app/services/temporal_graph.py  (get_snapshot, compute_diff)
 - backend/app/services/network_analytics.py  (PolarizationMetrics, bridge_agents)
-- docu/2026-05-03-task-22-graph-diff-spike.md § 3 (autoritatives Spec-Dokument)
+- docs/archive/history/2026-05-03-task-22-graph-diff-spike.md § 3 (autoritatives Spec-Dokument)
 
 Designentscheidungen (Abweichungen vom Spike-Pseudocode):
 - source_id / target_id: str statt str|int — Neo4j-IDs werden als String serialisiert.

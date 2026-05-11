@@ -6,15 +6,17 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 
 | Datei / Verzeichnis | Zweck |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Anleitung für Claude-Code-Agents: PR-Workflow, Layer-Tabelle, Subagent-Routing, Stack-Map, Verboten-Liste |
-| [`AGENTS.md`](AGENTS.md) | Anleitung für Codex-Plugin und andere Integrations-Agents |
+| [`CLAUDE.md`](CLAUDE.md) | Kurz-Onboarding für Claude Code |
+| [`AGENTS.md`](AGENTS.md) | Kurz-Onboarding für Codex und andere Agent-Runtimes |
 | [`PLAN.md`](PLAN.md) | Operative Task-Quelle für `/agora-next-task` Subagent-Orchestrator; definiert Milestones M9–M13 und Task-Slices |
-| [`docu/STATUS.md`](docu/STATUS.md) | **Single Source of Truth** für Test-Counts (Backend/Frontend) und Versionsstände; auto-generiert via `scripts/sync-status.sh` |
-| [`docu/ROADMAP.md`](docu/ROADMAP.md) | Strategische Now/Next/Later-Sicht; definiert Milestones und längerfristige Architektur-Ziele |
-| [`docu/glossary-wording.md`](docu/glossary-wording.md) | Verbindliches DACH-Voice-Glossar v1; untersagt US-Marketing-Phrasen (`prediction`, `rehearsal`, `god's eye view`) |
+| [`docs/status.md`](docs/status.md) | **Single Source of Truth** für Test-Counts, Coverage und Versionsstände; aktualisiert via `scripts/sync-status.sh` |
+| [`docs/architecture.md`](docs/architecture.md) | Systemüberblick und Pipeline |
+| [`docs/development.md`](docs/development.md) | Setup, Tests, Branching und Schema-Drift |
+| [`docs/glossary-wording.md`](docs/glossary-wording.md) | Verbindliches DACH-Voice-Glossar v1; untersagt US-Marketing-Phrasen (`prediction`, `rehearsal`, `god's eye view`) |
 | [`CHANGELOG.md`](CHANGELOG.md) | SemVer-Releases und `[Unreleased]`-Block; Sub-Slice-Einträge hier landen, bevor PR auf main merget |
-| [`docu/decisions/`](docu/decisions/) | Architektur-Decision-Records (ADRs) als `NNNN-<slug>.md`; sobald angelegt |
-| [`docu/history/`](docu/history/) | Arbeitsprotokolle (z.B. `2026-05-03-slice-44-doku-sync-arbeitsprotokoll.md`), ältere Pläne, Audit-Trails |
+| [`docs/adr/`](docs/adr/) | Architektur-Decision-Records (ADRs) |
+| [`docs/archive/worklogs/`](docs/archive/worklogs/) | Historische Arbeitsprotokolle |
+| [`docs/archive/`](docs/archive/) | Reviews, alte Pläne, Logs und historische Artefakte |
 
 ## Branch- und PR-Hygiene
 
@@ -57,7 +59,7 @@ git diff --exit-code schemas/      # darf nicht driften
 
 Ein Sub-Slice erfordert:
 1. **Ein Commit** mit prägnanter Message: `feat/fix/docs(scope): Beschreibung (Refs #NNN, Sub-Slice X)`
-2. **Ein Arbeitsprotokoll** unter `docu/<YYYY-MM-DD>-slice-<N>-<slug>-arbeitsprotokoll.md` (Ziel, Befund, Geänderte Dateien, Akzeptanz-Checks, Folgen)
+2. **Ein Arbeitsprotokoll** unter `docs/archive/worklogs/<YYYY-MM-DD>-slice-<N>-<slug>-arbeitsprotokoll.md` (Ziel, Befund, Geänderte Dateien, Akzeptanz-Checks, Folgen)
 3. **Eintrag im `[Unreleased]`-Block** von [`CHANGELOG.md`](CHANGELOG.md) (Format: `- **Sub-Slice X (...)**: Kurzbeschreibung. Refs #NNN.`)
 
 Commits sind atomar — alle Tests und Akzeptanz-Checks müssen grün sein, bevor der Commit gepusht wird.
@@ -70,7 +72,7 @@ Agora-Dokumentation und -Prompts nutzen DACH-Voice (Du-Form, sachlich). Explizit
 - `god's eye view` / `high-fidelity digital world`
 - `revolutionary` / `seamless` / `state-of-the-art`
 
-Ersatz-Vokabular: siehe [`docu/glossary-wording.md`](docu/glossary-wording.md).
+Ersatz-Vokabular: siehe [`docs/glossary-wording.md`](docs/glossary-wording.md).
 
 ## Layer-Reihenfolge
 

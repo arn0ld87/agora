@@ -47,7 +47,7 @@ jobs:
         # Temporary baseline: these advisories are pinned by upstream
         # dependencies (camel-oasis==0.2.5 / camel-ai==0.2.78 /
         # sentence-transformers==3.0.0). Tracked in
-        # docu/dependency-risk-register.md. Hardstop 2026-07-30 — afterwards
+        # docs/dependency-risk-register.md. Hardstop 2026-07-30 — afterwards
         # this --ignore-vuln list MUST be empty. The weekly CVE-Monitor-
         # Workflow (.github/workflows/cve-monitor.yml) enforces the deadline
         # by failing on/after 2026-07-30 if any of these CVEs are still

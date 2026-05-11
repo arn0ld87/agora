@@ -25,7 +25,7 @@
       "Edit(frontend/**)",
       "Edit(schemas/**)",
       "Edit(prompts/**)",
-      "Edit(docu/**)",
+      "Edit(docs/**)",
       "Edit(.github/**)",
       "Edit(.claude/**)"
     ],

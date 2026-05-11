@@ -68,14 +68,12 @@ context.md
 /blog-*-draft.md
 /test-document*.md
 
-# docu/ ist seit v0.8.0 öffentlich (Portfolio-Material).
-# AGENTS.md / CLAUDE.md / PLAN.md / REFACTORING_PLAN.md / SECURITY_REVIEW.md
-# sind seit Sub-Slice 34 ebenfalls getrackt — Onboarding-/Plan-Material, das
-# externe Mitarbeiter und kollaborierende Agenten (Claude, Codex, Gemini)
-# vor dem ersten Edit lesen können müssen.
+# docs/ ist die öffentliche Projektdokumentation.
+# AGENTS.md / CLAUDE.md / PLAN.md sind ebenfalls getrackt:
+# Onboarding-/Plan-Material, das externe Mitarbeiter und kollaborierende
+# Agenten vor dem ersten Edit lesen können müssen.
 PLAN.md.bak
 # .github/ enthält die CI- und Docker-Image-Workflows — getrackt und aktiv.
-/docs/
 /Agora_design/
 /scripts/logs/
 /.codex

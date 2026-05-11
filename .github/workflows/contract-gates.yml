@@ -29,7 +29,7 @@ jobs:
         run: uv run python -m app.contracts.dump_schemas --check
 
   status-sync-drift:
-    name: STATUS.md Drift-Check
+    name: status.md Drift-Check
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner

@@ -5,7 +5,7 @@ und `backend/app/services/graph_tools.py`. Verstösse machen die ganze
 Slice rückgängig — daher rote Tests, sobald jemand „prediction"-/
 „rehearsal"-/„god's eye"-Vokabular ins Prompt-Layer wieder einbaut.
 
-Geltungsbereich (siehe `docu/glossary-wording.md`):
+Geltungsbereich (siehe `docs/glossary-wording.md`):
 - alles im Modul `report_prompts` (System-/User-/ReACT-/Chat-Prompts)
 - die in den Report exportierten Header in `graph_tools.InsightForgeResult.to_text`
 """
@@ -52,7 +52,7 @@ def test_prompt_constant_avoids_forbidden_wording(name: str, pattern: str) -> No
     matches = re.findall(pattern, value, flags=re.IGNORECASE)
     assert not matches, (
         f"{name} enthält verbotenes Wording {pattern!r} "
-        f"(siehe docu/glossary-wording.md, Issue #175): {matches}"
+        f"(siehe docs/glossary-wording.md, Issue #175): {matches}"
     )
 
 
@@ -73,7 +73,7 @@ def test_insight_forge_result_text_avoids_forbidden_wording(pattern: str) -> Non
     matches = re.findall(pattern, text, flags=re.IGNORECASE)
     assert not matches, (
         f"InsightForgeResult.to_text() enthält verbotenes Wording {pattern!r} "
-        f"(siehe docu/glossary-wording.md, Issue #175): {matches}"
+        f"(siehe docs/glossary-wording.md, Issue #175): {matches}"
     )
 
 
@@ -111,5 +111,5 @@ def test_service_file_source_avoids_forbidden_wording(
     matches = re.findall(pattern, source, flags=re.IGNORECASE)
     assert not matches, (
         f"{rel_path} enthält verbotenes Wording {pattern!r} "
-        f"(siehe docu/glossary-wording.md, Issue #175): {matches}"
+        f"(siehe docs/glossary-wording.md, Issue #175): {matches}"
     )

@@ -91,7 +91,7 @@ def test_orphan_claim_gets_low_confidence():
 
 ## Doku
 
-- docu/<YYYY-MM-DD>-task-04-anti-deko-arbeitsprotokoll.md (kurz: Drift-Stellen, neue Tests, Smoke-Werte)
+- docs/<YYYY-MM-DD>-task-04-anti-deko-arbeitsprotokoll.md (kurz: Drift-Stellen, neue Tests, Smoke-Werte)
 - CHANGELOG.md [Unreleased]: "Layer 1: Anti-Dekorations-Fix + Confidence-Hardening (Sub-Slice 04)"
 
 ## NICHT

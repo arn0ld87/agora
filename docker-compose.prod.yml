@@ -31,7 +31,7 @@ services:
         # Frontend bekommt leeren Token, Runtime-Login erforderlich.
         # Opt-In nur für Single-User-Tailnet-Deploys.
         # Siehe Dockerfile:ARG ALLOW_BUILD_TIME_TOKEN und
-        # docu/security-hardening.md → F2.1
+        # docs/security.md → F2.1
         ALLOW_BUILD_TIME_TOKEN: ${ALLOW_BUILD_TIME_TOKEN:-false}
         # Der eigentliche Token-Wert (wird nur bei Gate=true verwendet).
         VITE_AGORA_TOKEN: ${VITE_AGORA_TOKEN:-}
@@ -48,7 +48,7 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       # Default-Setup: Ollama läuft auf dem Host (siehe README.md sowie
-      # docu/deployment-prod-like.md → "Ollama"). Container erreicht den
+      # docs/deployment-prod.md → "Ollama"). Container erreicht den
       # Host über `host.docker.internal`, das im Default-Compose per
       # `extra_hosts: host-gateway` aufgelöst wird (Linux-Bridge).
       #

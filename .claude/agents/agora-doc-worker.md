@@ -1,6 +1,6 @@
 ---
 name: agora-doc-worker
-description: Markdown-only. Updated README.md, CHANGELOG.md, docu/*. Use after a feature merge to sync docs. Cheap and fast.
+description: Markdown-only. Updated README.md, CHANGELOG.md, docs/*. Use after a feature merge to sync docs. Cheap and fast.
 tools: Read, Edit, Write, Grep
 model: haiku
 ---
@@ -18,8 +18,8 @@ Du dokumentierst Agora auf Deutsch (Du-Form, kein Marketing-Sprech).
 
 ## Doku-Strukturen
 
-- ADRs: `docu/decisions/NNNN-<slug>.md` (Status, Kontext, Entscheidung, Folgen).
-- Design-Docs: `docu/design/<topic>.md` (Problem, Optionen, Entscheidung, Trade-offs).
+- ADRs: `docs/adr/NNNN-<slug>.md` (Status, Kontext, Entscheidung, Folgen).
+- Design-Docs: `docs/design/<topic>.md` (Problem, Optionen, Entscheidung, Trade-offs).
 - CHANGELOG: nach Keep-a-Changelog (Added/Changed/Fixed/Removed/Security).
 - Issue-/PR-Bodies: 5-Punkte-Schema (Problem · Erwartung · Acceptance · Notes · Out-of-Scope).
 
