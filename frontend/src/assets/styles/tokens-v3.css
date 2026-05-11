@@ -5,16 +5,15 @@
                 Apple Business Manager · Apple Vision Pro
    ------------------------------------------------------------
    Source-of-truth: Agora Design Language v3 · agora-v3.css
-   Diese Datei wird parallel zu tokens.css gehalten und nur
-   aktiviert, wenn VITE_DESIGN_V3=true ist (siehe main.ts).
-   Sie enthält v3-Tokens + einen v2-Alias-Layer, sodass
+   Diese Datei ist seit Phase 6 der Default-Tokenpfad.
+   Sie enthält v3-Tokens + einen v2-Kompatibilitaets-Layer, sodass
    bestehende Komponenten ohne Codeänderung gegen v3 rendern.
    ============================================================ */
 
 /* ─────────────────────────────────────────────────────────────
    v3 NATIVE TOKENS
    ───────────────────────────────────────────────────────────── */
-:root, [data-theme="light"], [data-theme="dark"] {
+:root, [data-theme="light"] {
   /* Surfaces (light only) */
   --surface-base:        #ffffff;
   --surface-canvas:      #f5f5f7;
@@ -117,12 +116,12 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   v2 → v3 ALIAS LAYER
+   v2 → v3 COMPAT LAYER
    Mappt jeden in v2 verwendeten Token-Namen auf das v3-Pendant.
    Damit rendern bestehende Komponenten unverändert gegen v3,
    solange Phasen 2–5 die Patterns sukzessive umstellen.
    ───────────────────────────────────────────────────────────── */
-:root, [data-theme="light"], [data-theme="dark"] {
+:root, [data-theme="light"] {
   /* Brand axis — v3 hat nur einen Akzent */
   --brand-aurora: var(--accent);
   --brand-iris:   var(--accent);
@@ -189,7 +188,7 @@
   --warn-soft: var(--status-orange-bg);
   --err-soft:  var(--status-red-bg);
 
-  /* Status-Long-Form-Aliase (legacy v1-Layer in tokens.css) */
+  /* Status-Long-Form-Aliase fuer noch nicht bereinigte Legacy-Klassen */
   --status-success:      var(--status-green);
   --status-success-soft: var(--status-green-bg);
   --status-warn-soft:    var(--status-orange-bg);
@@ -313,8 +312,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Base — light-only override
-   v3 ist light-only. Wir ignorieren data-theme="dark" bewusst.
+   Base — light-only
    ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

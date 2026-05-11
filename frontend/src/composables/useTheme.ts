@@ -1,6 +1,6 @@
 import { ref, watch, type Ref } from 'vue'
 
-export type ThemeValue = 'light' | 'dark'
+export type ThemeValue = 'light'
 
 export interface UseThemeReturn {
   theme: Ref<ThemeValue>
@@ -10,22 +10,10 @@ export interface UseThemeReturn {
 }
 
 const STORAGE_KEY = 'agora-theme'
-const VALID: ThemeValue[] = ['light', 'dark']
+const VALID: ThemeValue[] = ['light']
 const DEFAULT_THEME: ThemeValue = 'light'
 
 function readInitial(): ThemeValue {
-  if (typeof document !== 'undefined') {
-    const attr = document.documentElement.getAttribute('data-theme')
-    if (attr === 'light' || attr === 'dark') return attr
-  }
-  if (typeof localStorage !== 'undefined') {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored === 'light' || stored === 'dark') return stored
-    } catch {
-      /* localStorage blocked */
-    }
-  }
   return DEFAULT_THEME
 }
 
@@ -64,8 +52,8 @@ export function useTheme(): UseThemeReturn {
     theme.value = value
   }
 
-  function toggle(): void {
-    theme.value = theme.value === 'dark' ? 'light' : 'dark'
+function toggle(): void {
+    theme.value = DEFAULT_THEME
   }
 
   return { theme, setTheme, toggle, options: VALID.slice() }
