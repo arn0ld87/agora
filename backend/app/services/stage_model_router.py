@@ -33,7 +33,7 @@ class StageModelRouter:
         # 2. Resolve from runtime config
         cfg = runtime_cfg or self.config_service.load_config()
         route = cfg.stage_overrides.get(stage_id) or cfg.global_default
-        base_url = route.provider_options.get("base_url")
+        base_url = route.provider_options.get("base_url") if route.provider_options else None
 
         # 3. Create new snapshot (but don't persist yet - caller should do that on stage start)
         resolver = SecretResolver()
