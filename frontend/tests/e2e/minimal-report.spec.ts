@@ -7,15 +7,16 @@
  *      Der Report-Pfad benötigt einen vorhandenen Graph (backend/app/api/report.py:107
  *      — "Missing graph ID, please ensure graph is built").
  *   3. Simulation anlegen via POST /api/simulation/create (braucht project_id + graph_id).
- *   4. POST /api/report/generate mit Bearer-Auth triggern.
- *   5. Status-Polling via POST /api/report/generate/status bis "completed" (kein setTimeout).
+ *   4. 50 manuelle Stub-Personas via POST /api/simulation/<id>/profiles anlegen.
+ *   5. POST /api/report/generate mit Bearer-Auth triggern.
+ *   6. Status-Polling via POST /api/report/generate/status bis "completed" (kein setTimeout).
  *      Timeout: 5 min (Stub-Modus: 11 Sections × 4 ReACT-Runden, aber kein echter LLM-Call).
- *   6. UI-Assertion: alle 11 Section-Header aus output-contract-required-sections.txt
+ *   7. UI-Assertion: alle 11 Section-Header aus output-contract-required-sections.txt
  *      sind als span.outline-title in ReportOutlinePanel sichtbar.
  *      Die Liste wird zur Laufzeit aus der Snapshot-Datei gelesen — keine Hardcoded-Liste.
- *   7. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als span.outline-title sichtbar.
- *      MIN_PERSONA_TABLE_ROWS = 0 im Stub-Modus (stub liefert Freitext, keine Markdown-Tabelle).
- *   8. 0 Page-Errors während des gesamten Flows.
+ *   8. Persona-Tabelle: Abschnitt "Persona-Tabelle" ist als span.outline-title sichtbar.
+ *      Der Backend-Persona-Floor bleibt auch im Stub-Modus aktiv.
+ *   9. 0 Page-Errors während des gesamten Flows.
  *
  * Stub-Vertrag (AGORA_E2E_LLM_MODE=stub):
  *   - chat_json(schema=PlanResponse) → _stub_plan_response() → 11 Sections
@@ -24,9 +25,9 @@
  *     (llm_e2e_stub.py::e2e_stub_chat_response + llm_client.py::chat Stub-Branch).
  *   - Report-Graph (Neo4j): leer (0 Entities), aber existierend — Graph-Build-Phase
  *     schreibt keinen Content-Node im Stub-Modus (NER gibt leere entity-Liste zurück).
- *   - Persona-Stub: llm_e2e_stub.py::_stub_report_v3() hat 1 Persona (p-stub-01).
- *     Dieser Wert ist für MIN_PERSONA_TABLE_ROWS nicht relevant, weil die Personas
- *     aus dem markdown_content-Render kommen, nicht aus ReportV3 direkt.
+ *   - Persona-Floor: report_agent.workflow::_load_persona_count liest
+ *     reddit_profiles.json; der Smoke seedet deshalb 50 manuelle Profile über
+ *     den regulären API-Pfad.
  *
  * Report braucht Graph: JA.
  *   POST /api/report/generate prüft graph_id in simulation.state und project.graph_id
@@ -53,7 +54,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { test, expect, request } from '@playwright/test';
+import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { injectAuthToken, authHeader } from './helpers/auth';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
@@ -91,16 +92,11 @@ if (REQUIRED_SECTION_HEADERS.length !== 11) {
 }
 
 // ---------------------------------------------------------------------------
-// MIN_PERSONA_TABLE_ROWS
+// Backend-Persona-Floor für die Report-Generierung
 // ---------------------------------------------------------------------------
-// Im Stub-Modus erzeugt e2e_stub_chat_response() Freitext ohne Markdown-Tabelle.
-// Die section "Persona-Tabelle" enthält daher 0 <tr>-Zeilen im gerendertem HTML.
-// Wert = 0: Die Assertion prüft, dass die Section-Heading sichtbar ist,
-//           nicht table-row-count (was trivial 0 wäre und nichts aussagt).
-// Quelle: llm_e2e_stub.py::_STUB_FINAL_ANSWER_TEMPLATE (kein Tabellen-Markdown).
-// Für echten LLM-Betrieb: backend/app/services/report_agent/contract_constants.py
-//   MIN_PERSONA_TABLE_ROWS = 50 (Pflichtmenge lt. Output-Vertrag §6.1).
-const MIN_PERSONA_TABLE_ROWS = 0;
+// Gespiegelt aus backend/app/services/report_agent/contract_constants.py.
+// Der E2E-Stub ersetzt LLM-Antworten, aber nicht den Report-Contract-Gate.
+const MIN_PERSONA_TABLE_ROWS = 50;
 
 // ---------------------------------------------------------------------------
 // Deterministisches Smoke-Dokument
@@ -122,6 +118,49 @@ Das Testprodukt ist ein fiktives Software-System für CI-Verifikationszwecke.
 
 const SMOKE_FILENAME = 'e2e-smoke-m11-4c.md';
 
+async function seedPersonaFloor(
+  apiCtx: APIRequestContext,
+  simulationId: string,
+  baseURL: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  for (let i = 1; i <= MIN_PERSONA_TABLE_ROWS; i += 1) {
+    const username = `e2e_persona_${String(i).padStart(2, '0')}`;
+    const res = await apiCtx.post(`${baseURL}/api/simulation/${simulationId}/profiles`, {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: {
+        platform: 'reddit',
+        username,
+        name: `E2E Persona ${i}`,
+        bio: `Deterministische E2E-Persona ${i}`,
+        persona: `E2E Persona ${i} bewertet das Testprodukt im DACH-Kontext.`,
+        age: 25 + (i % 30),
+        gender: i % 2 === 0 ? 'female' : 'male',
+        country: ['DE', 'AT', 'CH'][i % 3],
+        profession: 'E2E Testrolle',
+        interested_topics: ['Software', 'Vertrauen', 'DACH'],
+      },
+    });
+    expect(
+      res.ok(),
+      `POST /api/simulation/${simulationId}/profiles fehlgeschlagen (${res.status()}): ${await res.text()}`,
+    ).toBe(true);
+  }
+
+  const profilesRes = await apiCtx.get(`${baseURL}/api/simulation/${simulationId}/profiles`, {
+    headers,
+  });
+  expect(
+    profilesRes.ok(),
+    `GET /api/simulation/${simulationId}/profiles fehlgeschlagen (${profilesRes.status()}): ${await profilesRes.text()}`,
+  ).toBe(true);
+  const profilesJson = await profilesRes.json();
+  expect(
+    profilesJson?.data?.count,
+    `Minimalreport-Smoke braucht mindestens ${MIN_PERSONA_TABLE_ROWS} Personas`,
+  ).toBeGreaterThanOrEqual(MIN_PERSONA_TABLE_ROWS);
+}
+
 // ---------------------------------------------------------------------------
 // Test
 // ---------------------------------------------------------------------------
@@ -130,11 +169,12 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
   test(
     '1 · Graph-Setup → Report generieren → 11 Sections + Persona-Tabelle sichtbar',
     async ({ page, context, baseURL }) => {
-      // M11.4b-Followup-3: Test-Total-Timeout auf 5 Min anheben.
+      // M11.4b-Followup-3: Test-Total-Timeout anheben.
       // Report-Generation (11 Sections × 4 ReACT-Iterationen im Stub) plus
-      // Graph-Build-Vorlauf dauern länger als Playwright-Default (30 s).
+      // Graph-Build-Vorlauf und Persona-Floor-Seeding dauern länger als
+      // Playwright-Default (30 s).
       // test.setTimeout ist targeted (nur dieser Test), kein Global-Bump in playwright.config.ts.
-      test.setTimeout(300_000);
+      test.setTimeout(420_000);
 
       // =======================================================================
       // Schritt 1: Auth-Token injizieren
@@ -212,20 +252,27 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         expect(simulationId, 'simulation_id muss ein nichtleerer String sein').toBeTruthy();
 
         // ===================================================================
-        // Schritt 7: Report-Generierung starten → POST /api/report/generate
+        // Schritt 7: Persona-Floor seeden → POST /api/simulation/<id>/profiles
+        // Report-Agent bricht vor Section-Generierung ab, wenn weniger als
+        // MIN_PERSONA_TABLE_ROWS Profile in reddit_profiles.json liegen.
+        // ===================================================================
+        await seedPersonaFloor(apiCtx, simulationId, baseURL!, headers);
+
+        // ===================================================================
+        // Schritt 8: Report-Generierung starten → POST /api/report/generate
         // ===================================================================
         const { report_id } = await triggerReport(apiCtx, simulationId, baseURL!, headers);
         expect(report_id, 'report_id muss ein nichtleerer String sein').toBeTruthy();
 
         // ===================================================================
-        // Schritt 8: Report-Status pollen bis "completed"
+        // Schritt 9: Report-Status pollen bis "completed"
         // Timeout 300 s (5 min): 11 Sections × 4 ReACT-Iterationen im Stub.
         // Kein hardcoded setTimeout — expect.poll in pollReportReady.
         // ===================================================================
         await pollReportReady(apiCtx, report_id, baseURL!, headers, 300_000);
 
         // ===================================================================
-        // Schritt 9: UI — /report/<report_id> laden und Assertions prüfen
+        // Schritt 10: UI — /report/<report_id> laden und Assertions prüfen
         //
         // ReportView rendert Step4Report mit :reportId="currentReportId".
         // Step4Report::onMounted() ruft pollStatus() auf, das GET /api/report/<id>
