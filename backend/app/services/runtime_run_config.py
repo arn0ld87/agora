@@ -30,9 +30,7 @@ class RuntimeRunConfig:
 
         # Legacy fallback: synthesize from global Config or existing run metadata
         from ..config import Config
-        provider_options: Dict[str, Any] = {}
-        if Config.LLM_BASE_URL:
-            provider_options["base_url"] = Config.LLM_BASE_URL
+        provider_options: Dict[str, Any] = {"base_url": Config.LLM_BASE_URL} if Config.LLM_BASE_URL else {}
 
         global_default = StageLLMRoute(
             provider_id="ollama_local",

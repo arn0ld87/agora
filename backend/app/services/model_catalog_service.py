@@ -85,7 +85,8 @@ class ModelCatalogService:
                 if resp.status_code == 200:
                     data = resp.json()
                     return [m["id"] for m in data.get("data", [])]
-            except Exception:
+            except Exception as exc:
+                logger.debug("OpenAI-compatible /v1/models discovery failed: %s", exc)
                 pass
 
             # Try native Ollama /api/tags as fallback
