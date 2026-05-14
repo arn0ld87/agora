@@ -233,6 +233,19 @@ def generate_ontology():
             message=str(exc),
         )
 
+    # P5.3: Optional llm_profile_id aus Form-Data — überschreibt Stage-Routing für diesen Run.
+    llm_profile_id = (request.form.get('llm_profile_id') or '').strip() or None
+    _resolved_profile = None
+    if llm_profile_id:
+        from ..services.llm_profiles_store import get_llm_profiles_store
+        _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
+        if _resolved_profile is None:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=404,
+                message=f"LLM profile {llm_profile_id!r} not found",
+            )
+
     # Get uploaded files
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or all(not f.filename for f in uploaded_files):
@@ -309,17 +322,28 @@ def generate_ontology():
     ontology_route = route_router.resolve("ontology_generation")
     route_router.lock_stage("ontology_generation", ontology_route)
 
-    llm_client = LLMClient.from_route(
-        ontology_route,
-        api_key=resolve_route_api_key(ontology_route, llm_runtime),
-        run_id=run_id,
-    )
-    logger.info(
-        "Calling LLM to generate ontology definition (model=%s, provider=%s, version=%d)",
-        llm_client.model,
-        ontology_route.provider_id,
-        ontology_route.routing_version,
-    )
+    if _resolved_profile is not None:
+        # P5.3: Profil-Override — Stage-Routing wird für diesen Run ignoriert.
+        from ..utils.llm_client import build_client_from_profile as _build_from_profile
+        llm_client = _build_from_profile(_resolved_profile, run_id=run_id)
+        logger.info(
+            "Using LLM profile %r for ontology (provider=%s, model=%s)",
+            llm_profile_id,
+            _resolved_profile.provider,
+            _resolved_profile.model_name,
+        )
+    else:
+        llm_client = LLMClient.from_route(
+            ontology_route,
+            api_key=resolve_route_api_key(ontology_route, llm_runtime),
+            run_id=run_id,
+        )
+        logger.info(
+            "Calling LLM to generate ontology definition (model=%s, provider=%s, version=%d)",
+            llm_client.model,
+            ontology_route.provider_id,
+            ontology_route.routing_version,
+        )
     generator = OntologyGenerator(llm_client=llm_client)
     ontology = generator.generate(
         document_texts=document_texts,

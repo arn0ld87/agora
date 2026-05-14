@@ -126,6 +126,20 @@ def generate_report():
         llm_runtime = parse_runtime_llm_config(data)
     except ValueError as exc:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+
+    # P5.3: Optional llm_profile_id aus Request-Body — überschreibt Stage-Routing für diesen Run.
+    llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
+    _resolved_profile = None
+    if llm_profile_id:
+        from ..services.llm_profiles_store import get_llm_profiles_store
+        _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
+        if _resolved_profile is None:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=404,
+                message=f"LLM profile {llm_profile_id!r} not found",
+            )
+
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
@@ -210,11 +224,22 @@ def generate_report():
     # teilen, sonst nutzt GraphToolsService.llm beim Lazy-Init ``LLMClient()``
     # mit Config-Default — egal welches Modell der User für den Report gewählt
     # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
-    shared_llm_client = LLMClient.from_route(
-        resolved_route,
-        api_key=resolve_route_api_key(resolved_route, llm_runtime),
-        run_id=run_record["run_id"],
-    )
+    if _resolved_profile is not None:
+        # P5.3: Profil-Override — Stage-Routing wird für diesen Run ignoriert.
+        from ..utils.llm_client import build_client_from_profile as _build_from_profile
+        shared_llm_client = _build_from_profile(_resolved_profile, run_id=run_record["run_id"])
+        logger.info(
+            "Using LLM profile %r for report (provider=%s, model=%s)",
+            llm_profile_id,
+            _resolved_profile.provider,
+            _resolved_profile.model_name,
+        )
+    else:
+        shared_llm_client = LLMClient.from_route(
+            resolved_route,
+            api_key=resolve_route_api_key(resolved_route, llm_runtime),
+            run_id=run_record["run_id"],
+        )
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     def run_generate():

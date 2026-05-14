@@ -121,12 +121,17 @@ class LlmProfilesStore:
                 ).fetchall()
             return [_row_to_profile(r) for r in rows]
 
-    def get(self, profile_id: str) -> Optional[LlmProfile]:
+    def get(self, profile_id: str, include_api_key: bool = False) -> Optional[LlmProfile]:
         with self._lock, self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM llm_profiles WHERE id = ?", (profile_id,)
             ).fetchone()
-            return _row_to_profile(row) if row else None
+            if row is None:
+                return None
+            profile = _row_to_profile(row)
+            if include_api_key:
+                profile = profile.model_copy(update={"api_key": row["api_key"]})
+            return profile
 
     def create(self, req: LlmProfileCreateRequest) -> LlmProfile:
         profile_id = uuid.uuid4().hex
