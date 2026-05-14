@@ -69,7 +69,8 @@ function shortId(id: string): string {
 function relTime(iso: string): string {
   const ts = Date.parse(iso)
   if (Number.isNaN(ts)) return '—'
-  const diff = Date.now() - ts
+  // clamp gegen Clock-Skew — Server-Timestamp kann minimal in der Zukunft liegen
+  const diff = Math.max(0, Date.now() - ts)
   const secs = Math.round(diff / 1000)
   if (secs < 60) return t('dashboard.time.secondsAgo', { n: secs })
   const mins = Math.round(secs / 60)

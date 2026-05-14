@@ -43,7 +43,7 @@ async function tick(): Promise<void> {
     error.value = ''
   } catch (e) {
     if (e instanceof ApiError) error.value = e.message
-    else error.value = e instanceof Error ? e.message : 'Netzwerkfehler'
+    else error.value = e instanceof Error ? e.message : t('errors.network')
   } finally {
     loading.value = false
   }
