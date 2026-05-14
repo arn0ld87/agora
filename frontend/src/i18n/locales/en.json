@@ -797,6 +797,33 @@
           "description": "A tamper-evident append-only log for security-relevant actions ships with the identity module."
         }
       },
+      "llmProfiles": {
+        "title": "LLM Profiles",
+        "subtitle": "Manage multiple named LLM configurations. Selectable per run step.",
+        "addBtn": "New Profile",
+        "nameLabel": "Display Name",
+        "providerLabel": "Provider",
+        "baseUrlLabel": "Base URL",
+        "modelLabel": "Model",
+        "apiKeyLabel": "API Key",
+        "apiKeyPlaceholderEdit": "Leave empty to keep current",
+        "clearKeyBtn": "Remove Key",
+        "setDefaultBtn": "Set as Default",
+        "defaultBadge": "Default",
+        "deleteConfirm": "Really delete this profile?",
+        "saveBtn": "Save",
+        "cancelBtn": "Cancel",
+        "editBtn": "Edit",
+        "deleteBtn": "Delete",
+        "emptyState": "No profiles yet.",
+        "presets": {
+          "ollama": "Ollama (local)",
+          "openai": "OpenAI",
+          "gemini": "Gemini",
+          "anthropic": "Anthropic",
+          "custom": "Custom endpoint"
+        }
+      },
       "llmProvider": {
         "title": "LLM Provider",
         "subtitle": "Select a provider and enter your API key and model.",

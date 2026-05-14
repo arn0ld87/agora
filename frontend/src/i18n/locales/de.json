@@ -797,6 +797,33 @@
           "description": "Ein revisionssicherer Append-Only-Log für sicherheitsrelevante Aktionen wird mit dem Identity-Modul ausgeliefert."
         }
       },
+      "llmProfiles": {
+        "title": "LLM-Profile",
+        "subtitle": "Verwalte mehrere benannte LLM-Konfigurationen. Pro Schritt eines Runs wählbar.",
+        "addBtn": "Neues Profil",
+        "nameLabel": "Anzeigename",
+        "providerLabel": "Anbieter",
+        "baseUrlLabel": "Base URL",
+        "modelLabel": "Modell",
+        "apiKeyLabel": "API Key",
+        "apiKeyPlaceholderEdit": "Leer lassen = unverändert",
+        "clearKeyBtn": "Key entfernen",
+        "setDefaultBtn": "Als Standard setzen",
+        "defaultBadge": "Standard",
+        "deleteConfirm": "Dieses Profil wirklich löschen?",
+        "saveBtn": "Speichern",
+        "cancelBtn": "Abbrechen",
+        "editBtn": "Bearbeiten",
+        "deleteBtn": "Löschen",
+        "emptyState": "Noch keine Profile angelegt.",
+        "presets": {
+          "ollama": "Ollama (lokal)",
+          "openai": "OpenAI",
+          "gemini": "Gemini",
+          "anthropic": "Anthropic",
+          "custom": "Eigener Endpunkt"
+        }
+      },
       "llmProvider": {
         "title": "LLM-Anbieter",
         "subtitle": "Wähle einen Anbieter und hinterlege API-Key und Modell.",

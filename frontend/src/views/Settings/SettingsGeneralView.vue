@@ -4,6 +4,7 @@ import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
 import LlmProviderCard from '@/components/v4/forms/LlmProviderCard.vue'
+import LlmProfileManager from '@/components/v4/forms/LlmProfileManager.vue'
 
 const { t } = useI18n()
 
@@ -25,6 +26,7 @@ const ALLOWED_SECTIONS = ['llm', 'logging', 'locale', 'ui', 'event_bus', 'securi
       :subtitle="t('settings.v4.general.subtitle')"
     />
 
+    <LlmProfileManager style="margin-bottom: 16px;" />
     <LlmProviderCard style="margin-bottom: 16px;" />
     <SettingsSectionPanel :allowed-sections="ALLOWED_SECTIONS" />
   </AppShell>

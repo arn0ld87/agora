@@ -45,6 +45,12 @@ vi.mock('@/components/v4/forms/ComingSoonCard.vue', () => ({
     template: '<div class="coming-soon-stub"><h3>{{ title }}</h3><p>{{ description }}</p></div>',
   },
 }))
+vi.mock('@/components/v4/forms/LlmProfileManager.vue', () => ({
+  default: {
+    name: 'LlmProfileManager',
+    template: '<div class="llm-profile-manager-stub" />',
+  },
+}))
 
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
 import SettingsIntegrationsView from '../Settings/SettingsIntegrationsView.vue'
