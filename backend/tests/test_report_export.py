@@ -59,10 +59,10 @@ def _persist_report(*, with_evidence: bool = False) -> None:
         created_at="2026-04-29T10:00:00",
         completed_at="2026-04-29T10:05:00",
     )
-    ReportManager.save_report(report)
     if with_evidence:
-        # Sub-Slice 02b: persist a v2-contract-compliant evidence map so the
-        # strict ReportContractModel envelope round-trips through the export.
+        # MAI-06: Evidence zuerst speichern, damit save_report → save_report_v3
+        # das v3-Artefakt (report-v3.json) bei COMPLETED-Reports schreibt.
+        ReportManager._ensure_report_folder(REPORT_ID)
         ReportManager.save_evidence_map(REPORT_ID, {
             "schema_version": 2,
             "report_id": REPORT_ID,
@@ -98,6 +98,7 @@ def _persist_report(*, with_evidence: bool = False) -> None:
                 }
             ],
         })
+    ReportManager.save_report(report)
 
 
 def _persist_report_with_hypotheses() -> None:
@@ -295,12 +296,15 @@ def test_hypotheses_in_markdown_and_json(env):
 
 
 def test_export_md_prefers_report_v3_markdown(env):
+    """MAI-06: format=md rendert on-demand aus report-v3.json, keine pre-rendered .md-Datei."""
     _persist_report(with_evidence=True)
-    report_v3_md = ReportManager._get_report_v3_markdown_path(REPORT_ID)
-    with open(report_v3_md, "w", encoding="utf-8") as handle:
-        handle.write("# ReportV3\n\nv3 artifact")
-
+    # report-v3.json wurde durch save_report → save_report_v3 geschrieben.
+    # Der Export rendert daraus dynamisch — eine manuell abgelegte report-v3.md
+    # wird ignoriert (kein send_file mehr, MAI-06).
     response = env.get(f"/api/report/{REPORT_ID}/export?format=md")
 
     assert response.status_code == 200
-    assert response.data.decode("utf-8") == "# ReportV3\n\nv3 artifact"
+    body = response.data.decode("utf-8")
+    # render_report_v3 erzeugt diesen Header und den Mode-Banner
+    assert "# Agora ReportV3" in body
+    assert "**Report-Modus:**" in body
