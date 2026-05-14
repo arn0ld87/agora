@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+import { createI18n } from 'vue-i18n'
 
 vi.mock('../../api/status', () => ({
   getSystemStatus: vi.fn(),
@@ -8,6 +9,12 @@ vi.mock('../../api/status', () => ({
 
 import { getSystemStatus } from '../../api/status'
 import { useSystemStatus, type UseSystemStatusReturn } from '../useSystemStatus'
+
+const i18n = createI18n({
+  legacy: false,
+  locale: 'de',
+  messages: { de: { errors: { network: 'Netzwerkfehler' } }, en: {} },
+})
 
 const statusPayload = {
   backend: { ok: true, version: '0.9.1-dev', auth_mode: 'single_user_token' },
@@ -32,7 +39,7 @@ function mountComposable(): UseSystemStatusReturn {
       return () => h('div')
     },
   })
-  mount(Comp)
+  mount(Comp, { global: { plugins: [i18n] } })
   return exposed as UseSystemStatusReturn
 }
 

@@ -6,6 +6,7 @@
  * beide Formen (data.* und top-level).
  */
 import { ref, type Ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getSystemStatus } from '../api/status'
 import { ApiError } from '../api/envelope'
 import {
@@ -41,6 +42,7 @@ export function useSystemStatus(
   const status = ref<SystemStatusResponse | null>(null)
   const loading = ref(false)
   const error = ref('')
+  const { t } = useI18n()
 
   async function tick(): Promise<void> {
     loading.value = true
@@ -58,7 +60,7 @@ export function useSystemStatus(
       if (e instanceof ApiError) {
         error.value = e.message
       } else {
-        error.value = e instanceof Error ? e.message : 'Netzwerkfehler'
+        error.value = e instanceof Error ? e.message : t('errors.network')
       }
     } finally {
       loading.value = false

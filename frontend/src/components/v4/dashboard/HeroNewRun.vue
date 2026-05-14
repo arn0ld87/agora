@@ -129,25 +129,28 @@ function onPickKey(e: KeyboardEvent) {
   }
 }
 
-function onFiles(e: Event) {
-  const t = e.target as HTMLInputElement
-  if (!t.files) return
-  const accepted = filterAllowed(t.files)
+function applyAcceptedFiles(rawFiles: FileList): void {
+  const accepted = filterAllowed(rawFiles)
   files.value = accepted
-  if (accepted.length === 0 && t.files.length > 0) {
-    errorMsg.value = t.value
-      ? ''
-      : ''
+  if (accepted.length === 0 && rawFiles.length > 0) {
+    errorMsg.value = t('errors.fileTypeNotAllowed')
+  } else {
     errorMsg.value = ''
   }
-  t.value = ''
+}
+
+function onFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files) return
+  applyAcceptedFiles(input.files)
+  input.value = ''
 }
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
   isDragOver.value = false
   if (!e.dataTransfer?.files) return
-  files.value = filterAllowed(e.dataTransfer.files)
+  applyAcceptedFiles(e.dataTransfer.files)
 }
 
 function onDragOver(e: DragEvent) {
