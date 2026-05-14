@@ -268,6 +268,26 @@ class TestGenerateSectionMetadata:
         call_kwargs = agent.llm.chat_json.call_args.kwargs
         assert call_kwargs.get("schema") is Persona
 
+    def test_metadata_prompt_uses_generic_field_name_examples(self):
+        """Schema-Regeln dürfen keine SectionMetadata-spezifischen Felder suggerieren."""
+        from app.services.report_agent.workflow import generate_section_metadata
+
+        agent = _make_agent()
+        agent.llm.chat_json.side_effect = Exception("Schema-Mismatch-simuliert")
+
+        generate_section_metadata(
+            agent,
+            section_title="Persona-Tabelle",
+            section_content="Persona Alpha ist 35-50 Jahre alt.",
+            section_index=2,
+        )
+
+        call_kwargs = agent.llm.chat_json.call_args.kwargs
+        system_msg = call_kwargs["messages"][0]["content"]
+        assert "`field_name` statt `fieldName`" in system_msg
+        assert "`section_title`, NICHT `sectionTitle`" not in system_msg
+        assert "`key_takeaways`, NICHT `keyFindings`" not in system_msg
+
     def test_returns_empty_dict_on_exception(self):
         """Fehler in chat_json geben {} zurück — Hauptgenerierung unblockiert."""
         from app.services.report_agent.workflow import generate_section_metadata
