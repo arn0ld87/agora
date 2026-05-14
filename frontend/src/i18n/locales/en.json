@@ -777,7 +777,8 @@
         "errors": {
           "loadFailed": "Failed to load API keys.",
           "createFailed": "Failed to create key.",
-          "revokeFailed": "Failed to revoke key."
+          "revokeFailed": "Failed to revoke key.",
+          "copyFailed": "Failed to copy key to clipboard."
         }
       },
       "usersTeams": {

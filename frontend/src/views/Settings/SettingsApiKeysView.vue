@@ -9,7 +9,7 @@ import Input from '@/components/v4/forms/Input.vue'
 import { useApiKeysStore } from '@/store/apiKeys'
 import type { ApiKeyModel, ApiKeyScope } from '@/contracts/apiKeysContract'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = useApiKeysStore()
 
 const BREADCRUMBS = [
@@ -64,11 +64,18 @@ async function submitCreate(): Promise<void> {
 // --- Copy-to-Clipboard ---
 const tokenCopied = ref(false)
 
+const copyError = ref<string | null>(null)
+
 async function copyToken(): Promise<void> {
   if (!store.lastCreatedToken) return
-  await navigator.clipboard.writeText(store.lastCreatedToken)
-  tokenCopied.value = true
-  setTimeout(() => { tokenCopied.value = false }, 2000)
+  copyError.value = null
+  try {
+    await navigator.clipboard.writeText(store.lastCreatedToken)
+    tokenCopied.value = true
+    setTimeout(() => { tokenCopied.value = false }, 2000)
+  } catch {
+    copyError.value = t('settings.v4.apiKeys.errors.copyFailed')
+  }
 }
 
 // --- Revoke-Dialog-State ---
@@ -99,7 +106,7 @@ async function confirmRevoke(): Promise<void> {
 // --- Helpers ---
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return t('settings.v4.apiKeys.table.never')
-  return new Date(iso).toLocaleDateString('de-DE', {
+  return new Date(iso).toLocaleDateString(locale.value, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -231,6 +238,9 @@ onMounted(() => {
               <button class="v4-btn v4-btn--secondary" @click="copyToken">
                 {{ tokenCopied ? t('settings.v4.apiKeys.actions.copied') : t('settings.v4.apiKeys.actions.copy') }}
               </button>
+            </div>
+            <div v-if="copyError" class="api-keys__form-error" role="alert">
+              {{ copyError }}
             </div>
             <div class="v4-modal__footer">
               <button class="v4-btn v4-btn--primary" @click="closeCreateModal">
