@@ -24,8 +24,9 @@ jobs:
       - name: Sync backend deps
         working-directory: backend
         run: uv sync --group dev
-      - name: Check generated schemas from Pydantic models
+      - name: Schema-Drift-Check (MAI-04)
         working-directory: backend
+        # exit 1 bei nicht-committeten Schema-Aenderungen -> blockiert Merge.
         run: uv run python -m app.contracts.dump_schemas --check
 
   status-sync-drift:
