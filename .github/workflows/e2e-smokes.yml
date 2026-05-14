@@ -3,22 +3,6 @@ name: e2e-smokes
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-    paths:
-      - 'frontend/src/**'
-      - 'frontend/tests/e2e/**'
-      - 'frontend/playwright.config.ts'
-      - 'frontend/package*.json'
-      - 'backend/app/api/**'
-      - 'backend/app/services/report_agent/**'
-      - 'backend/app/utils/llm_client.py'
-      - 'backend/app/utils/llm_e2e_stub.py'
-      - 'docker-compose*.yml'
-      - 'Dockerfile'
-      - 'deploy/**'
-      - 'scripts/e2e-*.sh'
-      - '.github/workflows/e2e-smokes.yml'
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
