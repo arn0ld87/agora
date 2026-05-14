@@ -10,6 +10,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Optional
 
 from neo4j import GraphDatabase
@@ -54,6 +55,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         self._uri = uri or Config.NEO4J_URI
         self._user = user or Config.NEO4J_USER
         self._password = password or Config.NEO4J_PASSWORD
+        self._lock = Lock()
 
         self._driver = GraphDatabase.driver(
             self._uri, auth=(self._user, self._password)
