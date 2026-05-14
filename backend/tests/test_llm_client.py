@@ -147,8 +147,8 @@ class TestChatJsonStrictSchema:
             f"Expected fallback warning, got: {warning_calls}"
         )
 
-    def test_chat_json_disable_json_mode_skips_both(self, client, monkeypatch):
-        """LLM_DISABLE_JSON_MODE=true must skip both json_object and json_schema."""
+    def test_chat_json_disable_json_mode_keeps_strict_schema(self, client, monkeypatch):
+        """LLM_DISABLE_JSON_MODE=true must not disable schema-bound strict JSON."""
         monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "true")
 
         captured: list = []
@@ -166,9 +166,8 @@ class TestChatJsonStrictSchema:
 
         assert result == {"x": 99}
         assert len(captured) == 1
-        assert captured[0] is None, (
-            f"response_format must be None when LLM_DISABLE_JSON_MODE is set, got {captured[0]}"
-        )
+        assert captured[0]["type"] == "json_schema"
+        assert captured[0]["json_schema"]["strict"] is True
 
     def test_chat_json_dict_schema_no_server_validation(self, client, monkeypatch):
         """When schema is a plain dict the returned value is passed through unchanged."""

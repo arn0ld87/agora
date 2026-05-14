@@ -646,7 +646,18 @@ class LLMClient:
                 messages=list(messages),
             )
 
-        disable_json_mode = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
+        disable_json_mode_env = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
+        # Strict-Schema-Aufrufer (schema is not None) dürfen NIE im Freitext-Mode
+        # landen — sonst halluziniert das Modell camelCase / Extra-Felder und
+        # Pydantic (extra='forbid') lehnt ab. LLM_DISABLE_JSON_MODE bleibt nur
+        # für schemalose chat_json()-Calls wirksam.
+        disable_json_mode = disable_json_mode_env and schema is None
+        if disable_json_mode_env and schema is not None:
+            logger.info(
+                "LLMClient.chat_json: LLM_DISABLE_JSON_MODE ignoriert — schema=%s "
+                "erzwingt strict json_schema",
+                schema.__name__ if isinstance(schema, type) else "dict",
+            )
 
         if schema is not None:
             schema_label = schema.__name__ if isinstance(schema, type) else "dict"

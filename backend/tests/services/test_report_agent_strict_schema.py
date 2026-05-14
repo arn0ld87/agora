@@ -18,6 +18,7 @@ from app.services.report_agent.schemas import (
     PlanResponse,
     PlanSection,
     SectionMetadata,
+    _make_table_metadata,
     _section_schema_for,
 )
 from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
@@ -183,7 +184,7 @@ class TestPlanOutlineStrictSchema:
 # ---------------------------------------------------------------------------
 
 class TestSectionSchemaFor:
-    @pytest.mark.parametrize("title,expected_cls", [
+    @pytest.mark.parametrize("title,item_cls", [
         ("Persona-Tabelle", Persona),
         ("Segment-Tabelle", Segment),
         ("Multiplikator-Auswertung", Multiplier),
@@ -195,12 +196,11 @@ class TestSectionSchemaFor:
         ("Content-Ideen", ContentIdea),
         ("Datenlücken", DataGap),
     ])
-    def test_schema_mapping(self, title: str, expected_cls: type):
+    def test_schema_mapping(self, title: str, item_cls: type):
         result = _section_schema_for(title)
-        assert result is expected_cls, (
-            f"_section_schema_for({title!r}) → {result.__name__!r}, "
-            f"erwartet: {expected_cls.__name__!r}"
-        )
+        assert result is _make_table_metadata(item_cls)
+        assert result.__name__ == f"{item_cls.__name__}Table"
+        assert result.model_fields["items"].annotation == list[item_cls]
 
     def test_unknown_section_falls_back_to_section_metadata(self):
         """Unbekannte Section-Titel → SectionMetadata als Fallback."""
@@ -209,8 +209,8 @@ class TestSectionSchemaFor:
 
     def test_case_insensitive_matching(self):
         """Matching ist case-insensitiv."""
-        assert _section_schema_for("PERSONA-TABELLE") is Persona
-        assert _section_schema_for("top 10 vertrauenssignale") is TrustSignal
+        assert _section_schema_for("PERSONA-TABELLE") is _make_table_metadata(Persona)
+        assert _section_schema_for("top 10 vertrauenssignale") is _make_table_metadata(TrustSignal)
 
     def test_free_persona_analysis_title_uses_generic_metadata(self):
         """Freie 3-Section-Fallback-Titel dürfen kein volles Persona-DTO erzwingen."""
@@ -247,12 +247,12 @@ class TestGenerateSectionMetadata:
         assert call_kwargs.get("schema") is SectionMetadata
         assert "section_metadata" in call_kwargs.get("schema_name", "")
 
-    def test_passes_persona_schema_for_required_persona_table(self):
-        """generate_section_metadata() wählt Persona-DTO für den Pflichtabschnitt."""
+    def test_passes_persona_table_schema_for_required_persona_table(self):
+        """generate_section_metadata() wählt PersonaTable für den Pflichtabschnitt."""
         from app.services.report_agent.workflow import generate_section_metadata
 
         agent = _make_agent()
-        # Persona ist ein komplexes Modell — chat_json wird es validieren.
+        # PersonaTable ist ein komplexes Modell — chat_json wird es validieren.
         # Hier testen wir nur, dass das richtige schema= übergeben wird.
         # Bei Validierungsfehler gibt die Funktion {} zurück (Fehler-Pfad).
         agent.llm.chat_json.side_effect = Exception("Schema-Mismatch-simuliert")
@@ -266,7 +266,7 @@ class TestGenerateSectionMetadata:
 
         assert result == {}, "Bei chat_json-Fehler muss {} zurückgegeben werden"
         call_kwargs = agent.llm.chat_json.call_args.kwargs
-        assert call_kwargs.get("schema") is Persona
+        assert call_kwargs.get("schema") is _make_table_metadata(Persona)
 
     def test_returns_empty_dict_on_exception(self):
         """Fehler in chat_json geben {} zurück — Hauptgenerierung unblockiert."""
