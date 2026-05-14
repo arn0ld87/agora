@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.contracts.report_v3 import Claim, DataGap, Persona, ReportV3, Segment
+from app.contracts.report_v3 import Claim, DataGap, Hypothesis, Persona, ReportV3, Segment
 from app.services.report_agent.markdown_renderer import (
     render_data_gaps,
     render_persona_table,
@@ -50,6 +50,15 @@ def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
                 suggested_fixes=["Interview nacherheben"],
             )
         ],
+        hypotheses=[
+            Hypothesis(
+                id="hyp_01",
+                hypothesis_text="Preisbereitschaft koennte segmentabhaengig sein.",
+                rationale="Nur indirekte Hinweise vorhanden.",
+                suggested_evidence=["Interview nacherheben"],
+                confidence_score=0.3,
+            )
+        ],
     )
 
     markdown = render_report_v3(report)
@@ -58,6 +67,9 @@ def test_report_v3_renderer_outputs_tables_and_data_gaps() -> None:
     assert "| P01 | neutral-de | 35-50 | Gruenderin | DACH |" in markdown
     assert "| S01 | KMU | Kleine und mittlere Unternehmen | P01 |" in markdown
     assert "| claim_01 | medium | persona | Sicherheitsbedenken" in markdown
+    assert "## Hypothesen ohne Evidence" in markdown
+    assert "| hyp_01 | Preisbereitschaft koennte segmentabhaengig sein. |" in markdown
+    assert "## Data Gaps" in markdown
     assert "| gap_01 | medium | Preisbereitschaft ist nicht belegt. | Interview nacherheben |" in markdown
 
 
