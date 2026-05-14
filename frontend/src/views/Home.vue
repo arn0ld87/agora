@@ -495,8 +495,8 @@ const differentiators = computed(() => tm('home.differentiators'))
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--ff-serif);
-  font-weight: 500;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 24px;
   letter-spacing: -0.02em;
   color: var(--fg);
@@ -527,17 +527,16 @@ const differentiators = computed(() => tm('home.differentiators'))
   margin-bottom: var(--s-5);
 }
 .display {
-  font-family: var(--ff-serif);
-  font-weight: 300;
-  font-size: clamp(56px, 8vw, 132px);
-  line-height: 0.98;
-  letter-spacing: -0.03em;
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   color: var(--fg);
   margin: 0;
 }
 .display .it {
-  font-style: italic;
-  font-weight: 400;
+  font-weight: 650;
   color: var(--accent);
 }
 .lead {
@@ -612,10 +611,11 @@ const differentiators = computed(() => tm('home.differentiators'))
 }
 .metric:last-child { border-right: none; }
 .metric .value {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-44);
   line-height: 1.05;
+  letter-spacing: -0.02em;
   color: var(--fg);
 }
 .metric .label {
@@ -652,11 +652,11 @@ const differentiators = computed(() => tm('home.differentiators'))
 }
 .step-body { display: flex; flex-direction: column; gap: var(--s-2); }
 .step-title {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   color: var(--fg);
 }
 .step-desc {
@@ -685,11 +685,11 @@ const differentiators = computed(() => tm('home.differentiators'))
   gap: var(--s-2);
 }
 .differentiator-title {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   color: var(--fg);
 }
 .differentiator-desc {
@@ -746,10 +746,11 @@ const differentiators = computed(() => tm('home.differentiators'))
   color: var(--accent);
 }
 .dropzone-title {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-24);
   color: var(--fg);
-  font-weight: 400;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .dropzone-hint {
   font-family: var(--ff-mono);

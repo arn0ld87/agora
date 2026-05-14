@@ -229,10 +229,10 @@ function updateGender(event: Event) {
   margin-bottom: var(--s-2);
 }
 .modal-head h3 {
-  font-family: var(--ff-serif);
-  font-weight: 400;
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 1.05;
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--fg);
@@ -267,7 +267,7 @@ function updateGender(event: Event) {
   letter-spacing: normal;
   outline: none;
 }
-.form-row textarea { resize: vertical; font-family: var(--ff-serif); line-height: 1.4; }
+.form-row textarea { resize: vertical; font-family: var(--ff-sans); line-height: 1.4; }
 .form-row input:focus,
 .form-row select:focus,
 .form-row textarea:focus { border-color: var(--accent); }
@@ -289,4 +289,30 @@ function updateGender(event: Event) {
   color: var(--fg-muted);
 }
 .x:hover { color: var(--accent); }
+
+/* Design v3 form polish. */
+.form-row {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary, var(--fg-muted));
+  font-weight: 590;
+}
+.form-row input,
+.form-row select,
+.form-row textarea {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.form-row textarea {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+}
 </style>

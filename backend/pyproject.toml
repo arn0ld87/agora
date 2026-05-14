@@ -200,3 +200,14 @@ disable_error_code = ["attr-defined"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[tool.uv]
+# Unblock Python 3.14 (Issue #199): Multiple dependencies are pinned to old versions
+# without cp314 wheels, and their source builds fail on Python 3.14.
+# Overriding them to newer versions that provide native cp314 wheels.
+override-dependencies = [
+    "tiktoken>=0.12.0",
+    "pillow>=12.1.1",
+    "pandas>=3.0.3",
+    "numpy>=2.4.4",
+]

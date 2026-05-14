@@ -18,6 +18,7 @@ from app.contracts.report_v3 import (
     ContentIdea,
     DataGap,
     FrictionPoint,
+    Hypothesis,
     Multiplier,
     Persona,
     PositioningVariant,
@@ -28,14 +29,14 @@ from app.contracts.report_v3 import (
 )
 
 
-# ---- Importierbarkeit aller 12 Klassen ----
+# ---- Importierbarkeit aller 13 Klassen ----
 
 def test_all_classes_importable():
-    """Alle 12 Klassen (ReportV3 + 11 DTOs) sind importierbar."""
+    """Alle 13 Klassen (ReportV3 + 12 DTOs) sind importierbar."""
     for cls in [
         ReportV3, Persona, Segment, Claim, Multiplier,
         FrictionPoint, TrustSignal, ChangeRecommendation,
-        ProjectImpact, PositioningVariant, ContentIdea, DataGap,
+        ProjectImpact, PositioningVariant, ContentIdea, DataGap, Hypothesis,
     ]:
         assert cls is not None, f"{cls.__name__} nicht importierbar"
 
@@ -197,6 +198,15 @@ def test_minimal_report_v3_roundtrip():
                 suggested_fixes=["A/B-Test durchführen", "Marktforschung beauftragen"],
             )
         ],
+        hypotheses=[
+            Hypothesis(
+                id="hyp1",
+                hypothesis_text="Preisbereitschaft koennte segmentabhaengig variieren.",
+                rationale="Keine harte Evidence im Seed-Korpus.",
+                suggested_evidence=["Preisinterviews"],
+                confidence_score=0.25,
+            )
+        ],
     )
 
     json_str = original.model_dump_json()
@@ -209,6 +219,8 @@ def test_minimal_report_v3_roundtrip():
     assert len(restored.claims) == 1
     assert restored.claims[0].evidence_refs == ["ev-001"]
     assert len(restored.data_gaps) == 1
+    assert len(restored.hypotheses) == 1
+    assert restored.hypotheses[0].suggested_evidence == ["Preisinterviews"]
 
 
 def test_persisted_v3_validates(tmp_path, monkeypatch):
@@ -270,14 +282,17 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     report_v3_path = tmp_path / "reports" / report_id / "report-v3.json"
     raw = json.loads(report_v3_path.read_text(encoding="utf-8"))
     restored = ReportV3.model_validate(raw)
-    report_v3_markdown = tmp_path / "reports" / report_id / "report-v3.md"
+    # MAI-06: report-v3.md wird nicht mehr auf Disk geschrieben — on-demand via build_report_v3_markdown().
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+    report_v3_markdown = ReportManager.build_report_v3_markdown(report_id)
+    assert report_v3_markdown is not None, "build_report_v3_markdown() lieferte None — report-v3.json fehlt oder ungültig"
 
     assert restored.schema_version == 3
     assert restored.report_id == report_id
     assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
     assert restored.data_gaps[0].id == "gap_01"
-    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown.read_text(encoding="utf-8")
-    assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown.read_text(encoding="utf-8")
+    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown
+    assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 
 # ---- migrate_v2_to_v3 Unit-Tests ----

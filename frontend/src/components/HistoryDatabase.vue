@@ -529,7 +529,7 @@ onMounted(loadRuns)
   border-bottom: 1px solid var(--rule);
   padding-bottom: var(--s-4);
 }
-.drawer-head h3 { margin: 4px 0 0; font-family: var(--ff-serif); }
+.drawer-head h3 { margin: 4px 0 0; font-family: var(--ff-sans); font-weight: 600; letter-spacing: -0.01em; }
 .eyebrow { font-family: var(--ff-mono); font-size: 11px; letter-spacing: var(--ls-mono); text-transform: uppercase; color: var(--fg-muted); }
 .linkish, .action {
   border: 1px solid var(--rule-strong);
@@ -568,7 +568,7 @@ onMounted(loadRuns)
 .retry-btn:hover { background: var(--bg-panel-2); }
 .actions, .branch-row { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
 .branch-box, .artifacts, .events, .advanced-box { margin-top: var(--s-6); }
-.branch-box h4, .artifacts h4, .events h4 { margin-bottom: var(--s-3); font-family: var(--ff-serif); }
+.branch-box h4, .artifacts h4, .events h4 { margin-bottom: var(--s-3); font-family: var(--ff-sans); font-weight: 600; }
 .branch-box label { display: block; margin-top: var(--s-2); color: var(--fg-muted); }
 pre {
   max-height: 200px;

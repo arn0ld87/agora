@@ -13,9 +13,11 @@ from flask import Response, request, current_app
 from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
+from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401  (kept for type re-exports)
+from ..services.stage_model_router import StageModelRouter
 from ..services.text_processor import TextProcessor
 from ..storage.ner_extractor import NERExtractor
 from ..utils.file_parser import FileParser
@@ -245,33 +247,6 @@ def generate_ontology():
     project.simulation_requirement = simulation_requirement
     logger.info(f"Project created: {project.project_id}")
 
-    # 0. Initialise runtime routing for the project/run
-    from ..services.stage_model_router import StageModelRouter
-    from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
-
-    run_id = f"proj_{project.project_id}" # Mapping project to a run_id for routing
-    config_service = RuntimeRunConfig(run_id)
-
-    # Resolve default route
-    if llm_runtime.enabled:
-        default_route = StageLLMRoute(
-            provider_id=llm_runtime.provider,
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=llm_runtime.base_url
-        )
-    else:
-        default_route = StageLLMRoute(
-            provider_id="ollama_local",
-            model=llm_model_override or Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL
-        )
-
-    runtime_routing = RuntimeLlmRouting(default_route=default_route)
-    config_service.save_config(runtime_routing)
-
-    router = StageModelRouter(run_id)
-
     # Save files and extract text
     document_texts = []
     all_text = ""
@@ -313,20 +288,37 @@ def generate_ontology():
     logger.info(f"Text extraction completed, total {len(all_text)} characters")
 
     # Generate ontology
-    # Stage 1: document_ingest (Implicitly used during extraction if needed, but here we lock it)
-    ingest_route = router.resolve("document_ingest")
-    router.lock_stage("document_ingest", ingest_route)
+    run_record = run_registry.create_run(
+        run_type="ontology_generate",
+        entity_id=project.project_id,
+        status="processing",
+        progress=0,
+        message="Ontology generation started",
+        linked_ids={"project_id": project.project_id},
+    )
+    run_id = run_record["run_id"]
+    seed_run_stage_routing(
+        run_id,
+        "ontology_generation",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_id)
+    ingest_route = route_router.resolve("document_ingest")
+    route_router.lock_stage("document_ingest", ingest_route)
+    ontology_route = route_router.resolve("ontology_generation")
+    route_router.lock_stage("ontology_generation", ontology_route)
 
-    # Stage 2: ontology_generation
-    ontology_route = router.resolve("ontology_generation")
-    router.lock_stage("ontology_generation", ontology_route)
-
-    llm_client = LLMClient.from_route(ontology_route, run_id=run_id)
+    llm_client = LLMClient.from_route(
+        ontology_route,
+        api_key=resolve_route_api_key(ontology_route, llm_runtime),
+        run_id=run_id,
+    )
     logger.info(
         "Calling LLM to generate ontology definition (model=%s, provider=%s, version=%d)",
         llm_client.model,
         ontology_route.provider_id,
-        ontology_route.routing_version
+        ontology_route.routing_version,
     )
     generator = OntologyGenerator(llm_client=llm_client)
     ontology = generator.generate(
@@ -352,6 +344,13 @@ def generate_ontology():
     project.llm_model = llm_model_override
     project.llm_provider = llm_runtime.redacted_metadata() or None
     ProjectManager.save_project(project)
+    run_registry.update_run(
+        run_id,
+        status="completed",
+        progress=100,
+        message="Ontology generation completed",
+        linked_ids={"project_id": project.project_id},
+    )
     logger.info(f"=== Ontology generation completed === Project ID: {project.project_id}")
 
     return json_success({
@@ -364,60 +363,71 @@ def generate_ontology():
     })
 
 
-# ============== Interface 2: Build Graph ==============
+# ============== Private helpers for build_graph ==============
 
-@graph_bp.route('/build', methods=['POST'])
-@handle_api_errors(log_prefix="Graph build initiation failed")
-def build_graph():
-    """
-    Interface 2: Build graph based on project_id
-    """
-    logger.info("=== Starting graph build ===")
 
-    # Parse request
-    data = request.get_json() or {}
+def _validate_build_request(data: dict):
+    """Validate project_id from request data and look up the project.
+
+    Returns ``(project_id, project, error_response)`` where *error_response*
+    is ``None`` on success.
+    """
     project_id = data.get('project_id')
     logger.debug(f"Request parameters: project_id={project_id}")
 
     if not project_id:
-        return json_error(
+        return None, None, json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
             message="Please provide project_id",
         )
 
     if not validate_project_id(project_id):
-        return json_error(ApiErrorCode.INVALID_ID, status=400)
+        return None, None, json_error(ApiErrorCode.INVALID_ID, status=400)
 
-    # Get project
     project = ProjectManager.get_project(project_id)
     if not project:
-        return json_error(
+        return None, None, json_error(
             ApiErrorCode.NOT_FOUND,
             status=404,
             message=f"Project does not exist: {project_id}",
         )
 
-    # LLM-Override für den Build-Pfad (Sub-Slice „build-respects-frontend-model").
+    return project_id, project, None
+
+
+def _resolve_llm_overrides(data: dict, project):
+    """Parse llm_model / llm_provider from *data* and build RuntimeLlmConfig.
+
+    Returns ``(llm_runtime, llm_model_override, error_response)`` where
+    *error_response* is ``None`` on success.
+    """
     # Reihenfolge: explizit im Request > persistiert am Projekt aus dem
     # Ontology-Schritt > Server-Default. Secrets (api_key) sind im Projekt
     # nicht persistiert (redacted_metadata) — daher kann der Build den
     # Provider-Override nur dann rekonstruieren, wenn der Request ihn
-    # erneut mitschickt. Modell-Name allein wird vom Projekt-Default geerbt.
+    # erneut mitschickt.
     llm_model_override = (data.get('llm_model') or '').strip() or project.llm_model or None
     llm_provider_payload = data.get('llm_provider')
     try:
         llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
     except ValueError as exc:
-        return json_error(
+        return None, None, json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
             message=str(exc),
         )
 
-    # Check project status
-    force = data.get('force', False)  # Force rebuild
+    return llm_runtime, llm_model_override, None
 
+
+def _check_project_state_for_build(project, force: bool):
+    """Check and optionally reset project status before a build.
+
+    Returns ``error_response`` (a tuple ready for Flask return) or ``None``
+    when the project state is acceptable for starting a build.  Mutates
+    *project* in-place when a force-reset is performed.
+    """
     if project.status == ProjectStatus.CREATED:
         return json_error(
             ApiErrorCode.ONTOLOGY_MISSING,
@@ -433,74 +443,57 @@ def build_graph():
             extra={"task_id": project.graph_build_task_id},
         )
 
-    # If force rebuild, reset status
-    if force and project.status in [ProjectStatus.GRAPH_BUILDING, ProjectStatus.FAILED, ProjectStatus.GRAPH_COMPLETED]:
+    if force and project.status in [
+        ProjectStatus.GRAPH_BUILDING,
+        ProjectStatus.FAILED,
+        ProjectStatus.GRAPH_COMPLETED,
+    ]:
         project.status = ProjectStatus.ONTOLOGY_GENERATED
         project.graph_id = None
         project.graph_build_task_id = None
         project.error = None
 
-    run_id = f"proj_{project.project_id}"
-    from ..services.stage_model_router import StageModelRouter
-    from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import StageLLMRoute
+    return None
 
-    # 0. Update runtime config if new provider passed
-    if llm_provider_payload or llm_model_override:
-        config_service = RuntimeRunConfig(run_id)
-        config = config_service.load_config()
-        if llm_runtime.enabled:
-            config.default_route = StageLLMRoute(
-                provider_id=llm_runtime.provider,
-                model=llm_model_override or config.default_route.model,
-                base_url=llm_runtime.base_url
-            )
-        elif llm_model_override:
-             config.default_route.model = llm_model_override
 
-        config.routing_version += 1
-        config_service.save_config(config)
+def _load_build_inputs(project_id: str, project, data: dict):
+    """Read configuration, extracted text and ontology for the build.
 
-    # Get configuration
+    Returns ``(graph_name, text, ontology, chunk_size, chunk_overlap, error_response)``
+    where *error_response* is ``None`` on success.  Also persists chunk
+    params back onto *project*.
+    """
     graph_name = data.get('graph_name', project.name or 'Agora Graph')
     chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
     chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
 
-    # Update project configuration
     project.chunk_size = chunk_size
     project.chunk_overlap = chunk_overlap
 
-    # Get extracted text
     text = ProjectManager.get_extracted_text(project_id)
     if not text:
-        return json_error(
+        return None, None, None, None, None, json_error(
             ApiErrorCode.NOT_FOUND,
             status=400,
             message="Extracted text not found",
         )
 
-    # Get ontology
     ontology = project.ontology
     if not ontology:
-        return json_error(
+        return None, None, None, None, None, json_error(
             ApiErrorCode.ONTOLOGY_MISSING,
             status=400,
             message="Ontology definition not found",
         )
 
-    # Get storage in request context (background thread cannot access current_app)
-    # Capture container in the request thread so the background closure
-    # below can resolve services without a live Flask app context.
-    container = get_container()
-    if container.neo4j_storage is None:
-        return json_error(
-            ApiErrorCode.NEO4J_UNAVAILABLE,
-            status=503,
-            message="GraphStorage not initialized",
-        )
+    return graph_name, text, ontology, chunk_size, chunk_overlap, None
 
-    # Create async task
-    task_manager = TaskManager()
+
+def _create_build_run_record(project_id: str, project, graph_name: str, task_manager: TaskManager):
+    """Register run + task records and transition project to GRAPH_BUILDING.
+
+    Returns ``(run_record, task_id)``.
+    """
     run_record = run_registry.create_run(
         run_type="graph_build",
         entity_id=project_id,
@@ -520,27 +513,85 @@ def build_graph():
     )
     logger.info(f"Graph build task created: task_id={task_id}, project_id={project_id}")
 
-    # Update project status
     project.status = ProjectStatus.GRAPH_BUILDING
     project.graph_build_task_id = task_id
     ProjectManager.save_project(project)
 
-    # Stage 3: graph_build
-    router = StageModelRouter(run_id)
-    build_route = router.resolve("graph_build")
-    router.lock_stage("graph_build", build_route)
+    return run_record, task_id
 
-    # NER-Override pro Build: wenn der Request (oder das Projekt-Default)
-    # ein Frontend-Modell vorgibt, bauen wir einen dedizierten NERExtractor,
-    # damit Phase-1-Extraktion das gewählte Modell nutzt — ohne den
-    # globalen Storage-Singleton-NER zu mutieren.
-    ner_llm_client = LLMClient.from_route(build_route, run_id=run_id)
-    ner_override = NERExtractor(llm_client=ner_llm_client)
+
+def _make_ner_override_from_route(run_id: str, resolved_route, llm_runtime) -> NERExtractor:
+    """Build a dedicated NERExtractor from the resolved per-run route."""
+    ner_llm_client = LLMClient.from_route(
+        resolved_route,
+        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        run_id=run_id,
+    )
     logger.info(
-        "Build-Pfad nutzt NER-LLM-Override: model=%s provider=%s, version=%d",
+        "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s",
         ner_llm_client.model,
-        build_route.provider_id,
-        build_route.routing_version
+        resolved_route.provider_id,
+    )
+    return NERExtractor(llm_client=ner_llm_client)
+
+
+# ============== Interface 2: Build Graph ==============
+
+@graph_bp.route('/build', methods=['POST'])
+@handle_api_errors(log_prefix="Graph build initiation failed")
+def build_graph():
+    """
+    Interface 2: Build graph based on project_id
+    """
+    logger.info("=== Starting graph build ===")
+
+    data = request.get_json() or {}
+
+    project_id, project, err = _validate_build_request(data)
+    if err is not None:
+        return err
+
+    llm_runtime, llm_model_override, err = _resolve_llm_overrides(data, project)
+    if err is not None:
+        return err
+
+    force = data.get('force', False)
+    err = _check_project_state_for_build(project, force)
+    if err is not None:
+        return err
+
+    graph_name, text, ontology, chunk_size, chunk_overlap, err = _load_build_inputs(
+        project_id, project, data
+    )
+    if err is not None:
+        return err
+
+    # Capture container in the request thread so the background closure
+    # below can resolve services without a live Flask app context.
+    container = get_container()
+    if container.neo4j_storage is None:
+        return json_error(
+            ApiErrorCode.NEO4J_UNAVAILABLE,
+            status=503,
+            message="GraphStorage not initialized",
+        )
+
+    task_manager = TaskManager()
+    run_record, task_id = _create_build_run_record(project_id, project, graph_name, task_manager)
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "graph_build",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("graph_build")
+    route_router.lock_stage("graph_build", resolved_route)
+
+    ner_override: NERExtractor = _make_ner_override_from_route(
+        run_record["run_id"],
+        resolved_route,
+        llm_runtime,
     )
 
     # Start background task

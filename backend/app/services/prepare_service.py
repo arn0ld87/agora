@@ -26,9 +26,12 @@ import traceback
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
+from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
 from .settings_layer import get_default_service as _get_settings
+from .llm_routing_seed import resolve_route_api_key
+from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
 from .report_agent import MIN_PERSONA_TABLE_ROWS
@@ -38,6 +41,18 @@ if TYPE_CHECKING:
     from .simulation_manager import SimulationManager, SimulationState
 
 logger = get_logger("agora.prepare")
+
+LlmRuntimeInput = RuntimeLlmConfig | ResolvedRoute
+
+
+def _resolve_llm_connection(
+    llm_runtime: Optional[LlmRuntimeInput],
+) -> tuple[Optional[str], Optional[str]]:
+    if isinstance(llm_runtime, ResolvedRoute):
+        return resolve_route_api_key(llm_runtime), llm_runtime.base_url_sanitized
+    if llm_runtime and llm_runtime.enabled:
+        return llm_runtime.api_key, llm_runtime.base_url
+    return None, None
 
 
 def _phase_read_entities(
@@ -105,7 +120,7 @@ def _phase_generate_profiles(
     sim_dir: str,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[Any] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
     run_id: Optional[str] = None,
     use_llm_for_profiles: bool,
@@ -143,18 +158,7 @@ def _phase_generate_profiles(
     # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
     industry_plan = default_dach_industry_quota(max(total_entities, 1))
 
-    # Resolve secrets if llm_runtime is a ResolvedRoute
-    from ..contracts.llm_routing_contract import ResolvedRoute
-    from ..utils.llm_client import LLMClient
-    api_key = None
-    base_url = None
-    if isinstance(llm_runtime, ResolvedRoute):
-        client = LLMClient.from_route(llm_runtime, run_id=run_id)
-        api_key = client.api_key
-        base_url = client.base_url
-    elif llm_runtime and getattr(llm_runtime, "enabled", False):
-        api_key = getattr(llm_runtime, "api_key", None)
-        base_url = getattr(llm_runtime, "base_url", None)
+    api_key, base_url = _resolve_llm_connection(llm_runtime)
 
     generator = OasisProfileGenerator(
         api_key=api_key,
@@ -244,7 +248,7 @@ def _phase_generate_config(
     filtered,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[Any] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
     run_id: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
@@ -269,18 +273,7 @@ def _phase_generate_config(
             total=3,
         )
 
-    # Resolve secrets if llm_runtime is a ResolvedRoute
-    from ..contracts.llm_routing_contract import ResolvedRoute
-    from ..utils.llm_client import LLMClient
-    api_key = None
-    base_url = None
-    if isinstance(llm_runtime, ResolvedRoute):
-        client = LLMClient.from_route(llm_runtime, run_id=run_id)
-        api_key = client.api_key
-        base_url = client.base_url
-    elif llm_runtime and getattr(llm_runtime, "enabled", False):
-        api_key = getattr(llm_runtime, "api_key", None)
-        base_url = getattr(llm_runtime, "base_url", None)
+    api_key, base_url = _resolve_llm_connection(llm_runtime)
 
     config_generator = SimulationConfigGenerator(
         api_key=api_key,
@@ -489,7 +482,7 @@ def prepare_simulation(
     parallel_profile_count: Optional[int] = None,
     storage: Any = None,
     llm_model: Optional[str] = None,
-    llm_runtime: Optional[Any] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str] = None,
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,

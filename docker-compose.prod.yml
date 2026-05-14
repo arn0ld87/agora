@@ -35,6 +35,11 @@ services:
         ALLOW_BUILD_TIME_TOKEN: ${ALLOW_BUILD_TIME_TOKEN:-false}
         # Der eigentliche Token-Wert (wird nur bei Gate=true verwendet).
         VITE_AGORA_TOKEN: ${VITE_AGORA_TOKEN:-}
+        # Build-Provenance-Marker für das v4-Design-Language-Bundle.
+        # Wird vom Frontend auf `window.__AGORA_UI_VERSION__` gespiegelt und
+        # ist damit in Browser-DevTools sichtbar, ohne Bundle-Hash-Vergleich.
+        # Override via `.env` oder `VITE_UI_VERSION=… docker compose up`.
+        VITE_UI_VERSION: ${VITE_UI_VERSION:-v4}
     ports: !override
       # Backend bleibt auf Loopback gebunden — externer Zugriff geht
       # über Reverse-Proxy / Tailscale / SSH-Forward, nicht direkt.

@@ -44,8 +44,28 @@ Root Cause:
 | Warten auf \`tiktoken\` cp314-Wheel | Null Aufwand, time-blocking | präferiert |
 | Warten auf \`camel-ai\`-Bump (mit neuer tiktoken-Version) | Hängt zusätzlich an #196 (camel-oasis-Pin) | parallel |
 | \`apt install rustc cargo\` ins Dockerfile | Image +~300 MB, Build +5–10 min | letzte Wahl |
+| **Dependency-Overrides via \`uv\`** | Native cp314-Wheels erzwungen | **umgesetzt** |
 
-## Verifikation
+## Nachtrag 2026-05-14: Unblocking via uv-Overrides
+
+Der Python 3.14-Bump wurde durch gezielte Dependency-Overrides in \`backend/pyproject.toml\` unter \`[tool.uv]\` mit dem Key \`override-dependencies\` unblockiert.
+
+### Problem
+\`tiktoken 0.7.0\` (gepinnt von \`camel-ai 0.2.78\`) hat keine cp314-Wheels. Ein Source-Build schlägt fehl, da das enthaltene \`pyo3 0.20.3\` Python 3.14 noch nicht unterstützt (Max 3.12), selbst wenn ein Rust-Compiler vorhanden wäre.
+
+### Lösung
+Erzwingen von neueren Versionen mit nativen cp314-Wheels:
+- \`tiktoken >= 0.12.0\`
+- \`pillow >= 12.1.1\`
+- \`pandas >= 3.0.3\`
+- \`numpy >= 2.4.4\`
+
+### Verifikation 2026-05-14
+1. \`uv lock --python 3.14\` → Auflösung erfolgreich.
+2. \`uv sync --python 3.14\` → Installation erfolgreich ohne Source-Builds.
+3. \`uv run pytest\` → Backend-Tests auf Python 3.14 grün (1954 passed).
+
+## Verifikation (historisch)
 
 ```bash
 git fetch origin pull/192/head:pr-192 && git checkout pr-192

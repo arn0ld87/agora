@@ -289,10 +289,10 @@ function updateEditGender(event: Event) {
   margin-bottom: var(--s-2);
 }
 .modal-head h3 {
-  font-family: var(--ff-serif);
-  font-weight: 400;
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 1.05;
+  font-family: var(--ff-sans);
+  font-weight: 650;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
   letter-spacing: -0.02em;
   margin: 0;
   color: var(--fg);
@@ -361,11 +361,10 @@ function updateEditGender(event: Event) {
 .regenerate-hint-input::placeholder { color: var(--fg-muted); }
 .regenerate-hint-input:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-bio {
-  font-family: var(--ff-serif);
-  font-style: italic;
+  font-family: var(--ff-sans);
   font-weight: 400;
-  font-size: var(--fs-24);
-  line-height: 1.35;
+  font-size: var(--fs-18);
+  line-height: 1.5;
   color: var(--fg-body);
   margin: 0;
   border-left: 2px solid var(--accent);
@@ -467,7 +466,7 @@ function updateEditGender(event: Event) {
   letter-spacing: normal;
   outline: none;
 }
-.form-row textarea { resize: vertical; font-family: var(--ff-serif); line-height: 1.4; }
+.form-row textarea { resize: vertical; font-family: var(--ff-sans); line-height: 1.4; }
 .form-row input:focus,
 .form-row select:focus,
 .form-row textarea:focus { border-color: var(--accent); }
@@ -480,5 +479,67 @@ function updateEditGender(event: Event) {
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   color: var(--fg-muted);
+}
+
+/* Design v3 modal and form polish. */
+.modal {
+  background: color-mix(in srgb, var(--surface-base, var(--bg)) 72%, transparent);
+}
+.modal-card {
+  background: var(--surface-elevated, var(--bg));
+  border-color: var(--hairline, var(--rule-strong));
+  border-radius: var(--r-8, var(--r-1));
+  box-shadow: var(--shadow-4, var(--shadow-modal));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.modal-head,
+.review-bar,
+.modal-marginalia {
+  border-color: var(--separator, var(--rule));
+}
+.kicker-mono,
+.meta,
+.form-row,
+.chip {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.modal-handle,
+.modal-bio,
+.form-row textarea {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.modal-handle {
+  color: var(--text-primary, var(--fg));
+}
+.modal-bio,
+.modal-persona {
+  color: var(--text-secondary, var(--fg-body));
+}
+.form-row {
+  color: var(--text-secondary, var(--fg-muted));
+  font-weight: 590;
+}
+.form-row input,
+.form-row select,
+.form-row textarea,
+.regenerate-hint-input {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus,
+.regenerate-hint-input:focus {
+  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+}
+.chip {
+  background: var(--surface-inset, transparent);
+  border-color: var(--hairline, var(--rule-strong));
+  color: var(--text-secondary, var(--fg));
 }
 </style>

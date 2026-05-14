@@ -10,9 +10,15 @@ from . import simulation_bp
 from ..config import Config
 from ..models.project import ProjectManager
 from ..services.persona_review_service import PersonaReviewService
+from ..services.llm_routing_seed import (
+    build_route_subprocess_env,
+    resolve_route_api_key,
+    seed_run_stage_routing,
+)
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
+from ..services.stage_model_router import StageModelRouter
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
@@ -195,81 +201,12 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
-    run_id = f"sim_{simulation_id}"
-    from ..services.stage_model_router import StageModelRouter
-    from ..services.runtime_run_config import RuntimeRunConfig
-    from ..contracts.llm_routing_contract import StageLLMRoute
-
-    # 0. Initialise or update runtime routing
-    config_service = RuntimeRunConfig(run_id)
-    try:
-        runtime_routing = config_service.load_config()
-        if llm_runtime.enabled:
-             runtime_routing.default_route = StageLLMRoute(
-                 provider_id=llm_runtime.provider,
-                 model=llm_model_override or Config.LLM_MODEL_NAME,
-                 base_url=llm_runtime.base_url
-             )
-             runtime_routing.routing_version += 1
-        elif llm_model_override:
-             runtime_routing.default_route.model = llm_model_override
-             runtime_routing.routing_version += 1
-        config_service.save_config(runtime_routing)
-    except Exception:
-        # Synthesis happens in load_config fallback
-        pass
-
-    router = StageModelRouter(run_id)
-    rounds_route = router.resolve("simulation_rounds")
-    router.lock_stage("simulation_rounds", rounds_route)
-
-    # Reconstruct effective RuntimeLlmConfig for subprocess_env (OASIS compat)
-    from ..services.llm_runtime import RuntimeLlmConfig
-    from ..utils.llm_client import LLMClient
-
-    rounds_client = LLMClient.from_route(rounds_route, run_id=run_id)
-    effective_runtime = RuntimeLlmConfig(
-        provider=rounds_route.provider_id,
-        api_key=rounds_client.api_key,
-        base_url=rounds_client.base_url
-    )
-
-    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
-        store = get_artifact_store()
-        config = store.read_json(simulation_id, "simulation_config", default=None)
-        if not config:
-            return json_error(
-                ApiErrorCode.SIMULATION_NOT_PREPARED,
-                status=404,
-                message="Simulation configuration does not exist. Please call /prepare first",
-            )
-        if simulation_days is not None:
-            time_config = dict(config.get("time_config") or {})
-            time_config["total_simulation_hours"] = simulation_days * 24
-            config["time_config"] = time_config
-
-        # Lock simulation_config to use the snapshot model/url
-        config["llm_model"] = rounds_route.model
-        config["llm_base_url"] = rounds_client.base_url
-        store.write_json(simulation_id, "simulation_config", config)
-
-    run_state = SimulationRunner.start_simulation(
-        simulation_id=simulation_id,
-        platform=platform,
-        max_rounds=max_rounds,
-        enable_graph_memory_update=enable_graph_memory_update,
-        graph_id=graph_id,
-        runtime_env=effective_runtime.subprocess_env(model=rounds_route.model),
-    )
-
-    manager._set_status(state, SimulationStatus.RUNNING)
-
     run_record = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
-        status="processing",
+        status="pending",
         progress=0,
-        message="Simulation run started",
+        message="Simulation run queued",
         linked_ids={"simulation_id": simulation_id, "project_id": state.project_id},
         artifacts=_simulation_run_artifacts(simulation_id),
         resume_capability=_simulation_resume_capability(simulation_id, state),
@@ -284,6 +221,57 @@ def start_simulation():
             "llm_model": llm_model_override,
             "llm_provider": llm_runtime.redacted_metadata() or None,
         },
+    )
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "simulation_rounds",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("simulation_rounds")
+    route_router.lock_stage("simulation_rounds", resolved_route)
+    resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
+
+    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
+        store = get_artifact_store()
+        config = store.read_json(simulation_id, "simulation_config", default=None)
+        if not config:
+            return json_error(
+                ApiErrorCode.SIMULATION_NOT_PREPARED,
+                status=404,
+                message="Simulation configuration does not exist. Please call /prepare first",
+            )
+        if simulation_days is not None:
+            time_config = dict(config.get("time_config") or {})
+            time_config["total_simulation_hours"] = simulation_days * 24
+            config["time_config"] = time_config
+        if llm_model_override:
+            config["llm_model"] = resolved_route.model
+        if llm_runtime.enabled and resolved_route.base_url_sanitized:
+            config["llm_base_url"] = resolved_route.base_url_sanitized
+        store.write_json(simulation_id, "simulation_config", config)
+
+    run_state = SimulationRunner.start_simulation(
+        simulation_id=simulation_id,
+        platform=platform,
+        max_rounds=max_rounds,
+        enable_graph_memory_update=enable_graph_memory_update,
+        graph_id=graph_id,
+        runtime_env=build_route_subprocess_env(
+            resolved_route,
+            resolved_api_key,
+            run_record["run_id"],
+        ),
+    )
+
+    manager._set_status(state, SimulationStatus.RUNNING)
+    run_registry.update_run(
+        run_record["run_id"],
+        status="processing",
+        progress=0,
+        message="Simulation run started",
+        resume_capability=_simulation_resume_capability(simulation_id, state),
     )
 
     response_data = run_state.to_dict()

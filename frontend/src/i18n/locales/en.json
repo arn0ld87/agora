@@ -71,7 +71,8 @@
     "and": "and",
     "or": "or",
     "all": "All",
-    "none": "None"
+    "none": "None",
+    "tryAgain": "Try again"
   },
   "home": {
     "kicker": "STUDIO · LOCAL",
@@ -93,11 +94,22 @@
       "desc": "The engine runs on your hardware. No account, no signup. Drop a document, write the question — the simulation does the rest."
     },
     "metrics": {
-      "free": { "value": "Free", "label": "Runs on your hardware" },
-      "private": { "value": "Private", "label": "Nothing leaves this machine" },
-      "openSource": { "value": "Open", "label": "AGPL-3.0 licensed" }
+      "free": {
+        "value": "Free",
+        "label": "Runs on your hardware"
+      },
+      "private": {
+        "value": "Private",
+        "label": "Nothing leaves this machine"
+      },
+      "openSource": {
+        "value": "Open",
+        "label": "AGPL-3.0 licensed"
+      }
     },
-    "workflow": { "kicker": "№ 03 — WORKFLOW" },
+    "workflow": {
+      "kicker": "№ 03 — WORKFLOW"
+    },
     "console": {
       "uploadKicker": "01 / DOCUMENT",
       "uploadTitle": "Drop your documents here.",
@@ -112,11 +124,31 @@
       "needPrompt": "Add a simulation description."
     },
     "steps": [
-      { "num": "01", "title": "Build graph", "desc": "Extract entities and relations from your document — knowledge graph in Neo4j." },
-      { "num": "02", "title": "Environment", "desc": "Generate hundreds of agent personas with personality, bias and reaction profile." },
-      { "num": "03", "title": "Simulation", "desc": "Agents post, reply, argue — round-based, observable in real time." },
-      { "num": "04", "title": "Report", "desc": "ReportAgent searches the result, interviews a focus group and writes the report." },
-      { "num": "05", "title": "Conversation", "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent." }
+      {
+        "num": "01",
+        "title": "Build graph",
+        "desc": "Extract entities and relations from your document — knowledge graph in Neo4j."
+      },
+      {
+        "num": "02",
+        "title": "Environment",
+        "desc": "Generate hundreds of agent personas with personality, bias and reaction profile."
+      },
+      {
+        "num": "03",
+        "title": "Simulation",
+        "desc": "Agents post, reply, argue — round-based, observable in real time."
+      },
+      {
+        "num": "04",
+        "title": "Report",
+        "desc": "ReportAgent searches the result, interviews a focus group and writes the report."
+      },
+      {
+        "num": "05",
+        "title": "Conversation",
+        "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent."
+      }
     ],
     "differentiators": [
       {
@@ -354,17 +386,12 @@
       "locked": "Locked",
       "active_snapshots": "Active Snapshots",
       "no_snapshots_yet": "No snapshots yet.",
-      "routing_version": "Routing Version",
-      "version_divergence": "Configured v{configured} vs Active v{active}",
-      "custom_model": "Custom model",
-      "provider_options": "Provider Options (JSON)",
-      "locked_explanation": "This stage has already started. The route is locked and cannot be changed.",
-      "source_badges": {
-        "live": "Live",
-        "cached": "Cached",
-        "fallback": "Fallback",
-        "custom": "Custom"
-      }
+      "call_events": "LLM Calls",
+      "no_call_events_yet": "No LLM calls recorded yet.",
+      "success": "OK",
+      "failed": "Failed",
+      "latency": "Latency",
+      "error_type": "Error Type"
     }
   },
   "step3": {
@@ -661,7 +688,10 @@
       "set": "•••••••• (set)",
       "empty": "empty"
     },
-    "bool": { "on": "on", "off": "off" },
+    "bool": {
+      "on": "on",
+      "off": "off"
+    },
     "modal": {
       "title": "Confirm secrets",
       "body": "You're about to save changes to secret fields (e.g. {neoPw} or {authToken}). A typo here can lock you out of the backend — please double-check.",
@@ -675,14 +705,99 @@
       "ontology": "Ontology",
       "hybrid_search": "Hybrid Search",
       "agent_tools": "Agent Tools",
-        "event_bus": "Event Bus",
-        "logging": "Logging",
-        "locale": "Locale",
-        "ui": "UI",
-        "webtools": "Webtools",
-        "oasis": "OASIS",
-        "security": "Secrets"
+      "event_bus": "Event Bus",
+      "logging": "Logging",
+      "locale": "Locale",
+      "ui": "UI",
+      "webtools": "Webtools",
+      "oasis": "OASIS",
+      "security": "Secrets"
+    },
+    "v4": {
+      "noSections": "No settings in this category.",
+      "general": {
+        "title": "General",
+        "subtitle": "Workspace runtime behaviour: LLM, logging, locale, UI, event bus, secrets."
+      },
+      "integrations": {
+        "title": "Integrations",
+        "subtitle": "Connect external services: Neo4j, embedding providers, ontology LLM, hybrid search, agent tools, WebTools and the OASIS runner."
+      },
+      "apiKeys": {
+        "title": "API keys",
+        "subtitle": "Create and manage API access.",
+        "actions": {
+          "create": "Create key",
+          "revoke": "Revoke",
+          "cancel": "Cancel",
+          "close": "Close",
+          "copy": "Copy",
+          "copied": "Copied"
+        },
+        "create": {
+          "modalTitle": "Create new API key",
+          "modalSubtitle": "Give it a name and choose the permissions for this key.",
+          "labelField": "Label",
+          "scopesField": "Permissions",
+          "scopes": {
+            "read": "Read",
+            "write": "Write",
+            "admin": "Admin"
+          },
+          "submit": "Create key"
+        },
+        "created": {
+          "title": "Key created — copy it now",
+          "warning": "This key is only shown once. If lost, create a new one.",
+          "tokenLabel": "Plain-text token"
+        },
+        "revoke": {
+          "modalTitle": "Revoke key?",
+          "modalSubtitle": "Existing clients will immediately lose access. This action cannot be undone.",
+          "confirm": "Revoke"
+        },
+        "table": {
+          "label": "Label",
+          "prefix": "Prefix",
+          "scopes": "Permissions",
+          "status": "Status",
+          "createdAt": "Created",
+          "lastUsedAt": "Last used",
+          "never": "Never",
+          "actions": "Actions"
+        },
+        "status": {
+          "active": "Active",
+          "revoked": "Revoked"
+        },
+        "empty": {
+          "title": "No API keys yet",
+          "description": "Create a key to grant external clients access."
+        },
+        "errors": {
+          "loadFailed": "Failed to load API keys.",
+          "createFailed": "Failed to create key.",
+          "revokeFailed": "Failed to revoke key.",
+          "copyFailed": "Failed to copy key to clipboard."
+        }
+      },
+      "usersTeams": {
+        "title": "Users & teams",
+        "subtitle": "Manage members and configure team access.",
+        "empty": {
+          "title": "Multi-user management coming soon",
+          "description": "Agora is currently a single-workspace tool. An identity module with roles and teams will ship in a later epic."
+        }
+      },
+      "auditLogs": {
+        "title": "Audit logs",
+        "subtitle": "Inspect the workspace activity trail.",
+        "empty": {
+          "title": "Audit trail coming soon",
+          "description": "A tamper-evident append-only log for security-relevant actions ships with the identity module."
+        }
       }
+    }
   },
   "activeModel": {
     "label": "Active model",
@@ -816,5 +931,85 @@
     "simulationFailed": "Simulation failed.",
     "reportFailed": "Report failed.",
     "unknown": "Unknown error."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Active runs, reports, system state at a glance.",
+    "hero": {
+      "title": "New run",
+      "subtitle": "Drop source, pick model, start.",
+      "sourceLabel": "Source",
+      "dropHint": "Drop file here or click",
+      "modelLabel": "Model",
+      "modelDefault": "Default",
+      "languageLabel": "Language",
+      "startCta": "Start",
+      "disabledHint": "Pick a file first, then start."
+    },
+    "stats": {
+      "activeRuns": "Active runs",
+      "completedToday": "Done today",
+      "avgConfidence": "Avg confidence",
+      "personas": "Personas live"
+    },
+    "active": {
+      "title": "Active runs",
+      "emptyTitle": "No active runs",
+      "emptyHint": "Start a new run from a source above.",
+      "errorLabel": "Error",
+      "columns": {
+        "runId": "Run ID",
+        "project": "Project",
+        "phase": "Phase",
+        "progress": "Progress",
+        "started": "Started",
+        "actions": ""
+      },
+      "phase": {
+        "graph_build": "Graph build",
+        "simulation_prepare": "Personas",
+        "simulation_run": "Simulation",
+        "report_generate": "Report"
+      }
+    },
+    "system": {
+      "title": "System",
+      "ollama": "Ollama",
+      "neo4j": "Neo4j",
+      "oasis": "OASIS",
+      "disk": "Disk",
+      "diskFree": "free",
+      "statusReachable": "reachable",
+      "statusUnreachable": "offline",
+      "statusIdle": "idle",
+      "oasisHint": "Becomes active when a run starts.",
+      "ollamaHint": "{n} models available"
+    },
+    "reports": {
+      "title": "Recent reports",
+      "emptyTitle": "No reports yet",
+      "emptyHint": "Once a run completes, it shows up here.",
+      "columns": {
+        "reportId": "Report ID",
+        "project": "Project",
+        "personas": "Personas",
+        "confidence": "Confidence",
+        "date": "Date",
+        "actions": ""
+      }
+    },
+    "quick": {
+      "compare": "Compare",
+      "compareHint": "Branches & runs side-by-side",
+      "history": "History",
+      "historyHint": "Browse all runs",
+      "settings": "Settings",
+      "settingsHint": "LLM routing, API keys, audit"
+    },
+    "time": {
+      "secondsAgo": "{n}s ago",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    }
   }
 }

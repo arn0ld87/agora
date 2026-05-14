@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import ValidationError
 
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
+from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -211,12 +212,28 @@ class ReportManager:
             cls._get_report_v3_path(report_v3.report_id),
             report_v3.model_dump(mode="json"),
         )
-        with open(cls._get_report_v3_markdown_path(report_v3.report_id), "w", encoding="utf-8") as handle:
-            handle.write(render_report_v3(report_v3))
+        # MAI-06: Kein .md-Write mehr — Markdown wird on-demand via build_report_v3_markdown() gerendert.
 
     @classmethod
     def get_report_v3(cls, report_id: str) -> Optional[Dict[str, Any]]:
         return cls._read_json_safe(cls._get_report_v3_path(report_id))
+
+    @classmethod
+    def build_report_v3_markdown(cls, report_id: str) -> Optional[str]:
+        """MAI-06: On-demand-Render des v3-Markdowns aus report-v3.json.
+
+        Ersetzt den stummen full_report.md-Write. Liefert None wenn kein
+        report-v3.json vorhanden (Bestandsreport ohne v3-Artefakt).
+        """
+        raw = cls.get_report_v3(report_id)
+        if raw is None:
+            return None
+        try:
+            v3 = ReportV3.model_validate(raw)
+            return render_report_v3(v3)
+        except (ValidationError, Exception) as exc:
+            logger.warning(f"report-v3.json render failed for {report_id}: {exc}")
+            return None
 
     @classmethod
     def _evidence_ref_for_item(
@@ -245,6 +262,7 @@ class ReportManager:
     ) -> ReportV3:
         claims: List[ReportV3Claim] = []
         data_gaps: List[ReportV3DataGap] = []
+        hypotheses: List[ReportV3Hypothesis] = []
         for section in evidence_map.get("sections") or []:
             if not isinstance(section, dict):
                 continue
@@ -307,20 +325,39 @@ class ReportManager:
                     continue
                 hypothesis_id = str(
                     hypothesis.get("hypothesis_id")
-                    or f"hypothesis_{len(data_gaps) + 1:02d}"
+                    or f"hypothesis_{len(hypotheses) + 1:02d}"
                 )
                 text = str(hypothesis.get("hypothesis_text") or "").strip()
                 if not text:
                     continue
-                data_gaps.append(ReportV3DataGap(
+                origin_section_index = hypothesis.get(
+                    "origin_section_index", section_index
+                )
+                try:
+                    origin_index = (
+                        int(origin_section_index)
+                        if origin_section_index is not None
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    origin_index = None
+                try:
+                    confidence_score = float(
+                        hypothesis.get("confidence_score") or 0.0
+                    )
+                except (TypeError, ValueError):
+                    confidence_score = 0.0
+                hypotheses.append(ReportV3Hypothesis(
                     id=hypothesis_id,
-                    beschreibung=text,
-                    severity="low",
-                    suggested_fixes=[
+                    hypothesis_text=text,
+                    rationale=str(hypothesis.get("rationale") or ""),
+                    suggested_evidence=[
                         str(item)
                         for item in (hypothesis.get("suggested_evidence") or [])
                         if str(item).strip()
                     ],
+                    origin_section_index=origin_index,
+                    confidence_score=max(0.0, min(1.0, confidence_score)),
                 ))
         return ReportV3(
             report_id=report.report_id,
@@ -328,6 +365,7 @@ class ReportManager:
             report_mode=report_mode,
             claims=claims,
             data_gaps=data_gaps,
+            hypotheses=hypotheses,
         )
     
     @classmethod
@@ -491,13 +529,11 @@ class ReportManager:
         
         # post-processing：clean entireReporttitlequestion
         md_content = cls._post_process_report(md_content, outline)
-        
-        # saveComplete report
-        full_path = cls._get_report_markdown_path(report_id)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
-        logger.info(f"completereporthasassemble: {report_id}")
+
+        # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
+        # Aufrufer ist save_report(), das setzt report.markdown_content.
+        # Der Export-Endpoint rendert on-demand via build_report_v3_markdown().
+        logger.info(f"Markdown-String assembliert (wird in meta.json persistiert, keine separate .md-Datei): {report_id}")
         return md_content
     
     @classmethod
@@ -650,17 +686,16 @@ class ReportManager:
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
 
-        # saveCompleteMarkdownReport
-        if report.status != ReportStatus.INCOMPLETE and report.markdown_content:
-            with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
-                f.write(report.markdown_content)
+        # MAI-06: Kein full_report.md-Write mehr.
+        # markdown_content bleibt in meta.json (für Frontend-getReport()).
+        # Der Markdown-Export läuft über export-Endpoint → build_report_v3_markdown().
         if report.status == ReportStatus.COMPLETED and evidence_map:
             try:
                 cls.save_report_v3(cls.build_report_v3(report, evidence_map, report_mode=report_mode))
             except ValidationError as exc:
                 logger.warning(f"report-v3 artifact skipped for {report.report_id}: {exc}")
         
-        logger.info(f"reportsaved: {report.report_id}")
+        logger.info(f"report saved (meta + v3-json): {report.report_id}")
     
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:

@@ -12,7 +12,7 @@
 # `docker-compose.prod.yml`.
 
 # ---------- shared base ----------
-FROM python:3.11 AS base
+FROM python:3.14 AS base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends nodejs npm curl \
@@ -76,6 +76,11 @@ FROM base AS frontend-build
 #     --build-arg VITE_AGORA_TOKEN=<token> .
 ARG ALLOW_BUILD_TIME_TOKEN=false
 ARG VITE_AGORA_TOKEN=""
+# Build-Provenance-Marker (Design-Language-Version).
+# Wird in main.ts als `import.meta.env.VITE_UI_VERSION` ausgelesen und
+# auf `window.__AGORA_UI_VERSION__` gespiegelt. Sichtbar in Browser-DevTools,
+# damit Rollouts/Rollbacks ohne Bundle-Hash-Vergleich identifizierbar sind.
+ARG VITE_UI_VERSION="v4"
 # ENV VITE_AGORA_TOKEN wird bewusst NICHT gesetzt — ein ENV-Befehl würde
 # den ARG-Wert im RUN-Block überschreiben und das Gate wäre wirkungslos.
 # Vite liest VITE_* zur Build-Zeit aus dem Shell-Kontext von npm run build;
@@ -87,7 +92,9 @@ RUN _token="${VITE_AGORA_TOKEN:-}" && \
     else \
       echo "ALLOW_BUILD_TIME_TOKEN=false (Default): Frontend-Bundle bekommt leeren Token. Runtime-Login erforderlich."; \
       echo "VITE_AGORA_TOKEN=" > /tmp/.vite_token_env; \
-    fi
+    fi && \
+    printf 'VITE_UI_VERSION=%s\n' "${VITE_UI_VERSION:-v4}" >> /tmp/.vite_token_env && \
+    echo "VITE_UI_VERSION=${VITE_UI_VERSION:-v4} (Build-Provenance)."
 
 COPY --chown=agora:agora frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
@@ -105,7 +112,7 @@ RUN cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
 # ---------- prod ----------
-FROM python:3.11-slim AS prod
+FROM python:3.14-slim AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

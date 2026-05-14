@@ -4,20 +4,14 @@ from app.services.llm_provider_registry import LlmProviderRegistry
 from app.services.secret_resolver import SecretResolver
 from app.services.model_catalog_service import ModelCatalogService
 
-def test_provider_registry_auth_status():
+def test_provider_registry_metadata():
     registry = LlmProviderRegistry()
-
-    # Mock Config.LLM_API_KEY
-    with patch("app.services.llm_provider_registry.Config") as mock_config:
-        mock_config.LLM_API_KEY = "sk-test"
-        mock_config.LLM_BASE_URL = "https://api.openai.com/v1"
-
-        providers = registry.get_providers()
-        openai = next(p for p in providers if p.id == "openai")
-        assert openai.auth_status == "configured"
-
-        google = next(p for p in providers if p.id == "google")
-        assert google.auth_status == "missing"
+    providers = registry.get_providers()
+    openai = next(p for p in providers if p.id == "openai")
+    assert openai.label == "OpenAI"
+    assert openai.base_url == "https://api.openai.com/v1"
+    assert openai.api_key_ref == "OPENAI_API_KEY"
+    assert openai.supports_models_endpoint is True
 
 def test_secret_resolver():
     resolver = SecretResolver(session_api_keys={"openai": "session-key"})

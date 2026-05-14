@@ -1,44 +1,47 @@
 /* ============================================================
-   Agora — Design Tokens v3 (2026-05-09)
-   Apple Enterprise · Light only
-   Inspired by: macOS Sequoia Settings · App Store Connect ·
-                Apple Business Manager · Apple Vision Pro
-   ------------------------------------------------------------
-   Source-of-truth: Agora Design Language v3 · agora-v3.css
-   Diese Datei wird parallel zu tokens.css gehalten und nur
-   aktiviert, wenn VITE_DESIGN_V3=true ist (siehe main.ts).
-   Sie enthält v3-Tokens + einen v2-Alias-Layer, sodass
-   bestehende Komponenten ohne Codeänderung gegen v3 rendern.
+   Agora Design Language v4 — ported from design/v3-source/agora-v3.css
+   Datum: 2026-05-11
+   Epic-Doku: docu/2026-05-11-design-v4-app-shell-epic.md
+   Slice A: Token-Port (Slice B–J folgen)
+   ============================================================
+   Aufbau dieser Datei:
+   1. @font-face  (Geist Sans / Mono Variable)
+   2. :root — native v4-Tokens aus agora-v3.css
+   3. Compat-Layer (v1/v2 → v3/v4) — Aliase erhalten für bestehende
+      Komponenten bis Cleanup-Slice J
    ============================================================ */
 
-/* ─────────────────────────────────────────────────────────────
-   v3 NATIVE TOKENS
-   ───────────────────────────────────────────────────────────── */
-:root, [data-theme="light"], [data-theme="dark"] {
-  /* Surfaces (light only) */
-  --surface-base:        #ffffff;
-  --surface-canvas:      #f5f5f7;
-  --surface-elevated:    #ffffff;
+/* ─── @font-face via fonts.css (importiert vor dieser Datei in main.ts) ────
+   Geist Sans / Mono: siehe frontend/src/assets/styles/fonts.css
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Native v4-Tokens (agora-v3.css :root) ─────────────── */
+
+:root, [data-theme="light"] {
+  /* ─── Surfaces (light only) ───────────────────────────── */
+  --surface-base:        #ffffff;        /* page */
+  --surface-canvas:      #f5f5f7;        /* canvas / sunken */
+  --surface-elevated:    #ffffff;        /* cards on canvas */
   --surface-translucent: rgba(255,255,255,0.72);
-  --surface-tint:        #fbfbfd;
-  --surface-inset:       #f2f2f7;
+  --surface-tint:        #fbfbfd;        /* sidebar / chrome */
+  --surface-inset:       #f2f2f7;        /* grouped list bg, inputs */
   --surface-hover:       rgba(0,0,0,0.04);
   --surface-pressed:     rgba(0,0,0,0.06);
 
-  /* Borders / hairlines */
+  /* ─── Borders / hairlines ──────────────────────────────── */
   --hairline:            rgba(60,60,67,0.12);
   --hairline-strong:     rgba(60,60,67,0.22);
   --separator:           rgba(60,60,67,0.08);
   --focus-ring:          rgba(0,102,204,0.35);
 
-  /* Text */
+  /* ─── Text ─────────────────────────────────────────────── */
   --text-primary:        #1d1d1f;
   --text-secondary:      #6e6e73;
   --text-tertiary:       #86868b;
   --text-quaternary:     #aeaeb2;
   --text-on-accent:      #ffffff;
 
-  /* Accent (Apple enterprise blue) */
+  /* ─── Accent (Apple enterprise blue) ───────────────────── */
   --accent:              #0066cc;
   --accent-hover:        #0052a3;
   --accent-pressed:      #004080;
@@ -46,7 +49,7 @@
   --accent-tint-bg-strong: rgba(0,102,204,0.16);
   --accent-tint-text:    #0058b0;
 
-  /* Status (SF system colors) */
+  /* ─── Status (SF system colors) ────────────────────────── */
   --status-green:        #248a3d;
   --status-green-bg:     rgba(36,138,61,0.10);
   --status-orange:       #b25000;
@@ -60,7 +63,7 @@
   --status-gray:         #6e6e73;
   --status-gray-bg:      rgba(110,110,115,0.10);
 
-  /* System grays (Apple iOS / macOS named scale) */
+  /* ─── System grays (Apple iOS / macOS named scale) ─────── */
   --gray-1: #8e8e93;
   --gray-2: #aeaeb2;
   --gray-3: #c7c7cc;
@@ -68,7 +71,7 @@
   --gray-5: #e5e5ea;
   --gray-6: #f2f2f7;
 
-  /* Type stacks */
+  /* ─── Type ─────────────────────────────────────────────── */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Geist Sans", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
 
@@ -83,21 +86,23 @@
   --fs-footnote:   12px;   --lh-footnote:   16px;
   --fs-caption-1:  11px;   --lh-caption-1:  13px;
   --fs-caption-2:  10px;   --lh-caption-2:  13px;
+
+  /* Hero / display (for landing-style content only) */
   --fs-hero:       64px;   --lh-hero:       66px;   --tr-hero:       -0.028em;
   --fs-display:    48px;   --lh-display:    52px;   --tr-display:    -0.024em;
 
-  /* Radii */
-  --r-2:  4px;
-  --r-3:  6px;
-  --r-4:  8px;
-  --r-5: 10px;
-  --r-6: 12px;
-  --r-7: 14px;
-  --r-8: 18px;
-  --r-9: 22px;
+  /* ─── Radii ────────────────────────────────────────────── */
+  --r-2:  4px;    /* tag / chip */
+  --r-3:  6px;    /* small control */
+  --r-4:  8px;    /* control */
+  --r-5: 10px;    /* input */
+  --r-6: 12px;    /* card */
+  --r-7: 14px;    /* card grouped */
+  --r-8: 18px;    /* large card */
+  --r-9: 22px;    /* hero card */
   --r-pill: 9999px;
 
-  /* Shadows */
+  /* ─── Shadows ──────────────────────────────────────────── */
   --shadow-1: 0 1px 1px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-2: 0 1px 1px rgba(0,0,0,0.03), 0 4px 12px rgba(0,0,0,0.06);
   --shadow-3: 0 2px 4px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.08);
@@ -105,32 +110,34 @@
   --shadow-control: 0 1px 0 rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.05);
   --shadow-inset:   inset 0 0 0 1px rgba(0,0,0,0.06);
 
-  /* Spacing */
+  /* ─── Spacing ──────────────────────────────────────────── */
   --sp-1:  4px;   --sp-2:  8px;   --sp-3: 12px;   --sp-4: 16px;
   --sp-5: 20px;   --sp-6: 24px;   --sp-7: 32px;   --sp-8: 40px;
   --sp-9: 56px;   --sp-10: 72px;
 
-  /* Control heights */
+  /* ─── Control heights ──────────────────────────────────── */
   --ctl-h-sm: 28px;
   --ctl-h-md: 32px;
   --ctl-h-lg: 40px;
 }
 
-/* ─────────────────────────────────────────────────────────────
-   v2 → v3 ALIAS LAYER
-   Mappt jeden in v2 verwendeten Token-Namen auf das v3-Pendant.
-   Damit rendern bestehende Komponenten unverändert gegen v3,
-   solange Phasen 2–5 die Patterns sukzessive umstellen.
-   ───────────────────────────────────────────────────────────── */
-:root, [data-theme="light"], [data-theme="dark"] {
-  /* Brand axis — v3 hat nur einen Akzent */
+/* ============================================================
+   Compat-Layer (v1/v2 → v3/v4)
+   Mappt jeden in v1/v2 verwendeten Token-Namen auf das v4-Pendant.
+   Damit rendern bestehende Komponenten unverändert gegen v4,
+   solange Phasen B–J die Patterns sukzessive umstellen.
+   Cleanup-Slice J reduziert diesen Layer schrittweise.
+   siehe Epic-Doku: docu/2026-05-11-design-v4-app-shell-epic.md
+   ============================================================ */
+:root, [data-theme="light"] {
+  /* Brand axis — v4 hat nur einen Akzent */
   --brand-aurora: var(--accent);
   --brand-iris:   var(--accent);
   --brand-mint:   var(--status-teal);
   --brand-violet: var(--status-purple);
 
   /* Neutral scale — v2 nutzte ink-0..ink-1000 (oklch).
-     In v3 mappen wir light-only auf System-Grays + Text-Skala. */
+     In v4 mappen wir light-only auf System-Grays + Text-Skala. */
   --ink-0:    var(--surface-base);
   --ink-50:   var(--surface-canvas);
   --ink-100:  var(--surface-inset);
@@ -166,7 +173,7 @@
   --rule-strong: var(--hairline-strong);
   --rule-soft:   var(--separator);
 
-  /* Mesh — in v3 deaktiviert (Apple-Look ohne Aurora-Mesh) */
+  /* Mesh — in v4 deaktiviert (Apple-Look ohne Aurora-Mesh) */
   --mesh-1: transparent;
   --mesh-2: transparent;
   --mesh-3: transparent;
@@ -181,7 +188,7 @@
   --info:        var(--accent);
   --info-soft:   var(--accent-tint-bg);
 
-  /* Status (v2-Namen → v3-Werte) */
+  /* Status (v2-Namen → v4-Werte) */
   --ok:    var(--status-green);
   --warn:  var(--status-orange);
   --err:   var(--status-red);
@@ -189,7 +196,7 @@
   --warn-soft: var(--status-orange-bg);
   --err-soft:  var(--status-red-bg);
 
-  /* Status-Long-Form-Aliase (legacy v1-Layer in tokens.css) */
+  /* Status-Long-Form-Aliase fuer noch nicht bereinigte Legacy-Klassen */
   --status-success:      var(--status-green);
   --status-success-soft: var(--status-green-bg);
   --status-warn-soft:    var(--status-orange-bg);
@@ -212,15 +219,16 @@
   /* Type families — v2-Namen */
   --ff-sans:  var(--font-sans);
   --ff-mono:  var(--font-mono);
-  --ff-serif: var(--font-sans);  /* v3 hat keine Serif */
+  --ff-serif: var(--font-sans);  /* v4 hat keine Serif */
 
-  /* Type sizes — v2-Namen --fs-11..--fs-120 */
+  /* Type sizes — v2-Namen --fs-11..--fs-120 (absolute px-Werte) */
   --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px;
   --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-22: 22px; --fs-24: 24px;
   --fs-28: 28px; --fs-32: 32px; --fs-40: 40px; --fs-44: 44px; --fs-52: 52px;
   --fs-60: 60px; --fs-72: 72px; --fs-84: 84px; --fs-96: 96px; --fs-120: 120px;
 
-  /* Line heights / letter-spacing — v2-Namen */
+  /* Line heights / letter-spacing — v2-Namen (ratio-Werte, überschreiben bewusst
+     die px-Werte aus dem nativen v4-Block, da Komponenten diese als Ratios erwarten) */
   --lh-tight:   1.02;
   --lh-display: 1.08;
   --lh-heading: 1.18;
@@ -239,24 +247,23 @@
   --s-2: var(--sp-2);
   --s-3: var(--sp-3);
   --s-4: var(--sp-4);
-  --s-5: var(--sp-6);   /* v2 --s-5=24px ↔ v3 --sp-6=24px */
-  --s-6: var(--sp-7);   /* v2 --s-6=32px ↔ v3 --sp-7=32px */
-  --s-7: var(--sp-8);   /* v2 --s-7=48px → 40 px in v3 (closest); approx */
+  --s-5: var(--sp-6);   /* v2 --s-5=24px ↔ v4 --sp-6=24px */
+  --s-6: var(--sp-7);   /* v2 --s-6=32px ↔ v4 --sp-7=32px */
+  --s-7: var(--sp-8);   /* v2 --s-7=48px → 40 px in v4 (closest); approx */
   --s-8: var(--sp-9);   /* v2 --s-8=64px → 56 px; approx */
   --s-9: var(--sp-10);  /* v2 --s-9=96px → 72 px; approx */
   --s-10: 128px;
 
   /* Radii — v2-Namen --r-0..--r-5 */
   --r-0: 0;
-  --r-1: var(--r-3);   /* v2 6px → v3 6px */
-  /* --r-2 already defined in v3 (4px). v2 --r-2=10px aber selten → bewusster Drift */
-  /* --r-3 already defined in v3 (6px) — v2 --r-3=14px → bewusster Drift, Apple-Tightness */
-  /* --r-4 already defined in v3 (8px) — v2 --r-4=20px */
-  /* --r-5 already defined in v3 (10px) — v2 --r-5=28px */
+  --r-1: var(--r-3);   /* v2 6px → v4 6px */
+  /* --r-2 already defined in v4 (4px). v2 --r-2=10px aber selten → bewusster Drift */
+  /* --r-3 already defined in v4 (6px) — v2 --r-3=14px → bewusster Drift, Apple-Tightness */
+  /* --r-4 already defined in v4 (8px) — v2 --r-4=20px */
+  /* --r-5 already defined in v4 (10px) — v2 --r-5=28px */
 
-  /* Controls — v2 ctl-h-sm/md/lg waren 30/38/48; v3 sind 28/32/40.
-     Wir behalten v3-Werte, da Apple-Density Teil des v3-Brand-Kerns ist. */
-
+  /* Controls — v2 ctl-h-sm/md/lg waren 30/38/48; v4 sind 28/32/40.
+     Wir behalten v4-Werte, da Apple-Density Teil des v4-Brand-Kerns ist. */
   --ctl-pad-x: 16px;
 
   /* Grid */
@@ -312,10 +319,7 @@
   --rule-on-dark:      rgba(255,255,255,0.18);
 }
 
-/* ─────────────────────────────────────────────────────────────
-   Base — light-only override
-   v3 ist light-only. Wir ignorieren data-theme="dark" bewusst.
-   ───────────────────────────────────────────────────────────── */
+/* ─── Base — light-only ──────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -335,10 +339,7 @@ body {
 
 ::selection { background: var(--accent); color: var(--text-on-accent); }
 
-/* ─────────────────────────────────────────────────────────────
-   Type roles — kompatibel zu v2-Klassen .t-display .t-headline …
-   In v3 ohne Serif: alle Headlines auf --font-sans, generös tracked.
-   ───────────────────────────────────────────────────────────── */
+/* ─── Type roles — kompatibel zu v2-Klassen ─────────────── */
 .t-display {
   font-family: var(--font-sans);
   font-weight: 600;

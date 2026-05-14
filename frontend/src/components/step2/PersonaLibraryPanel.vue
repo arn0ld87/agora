@@ -175,4 +175,28 @@ function templateBio(template: Template): string {
   text-transform: uppercase;
   color: var(--fg-muted);
 }
+
+/* Design v3 library list polish. */
+.persona-more-btn,
+.persona-handle,
+.kicker-mono,
+.meta {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.persona-more-btn {
+  border-style: solid;
+  border-color: var(--hairline, var(--rule-strong));
+  border-radius: var(--r-5, var(--r-1));
+  background: var(--surface-elevated, transparent);
+}
+.persona-more-btn:hover,
+.persona-template-actions button:hover {
+  background: var(--surface-hover, transparent);
+}
+.persona-handle,
+.meta {
+  color: var(--text-secondary, var(--fg-muted));
+}
 </style>

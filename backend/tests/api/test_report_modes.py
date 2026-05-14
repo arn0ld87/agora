@@ -114,7 +114,8 @@ def _patched_generate():
         patch("app.api.report.TaskManager") as mock_tm,
         patch("app.api.report.run_registry") as mock_rr,
         patch("app.api.report.threading.Thread") as mock_thread,
-        patch("app.api.report.RuntimeRunConfig"),
+        patch("app.api.report.resolve_route_api_key", return_value="sk-route"),
+        patch("app.api.report.LLMClient.from_route", return_value=MagicMock()),
         patch("app.api.report.StageModelRouter") as mock_smr,
     ):
         mock_sim_mgr.return_value.get_simulation.return_value = mock_state

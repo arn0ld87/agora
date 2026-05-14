@@ -129,4 +129,20 @@ const buildingHintLabel = computed(() =>
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Design v3 hint chrome. */
+.graph-building-hint {
+  background: var(--surface-translucent, var(--bg-glass));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-6, var(--r-1));
+  box-shadow: var(--shadow-2);
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.graph-building-hint.finished-hint {
+  background: var(--text-primary, var(--bg-inverse));
+}
+.finished-hint .hint-icon,
+.hint-close-btn {
+  color: var(--surface-base, var(--bg));
+}
 </style>

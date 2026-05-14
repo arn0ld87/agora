@@ -57,5 +57,5 @@ function pick(loc) { setLocale(loc) }
   padding-bottom: 1px;
 }
 .author-line a:hover { color: var(--accent); }
-.author-line a.author { font-family: var(--ff-serif); font-style: italic; font-weight: 400; font-size: 14px; letter-spacing: 0; text-transform: none; }
+.author-line a.author { font-family: var(--ff-sans); font-weight: 500; font-size: 13px; letter-spacing: 0; text-transform: none; }
 </style>

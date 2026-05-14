@@ -2,19 +2,9 @@
   "$id": "https://alexle135.de/schemas/llm-provider-descriptor.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Metadata about an LLM provider.",
+  "description": "Metadata about an LLM provider (public, no secrets).",
   "properties": {
-    "auth_status": {
-      "default": "missing",
-      "enum": [
-        "configured",
-        "missing",
-        "session_required"
-      ],
-      "title": "Auth Status",
-      "type": "string"
-    },
-    "default_base_url": {
+    "api_key_ref": {
       "anyOf": [
         {
           "type": "string"
@@ -24,15 +14,39 @@
         }
       ],
       "default": null,
-      "title": "Default Base Url"
+      "title": "Api Key Ref"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url"
+    },
+    "fallback_models": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Fallback Models",
+      "type": "array"
     },
     "id": {
       "title": "Id",
       "type": "string"
     },
-    "name": {
-      "title": "Name",
+    "label": {
+      "title": "Label",
       "type": "string"
+    },
+    "supports_models_endpoint": {
+      "default": false,
+      "title": "Supports Models Endpoint",
+      "type": "boolean"
     },
     "type": {
       "enum": [
@@ -47,7 +61,7 @@
   },
   "required": [
     "id",
-    "name",
+    "label",
     "type"
   ],
   "title": "ProviderDescriptor",

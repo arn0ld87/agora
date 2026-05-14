@@ -29,14 +29,18 @@ def test_list_provider_models(mock_get_models, client):
     assert resp.status_code == 200
 
 def test_get_run_llm_routing(client):
-    with patch("app.services.runtime_run_config.RuntimeRunConfig.load_config") as mock_load:
+    with patch("app.services.runtime_run_config.RuntimeRunConfig.load_config") as mock_load, patch(
+        "app.api.llm_routing._load_invocation_events"
+    ) as mock_events:
         from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
         mock_load.return_value = RuntimeLlmRouting(
-            default_route=StageLLMRoute(provider_id="o", model="m")
+            global_default=StageLLMRoute(provider_id="o", model="m")
         )
+        mock_events.return_value = [{"stage": "report_generation", "success": True}]
         resp = client.get("/api/runs/proj_123/llm-routing")
         assert resp.status_code == 200
         assert "runtime_config" in resp.json["data"]
+        assert resp.json["data"]["invocation_events"][0]["stage"] == "report_generation"
 
 def test_patch_stage_llm_routing_locked(client):
     with patch("app.services.runtime_run_config.RuntimeRunConfig.load_stage_snapshot") as mock_snap:

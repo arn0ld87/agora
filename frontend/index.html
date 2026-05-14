@@ -7,19 +7,10 @@
     <meta name="description" content="Agora — Multi-Agent Schwarmintelligenz-Simulator. Lokal. Privat. Entwickelt von Alexander Schneider (alexle135.de)." />
     <meta name="author" content="Alexander Schneider — alexle135.de" />
     <title>Agora — Schwarmintelligenz</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
-      // Theme bootstrap — apply persisted theme before paint to avoid FOUC.
+      // Design v3 ist light-only; setze das Attribut vor dem ersten Paint.
       (function () {
-        try {
-          var stored = localStorage.getItem('agora-theme');
-          var theme = stored === 'dark' || stored === 'light' ? stored : 'light';
-          document.documentElement.setAttribute('data-theme', theme);
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
+        document.documentElement.setAttribute('data-theme', 'light');
       })();
     </script>
   </head>

@@ -87,23 +87,25 @@ class LLMClient:
         reasoning_effort: Optional[ReasoningEffort] = None,
         provider_options: Optional[Dict[str, Any]] = None,
         run_id: Optional[str] = None,
-        stage: Optional[str] = None,
         routing_version: Optional[int] = None,
-        provider_id: Optional[str] = None,
+        route_stage: Optional[str] = None,
+        route_provider_id: Optional[str] = None,
     ):
-        self.run_id = run_id
-        self.stage = stage
-        self.routing_version = routing_version or 0
-        self.provider_id = provider_id
-        self._invocation_logger = None
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
         self.provider_options = provider_options or {}
+        self.run_id = run_id or os.environ.get("AGORA_RUN_ID")
+        self.routing_version = routing_version
+        self.route_stage = route_stage
+        self.route_provider_id = route_provider_id
+
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY not configured")
 
         self.client = OpenAI(
-            api_key=self.api_key or "no-key-set",
+            api_key=self.api_key,
             base_url=self.base_url,
             timeout=timeout,
         )
@@ -111,19 +113,8 @@ class LLMClient:
         # Ollama context window size — prevents prompt truncation.
         # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
         self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
-
-        # num_ctx boundary check: only Ollama may use it
-        if self._num_ctx != 8192 and not self._is_ollama():
-             # Non-Ollama providers ignore num_ctx from provider_options
-             if 'num_ctx' in self.provider_options:
-                 logger.warning("num_ctx in provider_options ignored for non-Ollama provider")
-
         # Ollama thinking toggle (mapped from reasoning_effort).
         self._think = self.reasoning_effort != "none"
-
-        # Initialize invocation logger if run_id is present
-        from ..services.llm_invocation_logger import LlmInvocationLogger
-        self._invocation_logger = LlmInvocationLogger(run_id) if run_id else None
 
         # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
         self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
@@ -134,57 +125,22 @@ class LLMClient:
     def from_route(
         cls,
         route: ResolvedRoute,
-        secret_resolver: Optional[Any] = None,
+        api_key: Optional[str],
+        timeout: float = 300.0,
         run_id: Optional[str] = None,
-        timeout: float = 300.0
     ) -> "LLMClient":
-        """Factory: create LLMClient from a resolved stage route and secret resolver."""
-        from ..services.secret_resolver import SecretResolver
-        resolver = secret_resolver or SecretResolver()
-
-        # 1. Resolve provider type (needed for api key resolution)
-        # We need to know the type, but ResolvedRoute only has provider_id.
-        # For now, we try to infer it or use a default.
-        # In a more robust implementation, ResolvedRoute might carry provider_type.
-        provider_type = "openai_compatible"
-        if route.provider_id == "openai":
-            provider_type = "openai"
-        elif route.provider_id == "google":
-            provider_type = "google"
-        elif route.provider_id == "ollama_local":
-            provider_type = "ollama_local"
-
-        # 2. Resolve secrets
-        api_key = resolver.get_api_key(route.provider_id, provider_type)
-
-        # For base_url, we need the ORIGINAL URL if it was overridden,
-        # but ResolvedRoute only has base_url_sanitized.
-        # This is a gap in the contract: if we use a custom base_url,
-        # where do we get the non-sanitized one?
-        # Requirement 5 says: "do not use base_url_sanitized as the actual invocation URL if the original route URL is needed for execution"
-        # However, secrets are not allowed in URLs anyway by our sanitization logic (userinfo, query).
-        # If the original base_url was in Config, we can get it.
-        # If it was a per-stage override, we might need to recover it.
-
-        base_url = route.base_url_sanitized
-        if route.provider_id == "openai" and not route.base_url_sanitized:
-             base_url = "https://api.openai.com/v1"
-        elif route.provider_id == "google" and not route.base_url_sanitized:
-             base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        elif route.provider_id == "ollama_local" and not route.base_url_sanitized:
-             base_url = "http://localhost:11434/v1"
-
+        """Factory: create LLMClient from a resolved stage route."""
         return cls(
             api_key=api_key,
-            base_url=base_url,
+            base_url=route.base_url_sanitized,  # Caller must provide secret base_url if needed
             model=route.model,
             timeout=timeout,
             reasoning_effort=route.reasoning_effort,
             provider_options=route.provider_options,
             run_id=run_id,
-            stage=route.stage,
             routing_version=route.routing_version,
-            provider_id=route.provider_id,
+            route_stage=route.stage,
+            route_provider_id=route.provider_id,
         )
 
     def _is_ollama(self) -> bool:
@@ -331,6 +287,39 @@ class LLMClient:
                 "model_event_bus.publish failed (LLM call proceeds): %s", exc
             )
 
+    def _log_invocation_event(
+        self,
+        *,
+        stage: str,
+        latency_ms: float,
+        success: bool,
+        error_type: Optional[str] = None,
+        http_status: Optional[int] = None,
+        remote_request_id: Optional[str] = None,
+    ) -> None:
+        """Persist LLM call telemetry for routed runs without blocking execution."""
+        if not getattr(self, "run_id", None):
+            return
+
+        try:
+            from ..services.llm_invocation_logger import LlmInvocationLogger
+
+            logger_service = LlmInvocationLogger(self.run_id)
+            logger_service.log_event(
+                stage=getattr(self, "route_stage", None) or stage,
+                provider_id=getattr(self, "route_provider_id", None) or self._detect_provider(),
+                model=self.model or "unknown",
+                base_url=self.base_url,
+                routing_version=getattr(self, "routing_version", None) or 0,
+                latency_ms=latency_ms,
+                success=success,
+                error_type=error_type,
+                http_status=http_status,
+                remote_request_id=remote_request_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("llm invocation logging failed (LLM call proceeds): %s", exc)
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -355,9 +344,6 @@ class LLMClient:
         Returns:
             Model response text
         """
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY not configured")
-
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
@@ -403,37 +389,13 @@ class LLMClient:
 
         def _create(call_kwargs: Dict[str, Any]):
             """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
-            try:
-                return llm_call_with_retry(
-                    self.client.chat.completions.create,
-                    max_retries=self._max_retries,
-                    initial_delay=self._retry_initial_delay,
-                    max_delay=self._retry_max_delay,
-                    **call_kwargs,
-                )
-            except Exception as exc:
-                logger_inst = getattr(self, "_invocation_logger", None)
-                if logger_inst:
-                    # Log failure before re-raising
-                    import time as _t
-                    latency = (_t.monotonic() - _t0) * 1000
-                    status_code = getattr(exc, "status_code", None)
-                    if status_code is None:
-                        response = getattr(exc, "response", None)
-                        status_code = getattr(response, "status_code", None)
-
-                    logger_inst.log_event(
-                        stage=getattr(self, "stage", "unknown") or "unknown",
-                        provider_id=getattr(self, "provider_id", "unknown") or "unknown",
-                        model=getattr(self, "model", "unknown") or "unknown",
-                        base_url=getattr(self, "base_url", None),
-                        routing_version=getattr(self, "routing_version", 0),
-                        latency_ms=latency,
-                        success=False,
-                        error_type=type(exc).__name__,
-                        http_status=status_code,
-                    )
-                raise
+            return llm_call_with_retry(
+                self.client.chat.completions.create,
+                max_retries=self._max_retries,
+                initial_delay=self._retry_initial_delay,
+                max_delay=self._retry_max_delay,
+                **call_kwargs,
+            )
 
         def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]):
             """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
@@ -456,52 +418,53 @@ class LLMClient:
                 )
                 return _create(swapped)
 
-        if force_stream:
-            kwargs["stream"] = True
-            stream = _call_with_token_key_fallback(kwargs)
-            chunks: List[str] = []
-            finish_reason = None
-            completion_tokens = None
-            for event in stream:
-                if not event.choices:
-                    continue
-                delta = event.choices[0].delta
-                piece = getattr(delta, "content", None)
-                if piece:
-                    chunks.append(piece)
-                if event.choices[0].finish_reason:
-                    finish_reason = event.choices[0].finish_reason
-                usage = getattr(event, "usage", None)
-                if usage and getattr(usage, "completion_tokens", None) is not None:
-                    completion_tokens = usage.completion_tokens
-            content = "".join(chunks)
-        else:
-            response = _call_with_token_key_fallback(kwargs)
-            choice = response.choices[0]
-            finish_reason = getattr(choice, "finish_reason", None)
-            usage = getattr(response, "usage", None)
-            completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            content = choice.message.content or ""
+        try:
+            if force_stream:
+                kwargs["stream"] = True
+                stream = _call_with_token_key_fallback(kwargs)
+                chunks: List[str] = []
+                finish_reason = None
+                completion_tokens = None
+                for event in stream:
+                    if not event.choices:
+                        continue
+                    delta = event.choices[0].delta
+                    piece = getattr(delta, "content", None)
+                    if piece:
+                        chunks.append(piece)
+                    if event.choices[0].finish_reason:
+                        finish_reason = event.choices[0].finish_reason
+                    usage = getattr(event, "usage", None)
+                    if usage and getattr(usage, "completion_tokens", None) is not None:
+                        completion_tokens = usage.completion_tokens
+                content = "".join(chunks)
+            else:
+                response = _call_with_token_key_fallback(kwargs)
+                choice = response.choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                usage = getattr(response, "usage", None)
+                completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+                content = choice.message.content or ""
+        except Exception as exc:  # noqa: BLE001
+            elapsed = _time.monotonic() - _t0
+            self._log_invocation_event(
+                stage=context,
+                latency_ms=elapsed * 1000,
+                success=False,
+                error_type=exc.__class__.__name__,
+                http_status=getattr(exc, "status_code", None),
+            )
+            raise
         elapsed = _time.monotonic() - _t0
         logger.info(
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
         )
-
-        # Log event if logger is configured
-        logger_inst = getattr(self, "_invocation_logger", None)
-        if logger_inst:
-            logger_inst.log_event(
-                stage=getattr(self, "stage", "unknown") or "unknown",
-                provider_id=getattr(self, "provider_id", "unknown") or "unknown",
-                model=getattr(self, "model", "unknown") or "unknown",
-                base_url=getattr(self, "base_url", None),
-                routing_version=getattr(self, "routing_version", 0),
-                latency_ms=elapsed * 1000,
-                success=True,
-                http_status=200,
-            )
-
+        self._log_invocation_event(
+            stage=context,
+            latency_ms=elapsed * 1000,
+            success=True,
+        )
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content
@@ -515,8 +478,6 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 1024,
     ) -> str:
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY not configured")
         """
         Send a single image + prompt to a vision-capable model and return a
         plain-text description.

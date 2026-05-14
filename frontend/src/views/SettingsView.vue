@@ -326,7 +326,8 @@ function sourceVariant(source) {
 }
 .brand-glyph { width: 28px; height: 28px; }
 .brand-name {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.01em;
 }
@@ -361,7 +362,8 @@ function sourceVariant(source) {
   gap: var(--s-3);
 }
 .title {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 650;
   font-size: 36px;
   letter-spacing: -0.02em;
   margin: 0;
@@ -559,8 +561,10 @@ function sourceVariant(source) {
 }
 .modal-title {
   margin: 0 0 var(--s-3);
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 24px;
+  letter-spacing: -0.01em;
 }
 .modal p { color: var(--fg-muted); }
 .modal code {

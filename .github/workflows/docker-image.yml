@@ -9,6 +9,9 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, ready_for_review, labeled]
+    # PRs aus release/**/rc/** triggern den Smoke immer.
+    # Normale Feature-PRs nur mit Label "needs-prod-smoke" (MAI-11).
   workflow_dispatch:
     inputs:
       force_publish:
@@ -26,7 +29,7 @@ jobs:
     # Das Image wird als Artefakt gespeichert und im smoke-Job geladen.
     # Damit wird sichergestellt, dass kein kaputtes Image in die Registry
     # gelangt, bevor der End-to-End-Smoke-Test grün ist.
-    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'rc/') }}
+    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'rc/') || contains(github.event.pull_request.labels.*.name, 'needs-prod-smoke') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,13 +96,13 @@ jobs:
 
       - name: Upload Trivy SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7 # v4.35.3
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
 
       - name: Image-Artefakt hochladen
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-image
           path: /tmp/image.tar
@@ -110,6 +113,15 @@ jobs:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
     needs: [build-only]
+    # MAI-11: Smoke läuft automatisch nur auf release-relevanten Pfaden.
+    # Feature-PRs können den Smoke opt-in per Label "needs-prod-smoke" erzwingen.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v'))) ||
+      (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') ||
+      startsWith(github.head_ref, 'rc/') ||
+      contains(github.event.pull_request.labels.*.name, 'needs-prod-smoke')))
     permissions:
       contents: read
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
@@ -335,7 +347,7 @@ jobs:
           upload-release-assets: false
 
       - name: Upload GHCR SBOM artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agora-ghcr-sbom-spdx
           path: agora-image.spdx.json

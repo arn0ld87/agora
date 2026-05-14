@@ -529,11 +529,12 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   padding-bottom: var(--s-3);
 }
 .target {
-  font-family: var(--ff-serif);
-  font-weight: 400;
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   margin: var(--s-2) 0 0;
+  letter-spacing: -0.02em;
 }
 .sub {
   font-family: var(--ff-sans);
@@ -569,7 +570,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   margin-bottom: var(--s-2);
 }
 .msg .body {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-18);
   line-height: 1.55;
   color: var(--fg);
@@ -614,9 +615,8 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   color: var(--fg-muted);
 }
 .profile-bio {
-  font-family: var(--ff-serif);
-  font-style: italic;
-  font-size: var(--fs-18);
+  font-family: var(--ff-sans);
+  font-size: var(--fs-16);
   color: var(--fg-body);
   margin: var(--s-3) 0 0;
 }
@@ -664,9 +664,9 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
   text-transform: uppercase;
   color: var(--fg);
 }
-.survey-bio { display: block; margin-bottom: var(--s-2); font-style: italic; }
+.survey-bio { display: block; margin-bottom: var(--s-2); color: var(--fg-body); }
 .survey-answer {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
   font-size: var(--fs-18);
   line-height: 1.55;
   color: var(--fg);
@@ -677,5 +677,36 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
 @media (max-width: 720px) {
   .layout { grid-template-columns: 1fr; }
   .picker { border-right: none; border-bottom: 1px solid var(--rule); max-height: 280px; }
+}
+
+/* Design v3 interaction surface polish. */
+.layout,
+.picker,
+.survey-panel,
+.survey-results {
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.survey-panel {
+  background: var(--surface-elevated, var(--bg-elevated));
+  border-radius: var(--r-7, var(--r-1));
+  box-shadow: var(--shadow-1);
+}
+.survey-row,
+.survey-row:last-child,
+.picker {
+  border-color: var(--separator, var(--rule));
+}
+.survey-name,
+.survey-answer {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.survey-name {
+  color: var(--text-secondary, var(--fg));
+  font-weight: 600;
+}
+.survey-answer {
+  color: var(--text-primary, var(--fg));
 }
 </style>

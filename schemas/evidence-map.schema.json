@@ -121,6 +121,21 @@
           "default": null,
           "title": "Raw"
         },
+        "sentiment_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).",
+          "title": "Sentiment Score"
+        },
         "snippet": {
           "maxLength": 2000,
           "minLength": 1,

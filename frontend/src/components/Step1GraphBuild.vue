@@ -287,10 +287,12 @@ function phaseVariant(phase) {
 .stat:last-child { border-right: 0; }
 .stat-value {
   display: block;
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 .stat-label {
   display: block;
@@ -328,10 +330,12 @@ function phaseVariant(phase) {
 }
 .detail-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); }
 .detail-name {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-20);
   color: var(--fg);
   margin-left: var(--s-2);
+  letter-spacing: -0.01em;
 }
 .detail-desc { color: var(--fg-body); margin: 0; }
 .detail-section { display: flex; flex-direction: column; gap: var(--s-2); }
@@ -362,4 +366,71 @@ function phaseVariant(phase) {
   font-size: 11px;
 }
 .log-line { white-space: pre-wrap; }
+
+/* Design v3 shell pass: Apple Settings density and sans-only type. */
+.step-panel {
+  background: var(--surface-canvas, var(--bg));
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
+}
+.scroll {
+  padding: var(--sp-6, var(--s-6));
+  gap: var(--sp-5, var(--s-5));
+}
+.card {
+  background: var(--surface-elevated, var(--bg));
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-7, var(--r-1));
+  box-shadow: var(--shadow-1);
+}
+.card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-tint-bg, var(--accent-soft)), var(--shadow-1);
+}
+.card-head {
+  border-bottom-color: var(--separator, var(--rule));
+}
+.card-desc,
+.detail-desc,
+.detail-section li {
+  color: var(--text-secondary, var(--fg-body));
+}
+.progress-row,
+.stat-label,
+.chip,
+.meta {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary, var(--fg-muted));
+}
+.stat-value,
+.detail-name {
+  font-family: var(--font-sans, var(--ff-sans));
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-primary, var(--fg));
+}
+.stat {
+  border-right-color: var(--separator, var(--rule));
+}
+.chip {
+  border: 0;
+  background: var(--surface-inset, var(--bg-elevated));
+  color: var(--text-secondary, var(--fg));
+  font-weight: 600;
+}
+.chip.clickable:hover {
+  background: var(--surface-hover, var(--bg-elevated));
+}
+.detail-overlay {
+  background: var(--surface-inset, var(--bg-elevated));
+  border-left: 0;
+  border-radius: var(--r-6, var(--r-1));
+  box-shadow: inset 0 0 0 1px var(--hairline, var(--rule));
+}
+.logs {
+  background: var(--surface-elevated, var(--bg));
+  border-top-color: var(--hairline-strong, var(--rule-strong));
+}
 </style>

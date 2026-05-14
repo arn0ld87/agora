@@ -96,8 +96,8 @@ watch(() => props.isSimulating, (newValue) => {
   position: relative;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-elevated);
-  background-image: radial-gradient(var(--mono-700) 1px, transparent 1px);
+  background-color: var(--surface-elevated, var(--bg-elevated));
+  background-image: radial-gradient(var(--hairline-strong, var(--mono-700)) 1px, transparent 1px);
   background-size: 24px 24px;
   overflow: hidden;
 }

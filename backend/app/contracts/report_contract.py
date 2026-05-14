@@ -100,6 +100,15 @@ class EvidenceItemModel(BaseModel):
     source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     supports_claim: Optional[bool] = None
+    # MAI-14: Sentiment des Quellen-Snippets (-1 = negativ, 0 = neutral, +1 = positiv).
+    # None = nicht bestimmt. Wird von confidence_calculator._has_contradiction
+    # genutzt, um widersprüchliche Sentiment-Vektoren zu erkennen.
+    sentiment_score: Optional[float] = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+        description="Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).",
+    )
     # ADR-0002 Anker 3 (Sub-Slice M11.7b): Default seed_corpus sichert die
     # Backward-Compat fuer alte Fixtures, die das Feld nicht mitschicken.
     source_kind: EvidenceSourceKind = EvidenceSourceKind.seed_corpus

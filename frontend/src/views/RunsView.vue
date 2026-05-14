@@ -75,7 +75,8 @@ function goHome(): void {
 }
 .brand-glyph { width: 28px; height: 28px; }
 .brand-name {
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: 22px;
   letter-spacing: -0.01em;
 }

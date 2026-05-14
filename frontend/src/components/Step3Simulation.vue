@@ -731,10 +731,12 @@ onUnmounted(() => {
 .stat:last-child { border-right: 0; }
 .stat-value {
   display: block;
-  font-family: var(--ff-serif);
+  font-family: var(--ff-sans);
+  font-weight: 600;
   font-size: var(--fs-32);
   color: var(--fg);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 .stat-label {
   display: block;
@@ -944,5 +946,50 @@ onUnmounted(() => {
 }
 @media (max-width: 880px) {
   .logs-grid { grid-template-columns: 1fr; }
+}
+
+/* Design v3 shell pass: compact Apple controls and sans-only labels. */
+.tool-panel-toggle,
+.filter-btn,
+.console-line,
+.copy-btn {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.tool-panel-toggle,
+.filter-toggle {
+  border-color: var(--hairline, var(--rule));
+  border-radius: var(--r-5, var(--r-1));
+  background: var(--surface-elevated, transparent);
+  box-shadow: var(--shadow-control, none);
+}
+.tool-panel-toggle:hover {
+  background: var(--surface-hover, transparent);
+  color: var(--accent);
+}
+.tool-panel-badge {
+  background: var(--status-red, var(--status-error, #c53030));
+  color: var(--text-on-accent, var(--bg));
+}
+.filter-btn {
+  color: var(--text-secondary, var(--fg-muted));
+}
+.filter-btn + .filter-btn {
+  border-left-color: var(--separator, var(--rule));
+}
+.filter-btn:hover {
+  background: var(--surface-hover, transparent);
+  color: var(--text-primary, var(--fg));
+}
+.filter-btn.active {
+  background: var(--accent);
+  color: var(--text-on-accent, var(--bg));
+}
+.console-line {
+  color: var(--text-secondary, var(--mono-100));
+}
+.console-line.is-error {
+  color: var(--status-red, var(--status-error, #f56565));
 }
 </style>

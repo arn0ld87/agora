@@ -1,0 +1,49 @@
+"""MAI-08: Re-Export für Backward-Compatibility.
+
+Alle Aufrufer importieren weiterhin via:
+    from app.services.report_prompts import DEFAULT_REPORT_SECTIONS, SECTION_SYSTEM_PROMPT_TEMPLATE
+"""
+
+from .planning import (
+    DEFAULT_REPORT_SECTIONS,
+    PLAN_SYSTEM_PROMPT_TEMPLATE,
+    PLAN_USER_PROMPT_TEMPLATE,
+    format_required_sections,
+)
+from .sections import (
+    SECTION_SYSTEM_PROMPT_TEMPLATE,
+    SECTION_USER_PROMPT_TEMPLATE,
+)
+from .react import (
+    REACT_FORCE_FINAL_MSG,
+    REACT_INSUFFICIENT_TOOLS_MSG,
+    REACT_INSUFFICIENT_TOOLS_MSG_ALT,
+    REACT_OBSERVATION_TEMPLATE,
+    REACT_TOOL_LIMIT_MSG,
+    REACT_UNUSED_TOOLS_HINT,
+)
+from .chat import (
+    CHAT_OBSERVATION_SUFFIX,
+    CHAT_SYSTEM_PROMPT_TEMPLATE,
+)
+
+__all__ = [
+    # Planning
+    "DEFAULT_REPORT_SECTIONS",
+    "PLAN_SYSTEM_PROMPT_TEMPLATE",
+    "PLAN_USER_PROMPT_TEMPLATE",
+    "format_required_sections",
+    # Sections
+    "SECTION_SYSTEM_PROMPT_TEMPLATE",
+    "SECTION_USER_PROMPT_TEMPLATE",
+    # React
+    "REACT_FORCE_FINAL_MSG",
+    "REACT_INSUFFICIENT_TOOLS_MSG",
+    "REACT_INSUFFICIENT_TOOLS_MSG_ALT",
+    "REACT_OBSERVATION_TEMPLATE",
+    "REACT_TOOL_LIMIT_MSG",
+    "REACT_UNUSED_TOOLS_HINT",
+    # Chat
+    "CHAT_OBSERVATION_SUFFIX",
+    "CHAT_SYSTEM_PROMPT_TEMPLATE",
+]

@@ -304,7 +304,6 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
   margin: 0.5em 0;
   padding: 0.4em 0.8em;
   background: var(--bg-glass);
-  font-style: italic;
   color: var(--fg-meta);
   font-size: 0.92em;
 }

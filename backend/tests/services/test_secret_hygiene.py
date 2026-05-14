@@ -17,18 +17,19 @@ def test_recursive_secret_scrubbing(temp_run_dir):
     service = RuntimeRunConfig(run_id)
 
     # Create a config with secrets in provider_options (nested)
-    default_route = StageLLMRoute(
+    global_default = StageLLMRoute(
         provider_id="ollama",
         model="qwen",
         provider_options={
             "api_key": "secret123",
+            "base_url": "https://user:pass@example.test/v1?api_key=secret",
             "nested": {
                 "password": "pass",
                 "safe": "value"
             }
         }
     )
-    config = RuntimeLlmRouting(default_route=default_route, routing_version=1)
+    config = RuntimeLlmRouting(global_default=global_default, routing_version=1)
 
     # Save config
     service.save_config(config)
@@ -48,7 +49,9 @@ def test_recursive_secret_scrubbing(temp_run_dir):
                 check_no_secrets(i)
 
     check_no_secrets(data)
-    assert data["default_route"]["provider_options"]["nested"]["safe"] == "value"
+    provider_options = data["global_default"]["provider_options"]
+    assert provider_options["nested"]["safe"] == "value"
+    assert provider_options["base_url"] == "https://example.test/v1"
 
 def test_stage_snapshot_secret_scrubbing(temp_run_dir):
     run_id, run_dir = temp_run_dir
@@ -71,3 +74,18 @@ def test_stage_snapshot_secret_scrubbing(temp_run_dir):
 
     assert "api_key" not in data
     assert "token" not in data["provider_options"]
+
+
+def test_stage_snapshot_is_write_once(temp_run_dir):
+    run_id, run_dir = temp_run_dir
+    service = RuntimeRunConfig(run_id)
+
+    service.save_stage_snapshot("graph_build", {"provider_id": "openai", "model": "gpt-4o"})
+    service.save_stage_snapshot("graph_build", {"provider_id": "google", "model": "gemini"})
+
+    snapshot_path = run_dir / "stages" / "graph_build_llm_route_snapshot.json"
+    with open(snapshot_path, "r") as f:
+        data = json.load(f)
+
+    assert data["provider_id"] == "openai"
+    assert data["model"] == "gpt-4o"

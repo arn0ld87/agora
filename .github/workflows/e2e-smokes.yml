@@ -82,7 +82,7 @@ jobs:
         run: npx playwright test health.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace
           path: frontend/test-results/
@@ -136,7 +136,7 @@ jobs:
         run: npx playwright test upload-graph.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace-upload-graph
           path: frontend/test-results/
@@ -193,8 +193,57 @@ jobs:
         run: npx playwright test minimal-report.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace-minimal-report
+          path: frontend/test-results/
+          retention-days: 14
+
+  report-modes-smoke:
+    name: Playwright Report-Modes-Smoke (P4.4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AGORA_PROXY_PORT: '80'
+      AGORA_E2E_BASE_URL: http://127.0.0.1:80
+      AGORA_SKIP_EMBEDDING_PROBE: 'true'
+      # Stub-Modus: deterministisch für alle drei Modi (strict/balanced/explorative)
+      AGORA_E2E_LLM_MODE: 'stub'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Generate ephemeral E2E credentials
+        run: |
+          {
+            echo "AGORA_AUTH_TOKEN=$(openssl rand -hex 24)"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: npm run build
+      - name: Install Playwright browsers (Chromium-only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright Report-Modes-Smoke
+        working-directory: frontend
+        run: npx playwright test report-modes.spec.ts --reporter=list,github
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-trace-report-modes
           path: frontend/test-results/
           retention-days: 14

@@ -134,33 +134,108 @@ docker exec agora curl -fsS http://localhost:5001/health
 git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 ```
 
-## Erwartete Tool-Nutzung (proaktiv)
+## Tool-Pflicht (nicht verhandelbar)
 
-- **code-review-graph** — Pflicht-First-Stop bei Code-Exploration, *bevor* `rg`/`grep`/`Read`/`Glob`. Tree-sitter-basierter persistenter Knowledge-Graph mit strukturellem Kontext (Caller, Dependents, Test-Coverage). Tool-Routing:
+Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Claude greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Das produziert
+veraltete Annahmen, halluzinierte Symbole, doppelte Recherche und unnötig große Kontextfenster. Daher gilt:
 
-  | Frage | Graph-Tool | Statt |
-  |---|---|---|
-  | Code-Review eines Diff | `detect_changes` + `get_review_context` | komplette Files via `Read` |
-  | Blast-Radius einer Änderung | `get_impact_radius` | manuelles Import-Tracing |
-  | Welche Flows sind betroffen? | `get_affected_flows` | `rg` durch alle Service-Files |
-  | Wer ruft `<symbol>` auf? | `query_graph` mit `pattern=callers_of` | `rg "<symbol>"` |
-  | Caller/Callee/Tests für `<symbol>` | `query_graph` mit `pattern=callees_of` / `tests_for` | `rg` |
-  | Funktion/Klasse finden | `semantic_search_nodes` | `rg "def <name>"` |
-  | Architektur-Überblick | `get_architecture_overview` + `list_communities` | mehrere `Read` über `__init__.py` |
-  | Refactor-Hot-Spots | `find_large_functions_tool` + `get_hub_nodes_tool` | manuelle `git grep` |
-  | Refactor-Planung (Renames, Dead-Code) | `refactor_tool` | manuelle Cross-Repo-Suche |
+**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context7`, `sequential-thinking`, GitHub/`gh`, honcho-memory/episodic-memory und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
 
-  **Fallback auf `rg`/`grep`/`Read`** nur wenn der Graph die Frage nicht abdeckt: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Der Graph parst Code-Symbole — bei Nicht-Code-Files ist Direkt-Lesen korrekt.
+### Pre-Flight-Checkliste (bevor du erste Bash/Read absetzt)
 
-  Workflow: Graph aktualisiert sich automatisch via Hooks. Bei Code-Review zuerst `detect_changes` für Risk-Score. Vor Refactor `get_minimal_context_tool` (token-spart gegenüber `Read` ganzer Files). Vor Slice-Cuts in verbleibenden Hot-Spots `get_hub_nodes_tool` für Schnitt-Grenzen. F8 Frontend-Hotspots sind bereits unter Schwelle (667 LOC / 797 LOC).
+Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **strikt**:
 
-- **context7** — bei jeder Task, die Bibliotheken/Frameworks/SDKs/CLIs/Cloud-Services berührt (Flask, Pydantic v2, Vue 3, Vite, Pinia, Neo4j-Driver, OASIS/CAMEL, Ollama, OpenAI-kompatible Chat-/Tool-Call-APIs, pytest, uv, …): aktuelle Docs prüfen, **bevor** Code geschrieben wird.
+1. **Skill-Liste scannen.** Die System-Reminder listet alle Skills auf. Falls einer matcht: zuerst invoken.
+2. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Pflicht für Token-Sparen: liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
+3. **`mcp__claude_ai_Context7__resolve-library-id` + `query-docs`** wenn die Task eine Library/Framework/SDK/CLI berührt (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker, …). Auch wenn du „die Lib kennst" — Training-Cutoff ist nicht aktuell.
+4. **`sequential-thinking`** invoken wenn die Task ambig ist, Multi-File-Scope hat, oder eine Pipeline-Grenze überschreitet (graph ↔ env ↔ simulation ↔ report). Mindestens 3–5 Thoughts.
+5. **Dann erst** `Read`/`rg`/`Bash`.
 
-- **GitHub-Suche / `gh`** — Debugging von Third-Party-Verhalten (OASIS-Eigenheiten, Neo4j-Vector-Search-Kanten, Ollama-Tool-Call-Payloads, Qwen/GPT-OSS-Reasoning-Blöcke, CAMEL-Memory-/Context-Edge-Cases) zuerst gegen Upstream-Issues/PRs spiegeln.
+Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum (z. B. „get_minimal_context war out-of-date, deshalb direkter Read").
 
-- **sequential-thinking** — automatisch für Multi-File-Refactors, pipelinespannende Änderungen (graph → env → simulation → report), Debugging über die Flask↔OASIS-Subprozess-Grenze, oder Tasks mit unklarem Lösungspfad.
+### code-review-graph — Pflicht-First-Stop
 
-Defaults, keine Eskalation. Wenn du eins davon überspringst, notiere kurz warum.
+Der Graph ist Tree-sitter-basiert und persistent. Strukturkontext (Caller/Callee/Tests/Imports/Communities) ist da, **ohne** dass du Files öffnest.
+
+| Frage | Graph-Tool | Statt |
+|---|---|---|
+| Pre-Flight für jede Task | `get_minimal_context_tool` | Annahme |
+| Code-Review eines Diff | `detect_changes_tool` + `get_review_context_tool` | komplette Files via `Read` |
+| Blast-Radius einer Änderung | `get_impact_radius_tool` | manuelles Import-Tracing |
+| Welche Flows sind betroffen? | `get_affected_flows_tool` | `rg` durch alle Service-Files |
+| Wer ruft `<symbol>` auf? | `query_graph_tool` `pattern=callers_of` | `rg "<symbol>"` |
+| Caller/Callee/Tests für `<symbol>` | `query_graph_tool` `pattern=callees_of` / `tests_for` | `rg` |
+| Funktion/Klasse finden | `semantic_search_nodes_tool` | `rg "def <name>"` |
+| Architektur-Überblick | `get_architecture_overview_tool` + `list_communities_tool` | mehrere `Read` über `__init__.py` |
+| Refactor-Hot-Spots | `find_large_functions_tool` + `get_hub_nodes_tool` | manuelle `git grep` |
+| Refactor-Planung (Renames, Dead-Code) | `refactor_tool` | manuelle Cross-Repo-Suche |
+| Token-effizientes Context-Snippet | `get_minimal_context_tool` | `Read` ganzer Files |
+
+**Update-Rhythmus.** Der Graph hat einen Auto-Update-Hook bei File-Writes, aber er kann nach längeren Sessions oder externen Tools (Subagenten in Worktrees!) driften. Drei Trigger für manuelles Refresh:
+
+```bash
+code-review-graph update    # CLI im Repo-Root
+```
+
+- Nach **jedem Slice-Merge** (mehrere Files in einem Schritt geändert).
+- Wenn `query_graph_tool` Knoten zurückliefert, die du gerade gelöscht/umbenannt hast.
+- Vor einem großen Refactor-Briefing an einen Subagent, damit dessen Empfehlungen nicht auf altem Graph basieren.
+
+**Fallback** auf `rg`/`grep`/`Read` nur für: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Bei Vue/TS/Python-Code immer **erst** Graph.
+
+### context7 — Live-Docs vor Code
+
+Für jede Task die eine externe Lib berührt:
+
+1. `mcp__claude_ai_Context7__resolve-library-id` mit `libraryName: "vue 3"` (oder Pinia, Vite, Neo4j, …).
+2. `mcp__claude_ai_Context7__query-docs` mit dem gefundenen `libraryID` + spezifischer Frage.
+
+Beispiele wann zwingend:
+- Vue-3-Komposition-API-Pattern (`<script setup>` Reactivity-Edge-Cases, Suspense, Teleport)
+- Pydantic-v2-Validator-Signaturen (haben sich gegen v1 geändert)
+- Neo4j-Driver async/sync, Bookmark-Management
+- OASIS / CAMEL Memory-Limits, Tool-Use-Payloads
+- Vite-Plugin-API, manualChunks-Strategy
+- pytest-Fixtures + parametrize-Edge-Cases
+- uv-Lock-File-Konflikte
+
+**Niemals** auf Training-Wissen verlassen wenn Context7 verfügbar ist. Training-Cutoff ist Anfang 2026; Repo lebt auf Library-Versionen, die danach erschienen sind.
+
+### sequential-thinking — für Multi-Step-Probleme
+
+`mcp__MCP_DOCKER__sequentialthinking` ist Pflicht bei:
+
+- Multi-File-Refactors (z. B. Vue-Komponenten aufteilen + Tests + Pinia-Store anpassen).
+- Pipeline-Grenzen-Debug (graph → env → simulation → report).
+- Flask ↔ OASIS-Subprozess-Probleme (gevent, Redis-Pub-Sub, Ticket-Auth).
+- Token-Budget-Limits in CAMEL-Memory.
+- Unklare Spec-Pfade ohne Tests.
+
+Mindestens 3 Thoughts, gerne mit Revisions (`revises_thought_number`). Output: konkretes Akzeptanzkriterium für den nächsten Subagent-Brief.
+
+### honcho-memory & episodic-memory
+
+- **honcho-memory** — bei jeder Frage über den User selbst (Setup, Hardware, Präferenzen, Projekt-Historie über mehrere Sessions hinweg).
+- **episodic-memory:remembering-conversations** — bei „wie hatten wir das damals gelöst", „der bekannte Bug X", wiederkehrenden Workflows. **Vor** Codeexploration aufrufen, nicht danach.
+
+### GitHub / `gh`
+
+- Vor PR-Merge: `sleep 90` und Gemini-Findings ziehen (siehe PR-Workflow oben).
+- Third-Party-Bug-Hunt: zuerst `gh search issues --repo <upstream>` gegen Upstream spiegeln, dann Workaround.
+- Niemals `gh pr merge --auto` ohne Findings-Sichtung.
+
+### Anti-Pattern (sofort stoppen, wenn du dich dabei ertappst)
+
+| Gedanke | Realität |
+|---|---|
+| „Ich weiß die Antwort, brauche kein Graph" | Graph ist 50× schneller und korrekter als dein Memory |
+| „Ein schneller `rg` reicht" | `rg` findet Strings, Graph findet Symbole + Beziehungen |
+| „Library kenne ich auswendig" | Training-Cutoff ist veraltet, Context7 fragen |
+| „Sequential-thinking ist Overkill für so eine kleine Aufgabe" | Wenn du das denkst, ist es selten klein |
+| „Der Subagent klärt das schon" | Subagent läuft auf deinem Briefing — Brief = Risiko |
+| „Tool ist gerade ConnectING" | `ToolSearch` ruft die Tools im Connecting-State auf und wartet |
+
+Defaults, keine Eskalation. Wenn du eins davon überspringst, **eine Zeile** im Worklog notieren — damit der nächste Run den Fehler nicht wiederholt.
 
 ## Verifikations-Disziplin
 
@@ -174,11 +249,74 @@ find . -path "*<pattern>*"
 ChatGPT/Claude-LLM-Vorschläge sind oft präzise, aber Variablen-Namen
 sind manchmal halluziniert. Verifiziere **immer**.
 
+## Worktree-Strategie (Pflicht für Slice-Arbeit)
+
+Trait des Users: **Isolation-driven**. Jeder Slice läuft in einem eigenen
+Worktree unter `/private/tmp/agora-<slice-id>/`, nicht im Haupt-Workspace.
+
+```bash
+git worktree add -b feat/<scope-slice-id> /private/tmp/agora-<slice-id> origin/main
+ln -sfn /Volumes/T7/Projekte/agora/frontend/node_modules /private/tmp/agora-<slice-id>/frontend/node_modules
+```
+
+### Strategie für Multi-Slice-Epics
+
+Wenn ein Epic aus mehreren Slices besteht (A → B → C → … → Z):
+
+1. **Slice A** baut auf `origin/main`.
+2. **Slice B/C/D parallel** bauen auf Slice A (gleicher Base-Branch). Disjunkte
+   Verzeichnis-Scopes Pflicht, sonst Merge-Konflikte.
+3. **Integration-Branch** `feat/<epic>-epic` mergt alle Slices lokal mit `--no-ff`.
+4. **Lokale Gates** pro Slice und auf Integration: `typecheck && test && build && lint`.
+5. **GitHub-CI** erst am Schluss mit **einem** PR (`feat/<epic>-epic` → main).
+   Nicht jeden Slice einzeln pushen — das verbraucht CI-Minuten ohne Mehrwert
+   und lässt halbfertige PRs offen liegen.
+
+Diese Regel überschreibt den Default-PR-Workflow für Mehrwert-Slices. Einzelne
+Bugfixes/Followups dürfen weiterhin sofort als PR rausgehen.
+
+## Subagent-Briefing (Lead → Worker)
+
+Wenn du Subagents spawnst, **brief sie so dass sie ohne Rückfrage durchziehen können**.
+Pflicht im Briefing:
+
+1. **Kontext** in 3–5 Zeilen: Welche Slice, welche Phase, welche Vor-Slices laufen.
+2. **Worktree-Setup** (exakte Pfade + Symlink-Befehl).
+3. **Disjunkter Verzeichnis-Scope** (z. B. `frontend/src/components/v4/shell/`).
+4. **Konkrete Datei-Liste** mit LOC-Erwartung.
+5. **Tokens/Constants** (welche v4-Tokens, welche Pinia-Stores, welche i18n-Keys).
+6. **Tests-Pflicht** (mindestens N Smokes) mit Stil-Verweis auf existierende Specs.
+7. **Doku-Pflicht** (`docu/YYYY-MM-DD-<slice>-worklog.md` Schema).
+8. **Lokale Gates** (typecheck/test/build/lint) als Abnahmekriterium.
+9. **Push-Verbot** wenn Teil eines Epics: explizit „KEIN push, KEIN gh pr create".
+10. **Rückmeldungs-Format** (Branch + letzter Commit-Hash + Test-Delta + Bundle-Delta + Gaps).
+
+Worker-Briefings sind keine Tickets, sondern Verträge. Wenn ein Slice
+mehrfach aufgerufen werden muss, dann war das Brief unvollständig.
+
+### Subagent-Verification-Gate
+
+Nach jedem Subagent-Run **Pflicht**:
+
+```bash
+# Im Slice-Worktree:
+cd /private/tmp/agora-<slice-id>/frontend
+npm run typecheck && npm test -- --run && npm run build && npm run lint
+
+# Backend, falls Python-Slice:
+cd backend && uv run pytest -x -q && uv run ruff check . && uv run mypy app
+```
+
+Falls rot: NICHT mergen, sondern Worker mit präzisem Fix-Brief erneut anstoßen.
+`/verify-after-subagent` Slash-Command führt das Gate ggf. automatisiert aus.
+
 ## Subagent-Routing (Max-Plan)
 
-Optimierungsziel ist **Rework-Vermeidung**, nicht Token-Sparen. Layer-0-Drift
-oder Wording-Glossar-Verstöße kosten in der Re-Review mehr als ein direkter
-Opus-Run gespart hätte.
+Optimierungsziel ist **Rework-Vermeidung plus gezieltes Token-Sparen**.
+`code-review-graph` ist Pflicht, damit kleinere Modelle und Subagents mit
+präzisem Strukturkontext arbeiten können; bei Layer-0-Drift oder
+Wording-Glossar-Verstößen hat trotzdem Senior-Review Vorrang vor blindem
+Sparen.
 
 Ziel-Mix: ~35 % Opus, ~55 % Sonnet, ~10 % Haiku.
 
@@ -214,6 +352,26 @@ Signalen direkt Opus ziehen:
   Subagent-Run (sequential gate).
 - `/fix-task-01..04-*` — Templates aus dem Layer-0–4-Refactor
   (inhaltlich abgearbeitet; können archiviert werden).
+
+## Aktive Epics
+
+- **Design Language v4 — App-Shell-Port** (2026-05-11 → laufend).
+  Spec: [`docu/2026-05-11-design-v4-app-shell-epic.md`](docu/2026-05-11-design-v4-app-shell-epic.md).
+  Quellen vendoriert unter [`design/v3-source/`](design/v3-source/). Integration-Branch
+  `feat/design-v4-epic`. Strategie: lokale Slices A–J, **EIN PR am Ende**.
+  Stand: Slices A (Tokens), B (Shell), C (Forms), D (Data), E (LlmRouting-Pilot)
+  durch; F (Settings + Views in AppShell) läuft. Visual-Akzeptanz gegen
+  `design.png` ~93 % nach Slice E.
+
+  Wichtigste Mechanik:
+  - Neue v4-Komponenten in `frontend/src/components/v4/{shell,forms,data}/`
+    (disjunkter Namespace zu legacy `components/ui/`).
+  - `frontend/src/assets/styles/tokens-v3.css` ist die portierte v4-Tokens-Datei
+    (Apple-System-Tokens + Compat-Layer für v1/v2-Aliase).
+  - Backend nicht angefasst.
+
+- **v1.0-Output-Vertrag** (PLAN.md) — offen: P3.2-Verdrahtung, P4.1, P4.3, P4.4.
+  Status-Tabelle in [`docu/STATUS.md`](docu/STATUS.md).
 
 ## Verboten
 

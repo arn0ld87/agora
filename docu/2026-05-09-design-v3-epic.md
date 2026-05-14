@@ -1,6 +1,6 @@
 # EPIC: Design Language v3 — Apple Enterprise Reskin
 
-**Status:** Phase 1 in Arbeit · Phase 2–6 geplant
+**Status:** Phase 1 gemerged · Phase 2–6 im laufenden Draft-PR #401 umgesetzt
 **Owner:** Alexander Schneider (`arn0ld87`)
 **Quelle:** `Agora.zip` (extrahiert nach `/tmp/agora-zip-extract/`) — Files
 `agora-v3.css`, `ab3-foundations.jsx`, `ab3-controls.jsx`, `ab3-screens.jsx`,
@@ -41,14 +41,15 @@ App Store Connect · Apple Business Manager · Apple Vision Pro.
 | # | Titel | Branch | Inhalt | Aufwand | Tests | Reversibel |
 |---|---|---|---|---|---|---|
 | **1** | **Foundation** | `feat/design-v3-epic-phase1-foundation` | `tokens-v3.css` parallel zu v2 mit v2→v3 Alias-Layer · Geist-Fonts via `@font-face` · Showcase unter `/design/v3/` · Feature-Flag `VITE_DESIGN_V3` im `main.ts` (default `false`) | ~3 h | grün ohne Änderung | trivial (Flag flip) |
-| **2** | Layouts & Shell | `feat/design-v3-epic-phase2-shell` | `WorkspaceLayout`, `WorkspaceHeader`, `WorkspaceSplit`, `WorkspaceModeSwitch`, `WorkspaceStepStatus`, `WorkspaceBrandLink` an v3-Tokens · Apple-Settings-Sidebar · Header `glass`-translucent | ~1 d | Snapshot-Refresh | per Revert |
-| **3** | UI Kit | `feat/design-v3-epic-phase3-uikit` | `components/ui/*` (`Btn`, `Badge`, `Field`, `Card`, `Select`, `SectionHead`) auf Pill-Buttons + Apple-Lists + Segmented Controls | ~1 d | Snapshot-Refresh | per Revert |
-| **4** | Pipeline Step1–3 | `feat/design-v3-epic-phase4-steps123` | `Step1GraphBuild`, `Step2EnvSetup` (+`step2/*`), `Step3Simulation` an v3 | ~1.5 d | mehrere Specs anzupassen | per Revert |
-| **5** | Pipeline Step4–5 + Graph + Compare | `feat/design-v3-epic-phase5-steps45graph` | `Step4Report` (1301 LOC), `Step5Interaction`, `GraphPanel`/`graph/*`, `compare/BranchComparePanel` | ~2 d | Snapshot + Visual | per Revert |
-| **6** | Cleanup | `feat/design-v3-epic-phase6-cleanup` | v2-Tokens raus · Alias-Layer raus · `data-theme="dark"`-Pfad raus · Theme-Toggle entfernen · Feature-Flag `VITE_DESIGN_V3` als Default `true` und später entfernen · Google-Fonts-`<link>` raus | ~0.5 d | grün | nur Vorwärts |
+| **2** | Layouts & Shell | `feat/design-v3-epic-complete` / PR #401 | `WorkspaceLayout`, `WorkspaceHeader`, `WorkspaceSplit`, `WorkspaceModeSwitch`, `WorkspaceStepStatus`, `WorkspaceBrandLink` an v3-Tokens · Header `glass`-translucent · Mode-Switch als Segmented Control | umgesetzt | lokal grün | per Commit-Revert |
+| **3** | UI Kit | `feat/design-v3-epic-complete` / PR #401 | `components/ui/*` (`Btn`, `Badge`, `Field`, `Card`, `Select`, `SectionHead`) auf Pill-Buttons + Apple-Controls | umgesetzt | lokal grün | per Commit-Revert |
+| **4** | Pipeline Step1–3 | `feat/design-v3-epic-complete` / PR #401 | `Step1GraphBuild`, `Step2EnvSetup` (+`step2/*`), `Step3Simulation` an v3 | umgesetzt | lokal grün | per Commit-Revert |
+| **5** | Pipeline Step4–5 + Graph + Compare | `feat/design-v3-epic-complete` / PR #401 | `Step4Report`, `Step5Interaction`, `GraphPanel`/`graph/*`, `compare/BranchComparePanel` an v3 | umgesetzt | lokal grün | per Commit-Revert |
+| **6** | Cleanup | `feat/design-v3-epic-complete` / PR #401 | v3 Default · `tokens.css` raus · `data-theme="dark"`-Pfad raus · Theme-Toggle entfernen · Google-Fonts-`<link>` raus | umgesetzt | lokal grün | per Commit-Revert |
 
-**Summe:** ~6.5 Tage über 6 PRs. Jeder PR durchläuft `CLAUDE.md`-PR-Workflow
-(Branch → `gh pr create` → 90 s warten → Gemini-Findings sichten → mergen).
+**PR-Strategie geändert am 2026-05-11:** Auf Wunsch wird Phase 2–6 in einem
+laufenden Draft-PR (#401) gesammelt und erweitert. GitHub-CI/Gemini werden erst
+nach Abschluss aller Phasen als finales Gate ausgewertet.
 
 ## Ziel-Architektur ab Phase 1
 
@@ -56,15 +57,14 @@ App Store Connect · Apple Business Manager · Apple Vision Pro.
 frontend/
   index.html                       # behält v2-Google-Fonts-link bis Phase 6
   src/
-    main.ts                        # bedingt: tokens.css ODER tokens-v3.css je nach VITE_DESIGN_V3
+    main.ts                        # lädt tokens-v3.css direkt (v3 Default)
     assets/
       fonts/
         GeistSans-Variable.woff2   # bereits da
         GeistMono-Variable.woff2   # bereits da
       styles/
         fonts.css                  # @font-face Geist Sans/Mono ergänzt
-        tokens.css                 # v2 (default, bleibt)
-        tokens-v3.css              # NEU — Apple Enterprise Light + v2-Aliasse
+        tokens-v3.css              # Apple Enterprise Light + Legacy-Compat-Layer
         global.css                 # bleibt
   public/
     design/
@@ -78,7 +78,7 @@ frontend/
         fonts/
 ```
 
-## Token-Mapping v2 → v3 (Auszug, in `tokens-v3.css` als Alias verdrahtet)
+## Token-Mapping v2 → v3 (Compat-Layer in `tokens-v3.css`)
 
 | v2 | v3 |
 |---|---|
@@ -110,6 +110,13 @@ Tokens, die in v3 **kein direktes Pendant** haben (Alias = Best-Effort):
 - `--bg-glass`, `--bg-glass-hi`, `--bg-panel` → fallen auf `--surface-translucent`
 - `--mesh-*`, `--bg-page` (Aurora-Mesh) → in v3 deaktiviert
 - `--accent-glow`, `--glow-info`, `--glow-plasma` → fallen weg (v3 nutzt klassische Shadows)
+
+**Cleanup-Notiz 2026-05-11:** Der frühere `tokens.css`-Import und die Datei
+`frontend/src/assets/styles/tokens.css` sind entfernt. Der Compat-Layer in
+`tokens-v3.css` bleibt absichtlich erhalten: `rg` fand nach Phase 6 noch 2402
+Legacy-Tokenverwendungen in `frontend/src`. Ein Entfernen des Compat-Layers
+würde aktuell nicht gedeckte Komponenten visuell brechen. Der Layer ist damit
+kein v2-Default mehr, sondern eine kontrollierte Rueckwaertskompatibilitaet.
 
 ## Phase-1-Akzeptanzkriterien
 

@@ -274,4 +274,38 @@ function onToggleChange(event: Event): void {
   text-transform: uppercase;
   color: var(--fg-muted);
 }
+
+/* Design v3 quota editor. */
+.quota-toggle,
+.quota-segment,
+.quota-count,
+.hint,
+.meta {
+  font-family: var(--font-sans, var(--ff-sans));
+  letter-spacing: 0;
+  text-transform: none;
+}
+.quota-toggle {
+  color: var(--text-primary, var(--fg));
+}
+.quota-segment,
+.quota-count {
+  background: var(--surface-elevated, transparent);
+  border: 1px solid var(--hairline, var(--rule-strong));
+  border-radius: var(--r-5, var(--r-1));
+  color: var(--text-primary, var(--fg));
+  padding: 7px 10px;
+}
+.quota-segment:focus,
+.quota-count:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring, var(--accent-soft));
+}
+.hint,
+.meta {
+  color: var(--text-secondary, var(--fg-muted));
+}
+.quota-error {
+  color: var(--status-red, var(--color-err, #d73a49));
+}
 </style>

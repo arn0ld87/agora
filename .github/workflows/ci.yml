@@ -64,7 +64,7 @@ jobs:
         # CVE-2024-46455  unstructured==0.13.7 via camel-oasis #125
         # CVE-2025-64712  unstructured==0.13.7 via camel-oasis #126
         run: |
-          uvx pip-audit --strict \
+          uvx pip-audit --strict --no-deps --disable-pip \
             --ignore-vuln CVE-2026-25990 \
             --ignore-vuln CVE-2026-40192 \
             --ignore-vuln CVE-2026-42308 \
@@ -138,7 +138,7 @@ jobs:
         run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=55
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/coverage.xml
@@ -185,7 +185,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload frontend coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage
           path: frontend/coverage/
@@ -195,3 +195,32 @@ jobs:
       - name: Run frontend build
         working-directory: frontend
         run: npm run build
+
+  status-sync:
+    name: STATUS.md drift check (MAI-16)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Sync backend dependencies (collect-only)
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: STATUS.md drift check (MAI-16)
+        run: |
+          bash scripts/sync-status.sh --check
+        # exit 1 bei manuell editiertem STATUS.md ohne sync-status-Run

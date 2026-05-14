@@ -31,7 +31,9 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
+from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.stage_model_router import StageModelRouter
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
 from ..utils.auth import allow_ticket_auth
@@ -40,10 +42,6 @@ from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
-from ..config import Config
-from ..services.stage_model_router import StageModelRouter
-from ..services.runtime_run_config import RuntimeRunConfig
-from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
 logger = get_logger(__name__)
 run_registry = RunRegistry()
@@ -158,35 +156,6 @@ def generate_report():
 
     report_id = f"report_{uuid.uuid4().hex[:12]}"
 
-    # 0. Runtime routing integration
-    run_id = f"report_{report_id}"
-    config_service = RuntimeRunConfig(run_id)
-
-    # Initialize runtime config
-    if llm_runtime.enabled:
-        default_route = StageLLMRoute(
-            provider_id=llm_runtime.provider,
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
-            base_url=llm_runtime.base_url
-        )
-    else:
-        default_route = StageLLMRoute(
-            provider_id="ollama_local",
-            model=llm_model_override or project.llm_model or Config.LLM_MODEL_NAME,
-            base_url=Config.LLM_BASE_URL
-        )
-
-    runtime_routing = RuntimeLlmRouting(default_route=default_route)
-    config_service.save_config(runtime_routing)
-
-    router = StageModelRouter(run_id)
-    # Lock evaluation stage
-    eval_route = router.resolve("evaluation")
-    router.lock_stage("evaluation", eval_route)
-    # Lock report generation stage
-    report_route = router.resolve("report_generation")
-    router.lock_stage("report_generation", report_route)
-
     task_manager = TaskManager()
     run_record = run_registry.create_run(
         run_type="report_generate",
@@ -221,6 +190,15 @@ def generate_report():
         task_type="report_generate",
         metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
     )
+    seed_run_stage_routing(
+        run_record["run_id"],
+        "report_generation",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_record["run_id"])
+    resolved_route = route_router.resolve("report_generation")
+    route_router.lock_stage("report_generation", resolved_route)
 
     # Initialize graph_tools in Flask context BEFORE spawning thread
     # (current_app is not available inside background threads)
@@ -229,8 +207,14 @@ def generate_report():
         return json_error("GraphStorage not initialized — check Neo4j connection", status=500)
 
     # Bug-Fix: ReportAgent und GraphToolsService müssen denselben LLMClient
-    # teilen. Wir nutzen nun den Snapshot-basierten Client.
-    shared_llm_client = LLMClient.from_route(report_route, run_id=run_id)
+    # teilen, sonst nutzt GraphToolsService.llm beim Lazy-Init ``LLMClient()``
+    # mit Config-Default — egal welches Modell der User für den Report gewählt
+    # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
+    shared_llm_client = LLMClient.from_route(
+        resolved_route,
+        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        run_id=run_record["run_id"],
+    )
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     def run_generate():
@@ -242,7 +226,7 @@ def generate_report():
                 simulation_requirement=simulation_requirement,
                 graph_tools=graph_tools,
                 llm_client=shared_llm_client,
-                model_name=llm_model_override,
+                model_name=resolved_route.model,
             )
             def progress_callback(stage, progress, message):
                 task_manager.update_task(task_id, progress=progress, message=f"[{stage}] {message}")
@@ -659,18 +643,13 @@ def export_report(report_id: str):
 
     if fmt == 'md':
         download_name = f"agora-report-{report_id}.md"
-        md_path = ReportManager._get_report_v3_markdown_path(report_id)
-        if not os.path.exists(md_path):
-            md_path = ReportManager._get_report_markdown_path(report_id)
-        if os.path.exists(md_path):
-            return send_file(
-                md_path,
-                as_attachment=True,
-                download_name=download_name,
-                mimetype="text/markdown; charset=utf-8",
-            )
-        body = report.markdown_content or ""
-        response = Response(body, mimetype='text/markdown; charset=utf-8')
+        # MAI-06: On-demand-Render aus report-v3.json (Single Source of Truth).
+        # Kein send_file mehr von full_report.md oder report-v3.md.
+        md_text = ReportManager.build_report_v3_markdown(report_id)
+        if md_text is None:
+            # Fallback für Bestandsreports ohne v3-Artefakt.
+            md_text = report.markdown_content or ""
+        response = Response(md_text, mimetype='text/markdown; charset=utf-8')
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response
 
@@ -719,12 +698,13 @@ def _build_zip_bundle(report_id: str, report: Any) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # --- report-v3.md ---
-        md_path = ReportManager._get_report_v3_markdown_path(report_id)
-        if os.path.exists(md_path):
-            with open(md_path, encoding="utf-8") as fh:
-                zf.writestr(f"{prefix}/report-v3.md", fh.read())
-        elif getattr(report, "markdown_content", None):
-            zf.writestr(f"{prefix}/report-v3.md", report.markdown_content)
+        # MAI-06: On-demand-Render aus report-v3.json (Single Source of Truth).
+        # Kein Dateisystem-Read mehr — _get_report_v3_markdown_path() wird nicht mehr geschrieben.
+        md_text = ReportManager.build_report_v3_markdown(report_id)
+        if md_text is None:
+            md_text = getattr(report, "markdown_content", None)
+        if md_text:
+            zf.writestr(f"{prefix}/report-v3.md", md_text)
 
         # --- report-v3.json ---
         v3_path = ReportManager._get_report_v3_path(report_id)
