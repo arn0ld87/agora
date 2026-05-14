@@ -36,6 +36,8 @@ services:
       - ALL
     volumes:
       - ./backend/uploads:/app/backend/uploads
+      # Persist UI-saved settings (LLM provider, keys, model) across container restarts.
+      - ./backend/instance:/app/backend/instance
       # Persist HuggingFace model cache on the external disk so OASIS-pulled
       # models (z. B. Twitter/twhin-bert-base, ~1.1 GB) das 256 MB tmpfs nicht
       # sprengen und beim Container-Restart nicht neu gezogen werden.
