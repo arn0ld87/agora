@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from functools import cache
+
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from ...contracts import (
     EvidenceMapModel,
@@ -20,6 +22,21 @@ from ...contracts import (
 from ..evidence_migrations import CURRENT_SCHEMA_VERSION, migrate_v1_to_v2
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class _TableMetadataBase(BaseModel):
+    model_config = _STRICT
+
+
+@cache
+def _make_table_metadata(item_cls: type[BaseModel]) -> type[BaseModel]:
+    """Create a strict section metadata wrapper for list-shaped ReportV3 DTOs."""
+    return create_model(
+        f"{item_cls.__name__}Table",
+        __base__=_TableMetadataBase,
+        __module__=__name__,
+        items=(list[item_cls], Field(description=f"Liste von {item_cls.__name__}-Einträgen")),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -101,16 +118,16 @@ class SectionMetadata(BaseModel):
 
 _SECTION_TITLE_MAP: dict[str, type[BaseModel]] = {
     # ReportV3 Pflichtabschnitt-DTOs
-    "segment-tabelle": Segment,
-    "persona-tabelle": Persona,
-    "multiplikator-auswertung": Multiplier,
-    "top 10 reibungspunkte": FrictionPoint,
-    "top 10 vertrauenssignale": TrustSignal,
-    "top 10 änderungen": ChangeRecommendation,
-    "projektwirkung": ProjectImpact,
-    "positionierung": PositioningVariant,
-    "content-ideen": ContentIdea,
-    "datenlücken": DataGap,
+    "segment-tabelle": _make_table_metadata(Segment),
+    "persona-tabelle": _make_table_metadata(Persona),
+    "multiplikator-auswertung": _make_table_metadata(Multiplier),
+    "top 10 reibungspunkte": _make_table_metadata(FrictionPoint),
+    "top 10 vertrauenssignale": _make_table_metadata(TrustSignal),
+    "top 10 änderungen": _make_table_metadata(ChangeRecommendation),
+    "projektwirkung": _make_table_metadata(ProjectImpact),
+    "positionierung": _make_table_metadata(PositioningVariant),
+    "content-ideen": _make_table_metadata(ContentIdea),
+    "datenlücken": _make_table_metadata(DataGap),
 }
 
 
@@ -157,5 +174,6 @@ __all__ = [
     # M11.8d — Section-Metadata DTOs + mapper
     "SectionKeyTakeaway",
     "SectionMetadata",
+    "_make_table_metadata",
     "_section_schema_for",
 ]
