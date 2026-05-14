@@ -54,6 +54,7 @@ export type SettingsFieldMeta = z.infer<typeof SettingsFieldMetaSchema>
 export const SettingsValuesPayloadSchema = z.object({
   sections: z.array(SettingsSectionSchema),
   fields: z.record(z.string(), z.array(SettingsFieldMetaSchema)),
+  updated_keys: z.array(z.string()).optional(),
 }).strict()
 export type SettingsValuesPayload = z.infer<typeof SettingsValuesPayloadSchema>
 
