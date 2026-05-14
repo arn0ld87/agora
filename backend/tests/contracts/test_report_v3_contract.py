@@ -282,14 +282,17 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
     report_v3_path = tmp_path / "reports" / report_id / "report-v3.json"
     raw = json.loads(report_v3_path.read_text(encoding="utf-8"))
     restored = ReportV3.model_validate(raw)
-    report_v3_markdown = tmp_path / "reports" / report_id / "report-v3.md"
+    # MAI-06: report-v3.md wird nicht mehr auf Disk geschrieben — on-demand via build_report_v3_markdown().
+    from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+    report_v3_markdown = ReportManager.build_report_v3_markdown(report_id)
+    assert report_v3_markdown is not None, "build_report_v3_markdown() lieferte None — report-v3.json fehlt oder ungültig"
 
     assert restored.schema_version == 3
     assert restored.report_id == report_id
     assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
     assert restored.data_gaps[0].id == "gap_01"
-    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown.read_text(encoding="utf-8")
-    assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown.read_text(encoding="utf-8")
+    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown
+    assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 
 # ---- migrate_v2_to_v3 Unit-Tests ----

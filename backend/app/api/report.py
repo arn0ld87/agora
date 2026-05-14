@@ -698,12 +698,13 @@ def _build_zip_bundle(report_id: str, report: Any) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         # --- report-v3.md ---
-        md_path = ReportManager._get_report_v3_markdown_path(report_id)
-        if os.path.exists(md_path):
-            with open(md_path, encoding="utf-8") as fh:
-                zf.writestr(f"{prefix}/report-v3.md", fh.read())
-        elif getattr(report, "markdown_content", None):
-            zf.writestr(f"{prefix}/report-v3.md", report.markdown_content)
+        # MAI-06: On-demand-Render aus report-v3.json (Single Source of Truth).
+        # Kein Dateisystem-Read mehr — _get_report_v3_markdown_path() wird nicht mehr geschrieben.
+        md_text = ReportManager.build_report_v3_markdown(report_id)
+        if md_text is None:
+            md_text = getattr(report, "markdown_content", None)
+        if md_text:
+            zf.writestr(f"{prefix}/report-v3.md", md_text)
 
         # --- report-v3.json ---
         v3_path = ReportManager._get_report_v3_path(report_id)

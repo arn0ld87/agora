@@ -212,8 +212,7 @@ class ReportManager:
             cls._get_report_v3_path(report_v3.report_id),
             report_v3.model_dump(mode="json"),
         )
-        with open(cls._get_report_v3_markdown_path(report_v3.report_id), "w", encoding="utf-8") as handle:
-            handle.write(render_report_v3(report_v3))
+        # MAI-06: Kein .md-Write mehr — Markdown wird on-demand via build_report_v3_markdown() gerendert.
 
     @classmethod
     def get_report_v3(cls, report_id: str) -> Optional[Dict[str, Any]]:
@@ -232,7 +231,7 @@ class ReportManager:
         try:
             v3 = ReportV3.model_validate(raw)
             return render_report_v3(v3)
-        except Exception as exc:
+        except (ValidationError, Exception) as exc:
             logger.warning(f"report-v3.json render failed for {report_id}: {exc}")
             return None
 
@@ -534,7 +533,7 @@ class ReportManager:
         # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
         # Aufrufer ist save_report(), das setzt report.markdown_content.
         # Der Export-Endpoint rendert on-demand via build_report_v3_markdown().
-        logger.info(f"Markdown-String assembliert (in-memory only): {report_id}")
+        logger.info(f"Markdown-String assembliert (wird in meta.json persistiert, keine separate .md-Datei): {report_id}")
         return md_content
     
     @classmethod
@@ -696,7 +695,7 @@ class ReportManager:
             except ValidationError as exc:
                 logger.warning(f"report-v3 artifact skipped for {report.report_id}: {exc}")
         
-        logger.info(f"report saved (v3-only): {report.report_id}")
+        logger.info(f"report saved (meta + v3-json): {report.report_id}")
     
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:
