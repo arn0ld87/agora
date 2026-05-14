@@ -22,6 +22,7 @@ import {
   runtimeLlmPayloadFromStorage,
   runtimeProviderMissingApiKeyFromStorage,
 } from '../composables/useRuntimeLlmOptions'
+import type { LlmRuntimePayload } from '../api/llmRuntime'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
@@ -105,8 +106,14 @@ const resolvedSimulationId = ref(props.simulationId || null)
 
 const STORAGE_REPORT_MODEL = 'agora.reportModel'
 const STORAGE_REPORT_CUSTOM_MODEL = 'agora.reportCustomModel'
+const STORAGE_REPORT_PROVIDER = 'agora.report.llmProvider'
+const STORAGE_REPORT_BASE_URL = 'agora.report.llmBaseUrl'
+const SESSION_REPORT_API_KEY = 'agora.report.llmApiKey'
 const reportModelOption = ref(localStorage.getItem(STORAGE_REPORT_MODEL) || 'default')
 const customReportModel = ref(localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL) || '')
+const reportProvider = ref(localStorage.getItem(STORAGE_REPORT_PROVIDER) || 'default')
+const reportApiKey = ref(sessionStorage.getItem(SESSION_REPORT_API_KEY) || '')
+const reportBaseUrl = ref(localStorage.getItem(STORAGE_REPORT_BASE_URL) || '')
 const ollamaModels = ref<Array<{ name: string; label?: string }>>([])
 const presetModels = ref<Array<{ name: string; label?: string }>>([])
 const defaultModel = ref('')
@@ -114,6 +121,9 @@ const isRegenerating = ref(false)
 
 watch(reportModelOption, (val) => { localStorage.setItem(STORAGE_REPORT_MODEL, val) })
 watch(customReportModel, (val) => { localStorage.setItem(STORAGE_REPORT_CUSTOM_MODEL, val) })
+watch(reportProvider, (val) => { localStorage.setItem(STORAGE_REPORT_PROVIDER, val) })
+watch(reportApiKey, (val) => { sessionStorage.setItem(SESSION_REPORT_API_KEY, val) })
+watch(reportBaseUrl, (val) => { localStorage.setItem(STORAGE_REPORT_BASE_URL, val) })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
@@ -126,6 +136,25 @@ function resolveStoredReportMode(): ReportMode {
 }
 const reportMode = ref<ReportMode>(resolveStoredReportMode())
 watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
+
+const providerOptions = [
+  { value: 'default', label: 'Standard (Server-Default)' },
+  { value: 'google', label: 'Google (Gemini)' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'custom_openai', label: 'Custom OpenAI-kompatibel' },
+]
+
+function effectiveReportProvider(): LlmRuntimePayload | null {
+  if (reportProvider.value === 'default') return null
+  const key = reportApiKey.value.trim()
+  if (!key) return null
+  const base = reportBaseUrl.value.trim()
+  return { provider: reportProvider.value as 'google' | 'openai' | 'custom_openai', api_key: key, ...(base ? { base_url: base } : {}) }
+}
+
+function reportProviderMissingApiKey(): boolean {
+  return reportProvider.value !== 'default' && !reportApiKey.value.trim()
+}
 
 const modelOptions = computed(() => {
   const opts = [{ value: 'default', label: `Standard — ${defaultModel.value || '?'}` }]
@@ -170,12 +199,13 @@ async function regenerateWithModel() {
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
-    if (runtimeProviderMissingApiKeyFromStorage()) {
-      addLog(t('step2.runtimeProvider.missingKey'))
+
+    if (reportProviderMissingApiKey()) {
+      addLog('API-Key für gewählten LLM-Anbieter fehlt.')
       return
     }
-    const runtimeProvider = runtimeLlmPayloadFromStorage()
-    if (runtimeProvider) payload.llm_provider = runtimeProvider
+    const providerPayload = effectiveReportProvider()
+    if (providerPayload) payload.llm_provider = providerPayload
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
@@ -458,7 +488,11 @@ onUnmounted(stopPolling)
           v-if="resolvedSimulationId || simulationId"
           v-model:report-model-option="reportModelOption"
           v-model:custom-report-model="customReportModel"
+          v-model:provider="reportProvider"
+          v-model:api-key="reportApiKey"
+          v-model:base-url="reportBaseUrl"
           :model-options="modelOptions"
+          :provider-options="providerOptions"
           :is-regenerating="isRegenerating"
           @regenerate="regenerateWithModel"
         />

@@ -10,7 +10,7 @@ from ..contracts.llm_routing_contract import (
     ResolvedRoute,
     StageId
 )
-from .runtime_run_config import RuntimeRunConfig
+from .runtime_run_config import RuntimeRunConfig, _detect_default_provider_id
 from .secret_resolver import SecretResolver
 from ..utils.logger import get_logger
 
@@ -37,10 +37,14 @@ class StageModelRouter:
 
         # 3. Create new snapshot (but don't persist yet - caller should do that on stage start)
         resolver = SecretResolver()
+        # Defensive: provider_id darf nicht None sein (ResolvedRoute erwartet str).
+        # Fallback auf Best-Effort-Detection aus base_url / model.
+        provider_id = route.provider_id or _detect_default_provider_id(base_url, route.model)
+
         resolved = ResolvedRoute(
             stage=stage_id,
-            provider_id=route.provider_id,
-            model=route.model,
+            provider_id=provider_id,
+            model=route.model or "",
             base_url_sanitized=resolver.sanitize_url(base_url),
             reasoning_effort=route.reasoning_effort,
             routing_version=cfg.routing_version,

@@ -13,6 +13,10 @@ interface Props {
   customReportModel: string
   modelOptions: Option[]
   isRegenerating: boolean
+  provider: string
+  apiKey: string
+  baseUrl: string
+  providerOptions: Option[]
 }
 
 const props = defineProps<Props>()
@@ -20,6 +24,9 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:reportModelOption': [value: string]
   'update:customReportModel': [value: string]
+  'update:provider': [value: string]
+  'update:apiKey': [value: string]
+  'update:baseUrl': [value: string]
   regenerate: []
 }>()
 
@@ -32,6 +39,23 @@ const customModel = computed({
   get: () => props.customReportModel,
   set: (value: string) => emit('update:customReportModel', value),
 })
+
+const provider = computed({
+  get: () => props.provider,
+  set: (value: string) => emit('update:provider', value),
+})
+
+const apiKey = computed({
+  get: () => props.apiKey,
+  set: (value: string) => emit('update:apiKey', value),
+})
+
+const baseUrl = computed({
+  get: () => props.baseUrl,
+  set: (value: string) => emit('update:baseUrl', value),
+})
+
+const providerEnabled = computed(() => provider.value !== 'default')
 </script>
 
 <template>
@@ -52,6 +76,31 @@ const customModel = computed({
         placeholder="z. B. deepseek-v3.2:cloud"
       />
     </div>
+    <div class="model-cell">
+      <Select
+        v-model="provider"
+        label="LLM-Anbieter"
+        :options="providerOptions"
+      />
+    </div>
+    <div v-if="providerEnabled" class="model-cell">
+      <label class="field-label">API-Key</label>
+      <input
+        v-model="apiKey"
+        class="model-input"
+        type="password"
+        placeholder="API-Key für gewählten Anbieter"
+      />
+    </div>
+    <div v-if="providerEnabled" class="model-cell">
+      <label class="field-label">Base-URL (optional)</label>
+      <input
+        v-model="baseUrl"
+        class="model-input"
+        type="text"
+        placeholder="z. B. https://api.openai.com/v1"
+      />
+    </div>
     <Btn
       variant="ghost"
       :loading="isRegenerating"
@@ -66,7 +115,7 @@ const customModel = computed({
 <style scoped>
 .model-row {
   display: grid;
-  grid-template-columns: 2fr 2fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--s-3);
   align-items: end;
   border-top: 1px solid var(--rule);
