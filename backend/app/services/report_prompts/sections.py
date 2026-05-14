@@ -37,11 +37,9 @@ You classify the level yourself and set confidence_label accordingly.
 <provenance_levels>
   <level name="hypothesis" max_confidence="none">
     No evidence. Claim emerges only from your reasoning.
-    → Do NOT write this claim into claims[]. Instead, document it as
-      ReportSection.hypotheses[] (dedicated field, arrives with Slice C)
-      with explicit justification. Until hypotheses[] is available:
-      omit the claim entirely, or mark it in section_summary as
-      "Hypothesis without evidence — not formulated as fact."
+    → Do NOT present this as a factual claim. Either omit it entirely,
+      or label it in prose as an unverified hypothesis with explicit
+      rationale: "Hypothesis without evidence — not formulated as fact."
   </level>
 
   <level name="seed_only" max_confidence="low">
@@ -91,7 +89,8 @@ Before writing a claim, check in this exact order:
      evidence[] entries — the validator only sees the structured
      evidence[] list, not the markdown body.
 1. Do I have any evidence at all?
-   → No: Do not formulate as claim. Use hypotheses[] instead.
+   → No: Do not formulate as a factual claim. Omit it or label it
+     explicitly as an unverified hypothesis in prose.
 2. Is the evidence a real agent quote, or only seed text?
    → Seed only: max low + hedge word required.
 3. Do I have quotes from at least 2 stakeholder groups, consistent direction?
@@ -118,7 +117,7 @@ without adding matching (B) entries on the claim is treated as
 If `interview_agents` produced no usable answers:
 - Do NOT invent <simulated_quote> blocks to fill the gap.
 - Either downgrade the claim to "low" with seed_corpus evidence + hedge,
-  or move it to hypotheses[] entirely.
+  or present it only as an explicitly marked unverified hypothesis.
 </critical_distinction>
 
 <negative_examples>
@@ -140,8 +139,8 @@ WRONG: interview_agents returned no successful interviews, but the
        section still contains claims with confidence_label="high" and
        inline <simulated_quote> tags as substitute for missing data.
 FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
-       a hedge word, OR move the assertion to hypotheses[] with a
-       rationale field. The cross_stakeholder_for_high validator will
+       a hedge word, OR mark the assertion as an unverified hypothesis
+       with rationale in the prose. The cross_stakeholder_for_high validator will
        reject "high" without two distinct persona_stakeholder_group
        entries in evidence[].
 </negative_examples>
