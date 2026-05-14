@@ -726,9 +726,58 @@
       "apiKeys": {
         "title": "API-Schlüssel",
         "subtitle": "API-Zugänge erstellen und verwalten.",
+        "actions": {
+          "create": "Schlüssel anlegen",
+          "revoke": "Widerrufen",
+          "cancel": "Abbrechen",
+          "close": "Schließen",
+          "copy": "Kopieren",
+          "copied": "Kopiert"
+        },
+        "create": {
+          "modalTitle": "Neuen API-Schlüssel anlegen",
+          "modalSubtitle": "Vergib einen Namen und wähle die Berechtigungen für diesen Schlüssel.",
+          "labelField": "Bezeichnung",
+          "scopesField": "Berechtigungen",
+          "scopes": {
+            "read": "Lesen (read)",
+            "write": "Schreiben (write)",
+            "admin": "Verwaltung (admin)"
+          },
+          "submit": "Schlüssel anlegen"
+        },
+        "created": {
+          "title": "Schlüssel erstellt — jetzt kopieren",
+          "warning": "Dieser Schlüssel wird nur jetzt angezeigt. Verloren = neu anlegen.",
+          "tokenLabel": "Klartext-Token"
+        },
+        "revoke": {
+          "modalTitle": "Schlüssel widerrufen?",
+          "modalSubtitle": "Bestehende Clients verlieren sofort Zugriff. Diese Aktion kann nicht rückgängig gemacht werden.",
+          "confirm": "Widerrufen"
+        },
+        "table": {
+          "label": "Bezeichnung",
+          "prefix": "Prefix",
+          "scopes": "Berechtigungen",
+          "status": "Status",
+          "createdAt": "Erstellt",
+          "lastUsedAt": "Zuletzt verwendet",
+          "never": "Nie",
+          "actions": "Aktionen"
+        },
+        "status": {
+          "active": "Aktiv",
+          "revoked": "Widerrufen"
+        },
         "empty": {
-          "title": "API-Schlüssel-Verwaltung folgt",
-          "description": "Backend-Support für persönliche und Service-Schlüssel ist in Vorbereitung. Bis dahin werden Zugriffe zentral über das Auth-Token gesteuert."
+          "title": "Noch keine API-Schlüssel",
+          "description": "Lege einen Schlüssel an, um externen Clients Zugriff zu geben."
+        },
+        "errors": {
+          "loadFailed": "API-Schlüssel konnten nicht geladen werden.",
+          "createFailed": "Schlüssel konnte nicht angelegt werden.",
+          "revokeFailed": "Schlüssel konnte nicht widerrufen werden."
         }
       },
       "usersTeams": {

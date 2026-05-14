@@ -726,9 +726,58 @@
       "apiKeys": {
         "title": "API keys",
         "subtitle": "Create and manage API access.",
+        "actions": {
+          "create": "Create key",
+          "revoke": "Revoke",
+          "cancel": "Cancel",
+          "close": "Close",
+          "copy": "Copy",
+          "copied": "Copied"
+        },
+        "create": {
+          "modalTitle": "Create new API key",
+          "modalSubtitle": "Give it a name and choose the permissions for this key.",
+          "labelField": "Label",
+          "scopesField": "Permissions",
+          "scopes": {
+            "read": "Read",
+            "write": "Write",
+            "admin": "Admin"
+          },
+          "submit": "Create key"
+        },
+        "created": {
+          "title": "Key created — copy it now",
+          "warning": "This key is only shown once. If lost, create a new one.",
+          "tokenLabel": "Plain-text token"
+        },
+        "revoke": {
+          "modalTitle": "Revoke key?",
+          "modalSubtitle": "Existing clients will immediately lose access. This action cannot be undone.",
+          "confirm": "Revoke"
+        },
+        "table": {
+          "label": "Label",
+          "prefix": "Prefix",
+          "scopes": "Permissions",
+          "status": "Status",
+          "createdAt": "Created",
+          "lastUsedAt": "Last used",
+          "never": "Never",
+          "actions": "Actions"
+        },
+        "status": {
+          "active": "Active",
+          "revoked": "Revoked"
+        },
         "empty": {
-          "title": "API-key management coming soon",
-          "description": "Backend support for personal and service keys is in preparation. Until then, access is governed centrally via the auth token."
+          "title": "No API keys yet",
+          "description": "Create a key to grant external clients access."
+        },
+        "errors": {
+          "loadFailed": "Failed to load API keys.",
+          "createFailed": "Failed to create key.",
+          "revokeFailed": "Failed to revoke key."
         }
       },
       "usersTeams": {

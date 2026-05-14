@@ -140,7 +140,10 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
   })
 })
 
-describe('SettingsApiKeysView (Slice G1, coming soon)', () => {
+// Slice G2: SettingsApiKeysView ist jetzt real — eigene Smoke-Tests in
+// views/__tests__/SettingsApiKeysView.spec.ts. Dieser Block prüft nur
+// noch, dass kein ComingSoonCard-Stub mehr erscheint.
+describe('SettingsApiKeysView (Slice G2, real)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('rendert Breadcrumb "API Keys"', async () => {
@@ -150,11 +153,10 @@ describe('SettingsApiKeysView (Slice G1, coming soon)', () => {
     expect(crumbs.map((c) => c.label)).toContain('API Keys')
   })
 
-  it('rendert ComingSoonCard mit lokalisiertem Titel', async () => {
+  it('rendert keine ComingSoonCard mehr (View ist real)', async () => {
     const w = await mountView(SettingsApiKeysView, '/settings/api-keys')
     const card = w.findComponent({ name: 'ComingSoonCard' })
-    expect(card.exists()).toBe(true)
-    expect(card.props('title')).toBe('API-Schlüssel-Verwaltung folgt')
+    expect(card.exists()).toBe(false)
   })
 
   it('zeigt keinen "Slice G folgt"-Stub mehr', async () => {
