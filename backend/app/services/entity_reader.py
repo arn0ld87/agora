@@ -215,12 +215,12 @@ class EntityReader:
         Returns:
             EntityNode or None.
         """
-        # Not-found path: storage returns None for unknown UUIDs (expected, no error).
-        node = self.storage.get_node(entity_uuid)
-        if not node:
-            return None
-
         try:
+            # Not-found path: storage returns None for unknown UUIDs (expected, no error).
+            node = self.storage.get_node(entity_uuid)
+            if not node:
+                return None
+
             # Get edges for this node (O(degree) via Cypher)
             edges = self.storage.get_node_edges(entity_uuid)
 
