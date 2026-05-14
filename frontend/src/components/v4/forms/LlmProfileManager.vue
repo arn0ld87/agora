@@ -32,6 +32,9 @@ const PRESETS = computed<Preset[]>(() => [
 type FormMode = 'idle' | 'create' | 'edit'
 const formMode = ref<FormMode>('idle')
 const editingId = ref<string | null>(null)
+// is_default vom existierenden Profil beim Edit übernehmen, sonst löscht
+// das Hardcoden `is_default: false` den Standard-Status beim Bearbeiten.
+const editingIsDefault = ref(false)
 
 const formName     = ref('')
 const formProvider = ref<LlmProvider>('ollama')
@@ -72,13 +75,15 @@ function openEdit(profile: LlmProfile): void {
   // api_key bleibt initial leer ("unchanged")
   apiKeyEditMode.value = 'unchanged'
   apiKeyDraft.value    = ''
-  editingId.value = profile.id
-  formMode.value  = 'edit'
+  editingId.value        = profile.id
+  editingIsDefault.value = profile.is_default
+  formMode.value         = 'edit'
 }
 
 function cancel(): void {
-  formMode.value  = 'idle'
-  editingId.value = null
+  formMode.value         = 'idle'
+  editingId.value        = null
+  editingIsDefault.value = false
   resetForm()
 }
 
@@ -131,7 +136,10 @@ async function submit(): Promise<void> {
     base_url:   formBaseUrl.value.trim(),
     model_name: formModel.value.trim(),
     api_key:    resolvedApiKey.value,
-    is_default: false,
+    // Edit: bestehenden is_default beibehalten — sonst verliert das aktuelle
+    // Default-Profil beim Bearbeiten seinen Status. Create: immer false; der
+    // User setzt den Default explizit über den „Als Standard"-Button.
+    is_default: formMode.value === 'edit' ? editingIsDefault.value : false,
   }
 
   if (formMode.value === 'create') {
