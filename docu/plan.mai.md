@@ -47,7 +47,7 @@
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-06 | 🔴 | v2-`full_report.md` retiren | L | `backend/app/services/report_agent/manager.py`, `backend/scripts/migrate_v2_full_report_to_v3.py` | Refs ADR-0001 |
+| MAI-06 | ✅ | v2-`full_report.md` retiren | L | `backend/app/services/report_agent/manager.py`, `backend/scripts/migrate_v2_full_report_to_v3.py` | Refs ADR-0001 |
 | MAI-12 | 🔴 | Fork-Safety `register_at_fork` + `--preload` | M | `backend/app/__init__.py`, `backend/run.py`, `backend/Dockerfile` | Refs CLAUDE.md Hot-Spots |
 | MAI-11 | ✅ | PR-Smoke nur auf RC/Release | S | `.github/workflows/docker-image.yml` | Refs STATUS.md 2026-05-06 |
 
