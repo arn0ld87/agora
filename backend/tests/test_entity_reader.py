@@ -190,3 +190,102 @@ def test_get_entities_by_type_delegates(storage):
         enrich_with_edges=True,
     )
     assert all(isinstance(e, EntityNode) for e in result)
+
+
+# ---------------------------------------------------------------------------
+# get_entity_with_context — Issue #412: not-found vs. storage error
+# ---------------------------------------------------------------------------
+
+
+def _node_fixture() -> dict:
+    return {
+        "uuid": "u1",
+        "name": "Alice",
+        "labels": ["Entity", "Person"],
+        "summary": "researcher",
+        "attributes": {"age": 30},
+    }
+
+
+def _edge_fixture(source: str, target: str) -> dict:
+    return {
+        "source_node_uuid": source,
+        "target_node_uuid": target,
+        "name": "KNOWS",
+        "fact": "Alice knows Bob",
+    }
+
+
+def test_get_entity_with_context_not_found_returns_none():
+    """(a) storage.get_node() → None must yield None (not-found, not an error)."""
+    storage = MagicMock()
+    storage.get_node.return_value = None
+
+    reader = EntityReader(storage)
+    result = reader.get_entity_with_context("g1", "missing-uuid")
+
+    assert result is None
+    # get_node_edges must NOT be called — the node does not exist
+    storage.get_node_edges.assert_not_called()
+
+
+def test_get_entity_with_context_returns_entity_node():
+    """Happy-path: node found, edges fetched, EntityNode constructed correctly."""
+    storage = MagicMock()
+    storage.get_node.side_effect = [
+        _node_fixture(),   # primary node lookup
+        {                  # related node lookup
+            "uuid": "u2",
+            "name": "Bob",
+            "labels": ["Person"],
+            "summary": "colleague",
+        },
+    ]
+    storage.get_node_edges.return_value = [_edge_fixture("u1", "u2")]
+
+    reader = EntityReader(storage)
+    result = reader.get_entity_with_context("g1", "u1")
+
+    assert isinstance(result, EntityNode)
+    assert result.uuid == "u1"
+    assert result.name == "Alice"
+    assert len(result.related_edges) == 1
+    assert result.related_edges[0]["direction"] == "outgoing"
+    assert len(result.related_nodes) == 1
+    assert result.related_nodes[0]["uuid"] == "u2"
+
+
+def test_get_entity_with_context_storage_error_propagates():
+    """(b) Storage connection errors must propagate — must NOT return None."""
+    storage = MagicMock()
+    storage.get_node.return_value = _node_fixture()
+    storage.get_node_edges.side_effect = ConnectionError("Neo4j unavailable")
+
+    reader = EntityReader(storage)
+
+    with pytest.raises(ConnectionError, match="Neo4j unavailable"):
+        reader.get_entity_with_context("g1", "u1")
+
+
+def test_get_entity_with_context_unexpected_exception_propagates():
+    """(b) Any unexpected exception must propagate, not silently return None."""
+    storage = MagicMock()
+    storage.get_node.return_value = _node_fixture()
+    storage.get_node_edges.side_effect = RuntimeError("unexpected bug")
+
+    reader = EntityReader(storage)
+
+    with pytest.raises(RuntimeError, match="unexpected bug"):
+        reader.get_entity_with_context("g1", "u1")
+
+
+def test_get_entity_with_context_not_found_does_not_raise():
+    """(c) API consumers must still receive None for missing entities (no exception)."""
+    storage = MagicMock()
+    storage.get_node.return_value = None
+
+    reader = EntityReader(storage)
+
+    # Must not raise — API layer checks `if not entity:` and returns 404
+    result = reader.get_entity_with_context("g1", "nonexistent")
+    assert result is None
