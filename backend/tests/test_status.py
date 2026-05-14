@@ -130,6 +130,9 @@ class TestStatusFunctions:
             side_effect=Exception("Connection refused")
         )
         mock_storage._driver = mock_driver
+        mock_storage.verify_connectivity = Mock(
+            side_effect=Exception("Connection refused")
+        )
         app.extensions['neo4j_storage'] = mock_storage
 
         with app.app_context():
@@ -138,3 +141,46 @@ class TestStatusFunctions:
             assert result['reachable'] is False
             assert result['error'] is not None
             assert 'uri' in result
+
+    def test_get_neo4j_status_after_fork_reset_driver_is_none(self):
+        """Regression: nach gunicorn-Fork-Reset ist storage._driver=None.
+
+        Direkter Zugriff auf ``storage._driver.verify_connectivity()`` würde
+        ``'NoneType' object has no attribute 'verify_connectivity'`` werfen
+        und im UI als Service-Ausfall sichtbar machen, obwohl Neo4j selbst
+        erreichbar ist. Der Status-Endpoint muss die Lazy-Reconnect-Logik
+        des Storage nutzen.
+        """
+        import threading
+        from flask import Flask
+        from app.storage.neo4j_storage import Neo4jStorage
+
+        app = Flask(__name__)
+        app.extensions = {}
+
+        # Bare Neo4jStorage instance — kein __init__-Call, damit kein echter
+        # Driver oder Server-Roundtrip nötig ist.
+        storage = Neo4jStorage.__new__(Neo4jStorage)
+        storage._driver = None
+        storage._lock = threading.Lock()
+        storage._uri = 'bolt://127.0.0.1:0'
+        storage._user = 'neo4j'
+        storage._password = 'invalid'
+        storage._is_connected = False
+        storage._last_error = None
+        storage._last_success_ts = None
+        app.extensions['neo4j_storage'] = storage
+
+        with app.app_context():
+            result = _get_neo4j_status()
+
+        assert result['reachable'] is False
+        assert result['error'] is not None
+        # Der konkrete NoneType-AttributeError darf nicht durchschlagen —
+        # er ist ein internes Symptom, nicht der echte Connectivity-Fehler.
+        assert "'NoneType'" not in result['error'], (
+            f"NoneType-AttributeError leakt durch: {result['error']!r}"
+        )
+        assert "verify_connectivity'" not in result['error'], (
+            f"NoneType-AttributeError leakt durch: {result['error']!r}"
+        )

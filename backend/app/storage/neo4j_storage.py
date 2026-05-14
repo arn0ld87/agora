@@ -8,6 +8,7 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 import logging
 import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -54,6 +55,13 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         self._uri = uri or Config.NEO4J_URI
         self._user = user or Config.NEO4J_USER
         self._password = password or Config.NEO4J_PASSWORD
+
+        # Guards the lazy driver re-creation in :meth:`_get_session` after a
+        # ``_reset_driver_after_fork`` nulled ``_driver``. Without this lock
+        # gunicorn workers racing on the first request would each rebuild
+        # their own driver. Must live on the instance so ``__new__`` callers
+        # in tests can install one without going through ``__init__``.
+        self._lock = threading.Lock()
 
         self._driver = GraphDatabase.driver(
             self._uri, auth=(self._user, self._password)
@@ -105,6 +113,20 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
             # via neo4j_call_with_retry if it uses session.run or similar.
             # But here we just return the session.
         return self._driver.session(**kwargs)
+
+    def verify_connectivity(self) -> None:
+        """Public connectivity probe for ``/api/status``.
+
+        Wraps the private retry loop with the lazy-reconnect path so callers
+        can probe health without reaching into ``self._driver`` directly. The
+        ``_get_session()`` call rebuilds the driver if a gunicorn fork-reset
+        nulled it; a single ``RETURN 1`` then forces an actual round-trip.
+
+        Raises whatever the driver raises — callers translate into the
+        ``reachable: false`` status payload.
+        """
+        with self._get_session() as session:
+            session.run("RETURN 1").consume()
 
     def _reset_driver_after_fork(self) -> None:
         """Close and discard the inherited driver after gunicorn fork.

@@ -69,8 +69,11 @@ def _get_neo4j_status():
         }
 
     try:
-        # Verify connectivity using the driver's verify_connectivity method
-        storage._driver.verify_connectivity()
+        # Go through the storage's public probe so the fork-reset
+        # lazy-reconnect path is honored. Reaching into ``storage._driver``
+        # directly would crash with "'NoneType' object has no attribute
+        # 'verify_connectivity'" right after a gunicorn worker fork.
+        storage.verify_connectivity()
         last_success = getattr(storage, 'last_success_ts', None)
         return {
             "reachable": True,
