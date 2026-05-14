@@ -35,3 +35,4 @@ from . import status  # noqa: E402, F401
 from . import logs  # noqa: E402, F401 -- Issue #132: Backend-Log-Viewer
 from . import llm  # noqa: E402, F401 -- Slice E.1 (#213): model-active SSE stream
 from . import llm_providers  # noqa: E402, F401
+from .llm_profiles import llm_profiles_bp  # noqa: E402, F401 -- P5.2: LLM-Profile CRUD
