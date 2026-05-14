@@ -1,6 +1,4 @@
-import os
 import pytest
-from pathlib import Path
 from app.utils.file_parser import FileParser, _read_text_with_fallback, split_text_into_chunks
 
 def test_read_text_with_fallback_utf8(tmp_path):
