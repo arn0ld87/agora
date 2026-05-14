@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import ValidationError
 
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
+from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -245,6 +246,7 @@ class ReportManager:
     ) -> ReportV3:
         claims: List[ReportV3Claim] = []
         data_gaps: List[ReportV3DataGap] = []
+        hypotheses: List[ReportV3Hypothesis] = []
         for section in evidence_map.get("sections") or []:
             if not isinstance(section, dict):
                 continue
@@ -307,20 +309,39 @@ class ReportManager:
                     continue
                 hypothesis_id = str(
                     hypothesis.get("hypothesis_id")
-                    or f"hypothesis_{len(data_gaps) + 1:02d}"
+                    or f"hypothesis_{len(hypotheses) + 1:02d}"
                 )
                 text = str(hypothesis.get("hypothesis_text") or "").strip()
                 if not text:
                     continue
-                data_gaps.append(ReportV3DataGap(
+                origin_section_index = hypothesis.get(
+                    "origin_section_index", section_index
+                )
+                try:
+                    origin_index = (
+                        int(origin_section_index)
+                        if origin_section_index is not None
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    origin_index = None
+                try:
+                    confidence_score = float(
+                        hypothesis.get("confidence_score") or 0.0
+                    )
+                except (TypeError, ValueError):
+                    confidence_score = 0.0
+                hypotheses.append(ReportV3Hypothesis(
                     id=hypothesis_id,
-                    beschreibung=text,
-                    severity="low",
-                    suggested_fixes=[
+                    hypothesis_text=text,
+                    rationale=str(hypothesis.get("rationale") or ""),
+                    suggested_evidence=[
                         str(item)
                         for item in (hypothesis.get("suggested_evidence") or [])
                         if str(item).strip()
                     ],
+                    origin_section_index=origin_index,
+                    confidence_score=max(0.0, min(1.0, confidence_score)),
                 ))
         return ReportV3(
             report_id=report.report_id,
@@ -328,6 +349,7 @@ class ReportManager:
             report_mode=report_mode,
             claims=claims,
             data_gaps=data_gaps,
+            hypotheses=hypotheses,
         )
     
     @classmethod

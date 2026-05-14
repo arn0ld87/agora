@@ -12,6 +12,7 @@ import {
   ReportV3Schema,
   ReportModeSchema,
   ClaimSchema,
+  HypothesisSchema,
   PersonaV3Schema,
 } from "../reportV3Contract";
 import reportV3Json from "../../../../schemas/report-v3.schema.json";
@@ -59,6 +60,15 @@ const MINIMAL_REPORT_V3 = {
       suggested_fixes: ["A/B-Test durchführen", "Marktforschung beauftragen"],
     },
   ],
+  hypotheses: [
+    {
+      id: "hyp1",
+      hypothesis_text: "Preisbereitschaft könnte segmentabhängig variieren.",
+      rationale: "Keine harte Evidence im Seed-Korpus.",
+      suggested_evidence: ["Preisinterviews"],
+      confidence_score: 0.25,
+    },
+  ],
 };
 
 describe("ReportV3Schema (Zod-Spiegel)", () => {
@@ -70,6 +80,9 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       expect(result.data.personas[0].voice_register).toBe("formal-de");
       expect(result.data.claims[0].evidence_refs).toEqual(["ev-001"]);
       expect(result.data.data_gaps[0].severity).toBe("medium");
+      expect(result.data.hypotheses[0].suggested_evidence).toEqual([
+        "Preisinterviews",
+      ]);
     }
   });
 
@@ -140,6 +153,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       "positioning_variants",
       "content_ideas",
       "data_gaps",
+      "hypotheses",
     ];
     for (const key of expected) {
       expect(key in schema).toBe(true);
@@ -150,6 +164,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     expect(shapeKeys(ReportV3Schema)).toEqual(propertyKeys(reportV3Json));
     expect(shapeKeys(PersonaV3Schema)).toEqual(propertyKeys(reportV3Json.$defs.Persona));
     expect(shapeKeys(ClaimSchema)).toEqual(propertyKeys(reportV3Json.$defs.Claim));
+    expect(shapeKeys(HypothesisSchema)).toEqual(propertyKeys(reportV3Json.$defs.Hypothesis));
   });
 
   it("report_mode defaults to 'balanced' when absent", () => {
@@ -189,6 +204,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       expect(result.data.personas).toEqual([]);
       expect(result.data.claims).toEqual([]);
       expect(result.data.data_gaps).toEqual([]);
+      expect(result.data.hypotheses).toEqual([]);
     }
   });
 });

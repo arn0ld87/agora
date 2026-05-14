@@ -250,6 +250,59 @@
       "title": "FrictionPoint",
       "type": "object"
     },
+    "Hypothesis": {
+      "additionalProperties": false,
+      "description": "Hypothese ohne harte Evidence \u2014 separater Slot in ReportV3.\n\nAbgrenzung zu DataGap:\n- DataGap = strukturelle Datenl\u00fccke, die Einsch\u00e4tzungsqualit\u00e4t limitiert.\n- Hypothesis = inhaltliche Behauptung ohne Beleg, mit Rationale.",
+      "properties": {
+        "confidence_score": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence Score",
+          "type": "number"
+        },
+        "hypothesis_text": {
+          "minLength": 1,
+          "title": "Hypothesis Text",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "origin_section_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Section Index"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "suggested_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Suggested Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "hypothesis_text"
+      ],
+      "title": "Hypothesis",
+      "type": "object"
+    },
     "Multiplier": {
       "additionalProperties": false,
       "description": "Wachstums- oder Wirkungshebel entlang der Customer-Journey-Stufen.",
@@ -613,6 +666,13 @@
       "format": "date-time",
       "title": "Generated At",
       "type": "string"
+    },
+    "hypotheses": {
+      "items": {
+        "$ref": "#/$defs/Hypothesis"
+      },
+      "title": "Hypotheses",
+      "type": "array"
     },
     "multipliers": {
       "items": {

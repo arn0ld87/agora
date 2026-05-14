@@ -185,6 +185,19 @@ export const DataGapSchema = z
   .strict();
 export type DataGap = z.infer<typeof DataGapSchema>;
 
+// === Hypothesis ===
+export const HypothesisSchema = z
+  .object({
+    id: z.string().min(1),
+    hypothesis_text: z.string().min(1),
+    rationale: z.string().default(""),
+    suggested_evidence: z.array(z.string()).default([]),
+    origin_section_index: z.number().int().nullable().optional(),
+    confidence_score: z.number().min(0).max(1).default(0),
+  })
+  .strict();
+export type Hypothesis = z.infer<typeof HypothesisSchema>;
+
 // === ReportMode ===
 export const ReportModeSchema = z.enum(["strict", "balanced", "explorative"]);
 export type ReportMode = z.infer<typeof ReportModeSchema>;
@@ -208,6 +221,7 @@ export const ReportV3Schema = z
     positioning_variants: z.array(PositioningVariantSchema).default([]),
     content_ideas: z.array(ContentIdeaSchema).default([]),
     data_gaps: z.array(DataGapSchema).default([]),
+    hypotheses: z.array(HypothesisSchema).default([]),
   })
   .strict();
 export type ReportV3 = z.infer<typeof ReportV3Schema>;
