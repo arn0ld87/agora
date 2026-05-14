@@ -550,7 +550,7 @@ onMounted(() => void loadStatus())
 }
 
 .hero-field--full {
-  grid-column: 1 / -1;
+  width: 100%;
 }
 .hero-required {
   color: var(--status-red, #c0392b);
