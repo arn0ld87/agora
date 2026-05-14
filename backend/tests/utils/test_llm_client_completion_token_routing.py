@@ -29,6 +29,9 @@ from app.utils.llm_client import LLMClient
         "gpt-5-nano",
         "GPT-5-Pro",            # case-insensitiv
         "  gpt-5-thinking  ",   # getrimmt
+        "gpt-5.4-mini",         # Punkt-Separator (Regression: war kein Match)
+        "gpt-5.4",
+        "gpt-5.4-thinking",
         "o1",
         "o1-preview",
         "o3",

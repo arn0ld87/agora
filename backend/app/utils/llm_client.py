@@ -157,7 +157,7 @@ class LLMClient:
         # Mismatches wie hypothetisches "gpt-500".
         lowered = (model or "").strip().lower()
         for prefix in ("gpt-5", "o1", "o3", "o4"):
-            if lowered == prefix or lowered.startswith(f"{prefix}-"):
+            if lowered == prefix or lowered.startswith(f"{prefix}-") or lowered.startswith(f"{prefix}."):
                 return True
         return False
 
