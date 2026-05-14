@@ -1,35 +1,36 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
-import Card from '@/components/v4/forms/Card.vue'
+import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
+
+const { t } = useI18n()
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
   { label: 'Integrations' },
 ]
+
+// Externe Systeme — Neo4j, Embedding-Provider, Ontology-LLM, Hybrid-Search,
+// Agent-Tools, WebTools und OASIS-Runner.
+const ALLOWED_SECTIONS = [
+  'neo4j',
+  'embedding',
+  'ontology',
+  'hybrid_search',
+  'agent_tools',
+  'webtools',
+  'oasis',
+] as const
 </script>
 
 <template>
   <AppShell :breadcrumbs="BREADCRUMBS">
     <PageHeader
-      title="Integrations"
-      subtitle="Externe Dienste und Datenquellen verbinden."
+      :title="t('settings.v4.integrations.title')"
+      :subtitle="t('settings.v4.integrations.subtitle')"
     />
 
-    <Card title="Verbundene Dienste">
-      <p class="stub-hint">
-        Inhalt folgt in Slice G — aktuell verwaltet ueber den klassischen Tab in
-        <RouterLink :to="{ name: 'Settings', query: { tab: 'integrations' } }">/settings?tab=integrations</RouterLink>.
-      </p>
-    </Card>
+    <SettingsSectionPanel :allowed-sections="ALLOWED_SECTIONS" />
   </AppShell>
 </template>
-
-<style scoped>
-.stub-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-</style>

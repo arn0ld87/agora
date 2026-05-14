@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
-import Card from '@/components/v4/forms/Card.vue'
+import ComingSoonCard from '@/components/v4/forms/ComingSoonCard.vue'
+
+const { t } = useI18n()
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
@@ -12,24 +15,13 @@ const BREADCRUMBS = [
 <template>
   <AppShell :breadcrumbs="BREADCRUMBS">
     <PageHeader
-      title="API Keys"
-      subtitle="API-Zugaenge erstellen und verwalten."
+      :title="t('settings.v4.apiKeys.title')"
+      :subtitle="t('settings.v4.apiKeys.subtitle')"
     />
 
-    <Card title="Aktive Schlussel">
-      <p class="stub-hint">
-        Inhalt folgt in Slice G — aktuell verwaltet ueber den klassischen Tab in
-        <RouterLink :to="{ name: 'Settings', query: { tab: 'api-keys' } }">/settings?tab=api-keys</RouterLink>.
-      </p>
-    </Card>
+    <ComingSoonCard
+      :title="t('settings.v4.apiKeys.empty.title')"
+      :description="t('settings.v4.apiKeys.empty.description')"
+    />
   </AppShell>
 </template>
-
-<style scoped>
-.stub-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-</style>

@@ -712,6 +712,41 @@
       "webtools": "Webtools",
       "oasis": "OASIS",
       "security": "Secrets"
+    },
+    "v4": {
+      "noSections": "Keine Einstellungen in dieser Kategorie.",
+      "general": {
+        "title": "Allgemein",
+        "subtitle": "Laufzeit-Verhalten des Workspaces: LLM, Logging, Locale, UI, Event-Bus, Secrets."
+      },
+      "integrations": {
+        "title": "Integrationen",
+        "subtitle": "Externe Dienste verbinden: Neo4j, Embedding-Anbieter, Ontology-LLM, Hybrid-Search, Agent-Tools, WebTools und OASIS-Runner."
+      },
+      "apiKeys": {
+        "title": "API-Schlüssel",
+        "subtitle": "API-Zugänge erstellen und verwalten.",
+        "empty": {
+          "title": "API-Schlüssel-Verwaltung folgt",
+          "description": "Backend-Support für persönliche und Service-Schlüssel ist in Vorbereitung. Bis dahin werden Zugriffe zentral über das Auth-Token gesteuert."
+        }
+      },
+      "usersTeams": {
+        "title": "Nutzer & Teams",
+        "subtitle": "Mitglieder verwalten und Teamzugänge konfigurieren.",
+        "empty": {
+          "title": "Multi-User-Verwaltung folgt",
+          "description": "Agora ist aktuell als Single-Workspace-Tool ausgelegt. Ein Identity-Modul mit Rollen und Teams folgt in einem späteren Epic."
+        }
+      },
+      "auditLogs": {
+        "title": "Audit-Logs",
+        "subtitle": "Aktivitätsprotokoll des Workspaces einsehen.",
+        "empty": {
+          "title": "Audit-Trail folgt",
+          "description": "Ein revisionssicherer Append-Only-Log für sicherheitsrelevante Aktionen wird mit dem Identity-Modul ausgeliefert."
+        }
+      }
     }
   },
   "activeModel": {

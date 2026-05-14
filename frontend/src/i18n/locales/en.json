@@ -712,6 +712,41 @@
       "webtools": "Webtools",
       "oasis": "OASIS",
       "security": "Secrets"
+    },
+    "v4": {
+      "noSections": "No settings in this category.",
+      "general": {
+        "title": "General",
+        "subtitle": "Workspace runtime behaviour: LLM, logging, locale, UI, event bus, secrets."
+      },
+      "integrations": {
+        "title": "Integrations",
+        "subtitle": "Connect external services: Neo4j, embedding providers, ontology LLM, hybrid search, agent tools, WebTools and the OASIS runner."
+      },
+      "apiKeys": {
+        "title": "API keys",
+        "subtitle": "Create and manage API access.",
+        "empty": {
+          "title": "API-key management coming soon",
+          "description": "Backend support for personal and service keys is in preparation. Until then, access is governed centrally via the auth token."
+        }
+      },
+      "usersTeams": {
+        "title": "Users & teams",
+        "subtitle": "Manage members and configure team access.",
+        "empty": {
+          "title": "Multi-user management coming soon",
+          "description": "Agora is currently a single-workspace tool. An identity module with roles and teams will ship in a later epic."
+        }
+      },
+      "auditLogs": {
+        "title": "Audit logs",
+        "subtitle": "Inspect the workspace activity trail.",
+        "empty": {
+          "title": "Audit trail coming soon",
+          "description": "A tamper-evident append-only log for security-relevant actions ships with the identity module."
+        }
+      }
     }
   },
   "activeModel": {
