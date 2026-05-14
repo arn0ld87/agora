@@ -1,0 +1,70 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_key": {
+      "default": "",
+      "title": "Api Key",
+      "type": "string"
+    },
+    "base_url": {
+      "minLength": 1,
+      "title": "Base Url",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "description": "UUID, server-generiert",
+      "title": "Id",
+      "type": "string"
+    },
+    "is_default": {
+      "default": false,
+      "title": "Is Default",
+      "type": "boolean"
+    },
+    "model_name": {
+      "minLength": 1,
+      "title": "Model Name",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "ollama",
+        "openai",
+        "gemini",
+        "anthropic",
+        "custom"
+      ],
+      "title": "Provider",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "provider",
+    "base_url",
+    "model_name",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "LlmProfile",
+  "type": "object"
+}
