@@ -10,6 +10,10 @@ import './assets/styles/global.css'
 
 document.documentElement.setAttribute('data-theme', 'light')
 
+const uiVersion = (import.meta.env.VITE_UI_VERSION as string | undefined) ?? 'v4'
+;(window as unknown as { __AGORA_UI_VERSION__?: string }).__AGORA_UI_VERSION__ = uiVersion
+document.documentElement.setAttribute('data-ui-version', uiVersion)
+
 const app = createApp(App)
 
 app.use(createPinia())
