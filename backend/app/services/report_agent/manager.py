@@ -220,6 +220,23 @@ class ReportManager:
         return cls._read_json_safe(cls._get_report_v3_path(report_id))
 
     @classmethod
+    def build_report_v3_markdown(cls, report_id: str) -> Optional[str]:
+        """MAI-06: On-demand-Render des v3-Markdowns aus report-v3.json.
+
+        Ersetzt den stummen full_report.md-Write. Liefert None wenn kein
+        report-v3.json vorhanden (Bestandsreport ohne v3-Artefakt).
+        """
+        raw = cls.get_report_v3(report_id)
+        if raw is None:
+            return None
+        try:
+            v3 = ReportV3.model_validate(raw)
+            return render_report_v3(v3)
+        except Exception as exc:
+            logger.warning(f"report-v3.json render failed for {report_id}: {exc}")
+            return None
+
+    @classmethod
     def _evidence_ref_for_item(
         cls,
         item: Dict[str, Any],
@@ -513,13 +530,11 @@ class ReportManager:
         
         # post-processing：clean entireReporttitlequestion
         md_content = cls._post_process_report(md_content, outline)
-        
-        # saveComplete report
-        full_path = cls._get_report_markdown_path(report_id)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
-        logger.info(f"completereporthasassemble: {report_id}")
+
+        # MAI-06: Nicht mehr auf Disk schreiben — nur zurückgeben.
+        # Aufrufer ist save_report(), das setzt report.markdown_content.
+        # Der Export-Endpoint rendert on-demand via build_report_v3_markdown().
+        logger.info(f"Markdown-String assembliert (in-memory only): {report_id}")
         return md_content
     
     @classmethod
@@ -672,17 +687,16 @@ class ReportManager:
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
 
-        # saveCompleteMarkdownReport
-        if report.status != ReportStatus.INCOMPLETE and report.markdown_content:
-            with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
-                f.write(report.markdown_content)
+        # MAI-06: Kein full_report.md-Write mehr.
+        # markdown_content bleibt in meta.json (für Frontend-getReport()).
+        # Der Markdown-Export läuft über export-Endpoint → build_report_v3_markdown().
         if report.status == ReportStatus.COMPLETED and evidence_map:
             try:
                 cls.save_report_v3(cls.build_report_v3(report, evidence_map, report_mode=report_mode))
             except ValidationError as exc:
                 logger.warning(f"report-v3 artifact skipped for {report.report_id}: {exc}")
         
-        logger.info(f"reportsaved: {report.report_id}")
+        logger.info(f"report saved (v3-only): {report.report_id}")
     
     @classmethod
     def get_report(cls, report_id: str) -> Optional[Report]:

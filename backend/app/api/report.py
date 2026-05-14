@@ -643,18 +643,13 @@ def export_report(report_id: str):
 
     if fmt == 'md':
         download_name = f"agora-report-{report_id}.md"
-        md_path = ReportManager._get_report_v3_markdown_path(report_id)
-        if not os.path.exists(md_path):
-            md_path = ReportManager._get_report_markdown_path(report_id)
-        if os.path.exists(md_path):
-            return send_file(
-                md_path,
-                as_attachment=True,
-                download_name=download_name,
-                mimetype="text/markdown; charset=utf-8",
-            )
-        body = report.markdown_content or ""
-        response = Response(body, mimetype='text/markdown; charset=utf-8')
+        # MAI-06: On-demand-Render aus report-v3.json (Single Source of Truth).
+        # Kein send_file mehr von full_report.md oder report-v3.md.
+        md_text = ReportManager.build_report_v3_markdown(report_id)
+        if md_text is None:
+            # Fallback für Bestandsreports ohne v3-Artefakt.
+            md_text = report.markdown_content or ""
+        response = Response(md_text, mimetype='text/markdown; charset=utf-8')
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response
 
