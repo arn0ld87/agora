@@ -12,7 +12,7 @@
 # `docker-compose.prod.yml`.
 
 # ---------- shared base ----------
-FROM python:3.11 AS base
+FROM python:3.14 AS base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends nodejs npm curl \
@@ -105,7 +105,7 @@ RUN cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
 # ---------- prod ----------
-FROM python:3.11-slim AS prod
+FROM python:3.14-slim AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

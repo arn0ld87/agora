@@ -64,7 +64,7 @@ jobs:
         # CVE-2024-46455  unstructured==0.13.7 via camel-oasis #125
         # CVE-2025-64712  unstructured==0.13.7 via camel-oasis #126
         run: |
-          uvx pip-audit --strict \
+          uvx pip-audit --strict --no-deps --disable-pip \
             --ignore-vuln CVE-2026-25990 \
             --ignore-vuln CVE-2026-40192 \
             --ignore-vuln CVE-2026-42308 \
