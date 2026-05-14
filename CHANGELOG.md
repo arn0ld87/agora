@@ -9,6 +9,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - MAI-01 · P4.4 Mode-Smokes als CI-Job verdrahtet (e2e-smokes.yml::report-modes-smoke).
 - MAI-04 · Schema-Drift-Gate (dump_schemas --check) als CI-Pflichtschritt.
 - MAI-13 · mistune + pygments Lockfile-Bump (Dependabot #323 + #326 closed).
+- MAI-16 · sync-status.sh --check als CI-Pflicht-Gate für STATUS.md.
 - chore(build): `VITE_UI_VERSION` Build-Provenance-Marker (Default `v4`) als Dockerfile-ARG und Compose-Build-Arg verdrahtet. Wert wird in `main.ts` auf `window.__AGORA_UI_VERSION__` und `<html data-ui-version>` gespiegelt — in Browser-DevTools sichtbar.
 - MAI-14 · Confidence-Contradiction-Penalty (Std-Dev>0.6 ODER Range>0.6 ⇒ -0.2).
 - MAI-03 · ReportV3.hypotheses[] als dedizierter Slot, getrennt von data_gaps[].
