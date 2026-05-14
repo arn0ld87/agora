@@ -23,7 +23,7 @@
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-01 | 🔴 | P4.4 Mode-Smokes in CI verdrahten | S | `.github/workflows/e2e-smokes.yml` | Refs PLAN.md §5.4 |
+| MAI-01 | ✅ | P4.4 Mode-Smokes in CI verdrahten | S | `.github/workflows/e2e-smokes.yml` | Refs PLAN.md §5.4 |
 | MAI-04 | 🔴 | Schema-Drift-Gate `--check` | S | `backend/app/contracts/dump_schemas.py`, `.github/workflows/contract-gates.yml` | Refs R12 |
 | MAI-13 | 🔴 | Dependabot #323 + #326 mergen | S | `backend/uv.lock` | Closes #323, Closes #326 |
 
@@ -49,7 +49,7 @@
 |---|---|---|---|---|---|
 | MAI-06 | 🔴 | v2-`full_report.md` retiren | L | `backend/app/services/report_agent/manager.py`, `backend/scripts/migrate_v2_full_report_to_v3.py` | Refs ADR-0001 |
 | MAI-12 | 🔴 | Fork-Safety `register_at_fork` + `--preload` | M | `backend/app/__init__.py`, `backend/run.py`, `backend/Dockerfile` | Refs CLAUDE.md Hot-Spots |
-| MAI-11 | 🔴 | PR-Smoke nur auf RC/Release | S | `.github/workflows/docker-image.yml` | Refs STATUS.md 2026-05-06 |
+| MAI-11 | ✅ | PR-Smoke nur auf RC/Release | S | `.github/workflows/docker-image.yml` | Refs STATUS.md 2026-05-06 |
 
 ### Block E — Bewertungs-Polish
 
@@ -63,8 +63,8 @@
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-16 | 🔴 | `sync-status.sh --check` als CI-Pflicht | S | `scripts/sync-status.sh`, `.github/workflows/ci.yml` | Refs Phase 6 |
-| MAI-17 | 🔴 | `radon` Komplexitäts-Gate | S | `.github/workflows/contract-gates.yml`, `backend/radon-allowlist.txt` | Refs M11.5 |
+| MAI-16 | ✅ | `sync-status.sh --check` als CI-Pflicht | S | `scripts/sync-status.sh`, `.github/workflows/ci.yml` | Refs Phase 6 |
+| MAI-17 | ✅ | `radon` Komplexitäts-Gate | S | `.github/workflows/contract-gates.yml`, `backend/radon-allowlist.txt` | Refs M11.5 |
 
 ---
 
