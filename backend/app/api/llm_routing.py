@@ -43,7 +43,8 @@ def _load_invocation_events(run_id: str, limit: int = 200) -> list[dict]:
     if not os.path.exists(log_path):
         return []
 
-    events = deque(maxlen=limit if limit > 0 else None)
+    from typing import Any
+    events: deque[Any] = deque(maxlen=limit if limit > 0 else None)
     with open(log_path, "r", encoding="utf-8") as handle:
         for line in handle:
             payload = line.strip()
