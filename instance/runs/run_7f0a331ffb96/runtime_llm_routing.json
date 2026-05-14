@@ -1,0 +1,9 @@
+{
+  "global_default": {
+    "provider_id": "ollama_local",
+    "model": "qwen2.5:32b",
+    "provider_options": {
+      "base_url": "http://localhost:11434/v1"
+    }
+  }
+}

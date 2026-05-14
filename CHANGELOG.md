@@ -5,7 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
-(Keine Einträge — nächste Version öffnet den Block.)
+### Changed
+- ci(coverage): Coverage-Schwellen auf Step 2 angehoben: Backend 55 → 60 %, Frontend 26 → 28 %. Backend-Istwert durch neue Tests für `file_parser.py` auf 66 % gesteigert. (Sub-Slice M11.2/M11.3 Step 2).
+
+### Added
+- test(backend): Unit-Tests für `app/utils/file_parser.py` hinzugefügt (`tests/utils/test_file_parser.py`). Deckt Text-Extraktion (TXT/MD) mit Encoding-Fallback und Text-Chunking ab.
 
 ## [1.0.0] - 2026-05-11
 
