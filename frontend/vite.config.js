@@ -59,15 +59,14 @@ export default defineConfig({
         'src/router/**',
         'src/types/**',
       ],
-      // M11.3 Step1 (2026-05-10): Schwellen auf 26 % angehoben (vorgezogen, war
-      // 2026-06-04 geplant). Ist-Werte 2026-05-10: statements=50.46 %,
-      // branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier
-      // deutlich ueber 26 %. Naechste Anhebung: 2026-06-10 → 28 %.
+      // M11.3 Step2 (2026-06-10): Schwellen auf 28 % angehoben.
+      // Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %,
+      // functions=38.59 %, lines=52.50 % — alle vier deutlich ueber 28 %.
       thresholds: {
-        lines: 26,
-        functions: 26,
-        branches: 26,
-        statements: 26,
+        lines: 28,
+        functions: 28,
+        branches: 28,
+        statements: 28,
       },
     },
   }

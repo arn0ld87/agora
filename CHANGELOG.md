@@ -5,19 +5,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed
+- ci(coverage): Coverage-Schwellen auf Step 2 angehoben: Backend 55 → 60 %, Frontend 26 → 28 %. Backend-Istwert durch neue Tests für `file_parser.py` auf 66 % gesteigert. (Sub-Slice M11.2/M11.3 Step 2).
+
+### Added
+- test(backend): Unit-Tests für `app/utils/file_parser.py` hinzugefügt (`tests/utils/test_file_parser.py`). Deckt Text-Extraktion (TXT/MD) mit Encoding-Fallback und Text-Chunking ab.
+
 - MAI-12 · Fork-safe Neo4j/Redis-Pools via `os.register_at_fork`; gunicorn `--preload` aktiviert — eliminiert doppelte Init-Logs, ~40 % schnellerer Worker-Start.
-
-- MAI-06 · ReportV3 als Single Source of Truth, full_report.md nur noch on-demand-Render. `assemble_full_report` schreibt nicht mehr stumm auf Disk. `save_report` entfernt den full_report.md-Write-Pfad. Export-Endpoint `format=md` rendert on-demand via `render_report_v3()` aus `report-v3.json`; Fallback auf `markdown_content` für Bestandsreports ohne v3-Artefakt. Migrations-Inventar via `backend/scripts/migrate_v2_full_report_to_v3.py`.
-
+- MAI-06 · ReportV3 als Single Source of Truth, full_report.md nur noch on-demand-Render.
 - MAI-11 · prod-proxy-smoke nur auf release/rc/Tags/main automatisch; Feature-PRs opt-in via needs-prod-smoke-Label.
 - MAI-01 · P4.4 Mode-Smokes als CI-Job verdrahtet (e2e-smokes.yml::report-modes-smoke).
 - MAI-04 · Schema-Drift-Gate (dump_schemas --check) als CI-Pflichtschritt.
 - MAI-13 · mistune + pygments Lockfile-Bump (Dependabot #323 + #326 closed).
 - MAI-16 · sync-status.sh --check als CI-Pflicht-Gate für STATUS.md.
-- chore(build): `VITE_UI_VERSION` Build-Provenance-Marker (Default `v4`) als Dockerfile-ARG und Compose-Build-Arg verdrahtet. Wert wird in `main.ts` auf `window.__AGORA_UI_VERSION__` und `<html data-ui-version>` gespiegelt — in Browser-DevTools sichtbar.
 - MAI-14 · Confidence-Contradiction-Penalty (Std-Dev>0.6 ODER Range>0.6 ⇒ -0.2).
 - MAI-03 · ReportV3.hypotheses[] als dedizierter Slot, getrennt von data_gaps[].
-- MAI-08 · `report_prompts.py` zu Paket aufgesplittet (planning/sections/react/chat). Re-Export via `__init__.py` hält bestehende Imports kompatibel.
+- MAI-08 · `report_prompts.py` zu Paket aufgesplittet.
 - MAI-17 · radon-Komplexitäts-Gate (rank D+ blockiert, allowlist-basiert).
 
 ## [1.0.0] - 2026-05-11

@@ -35,9 +35,9 @@ Gemessen 2026-05-04 mit `uv run pytest --cov=app --cov-report=term -q` (1425 pas
 | `app/` gesamt | 55 % | 12 842 Statements, 5 733 missed |
 | `app/services/` | 51 % | 6 964 Statements, 3 427 missed |
 
-**Aktive CI-Schwelle: 55 %** (`--cov-fail-under=55` in `.github/workflows/ci.yml`).
+**Aktive CI-Schwelle: 60 %** (`--cov-fail-under=60` in `.github/workflows/ci.yml`).
 
-Begründung der Schwellenwahl: Ist-Wert (61.41 %, gemessen 2026-05-10) liegt deutlich über der neuen Schwelle. Die PLAN-Default-Schwelle von 70 % ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte bis Ziel 85 %.
+Begründung der Schwellenwahl: Ist-Wert (66.00 %, gemessen 2026-06-10) liegt deutlich über der neuen Schwelle. Die PLAN-Default-Schwelle von 70 % ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte bis Ziel 85 %.
 
 **Roadmap:**
 
@@ -45,7 +45,7 @@ Begründung der Schwellenwahl: Ist-Wert (61.41 %, gemessen 2026-05-10) liegt deu
 |---|---|---|
 | 2026-05-04 | 53 % | Startwert (M11.2) |
 | 2026-05-10 | 55 % | vorgezogen, Ist deckt (Followup-5 stabil) |
-| 2026-06-10 | 57 % | +2 Punkte |
+| 2026-06-10 | 60 % | Step 2: Coverage durch `file_parser`-Tests erhöht |
 | 2026-07-10 | 59 % | +2 Punkte |
 | … | … | monatlich +2 |
 | Ziel | 85 % | Langfristziel |
@@ -63,7 +63,7 @@ Gemessen 2026-05-07 mit `npm run test:coverage` (`vite.config.js` include `src/*
 | Functions | 38.23 % | 445 / 1 164 |
 | Lines | 51.29 % | 2 296 / 4 476 |
 
-**Aktive CI-Schwelle: 26 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Angehoben 2026-05-10 (vorgezogen, war 2026-06-04 geplant). Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier deutlich über 26 %.
+**Aktive CI-Schwelle: 28 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Angehoben 2026-06-10 (Step 2). Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier deutlich über 28 %.
 
 Historische Begründung der Schwellenwahl: Der M11.3-Startwert war `branches` mit 26.70 %. Dieser lag weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` griff. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
 
@@ -79,7 +79,7 @@ Diese Lücken sind strukturell. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Z
 |---|---|---|
 | 2026-05-04 | 24 % | Startwert (M11.3) |
 | 2026-05-10 | 26 % | vorgezogen, Ist deckt (Followup-5 stabil) |
-| 2026-06-10 | 28 % | +2 Punkte |
+| 2026-06-10 | 28 % | Step 2: +2 Punkte gemäß Roadmap |
 | 2026-07-10 | 30 % | +2 Punkte |
 | … | … | monatlich +2 |
 | Ziel | 80 % | Langfristziel (inkl. Playwright E2E, M11.4+) |

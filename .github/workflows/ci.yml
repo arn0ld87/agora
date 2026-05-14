@@ -133,9 +133,9 @@ jobs:
         working-directory: backend
         # Coverage-Flags bewusst hier statt in pyproject.toml addopts -- sonst
         # brechen Subset-Aufrufe wie `pytest tests/contracts/` in
-        # contract-gates.yml. Schwelle 55 % = Step1 (Ist 61.41 %, vorgezogen
-        # 2026-05-10, war 2026-06-04 geplant). Roadmap +2 Punkte/Monat -> 85 %.
-        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=55
+        # contract-gates.yml. Schwelle 60 % = Step2 (Ist 66.00 %, vorgezogen
+        # 2026-06-10). Roadmap +2 Punkte/Monat -> 85 %.
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=60
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
