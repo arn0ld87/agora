@@ -95,10 +95,12 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         This handles re-initialization after a fork-reset.
         """
         if self._driver is None:
-            logger.info("Neo4j driver re-initializing after fork")
-            self._driver = GraphDatabase.driver(
-                self._uri, auth=(self._user, self._password)
-            )
+            with self._lock:
+                if self._driver is None:
+                    logger.info("Neo4j driver re-initializing after fork")
+                    self._driver = GraphDatabase.driver(
+                        self._uri, auth=(self._user, self._password)
+                    )
             # Connectivity check is deferred to the first actual call
             # via neo4j_call_with_retry if it uses session.run or similar.
             # But here we just return the session.
