@@ -7,6 +7,7 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -197,6 +198,11 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
             stored_dim,
             expected_dim,
         )
+        # Strict validation: alphanumeric and underscores only, max 50 chars.
+        # This prevents Cypher injection in the dynamic DROP INDEX query.
+        if not re.fullmatch(r"^[A-Za-z_][A-Za-z0-9_]{0,49}$", index_name):
+            raise ValueError(f"Invalid index name: {index_name}")
+
         session.run(f"DROP INDEX {index_name}")
 
     _VECTOR_INDEX_NAMES = ("entity_embedding", "fact_embedding")
