@@ -125,14 +125,43 @@ class LLMClient:
     def from_route(
         cls,
         route: ResolvedRoute,
-        api_key: Optional[str],
+        secret_resolver: Optional["Any"] = None,
         timeout: float = 300.0,
         run_id: Optional[str] = None,
+        api_key_override: Optional[str] = None,
     ) -> "LLMClient":
-        """Factory: create LLMClient from a resolved stage route."""
+        """Factory: create LLMClient from a resolved stage route.
+
+        Resolves actual base_url and api_key from the provider configuration,
+        falling back to sanitized/config defaults if no resolver is provided.
+        """
+        base_url = route.base_url_sanitized
+        api_key = api_key_override
+
+        # If a secret resolver is provided, we try to get the real secrets.
+        # This prevents leaking them into ResolvedRoute but allows LLMClient
+        # to use them.
+        if secret_resolver:
+            # We need to know the provider type to resolve the key correctly.
+            # ResolvedRoute only has provider_id.
+            # In a full implementation, we'd look up the provider descriptor.
+            # For now, we use the fallback logic in SecretResolver.
+            from ..services.llm_provider_registry import LlmProviderRegistry
+            registry = LlmProviderRegistry()
+            descriptor = next((p for p in registry.get_providers() if p.id == route.provider_id), None)
+
+            p_type = descriptor.type if descriptor else "unknown"
+            if not api_key:
+                api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+
+            # Use real base_url from provider_options if present, otherwise from descriptor
+            real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
+            if real_base:
+                base_url = real_base
+
         return cls(
             api_key=api_key,
-            base_url=route.base_url_sanitized,  # Caller must provide secret base_url if needed
+            base_url=base_url,
             model=route.model,
             timeout=timeout,
             reasoning_effort=route.reasoning_effort,

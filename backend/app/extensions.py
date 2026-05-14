@@ -37,7 +37,7 @@ def register_fork_handlers(neo4j_storage: Optional["Neo4jStorage"] = None) -> No
 
     # --- Redis signed_ticket ---
     try:
-        from .utils.signed_ticket import _reset_seen_for_tests as _reset_redis
+        from .utils.signed_ticket import reset_after_fork as _reset_redis
 
         os.register_at_fork(after_in_child=_reset_redis)
         logger.debug("Registered signed_ticket Redis after_in_child fork handler")

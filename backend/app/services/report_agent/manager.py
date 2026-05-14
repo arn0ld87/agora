@@ -231,8 +231,11 @@ class ReportManager:
         try:
             v3 = ReportV3.model_validate(raw)
             return render_report_v3(v3)
-        except (ValidationError, Exception) as exc:
-            logger.warning(f"report-v3.json render failed for {report_id}: {exc}")
+        except ValidationError as exc:
+            logger.warning("report-v3.json validation failed for %s: %s", report_id, exc)
+            return None
+        except Exception as exc:
+            logger.error("Unexpected error rendering report-v3 for %s: %s", report_id, exc)
             return None
 
     @classmethod

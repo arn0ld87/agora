@@ -8,6 +8,7 @@ Audit-Log-Hook ist Out-of-Scope für G2 (kommt in G3).
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 import threading
 import uuid
@@ -36,6 +37,11 @@ def _generate_token() -> tuple[str, str]:
     return token, prefix
 
 
+def _hash_token(token: str) -> str:
+    """Berechnet SHA-256 Hash des Tokens."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 class ApiKeysStore:
     """Thread-safe In-Memory-Store. Pro Prozess eine Instanz (Modul-Singleton)."""
 
@@ -57,6 +63,7 @@ class ApiKeysStore:
 
     def create(self, label: str, scopes: list[ApiKeyScope]) -> ApiKeyCreateResponse:
         token, prefix = _generate_token()
+        hashed = _hash_token(token)
         key_id = uuid.uuid4().hex
         model = ApiKeyModel(
             id=key_id,
@@ -64,6 +71,7 @@ class ApiKeysStore:
             prefix=prefix,
             scopes=list(scopes),
             status="active",
+            hashed_token=hashed,
             created_at=_now(),
             last_used_at=None,
             revoked_at=None,
@@ -71,6 +79,23 @@ class ApiKeysStore:
         with self._lock:
             self._keys[key_id] = model
         return ApiKeyCreateResponse(key=model, token=token)
+
+    def validate_token(self, token: str) -> Optional[ApiKeyModel]:
+        """Validiert einen Klartext-Token und aktualisiert last_used_at."""
+        if not token.startswith("ago_"):
+            return None
+        hashed = _hash_token(token)
+        with self._lock:
+            # Effizientere Suche wäre ein Index auf hashed_token,
+            # für den In-Memory-Store reicht linearer Scan (wenige Schlüssel).
+            for key_id, model in self._keys.items():
+                if model.hashed_token == hashed:
+                    if model.status == "revoked":
+                        return model
+                    updated = model.model_copy(update={"last_used_at": _now()})
+                    self._keys[key_id] = updated
+                    return updated
+        return None
 
     def revoke(self, key_id: str) -> Optional[ApiKeyModel]:
         with self._lock:

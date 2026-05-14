@@ -27,6 +27,7 @@ export const ApiKeyModelSchema = z
       .regex(/^ago_[0-9a-f]{8}$/),
     scopes: z.array(ApiKeyScopeSchema).min(1),
     status: ApiKeyStatusSchema,
+    hashed_token: z.string(),
     created_at: z.string(),
     last_used_at: z.string().nullable().optional(),
     revoked_at: z.string().nullable().optional(),

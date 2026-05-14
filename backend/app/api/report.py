@@ -31,6 +31,7 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..services.graph_tools import GraphToolsService
+from ..services.secret_resolver import SecretResolver
 from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.stage_model_router import StageModelRouter
@@ -212,7 +213,8 @@ def generate_report():
     # hat. Wir bauen den Client hier einmal und reichen ihn in beide rein.
     shared_llm_client = LLMClient.from_route(
         resolved_route,
-        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        secret_resolver=SecretResolver(),
+        api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
         run_id=run_record["run_id"],
     )
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
@@ -609,8 +611,8 @@ def export_report(report_id: str):
         if not report:
             return json_error(f"Report does not exist: {report_id}", status=404)
         v3_path = ReportManager._get_report_v3_path(report_id)
-        md_path = ReportManager._get_report_v3_markdown_path(report_id)
-        if not os.path.exists(v3_path) and not os.path.exists(md_path):
+        # We allow ZIP export if either report-v3.json exists OR there is legacy markdown_content
+        if not os.path.exists(v3_path) and not getattr(report, "markdown_content", None):
             return json_error("report_not_finalised", status=404)
         zip_bytes = _build_zip_bundle(report_id, report)
         filename = f"agora-report-{report_id}-bundle.zip"

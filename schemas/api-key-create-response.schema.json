@@ -9,6 +9,11 @@
           "title": "Created At",
           "type": "string"
         },
+        "hashed_token": {
+          "description": "SHA-256 hash of the full token",
+          "title": "Hashed Token",
+          "type": "string"
+        },
         "id": {
           "minLength": 1,
           "title": "Id",
@@ -81,6 +86,7 @@
         "prefix",
         "scopes",
         "status",
+        "hashed_token",
         "created_at"
       ],
       "title": "ApiKeyModel",

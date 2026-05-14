@@ -36,7 +36,7 @@ class Neo4jReadMixin:
                 return json.loads(record["oj"])
             return {}
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_all_nodes(self, graph_id: str, limit: int = 2000) -> List[Dict[str, Any]]:
@@ -53,7 +53,7 @@ class Neo4jReadMixin:
             )
             return [node_to_dict(record["n"], record["labels"]) for record in result]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_node(self, uuid: str) -> Optional[Dict[str, Any]]:
@@ -67,7 +67,7 @@ class Neo4jReadMixin:
                 return node_to_dict(record["n"], record["labels"])
             return None
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_node_edges(self, node_uuid: str) -> List[Dict[str, Any]]:
@@ -85,7 +85,7 @@ class Neo4jReadMixin:
                 for record in result
             ]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_nodes_by_label(self, graph_id: str, label: str) -> List[Dict[str, Any]]:
@@ -104,7 +104,7 @@ class Neo4jReadMixin:
             result = tx.run(query, gid=graph_id)
             return [node_to_dict(record["n"], record["labels"]) for record in result]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_filtered_entities_with_edges(
@@ -179,7 +179,7 @@ class Neo4jReadMixin:
                 for record in records
             ]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             total_count, rows = self._call_with_retry(session.execute_read, _read)
 
         entities: List[Dict[str, Any]] = []
@@ -251,7 +251,7 @@ class Neo4jReadMixin:
                 for record in result
             ]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_edges_at_round(
@@ -284,7 +284,7 @@ class Neo4jReadMixin:
                 for record in result
             ]
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_graph_info(self, graph_id: str) -> Dict[str, Any]:
@@ -322,7 +322,7 @@ class Neo4jReadMixin:
                 "entity_types": entity_types,
             }
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
     def get_graph_data(self, graph_id: str) -> Dict[str, Any]:
@@ -372,7 +372,7 @@ class Neo4jReadMixin:
                 "edge_count": len(edges),
             }
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_read, _read)
 
 
