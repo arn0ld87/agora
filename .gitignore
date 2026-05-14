@@ -106,6 +106,10 @@ backend/logs/
 # Persistent caches mounted into the agora container
 backend/.cache/
 
+# Runtime artifacts and local instances
+instance/
+backend/instance/
+
 # Upload folder
 backend/uploads/
 
