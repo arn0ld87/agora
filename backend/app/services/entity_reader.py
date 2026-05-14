@@ -270,9 +270,9 @@ class EntityReader:
 
         except Exception as e:
             logger.error(
-                "Storage error while loading context for entity %s: %s",
+                "Storage error while loading context for entity %s",
                 entity_uuid,
-                str(e),
+                exc_info=True,
             )
             raise
 
