@@ -2,8 +2,8 @@
 # Neue Einträge nur nach Sub-Slice mit Architektur-Begründung im Arbeitsprotokoll.
 # Format: <rel-path>::<func>  (rel-path relativ zu backend/, func = radon-Ausgabe-Name)
 #
-# Gemessen: 2026-05-11, radon 6.0.1, radon cc -n D app/
-# Anzahl Einträge: 29 (5 x Class E/F, 24 x Class D)
+# Gemessen: 2026-05-14, radon 6.0.1, radon cc --min C --no-assert -j app/
+# Anzahl Einträge: 30 (5 x Class F, 1 x Class E, 24 x Class D)
 #
 # Top-5 nach Cyclomatic Complexity:
 #   F (cc=50)  app/services/evidence_migrations.py::migrate_v2_to_v3

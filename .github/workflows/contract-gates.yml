@@ -165,7 +165,8 @@ jobs:
       - name: Install backend deps (inkl. radon)
         working-directory: backend
         run: uv sync --group dev
-      - name: Complexity-Gate ausfuehren
+      - name: Cyclomatic-Complexity-Gate (MAI-17)
         # Schwelle: Class D+ (cc >= 21). Bestands-Hot-Spots in backend/radon-allowlist.txt.
         # Neue D/E/F-Funktionen ausserhalb der Allow-List → Exit 1.
-        run: bash scripts/check_complexity.sh
+        # Skript: backend/scripts/check_complexity.py (radon cc -j + allowlist-Match)
+        run: cd backend && uv run python scripts/check_complexity.py

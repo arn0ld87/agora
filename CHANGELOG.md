@@ -14,6 +14,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - MAI-14 · Confidence-Contradiction-Penalty (Std-Dev>0.6 ODER Range>0.6 ⇒ -0.2).
 - MAI-03 · ReportV3.hypotheses[] als dedizierter Slot, getrennt von data_gaps[].
 - MAI-08 · `report_prompts.py` zu Paket aufgesplittet (planning/sections/react/chat). Re-Export via `__init__.py` hält bestehende Imports kompatibel.
+- MAI-17 · radon-Komplexitäts-Gate (rank D+ blockiert, allowlist-basiert).
 
 ## [1.0.0] - 2026-05-11
 
