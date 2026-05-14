@@ -47,6 +47,7 @@ function makeKey(overrides: Partial<ApiKeyModel> = {}): ApiKeyModel {
     prefix: 'ago_abcd1234',
     scopes: ['read'],
     status: 'active',
+    hashed_token: 'h-mock-001',
     created_at: '2026-05-14T10:00:00Z',
     last_used_at: null,
     revoked_at: null,

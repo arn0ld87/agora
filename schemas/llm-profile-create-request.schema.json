@@ -1,0 +1,59 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-profile-create-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "api_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Api Key"
+    },
+    "base_url": {
+      "minLength": 1,
+      "title": "Base Url",
+      "type": "string"
+    },
+    "is_default": {
+      "default": false,
+      "title": "Is Default",
+      "type": "boolean"
+    },
+    "model_name": {
+      "minLength": 1,
+      "title": "Model Name",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "ollama",
+        "openai",
+        "gemini",
+        "anthropic",
+        "custom"
+      ],
+      "title": "Provider",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "provider",
+    "base_url",
+    "model_name"
+  ],
+  "title": "LlmProfileCreateRequest",
+  "type": "object"
+}
