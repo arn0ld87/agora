@@ -24,23 +24,23 @@
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
 | MAI-01 | ✅ | P4.4 Mode-Smokes in CI verdrahten | S | `.github/workflows/e2e-smokes.yml` | Refs PLAN.md §5.4 |
-| MAI-04 | 🔴 | Schema-Drift-Gate `--check` | S | `backend/app/contracts/dump_schemas.py`, `.github/workflows/contract-gates.yml` | Refs R12 |
-| MAI-13 | 🔴 | Dependabot #323 + #326 mergen | S | `backend/uv.lock` | Closes #323, Closes #326 |
+| MAI-04 | ✅ | Schema-Drift-Gate `--check` | S | `backend/app/contracts/dump_schemas.py`, `.github/workflows/contract-gates.yml` | Refs R12 |
+| MAI-13 | ✅ | Dependabot #323 + #326 mergen | S | `backend/uv.lock` | Closes #323, Closes #326 |
 
 ### Block B — Bewertungs-Score-Hebel
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-02 | 🔴 | R4 Evidence-Routing in Hypotheses/DataGaps | M | `backend/app/services/report_agent/agent.py`, `backend/app/services/report_agent/workflow.py`, `backend/app/contracts/report_contract.py` | Refs R4 |
-| MAI-03 | 🔴 | R11 Hypothesen-Slot voll integrieren | M | `backend/app/services/report_agent/sections.py`, `backend/app/services/report_agent/manager.py`, `backend/app/contracts/report_v3.py`, `frontend/src/contracts/reportV3Contract.ts` | Refs R11 |
-| MAI-14 | 🔴 | Confidence-Contradiction-Penalty | S | `backend/app/services/confidence_calculator.py`, `backend/tests/test_confidence_calculator.py` | Refs Bewertung §10 |
+| MAI-02 | ✅ | R4 Evidence-Routing in Hypotheses/DataGaps | M | `backend/app/services/report_agent/agent.py`, `backend/app/services/report_agent/workflow.py`, `backend/app/contracts/report_contract.py` | Refs R4 |
+| MAI-03 | ✅ | R11 Hypothesen-Slot voll integrieren | M | `backend/app/services/report_agent/sections.py`, `backend/app/services/report_agent/manager.py`, `backend/app/contracts/report_v3.py`, `frontend/src/contracts/reportV3Contract.ts` | Refs R11 |
+| MAI-14 | ✅ | Confidence-Contradiction-Penalty | S | `backend/app/services/confidence_calculator.py`, `backend/tests/test_confidence_calculator.py` | Refs Bewertung §10 |
 
 ### Block C — Hygiene parallel zu B
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-08 | 🔴 | `report_prompts.py` Paket-Split | M | `backend/app/services/report_prompts.py` → Paket | Refs R13 |
-| MAI-09 | 🔴 | `markdown.js` → `markdown.ts` | S | `frontend/src/utils/markdown.js` | Refs R14 |
+| MAI-08 | ✅ | `report_prompts.py` Paket-Split | M | `backend/app/services/report_prompts.py` → Paket | Refs R13 |
+| MAI-09 | ✅ | `markdown.js` → `markdown.ts` | S | `frontend/src/utils/markdown.js` | Refs R14 |
 | MAI-10 | ✅ | Issue #203 schließen | S | — (reine Doku) | Closes #203 |
 
 ### Block D — Production-Cleanup
@@ -48,14 +48,14 @@
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
 | MAI-06 | ✅ | v2-`full_report.md` retiren | L | `backend/app/services/report_agent/manager.py`, `backend/scripts/migrate_v2_full_report_to_v3.py` | Refs ADR-0001 |
-| MAI-12 | 🔴 | Fork-Safety `register_at_fork` + `--preload` | M | `backend/app/__init__.py`, `backend/run.py`, `backend/Dockerfile` | Refs CLAUDE.md Hot-Spots |
+| MAI-12 | ✅ | Fork-Safety `register_at_fork` + `--preload` | M | `backend/app/__init__.py`, `backend/app/extensions.py`, `Dockerfile` | PR #429 merged |
 | MAI-11 | ✅ | PR-Smoke nur auf RC/Release | S | `.github/workflows/docker-image.yml` | Refs STATUS.md 2026-05-06 |
 
 ### Block E — Bewertungs-Polish
 
 | Slice | Status | Titel | Aufwand | Files | Refs / Closes |
 |---|---|---|---|---|---|
-| MAI-05 | 🔴 | Voice-Lint CI-Pflicht | S | `backend/scripts/check_voice.py`, `.github/workflows/contract-gates.yml` | Refs Task 11 PLAN.md |
+| MAI-05 | ✅ | Voice-Lint CI-Pflicht | S | `backend/scripts/check_voice.py`, `.github/workflows/contract-gates.yml` | Refs Task 11 PLAN.md |
 | MAI-07 | 🔴 | Quote-Marker CSS im Standalone-HTML | S | `frontend/src/composables/useReportExports.ts`, `frontend/src/utils/markdown.ts` | Refs P3.3 |
 | MAI-15 | 🔴 | E2E mit `persona_detail_level=compact` | S | `.github/workflows/e2e-smokes.yml`, `backend/app/utils/llm_e2e_stub.py` | Refs Issue #217 |
 

@@ -139,7 +139,7 @@ git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Claude greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Das produziert
 veraltete Annahmen, halluzinierte Symbole, doppelte Recherche und unnötig große Kontextfenster. Daher gilt:
 
-**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context7`, `sequential-thinking`, GitHub/`gh`, honcho-memory/episodic-memory und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
+**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context-mode`, `context7`, `sequential-thinking`, GitHub/`gh`, honcho-memory/episodic-memory und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
 
 ### Pre-Flight-Checkliste (bevor du erste Bash/Read absetzt)
 
@@ -149,7 +149,8 @@ Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **s
 2. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Pflicht für Token-Sparen: liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
 3. **`mcp__claude_ai_Context7__resolve-library-id` + `query-docs`** wenn die Task eine Library/Framework/SDK/CLI berührt (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker, …). Auch wenn du „die Lib kennst" — Training-Cutoff ist nicht aktuell.
 4. **`sequential-thinking`** invoken wenn die Task ambig ist, Multi-File-Scope hat, oder eine Pipeline-Grenze überschreitet (graph ↔ env ↔ simulation ↔ report). Mindestens 3–5 Thoughts.
-5. **Dann erst** `Read`/`rg`/`Bash`.
+5. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen.
+6. **Dann erst** `Read`/`rg`/`Bash`.
 
 Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum (z. B. „get_minimal_context war out-of-date, deshalb direkter Read").
 
@@ -182,6 +183,15 @@ code-review-graph update    # CLI im Repo-Root
 - Vor einem großen Refactor-Briefing an einen Subagent, damit dessen Empfehlungen nicht auf altem Graph basieren.
 
 **Fallback** auf `rg`/`grep`/`Read` nur für: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas. Bei Vue/TS/Python-Code immer **erst** Graph.
+
+### context-mode — Kontext-Sandbox & Retrieval
+
+`context-mode` ist Pflicht, sobald ein Tool- oder Datei-Read voraussichtlich große Rohdaten in den Kontext laden würde.
+
+- **Doku/Wissen indexieren:** `ctx_index` für große Markdown-/Doku-/Tool-Ausgaben; danach `ctx_search` für gezielte Abrufe.
+- **Dateien analysieren:** `ctx_execute_file` nutzen, wenn du aus Logs, JSON, CSV, Markdown oder großen Source-Dateien nur kompakte Fakten brauchst.
+- **Mehrere Checks bündeln:** `ctx_batch_execute` für mehrere unabhängige Read-/Status-Kommandos plus Suchfragen; keine langen Rohoutputs in den Chat ziehen.
+- **Nicht ersetzen:** `context-mode` ersetzt nicht den `code-review-graph` für Strukturkontext und nicht `context7` für Live-Docs; es schützt den Kontext und macht Retrieval gezielt.
 
 ### context7 — Live-Docs vor Code
 

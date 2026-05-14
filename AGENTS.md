@@ -43,7 +43,7 @@ Erst nach Findings-Sichtung mergen — `git checkout main && git merge --ff-only
 Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Agent greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Veraltete Annahmen,
 halluzinierte Symbole, doppelte Recherche und unnötig große File-Reads sind zu vermeiden.
 
-**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context7`, `sequential-thinking`, GitHub/`gh` und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
+**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context-mode`, `context7`, `sequential-thinking`, GitHub/`gh` und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
 
 ### Pre-Flight-Checkliste (vor erstem Bash/Read)
 
@@ -52,7 +52,8 @@ Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **s
 1. **`code-review-graph::get_minimal_context_tool`** mit `task: "<one-liner>"`. Pflicht für Token-Sparen: liefert Risk-Score + Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
 2. **`context7::resolve-library-id` + `query-docs`** bei jeder Lib/Framework/SDK/CLI-Berührung (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker). Training-Cutoff ist nicht aktuell.
 3. **`sequential-thinking`** bei ambigen, multi-file, oder pipeline-überschreitenden Tasks. Mindestens 3–5 Thoughts.
-4. **Dann erst** `Read`/`rg`/`Bash`.
+4. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen.
+5. **Dann erst** `Read`/`rg`/`Bash`.
 
 Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum.
 
@@ -84,6 +85,15 @@ Manuelles Refresh nach:
 - vor einem großen Refactor-Briefing an Subagent.
 
 **Fallback** auf `rg`/`Read` nur für: Bash-Skripte, GitHub-Workflow-yml, Markdown, Config-Files, generierte Schemas.
+
+### context-mode — Kontext-Sandbox & Retrieval
+
+`context-mode` ist Pflicht, sobald ein Tool- oder Datei-Read voraussichtlich große Rohdaten in den Kontext laden würde.
+
+- **Doku/Wissen indexieren:** `ctx_index` für große Markdown-/Doku-/Tool-Ausgaben; danach `ctx_search` für gezielte Abrufe.
+- **Dateien analysieren:** `ctx_execute_file` nutzen, wenn du aus Logs, JSON, CSV, Markdown oder großen Source-Dateien nur kompakte Fakten brauchst.
+- **Mehrere Checks bündeln:** `ctx_batch_execute` für mehrere unabhängige Read-/Status-Kommandos plus Suchfragen; keine langen Rohoutputs in den Chat ziehen.
+- **Nicht ersetzen:** `context-mode` ersetzt nicht den `code-review-graph` für Strukturkontext und nicht `context7` für Live-Docs; es schützt den Kontext und macht Retrieval gezielt.
 
 ### context7 — Live-Docs vor Code
 
