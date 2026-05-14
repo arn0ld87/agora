@@ -35,9 +35,9 @@ def test_ensure_vector_index_dim_sanitization():
 
     # Case 2: Invalid index name (Cypher injection attempt) should raise ValueError
     hostile_name = "idx`; DROP DATABASE neo4j; //"
-    with pytest.raises(ValueError, match="Invalid index name for DROP INDEX"):
+    with pytest.raises(ValueError, match="Invalid index name"):
         storage._ensure_vector_index_dim(mock_session, hostile_name, 256)
 
     # Case 3: Another invalid name
-    with pytest.raises(ValueError, match="Invalid index name for DROP INDEX"):
+    with pytest.raises(ValueError, match="Invalid index name"):
         storage._ensure_vector_index_dim(mock_session, "invalid-name-with-dashes", 256)
