@@ -27,6 +27,12 @@ from app.contracts.llm_routing_contract import (
     ProviderDescriptor,
     ResolvedRoute,
 )
+from app.contracts.api_keys_contract import (
+    ApiKeyCreateRequest,
+    ApiKeyCreateResponse,
+    ApiKeyModel,
+    ApiKeysListResponse,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -47,6 +53,10 @@ CONTRACTS: dict[str, type] = {
     "llm-runtime-routing.schema.json": RuntimeLlmRouting,
     "llm-provider-descriptor.schema.json": ProviderDescriptor,
     "llm-resolved-route.schema.json": ResolvedRoute,
+    "api-key.schema.json": ApiKeyModel,
+    "api-key-create-request.schema.json": ApiKeyCreateRequest,
+    "api-key-create-response.schema.json": ApiKeyCreateResponse,
+    "api-keys-list-response.schema.json": ApiKeysListResponse,
 }
 
 

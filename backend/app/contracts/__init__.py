@@ -55,6 +55,14 @@ from .graph_diff import (
     NodePropertyShift,
 )
 from .persona_entity_context import EntityRelationship, PersonaEntityContext
+from .api_keys_contract import (
+    ApiKeyCreateRequest,
+    ApiKeyCreateResponse,
+    ApiKeyModel,
+    ApiKeyScope,
+    ApiKeyStatus,
+    ApiKeysListResponse,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -73,6 +81,12 @@ from .report_v3 import (
 )
 
 __all__ = [
+    "ApiKeyCreateRequest",
+    "ApiKeyCreateResponse",
+    "ApiKeyModel",
+    "ApiKeyScope",
+    "ApiKeyStatus",
+    "ApiKeysListResponse",
     "BranchComparison",
     "BranchMetrics",
     "BridgeAgentShift",
