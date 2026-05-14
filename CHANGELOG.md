@@ -5,7 +5,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
-(Keine Einträge — nächste Version öffnet den Block.)
+- MAI-01 · P4.4 Mode-Smokes als CI-Job verdrahtet (e2e-smokes.yml::report-modes-smoke).
 
 ## [1.0.0] - 2026-05-11
 
