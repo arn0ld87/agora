@@ -26,11 +26,63 @@ Labels:
   einen ``match_score >= 0.85`` trägt UND mindestens 2 unabhängige
   Quellen vorliegen — sonst gedeckelt auf 0.89)
 * Zusätzlich: wenn alle match_scores < 0.55 → Deckel auf 0.69 (medium)
+
+MAI-14: Contradiction-Penalty.
+
+Wenn Evidence-Items derselben Claim auseinandergehende Sentiments tragen,
+ist die Behauptung weniger belastbar. Konkret:
+- Wenn std(sentiment_scores) > 0.6 → Penalty -0.2.
+- Wenn min < -0.3 und max > +0.3 → Penalty -0.2 (gemischter Tenor).
+
+Die Heuristik greift in compute_confidence automatisch, sobald mindestens
+2 Evidence-Items ein sentiment_score-Feld tragen. Die Penalty wird
+zusätzlich zum extern übergebenen contradiction_penalty aufaddiert.
+compute_claim_confidence() ist die erweiterte Variante für Aufrufer,
+die applied_penalties auswerten wollen.
 """
 
 from __future__ import annotations
 
+import statistics
 from typing import Dict, List, Tuple
+
+# MAI-14: Schwellwerte für Sentiment-Contradiction-Heuristik.
+_CONTRADICTION_PENALTY_AMOUNT: float = 0.2
+_CONTRADICTION_STD_THRESHOLD: float = 0.6
+_CONTRADICTION_RANGE_LOW: float = -0.3
+_CONTRADICTION_RANGE_HIGH: float = 0.3
+
+
+def _has_contradiction(sentiment_scores: List[float]) -> bool:
+    """Erkennt widersprüchliche Sentiment-Vektoren in einem Evidence-Set.
+
+    Zwei Kriterien (OR-verknüpft):
+    1. Populationsstandardabweichung > 0.6 — hohe Streuung.
+    2. Minimum < -0.3 UND Maximum > +0.3 — gemischter Tenor.
+
+    Mindestens 2 Scores nötig; 1 Score kann nicht widersprüchlich sein.
+    """
+    if len(sentiment_scores) < 2:
+        return False
+    stddev = statistics.pstdev(sentiment_scores)
+    if stddev > _CONTRADICTION_STD_THRESHOLD:
+        return True
+    low = min(sentiment_scores)
+    high = max(sentiment_scores)
+    if low < _CONTRADICTION_RANGE_LOW and high > _CONTRADICTION_RANGE_HIGH:
+        return True
+    return False
+
+
+def _extract_sentiment_scores(evidence: List[Dict]) -> List[float]:
+    """Extrahiert valide sentiment_score-Werte aus einer Evidence-Liste."""
+    result: List[float] = []
+    for e in evidence:
+        val = e.get("sentiment_score")
+        if val is not None and isinstance(val, (int, float)):
+            result.append(float(val))
+    return result
+
 
 # S6: Source-Quality-Gewichtung. Bewusst grob — der Audit-Trail wird
 # in S5 ohnehin getrennt und fließt hier nicht ein.
@@ -96,7 +148,13 @@ def compute_confidence(
     *,
     contradiction_penalty: float = 0.0,
 ) -> Tuple[float, str]:
-    """Liefert (score, label) für eine Evidence-Liste."""
+    """Liefert (score, label) für eine Evidence-Liste.
+
+    MAI-14: Wenn sentiment_score-Felder in den Evidence-Items vorhanden sind
+    und _has_contradiction() anschlägt, wird automatisch ein Sentiment-
+    Contradiction-Penalty von 0.2 aufaddiert (zusätzlich zum extern
+    übergebenen contradiction_penalty).
+    """
     if not evidence:
         return 0.15, "low"
     relevance = _component_relevance(evidence)
@@ -104,12 +162,18 @@ def compute_confidence(
     specificity = _component_specificity(evidence)
     consistency = _component_consistency(evidence)
 
+    # MAI-14: Sentiment-Contradiction-Penalty auto-berechnen
+    sentiments = _extract_sentiment_scores(evidence)
+    sentiment_penalty = _CONTRADICTION_PENALTY_AMOUNT if _has_contradiction(sentiments) else 0.0
+
+    total_penalty = max(0.0, contradiction_penalty) + sentiment_penalty
+
     raw = (
         0.40 * relevance
         + 0.25 * source_quality
         + 0.20 * specificity
         + 0.15 * consistency
-        - max(0.0, contradiction_penalty)
+        - total_penalty
     )
     score = max(0.0, min(1.0, raw))
 
@@ -147,4 +211,42 @@ def compute_confidence(
     return round(score, 3), label
 
 
-__all__ = ["compute_confidence"]
+def compute_claim_confidence(
+    evidence: List[Dict],
+    *,
+    base_score: float = 0.5,
+    contradiction_penalty: float = 0.0,
+) -> Tuple[float, str, List[str]]:
+    """Erweiterte Variante von compute_confidence mit Penalty-Audit-Trail.
+
+    Returns:
+        (score, label, applied_penalties)
+        score: 0.0–1.0
+        label: "low" | "medium" | "high" | "verified"
+        applied_penalties: Namen aller angewandten Penalties für Audit.
+
+    MAI-14: Erkennt Sentiment-Widersprüche (std > 0.6 ODER Range > 0.6)
+    und trägt "contradiction_penalty" in applied_penalties ein.
+    """
+    applied_penalties: List[str] = []
+
+    # MAI-14: Sentiment-Contradiction-Heuristik
+    sentiments = _extract_sentiment_scores(evidence)
+    sentiment_contradiction = _has_contradiction(sentiments)
+    if sentiment_contradiction:
+        applied_penalties.append("contradiction_penalty")
+
+    # Delegiere an compute_confidence — dadurch bleiben alle bestehenden
+    # Formeln (relevance, source_quality, specificity, consistency, caps)
+    # konsistent.
+    score, label = compute_confidence(
+        evidence,
+        contradiction_penalty=contradiction_penalty,
+        # Hinweis: compute_confidence berechnet den Sentiment-Penalty intern
+        # nochmal selbst — das ist korrekt, da es die einzige Authoritative
+        # Stelle für die Formel ist.
+    )
+    return score, label, applied_penalties
+
+
+__all__ = ["compute_confidence", "compute_claim_confidence", "_has_contradiction"]
