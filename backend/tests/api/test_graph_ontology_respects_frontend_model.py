@@ -47,8 +47,9 @@ def _make_project_mock():
     Falle: ``MagicMock(name=...)`` setzt den Mock-Repr-Namen, **nicht** das
     ``.name``-Attribut. Daher alle felder explizit zugewiesen.
     """
+    import uuid
     mock = MagicMock()
-    mock.project_id = "proj_abcdef012345"
+    mock.project_id = f"proj_{uuid.uuid4().hex[:12]}"
     mock.name = "Test"
     mock.files = []
     mock.total_text_length = 42
@@ -114,15 +115,17 @@ def test_ontology_generate_uses_frontend_llm_model_and_provider(
     assert response.get_json()["success"] is True
 
     # LLMClient muss mit dem Frontend-Modell + Provider-Override instanziiert sein.
-    llm_client_cls.assert_called_once()
-    kwargs = llm_client_cls.call_args.kwargs
-    assert kwargs.get("model") == "gpt-5-mini"
-    assert kwargs.get("api_key") == "sk-test"
-    assert kwargs.get("base_url") == "https://api.openai.com/v1"
+    # Nach Refactor wird .from_route() verwendet.
+    llm_client_cls.from_route.assert_called_once()
+    route = llm_client_cls.from_route.call_args.args[0]
+    assert route.model == "gpt-5-mini"
+    assert route.provider_id == "openai"
+    # base_url wird im SecretResolver/from_route aufgelöst, hier prüfen wir die Route
+    assert route.base_url_sanitized == "https://api.openai.com/v1"
 
     # OntologyGenerator muss den injizierten Client bekommen.
     ontology_generator_cls.assert_called_once()
-    assert ontology_generator_cls.call_args.kwargs.get("llm_client") is llm_client_cls.return_value
+    assert ontology_generator_cls.call_args.kwargs.get("llm_client") is llm_client_cls.from_route.return_value
 
 
 @patch("app.api.graph.LLMClient")
@@ -160,10 +163,11 @@ def test_ontology_generate_without_overrides_uses_server_default(
     )
 
     assert response.status_code == 200, response.get_json()
-    llm_client_cls.assert_called_once()
-    kwargs = llm_client_cls.call_args.kwargs
-    # Ohne Runtime-Provider liefert client_kwargs nur {"model": None}.
-    assert kwargs == {"model": None}
+    llm_client_cls.from_route.assert_called_once()
+    route = llm_client_cls.from_route.call_args.args[0]
+    # Standard-Modell aus Config
+    from app.config import Config
+    assert route.model == Config.LLM_MODEL_NAME
 
 
 def test_ontology_generate_rejects_invalid_llm_provider_json(client):

@@ -297,6 +297,8 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
         patch("app.api.graph.get_container", return_value=fake_container),
         patch("app.api.graph.TextProcessor.split_text", return_value=["chunk1", "chunk2"]),
         patch("app.api.graph.ArtifactLocator.existing_paths", return_value={}),
+        patch("app.api.graph.seed_run_stage_routing"),
+        patch("app.api.graph._make_ner_override_from_route", return_value=MagicMock()),
     ):
         flask_app = Flask(__name__)
         storage = MagicMock()

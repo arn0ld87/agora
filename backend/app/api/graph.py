@@ -288,11 +288,37 @@ def generate_ontology():
     logger.info(f"Text extraction completed, total {len(all_text)} characters")
 
     # Generate ontology
-    llm_client = LLMClient(**llm_runtime.client_kwargs(model=llm_model_override))
+    run_record = run_registry.create_run(
+        run_type="ontology_generate",
+        entity_id=project.project_id,
+        status="processing",
+        progress=0,
+        message="Ontology generation started",
+        linked_ids={"project_id": project.project_id},
+    )
+    run_id = run_record["run_id"]
+    seed_run_stage_routing(
+        run_id,
+        "ontology_generation",
+        llm_model_override=llm_model_override,
+        llm_runtime=llm_runtime,
+    )
+    route_router = StageModelRouter(run_id)
+    ingest_route = route_router.resolve("document_ingest")
+    route_router.lock_stage("document_ingest", ingest_route)
+    ontology_route = route_router.resolve("ontology_generation")
+    route_router.lock_stage("ontology_generation", ontology_route)
+
+    llm_client = LLMClient.from_route(
+        ontology_route,
+        api_key=resolve_route_api_key(ontology_route, llm_runtime),
+        run_id=run_id,
+    )
     logger.info(
-        "Calling LLM to generate ontology definition (model=%s, runtime_provider=%s)",
+        "Calling LLM to generate ontology definition (model=%s, provider=%s, version=%d)",
         llm_client.model,
-        llm_runtime.provider,
+        ontology_route.provider_id,
+        ontology_route.routing_version,
     )
     generator = OntologyGenerator(llm_client=llm_client)
     ontology = generator.generate(
@@ -318,6 +344,13 @@ def generate_ontology():
     project.llm_model = llm_model_override
     project.llm_provider = llm_runtime.redacted_metadata() or None
     ProjectManager.save_project(project)
+    run_registry.update_run(
+        run_id,
+        status="completed",
+        progress=100,
+        message="Ontology generation completed",
+        linked_ids={"project_id": project.project_id},
+    )
     logger.info(f"=== Ontology generation completed === Project ID: {project.project_id}")
 
     return json_success({

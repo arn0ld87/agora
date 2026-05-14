@@ -76,4 +76,5 @@ def test_provider(provider_id: str):
 
         return json_success(test_result)
     except Exception as exc:
-        return json_error(f"Test failed: {exc}", status=400)
+        logger.exception("Provider test failed for %s: %s", provider_id, exc)
+        return json_error("Test failed: connectivity or authentication error", status=400)

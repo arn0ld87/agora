@@ -26,9 +26,11 @@ import traceback
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
+from ..contracts.llm_routing_contract import ResolvedRoute
 from ..utils.logger import get_logger
 from .entity_reader import EntityReader
 from .settings_layer import get_default_service as _get_settings
+from .llm_routing_seed import resolve_route_api_key
 from .llm_runtime import RuntimeLlmConfig
 from .oasis_profile_generator import OasisAgentProfile, OasisProfileGenerator
 from .persona_quota_defaults import default_dach_industry_quota
@@ -39,6 +41,18 @@ if TYPE_CHECKING:
     from .simulation_manager import SimulationManager, SimulationState
 
 logger = get_logger("agora.prepare")
+
+LlmRuntimeInput = RuntimeLlmConfig | ResolvedRoute
+
+
+def _resolve_llm_connection(
+    llm_runtime: Optional[LlmRuntimeInput],
+) -> tuple[Optional[str], Optional[str]]:
+    if isinstance(llm_runtime, ResolvedRoute):
+        return resolve_route_api_key(llm_runtime), llm_runtime.base_url_sanitized
+    if llm_runtime and llm_runtime.enabled:
+        return llm_runtime.api_key, llm_runtime.base_url
+    return None, None
 
 
 def _phase_read_entities(
@@ -106,8 +120,9 @@ def _phase_generate_profiles(
     sim_dir: str,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
+    run_id: Optional[str] = None,
     use_llm_for_profiles: bool,
     parallel_profile_count: int,
     progress_callback: Optional[Callable] = None,
@@ -142,9 +157,12 @@ def _phase_generate_profiles(
     # Issue #215: Branchenverteilung-Plan für LLM-Prompt — Default Destatis WZ 2008
     # (IT-Cap ≤ 12 %). total_entities als Pool-Größe für proportionale Verteilung.
     industry_plan = default_dach_industry_quota(max(total_entities, 1))
+
+    api_key, base_url = _resolve_llm_connection(llm_runtime)
+
     generator = OasisProfileGenerator(
-        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
-        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
+        api_key=api_key,
+        base_url=base_url,
         storage=storage,
         graph_id=state.graph_id,
         model_name=llm_model,
@@ -230,8 +248,9 @@ def _phase_generate_config(
     filtered,
     *,
     llm_model: Optional[str],
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
+    run_id: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
 ) -> None:
@@ -254,9 +273,11 @@ def _phase_generate_config(
             total=3,
         )
 
+    api_key, base_url = _resolve_llm_connection(llm_runtime)
+
     config_generator = SimulationConfigGenerator(
-        api_key=llm_runtime.api_key if llm_runtime and llm_runtime.enabled else None,
-        base_url=llm_runtime.base_url if llm_runtime and llm_runtime.enabled else None,
+        api_key=api_key,
+        base_url=base_url,
         model_name=llm_model,
         language=language,
     )
@@ -461,10 +482,11 @@ def prepare_simulation(
     parallel_profile_count: Optional[int] = None,
     storage: Any = None,
     llm_model: Optional[str] = None,
-    llm_runtime: Optional[RuntimeLlmConfig] = None,
+    llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str] = None,
     max_agents: Optional[int] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
+    run_id: Optional[str] = None,
 ) -> SimulationState:
     """Orchestrator für die drei Prepare-Phasen.
 
@@ -520,6 +542,7 @@ def prepare_simulation(
             parallel_profile_count=parallel_profile_count,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
+            run_id=run_id,
         )
 
         # Optional quota check: ValidationError propagates → FAILED state.
@@ -539,6 +562,7 @@ def prepare_simulation(
             language=language,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
+            run_id=run_id,
         )
 
         # Run scripts remain in backend/scripts/ directory, no longer copy to
