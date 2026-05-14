@@ -150,6 +150,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["/app/backend/.venv/bin/gunicorn", \
      "-k", "gevent", \
      "--workers", "2", \
+     "--preload", \
      "--timeout", "60", \
      "--graceful-timeout", "30", \
      "--bind", "0.0.0.0:5001", \

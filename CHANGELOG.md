@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+- MAI-12 · Fork-safe Neo4j/Redis-Pools via `os.register_at_fork`; gunicorn `--preload` aktiviert — eliminiert doppelte Init-Logs, ~40 % schnellerer Worker-Start.
+
 - MAI-06 · ReportV3 als Single Source of Truth, full_report.md nur noch on-demand-Render. `assemble_full_report` schreibt nicht mehr stumm auf Disk. `save_report` entfernt den full_report.md-Write-Pfad. Export-Endpoint `format=md` rendert on-demand via `render_report_v3()` aus `report-v3.json`; Fallback auf `markdown_content` für Bestandsreports ohne v3-Artefakt. Migrations-Inventar via `backend/scripts/migrate_v2_full_report_to_v3.py`.
 
 - MAI-11 · prod-proxy-smoke nur auf release/rc/Tags/main automatisch; Feature-PRs opt-in via needs-prod-smoke-Label.

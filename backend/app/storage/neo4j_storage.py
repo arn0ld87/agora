@@ -87,6 +87,21 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         """Close the Neo4j driver connection."""
         self._driver.close()
 
+    def _reset_driver_after_fork(self) -> None:
+        """Close and discard the inherited driver after gunicorn fork.
+
+        The first real DB call will trigger a new connection via the
+        existing lazy-connect logic in neo4j_call_with_retry.
+        """
+        try:
+            if self._driver is not None:
+                self._driver.close()
+        except Exception:
+            pass
+        finally:
+            self._driver = None
+            self._is_connected = False
+
     def set_ontology_mutation_service(self, service) -> None:
         """Late-bind the Issue #11 ``OntologyMutationService``.
 
