@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
-import Card from '@/components/v4/forms/Card.vue'
+import ComingSoonCard from '@/components/v4/forms/ComingSoonCard.vue'
+
+const { t } = useI18n()
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
@@ -12,24 +15,13 @@ const BREADCRUMBS = [
 <template>
   <AppShell :breadcrumbs="BREADCRUMBS">
     <PageHeader
-      title="Users & Teams"
-      subtitle="Nutzer verwalten und Teamzugaenge konfigurieren."
+      :title="t('settings.v4.usersTeams.title')"
+      :subtitle="t('settings.v4.usersTeams.subtitle')"
     />
 
-    <Card title="Teammitglieder">
-      <p class="stub-hint">
-        Inhalt folgt in Slice G — aktuell verwaltet ueber den klassischen Tab in
-        <RouterLink :to="{ name: 'Settings', query: { tab: 'users' } }">/settings?tab=users</RouterLink>.
-      </p>
-    </Card>
+    <ComingSoonCard
+      :title="t('settings.v4.usersTeams.empty.title')"
+      :description="t('settings.v4.usersTeams.empty.description')"
+    />
   </AppShell>
 </template>
-
-<style scoped>
-.stub-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-</style>
