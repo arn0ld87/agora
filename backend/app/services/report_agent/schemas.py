@@ -174,6 +174,4 @@ __all__ = [
     # M11.8d — Section-Metadata DTOs + mapper
     "SectionKeyTakeaway",
     "SectionMetadata",
-    "_make_table_metadata",
-    "_section_schema_for",
 ]
