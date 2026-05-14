@@ -40,22 +40,8 @@ class TestResolveDefaultEventBusNoContext:
 class TestResolveDefaultEventBusFlaskMissing:
     def test_import_error_yields_fallback(self, monkeypatch):
         """If flask cannot be imported the function must still return the fallback."""
-        # Temporarily make the flask import fail inside the function.
-        original_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
-
-        def _block_flask(name, *args, **kwargs):
-            if name == "flask":
-                raise ImportError("flask is not installed")
-            return original_import(name, *args, **kwargs)
-
-        # Patch builtins.__import__ so the lazy `from flask import …` fails.
-        import builtins
-        monkeypatch.setattr(builtins, "__import__", _block_flask)
-
-        # Remove cached flask module so the import actually runs.
-        flask_modules = {k: v for k, v in sys.modules.items() if k == "flask" or k.startswith("flask.")}
-        for k in flask_modules:
-            monkeypatch.delitem(sys.modules, k, raising=False)
+        # Setting a module to None in sys.modules triggers an ImportError on import.
+        monkeypatch.setitem(sys.modules, "flask", None)
 
         result = resolve_default_event_bus()
         assert isinstance(result, FilePollingEventBus)
