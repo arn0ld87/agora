@@ -215,12 +215,12 @@ class EntityReader:
         Returns:
             EntityNode or None.
         """
-        try:
-            # Get the node directly by UUID (O(1) lookup)
-            node = self.storage.get_node(entity_uuid)
-            if not node:
-                return None
+        # Not-found path: storage returns None for unknown UUIDs (expected, no error).
+        node = self.storage.get_node(entity_uuid)
+        if not node:
+            return None
 
+        try:
             # Get edges for this node (O(degree) via Cypher)
             edges = self.storage.get_node_edges(entity_uuid)
 
@@ -269,8 +269,12 @@ class EntityReader:
             )
 
         except Exception as e:
-            logger.error(f"Failed to get entity {entity_uuid}: {str(e)}")
-            return None
+            logger.error(
+                "Storage error while loading context for entity %s: %s",
+                entity_uuid,
+                str(e),
+            )
+            raise
 
     def get_entities_by_type(
         self,
