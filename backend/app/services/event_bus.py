@@ -527,7 +527,11 @@ def resolve_default_event_bus() -> SimulationEventBus:
     """
     try:
         from flask import current_app, has_app_context
+    except ImportError:
+        # Flask is not installed (subprocess / standalone script context).
+        return FilePollingEventBus()
 
+    try:
         if has_app_context():
             container = current_app.extensions.get("container")
             if container is not None:
@@ -535,8 +539,12 @@ def resolve_default_event_bus() -> SimulationEventBus:
             bus = current_app.extensions.get("event_bus")
             if bus is not None:
                 return bus
-    except Exception:  # noqa: BLE001 — Flask optional at import time
-        pass
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "resolve_default_event_bus: unexpected error reading Flask extensions; "
+            "falling back to FilePollingEventBus",
+            exc_info=True,
+        )
     return FilePollingEventBus()
 
 
