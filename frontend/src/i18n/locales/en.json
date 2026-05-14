@@ -71,7 +71,8 @@
     "and": "and",
     "or": "or",
     "all": "All",
-    "none": "None"
+    "none": "None",
+    "tryAgain": "Try again"
   },
   "home": {
     "kicker": "STUDIO · LOCAL",
@@ -93,11 +94,22 @@
       "desc": "The engine runs on your hardware. No account, no signup. Drop a document, write the question — the simulation does the rest."
     },
     "metrics": {
-      "free": { "value": "Free", "label": "Runs on your hardware" },
-      "private": { "value": "Private", "label": "Nothing leaves this machine" },
-      "openSource": { "value": "Open", "label": "AGPL-3.0 licensed" }
+      "free": {
+        "value": "Free",
+        "label": "Runs on your hardware"
+      },
+      "private": {
+        "value": "Private",
+        "label": "Nothing leaves this machine"
+      },
+      "openSource": {
+        "value": "Open",
+        "label": "AGPL-3.0 licensed"
+      }
     },
-    "workflow": { "kicker": "№ 03 — WORKFLOW" },
+    "workflow": {
+      "kicker": "№ 03 — WORKFLOW"
+    },
     "console": {
       "uploadKicker": "01 / DOCUMENT",
       "uploadTitle": "Drop your documents here.",
@@ -112,11 +124,31 @@
       "needPrompt": "Add a simulation description."
     },
     "steps": [
-      { "num": "01", "title": "Build graph", "desc": "Extract entities and relations from your document — knowledge graph in Neo4j." },
-      { "num": "02", "title": "Environment", "desc": "Generate hundreds of agent personas with personality, bias and reaction profile." },
-      { "num": "03", "title": "Simulation", "desc": "Agents post, reply, argue — round-based, observable in real time." },
-      { "num": "04", "title": "Report", "desc": "ReportAgent searches the result, interviews a focus group and writes the report." },
-      { "num": "05", "title": "Conversation", "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent." }
+      {
+        "num": "01",
+        "title": "Build graph",
+        "desc": "Extract entities and relations from your document — knowledge graph in Neo4j."
+      },
+      {
+        "num": "02",
+        "title": "Environment",
+        "desc": "Generate hundreds of agent personas with personality, bias and reaction profile."
+      },
+      {
+        "num": "03",
+        "title": "Simulation",
+        "desc": "Agents post, reply, argue — round-based, observable in real time."
+      },
+      {
+        "num": "04",
+        "title": "Report",
+        "desc": "ReportAgent searches the result, interviews a focus group and writes the report."
+      },
+      {
+        "num": "05",
+        "title": "Conversation",
+        "desc": "Talk directly to the agents in the simulated world — or to the ReportAgent."
+      }
     ],
     "differentiators": [
       {
@@ -656,7 +688,10 @@
       "set": "•••••••• (set)",
       "empty": "empty"
     },
-    "bool": { "on": "on", "off": "off" },
+    "bool": {
+      "on": "on",
+      "off": "off"
+    },
     "modal": {
       "title": "Confirm secrets",
       "body": "You're about to save changes to secret fields (e.g. {neoPw} or {authToken}). A typo here can lock you out of the backend — please double-check.",
@@ -670,14 +705,14 @@
       "ontology": "Ontology",
       "hybrid_search": "Hybrid Search",
       "agent_tools": "Agent Tools",
-        "event_bus": "Event Bus",
-        "logging": "Logging",
-        "locale": "Locale",
-        "ui": "UI",
-        "webtools": "Webtools",
-        "oasis": "OASIS",
-        "security": "Secrets"
-      }
+      "event_bus": "Event Bus",
+      "logging": "Logging",
+      "locale": "Locale",
+      "ui": "UI",
+      "webtools": "Webtools",
+      "oasis": "OASIS",
+      "security": "Secrets"
+    }
   },
   "activeModel": {
     "label": "Active model",
@@ -811,5 +846,85 @@
     "simulationFailed": "Simulation failed.",
     "reportFailed": "Report failed.",
     "unknown": "Unknown error."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Active runs, reports, system state at a glance.",
+    "hero": {
+      "title": "New run",
+      "subtitle": "Drop source, pick model, start.",
+      "sourceLabel": "Source",
+      "dropHint": "Drop file here or click",
+      "modelLabel": "Model",
+      "modelDefault": "Default",
+      "languageLabel": "Language",
+      "startCta": "Start",
+      "disabledHint": "Pick a file first, then start."
+    },
+    "stats": {
+      "activeRuns": "Active runs",
+      "completedToday": "Done today",
+      "avgConfidence": "Avg confidence",
+      "personas": "Personas live"
+    },
+    "active": {
+      "title": "Active runs",
+      "emptyTitle": "No active runs",
+      "emptyHint": "Start a new run from a source above.",
+      "errorLabel": "Error",
+      "columns": {
+        "runId": "Run ID",
+        "project": "Project",
+        "phase": "Phase",
+        "progress": "Progress",
+        "started": "Started",
+        "actions": ""
+      },
+      "phase": {
+        "graph_build": "Graph build",
+        "simulation_prepare": "Personas",
+        "simulation_run": "Simulation",
+        "report_generate": "Report"
+      }
+    },
+    "system": {
+      "title": "System",
+      "ollama": "Ollama",
+      "neo4j": "Neo4j",
+      "oasis": "OASIS",
+      "disk": "Disk",
+      "diskFree": "free",
+      "statusReachable": "reachable",
+      "statusUnreachable": "offline",
+      "statusIdle": "idle",
+      "oasisHint": "Becomes active when a run starts.",
+      "ollamaHint": "{n} models available"
+    },
+    "reports": {
+      "title": "Recent reports",
+      "emptyTitle": "No reports yet",
+      "emptyHint": "Once a run completes, it shows up here.",
+      "columns": {
+        "reportId": "Report ID",
+        "project": "Project",
+        "personas": "Personas",
+        "confidence": "Confidence",
+        "date": "Date",
+        "actions": ""
+      }
+    },
+    "quick": {
+      "compare": "Compare",
+      "compareHint": "Branches & runs side-by-side",
+      "history": "History",
+      "historyHint": "Browse all runs",
+      "settings": "Settings",
+      "settingsHint": "LLM routing, API keys, audit"
+    },
+    "time": {
+      "secondsAgo": "{n}s ago",
+      "minutesAgo": "{n}m ago",
+      "hoursAgo": "{n}h ago"
+    }
   }
 }
