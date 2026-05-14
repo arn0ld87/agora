@@ -796,6 +796,22 @@
           "title": "Audit-Trail folgt",
           "description": "Ein revisionssicherer Append-Only-Log für sicherheitsrelevante Aktionen wird mit dem Identity-Modul ausgeliefert."
         }
+      },
+      "llmProvider": {
+        "title": "LLM-Anbieter",
+        "subtitle": "Wähle einen Anbieter und hinterlege API-Key und Modell.",
+        "baseUrlLabel": "Base URL",
+        "apiKeyLabel": "API Key",
+        "modelLabel": "Modell",
+        "saveBtn": "Speichern",
+        "savedHint": "Gespeichert.",
+        "presets": {
+          "ollama": "Ollama (lokal)",
+          "openai": "OpenAI",
+          "gemini": "Gemini",
+          "anthropic": "Anthropic",
+          "custom": "Eigener Endpunkt"
+        }
       }
     }
   },
@@ -944,7 +960,9 @@
       "modelDefault": "Standard",
       "languageLabel": "Sprache",
       "startCta": "Starten",
-      "disabledHint": "Erst Datei wählen, dann starten."
+      "disabledHint": "Erst Datei und Fragestellung eingeben, dann starten.",
+      "requirementLabel": "Fragestellung / Anforderung",
+      "requirementPlaceholder": "z. B. 'Welche politischen Reaktionen sind in der DACH-Region zu erwarten?'"
     },
     "stats": {
       "activeRuns": "Aktive Runs",

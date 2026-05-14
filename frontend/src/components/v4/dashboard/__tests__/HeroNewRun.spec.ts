@@ -42,7 +42,22 @@ describe('HeroNewRun', () => {
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
-  it('aktiviert CTA nach Datei-Upload und navigiert zu /process/new', async () => {
+  it('CTA bleibt deaktiviert mit Datei aber ohne Requirement', async () => {
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(w.find('.hero-cta').attributes('disabled')).toBeDefined()
+  })
+
+  it('aktiviert CTA und startet nach Datei + Requirement', async () => {
     const router = makeRouter()
     await router.push('/dashboard')
     const pushSpy = vi.spyOn(router, 'push')
@@ -55,12 +70,19 @@ describe('HeroNewRun', () => {
     await input.trigger('change')
     await flushPromises()
 
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
     const btn = w.find('.hero-cta')
     expect(btn.attributes('disabled')).toBeUndefined()
     await btn.trigger('click')
     await flushPromises()
 
-    expect(setPendingUpload).toHaveBeenCalledTimes(1)
+    expect(setPendingUpload).toHaveBeenCalledWith(
+      [file],
+      'Wie reagiert die DACH-Region?',
+    )
     expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })
 })

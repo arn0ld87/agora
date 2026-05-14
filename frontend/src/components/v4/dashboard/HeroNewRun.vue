@@ -70,6 +70,7 @@ function removeLocal(key: string): void {
 
 const modelOption = ref<string>(readLocal(STORAGE_MODEL) || 'default')
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
+const simulationRequirement = ref('')
 
 const modelOptions = computed<ModelOption[]>(() => {
   const opts: ModelOption[] = [
@@ -83,7 +84,9 @@ const modelOptions = computed<ModelOption[]>(() => {
   return opts
 })
 
-const canSubmit = computed(() => files.value.length > 0 && !loadingStatus.value)
+const canSubmit = computed(
+  () => files.value.length > 0 && simulationRequirement.value.trim() !== '' && !loadingStatus.value,
+)
 
 async function loadStatus() {
   loadingStatus.value = true
@@ -178,7 +181,7 @@ async function startSimulation() {
     writeLocal(STORAGE_MODEL, modelOption.value)
     writeLocal(STORAGE_LANG, language.value)
     removeLocal(STORAGE_CUSTOM_MODEL)
-    setPendingUpload(files.value, '')
+    setPendingUpload(files.value, simulationRequirement.value.trim())
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
@@ -262,6 +265,19 @@ onMounted(() => void loadStatus())
             <option value="de">Deutsch</option>
             <option value="en">English</option>
           </select>
+        </div>
+        <div class="hero-field hero-field--full">
+          <label class="hero-label" for="hero-requirement">
+            {{ $t('dashboard.hero.requirementLabel') }}
+            <span class="hero-required">*</span>
+          </label>
+          <textarea
+            id="hero-requirement"
+            v-model="simulationRequirement"
+            class="hero-textarea"
+            :placeholder="$t('dashboard.hero.requirementPlaceholder')"
+            rows="3"
+          />
         </div>
       </div>
 
@@ -531,5 +547,31 @@ onMounted(() => void loadStatus())
   .hero-file__remove {
     transition: none;
   }
+}
+
+.hero-field--full {
+  grid-column: 1 / -1;
+}
+.hero-required {
+  color: var(--status-red, #c0392b);
+  margin-left: 2px;
+}
+.hero-textarea {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-4, 8px);
+  background: var(--surface-elevated, #fff);
+  color: var(--text-primary);
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+.hero-textarea:hover { border-color: var(--hairline-strong); }
+.hero-textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>

@@ -796,6 +796,22 @@
           "title": "Audit trail coming soon",
           "description": "A tamper-evident append-only log for security-relevant actions ships with the identity module."
         }
+      },
+      "llmProvider": {
+        "title": "LLM Provider",
+        "subtitle": "Select a provider and enter your API key and model.",
+        "baseUrlLabel": "Base URL",
+        "apiKeyLabel": "API Key",
+        "modelLabel": "Model",
+        "saveBtn": "Save",
+        "savedHint": "Saved.",
+        "presets": {
+          "ollama": "Ollama (local)",
+          "openai": "OpenAI",
+          "gemini": "Gemini",
+          "anthropic": "Anthropic",
+          "custom": "Custom endpoint"
+        }
       }
     }
   },
@@ -944,7 +960,9 @@
       "modelDefault": "Default",
       "languageLabel": "Language",
       "startCta": "Start",
-      "disabledHint": "Pick a file first, then start."
+      "disabledHint": "Select a file and enter a requirement first.",
+      "requirementLabel": "Research question / requirement",
+      "requirementPlaceholder": "e.g. \"What political reactions are expected in the DACH region?\""
     },
     "stats": {
       "activeRuns": "Active runs",
