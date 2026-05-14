@@ -14,17 +14,17 @@ interface Preset {
   needsKey: boolean
 }
 
-const PRESETS: Preset[] = [
+const PRESETS = computed<Preset[]>(() => [
   { key: 'ollama',     label: t('settings.v4.llmProvider.presets.ollama'),     url: 'http://localhost:11434/v1',                               needsKey: false },
   { key: 'openai',    label: t('settings.v4.llmProvider.presets.openai'),    url: 'https://api.openai.com/v1',                               needsKey: true  },
   { key: 'gemini',    label: t('settings.v4.llmProvider.presets.gemini'),    url: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true  },
   { key: 'anthropic', label: t('settings.v4.llmProvider.presets.anthropic'), url: 'https://api.anthropic.com/v1',                            needsKey: true  },
   { key: 'custom',    label: t('settings.v4.llmProvider.presets.custom'),    url: '',                                                        needsKey: false },
-]
+])
 
 const currentUrl = computed(() => (store.draft['LLM_BASE_URL'] as string) ?? '')
 const activePreset = computed(
-  () => PRESETS.find(p => p.url !== '' && p.url === currentUrl.value) ?? PRESETS[4],
+  () => PRESETS.value.find(p => p.url !== '' && p.url === currentUrl.value) ?? PRESETS.value[4],
 )
 
 const baseUrl = computed({
