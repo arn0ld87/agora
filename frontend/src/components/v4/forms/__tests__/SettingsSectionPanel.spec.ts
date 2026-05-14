@@ -114,4 +114,26 @@ describe('SettingsSectionPanel', () => {
     const w = await mountPanel([])
     expect(w.find('.v4-banner--muted').exists()).toBe(true)
   })
+
+  // Regression: Gemini HIGH-Finding auf #422 — hasDirtySecrets darf nur
+  // Secrets aus den erlaubten Sektionen beruecksichtigen.
+  it('zeigt kein Secret-Modal, wenn dirty Secret in nicht sichtbarer Sektion liegt', async () => {
+    const w = await mountPanel(['llm'])
+    const { useSettingsStore } = await import('@/store/settings')
+    const store = useSettingsStore()
+    // dirty Secret in 'neo4j' setzen — neo4j ist NICHT in allowedSections.
+    ;(store.draft as Record<string, unknown>).NEO4J_PASSWORD = 'neu'
+    await flushPromises()
+
+    // Save-Button finden (zweiter Btn im Footer) und klicken.
+    const buttons = w.findAll('button')
+    const saveBtn = buttons.find((b) => b.text().includes('Speichern'))
+    expect(saveBtn).toBeDefined()
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    // Modal darf nicht erscheinen, weil das dirty Secret nicht zu den
+    // sichtbaren Sektionen gehoert.
+    expect(w.find('.v4-modal').exists()).toBe(false)
+  })
 })

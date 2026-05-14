@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 import Badge from '@/components/ui/Badge.vue'
 import Btn from '@/components/ui/Btn.vue'
 import { useSettingsStore } from '@/store/settings'
+import type { SettingsFieldMeta } from '@/contracts/settingsContract'
 
 const props = defineProps<{
   /** Erlaubte Sektions-IDs; alle anderen werden ausgeblendet. */
@@ -24,7 +25,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
-const { sections, schema, fields, dirtyKeys, dirtySectionFlags } = storeToRefs(settingsStore)
+const { sections, fields, dirtySectionFlags } = storeToRefs(settingsStore)
 
 const showSecretsModal = ref(false)
 const flashMessage = ref('')
@@ -51,32 +52,31 @@ watch(
   { immediate: true },
 )
 
-const currentFields = computed(
-  () => (fields.value as Record<string, unknown[]> | undefined)?.[activeSection.value] || [],
+// Felder der aktiven Sektion — typed, kein `as` mehr im Template noetig.
+const currentFields = computed<SettingsFieldMeta[]>(
+  () => fields.value[activeSection.value] ?? [],
 )
 
 const dirtySections = computed(() => dirtySectionFlags.value)
 
-// Nur dirty-Keys aus erlaubten Sektionen zaehlen — gemeinsamer Save-Pfad
-// sieht jedoch alle dirty Keys; saveSettings ist atomar.
-const totalDirty = computed(() => {
-  const allow = new Set(props.allowedSections)
-  return (dirtyKeys.value as string[]).filter((key: string) => {
-    const spec = (schema.value as Array<{ key: string; section: string }> | undefined)?.find(
-      (s) => s.key === key,
-    )
-    return spec ? allow.has(spec.section) : false
-  }).length
-})
+// Dirty-Counter: direkt ueber die vorgrupperten fields[section] iterieren.
+// Spart die O(N*M) Schema-Suche aus der ersten Slice-G1-Implementierung
+// (Gemini Followup zu #422).
+const totalDirty = computed(() =>
+  props.allowedSections.reduce((acc, section) => {
+    const sectionFields = fields.value[section] ?? []
+    return acc + sectionFields.filter((f) => settingsStore.isDirty(f.key)).length
+  }, 0),
+)
 
-const hasDirtySecrets = computed(() => {
-  return (dirtyKeys.value as string[]).some((key: string) => {
-    const spec = (schema.value as Array<{ key: string; secret?: boolean }> | undefined)?.find(
-      (s) => s.key === key,
-    )
-    return Boolean(spec?.secret)
-  })
-})
+// Secret-Check ist auf die in dieser View sichtbaren Sektionen begrenzt.
+// Sonst wuerde das Bestaetigungs-Modal auch bei dirty Secrets in einer
+// nicht sichtbaren Sektion erscheinen (Gemini HIGH-Finding auf #422).
+const hasDirtySecrets = computed(() =>
+  props.allowedSections.some((section) =>
+    (fields.value[section] ?? []).some((f) => f.secret && settingsStore.isDirty(f.key)),
+  ),
+)
 
 onMounted(async () => {
   try {
@@ -200,86 +200,63 @@ function setDraftValue(key: string, value: unknown) {
           <tbody>
             <tr
               v-for="field in currentFields"
-              :key="(field as { key: string }).key"
+              :key="field.key"
               :class="{
-                'v4-fields__row--dirty': settingsStore.isDirty((field as { key: string }).key),
-                'v4-fields__row--secret': (field as { secret?: boolean }).secret,
+                'v4-fields__row--dirty': settingsStore.isDirty(field.key),
+                'v4-fields__row--secret': field.secret,
               }"
             >
               <th scope="row" class="v4-fields__cell-key">
-                <code>{{ (field as { key: string }).key }}</code>
+                <code>{{ field.key }}</code>
               </th>
               <td class="v4-fields__cell-source">
-                <Badge :variant="sourceVariant((field as { source: string }).source)">
-                  {{ sourceLabel((field as { source: string }).source) }}
+                <Badge :variant="sourceVariant(field.source)">
+                  {{ sourceLabel(field.source) }}
                 </Badge>
               </td>
               <td class="v4-fields__cell-input">
-                <template v-if="(field as { secret?: boolean }).secret">
+                <template v-if="field.secret">
                   <input
                     type="password"
                     class="v4-input v4-input--secret"
                     :placeholder="
-                      (field as { is_set?: boolean }).is_set
+                      field.is_set
                         ? t('settings.secretInput.set')
                         : t('settings.secretInput.empty')
                     "
-                    :value="
-                      (settingsStore.draft as Record<string, unknown>)[
-                        (field as { key: string }).key
-                      ] || ''
-                    "
+                    :value="settingsStore.draft[field.key] || ''"
                     autocomplete="new-password"
                     @input="
-                      setDraftValue(
-                        (field as { key: string }).key,
-                        ($event.target as HTMLInputElement).value,
-                      )
+                      setDraftValue(field.key, ($event.target as HTMLInputElement).value)
                     "
                   >
                 </template>
-                <template v-else-if="(field as { type: string }).type === 'bool'">
+                <template v-else-if="field.type === 'bool'">
                   <label class="v4-bool-row">
                     <input
                       type="checkbox"
-                      :checked="
-                        (settingsStore.draft as Record<string, unknown>)[
-                          (field as { key: string }).key
-                        ] === true
-                      "
+                      :checked="settingsStore.draft[field.key] === true"
                       @change="
-                        setDraftValue(
-                          (field as { key: string }).key,
-                          ($event.target as HTMLInputElement).checked,
-                        )
+                        setDraftValue(field.key, ($event.target as HTMLInputElement).checked)
                       "
                     >
                     <span>{{
-                      (settingsStore.draft as Record<string, unknown>)[
-                        (field as { key: string }).key
-                      ] === true
+                      settingsStore.draft[field.key] === true
                         ? t('settings.bool.on')
                         : t('settings.bool.off')
                     }}</span>
                   </label>
                 </template>
-                <template v-else-if="(field as { type: string }).type === 'enum'">
+                <template v-else-if="field.type === 'enum'">
                   <select
                     class="v4-input"
-                    :value="
-                      (settingsStore.draft as Record<string, unknown>)[
-                        (field as { key: string }).key
-                      ]
-                    "
+                    :value="settingsStore.draft[field.key]"
                     @change="
-                      setDraftValue(
-                        (field as { key: string }).key,
-                        ($event.target as HTMLSelectElement).value,
-                      )
+                      setDraftValue(field.key, ($event.target as HTMLSelectElement).value)
                     "
                   >
                     <option
-                      v-for="opt in (field as { enum_values?: string[] }).enum_values || []"
+                      v-for="opt in field.enum_values || []"
                       :key="opt"
                       :value="opt"
                     >
@@ -287,26 +264,14 @@ function setDraftValue(key: string, value: unknown) {
                     </option>
                   </select>
                 </template>
-                <template
-                  v-else-if="
-                    (field as { type: string }).type === 'int' ||
-                    (field as { type: string }).type === 'float'
-                  "
-                >
+                <template v-else-if="field.type === 'int' || field.type === 'float'">
                   <input
                     class="v4-input"
                     type="number"
-                    :step="(field as { type: string }).type === 'float' ? '0.01' : '1'"
-                    :value="
-                      (settingsStore.draft as Record<string, unknown>)[
-                        (field as { key: string }).key
-                      ]
-                    "
+                    :step="field.type === 'float' ? '0.01' : '1'"
+                    :value="settingsStore.draft[field.key]"
                     @input="
-                      setDraftValue(
-                        (field as { key: string }).key,
-                        ($event.target as HTMLInputElement).value,
-                      )
+                      setDraftValue(field.key, ($event.target as HTMLInputElement).value)
                     "
                   >
                 </template>
@@ -314,33 +279,26 @@ function setDraftValue(key: string, value: unknown) {
                   <input
                     class="v4-input"
                     type="text"
-                    :value="
-                      (settingsStore.draft as Record<string, unknown>)[
-                        (field as { key: string }).key
-                      ]
-                    "
+                    :value="settingsStore.draft[field.key]"
                     @input="
-                      setDraftValue(
-                        (field as { key: string }).key,
-                        ($event.target as HTMLInputElement).value,
-                      )
+                      setDraftValue(field.key, ($event.target as HTMLInputElement).value)
                     "
                   >
                 </template>
 
                 <p
-                  v-for="err in settingsStore.fieldErrors((field as { key: string }).key)"
-                  :key="(err as { code: string }).code"
+                  v-for="err in settingsStore.fieldErrors(field.key)"
+                  :key="err.code"
                   class="v4-hint v4-hint--error"
                 >
-                  {{ (err as { message: string }).message }}
+                  {{ err.message }}
                 </p>
               </td>
               <td class="v4-fields__cell-flags">
-                <Badge v-if="(field as { secret?: boolean }).secret" variant="warn">
+                <Badge v-if="field.secret" variant="warn">
                   {{ t('settings.flag.secret') }}
                 </Badge>
-                <Badge v-if="(field as { reload_required?: boolean }).reload_required" variant="warn">
+                <Badge v-if="field.reload_required" variant="warn">
                   {{ t('settings.flag.reload') }}
                 </Badge>
               </td>
