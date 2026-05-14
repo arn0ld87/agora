@@ -107,8 +107,9 @@ backend/logs/
 backend/.cache/
 
 # Runtime artifacts and local instances
-instance/
-backend/instance/
+/instance/
+backend/instance/settings.json
+backend/instance/settings.*.json.tmp
 
 # Upload folder
 backend/uploads/
