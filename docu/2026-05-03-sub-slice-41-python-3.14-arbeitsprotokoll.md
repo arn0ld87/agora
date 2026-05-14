@@ -48,7 +48,7 @@ Root Cause:
 
 ## Nachtrag 2026-05-14: Unblocking via uv-Overrides
 
-Der Python 3.14-Bump wurde durch gezielte Dependency-Overrides in \`backend/pyproject.toml\` (\`[tool.uv.override-dependencies]\`) unblockiert.
+Der Python 3.14-Bump wurde durch gezielte Dependency-Overrides in \`backend/pyproject.toml\` unter \`[tool.uv]\` mit dem Key \`override-dependencies\` unblockiert.
 
 ### Problem
 \`tiktoken 0.7.0\` (gepinnt von \`camel-ai 0.2.78\`) hat keine cp314-Wheels. Ein Source-Build schlägt fehl, da das enthaltene \`pyo3 0.20.3\` Python 3.14 noch nicht unterstützt (Max 3.12), selbst wenn ein Rust-Compiler vorhanden wäre.

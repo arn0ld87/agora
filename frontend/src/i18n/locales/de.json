@@ -71,7 +71,8 @@
     "and": "und",
     "or": "oder",
     "all": "Alle",
-    "none": "Keine"
+    "none": "Keine",
+    "tryAgain": "Erneut versuchen"
   },
   "home": {
     "kicker": "STUDIO · LOKAL",
@@ -123,11 +124,31 @@
       "needPrompt": "Beschreibung der Simulation fehlt."
     },
     "steps": [
-      { "num": "01", "title": "Graph aufbauen", "desc": "Entitäten und Beziehungen aus deinem Dokument extrahieren — Wissensgraph in Neo4j." },
-      { "num": "02", "title": "Umgebung", "desc": "Hunderte Agenten-Personas mit Persönlichkeit, Bias und Reaktionsverhalten erzeugen." },
-      { "num": "03", "title": "Simulation", "desc": "Agenten posten, antworten, streiten — runden­basiert, beobachtbar in Echtzeit." },
-      { "num": "04", "title": "Report", "desc": "ReportAgent durchsucht das Ergebnis, befragt eine Fokusgruppe und schreibt den Bericht." },
-      { "num": "05", "title": "Gespräch", "desc": "Sprich direkt mit den Agenten der simulierten Welt — oder mit dem ReportAgent." }
+      {
+        "num": "01",
+        "title": "Graph aufbauen",
+        "desc": "Entitäten und Beziehungen aus deinem Dokument extrahieren — Wissensgraph in Neo4j."
+      },
+      {
+        "num": "02",
+        "title": "Umgebung",
+        "desc": "Hunderte Agenten-Personas mit Persönlichkeit, Bias und Reaktionsverhalten erzeugen."
+      },
+      {
+        "num": "03",
+        "title": "Simulation",
+        "desc": "Agenten posten, antworten, streiten — runden­basiert, beobachtbar in Echtzeit."
+      },
+      {
+        "num": "04",
+        "title": "Report",
+        "desc": "ReportAgent durchsucht das Ergebnis, befragt eine Fokusgruppe und schreibt den Bericht."
+      },
+      {
+        "num": "05",
+        "title": "Gespräch",
+        "desc": "Sprich direkt mit den Agenten der simulierten Welt — oder mit dem ReportAgent."
+      }
     ],
     "differentiators": [
       {
@@ -667,7 +688,10 @@
       "set": "•••••••• (gesetzt)",
       "empty": "leer"
     },
-    "bool": { "on": "an", "off": "aus" },
+    "bool": {
+      "on": "an",
+      "off": "aus"
+    },
     "modal": {
       "title": "Secrets bestätigen",
       "body": "Du speicherst Änderungen an Secret-Feldern (z. B. {neoPw} oder {authToken}). Tippfehler hier können dich aus dem Backend aussperren — bitte nochmal sicher prüfen.",
@@ -681,14 +705,99 @@
       "ontology": "Ontology",
       "hybrid_search": "Hybrid Search",
       "agent_tools": "Agent Tools",
-        "event_bus": "Event Bus",
-        "logging": "Logging",
-        "locale": "Locale",
-        "ui": "UI",
-        "webtools": "Webtools",
-        "oasis": "OASIS",
-        "security": "Secrets"
+      "event_bus": "Event Bus",
+      "logging": "Logging",
+      "locale": "Locale",
+      "ui": "UI",
+      "webtools": "Webtools",
+      "oasis": "OASIS",
+      "security": "Secrets"
+    },
+    "v4": {
+      "noSections": "Keine Einstellungen in dieser Kategorie.",
+      "general": {
+        "title": "Allgemein",
+        "subtitle": "Laufzeit-Verhalten des Workspaces: LLM, Logging, Locale, UI, Event-Bus, Secrets."
+      },
+      "integrations": {
+        "title": "Integrationen",
+        "subtitle": "Externe Dienste verbinden: Neo4j, Embedding-Anbieter, Ontology-LLM, Hybrid-Search, Agent-Tools, WebTools und OASIS-Runner."
+      },
+      "apiKeys": {
+        "title": "API-Schlüssel",
+        "subtitle": "API-Zugänge erstellen und verwalten.",
+        "actions": {
+          "create": "Schlüssel anlegen",
+          "revoke": "Widerrufen",
+          "cancel": "Abbrechen",
+          "close": "Schließen",
+          "copy": "Kopieren",
+          "copied": "Kopiert"
+        },
+        "create": {
+          "modalTitle": "Neuen API-Schlüssel anlegen",
+          "modalSubtitle": "Vergib einen Namen und wähle die Berechtigungen für diesen Schlüssel.",
+          "labelField": "Bezeichnung",
+          "scopesField": "Berechtigungen",
+          "scopes": {
+            "read": "Lesen (read)",
+            "write": "Schreiben (write)",
+            "admin": "Verwaltung (admin)"
+          },
+          "submit": "Schlüssel anlegen"
+        },
+        "created": {
+          "title": "Schlüssel erstellt — jetzt kopieren",
+          "warning": "Dieser Schlüssel wird nur jetzt angezeigt. Verloren = neu anlegen.",
+          "tokenLabel": "Klartext-Token"
+        },
+        "revoke": {
+          "modalTitle": "Schlüssel widerrufen?",
+          "modalSubtitle": "Bestehende Clients verlieren sofort Zugriff. Diese Aktion kann nicht rückgängig gemacht werden.",
+          "confirm": "Widerrufen"
+        },
+        "table": {
+          "label": "Bezeichnung",
+          "prefix": "Prefix",
+          "scopes": "Berechtigungen",
+          "status": "Status",
+          "createdAt": "Erstellt",
+          "lastUsedAt": "Zuletzt verwendet",
+          "never": "Nie",
+          "actions": "Aktionen"
+        },
+        "status": {
+          "active": "Aktiv",
+          "revoked": "Widerrufen"
+        },
+        "empty": {
+          "title": "Noch keine API-Schlüssel",
+          "description": "Lege einen Schlüssel an, um externen Clients Zugriff zu geben."
+        },
+        "errors": {
+          "loadFailed": "API-Schlüssel konnten nicht geladen werden.",
+          "createFailed": "Schlüssel konnte nicht angelegt werden.",
+          "revokeFailed": "Schlüssel konnte nicht widerrufen werden.",
+          "copyFailed": "Schlüssel konnte nicht in die Zwischenablage kopiert werden."
+        }
+      },
+      "usersTeams": {
+        "title": "Nutzer & Teams",
+        "subtitle": "Mitglieder verwalten und Teamzugänge konfigurieren.",
+        "empty": {
+          "title": "Multi-User-Verwaltung folgt",
+          "description": "Agora ist aktuell als Single-Workspace-Tool ausgelegt. Ein Identity-Modul mit Rollen und Teams folgt in einem späteren Epic."
+        }
+      },
+      "auditLogs": {
+        "title": "Audit-Logs",
+        "subtitle": "Aktivitätsprotokoll des Workspaces einsehen.",
+        "empty": {
+          "title": "Audit-Trail folgt",
+          "description": "Ein revisionssicherer Append-Only-Log für sicherheitsrelevante Aktionen wird mit dem Identity-Modul ausgeliefert."
+        }
       }
+    }
   },
   "activeModel": {
     "label": "Aktives Modell",
@@ -822,5 +931,85 @@
     "simulationFailed": "Simulation fehlgeschlagen.",
     "reportFailed": "Bericht fehlgeschlagen.",
     "unknown": "Unbekannter Fehler."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Aktive Runs, Reports, Systemzustand auf einen Blick.",
+    "hero": {
+      "title": "Neuer Run",
+      "subtitle": "Quelle ablegen, Modell wählen, starten.",
+      "sourceLabel": "Quelle",
+      "dropHint": "Datei hierher ziehen oder klicken",
+      "modelLabel": "Modell",
+      "modelDefault": "Standard",
+      "languageLabel": "Sprache",
+      "startCta": "Starten",
+      "disabledHint": "Erst Datei wählen, dann starten."
+    },
+    "stats": {
+      "activeRuns": "Aktive Runs",
+      "completedToday": "Heute fertig",
+      "avgConfidence": "Ø Confidence",
+      "personas": "Personas aktiv"
+    },
+    "active": {
+      "title": "Aktive Runs",
+      "emptyTitle": "Keine aktiven Runs",
+      "emptyHint": "Starte oben einen neuen Run aus einer Quelle.",
+      "errorLabel": "Fehler",
+      "columns": {
+        "runId": "Run-ID",
+        "project": "Projekt",
+        "phase": "Phase",
+        "progress": "Fortschritt",
+        "started": "Gestartet",
+        "actions": ""
+      },
+      "phase": {
+        "graph_build": "Graph-Build",
+        "simulation_prepare": "Personas",
+        "simulation_run": "Simulation",
+        "report_generate": "Report"
+      }
+    },
+    "system": {
+      "title": "System",
+      "ollama": "Ollama",
+      "neo4j": "Neo4j",
+      "oasis": "OASIS",
+      "disk": "Disk",
+      "diskFree": "frei",
+      "statusReachable": "erreichbar",
+      "statusUnreachable": "offline",
+      "statusIdle": "idle",
+      "oasisHint": "Wird beim Start eines Runs aktiv.",
+      "ollamaHint": "{n} Modelle verfügbar"
+    },
+    "reports": {
+      "title": "Letzte Reports",
+      "emptyTitle": "Noch keine Reports",
+      "emptyHint": "Sobald ein Run durchläuft, erscheint hier das Ergebnis.",
+      "columns": {
+        "reportId": "Report-ID",
+        "project": "Projekt",
+        "personas": "Personas",
+        "confidence": "Confidence",
+        "date": "Datum",
+        "actions": ""
+      }
+    },
+    "quick": {
+      "compare": "Vergleichen",
+      "compareHint": "Branches & Runs gegenüberstellen",
+      "history": "Historie",
+      "historyHint": "Alle Runs durchsuchen",
+      "settings": "Einstellungen",
+      "settingsHint": "LLM-Routing, API-Keys, Audit"
+    },
+    "time": {
+      "secondsAgo": "vor {n}s",
+      "minutesAgo": "vor {n}m",
+      "hoursAgo": "vor {n}h"
+    }
   }
 }

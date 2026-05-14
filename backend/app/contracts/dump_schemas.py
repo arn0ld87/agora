@@ -1,12 +1,12 @@
-"""
-CLI: dumpt alle Pydantic-Contracts als JSON Schema 2020-12 nach schemas/.
+"""Dump JSON schemas of all Pydantic contracts.
 
-Aufruf:
-    cd backend && uv run python -m app.contracts.dump_schemas
+Modi:
+  python -m app.contracts.dump_schemas          # schreibt schemas/
+  python -m app.contracts.dump_schemas --check  # vergleicht byte-genau, exit 1 bei Drift
 
-CI-Verhalten:
-    Nach dump muss `git diff --exit-code schemas/` sauber sein —
-    sonst hat Backend Schemas geändert ohne Frontend-Regen.
+CI-Verhalten (--check):
+    Gibt GitHub-Actions-kompatible ::error::-Annotationen aus bei Drift.
+    Exit 1 blockiert den Merge. Alle Schemas werden geprueft (kein Kurzschluss).
 """
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ from app.contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ProviderDescriptor,
     ResolvedRoute,
+)
+from app.contracts.api_keys_contract import (
+    ApiKeyCreateRequest,
+    ApiKeyCreateResponse,
+    ApiKeyModel,
+    ApiKeysListResponse,
 )
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
@@ -47,6 +53,10 @@ CONTRACTS: dict[str, type] = {
     "llm-runtime-routing.schema.json": RuntimeLlmRouting,
     "llm-provider-descriptor.schema.json": ProviderDescriptor,
     "llm-resolved-route.schema.json": ResolvedRoute,
+    "api-key.schema.json": ApiKeyModel,
+    "api-key-create-request.schema.json": ApiKeyCreateRequest,
+    "api-key-create-response.schema.json": ApiKeyCreateResponse,
+    "api-keys-list-response.schema.json": ApiKeysListResponse,
 }
 
 
@@ -64,35 +74,70 @@ def dump_one(filename: str, model: type) -> Path:
 
 
 def check_one(filename: str, model: type) -> bool:
+    """Vergleicht ein Schema byte-genau gegen die Datei auf Disk.
+
+    Gibt GitHub-Actions-kompatible ::error::-Zeile bei Drift aus.
+    Returns True wenn clean, False bei Drift oder fehlendem File.
+    """
     path = OUT_DIR / filename
     expected = render_schema(filename, model)
+    rel = f"schemas/{filename}"
+
     if not path.exists():
-        print(f"missing: {path.relative_to(OUT_DIR.parent)}", file=sys.stderr)
+        sys.stderr.write(
+            f"::error::Schema-Drift (MAI-04): Datei fehlt auf Disk: {rel}\n"
+            f"  Fix: cd backend && uv run python -m app.contracts.dump_schemas"
+            f" && git add schemas/\n"
+        )
         return False
+
     actual = path.read_text(encoding="utf-8")
     if actual != expected:
-        print(f"drift: {path.relative_to(OUT_DIR.parent)}", file=sys.stderr)
+        sys.stderr.write(
+            f"::error::Schema-Drift (MAI-04): Inhalt weicht ab: {rel}\n"
+            f"  Fix: cd backend && uv run python -m app.contracts.dump_schemas"
+            f" && git add schemas/\n"
+        )
         return False
-    print(f"✓ {path.relative_to(OUT_DIR.parent)}")
+
+    sys.stdout.write(f"OK: {rel}\n")
     return True
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Dump or check Pydantic JSON schemas.",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="nur prüfen, ob schemas/ dem aktuellen Pydantic-Stand entspricht",
+        help=(
+            "Vergleicht regenerierte Schemas byte-genau gegen schemas/ "
+            "(exit 1 bei Drift). Alle Schemas werden geprueft."
+        ),
     )
     args = parser.parse_args(argv)
 
     if args.check:
-        return 0 if all(check_one(filename, model) for filename, model in CONTRACTS.items()) else 1
+        # Alle Schemas pruefen — kein all()-Kurzschluss, damit alle Drift-Zeilen sichtbar sind.
+        results = [check_one(filename, model) for filename, model in CONTRACTS.items()]
+        ok = all(results)
+        if not ok:
+            n_drift = results.count(False)
+            sys.stderr.write(
+                f"::error::Schema-Drift (MAI-04): {n_drift} von {len(results)} Schemas"
+                " weichen ab. Regenerieren mit:"
+                " cd backend && uv run python -m app.contracts.dump_schemas"
+                " && git add schemas/\n"
+            )
+            return 1
+        sys.stdout.write(f"OK: alle {len(results)} Schemas matchen schemas/\n")
+        return 0
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for filename, model in CONTRACTS.items():
         path = dump_one(filename, model)
-        print(f"\u2713 {path.relative_to(OUT_DIR.parent)}")
+        sys.stdout.write(f"OK: {path.relative_to(OUT_DIR.parent)}\n")
     return 0
 
 

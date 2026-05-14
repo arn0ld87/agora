@@ -1,0 +1,33 @@
+{
+  "$id": "https://alexle135.de/schemas/api-key-create-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eingabe f\u00fcr POST /api/api-keys.",
+  "properties": {
+    "label": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Label",
+      "type": "string"
+    },
+    "scopes": {
+      "items": {
+        "enum": [
+          "read",
+          "write",
+          "admin"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Scopes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "label",
+    "scopes"
+  ],
+  "title": "ApiKeyCreateRequest",
+  "type": "object"
+}

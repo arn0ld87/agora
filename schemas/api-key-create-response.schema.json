@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "ApiKeyModel": {
+      "additionalProperties": false,
+      "description": "Persistierte Repr\u00e4sentation eines API-Schl\u00fcssels (ohne Klartext).",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "last_used_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Used At"
+        },
+        "prefix": {
+          "maxLength": 12,
+          "minLength": 12,
+          "pattern": "^ago_[0-9a-f]{8}$",
+          "title": "Prefix",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        },
+        "scopes": {
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Scopes",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "revoked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "prefix",
+        "scopes",
+        "status",
+        "created_at"
+      ],
+      "title": "ApiKeyModel",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/api-key-create-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort auf POST /api/api-keys \u2014 Klartext-Token erscheint hier genau einmal.",
+  "properties": {
+    "key": {
+      "$ref": "#/$defs/ApiKeyModel"
+    },
+    "token": {
+      "pattern": "^ago_[0-9a-f]{48}$",
+      "title": "Token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key",
+    "token"
+  ],
+  "title": "ApiKeyCreateResponse",
+  "type": "object"
+}
