@@ -208,11 +208,27 @@ def consume(
     return True
 
 
-def _reset_seen_for_tests() -> None:
-    """Test helper — clear the redemption store between cases."""
+def reset_after_fork() -> None:
+    """Close and discard the inherited Redis client after gunicorn fork.
+
+    The first real call will trigger a new connection. Also clears the
+    in-process redemption store to avoid double-redemption race conditions
+    with the parent process (though in-memory is not recommended for prod).
+    """
     global _redis_client, _redis_init_attempted, _warn_in_memory_done
     with _seen_lock:
         _seen.clear()
-    _redis_client = None
-    _redis_init_attempted = False
-    _warn_in_memory_done = False
+    try:
+        if _redis_client is not None:
+            _redis_client.close()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    finally:
+        _redis_client = None
+        _redis_init_attempted = False
+        _warn_in_memory_done = False
+
+
+def _reset_seen_for_tests() -> None:
+    """Test helper — clear the redemption store between cases."""
+    reset_after_fork()

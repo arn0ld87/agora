@@ -116,11 +116,17 @@ def patch_stage_llm_routing(run_id: str, stage_id: str):
 
     # 1. Check if stage already started/locked
     config_service = RuntimeRunConfig(run_id)
-    if config_service.load_stage_snapshot(stage_id):
+    snapshot = config_service.load_stage_snapshot(stage_id)
+    if snapshot:
         return json_error(
             "Stage already started, route is locked",
             status=409,
-            extra={"code": "stage_already_started"}
+            extra={
+                "code": "stage_already_started",
+                "current_stage": stage_id,
+                "target_stage": stage_id,
+                "applies_from": None,
+            }
         )
 
     # 2. Update override in runtime config

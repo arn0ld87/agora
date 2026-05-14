@@ -29,6 +29,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 from ..models.graph import GraphDataDTO
 from ..services.run_registry import RunRegistry
+from ..services.secret_resolver import SecretResolver
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.graph_diff_helpers import build_pydantic_graph_diff
@@ -311,7 +312,8 @@ def generate_ontology():
 
     llm_client = LLMClient.from_route(
         ontology_route,
-        api_key=resolve_route_api_key(ontology_route, llm_runtime),
+        secret_resolver=SecretResolver(),
+        api_key_override=resolve_route_api_key(ontology_route, llm_runtime),
         run_id=run_id,
     )
     logger.info(
@@ -524,7 +526,8 @@ def _make_ner_override_from_route(run_id: str, resolved_route, llm_runtime) -> N
     """Build a dedicated NERExtractor from the resolved per-run route."""
     ner_llm_client = LLMClient.from_route(
         resolved_route,
-        api_key=resolve_route_api_key(resolved_route, llm_runtime),
+        secret_resolver=SecretResolver(),
+        api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
         run_id=run_id,
     )
     logger.info(

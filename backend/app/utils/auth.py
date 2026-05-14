@@ -28,6 +28,7 @@ from flask import Blueprint, Flask, current_app, request
 
 from . import signed_ticket
 from .api_responses import json_error
+from ..services.api_keys_store import get_api_keys_store
 from .logger import get_logger
 
 _logger = get_logger("agora.auth")
@@ -122,18 +123,40 @@ def _try_consume_ticket() -> bool:
     return signed_ticket.verify(secret, ticket, expected_scope)
 
 
+def _check_api_key(token: str) -> bool:
+    """Prüft ob der Token ein gültiger ago_... API-Key ist."""
+    if not token.startswith("ago_"):
+        return False
+    store = get_api_keys_store()
+    key = store.validate_token(token)
+    if key and key.status == "active":
+        return True
+    if key and key.status == "revoked":
+        _logger.warning("auth: revoked API key used (prefix=%s)", key.prefix)
+    return False
+
+
 def token_required(view):
     """Decorator für einzelne Views. Kein-Op wenn ``AGORA_AUTH_TOKEN`` leer ist."""
 
     @wraps(view)
     def wrapper(*args, **kwargs):
         expected = _expected_token()
+        got = _extract_token()
+
+        # 1. AGORA_AUTH_TOKEN (Master)
+        if expected and got and hmac.compare_digest(got, expected):
+            return view(*args, **kwargs)
+
+        # 2. Workspace API Keys (ago_...)
+        if got and _check_api_key(got):
+            return view(*args, **kwargs)
+
+        # 3. Open mode fallback (only if no master token configured)
         if not expected:
             return view(*args, **kwargs)
-        got = _extract_token()
-        if not got or not hmac.compare_digest(got, expected):
-            return _auth_error()
-        return view(*args, **kwargs)
+
+        return _auth_error()
 
     return wrapper
 
@@ -141,22 +164,30 @@ def token_required(view):
 def install_blueprint_guard(bp: Blueprint) -> None:
     """Hängt den Token-Check als ``before_request``-Hook an ein Blueprint.
 
-    Akzeptiert Header/Bearer/``?token=`` Token. Wenn der View mit
-    ``@allow_ticket_auth`` markiert ist, wird zusätzlich ein ``?ticket=``
-    versucht — passend signiert, frisch und mit korrektem Scope reicht das
-    aus, ohne dass der Bearer in der URL stehen muss.
+    Akzeptiert Master-Token, Workspace-API-Keys (ago_...) oder signierte Tickets.
     """
 
     @bp.before_request
     def _check_token():
         expected = _expected_token()
-        if not expected:
-            return None
         got = _extract_token()
-        if got and hmac.compare_digest(got, expected):
+
+        # 1. Master Token
+        if expected and got and hmac.compare_digest(got, expected):
             return None
+
+        # 2. Workspace API Keys
+        if got and _check_api_key(got):
+            return None
+
+        # 3. Signed Tickets
         if _try_consume_ticket():
             return None
+
+        # 4. Open mode fallback
+        if not expected:
+            return None
+
         return _auth_error()
 
 

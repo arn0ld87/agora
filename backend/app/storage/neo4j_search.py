@@ -40,7 +40,7 @@ class Neo4jSearchMixin:
         result: Dict[str, Any] = {"edges": [], "nodes": [], "query": query}
 
         def _do_search():
-            with self._driver.session() as session:
+            with self._get_session() as session:
                 if scope in ("edges", "both"):
                     result["edges"] = self._search.search_edges(
                         session, graph_id, query, limit

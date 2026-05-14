@@ -86,7 +86,25 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
 
     def close(self):
         """Close the Neo4j driver connection."""
-        self._driver.close()
+        if self._driver is not None:
+            self._driver.close()
+
+    def _get_session(self, **kwargs):
+        """Get a new Neo4j session, ensuring the driver is initialized.
+
+        This handles re-initialization after a fork-reset.
+        """
+        if self._driver is None:
+            with self._lock:
+                if self._driver is None:
+                    logger.info("Neo4j driver re-initializing after fork")
+                    self._driver = GraphDatabase.driver(
+                        self._uri, auth=(self._user, self._password)
+                    )
+            # Connectivity check is deferred to the first actual call
+            # via neo4j_call_with_retry if it uses session.run or similar.
+            # But here we just return the session.
+        return self._driver.session(**kwargs)
 
     def _reset_driver_after_fork(self) -> None:
         """Close and discard the inherited driver after gunicorn fork.
@@ -214,7 +232,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         statement runs.  If an index already exists with the wrong dimension
         it is dropped first so the subsequent CREATE builds it correctly.
         """
-        with self._driver.session() as session:
+        with self._get_session() as session:
             for query in neo4j_schema.ALL_SCHEMA_QUERIES:
                 # Before each vector-index CREATE, validate stored dimension.
                 for idx_name in self._VECTOR_INDEX_NAMES:

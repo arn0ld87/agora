@@ -21,6 +21,7 @@ def _valid_model_kwargs() -> dict:
         "prefix": "ago_deadbeef",
         "scopes": ["read"],
         "status": "active",
+        "hashed_token": "a" * 64,
         "created_at": datetime(2026, 5, 14, 12, 0, tzinfo=timezone.utc),
     }
 

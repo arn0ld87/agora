@@ -116,7 +116,7 @@ class Neo4jWriteMixin:
                 created_at=now,
             )
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             self._call_with_retry(session.execute_write, _create)
 
         logger.info(f"Created graph '{name}' with id {graph_id}")
@@ -135,7 +135,7 @@ class Neo4jWriteMixin:
                 gid=graph_id,
             )
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             self._call_with_retry(session.execute_write, _delete)
         logger.info(f"Deleted graph {graph_id}")
 
@@ -150,7 +150,7 @@ class Neo4jWriteMixin:
                 ontology_json=json.dumps(ontology, ensure_ascii=False),
             )
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             self._call_with_retry(session.execute_write, _set)
 
     # ── Add data (NER → nodes/edges) ────────────────────────────────
@@ -235,7 +235,7 @@ class Neo4jWriteMixin:
         Storage-intern (Cypher + Driver + Retry); separat von Phase 1/2,
         weil reine Funktionen kein Neo4j-Coupling haben sollen.
         """
-        with self._driver.session() as session:
+        with self._get_session() as session:
             # Create episode node
             def _create_episode(tx):
                 tx.run(
@@ -465,7 +465,7 @@ class Neo4jWriteMixin:
                 record["r"], record["src_uuid"], record["tgt_uuid"]
             )
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_write, _write)
 
     def tombstone_relation(
@@ -494,7 +494,7 @@ class Neo4jWriteMixin:
             record = result.single()
             return bool(record and record["hit"])
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_write, _write)
 
     def backfill_temporal_defaults(self, graph_id: Optional[str] = None) -> int:
@@ -530,7 +530,7 @@ class Neo4jWriteMixin:
             record = result.single()
             return int(record["touched"]) if record else 0
 
-        with self._driver.session() as session:
+        with self._get_session() as session:
             return self._call_with_retry(session.execute_write, _write)
 
 
