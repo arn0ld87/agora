@@ -8,9 +8,12 @@ import json
 import os
 import re
 import time as _time_mod
-from typing import Literal, Optional, Dict, Any, List, Type, Union
+from typing import TYPE_CHECKING, Literal, Optional, Dict, Any, List, Type, Union
 from openai import OpenAI
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from ..contracts.llm_profile_contract import LlmProfile
 
 from ..config import Config
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
@@ -743,3 +746,34 @@ class LLMClient:
                 + (f" Tail: …{tail}" if tail else "")
             )
         return self._maybe_validate(parsed, schema)
+
+
+# ---------------------------------------------------------------------------
+# P5.3: Profile-basierte Client-Factory
+# ---------------------------------------------------------------------------
+
+def build_client_from_profile(
+    profile: "LlmProfile",
+    *,
+    run_id: Optional[str] = None,
+    timeout: float = 300.0,
+) -> LLMClient:
+    """P5.3: LLMClient aus persistiertem LLM-Profil bauen (überschreibt Config).
+
+    Ollama-Provider (localhost oder 'ollama' in base_url) dürfen api_key leer
+    lassen — der Dummy-Wert 'ollama' wird gesetzt. Cloud-Provider ohne Key
+    scheitern sofort mit einem ValueError, bevor ein HTTP-Request entsteht.
+    """
+    base_url_lower = profile.base_url.lower()
+    is_local = "localhost" in base_url_lower or "127.0.0.1" in base_url_lower or "ollama" in base_url_lower
+    if not profile.api_key and not is_local:
+        raise ValueError(
+            f"LLM-Profil {profile.id!r}: api_key fehlt für Provider {profile.provider!r}"
+        )
+    return LLMClient(
+        api_key=profile.api_key or "ollama",
+        base_url=profile.base_url,
+        model=profile.model_name,
+        timeout=timeout,
+        run_id=run_id,
+    )

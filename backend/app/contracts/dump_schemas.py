@@ -33,6 +33,11 @@ from app.contracts.api_keys_contract import (
     ApiKeyModel,
     ApiKeysListResponse,
 )
+from app.contracts.llm_profile_contract import (
+    LlmProfile,
+    LlmProfileListResponse,
+    LlmProfileCreateRequest,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -57,6 +62,9 @@ CONTRACTS: dict[str, type] = {
     "api-key-create-request.schema.json": ApiKeyCreateRequest,
     "api-key-create-response.schema.json": ApiKeyCreateResponse,
     "api-keys-list-response.schema.json": ApiKeysListResponse,
+    "llm-profile.schema.json": LlmProfile,
+    "llm-profile-list-response.schema.json": LlmProfileListResponse,
+    "llm-profile-create-request.schema.json": LlmProfileCreateRequest,
 }
 
 
