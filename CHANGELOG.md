@@ -6,6 +6,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ## [Unreleased]
 
 - MAI-01 · P4.4 Mode-Smokes als CI-Job verdrahtet (e2e-smokes.yml::report-modes-smoke).
+- MAI-13 · mistune + pygments Lockfile-Bump (Dependabot #323 + #326 closed).
 
 ## [1.0.0] - 2026-05-11
 
