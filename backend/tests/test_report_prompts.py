@@ -272,6 +272,8 @@ class TestFormatCallability:
         # Doppel-Brace im Tool-Call-Beispiel muss als Single-Brace rauskommen
         assert '{"name": "Tool Name"' in out
         assert "T" in out and "Sec" in out
+        assert "hypotheses[]" not in out
+        assert "claims[]" not in out
 
     def test_section_user_template_formats(self):
         out = report_prompts.SECTION_USER_PROMPT_TEMPLATE.format(
