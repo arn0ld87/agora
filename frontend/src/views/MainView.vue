@@ -127,14 +127,19 @@ async function handleNewProject() {
     const formData = new FormData()
     pending.files.forEach((f) => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
-    // Frontend-Modellauswahl pro Run an Ontology-Endpoint anhängen, damit
-    // alle nachgelagerten LLM-Aufrufe (Ontology, Build, Persona, Report)
-    // dasselbe Modell verwenden. Helper kommen aus Step2/3/4 — gleiche
-    // localStorage-/sessionStorage-Keys wie dort, kein neuer Pinia-Store.
-    const selectedModel = storedEffectiveModel()
-    if (selectedModel) formData.append('llm_model', selectedModel)
-    const runtimeProvider = runtimeLlmPayloadFromStorage()
-    if (runtimeProvider) formData.append('llm_provider', JSON.stringify(runtimeProvider))
+    // LLM-Auswahl: persistiertes Profil hat Vorrang vor Preset/Ollama-Auswahl.
+    // Bei gesetzter llmProfileId sendet das Frontend nur llm_profile_id —
+    // Backend-P5.3 löst daraus Provider + Modell auf.
+    if (pending.llmProfileId) {
+      formData.append('llm_profile_id', pending.llmProfileId)
+    } else {
+      // Fallback: bisheriger Pfad via localStorage-Modell + Provider-Payload.
+      // Helper kommen aus Step2/3/4 — gleiche Keys wie dort, kein neuer Store.
+      const selectedModel = storedEffectiveModel()
+      if (selectedModel) formData.append('llm_model', selectedModel)
+      const runtimeProvider = runtimeLlmPayloadFromStorage()
+      if (runtimeProvider) formData.append('llm_provider', JSON.stringify(runtimeProvider))
+    }
     const res = await generateOntology(formData)
     if (res.success) {
       clearPendingUpload()

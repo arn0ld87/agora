@@ -15,8 +15,10 @@ import Card from '../forms/Card.vue'
 import Badge from '../forms/Badge.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
 import { getAvailableModels } from '../../../api/simulation'
+import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
+import type { LlmProfile } from '../../../contracts/llmProfileContract'
 
 interface ModelOption {
   value: string
@@ -35,6 +37,7 @@ const errorMsg = ref('')
 
 const presetModels = ref<ModelOption[]>([])
 const ollamaModels = ref<ModelOption[]>([])
+const llmProfiles = ref<LlmProfile[]>([])
 const defaultModel = ref('')
 const ollamaReachable = ref(false)
 const loadingStatus = ref(true)
@@ -73,9 +76,15 @@ const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
 const modelOptions = computed<ModelOption[]>(() => {
-  const opts: ModelOption[] = [
-    { value: 'default', label: `${t('dashboard.hero.modelDefault')} — ${defaultModel.value || '?'}` },
-  ]
+  const opts: ModelOption[] = []
+  // Profile-Gruppe zuerst (persistierte LLM-Profile aus P5.2)
+  for (const p of llmProfiles.value) {
+    opts.push({
+      value: `profile:${p.id}`,
+      label: `${p.name} — ${p.model_name}${p.is_default ? ` (${t('dashboard.hero.profileDefault')})` : ''}`,
+    })
+  }
+  opts.push({ value: 'default', label: `${t('dashboard.hero.modelDefault')} — ${defaultModel.value || '?'}` })
   for (const p of presetModels.value) opts.push(p)
   for (const m of ollamaModels.value) {
     if (presetModels.value.some(p => p.value === m.value)) continue
@@ -181,14 +190,21 @@ async function startSimulation() {
     writeLocal(STORAGE_MODEL, modelOption.value)
     writeLocal(STORAGE_LANG, language.value)
     removeLocal(STORAGE_CUSTOM_MODEL)
-    setPendingUpload(files.value, simulationRequirement.value.trim())
+    const selectedValue = modelOption.value
+    const profileId = selectedValue.startsWith('profile:') ? selectedValue.slice('profile:'.length) : null
+    setPendingUpload(files.value, simulationRequirement.value.trim(), profileId)
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
   }
 }
 
-onMounted(() => void loadStatus())
+onMounted(() => {
+  void loadStatus()
+  fetchLlmProfiles()
+    .then(profiles => { llmProfiles.value = profiles })
+    .catch(() => { /* Fallback: Profile-Gruppe bleibt leer, Presets/Ollama greifen */ })
+})
 </script>
 
 <template>
