@@ -211,6 +211,7 @@ def create_app(config_class=Config):
         logs_bp,
         settings_bp,
         llm_bp,
+        api_keys_bp,
     )
     from .utils.api_responses import install_api_error_handlers
     from .utils.auth import install_blueprint_guard, log_auth_mode
@@ -225,6 +226,7 @@ def create_app(config_class=Config):
         logs_bp,
         settings_bp,
         llm_bp,
+        api_keys_bp,
     ):
         install_blueprint_guard(bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -236,6 +238,7 @@ def create_app(config_class=Config):
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(llm_bp, url_prefix='/api/llm')
+    app.register_blueprint(api_keys_bp, url_prefix='/api/api-keys')
     if should_log_startup:
         log_auth_mode(app, logger)
 
