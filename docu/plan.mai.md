@@ -41,7 +41,7 @@
 |---|---|---|---|---|---|
 | MAI-08 | 🔴 | `report_prompts.py` Paket-Split | M | `backend/app/services/report_prompts.py` → Paket | Refs R13 |
 | MAI-09 | 🔴 | `markdown.js` → `markdown.ts` | S | `frontend/src/utils/markdown.js` | Refs R14 |
-| MAI-10 | 🔴 | Issue #203 schließen | S | — (reine Doku) | Closes #203 |
+| MAI-10 | ✅ | Issue #203 schließen | S | — (reine Doku) | Closes #203 |
 
 ### Block D — Production-Cleanup
 
