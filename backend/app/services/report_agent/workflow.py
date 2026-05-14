@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -362,12 +363,25 @@ def generate_section_metadata(
     schema_cls = _section_schema_for(section_title)
     schema_name = f"section_metadata_{schema_cls.__name__.lower()}"
 
+    schema_json = json.dumps(
+        schema_cls.model_json_schema(), ensure_ascii=False, indent=2
+    )
     system_msg = (
         "Du bist ein Analyse-Assistent. Extrahiere strukturierte Metadaten "
-        f"aus dem folgenden Report-Abschnitt. Halte dich streng an das "
-        f"vorgegebene JSON-Schema ({schema_cls.__name__}). "
-        "Verwende nur Informationen, die explizit im Text stehen. "
-        "Erfinde keine Daten."
+        "aus dem folgenden Report-Abschnitt.\n\n"
+        f"## Pflicht-Schema ({schema_cls.__name__})\n"
+        f"```json\n{schema_json}\n```\n\n"
+        "## Harte Regeln\n"
+        "1. Verwende AUSSCHLIESSLICH die im Schema definierten Feldnamen "
+        "in snake_case (z. B. `section_title`, NICHT `sectionTitle`; "
+        "`key_takeaways`, NICHT `keyFindings`).\n"
+        "2. KEINE zusätzlichen Felder. Das Schema ist strict "
+        "(`additionalProperties=false`); jedes unbekannte Feld lässt die "
+        "Validierung fehlschlagen.\n"
+        "3. Verwende nur Informationen, die explizit im Abschnittstext stehen. "
+        "Erfinde keine Daten.\n"
+        "4. Bei fehlenden Informationen: leere Liste oder Default-Wert. "
+        "Nicht halluzinieren, nicht auffüllen."
     )
     user_msg = (
         f"## Abschnittstitel\n{section_title}\n\n"

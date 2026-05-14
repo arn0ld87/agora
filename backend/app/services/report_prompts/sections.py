@@ -83,8 +83,15 @@ You classify the level yourself and set confidence_label accordingly.
 
 <self_check>
 Before writing a claim, check in this exact order:
+0. Did the `interview_agents` tool call actually return successful
+   interviews for this section?
+   → No / empty results / API error: there is NO agent_quote evidence
+     available. You MUST NOT label any claim "high" or "verified".
+     Fabricating <simulated_quote> tags inline does NOT create
+     evidence[] entries — the validator only sees the structured
+     evidence[] list, not the markdown body.
 1. Do I have any evidence at all?
-   → No: Do not formulate as claim.
+   → No: Do not formulate as claim. Use hypotheses[] instead.
 2. Is the evidence a real agent quote, or only seed text?
    → Seed only: max low + hedge word required.
 3. Do I have quotes from at least 2 stakeholder groups, consistent direction?
@@ -92,6 +99,27 @@ Before writing a claim, check in this exact order:
    → Yes: high is allowed; name stakeholder groups in claim text
 4. Never set high or verified without supports_claim=True.
 </self_check>
+
+<critical_distinction>
+Two different things, do not confuse them:
+
+A) `<simulated_quote persona_id="..." seed_anchor="...">…</simulated_quote>`
+   is a markdown formatting tag for rendering persona statements in the
+   section body. It is purely cosmetic for the reader.
+
+B) `evidence[]` is the structured list on each claim, containing
+   EvidenceItem objects with `source_kind`, `persona_stakeholder_group`,
+   `supports_claim`, `match_score`, `quote`, etc.
+
+The Pydantic validator only inspects B. Adding (A) to the body text
+without adding matching (B) entries on the claim is treated as
+"no evidence" by the validator and will hard-fail the report build.
+
+If `interview_agents` produced no usable answers:
+- Do NOT invent <simulated_quote> blocks to fill the gap.
+- Either downgrade the claim to "low" with seed_corpus evidence + hedge,
+  or move it to hypotheses[] entirely.
+</critical_distinction>
 
 <negative_examples>
 WRONG: "Employees will embrace the initiative." (no quote, no hedge)
@@ -107,6 +135,15 @@ WRONG: "Competitors will adopt this approach." (only competitor quote,
 FIX:   confidence_label="medium". Competitor quote is strategic position,
        not stakeholder consensus. Label as competitive positioning in
        claim text.
+
+WRONG: interview_agents returned no successful interviews, but the
+       section still contains claims with confidence_label="high" and
+       inline <simulated_quote> tags as substitute for missing data.
+FIX:   Set confidence_label="low" with source_kind="seed_corpus" and
+       a hedge word, OR move the assertion to hypotheses[] with a
+       rationale field. The cross_stakeholder_for_high validator will
+       reject "high" without two distinct persona_stakeholder_group
+       entries in evidence[].
 </negative_examples>
 </evidence_gating>
 
