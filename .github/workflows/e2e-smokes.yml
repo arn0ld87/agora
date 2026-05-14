@@ -82,7 +82,7 @@ jobs:
         run: npx playwright test health.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace
           path: frontend/test-results/
@@ -136,7 +136,7 @@ jobs:
         run: npx playwright test upload-graph.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace-upload-graph
           path: frontend/test-results/
@@ -193,7 +193,7 @@ jobs:
         run: npx playwright test minimal-report.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-trace-minimal-report
           path: frontend/test-results/
