@@ -777,7 +777,8 @@
         "errors": {
           "loadFailed": "API-Schlüssel konnten nicht geladen werden.",
           "createFailed": "Schlüssel konnte nicht angelegt werden.",
-          "revokeFailed": "Schlüssel konnte nicht widerrufen werden."
+          "revokeFailed": "Schlüssel konnte nicht widerrufen werden.",
+          "copyFailed": "Schlüssel konnte nicht in die Zwischenablage kopiert werden."
         }
       },
       "usersTeams": {
