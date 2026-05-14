@@ -27,6 +27,7 @@ jobs:
             objects.githubusercontent.com:443
             pypi.org:443
             registry-1.docker.io:443
+            registry.npmjs.org:443
             api.github.com:443
 
       - name: Checkout full history for secret scan
