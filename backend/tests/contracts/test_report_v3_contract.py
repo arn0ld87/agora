@@ -18,6 +18,7 @@ from app.contracts.report_v3 import (
     ContentIdea,
     DataGap,
     FrictionPoint,
+    Hypothesis,
     Multiplier,
     Persona,
     PositioningVariant,
@@ -28,14 +29,14 @@ from app.contracts.report_v3 import (
 )
 
 
-# ---- Importierbarkeit aller 12 Klassen ----
+# ---- Importierbarkeit aller 13 Klassen ----
 
 def test_all_classes_importable():
-    """Alle 12 Klassen (ReportV3 + 11 DTOs) sind importierbar."""
+    """Alle 13 Klassen (ReportV3 + 12 DTOs) sind importierbar."""
     for cls in [
         ReportV3, Persona, Segment, Claim, Multiplier,
         FrictionPoint, TrustSignal, ChangeRecommendation,
-        ProjectImpact, PositioningVariant, ContentIdea, DataGap,
+        ProjectImpact, PositioningVariant, ContentIdea, DataGap, Hypothesis,
     ]:
         assert cls is not None, f"{cls.__name__} nicht importierbar"
 
@@ -197,6 +198,15 @@ def test_minimal_report_v3_roundtrip():
                 suggested_fixes=["A/B-Test durchführen", "Marktforschung beauftragen"],
             )
         ],
+        hypotheses=[
+            Hypothesis(
+                id="hyp1",
+                hypothesis_text="Preisbereitschaft koennte segmentabhaengig variieren.",
+                rationale="Keine harte Evidence im Seed-Korpus.",
+                suggested_evidence=["Preisinterviews"],
+                confidence_score=0.25,
+            )
+        ],
     )
 
     json_str = original.model_dump_json()
@@ -209,6 +219,8 @@ def test_minimal_report_v3_roundtrip():
     assert len(restored.claims) == 1
     assert restored.claims[0].evidence_refs == ["ev-001"]
     assert len(restored.data_gaps) == 1
+    assert len(restored.hypotheses) == 1
+    assert restored.hypotheses[0].suggested_evidence == ["Preisinterviews"]
 
 
 def test_persisted_v3_validates(tmp_path, monkeypatch):

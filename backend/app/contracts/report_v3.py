@@ -180,6 +180,24 @@ class DataGap(BaseModel):
     suggested_fixes: list[str] = Field(default_factory=list)
 
 
+class Hypothesis(BaseModel):
+    """Hypothese ohne harte Evidence — separater Slot in ReportV3.
+
+    Abgrenzung zu DataGap:
+    - DataGap = strukturelle Datenlücke, die Einschätzungsqualität limitiert.
+    - Hypothesis = inhaltliche Behauptung ohne Beleg, mit Rationale.
+    """
+
+    model_config = _STRICT
+
+    id: str = Field(min_length=1)
+    hypothesis_text: str = Field(min_length=1)
+    rationale: str = ""
+    suggested_evidence: list[str] = Field(default_factory=list)
+    origin_section_index: int | None = None
+    confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class ReportV3(BaseModel):
     """
     Container für alle 11 Pflichtabschnitte des strukturierten Reports v3.
@@ -208,3 +226,4 @@ class ReportV3(BaseModel):
     positioning_variants: list[PositioningVariant] = Field(default_factory=list)
     content_ideas: list[ContentIdea] = Field(default_factory=list)
     data_gaps: list[DataGap] = Field(default_factory=list)
+    hypotheses: list[Hypothesis] = Field(default_factory=list)

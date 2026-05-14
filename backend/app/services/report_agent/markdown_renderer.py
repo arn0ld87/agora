@@ -7,6 +7,7 @@ from ...contracts.report_v3 import (
     Claim,
     DataGap,
     FrictionPoint,
+    Hypothesis,
     Persona,
     ReportV3,
     Segment,
@@ -116,6 +117,23 @@ def render_data_gaps(gaps: list[DataGap]) -> str:
     )
 
 
+def render_hypotheses_table(hypotheses: list[Hypothesis]) -> str:
+    return _table(
+        ["ID", "Hypothese", "Rationale", "Suggested Evidence", "Score"],
+        [
+            [
+                hypothesis.id,
+                hypothesis.hypothesis_text,
+                hypothesis.rationale,
+                _list_cell(hypothesis.suggested_evidence),
+                f"{hypothesis.confidence_score:.2f}",
+            ]
+            for hypothesis in hypotheses
+        ],
+        "Keine Hypothesen im ReportV3-Artefakt.",
+    )
+
+
 def _render_generic_table(title: str, rows: list[list[object]], headers: list[str]) -> str:
     return f"## {title}\n\n" + _table(headers, rows, f"Keine Eintraege fuer {title}.")
 
@@ -180,7 +198,9 @@ def render_report_v3(report: ReportV3) -> str:
             ],
             ["ID", "Format", "Titel", "Personas"],
         ),
-        "## Hypothesen ohne Evidence / Data Gaps",
+        "## Hypothesen ohne Evidence",
+        render_hypotheses_table(report.hypotheses),
+        "## Data Gaps",
         render_data_gaps(report.data_gaps),
     ]
     return "\n\n".join(parts).rstrip() + "\n"
@@ -189,6 +209,7 @@ def render_report_v3(report: ReportV3) -> str:
 __all__ = [
     "render_claim_table",
     "render_data_gaps",
+    "render_hypotheses_table",
     "render_persona_table",
     "render_report_v3",
     "render_segment_table",
