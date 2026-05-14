@@ -20,7 +20,8 @@ export const LlmProfileSchema = z
     provider: LlmProviderSchema,
     base_url: z.string().min(1),
     model_name: z.string().min(1),
-    api_key: z.string().default(""),
+    // null = nicht gesetzt (Update lässt Feld weg). "" = explizit geleert.
+    api_key: z.string().nullable().default(null),
     is_default: z.boolean().default(false),
     created_at: z.string(), // ISO-String (datetime serialisiert als str)
     updated_at: z.string(),
@@ -41,7 +42,7 @@ export const LlmProfileCreateRequestSchema = z
     provider: LlmProviderSchema,
     base_url: z.string().min(1),
     model_name: z.string().min(1),
-    api_key: z.string().default(""),
+    api_key: z.string().nullable().default(null),
     is_default: z.boolean().default(false),
   })
   .strict();

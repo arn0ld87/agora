@@ -62,8 +62,13 @@ def _row_to_profile(row: sqlite3.Row) -> LlmProfile:
 
 
 def _bootstrap_profile() -> dict:
-    """Erzeugt Default-Profil aus LLM_*-Env-Variablen."""
-    base_url = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
+    """Erzeugt Default-Profil aus LLM_*-Env-Variablen.
+
+    Localhost-Falle: 'localhost' aus dem Host-.env resolved nicht innerhalb des
+    Containers. Default daher 'host.docker.internal'; Provider-Detection muss
+    den Host-Alias kennen.
+    """
+    base_url = os.environ.get("LLM_BASE_URL", "http://host.docker.internal:11434/v1")
     model = os.environ.get("LLM_MODEL_NAME", "qwen2.5:32b")
     if "openai.com" in base_url:
         provider = "openai"
@@ -71,7 +76,7 @@ def _bootstrap_profile() -> dict:
         provider = "gemini"
     elif "anthropic.com" in base_url:
         provider = "anthropic"
-    elif "localhost" in base_url or "127.0.0.1" in base_url:
+    elif any(h in base_url for h in ("localhost", "127.0.0.1", "host.docker.internal")):
         provider = "ollama"
     else:
         provider = "custom"
@@ -147,7 +152,7 @@ class LlmProfilesStore:
                     req.provider,
                     req.base_url,
                     req.model_name,
-                    req.api_key,
+                    req.api_key if req.api_key is not None else "",
                     int(req.is_default),
                     now,
                     now,
@@ -165,7 +170,9 @@ class LlmProfilesStore:
                 return None
             if req.is_default:
                 conn.execute("UPDATE llm_profiles SET is_default = 0")
-            if req.api_key:
+            # is not None unterscheidet 'weglassen' (None → bestehender Key bleibt)
+            # von 'explizit leeren' ("" → Key wird entfernt).
+            if req.api_key is not None:
                 conn.execute(
                     "UPDATE llm_profiles SET name=?,provider=?,base_url=?,model_name=?,"
                     "api_key=?,is_default=?,updated_at=? WHERE id=?",

@@ -6,7 +6,7 @@ Jeder Agora-Run kann pro Schritt ein Profil referenzieren.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +23,8 @@ class LlmProfile(BaseModel):
     provider: ProviderLiteral
     base_url: str = Field(..., min_length=1)
     model_name: str = Field(..., min_length=1)
-    api_key: str = Field(default="")
+    # None = nicht gesetzt (Update lässt Feld weg). "" = explizit geleert.
+    api_key: Optional[str] = None
     is_default: bool = False
     created_at: datetime
     updated_at: datetime
@@ -41,5 +42,6 @@ class LlmProfileCreateRequest(BaseModel):
     provider: ProviderLiteral
     base_url: str = Field(..., min_length=1)
     model_name: str = Field(..., min_length=1)
-    api_key: str = ""
+    # None = nicht gesetzt (Update lässt Feld weg). "" = explizit geleert.
+    api_key: Optional[str] = None
     is_default: bool = False

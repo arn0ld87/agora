@@ -765,7 +765,10 @@ def build_client_from_profile(
     scheitern sofort mit einem ValueError, bevor ein HTTP-Request entsteht.
     """
     base_url_lower = profile.base_url.lower()
-    is_local = "localhost" in base_url_lower or "127.0.0.1" in base_url_lower or "ollama" in base_url_lower
+    is_local = any(
+        h in base_url_lower
+        for h in ("localhost", "127.0.0.1", "host.docker.internal", "ollama")
+    )
     if not profile.api_key and not is_local:
         raise ValueError(
             f"LLM-Profil {profile.id!r}: api_key fehlt für Provider {profile.provider!r}"
