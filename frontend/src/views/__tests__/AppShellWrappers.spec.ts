@@ -1,8 +1,12 @@
 /**
- * AppShellWrappers — Smoke-Tests fuer DashboardView, RunsAppShellView,
- * RunDetailAppShellView (Slice F, Design-v4).
+ * AppShellWrappers — Smoke-Tests fuer RunsAppShellView, RunDetailAppShellView
+ * (Slice F, Design-v4).
  *
  * Prueft: mountet ohne Crash, AppShell wird gerendert.
+ *
+ * Hinweis: DashboardView ist seit dem Workbench-Rebuild (2026-05-14) ein
+ * eigener Spec unter src/views/v4/__tests__/DashboardView.spec.ts —
+ * nicht mehr Teil dieser Datei.
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -45,7 +49,6 @@ vi.mock('@/views/RunDetailView.vue', () => ({
   },
 }))
 
-import DashboardView from '../v4/DashboardView.vue'
 import RunsAppShellView from '../v4/RunsAppShellView.vue'
 import RunDetailAppShellView from '../v4/RunDetailAppShellView.vue'
 
@@ -61,32 +64,6 @@ async function mountView(component: object, path: string) {
   await flushPromises()
   return wrapper
 }
-
-describe('DashboardView', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('mountet ohne Crash', async () => {
-    const w = await mountView(DashboardView, '/dashboard')
-    expect(w.exists()).toBe(true)
-  })
-
-  it('rendert AppShell', async () => {
-    const w = await mountView(DashboardView, '/dashboard')
-    expect(w.find('.app-shell-stub').exists()).toBe(true)
-  })
-
-  it('uebergibt Breadcrumb "Dashboard"', async () => {
-    const w = await mountView(DashboardView, '/dashboard')
-    const shell = w.findComponent({ name: 'AppShell' })
-    const crumbs = shell.props('breadcrumbs') as Array<{ label: string }>
-    expect(crumbs.map((c) => c.label)).toContain('Dashboard')
-  })
-
-  it('zeigt Slice-H-Hinweis', async () => {
-    const w = await mountView(DashboardView, '/dashboard')
-    expect(w.text()).toContain('Slice H')
-  })
-})
 
 describe('RunsAppShellView', () => {
   beforeEach(() => vi.clearAllMocks())
