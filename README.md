@@ -23,16 +23,19 @@ Dokument hochladen, Wissensgraph extrahieren, Personas ableiten, Social-Media-Re
 > ## Status: v1.0.0 auf `main`
 >
 > Releasedatum: **2026-05-11** ([Release Notes](docu/2026-05-11-v1.0.0-release-notes.md)).
-> Alle 14 PR-Slices der v1.0-Output-Vertrag-Roadmap aus [`PLAN.md`](PLAN.md) sind durch:
+> Kern-Output-Vertrag-Phases stehen (P2.1/P2.2/P3.1/P3.3/P3.4/P4.2):
 > Pflichtabschnitt-Validator, Persona-Mindestanzahl, Evidence-Anker-Pflicht, Low-Confidence-Marker,
 > ReportV3-Persistenz mit Markdown-Renderer, Quote-Source-Marker, drei Vertrauensmodi
-> (`strict`/`balanced`/`explorative`), CSV/ZIP-Export und E2E-Smokes über die drei Modi.
+> (`strict`/`balanced`/`explorative`), CSV/ZIP-Export.
+> Offene Sub-Slices (P3.2-Verdrahtung, P4.1 Report-Modi, P4.3 ZIP-Bundle, P4.4 E2E-Smokes) laufen unter M11.
 >
 > Agora ist ein **experimenteller Fork**. Graph-Build, Simulation und Report-Pipeline hängen stark an Modellqualität, JSON-Verhalten, Neo4j, Redis und OASIS-Subprozessen.
 >
 > **Nicht direkt ins öffentliche Internet stellen.** Agora v1 ist per [ADR-0001](docu/decisions/0001-auth-model.md) bewusst **Single-User-only**: Shared `AGORA_AUTH_TOKEN`, signed Tickets für SSE/Downloads, kein Multi-User-AuthN/AuthZ-Stack. Für Tailnet/LAN nur hinter Reverse-Proxy oder Tunnel betreiben.
 >
 > **Aktiv gepflegter Modellpfad:** `qwen3-coder-next:cloud` für LLMs und `qwen3-embedding:4b` mit `VECTOR_DIM=2560` für Embeddings. `nomic-embed-text` mit 768 Dimensionen bleibt als Fallback möglich.
+
+> **Laufend:** [Design Language v4 — App-Shell-Port](docu/2026-05-11-design-v4-app-shell-epic.md) (Operator-Workbench-Dashboard, native v4-Tokens, Apple-System-Farben). Integration-Branch `feat/design-v4-epic`, Slices A–J geplant.
 
 ---
 
@@ -121,6 +124,16 @@ Verbindliche Testzahlen, Coverage und Milestone-Status stehen in [`docu/STATUS.m
 | 9 | Production Deployment | grün mit bewusst pausiertem PR-Smoke |
 | 10 | Security Watchlist | grün |
 
+#### Laufende Härtung (M11)
+
+- **Coverage-Gate-Anhebung** (M11.2/M11.3): Backend 55 % → 85 % (monatlich +2 Punkte), Frontend 26 % → 80 % (mit Playwright E2E, M11.4+). Reports als Artifacts in CI.
+- **Playwright-Smokes** (M11.4): Drei stabile E2E-Smokes — Health/Login, Upload+Graph, Minimalreport statt 90-Test-Pyramide.
+- **Komplexitäts-Gate** (M11.5): `radon` Backend, `ESLint`/`size-limit` Frontend.
+- **API-Envelope** (M11.6): Error-/Success-Envelopes vollständig durchziehen.
+- **gevent ↔ OASIS-Subprozess-Smoke:** Bei OASIS-Pfad-Änderungen via `scripts/verify-deploy.sh` verifizieren.
+
+Siehe [`docu/STATUS.md`](docu/STATUS.md) für Coverage-Roadmap und aktuelle Schwellen.
+
 ### Schnellstart
 
 Vollständige Guides:
@@ -139,8 +152,8 @@ git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
 
-# Modelle auf dem Host vorbereiten
-ollama pull qwen2.5:32b
+# Modelle auf dem Host vorbereiten (aktiv gepflegt)
+ollama pull qwen3-coder-next:cloud
 ollama pull qwen3-embedding:4b
 
 # Dev-Stack: Agora + Neo4j + Redis
@@ -176,12 +189,12 @@ Named Volumes für Neo4j und Redis bleiben dabei erhalten.
 ### Wichtige Konfiguration
 
 ```env
-# LLM / Ollama oder OpenAI-kompatibler Endpoint
+# LLM / Ollama oder OpenAI-kompatibler Endpoint (aktiv gepflegt: qwen3-coder-next)
 LLM_API_KEY=ollama
 LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL_NAME=qwen2.5:32b
+LLM_MODEL_NAME=qwen3-coder-next:cloud
 
-# Embeddings
+# Embeddings (aktiv gepflegt: qwen3-embedding:4b)
 EMBEDDING_MODEL=qwen3-embedding:4b
 EMBEDDING_BASE_URL=http://localhost:11434
 VECTOR_DIM=2560
@@ -210,6 +223,8 @@ Embedding-Modell und `VECTOR_DIM` müssen zusammenpassen:
 | `embeddinggemma:300m` | 768 |
 | `qwen3-embedding:4b` | 2560 |
 | `qwen3-embedding:8b` | 4096 |
+
+**Fallback (älter):** Statt `qwen3-coder-next:cloud` kannst du auch `qwen2.5:32b` nutzen; die Token-Limits sind reduziert.
 
 ### Sicherheit
 
@@ -275,7 +290,7 @@ It is built for careful local experimentation: Neo4j for graph memory, Flask/Pyd
 
 ### Current status
 
-`main` is at **v1.0.0** (released 2026-05-11, see [Release Notes](docu/2026-05-11-v1.0.0-release-notes.md)). All 14 PR slices of the v1.0 output-contract roadmap are merged: required-sections validator, persona-minimum floor, evidence-anchor requirement, low-confidence markers, ReportV3 persistence with Markdown renderer, quote-source markers, three trust modes (`strict`/`balanced`/`explorative`), CSV/ZIP export, and E2E mode smokes. Production hardening (reverse-proxy sidecar, gevent, signed tickets), CVE monitoring with the 2026-07-30 hardstop, and coverage gates are documented in [`docu/STATUS.md`](docu/STATUS.md).
+`main` is at **v1.0.0** (released 2026-05-11, see [Release Notes](docu/2026-05-11-v1.0.0-release-notes.md)). Core output-contract phases complete (P2.1/P2.2/P3.1/P3.3/P3.4/P4.2): required-sections validator, persona-minimum floor, evidence-anchor requirement, low-confidence markers, ReportV3 persistence with Markdown renderer, quote-source markers, three trust modes (`strict`/`balanced`/`explorative`), CSV export. Open sub-slices (P3.2 wiring, P4.1 report modes, P4.3 ZIP bundle, P4.4 E2E smokes) in progress under M11. Production hardening (reverse-proxy sidecar, gevent, signed tickets), CVE monitoring with the 2026-07-30 hardstop, and coverage gates documented in [`docu/STATUS.md`](docu/STATUS.md).
 
 Agora v1 is **single-user-only** by architecture decision. Do not expose it directly to the public internet.
 
@@ -299,7 +314,7 @@ git clone https://github.com/arn0ld87/agora.git
 cd agora
 cp .env.example .env
 
-ollama pull qwen2.5:32b
+ollama pull qwen3-coder-next:cloud
 ollama pull qwen3-embedding:4b
 
 docker compose up -d --build
