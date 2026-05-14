@@ -9,6 +9,9 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, ready_for_review, labeled]
+    # PRs aus release/**/rc/** triggern den Smoke immer.
+    # Normale Feature-PRs nur mit Label "needs-prod-smoke" (MAI-11).
   workflow_dispatch:
     inputs:
       force_publish:
@@ -26,7 +29,7 @@ jobs:
     # Das Image wird als Artefakt gespeichert und im smoke-Job geladen.
     # Damit wird sichergestellt, dass kein kaputtes Image in die Registry
     # gelangt, bevor der End-to-End-Smoke-Test grün ist.
-    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'rc/') }}
+    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'rc/') || contains(github.event.pull_request.labels.*.name, 'needs-prod-smoke') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -110,6 +113,15 @@ jobs:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
     needs: [build-only]
+    # MAI-11: Smoke läuft automatisch nur auf release-relevanten Pfaden.
+    # Feature-PRs können den Smoke opt-in per Label "needs-prod-smoke" erzwingen.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v'))) ||
+      (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'release/') ||
+      startsWith(github.head_ref, 'rc/') ||
+      contains(github.event.pull_request.labels.*.name, 'needs-prod-smoke')))
     permissions:
       contents: read
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
