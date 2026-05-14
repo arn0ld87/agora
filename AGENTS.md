@@ -40,14 +40,16 @@ Erst nach Findings-Sichtung mergen — `git checkout main && git merge --ff-only
 
 ## Tool-Pflicht (nicht verhandelbar)
 
-Die häufigste Quelle für Rework in diesem Repo ist: **Agent greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Veraltete Annahmen,
-halluzinierte Symbole, doppelte Recherche.
+Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Agent greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Veraltete Annahmen,
+halluzinierte Symbole, doppelte Recherche und unnötig große File-Reads sind zu vermeiden.
+
+**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context7`, `sequential-thinking`, GitHub/`gh` und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
 
 ### Pre-Flight-Checkliste (vor erstem Bash/Read)
 
 Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **strikt**:
 
-1. **`code-review-graph::get_minimal_context_tool`** mit `task: "<one-liner>"`. Liefert Risk-Score + Communities + Tool-Empfehlungen in ~100 Tokens.
+1. **`code-review-graph::get_minimal_context_tool`** mit `task: "<one-liner>"`. Pflicht für Token-Sparen: liefert Risk-Score + Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
 2. **`context7::resolve-library-id` + `query-docs`** bei jeder Lib/Framework/SDK/CLI-Berührung (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker). Training-Cutoff ist nicht aktuell.
 3. **`sequential-thinking`** bei ambigen, multi-file, oder pipeline-überschreitenden Tasks. Mindestens 3–5 Thoughts.
 4. **Dann erst** `Read`/`rg`/`Bash`.
@@ -363,7 +365,7 @@ Rot: NICHT mergen, sondern Worker mit präzisem Fix-Brief erneut anstoßen.
 
 ## Subagent-Routing (Codex / Multi-Runtime)
 
-Optimierungsziel ist **Rework-Vermeidung**, nicht Token-Sparen. Layer-0-Drift oder Wording-Glossar-Verstöße kosten in der Re-Review mehr als ein direkter Senior-Modell-Run gespart hätte.
+Optimierungsziel ist **Rework-Vermeidung plus gezieltes Token-Sparen**. `code-review-graph` ist Pflicht, damit kleinere Modelle und Subagents mit präzisem Strukturkontext arbeiten können; bei Layer-0-Drift oder Wording-Glossar-Verstößen hat trotzdem Senior-Review Vorrang vor blindem Sparen.
 
 | Aufgabe | Modell-Profil | Subagent-Profil |
 |---|---|---|

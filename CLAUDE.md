@@ -136,15 +136,17 @@ git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 
 ## Tool-Pflicht (nicht verhandelbar)
 
-Die häufigste Quelle für Rework in diesem Repo ist: **Claude greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Das produziert
-veraltete Annahmen, halluzinierte Symbole und doppelte Recherche. Daher gilt:
+Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Claude greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Das produziert
+veraltete Annahmen, halluzinierte Symbole, doppelte Recherche und unnötig große Kontextfenster. Daher gilt:
+
+**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context7`, `sequential-thinking`, GitHub/`gh`, honcho-memory/episodic-memory und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
 
 ### Pre-Flight-Checkliste (bevor du erste Bash/Read absetzt)
 
 Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **strikt**:
 
 1. **Skill-Liste scannen.** Die System-Reminder listet alle Skills auf. Falls einer matcht: zuerst invoken.
-2. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens.
+2. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Pflicht für Token-Sparen: liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
 3. **`mcp__claude_ai_Context7__resolve-library-id` + `query-docs`** wenn die Task eine Library/Framework/SDK/CLI berührt (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker, …). Auch wenn du „die Lib kennst" — Training-Cutoff ist nicht aktuell.
 4. **`sequential-thinking`** invoken wenn die Task ambig ist, Multi-File-Scope hat, oder eine Pipeline-Grenze überschreitet (graph ↔ env ↔ simulation ↔ report). Mindestens 3–5 Thoughts.
 5. **Dann erst** `Read`/`rg`/`Bash`.
@@ -310,9 +312,11 @@ Falls rot: NICHT mergen, sondern Worker mit präzisem Fix-Brief erneut anstoßen
 
 ## Subagent-Routing (Max-Plan)
 
-Optimierungsziel ist **Rework-Vermeidung**, nicht Token-Sparen. Layer-0-Drift
-oder Wording-Glossar-Verstöße kosten in der Re-Review mehr als ein direkter
-Opus-Run gespart hätte.
+Optimierungsziel ist **Rework-Vermeidung plus gezieltes Token-Sparen**.
+`code-review-graph` ist Pflicht, damit kleinere Modelle und Subagents mit
+präzisem Strukturkontext arbeiten können; bei Layer-0-Drift oder
+Wording-Glossar-Verstößen hat trotzdem Senior-Review Vorrang vor blindem
+Sparen.
 
 Ziel-Mix: ~35 % Opus, ~55 % Sonnet, ~10 % Haiku.
 
