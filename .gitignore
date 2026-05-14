@@ -118,3 +118,4 @@ backend/uploads/
 data/backend/venv311/
 backend/venv311/
 .fehler/konsole_safari
+backend/instance/*.db
