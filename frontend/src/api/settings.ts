@@ -5,6 +5,7 @@
 // auch alle anderen API-Module nutzen.
 
 import service, { getAgoraToken } from './index'
+import { useApiAuth } from '../composables/useApiAuth'
 
 export interface SettingsResponse {
   settings: Record<string, unknown>
@@ -17,12 +18,6 @@ export interface SettingsSchemaResponse {
 }
 
 export type SecretsPayload = Record<string, string>
-
-interface TicketApiResponse {
-  data?: {
-    ticket?: string
-  }
-}
 
 export interface SettingsStreamHandlers {
   changed?: (payload: unknown) => void
@@ -63,12 +58,12 @@ export async function buildSettingsStreamUrl(): Promise<string> {
   const base = import.meta.env.VITE_API_BASE_URL || ''
   const path = `${base}/api/settings/stream`
   if (!getAgoraToken()) return path
-  const res = await service.post('/api/auth/ticket', {
-    scope: 'settings-stream',
-    ttl_seconds: 60,
-  })
-  const ticket = (res as unknown as TicketApiResponse)?.data?.ticket
-  return ticket ? `${path}?ticket=${encodeURIComponent(ticket)}` : path
+  try {
+    const ticket = await useApiAuth.fetchTicket('settings-stream')
+    return ticket ? `${path}?ticket=${encodeURIComponent(ticket)}` : path
+  } catch {
+    return path
+  }
 }
 
 export async function openSettingsStream(

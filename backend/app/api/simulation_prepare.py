@@ -35,6 +35,31 @@ from .simulation_common import (
 )
 
 
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
+
+
+def _is_local_endpoint(base_url: Optional[str]) -> bool:
+    """Prüft, ob eine Base-URL auf einen lokalen Endpunkt zeigt.
+
+    Nutzt ``urllib.parse.urlparse`` und vergleicht den Hostnamen explizit gegen
+    eine Whitelist (``localhost``, ``127.0.0.1``, ``::1``, ``0.0.0.0``,
+    ``host.docker.internal``). Das verhindert Subdomain-Smuggling wie
+    ``http://not-localhost.com`` oder ``http://remote-server:11434``, die ein
+    reines Substring-Match fälschlich als lokal akzeptiert hätte
+    (Gemini-Review PR #466).
+    """
+    if not base_url:
+        return False
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in _LOCAL_HOSTS
+
+
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
     """Parse ``quota_plan`` aus dem POST-Body in ein ``PersonaQuotaPlan``.
 
@@ -353,6 +378,19 @@ def prepare_simulation():
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
+
+    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=422,
+            message=(
+                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
+            ),
+        )
+
     effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
 
     manager._set_status(state, SimulationStatus.PREPARING)

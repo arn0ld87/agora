@@ -221,8 +221,13 @@ def create_app(config_class=Config):
     from .utils.api_responses import install_api_error_handlers
     from .utils.auth import install_blueprint_guard, log_auth_mode
     install_api_error_handlers(app)
-    for bp in (
+    # auth_bp: POST /api/auth/ticket darf kein abgelaufenes Ticket zur
+    # Re-Auth nutzen (Henne-Ei).  Master-Token / API-Key reichen.
+    install_blueprint_guard(
         auth_bp,
+        token_only_endpoints=frozenset({"auth.issue_ticket"}),
+    )
+    for bp in (
         graph_bp,
         simulation_bp,
         report_bp,

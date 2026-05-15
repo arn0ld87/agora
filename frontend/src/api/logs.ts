@@ -1,5 +1,6 @@
 // Issue #132 — Backend-Log-Viewer-API.
 import api, { getAgoraToken } from './index'
+import { useApiAuth } from '../composables/useApiAuth'
 
 export interface FetchLogsParams {
   tail?: number
@@ -41,8 +42,7 @@ export async function buildLogsStreamUrl(
   }
   if (!getAgoraToken()) return u.toString()
   try {
-    const res = await api.post('/api/auth/ticket', { scope: 'logs:stream', ttl_seconds: 60 })
-    const ticket = (res as unknown as { data?: { ticket?: string } })?.data?.ticket
+    const ticket = await useApiAuth.fetchTicket('logs:stream')
     if (ticket) u.searchParams.set('ticket', ticket)
   } catch { /* open-mode or ticket-endpoint not reachable — proceed without ticket */ }
   return u.toString()

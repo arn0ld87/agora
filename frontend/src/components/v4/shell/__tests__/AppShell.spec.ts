@@ -11,7 +11,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from './testRouter'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
+
+// Lokale i18n-Instanz — kein Singleton-Import, um localStorage-Konflikte zu vermeiden
+const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
 
 // localStorage-Mock
 const lsMock = (() => {
@@ -38,7 +44,7 @@ describe('AppShell', () => {
   it('mountet ohne Crash', async () => {
     await router.push('/')
     const wrapper = mount(AppShell, {
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.exists()).toBe(true)
   })
@@ -46,7 +52,7 @@ describe('AppShell', () => {
   it('rendert Standard-Sidebar-Slot (Sidebar-Komponente)', async () => {
     await router.push('/')
     const wrapper = mount(AppShell, {
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     // Sidebar hat class app-shell__sidebar
     expect(wrapper.find('.app-shell__sidebar').exists()).toBe(true)
@@ -55,7 +61,7 @@ describe('AppShell', () => {
   it('rendert Topbar-Slot', async () => {
     await router.push('/')
     const wrapper = mount(AppShell, {
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.find('.app-shell__topbar').exists()).toBe(true)
   })
@@ -66,7 +72,7 @@ describe('AppShell', () => {
       slots: {
         sidebar: '<div class="custom-sidebar">Sidebar</div>',
       },
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.find('.custom-sidebar').exists()).toBe(true)
   })
@@ -77,7 +83,7 @@ describe('AppShell', () => {
       slots: {
         default: '<div class="main-content">Main</div>',
       },
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.find('.main-content').exists()).toBe(true)
   })
@@ -85,7 +91,7 @@ describe('AppShell', () => {
   it('Inspector-Slot ist default geschlossen', async () => {
     await router.push('/')
     const wrapper = mount(AppShell, {
-      global: { plugins: [router, createPinia()] },
+      global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.find('.app-shell__inspector').exists()).toBe(false)
   })
@@ -98,7 +104,7 @@ describe('AppShell', () => {
       slots: {
         inspector: '<div class="inspector-content">Inspector</div>',
       },
-      global: { plugins: [router, pinia] },
+      global: { plugins: [router, pinia, i18n] },
     })
 
     const { useShellStore } = await import('@/stores/shell')

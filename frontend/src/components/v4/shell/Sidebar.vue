@@ -24,14 +24,16 @@
         <SidebarItem
           :icon="item.icon"
           :label="item.label"
-          :to="item.to"
-          :active="active === item.id"
+          :to="item.disabled ? undefined : item.to"
+          :active="!item.disabled && active === item.id"
+          :disabled="item.disabled"
+          :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
         />
       </template>
 
       <!-- Settings group -->
       <SidebarGroup
-        label="Settings"
+        :label="t('sidebar.settings.label')"
         icon="settings"
         :open="settingsOpen"
         :active="active === 'settings' && !settingsOpen"
@@ -52,22 +54,28 @@
     <!-- Footer collapse toggle -->
     <div class="sidebar__footer" @click="emit('collapse-toggle')">
       <Icon :name="collapsed ? 'arrowL' : 'arrowL'" :size="14" :stroke="1.6" />
-      <span v-if="!collapsed" class="sidebar__footer-label">Collapse</span>
+      <span v-if="!collapsed" class="sidebar__footer-label">{{ t('sidebar.footer.collapse') }}</span>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
 import SidebarItem from './SidebarItem.vue'
 import SidebarGroup from './SidebarGroup.vue'
 import Icon from './Icon.vue'
+
+const { t } = useI18n()
 
 interface NavItem {
   id: string
   icon: string
   label: string
   to: RouteLocationRaw
+  /** Wenn true: kein Router-Push, aria-disabled, gedimmtes Styling, Tooltip. */
+  disabled?: boolean
 }
 
 interface NavSettingsItem {
@@ -100,24 +108,24 @@ function onSettingsGroupToggle(value: boolean): void {
   emit('update:settingsOpen', value)
 }
 
-const navWorkspace: NavItem[] = [
-  { id: 'dashboard', icon: 'home',   label: 'Dashboard',  to: { name: 'Dashboard' } },
-  { id: 'runs',      icon: 'branch', label: 'Runs',       to: { name: 'Runs' } },
-  { id: 'projects',  icon: 'folder', label: 'Projects',   to: { path: '#projects' } },
-  { id: 'datasets',  icon: 'layers', label: 'Datasets',   to: { path: '#datasets' } },
-  { id: 'templates', icon: 'doc',    label: 'Templates',  to: { path: '#templates' } },
-  { id: 'monitoring',icon: 'spark',  label: 'Monitoring', to: { path: '#monitoring' } },
-]
+const navWorkspace = computed<NavItem[]>(() => [
+  { id: 'dashboard',  icon: 'home',   label: t('sidebar.nav.dashboard'),  to: { name: 'Dashboard' } },
+  { id: 'runs',       icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
+  { id: 'projects',   icon: 'folder', label: t('sidebar.nav.projects'),   to: { path: '#projects' },  disabled: true },
+  { id: 'datasets',   icon: 'layers', label: t('sidebar.nav.datasets'),   to: { path: '#datasets' },  disabled: true },
+  { id: 'templates',  icon: 'doc',    label: t('sidebar.nav.templates'),  to: { path: '#templates' }, disabled: true },
+  { id: 'monitoring', icon: 'spark',  label: t('sidebar.nav.monitoring'), to: { path: '#monitoring' },disabled: true },
+])
 
-const navSettings: NavSettingsItem[] = [
-  { id: 'general',       label: 'General',       to: { name: 'SettingsGeneral' } },
-  { id: 'integrations',  label: 'Integrations',  to: { name: 'SettingsIntegrations' } },
-  { id: 'users-teams',   label: 'Users & Teams', to: { name: 'SettingsUsersTeams' } },
-  { id: 'api-keys',      label: 'API Keys',      to: { name: 'SettingsApiKeys' } },
-  { id: 'llm-providers', label: 'LLM Providers', to: { name: 'SettingsLlmProviders' } },
-  { id: 'llm-routing',   label: 'LLM Routing',   to: { name: 'SettingsLlmRouting' } },
-  { id: 'audit',         label: 'Audit Logs',    to: { name: 'SettingsAuditLogs' } },
-]
+const navSettings = computed<NavSettingsItem[]>(() => [
+  { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
+  { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
+  { id: 'users-teams',   label: t('sidebar.settings.usersTeams'),    to: { name: 'SettingsUsersTeams' } },
+  { id: 'api-keys',      label: t('sidebar.settings.apiKeys'),       to: { name: 'SettingsApiKeys' } },
+  { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
+  { id: 'llm-routing',   label: t('sidebar.settings.llmRouting'),    to: { name: 'SettingsLlmRouting' } },
+  { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
+])
 </script>
 
 <style scoped>

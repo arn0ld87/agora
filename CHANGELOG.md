@@ -5,6 +5,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Smoke-Fix Welle 2 — 2026-05-15)
+
+- `fix(report-agent): Ollama-Outline-Robustness — max_tokens=16384, force_no_thinking=True, Retry-Loop (#2)`
+- `fix(auth): Ticket-Refresh ohne bestehenden Ticket via Cookie/API-Key (#4)`
+- `fix(api): Provider-Override propagiert DB-Key automatisch via SecretResolver (#3, #17)`
+- `fix(ui): Sidebar-Stubs disabled+Tooltip, Persona-Slider min=10, Step4-Modell-Sync (#5, #6, #7)`
+- `feat(i18n): Locale-Parity + ontology_generate + graph.edgeLabels.* (#8, #9, #10)`
+
+### Added (Smoke-Fix Welle 2)
+
+- test(backend): 12 neue Unit-Tests (Ollama-Outline, Auth-Refresh, SecretResolver, Modell-Store)
+- test(frontend): 13 neue Tests (Sidebar-Stubs, Persona-Quota-Warning, Report-Model-Store, Locale-Coverage-Linter)
+
 ### Changed
 - ci(coverage): Coverage-Schwellen auf Step 2 angehoben: Backend 55 → 60 %, Frontend 26 → 28 %. Backend-Istwert durch neue Tests für `file_parser.py` auf 66 % gesteigert. (Sub-Slice M11.2/M11.3 Step 2).
 

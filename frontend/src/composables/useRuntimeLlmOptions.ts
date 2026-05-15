@@ -24,6 +24,8 @@ export interface UseRuntimeLlmOptionsReturn {
   runtimeProviderOptions: ComputedRef<Option[]>
   runtimeProviderEnabled: ComputedRef<boolean>
   runtimePayload: () => LlmRuntimePayload | null
+  /** True wenn Provider != default und kein expliziter Key im Sitzungsspeicher. */
+  runtimeApiKeyMissing: ComputedRef<boolean>
 }
 
 const DEFAULT_BASE_URLS: Record<Exclude<RuntimeProvider, 'default'>, string> = {
@@ -100,10 +102,10 @@ export function runtimeLlmPayloadFromStorage(): LlmRuntimePayload | null {
   const provider = normalizeProvider(safeLocalGet(STORAGE_LLM_PROVIDER, 'default'))
   if (provider === 'default') return null
   const apiKey = safeSessionGet(SESSION_LLM_API_KEY).trim()
-  if (!apiKey) return null
   const storedBaseUrl = safeLocalGet(STORAGE_LLM_BASE_URL).trim()
   const baseUrl = storedBaseUrl || defaultBaseUrl(provider)
-  return { provider, api_key: apiKey, ...(baseUrl ? { base_url: baseUrl } : {}) }
+  // Kein Session-Key → Provider ohne api_key senden; Backend löst via Settings-DB auf.
+  return { provider, ...(apiKey ? { api_key: apiKey } : {}), ...(baseUrl ? { base_url: baseUrl } : {}) }
 }
 
 export function runtimeProviderMissingApiKeyFromStorage(): boolean {
@@ -149,14 +151,19 @@ export function useRuntimeLlmOptions(
   function runtimePayload(): LlmRuntimePayload | null {
     if (runtimeProvider.value === 'default') return null
     const apiKey = runtimeApiKey.value.trim()
-    if (!apiKey) return null
     const baseUrl = runtimeBaseUrl.value.trim() || defaultBaseUrl(runtimeProvider.value)
+    // Wenn kein expliziter Session-Key vorhanden: Provider ohne api_key senden —
+    // Backend löst den Key via SecretResolver aus der Settings-DB auf (Smoke-Fix Slice 04).
     return {
       provider: runtimeProvider.value,
-      api_key: apiKey,
+      ...(apiKey ? { api_key: apiKey } : {}),
       ...(baseUrl ? { base_url: baseUrl } : {}),
     }
   }
+
+  const runtimeApiKeyMissing = computed(
+    () => runtimeProvider.value !== 'default' && !runtimeApiKey.value.trim(),
+  )
 
   return {
     runtimeProvider,
@@ -165,5 +172,6 @@ export function useRuntimeLlmOptions(
     runtimeProviderOptions,
     runtimeProviderEnabled,
     runtimePayload,
+    runtimeApiKeyMissing,
   }
 }

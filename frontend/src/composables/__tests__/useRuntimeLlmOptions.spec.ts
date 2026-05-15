@@ -56,12 +56,19 @@ describe('runtimeLlmPayloadFromStorage', () => {
     })
   })
 
-  it('liest API-Key nur aus sessionStorage', () => {
+  it('liest API-Key nur aus sessionStorage — kein Key sendet Provider ohne api_key (DB-Fallback)', () => {
+    // Smoke-Fix Slice 04: runtimeLlmPayloadFromStorage() gibt Provider auch ohne Session-Key zurück.
+    // Backend löst Key via Settings-DB auf. api_key im localStorage wird ignoriert.
     localStorage.setItem(STORAGE_LLM_PROVIDER, 'custom_openai')
     localStorage.setItem(STORAGE_LLM_BASE_URL, 'https://example.test/v1')
     localStorage.setItem(SESSION_LLM_API_KEY, 'wrong-place')
 
-    expect(runtimeLlmPayloadFromStorage()).toBeNull()
+    // Payload enthält Provider + base_url, aber KEIN api_key (falsch platzierter Key wird ignoriert)
+    const payload = runtimeLlmPayloadFromStorage()
+    expect(payload).not.toBeNull()
+    expect(payload?.provider).toBe('custom_openai')
+    expect(payload?.api_key).toBeUndefined()
+    // runtimeProviderMissingApiKeyFromStorage: sessionStorage hat keinen Key → true
     expect(runtimeProviderMissingApiKeyFromStorage()).toBe(true)
   })
 

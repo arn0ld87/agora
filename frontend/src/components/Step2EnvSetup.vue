@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, watchEffect } from 'vue'
 import { usePersonaActions } from '../composables/usePersonaActions'
 import { usePersonaFilter } from '../composables/usePersonaFilter'
 import { usePersonaLibrary } from '../composables/usePersonaLibrary'
@@ -21,6 +21,7 @@ import PersonaLibraryPanel from './step2/PersonaLibraryPanel.vue'
 import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
+import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
 
 const { t } = useI18n()
 
@@ -47,7 +48,35 @@ const {
   runtimeProviderOptions,
   runtimeProviderEnabled,
   runtimePayload,
+  runtimeApiKeyMissing,
 } = useRuntimeLlmOptions(t)
+
+// --- DB-Key-Status für Override-Provider (Smoke-Fix Slice 04) ---
+/** True wenn für den gewählten Override-Provider ein Key in der Settings-DB hinterlegt ist. */
+const providerDbHasKey = ref(false)
+/** True während der has-key-Status abgefragt wird. */
+const providerDbKeyChecking = ref(false)
+
+async function _checkProviderDbKey(providerId) {
+  if (!providerId || providerId === 'default') {
+    providerDbHasKey.value = false
+    return
+  }
+  providerDbKeyChecking.value = true
+  try {
+    providerDbHasKey.value = await checkLlmProviderHasKey(providerId)
+  } finally {
+    providerDbKeyChecking.value = false
+  }
+}
+
+watchEffect(() => {
+  if (runtimeProviderEnabled.value) {
+    _checkProviderDbKey(runtimeProvider.value)
+  } else {
+    providerDbHasKey.value = false
+  }
+})
 
 // ----- Model + language picker (useEnvForm — Sub-Slice 37, Refs #203) -----
 
@@ -121,7 +150,14 @@ const {
   useQuotaPlan,
   quotaEntries,
   quotaValidationError,
+  quotaTotal,
 } = usePersonaQuota({ t })
+
+// Warn wenn Pool kleiner als Quota-Summe (smoke #6)
+const belowQuotaWarning = computed(() => {
+  if (!useAgentCap.value || !useQuotaPlan.value) return false
+  return quotaTotal.value > 0 && maxAgents.value < quotaTotal.value
+})
 
 // ----- Persona-Library + CRUD (usePersonaLibrary — Sub-Slice 39, Refs #203) -----
 const {
@@ -195,11 +231,9 @@ async function triggerPrepare() {
   }
   const m = effectiveModel()
   if (m) payload.llm_model = m
-  if (runtimeProviderEnabled.value && !runtimeApiKey.value.trim()) {
-    addLog(t('step2.runtimeProvider.missingKey'))
-    emit('update-status', 'error')
-    return
-  }
+  // Smoke-Fix Slice 04: kein hartes Abbrechen bei fehlendem Session-Key mehr.
+  // Backend löst den Key via SecretResolver aus der Settings-DB auf.
+  // Wenn weder Session-Key noch DB-Key vorhanden: Backend antwortet 422 mit Fehlermeldung.
   const provider = runtimePayload()
   if (provider) payload.llm_provider = provider
   if (useAgentCap.value && maxAgents.value > 0) {
@@ -296,19 +330,33 @@ onMounted(() => {
                 :label="t('step2.runtimeProvider.label')"
                 :options="runtimeProviderOptions"
               />
-              <Field
-                v-if="runtimeProviderEnabled"
-                v-model="runtimeApiKey"
-                type="password"
-                :label="t('step2.runtimeProvider.apiKey')"
-                :placeholder="t('step2.runtimeProvider.apiKeyPlaceholder')"
-              />
-              <Field
-                v-if="runtimeProviderEnabled"
-                v-model="runtimeBaseUrl"
-                :label="t('step2.runtimeProvider.baseUrl')"
-                :placeholder="t('step2.runtimeProvider.baseUrlPlaceholder')"
-              />
+              <template v-if="runtimeProviderEnabled">
+                <!-- Statushinweis während DB-Key-Prüfung -->
+                <p v-if="providerDbKeyChecking" class="hint">
+                  {{ t('step2.runtimeProvider.checkingKey') }}
+                </p>
+                <!-- Banner: kein DB-Key, kein Session-Key gesetzt -->
+                <p
+                  v-else-if="runtimeApiKeyMissing && !providerDbHasKey"
+                  class="hint warning provider-override-banner"
+                  role="alert"
+                >
+                  {{ t('step2.runtimeProvider.noDbKeyBanner', { provider: runtimeProvider }) }}
+                </p>
+                <Field
+                  v-model="runtimeApiKey"
+                  type="password"
+                  :label="t('step2.runtimeProvider.sessionKeyLabel')"
+                  :placeholder="providerDbHasKey
+                    ? t('step2.runtimeProvider.dbKeyPlaceholder')
+                    : t('step2.runtimeProvider.apiKeyPlaceholder')"
+                />
+                <Field
+                  v-model="runtimeBaseUrl"
+                  :label="t('step2.runtimeProvider.baseUrl')"
+                  :placeholder="t('step2.runtimeProvider.baseUrlPlaceholder')"
+                />
+              </template>
             </div>
           </div>
 
@@ -335,7 +383,7 @@ onMounted(() => {
               <input
                 type="range"
                 v-model.number="maxAgents"
-                min="50"
+                min="10"
                 max="500"
                 step="5"
                 :disabled="isPreparing"
@@ -344,7 +392,7 @@ onMounted(() => {
               <input
                 type="number"
                 v-model.number="maxAgents"
-                min="50"
+                min="10"
                 max="2000"
                 :disabled="isPreparing"
                 class="agent-cap-number"
@@ -352,6 +400,9 @@ onMounted(() => {
               />
               <span class="meta">{{ t('step2.agentCap.unit') }}</span>
             </div>
+            <p v-if="belowQuotaWarning" class="hint hint--warn" role="alert">
+              {{ t('step2.personaPool.belowQuotaWarning', { pool: maxAgents, quota: quotaTotal }) }}
+            </p>
             <p class="hint" v-if="!useAgentCap">{{ t('step2.agentCap.unlimitedHint') }}</p>
           </div>
 

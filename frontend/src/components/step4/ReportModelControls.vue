@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Btn from '../ui/Btn.vue'
 import Select from '../ui/Select.vue'
+
+const { t } = useI18n()
 
 interface Option {
   value: string
@@ -63,42 +66,42 @@ const providerEnabled = computed(() => provider.value !== 'default')
     <div class="model-cell">
       <Select
         v-model="selectedModel"
-        label="Modell für Report"
+        :label="t('step4.model.reportLabel')"
         :options="modelOptions"
       />
     </div>
     <div v-if="reportModelOption === 'custom'" class="model-cell">
-      <label class="field-label">Eigenes Modell</label>
+      <label class="field-label">{{ t('step4.model.customLabel') }}</label>
       <input
         v-model="customModel"
         class="model-input"
         type="text"
-        placeholder="z. B. deepseek-v3.2:cloud"
+        :placeholder="t('step4.model.customPlaceholder')"
       />
     </div>
     <div class="model-cell">
       <Select
         v-model="provider"
-        label="LLM-Anbieter"
+        :label="t('step4.model.providerLabel')"
         :options="providerOptions"
       />
     </div>
     <div v-if="providerEnabled" class="model-cell">
-      <label class="field-label">API-Key</label>
+      <label class="field-label">{{ t('step4.model.apiKeyLabel') }}</label>
       <input
         v-model="apiKey"
         class="model-input"
         type="password"
-        placeholder="API-Key für gewählten Anbieter"
+        :placeholder="t('step4.model.apiKeyPlaceholder')"
       />
     </div>
     <div v-if="providerEnabled" class="model-cell">
-      <label class="field-label">Base-URL (optional)</label>
+      <label class="field-label">{{ t('step4.model.baseUrlLabel') }}</label>
       <input
         v-model="baseUrl"
         class="model-input"
         type="text"
-        placeholder="z. B. https://api.openai.com/v1"
+        :placeholder="t('step4.model.baseUrlPlaceholder')"
       />
     </div>
     <Btn
@@ -107,7 +110,7 @@ const providerEnabled = computed(() => provider.value !== 'default')
       :disabled="isRegenerating"
       @click="emit('regenerate')"
     >
-      Neu generieren
+      {{ t('step4.model.regenerate') }}
     </Btn>
   </div>
 </template>

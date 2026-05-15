@@ -259,7 +259,19 @@
       "apiKeyPlaceholder": "Only for this browser session",
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta/openai/",
-      "missingKey": "Provider override is active, but the API key is missing."
+      "missingKey": "Provider override is active, but the API key is missing.",
+      "dbKeyPlaceholder": "Server key will be used (saved in Settings)",
+      "sessionKeyToggle": "Use own key for this browser session only",
+      "sessionKeyLabel": "Session API key",
+      "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
+      "checkingKey": "Checking key status…"
+    },
+    "providerOverride": {
+      "dbKeyPlaceholder": "Server key will be used (saved in Settings)",
+      "sessionKeyToggle": "Use own key for this browser session only",
+      "sessionKeyLabel": "Session API key",
+      "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
+      "checkingKey": "Checking key status…"
     },
     "personas": {
       "title": "Generate personas",
@@ -362,8 +374,11 @@
     "agentCap": {
       "label": "Limit max. number of agents",
       "unit": "Agents",
-      "minimumHint": "Minimum for the DACH persona table: 50 agents.",
+      "minimumHint": "Minimum for the DACH persona table: 10 agents.",
       "unlimitedHint": "Without a limit, one agent is created for each entity in the graph."
+    },
+    "personaPool": {
+      "belowQuotaWarning": "Pool size ({pool}) is below the required quota sum ({quota}). Some segments may not be fully populated."
     },
     "next": "Next: simulation →"
   },
@@ -506,6 +521,17 @@
       "exportPdf": "Export as PDF",
       "printPdf": "Print as PDF (browser)"
     },
+    "model": {
+      "reportLabel": "Model for report",
+      "customLabel": "Custom model",
+      "customPlaceholder": "e.g. deepseek-v3.2:cloud",
+      "providerLabel": "LLM provider",
+      "apiKeyLabel": "API key",
+      "apiKeyPlaceholder": "API key for selected provider",
+      "baseUrlLabel": "Base URL (optional)",
+      "baseUrlPlaceholder": "e.g. https://api.openai.com/v1",
+      "regenerate": "Regenerate"
+    },
     "quote": {
       "openSource": "Open source"
     },
@@ -636,8 +662,42 @@
       "TAGGED_AS": "tagged as",
       "HAS_TOPIC": "has topic",
       "HAS_INTEREST": "has interest",
-      "INTERESTED_IN": "interested in"
+      "INTERESTED_IN": "interested in",
+      "REPRESENTS": "represents",
+      "COMMENTS_ON": "comments on",
+      "PLANS_WITH": "plans with",
+      "OWNERSHIP_STAKE": "ownership stake",
+      "LEADS": "leads",
+      "SELF_RELATIONS_(1)": "Self-relation (1)"
     }
+  },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "runs": "Runs",
+      "projects": "Projects",
+      "datasets": "Datasets",
+      "templates": "Templates",
+      "monitoring": "Monitoring"
+    },
+    "settings": {
+      "label": "Settings",
+      "general": "General",
+      "integrations": "Integrations",
+      "usersTeams": "Users & Teams",
+      "apiKeys": "API Keys",
+      "llmProviders": "LLM Providers",
+      "llmRouting": "LLM Routing",
+      "auditLogs": "Audit Logs"
+    },
+    "footer": {
+      "collapse": "Collapse"
+    },
+    "disabledTooltip": "Coming soon"
+  },
+  "topbar": {
+    "search": "Search",
+    "notifications": "Notifications"
   },
   "logs": {
     "drawer": {
@@ -1047,7 +1107,8 @@
         "graph_build": "Graph build",
         "simulation_prepare": "Personas",
         "simulation_run": "Simulation",
-        "report_generate": "Report"
+        "report_generate": "Report",
+        "ontology_generate": "Generating ontology"
       }
     },
     "system": {
