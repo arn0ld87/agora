@@ -149,6 +149,20 @@ def init_runner_tracing(service_name: str) -> None:
         otel_context.attach(ctx)
 
 
+def init_runner_logging(service_name: str) -> None:
+    """Setup LoggerProvider im OASIS-Runner.
+
+    Wird von ``run_*_simulation.py`` direkt nach ``init_runner_tracing`` gerufen.
+    Schlägt lautlos fehl, wenn ``app.observability`` nicht importierbar ist
+    oder ``OTEL_LOGS_ENABLED=false`` (Default-Off).
+    """
+    try:
+        from app.observability import init_logging  # type: ignore[import]
+    except ImportError:
+        return
+    init_logging(service_name)
+
+
 def should_filter_max_tokens_warning(message: str) -> bool:
     return "max_tokens" in message and "Invalid or missing" in message
 

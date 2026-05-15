@@ -46,6 +46,7 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-instrumentation-flask" },
+    { name = "opentelemetry-instrumentation-logging" },
     { name = "opentelemetry-instrumentation-redis" },
     { name = "opentelemetry-instrumentation-requests" },
     { name = "opentelemetry-sdk" },
@@ -104,6 +105,7 @@ requires-dist = [
     { name = "opentelemetry-api", specifier = ">=1.24.0" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.24.0" },
     { name = "opentelemetry-instrumentation-flask", specifier = ">=0.45b0" },
+    { name = "opentelemetry-instrumentation-logging", specifier = ">=0.45b0" },
     { name = "opentelemetry-instrumentation-redis", specifier = ">=0.45b0" },
     { name = "opentelemetry-instrumentation-requests", specifier = ">=0.45b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.24.0" },
@@ -2349,6 +2351,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d3/08/e52e6eab550db1736c5657a7e38484c22a101009e77fc67eb00b272a96c1/opentelemetry_instrumentation_flask-0.62b1.tar.gz", hash = "sha256:37662ad159570dab1e3017a2a415193c014a5798fc32d33f3bdd254469e8c69a", size = 24100, upload-time = "2026-04-24T13:22:50.845Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/58/d0e5e82d225365987bd192576095b1125f6b172decc4db79963373c92b74/opentelemetry_instrumentation_flask-0.62b1-py3-none-any.whl", hash = "sha256:6df32684a7dd5dab5feb499c0748a4628b3fd139bffd8171326fb479aa525367", size = 16007, upload-time = "2026-04-24T13:21:55.462Z" },
+]
+
+[[package]]
+name = "opentelemetry-instrumentation-logging"
+version = "0.62b1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3b/25/a30e0160cb3654bb63936be16d8ffe5f4a658d10bec0d5509cca3c74f103/opentelemetry_instrumentation_logging-0.62b1.tar.gz", hash = "sha256:997359d29ce06cb3768677387469431d0484b2450b5c35d7f02361431d3de338", size = 18969, upload-time = "2026-04-24T13:22:54.275Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/e4/216d1c7ff9c10815a8587ecbca0b570596921f001d1e2c2903c6f19e2e90/opentelemetry_instrumentation_logging-0.62b1-py3-none-any.whl", hash = "sha256:969330216d1ae02f4e10f1a030566ae758114caead020817192e6a02c6d1a0e1", size = 17488, upload-time = "2026-04-24T13:22:00.726Z" },
 ]
 
 [[package]]
