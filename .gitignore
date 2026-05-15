@@ -126,3 +126,6 @@ data/backend/venv311/
 backend/venv311/
 .fehler/konsole_safari
 backend/instance/*.db
+
+# code-review-graph local storage (Tree-sitter graph cache, embeddings)
+.code-review-graph/

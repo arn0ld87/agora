@@ -1,0 +1,37 @@
+# code-review-graph ignore — siehe docu/ui/shadcn-vue-evaluation.md "Bun und code-review-graph"
+# und CLAUDE.md "Tool-Pflicht :: code-review-graph"
+
+# Dependencies
+node_modules/**
+.bun/**
+
+# Frontend Builds
+frontend/dist/**
+frontend/coverage/**
+frontend/playwright-report/**
+
+# Backend / Python caches
+__pycache__/**
+.pytest_cache/**
+.ruff_cache/**
+.mypy_cache/**
+.venv/**
+backend/.venv/**
+backend/venv311/**
+backend/data/**
+backend/instance/**
+
+# Worktrees (lokale Slice-Workspaces)
+.worktrees/**
+
+# OASIS / Runtime
+backend/uploads/**
+data/**
+logs/**
+*.log
+
+# Schemas sind generiert — Graph soll Pydantic-Source-Truth abbilden
+schemas/**
+
+# Generated graph storage stays local
+.code-review-graph/**
