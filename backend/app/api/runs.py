@@ -617,12 +617,20 @@ def _resume_report_generate(run: dict):
     if llm_model_override:
         try:
             shared_llm_client: Optional[LLMClient] = LLMClient(model=llm_model_override)
-        except ValueError:
+        except ValueError as exc:
+            # Kein API-Key konfiguriert → kein sinnvoller Resume-Pfad möglich.
+            # Synchron mit 422 antworten statt still None zu setzen und im
+            # Worker-Thread beim ersten LLM-Call zu sterben (Copilot PR #466).
             logger.warning(
-                "LLMClient für Resume-Report konnte nicht erstellt werden (kein API-Key konfiguriert); "
-                "nutze Service-Default-Client",
+                "LLMClient für Resume-Report nicht verfügbar — synchrones 422: %s",
+                exc,
             )
-            shared_llm_client = None
+            return json_error(
+                f"LLM-Provider nicht verfügbar: {exc}. "
+                "Konfiguriere einen API-Key, bevor der Report fortgesetzt wird.",
+                status=422,
+                code="llm_client_unavailable",
+            )
     else:
         shared_llm_client = None
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
@@ -690,7 +698,12 @@ def resume_run(run_id: str):
     elif run_type == "simulation_run":
         data = _resume_or_restart_simulation_run(run)
     elif run_type == "report_generate":
-        data = _resume_report_generate(run)
+        # _resume_report_generate kann bei fehlendem LLM-Key direkt eine
+        # Fehler-Response (Tuple) zurückgeben — in dem Fall weiterleiten.
+        result = _resume_report_generate(run)
+        if not isinstance(result, dict):
+            return result
+        return json_success(result)
     else:
         return json_error(f"Unsupported run type: {run_type}", status=409)
     return json_success(data)

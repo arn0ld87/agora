@@ -9,12 +9,15 @@ Abgedeckte Szenarien (Negativpfade; keine echten Dispatcher-Calls):
   4  POST /api/runs/<id>/stop mit run_type="graph_build" → 409
   5  POST /api/runs/<id>/stop mit simulation_run aber ohne linked simulation_id → 409
   6  Resume 409-Pfad liefert {success:false, error:...}-Envelope
+  7  POST /api/runs/<id>/resume report_generate ohne LLM-Key → synchrones 422
+     (Copilot PR #466 — kein stiller None-Fallback mit asynchronem Fail)
 """
 
 from __future__ import annotations
 
 import os
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from flask import Flask
@@ -191,3 +194,61 @@ def test_resume_response_uses_json_success_envelope(env):
     assert "error" in payload
     # Kein Leer-String
     assert payload["error"]
+
+
+# ---------------------------------------------------------------------------
+# Test 7: Resume report_generate ohne LLM-Key → synchrones 422
+# Copilot PR #466 — kein stiller None-Fallback mit asynchronem Fail
+# ---------------------------------------------------------------------------
+
+
+def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
+    """POST /api/runs/<id>/resume für report_generate mit model_name, aber ohne
+    konfigurierten API-Key → synchrones 422 zurück, kein asynchrones Fail im Thread.
+
+    Verifikation: LLMClient-Konstruktion wirft ValueError (kein Key) →
+    der Endpunkt antwortet sofort mit 422 statt still None zu setzen
+    und erst im Worker-Thread zu scheitern.
+    """
+    from unittest.mock import MagicMock
+
+    run = _create_run(
+        env["registry"],
+        run_type="report_generate",
+        entity_id="report_test",
+        simulation_id="sim_test",
+        status="failed",
+        metadata={"llm_model": "gpt-4o-mini", "simulation_id": "sim_test"},
+        linked_ids={
+            "report_id": "report_test",
+            "simulation_id": "sim_test",
+            "project_id": "proj_test",
+        },
+    )
+
+    fake_sim_state = MagicMock()
+    fake_sim_state.project_id = "proj_test"
+    fake_sim_state.graph_id = "graph_test"
+
+    fake_project = MagicMock()
+    fake_project.graph_id = "graph_test"
+    fake_project.simulation_requirement = "Test"
+
+    with (
+        patch("app.api.runs.SimulationManager") as mock_sm,
+        patch("app.api.runs.ProjectManager") as mock_pm,
+        patch("app.api.runs.LLMClient", side_effect=ValueError("no API key configured")),
+    ):
+        mock_sm.return_value.get_simulation.return_value = fake_sim_state
+        mock_pm.get_project.return_value = fake_project
+        # neo4j_storage ist im env-Fixture nicht gesetzt — in app.extensions hinterlegen
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        resp = env["client"].post(f"/api/runs/{run['run_id']}/resume")
+
+    assert resp.status_code == 422, (
+        f"Erwartete 422 bei fehlendem LLM-Key, erhalten: {resp.status_code} — {resp.get_json()}"
+    )
+    payload = resp.get_json()
+    assert payload["success"] is False
+    assert payload.get("error")
