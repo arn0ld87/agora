@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-**Stand:** 2026-05-11, Europe/Berlin
+**Stand:** 2026-05-15, Europe/Berlin
 **Ausgeloest durch:** Repo-Review PR4 — CVE-Baseline aktiv abbauen.
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
@@ -15,11 +15,6 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 
 | CVE | Paket | Version | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|
-| CVE-2026-25990 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open (tracked) | [#121](https://github.com/arn0ld87/agora/issues/121) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
-| CVE-2026-40192 | `pillow` | `10.3.0` | camel-ai | 2026-07-30 | open (tracked) | [#122](https://github.com/arn0ld87/agora/issues/122) | [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
-| CVE-2026-42308 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#296](https://github.com/arn0ld87/agora/issues/296) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
-| CVE-2026-42310 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#297](https://github.com/arn0ld87/agora/issues/297) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
-| CVE-2026-42311 | `pillow` | `10.3.0` | camel-oasis / camel-ai | 2026-07-30 | open | [#298](https://github.com/arn0ld87/agora/issues/298) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases), [camel-ai/releases](https://github.com/camel-ai/camel/releases) |
 | CVE-2025-71176 | `pytest` | `8.2.0` | camel-oasis | 2026-07-30 | open | [#123](https://github.com/arn0ld87/agora/issues/123) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
 | CVE-2026-1839 | `transformers` | `4.57.6` | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
 | CVE-2024-46455 | `unstructured` | `0.13.7` | camel-oasis | 2026-07-30 | open | [#125](https://github.com/arn0ld87/agora/issues/125) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
@@ -29,7 +24,6 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
-| `pillow` | `10.3.0` | `camel-oasis==0.2.5`, `camel-ai==0.2.78` | `camel-oasis` pinnt `pillow==10.3.0`; `camel-ai` limitiert `pillow<11`. |
 | `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. Fix: `>=9.0.3`. |
 | `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
 | `unstructured` | `0.13.7` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `unstructured==0.13.7`. |
@@ -67,4 +61,8 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 
 | CVE | Paket | Aufloesung | Datum |
 |---|---|---|---|
-| — | — | — | — |
+| CVE-2026-25990 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #121 schließen. | 2026-05-15 |
+| CVE-2026-40192 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #122 schließen. | 2026-05-15 |
+| CVE-2026-42308 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #296 schließen. | 2026-05-15 |
+| CVE-2026-42310 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #297 schließen. | 2026-05-15 |
+| CVE-2026-42311 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #298 schließen. | 2026-05-15 |
