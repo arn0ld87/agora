@@ -11,7 +11,18 @@
     "running": "Running",
     "paused": "Paused",
     "stopped": "Stopped",
-    "error": "Error"
+    "error": "Error",
+    "Dashboard": "Dashboard",
+    "Runs": "Runs",
+    "RunDetail": "Run Details",
+    "Settings": "Settings",
+    "SettingsGeneral": "General",
+    "SettingsLlmRouting": "LLM Routing",
+    "SettingsLlmProviders": "LLM Providers",
+    "SettingsIntegrations": "Integrations",
+    "SettingsApiKeys": "API Keys",
+    "SettingsUsersTeams": "Users & Teams",
+    "SettingsAuditLogs": "Audit Logs"
   },
   "common": {
     "start": "Start",
