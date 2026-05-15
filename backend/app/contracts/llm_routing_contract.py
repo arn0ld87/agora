@@ -21,6 +21,8 @@ StageId = Literal[
 
 ReasoningEffort = Literal["none", "minimal", "low", "medium", "high"]
 
+ALLOWED_PROVIDER_OPTIONS = {"num_ctx", "temperature", "max_tokens", "reasoning_effort"}
+
 
 class StageLLMRoute(BaseModel):
     """Configuration for a single stage route."""
