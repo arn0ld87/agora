@@ -71,7 +71,7 @@ import logging
 import random
 import signal
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 
@@ -193,6 +193,88 @@ try:
     AGENT_TOOLS_AVAILABLE = True
 except ImportError as _e:
     AGENT_TOOLS_AVAILABLE = False
+
+
+# ---------------------------------------------------------------------------
+# Slice 5-pre: Live-Post-Event-Emit nach CREATE_POST
+# ---------------------------------------------------------------------------
+
+# Module-level Redis-Client-Cache: lazy-init beim ersten Emit, danach reuse.
+# Vermeidet TCP-Handshake-Overhead pro emit_post_created_to_redis-Aufruf.
+_redis_clients: Dict[str, Any] = {}
+
+
+def _get_redis_client(redis_url: str) -> Any:
+    """Lazy-init und cache eines asyncio-Redis-Clients pro URL."""
+    if redis_url not in _redis_clients:
+        import redis.asyncio as aioredis  # type: ignore[import-not-found]
+        _redis_clients[redis_url] = aioredis.from_url(redis_url, decode_responses=True)
+    return _redis_clients[redis_url]
+
+
+async def _emit_post_created_to_redis(
+    simulation_id: str,
+    platform: str,
+    action_data: Dict[str, Any],
+    redis_url: Optional[str],
+) -> None:
+    """Publish a PostCreatedEvent to Redis after a CREATE_POST action.
+
+    Runs inside the asyncio event loop of the OASIS subprocess (Pfad B).
+    Silently no-ops when REDIS_URL is unset or Redis is unreachable.
+
+    Channel: agora:sim:{simulation_id}:post_created
+    """
+    if not redis_url:
+        return
+    action_args = action_data.get("action_args", {})
+    post_id = str(
+        action_args.get("post_id")
+        or action_args.get("new_post_id")
+        or action_args.get("id")
+        or ""
+    )
+    body = (
+        action_args.get("content")
+        or action_args.get("text")
+        or ""
+    )
+    if not post_id or not body:
+        return
+    persona_id = str(action_data.get("agent_id", ""))
+    voice_register = str(action_args.get("voice_register", "casual"))
+    if voice_register not in ("formal", "casual", "jugendsprache"):
+        voice_register = "casual"
+    platform_value = "twitter" if "twitter" in platform.lower() else "reddit"
+    parent_post_id = (
+        str(action_args.get("parent_post_id"))
+        if action_args.get("parent_post_id")
+        else None
+    )
+    payload: Dict[str, Any] = {
+        "event_type": "post_created",
+        "simulation_id": simulation_id,
+        "post_id": post_id,
+        "parent_post_id": parent_post_id,
+        "platform": platform_value,
+        "persona_id": persona_id,
+        "voice_register": voice_register,
+        "is_simulated": True,
+        "body": body,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    channel = f"agora:sim:{simulation_id}:post_created"
+    try:
+        import redis.asyncio as aioredis  # type: ignore[import-not-found]
+        client = _get_redis_client(redis_url)
+        await client.publish(channel, json.dumps(payload, ensure_ascii=False))
+    except Exception:
+        # Non-fatal: SSE post-events are best-effort; simulation must not crash.
+        logging.getLogger("agora.run_parallel_simulation").debug(
+            "emit_post_created_to_redis failed for sim=%s post=%s (non-fatal)",
+            simulation_id,
+            post_id,
+        )
 
 
 # Twitter available actions (INTERVIEW not included, INTERVIEW can only be triggered manually via ManualAction)
@@ -1483,6 +1565,8 @@ async def run_twitter_simulation(
         )
         
         round_action_count = 0
+        _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
+        _redis_url_for_emit = os.environ.get("REDIS_URL")
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1494,23 +1578,31 @@ async def run_twitter_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+            # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
+            if action_data.get("action_type") == "CREATE_POST":
+                await _emit_post_created_to_redis(
+                    simulation_id=_sim_id_for_emit,
+                    platform="twitter",
+                    action_data=action_data,
+                    redis_url=_redis_url_for_emit,
+                )
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count)
-        
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # Note: Do not close environment, keep for Interview use
-    
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"Simulation loop completed! Time taken: {elapsed:.1f}seconds, Total actions: {total_actions}")
-    
+
     return result
 
 
@@ -1737,6 +1829,8 @@ async def run_reddit_simulation(
         )
         
         round_action_count = 0
+        _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
+        _redis_url_for_emit = os.environ.get("REDIS_URL")
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1748,23 +1842,31 @@ async def run_reddit_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+            # Slice 5-pre: emit PostCreatedEvent to Redis for SSE live-feed.
+            if action_data.get("action_type") == "CREATE_POST":
+                await _emit_post_created_to_redis(
+                    simulation_id=_sim_id_for_emit,
+                    platform="reddit",
+                    action_data=action_data,
+                    redis_url=_redis_url_for_emit,
+                )
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count)
-        
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # Note: Do not close environment, keep for Interview use
-    
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"Simulation loop completed! Time taken: {elapsed:.1f}seconds, Total actions: {total_actions}")
-    
+
     return result
 
 

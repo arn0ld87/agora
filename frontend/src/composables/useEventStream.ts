@@ -11,7 +11,12 @@
 
 import { onUnmounted, ref, type Ref } from 'vue'
 import { context, propagation } from '@opentelemetry/api'
-import { openSimulationStream, type StreamHandlers, type SseEventFrame } from '../api/stream'
+import {
+  openSimulationStream,
+  type StreamHandlers,
+  type SseEventFrame,
+  type PostCreatedEvent,
+} from '../api/stream'
 import { getTracer } from '../observability/tracing'
 
 const MAX_RECONNECT_ATTEMPTS = 5
@@ -115,6 +120,11 @@ export function useEventStream(
         state: wrap(handlers.state),
         control: wrap(handlers.control),
         ping: wrap(handlers.ping),
+        // Slice 5-pre: post_created is already Zod-parsed by openSimulationStream;
+        // wrap() handles lastEventAt + error-reset bookkeeping.
+        post_created: handlers.post_created
+          ? (wrap as unknown as (h: (p: PostCreatedEvent) => void) => (p: PostCreatedEvent) => void)(handlers.post_created)
+          : undefined,
         error: (ev: Event) => {
           error.value = ev
           if (typeof handlers.error === 'function') handlers.error(ev)

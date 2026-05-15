@@ -1,15 +1,10 @@
 <template>
   <component
-    :is="disabled ? 'span' : (to ? 'RouterLink' : 'div')"
-    v-bind="!disabled && to ? { to } : {}"
-    class="sidebar-item"
-    :class="{
-      'sidebar-item--active': active && !disabled,
-      'sidebar-item--disabled': disabled,
-    }"
-    :aria-disabled="disabled ? 'true' : undefined"
-    :title="tooltip"
-    @click="!disabled && !to && emit('click')"
+    :is="componentTag"
+    v-bind="componentAttrs"
+    class="sidebar-item v4-state-selectable"
+    :class="componentClasses"
+    @click="handleClick"
   >
     <Icon v-if="icon" :name="icon" :size="18" :stroke="1.6" />
     <span class="sidebar-item__label">{{ label }}</span>
@@ -18,11 +13,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { RouterLink, useLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
 
-defineProps<{
+const props = defineProps<{
   icon?: IconName | string
   label: string
   badge?: number
@@ -37,6 +34,52 @@ defineProps<{
 const emit = defineEmits<{
   click: []
 }>()
+
+// useLink braucht immer eine Route — Fallback auf '/' wenn kein 'to' gesetzt ist.
+// Die Werte werden nur genutzt wenn props.to gesetzt ist.
+const linkTarget = computed(() => props.to ?? '/')
+const { isExactActive, isActive } = useLink({ to: linkTarget })
+
+const componentTag = computed(() => {
+  if (props.disabled) return 'span'
+  if (props.to) return RouterLink
+  return 'div'
+})
+
+const componentAttrs = computed(() => {
+  if (props.disabled) {
+    return {
+      'aria-disabled': 'true',
+      title: props.tooltip,
+    }
+  }
+  if (props.to) {
+    return {
+      to: props.to,
+      'aria-current': isExactActive.value ? 'page' : (isActive.value ? 'true' : undefined),
+      title: props.tooltip,
+    }
+  }
+  return {
+    title: props.tooltip,
+  }
+})
+
+const componentClasses = computed(() => ({
+  'sidebar-item--active': props.to
+    ? (isExactActive.value || isActive.value || !!props.active)
+    : !!props.active,
+  'sidebar-item--disabled': !!props.disabled,
+}))
+
+function handleClick(event: MouseEvent) {
+  if (props.disabled) return
+  if (props.to) {
+    // navigate handled by RouterLink itself
+    return
+  }
+  emit('click')
+}
 </script>
 
 <style scoped>
@@ -53,12 +96,13 @@ const emit = defineEmits<{
   background: transparent;
   text-decoration: none;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  /* transition: via .v4-state-selectable */
   user-select: none;
 }
 
+/* Hover: v4-state-selectable liefert BG-Token */
 .sidebar-item:hover:not(.sidebar-item--active) {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--v4-state-hover-bg);
 }
 
 .sidebar-item--active {
@@ -74,15 +118,13 @@ const emit = defineEmits<{
   text-overflow: ellipsis;
 }
 
+/* Disabled: Token-Override */
 .sidebar-item--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  color: var(--text-secondary, var(--fg-muted, #888));
+  opacity: var(--v4-state-disabled-opacity);
+  cursor: var(--v4-state-disabled-cursor);
+  color: var(--text-secondary);
 }
 
-/* Klick ist bereits durch Props/Template (`!disabled`) blockiert; ohne
-   ``pointer-events: none`` zeigt der Browser ``title``-Tooltip + ``cursor:
-   not-allowed`` korrekt an (Gemini-Review PR #466). */
 .sidebar-item--disabled:hover {
   background: transparent;
 }

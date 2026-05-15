@@ -31,6 +31,7 @@ from opentelemetry import trace as otel_trace
 
 from ..services.event_bus import (
     CHANNEL_CONTROL,
+    CHANNEL_POST_CREATED,
     CHANNEL_STATE,
     SimulationEvent,
     SimulationEventBus,
@@ -118,7 +119,7 @@ def _stream(simulation_id: str) -> Iterator[str]:
             name=f"sse-{simulation_id}-{channel}",
             daemon=True,
         )
-        for channel in (CHANNEL_STATE, CHANNEL_CONTROL)
+        for channel in (CHANNEL_STATE, CHANNEL_CONTROL, CHANNEL_POST_CREATED)
     ]
     for t in threads:
         t.start()
@@ -137,7 +138,14 @@ def _stream(simulation_id: str) -> Iterator[str]:
             if msg is not None:
                 channel = msg["channel"]
                 evt: SimulationEvent = msg["event"]
-                event_name = "state" if channel == CHANNEL_STATE else "control"
+                if channel == CHANNEL_STATE:
+                    event_name = "state"
+                elif channel == CHANNEL_CONTROL:
+                    event_name = "control"
+                elif channel == CHANNEL_POST_CREATED:
+                    event_name = "post_created"
+                else:
+                    event_name = channel
                 yield _event_to_sse(event_name, evt)
             now = time.monotonic()
             if now - last_heartbeat >= _HEARTBEAT_SECONDS:

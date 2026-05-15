@@ -41,6 +41,7 @@ CHANNEL_CONTROL = "control"          # pause / stop / resume flags
 CHANNEL_STATE = "state"              # run_state.json updates
 CHANNEL_RPC_COMMAND = "rpc.command"  # Flask → subprocess commands (fan-in)
 CHANNEL_ACTION = "action"            # reserved for Phase B (live action events)
+CHANNEL_POST_CREATED = "post_created"  # Slice 5-pre: live post events from OASIS runner
 
 
 def rpc_response_channel(correlation_id: str) -> str:
@@ -193,6 +194,24 @@ class InMemoryEventBus:
                         self._lock.wait()
                     continue
             yield event
+
+    def emit_post_created(self, event: "PostCreatedEvent") -> None:  # noqa: F821
+        """Publish a PostCreatedEvent to CHANNEL_POST_CREATED for the simulation.
+
+        Slice 5-pre: emitted by OASIS runner after each CREATE_POST action.
+        SSE stream (simulation_stream.py) subscribes and forwards as
+        ``event: post_created`` frames to the browser.
+        """
+        from ..contracts.post_event_contract import PostCreatedEvent as _PostCreatedEvent
+
+        if not isinstance(event, _PostCreatedEvent):
+            raise TypeError(f"Expected PostCreatedEvent, got {type(event)!r}")
+        sim_event = SimulationEvent(
+            type="post_created",
+            simulation_id=event.simulation_id,
+            payload=event.model_dump(mode="json"),
+        )
+        self.publish(CHANNEL_POST_CREATED, sim_event)
 
     def request_response(
         self,
@@ -467,6 +486,24 @@ class FilePollingEventBus:
             if self._sleep_until_deadline(deadline, poll_interval):
                 return
 
+    def emit_post_created(self, event: "PostCreatedEvent") -> None:  # noqa: F821
+        """Drop-sink for FilePollingEventBus: post-created events have no
+        file-backed semantics. Phase B (RedisEventBus) is the real path.
+
+        Logs at DEBUG level so the file-polling path does not silently swallow
+        the call in test environments that stub out Redis.
+        """
+        from ..contracts.post_event_contract import PostCreatedEvent as _PostCreatedEvent
+
+        if not isinstance(event, _PostCreatedEvent):
+            raise TypeError(f"Expected PostCreatedEvent, got {type(event)!r}")
+        logger.debug(
+            "FilePollingEventBus.emit_post_created: no file-backed semantics "
+            "(sim=%s, post_id=%s) — use RedisEventBus for live post events",
+            event.simulation_id,
+            event.post_id,
+        )
+
     # -- port: request_response -------------------------------------------
 
     def request_response(
@@ -559,4 +596,5 @@ __all__ = [
     "CHANNEL_STATE",
     "CHANNEL_RPC_COMMAND",
     "CHANNEL_ACTION",
+    "CHANNEL_POST_CREATED",
 ]

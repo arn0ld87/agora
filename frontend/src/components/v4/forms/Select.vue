@@ -16,7 +16,7 @@ defineEmits<{
 <template>
   <div class="v4-select-wrap" :class="{ 'v4-select-wrap--disabled': disabled }">
     <select
-      class="v4-select"
+      class="v4-select v4-state-interactive"
       :value="modelValue"
       :disabled="disabled"
       @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
@@ -77,14 +77,16 @@ defineEmits<{
   box-sizing: border-box;
 }
 
-.v4-select:focus {
+/* Focus: Inset-Ring Override */
+.v4-select:focus-visible {
   border-color: var(--accent);
-  outline: 2px solid var(--focus-ring);
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
   outline-offset: -2px;
 }
 
-.v4-select:hover:not(:focus) {
-  border-color: var(--text-tertiary);
+/* Hover: komponentenspezifischer Border-Override */
+.v4-select:hover:not(:focus-visible) {
+  border-color: var(--v4-state-hover-border);
 }
 
 .v4-select-chevron {

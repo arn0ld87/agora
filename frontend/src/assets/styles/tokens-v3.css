@@ -119,6 +119,25 @@
   --ctl-h-sm: 28px;
   --ctl-h-md: 32px;
   --ctl-h-lg: 40px;
+
+  /* ─── Shell-Chrome Density-Tokens (Slice FE-Redesign-6) ── */
+  /* Topbar */
+  --topbar-h:  64px;
+  --topbar-px: 24px;
+
+  /* Sidebar-Items */
+  --sidebar-item-py: 6px;
+  --sidebar-item-px: 12px;
+  --sidebar-group-trigger-py: 6px;
+  --sidebar-group-gap: 2px;
+
+  /* DataTable */
+  --table-cell-py: 10px;
+  --table-cell-px: 16px;
+
+  /* Body-Text-Scale */
+  --text-body-fs: var(--fs-body);   /* 15px */
+  --text-body-lh: var(--lh-body);   /* 1.55 */
 }
 
 /* ============================================================
@@ -428,3 +447,29 @@ body {
   color: var(--text-primary);
 }
 .t-num { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Density: compact — Slice FE-Redesign-6 · 2026-05-15
+   Greift NUR auf Shell-Chrome-Spacing/Typo, NICHT auf
+   Touch-Targets (Buttons bleiben ≥40px für a11y).
+   ============================================================ */
+
+[data-density="compact"] {
+  /* Sidebar-Items */
+  --sidebar-item-py: 4px;
+  --sidebar-item-px: 10px;
+  --sidebar-group-trigger-py: 4px;
+  --sidebar-group-gap: 0px;
+
+  /* Topbar */
+  --topbar-h:  44px;
+  --topbar-px: 12px;
+
+  /* DataTable */
+  --table-cell-py: 6px;
+  --table-cell-px: 10px;
+
+  /* Body-Text-Scale leicht runter */
+  --text-body-fs: 12px;
+  --text-body-lh: 1.45;
+}

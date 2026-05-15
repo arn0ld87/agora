@@ -28,6 +28,11 @@ const routes: RouteRecordRaw[] = [
     name: 'Dashboard',
     component: () => import('../views/v4/DashboardView.vue'),
   },
+  // UX-Konsistenz: /v4/dashboard → /dashboard (alle v4-Step-Routes liegen unter /v4/*)
+  {
+    path: '/v4/dashboard',
+    redirect: { name: 'Dashboard' },
+  },
 
   // Runs — AppShell-Wrapper ersetzt direkte RunsView (Slice F)
   {
@@ -139,6 +144,12 @@ const routes: RouteRecordRaw[] = [
     path: '/v4/simulation/:simulationId',
     name: 'StepSimulation',
     component: () => import('../views/v4/steps/StepSimulationView.vue'),
+    props: true,
+  },
+  {
+    path: '/v4/simulation/:simulationId/feed',
+    name: 'StepSimulationFeed',
+    component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
     props: true,
   },
   {

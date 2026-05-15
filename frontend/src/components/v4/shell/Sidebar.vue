@@ -25,7 +25,6 @@
           :icon="item.icon"
           :label="item.label"
           :to="item.disabled ? undefined : item.to"
-          :active="!item.disabled && active === item.id"
           :disabled="item.disabled"
           :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
         />
@@ -33,17 +32,17 @@
 
       <!-- Settings group -->
       <SidebarGroup
+        group-key="settings"
         :label="t('sidebar.settings.label')"
         icon="settings"
-        :open="settingsOpen"
-        :active="active === 'settings' && !settingsOpen"
-        @update:open="onSettingsGroupToggle"
+        :active-route-names="settingsRouteNames"
       >
         <template v-for="sub in navSettings" :key="sub.id">
           <RouterLink
             :to="sub.to"
             class="sidebar-sub-item"
-            :class="{ 'sidebar-sub-item--active': subActive === sub.id }"
+            active-class="sidebar-sub-item--active"
+            exact-active-class="sidebar-sub-item--active"
           >
             {{ sub.label }}
           </RouterLink>
@@ -60,7 +59,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RouteLocationRaw } from 'vue-router'
 import SidebarItem from './SidebarItem.vue'
@@ -86,46 +84,47 @@ interface NavSettingsItem {
 
 const props = withDefaults(
   defineProps<{
-    active?: string
-    subActive?: string
-    settingsOpen?: boolean
     collapsed?: boolean
   }>(),
   {
-    active: '',
-    subActive: '',
-    settingsOpen: false,
     collapsed: false,
   },
 )
 
 const emit = defineEmits<{
-  'update:settingsOpen': [value: boolean]
   'collapse-toggle': []
 }>()
 
-function onSettingsGroupToggle(value: boolean): void {
-  emit('update:settingsOpen', value)
-}
+/** Alle Route-Namen, bei denen die Settings-Gruppe als aktiv gilt und auto-öffnet. */
+const settingsRouteNames = [
+  'Settings',
+  'SettingsGeneral',
+  'SettingsIntegrations',
+  'SettingsUsersTeams',
+  'SettingsApiKeys',
+  'SettingsAuditLogs',
+  'SettingsLlmRouting',
+  'SettingsLlmProviders',
+]
 
-const navWorkspace = computed<NavItem[]>(() => [
+const navWorkspace = [
   { id: 'dashboard',  icon: 'home',   label: t('sidebar.nav.dashboard'),  to: { name: 'Dashboard' } },
   { id: 'runs',       icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
   { id: 'projects',   icon: 'folder', label: t('sidebar.nav.projects'),   to: { path: '#projects' },  disabled: true },
   { id: 'datasets',   icon: 'layers', label: t('sidebar.nav.datasets'),   to: { path: '#datasets' },  disabled: true },
   { id: 'templates',  icon: 'doc',    label: t('sidebar.nav.templates'),  to: { path: '#templates' }, disabled: true },
   { id: 'monitoring', icon: 'spark',  label: t('sidebar.nav.monitoring'), to: { path: '#monitoring' },disabled: true },
-])
+] satisfies NavItem[]
 
-const navSettings = computed<NavSettingsItem[]>(() => [
+const navSettings: NavSettingsItem[] = [
   { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
   { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
   { id: 'users-teams',   label: t('sidebar.settings.usersTeams'),    to: { name: 'SettingsUsersTeams' } },
   { id: 'api-keys',      label: t('sidebar.settings.apiKeys'),       to: { name: 'SettingsApiKeys' } },
+  { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
   { id: 'llm-routing',   label: t('sidebar.settings.llmRouting'),    to: { name: 'SettingsLlmRouting' } },
-  { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
-])
+]
 </script>
 
 <style scoped>

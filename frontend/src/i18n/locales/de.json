@@ -11,7 +11,18 @@
     "running": "Läuft",
     "paused": "Pausiert",
     "stopped": "Gestoppt",
-    "error": "Fehler"
+    "error": "Fehler",
+    "Dashboard": "Dashboard",
+    "Runs": "Läufe",
+    "RunDetail": "Lauf-Details",
+    "Settings": "Einstellungen",
+    "SettingsGeneral": "Allgemein",
+    "SettingsLlmRouting": "LLM-Routing",
+    "SettingsLlmProviders": "LLM-Provider",
+    "SettingsIntegrations": "Integrationen",
+    "SettingsApiKeys": "API-Schlüssel",
+    "SettingsUsersTeams": "Nutzer & Teams",
+    "SettingsAuditLogs": "Audit-Logs"
   },
   "common": {
     "start": "Starten",
@@ -697,6 +708,23 @@
     },
     "disabledTooltip": "Bald verfügbar"
   },
+  "cmd": {
+    "title": "Befehlspalette",
+    "placeholder": "Route suchen oder Befehl eingeben…",
+    "trigger": "Befehlspalette öffnen (Cmd+K)",
+    "noResults": "Keine Treffer.",
+    "groups": {
+      "nav": "Navigation",
+      "sim": "Simulationen",
+      "report": "Reports",
+      "recent": "Zuletzt verwendet"
+    },
+    "hints": {
+      "select": "Auswählen",
+      "navigate": "Navigieren",
+      "close": "Schließen"
+    }
+  },
   "topbar": {
     "search": "Suche",
     "notifications": "Benachrichtigungen"
@@ -1152,6 +1180,17 @@
       "minutesAgo": "vor {n}m",
       "hoursAgo": "vor {n}h"
     }
+  },
+  "feed": {
+    "reddit": "Reddit",
+    "twitter": "Twitter",
+    "simBadge": "SIM",
+    "activity": "Posts/min",
+    "live": "Live",
+    "empty": "Noch keine Aktivität.",
+    "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
+    "pipeline": "Pipeline",
+    "feedTab": "Live-Feed"
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"
