@@ -13,6 +13,7 @@ Tools available:
 """
 
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -23,6 +24,8 @@ from dataclasses import dataclass
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Allow importing backend modules (run scripts already do sys.path.insert)
 _scripts_dir = os.path.dirname(os.path.abspath(__file__))
@@ -105,11 +108,11 @@ class AgentToolRegistry:
                     user=neo4j_user,
                     password=neo4j_secret
                 )
-                print(f"[AgentToolRegistry] Neo4j connected: {neo4j_uri}")
+                logger.info("[AgentToolRegistry] Neo4j connected: %s", neo4j_uri)
             except Exception as e:
-                print(f"[AgentToolRegistry] Neo4j connection failed: {e}")
+                logger.warning("[AgentToolRegistry] Neo4j connection failed: %s", e)
         else:
-            print("[AgentToolRegistry] No Neo4j credentials, tools will be disabled")
+            logger.info("[AgentToolRegistry] No Neo4j credentials, tools will be disabled")
 
         return cls(
             neo4j_storage=storage,
@@ -709,7 +712,7 @@ class ToolAwareActionLoop:
                 else:
                     response_text = str(response)
             except Exception as e:
-                print(f"[ToolAwareActionLoop] LLM call failed: {e}")
+                logger.warning("[ToolAwareActionLoop] LLM call failed: %s", e)
                 # Fallback to standard LLMAction
                 return LLMAction()
 
@@ -733,10 +736,10 @@ class ToolAwareActionLoop:
             for call in tool_calls:
                 tool_name = call.get("name", "")
                 params = call.get("parameters", {})
-                print(f"[ToolUse] Agent calling {tool_name}({params})", flush=True)
+                logger.info("[ToolUse] Agent calling %s(%s)", tool_name, params)
                 result = self.tools.execute(tool_name, params)
                 status = "OK" if result.success else f"ERROR: {result.error}"
-                print(f"[ToolUse]   -> {status}", flush=True)
+                logger.info("[ToolUse]   -> %s", status)
                 tool_results.append({
                     "tool": tool_name,
                     "result": result.to_text()
@@ -824,7 +827,7 @@ def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
     try:
         from camel.toolkits import FunctionTool
     except ImportError:
-        print("[agent_tools] camel.toolkits.FunctionTool not available")
+        logger.info("[agent_tools] camel.toolkits.FunctionTool not available")
         return []
 
     registry = AgentToolRegistry.from_config(config)
@@ -843,9 +846,9 @@ def build_camel_function_tools(config: Dict[str, Any]) -> List[Any]:
             JSON string with `results` list containing title, url and snippet
             for each hit.
         """
-        print(f"[FunctionTool] >>> web_search({query!r}, {num_results})", flush=True)
+        logger.info("[FunctionTool] >>> web_search(%r, %s)", query, num_results)
         data = registry.web_search(query=query, num_results=num_results)
-        print(f"[FunctionTool] <<< web_search returned {data.get('results_found','?')} results", flush=True)
+        logger.info("[FunctionTool] <<< web_search returned %s results", data.get("results_found", "?"))
         return json.dumps(data, ensure_ascii=False)
 
     def web_fetch(url: str, max_chars: int = 2000) -> str:
@@ -951,9 +954,10 @@ def _install_empty_assistant_memory_sanitizer(agent_id: Any, memory: Any) -> Non
         sanitized_records = _sanitize_memory_records(record_list)
         dropped_count = len(record_list) - len(sanitized_records)
         if dropped_count:
-            print(
-                f"[attach_tools] agent {agent_id} dropped {dropped_count} empty assistant memory record(s)",
-                flush=True,
+            logger.info(
+                "[attach_tools] agent %s dropped %s empty assistant memory record(s)",
+                agent_id,
+                dropped_count,
             )
         if not sanitized_records:
             return None
@@ -1012,7 +1016,7 @@ def _resolve_memory_token_limit(model_name: Optional[str] = None) -> int:
         try:
             parsed = json.loads(raw_overrides)
         except json.JSONDecodeError as exc:
-            print(f"[attach_tools] invalid LLM_MODEL_CONTEXT_LIMITS_JSON ignored: {exc}", flush=True)
+            logger.warning("[attach_tools] invalid LLM_MODEL_CONTEXT_LIMITS_JSON ignored: %s", exc)
         else:
             if isinstance(parsed, dict):
                 overrides.update(parsed)
@@ -1047,7 +1051,7 @@ def enforce_memory_token_limit(agent_graph) -> int:
     try:
         agents_iter = agent_graph.get_agents()
     except Exception as exc:  # pragma: no cover — Defensive Hook
-        print(f"[enforce_memory_token_limit] get_agents failed: {exc}", flush=True)
+        logger.warning("[enforce_memory_token_limit] get_agents failed: %s", exc)
         return 0
 
     patched = 0
@@ -1066,15 +1070,18 @@ def enforce_memory_token_limit(agent_graph) -> int:
             if old_limit is None or old_limit < ctx_limit:
                 creator._token_limit = ctx_limit
                 patched += 1
-                print(
-                    f"[enforce_memory_token_limit] agent {agent_id}: "
-                    f"{old_limit} -> {ctx_limit} (model={model_name or '?'})",
-                    flush=True,
+                logger.info(
+                    "[enforce_memory_token_limit] agent %s: %s -> %s (model=%s)",
+                    agent_id,
+                    old_limit,
+                    ctx_limit,
+                    model_name or "?",
                 )
         except Exception as exc:
-            print(
-                f"[enforce_memory_token_limit] agent {agent_id} patch failed: {exc}",
-                flush=True,
+            logger.warning(
+                "[enforce_memory_token_limit] agent %s patch failed: %s",
+                agent_id,
+                exc,
             )
     return patched
 
@@ -1096,7 +1103,7 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
     try:
         agents_iter = agent_graph.get_agents()
     except Exception as e:
-        print(f"[attach_tools] get_agents failed: {e}")
+        logger.warning("[attach_tools] get_agents failed: %s", e)
         return 0
     for agent_id, agent in agents_iter:
         for tool in tools:
@@ -1104,7 +1111,7 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
                 agent.add_tool(tool)
                 attached += 1
             except Exception as e:
-                print(f"[attach_tools] agent {agent_id} add_tool failed: {e}")
+                logger.warning("[attach_tools] agent %s add_tool failed: %s", agent_id, e)
                 break
         # Extend system_message so the persona actively uses the tools.
         try:
@@ -1123,7 +1130,7 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
                     if hasattr(agent, "init_messages"):
                         agent.init_messages()
         except Exception as e:
-            print(f"[attach_tools] agent {agent_id} prompt patch failed: {e}")
+            logger.warning("[attach_tools] agent %s prompt patch failed: %s", agent_id, e)
         # OASIS SocialAgent defaults to max_iteration=1 — meaning the LLM gets
         # exactly one turn, so it can either call a research tool OR a social
         # action, never both. Raise it so research → action can happen in one
@@ -1132,12 +1139,12 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
             if hasattr(agent, "max_iteration"):
                 agent.max_iteration = max(getattr(agent, "max_iteration", 1) or 1, 4)
         except Exception as e:
-            print(f"[attach_tools] agent {agent_id} max_iteration patch failed: {e}")
+            logger.warning("[attach_tools] agent %s max_iteration patch failed: %s", agent_id, e)
 
         try:
             _install_empty_assistant_memory_sanitizer(agent_id, getattr(agent, "memory", None))
         except Exception as e:
-            print(f"[attach_tools] agent {agent_id} memory sanitizer patch failed: {e}")
+            logger.warning("[attach_tools] agent %s memory sanitizer patch failed: %s", agent_id, e)
 
         # Raise the CAMEL memory budget independently from max_tokens.
         # In this CAMEL version token_limit is read-only and backed by
@@ -1152,19 +1159,22 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
                     old_limit = getattr(creator, "token_limit", None)
                     if hasattr(creator, "_token_limit"):
                         creator._token_limit = ctx_limit
-                        print(
-                            f"[attach_tools] agent {agent_id} context limit: {old_limit} -> {ctx_limit} "
-                            f"(model={model_name or '?'})",
-                            flush=True,
+                        logger.info(
+                            "[attach_tools] agent %s context limit: %s -> %s (model=%s)",
+                            agent_id,
+                            old_limit,
+                            ctx_limit,
+                            model_name or "?",
                         )
                     else:
-                        print(
-                            f"[attach_tools] agent {agent_id} context creator has no _token_limit; "
-                            f"skip memory patch (type={type(creator).__name__})",
-                            flush=True,
+                        logger.info(
+                            "[attach_tools] agent %s context creator has no _token_limit; "
+                            "skip memory patch (type=%s)",
+                            agent_id,
+                            type(creator).__name__,
                         )
         except Exception as e:
-            print(f"[attach_tools] agent {agent_id} token_limit patch failed: {e}")
+            logger.warning("[attach_tools] agent %s token_limit patch failed: %s", agent_id, e)
 
     # Sanity: dump the tool names on the first agent after patching.
     try:
@@ -1177,14 +1187,15 @@ def attach_tools_to_agents(agent_graph, tools: List[Any]) -> int:
             creator = memory.get_context_creator()
         memory_limit = getattr(creator, "token_limit", "?") if creator is not None else "?"
         model_cfg = getattr(getattr(first_agent, "model_backend", None), "model_config_dict", {}) or {}
-        print(f"[attach_tools] sanity: agent {first_id} now has {len(all_names)} tools: {all_names}", flush=True)
-        print(f"[attach_tools] sanity: agent {first_id} max_iteration = {getattr(first_agent, 'max_iteration', '?')}", flush=True)
-        print(f"[attach_tools] sanity: agent {first_id} memory_token_limit = {memory_limit}", flush=True)
-        print(
-            f"[attach_tools] sanity: agent {first_id} completion_max_tokens = {model_cfg.get('max_completion_tokens', model_cfg.get('max_tokens', '?'))}",
-            flush=True,
+        logger.info("[attach_tools] sanity: agent %s now has %s tools: %s", first_id, len(all_names), all_names)
+        logger.info("[attach_tools] sanity: agent %s max_iteration = %s", first_id, getattr(first_agent, "max_iteration", "?"))
+        logger.info("[attach_tools] sanity: agent %s memory_token_limit = %s", first_id, memory_limit)
+        logger.info(
+            "[attach_tools] sanity: agent %s completion_max_tokens = %s",
+            first_id,
+            model_cfg.get("max_completion_tokens", model_cfg.get("max_tokens", "?")),
         )
     except Exception as e:
-        print(f"[attach_tools] sanity dump failed: {e}")
+        logger.warning("[attach_tools] sanity dump failed: %s", e)
 
     return attached

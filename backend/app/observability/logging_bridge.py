@@ -21,6 +21,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
+# opentelemetry.sdk.logs (ohne Underscore) existiert nicht; sdk._logs ist der
+# kanonische Importpfad auf SDK 1.41.1 — kommunale Praxis bis Logs-API stabil ist.
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource

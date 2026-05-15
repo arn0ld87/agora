@@ -37,6 +37,7 @@ try:
         build_camel_extra_body,
         build_single_platform_parser,
         init_runner_tracing,
+        init_runner_logging,
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
@@ -50,6 +51,7 @@ except ImportError:  # direct script execution
         build_camel_extra_body,
         build_single_platform_parser,
         init_runner_tracing,
+        init_runner_logging,
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
@@ -60,6 +62,7 @@ except ImportError:  # direct script execution
 _runtime_paths = resolve_runtime_paths(__file__)
 install_script_paths(_runtime_paths)
 init_runner_tracing("agora-oasis-runner")
+init_runner_logging("agora-oasis-runner")
 load_project_env(__file__)
 install_max_tokens_warning_filter()
 _camel_context_floor = apply_camel_context_floor()
