@@ -55,6 +55,11 @@ from .graph_diff import (
     NodePropertyShift,
 )
 from .persona_entity_context import EntityRelationship, PersonaEntityContext
+from .post_event_contract import (
+    Platform,
+    PostCreatedEvent,
+    VoiceRegister as PostVoiceRegister,
+)
 from .api_keys_contract import (
     ApiKeyCreateRequest,
     ApiKeyCreateResponse,
@@ -110,6 +115,9 @@ __all__ = [
     "NodePropertyShift",
     "PersonaEntityContext",
     "PersonaModel",
+    "Platform",
+    "PostCreatedEvent",
+    "PostVoiceRegister",
     "PersonaQuotaActual",
     "PersonaQuotaPlan",
     "ReportClaimModel",

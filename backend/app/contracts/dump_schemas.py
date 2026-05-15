@@ -44,6 +44,7 @@ from app.contracts.llm_provider_keys_contract import (
     LlmProviderKeysListResponse,
 )
 from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
+from app.contracts.post_event_contract import PostCreatedEvent
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -75,6 +76,7 @@ CONTRACTS: dict[str, type] = {
     "llm-provider-key-create-request.schema.json": LlmProviderKeyCreateRequest,
     "llm-provider-keys-list-response.schema.json": LlmProviderKeysListResponse,
     "workspace-llm-routing-defaults.schema.json": WorkspaceLlmRoutingDefaults,
+    "post-created-event.schema.json": PostCreatedEvent,
 }
 
 

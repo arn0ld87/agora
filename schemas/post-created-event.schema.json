@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "Platform": {
+      "description": "Plattform-Enum f\u00fcr Dual-Column-Routing.\n\nEng halten \u2014 andere Channels (Mastodon, Threads) brauchen ADR + Slice.",
+      "enum": [
+        "reddit",
+        "twitter"
+      ],
+      "title": "Platform",
+      "type": "string"
+    },
+    "VoiceRegister": {
+      "description": "Voice-Register aus oasis_profile_generator (Sub-Slice 10).\n\nFrontend rendert Badge in PersonaAvatar.",
+      "enum": [
+        "formal",
+        "casual",
+        "jugendsprache"
+      ],
+      "title": "VoiceRegister",
+      "type": "string"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/post-created-event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "SSE-Frame f\u00fcr einen einzelnen Post-Action des OASIS-Runners.",
+  "properties": {
+    "body": {
+      "minLength": 1,
+      "title": "Body",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "post_created",
+      "default": "post_created",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "is_simulated": {
+      "default": true,
+      "title": "Is Simulated",
+      "type": "boolean"
+    },
+    "parent_post_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Post Id"
+    },
+    "persona_id": {
+      "minLength": 1,
+      "title": "Persona Id",
+      "type": "string"
+    },
+    "platform": {
+      "$ref": "#/$defs/Platform"
+    },
+    "post_id": {
+      "minLength": 1,
+      "title": "Post Id",
+      "type": "string"
+    },
+    "simulation_id": {
+      "minLength": 1,
+      "title": "Simulation Id",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "voice_register": {
+      "$ref": "#/$defs/VoiceRegister"
+    }
+  },
+  "required": [
+    "simulation_id",
+    "post_id",
+    "platform",
+    "persona_id",
+    "voice_register",
+    "body",
+    "timestamp"
+  ],
+  "title": "PostCreatedEvent",
+  "type": "object"
+}
