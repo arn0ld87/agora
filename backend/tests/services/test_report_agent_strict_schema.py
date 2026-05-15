@@ -107,10 +107,19 @@ class TestPlanResponse:
                 "unknown_field": "x",
             })
 
-    def test_plan_section_default_description(self):
-        """PlanSection hat Default-description '—'."""
-        ps = PlanSection(title="Abschnitt")
-        assert ps.description == "—"
+    def test_plan_section_description_is_required(self):
+        """PlanSection verlangt description als Pflichtfeld (kein default mehr).
+
+        Grund: OpenAI strict structured outputs verlangt required=all-properties.
+        Ein Default-Wert würde description aus required herauslassen (Smoke #1).
+        """
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            PlanSection(title="Abschnitt")  # description fehlt → ValidationError
+
+        # Mit description korrekt instanziierbar
+        ps = PlanSection(title="Abschnitt", description="Kurze Beschreibung")
+        assert ps.description == "Kurze Beschreibung"
 
     def test_plan_response_model_json_schema_is_dict(self):
         """model_json_schema() liefert ein dict (kein Inline-String)."""
