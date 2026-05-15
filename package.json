@@ -5,19 +5,19 @@
   "author": "Alexander Schneider <https://alexle135.de>",
   "homepage": "https://alexle135.de",
   "scripts": {
-    "setup": "npm install && cd frontend && npm install",
+    "setup": "bun install && cd frontend && bun install",
     "setup:backend": "cd backend && uv sync",
-    "setup:all": "npm run setup && npm run setup:backend",
-    "dev": "concurrently --kill-others -n \"backend,frontend\" -c \"green,cyan\" \"npm run backend\" \"npm run frontend\"",
+    "setup:all": "bun run setup && bun run setup:backend",
+    "dev": "concurrently --kill-others -n \"backend,frontend\" -c \"green,cyan\" \"bun run backend\" \"bun run frontend\"",
     "backend": "cd backend && uv run python run.py",
-    "frontend": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
-    "build:frontend": "cd frontend && npm run build",
-    "lint:frontend": "cd frontend && npm run lint",
+    "frontend": "cd frontend && bun run dev",
+    "build": "cd frontend && bun run build",
+    "build:frontend": "cd frontend && bun run build",
+    "lint:frontend": "cd frontend && bun run lint",
     "lint:backend": "cd backend && uv run ruff check app/ tests/",
     "test:backend": "cd backend && uv run pytest",
-    "test:frontend": "cd frontend && npm test",
-    "check": "npm run lint:backend && npm run test:backend && npm run lint:frontend && npm run test:frontend && npm run build:frontend",
+    "test:frontend": "cd frontend && bun run test",
+    "check": "bun run lint:backend && bun run test:backend && bun run lint:frontend && bun run test:frontend && bun run build:frontend",
     "dev:rebuild": "bash scripts/dev-rebuild.sh quick",
     "dev:rebuild:deps": "bash scripts/dev-rebuild.sh deps",
     "dev:rebuild:full": "bash scripts/dev-rebuild.sh full",
@@ -27,7 +27,7 @@
     "concurrently": "^9.1.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "bun": ">=1.0.0"
   },
   "license": "AGPL-3.0"
 }
