@@ -2,10 +2,10 @@
 #
 # Targets:
 #   dev   — Default, identisch mit der ursprünglichen Single-Stage-Variante.
-#           Enthält Node + uv + alle Dev-Dependencies, lädt das Repo per
-#           Bind-Mount und startet `npm run dev` (Vite + Flask).
+#           Enthält Bun + uv + alle Dev-Dependencies, lädt das Repo per
+#           Bind-Mount und startet `bun run dev` (Vite + Flask).
 #   prod  — schlanke Runtime: gebautes Frontend-Bundle, gunicorn vor Flask.
-#           Kein Vite, kein npm, kein curl, kein Bind-Mount erwartet.
+#           Kein Vite, kein Bun, kein curl, kein Bind-Mount erwartet.
 #
 # Auswahl im Compose über `target: dev` / `target: prod`. Default-
 # Compose nutzt `dev`. Für Produktions-Setups siehe
@@ -15,9 +15,10 @@
 FROM python:3.14 AS base
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends nodejs npm curl \
+  && apt-get install -y --no-install-recommends curl unzip \
   && rm -rf /var/lib/apt/lists/*
 
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 
 # Große CUDA-Wheels (cudnn ~700 MB, nvshmem ~300 MB) sprengen den
@@ -33,12 +34,12 @@ RUN useradd -m -u 1000 agora \
 # ---------- dev (default) ----------
 FROM base AS dev
 
-COPY --chown=agora:agora package.json package-lock.json ./
-COPY --chown=agora:agora frontend/package.json frontend/package-lock.json ./frontend/
+COPY --chown=agora:agora package.json bun.lock ./
+COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
 COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock ./backend/
 
-RUN npm ci \
-  && npm ci --prefix frontend \
+RUN bun install --frozen-lockfile \
+  && bun install --frozen-lockfile --cwd frontend \
   && cd backend && uv sync --frozen \
   && chown -R agora:agora /app
 
@@ -53,7 +54,7 @@ EXPOSE 5173 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5001/health || exit 1
 
-CMD ["npm", "run", "dev"]
+CMD ["bun", "run", "dev"]
 
 # ---------- frontend-build (frontend bundle only) ----------
 FROM base AS frontend-build
@@ -83,7 +84,7 @@ ARG VITE_AGORA_TOKEN=""
 ARG VITE_UI_VERSION="v4"
 # ENV VITE_AGORA_TOKEN wird bewusst NICHT gesetzt — ein ENV-Befehl würde
 # den ARG-Wert im RUN-Block überschreiben und das Gate wäre wirkungslos.
-# Vite liest VITE_* zur Build-Zeit aus dem Shell-Kontext von npm run build;
+# Vite liest VITE_* zur Build-Zeit aus dem Shell-Kontext von bun run build;
 # die /tmp/.vite_token_env-Datei speist den korrekten Wert ein.
 RUN _token="${VITE_AGORA_TOKEN:-}" && \
     if [ "$ALLOW_BUILD_TIME_TOKEN" = "true" ] && [ -n "$_token" ]; then \
@@ -96,12 +97,12 @@ RUN _token="${VITE_AGORA_TOKEN:-}" && \
     printf 'VITE_UI_VERSION=%s\n' "${VITE_UI_VERSION:-v4}" >> /tmp/.vite_token_env && \
     echo "VITE_UI_VERSION=${VITE_UI_VERSION:-v4} (Build-Provenance)."
 
-COPY --chown=agora:agora frontend/package.json frontend/package-lock.json ./frontend/
-RUN cd frontend && npm ci
+COPY --chown=agora:agora frontend/package.json frontend/bun.lock ./frontend/
+RUN cd frontend && bun install --frozen-lockfile
 
 COPY --chown=agora:agora frontend/ ./frontend/
 RUN export $(cat /tmp/.vite_token_env) && rm /tmp/.vite_token_env && \
-    cd frontend && npm run build
+    cd frontend && bun run build
 
 # ---------- backend-build (production Python environment only) ----------
 FROM base AS backend-build
