@@ -65,10 +65,13 @@ def init_logging(service_name: str) -> None:
         )
         from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
-        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+        # Use host.docker.internal as default to avoid the localhost trap in Docker.
+        # Note: localhost values from a host's .env file will not resolve to the host from within the container.
+        endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "host.docker.internal:4317")
 
         resource = Resource.create({"service.name": service_name})
-        exporter = OTLPLogExporter(endpoint=endpoint, insecure=True)
+        # Letting the exporter handle security/headers via standard OTel env vars is preferred.
+        exporter = OTLPLogExporter(endpoint=endpoint)
         processor = BatchLogRecordProcessor(exporter)
         provider = LoggerProvider(resource=resource)
         provider.add_log_record_processor(processor)
