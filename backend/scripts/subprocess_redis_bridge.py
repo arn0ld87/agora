@@ -150,6 +150,31 @@ class RedisIPCBridge:
             )
             return False
 
+    async def publish_post_event(self, event_payload: Dict[str, Any]) -> bool:
+        """Publish a PostCreatedEvent payload to the post_created channel.
+
+        Slice 5-pre: called from run_parallel_simulation after each CREATE_POST
+        action. Runs inside the asyncio loop of the OASIS subprocess so no
+        gevent/threading boundary is crossed.
+
+        Channel: agora:sim:{simulation_id}:post_created
+        Returns True on success, False if bridge inactive or publish failed.
+        """
+        if not self.active or self._client is None:
+            return False
+        key = channel_key(self.simulation_id, "post_created")
+        try:
+            enriched = inject_trace_into_event(dict(event_payload))
+            await self._client.publish(
+                key, json.dumps(enriched, ensure_ascii=False)
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "RedisIPCBridge: failed to publish post_event on %s", key
+            )
+            return False
+
     async def stop(self) -> None:
         if not self.active and self._task is None:
             return
