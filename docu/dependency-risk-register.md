@@ -5,20 +5,22 @@
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
-Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings. Jedes Ignored-
-CVE hat ein GitHub-Issue, eine Frist und einen Owner. Neue Findings duerfen
+Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
+Jedes Ignored-CVE hat ein GitHub-Issue, eine Frist und einen Owner. Neue Findings duerfen
 nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
+Die hier gelisteten CVEs sind auch in der `.trivyignore`-Datei im Root-Verzeichnis
+hinterlegt, um den Container-Scan nicht zu blockieren.
 
 ---
 
 ## Aktive Baseline (Hardstop 2026-07-30)
 
-| CVE | Paket | Version | Owner | Frist | Status | Issue | Upstream-Release-Watch |
-|---|---|---|---|---|---|---|---|
-| CVE-2025-71176 | `pytest` | `8.2.0` | camel-oasis | 2026-07-30 | open | [#123](https://github.com/arn0ld87/agora/issues/123) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
-| CVE-2026-1839 | `transformers` | `4.57.6` | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
-| CVE-2024-46455 | `unstructured` | `0.13.7` | camel-oasis | 2026-07-30 | open | [#125](https://github.com/arn0ld87/agora/issues/125) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
-| CVE-2025-64712 | `unstructured` | `0.13.7` | camel-oasis | 2026-07-30 | open | [#126](https://github.com/arn0ld87/agora/issues/126) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
+| CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
+|---|---|---|---|---|---|---|---|---|
+| CVE-2025-71176 | `pytest` | Low | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#123](https://github.com/arn0ld87/agora/issues/123) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
+| CVE-2026-1839 | `transformers` | Medium | Nein (Upstream Pin) | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
+| CVE-2024-46455 | `unstructured` | Medium | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#125](https://github.com/arn0ld87/agora/issues/125) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
+| CVE-2025-64712 | `unstructured` | Medium | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#126](https://github.com/arn0ld87/agora/issues/126) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
 
 ### Pin-Begruendungen
 
