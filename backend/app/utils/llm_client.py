@@ -419,6 +419,7 @@ class LLMClient:
         context: Literal[
             "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
         ] = "chat",
+        force_no_thinking: bool = False,
     ) -> str:
         """
         Send chat request
@@ -430,6 +431,8 @@ class LLMClient:
             response_format: Response format (e.g., JSON mode)
             context: Logical call context label for observability (published
                 to :mod:`app.services.model_event_bus` before the API call).
+            force_no_thinking: Bei True und Ollama-Provider wird ``think=False``
+                hart gesetzt, unabhaengig vom reasoning_effort-Profil.
 
         Returns:
             Model response text
@@ -457,11 +460,13 @@ class LLMClient:
 
         # For Ollama: pass num_ctx via extra_body to prevent prompt truncation,
         # plus think flag to control reasoning output on capable models.
+        # force_no_thinking=True überschreibt self._think hart auf False —
+        # verhindert, dass Reasoning-Profile den Token-Cap mit Thoughts belegen.
         if self._is_ollama():
             extra_body: Dict[str, Any] = {}
             if self._num_ctx:
                 extra_body["options"] = {"num_ctx": self._num_ctx}
-            extra_body["think"] = self._think
+            extra_body["think"] = False if force_no_thinking else self._think
             kwargs["extra_body"] = extra_body
 
         # Force streaming for Ollama: the OpenAI-compatible endpoint in Ollama
@@ -656,6 +661,7 @@ class LLMClient:
         context: Literal[
             "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
         ] = "chat_json",
+        force_no_thinking: bool = False,
     ) -> Dict[str, Any]:
         """
         Send chat request and return JSON.
@@ -675,6 +681,8 @@ class LLMClient:
                 (used by some providers for caching / routing).
             context: Logical call context label for observability (forwarded
                 to :meth:`chat` which publishes it to the model event bus).
+            force_no_thinking: Wird an chat() weitergereicht — bei Ollama wird
+                ``think=False`` hart gesetzt, unabhaengig vom Profil.
 
         Returns:
             Parsed JSON object (dict).
@@ -759,6 +767,7 @@ class LLMClient:
                     max_tokens=max_tokens,
                     response_format=response_format,
                     context=context,
+                    force_no_thinking=force_no_thinking,
                 )
             except Exception as exc:
                 exc_lower = str(exc).lower()
@@ -774,6 +783,7 @@ class LLMClient:
                         max_tokens=max_tokens,
                         response_format={"type": "json_object"},
                         context=context,
+                        force_no_thinking=force_no_thinking,
                     )
                 else:
                     raise
@@ -784,6 +794,7 @@ class LLMClient:
                 max_tokens=max_tokens,
                 response_format=response_format,
                 context=context,
+                force_no_thinking=force_no_thinking,
             )
         # Clean markdown code block markers
         cleaned_response = response.strip()

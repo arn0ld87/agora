@@ -49,7 +49,7 @@ class TestChatJsonLegacy:
         monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format, context="chat"):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat", **kwargs):
             captured.append(response_format)
             return '{"result": "ok"}'
 
@@ -68,7 +68,7 @@ class TestChatJsonStrictSchema:
         monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
             captured.append(response_format)
             return '{"x": 5}'
 
@@ -117,7 +117,7 @@ class TestChatJsonStrictSchema:
         call_count = 0
         warning_calls: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -153,7 +153,7 @@ class TestChatJsonStrictSchema:
 
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
             captured.append(response_format)
             return '{"x": 99}'
 
@@ -178,7 +178,7 @@ class TestChatJsonStrictSchema:
         }
         captured: list = []
 
-        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json"):
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
             captured.append(response_format)
             return '{"name": "Agora"}'
 
@@ -195,3 +195,63 @@ class TestChatJsonStrictSchema:
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["name"] == "name_obj"
         assert rf["json_schema"]["strict"] is True
+
+
+class TestChatForceNoThinking:
+    def test_chat_force_no_thinking_overrides_extra_body_think(self, monkeypatch):
+        """force_no_thinking=True muss extra_body['think']=False setzen, auch wenn reasoning_effort='medium'.
+
+        Prueft, dass ein Ollama-Client mit aktiviertem Reasoning (self._think=True)
+        bei force_no_thinking=True trotzdem think=False an die API sendet.
+        """
+        from unittest.mock import MagicMock
+
+        # Client mit Ollama-Base-URL und Reasoning (self._think=True)
+        obj = LLMClient.__new__(LLMClient)
+        obj._max_retries = 1
+        obj._retry_initial_delay = 0.0
+        obj._retry_max_delay = 0.0
+        obj._num_ctx = 8192
+        obj._think = True  # Reasoning aktiviert (reasoning_effort="medium")
+        obj.model = "kimi-k2.6"
+        obj.base_url = "http://localhost:11434/v1"
+        obj.api_key = "ollama"
+        obj.run_id = None
+        obj.routing_version = None
+        obj.route_stage = None
+        obj.route_provider_id = None
+
+        # E2E-Stub deaktivieren
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        # Streaming deaktivieren, damit wir den einfachen Response-Pfad testen
+        monkeypatch.setenv("LLM_FORCE_STREAM", "false")
+
+        captured_kwargs: list = []
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.choices[0].finish_reason = "stop"
+        mock_response.usage.completion_tokens = 5
+
+        def fake_create(**kwargs):
+            captured_kwargs.append(dict(kwargs))
+            return mock_response
+
+        # client-Attribut direkt setzen (nicht via patch.object — __new__ hat es nicht initialisiert)
+        mock_openai_client = MagicMock()
+        mock_openai_client.chat.completions.create.side_effect = fake_create
+        obj.client = mock_openai_client
+
+        obj.chat(
+            messages=[{"role": "user", "content": "test"}],
+            force_no_thinking=True,
+        )
+
+        assert len(captured_kwargs) >= 1, "Kein API-Call wurde abgesetzt"
+        wire_call = captured_kwargs[0]
+        extra_body = wire_call.get("extra_body", {})
+        assert extra_body.get("think") is False, (
+            f"force_no_thinking=True muss extra_body['think']=False setzen, "
+            f"erhalten: {extra_body}"
+        )

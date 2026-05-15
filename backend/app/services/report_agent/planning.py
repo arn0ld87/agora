@@ -45,18 +45,43 @@ def plan_outline(
     )
 
     try:
-        # M11.8d: strict json_schema mode — PlanResponse DTO erzwingt Struktur.
+        # M11.8d / Smoke-02: strict json_schema mode — PlanResponse DTO erzwingt Struktur.
+        # max_tokens=16384 verhindert Token-Cap-Truncation bei Ollama-Fallback-Modellen.
+        # force_no_thinking=True deaktiviert Ollama-Thinking-Mode, damit der Token-Cap
+        # nicht durch Thought-Tokens belegt wird und kein leeres JSON entsteht.
         # Bei nicht-strict-fähigen Providern macht llm_client.py automatisch
         # Fallback auf json_object (kein Inline-Schema-String nötig).
-        response = agent.llm.chat_json(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-            schema=PlanResponse,
-            schema_name="report_plan",
-        )
+        _messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        try:
+            response = agent.llm.chat_json(
+                messages=_messages,
+                temperature=0.2,
+                max_tokens=16384,
+                schema=PlanResponse,
+                schema_name="report_plan",
+                force_no_thinking=True,
+            )
+        except ValueError as _first_err:
+            _msg = str(_first_err)
+            if "len=0" in _msg or "Invalid JSON format from LLM" in _msg:
+                logger.warning(
+                    "plan_outline: first chat_json attempt failed with empty/invalid "
+                    "response (%s) — retrying once with max_tokens=24576, temperature=0.1",
+                    _msg[:120],
+                )
+                response = agent.llm.chat_json(
+                    messages=_messages,
+                    temperature=0.1,
+                    max_tokens=24576,
+                    schema=PlanResponse,
+                    schema_name="report_plan",
+                    force_no_thinking=True,
+                )
+            else:
+                raise
 
         if progress_callback:
             progress_callback("planning", 80, "Parsing outline structure...")
