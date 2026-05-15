@@ -229,9 +229,12 @@ def test_ontology_generate_accepts_provider_without_api_key_uses_db_fallback(
         },
         content_type="multipart/form-data",
     )
-    # Kein 400 mehr — parse_runtime_llm_config akzeptiert leeren Key
-    assert response.status_code != 400, (
-        "parse_runtime_llm_config darf bei fehlendem api_key keinen 400 mehr werfen; "
+    # Provider ohne api_key wird erfolgreich akzeptiert — parse_runtime_llm_config
+    # wirft keinen Fehler mehr, der Fallback auf Settings-DB erfolgt intern.
+    # Copilot PR #466: Assertion auf konkreten 200 statt nur != 400, damit
+    # 500er oder andere Fehler nicht unbemerkt durchgehen.
+    assert response.status_code == 200, (
+        "Provider ohne api_key muss erfolgreich verarbeitet werden (200); "
         f"erhalten: {response.status_code} — {response.get_json()}"
     )
 
