@@ -909,6 +909,33 @@ def _chat_with_tools(
         )
         return e2e_stub_chat_with_tools_response(messages=messages, tools=tools)
 
+    # Provider-Unknown-Short-Circuit: für nicht eindeutig identifizierbare Provider
+    # (weder Ollama lokal noch Ollama-Cloud noch OpenAI) können wir nicht garantieren,
+    # dass das Backend ``tools=``/``tool_choice=`` versteht. Statt einen 400er zu
+    # provozieren, fallen wir auf einen ``chat()``-Call ohne Tools zurück und liefern
+    # ``tool_calls=[]`` — der Caller (workflow.generate_section_react) erkennt das
+    # und nutzt den XML-Fallback-Parser. So bleibt das ReACT-Loop-Verhalten stabil.
+    provider = self._detect_provider()
+    if provider == "unknown":
+        logger.info(
+            "LLMClient.chat_with_tools: provider=unknown (model=%s, base=%s) — "
+            "skipping tools= and falling back to chat() for XML-tool-call parsing",
+            self.model,
+            self.base_url,
+        )
+        fallback_content = self.chat(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            context=context,
+        ) or ""
+        return ToolCallResponse(
+            content=fallback_content,
+            tool_calls=[],
+            finish_reason="stop",
+            raw_response=None,
+        )
+
     import time as _time
     _t0 = _time.monotonic()
 
