@@ -113,14 +113,12 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: cd frontend && npm ci
+          bun-version: latest
+      - run: cd frontend && bun install --frozen-lockfile
       - name: Vitest - Sample-Payload muss Zod-strikt parsen
-        run: cd frontend && npm run test -- --run src/contracts/
+        run: cd frontend && bun run test -- --run src/contracts/
 
   voice-lint:
     name: Voice-Lint (DACH-Voice + Anti-Forecast)
