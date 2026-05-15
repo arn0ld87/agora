@@ -58,7 +58,7 @@
 - Create: `deploy/observability/README.md`
 - Modify: `.env.example` (3 neue Variablen)
 
-- [ ] **Step 1: SigNoz-Compose-File anlegen**
+- [x] **Step 1: SigNoz-Compose-File anlegen**
 
 `docker-compose.observability.yml` mit dem SigNoz-Community-Stack (clickhouse, zookeeper, query-service, frontend, alertmanager) plus separater OTel-Collector. Profile `observability` damit der Stack nicht zu Agora-Default-Compose dazukommt.
 
@@ -124,7 +124,7 @@ volumes:
   signoz-query-data:
 ```
 
-- [ ] **Step 2: Collector-Config anlegen**
+- [x] **Step 2: Collector-Config anlegen**
 
 `deploy/observability/otel-collector.yaml`:
 
@@ -164,7 +164,7 @@ service:
       exporters: [clickhousetraces, debug]
 ```
 
-- [ ] **Step 3: README für lokales Aufrufen**
+- [x] **Step 3: README für lokales Aufrufen**
 
 `deploy/observability/README.md`:
 
@@ -186,7 +186,7 @@ OTLP-grpc-Endpoint (für Agora-Backend + Frontend): localhost:4317 (grpc), local
     docker compose -f docker-compose.observability.yml --profile observability down -v  # inkl. Daten
 ```
 
-- [ ] **Step 4: .env.example ergänzen**
+- [x] **Step 4: .env.example ergänzen**
 
 ```bash
 # --- Observability (Slice 1) ---
@@ -195,7 +195,7 @@ OTEL_SERVICE_NAME=agora-backend
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
-- [ ] **Step 5: Smoke-Test**
+- [x] **Step 5: Smoke-Test**
 
 Stack hochfahren, manueller Span via `telemetrygen`:
 
@@ -208,7 +208,7 @@ docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-co
 
 Expected: SigNoz-UI (http://localhost:3301) zeigt unter „Services" einen Service `telemetrygen` mit einem Trace.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit** *(pending — kommt nach Gesamtslice)*
 
 ```bash
 git add docker-compose.observability.yml deploy/observability/ .env.example
@@ -226,7 +226,7 @@ git commit -m "feat(observability): SigNoz + OTel-Collector als lokaler Compose-
 - Create: `backend/tests/observability/__init__.py`, `test_tracing_init.py`
 - Modify: `backend/pyproject.toml`, `backend/app/__init__.py`, `backend/app/api/simulation_lifecycle.py`
 
-- [ ] **Step 1: Failing-Test anlegen — TracerProvider liefert Spans an In-Memory-Exporter**
+- [x] **Step 1: Failing-Test anlegen — TracerProvider liefert Spans an In-Memory-Exporter**
 
 `backend/tests/observability/test_tracing_init.py`:
 
@@ -261,14 +261,14 @@ def test_init_tracing_noop_when_disabled(monkeypatch):
     assert provider is None
 ```
 
-- [ ] **Step 2: Test laufen lassen — muss rot sein**
+- [x] **Step 2: Test laufen lassen — muss rot sein**
 
 ```bash
 cd backend && uv run pytest tests/observability/test_tracing_init.py -v
 ```
 Expected: FAIL mit `ModuleNotFoundError: app.observability`.
 
-- [ ] **Step 3: Dependencies in pyproject.toml ergänzen**
+- [x] **Step 3: Dependencies in pyproject.toml ergänzen**
 
 In `[project.dependencies]` (oder die existierende Liste) hinzufügen:
 
@@ -283,7 +283,7 @@ In `[project.dependencies]` (oder die existierende Liste) hinzufügen:
 
 Dann: `cd backend && uv sync`.
 
-- [ ] **Step 4: `backend/app/observability/__init__.py` schreiben**
+- [x] **Step 4: `backend/app/observability/__init__.py` schreiben**
 
 ```python
 """Observability bootstrap — OpenTelemetry Tracing.
@@ -298,7 +298,7 @@ from .tracing import init_tracing
 __all__ = ["init_tracing"]
 ```
 
-- [ ] **Step 5: `backend/app/observability/tracing.py` schreiben**
+- [x] **Step 5: `backend/app/observability/tracing.py` schreiben**
 
 ```python
 from __future__ import annotations
@@ -361,14 +361,14 @@ def instrument_flask_app(app) -> None:
     FlaskInstrumentor().instrument_app(app)
 ```
 
-- [ ] **Step 6: Test grün ziehen**
+- [x] **Step 6: Test grün ziehen**
 
 ```bash
 cd backend && uv run pytest tests/observability/test_tracing_init.py -v
 ```
 Expected: PASS (beide Tests).
 
-- [ ] **Step 7: App-Factory verdrahten**
+- [x] **Step 7: App-Factory verdrahten**
 
 `backend/app/__init__.py` — am Anfang der `create_app()`-Funktion (vor anderen Initialisierungen, **nach** `gevent.monkey.patch_all()`, falls dort gerufen):
 
@@ -381,7 +381,7 @@ init_tracing(service_name=os.environ.get("OTEL_SERVICE_NAME", "agora-backend"))
 instrument_flask_app(app)
 ```
 
-- [ ] **Step 8: Manual-Root-Span im Sim-Handler**
+- [x] **Step 8: Manual-Root-Span im Sim-Handler**
 
 `backend/app/api/simulation_lifecycle.py` — den POST-Handler für `/api/simulations` (oder den existierenden Create-Endpoint) mit Span umschließen:
 
@@ -397,7 +397,7 @@ with _tracer.start_as_current_span("agora.simulation.create") as span:
     # ... bestehender Code ...
 ```
 
-- [ ] **Step 9: gevent-Kompatibilität verifizieren (manueller Smoke)**
+- [x] **Step 9: gevent-Kompatibilität verifizieren (manueller Smoke)**
 
 ```bash
 cd backend
@@ -427,7 +427,7 @@ git commit -m "feat(observability): Flask + gevent Tracing mit Root-Span im Sim-
 - Modify: `backend/scripts/_sim_common.py`
 - Create: `backend/tests/observability/test_subprocess_propagation.py`
 
-- [ ] **Step 1: Failing-Test — TRACEPARENT-Roundtrip**
+- [x] **Step 1: Failing-Test — TRACEPARENT-Roundtrip**
 
 `backend/tests/observability/test_subprocess_propagation.py`:
 
@@ -472,14 +472,14 @@ def test_traceparent_propagates_via_env(tmp_path):
     assert result.stdout.strip() == parent_trace_id
 ```
 
-- [ ] **Step 2: Test ausführen, Roundtrip funktioniert mit Stock-API**
+- [x] **Step 2: Test ausführen, Roundtrip funktioniert mit Stock-API**
 
 ```bash
 cd backend && uv run pytest tests/observability/test_subprocess_propagation.py -v
 ```
 Expected: PASS (OTel SDK kann das ohne Custom-Code; der Test ist die **Spezifikation**, dass der Mechanismus stabil bleibt).
 
-- [ ] **Step 3: `process_manager.py` — TRACEPARENT in Popen-ENV mergen**
+- [x] **Step 3: `process_manager.py` — TRACEPARENT in Popen-ENV mergen**
 
 In `backend/app/services/sim/process_manager.py` die Stelle finden, an der `subprocess.Popen(...)` aufgerufen wird (vermutlich `start_subprocess` o.ä.) und vor dem Popen-Call den Trace-Context injizieren:
 
@@ -501,7 +501,7 @@ with _tracer.start_as_current_span("agora.subprocess.spawn") as span:
     process = subprocess.Popen(cmd, env=env, ...)  # existierender Aufruf
 ```
 
-- [ ] **Step 4: Runner-Script Init in `_sim_common.py`**
+- [x] **Step 4: Runner-Script Init in `_sim_common.py`**
 
 `backend/scripts/_sim_common.py` — neue Funktion am Anfang des Init-Pfades:
 
@@ -569,7 +569,7 @@ git commit -m "feat(observability): TRACEPARENT-Propagation durch subprocess.Pop
 - Modify: `backend/scripts/subprocess_redis_bridge.py`
 - Modify: `backend/app/services/sim/` (Consumer-Seite — Datei via `grep -rn "RedisEventBus" backend/app/services/sim/` lokalisieren)
 
-- [ ] **Step 1: Failing-Test — Inject + Extract Roundtrip**
+- [x] **Step 1: Failing-Test — Inject + Extract Roundtrip**
 
 `backend/tests/observability/test_redis_propagator.py`:
 
@@ -605,14 +605,14 @@ def test_extract_handles_missing_traceparent():
     assert ctx is not None  # Fallback-Context, kein Crash
 ```
 
-- [ ] **Step 2: Test rot ziehen**
+- [x] **Step 2: Test rot ziehen**
 
 ```bash
 cd backend && uv run pytest tests/observability/test_redis_propagator.py -v
 ```
 Expected: FAIL mit `ModuleNotFoundError`.
 
-- [ ] **Step 3: Propagator implementieren**
+- [x] **Step 3: Propagator implementieren**
 
 `backend/app/observability/redis_propagator.py`:
 
@@ -652,7 +652,7 @@ def extract_trace_from_event(event: Dict[str, Any]) -> otel_context.Context:
     return _PROPAGATOR.extract({"traceparent": traceparent})
 ```
 
-- [ ] **Step 4: Test grün ziehen**
+- [x] **Step 4: Test grün ziehen**
 
 ```bash
 cd backend && uv run pytest tests/observability/test_redis_propagator.py -v
@@ -728,7 +728,7 @@ git commit -m "feat(observability): Trace-Propagation über Redis-pub/sub Bus-Ev
 - Create: `frontend/src/observability/tracing.ts`
 - Create: `frontend/tests/observability/tracing.spec.ts`
 
-- [ ] **Step 1: Backend — `trace_id` ins SSE-Event mergen**
+- [x] **Step 1: Backend — `trace_id` ins SSE-Event mergen**
 
 In `backend/app/api/simulation_stream.py`, an der Stelle, wo das Frame an den Browser geschrieben wird (vermutlich `format_sse_frame` oder direkt `yield f"data: {json.dumps(...)}"`):
 
@@ -742,7 +742,7 @@ if span_ctx.is_valid:
     frame["trace_id"] = format(span_ctx.trace_id, "032x")
 ```
 
-- [ ] **Step 2: Frontend-Deps in `frontend/package.json`**
+- [x] **Step 2: Frontend-Deps in `frontend/package.json`**
 
 ```json
 {
@@ -762,7 +762,7 @@ if span_ctx.is_valid:
 cd frontend && bun install
 ```
 
-- [ ] **Step 3: Frontend-Tracer schreiben**
+- [x] **Step 3: Frontend-Tracer schreiben**
 
 `frontend/src/observability/tracing.ts`:
 
@@ -811,7 +811,7 @@ export function traceIdToSigNozUrl(traceId: string): string {
 export { context, trace }
 ```
 
-- [ ] **Step 4: `frontend/src/main.ts` — Tracing vor Vue-Init**
+- [x] **Step 4: `frontend/src/main.ts` — Tracing vor Vue-Init**
 
 ```typescript
 import { initFrontendTracing } from './observability/tracing'
@@ -820,7 +820,7 @@ initFrontendTracing()
 // danach: existierender createApp(...).mount(...)
 ```
 
-- [ ] **Step 5: SseEventFrame-Type ergänzen**
+- [x] **Step 5: SseEventFrame-Type ergänzen**
 
 `frontend/src/api/stream.ts`:
 
@@ -834,7 +834,7 @@ export interface SseEventFrame {
 }
 ```
 
-- [ ] **Step 6: `useEventStream.ts` — trace_id als Span-Link konsumieren**
+- [x] **Step 6: `useEventStream.ts` — trace_id als Span-Link konsumieren**
 
 In der Stelle, an der Frames verarbeitet werden:
 
@@ -858,7 +858,7 @@ if (frame.trace_id) {
 
 Der genaue Hook hängt vom existierenden Composable ab — sicherstellen, dass der Reactive-State um `lastTraceId: Ref<string | null>` erweitert wird, return-merge.
 
-- [ ] **Step 7: SimDetail-Panel — „Trace anzeigen"-Button**
+- [x] **Step 7: SimDetail-Panel — „Trace anzeigen"-Button**
 
 In der Vue-Komponente, die den aktuellen Sim-Stream rendert (vermutlich unter `frontend/src/components/Step*.vue` — via Grep: `rg -l "useEventStream" frontend/src/`):
 
@@ -877,7 +877,7 @@ const { lastTraceId } = useEventStream(...)
 </template>
 ```
 
-- [ ] **Step 8: Vitest-Smoke**
+- [x] **Step 8: Vitest-Smoke**
 
 `frontend/tests/observability/tracing.spec.ts`:
 

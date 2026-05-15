@@ -1,39 +1,43 @@
 <script setup lang="ts">
 /**
- * DropdownMenu — einfaches Click-Outside-Dropdown für Agora Design v4
- * Slice UI-G · 2026-05-15
+ * DropdownMenu — Wrapper über reka-ui DropdownMenuRoot/Trigger/Portal/Content.
  *
- * Use-Case: Aktions-Menüs in DataTable-Zeilen, Topbar-User-Menü, Run-Card-Aktionen.
+ * Slice FE-Redesign-1 · 2026-05-15
  *
- * API:
- *   <DropdownMenu>
+ * Public API unverändert gegenüber Slice UI-G:
+ *   <DropdownMenu align="end">
  *     <template #trigger="{ toggle, isOpen }">
- *       <Button :aria-expanded="isOpen" @click="toggle">Aktionen</Button>
+ *       <Button @click="toggle">Aktionen</Button>
  *     </template>
  *     <template #default="{ close }">
- *       <DropdownMenuItem @select="() => { onEdit(); close() }">Bearbeiten</DropdownMenuItem>
- *       <DropdownMenuItem variant="danger" @select="() => { onDelete(); close() }">Löschen</DropdownMenuItem>
+ *       <DropdownMenuItem @select="close">Bearbeiten</DropdownMenuItem>
  *     </template>
  *   </DropdownMenu>
  *
- * Hinweis: Slot-Props (`close`) sind nur via `<template #default="{ close }">`
- * zugänglich, nicht über lose Default-Slot-Children.
+ * Exposed: open/close/toggle/isOpen
  *
- * Keyboard:
- * - ESC schließt das Menü und gibt Fokus an Trigger zurück.
- * - Click outside schließt das Menü.
+ * Was reka-ui jetzt liefert (gegen Eigenbau-Variante):
+ * - aria-haspopup="menu" + aria-expanded auf DropdownMenuTrigger
+ * - role="menu" + aria-orientation="vertical" auf Content
+ * - Arrow-Up/Down navigiert zwischen Items
+ * - Home/End zu erstem/letztem Item
+ * - Type-Ahead-Suche
+ * - Focus-Trap im offenen Menu
+ * - Escape schließt Menu und gibt Fokus zurück
+ * - Portal-aware Outside-Click-Detection (kein document-Listener mehr nötig)
  *
- * Listener-Lifecycle: document-level click/keydown werden NUR während offener
- * Phase registriert — vermeidet O(N)-globale-Listener bei vielen Dropdowns
- * (z. B. eine pro DataTable-Zeile).
- *
- * Wir verwenden bewusst kein @floating-ui / Reka-UI:
- * - Use-Cases sind alle „Trigger-rechts, Menü-darunter-rechts-aligned" — keine
- *   Collision-Detection nötig.
- * - Halte Dependencies minimal (siehe shadcn-vue-evaluation.md).
+ * Portal-Hinweis: Panel wird via DropdownMenuPortal in document.body
+ * gemountet. Tests müssen document.querySelector statt wrapper.find
+ * für Panel-Elemente verwenden.
  */
 
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { ref } from 'vue'
+import {
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuPortal,
+  DropdownMenuContent,
+} from 'reka-ui'
 
 withDefaults(
   defineProps<{
@@ -46,8 +50,6 @@ withDefaults(
 )
 
 const isOpen = ref(false)
-const rootRef = ref<HTMLElement | null>(null)
-const triggerWrapperRef = ref<HTMLElement | null>(null)
 
 function open(): void {
   isOpen.value = true
@@ -61,46 +63,6 @@ function toggle(): void {
   isOpen.value = !isOpen.value
 }
 
-function onDocumentClick(event: MouseEvent): void {
-  if (!isOpen.value) return
-  const target = event.target as Node | null
-  if (!target) return
-  if (rootRef.value && !rootRef.value.contains(target)) {
-    close()
-  }
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && isOpen.value) {
-    close()
-    // Fokus zurück auf erste fokussierbare Element im Trigger
-    const trigger = triggerWrapperRef.value?.querySelector<HTMLElement>(
-      'button, [tabindex]:not([tabindex="-1"])',
-    )
-    trigger?.focus()
-  }
-}
-
-function attachGlobalListeners(): void {
-  document.addEventListener('click', onDocumentClick, true)
-  document.addEventListener('keydown', onKeydown)
-}
-
-function detachGlobalListeners(): void {
-  document.removeEventListener('click', onDocumentClick, true)
-  document.removeEventListener('keydown', onKeydown)
-}
-
-// Listener nur während offener Phase — skaliert auch bei Dropdown-pro-Tabellenzeile.
-watch(isOpen, (open) => {
-  if (open) attachGlobalListeners()
-  else detachGlobalListeners()
-})
-
-onBeforeUnmount(() => {
-  detachGlobalListeners()
-})
-
 defineExpose({ open, close, toggle, isOpen })
 
 defineSlots<{
@@ -110,31 +72,35 @@ defineSlots<{
 </script>
 
 <template>
-  <div ref="rootRef" class="dm-root">
-    <div ref="triggerWrapperRef" class="dm-trigger">
+  <DropdownMenuRoot v-model:open="isOpen">
+    <!-- dm-trigger-wrapper: reka-ui DropdownMenuTrigger setzt aria-haspopup +
+         aria-expanded auf das as-child-Element. Wir verwenden keinen as-child
+         hier, damit der Wrapper das Trigger-Slot direkt enthält und reka-ui
+         die Attribute auf den Wrapper setzt — Consumer-Elemente im trigger-Slot
+         werden dadurch visuell korrekt positioniert. -->
+    <DropdownMenuTrigger class="dm-trigger" @click.prevent>
       <slot name="trigger" :toggle="toggle" :is-open="isOpen" />
-    </div>
+    </DropdownMenuTrigger>
 
-    <div
-      v-if="isOpen"
-      class="dm-panel"
-      :class="`dm-panel--align-${align}`"
-      role="menu"
-    >
-      <slot :close="close" />
-    </div>
-  </div>
+    <DropdownMenuPortal>
+      <DropdownMenuContent
+        class="dm-panel"
+        :class="`dm-panel--align-${align}`"
+        :align="align"
+        :side-offset="6"
+      >
+        <slot :close="close" />
+      </DropdownMenuContent>
+    </DropdownMenuPortal>
+  </DropdownMenuRoot>
 </template>
 
 <style scoped>
-.dm-root {
-  position: relative;
+.dm-trigger {
   display: inline-block;
 }
 
 .dm-panel {
-  position: absolute;
-  top: calc(100% + 6px);
   min-width: 180px;
   padding: 4px;
   background: var(--surface-elevated, #fff);
@@ -145,13 +111,12 @@ defineSlots<{
   display: flex;
   flex-direction: column;
   gap: 1px;
+  outline: none;
 }
 
-.dm-panel--align-start {
-  left: 0;
-}
-
+.dm-panel--align-start,
 .dm-panel--align-end {
-  right: 0;
+  /* Alignment wird von reka-ui über transform gesteuert.
+     Klassen bleiben für visual-regression-snapshots und CSS-Overrides. */
 }
 </style>
