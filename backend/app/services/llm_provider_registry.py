@@ -21,7 +21,10 @@ class LlmProviderRegistry:
                 id="ollama_local",
                 label="Ollama (Local)",
                 type="ollama_local",
-                base_url="http://localhost:11434",
+                # OpenAI-kompatibler Ollama-Endpoint mit /v1-Suffix; aus dem
+                # Docker-Container muss host.docker.internal verwendet werden,
+                # damit der Mac-Host erreicht wird (Smoke-Live 2026-05-15).
+                base_url="http://host.docker.internal:11434/v1",
                 supports_models_endpoint=True,
                 fallback_models=["qwen2.5:32b", "llama3.1:8b", "phi3"],
             ),
