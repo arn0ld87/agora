@@ -21,7 +21,9 @@ import { useReportExports } from '../composables/useReportExports'
 import {
   runtimeLlmPayloadFromStorage,
   runtimeProviderMissingApiKeyFromStorage,
+  mapRuntimeProviderToBackendId,
 } from '../composables/useRuntimeLlmOptions'
+import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
 import type { LlmRuntimePayload } from '../api/llmRuntime'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
@@ -162,16 +164,35 @@ const providerOptions = [
   { value: 'custom_openai', label: 'Custom OpenAI-kompatibel' },
 ]
 
+/**
+ * Baut den Provider-Payload für den Report-Regenerate-Request.
+ * Wenn kein Session-Key vorhanden: api_key weggelassen — Backend löst via
+ * Settings-DB auf (Smoke-Fix Slice 04 / Copilot-Followup PR #466).
+ */
 function effectiveReportProvider(): LlmRuntimePayload | null {
   if (reportProvider.value === 'default') return null
   const key = reportApiKey.value.trim()
-  if (!key) return null
   const base = reportBaseUrl.value.trim()
-  return { provider: reportProvider.value as 'google' | 'openai' | 'custom_openai', api_key: key, ...(base ? { base_url: base } : {}) }
+  return {
+    provider: reportProvider.value as 'google' | 'openai' | 'custom_openai',
+    ...(key ? { api_key: key } : {}),
+    ...(base ? { base_url: base } : {}),
+  }
 }
 
-function reportProviderMissingApiKey(): boolean {
-  return reportProvider.value !== 'default' && !reportApiKey.value.trim()
+/**
+ * Gibt true zurück wenn Provider != default, kein Session-Key vorhanden UND
+ * auch kein DB-Key für den Provider hinterlegt ist (Copilot-Followup PR #466).
+ * Async wegen DB-Key-Prüfung via /api/llm/providers/<id>/has-key.
+ */
+async function reportProviderMissingKeyEverywhere(): Promise<boolean> {
+  if (reportProvider.value === 'default') return false
+  if (reportApiKey.value.trim()) return false
+  const backendId = mapRuntimeProviderToBackendId(
+    reportProvider.value as 'google' | 'openai' | 'custom_openai',
+  )
+  const hasDbKey = await checkLlmProviderHasKey(backendId)
+  return !hasDbKey
 }
 
 const modelOptions = computed(() => {
@@ -218,8 +239,8 @@ async function regenerateWithModel() {
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
 
-    if (reportProviderMissingApiKey()) {
-      addLog('API-Key für gewählten LLM-Anbieter fehlt.')
+    if (await reportProviderMissingKeyEverywhere()) {
+      addLog('API-Key für gewählten LLM-Anbieter fehlt (weder Session-Key noch DB-Key vorhanden).')
       return
     }
     const providerPayload = effectiveReportProvider()

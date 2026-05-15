@@ -182,4 +182,40 @@ describe('useApiAuth', () => {
     expect(mockPost).toHaveBeenCalledOnce()
     expect(fn).toHaveBeenCalledOnce()
   })
+
+  // -------------------------------------------------------------------------
+  // 6. In-Flight-Deduplizierung: 2× parallel fetchTicket(scope) → 1× POST
+  //    Copilot-Followup PR #466: concurrent callers für denselben Scope
+  //    dürfen keinen zweiten POST auslösen.
+  // -------------------------------------------------------------------------
+
+  it('2× parallele fetchTicket(scope) resultieren in genau 1× POST /api/auth/ticket', async () => {
+    const scope = 'sse:sim_parallel'
+
+    // mockPost resolved nur einmal — wenn ein zweiter POST käme, würde er undefined zurückgeben
+    // und fetchTicket mit „no ticket"-Fehler abbrechen.
+    mockPost.mockResolvedValueOnce(makeTicketResponse('v1.shared'))
+
+    const [t1, t2] = await Promise.all([
+      useApiAuth.fetchTicket(scope),
+      useApiAuth.fetchTicket(scope),
+    ])
+
+    expect(mockPost).toHaveBeenCalledOnce()
+    expect(t1).toBe('v1.shared')
+    expect(t2).toBe('v1.shared')
+  })
+
+  // -------------------------------------------------------------------------
+  // 7. ttlSeconds wird an POST /api/auth/ticket weitergegeben
+  //    Copilot-Followup PR #466 (stream.ts:49).
+  // -------------------------------------------------------------------------
+
+  it('fetchTicket sendet ttlSeconds als ttl_seconds im POST-Body', async () => {
+    mockPost.mockResolvedValueOnce(makeTicketResponse('v1.custom-ttl'))
+
+    await useApiAuth.fetchTicket('sse:sim_ttl', 120)
+
+    expect(mockPost).toHaveBeenCalledWith('/api/auth/ticket', { scope: 'sse:sim_ttl', ttl_seconds: 120 })
+  })
 })

@@ -42,11 +42,12 @@ export interface StreamHandlers {
 
 export async function fetchStreamTicket(
   simulationId: string,
-  { ttlSeconds: _ttlSeconds = 60 }: { ttlSeconds?: number } = {}
+  { ttlSeconds = 60 }: { ttlSeconds?: number } = {}
 ): Promise<string | undefined> {
   if (!simulationId) throw new Error('simulationId is required')
   // Delegiert an useApiAuth.fetchTicket für Cache + Auto-Refresh-Support.
-  return useApiAuth.fetchTicket(`sse:${simulationId}`)
+  // ttlSeconds wird durchgereicht (Copilot-Followup PR #466).
+  return useApiAuth.fetchTicket(`sse:${simulationId}`, ttlSeconds)
 }
 
 export async function buildSimulationStreamUrl(simulationId: string): Promise<string> {
