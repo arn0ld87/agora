@@ -645,6 +645,33 @@
       "SELF_RELATIONS_(1)": "Selbstbeziehung (1)"
     }
   },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "runs": "Runs",
+      "projects": "Projekte",
+      "datasets": "Datensätze",
+      "templates": "Vorlagen",
+      "monitoring": "Monitoring"
+    },
+    "settings": {
+      "label": "Einstellungen",
+      "general": "Allgemein",
+      "integrations": "Integrationen",
+      "usersTeams": "Nutzer & Teams",
+      "apiKeys": "API-Schlüssel",
+      "llmProviders": "LLM-Anbieter",
+      "llmRouting": "LLM-Routing",
+      "auditLogs": "Audit-Logs"
+    },
+    "footer": {
+      "collapse": "Einklappen"
+    }
+  },
+  "topbar": {
+    "search": "Suche",
+    "notifications": "Benachrichtigungen"
+  },
   "logs": {
     "drawer": {
       "title": "Backend-Logs",

@@ -645,6 +645,33 @@
       "SELF_RELATIONS_(1)": "Self-relation (1)"
     }
   },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "runs": "Runs",
+      "projects": "Projects",
+      "datasets": "Datasets",
+      "templates": "Templates",
+      "monitoring": "Monitoring"
+    },
+    "settings": {
+      "label": "Settings",
+      "general": "General",
+      "integrations": "Integrations",
+      "usersTeams": "Users & Teams",
+      "apiKeys": "API Keys",
+      "llmProviders": "LLM Providers",
+      "llmRouting": "LLM Routing",
+      "auditLogs": "Audit Logs"
+    },
+    "footer": {
+      "collapse": "Collapse"
+    }
+  },
+  "topbar": {
+    "search": "Search",
+    "notifications": "Notifications"
+  },
   "logs": {
     "drawer": {
       "title": "Backend logs",

@@ -11,13 +11,13 @@
     <div class="topbar__actions">
       <slot name="actions">
         <!-- Search -->
-        <button class="topbar__icon-btn" type="button" aria-label="Suche">
+        <button class="topbar__icon-btn" type="button" :aria-label="t('topbar.search')">
           <Icon name="search" :size="18" :stroke="1.6" />
         </button>
 
         <!-- Notifications with badge -->
         <div class="topbar__notif-wrap">
-          <button class="topbar__icon-btn" type="button" aria-label="Benachrichtigungen">
+          <button class="topbar__icon-btn" type="button" :aria-label="t('topbar.notifications')">
             <!-- Bell icon inline (not in ds-shell registry, built-in) -->
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
               <path d="M10 3C7.24 3 5 5.24 5 8V12L3 14V15H17V14L15 12V8C15 5.24 12.76 3 10 3Z"
@@ -26,7 +26,7 @@
                 stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
           </button>
-          <span v-if="notificationBadge > 0" class="topbar__badge" aria-label="`${notificationBadge} Benachrichtigungen`">
+          <span v-if="notificationBadge > 0" class="topbar__badge" :aria-label="`${notificationBadge} ${t('topbar.notifications')}`">
             {{ notificationBadge }}
           </span>
         </div>
@@ -43,9 +43,12 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import Breadcrumbs from './Breadcrumbs.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
 import Icon from './Icon.vue'
+
+const { t } = useI18n()
 
 withDefaults(
   defineProps<{
