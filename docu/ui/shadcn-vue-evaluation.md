@@ -43,15 +43,16 @@ damit die Entscheidung später nicht ohne Kontext aus dem Boden gezogen wird.
 | `Tabs` | ✅ `components/v4/data/Tabs.vue` + `SegmentedControl.vue` |
 | `Table` / `DataTable` | ✅ `components/v4/data/DataTable.vue` (Generics, Sticky, Slots) |
 | `EmptyState` | ✅ `components/v4/data/EmptyState.vue` |
-| `Skeleton` | ⚠️ keine generische Komponente — Lücke |
-| `Dialog` | ⚠️ keine generische Komponente — Lücke (LogDrawer u. a. spezifisch) |
-| `Alert` / Toast | ⚠️ keine generische Komponente — Lücke |
-| `DropdownMenu` | ⚠️ keine generische Komponente — Lücke |
-| `Chart` | ⚠️ D3 direkt, kein Wrapper — Lücke (siehe Audit) |
+| `Skeleton` | ✅ `components/v4/forms/Skeleton.vue` (Slice UI-D, 2026-05-15) |
+| `Dialog` | ✅ `components/v4/data/Dialog.vue` Focus-Trap + Scroll-Lock (Slice UI-E, 2026-05-15) |
+| `Alert` / Toast | ✅ `components/v4/data/Alert.vue` inline (Slice UI-F, 2026-05-15); Toast offen |
+| `DropdownMenu` | ✅ `components/v4/forms/DropdownMenu.vue` + Item (Slice UI-G, 2026-05-15) |
+| `Chart` | ✅ `components/v4/data/Chart.vue` D3-Wrapper (Slice UI-B, 2026-05-15) |
 | Tokens-System | ✅ `tokens-v3.css` (430 LOC, Light + Dark, Apple-System-Tokens) |
 
 Die echten Lücken sind: **Skeleton, Dialog, Alert, DropdownMenu, Chart-Wrapper**.
-Das sind ~5 Komponenten — keine 50.
+Das sind ~5 Komponenten — keine 50. Plus `Button`/`Kicker`-Ports macht 7 Komponenten,
+**alle in diesem Epic implementiert** (siehe Audit, UI-A bis UI-G).
 
 ## Kosten einer shadcn-vue + Tailwind Migration
 
@@ -115,21 +116,22 @@ Das sind ~5 Komponenten — keine 50.
 
 **Nein zu Tailwind + shadcn-vue + daisyUI für Agora.**
 
-Stattdessen werden die echten Lücken in **eigenen Mini-Slices** geschlossen:
+Stattdessen wurden die echten Lücken in **eigenen Mini-Slices** in diesem Epic geschlossen:
 
-1. `v4/forms/Skeleton.vue` — Loading-State für DataTable, Cards, etc.
-2. `v4/data/Dialog.vue` — modaler Container mit Focus-Trap.
-3. `v4/data/Alert.vue` — inline-Fehler/Erfolgs-Banner.
-4. `v4/forms/DropdownMenu.vue` — Action-Menü.
-5. `v4/data/Chart.vue` — D3-Wrapper mit standardisiertem Header (Titel,
+1. ✅ `v4/forms/Skeleton.vue` (UI-D) — Loading-State für DataTable, Cards, etc.
+2. ✅ `v4/data/Dialog.vue` (UI-E) — modaler Container mit Focus-Trap + Scroll-Lock.
+3. ✅ `v4/data/Alert.vue` (UI-F) — inline-Banner Info/Success/Warning/Danger, dismissible.
+4. ✅ `v4/forms/DropdownMenu.vue` + `DropdownMenuItem.vue` (UI-G) — Action-Menü mit ESC-Close.
+5. ✅ `v4/data/Chart.vue` (UI-B) — D3-Wrapper mit standardisiertem Header (Titel,
    Zeitraum, Einheit, Interpretation).
 
 Plus die Audit-Empfehlungen:
 
-6. `v4/forms/Button.vue` — Port von `ui/Btn.vue`.
-7. `v4/data/Kicker.vue` — Port von `ui/Kicker.vue`.
+6. ✅ `v4/forms/Button.vue` (UI-A) — typesafe Wrapper über bestehende `.btn`-CSS.
+7. ✅ `v4/data/Kicker.vue` (UI-C) — typesafe Port von `ui/Kicker.vue`.
 
-Jedes davon ist ~50–200 LOC, eigenständig testbar, kein Build-Layer-Eingriff.
+Jedes davon ist 30–250 LOC, eigenständig testbar, kein Build-Layer-Eingriff.
+Test-Coverage pro Komponente: 5–10 Vitest-Smokes, 52 Tests insgesamt grün.
 
 ## Was Bun und code-review-graph angeht
 

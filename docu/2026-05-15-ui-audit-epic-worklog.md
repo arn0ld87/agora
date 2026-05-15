@@ -61,6 +61,28 @@ Tailwind/shadcn-vue in den Stack zu drücken.
 6. `.gitignore` — eine Zeile `.code-review-graph/` ergänzt, damit lokale
    Graph-Storage-Daten nicht committed werden.
 
+### Welle 2: echte Lücken schließen (2026-05-15)
+
+Nach Review der ersten Welle wurde entschieden, den PR zu erweitern um die
+**7 echten Lücken** (UI-A bis UI-G), damit am Ende **EIN großer PR** alle
+nötigen Komponenten enthält statt 7 Folge-PRs. Lieferumfang Welle 2:
+
+| Slice | Datei | LOC | Tests |
+|---|---|---:|---:|
+| UI-A | `frontend/src/components/v4/forms/Button.vue` | 100 | 9 |
+| UI-B | `frontend/src/components/v4/data/Chart.vue` | 280 | 7 |
+| UI-C | `frontend/src/components/v4/data/Kicker.vue` | 50 | 5 |
+| UI-D | `frontend/src/components/v4/forms/Skeleton.vue` | 120 | 6 |
+| UI-E | `frontend/src/components/v4/data/Dialog.vue` | 270 | 10 |
+| UI-F | `frontend/src/components/v4/data/Alert.vue` | 240 | 6 |
+| UI-G | `frontend/src/components/v4/forms/DropdownMenu.vue` + `DropdownMenuItem.vue` | 220 | 9 |
+| Bonus | Barrel-Exports `forms/index.ts` + neu `data/index.ts` | 25 | – |
+
+**Summe Welle 2**: ~1305 LOC Code + 52 Vitest-Smokes, alle grün.
+
+Mit Welle 2 ist `components/v4/` vollständig genug, dass kein künftiger Slice
+mehr auf shadcn-vue/Tailwind angewiesen ist.
+
 ### Nicht geliefert (und warum)
 
 | Anleitung-Schritt | Status | Grund |
@@ -69,9 +91,9 @@ Tailwind/shadcn-vue in den Stack zu drücken.
 | code-review-graph-Install | Skip | bereits durch |
 | Tailwind-Install | Skip | abgelehnt (siehe Evaluation) |
 | shadcn-vue init | Skip | abgelehnt (siehe Evaluation) |
-| Agora-Wrapper-Komponenten | Skip | existieren in v4 bereits |
 | daisyUI | Skip | optional als Wegwerf-Branch erwähnt |
 | Astro-Theme-Test alexle135.de | Skip | außerhalb des Agora-Repos |
+| Cleanup-Slice J (ui/-Imports auf v4 umstellen) | Skip | eigener Folge-PR, da Step*.vue-Hotspots groß |
 
 ## Tool-Disziplin (CLAUDE.md-Pflicht)
 

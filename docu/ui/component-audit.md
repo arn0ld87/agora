@@ -46,7 +46,7 @@ sie mehr importiert. Erst dann retire.
 | `Icon.vue` | SVG-Icon-Renderer mit Registry | keep |
 | `icons/` | Lokale SVG-Registry | keep — kein lucide nötig |
 
-### `v4/forms/` (Eingabekomponenten, 14 Files + index.ts)
+### `v4/forms/` (Eingabekomponenten, 18 Files + index.ts)
 
 | Komponente | Zweck | Empfehlung |
 |---|---|---|
@@ -64,15 +64,23 @@ sie mehr importiert. Erst dann retire.
 | `SettingsSectionPanel.vue` | Settings-Page-Sektionscontainer | keep |
 | `StepModelOverrideChip.vue` | Per-Step-Model-Override-Chip | keep |
 | `StickyActionBar.vue` | Bottom-fixed Submit/Cancel-Bar | keep |
+| `Button.vue` _(neu UI-A · 2026-05-15)_ | Typesafe Button-Wrapper über `.btn`-CSS, variants/sizes/loading/icon/arrow | keep — ersetzt langfristig `ui/Btn.vue` |
+| `Skeleton.vue` _(neu UI-D · 2026-05-15)_ | Loading-Placeholder text/rect/circle mit Shimmer-Animation, respektiert `prefers-reduced-motion` | keep |
+| `DropdownMenu.vue` _(neu UI-G · 2026-05-15)_ | Click-Outside-Dropdown mit ESC-Close + Fokus-Rückgabe an Trigger, align start/end | keep |
+| `DropdownMenuItem.vue` _(neu UI-G · 2026-05-15)_ | Einzeleintrag mit role=menuitem, variants default/danger, disabled-State | keep |
 | `index.ts` | Barrel-Export | keep — Import-Ergonomie |
 
-### `v4/data/` (Datenkomponenten, 3 Files)
+### `v4/data/` (Datenkomponenten, 7 Files)
 
 | Komponente | Zweck | Empfehlung |
 |---|---|---|
 | `DataTable.vue` | Generisches `<DataTable<TRow>>` mit sticky-Header, cell-Slots, Actions, compact-Modus, Empty-Slot | keep — **deckt Anleitung-Phase-17 vollständig ab** |
 | `EmptyState.vue` | Icon + Titel + Subtitle + Actions-Slot | keep — **deckt Anleitung-Phase-12 vollständig ab** |
 | `Tabs.vue` | Tab-Bar mit Indikator | keep |
+| `Alert.vue` _(neu UI-F · 2026-05-15)_ | Inline-Banner mit Tones info/success/warning/danger, dismissible, actions-Slot | keep |
+| `Kicker.vue` _(neu UI-C · 2026-05-15)_ | Mono-Caption-Heading mit Numerierung, typesafe Port von `ui/Kicker.vue` | keep |
+| `Dialog.vue` _(neu UI-E · 2026-05-15)_ | Modaler Container mit Focus-Trap, Scroll-Lock, ESC/Backdrop-Close, size-Presets | keep |
+| `Chart.vue` _(neu UI-B · 2026-05-15)_ | Standardisierter Card-Container für D3 mit title/description/timeRange/unit/interpretation, toolbar/legend-Slots, loading-Skeleton | keep |
 
 ### `v4/dashboard/` (Dashboard-Cards, 6 Files)
 
@@ -113,17 +121,18 @@ sie mehr importiert. Erst dann retire.
 | 16 (Chart) | shadcn-vue Chart / Unovis | ⚠️ D3 direkt — kein Wrapper. **Echte Lücke**: kein generischer `Chart`-Slot wie in Anleitung-§16. |
 | 17 (DataTable) | TanStack + shadcn-vue Table | ✅ `v4/data/DataTable.vue` mit Generics, Sticky-Header, Slots |
 
-**Echte Lücken** (Empfehlung: in separatem Slice angehen):
+**Echte Lücken** (alle in diesem Epic geschlossen):
 
-1. `v4/forms/Button.vue` — derzeit nur Legacy `ui/Btn.vue`. Migration in
-   v4-Namespace wäre konsistent.
-2. `v4/data/Chart.vue` (oder `v4/charts/*`) — Wrapper-Komponente mit
-   einheitlichem Header (Titel, Beschreibung, Zeitraum, Einheit, Interpretation)
-   um D3-Charts. Anleitung-§16 hat hier einen validen Punkt.
-3. `v4/data/Kicker.vue` — Migration von `ui/Kicker.vue`.
+1. ~~`v4/forms/Button.vue`~~ — ✅ erledigt (Slice UI-A, 2026-05-15).
+2. ~~`v4/data/Chart.vue`~~ — ✅ erledigt (Slice UI-B, 2026-05-15).
+3. ~~`v4/data/Kicker.vue`~~ — ✅ erledigt (Slice UI-C, 2026-05-15).
+4. ~~`v4/forms/Skeleton.vue`~~ — ✅ erledigt (Slice UI-D, 2026-05-15).
+5. ~~`v4/data/Dialog.vue`~~ — ✅ erledigt (Slice UI-E, 2026-05-15).
+6. ~~`v4/data/Alert.vue`~~ — ✅ erledigt (Slice UI-F, 2026-05-15).
+7. ~~`v4/forms/DropdownMenu.vue`~~ — ✅ erledigt (Slice UI-G, 2026-05-15).
 
-Diese drei Lücken rechtfertigen für sich genommen **keine Tailwind/shadcn-vue-Migration**.
-Sie sind kleine eigene Slices.
+Damit ist die Component-Library vollständig genug, dass kein neuer Slice mehr
+auf shadcn-vue oder Tailwind angewiesen ist.
 
 ## Komponenten-Komplexitäts-Hotspots
 
@@ -143,11 +152,10 @@ deutlich über 28 %).
 
 ## Empfohlene nächste Mini-Slices (jeder = 1 PR)
 
+Nach diesem Audit-Epic bleibt nur noch ein offener Slice:
+
 | Slice | Scope | Risiko |
 |---|---|---|
-| UI-A | `v4/forms/Button.vue` aus `ui/Btn.vue` portieren + Tests | niedrig |
-| UI-B | `v4/data/Chart.vue` Wrapper-Komponente einführen | mittel |
-| UI-C | `ui/Kicker.vue` → `v4/data/Kicker.vue` migrieren | niedrig |
-| UI-D | Cleanup-Slice J: alle `components/ui/`-Importe ablösen | mittel |
+| Cleanup-J | Alle `components/ui/`-Importe in Step*.vue + Views auf v4-Imports umstellen, danach Legacy-Komponenten retiren | mittel |
 
 Kein Big-Bang-Refactor nötig.
