@@ -121,7 +121,7 @@ function openRun(row: Row) {
     <div v-if="error" class="ar-error">
       <Badge tone="red">{{ $t('dashboard.active.errorLabel') }}</Badge>
       <span class="ar-error__msg">{{ error }}</span>
-      <button class="ar-retry" type="button" @click="emit('refresh')">
+      <button class="ar-retry v4-state-interactive" type="button" @click="emit('refresh')">
         {{ $t('common.tryAgain') }}
       </button>
     </div>
@@ -179,20 +179,11 @@ function openRun(row: Row) {
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--accent);
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  cursor: pointer;
+  /* v4-state-interactive liefert background/border/transition/hover/focus-ring/cursor */
   border-radius: var(--r-3, 6px);
-}
-
-.ar-retry:hover {
-  background: var(--accent-tint-bg);
-}
-
-.ar-retry:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  padding: 4px 8px;
+  /* Override: accent-tint-bg statt default hover-bg */
+  --v4-state-hover-bg: var(--accent-tint-bg);
 }
 
 .ar-id {

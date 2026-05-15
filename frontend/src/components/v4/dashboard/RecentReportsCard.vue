@@ -136,7 +136,7 @@ function confidenceTone(c: number | null): 'green' | 'orange' | 'red' | 'gray' {
     <div v-if="error" class="rr-error">
       <Badge tone="red">{{ $t('dashboard.active.errorLabel') }}</Badge>
       <span class="rr-error__msg">{{ error }}</span>
-      <button class="rr-retry" type="button" @click="() => void polling.tick()">
+      <button class="rr-retry v4-state-interactive" type="button" @click="() => void polling.tick()">
         {{ $t('common.tryAgain') }}
       </button>
     </div>
@@ -200,15 +200,10 @@ function confidenceTone(c: number | null): 'green' | 'orange' | 'red' | 'gray' {
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--accent);
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  cursor: pointer;
+  /* v4-state-interactive liefert background/border/transition/hover/focus-ring/cursor */
   border-radius: var(--r-3, 6px);
-}
-
-.rr-retry:hover {
-  background: var(--accent-tint-bg);
+  padding: 4px 8px;
+  --v4-state-hover-bg: var(--accent-tint-bg);
 }
 
 .rr-retry:focus-visible {
