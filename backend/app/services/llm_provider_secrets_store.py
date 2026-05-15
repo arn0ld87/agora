@@ -136,6 +136,11 @@ class LlmProviderSecretsStore:
         ``threading.Lock`` schützt nur innerhalb eines Prozesses. Bei mehreren
         Gunicorn-Workern ist zusätzlich ``fcntl.flock`` nötig, um Lost-Updates
         zu verhindern (Gemini MEDIUM #2).
+
+        Nach dem Replace setzt der Store ``0600`` auf das JSON-File, damit der
+        Fernet-Ciphertext nicht für andere User auf dem Host lesbar ist
+        (Issue #450 P1.3). chmod-Fehler werden geloggt statt zu crashen — auf
+        manchen NFS-/Volume-Mounts ist chmod nicht erlaubt.
         """
         import fcntl  # POSIX-only — Agora läuft ausschließlich auf Linux/macOS
 
@@ -149,6 +154,14 @@ class LlmProviderSecretsStore:
                     json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8"
                 )
                 os.replace(tmp_path, self._path)
+                try:
+                    os.chmod(self._path, 0o600)
+                except OSError as exc:
+                    logger.warning(
+                        "Konnte Rechte auf %s nicht auf 0600 setzen: %s",
+                        self._path,
+                        exc,
+                    )
             finally:
                 fcntl.flock(lock_fh, fcntl.LOCK_UN)
 

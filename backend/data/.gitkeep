@@ -1,0 +1,3 @@
+# Placeholder — Provider-Secrets-Store + Workspace-Routing-Store schreiben hierhin.
+# Die JSON-Files (llm_provider_secrets.json, workspace_llm_routing.json) sind via
+# .gitignore ausgeschlossen.

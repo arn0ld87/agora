@@ -109,6 +109,28 @@ check "name->id Lookup im Service" \
   docker compose exec -T agora grep -q "post_author_name\|original_author_name\|target_user_name" backend/app/services/network_analytics.py
 
 echo
+echo "P450-3 (backend/data Persistenz, Issue #450 P1.3):"
+_data_dir_writable() {
+  docker compose exec -T agora test -d /app/backend/data && \
+    docker compose exec -T agora test -w /app/backend/data
+}
+_secrets_file_mode_or_absent() {
+  # File ist 0600, falls vorhanden. Wenn die Datei noch nicht angelegt ist,
+  # gilt der Check als bestanden (Frischer Container ohne Provider-Setup).
+  docker compose exec -T agora sh -c '
+    if [ -f /app/backend/data/llm_provider_secrets.json ]; then
+      mode=$(stat -c "%a" /app/backend/data/llm_provider_secrets.json 2>/dev/null || \
+             stat -f "%A" /app/backend/data/llm_provider_secrets.json 2>/dev/null)
+      [ "$mode" = "600" ]
+    else
+      true
+    fi
+  '
+}
+check "backend/data im Container schreibbar" _data_dir_writable
+check "llm_provider_secrets.json hat Mode 0600 (oder fehlt noch)" _secrets_file_mode_or_absent
+
+echo
 echo "Diagnose-Run (3 letzte Sims):"
 docker compose exec -T agora uv run --project backend \
   python backend/scripts/diagnose_metric_snapshot.py --limit 3 --no-write 2>&1 | tail -10
