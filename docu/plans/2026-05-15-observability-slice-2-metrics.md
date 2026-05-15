@@ -35,7 +35,7 @@
 ## Task 1 — Foundation `metrics.py`
 
 - [ ] **TDD:** `test_metrics.py` mit `InMemoryMetricReader`. Zwei Cases: (a) Counter-Increment landet in Reader, (b) NoOp wenn `OTEL_METRICS_ENABLED=false`.
-- [ ] `metrics.py::init_metrics(service_name)` analog zu `init_tracing`. Module-Cache, OTLP-gRPC-Exporter, `PeriodicExportingMetricReader(export_interval_millis=10_000)`.
+- [ ] metrics.py::init_metrics(service_name) analog zu init_tracing. Module-Cache, OTLP-gRPC-Exporter, PeriodicExportingMetricReader(export_interval_millis=10_000). Hinweis: force_flush() für Runner-Scripts einplanen.
 - [ ] Helper-Factories: `sim_counter()`, `sim_duration_histogram()`, `sim_active_gauge()`, `bus_event_drop_counter()`, `llm_token_counter()`.
 - [ ] Test grün, Commit.
 
