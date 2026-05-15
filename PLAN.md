@@ -190,15 +190,12 @@ agora/
 │   ├── agents/
 │   └── settings.json
 ├── backend/
-│   └── services/
-│       └── ai/
-│           ├── providers/
-│           │   ├── openai.py
-│           │   ├── gemini.py
-│           │   └── ollama.py
-│           ├── model_discovery.py  # NEU
-│           ├── session.py          # NEU
-│           └── unified_client.py   # NEU
+│   └── app/
+│       ├── services/
+│       │   ├── llm_routing_seed.py    # Multi-Provider-Routing (produktiv)
+│       │   └── stage_model_router.py  # Stage→Modell-Mapping (produktiv)
+│       └── utils/
+│           └── llm_client.py          # Unified LLM-Client (produktiv, ersetzt geplantes services/ai/)
 ├── prompts/
 │   ├── system/
 │   │   ├── base.md                 # NEU: Basis-System-Prompt
@@ -214,17 +211,27 @@ agora/
 
 ## 7. Implementierungs-Phasen
 
-### Phase 1 — Fundament (Priorität: HOCH)
-- [ ] `backend/services/ai/model_discovery.py` implementieren
-- [ ] `backend/services/ai/unified_client.py` implementieren
-- [ ] Provider-spezifische Clients (openai.py, gemini.py, ollama.py)
-- [ ] `.env.example` um AI-Variablen erweitern
+### Phase 1 — Fundament (Status: nicht umgesetzt)
 
-### Phase 2 — Session & Switching (Priorität: HOCH)
-- [ ] `backend/services/ai/session.py` — Session-State-Management
-- [ ] Start-Flow mit Provider-/Modell-Auswahl
-- [ ] Mid-Session-Switch-Logik
-- [ ] Switch-History-Protokoll
+Das `backend/services/ai/`-Scaffold (model_discovery, unified_client, provider-Clients)
+wurde 2026-05 entfernt — kein Import außerhalb des Pakets, nicht im Wheel-Build
+(`packages = ["app"]`), nicht durch Tests abgedeckt. Produktiv läuft Multi-Provider-Routing
+heute über:
+
+- `app/services/llm_routing_seed.py` — Provider-/Modell-Mapping pro Stage
+- `app/services/stage_model_router.py` — Stage→Modell-Auflösung
+- `app/utils/llm_client.py` — Unified LLM-Client (`from_route()`)
+- `app/services/llm_providers/github_copilot.py` — Provider-Auth
+
+Backup-Tag des entfernten Codes: `archive/services-ai-pre-removal`.
+Falls die Phase reaktiviert wird: neu in `app/services/llm/` aufsetzen, **nicht**
+außerhalb von `app/` (sonst nicht im Wheel).
+
+### Phase 2 — Session & Switching (Status: nicht umgesetzt)
+
+Mid-Session-Provider-/Modell-Switch ist nicht implementiert. Aktueller Ersatz:
+Stage-basiertes Routing in `stage_model_router.py` + Frontend-Settings für
+Override pro Run.
 
 ### Phase 3 — Claude Integration (Priorität: MITTEL)
 - [ ] Alle neuen Slash Commands erstellen
