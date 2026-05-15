@@ -30,16 +30,23 @@
     <div v-if="shellStore.inspectorOpen" class="app-shell__inspector">
       <slot name="inspector" />
     </div>
+
+    <!-- Command-Palette (global, rendered einmalig in Shell) -->
+    <CommandPalette />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { useShellStore } from '@/stores/shell'
+import { useCommandPalette } from '@/composables/useCommandPalette'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
+
+// Async-Import: CommandPalette in eigenem Chunk → kein AppShell-Bundle-Overhead
+const CommandPalette = defineAsyncComponent(() => import('./CommandPalette.vue'))
 
 const props = withDefaults(
   defineProps<{
@@ -54,6 +61,17 @@ const props = withDefaults(
 
 const shellStore = useShellStore()
 const route = useRoute()
+const { toggle: togglePalette } = useCommandPalette()
+
+function onKeyDown(e: KeyboardEvent): void {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    togglePalette()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeyDown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 // Derive active route name for sidebar item highlighting
 const activeRoute = computed<string>(() => {
