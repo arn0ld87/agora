@@ -267,7 +267,11 @@ class ReportSectionModel(BaseModel):
 class ReportOutlineSectionModel(BaseModel):
     model_config = _STRICT
     title: str = Field(min_length=3)
-    description: str = Field(min_length=1, max_length=500)
+    # max_length=2000 (war 500): deutsche Persona-Reaktions-Outlines können
+    # naturgemäß mehr Text brauchen als englische; 500 brach den realen
+    # gpt-5.4-nano-Outline-Pfad (Smoke-Live 2026-05-15). Quote/suggested_fix
+    # bleiben bei 500, weil sie strukturell kürzere Texttypen sind.
+    description: str = Field(min_length=1, max_length=2000)
 
 
 class ReportOutlineModel(BaseModel):

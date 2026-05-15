@@ -180,7 +180,9 @@ export type ReportSection = z.infer<typeof ReportSectionSchema>;
 
 export const ReportOutlineSectionSchema = z.object({
   title: z.string().min(3),
-  description: z.string().min(1).max(500),
+  // max(2000) — spiegelt backend/app/contracts/report_contract.py
+  // (Smoke-Live 2026-05-15: 500 brach reale Outline-Beschreibungen).
+  description: z.string().min(1).max(2000),
 }).strict();
 
 export const ReportOutlineSchema = z.object({
