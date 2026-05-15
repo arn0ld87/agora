@@ -10,7 +10,8 @@
 // failures so we don't hammer a misbehaving backend.
 
 import { onUnmounted, ref, type Ref } from 'vue'
-import { openSimulationStream, type StreamHandlers } from '../api/stream'
+import { openSimulationStream, type StreamHandlers, type SseEventFrame } from '../api/stream'
+import { getTracer } from '../observability/tracing'
 
 const MAX_RECONNECT_ATTEMPTS = 5
 const RECONNECT_BASE_DELAY_MS = 500
@@ -20,6 +21,7 @@ export interface UseEventStreamReturn {
   isStreaming: Ref<boolean>
   error: Ref<unknown>
   lastEventAt: Ref<number | null>
+  lastTraceId: Ref<string | null>
   start: () => Promise<void>
   stop: () => void
 }
@@ -31,6 +33,7 @@ export function useEventStream(
   const isStreaming = ref(false)
   const error = ref<unknown>(null)
   const lastEventAt = ref<number | null>(null)
+  const lastTraceId = ref<string | null>(null)
   let source: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let attempts = 0
@@ -48,6 +51,25 @@ export function useEventStream(
       lastEventAt.value = Date.now()
       error.value = null
       attempts = 0
+      // Slice 1e: capture trace_id from SSE event frames (state/control).
+      // Guard via 'in' so hello/ping payloads (no trace_id field) are ignored.
+      if (payload !== null && typeof payload === 'object' && 'trace_id' in payload) {
+        // Double-cast through unknown: T is generic and TS cannot prove overlap
+        // with SseEventFrame directly; the 'in' guard ensures shape is correct.
+        const frame = payload as unknown as SseEventFrame
+        if (frame.trace_id) {
+          lastTraceId.value = frame.trace_id
+          // Short browser span for SSE event correlation — no-op when OTEL disabled.
+          const tracer = getTracer()
+          const span = tracer.startSpan(`agora.sse.event.${frame.type}`, {
+            attributes: {
+              'agora.simulation.id': frame.simulation_id,
+              'agora.event.trace_id': frame.trace_id,
+            },
+          })
+          span.end()
+        }
+      }
       if (typeof handler === 'function') handler(payload)
     }
   }
@@ -125,6 +147,7 @@ export function useEventStream(
     isStreaming,
     error,
     lastEventAt,
+    lastTraceId,
     start,
     stop,
   }

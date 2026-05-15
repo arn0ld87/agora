@@ -27,6 +27,7 @@ import time
 from typing import Any, Dict, Iterator, Optional
 
 from flask import Response, current_app, request, stream_with_context
+from opentelemetry import trace as otel_trace
 
 from ..services.event_bus import (
     CHANNEL_CONTROL,
@@ -65,16 +66,20 @@ def _sse_format(event: str, data: Any, event_id: Optional[str] = None) -> str:
 
 
 def _event_to_sse(event_name: str, evt: SimulationEvent) -> str:
-    return _sse_format(
-        event_name,
-        {
-            "type": evt.type,
-            "simulation_id": evt.simulation_id,
-            "payload": evt.payload,
-            "ts": evt.ts,
-        },
-        event_id=evt.ts or None,
-    )
+    frame: Dict[str, Any] = {
+        "type": evt.type,
+        "simulation_id": evt.simulation_id,
+        "payload": evt.payload,
+        "ts": evt.ts,
+    }
+    # Slice 1e: inject W3C trace_id from the current span so the browser can
+    # build a SigNoz deep-link. Only present when OTEL is enabled and a valid
+    # span is active; absent otherwise (OTEL_ENABLED=false → noop tracer).
+    current_span = otel_trace.get_current_span()
+    span_ctx = current_span.get_span_context()
+    if span_ctx.is_valid:
+        frame["trace_id"] = format(span_ctx.trace_id, "032x")
+    return _sse_format(event_name, frame, event_id=evt.ts or None)
 
 
 def _drain_channel(
