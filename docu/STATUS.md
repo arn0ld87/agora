@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-11 (v1.0.0)
+Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -19,7 +19,7 @@ Stand: 2026-05-11 (v1.0.0)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2207 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 2214 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 88 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
