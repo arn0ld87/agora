@@ -31,6 +31,9 @@
           </span>
         </div>
 
+        <!-- Density Toggle -->
+        <DensityToggle />
+
         <!-- User slot -->
         <div class="topbar__user">
           <slot name="user">
@@ -47,6 +50,7 @@ import { useI18n } from 'vue-i18n'
 import Breadcrumbs from './Breadcrumbs.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
 import Icon from './Icon.vue'
+import DensityToggle from './DensityToggle.vue'
 
 const { t } = useI18n()
 
