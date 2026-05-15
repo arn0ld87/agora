@@ -109,8 +109,26 @@ const STORAGE_REPORT_CUSTOM_MODEL = 'agora.reportCustomModel'
 const STORAGE_REPORT_PROVIDER = 'agora.report.llmProvider'
 const STORAGE_REPORT_BASE_URL = 'agora.report.llmBaseUrl'
 const SESSION_REPORT_API_KEY = 'agora.report.llmApiKey'
-const reportModelOption = ref(localStorage.getItem(STORAGE_REPORT_MODEL) || 'default')
-const customReportModel = ref(localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL) || '')
+// Workspace-Default (Step 1 / Step 2) — Source of Truth für initialen Report-Modell-Wert.
+// Smoke-Fix #7: kein Drift mehr zwischen angezeigtem Modell und Backend-Call-Payload.
+const STORAGE_WORKSPACE_MODEL = 'agora.lastModel'
+const STORAGE_WORKSPACE_CUSTOM_MODEL = 'agora.lastCustomModel'
+
+/** Initialer Report-Modell-Wert: expliziter User-Override aus STORAGE_REPORT_MODEL,
+ *  sonst Workspace-Default aus STORAGE_WORKSPACE_MODEL. */
+function resolveInitialReportModel(): string {
+  const override = localStorage.getItem(STORAGE_REPORT_MODEL)
+  if (override) return override
+  return localStorage.getItem(STORAGE_WORKSPACE_MODEL) || 'default'
+}
+function resolveInitialCustomReportModel(): string {
+  const override = localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL)
+  if (override !== null) return override
+  return localStorage.getItem(STORAGE_WORKSPACE_CUSTOM_MODEL) || ''
+}
+
+const reportModelOption = ref(resolveInitialReportModel())
+const customReportModel = ref(resolveInitialCustomReportModel())
 const reportProvider = ref(localStorage.getItem(STORAGE_REPORT_PROVIDER) || 'default')
 const reportApiKey = ref(sessionStorage.getItem(SESSION_REPORT_API_KEY) || '')
 const reportBaseUrl = ref(localStorage.getItem(STORAGE_REPORT_BASE_URL) || '')
