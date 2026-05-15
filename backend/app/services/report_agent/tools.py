@@ -113,18 +113,30 @@ def get_openai_tools_schema(agent: Any) -> List[Dict[str, Any]]:
     in das OpenAI-Schema-Format um:
     ``[{"type": "function", "function": {"name", "description", "parameters": {...}}}]``.
 
-    ``parameters`` wird als valides JSON-Schema aufgebaut:
-    alle Einträge sind ``string``-typed optional properties.
+    ``parameters`` wird als valides JSON-Schema aufgebaut. Typ- und
+    Required-Heuristik basiert auf Parameter-Name und -Beschreibung:
+    ``limit``/``max_*`` → ``integer``, ``include_expired`` → ``boolean``,
+    Rest ``string``. Parameter mit ``optional`` in der Beschreibung sind
+    nicht required.
     """
     tools = define_tools(agent)
     result: List[Dict[str, Any]] = []
     for tool_name, tool_def in tools.items():
         properties: Dict[str, Any] = {}
+        required_params: List[str] = []
         for param_name, param_desc in tool_def.get("parameters", {}).items():
+            desc_str = str(param_desc)
+            p_type = "string"
+            if param_name == "limit" or param_name.startswith("max_"):
+                p_type = "integer"
+            elif param_name == "include_expired":
+                p_type = "boolean"
             properties[param_name] = {
-                "type": "string",
-                "description": str(param_desc),
+                "type": p_type,
+                "description": desc_str,
             }
+            if "optional" not in desc_str.lower():
+                required_params.append(param_name)
         result.append(
             {
                 "type": "function",
@@ -134,7 +146,7 @@ def get_openai_tools_schema(agent: Any) -> List[Dict[str, Any]]:
                     "parameters": {
                         "type": "object",
                         "properties": properties,
-                        "required": [],
+                        "required": required_params,
                     },
                 },
             }

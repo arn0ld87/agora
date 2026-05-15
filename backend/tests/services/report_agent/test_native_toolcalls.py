@@ -554,3 +554,115 @@ class TestChatWithToolsE2EStub:
         assert "finish_reason" in result
         # Stub darf kein RuntimeError werfen
         client.client.chat.completions.create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Gemini-Followup: Schema-Heuristik + JSON-Parse-Logging
+# ---------------------------------------------------------------------------
+
+
+class TestToolsSchemaHeuristics:
+    """Schema-Generierung markiert Parameter mit korrektem Typ und required-Flag."""
+
+    def _schema_for_tool(self, tool_name: str) -> dict:
+        from app.services.report_agent.tools import get_openai_tools_schema
+
+        agent = MagicMock()
+        agent.web_tools = MagicMock()
+        agent.web_tools.is_available.return_value = False
+        schema = get_openai_tools_schema(agent)
+        match = next((t for t in schema if t["function"]["name"] == tool_name), None)
+        assert match is not None, f"Tool {tool_name} nicht im Schema"
+        return match["function"]["parameters"]
+
+    def test_limit_param_is_integer_type(self) -> None:
+        params = self._schema_for_tool("quick_search")
+        props = params["properties"]
+        assert "limit" in props
+        assert props["limit"]["type"] == "integer"
+
+    def test_max_agents_param_is_integer_type(self) -> None:
+        params = self._schema_for_tool("interview_agents")
+        props = params["properties"]
+        if "max_agents" in props:
+            assert props["max_agents"]["type"] == "integer"
+
+    def test_required_params_include_query(self) -> None:
+        params = self._schema_for_tool("quick_search")
+        assert "query" in params["required"], (
+            "query muss als required markiert sein, sonst lässt das LLM es weg"
+        )
+
+    def test_optional_params_excluded_from_required(self) -> None:
+        from app.services.report_agent.tools import get_openai_tools_schema
+
+        fake_agent = MagicMock()
+        fake_agent.web_tools = MagicMock()
+        fake_agent.web_tools.is_available.return_value = False
+
+        with patch(
+            "app.services.report_agent.tools.define_tools",
+            return_value={
+                "fake_tool": {
+                    "description": "Fake tool",
+                    "parameters": {
+                        "query": "the search query",
+                        "extra": "optional additional filter",
+                    },
+                },
+            },
+        ):
+            schema = get_openai_tools_schema(fake_agent)
+
+        params = schema[0]["function"]["parameters"]
+        assert "query" in params["required"]
+        assert "extra" not in params["required"]
+
+
+class TestToolArgumentJsonLogging:
+    """Ungültiges Tool-Argument-JSON wird mit warning geloggt."""
+
+    def test_non_streaming_logs_warning_on_invalid_json(self) -> None:
+        from app.utils import llm_client as llm_client_mod
+
+        msg = MagicMock()
+        tc = MagicMock()
+        tc.id = "tc1"
+        tc.function = MagicMock()
+        tc.function.name = "quick_search"
+        tc.function.arguments = "not valid {json"
+        msg.tool_calls = [tc]
+
+        with patch.object(llm_client_mod.logger, "warning") as warn:
+            result = llm_client_mod._extract_tool_calls_from_message(msg)
+
+        assert result == [{"id": "tc1", "name": "quick_search", "arguments": {}}]
+        assert warn.called
+        msg_fmt = warn.call_args[0][0]
+        assert "failed to parse tool arguments" in msg_fmt
+
+    def test_streaming_logs_warning_on_invalid_json(self) -> None:
+        from app.utils import llm_client as llm_client_mod
+
+        chunks = [
+            _make_stream_chunk(
+                tool_call_delta={
+                    "index": 0,
+                    "id": "tc1",
+                    "function": {"name": "quick_search", "arguments": "{broken"},
+                },
+            ),
+            _make_stream_chunk(finish_reason="tool_calls"),
+        ]
+
+        with patch.object(llm_client_mod.logger, "warning") as warn:
+            content, tool_calls, finish = (
+                llm_client_mod._accumulate_streaming_tool_calls(chunks)
+            )
+
+        assert finish == "tool_calls"
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["arguments"] == {}
+        assert warn.called
+        msg_fmt = warn.call_args[0][0]
+        assert "failed to parse streaming tool arguments" in msg_fmt

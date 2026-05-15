@@ -793,6 +793,11 @@ def _extract_tool_calls_from_message(message: Any) -> List[ToolCallItem]:
         try:
             arguments: dict = json.loads(args_raw) if args_raw else {}
         except json.JSONDecodeError:
+            logger.warning(
+                "LLMClient: failed to parse tool arguments as JSON (tool=%s): %s",
+                name,
+                args_raw[:200],
+            )
             arguments = {}
         result.append(ToolCallItem(id=tc_id, name=name, arguments=arguments))
     return result
@@ -853,6 +858,11 @@ def _accumulate_streaming_tool_calls(
         try:
             arguments = json.loads(args_str) if args_str else {}
         except json.JSONDecodeError:
+            logger.warning(
+                "LLMClient: failed to parse streaming tool arguments (tool=%s): %s",
+                entry["name"],
+                args_str[:200],
+            )
             arguments = {}
         tool_calls.append(
             ToolCallItem(id=entry["id"], name=entry["name"], arguments=arguments)
