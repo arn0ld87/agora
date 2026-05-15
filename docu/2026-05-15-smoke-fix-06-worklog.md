@@ -17,9 +17,7 @@ Root-Cause: v3-Phase-Komponenten nutzen englische Hardcodes; Edge-Label-Renderin
 
 ## Fix
 
-**Backend-Logging** (`backend/app/services/report_agent/planning.py` + `backend/app/services/sim/`):
-- Phase-Strings (`"WAITING FOR ONTOLOGY GENERATION"`, etc.) durch i18n-Keys ersetzen (via `app.logger` mit strukturiertem `context={"phase": "ontology_generate"}`).
-- Keys folgen Muster `dashboard.active.phase.<phase_slug>`.
+**Hinweis:** Backend-Phase-Logging aus `planning.py` + `services/sim/` ist **nicht** in diesem Slice enthalten. Phase-Strings propagieren noch nicht strukturiert vom Backend. Die vollständige Durchverdrahtung bleibt für eine Folge-Slice reserviert.
 
 **Frontend i18n** (`frontend/src/i18n/de.json` + `frontend/src/i18n/en.json`):
 - Neue Sektion `dashboard.active.phase`:
@@ -76,8 +74,6 @@ Neu:
 
 ## Geänderte Dateien
 
-- `backend/app/services/report_agent/planning.py` (+8 LOC, Phase-Logging mit i18n-Keys)
-- `backend/app/services/sim/process_manager.py` (+5 LOC)
 - `frontend/src/i18n/de.json` (+42 neue Keys)
 - `frontend/src/i18n/en.json` (+42 neue Keys, English Pendant)
 - `frontend/src/components/v4/shell/Sidebar.vue` (+18 LOC, `t(...)` angewandt)
@@ -89,7 +85,7 @@ Neu:
 ## Risiken & Gaps
 
 - **Locale-Coverage-Test ist defensiv:** Prüft nur dass Keys existieren, nicht dass Übersetzungen semantisch korrekt sind. Menschliche Review bleibt notwendig.
-- **Backend-Phase-Keys:** Aktuelle Phase wird via Log-Context propagiert; Frontend sollte diese Struktur konsumieren. Übergabe noch nicht vollständig durchverdrahtet — Falls für Follow-up-Slice reserviert.
+- **Backend-Phase-Propagation:** Vollständige Durchverdrahtung von Backend-Phase-Logging über strukturierte Keys in `planning.py` + `services/sim/` bleibt für eine dedizierte Folge-Slice reserviert. Aktuell nutzen neue i18n-Keys nur Frontend-seitig im Graph und in Sidebar/Topbar.
 - **Hardcoded English in Prompts:** `backend/app/services/report_agent/prompts.py` enthält englische System-Prompts für LLM. Getrennte Slice nötig; vorerst nicht in 06 adressiert.
 
 ## Verifikations-Gate

@@ -15,7 +15,7 @@ getestet auf Dev-Stack (volle pytest + vitest Suites grün, keine Schema-Drift).
 
 - **Slice 04 [Layer 1+4] — OpenAI-Key-Propagation:** Backend `SecretResolver` lädt DB-Key bei Override-Provider mit leerem Key; neuer Endpoint `GET /api/llm/providers/<id>/has-key`; Frontend-Banner + dynamischer Placeholder. Bonus: 2 Pre-Existing Test-Failures repariert. (+9 Tests, +2 pre-existing)
 
-- **Slice 05 [Layer 4] — UI-Quickfixes:** Sidebar-Stubs disabled + Tooltip; Persona-Slider `min=10`; Step4 Report-Modell synct mit Workspace-Default über neuen `useReportModelStore`. (+8 Frontend-Tests)
+- **Slice 05 [Layer 4] — UI-Quickfixes:** Sidebar-Stubs disabled + Tooltip; Persona-Slider `min=10`; Step4 Report-Modell synct mit Workspace-Default über `ReportModelControls.vue` + localStorage. (+8 Frontend-Tests)
 
 - **Slice 06 [Layer 2+4] — i18n-Audit:** Neue Keys `dashboard.active.phase.ontology_generate` + `graph.edgeLabels.*` in beiden Locales; v4-Shell-Migration auf `t(...)`; neuer Locale-Parity-Test (`locale-coverage.spec.ts`). (+5 Frontend-Tests)
 

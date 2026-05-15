@@ -25,17 +25,17 @@ Drei separate UI-Probleme blockieren Benutzerfluss in Step 2–4:
 - Neue Warnung wenn aktuelle Quota < 10: Banner „Persona-Quota kleiner als 10; Seed-Große überprüfen".
 
 **3. Step4-Modell-Sync** (`frontend/src/components/step4/ReportModelControls.vue` + `frontend/src/components/Step4Report.vue`):
-- Neuer Pinia-Store `useReportModelStore` (Single Source of Truth für Report-Model-Selection).
-- Step 2 setzt Workspace-Default bei Report-Init (über `Step4Report` Setup).
-- Step 4 liest/schreibt aus zentralem Store statt lokaler Komponenten-State.
-- Backend-Read im `ReportModelControls` bestätigt Model aus DB bei Render.
+- Zentralisierte Model-Selection durch `ReportModelControls.vue` als Single Source of Truth.
+- Step 2 setzt Workspace-Default via `Step4Report.vue` Setup-Hook.
+- Step 4 synchronisiert lokale Refs mit Backend-State; localStorage als Fallback bei Neuladen.
+- Backend-Anfrage im `ReportModelControls` bestätigt aktuelles Model aus DB bei Mount.
 
 ## Tests
 
 Neu:
 - `frontend/src/components/v4/shell/__tests__/SidebarStubs.spec.ts` (2 Tests) — disabled state + Tooltip
 - `frontend/src/components/__tests__/Step2EnvSetup.quotaWarning.spec.ts` (2 Tests) — min=10 + Banner bei Underquota
-- `frontend/src/store/__tests__/useReportModelStore.spec.ts` (4 Tests, NEU) — Store Init, Getters, Setters
+- `frontend/src/components/step4/__tests__/ReportModelControls.sync.spec.ts` (2 Tests) — Model-Sync zwischen Step2 und Step4
 
 **Test-Counts:** Frontend +8 / Backend 0
 
@@ -46,10 +46,9 @@ Neu:
 - `frontend/src/components/v4/shell/__tests__/SidebarStubs.spec.ts` (+56 LOC, NEU)
 - `frontend/src/components/Step2EnvSetup.vue` (+22 LOC, quota-warning + min=10)
 - `frontend/src/components/__tests__/Step2EnvSetup.quotaWarning.spec.ts` (+48 LOC, NEU)
-- `frontend/src/components/step4/ReportModelControls.vue` (+18 LOC, Store-Integration)
-- `frontend/src/components/Step4Report.vue` (+15 LOC, Store-Init)
-- `frontend/src/store/useReportModelStore.ts` (+67 LOC, NEU)
-- `frontend/src/store/__tests__/useReportModelStore.spec.ts` (+89 LOC, NEU)
+- `frontend/src/components/step4/ReportModelControls.vue` (+25 LOC, localStorage-Sync + Backend-Verify)
+- `frontend/src/components/Step4Report.vue` (+18 LOC, Setup-Hook für Workspace-Default)
+- `frontend/src/components/step4/__tests__/ReportModelControls.sync.spec.ts` (+72 LOC, NEU)
 - `frontend/src/i18n/de.json` (+2 neue Keys: `sidebar.nav.comingsoon`, `step2.quota.warning`)
 - `frontend/src/i18n/en.json` (+2 neue Keys, English Pendant)
 
@@ -57,7 +56,7 @@ Neu:
 
 - Sidebar-Stubs mit `disabled=true` sind visuell weniger offensichtlich als Router-Link — möglich dass Benutzer trotzdem klicken und nichts passiert. Tooltip sollte Missverständnis klären.
 - `min=10` Personas ist für sehr kleine Seeds (< 10 Entitäten) immer noch zu groß — kein perfekter Fix, aber deutlich besser testbar.
-- `useReportModelStore` ist neu und könnte bei Multi-Tab-Szenarios zu Konsistenz-Problemen führen (Pinia persistiert lokal aber nicht über Browser-Tabs). Aktuell out-of-scope, wird als Issue gemeldet.
+- **Step4-Model-Sync:** localStorage-Fallback funktioniert nur bei Seiten-Reload. Multi-Tab-Szenarios sind derzeit nicht synchronisiert (Browser-Tabs haben separaten localStorage). Follow-up für persistente Pinia-State oder WebStorage-Sync reserviert.
 
 ## Verifikations-Gate
 
