@@ -28,6 +28,13 @@ import json
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+try:
+    from app.observability.redis_propagator import inject_trace_into_event
+except ImportError:
+
+    def inject_trace_into_event(event: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[no-redef]
+        return event
+
 logger = logging.getLogger("agora.subprocess_redis_bridge")
 
 _CHANNEL_PREFIX = "agora:sim"
@@ -132,8 +139,9 @@ class RedisIPCBridge:
             return False
         key = channel_key(self.simulation_id, f"rpc.response.{correlation_id}")
         try:
+            enriched = inject_trace_into_event(dict(payload))
             await self._client.publish(
-                key, json.dumps(payload, ensure_ascii=False)
+                key, json.dumps(enriched, ensure_ascii=False)
             )
             return True
         except Exception:
