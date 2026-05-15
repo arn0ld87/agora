@@ -1,10 +1,15 @@
 <template>
   <component
-    :is="to ? 'RouterLink' : 'div'"
-    v-bind="to ? { to } : {}"
+    :is="disabled ? 'span' : (to ? 'RouterLink' : 'div')"
+    v-bind="!disabled && to ? { to } : {}"
     class="sidebar-item"
-    :class="{ 'sidebar-item--active': active }"
-    @click="!to && emit('click')"
+    :class="{
+      'sidebar-item--active': active && !disabled,
+      'sidebar-item--disabled': disabled,
+    }"
+    :aria-disabled="disabled ? 'true' : undefined"
+    :title="tooltip"
+    @click="!disabled && !to && emit('click')"
   >
     <Icon v-if="icon" :name="icon" :size="18" :stroke="1.6" />
     <span class="sidebar-item__label">{{ label }}</span>
@@ -23,6 +28,10 @@ defineProps<{
   badge?: number
   to?: RouteLocationRaw
   active?: boolean
+  /** Deaktiviert den Item: kein Router-Push, aria-disabled="true", gedimmtes Styling. */
+  disabled?: boolean
+  /** Tooltip-Text (z. B. „Bald verfügbar"). */
+  tooltip?: string
 }>()
 
 const emit = defineEmits<{
@@ -63,6 +72,13 @@ const emit = defineEmits<{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sidebar-item--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  color: var(--text-secondary, var(--fg-muted, #888));
 }
 
 .sidebar-item__badge {

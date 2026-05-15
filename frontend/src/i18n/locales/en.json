@@ -374,8 +374,11 @@
     "agentCap": {
       "label": "Limit max. number of agents",
       "unit": "Agents",
-      "minimumHint": "Minimum for the DACH persona table: 50 agents.",
+      "minimumHint": "Minimum for the DACH persona table: 10 agents.",
       "unlimitedHint": "Without a limit, one agent is created for each entity in the graph."
+    },
+    "personaPool": {
+      "belowQuotaWarning": "Pool size ({pool}) is below the required quota sum ({quota}). Some segments may not be fully populated."
     },
     "next": "Next: simulation →"
   },
@@ -517,6 +520,17 @@
       "exportMd": "Export as Markdown",
       "exportPdf": "Export as PDF",
       "printPdf": "Print as PDF (browser)"
+    },
+    "model": {
+      "reportLabel": "Model for report",
+      "customLabel": "Custom model",
+      "customPlaceholder": "e.g. deepseek-v3.2:cloud",
+      "providerLabel": "LLM provider",
+      "apiKeyLabel": "API key",
+      "apiKeyPlaceholder": "API key for selected provider",
+      "baseUrlLabel": "Base URL (optional)",
+      "baseUrlPlaceholder": "e.g. https://api.openai.com/v1",
+      "regenerate": "Regenerate"
     },
     "quote": {
       "openSource": "Open source"
@@ -678,7 +692,8 @@
     },
     "footer": {
       "collapse": "Collapse"
-    }
+    },
+    "disabledTooltip": "Coming soon"
   },
   "topbar": {
     "search": "Search",
