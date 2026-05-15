@@ -2,10 +2,13 @@
   <div class="sidebar-group">
     <!-- Group header trigger -->
     <div
+      :id="`sidebar-group-trigger-${groupKey}`"
       class="sidebar-group__trigger"
       :class="{ 'sidebar-group__trigger--active': isGroupOpen(groupKey) }"
       role="button"
       tabindex="0"
+      :aria-expanded="isGroupOpen(groupKey)"
+      :aria-controls="`sidebar-group-body-${groupKey}`"
       data-sidebar-trigger
       @click="toggleGroup(groupKey)"
       @keydown.enter.prevent="toggleGroup(groupKey)"
@@ -22,14 +25,18 @@
     </div>
 
     <!-- Sub-items -->
-    <div v-if="isGroupOpen(groupKey)" class="sidebar-group__body">
+    <div
+      v-if="isGroupOpen(groupKey)"
+      :id="`sidebar-group-body-${groupKey}`"
+      class="sidebar-group__body"
+    >
       <slot />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
@@ -45,15 +52,22 @@ const props = defineProps<{
 const route = useRoute()
 const { isGroupOpen, setGroupOpen, toggleGroup } = useSidebarState()
 
+const hasActiveChild = computed(() =>
+  props.activeRouteNames.length > 0 &&
+  route.matched.some(
+    (r) => r.name !== undefined && props.activeRouteNames.includes(String(r.name)),
+  ),
+)
+
 onMounted(() => {
-  if (
-    props.activeRouteNames.length > 0 &&
-    route.matched.some(
-      (r) => r.name !== undefined && props.activeRouteNames.includes(String(r.name)),
-    )
-  ) {
+  if (hasActiveChild.value) {
     setGroupOpen(props.groupKey, true)
   }
+})
+
+// Reaktiv auf Route-Wechsel: Auto-Open wenn ein Child-Route aktiv wird.
+watch(hasActiveChild, (active) => {
+  if (active) setGroupOpen(props.groupKey, true)
 })
 </script>
 

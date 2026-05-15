@@ -18,6 +18,7 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, wri
 describe('useSidebarState', () => {
   beforeEach(() => {
     localStorage.clear()
+    useSidebarState._resetForTesting()
   })
 
   it('Default-State ist leere Map (alle Groups closed)', () => {
@@ -44,6 +45,7 @@ describe('useSidebarState', () => {
 
   it('State wird aus localStorage hydratet', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings: true }))
+    useSidebarState._resetForTesting()
     const { isGroupOpen } = useSidebarState()
     expect(isGroupOpen('settings')).toBe(true)
     expect(isGroupOpen('runs')).toBe(false)
@@ -60,5 +62,13 @@ describe('useSidebarState', () => {
   it('korrupter localStorage wird graceful ignoriert', () => {
     localStorage.setItem(STORAGE_KEY, 'KEIN_JSON{{')
     expect(() => useSidebarState()).not.toThrow()
+  })
+
+  it('Singleton: mehrere Caller sehen denselben State', () => {
+    const a = useSidebarState()
+    const b = useSidebarState()
+    a.setGroupOpen('settings', true)
+    // b muss denselben State sehen — kein eigener reaktiver State mehr
+    expect(b.isGroupOpen('settings')).toBe(true)
   })
 })

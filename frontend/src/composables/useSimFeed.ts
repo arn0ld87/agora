@@ -7,7 +7,8 @@
  * dedupliziert per post_id, baut Reddit-Reply-Tree, sortiert Twitter
  * nach timestamp DESC.
  *
- * Singleton-Map pro simulationId — reset via clear().
+ * Singleton-Map pro simulationId — reset via clearSimFeed(simulationId).
+ * LRU-Limit: max. 10 Einträge; ältester wird beim 11. evicted.
  */
 
 import { computed, ref } from 'vue'
@@ -17,6 +18,7 @@ export interface RedditNode extends PostCreatedEvent {
   children: RedditNode[]
 }
 
+const MAX_STORES = 10
 const stores = new Map<string, ReturnType<typeof createStore>>()
 
 function createStore(simulationId: string) {
@@ -77,13 +79,27 @@ function createStore(simulationId: string) {
 
 export function useSimFeed(simulationId: string) {
   if (!stores.has(simulationId)) {
+    // LRU-Eviction: wenn Limit erreicht, ältesten Eintrag entfernen.
+    if (stores.size >= MAX_STORES) {
+      const oldestKey = stores.keys().next().value
+      if (oldestKey !== undefined) stores.delete(oldestKey)
+    }
     stores.set(simulationId, createStore(simulationId))
   }
   return stores.get(simulationId)!
 }
 
 /**
+ * clearSimFeed — entfernt den Store für eine simulationId.
+ * Wird in StepSimulationFeedView.vue onBeforeUnmount aufgerufen.
+ */
+export function clearSimFeed(simulationId: string): void {
+  stores.delete(simulationId)
+}
+
+/**
  * resetSimFeedStore — nur für Tests: entfernt gespeicherten Store.
+ * @deprecated Verwende clearSimFeed() stattdessen.
  */
 export function resetSimFeedStore(simulationId: string): void {
   stores.delete(simulationId)

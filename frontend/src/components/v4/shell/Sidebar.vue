@@ -41,6 +41,8 @@
           <RouterLink
             :to="sub.to"
             class="sidebar-sub-item"
+            active-class="sidebar-sub-item--active"
+            exact-active-class="sidebar-sub-item--active"
           >
             {{ sub.label }}
           </RouterLink>

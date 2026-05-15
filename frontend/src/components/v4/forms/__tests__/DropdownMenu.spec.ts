@@ -52,8 +52,12 @@ describe('DropdownMenu', () => {
   })
 
   it('Test 2: Trigger-Slot bekommt toggle + isOpen als Slot-Props', async () => {
+    // Mit as-child übernimmt reka-ui das Click-Handling auf dem Trigger-Button.
+    // Der Consumer-Button darf daher kein eigenes @click="toggle" haben —
+    // sonst wird isOpen doppelt getoggelt. isOpen als Slot-Prop reflektiert
+    // reka-ui's internen Open-State via v-model:open.
     const Host = buildHost({
-      trigger: '<button data-testid="trigger" @click="toggle">{{ isOpen ? "OPEN" : "ZU" }}</button>',
+      trigger: '<button data-testid="trigger">{{ isOpen ? "OPEN" : "ZU" }}</button>',
       menu: '<div data-testid="panel-content">Inhalt</div>',
     })
 
@@ -145,8 +149,9 @@ describe('DropdownMenuItem', () => {
       components: { DropdownMenu, DropdownMenuItem },
       template: `
         <DropdownMenu ref="menu">
-          <template #trigger="{ toggle }">
-            <button data-testid="trigger" @click="toggle">Aktionen</button>
+          <template #trigger>
+            <!-- as-child: reka-ui übernimmt Click-Handling -->
+            <button data-testid="trigger">Aktionen</button>
           </template>
           ${itemTemplate}
         </DropdownMenu>
@@ -200,8 +205,8 @@ describe('DropdownMenuItem', () => {
       },
       template: `
         <DropdownMenu>
-          <template #trigger="{ toggle }">
-            <button data-testid="trigger" @click="toggle">Open</button>
+          <template #trigger>
+            <button data-testid="trigger">Open</button>
           </template>
           <DropdownMenuItem data-testid="item" @select="onSelect">X</DropdownMenuItem>
         </DropdownMenu>
@@ -229,8 +234,8 @@ describe('DropdownMenuItem', () => {
       },
       template: `
         <DropdownMenu>
-          <template #trigger="{ toggle }">
-            <button data-testid="trigger" @click="toggle">Open</button>
+          <template #trigger>
+            <button data-testid="trigger">Open</button>
           </template>
           <DropdownMenuItem data-testid="item" :disabled="true" @select="onSelect">X</DropdownMenuItem>
         </DropdownMenu>

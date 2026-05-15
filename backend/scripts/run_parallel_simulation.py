@@ -71,7 +71,7 @@ import logging
 import random
 import signal
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 
@@ -199,6 +199,19 @@ except ImportError as _e:
 # Slice 5-pre: Live-Post-Event-Emit nach CREATE_POST
 # ---------------------------------------------------------------------------
 
+# Module-level Redis-Client-Cache: lazy-init beim ersten Emit, danach reuse.
+# Vermeidet TCP-Handshake-Overhead pro emit_post_created_to_redis-Aufruf.
+_redis_clients: Dict[str, Any] = {}
+
+
+def _get_redis_client(redis_url: str) -> Any:
+    """Lazy-init und cache eines asyncio-Redis-Clients pro URL."""
+    if redis_url not in _redis_clients:
+        import redis.asyncio as aioredis  # type: ignore[import-not-found]
+        _redis_clients[redis_url] = aioredis.from_url(redis_url, decode_responses=True)
+    return _redis_clients[redis_url]
+
+
 async def _emit_post_created_to_redis(
     simulation_id: str,
     platform: str,
@@ -248,15 +261,13 @@ async def _emit_post_created_to_redis(
         "voice_register": voice_register,
         "is_simulated": True,
         "body": body,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     channel = f"agora:sim:{simulation_id}:post_created"
     try:
         import redis.asyncio as aioredis  # type: ignore[import-not-found]
-        client = aioredis.from_url(redis_url, decode_responses=True)
+        client = _get_redis_client(redis_url)
         await client.publish(channel, json.dumps(payload, ensure_ascii=False))
-        close_fn = getattr(client, "aclose", None) or client.close
-        await close_fn()
     except Exception:
         # Non-fatal: SSE post-events are best-effort; simulation must not crash.
         logging.getLogger("agora.run_parallel_simulation").debug(

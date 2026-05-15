@@ -8,7 +8,6 @@
  * Hier: statische Commands + recent-Ordering.
  */
 import { defineStore } from 'pinia'
-import { computed } from 'vue'
 import type { Router } from 'vue-router'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 
@@ -63,11 +62,6 @@ export const useCommandsStore = defineStore('commands', () => {
     }))
   }
 
-  // all ist ein computed, der _baseCommands und recent-Ordering kombiniert.
-  // Da router erst beim Komponent-Setup bekannt ist, speichern wir
-  // den Ref auf die gebuildete Liste in einem reaktiven Ref.
-  const _static = computed<Command[]>(() => [])
-
   /**
    * Gibt alle Commands zurueck: Recent zuerst (nach recent-Stack sortiert),
    * dann restliche statische Commands.
@@ -94,7 +88,6 @@ export const useCommandsStore = defineStore('commands', () => {
   }
 
   return {
-    _static,
     recent,
     buildStaticCommands,
     getOrdered,
