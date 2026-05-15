@@ -15,7 +15,7 @@ defineEmits<{
       v-for="opt in options"
       :key="opt.value"
       type="button"
-      class="v4-segmented__seg"
+      class="v4-segmented__seg v4-state-selectable"
       :class="{ 'v4-segmented__seg--active': modelValue === opt.value }"
       @click="$emit('update:modelValue', opt.value)"
     >
@@ -49,8 +49,9 @@ defineEmits<{
   line-height: 1;
 }
 
+/* Hover: v4-state-selectable liefert BG; zusätzlich Farbe für inaktive Segmente */
 .v4-segmented__seg:hover:not(.v4-segmented__seg--active) {
-  color: var(--text-primary);
+  color: var(--v4-state-hover-fg);
 }
 
 .v4-segmented__seg--active {

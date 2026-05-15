@@ -81,7 +81,7 @@ function isActive(tab: TabItem): boolean {
       v-for="tab in tabs"
       :key="tab.key"
       role="tab"
-      class="tabs-item"
+      class="tabs-item v4-state-selectable"
       :class="{
         'tabs-item--active': isActive(tab),
         'tabs-item--disabled': tab.disabled,
@@ -127,8 +127,9 @@ function isActive(tab: TabItem): boolean {
   outline: none;
 }
 
+/* Hover: v4-state-selectable liefert BG; Tab-Farbe zusätzlich */
 .tabs-item:hover:not(.tabs-item--active):not(.tabs-item--disabled) {
-  color: var(--text-primary);
+  color: var(--v4-state-hover-fg);
 }
 
 .tabs-item--active {
@@ -137,14 +138,16 @@ function isActive(tab: TabItem): boolean {
   border-bottom-color: var(--accent);
 }
 
+/* Disabled: Token-Override */
 .tabs-item--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  opacity: var(--v4-state-disabled-opacity);
+  cursor: var(--v4-state-disabled-cursor);
 }
 
+/* Focus: Override für korrekten Offset + Border-Radius bei Tab-Geometrie */
 .tabs-item:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
+  outline-offset: var(--v4-state-focus-ring-offset);
   border-radius: 2px;
 }
 

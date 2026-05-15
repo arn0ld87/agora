@@ -39,7 +39,7 @@ function onSelect(event: Event): void {
 
 <template>
   <DropdownMenuItem
-    class="dmi-root"
+    class="dmi-root v4-state-selectable"
     :class="[`dmi-root--${variant}`, { 'dmi-root--disabled': disabled }]"
     :disabled="disabled"
     @select="onSelect"
@@ -63,33 +63,26 @@ function onSelect(event: Event): void {
   border-radius: var(--r-2, 4px);
   cursor: pointer;
   text-align: left;
-  transition: background 80ms ease;
-  outline: none;
+  /* transition + outline-none: via .v4-state-selectable */
 }
 
-/* reka-ui setzt data-highlighted statt :hover für keyboard-focus — beide Pfade */
-.dmi-root:hover:not([data-disabled]),
-.dmi-root[data-highlighted]:not([data-disabled]) {
-  background: var(--surface-hover);
-}
-
-.dmi-root:focus-visible {
-  outline: 2px solid var(--accent, currentColor);
-  outline-offset: -2px;
-}
+/* reka-ui setzt data-highlighted — v4-state-selectable deckt :hover + data-highlighted ab.
+   Hartkodierte Werte entfernt; Overrides via Tokens. */
 
 .dmi-root--danger {
   color: var(--status-red);
 }
 
+/* Danger-Variante: BG-Override für Hover + Keyboard-Highlight */
 .dmi-root--danger:hover:not([data-disabled]),
 .dmi-root--danger[data-highlighted]:not([data-disabled]) {
   background: var(--status-red-bg);
 }
 
+/* Disabled: .v4-state-selectable hat kein Disabled-Styling, hier explizit */
 .dmi-root--disabled,
 .dmi-root[data-disabled] {
-  opacity: 0.45;
-  cursor: not-allowed;
+  opacity: var(--v4-state-disabled-opacity);
+  cursor: var(--v4-state-disabled-cursor);
 }
 </style>
