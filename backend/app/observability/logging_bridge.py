@@ -82,7 +82,10 @@ def init_logging(service_name: str) -> None:
         # Zusätzlicher StreamHandler mit JSON-Trace-Formatter auf stdout.
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(JsonTraceFormatter(service_name=service_name))
-        logging.getLogger().addHandler(handler)
+        # Ensure we don't add multiple JSON handlers to the root logger to avoid duplication and leaks.
+        root_logger = logging.getLogger()
+        if not any(isinstance(h.formatter, JsonTraceFormatter) for h in root_logger.handlers):
+            root_logger.addHandler(handler)
 
 
 def force_flush_logs(timeout_millis: int = 5000) -> None:
