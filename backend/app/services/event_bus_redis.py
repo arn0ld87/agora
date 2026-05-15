@@ -28,6 +28,7 @@ from typing import Any, Dict, Iterator, Optional
 
 from opentelemetry import trace as otel_trace
 
+from ..observability import bus_event_drop_counter
 from ..utils.logger import get_logger
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 from .event_bus import (
@@ -250,10 +251,16 @@ class RedisEventBus:
                         finally:
                             span.end()
                         yield event
-                    except (json.JSONDecodeError, KeyError) as exc:
+                    except json.JSONDecodeError as exc:
                         logger.warning(
                             "Dropped malformed bus event on %s: %s", key, exc
                         )
+                        bus_event_drop_counter().add(1, {"reason": "decode_error"})
+                    except KeyError as exc:
+                        logger.warning(
+                            "Dropped bus event with missing fields on %s: %s", key, exc
+                        )
+                        bus_event_drop_counter().add(1, {"reason": "schema_error"})
         finally:
             try:
                 pubsub.unsubscribe(key)
