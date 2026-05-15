@@ -24,7 +24,7 @@ const TILES: Tile[] = [
       v-for="tile in TILES"
       :key="tile.to"
       :to="tile.to"
-      class="qa-tile"
+      class="qa-tile v4-state-selectable"
     >
       <span class="qa-tile__label">{{ $t(tile.labelKey) }}</span>
       <span class="qa-tile__hint">{{ $t(tile.hintKey) }}</span>
@@ -46,22 +46,19 @@ const TILES: Tile[] = [
   align-items: center;
   column-gap: 12px;
   padding: 16px 18px;
+  /* v4-state-selectable liefert background/transition/cursor/hover/focus-ring */
   background: var(--surface-elevated, #fff);
   border-radius: var(--r-6, 12px);
   box-shadow: 0 0 0 1px var(--hairline);
   text-decoration: none;
   color: var(--text-primary);
-  transition: background 80ms ease, box-shadow 80ms ease;
   min-width: 0;
 }
 
-.qa-tile:hover {
-  background: var(--surface-hover);
-}
-
+/* focus-visible: eigener Override da box-shadow-Fokus-Ring statt outline */
 .qa-tile:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px var(--hairline), 0 0 0 3px var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--hairline), 0 0 0 3px var(--v4-state-focus-ring, var(--focus-ring));
 }
 
 .qa-tile__label {

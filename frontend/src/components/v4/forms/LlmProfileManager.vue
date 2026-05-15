@@ -207,7 +207,7 @@ onMounted(() => {
           <div class="pm-item-actions">
             <button
               type="button"
-              class="pm-action-btn"
+              class="pm-action-btn v4-state-interactive"
               :disabled="store.saving"
               @click="openEdit(profile)"
             >
@@ -215,7 +215,7 @@ onMounted(() => {
             </button>
             <button
               type="button"
-              class="pm-action-btn"
+              class="pm-action-btn v4-state-interactive"
               :disabled="profile.is_default || store.saving"
               @click="handleSetDefault(profile)"
             >
@@ -223,7 +223,7 @@ onMounted(() => {
             </button>
             <button
               type="button"
-              class="pm-action-btn pm-action-btn--danger"
+              class="pm-action-btn pm-action-btn--danger v4-state-interactive"
               :disabled="store.saving"
               @click="handleDelete(profile)"
             >
@@ -242,7 +242,7 @@ onMounted(() => {
           v-for="p in PRESETS"
           :key="p.key"
           type="button"
-          class="llm-preset"
+          class="llm-preset v4-state-interactive"
           :class="{ 'llm-preset--active': formProvider === p.key }"
           @click="selectPreset(p)"
         >
@@ -306,7 +306,7 @@ onMounted(() => {
               <button
                 v-if="apiKeyEditMode !== 'clear'"
                 type="button"
-                class="pm-action-btn pm-action-btn--danger"
+                class="pm-action-btn pm-action-btn--danger v4-state-interactive"
                 @click="clearKey"
               >
                 {{ t('settings.v4.llmProfiles.clearKeyBtn') }}
@@ -314,7 +314,7 @@ onMounted(() => {
               <button
                 v-else
                 type="button"
-                class="pm-action-btn"
+                class="pm-action-btn v4-state-interactive"
                 @click="undoClearKey"
               >
                 {{ t('settings.v4.llmProfiles.cancelBtn') }}
@@ -331,7 +331,7 @@ onMounted(() => {
       <div class="llm-footer">
         <button
           type="button"
-          class="pm-action-btn"
+          class="pm-action-btn v4-state-interactive"
           :disabled="store.saving"
           @click="cancel"
         >
@@ -437,28 +437,24 @@ onMounted(() => {
   gap: 6px;
 }
 
-/* Buttons */
+/* Buttons — v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor/disabled */
 .pm-action-btn {
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
   padding: 4px 10px;
-  border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
-  background: var(--surface-elevated, #fff);
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: border-color 80ms ease, color 80ms ease;
+  /* Override: eigener BG-Token für Rest-State */
+  --v4-state-rest-bg: var(--surface-elevated, #fff);
+  --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
-.pm-action-btn:hover:not(:disabled) {
-  border-color: var(--hairline-strong);
-  color: var(--text-primary);
-}
-.pm-action-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.pm-action-btn--danger:hover:not(:disabled) {
+/* Hover-Farbe: text-primary statt default */
+.pm-action-btn:hover:not(:disabled):not([data-disabled]) { color: var(--text-primary); }
+/* Disabled-Opacity: etwas weniger als Standard */
+.pm-action-btn:disabled { opacity: 0.4; }
+/* Danger-Variante: Danger-Farbe override */
+.pm-action-btn--danger:hover:not(:disabled):not([data-disabled]) {
   border-color: var(--status-red, #c0392b);
   color: var(--status-red, #c0392b);
 }
@@ -532,17 +528,13 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 500;
   padding: 6px 14px;
-  border: 1px solid var(--hairline);
   border-radius: var(--r-5, 10px);
-  background: var(--surface-elevated, #fff);
+  /* v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor */
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: border-color 80ms ease, color 80ms ease;
+  --v4-state-rest-bg: var(--surface-elevated, #fff);
+  --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
-.llm-preset:hover {
-  border-color: var(--hairline-strong);
-  color: var(--text-primary);
-}
+.llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);

@@ -73,7 +73,7 @@ async function save(): Promise<void> {
         v-for="p in PRESETS"
         :key="p.key"
         type="button"
-        class="llm-preset"
+        class="llm-preset v4-state-interactive"
         :class="{ 'llm-preset--active': activePreset.key === p.key }"
         @click="selectPreset(p)"
       >
@@ -149,14 +149,15 @@ async function save(): Promise<void> {
   font-size: 13px;
   font-weight: 500;
   padding: 6px 14px;
-  border: 1px solid var(--hairline);
   border-radius: var(--r-5, 10px);
-  background: var(--surface-elevated, #fff);
+  /* v4-state-interactive liefert border/background/transition/hover/focus-ring/cursor */
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: border-color 80ms ease, color 80ms ease;
+  /* Override: Hover-Farbe bleibt text-primary (kein bg-Swap) */
+  --v4-state-rest-bg: var(--surface-elevated, #fff);
+  --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
-.llm-preset:hover { border-color: var(--hairline-strong); color: var(--text-primary); }
+/* Hover-Farb-Override via scoped selector */
+.llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);

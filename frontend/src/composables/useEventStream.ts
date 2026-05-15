@@ -122,9 +122,10 @@ export function useEventStream(
         ping: wrap(handlers.ping),
         // Slice 5-pre: post_created is already Zod-parsed by openSimulationStream;
         // wrap() handles lastEventAt + error-reset bookkeeping.
-        post_created: handlers.post_created
-          ? (wrap as unknown as (h: (p: PostCreatedEvent) => void) => (p: PostCreatedEvent) => void)(handlers.post_created)
-          : undefined,
+        // A3-followup: wrap<PostCreatedEvent>() mit explizitem Typ-Parameter statt
+        // schwerem unknown-as-cast; TS inferiert den Typ-Parameter sauber aus dem
+        // generischen `wrap<T>`.
+        post_created: wrap<PostCreatedEvent>(handlers.post_created),
         error: (ev: Event) => {
           error.value = ev
           if (typeof handlers.error === 'function') handlers.error(ev)

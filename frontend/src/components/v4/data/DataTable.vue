@@ -170,7 +170,7 @@ const hasActions = computed(() => !!useSlots()['actions'])
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 6px 8px;
+  padding: var(--table-cell-py, 10px) var(--table-cell-px, 16px);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -204,13 +204,16 @@ const hasActions = computed(() => !!useSlots()['actions'])
 }
 
 .dt-td {
-  padding: 10px 8px;
+  padding: var(--table-cell-py, 10px) var(--table-cell-px, 16px);
   vertical-align: middle;
 }
 
+/* compact-Prop: hartkodierter Override bleibt, da der compact-Modus explizit
+   enger ist als das Default-Density-Token und kein data-density="compact"-
+   Attribut voraussetzt. */
 .dt-td--compact,
 .dt-body-row--compact .dt-td {
-  padding: 6px 8px;
+  padding: calc(var(--table-cell-py, 10px) * 0.6) var(--table-cell-px, 16px);
 }
 
 .dt-td--mono {

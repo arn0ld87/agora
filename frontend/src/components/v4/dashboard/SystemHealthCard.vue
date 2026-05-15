@@ -100,7 +100,7 @@ const stateLabel = (state: HealthRow['state']) => {
     <div v-if="error" class="sh-error">
       <Badge tone="red">{{ $t('dashboard.active.errorLabel') }}</Badge>
       <span class="sh-error__msg">{{ error }}</span>
-      <button class="sh-retry" type="button" @click="emit('refresh')">
+      <button class="sh-retry v4-state-interactive" type="button" @click="emit('refresh')">
         {{ $t('common.tryAgain') }}
       </button>
     </div>
@@ -156,15 +156,10 @@ const stateLabel = (state: HealthRow['state']) => {
   font-family: var(--font-sans);
   font-size: 12px;
   color: var(--accent);
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  cursor: pointer;
+  /* v4-state-interactive liefert background/border/transition/hover/focus-ring/cursor */
   border-radius: var(--r-3, 6px);
-}
-
-.sh-retry:hover {
-  background: var(--accent-tint-bg);
+  padding: 4px 8px;
+  --v4-state-hover-bg: var(--accent-tint-bg);
 }
 
 .sh-retry:focus-visible {
