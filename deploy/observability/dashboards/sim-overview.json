@@ -1,0 +1,323 @@
+{
+  "title": "Sim Overview",
+  "description": "Agora Sim-Lifecycle Metrics: Throughput, Latenz, Bus-Drops, LLM-Token, Active Sims. Quelle: OTel-Collector via agora-backend / agora-oasis-runner Service-Names.",
+  "tags": ["agora", "observability", "slice-2"],
+  "version": "v4",
+  "uploadedGrafana": false,
+  "collapsableRowsMigrated": true,
+  "variables": {},
+  "layout": [
+    { "i": "panel-sim-throughput", "x": 0, "y": 0, "w": 6, "h": 6, "moved": false, "static": false },
+    { "i": "panel-sim-duration",   "x": 6, "y": 0, "w": 6, "h": 6, "moved": false, "static": false },
+    { "i": "panel-bus-drops",      "x": 0, "y": 6, "w": 6, "h": 6, "moved": false, "static": false },
+    { "i": "panel-llm-tokens",     "x": 6, "y": 6, "w": 6, "h": 6, "moved": false, "static": false },
+    { "i": "panel-sim-active",     "x": 0, "y": 12, "w": 4, "h": 4, "moved": false, "static": false }
+  ],
+  "widgets": [
+    {
+      "id": "panel-sim-throughput",
+      "title": "Sim Throughput",
+      "description": "Rate of simulations started, grouped by terminal status (running/completed/failed).",
+      "panelTypes": "graph",
+      "yAxisUnit": "cps",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "isStacked": false,
+      "timePreferance": "GLOBAL_TIME",
+      "softMin": 0,
+      "softMax": null,
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryFormulas": [],
+          "queryData": [
+            {
+              "queryName": "A",
+              "expression": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "agora.sim.started",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "status", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "{{status}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "avg"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "panel-sim-duration",
+      "title": "Sim Duration p50 / p95 / p99",
+      "description": "Quantiles of simulation wall-clock duration in seconds, grouped by status. Histogram buckets: 1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800.",
+      "panelTypes": "graph",
+      "yAxisUnit": "s",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "isStacked": false,
+      "timePreferance": "GLOBAL_TIME",
+      "softMin": 0,
+      "softMax": null,
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryFormulas": [],
+          "queryData": [
+            {
+              "queryName": "A",
+              "expression": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "hist_quantile_50",
+              "aggregateAttribute": {
+                "key": "agora.sim.duration_seconds",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "p50",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "status", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "p50 {{status}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "avg"
+            },
+            {
+              "queryName": "B",
+              "expression": "B",
+              "dataSource": "metrics",
+              "aggregateOperator": "hist_quantile_95",
+              "aggregateAttribute": {
+                "key": "agora.sim.duration_seconds",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "p95",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "status", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "p95 {{status}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "avg"
+            },
+            {
+              "queryName": "C",
+              "expression": "C",
+              "dataSource": "metrics",
+              "aggregateOperator": "hist_quantile_99",
+              "aggregateAttribute": {
+                "key": "agora.sim.duration_seconds",
+                "dataType": "float64",
+                "type": "Histogram",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "p99",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "status", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "p99 {{status}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "avg"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "panel-bus-drops",
+      "title": "Bus Event Drops",
+      "description": "Rate of bus events dropped by reason (queue_full, serialization_error, redis_unavailable, ...). Stacked.",
+      "panelTypes": "graph",
+      "yAxisUnit": "cps",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "isStacked": true,
+      "timePreferance": "GLOBAL_TIME",
+      "softMin": 0,
+      "softMax": null,
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryFormulas": [],
+          "queryData": [
+            {
+              "queryName": "A",
+              "expression": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "rate",
+              "aggregateAttribute": {
+                "key": "agora.bus.events.dropped",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "reason", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "{{reason}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "avg"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "panel-llm-tokens",
+      "title": "LLM Token Spend",
+      "description": "Token consumption by provider/model/direction (input vs output). Stacked sum, time-bucketed.",
+      "panelTypes": "graph",
+      "yAxisUnit": "short",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "isStacked": true,
+      "timePreferance": "GLOBAL_TIME",
+      "softMin": 0,
+      "softMax": null,
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryFormulas": [],
+          "queryData": [
+            {
+              "queryName": "A",
+              "expression": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "sum_rate",
+              "aggregateAttribute": {
+                "key": "agora.llm.tokens",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "rate",
+              "spaceAggregation": "sum",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [
+                { "key": "provider", "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false },
+                { "key": "model",    "dataType": "string", "type": "tag", "isColumn": false, "isJSON": false },
+                { "key": "direction","dataType": "string", "type": "tag", "isColumn": false, "isJSON": false }
+              ],
+              "legend": "{{provider}}/{{model}} {{direction}}",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "sum"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "panel-sim-active",
+      "title": "Active Sims",
+      "description": "Current count of in-flight simulations (UpDownCounter, no labels).",
+      "panelTypes": "value",
+      "yAxisUnit": "short",
+      "nullZeroValues": "zero",
+      "opacity": "1",
+      "isStacked": false,
+      "timePreferance": "GLOBAL_TIME",
+      "softMin": 0,
+      "softMax": null,
+      "query": {
+        "queryType": "builder",
+        "promql": [],
+        "clickhouse_sql": [],
+        "builder": {
+          "queryFormulas": [],
+          "queryData": [
+            {
+              "queryName": "A",
+              "expression": "A",
+              "dataSource": "metrics",
+              "aggregateOperator": "latest",
+              "aggregateAttribute": {
+                "key": "agora.sim.active",
+                "dataType": "float64",
+                "type": "Sum",
+                "isColumn": true,
+                "isJSON": false
+              },
+              "timeAggregation": "latest",
+              "spaceAggregation": "sum",
+              "functions": [],
+              "filters": { "items": [], "op": "AND" },
+              "groupBy": [],
+              "legend": "active",
+              "disabled": false,
+              "having": [],
+              "stepInterval": 60,
+              "limit": null,
+              "orderBy": [],
+              "reduceTo": "last"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "panelMap": {}
+}
