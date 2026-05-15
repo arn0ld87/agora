@@ -108,7 +108,11 @@ class AgentToolRegistry:
                     user=neo4j_user,
                     password=neo4j_secret
                 )
-                logger.info("[AgentToolRegistry] Neo4j connected: %s", neo4j_uri)
+                from urllib.parse import urlparse
+
+                _parsed = urlparse(neo4j_uri)
+                _safe_uri = f"{_parsed.scheme}://{_parsed.hostname or '?'}:{_parsed.port or '?'}"
+                logger.info("[AgentToolRegistry] Neo4j connected: %s", _safe_uri)
             except Exception as e:
                 logger.warning("[AgentToolRegistry] Neo4j connection failed: %s", e)
         else:
