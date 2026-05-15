@@ -188,6 +188,15 @@ describe('Step2EnvSetup — Provider-Override-DB-Key-Fallback (Smoke-Fix Slice 0
     // checkLlmProviderHasKey muss aufgerufen worden sein
     expect(checkLlmProviderHasKey).toHaveBeenCalledWith('openai')
 
+    // Kern-Assertion: der tatsaechliche Prepare-Payload muss llm_provider enthalten
+    // und darf keinen api_key haben (Backend loest Key via SecretResolver auf).
+    expect(_preparePayloadCapture).not.toBeNull()
+    const payload = _preparePayloadCapture as Record<string, unknown>
+    expect(payload).toHaveProperty('llm_provider')
+    const llmProvider = payload.llm_provider as Record<string, unknown>
+    expect(llmProvider).toHaveProperty('provider', 'openai')
+    expect(llmProvider).not.toHaveProperty('api_key')
+
     wrapper.unmount()
   })
 
