@@ -17,25 +17,16 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ModelActiveEvent } from '../contracts/modelActiveContract'
 import { parseModelActiveEvent } from '../contracts/modelActiveContract'
-import service, { getAgoraToken } from '../api/index'
+import { getAgoraToken } from '../api/index'
+import { useApiAuth } from '../composables/useApiAuth'
 
 const MAX_RECONNECT_ATTEMPTS = 5
 export const STALE_AFTER_MS = 30_000
 const TICK_INTERVAL_MS = 5_000
 
-interface TicketApiResponse {
-  data?: {
-    ticket?: string
-  }
-}
-
 async function fetchLlmStreamTicket(): Promise<string | undefined> {
   if (!getAgoraToken()) return undefined
-  const res = await service.post('/api/auth/ticket', {
-    scope: 'llm-stream',
-    ttl_seconds: 60,
-  })
-  return (res as unknown as TicketApiResponse)?.data?.ticket
+  return useApiAuth.fetchTicket('llm-stream')
 }
 
 function buildLlmStreamUrl(ticket: string | undefined): string {

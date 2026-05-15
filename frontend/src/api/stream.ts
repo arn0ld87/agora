@@ -5,7 +5,8 @@
 // `sse:<simulationId>`, valid for ~60s and reusable inside that window so
 // EventSource auto-reconnects keep working.
 
-import service, { getAgoraToken } from './index'
+import { getAgoraToken } from './index'
+import { useApiAuth } from '../composables/useApiAuth'
 
 // --- SSE event types (derived from backend/app/api/simulation_stream.py) ---
 //
@@ -39,24 +40,13 @@ export interface StreamHandlers {
   error?: (event: Event) => void
 }
 
-interface TicketApiResponse {
-  data?: {
-    ticket?: string
-  }
-}
-
 export async function fetchStreamTicket(
   simulationId: string,
-  { ttlSeconds = 60 }: { ttlSeconds?: number } = {}
+  { ttlSeconds: _ttlSeconds = 60 }: { ttlSeconds?: number } = {}
 ): Promise<string | undefined> {
   if (!simulationId) throw new Error('simulationId is required')
-  const res = await service.post('/api/auth/ticket', {
-    scope: `sse:${simulationId}`,
-    ttl_seconds: ttlSeconds,
-  })
-  // service interceptor unwraps envelope; result shape is { data: { ticket } }.
-  // reason: service returns the unwrapped envelope body, not an AxiosResponse
-  return (res as unknown as TicketApiResponse)?.data?.ticket
+  // Delegiert an useApiAuth.fetchTicket für Cache + Auto-Refresh-Support.
+  return useApiAuth.fetchTicket(`sse:${simulationId}`)
 }
 
 export async function buildSimulationStreamUrl(simulationId: string): Promise<string> {
