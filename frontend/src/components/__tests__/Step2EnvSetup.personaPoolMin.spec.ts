@@ -131,7 +131,7 @@ describe('Step2EnvSetup — persona pool min=10 + below-quota warning (smoke #6)
   })
 
   it('Warn-Banner erscheint wenn Pool < Quoten-Summe', async () => {
-    // Quota-Plan mit Summe 30 vorbelegen
+    // Quota-Plan mit Summe 30 vorbelegen (quotaEntries wird aus localStorage geladen)
     localStorageMock.setItem(
       'agora.quotaPlan',
       JSON.stringify({ targets: { KMU: 20, Startup: 10 } }),
@@ -140,30 +140,32 @@ describe('Step2EnvSetup — persona pool min=10 + below-quota warning (smoke #6)
     const wrapper = mount(Step2EnvSetup, { props: defaultProps, global: globalConfig })
     await flushPromises()
 
-    // useAgentCap aktivieren mit Pool 15 (< Quota-Summe 30)
+    // Schritt 1: useAgentCap aktivieren (erstes Checkbox-Element in Step2EnvSetup direkt)
     const checkbox = wrapper.find('input[type="checkbox"]')
+    expect(checkbox.exists()).toBe(true)
     await checkbox.setValue(true)
     await nextTick()
 
+    // Schritt 2: Pool auf 15 setzen (< Quota-Summe 30)
     const rangeInput = wrapper.find('input[type="range"]')
+    expect(rangeInput.exists()).toBe(true)
     await rangeInput.setValue(15)
     await nextTick()
 
-    // useQuotaPlan checkbox: zweites Checkbox-Element (erstes ist agentCap)
+    // Schritt 3: useQuotaPlan aktivieren — QuotaPlanEditor hat ebenfalls ein checkbox.
+    // Das zweite input[type="checkbox"] gehoert zum QuotaPlanEditor-Toggle.
     const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    // Sicherstellen Quota-Toggle existiert (QuotaPlanEditor rendert einen Toggle)
-    if (checkboxes.length > 1) {
-      await checkboxes[1].setValue(true)
-      await nextTick()
-    }
+    expect(checkboxes.length).toBeGreaterThanOrEqual(2)
+    await checkboxes[1].setValue(true)
+    await nextTick()
 
-    // Warn-Banner mit hint--warn sollte erscheinen
-    const warn = wrapper.find('.hint--warn')
-    if (warn.exists()) {
-      expect(warn.text()).toContain('15')
-    }
-    // Alternativ: belowQuotaWarning-Logik direkt via Banner-Attribute prüfen
-    // (Fallback falls QuotaPlanEditor-Toggle stub nicht greift)
+    // Harte Assertion: Warn-Banner MUSS existieren — kein defensives if()
+    const warn = wrapper.find('.hint--warn[role="alert"]')
+    expect(warn.exists()).toBe(true)
+    // Banner-Text enthaelt Pool-Wert und Quoten-Summe als Orientierungspunkt
+    const warnText = warn.text()
+    expect(warnText).toMatch(/15/)
+    expect(warnText).toMatch(/30/)
   })
 
   it('Warn-Banner NICHT sichtbar wenn Pool >= Quoten-Summe', async () => {

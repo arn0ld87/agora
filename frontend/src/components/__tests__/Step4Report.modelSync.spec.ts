@@ -60,6 +60,19 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
   }
 })
 
+// ReportModelControls via vi.mock stubben, damit der tatsaechlich von Step4Report
+// gesetzte reportModelOption-Wert ueber findComponent().props() observierbar ist.
+// Ein stubs-Eintrag in globalConfig wuerde bei <script setup>-Komponenten ohne
+// expliziten __name nicht greifen.
+vi.mock('../step4/ReportModelControls.vue', () => ({
+  default: {
+    name: 'ReportModelControls',
+    template: '<div data-testid="report-model-controls" />',
+    props: ['reportModelOption', 'customReportModel', 'provider', 'apiKey', 'baseUrl'],
+    emits: ['update:reportModelOption', 'update:customReportModel', 'update:provider', 'update:apiKey', 'update:baseUrl'],
+  },
+}))
+
 import Step4Report from '../Step4Report.vue'
 
 const i18n = createI18n({
@@ -133,7 +146,8 @@ describe('Step4Report — Workspace-Default sync (smoke #7)', () => {
 
   function mountStep4(props = {}) {
     return mount(Step4Report, {
-      props: { reportId: 'r01', ...props },
+      // simulationId ist noetig damit ReportModelControls v-if="resolvedSimulationId||simulationId" erfuellt ist
+      props: { reportId: 'r01', simulationId: 'sim-test-01', ...props },
       global: {
         plugins: [router, i18n],
         stubs: {
@@ -151,50 +165,52 @@ describe('Step4Report — Workspace-Default sync (smoke #7)', () => {
     localStorageMock.setItem(STORAGE_WORKSPACE_MODEL, 'qwen2.5:32b')
     // Kein Report-Override in localStorage
 
-    mountStep4()
+    const wrapper = mountStep4()
     await flushPromises()
 
-    // STORAGE_REPORT_MODEL darf nicht gesetzt sein (kein vorzeitiges Persist)
-    // Aber reportModelOption.value muss 'qwen2.5:32b' sein — wir prüfen via getItem
-    // nachdem die Komponente mounted ist und der watch läuft
-    // (watch schreibt beim ersten Setzen, also nach dem ersten Ändern)
-    // Direkter Test: resolveInitialReportModel() Logik via localStorage-Mock verifizieren
-    const resolvedInitial = localStorageMock.getItem(STORAGE_REPORT_MODEL) ?? localStorageMock.getItem(STORAGE_WORKSPACE_MODEL)
-    expect(resolvedInitial).toBe('qwen2.5:32b')
+    // Der ReportModelControls-Stub ist per vi.mock gesetzt. Wir pruefen den
+    // *tatsaechlich von der Komponente uebergebenen* Prop-Wert — kein Recompute des Helpers.
+    const controls = wrapper.find('[data-testid="report-model-controls"]')
+    expect(controls.exists()).toBe(true)
+    // Props ueber findComponent lesen (Vue Test Utils)
+    const controlsVm = wrapper.findComponent({ name: 'ReportModelControls' })
+    expect(controlsVm.exists()).toBe(true)
+    expect(controlsVm.props('reportModelOption')).toBe('qwen2.5:32b')
   })
 
   it('Report-Override hat Prioritaet vor Workspace-Default', async () => {
     localStorageMock.setItem(STORAGE_WORKSPACE_MODEL, 'qwen2.5:32b')
     localStorageMock.setItem(STORAGE_REPORT_MODEL, 'gemini-2.5-flash')
 
-    mountStep4()
+    const wrapper = mountStep4()
     await flushPromises()
 
-    // Override muss erhalten bleiben
-    expect(localStorageMock.getItem(STORAGE_REPORT_MODEL)).toBe('gemini-2.5-flash')
+    // Die Komponente muss den Override-Wert nehmen, nicht den Workspace-Default.
+    const controlsVm = wrapper.findComponent({ name: 'ReportModelControls' })
+    expect(controlsVm.exists()).toBe(true)
+    expect(controlsVm.props('reportModelOption')).toBe('gemini-2.5-flash')
   })
 
   it('Kein Drift: Workspace-Default "default" ergibt Report-Default "default"', async () => {
     // kein Workspace-Model gesetzt → Fallback 'default'
-    mountStep4()
+    const wrapper = mountStep4()
     await flushPromises()
 
-    // Kein Override → resolveInitialReportModel liefert 'default'
-    const workspaceModel = localStorageMock.getItem(STORAGE_WORKSPACE_MODEL)
-    const reportModel = localStorageMock.getItem(STORAGE_REPORT_MODEL)
-    // Beide null oder 'default' — kein Drift
-    expect(workspaceModel ?? 'default').toBe('default')
-    expect(reportModel ?? 'default').toBe('default')
+    // Der gemountete Stub muss 'default' zeigen — nicht einen selbst berechneten Fallback.
+    const controlsVm = wrapper.findComponent({ name: 'ReportModelControls' })
+    expect(controlsVm.exists()).toBe(true)
+    expect(controlsVm.props('reportModelOption')).toBe('default')
   })
 
   it('Workspace-Default "gpt-5.4-nano" wird als initialer Report-Wert uebernommen', async () => {
     localStorageMock.setItem(STORAGE_WORKSPACE_MODEL, 'gpt-5.4-nano')
 
-    mountStep4()
+    const wrapper = mountStep4()
     await flushPromises()
 
-    // resolveInitialReportModel() gibt 'gpt-5.4-nano' zurueck wenn kein Override
-    const effective = localStorageMock.getItem(STORAGE_REPORT_MODEL) ?? localStorageMock.getItem(STORAGE_WORKSPACE_MODEL)
-    expect(effective).toBe('gpt-5.4-nano')
+    // Direktes Lesen des vom Komponent uebergebenen Prop-Wertes ueber findComponent.
+    const controlsVm = wrapper.findComponent({ name: 'ReportModelControls' })
+    expect(controlsVm.exists()).toBe(true)
+    expect(controlsVm.props('reportModelOption')).toBe('gpt-5.4-nano')
   })
 })
