@@ -299,11 +299,42 @@ class SimulationIPCClient:
         )
 
     def check_env_alive(self) -> bool:
-        """True if the simulation environment reports ``status == "alive"``."""
+        """True wenn der Sim-Subprozess wirklich noch antwortet.
+
+        Datei-Status allein ist unzuverlässig: bei Crash/SIGKILL bleibt
+        ``env_status.json`` auf ``"alive"`` stehen, weil der Subprozess sein
+        Shutdown nicht mehr ausführen kann. Wir kombinieren deshalb:
+        1. ``env_status.json`` muss ``alive`` melden.
+        2. Falls eine ``pid`` im Status steht, prüfen wir per
+           ``os.kill(pid, 0)`` ob der Prozess noch existiert. ``OSError``/
+           ``ProcessLookupError`` → tot, ``PermissionError`` → existiert
+           aber wir dürfen nicht signalisieren (sehr unwahrscheinlich im
+           Container, treat as alive).
+
+        Smoke-Live-Fix 2026-05-15: verhinderte 180-Sekunden-IPC-Timeouts,
+        wenn der Report-Agent nach Sim-Ende noch ``interview_agents`` ruft.
+        """
         status = self._store.read_json(self.simulation_id, "env_status", default=None)
         if not status:
             return False
-        return status.get("status") == "alive"
+        if status.get("status") != "alive":
+            return False
+        pid = status.get("pid")
+        if isinstance(pid, int) and pid > 0:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                logger.info(
+                    "check_env_alive: file says alive but PID %s is gone for %s — treating as dead",
+                    pid, self.simulation_id,
+                )
+                return False
+            except PermissionError:
+                # Existiert, gehört aber jemand anderem. Im Container unwahrscheinlich.
+                return True
+            except OSError:
+                return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -339,10 +370,18 @@ class SimulationIPCServer:
         self._update_env_status("stopped")
 
     def _update_env_status(self, status: str) -> None:
+        # PID wird mit reingeschrieben, damit ``SimulationIPCClient.check_env_alive``
+        # per ``os.kill(pid, 0)`` einen toten/gekillten Subprozess sicher
+        # erkennt — File-Status allein bleibt sonst nach Crash bei
+        # ``alive`` hängen (Smoke-Live-Fix 2026-05-15).
         self._store.write_json(
             self.simulation_id,
             "env_status",
-            {"status": status, "timestamp": datetime.now().isoformat()},
+            {
+                "status": status,
+                "pid": os.getpid(),
+                "timestamp": datetime.now().isoformat(),
+            },
         )
 
     def poll_commands(self) -> Optional[IPCCommand]:
