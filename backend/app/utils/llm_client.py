@@ -455,6 +455,7 @@ class LLMClient:
                 )
                 return _create(swapped)
 
+        _usage_for_counter: Optional[Any] = None
         try:
             if force_stream:
                 kwargs["stream"] = True
@@ -474,6 +475,7 @@ class LLMClient:
                     usage = getattr(event, "usage", None)
                     if usage and getattr(usage, "completion_tokens", None) is not None:
                         completion_tokens = usage.completion_tokens
+                        _usage_for_counter = usage
                 content = "".join(chunks)
             else:
                 response = _call_with_token_key_fallback(kwargs)
@@ -481,6 +483,7 @@ class LLMClient:
                 finish_reason = getattr(choice, "finish_reason", None)
                 usage = getattr(response, "usage", None)
                 completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+                _usage_for_counter = usage
                 content = choice.message.content or ""
         except Exception as exc:  # noqa: BLE001
             elapsed = _time.monotonic() - _t0
@@ -502,6 +505,20 @@ class LLMClient:
             latency_ms=elapsed * 1000,
             success=True,
         )
+        # Token-Counter — nur bei vorhandenen Integer-Usage-Daten, kein Log-Spam bei fehlendem Usage.
+        # isinstance-Check schützt gegen MagicMock-Attribute in Tests (Mock gibt immer
+        # einen Sub-Mock zurück, kein None) und gegen nicht-numerische Provider-Antworten.
+        if _usage_for_counter is not None:
+            _prompt_tokens = getattr(_usage_for_counter, "prompt_tokens", None)
+            _completion_tokens = getattr(_usage_for_counter, "completion_tokens", None)
+            _provider_label = self._detect_provider()
+            _model_label = self.model or "unknown"
+            from ..observability import llm_token_counter as _llm_token_counter  # noqa: PLC0415
+            _attrs: Dict[str, str] = {"provider": _provider_label, "model": _model_label}
+            if isinstance(_prompt_tokens, int):
+                _llm_token_counter().add(_prompt_tokens, {**_attrs, "direction": "in"})
+            if isinstance(_completion_tokens, int):
+                _llm_token_counter().add(_completion_tokens, {**_attrs, "direction": "out"})
         # Some models (like MiniMax M2.5, DeepSeek-R1) include <think>thinking content in response, need to remove
         content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.IGNORECASE).strip()
         return content

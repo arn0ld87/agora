@@ -21,12 +21,35 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
+from ...observability import sim_active_gauge, sim_counter, sim_duration_histogram
 from ...utils.logger import get_logger
 from .action_log_reader import get_actions as _get_actions
 from .action_log_reader import read_action_log_chunk
 from .run_state_store import RunnerStatus, SimulationRunState
 
 logger = get_logger("agora.monitor")
+
+
+def _compute_elapsed_seconds(started_at: Optional[str]) -> float:
+    """Berechnet die vergangene Zeit seit ``started_at`` in Sekunden.
+
+    Gibt 0.0 zurück wenn ``started_at`` fehlt oder nicht parsebar ist —
+    damit Metric-Calls bei fehlerhaftem State nicht werfen.
+
+    Args:
+        started_at: ISO-8601-Zeitstempel aus ``SimulationRunState.started_at``.
+
+    Returns:
+        Vergangene Sekunden als Float (>= 0.0).
+    """
+    if not started_at:
+        return 0.0
+    try:
+        start_dt = datetime.fromisoformat(started_at)
+        elapsed = (datetime.now() - start_dt).total_seconds()
+        return max(0.0, elapsed)
+    except (ValueError, OverflowError):
+        return 0.0
 
 
 def monitor_simulation(
@@ -108,10 +131,15 @@ def monitor_simulation(
 
         # Process ended
         exit_code = process.returncode
+        elapsed_seconds = _compute_elapsed_seconds(state.started_at)
 
         if exit_code == 0:
             state.runner_status = RunnerStatus.COMPLETED
             state.completed_at = datetime.now().isoformat()
+            # Slice 2b: Sim-Lifecycle-Metric — RUNNING → COMPLETED
+            sim_active_gauge().add(-1)
+            sim_counter().add(1, {"status": "done"})
+            sim_duration_histogram().record(elapsed_seconds, {"status": "done"})
             logger.info(
                 f"Simulation completed: {simulation_id}",
                 extra={"simulation_id": simulation_id},
@@ -128,6 +156,10 @@ def monitor_simulation(
             except Exception:
                 pass
             state.error = f"Process exit code: {exit_code}, error: {error_info}"
+            # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED
+            sim_active_gauge().add(-1)
+            sim_counter().add(1, {"status": "failed"})
+            sim_duration_histogram().record(elapsed_seconds, {"status": "failed"})
             logger.error(
                 f"Simulation failed: {simulation_id}, error={state.error}",
                 extra={"simulation_id": simulation_id},
@@ -139,6 +171,11 @@ def monitor_simulation(
 
     except Exception as e:
         logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
+        elapsed_seconds = _compute_elapsed_seconds(state.started_at)
+        # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED (Exception-Pfad)
+        sim_active_gauge().add(-1)
+        sim_counter().add(1, {"status": "failed"})
+        sim_duration_histogram().record(elapsed_seconds, {"status": "failed"})
         state.runner_status = RunnerStatus.FAILED
         state.error = str(e)
         save_state(state)
