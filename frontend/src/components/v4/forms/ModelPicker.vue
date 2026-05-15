@@ -29,7 +29,10 @@ const emit = defineEmits<{
 const store = useLlmProvidersStore()
 const loadingModels = ref<Record<string, boolean>>({})
 
-const PROVIDERS_WITHOUT_KEY = new Set(['ollama_local', 'github_copilot'])
+// Ollama Cloud BRAUCHT einen Bearer-Token (OLLAMA_API_KEY), darf also NICHT
+// in dieser Liste stehen. Nur Provider mit Token-Auflösung über Sub-Module
+// (z. B. ``github_copilot.resolve_copilot_token``) bleiben hier drin.
+const PROVIDERS_WITHOUT_KEY = new Set(['github_copilot'])
 
 const availableProviders = computed(() =>
   store.providers.filter((p) =>

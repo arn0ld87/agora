@@ -29,7 +29,7 @@ _ROUTE_TO_RUNTIME_PROVIDER = {
     "openai": "openai",
     "google": "google",
     "openai_compatible": "custom_openai",
-    "ollama_local": "custom_openai",
+    "ollama_cloud": "custom_openai",
     "github_copilot": "custom_openai",
 }
 

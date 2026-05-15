@@ -18,15 +18,20 @@ class LlmProviderRegistry:
         """Return static public provider metadata (no auth status computation)."""
         providers = [
             ProviderDescriptor(
-                id="ollama_local",
-                label="Ollama (Local)",
-                type="ollama_local",
-                # OpenAI-kompatibler Ollama-Endpoint mit /v1-Suffix; aus dem
-                # Docker-Container muss host.docker.internal verwendet werden,
-                # damit der Mac-Host erreicht wird (Smoke-Live 2026-05-15).
-                base_url="http://host.docker.internal:11434/v1",
+                id="ollama_cloud",
+                label="Ollama (Cloud)",
+                type="ollama_cloud",
+                # OpenAI-kompatibler Ollama-Cloud-Endpoint. Auth via Bearer-Token
+                # (``OLLAMA_API_KEY``). Doku: https://docs.ollama.com/cloud
+                base_url="https://ollama.com/v1",
+                api_key_ref="OLLAMA_API_KEY",
                 supports_models_endpoint=True,
-                fallback_models=["qwen2.5:32b", "llama3.1:8b", "phi3"],
+                fallback_models=[
+                    "qwen3-coder-next:cloud",
+                    "deepseek-v4-flash:cloud",
+                    "gpt-oss-128:cloud",
+                    "kimi-k2.6:cloud",
+                ],
             ),
             ProviderDescriptor(
                 id="openai",

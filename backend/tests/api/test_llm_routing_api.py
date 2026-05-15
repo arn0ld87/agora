@@ -31,7 +31,7 @@ def test_list_providers(client):
 @patch("app.api.llm_providers.model_catalog.get_models")
 def test_list_provider_models(mock_get_models, client):
     mock_get_models.return_value = []
-    resp = client.get("/api/llm/providers/ollama_local/models")
+    resp = client.get("/api/llm/providers/ollama_cloud/models")
     assert resp.status_code == 200
 
 def test_get_run_llm_routing(client):

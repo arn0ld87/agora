@@ -81,7 +81,7 @@ class ModelCatalogService:
             # über die ``_get_fallbacks``-Branch zurück — daher hier keine Live-IDs.
             return []
 
-        if provider_type == "ollama_local":
+        if provider_type == "ollama_cloud":
             # Ollama has /api/tags (native) and /v1/models (OpenAI compatible)
             # We prefer /api/tags for full metadata if available
             try:
@@ -119,7 +119,7 @@ class ModelCatalogService:
         return []
 
     def _get_fallbacks(self, provider_type: str) -> List[str]:
-        if provider_type == "ollama_local":
+        if provider_type == "ollama_cloud":
             return ["qwen2.5:32b", "llama3.1:8b", "phi3"]
         if provider_type == "openai":
             return ["gpt-4o", "gpt-4o-mini", "o1-preview"]

@@ -45,10 +45,9 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
     normalized_model = (model_name or "").strip().lower()
     parsed = urlparse(normalized_base) if normalized_base else None
     hostname = (parsed.hostname or "").lower() if parsed else ""
-    port = parsed.port if parsed else None
 
-    if normalized_model.endswith(":cloud") or port == 11434:
-        return "ollama_local"
+    if normalized_model.endswith(":cloud") or hostname == "ollama.com":
+        return "ollama_cloud"
     if hostname == "generativelanguage.googleapis.com" or "gemini" in normalized_model:
         return "google"
     if hostname in {"api.openai.com", "openai.com"}:

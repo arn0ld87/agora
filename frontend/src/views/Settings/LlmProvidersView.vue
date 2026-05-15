@@ -57,13 +57,11 @@ function ensureDraft(providerId: string): DraftState {
 
 function statusBadgeVariant(p: ProviderDescriptor): 'success' | 'neutral' | 'warning' {
   if (providersStore.hasKey(p.id)) return 'success'
-  if (p.type === 'ollama_local') return 'neutral'
   return 'warning'
 }
 
 function statusLabel(p: ProviderDescriptor): string {
   if (providersStore.hasKey(p.id)) return t('settings.v4.llmProviders.status.connected', 'verbunden')
-  if (p.type === 'ollama_local') return t('settings.v4.llmProviders.status.local', 'lokal')
   if (p.type === 'github_copilot') return t('settings.v4.llmProviders.status.cli', 'gh CLI')
   return t('settings.v4.llmProviders.status.missing', 'Key fehlt')
 }

@@ -35,7 +35,7 @@ def test_model_catalog_ollama_discovery(mock_get):
     mock_get.return_value = mock_resp
 
     service = ModelCatalogService()
-    models = service.get_models("ollama", "ollama_local", "http://localhost:11434/v1", None)
+    models = service.get_models("ollama", "ollama_cloud", "http://localhost:11434/v1", None)
 
     assert len(models) == 2
     assert models[0].id == "model1"

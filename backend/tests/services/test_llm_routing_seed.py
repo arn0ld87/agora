@@ -46,6 +46,12 @@ def test_seed_run_stage_routing_keeps_server_default_without_override(mock_run_d
     run_dir.mkdir(parents=True)
     mock_run_dir.return_value = str(run_dir)
 
+    # WorkspaceRoutingStore mocken — sonst leckt ein im Container persistierter
+    # Default in den Test und überschreibt den Config-Default
+    # (Smoke-Live 2026-05-15).
+    from app.services.workspace_routing_store import get_workspace_routing_store
+    get_workspace_routing_store().reset_for_tests()
+
     with patch("app.config.Config.LLM_BASE_URL", "https://api.openai.com/v1"), patch(
         "app.config.Config.LLM_MODEL_NAME", "gpt-4o"
     ):
@@ -105,7 +111,7 @@ def test_build_route_subprocess_env_uses_resolved_route_values():
 def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
     route = ResolvedRoute(
         stage="persona_generation",
-        provider_id="ollama_local",
+        provider_id="ollama_cloud",
         model="qwen2.5:32b",
         base_url_sanitized="http://localhost:11434/v1",
         routing_version=4,

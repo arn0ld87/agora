@@ -30,7 +30,7 @@ _PROVIDER_ALIASES = {
 
 
 # Erwartete Key-Präfixe pro Provider mit stabilem Schlüsselformat. Provider mit
-# beliebigem Format (``custom_openai``, ``ollama_local``, ``github_copilot``)
+# beliebigem Format (``custom_openai``, ``ollama_cloud``, ``github_copilot``)
 # stehen NICHT drin — die werden nicht validiert.
 _KEY_PREFIX_BY_PROVIDER: dict[str, tuple[str, ...]] = {
     "openai": ("sk-",),

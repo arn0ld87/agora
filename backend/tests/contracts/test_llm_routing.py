@@ -73,16 +73,16 @@ def test_runtime_llm_routing_valid():
 
 def test_provider_descriptor_valid():
     desc = ProviderDescriptor(
-        id="ollama_local",
+        id="ollama_cloud",
         label="Ollama Local",
-        type="ollama_local",
+        type="ollama_cloud",
         base_url="http://localhost:11434",
         supports_models_endpoint=True,
         fallback_models=["llama3"]
     )
-    assert desc.id == "ollama_local"
+    assert desc.id == "ollama_cloud"
     assert desc.label == "Ollama Local"
-    assert desc.type == "ollama_local"
+    assert desc.type == "ollama_cloud"
     assert desc.base_url == "http://localhost:11434"
     assert desc.supports_models_endpoint is True
     assert desc.fallback_models == ["llama3"]

@@ -50,7 +50,7 @@
     },
     "type": {
       "enum": [
-        "ollama_local",
+        "ollama_cloud",
         "openai",
         "google",
         "openai_compatible",
