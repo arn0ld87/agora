@@ -7,13 +7,16 @@
 
 import { getAgoraToken } from './index'
 import { useApiAuth } from '../composables/useApiAuth'
+import { PostCreatedEventSchema, type PostCreatedEvent } from '../contracts/postEventContract'
 
 // --- SSE event types (derived from backend/app/api/simulation_stream.py) ---
 //
-// event: hello   — sent once on connect: { simulation_id, ts }
-// event: ping    — heartbeat every ~15 s: { ts }
-// event: state   — run-state snapshot: { type, simulation_id, payload, ts }
-// event: control — pause/stop flags:   { type, simulation_id, payload, ts }
+// event: hello        — sent once on connect: { simulation_id, ts }
+// event: ping         — heartbeat every ~15 s: { ts }
+// event: state        — run-state snapshot: { type, simulation_id, payload, ts }
+// event: control      — pause/stop flags:   { type, simulation_id, payload, ts }
+// event: post_created — live post from OASIS runner (Slice 5-pre):
+//                       PostCreatedEvent payload
 
 export interface SseHelloPayload {
   simulation_id: string
@@ -33,12 +36,17 @@ export interface SseEventFrame {
   trace_id?: string
 }
 
+/** Re-export for consumers that want the fully typed PostCreatedEvent. */
+export type { PostCreatedEvent }
+
 /** Handler map for `openSimulationStream`. Each handler receives the already-parsed payload. */
 export interface StreamHandlers {
   state?: (event: SseEventFrame) => void
   control?: (event: SseEventFrame) => void
   hello?: (event: SseHelloPayload) => void
   ping?: (event: SsePingPayload) => void
+  /** Slice 5-pre: live post from OASIS runner, Zod-parsed PostCreatedEvent. */
+  post_created?: (event: PostCreatedEvent) => void
   error?: (event: Event) => void
 }
 
@@ -91,6 +99,26 @@ export async function openSimulationStream(
         }
       })
     }
+  }
+
+  // Slice 5-pre: post_created is Zod-parsed for type safety.
+  if (typeof handlers.post_created === 'function') {
+    const postHandler = handlers.post_created
+    source.addEventListener('post_created', (ev: MessageEvent) => {
+      try {
+        const raw = JSON.parse(ev.data as string)
+        // Backend wraps in SimulationEvent envelope: { type, simulation_id, payload, ts }
+        const payload = raw?.payload ?? raw
+        const parsed = PostCreatedEventSchema.safeParse(payload)
+        if (!parsed.success) {
+          console.warn('[stream] post_created Zod parse failed', parsed.error)
+          return
+        }
+        postHandler(parsed.data)
+      } catch (err) {
+        console.warn('[stream] dropped malformed post_created event', err)
+      }
+    })
   }
 
   if (typeof handlers.error === 'function') {
