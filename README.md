@@ -81,7 +81,7 @@ PDF wird ausschließlich über den Browser-Print-Dialog erzeugt — Button „Al
 - **Drei Vertrauensmodi**: `strict` (nur belegte Claims, harter Anchor-Validator), `balanced` (Default — belegte Claims + markierte Hypothesen), `explorative` (alles durch, EXPLORATIVE-Modus). Frontend-Selektor mit localStorage-Persistenz und i18n.
 - **Export-Vollständigkeit**: Markdown, JSON, CSV (Personas/Segmente/Claims, RFC-4180), ZIP-Bundle (serverseitig via Python-stdlib, kein jszip), Browser-Print-PDF.
 - **Live-Settings**: `GET`/`PUT /api/settings` mit Pydantic-Validierung, Secret-Redaction, `settings.changed`-Event-Bus. Services lesen via `settings_layer.get_*()` — Live-Übernahme ohne Container-Restart (`AGORA_PARALLEL_PERSONA_COUNT`, `AGORA_PERSONA_DETAIL_LEVEL`, `ONTOLOGY_MAX_TOKENS`).
-- **CI-Hardening**: `step-security/harden-runner` (audit-mode) in 9 Workflows, `aquasecurity/trivy-action` für Container-Scans, `ossf/scorecard-action` für Supply-Chain-Score.
+- **CI-Hardening**: `step-security/harden-runner` (audit-mode) in 9 Workflows, `aquasecurity/trivy-action` für Container-Scans, `ossf/scorecard-action` für Supply-Chain-Score, optionaler Python 3.14-dev Check via PR-Label.
 - **Compare- und Diff-Stack** (aus v0.9.x übernommen): Graph-Diff, Simulation-Compare, Runs Dashboard.
 - **Production-Hardening** (aus v0.9.x übernommen): Reverse-Proxy-Sidecar, gevent, Bundle-Token-Gate, signed Tickets, Prod-Smoke auf `main`/Tags/`workflow_dispatch`.
 - **Security-Watchlist**: CVE-Monitor wöchentlich, Hardstop 2026-07-30, Dependency Risk Register mit Eskalationspfad.

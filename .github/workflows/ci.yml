@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +14,10 @@ jobs:
   security:
     name: Security scans
     runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'needs-python314'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
@@ -105,6 +110,10 @@ jobs:
   backend:
     name: Backend tests + lint
     runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'needs-python314'
     env:
       # Tests instantiate LLMClient() directly (e.g. test_ontology_generator);
       # the constructor rejects an empty API key. No HTTP calls are made.
@@ -114,11 +123,15 @@ jobs:
       FLASK_DEBUG: "true"
     strategy:
       fail-fast: false
-      # PRs laufen nur gegen die stabile Runtime; 3.14-dev läuft auf main
-      # (sowie via workflow_dispatch), damit jeder PR-Push nicht 2x Backend
-      # bezahlt.
+      # PRs laufen standardmäßig nur gegen die stabile Runtime (3.11).
+      # 3.14-dev läuft auf main, via workflow_dispatch oder in PRs mit dem Label 'needs-python314'.
       matrix:
-        python-version: ${{ github.event_name == 'pull_request' && fromJSON('["3.11"]') || fromJSON('["3.11", "3.14-dev"]') }}
+        python-version: >-
+          ${{
+            (github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'needs-python314'))
+            && fromJSON('["3.11"]')
+            || fromJSON('["3.11", "3.14-dev"]')
+          }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
@@ -167,6 +180,10 @@ jobs:
   frontend:
     name: Frontend build + lint
     runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'needs-python314'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
@@ -212,6 +229,10 @@ jobs:
   status-sync:
     name: STATUS.md drift check (MAI-16)
     runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+      github.event.label.name == 'needs-python314'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1

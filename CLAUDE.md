@@ -11,7 +11,7 @@ Status: **v1.0.0 (2026-05-11)** · alle 14 PR-Slices der v1.0-Output-Vertrag-Roa
 ## Sofort wichtig
 
 - **Tool-Reihenfolge ist Pflicht** (Details § Tool-Pflicht): `code-review-graph::get_minimal_context_tool` → `context7::resolve-library-id`+`query-docs` → `sequential-thinking` → `context-mode` → **erst dann** `Read`/`rg`/`Bash`. Überspringen kostet Tokens und produziert Halluzinationen. Skip → eine Zeile im Worklog warum.
-- **Branch-Hygiene:** Nie auf `main` direkt pushen. Branch-Namen: `feat/task-XX-kurztitel`. Linear-FF-Merge auf main, keine Rewrites publizierter Commits.
+- **Branch-Hygiene:** Nie auf `main` direkt pushen. Branch-Namen: `feat/task-XX-kurztitel`. Riskante Backend-Änderungen: Label `needs-python314` setzen. Linear-FF-Merge auf main, keine Rewrites publizierter Commits.
 - **Tests sind die Spec.** Pflichttests vor Refactor lesen. TDD: erst RED, dann GREEN, dann Commit.
 - **Pakete unter Linux:** `nala` statt `apt`. Python-Deps via `uv`.
 - **Layer-Reihenfolge ist verbindlich** (siehe unten).
