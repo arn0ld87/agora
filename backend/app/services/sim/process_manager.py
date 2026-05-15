@@ -26,8 +26,13 @@ from datetime import datetime
 from queue import Queue
 from typing import Any, Callable, Dict, List, Optional
 
+from opentelemetry import trace
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
 from ...utils.logger import get_logger
 from .run_state_store import RunnerStatus, SimulationRunState
+
+_tracer = trace.get_tracer(__name__)
 
 logger = get_logger("agora.process_manager")
 
@@ -275,17 +280,27 @@ def start_simulation(
         # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
         _inject_oasis_db_env(env, sim_dir)
 
-        process = subprocess.Popen(
-            cmd,
-            cwd=sim_dir,
-            stdout=main_log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
-            env=env,
-            start_new_session=True,
-        )
+        # Slice 1c: Trace-Context via W3C-traceparent in den Subprozess propagieren.
+        with _tracer.start_as_current_span("agora.subprocess.spawn") as span:
+            span.set_attribute("agora.simulation.id", simulation_id)
+            span.set_attribute("agora.subprocess.cmd", " ".join(cmd))
+            carrier: dict[str, str] = {}
+            TraceContextTextMapPropagator().inject(carrier)
+            traceparent = carrier.get("traceparent", "")
+            if traceparent:
+                env["TRACEPARENT"] = traceparent
+
+            process = subprocess.Popen(
+                cmd,
+                cwd=sim_dir,
+                stdout=main_log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+                env=env,
+                start_new_session=True,
+            )
 
         stdout_files[simulation_id] = main_log_file
         stderr_files[simulation_id] = None
