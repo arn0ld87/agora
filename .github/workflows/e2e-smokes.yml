@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
         # Werte werden zur Runtime generiert, NICHT als Strings in der Datei
         # gehalten — sonst triggert GitGuardian / Gitleaks bei jedem PR.
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
         # Gleiche Credential-Generierung wie im health-smoke Job.
         # AGORA_E2E_LLM_MODE wird über Job-Level-env gesetzt, NICHT hier.
@@ -148,7 +148,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
         # Gleiche Credential-Generierung wie im health-smoke Job.
         run: |
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
         run: |
           {
