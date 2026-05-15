@@ -13,6 +13,8 @@ import { onUnmounted, ref, type Ref } from 'vue'
 import { openSimulationStream, type StreamHandlers } from '../api/stream'
 
 const MAX_RECONNECT_ATTEMPTS = 5
+const RECONNECT_BASE_DELAY_MS = 500
+const RECONNECT_MAX_DELAY_MS = 8000
 
 export interface UseEventStreamReturn {
   isStreaming: Ref<boolean>
@@ -50,6 +52,23 @@ export function useEventStream(
     }
   }
 
+  function scheduleReconnect(): void {
+    if (reconnectTimer) return  // bereits geplant
+    if (attempts >= MAX_RECONNECT_ATTEMPTS) {
+      stop()
+      return
+    }
+    const delay = Math.min(
+      RECONNECT_BASE_DELAY_MS * 2 ** (attempts - 1),
+      RECONNECT_MAX_DELAY_MS,
+    )
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      // Alte Source ist geschlossen — neuer Versuch mit frischem Ticket.
+      void start()
+    }, delay)
+  }
+
   async function start(): Promise<void> {
     const id = getId()
     if (!id) return
@@ -66,16 +85,25 @@ export function useEventStream(
         error: (ev: Event) => {
           error.value = ev
           if (typeof handlers.error === 'function') handlers.error(ev)
-          // EventSource attempts reconnect internally; cap the noise if the
-          // backend stays down (fall back to whatever polling the caller has).
+          // Smoke-Live 2026-05-15: EventSource interner Reconnect nutzt das
+          // ALTE Ticket-URL, das nach 60 s TTL abläuft → Endlos-Loop.
+          // Wir schließen die Source aktiv, holen mit Backoff ein frisches
+          // Ticket über ``openSimulationStream``.
           attempts += 1
-          if (attempts >= MAX_RECONNECT_ATTEMPTS) stop()
+          if (source) {
+            source.close()
+            source = null
+          }
+          isStreaming.value = false
+          scheduleReconnect()
         },
       })
       isStreaming.value = true
     } catch (err) {
       error.value = err
       isStreaming.value = false
+      attempts += 1
+      scheduleReconnect()
     }
   }
 
