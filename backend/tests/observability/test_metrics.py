@@ -37,12 +37,21 @@ from app.observability import (
 @pytest.fixture(autouse=True)
 def _reset_metrics_module_cache(monkeypatch):
     """Setzt den Modul-Cache vor jedem Test zurück, damit Idempotenz-Tests
-    sauber isoliert sind und kein State zwischen Tests leckt."""
+    sauber isoliert sind und kein State zwischen Tests leckt.
+
+    Teardown ruft ``provider.shutdown()`` auf, sobald ein echter MeterProvider
+    im Cache liegt. Sonst lebt der PeriodicExportingMetricReader-Background-
+    Thread aus ``init_metrics(enabled=true)`` über die Testgrenze hinaus weiter
+    und versucht periodisch gRPC-Export auf localhost:4317 (laut Audit-Finding
+    Slice-2a MEDIUM-1).
+    """
     monkeypatch.setattr(metrics_module, "_provider", None)
     monkeypatch.setattr(metrics_module, "_meter", None)
     monkeypatch.setattr(metrics_module, "_lock", threading.Lock())
     yield
-    # Teardown: Cache zurücksetzen damit folgende Tests sauber starten.
+    provider = metrics_module._provider
+    if isinstance(provider, MeterProvider):
+        provider.shutdown()
     metrics_module._provider = None
     metrics_module._meter = None
 
