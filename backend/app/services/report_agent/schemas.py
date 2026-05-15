@@ -171,7 +171,7 @@ __all__ = [
     # M11.8d — Plan-Response DTOs
     "PlanSection",
     "PlanResponse",
-    # M11.8d — Section-Metadata DTOs + mapper
+    # M11.8d — Section-Metadata DTOs
     "SectionKeyTakeaway",
     "SectionMetadata",
 ]
