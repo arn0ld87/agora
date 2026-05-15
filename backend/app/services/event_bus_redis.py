@@ -26,6 +26,8 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Iterator, Optional
 
+from opentelemetry import trace as otel_trace
+
 from ..utils.logger import get_logger
 from .artifact_store import SimulationArtifactStore, resolve_default_store
 from .event_bus import (
@@ -39,6 +41,19 @@ from .event_bus import (
 )
 
 logger = get_logger("agora.event_bus_redis")
+
+try:
+    from ..observability.redis_propagator import extract_trace_from_event as _extract_trace
+    _HAS_PROPAGATOR = True
+except ImportError:  # OTel optional — kein Fehler wenn nicht installiert
+    _HAS_PROPAGATOR = False
+
+    def _extract_trace(event: Dict[str, Any]) -> Any:  # type: ignore[misc]
+        from opentelemetry import context as otel_context
+        return otel_context.Context()
+
+
+_tracer = otel_trace.get_tracer(__name__)
 
 _CHANNEL_PREFIX = "agora:sim"
 
@@ -213,7 +228,28 @@ class RedisEventBus:
                 if msg and msg.get("type") == "message":
                     try:
                         data = json.loads(msg["data"])
-                        yield SimulationEvent.from_dict(data)
+                        # Trace-Propagation: Span nur über synchrone Decode-Phase
+                        # legen — Generator-yield darf keinen aktiven Span halten.
+                        ctx = _extract_trace(data)
+                        span = _tracer.start_span(
+                            "agora.bus.event.consume", context=ctx
+                        )
+                        try:
+                            span.set_attribute(
+                                "agora.event.type", data.get("type", "unknown")
+                            )
+                            span.set_attribute(
+                                "agora.simulation.id",
+                                data.get("simulation_id", ""),
+                            )
+                            event = SimulationEvent.from_dict(data)
+                        except Exception as exc:
+                            span.set_status(otel_trace.StatusCode.ERROR, str(exc))
+                            span.record_exception(exc)
+                            raise
+                        finally:
+                            span.end()
+                        yield event
                     except (json.JSONDecodeError, KeyError) as exc:
                         logger.warning(
                             "Dropped malformed bus event on %s: %s", key, exc

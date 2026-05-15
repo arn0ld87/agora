@@ -50,6 +50,16 @@ dependencies = [
     # Production WSGI: gunicorn + gevent worker (non-blocking SSE)
     "gunicorn>=23.0",
     "gevent>=24.0",
+
+    # Observability: OpenTelemetry Tracing (Slice 1b, 2026-05-15)
+    # Default-Off: OTEL_ENABLED=false => kein Overhead. Deps werden aber
+    # immer installiert, damit das Import-Gate funktioniert.
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
+    "opentelemetry-instrumentation-flask>=0.45b0",
+    "opentelemetry-instrumentation-requests>=0.45b0",
+    "opentelemetry-instrumentation-redis>=0.45b0",
 ]
 
 [project.optional-dependencies]

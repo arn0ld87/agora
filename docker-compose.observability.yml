@@ -1,0 +1,59 @@
+name: agora-observability
+
+services:
+  signoz-clickhouse:
+    image: clickhouse/clickhouse-server:24.1.2-alpine
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - signoz-clickhouse-data:/var/lib/clickhouse
+    ports:
+      - "127.0.0.1:9000:9000"
+
+  signoz-zookeeper:
+    image: bitnami/zookeeper:3.7.1
+    profiles: ["observability"]
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    volumes:
+      - signoz-zookeeper-data:/bitnami/zookeeper
+
+  signoz-query-service:
+    image: signoz/query-service:0.51.0
+    profiles: ["observability"]
+    depends_on: [signoz-clickhouse]
+    environment:
+      ClickHouseUrl: tcp://signoz-clickhouse:9000
+      STORAGE: clickhouse
+      ALERTMANAGER_API_PREFIX: http://signoz-alertmanager:9093/api/
+      SIGNOZ_LOCAL_DB_PATH: /var/lib/signoz/signoz.db
+    volumes:
+      - signoz-query-data:/var/lib/signoz
+
+  signoz-frontend:
+    image: signoz/frontend:0.51.0
+    profiles: ["observability"]
+    depends_on: [signoz-query-service]
+    ports:
+      - "127.0.0.1:3301:3301"
+
+  signoz-alertmanager:
+    image: signoz/alertmanager:0.23.7
+    profiles: ["observability"]
+    depends_on: [signoz-query-service]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.99.0
+    profiles: ["observability"]
+    depends_on: [signoz-clickhouse]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:4317:4317"  # OTLP grpc
+      - "127.0.0.1:4318:4318"  # OTLP http
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+
+volumes:
+  signoz-clickhouse-data:
+  signoz-zookeeper-data:
+  signoz-query-data:

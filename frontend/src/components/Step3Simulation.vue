@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useEventStream } from '../composables/useEventStream'
+import { traceIdToSigNozUrl } from '../observability/tracing'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { usePolling } from '../composables/usePolling'
 import { useStickyScroll } from '../composables/useStickyScroll'
@@ -205,6 +206,8 @@ const statusStream = useEventStream(() => props.simulationId, {
   state: (msg) => applyRunStateEvent(msg?.payload),
   control: (msg) => applyControlEvent(msg?.payload),
 })
+// Slice 1e: last SSE trace_id for the SigNoz deep-link button.
+const { lastTraceId } = statusStream
 const detailPolling = usePolling(pollDetail, 2500)
 
 function resetState() {
@@ -522,6 +525,17 @@ onUnmounted(() => {
             @click="goReport"
           >{{ t('step3.next') }}</Btn>
         </div>
+        <!-- Slice 1e: SigNoz deep-link — only rendered when OTEL is active and
+             the backend injected a trace_id into the SSE frame. -->
+        <a
+          v-if="lastTraceId"
+          :href="traceIdToSigNozUrl(lastTraceId)"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="trace-link"
+        >
+          {{ t('observability.viewTrace', { id: lastTraceId.slice(0, 8) }) }}
+        </a>
       </article>
 
       <!-- Card 2: Stats -->
@@ -991,5 +1005,23 @@ onUnmounted(() => {
 }
 .console-line.is-error {
   color: var(--status-red, var(--status-error, #f56565));
+}
+
+/* Slice 1e: SigNoz trace deep-link */
+.trace-link {
+  display: inline-block;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+  opacity: 0.75;
+  transition: opacity 120ms ease;
+}
+.trace-link:hover {
+  opacity: 1;
+  text-decoration-color: var(--accent);
 }
 </style>

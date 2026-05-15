@@ -5,6 +5,7 @@ Lifecycle and metadata endpoints split from the main simulation API module.
 import os
 
 from flask import current_app, request
+from opentelemetry import trace
 
 from . import simulation_bp
 from ..config import Config
@@ -14,6 +15,8 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.validation import validate_graph_id, validate_project_id, validate_simulation_id
 from .simulation_common import logger
+
+_tracer = trace.get_tracer(__name__)
 
 
 def _detect_default_provider() -> str:
@@ -137,14 +140,23 @@ def create_simulation():
             message="Invalid graph_id format",
         )
 
-    manager = SimulationManager()
-    state = manager.create_simulation(
-        project_id=project_id,
-        graph_id=graph_id,
-        enable_twitter=data.get('enable_twitter', True),
-        enable_reddit=data.get('enable_reddit', True),
+    enable_twitter = data.get('enable_twitter', True)
+    enable_reddit = data.get('enable_reddit', True)
+    platforms = ",".join(
+        p for p, enabled in [("twitter", enable_twitter), ("reddit", enable_reddit)] if enabled
     )
-    return json_success(state.to_dict())
+
+    with _tracer.start_as_current_span("agora.simulation.create") as span:
+        manager = SimulationManager()
+        state = manager.create_simulation(
+            project_id=project_id,
+            graph_id=graph_id,
+            enable_twitter=enable_twitter,
+            enable_reddit=enable_reddit,
+        )
+        span.set_attribute("agora.simulation.id", state.simulation_id)
+        span.set_attribute("agora.simulation.platforms", platforms)
+        return json_success(state.to_dict())
 
 
 @simulation_bp.route('/<simulation_id>', methods=['GET'])

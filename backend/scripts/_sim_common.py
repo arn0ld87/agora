@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from dotenv import load_dotenv
+from opentelemetry import context as otel_context
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 
 def _is_ollama_route(model: str, base_url: str) -> bool:
@@ -126,6 +128,25 @@ def load_project_env(script_file: str | Path, *, verbose: bool = False) -> Path 
                 print(f"Loaded environment configuration: {candidate}")
             return candidate
     return None
+
+
+def init_runner_tracing(service_name: str) -> None:
+    """Setup TracerProvider im OASIS-Runner und übernimm Parent-Context aus ENV.
+
+    Wird von ``run_*_simulation.py`` direkt nach den Imports gerufen.
+    Schlägt lautlos fehl, wenn ``app.observability`` nicht importierbar ist
+    (z.B. wenn OTEL-Deps nicht installiert sind oder ``OTEL_ENABLED=false``).
+    """
+    try:
+        from app.observability import init_tracing  # type: ignore[import]
+    except ImportError:
+        return
+    init_tracing(service_name)
+
+    traceparent = os.environ.get("TRACEPARENT")
+    if traceparent:
+        ctx = TraceContextTextMapPropagator().extract({"traceparent": traceparent})
+        otel_context.attach(ctx)
 
 
 def should_filter_max_tokens_warning(message: str) -> bool:

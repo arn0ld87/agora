@@ -19,8 +19,8 @@ Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2212 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 88 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 2246 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 94 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
@@ -174,3 +174,4 @@ Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 55 → 70 %, Fro
 - 2026-05-07: Phase 2 Static-Analysis-Gates — `ci.yml::backend` blockiert auf `uv run mypy app`, `ci.yml::frontend` blockiert auf `npm run typecheck`. Backend-mypy startet mit strengem Contract-Scope und Legacy-Baseline fuer API-/Service-Pfade; Ruff ist auf `E/F/B/I/UP/SIM` konfiguriert mit expliziter Phase-2-Baseline fuer bestehende Altlasten. Frontend `allowJs=false`; `noUncheckedIndexedAccess`/`exactOptionalPropertyTypes` nach Probelauf noch nicht aktiviert.
 - 2026-05-07: Phase 3 Runtime/Container-Hardening — `Dockerfile` trennt `frontend-build`, `backend-build` und finalen `prod`-Stage. Das finale Image basiert auf `python:3.11-slim`, enthaelt kein Node/npm/curl, installiert Runtime-Dependencies via `uv sync --frozen --no-dev` und nutzt einen Python-Healthcheck. `docker-compose.prod.yml` setzt `read_only: true` mit expliziten tmpfs-Schreibpfaden; DNS und Neo4j-Image-/Memory-Werte sind ueber `.env` parametrierbar. Lokale Image-Groesse: 747 MB -> 320 MB (-57 %).
 - 2026-05-07: Phase 4 Supply Chain — `dependency-review.yml` blockiert PRs bei neuen High-severity Dependency-Funden, `codeql.yml` scannt Python und JavaScript/TypeScript auf `main`, PRs und woechentlichem Schedule. `docker-image.yml::publish` erzeugt nach GHCR-Push eine Build-Provenance-Attestation und ein SPDX-JSON-SBOM-Artefakt.
+- 2026-05-15: Observability Slice 1 — End-to-End-Tracing der Sim-Pipeline mit SigNoz Community Edition + OpenTelemetry. Sechs atomic Sub-Slices (1a SigNoz-/OTel-Collector-Compose-Profile, 1b Flask+gevent Auto-Instrumentation + Sim-Root-Span, 1c TRACEPARENT-Propagation durch `subprocess.Popen`, 1d Custom-Redis-Propagator über `_otel_traceparent`-Feld, 1e SSE-Frame-`trace_id` + Frontend Web-Tracer + SigNoz-Deep-Link im SimDetail, 1f Worklog + Blog-Draft + STATUS-Sync). Branch `feat/observability-slice-1`, 6 Commits, Backend 2232 passed/9 skipped, Frontend-Gates clean, Bundle-Delta +34 kB. Default-Off via `OTEL_ENABLED=false`. Live-SigNoz-End-to-End-Smoke offen, läuft manuell vom User über Compose-Profile `observability`. Plan: [`docu/plans/2026-05-15-observability-slice-1.md`](plans/2026-05-15-observability-slice-1.md), Worklog: [`docu/2026-05-15-observability-slice-1-worklog.md`](2026-05-15-observability-slice-1-worklog.md).

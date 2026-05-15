@@ -29,6 +29,8 @@ export interface SseEventFrame {
   simulation_id: string
   payload: Record<string, unknown>
   ts: string | null
+  /** W3C hex trace_id injected by the backend SSE stream (Slice 1e). Optional — absent when OTEL_ENABLED=false. */
+  trace_id?: string
 }
 
 /** Handler map for `openSimulationStream`. Each handler receives the already-parsed payload. */

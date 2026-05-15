@@ -3,10 +3,14 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { initFrontendTracing } from './observability/tracing'
 
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
 import './assets/styles/global.css'
+
+// Observability: initialise before Vue so the first fetch spans are captured.
+initFrontendTracing()
 
 document.documentElement.setAttribute('data-theme', 'light')
 

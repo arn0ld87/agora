@@ -16,6 +16,7 @@ from flask import Flask, g, request  # noqa: E402
 from flask_cors import CORS  # noqa: E402
 
 from .config import Config  # noqa: E402
+from .observability import init_tracing, instrument_flask_app  # noqa: E402
 from .utils.logger import (  # noqa: E402
     install_redaction_filter,
     setup_logger,
@@ -27,7 +28,15 @@ __version__ = "0.9.0"
 
 def create_app(config_class=Config):
     """Flask application factory function"""
+    # Observability: TracerProvider vor Flask-Instanz initialisieren,
+    # damit gevent.monkey.patch_all() (wsgi.py) bereits gelaufen ist.
+    # NoOp solange OTEL_ENABLED != "true".
+    init_tracing(service_name=os.environ.get("OTEL_SERVICE_NAME", "agora-backend"))
+
     app = Flask(__name__)
+
+    # Flask-Auto-Instrumentation direkt nach App-Erstellung registrieren.
+    instrument_flask_app(app)
     app.config.from_object(config_class)
 
     # Configure JSON encoding: ensure Chinese displays directly (not as \uXXXX)
