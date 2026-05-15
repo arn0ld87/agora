@@ -214,6 +214,52 @@ SMOKE_PROVIDER="openai"
 SMOKE_API_KEY="sk-smoke-${RANDOM}${RANDOM}-do-not-use"
 SMOKE_MODEL="gpt-4o-mini"
 
+# ---------------------------------------------------------------------------
+# Production-Schutz (Copilot finding #1):
+# --full schreibt einen Test-Provider-Key + Workspace-Routing-Default. Wenn die
+# Instanz bereits Operator-Daten enthält, würde das die echten Werte
+# überschreiben (und Cleanup würde den Key löschen). Daher Pre-Check:
+#   * Existiert schon ein Provider-Key für SMOKE_PROVIDER?
+#   * Existiert schon ein Global-Default?
+# Wenn ja, abbruch — außer der Operator erzwingt mit AGORA_SMOKE_FORCE=1
+# (z. B. nach explizitem Snapshot der Files).
+# ---------------------------------------------------------------------------
+echo
+echo "Production-Schutz — Pre-Check (--full)"
+existing_key_http=$(curl -s -o /dev/null -w "%{http_code}" $AUTH_HEADER \
+  "${API_BASE}/api/llm/providers/${SMOKE_PROVIDER}/api-key" 2>/dev/null || echo "000")
+existing_default=$(curl -s $AUTH_HEADER \
+  "${API_BASE}/api/llm/routing/defaults" 2>/dev/null | grep -oE '"global_default":\s*\{[^}]+\}' | head -1)
+
+production_data_detected=0
+if [ "$existing_key_http" = "200" ]; then
+  production_data_detected=1
+fi
+if [ -n "$existing_default" ]; then
+  production_data_detected=1
+fi
+
+if [ "$production_data_detected" = "1" ]; then
+  if [ "${AGORA_SMOKE_FORCE:-0}" != "1" ]; then
+    cat <<'EOF'
+  FAIL Produktiv-Daten erkannt:
+    - Provider-Key oder Routing-Default existieren bereits.
+    - Der --full-Smoke würde diese überschreiben und am Ende löschen.
+  Aktion:
+    1. Vorher backend/data sichern:
+         docker compose exec -T agora cp /app/backend/data/llm_provider_secrets.json /tmp/secrets.bak
+         docker compose exec -T agora cp /app/backend/data/workspace_llm_routing.json /tmp/routing.bak
+    2. Smoke mit AGORA_SMOKE_FORCE=1 erneut starten.
+    3. Nach Smoke wieder einspielen.
+  Alternativ: --full nur gegen frische Test-Instanzen fahren.
+EOF
+    exit 3
+  fi
+  echo "  WARN Produktiv-Daten überschrieben — AGORA_SMOKE_FORCE=1 ist gesetzt."
+else
+  echo "  OK  Keine Produktiv-Daten erkannt — Smoke ist sicher."
+fi
+
 ok2=0; fail2=0
 check2() {
   local name="$1"; shift

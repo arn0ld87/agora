@@ -154,6 +154,35 @@ Commit `079136e`.
 
 Commit dieser Datei + `gh pr create` (folgt im nächsten Schritt).
 
+### Followup-Slice — Copilot-Review-Findings
+
+PR #451 hat von `copilot-pull-request-reviewer[bot]` drei Findings
+erhalten. Alle adressiert in einem zusätzlichen Commit (`Refs #450`):
+
+1. **`scripts/verify-deploy.sh --full` würde Production-Daten
+   überschreiben.** Pre-Check via `GET /api/llm/providers/openai/api-key`
+   + `GET /api/llm/routing/defaults` — wenn echte Daten erkannt werden,
+   wird der Smoke abgebrochen mit Hinweis-Block, wie man die Files
+   manuell sichern und mit `AGORA_SMOKE_FORCE=1` erzwingen kann.
+
+2. **`_write_raw` öffnete die Tmp-Datei mit umask-Default (0644).** Zwar
+   wurde nach `os.replace` 0600 gesetzt, aber zwischen Tmp-Write und
+   Rename lag der Ciphertext mit world-readable Mode auf der Platte.
+   Fix: `os.open(O_WRONLY|O_CREAT|O_TRUNC, mode=0o600)` statt
+   `tmp_path.write_text`. Gleicher Fix für
+   `WorkspaceRoutingStore._save_unlocked`.
+
+3. **`scripts/llm-secrets-doctor.py rotate` hatte einen Race
+   zwischen Read und Write.** Vorher griff der File-Lock nur im
+   `store._write_raw` am Ende; in der Zwischenzeit konnte ein Backend-
+   Worker per `upsert` einen neuen Provider-Key persistieren, der dann
+   vom Rotate überschrieben wurde. Fix: Rotate hält denselben
+   `fcntl.LOCK_EX` auf der `.lock`-Sidecar-Datei über die gesamte
+   read-decrypt-re-encrypt-write-Sequenz.
+
+Alle drei Findings sind **valide** und ohne Tests-Aufweichung
+adressiert. 31/31 pytest weiterhin grün.
+
 ---
 
 ## Followups (separate Issues)

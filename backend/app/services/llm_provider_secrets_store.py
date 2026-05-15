@@ -146,22 +146,37 @@ class LlmProviderSecretsStore:
 
         self._data_dir.mkdir(parents=True, exist_ok=True)
         lock_path = self._path.with_suffix(".lock")
+        payload = json.dumps(raw, indent=2, sort_keys=True).encode("utf-8")
         with open(lock_path, "w", encoding="utf-8") as lock_fh:
             fcntl.flock(lock_fh, fcntl.LOCK_EX)
             try:
                 tmp_path = self._path.with_suffix(".tmp")
-                tmp_path.write_text(
-                    json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8"
+                # Tmp-File mit 0600 *anlegen*, nicht erst nach dem Schreiben
+                # chmod-en — sonst läge der Ciphertext zwischen Write und
+                # os.replace mit umask-Default (oft 0644) lesbar herum
+                # (Copilot finding #2 / Issue #450 P1.3).
+                fd = os.open(
+                    str(tmp_path),
+                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                    0o600,
                 )
                 try:
-                    os.chmod(tmp_path, 0o600)
+                    os.write(fd, payload)
+                finally:
+                    os.close(fd)
+                os.replace(tmp_path, self._path)
+                # Defense in depth: nach dem Replace nochmal chmod, damit
+                # bei umask-restriktiven Hosts oder ACL-Edge-Cases der
+                # finale Pfad garantiert 0600 hat. Bei NFS-Mounts ohne
+                # chmod-Permission ist das kein Fail.
+                try:
+                    os.chmod(self._path, 0o600)
                 except OSError as exc:
                     logger.warning(
                         "Konnte Rechte auf %s nicht auf 0600 setzen: %s",
-                        tmp_path,
+                        self._path,
                         exc,
                     )
-                os.replace(tmp_path, self._path)
             finally:
                 fcntl.flock(lock_fh, fcntl.LOCK_UN)
 

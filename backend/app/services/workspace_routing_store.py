@@ -115,16 +115,25 @@ class WorkspaceRoutingStore:
     def _save_unlocked(self, model: WorkspaceLlmRoutingDefaults) -> WorkspaceLlmRoutingDefaults:
         self._data_dir.mkdir(parents=True, exist_ok=True)
         payload = model.model_copy(update={"updated_at": _now()})
+        serialized = json.dumps(
+            payload.model_dump(mode="json"), indent=2, sort_keys=True
+        ).encode("utf-8")
         tmp_path = self._path.with_suffix(".tmp")
-        tmp_path.write_text(
-            json.dumps(payload.model_dump(mode="json"), indent=2, sort_keys=True),
-            encoding="utf-8",
+        # Tmp-File mit 0600 anlegen, nicht erst chmod nach dem Write — sonst
+        # liegt der Inhalt zwischen Write und os.replace mit umask-Default
+        # auf der Platte (Copilot finding #2 / Issue #450 P1.3). Routing-
+        # Defaults enthalten zwar nur Provider-IDs + Modell-Strings, das
+        # Härtungs-Level bleibt aber konsistent mit dem Secrets-Store.
+        fd = os.open(
+            str(tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
         )
+        try:
+            os.write(fd, serialized)
+        finally:
+            os.close(fd)
         os.replace(tmp_path, self._path)
-        # Routing-Defaults enthalten Provider-IDs + Modell-Strings — keine
-        # Klartext-Secrets, aber dennoch nicht für andere User auf dem Host
-        # interessant. 0600 entspricht dem Secrets-Store-Niveau und macht
-        # Backup-/Rechte-Prüfung in scripts/verify-deploy.sh konsistent.
         try:
             os.chmod(self._path, 0o600)
         except OSError as exc:

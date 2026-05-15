@@ -163,6 +163,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_rotate(args: argparse.Namespace) -> int:
+    import fcntl  # POSIX-only; passt zum Rest des Stacks
+
     data_dir = _resolve_data_dir(args.data_dir)
     old_env = args.old_key_env
     new_env = args.new_key_env
@@ -173,62 +175,89 @@ def cmd_rotate(args: argparse.Namespace) -> int:
         return _fail(str(exc))
 
     store_path = data_dir / "llm_provider_secrets.json"
+    lock_path = store_path.with_suffix(".lock")
     if not store_path.exists():
         print("[doctor] Kein Store-File vorhanden — nichts zu rotieren.")
         return 0
 
-    # Direktes Re-Encrypten auf der raw-JSON-Ebene, weil
-    # ``LlmProviderSecretsStore`` Fernet via Env-Var lazy auflöst und keine
-    # Zwei-Key-Bridge anbietet. Wir laden die Datei manuell, entschlüsseln
-    # mit altem Key, verschlüsseln mit neuem Key und schreiben über den
-    # Store, damit Locking + 0600 weiter greifen.
-    try:
-        raw = json.loads(store_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return _fail(f"Store-File ist nicht lesbar: {exc}")
-
-    entries = raw.get("entries", {})
-    rotated = 0
-    failures: list[tuple[str, str]] = []
-    for provider_id, payload in entries.items():
-        ciphertext = payload.get("ciphertext")
-        if not ciphertext:
-            continue
+    # Race-Schutz (Copilot finding #3): Wir halten denselben fcntl.LOCK_EX
+    # auf der Lock-Sidecar-Datei, den auch ``LlmProviderSecretsStore._write_raw``
+    # verwendet, über die gesamte read-decrypt-re-encrypt-write-Sequenz. Sonst
+    # könnte ein parallel laufender Gunicorn-Worker zwischen unserem Read und
+    # Write einen ``upsert`` durchführen und seine Änderung würde von der
+    # Rotation überschrieben.
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w", encoding="utf-8") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
         try:
-            plaintext = old_fernet.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
-        except InvalidToken as exc:
-            failures.append((provider_id, f"old-key passt nicht: {exc}"))
-            continue
-        new_ciphertext = new_fernet.encrypt(plaintext.encode("utf-8")).decode("utf-8")
-        payload["ciphertext"] = new_ciphertext
-        rotated += 1
-        # Lokal-Variable freigeben — Klartext nicht länger im Memory halten als nötig
-        del plaintext
+            try:
+                raw = json.loads(store_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                return _fail(f"Store-File ist nicht lesbar: {exc}")
 
-    if failures:
-        print(
-            "[doctor] Rotation abgebrochen — die folgenden Einträge konnten mit "
-            f"dem alten Key (${old_env}) nicht entschlüsselt werden:",
-            file=sys.stderr,
-        )
-        for pid, reason in failures:
-            print(f"  - {pid}: {reason}", file=sys.stderr)
-        return 2
+            entries = raw.get("entries", {})
+            rotated = 0
+            failures: list[tuple[str, str]] = []
+            for provider_id, payload in entries.items():
+                ciphertext = payload.get("ciphertext")
+                if not ciphertext:
+                    continue
+                try:
+                    plaintext = old_fernet.decrypt(
+                        ciphertext.encode("utf-8")
+                    ).decode("utf-8")
+                except InvalidToken as exc:
+                    failures.append((provider_id, f"old-key passt nicht: {exc}"))
+                    continue
+                new_ciphertext = (
+                    new_fernet.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+                )
+                payload["ciphertext"] = new_ciphertext
+                rotated += 1
+                # Klartext nicht länger im Memory halten als nötig
+                del plaintext
 
-    # Über den Store schreiben, damit fcntl.flock + 0600 garantiert sind.
-    # Dafür AGORA_SECRET_KEY temporär auf den neuen Wert setzen.
-    os.environ["AGORA_SECRET_KEY"] = os.environ[new_env]
-    store = LlmProviderSecretsStore(data_dir=data_dir)
-    # Wir umgehen upsert(), weil das jeden Eintrag neu encrypten würde
-    # — wir haben den Ciphertext schon ersetzt. Stattdessen direkt write_raw,
-    # über die private API.
-    raw["version"] = 1
-    store._write_raw(raw)  # type: ignore[attr-defined]
-    print(
-        f"[doctor] {rotated} Einträge erfolgreich re-encrypted. "
-        f"Persistiere AGORA_SECRET_KEY=${new_env} in der produktiven .env."
-    )
-    return 0
+            if failures:
+                print(
+                    "[doctor] Rotation abgebrochen — die folgenden Einträge konnten mit "
+                    f"dem alten Key (${old_env}) nicht entschlüsselt werden:",
+                    file=sys.stderr,
+                )
+                for pid, reason in failures:
+                    print(f"  - {pid}: {reason}", file=sys.stderr)
+                return 2
+
+            # Im selben Lock atomic schreiben. Wir bauen den Tmp-File mit
+            # 0600 direkt via os.open auf, analog zu _write_raw, und
+            # rufen NICHT store._write_raw — der würde sonst doppelt
+            # locken (gleicher Lock-Pfad, gleicher Prozess: das wäre für
+            # fcntl re-entrant, aber wir vermeiden die Konstruktion
+            # bewusst, damit die Semantik einfach bleibt).
+            raw["version"] = 1
+            tmp_path = store_path.with_suffix(".tmp")
+            serialized = json.dumps(raw, indent=2, sort_keys=True).encode("utf-8")
+            fd = os.open(
+                str(tmp_path),
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                0o600,
+            )
+            try:
+                os.write(fd, serialized)
+            finally:
+                os.close(fd)
+            os.replace(tmp_path, store_path)
+            try:
+                os.chmod(store_path, 0o600)
+            except OSError:
+                pass  # Volume-Mount-Edge-Case (s. _write_raw)
+
+            print(
+                f"[doctor] {rotated} Einträge erfolgreich re-encrypted. "
+                f"Persistiere AGORA_SECRET_KEY=${new_env} in der produktiven .env."
+            )
+            return 0
+        finally:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
