@@ -1,3 +1,4 @@
+"""Prompt-Konstanten fuer den ReportAgent. Slice 02: max_tokens + force_no_thinking werden in planning.py gesetzt."""
 from __future__ import annotations
 
 from ..report_prompts import (
