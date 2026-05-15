@@ -44,9 +44,12 @@ describe('DropdownMenu — reka-ui ARIA-Härte', () => {
 
   it('Trigger trägt aria-haspopup="menu"', async () => {
     const wrapper = mountHost()
-    // DropdownMenuTrigger setzt aria-haspopup="menu" automatisch auf das Trigger-Element.
-    // Im as-child-Modus wird es auf das direkte Kind-Element übertragen.
-    const triggerEl = document.querySelector('[data-testid="trigger"]')
+    // DropdownMenuTrigger (reka-ui) setzt aria-haspopup="menu" auf sein eigenes
+    // Element. Es rendert ein <button> als Wrapper um den trigger-Slot.
+    // Wir suchen das Element mit aria-haspopup="menu" im DOM — das ist der
+    // DropdownMenuTrigger-Button, nicht der Consumer-Button im Slot.
+    const triggerEl = document.querySelector('[aria-haspopup="menu"]')
+    expect(triggerEl).not.toBeNull()
     expect(triggerEl?.getAttribute('aria-haspopup')).toBe('menu')
     wrapper.unmount()
   })
