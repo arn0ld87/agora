@@ -165,6 +165,11 @@ class Config:
     ]
 
     # Report Agent configuration
+    # REPORT_TOOLCALL_MODE: "native" nutzt OpenAI function-calling (tools=/tool_choice=);
+    # "xml" behält den Legacy-XML-Parsing-Pfad (<tool_call>...</tool_call>).
+    # Default: "native" — Modelle wie deepseek-v4-flash:cloud senden keinen sauberen XML-Block.
+    REPORT_TOOLCALL_MODE: str = os.environ.get('REPORT_TOOLCALL_MODE', 'native')
+
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
