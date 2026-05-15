@@ -18,34 +18,32 @@ Root-Cause: `max_tokens=4096` ist zu klein für Modelle mit implizitem Thinking-
 
 ## Fix
 
-1. **`backend/app/utils/llm_client.py`** — neue Konstante `OUTLINE_PLANNING_MAX_TOKENS = 16384` für Outline-Steps, unabhängig vom Provider.
-2. **`backend/app/services/report_agent/planning.py`** — `plan_outline()` nutzt `max_tokens=16384` statt global-konfig, explizit `force_no_thinking=True` für Ollama-Anfragen.
-3. **`backend/app/services/report_agent/prompts.py`** — Retry-Loop hinzugefügt: falls JSON-Output `len=0`, bis zu 3× erneut versuchen mit `max_tokens *= 1.2`.
-4. **Test:** `backend/tests/services/test_outline_planning_ollama.py` (NEU) — Smoke-Test mit Ollama-Mock, prüft dass `len(outline) > 0` auch bei lange Laufzeit.
+1. **`backend/app/utils/llm_client.py`** — neuer optionaler Parameter `force_no_thinking: bool = False` an `chat()` und `chat_json()`. Bei `force_no_thinking=True` UND Ollama-Endpoint wird `extra_body["think"] = False` hart gesetzt (überschreibt das aus `reasoning_effort` abgeleitete `self._think`).
+2. **`backend/app/services/report_agent/planning.py`** — `plan_outline()` ruft `chat_json` mit `max_tokens=16384`, `temperature=0.2`, `force_no_thinking=True` auf. Bei `ValueError` mit `"len=0"` oder `"Invalid JSON format from LLM"` wird **einmalig** mit `max_tokens=24576` und `temperature=0.1` retried. Bei zweitem Failure greift der bestehende Default-Fallback (3 Sections).
+3. **`backend/app/services/report_agent/prompts.py`** — nur Modul-Docstring-Hinweis, kein Code-Change.
+4. **Tests:** `backend/tests/services/test_outline_planning_ollama.py` (NEU, 4 Tests) plus 1 neuer Test in `backend/tests/test_llm_client.py`.
 
 ## Tests
 
-Neu: 
-- `backend/tests/services/test_outline_planning_ollama.py` (3 Tests) — Outline-Robustness mit Ollama-Parametern
-- `backend/tests/test_llm_client.py` erweitert um 2 Tests für `OUTLINE_PLANNING_MAX_TOKENS`
+Neu:
+- `backend/tests/services/test_outline_planning_ollama.py` (4 Tests) — max_tokens-Pass-Through, force_no_thinking-Pass-Through, Retry bei empty Response, Fallback nach zwei Failures
+- `backend/tests/test_llm_client.py` erweitert um `test_chat_force_no_thinking_overrides_extra_body_think` plus angepasste Mock-Stubs für `**kwargs`
 
-Betroffene bestehende Tests laufen grün nach Anpassung der erwarteten `max_tokens`-Assertion.
-
-**Test-Counts:** Backend +5 / Frontend 0
+**Test-Counts:** Backend +5 (4 neu + 1 neu, plus 5 Mock-Stub-Anpassungen) / Frontend 0
 
 ## Geänderte Dateien
 
-- `backend/app/utils/llm_client.py` (+12 LOC)
-- `backend/app/services/report_agent/planning.py` (+18 LOC)
-- `backend/app/services/report_agent/prompts.py` (+25 LOC, Retry-Logik)
-- `backend/tests/services/test_outline_planning_ollama.py` (+67 LOC, NEU)
-- `backend/tests/test_llm_client.py` (+8 LOC)
+- `backend/app/utils/llm_client.py` (+13 / -1)
+- `backend/app/services/report_agent/planning.py` (+35 / -10)
+- `backend/app/services/report_agent/prompts.py` (Docstring only, +1)
+- `backend/tests/services/test_outline_planning_ollama.py` (NEU, 151 LOC)
+- `backend/tests/test_llm_client.py` (+52 / -3)
 
 ## Risiken & Gaps
 
-- Retry-Loop könnte bei LLM-Fehler (z. B. Netzwerk) hängen — Timeout ist auf 5 min Gesamtlaufzeit pro `plan_outline()` begrenzt.
-- `force_no_thinking=True` ist Ollama-spezifisch; andere Provider ignorieren den Header. Kein Regressionsrisiko.
-- `OUTLINE_PLANNING_MAX_TOKENS = 16384` ist ggf. für sehr große Seeds (>1000 Chunks) noch knapp — Eval-Snapshot sollte aufzeigen ob Erhöhung nötig ist.
+- Der Retry-Loop fängt bewusst nur `ValueError` (empty/invalid JSON). Netzwerk-Timeouts und andere Exceptions landen direkt im Default-Fallback — gewollt, weil ein Retry mit 24 576 Tokens bei toter Verbindung sinnlos wäre.
+- `force_no_thinking=True` greift nur bei `_is_ollama()` (Substring-Check auf `11434`). Custom-Port-Deployments oder Ollama-Cloud-Proxy verlieren die Wirkung — pre-existing, nicht durch diesen Slice eingeführt.
+- `max_tokens=16384` ist konservativ; für sehr große Seeds (>1000 Chunks) ggf. zu knapp. Eval-Snapshot zeigt ob Erhöhung nötig ist.
 
 ## Verifikations-Gate
 

@@ -77,8 +77,14 @@ const emit = defineEmits<{
 .sidebar-item--disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  pointer-events: none;
   color: var(--text-secondary, var(--fg-muted, #888));
+}
+
+/* Klick ist bereits durch Props/Template (`!disabled`) blockiert; ohne
+   ``pointer-events: none`` zeigt der Browser ``title``-Tooltip + ``cursor:
+   not-allowed`` korrekt an (Gemini-Review PR #466). */
+.sidebar-item--disabled:hover {
+  background: transparent;
 }
 
 .sidebar-item__badge {

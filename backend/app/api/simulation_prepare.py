@@ -35,12 +35,29 @@ from .simulation_common import (
 )
 
 
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
+
+
 def _is_local_endpoint(base_url: Optional[str]) -> bool:
-    """Prüft ob eine Base-URL auf einen lokalen Endpunkt (Ollama, localhost) zeigt."""
+    """Prüft, ob eine Base-URL auf einen lokalen Endpunkt zeigt.
+
+    Nutzt ``urllib.parse.urlparse`` und vergleicht den Hostnamen explizit gegen
+    eine Whitelist (``localhost``, ``127.0.0.1``, ``::1``, ``0.0.0.0``,
+    ``host.docker.internal``). Das verhindert Subdomain-Smuggling wie
+    ``http://not-localhost.com`` oder ``http://remote-server:11434``, die ein
+    reines Substring-Match fälschlich als lokal akzeptiert hätte
+    (Gemini-Review PR #466).
+    """
     if not base_url:
         return False
-    url_lower = base_url.lower()
-    return "localhost" in url_lower or "127.0.0.1" in url_lower or "11434" in url_lower
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in _LOCAL_HOSTS
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
