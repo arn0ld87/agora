@@ -1,0 +1,148 @@
+<mxfile host="app.diagrams.net" modified="2026-05-15T00:00:00.000Z" version="24.0.0" type="device">
+  <diagram name="System Architecture" id="page-1">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- External Layer -->
+        <mxCell id="container-external" value="External Systems" style="rounded=1;container=1;swimlane=1;startSize=25;fillColor=#f5f5f5;strokeColor=#666;dashed=1;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1" connectable="0">
+          <mxGeometry x="10" y="10" width="800" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-user" value="User / Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666;fontSize=12;" vertex="1" parent="container-external">
+          <mxGeometry x="30" y="35" width="120" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-traefik" value="Traefik Reverse Proxy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666;fontSize=12;" vertex="1" parent="container-external">
+          <mxGeometry x="220" y="35" width="160" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-signoz" value="SigNoz CE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666;fontSize=12;" vertex="1" parent="container-external">
+          <mxGeometry x="620" y="35" width="140" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Frontend Layer -->
+        <mxCell id="container-frontend" value="Frontend Layer" style="rounded=1;container=1;swimlane=1;startSize=25;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1" connectable="0">
+          <mxGeometry x="10" y="110" width="800" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-frontend" value="&lt;b&gt;Vue 3 + TypeScript + Pinia&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="container-frontend">
+          <mxGeometry x="300" y="40" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Backend API Layer -->
+        <mxCell id="container-backend" value="Backend API Layer" style="rounded=1;container=1;swimlane=1;startSize=25;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1" connectable="0">
+          <mxGeometry x="10" y="220" width="800" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-graph-api" value="Graph API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="container-backend">
+          <mxGeometry x="40" y="45" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-flask-api" value="&lt;b&gt;Flask API Gateway&lt;/b&gt;&lt;br/&gt;(Auth, Tickets, Upload)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="container-backend">
+          <mxGeometry x="300" y="45" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-report-api" value="Report API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="container-backend">
+          <mxGeometry x="560" y="45" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-stream-api" value="SSE Stream" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="container-backend">
+          <mxGeometry x="690" y="45" width="100" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Services Layer -->
+        <mxCell id="container-services" value="Services Layer" style="rounded=1;container=1;swimlane=1;startSize=25;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1" connectable="0">
+          <mxGeometry x="10" y="360" width="800" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-simulation" value="&lt;b&gt;Simulation Runner&lt;/b&gt;&lt;br/&gt;(OASIS Orchestrator)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="container-services">
+          <mxGeometry x="40" y="45" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-report-agent" value="&lt;b&gt;Report Agent&lt;/b&gt;&lt;br/&gt;(Package Split)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="container-services">
+          <mxGeometry x="240" y="45" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-ai-provider" value="&lt;b&gt;AI Provider&lt;/b&gt;&lt;br/&gt;(OpenAI, Gemini, Ollama)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="container-services">
+          <mxGeometry x="440" y="45" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-evidence" value="Evidence Binder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="container-services">
+          <mxGeometry x="40" y="125" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-confidence" value="Confidence Calculator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="container-services">
+          <mxGeometry x="240" y="125" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-quota" value="Persona Quota Plan" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="container-services">
+          <mxGeometry x="440" y="125" width="160" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Data Layer -->
+        <mxCell id="container-data" value="Data &amp;amp; External Runners" style="rounded=1;container=1;swimlane=1;startSize=25;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;html=1;whiteSpace=wrap;fontSize=14;fontStyle=1;" vertex="1" parent="1" connectable="0">
+          <mxGeometry x="10" y="570" width="800" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-neo4j" value="Neo4j" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="container-data">
+          <mxGeometry x="40" y="40" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-redis" value="Redis" style="shape=cylinder;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="container-data">
+          <mxGeometry x="200" y="40" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-oasis" value="OASIS / CAMEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="container-data">
+          <mxGeometry x="360" y="40" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="node-ollama" value="Ollama" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666;fontSize=12;" vertex="1" parent="container-data">
+          <mxGeometry x="540" y="40" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges -->
+        <mxCell id="edge-user-traefik" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-user" target="node-traefik">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-traefik-frontend" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-traefik" target="node-frontend">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-traefik-flask" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-traefik" target="node-flask-api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-frontend-flask" value="REST" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-frontend" target="node-flask-api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-frontend-stream" value="SSE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-frontend" target="node-stream-api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-flask-graph" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-flask-api" target="node-graph-api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-flask-report" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-flask-api" target="node-report-api">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-graph-sim" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-graph-api" target="node-simulation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-graph-neo4j" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-graph-api" target="node-neo4j">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-report-agent" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-report-api" target="node-report-agent">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-report-evidence" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-report-api" target="node-evidence">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-report-confidence" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-report-api" target="node-confidence">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-report-quota" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-report-api" target="node-quota">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-sim-ai" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-simulation" target="node-ai-provider">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-sim-oasis" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-simulation" target="node-oasis">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-ai-ollama" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-ai-provider" target="node-ollama">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-flask-redis" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-flask-api" target="node-redis">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-oasis-redis" value="pub/sub" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node-oasis" target="node-redis">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-flask-signoz" value="traces" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;dashed=1;" edge="1" parent="1" source="node-flask-api" target="node-signoz">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -10,10 +10,15 @@ Agora ist ein **lokal-first** Multi-Agent-Simulator für DACH-Zielgruppenreaktio
 
 **Stack:** Flask (Python 3.11) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`) + Redis (Pub/Sub-IPC) + Ollama. Package-Manager: `uv` fürs Backend, `npm` fürs Frontend.
 
-**Status:** v0.9.0+ post-tag · Layer 0–6 grün · Layer 7–8 teilweise · Layer 9–10 grün · M11 Phase 1–5b durch. **v1.0-Output-Vertrag-Plan** ([`PLAN.md`](PLAN.md)): Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün; offen P3.2-Verdrahtung, P4.1, P4.3, P4.4. Test-Counts und Layer-Status laufen ausschließlich über [`docu/STATUS.md`](docu/STATUS.md) — keine Inline-Zahlen mehr in README/CLAUDE.md/AGENTS.md.
+**Status:** v1.0.0 (2026-05-11) · Layer 0–6 grün · Layer 7–8 teilweise · Layer 9–10 grün · M11 Phase 1–5b durch. **v1.0-Output-Vertrag-Plan** ([`PLAN.md`](PLAN.md)): Phase 1 + P2.1/P2.2/P3.1/P3.3/P3.4/P4.2 grün; offen P3.2-Verdrahtung, P4.1, P4.3, P4.4. Test-Counts und Layer-Status laufen ausschließlich über [`docu/STATUS.md`](docu/STATUS.md) — keine Inline-Zahlen mehr in README/CLAUDE.md/AGENTS.md.
+
+**Graph-Stand (2026-05-15):** Knowledge-Graph (code-review-graph) zuletzt aktualisiert 2026-05-15 12:57 UTC. 701 Files, 6657 Nodes, 56089 Edges, 6394 Embeddings über Python/TypeScript/Vue/JavaScript/Bash. Bei jedem Slice-Merge oder Worktree-Subagent-Run `code-review-graph update` ausführen, bevor neue Briefings entstehen.
+
+**Aktive Plan-Pipeline:** [`docu/plans/2026-05-15-observability-slice-1.md`](docu/plans/2026-05-15-observability-slice-1.md) (End-to-End-Tracing der Sim-Pipeline mit SigNoz CE + OTel, geplant, Implementation offen).
 
 ## Sofort wichtig
 
+- **Tool-Reihenfolge ist Pflicht** (Details § Tool-Pflicht): `code-review-graph::get_minimal_context_tool` → `context7::resolve-library-id`+`query-docs` → `sequential-thinking` → `context-mode` → **erst dann** `Read`/`rg`/`Bash`. Skip → eine Zeile im Worklog warum.
 - **Branch-Hygiene:** Nie auf `main` direkt pushen. Branch-Namen: `feat/task-XX-kurztitel`, `fix/<scope>-<slug>`, `chore/<scope>-<slug>`. Linear-FF-Merge auf `main`, keine Rewrites publizierter Commits.
 - **Layer-Reihenfolge ist verbindlich.** Layer 1 ohne Layer 0 ist verboten. Detail-Tabelle siehe [`CLAUDE.md` § Architektur-Layer](CLAUDE.md#architektur-layer-status).
 - **Tests sind die Spec.** Pflichttests vor Refactor lesen. TDD: erst RED, dann GREEN, dann Commit. Ausnahmen begründen.
@@ -43,19 +48,35 @@ Erst nach Findings-Sichtung mergen — `git checkout main && git merge --ff-only
 Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Agent greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Veraltete Annahmen,
 halluzinierte Symbole, doppelte Recherche und unnötig große File-Reads sind zu vermeiden.
 
-**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context-mode`, `context7`, `sequential-thinking`, GitHub/`gh` und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
+**Diese Sektion überschreibt das Default-Verhalten. Sie ist nicht verhandelbar.** Skip-Begründungen gehören ins Worklog — nicht in den Chat.
+
+### TL;DR-Entscheidungsbaum
+
+```
+Frage über…             →   Pflicht-Tool (zuerst)            →   Fallback
+─────────────────────────────────────────────────────────────────────────
+Symbol/Funktion/Klasse  →   code-review-graph                →   rg (nur wenn Graph leer)
+Caller/Callee/Tests     →   code-review-graph::query_graph   →   —
+Blast-Radius/Impact     →   code-review-graph::impact_radius →   manuelles Import-Tracing
+Library/SDK/Framework   →   context7                         →   Training-Wissen (verboten)
+Multi-File / ambig      →   sequential-thinking (3–5)        →   direkter Edit (verboten)
+Große Tool-/Log-Outputs →   context-mode (ctx_execute_*)     →   Bash + Read (verboten)
+Deferred MCP-Tool       →   ToolSearch select:<name>         →   „Tool fehlt" behaupten (verboten)
+Bash/yml/Markdown/Schemas → Read / rg / Bash                 →   —
+```
 
 ### Pre-Flight-Checkliste (vor erstem Bash/Read)
 
 Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **strikt**:
 
-1. **`code-review-graph::get_minimal_context_tool`** mit `task: "<one-liner>"`. Pflicht für Token-Sparen: liefert Risk-Score + Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
-2. **`context7::resolve-library-id` + `query-docs`** bei jeder Lib/Framework/SDK/CLI-Berührung (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker). Training-Cutoff ist nicht aktuell.
-3. **`sequential-thinking`** bei ambigen, multi-file, oder pipeline-überschreitenden Tasks. Mindestens 3–5 Thoughts.
-4. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen.
-5. **Dann erst** `Read`/`rg`/`Bash`.
+1. **Skill-/Deferred-Tool-Liste scannen.** Wenn ein potenziell passendes MCP-Tool nur als Name in der System-Reminder steht, lade es via `ToolSearch query:"select:<name>"` **bevor** du behauptest, eine Fähigkeit fehle.
+2. **`code-review-graph::get_minimal_context_tool`** mit `task: "<one-liner>"`. Pflicht für Token-Sparen: liefert Risk-Score + Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen. **Auch wenn du glaubst, du kennst den Pfad.**
+3. **`context7::resolve-library-id` + `query-docs`** bei jeder Lib/Framework/SDK/CLI-Berührung (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker). Training-Cutoff ist Anfang 2026 — Repo lebt auf neueren Versionen.
+4. **`sequential-thinking`** bei ambigen, multi-file, oder pipeline-überschreitenden Tasks. Mindestens 3 Thoughts, gerne mit Revisions. Output: konkretes Akzeptanzkriterium.
+5. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen. Bash mit erwartetem Output >20 Zeilen → automatisch `ctx_batch_execute`/`ctx_execute`.
+6. **Dann erst** `Read`/`rg`/`Bash`.
 
-Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum.
+Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum. Diese Zeile fehlt → der nächste Run wiederholt den Fehler.
 
 ### code-review-graph — Pflicht-First-Stop
 
@@ -137,8 +158,19 @@ Mindestens 3 Thoughts. Output: konkretes Akzeptanzkriterium.
 | „Sequential-thinking ist Overkill" | Wenn du das denkst, ist es selten klein |
 | „Der Subagent klärt das schon" | Subagent läuft auf deinem Briefing |
 | „Tool ist gerade ConnectING" | `ToolSearch` wartet bis Tool ready |
+| „Das Tool steht nicht im Tool-Header" | Deferred Tools sind unsichtbar bis `ToolSearch` |
+| „Ich mache nur eine Klarstellungsfrage" | Klärung = Aufgabe. Skill-/Tool-Check **vor** der Frage |
+| „Ich kann den Pfad raten" | Raten → Halluzination. `semantic_search_nodes_tool` braucht ~50 Tokens |
 
 Defaults, keine Eskalation. Skip → **eine Zeile** im Worklog notieren.
+
+### Enforcement-Protokoll
+
+Im Pre-PR-Self-Review oder Code-Review eines Subagent-Branches gilt:
+
+- Worklog enthält **kein** Sign-off von Graph-Query / Context7-Lookup / Sequential-Thoughts trotz Multi-File-Scope → Slice ist **nicht** review-ready, nochmal durch.
+- Subagent-Briefing zitiert Symbole/Pfade ohne Graph-Beleg → Brief ist unvollständig, Worker wird Halluzinationen produzieren.
+- Library-Pattern im Diff ohne Context7-Beleg im Worklog → Senior-Review-Pflicht, nicht direkt mergen.
 
 ## Stack-Map
 
@@ -166,6 +198,10 @@ backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
   tests/services/
   tests/eval/               Baseline-Eval-Suite + Snapshots (Sub-Slice 17)
   scripts/                  OASIS-Subprozess + run_*_simulation.py
+    subprocess_redis_bridge.py  Redis-IPC-Bridge im OASIS-Eventloop (#17 Phase D)
+    _sim_common.py          CAMEL-Context-Floor + (geplant Slice 1c) init_runner_tracing
+  app/observability/        (geplant Slice 1b) init_tracing() + Redis-Trace-Propagator
+  tests/observability/      (geplant Slice 1) Tracing-Init, Subprocess-Propagation, Redis-Propagator
 frontend/                   Vue 3 + TS + Pinia + Vitest + Zod
   src/
     contracts/              Zod-Spiegel zu backend/app/contracts/ (auto-generiert via dump_schemas)
@@ -175,7 +211,10 @@ frontend/                   Vue 3 + TS + Pinia + Vitest + Zod
     composables/            10/10 TypeScript (#72 grün) — useEventStream, usePolling, useWorkspaceMode, …
     components/Step*.vue    Pipeline-Steps (667/797/877 LOC — Step2/4 erledigt per F8, Step3 noch offen)
     layouts/Workspace*.vue  Workspace-Shell (EPIC-03)
+    observability/          (geplant Slice 1e) WebTracerProvider + SigNoz-Deep-Link
 schemas/                    auto-generiert via `python -m app.contracts.dump_schemas`
+deploy/observability/       (geplant Slice 1a) OTel-Collector-Config
+docker-compose.observability.yml  (geplant Slice 1a) SigNoz CE + OTel-Collector, Profile `observability`
 deploy/
   nginx/agora.conf          Reverse-Proxy (SSE-Buffering aus, /healthz, statisch + /api/*)
   compose/docker-compose.prod-with-proxy.yml  Sidecar-Topologie
@@ -438,6 +477,19 @@ Detail-Mapping mit Akzeptanzkriterien je Slice: [`docu/plan.heuristic.md`](docu/
   - Backend nicht angefasst.
 
 - **v1.0-Output-Vertrag** (PLAN.md) — offen: P3.2, P4.1, P4.3, P4.4. Status: [`docu/STATUS.md`](docu/STATUS.md).
+
+- **Observability Slice 1 — End-to-End-Tracing** (2026-05-15 geplant, Plan abgenommen, Implementation offen).
+  Plan: [`docu/plans/2026-05-15-observability-slice-1.md`](docu/plans/2026-05-15-observability-slice-1.md).
+  Treiber: Lerneffekt + Story (System-Integration-Career, Q3 2026) + lokal-first Observability für AI-Stack. **Kein** Performance-/Wartbarkeits-Schmerz.
+  Stack: SigNoz Community Edition (Apache 2.0, self-hosted via `docker-compose.observability.yml --profile observability`) + OpenTelemetry-Collector + ClickHouse.
+  Branch: `feat/observability-slice-1`. Strategie: lokale Sub-Slices 1a–1f, ein gemeinsamer PR am Ende (analog Design-v4-Epic).
+
+  Wichtigste Mechanik:
+  - Trace-Context propagiert via W3C-`traceparent` durch vier Hops: gevent-monkey-patched Flask, `subprocess.Popen`-Env-Var, Redis-pub/sub-Payload-Feld `_otel_traceparent`, SSE-Frame-`trace_id`.
+  - Drei Service-Namen: `agora-frontend`, `agora-backend`, `agora-oasis-runner`.
+  - Frontend rendert SigNoz-Deep-Link aus `trace_id` im SimDetail-Panel.
+  - Default-Off: ohne `OTEL_ENABLED=true` startet Agora unverändert (keine Layer-9-Hardening-Re-Validation in Slice 1).
+  - Folge-Slices (außerhalb 1): Metrics, Logs-Korrelation per `trace_id`, SLOs + Burn-Rate-Alerts.
 
 ## Referenz
 

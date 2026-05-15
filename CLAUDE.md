@@ -6,8 +6,11 @@ Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen.
 Stack: **Flask + Pydantic v2 + Vue 3 + Neo4j + Ollama + OASIS** (CAMEL-AI Subprozess).
 Status: **v1.0.0 (2026-05-11)** · alle 14 PR-Slices der v1.0-Output-Vertrag-Roadmap aus [`PLAN.md`](PLAN.md) durch · Layer 0–10 grün · Test-Counts: [`docu/STATUS.md`](docu/STATUS.md) · [Release Notes](docu/2026-05-11-v1.0.0-release-notes.md).
 
+**Graph-Stand:** Knowledge-Graph (code-review-graph) zuletzt aktualisiert 2026-05-15. 701 Files, 6657 Nodes, 56089 Edges, 6394 Embeddings über Python/TypeScript/Vue/JavaScript/Bash. Bei jedem Slice-Merge oder Worktree-Subagent-Run gilt: `code-review-graph update` ausführen, bevor Briefings erstellt werden.
+
 ## Sofort wichtig
 
+- **Tool-Reihenfolge ist Pflicht** (Details § Tool-Pflicht): `code-review-graph::get_minimal_context_tool` → `context7::resolve-library-id`+`query-docs` → `sequential-thinking` → `context-mode` → **erst dann** `Read`/`rg`/`Bash`. Überspringen kostet Tokens und produziert Halluzinationen. Skip → eine Zeile im Worklog warum.
 - **Branch-Hygiene:** Nie auf `main` direkt pushen. Branch-Namen: `feat/task-XX-kurztitel`. Linear-FF-Merge auf main, keine Rewrites publizierter Commits.
 - **Tests sind die Spec.** Pflichttests vor Refactor lesen. TDD: erst RED, dann GREEN, dann Commit.
 - **Pakete unter Linux:** `nala` statt `apt`. Python-Deps via `uv`.
@@ -57,13 +60,17 @@ backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
     models/                 Dataclasses (werden migriert)
     storage/                Neo4j-Adapter
     utils/llm_client.py     Sub-Slice 05: chat_json strict-Schema-Mode
+    observability/          Observability Slice 1 (geplant 2026-05-15): init_tracing() + Redis-Trace-Propagator
   tests/
     contracts/              Pflicht für jeden Vertrag
     api/                    Schema-Tests, jsonschema-basiert
     services/
     eval/                   Sub-Slice 17: Baseline-Eval-Suite + Snapshots
+    observability/          Observability Slice 1 (geplant): Tracing-Init, Subprocess-Propagation, Redis-Propagator
   scripts/                  OASIS-Subprozess + run_*_simulation.py
-frontend/                   Vue 3 + JS + Pinia + Vitest + Zod
+    subprocess_redis_bridge.py  Issue #17 Phase D: Redis-IPC-Bridge im OASIS-Eventloop
+    _sim_common.py          CAMEL-Context-Floor + init_runner_tracing (Slice 1c geplant)
+frontend/                   Vue 3 + TS + Pinia + Vitest + Zod
   src/
     contracts/              Zod-Spiegel zu backend/app/contracts/
       personaQuotaContract.ts  Sub-Slice 20c/24
@@ -71,7 +78,12 @@ frontend/                   Vue 3 + JS + Pinia + Vitest + Zod
     components/
       Step2EnvSetup.vue     Quoten-Editor (Sub-Slice 20c/24)
       Step4Report.vue       Sub-Slice 15: strict-Zod-Parse + Schema-Banner
+    composables/useEventStream.ts  SSE-Consumer (Issue #9 Phase C), 10/10 TS
+    api/stream.ts           EventSource-Factory mit signed-tickets (P0.2c)
+    observability/          Observability Slice 1 (geplant): WebTracerProvider + SigNoz-Deep-Link
 schemas/                    auto-generiert via app.contracts.dump_schemas
+deploy/observability/       Observability Slice 1 (geplant): OTel-Collector-Config
+docker-compose.observability.yml  Observability Slice 1 (geplant): SigNoz CE + OTel-Collector, Profile `observability`
 docu/                       Architektur, Logs, Plans, Arbeitsprotokolle
 prompts/                    UI-Prompt-Vorlagen
 ```
@@ -108,6 +120,7 @@ Layer-0–6 + 9–10 sind durch. **v1.0-Output-Vertrag-Pfad** (PLAN.md): Phase 1
 - **Init-Logs doppelt:** Folge-Slice braucht Fork-Safety-Verifikation der Neo4j/Redis-Pools vor `--preload`-Aktivierung.
 - **Dependabot-Aufräumen:** Offene PRs #323 (`mistune` 3.1.4 → 3.2.1), #326 (`pygments` 2.19.2 → 2.20.0). PR #315 (`camel-ai`) bleibt blockiert durch `camel-oasis==0.2.5` hard pin.
 - **Live-Settings #212 (P2):** Erst nach M11-Stabilisierung.
+- **Observability Slice 1 (geplant 2026-05-15):** End-to-End-Tracing der Sim-Pipeline mit SigNoz CE + OpenTelemetry. Vier seltene Hops: gevent↔OTel, `subprocess.Popen`-Boundary, Redis-pub/sub-Propagator, SSE-Frame-Korrelation. Plan: [`docu/plans/2026-05-15-observability-slice-1.md`](docu/plans/2026-05-15-observability-slice-1.md). Geschätzter Aufwand ~8–10 Tage in 6 atomic Sub-Slices (1a–1f). Default `OTEL_ENABLED=false` — kein Overhead solange ungenutzt.
 
 ## Kommandos (immer diese)
 
@@ -137,22 +150,41 @@ git diff --exit-code schemas/    # nach dump_schemas darf nichts driften
 ## Tool-Pflicht (nicht verhandelbar)
 
 Die häufigste Quelle für Rework und Token-Verschwendung in diesem Repo ist: **Claude greift direkt zu `rg`/`Read` statt zu Knowledge-Graph oder Live-Docs**. Das produziert
-veraltete Annahmen, halluzinierte Symbole, doppelte Recherche und unnötig große Kontextfenster. Daher gilt:
+veraltete Annahmen, halluzinierte Symbole, doppelte Recherche und unnötig große Kontextfenster.
 
-**Pflichtziel:** `code-review-graph` ist der First-Stop, um Token zu sparen und präzisen Strukturkontext zu laden. Weitere spezialisierte Tools wie `context-mode`, `context7`, `sequential-thinking`, GitHub/`gh`, honcho-memory/episodic-memory und passende MAP/MCP-Tools sind aktiv zu nutzen, sobald sie besser passen als rohe Datei- oder Shell-Suche.
+**Diese Sektion überschreibt das Default-Verhalten. Sie ist nicht verhandelbar.** Skip-Begründungen gehören ins Worklog — nicht in den Chat.
+
+### TL;DR-Entscheidungsbaum
+
+```
+Frage über…             →   Pflicht-Tool (zuerst)            →   Fallback
+─────────────────────────────────────────────────────────────────────────
+Symbol/Funktion/Klasse  →   code-review-graph                →   rg (nur wenn Graph leer)
+Caller/Callee/Tests     →   code-review-graph::query_graph   →   —
+Blast-Radius/Impact     →   code-review-graph::impact_radius →   manuelles Import-Tracing
+Library/SDK/Framework   →   context7                         →   Training-Wissen (verboten)
+Multi-File / ambig      →   sequential-thinking (3–5)        →   direkter Edit (verboten)
+Große Tool-/Log-Outputs →   context-mode (ctx_execute_*)     →   Bash + Read (verboten)
+Eigene Vorgeschichte    →   honcho-memory / episodic-memory  →   git log
+Skill in System-Reminder →  Skill-Tool invoken               →   Eigenimplementierung
+Deferred MCP-Tool       →   ToolSearch select:<name>         →   „Tool fehlt" behaupten (verboten)
+Bash/yml/Markdown/Schemas → Read / rg / Bash                 →   —
+```
 
 ### Pre-Flight-Checkliste (bevor du erste Bash/Read absetzt)
 
 Für jede Task — auch „nur eine kurze Frage" — laufe diese Reihenfolge **strikt**:
 
-1. **Skill-Liste scannen.** Die System-Reminder listet alle Skills auf. Falls einer matcht: zuerst invoken.
-2. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Pflicht für Token-Sparen: liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen.
-3. **`mcp__claude_ai_Context7__resolve-library-id` + `query-docs`** wenn die Task eine Library/Framework/SDK/CLI berührt (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker, …). Auch wenn du „die Lib kennst" — Training-Cutoff ist nicht aktuell.
-4. **`sequential-thinking`** invoken wenn die Task ambig ist, Multi-File-Scope hat, oder eine Pipeline-Grenze überschreitet (graph ↔ env ↔ simulation ↔ report). Mindestens 3–5 Thoughts.
-5. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen.
-6. **Dann erst** `Read`/`rg`/`Bash`.
+1. **Skill-Liste scannen.** Die System-Reminder listet alle Skills auf. Falls einer matcht: zuerst invoken. „Quick question" zählt nicht als Ausnahme.
+2. **Deferred-Tool-Liste scannen.** Wenn ein potenziell passendes MCP-Tool nur als Name in der System-Reminder steht (keine Schema-Daten), lade es via `ToolSearch query:"select:<name>"` **bevor** du behauptest, eine Fähigkeit fehle.
+3. **`mcp__code-review-graph__get_minimal_context_tool`** mit `task: "<one-liner>"` aufrufen. Pflicht für Token-Sparen: liefert Risk-Score + relevante Communities + Tool-Empfehlungen in ~100 Tokens statt ganze Files in den Kontext zu ziehen. **Auch wenn du glaubst, du kennst den Pfad.**
+4. **`mcp__claude_ai_Context7__resolve-library-id` + `query-docs`** wenn die Task eine Library/Framework/SDK/CLI berührt (Vue 3, Pydantic v2, Flask, Neo4j-Driver, OASIS/CAMEL, Ollama, Vite, pytest, uv, gh, docker, …). Training-Cutoff ist Anfang 2026 — Repo lebt auf neueren Versionen.
+5. **`mcp__MCP_DOCKER__sequentialthinking`** wenn die Task ambig ist, Multi-File-Scope hat, oder eine Pipeline-Grenze überschreitet (graph ↔ env ↔ simulation ↔ report). Mindestens 3 Thoughts, gerne mit Revisions. Output: konkretes Akzeptanzkriterium.
+6. **`context-mode`** für große Tool-Ausgaben, Doku-/Wissensinhalte, Log-/JSON-Analyse und kompakte On-Demand-Suche nutzen (`ctx_index`, `ctx_search`, `ctx_execute_file`, `ctx_batch_execute`), statt Rohdaten in den Chat zu ziehen. Bash mit erwartetem Output >20 Zeilen → automatisch `ctx_batch_execute`/`ctx_execute`.
+7. **honcho-memory / episodic-memory** prüfen, bevor du den User nach Setup/Präferenzen/Projekt-Historie fragst.
+8. **Dann erst** `Read`/`rg`/`Bash`.
 
-Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum (z. B. „get_minimal_context war out-of-date, deshalb direkter Read").
+Wenn du einen Schritt überspringst, schreibe **eine Zeile** ins Arbeitsprotokoll warum (z. B. „get_minimal_context war out-of-date, deshalb direkter Read"). Diese Zeile fehlt → der nächste Run wiederholt den Fehler.
 
 ### code-review-graph — Pflicht-First-Stop
 
@@ -244,8 +276,20 @@ Mindestens 3 Thoughts, gerne mit Revisions (`revises_thought_number`). Output: k
 | „Sequential-thinking ist Overkill für so eine kleine Aufgabe" | Wenn du das denkst, ist es selten klein |
 | „Der Subagent klärt das schon" | Subagent läuft auf deinem Briefing — Brief = Risiko |
 | „Tool ist gerade ConnectING" | `ToolSearch` ruft die Tools im Connecting-State auf und wartet |
+| „Das Tool steht nicht im Tool-Header" | Deferred Tools sind unsichtbar bis `ToolSearch` — erst prüfen, dann behaupten |
+| „Ich mache nur eine Klarstellungsfrage" | Klärung = Aufgabe. Skill- und Tool-Check kommt **vor** der Frage |
+| „Ich kann den Pfad raten" | Raten → Halluzination. `semantic_search_nodes_tool` braucht ~50 Tokens |
+| „Das war im letzten Run schon mal so" | Sessions starten ohne Memory. `episodic-memory` oder `git log` ziehen |
 
 Defaults, keine Eskalation. Wenn du eins davon überspringst, **eine Zeile** im Worklog notieren — damit der nächste Run den Fehler nicht wiederholt.
+
+### Enforcement-Protokoll
+
+Im Pre-PR-Self-Review oder Code-Review eines Subagent-Branches gilt:
+
+- Worklog enthält **kein** Sign-off von Graph-Query / Context7-Lookup / Sequential-Thoughts trotz Multi-File-Scope → Slice ist **nicht** review-ready, nochmal durch.
+- Subagent-Briefing zitiert Symbole/Pfade ohne Graph-Beleg → Brief ist unvollständig, Worker wird Halluzinationen produzieren.
+- Library-Pattern im Diff ohne Context7-Beleg im Worklog → Senior-Review-Pflicht, nicht direkt mergen.
 
 ## Verifikations-Disziplin
 
@@ -382,6 +426,18 @@ Signalen direkt Opus ziehen:
 
 - **v1.0-Output-Vertrag** (PLAN.md) — offen: P3.2-Verdrahtung, P4.1, P4.3, P4.4.
   Status-Tabelle in [`docu/STATUS.md`](docu/STATUS.md).
+
+- **Observability Slice 1 — End-to-End-Tracing** (2026-05-15 geplant, Plan abgenommen, Implementation offen).
+  Plan: [`docu/plans/2026-05-15-observability-slice-1.md`](docu/plans/2026-05-15-observability-slice-1.md).
+  Treiber: Lerneffekt + Story (System-Integration-Career, Q3 2026) + lokal-first Observability für AI-Stack. **Kein** Performance-/Wartbarkeits-Schmerz.
+  Stack: SigNoz Community Edition (Apache 2.0, self-hosted) + OpenTelemetry-Collector + Tempo-Style-Traces über ClickHouse.
+  Branch: `feat/observability-slice-1`. Strategie: lokale Slices 1a–1f, ein gemeinsamer PR am Ende des End-to-End-Pfads (analog Design-v4-Epic).
+
+  Wichtigste Mechanik:
+  - Trace-Context propagiert via W3C-`traceparent` durch vier Hops: gevent-monkey-patched Flask, `subprocess.Popen`-Env-Var, Redis-pub/sub-Payload-Feld (`_otel_traceparent`), SSE-Frame-`trace_id`.
+  - Frontend rendert SigNoz-Deep-Link aus aktueller `trace_id` im SimDetail-Panel.
+  - Backend nutzt drei Service-Namen: `agora-frontend`, `agora-backend`, `agora-oasis-runner`.
+  - Default-Off: ohne `OTEL_ENABLED=true` startet Agora unverändert (keine Layer-9-Hardening-Re-Validation in Slice 1).
 
 ## Verboten
 
