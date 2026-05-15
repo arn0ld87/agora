@@ -33,6 +33,16 @@ _STRICT_UNSUPPORTED_HINTS = (
 )
 
 
+def _read_active_config_safely() -> Optional[Dict[str, Any]]:
+    """Load the active LLM config without raising on missing/invalid file."""
+    try:
+        from ..api.llm_active import load_active_config
+        cfg = load_active_config()
+        return cfg or None
+    except Exception:  # noqa: BLE001 — never block LLMClient construction
+        return None
+
+
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
     """Best-effort recovery for an LLM JSON answer cut off at the output cap.
 
@@ -93,7 +103,44 @@ class LLMClient:
         routing_version: Optional[int] = None,
         route_stage: Optional[str] = None,
         route_provider_id: Optional[str] = None,
+        use_active_config: bool = True,
     ):
+        # When no explicit model is set, fall back to the user's active
+        # provider/model selection (Settings → LLM-Auswahl). Falls back to
+        # Config.* if no active config exists. Resolves api_key+base_url via
+        # SecretResolver/Provider-Registry analogous to from_route().
+        active_provider_id: Optional[str] = None
+        if use_active_config and model is None:
+            active = _read_active_config_safely()
+            if active:
+                active_provider_id = active.get("provider_id")
+                active_model = active.get("model")
+                active_base = active.get("base_url")
+                if active_model:
+                    model = active_model
+                if active_base and not base_url:
+                    base_url = active_base
+                if active_provider_id and not api_key:
+                    try:
+                        from ..services.llm_provider_registry import LlmProviderRegistry
+                        from ..services.secret_resolver import SecretResolver
+                        registry = LlmProviderRegistry()
+                        descriptor = next(
+                            (p for p in registry.get_providers() if p.id == active_provider_id),
+                            None,
+                        )
+                        if descriptor is not None:
+                            if not base_url:
+                                base_url = descriptor.base_url
+                            resolver = SecretResolver()
+                            api_key = resolver.get_api_key(active_provider_id, descriptor.type)
+                    except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
+                        logger.warning(
+                            "Failed to resolve active LLM config (provider=%s): %s",
+                            active_provider_id,
+                            exc,
+                        )
+
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
@@ -268,19 +315,22 @@ class LLMClient:
         """Infer the LLM provider from base_url and model name.
 
         Heuristics (in priority order):
-        1. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud proxy).
+        1. Base URL contains ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
         2. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
         3. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
-        4. Fallback → ``"unknown"``.
+        4. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint).
+        5. Fallback → ``"unknown"``.
         """
         model_name = self.model or ""
-        base = self.base_url or ""
-        if model_name.endswith(":cloud"):
+        base = (self.base_url or "").lower()
+        if "ollama.com" in base:
             return "cloud"
         if "11434" in base:
             return "ollama"
         if "openai.com" in base or "api.openai" in base:
             return "openai"
+        if model_name.endswith(":cloud"):
+            return "cloud"
         return "unknown"
 
     def _publish_model_active(

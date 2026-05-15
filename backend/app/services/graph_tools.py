@@ -535,7 +535,8 @@ Please generate 3-5 interview questions."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.5
+                temperature=0.5,
+                max_tokens=8192,
             )
 
             return response.get("questions", [f"What is your perspective on {interview_requirement}?"])
