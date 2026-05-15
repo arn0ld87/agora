@@ -723,6 +723,13 @@
       "select": "Select",
       "navigate": "Navigate",
       "close": "Close"
+    },
+    "dynamic": {
+      "runLabel": "Run: {name}",
+      "reportLabel": "Report: {name}",
+      "statusRunning": "running",
+      "statusPaused": "paused",
+      "statusPending": "pending"
     }
   },
   "topbar": {

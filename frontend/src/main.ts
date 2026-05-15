@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
 
@@ -29,5 +30,9 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
+
+// Registriere i18n-Global fuer Stores, die ausserhalb des Vue-Setup-Kontexts
+// uebersetzen muessen (z.B. commandsStore). Kein localStorage-Zugriff beim Import.
+registerI18n(i18n.global as Parameters<typeof registerI18n>[0])
 
 app.mount('#app')

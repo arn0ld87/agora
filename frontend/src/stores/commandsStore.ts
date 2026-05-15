@@ -15,6 +15,7 @@ import type { Router } from 'vue-router'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { useRunsPolling } from '@/composables/useRunsPolling'
 import type { RunDetail } from '@/contracts/runsContract'
+import { t } from '@/i18n/translate'
 
 export interface Command {
   id: string
@@ -78,6 +79,7 @@ export const useCommandsStore = defineStore('commands', () => {
   // Dynamische Commands (reaktiv, wird durch bindDynamicCommands befuellt).
   const dynamicCommands = ref<Command[]>([])
   let stopWatch: (() => void) | null = null
+  let stopPolling: (() => void) | null = null
 
   /**
    * Baut statische Commands und verdrahtet router.push.
@@ -107,7 +109,7 @@ export const useCommandsStore = defineStore('commands', () => {
     // Verhindere doppelte Watches
     if (stopWatch) return
 
-    const { runs, start } = useRunsPolling(10_000)
+    const { runs, start, stop } = useRunsPolling(10_000)
 
     // Polling starten (no-op wenn bereits laufend).
     // Promise.resolve() macht den Aufruf robust gegen gemockte start()-Varianten
@@ -115,6 +117,7 @@ export const useCommandsStore = defineStore('commands', () => {
     Promise.resolve(start()).catch(() => {
       // Polling-Start-Fehler (z.B. ohne API) ignorieren
     })
+    stopPolling = stop
 
     stopWatch = watch(
       runs,
@@ -124,10 +127,16 @@ export const useCommandsStore = defineStore('commands', () => {
         for (const run of currentRuns) {
           if (ACTIVE_STATUSES.has(run.status)) {
             const label = runLabel(run)
-            const statusLabel = run.status === 'processing' ? 'laufend' : run.status === 'paused' ? 'pausiert' : 'wartend'
+            const statusKey =
+              run.status === 'processing'
+                ? 'cmd.dynamic.statusRunning'
+                : run.status === 'paused'
+                  ? 'cmd.dynamic.statusPaused'
+                  : 'cmd.dynamic.statusPending'
+            const statusLabel = t(statusKey)
             cmds.push({
               id: `sim:${run.run_id}`,
-              label: `Lauf: ${label} (${statusLabel})`,
+              label: t('cmd.dynamic.runLabel', { name: `${label} (${statusLabel})` }),
               group: 'sim',
               keywords: [run.run_id, run.entity_id, label, 'simulation', 'lauf', 'live', run.status],
               action: () => {
@@ -150,7 +159,7 @@ export const useCommandsStore = defineStore('commands', () => {
           const label = runLabel(run)
           cmds.push({
             id: `report:${reportId}`,
-            label: `Report: ${label}`,
+            label: t('cmd.dynamic.reportLabel', { name: label }),
             group: 'report',
             keywords: [reportId, run.run_id, label, 'report', 'bericht', 'ergebnis'],
             action: () => {
@@ -175,6 +184,8 @@ export const useCommandsStore = defineStore('commands', () => {
   function unbindDynamicCommands(): void {
     stopWatch?.()
     stopWatch = null
+    stopPolling?.()
+    stopPolling = null
     dynamicCommands.value = []
   }
 
