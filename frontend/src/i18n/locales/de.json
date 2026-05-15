@@ -261,6 +261,8 @@
       "baseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta/openai/",
       "missingKey": "Provider-Override ist aktiv, aber der API-Key fehlt.",
       "dbKeyPlaceholder": "Server-Key wird verwendet (in Einstellungen hinterlegt)",
+      "dbKeyPresentBanner": "Server-Key für {provider} wird automatisch verwendet (aus Einstellungen → LLM-Anbieter).",
+      "sessionKeyOverrideToggle": "Stattdessen eigenen Sitzungs-Key eingeben",
       "sessionKeyToggle": "Eigenen Key nur für diese Browser-Sitzung verwenden",
       "sessionKeyLabel": "Sitzungs-API-Key",
       "noDbKeyBanner": "Für {provider} ist in Einstellungen → LLM-Anbieter kein API-Schlüssel hinterlegt. Bitte dort speichern oder hier eingeben.",

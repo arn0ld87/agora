@@ -18,7 +18,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.simulation_prepare import _parse_quota_plan, _resolve_max_agents_with_floor
-from app.services.report_agent import MIN_PERSONA_TABLE_ROWS
+from app.services.report_agent import MIN_PERSONA_TABLE_ROWS, MIN_SIMULATION_AGENTS
 from app.contracts import PersonaQuotaPlan
 from app.services import prepare_service
 from app.services.simulation_manager import SimulationManager
@@ -83,8 +83,16 @@ def test_parse_quota_plan_rejects_non_dict_payload():
 
 
 def test_resolve_max_agents_with_floor_enforces_minimum():
-    assert _resolve_max_agents_with_floor(1) == MIN_PERSONA_TABLE_ROWS
-    assert _resolve_max_agents_with_floor("25") == MIN_PERSONA_TABLE_ROWS
+    """Floor steht auf MIN_SIMULATION_AGENTS (10), nicht mehr auf MIN_PERSONA_TABLE_ROWS (50).
+
+    Begründung: Smoke #6 erlaubt Mini-Seeds < 50 Agenten; die Persona-Pool-
+    Hochskalierung auf 50 Personas passiert erst im Report-Pfad via
+    Round-Robin (siehe ``_apply_persona_floor_to_entities``).
+    """
+    assert _resolve_max_agents_with_floor(1) == MIN_SIMULATION_AGENTS
+    assert _resolve_max_agents_with_floor("5") == MIN_SIMULATION_AGENTS
+    assert _resolve_max_agents_with_floor(MIN_SIMULATION_AGENTS) == MIN_SIMULATION_AGENTS
+    assert _resolve_max_agents_with_floor("25") == 25
     assert _resolve_max_agents_with_floor(MIN_PERSONA_TABLE_ROWS + 5) == MIN_PERSONA_TABLE_ROWS + 5
     assert _resolve_max_agents_with_floor(None) is None
     assert _resolve_max_agents_with_floor("invalid") is None

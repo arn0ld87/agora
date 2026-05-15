@@ -7,10 +7,11 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-from .contract_constants import MIN_PERSONA_TABLE_ROWS
+from .contract_constants import MIN_PERSONA_TABLE_ROWS, MIN_SIMULATION_AGENTS
 
 __all__ = [
     "MIN_PERSONA_TABLE_ROWS",
+    "MIN_SIMULATION_AGENTS",
     "FORBIDDEN_EVIDENCE_TYPES",
     "VALID_TOOL_NAMES",
     "EvidenceItem",

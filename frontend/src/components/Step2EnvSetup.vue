@@ -51,11 +51,13 @@ const {
   runtimeApiKeyMissing,
 } = useRuntimeLlmOptions(t)
 
-// --- DB-Key-Status für Override-Provider (Smoke-Fix Slice 04) ---
+// --- DB-Key-Status für Override-Provider (Smoke-Fix Slice 04 + Followup) ---
 /** True wenn für den gewählten Override-Provider ein Key in der Settings-DB hinterlegt ist. */
 const providerDbHasKey = ref(false)
 /** True während der has-key-Status abgefragt wird. */
 const providerDbKeyChecking = ref(false)
+/** True wenn User trotz DB-Key explizit einen Session-Key eintragen will. */
+const showSessionKeyOverride = ref(false)
 
 async function _checkProviderDbKey(providerId) {
   if (!providerId || providerId === 'default') {
@@ -76,6 +78,8 @@ watchEffect(() => {
   } else {
     providerDbHasKey.value = false
   }
+  // Provider-Wechsel oder Toggle-aus: Session-Override-UI zurücksetzen.
+  showSessionKeyOverride.value = false
 })
 
 // ----- Model + language picker (useEnvForm — Sub-Slice 37, Refs #203) -----
@@ -335,21 +339,34 @@ onMounted(() => {
                 <p v-if="providerDbKeyChecking" class="hint">
                   {{ t('step2.runtimeProvider.checkingKey') }}
                 </p>
-                <!-- Banner: kein DB-Key, kein Session-Key gesetzt -->
+                <!-- DB-Key vorhanden: Banner + Toggle für optionalen Session-Override -->
+                <template v-else-if="providerDbHasKey">
+                  <p class="hint info provider-override-banner" role="status">
+                    {{ t('step2.runtimeProvider.dbKeyPresentBanner', { provider: runtimeProvider }) }}
+                  </p>
+                  <label class="session-key-toggle">
+                    <input
+                      type="checkbox"
+                      v-model="showSessionKeyOverride"
+                    />
+                    {{ t('step2.runtimeProvider.sessionKeyOverrideToggle') }}
+                  </label>
+                </template>
+                <!-- Kein DB-Key: Warn-Banner (Pflicht-Eingabe) -->
                 <p
-                  v-else-if="runtimeApiKeyMissing && !providerDbHasKey"
+                  v-else-if="runtimeApiKeyMissing"
                   class="hint warning provider-override-banner"
                   role="alert"
                 >
                   {{ t('step2.runtimeProvider.noDbKeyBanner', { provider: runtimeProvider }) }}
                 </p>
+                <!-- Key-Feld: nur sichtbar wenn kein DB-Key ODER User explizit überschreibt -->
                 <Field
+                  v-if="!providerDbHasKey || showSessionKeyOverride"
                   v-model="runtimeApiKey"
                   type="password"
                   :label="t('step2.runtimeProvider.sessionKeyLabel')"
-                  :placeholder="providerDbHasKey
-                    ? t('step2.runtimeProvider.dbKeyPlaceholder')
-                    : t('step2.runtimeProvider.apiKeyPlaceholder')"
+                  :placeholder="t('step2.runtimeProvider.apiKeyPlaceholder')"
                 />
                 <Field
                   v-model="runtimeBaseUrl"

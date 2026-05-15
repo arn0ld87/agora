@@ -20,7 +20,7 @@ from ..services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from ..services.llm_runtime import parse_runtime_llm_config
-from ..services.report_agent import MIN_PERSONA_TABLE_ROWS
+from ..services.report_agent import MIN_SIMULATION_AGENTS
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.stage_model_router import StageModelRouter
 from ..utils.validation import validate_simulation_id, validate_task_id
@@ -84,7 +84,14 @@ def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
 
 
 def _resolve_max_agents_with_floor(raw_value: object) -> int | None:
-    """Parse optional max_agents and enforce the report persona floor."""
+    """Parse optional ``max_agents`` and enforce the simulation-pool floor.
+
+    Der Floor steht bewusst auf ``MIN_SIMULATION_AGENTS`` (10), nicht auf
+    ``MIN_PERSONA_TABLE_ROWS`` (50). Das erlaubt Schnell-Tests mit Mini-Seeds
+    (Smoke #6 2026-05-15); die Report-Generation skaliert den Persona-Pool im
+    Nachgang via Round-Robin auf ``MIN_PERSONA_TABLE_ROWS`` hoch
+    (``_apply_persona_floor_to_entities`` in prepare_service.py).
+    """
     if raw_value is None or raw_value == "" or raw_value == 0:
         return None
     if not isinstance(raw_value, (str, int, float)):
@@ -95,13 +102,13 @@ def _resolve_max_agents_with_floor(raw_value: object) -> int | None:
         return None
     if parsed <= 0:
         return None
-    if parsed < MIN_PERSONA_TABLE_ROWS:
+    if parsed < MIN_SIMULATION_AGENTS:
         logger.info(
-            "Applying persona floor for max_agents: requested=%s floor=%s",
+            "Applying simulation-agents floor for max_agents: requested=%s floor=%s",
             parsed,
-            MIN_PERSONA_TABLE_ROWS,
+            MIN_SIMULATION_AGENTS,
         )
-        return MIN_PERSONA_TABLE_ROWS
+        return MIN_SIMULATION_AGENTS
     return parsed
 
 

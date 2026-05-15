@@ -12,6 +12,13 @@ from __future__ import annotations
 # ("Der Prompt fordert explizit 50 Persona-Zeilen.").
 MIN_PERSONA_TABLE_ROWS: int = 50
 
+# Untergrenze für die Simulation-Pool-Größe (OASIS-Agenten). Smaller pools
+# erlauben Schnell-Tests mit Mini-Seeds (Smoke-Befund #6 2026-05-15); der
+# Report-Pfad skaliert den Persona-Pool danach via Round-Robin auf
+# ``MIN_PERSONA_TABLE_ROWS`` hoch (siehe ``_apply_persona_floor_to_entities``).
+MIN_SIMULATION_AGENTS: int = 10
+
 __all__ = [
     "MIN_PERSONA_TABLE_ROWS",
+    "MIN_SIMULATION_AGENTS",
 ]
