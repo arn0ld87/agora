@@ -40,6 +40,7 @@ from .tools import (
     describe_tools,
     define_tools,
     execute_tool_call,
+    get_openai_tools_schema,
     is_valid_tool_call,
     parse_tool_calls,
 )
@@ -632,6 +633,10 @@ class ReportAgent:
 
     def _get_tools_description(self) -> str:
         return describe_tools(self.tools)
+
+    def _get_openai_tools_schema(self) -> List[Dict[str, Any]]:
+        """Liefert die Tool-Definitionen im OpenAI function-calling Format."""
+        return get_openai_tools_schema(self)
 
     def plan_outline(
         self,

@@ -152,6 +152,8 @@ def generate_section_react(
     all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
+    _toolcall_mode = Config.REPORT_TOOLCALL_MODE
+
     for iteration in range(max_iterations):
         if progress_callback:
             progress_callback(
@@ -160,7 +162,46 @@ def generate_section_react(
                 f"Deep retrieval and writing in progress ({tool_calls_count}/{agent.MAX_TOOL_CALLS_PER_SECTION})",
             )
 
-        response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+        if _toolcall_mode == "native":
+            # Nativer OpenAI function-calling Pfad
+            openai_tools = agent._get_openai_tools_schema()
+            native_result = agent.llm.chat_with_tools(
+                messages=messages,
+                tools=openai_tools,
+                tool_choice="auto",
+                temperature=0.5,
+                max_tokens=4096,
+                context="report",
+            )
+            response = native_result["content"]
+            native_tool_calls = native_result["tool_calls"]
+
+            if native_tool_calls:
+                # Normalisiere zu internem Format {name, parameters}
+                tool_calls = [
+                    {"name": tc["name"], "parameters": tc["arguments"]}
+                    for tc in native_tool_calls
+                ]
+                has_tool_calls = True
+                has_final_answer = False
+            else:
+                # Kein nativer Tool-Call — Soft-Fallback: XML-Parser einmal probieren
+                xml_fallback = agent._parse_tool_calls(response)
+                if xml_fallback:
+                    tool_calls = xml_fallback
+                    has_tool_calls = True
+                    has_final_answer = False
+                else:
+                    tool_calls = []
+                    has_tool_calls = False
+                    has_final_answer = "Final Answer:" in response
+        else:
+            # Legacy XML-Pfad
+            response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+            tool_calls = []
+            has_tool_calls = False
+            has_final_answer = False
+
         if response is None:
             logger.warning(f"Section {section.title} round {iteration + 1} iteration: LLM returned None")
             if iteration < max_iterations - 1:
@@ -169,10 +210,11 @@ def generate_section_react(
                 continue
             break
 
-        logger.debug(f"LLM response: {response[:200]}...")
-        tool_calls = agent._parse_tool_calls(response)
-        has_tool_calls = bool(tool_calls)
-        has_final_answer = "Final Answer:" in response
+        if _toolcall_mode == "xml":
+            logger.debug(f"LLM response: {response[:200]}...")
+            tool_calls = agent._parse_tool_calls(response)
+            has_tool_calls = bool(tool_calls)
+            has_final_answer = "Final Answer:" in response
 
         if has_tool_calls and has_final_answer:
             conflict_retries += 1
@@ -319,7 +361,18 @@ def generate_section_react(
 
     logger.warning(f"Section {section.title} reachedmaximumiterationscount，Forcegenerate")
     messages.append({"role": "user", "content": agent.REACT_FORCE_FINAL_MSG})
-    response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
+    if _toolcall_mode == "native":
+        force_result = agent.llm.chat_with_tools(
+            messages=messages,
+            tools=agent._get_openai_tools_schema(),
+            tool_choice="none",
+            temperature=0.5,
+            max_tokens=4096,
+            context="report",
+        )
+        response = force_result["content"]
+    else:
+        response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
     if response is None:
         final_answer = "(ThisSectiongeneratefailed: LLM returnedemptyresponse, pleaselaterretry)"
     elif "Final Answer:" in response:
@@ -710,15 +763,39 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 
     tool_calls_made = []
     max_iterations = 2
+    _chat_toolcall_mode = Config.REPORT_TOOLCALL_MODE
+
     for _ in range(max_iterations):
-        response = agent.llm.chat(messages=messages, temperature=0.5)
+        if _chat_toolcall_mode == "native":
+            chat_result = agent.llm.chat_with_tools(
+                messages=messages,
+                tools=agent._get_openai_tools_schema(),
+                tool_choice="auto",
+                temperature=0.5,
+                max_tokens=4096,
+                context="report",
+            )
+            response = chat_result["content"]
+            native_calls = chat_result["tool_calls"]
+            tool_calls = (
+                [{"name": tc["name"], "parameters": tc["arguments"]} for tc in native_calls]
+                if native_calls
+                else agent._parse_tool_calls(response)
+            )
+        else:
+            response = agent.llm.chat(messages=messages, temperature=0.5)
+            tool_calls = []
+
         if response is None:
             return {
                 "response": "",
                 "tool_calls": tool_calls_made,
                 "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made],
             }
-        tool_calls = agent._parse_tool_calls(response)
+
+        if _chat_toolcall_mode == "xml":
+            tool_calls = agent._parse_tool_calls(response)
+
         if not tool_calls:
             clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
             clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
@@ -738,7 +815,18 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
         observation = "\n".join([f"[{r['tool']}result]\n{r['result']}" for r in tool_results])
         messages.append({"role": "user", "content": observation + agent.CHAT_OBSERVATION_SUFFIX})
 
-    final_response = agent.llm.chat(messages=messages, temperature=0.5)
+    if _chat_toolcall_mode == "native":
+        final_result = agent.llm.chat_with_tools(
+            messages=messages,
+            tools=agent._get_openai_tools_schema(),
+            tool_choice="none",
+            temperature=0.5,
+            max_tokens=4096,
+            context="report",
+        )
+        final_response = final_result["content"]
+    else:
+        final_response = agent.llm.chat(messages=messages, temperature=0.5)
     if final_response is None:
         final_response = ""
     clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', final_response, flags=re.DOTALL)
