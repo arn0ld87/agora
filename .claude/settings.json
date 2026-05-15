@@ -1,48 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rg:*)",
-      "Bash(grep:*)",
-      "Bash(find:*)",
-      "Bash(uv run pytest*)",
-      "Bash(uv run python*)",
-      "Bash(uv run ruff*)",
-      "Bash(uv run mypy*)",
-      "Bash(uv sync*)",
-      "Bash(npm*)",
-      "Bash(npx*)",
-      "Bash(git status)",
-      "Bash(git diff*)",
-      "Bash(git log*)",
-      "Bash(git add*)",
-      "Bash(git commit*)",
-      "Bash(git checkout -b*)",
-      "Bash(jq *)",
-      "Bash(docker compose*)",
-      "Bash(nala list*)",
-      "Read(**)",
-      "Edit(backend/**)",
-      "Edit(frontend/**)",
-      "Edit(schemas/**)",
-      "Edit(prompts/**)",
-      "Edit(docu/**)",
-      "Edit(.github/**)",
-      "Edit(.claude/**)"
+      "*"
     ],
-    "ask": [
-      "Bash(git push*)",
-      "Bash(docker compose down*)"
-    ],
-    "deny": [
-      "Bash(rm -rf *)",
-      "Bash(curl*)",
-      "Bash(apt *)",
-      "Bash(apt-get *)",
-      "Read(**/.env)",
-      "Read(**/.env.*)",
-      "Edit(**/.env)",
-      "Edit(**/.env.*)"
-    ],
+    "ask": [],
+    "deny": [],
     "defaultMode": "default"
   },
   "hooks": {
