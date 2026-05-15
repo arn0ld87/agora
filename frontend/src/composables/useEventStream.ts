@@ -10,6 +10,7 @@
 // failures so we don't hammer a misbehaving backend.
 
 import { onUnmounted, ref, type Ref } from 'vue'
+import { context, propagation } from '@opentelemetry/api'
 import { openSimulationStream, type StreamHandlers, type SseEventFrame } from '../api/stream'
 import { getTracer } from '../observability/tracing'
 
@@ -60,13 +61,23 @@ export function useEventStream(
         if (frame.trace_id) {
           lastTraceId.value = frame.trace_id
           // Short browser span for SSE event correlation — no-op when OTEL disabled.
+          // Extract parent context from synthetic W3C traceparent so the browser
+          // span hangs off the backend trace instead of becoming a new root.
+          // Span-ID `1` is a placeholder since the SSE-Frame carries only the
+          // trace-ID — that's enough for SigNoz to group the spans under one trace.
+          const traceparent = `00-${frame.trace_id}-0000000000000001-01`
+          const parentContext = propagation.extract(context.active(), { traceparent })
           const tracer = getTracer()
-          const span = tracer.startSpan(`agora.sse.event.${frame.type}`, {
-            attributes: {
-              'agora.simulation.id': frame.simulation_id,
-              'agora.event.trace_id': frame.trace_id,
+          const span = tracer.startSpan(
+            `agora.sse.event.${frame.type}`,
+            {
+              attributes: {
+                'agora.simulation.id': frame.simulation_id,
+                'agora.event.trace_id': frame.trace_id,
+              },
             },
-          })
+            parentContext,
+          )
           span.end()
         }
       }

@@ -243,6 +243,10 @@ class RedisEventBus:
                                 data.get("simulation_id", ""),
                             )
                             event = SimulationEvent.from_dict(data)
+                        except Exception as exc:
+                            span.set_status(otel_trace.StatusCode.ERROR, str(exc))
+                            span.record_exception(exc)
+                            raise
                         finally:
                             span.end()
                         yield event

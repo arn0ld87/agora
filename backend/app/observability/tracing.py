@@ -14,9 +14,12 @@ nutzt threading, das unter gevent transparent gepatchted ist.
 from __future__ import annotations
 
 import os
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from opentelemetry import trace
+
+if TYPE_CHECKING:
+    from flask import Flask
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
@@ -77,7 +80,7 @@ def init_tracing(
     return provider
 
 
-def instrument_flask_app(app: object) -> None:
+def instrument_flask_app(app: "Flask") -> None:
     """Aktiviert Flask-Auto-Instrumentation für eine konkrete App-Instanz.
 
     Wrapper, damit die App-Factory keine OTel-API direkt importieren muss.
