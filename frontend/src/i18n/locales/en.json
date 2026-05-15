@@ -259,7 +259,19 @@
       "apiKeyPlaceholder": "Only for this browser session",
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta/openai/",
-      "missingKey": "Provider override is active, but the API key is missing."
+      "missingKey": "Provider override is active, but the API key is missing.",
+      "dbKeyPlaceholder": "Server key will be used (saved in Settings)",
+      "sessionKeyToggle": "Use own key for this browser session only",
+      "sessionKeyLabel": "Session API key",
+      "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
+      "checkingKey": "Checking key status…"
+    },
+    "providerOverride": {
+      "dbKeyPlaceholder": "Server key will be used (saved in Settings)",
+      "sessionKeyToggle": "Use own key for this browser session only",
+      "sessionKeyLabel": "Session API key",
+      "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
+      "checkingKey": "Checking key status…"
     },
     "personas": {
       "title": "Generate personas",
