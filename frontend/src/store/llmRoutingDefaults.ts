@@ -35,6 +35,8 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
   const defaults = ref<WorkspaceLlmRoutingDefaults>(EMPTY_DEFAULTS);
   const loading = ref(false);
   const lastError = ref<string | null>(null);
+  /** Explizites Loaded-Flag — robuster als updated_at-Proxy (Gemini MEDIUM #5). */
+  const hasLoadedOnce = ref(false);
 
   const globalDefault = computed(() => defaults.value.global_default);
   const stageOverrides = computed(() => defaults.value.stage_overrides);
@@ -48,6 +50,7 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
     lastError.value = null;
     try {
       defaults.value = await getRoutingDefaults();
+      hasLoadedOnce.value = true;
     } catch (err) {
       lastError.value = err instanceof Error ? err.message : String(err);
       throw err;
@@ -97,6 +100,7 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
     defaults,
     loading,
     lastError,
+    hasLoadedOnce,
     globalDefault,
     stageOverrides,
     effectiveRouteForStage,

@@ -15,12 +15,10 @@ import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 const props = withDefaults(defineProps<{
   modelValue?: StageLLMRoute | null
   placeholder?: string
-  allowClear?: boolean
   disabled?: boolean
 }>(), {
   modelValue: null,
   placeholder: 'Modell wählen …',
-  allowClear: true,
   disabled: false,
 })
 

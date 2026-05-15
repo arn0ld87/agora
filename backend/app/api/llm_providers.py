@@ -163,7 +163,9 @@ def upsert_provider_api_key(provider_id: str):
                 logger.warning("Provider-Validate fehlgeschlagen für %s: %s", provider_id, exc)
                 entry = store.mark_validated(provider_id, ok=False) or entry
 
-    return json_success(entry.model_dump(mode="json"), status=201)
+    # POST → 201 Created; PUT → 200 OK (Gemini MEDIUM #8)
+    status_code = 201 if request.method == "POST" else 200
+    return json_success(entry.model_dump(mode="json"), status=status_code)
 
 
 @llm_bp.route("/providers/<provider_id>/api-key", methods=["DELETE"])

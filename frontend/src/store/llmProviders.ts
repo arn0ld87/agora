@@ -20,8 +20,8 @@ import {
   testLlmProvider,
   type ProviderTestResult,
 } from "../api/llmProviderKeys";
-import { ProviderDescriptor } from "../contracts/llmRoutingContract";
-import { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
+import type { ProviderDescriptor } from "../contracts/llmRoutingContract";
+import type { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
 import service from "../api";
 import type { ApiSuccessEnvelope } from "../api/envelope";
 

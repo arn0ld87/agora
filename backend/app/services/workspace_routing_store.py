@@ -15,6 +15,9 @@ from typing import Optional
 
 from ..contracts.llm_routing_contract import StageId, StageLLMRoute
 from ..contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
+from ..utils.logger import get_logger
+
+logger = get_logger("agora.services.workspace_routing_store")
 
 _DATA_DIR_ENV = "AGORA_DATA_DIR"
 _STORE_FILENAME = "workspace_llm_routing.json"
@@ -48,7 +51,25 @@ class WorkspaceRoutingStore:
             return WorkspaceLlmRoutingDefaults()
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except OSError as exc:
+            # Dateisystem-Fehler beim Lesen — nicht silent schlucken (Gemini MEDIUM #4)
+            logger.error(
+                "Workspace-Routing-Store konnte nicht gelesen werden (%s): %s — "
+                "verwende leere Defaults",
+                self._path,
+                exc,
+            )
+            return WorkspaceLlmRoutingDefaults()
+        except json.JSONDecodeError as exc:
+            # Korrupte Datei: laut loggen statt silent Default zurückgeben.
+            # Beim nächsten save() würde die Datei überschrieben, was zu
+            # Datenverlust führt. Der Nutzer muss die Korruption sehen.
+            logger.error(
+                "Workspace-Routing-Store ist korrupt (%s): %s — "
+                "verwende leere Defaults. Bitte Datei manuell prüfen oder löschen.",
+                self._path,
+                exc,
+            )
             return WorkspaceLlmRoutingDefaults()
         return WorkspaceLlmRoutingDefaults.model_validate(raw)
 

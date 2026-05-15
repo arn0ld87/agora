@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import time
+import threading
 from typing import Optional
 
 logger = logging.getLogger("agora.llm.github_copilot")
@@ -33,9 +35,20 @@ GITHUB_COPILOT_MODELS: tuple[str, ...] = (
 
 GITHUB_COPILOT_BASE_URL = "https://api.githubcopilot.com"
 
+# Token-Cache: vermeidet wiederholte subprocess-Spawns (Gemini MEDIUM #3).
+# TTL 300 s — kurz genug um Token-Rotationen zu erfassen, lang genug um
+# den Overhead bei Per-Request-Auflösung zu vermeiden.
+_TOKEN_CACHE_TTL: float = 300.0
+_token_cache: Optional[str] = None
+_token_cache_ts: float = 0.0
+_token_cache_lock = threading.Lock()
+
 
 def resolve_copilot_token(timeout_seconds: float = 3.0) -> Optional[str]:
     """Resolve a GitHub Copilot token via ``gh auth token``.
+
+    Ergebnis wird für ``_TOKEN_CACHE_TTL`` Sekunden gecacht, um wiederholte
+    subprocess-Spawns zu vermeiden (Gemini MEDIUM #3).
 
     Returns
     -------
@@ -43,6 +56,24 @@ def resolve_copilot_token(timeout_seconds: float = 3.0) -> Optional[str]:
         Token-String, oder ``None`` wenn ``gh`` nicht installiert ist bzw.
         der User nicht angemeldet ist. Niemals ein leerer String.
     """
+    global _token_cache, _token_cache_ts
+
+    now = time.monotonic()
+    with _token_cache_lock:
+        if _token_cache is not None and (now - _token_cache_ts) < _TOKEN_CACHE_TTL:
+            return _token_cache
+
+    token = _resolve_copilot_token_uncached(timeout_seconds)
+
+    with _token_cache_lock:
+        _token_cache = token
+        _token_cache_ts = time.monotonic()
+
+    return token
+
+
+def _resolve_copilot_token_uncached(timeout_seconds: float) -> Optional[str]:
+    """Interner uncached Resolver — nicht direkt aufrufen."""
     gh_path = shutil.which("gh")
     if gh_path is None:
         logger.debug("`gh` CLI nicht im PATH — Copilot-Token nicht auflösbar")
@@ -63,8 +94,6 @@ def resolve_copilot_token(timeout_seconds: float = 3.0) -> Optional[str]:
         return None
 
     if proc.returncode != 0:
-        # gh schreibt im Fehlerfall eine Begründung nach stderr, aber sie kann
-        # den Token nicht enthalten — daher loggen wir sie.
         logger.info("`gh auth token` non-zero exit (%s): %s", proc.returncode, proc.stderr.strip())
         return None
 
@@ -73,3 +102,11 @@ def resolve_copilot_token(timeout_seconds: float = 3.0) -> Optional[str]:
         return None
     logger.info("GitHub-Copilot-Token aufgelöst (len=%d)", len(token))
     return token
+
+
+def clear_token_cache() -> None:
+    """Nur für Tests — leert den Token-Cache."""
+    global _token_cache, _token_cache_ts
+    with _token_cache_lock:
+        _token_cache = None
+        _token_cache_ts = 0.0

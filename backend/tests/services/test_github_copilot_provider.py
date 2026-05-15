@@ -9,15 +9,19 @@ import pytest
 from app.services.llm_provider_registry import LlmProviderRegistry
 from app.services.llm_providers.github_copilot import (
     GITHUB_COPILOT_MODELS,
+    clear_token_cache,
     resolve_copilot_token,
 )
 from app.services.model_catalog_service import ModelCatalogService
 
 
 @pytest.fixture(autouse=True)
-def clear_catalog_cache():
+def reset_caches():
+    """Vor jedem Test Token-Cache und Catalog-Cache leeren."""
+    clear_token_cache()
     ModelCatalogService._cache.clear()
     yield
+    clear_token_cache()
     ModelCatalogService._cache.clear()
 
 

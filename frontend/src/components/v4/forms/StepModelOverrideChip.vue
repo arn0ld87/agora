@@ -43,7 +43,9 @@ async function ensureLoaded(): Promise<void> {
   if (providersStore.providers.length === 0) {
     await providersStore.loadProviders()
   }
-  if (!defaultsStore.defaults.updated_at) {
+  // hasLoadedOnce ist robuster als updated_at-Proxy: updated_at ist legitimerweise
+  // null bei einer frischen Workspace ohne gespeicherte Defaults (Gemini MEDIUM #5).
+  if (!defaultsStore.hasLoadedOnce) {
     try {
       await defaultsStore.load()
     } catch {

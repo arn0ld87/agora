@@ -41,7 +41,9 @@ from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 
 from ..contracts.llm_provider_keys_contract import LlmProviderKeyEntry
+from ..utils.logger import get_logger
 
+logger = get_logger("agora.services.llm_provider_secrets_store")
 
 _DATA_DIR_ENV = "AGORA_DATA_DIR"
 _SECRET_KEY_ENV = "AGORA_SECRET_KEY"
@@ -93,15 +95,30 @@ class LlmProviderSecretsStore:
     Thread-safe via internen Lock. Lese-Operationen entschlüsseln on-demand und
     cachen Klartext NICHT — jeder Aufruf von ``get_plaintext`` macht einen
     Decrypt-Roundtrip.
+
+    Die ``Fernet``-Instanz wird beim ersten Zugriff einmalig erstellt und dann
+    gecacht, um das wiederholte Key-Parsing zu vermeiden (Gemini MEDIUM #1).
     """
 
     def __init__(self, *, data_dir: Optional[Path] = None) -> None:
         self._lock = threading.Lock()
         self._data_dir = data_dir or _resolve_data_dir()
         self._path = self._data_dir / _STORE_FILENAME
+        self._fernet_instance: Optional[Fernet] = None
+        self._fernet_key_raw: Optional[str] = None  # Wert aus Env beim letzten Cache-Fill
 
     def _fernet(self) -> Fernet:
-        return _load_fernet()
+        """Lazy-cached Fernet-Instanz.
+
+        Der Cache wird nur dann wiederverwendet, wenn der Env-Var-Wert von
+        ``AGORA_SECRET_KEY`` unverändert ist. Key-Rotation (oder Testwechsel)
+        invalidiert den Cache automatisch.
+        """
+        current_key_raw = os.environ.get(_SECRET_KEY_ENV)
+        if self._fernet_instance is None or self._fernet_key_raw != current_key_raw:
+            self._fernet_instance = _load_fernet()
+            self._fernet_key_raw = current_key_raw
+        return self._fernet_instance
 
     def _read_raw(self) -> dict:
         if not self._path.exists():
@@ -114,12 +131,26 @@ class LlmProviderSecretsStore:
             ) from exc
 
     def _write_raw(self, raw: dict) -> None:
+        """Atomisches Schreiben mit File-Level-Lock.
+
+        ``threading.Lock`` schützt nur innerhalb eines Prozesses. Bei mehreren
+        Gunicorn-Workern ist zusätzlich ``fcntl.flock`` nötig, um Lost-Updates
+        zu verhindern (Gemini MEDIUM #2).
+        """
+        import fcntl  # POSIX-only — Agora läuft ausschließlich auf Linux/macOS
+
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        # Atomic write via tmp + rename, damit kein halb-geschriebenes File
-        # liegen bleibt wenn der Prozess crasht.
-        tmp_path = self._path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_path, self._path)
+        lock_path = self._path.with_suffix(".lock")
+        with open(lock_path, "w", encoding="utf-8") as lock_fh:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX)
+            try:
+                tmp_path = self._path.with_suffix(".tmp")
+                tmp_path.write_text(
+                    json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8"
+                )
+                os.replace(tmp_path, self._path)
+            finally:
+                fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
     def list_entries(self) -> list[LlmProviderKeyEntry]:
         with self._lock:
