@@ -5,8 +5,15 @@ services:
     image: clickhouse/clickhouse-server:24.1.2-alpine
     profiles: ["observability"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "0.0.0.0:8123/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     volumes:
       - signoz-clickhouse-data:/var/lib/clickhouse
+      # Single-Node Cluster-Config — OTel-Exporter brauchen Cluster "cluster"
+      - ./deploy/observability/clickhouse-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
     ports:
       - "127.0.0.1:9000:9000"
 
@@ -22,10 +29,26 @@ services:
       - signoz-zookeeper-data:/data
       - signoz-zookeeper-datalog:/datalog
 
+  # Schema-Migrator erstellt das ClickHouse-Schema (signoz_traces, signoz_metrics etc.)
+  # Muss vor otel-collector und query-service fertig sein.
+  signoz-schema-migrator:
+    image: signoz/signoz-schema-migrator:0.102.3
+    profiles: ["observability"]
+    command:
+      - "--dsn=tcp://signoz-clickhouse:9000"
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+    restart: on-failure
+
   signoz-query-service:
     image: signoz/query-service:0.51.0
     profiles: ["observability"]
-    depends_on: [signoz-clickhouse]
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+      signoz-schema-migrator:
+        condition: service_completed_successfully
     environment:
       ClickHouseUrl: tcp://signoz-clickhouse:9000
       STORAGE: clickhouse
@@ -40,6 +63,10 @@ services:
     depends_on: [signoz-query-service]
     ports:
       - "127.0.0.1:3301:3301"
+    volumes:
+      # Fix: Builtin nginx config hat "location = /api" (exact match) —
+      # /api/v1/register und Subpfade wurden nie proxied → 405.
+      - ./deploy/observability/signoz-frontend-nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   signoz-alertmanager:
     image: signoz/alertmanager:0.23.7
@@ -47,15 +74,25 @@ services:
     depends_on: [signoz-query-service]
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.99.0
+    # SigNoz-eigenes OTel-Collector-Image — muss DIESELBE Version wie der
+    # signoz-schema-migrator haben, sonst gibt es Schema-Mismatch (Spaltenanzahl).
+    # SigNoz v0.51.0 liefert standardmäßig 0.102.3.
+    image: signoz/signoz-otel-collector:0.102.3
     profiles: ["observability"]
-    depends_on: [signoz-clickhouse]
+    depends_on:
+      signoz-clickhouse:
+        condition: service_healthy
+      signoz-schema-migrator:
+        condition: service_completed_successfully
+    environment:
+      - DOCKER_MULTI_NODE_CLUSTER=false
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
     volumes:
-      - ./deploy/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./deploy/observability/otel-collector.yaml:/etc/otel/config.yaml:ro
     ports:
       - "127.0.0.1:4317:4317"  # OTLP grpc
       - "127.0.0.1:4318:4318"  # OTLP http
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    command: ["--config=/etc/otel/config.yaml"]
 
 volumes:
   signoz-clickhouse-data:
