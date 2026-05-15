@@ -80,7 +80,18 @@ vi.mock('@/composables/useWorkspaceMode', () => ({
   }),
 }))
 vi.mock('@/composables/usePolling', () => ({
-  usePolling: () => ({ start: vi.fn(), stop: vi.fn() }),
+  usePolling: () => ({ start: vi.fn().mockResolvedValue(undefined), stop: vi.fn(), tick: vi.fn(), isRunning: { value: false } }),
+}))
+vi.mock('@/composables/useRunsPolling', () => ({
+  useRunsPolling: () => ({
+    runs: { value: [] },
+    loading: { value: false },
+    error: { value: '' },
+    isRunning: { value: false },
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn(),
+    refresh: vi.fn(),
+  }),
 }))
 vi.mock('@/composables/useRuntimeLlmOptions', () => ({
   useRuntimeLlmOptions: () => ({
