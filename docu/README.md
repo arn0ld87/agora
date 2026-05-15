@@ -25,6 +25,21 @@ Hier liegen insbesondere:
 - `feature-roadmap.md`
 - `p0-arbeitsprotokoll.md`
 
+## Betrieb (Operator)
+
+Wer Agora installieren, aktualisieren oder im Fehlerfall debuggen muss,
+beginnt mit:
+
+- [`operator-guide.md`](operator-guide.md) — Komplette
+  Operator-Anleitung (Install, Provider-Keys, Backup, Update, Diagnose,
+  Security).
+- [`secret-key-lifecycle.md`](secret-key-lifecycle.md) — AGORA_SECRET_KEY
+  erzeugen, sicher speichern, rotieren, im Verlustfall handhaben.
+- [`backup-restore.md`](backup-restore.md) — Asset-Tabelle inkl.
+  Multi-Provider-Hub-Daten unter `backend/data/`.
+- [`deployment-prod-like.md`](deployment-prod-like.md) — Prod-Compose,
+  Reverse-Proxy, gevent.
+
 ## Konvention
 
 - **`docu/`** = aktive Projekt-, Refactoring- und Verlaufsdokumentation

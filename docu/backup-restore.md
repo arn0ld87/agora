@@ -22,7 +22,10 @@ Verwandte Dokumente:
 | Uploads (PDF/MD/TXT, OASIS-Subprocess-Snapshots, Console-Logs) | Bind-Mount `./backend/uploads/` | teilweise — Quelldokumente können neu hochgeladen werden, aber Run-State wäre weg. |
 | Reports + Audit-Trails | `./backend/reports/` plus `ArtifactStore`-Pfade unter `backend/uploads/<sim_id>/` | teilweise — neuer Run reproduziert nicht zwingend dasselbe Report-Wording. |
 | `simulation_config.json`, `state.json` | unter `backend/uploads/<sim_id>/` | nein, sobald die Simulation läuft. Frozen Config wird beim Run-Start geschrieben. |
-| `.env` (Secrets) | Repo-Root, **nicht versioniert** | nein — `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`. |
+| **Multi-Provider-Hub-Daten** (Issue #450 P1.3) | Bind-Mount `./backend/data/` mit `llm_provider_secrets.json` + `workspace_llm_routing.json` | nein — verschlüsselte Provider-Keys + Workspace-Routing-Defaults. Verlust = jeder Workspace muss seine Cloud-Keys neu eingeben. |
+| **`AGORA_SECRET_KEY`** | `.env` (Fernet-Master-Key für `backend/data/llm_provider_secrets.json`) | nein — Verlust = Provider-Keys sind nicht mehr entschlüsselbar (Datenverlust). Separat zu `.env` sichern. |
+| UI-Settings (LLM-Provider, Modell-Defaults) | Bind-Mount `./backend/instance/` (`settings.json`, `llm_profiles.db`) | nein, sobald operative Defaults gesetzt sind. |
+| `.env` (Secrets) | Repo-Root, **nicht versioniert** | nein — `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`, `AGORA_SECRET_KEY`. |
 | HuggingFace-Cache | `./backend/.cache/huggingface/` | ja — kostenfrei nachladbar (~1 GB). |
 | Redis | Compose-Volume `redis_data` (RDB-Snapshot) | ja — nur Tickets + Pub/Sub-Backlog, kurzlebig. |
 | Neo4j-Logs | Compose-Volume `neo4j_logs` | ja. |
@@ -155,6 +158,46 @@ Mit Borg analog. Btrfs-Snapshot des Subvolume genauso valide.
 `ReportLogger`). Wird selten überschrieben — meistens append-only. Im
 Restic-Job mitsichern.
 
+### Multi-Provider-Hub (`backend/data/`)
+
+Seit dem LLM-Provider-Hub liegen in `backend/data/`:
+
+- `llm_provider_secrets.json` — Fernet-verschlüsselte Provider-Keys, gehärtet
+  via `fcntl.flock` + Mode `0600`. Klartext-Keys gibt es nur kurzzeitig im
+  Speicher der Backend-Prozesse.
+- `workspace_llm_routing.json` — Workspace-Routing-Defaults (Global-Default
+  und Stage-Overrides pro Pipeline-Stage), ebenfalls mit `0600`.
+- `*.lock` — Sidecar-Dateien für `fcntl.flock`; sind transient und müssen
+  **nicht** mitgesichert werden.
+
+Backup mit Restic:
+
+```bash
+restic -r /backups/agora backup \
+  --tag agora-data \
+  --exclude '*.lock' \
+  --exclude '*.tmp' \
+  ./backend/data
+```
+
+Restore-Reihenfolge:
+
+1. `docker compose down` (Backend muss aus sein, weil Workspace-Routing-Writes
+   beim Start passieren können).
+2. `restic restore latest --include backend/data --target /opt/agora-restore`.
+3. `rsync -a --delete /opt/agora-restore/backend/data/ ./backend/data/`.
+4. **`AGORA_SECRET_KEY` aus dem ursprünglichen `.env` wiederherstellen** —
+   sonst ist `llm_provider_secrets.json` mit dem aktuellen Key nicht
+   entschlüsselbar (`scripts/llm-secrets-doctor.py verify` schlägt dann fehl).
+5. `docker compose up -d --build` und im UI prüfen, ob die Provider-Maske
+   die gewohnten Keys zeigt.
+
+> **Achtung — Host-Rechte.** Der Container läuft als `uid=1000`. Auf
+> Linux-Hosts muss das Host-Verzeichnis `./backend/data/` für diesen User
+> schreibbar sein (`chown -R 1000:1000 backend/data` einmal vor dem ersten
+> Start; danach erbt der Bind-Mount die Rechte). Auf macOS/Docker-Desktop
+> mapped Docker die Bind-Mount-UID automatisch — kein `chown` nötig.
+
 ### `.env` (Secrets)
 
 Wegen der `SECRET_KEY` / `AGORA_AUTH_TOKEN`-Werte ist `.env` kritisch.
@@ -176,9 +219,10 @@ Crontab auf dem Compose-Host (Repo-Root als Working-Dir):
 # Täglicher Neo4j-Dump um 03:00 — schiebt Backend für ~30s in Pause.
 0 3 * * * /usr/local/bin/agora-backup-neo4j.sh
 
-# Stündliches Restic-Inkrement für Uploads/Reports.
+# Stündliches Restic-Inkrement für Uploads/Reports + Multi-Provider-Hub.
 17 * * * * cd /opt/agora && restic -r /backups/agora backup \
-              --tag agora-fs ./backend/uploads ./backend/reports
+              --tag agora-fs --exclude '*.lock' --exclude '*.tmp' \
+              ./backend/uploads ./backend/reports ./backend/data
 
 # Wöchentliche Restic-Forget-Politik.
 30 4 * * 0 restic -r /backups/agora forget \

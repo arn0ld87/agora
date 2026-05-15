@@ -114,6 +114,13 @@ backend/instance/settings.*.json.tmp
 # Upload folder
 backend/uploads/
 
+# Multi-Provider-Hub (Issue #450 P1.3): laufzeitbeschriebene Daten in
+# backend/data/ enthalten Fernet-Ciphertexte (Provider-Keys) und
+# Workspace-Routing-Defaults. Sie dürfen nicht ins Repo. Die .gitkeep im
+# Verzeichnis bleibt getrackt, damit der Pfad existiert.
+backend/data/*
+!backend/data/.gitkeep
+
 # Docker data
 data/backend/venv311/
 backend/venv311/
