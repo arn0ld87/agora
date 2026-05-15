@@ -29,6 +29,35 @@ _PROVIDER_ALIASES = {
 }
 
 
+# Erwartete Key-Präfixe pro Provider mit stabilem Schlüsselformat. Provider mit
+# beliebigem Format (``custom_openai``, ``ollama_local``, ``github_copilot``)
+# stehen NICHT drin — die werden nicht validiert.
+_KEY_PREFIX_BY_PROVIDER: dict[str, tuple[str, ...]] = {
+    "openai": ("sk-",),
+    "google": ("AIzaSy",),
+}
+
+
+def _validate_key_format(provider: str, api_key: Optional[str]) -> None:
+    """Wirft ``ValueError`` wenn ein gesetzter Key offensichtlich zum falschen
+    Provider gehört (Copilot PR #466 + Smoke-Live-Bug 2026-05-15: ein
+    Gemini-``AIzaSy``-Key wurde an OpenAI geschickt). Provider ohne
+    erwartetes Präfix (``custom_openai``) bleiben ungeprüft.
+    """
+    if not api_key:
+        return
+    expected = _KEY_PREFIX_BY_PROVIDER.get(provider)
+    if not expected:
+        return
+    if not api_key.startswith(expected):
+        prefixes = "/".join(expected)
+        raise ValueError(
+            f"llm_provider.api_key format does not match provider {provider!r} "
+            f"(expected prefix: {prefixes}). Likely cross-provider mismatch — "
+            "check Settings → LLM-Anbieter for the correct key."
+        )
+
+
 @dataclass(frozen=True)
 class RuntimeLlmConfig:
     """Validated runtime provider override for one request."""
@@ -93,6 +122,7 @@ def parse_runtime_llm_config(data: Mapping[str, Any]) -> RuntimeLlmConfig:
         return RuntimeLlmConfig()
 
     api_key: str | None = str(raw.get("api_key") or "").strip() or None
+    _validate_key_format(provider, api_key)
 
     base_url = str(raw.get("base_url") or "").strip()
     if not base_url:

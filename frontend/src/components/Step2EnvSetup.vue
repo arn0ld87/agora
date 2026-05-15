@@ -7,7 +7,7 @@ import { useSimulationPrepare } from '../composables/useSimulationPrepare'
 import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
 import { useEnvForm } from '../composables/useEnvForm'
-import { useRuntimeLlmOptions } from '../composables/useRuntimeLlmOptions'
+import { useRuntimeLlmOptions, mapRuntimeProviderToBackendId } from '../composables/useRuntimeLlmOptions'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from './ui/Kicker.vue'
@@ -58,17 +58,29 @@ const providerDbHasKey = ref(false)
 const providerDbKeyChecking = ref(false)
 /** True wenn User trotz DB-Key explizit einen Session-Key eintragen will. */
 const showSessionKeyOverride = ref(false)
+/** Race-Guard: nur die Antwort für den zuletzt angefragten Provider zählt. */
+let _checkProviderDbKeySeq = 0
 
 async function _checkProviderDbKey(providerId) {
   if (!providerId || providerId === 'default') {
     providerDbHasKey.value = false
     return
   }
+  // Custom-OpenAI im UI → openai_compatible im Backend-Registry
+  // (Copilot PR #466, Step2EnvSetup.vue:67).
+  const backendProviderId = mapRuntimeProviderToBackendId(providerId)
+  const mySeq = ++_checkProviderDbKeySeq
   providerDbKeyChecking.value = true
   try {
-    providerDbHasKey.value = await checkLlmProviderHasKey(providerId)
+    const result = await checkLlmProviderHasKey(backendProviderId)
+    // Stale-Antwort verwerfen: User hat zwischenzeitlich Provider gewechselt
+    // (Copilot PR #466, Step2EnvSetup.vue:75).
+    if (mySeq !== _checkProviderDbKeySeq) return
+    providerDbHasKey.value = result
   } finally {
-    providerDbKeyChecking.value = false
+    if (mySeq === _checkProviderDbKeySeq) {
+      providerDbKeyChecking.value = false
+    }
   }
 }
 
@@ -241,7 +253,11 @@ async function triggerPrepare() {
   const provider = runtimePayload()
   if (provider) payload.llm_provider = provider
   if (useAgentCap.value && maxAgents.value > 0) {
-    payload.max_agents = Math.max(50, maxAgents.value)
+    // Backend floor steht auf MIN_SIMULATION_AGENTS=10 (Followup zu Slice 05);
+    // wir clampen hier nur auf die gleiche Untergrenze, damit Mini-Pool-Smokes
+    // (Smoke #6 2026-05-15) tatsächlich mit < 50 Agenten laufen. Persona-Table-
+    // Floor (50) skaliert der Report-Pfad via Round-Robin nach (Copilot PR #466).
+    payload.max_agents = Math.max(10, maxAgents.value)
   }
   if (useQuotaPlan.value) {
     if (quotaValidationError.value) {

@@ -173,12 +173,14 @@ def upsert_provider_api_key(provider_id: str):
 def provider_has_key(provider_id: str):
     """Read-only: prüft ob für diesen Provider ein API-Schlüssel in der Settings-DB hinterlegt ist.
 
-    Gibt ``{"has_key": true}`` zurück wenn ein Key gespeichert ist,
-    sonst ``{"has_key": false}``. Keine 404 — immer 200.
+    Gibt ``{"has_key": true|false}`` und immer HTTP 200 zurück — auch für
+    unbekannte Provider-IDs (Copilot PR #466). Der Frontend-Banner-Code
+    interpretiert ``has_key=false`` korrekt als "Pflichteingabe", deshalb
+    ist 200 + has_key=false die sauberere Antwort als 404.
     Hinweis: dieser Endpoint liest nur den persistenten Store, kein env-Fallback.
     """
     if _provider_or_404(provider_id) is None:
-        return json_error(f"Provider not found: {provider_id}", status=404)
+        return json_success({"has_key": False, "provider_id": provider_id})
     try:
         stored = get_llm_provider_secrets_store().get_plaintext(provider_id)
         has_key = bool(stored)

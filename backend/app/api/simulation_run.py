@@ -202,6 +202,35 @@ def start_simulation():
             extra={'simulation_id': simulation_id},
         )
 
+    # Pre-Check VOR der Run-Record-Creation, damit kein orphaned Run entsteht
+    # (Copilot PR #466, simulation_run.py:247). Dafür simulieren wir die
+    # Stage-Auflösung ohne Persistenz: ein leerer Routing-Stub reicht für die
+    # Provider/Key-Bestimmung, weil ``seed_run_stage_routing`` nichts anderes
+    # tut als Workspace-Default + Override zusammenzuführen.
+    if llm_runtime.enabled and not llm_runtime.api_key:
+        from ..services.llm_routing_seed import map_runtime_provider_to_route_provider
+        from ..services.secret_resolver import SecretResolver
+        from ..services.llm_provider_registry import LlmProviderRegistry
+        provider_id_preview = map_runtime_provider_to_route_provider(llm_runtime.provider)
+        if provider_id_preview:
+            registry = LlmProviderRegistry()
+            descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
+            p_type = descriptor.type if descriptor else "openai_compatible"
+            stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
+            if not stored_key and not _is_local_endpoint(
+                (descriptor.base_url if descriptor else None) or llm_runtime.base_url
+            ):
+                return json_error(
+                    ApiErrorCode.VALIDATION_FAILED,
+                    status=422,
+                    message=(
+                        f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                        f"für Provider '{provider_id_preview}'. "
+                        "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                        "oder im Sitzungsfeld eingeben."
+                    ),
+                )
+
     run_record = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
@@ -235,6 +264,17 @@ def start_simulation():
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
     if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+        # Fallback-422 bleibt für Workspace-Default-Fälle (kein Frontend-Override) —
+        # da kann die Run-Record schon erstellt sein; markiere sie als failed,
+        # damit keine Phantom-Runs in der Liste landen.
+        try:
+            run_registry.update_run(
+                run_record["run_id"],
+                status="failed",
+                message=f"Missing API key for provider {resolved_route.provider_id}",
+            )
+        except Exception:  # noqa: BLE001 — best effort
+            logger.warning("Failed to mark orphaned run as failed", exc_info=True)
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=422,

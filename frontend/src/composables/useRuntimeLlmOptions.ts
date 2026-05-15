@@ -1,11 +1,20 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { LlmRuntimePayload } from '../api/llmRuntime'
+import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
 
 export const STORAGE_LLM_PROVIDER = 'agora.runtimeLlm.provider'
 export const STORAGE_LLM_BASE_URL = 'agora.runtimeLlm.baseUrl'
 export const SESSION_LLM_API_KEY = 'agora.runtimeLlm.apiKey'
 
 export type RuntimeProvider = 'default' | 'google' | 'openai' | 'custom_openai'
+
+/** Map frontend runtime provider id → backend provider registry id.
+ *  Backend kennt ``openai_compatible``, Frontend nennt das ``custom_openai``.
+ *  Fix für Copilot-Comment auf PR #466 (Step2EnvSetup.vue:67). */
+export function mapRuntimeProviderToBackendId(provider: RuntimeProvider | string): string {
+  if (provider === 'custom_openai') return 'openai_compatible'
+  return provider
+}
 
 interface Option {
   value: RuntimeProvider
@@ -111,6 +120,21 @@ export function runtimeLlmPayloadFromStorage(): LlmRuntimePayload | null {
 export function runtimeProviderMissingApiKeyFromStorage(): boolean {
   const provider = normalizeProvider(safeLocalGet(STORAGE_LLM_PROVIDER, 'default'))
   return provider !== 'default' && !safeSessionGet(SESSION_LLM_API_KEY).trim()
+}
+
+/**
+ * Liefert ``true`` wenn weder ein Session-Key vorliegt NOCH ein DB-Key in
+ * Settings → LLM-Anbieter hinterlegt ist. Für Step 3 / Report-Resume nötig,
+ * weil Slice-04-DB-Fallback sonst durch den Storage-only-Guard blockiert
+ * wird (Copilot PR #466 auf useRuntimeLlmOptions.ts:108).
+ */
+export async function runtimeProviderMissingKeyEverywhere(): Promise<boolean> {
+  const provider = normalizeProvider(safeLocalGet(STORAGE_LLM_PROVIDER, 'default'))
+  if (provider === 'default') return false
+  if (safeSessionGet(SESSION_LLM_API_KEY).trim()) return false
+  const backendProviderId = mapRuntimeProviderToBackendId(provider)
+  const hasDbKey = await checkLlmProviderHasKey(backendProviderId)
+  return !hasDbKey
 }
 
 export function useRuntimeLlmOptions(
