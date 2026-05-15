@@ -66,6 +66,25 @@
       "title": "Post Id",
       "type": "string"
     },
+    "score": {
+      "default": 0,
+      "description": "Voting-Score (Reddit-Pattern). Twitter-Posts haben kein Voting \u2192 0.",
+      "title": "Score",
+      "type": "integer"
+    },
+    "sentiment": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sentiment-Score -1.0 (negativ) bis 1.0 (positiv). None wenn Sentiment-Service nicht aktiv.",
+      "title": "Sentiment"
+    },
     "simulation_id": {
       "minLength": 1,
       "title": "Simulation Id",

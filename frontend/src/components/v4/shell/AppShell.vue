@@ -38,9 +38,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useShellStore } from '@/stores/shell'
 import { useCommandPalette } from '@/composables/useCommandPalette'
+import { useCommandsStore } from '@/stores/commandsStore'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
@@ -61,7 +62,9 @@ const props = withDefaults(
 
 const shellStore = useShellStore()
 const route = useRoute()
+const router = useRouter()
 const { toggle: togglePalette } = useCommandPalette()
+const commandsStore = useCommandsStore()
 
 function onKeyDown(e: KeyboardEvent): void {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -70,8 +73,16 @@ function onKeyDown(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeyDown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+  // Dynamische Commands (laufende Sims + Recent Reports) einmalig verdrahten.
+  // bindDynamicCommands ist idempotent — doppelter Aufruf ist sicher.
+  commandsStore.bindDynamicCommands(router)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  commandsStore.unbindDynamicCommands()
+})
 
 // Derive active route name for sidebar item highlighting
 const activeRoute = computed<string>(() => {

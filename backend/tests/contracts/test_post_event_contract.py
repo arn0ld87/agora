@@ -103,3 +103,66 @@ class TestPostCreatedEvent:
         del payload["simulation_id"]
         with pytest.raises(ValidationError):
             PostCreatedEvent.model_validate(payload)
+
+
+class TestPostCreatedEventSentimentScore:
+    """Phase B — neue optionale Felder sentiment + score."""
+
+    def test_sentiment_default_is_none(self) -> None:
+        ev = PostCreatedEvent.model_validate(_valid_payload())
+        assert ev.sentiment is None
+
+    def test_sentiment_accepts_null(self) -> None:
+        payload = {**_valid_payload(), "sentiment": None}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.sentiment is None
+
+    def test_sentiment_accepts_zero(self) -> None:
+        payload = {**_valid_payload(), "sentiment": 0.0}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.sentiment == 0.0
+
+    def test_sentiment_accepts_positive_one(self) -> None:
+        payload = {**_valid_payload(), "sentiment": 1.0}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.sentiment == 1.0
+
+    def test_sentiment_accepts_negative_one(self) -> None:
+        payload = {**_valid_payload(), "sentiment": -1.0}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.sentiment == -1.0
+
+    def test_sentiment_rejects_above_range(self) -> None:
+        payload = {**_valid_payload(), "sentiment": 1.5}
+        with pytest.raises(ValidationError):
+            PostCreatedEvent.model_validate(payload)
+
+    def test_sentiment_rejects_below_range(self) -> None:
+        payload = {**_valid_payload(), "sentiment": -1.5}
+        with pytest.raises(ValidationError):
+            PostCreatedEvent.model_validate(payload)
+
+    def test_score_default_is_zero(self) -> None:
+        ev = PostCreatedEvent.model_validate(_valid_payload())
+        assert ev.score == 0
+
+    def test_score_accepts_positive(self) -> None:
+        payload = {**_valid_payload(), "score": 42}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.score == 42
+
+    def test_score_accepts_negative(self) -> None:
+        payload = {**_valid_payload(), "score": -7}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.score == -7
+
+    def test_score_accepts_zero(self) -> None:
+        payload = {**_valid_payload(), "score": 0}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.score == 0
+
+    def test_twitter_post_score_default_zero(self) -> None:
+        """Twitter-Posts haben kein Voting — score bleibt 0."""
+        payload = {**_valid_payload(), "platform": "twitter"}
+        ev = PostCreatedEvent.model_validate(payload)
+        assert ev.score == 0

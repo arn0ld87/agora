@@ -163,10 +163,10 @@ const navSettings: NavSettingsItem[] = [
 }
 
 .sidebar__body {
-  padding: 8px 10px;
+  padding: 8px var(--sidebar-item-px, 10px);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sidebar-group-gap, 2px);
   flex: 1;
   overflow-y: auto;
 }

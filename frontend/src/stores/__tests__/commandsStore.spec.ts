@@ -1,14 +1,18 @@
 /**
  * commandsStore — Unit-Tests
  *
- * 4 Tests:
+ * 7 Tests:
  * 1. buildStaticCommands liefert alle Top-Level-Nav-Routes als Commands
  * 2. filter() filtert korrekt nach Query
  * 3. getOrdered(): Recent-Commands erscheinen zuerst
  * 4. getOrdered() ohne Recent liefert unveraenderte Reihenfolge
+ * 5. (Phase C) dynamicCommands erscheinen wenn runs-Store mit laufendem Run gefuettert wird
+ * 6. (Phase C) filter() matchet dynamische Sim-Commands per Keyword "sim"
+ * 7. (Phase C) unbindDynamicCommands() leert dynamicCommands + erlaubt Re-Bind
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { ref, nextTick } from 'vue'
 
 // localStorage-Mock
 const lsMock = (() => {
@@ -22,6 +26,43 @@ const lsMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
+// i18n/translate-Mock: kein localStorage-Zugriff beim Modul-Import.
+// Simuliert t() mit einem minimalen Template-Resolver auf Basis der deutschen Schluessel-Templates.
+const I18N_TEMPLATES: Record<string, string> = {
+  'cmd.dynamic.runLabel': 'Lauf: {name}',
+  'cmd.dynamic.reportLabel': 'Report: {name}',
+  'cmd.dynamic.statusRunning': 'läuft',
+  'cmd.dynamic.statusPaused': 'pausiert',
+  'cmd.dynamic.statusPending': 'wartend',
+}
+vi.mock('@/i18n/translate', () => ({
+  t: (key: string, params?: Record<string, unknown>) => {
+    const template = I18N_TEMPLATES[key] ?? key
+    if (!params) return template
+    return Object.entries(params).reduce(
+      (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
+      template,
+    )
+  },
+  registerI18n: vi.fn(),
+  _resetI18nGlobal: vi.fn(),
+}))
+
+// useRunsPolling-Mock — gibt kontrollierten runs-Ref zurueck
+const mockRuns = ref<unknown[]>([])
+const mockStop = vi.fn()
+vi.mock('@/composables/useRunsPolling', () => ({
+  useRunsPolling: () => ({
+    runs: mockRuns,
+    loading: ref(false),
+    error: ref(''),
+    isRunning: ref(false),
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: mockStop,
+    refresh: vi.fn(),
+  }),
+}))
+
 import { useCommandsStore } from '../commandsStore'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 
@@ -33,6 +74,8 @@ const routerMock = {
 describe('commandsStore', () => {
   beforeEach(() => {
     lsMock.clear()
+    mockRuns.value = []
+    mockStop.mockClear()
     setActivePinia(createPinia())
     const { clearRecent } = useCommandPalette()
     clearRecent()
@@ -91,5 +134,158 @@ describe('commandsStore', () => {
     const cmds = store.buildStaticCommands(routerMock as never)
     const ordered = store.getOrdered(cmds)
     expect(ordered.map((c) => c.id)).toEqual(cmds.map((c) => c.id))
+  })
+
+  // -------------------------------------------------------------------------
+  // Phase C — dynamische Commands
+  // -------------------------------------------------------------------------
+
+  it('(Phase C) dynamicCommands erscheinen wenn laufender Run vorhanden', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    // Run mit Status 'processing' einfuegen
+    mockRuns.value = [
+      {
+        run_id: 'run-abc-123',
+        run_type: 'simulation',
+        entity_id: 'sim-entity-456',
+        status: 'processing',
+        progress: 42,
+        message: '',
+        started_at: '2026-05-15T10:00:00Z',
+        updated_at: '2026-05-15T10:01:00Z',
+        metadata: {},
+        linked_ids: {},
+        artifacts: {},
+        resume_capability: {},
+        summary: { document_name: 'Test-Kampagne', model: null, persona_count: 10, graph_id: null, graph_name: null, branch_name: null },
+      },
+    ]
+
+    // Watch-Reaktivitaet abwarten (Vue flushed Watchers asynchron)
+    await nextTick()
+
+    const dynCmds = store.dynamicCommands
+    expect(dynCmds.length).toBeGreaterThanOrEqual(1)
+    const simCmd = dynCmds.find((c) => c.id === 'sim:run-abc-123')
+    expect(simCmd).toBeDefined()
+    expect(simCmd?.group).toBe('sim')
+    expect(simCmd?.label).toContain('Test-Kampagne')
+    expect(simCmd?.keywords).toContain('simulation')
+  })
+
+  it('(Phase C) filter() matchet dynamische Sim-Commands per Keyword "sim"', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    mockRuns.value = [
+      {
+        run_id: 'run-xyz-789',
+        run_type: 'simulation',
+        entity_id: 'sim-ent-789',
+        status: 'pending',
+        progress: 0,
+        message: '',
+        started_at: '2026-05-15T11:00:00Z',
+        updated_at: '2026-05-15T11:00:00Z',
+        metadata: {},
+        linked_ids: {},
+        artifacts: {},
+        resume_capability: {},
+        summary: null,
+      },
+    ]
+
+    await nextTick()
+
+    const dynCmds = store.dynamicCommands
+    const filtered = store.filter(dynCmds, 'sim')
+    expect(filtered.length).toBeGreaterThanOrEqual(1)
+    expect(filtered.some((c) => c.id.startsWith('sim:'))).toBe(true)
+  })
+
+  it('(Phase C) unbindDynamicCommands() ruft Polling-stop auf', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    store.unbindDynamicCommands()
+
+    expect(mockStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('(Phase C) Sim-Labels nutzen i18n-Keys statt hartcodierter Strings', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    mockRuns.value = [
+      {
+        run_id: 'run-i18n-001',
+        run_type: 'simulation',
+        entity_id: 'sim-i18n-001',
+        status: 'processing',
+        progress: 5,
+        message: '',
+        started_at: '2026-05-16T09:00:00Z',
+        updated_at: '2026-05-16T09:00:00Z',
+        metadata: {},
+        linked_ids: {},
+        artifacts: {},
+        resume_capability: {},
+        summary: { document_name: 'i18n-Kampagne', model: null, persona_count: 5, graph_id: null, graph_name: null, branch_name: null },
+      },
+    ]
+
+    await nextTick()
+
+    const simCmd = store.dynamicCommands.find((c) => c.id === 'sim:run-i18n-001')
+    expect(simCmd).toBeDefined()
+
+    // Der i18n-Mock verwendet die Template-Strings aus I18N_TEMPLATES.
+    // 'cmd.dynamic.runLabel' → 'Lauf: {name}', Status 'processing' → 'läuft'.
+    // Kein hartcodierter String 'laufend' mehr im Label.
+    expect(simCmd?.label).not.toContain('laufend')
+    // Der aufgelöste Status-Text kommt aus dem i18n-Mock (de: 'läuft')
+    expect(simCmd?.label).toContain('läuft')
+    // Der Kampagnenname ist im Label enthalten (via {name}-Substitution)
+    expect(simCmd?.label).toContain('i18n-Kampagne')
+  })
+
+  it('(Phase C) unbindDynamicCommands() leert Commands und erlaubt Re-Bind', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    mockRuns.value = [
+      {
+        run_id: 'run-del-001',
+        run_type: 'simulation',
+        entity_id: 'sim-del-001',
+        status: 'processing',
+        progress: 10,
+        message: '',
+        started_at: '2026-05-15T12:00:00Z',
+        updated_at: '2026-05-15T12:00:00Z',
+        metadata: {},
+        linked_ids: {},
+        artifacts: {},
+        resume_capability: {},
+        summary: null,
+      },
+    ]
+
+    await nextTick()
+    expect(store.dynamicCommands.length).toBeGreaterThanOrEqual(1)
+
+    // Unbind leert
+    store.unbindDynamicCommands()
+    expect(store.dynamicCommands.length).toBe(0)
+
+    // Re-Bind funktioniert (kein Fehler, neuer Watch).
+    // Nach Re-Bind reagiert der neue Watch bei naechster Aenderung.
+    // Wir aendern mockRuns minimal, um den Watch zu triggern.
+    store.bindDynamicCommands(routerMock as never)
+    mockRuns.value = [...mockRuns.value] // neue Array-Referenz triggert watch
+    await nextTick()
+    expect(store.dynamicCommands.length).toBeGreaterThanOrEqual(1)
   })
 })

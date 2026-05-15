@@ -723,6 +723,13 @@
       "select": "Auswählen",
       "navigate": "Navigieren",
       "close": "Schließen"
+    },
+    "dynamic": {
+      "runLabel": "Lauf: {name}",
+      "reportLabel": "Report: {name}",
+      "statusRunning": "läuft",
+      "statusPaused": "pausiert",
+      "statusPending": "wartend"
     }
   },
   "topbar": {

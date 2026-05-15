@@ -29,6 +29,9 @@ export const PostCreatedEventSchema = z
     is_simulated: z.boolean().default(true),
     body: z.string().min(1),
     timestamp: z.string().datetime({ offset: true }),
+    // Phase B — Sentiment-Heatbar + Voting-Score
+    sentiment: z.number().min(-1).max(1).nullable().optional(),
+    score: z.number().int().default(0),
   })
   .strict()
 

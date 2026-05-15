@@ -262,6 +262,10 @@ async def _emit_post_created_to_redis(
         "is_simulated": True,
         "body": body,
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        # Phase B: Sentiment-Architektur-Slot — None bis Sentiment-Service aktiv.
+        "sentiment": None,
+        # Phase B: Voting-Score — 0 als neutraler Default (Twitter hat kein Voting).
+        "score": 0,
     }
     channel = f"agora:sim:{simulation_id}:post_created"
     try:
