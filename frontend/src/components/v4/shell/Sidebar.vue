@@ -24,8 +24,10 @@
         <SidebarItem
           :icon="item.icon"
           :label="item.label"
-          :to="item.to"
-          :active="active === item.id"
+          :to="item.disabled ? undefined : item.to"
+          :active="!item.disabled && active === item.id"
+          :disabled="item.disabled"
+          :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
         />
       </template>
 
@@ -72,6 +74,8 @@ interface NavItem {
   icon: string
   label: string
   to: RouteLocationRaw
+  /** Wenn true: kein Router-Push, aria-disabled, gedimmtes Styling, Tooltip. */
+  disabled?: boolean
 }
 
 interface NavSettingsItem {
@@ -105,12 +109,12 @@ function onSettingsGroupToggle(value: boolean): void {
 }
 
 const navWorkspace = computed<NavItem[]>(() => [
-  { id: 'dashboard', icon: 'home',   label: t('sidebar.nav.dashboard'),  to: { name: 'Dashboard' } },
-  { id: 'runs',      icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
-  { id: 'projects',  icon: 'folder', label: t('sidebar.nav.projects'),   to: { path: '#projects' } },
-  { id: 'datasets',  icon: 'layers', label: t('sidebar.nav.datasets'),   to: { path: '#datasets' } },
-  { id: 'templates', icon: 'doc',    label: t('sidebar.nav.templates'),  to: { path: '#templates' } },
-  { id: 'monitoring',icon: 'spark',  label: t('sidebar.nav.monitoring'), to: { path: '#monitoring' } },
+  { id: 'dashboard',  icon: 'home',   label: t('sidebar.nav.dashboard'),  to: { name: 'Dashboard' } },
+  { id: 'runs',       icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
+  { id: 'projects',   icon: 'folder', label: t('sidebar.nav.projects'),   to: { path: '#projects' },  disabled: true },
+  { id: 'datasets',   icon: 'layers', label: t('sidebar.nav.datasets'),   to: { path: '#datasets' },  disabled: true },
+  { id: 'templates',  icon: 'doc',    label: t('sidebar.nav.templates'),  to: { path: '#templates' }, disabled: true },
+  { id: 'monitoring', icon: 'spark',  label: t('sidebar.nav.monitoring'), to: { path: '#monitoring' },disabled: true },
 ])
 
 const navSettings = computed<NavSettingsItem[]>(() => [

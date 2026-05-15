@@ -374,8 +374,11 @@
     "agentCap": {
       "label": "Max. Anzahl Agenten begrenzen",
       "unit": "Agenten",
-      "minimumHint": "Mindestmenge für die DACH-Persona-Tabelle: 50 Agenten.",
+      "minimumHint": "Mindestmenge für die DACH-Persona-Tabelle: 10 Agenten.",
       "unlimitedHint": "Ohne Begrenzung wird pro Entität im Graph ein Agent erzeugt."
+    },
+    "personaPool": {
+      "belowQuotaWarning": "Pool-Größe ({pool}) liegt unter der geforderten Quoten-Summe ({quota}). Einzelne Segmente können ggf. nicht vollständig besetzt werden."
     },
     "next": "Weiter zur Simulation →"
   },
@@ -517,6 +520,17 @@
       "exportMd": "Als Markdown exportieren",
       "exportPdf": "Als PDF exportieren",
       "printPdf": "Als PDF drucken (Browser)"
+    },
+    "model": {
+      "reportLabel": "Modell für Report",
+      "customLabel": "Eigenes Modell",
+      "customPlaceholder": "z. B. deepseek-v3.2:cloud",
+      "providerLabel": "LLM-Anbieter",
+      "apiKeyLabel": "API-Key",
+      "apiKeyPlaceholder": "API-Key für gewählten Anbieter",
+      "baseUrlLabel": "Base-URL (optional)",
+      "baseUrlPlaceholder": "z. B. https://api.openai.com/v1",
+      "regenerate": "Neu generieren"
     },
     "quote": {
       "openSource": "Quelle öffnen"
@@ -678,7 +692,8 @@
     },
     "footer": {
       "collapse": "Einklappen"
-    }
+    },
+    "disabledTooltip": "Bald verfügbar"
   },
   "topbar": {
     "search": "Suche",
