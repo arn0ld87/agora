@@ -18,7 +18,7 @@
 
 | SLO | Indicator | Objective | Datenquelle |
 |---|---|---|---|
-| Sim-Erfolgsrate | `1 - rate(agora_sim_started{status="failed"}) / rate(agora_sim_started)` | ≥ 95 % über 7 Tage | Slice 2 Counter |
+| Sim-Erfolgsrate | 1 - (rate(agora_sim_started{status="failed"}) / rate(agora_sim_started) or vector(0)) | ≥ 95 % über 7 Tage | Slice 2 Counter |
 | Sim-Latenz p95 | `histogram_quantile(0.95, agora_sim_duration_seconds_bucket)` | ≤ 90 s (Stub-Mode 30 s) | Slice 2 Histogram |
 | Backend-Verfügbarkeit | `1 - rate(http_server_duration_seconds_count{status_code=~"5.."}) / rate(http_server_duration_seconds_count)` | ≥ 99 % über 7 Tage | Flask-Auto-Instrumentation aus Slice 1b |
 | Bus-Event-Loss | `rate(agora_bus_events_dropped_total)` | ≤ 0.1 events/s über 1 h | Slice 2 Counter |
