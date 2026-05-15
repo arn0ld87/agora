@@ -1,12 +1,20 @@
 <script setup lang="ts">
 /**
- * DropdownMenuItem — Einzeleintrag für DropdownMenu
- * Slice UI-G · 2026-05-15
+ * DropdownMenuItem — Wrapper über reka-ui DropdownMenuItem.
  *
- * Emit `select` löst die Aktion aus. Konsument bekommt zusätzlich Zugriff
- * auf `close` über den DropdownMenu-Slot-Prop, um das Menü nach Klick zu
- * schließen.
+ * Slice FE-Redesign-1 · 2026-05-15
+ *
+ * Public API unverändert: emit `select`, props `variant`/`disabled`.
+ * reka-ui übernimmt ARIA-Rolle (role="menuitem"), aria-disabled,
+ * data-disabled, data-highlighted, Keyboard-Handling (Arrow, Home/End,
+ * Type-Ahead) und Focus-Management automatisch.
+ *
+ * Abweichung von HTML-Semantik: reka-ui setzt aria-disabled="true"
+ * statt HTML disabled-Attribut — das ist ARIA-konform und verhindert
+ * Tab-Index-Konflikte im Focus-Trap.
  */
+
+import { DropdownMenuItem } from 'reka-ui'
 
 withDefaults(
   defineProps<{
@@ -20,26 +28,24 @@ withDefaults(
 )
 
 const emit = defineEmits<{
-  select: [event: MouseEvent]
+  select: [event: Event]
 }>()
 
-function onClick(event: MouseEvent): void {
+function onSelect(event: Event): void {
   if (event.defaultPrevented) return
   emit('select', event)
 }
 </script>
 
 <template>
-  <button
-    type="button"
+  <DropdownMenuItem
     class="dmi-root"
     :class="[`dmi-root--${variant}`, { 'dmi-root--disabled': disabled }]"
-    role="menuitem"
     :disabled="disabled"
-    @click="onClick"
+    @select="onSelect"
   >
     <slot />
-  </button>
+  </DropdownMenuItem>
 </template>
 
 <style scoped>
@@ -58,25 +64,31 @@ function onClick(event: MouseEvent): void {
   cursor: pointer;
   text-align: left;
   transition: background 80ms ease;
+  outline: none;
 }
 
-.dmi-root:hover:not(:disabled),
-.dmi-root:focus-visible:not(:disabled) {
+/* reka-ui setzt data-highlighted statt :hover für keyboard-focus — beide Pfade */
+.dmi-root:hover:not([data-disabled]),
+.dmi-root[data-highlighted]:not([data-disabled]) {
   background: var(--surface-hover);
-  outline: none;
+}
+
+.dmi-root:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: -2px;
 }
 
 .dmi-root--danger {
   color: var(--status-red);
 }
 
-.dmi-root--danger:hover:not(:disabled),
-.dmi-root--danger:focus-visible:not(:disabled) {
+.dmi-root--danger:hover:not([data-disabled]),
+.dmi-root--danger[data-highlighted]:not([data-disabled]) {
   background: var(--status-red-bg);
 }
 
 .dmi-root--disabled,
-.dmi-root:disabled {
+.dmi-root[data-disabled] {
   opacity: 0.45;
   cursor: not-allowed;
 }
