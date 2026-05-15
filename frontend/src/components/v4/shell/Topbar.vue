@@ -64,13 +64,14 @@ withDefaults(
 
 <style scoped>
 .topbar {
-  height: 64px;
-  padding: 0 24px;
+  height: var(--topbar-h, 64px);
+  padding: 0 var(--topbar-px, 24px);
   background: var(--surface-base, #fff);
   border-bottom: 1px solid var(--hairline);
   display: flex;
   align-items: center;
   gap: 12px;
+  transition: height 150ms ease, padding 150ms ease;
 }
 
 .topbar__crumbs {
