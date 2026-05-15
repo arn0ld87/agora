@@ -8,8 +8,7 @@ from typing import Optional
 from ..contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ResolvedRoute,
-    StageId,
-    ALLOWED_PROVIDER_OPTIONS
+    StageId
 )
 from .runtime_run_config import RuntimeRunConfig, _detect_default_provider_id
 from .secret_resolver import SecretResolver
@@ -42,13 +41,6 @@ class StageModelRouter:
         # Fallback auf Best-Effort-Detection aus base_url / model.
         provider_id = route.provider_id or _detect_default_provider_id(base_url, route.model)
 
-        # Harden provider_options: only allow safe keys in ResolvedRoute (snapshot-ready)
-        raw_options = route.provider_options or {}
-        safe_options = {
-            k: v for k, v in raw_options.items()
-            if k.lower() in ALLOWED_PROVIDER_OPTIONS
-        }
-
         resolved = ResolvedRoute(
             stage=stage_id,
             provider_id=provider_id,
@@ -56,7 +48,7 @@ class StageModelRouter:
             base_url_sanitized=resolver.sanitize_url(base_url),
             reasoning_effort=route.reasoning_effort,
             routing_version=cfg.routing_version,
-            provider_options=safe_options,
+            provider_options=route.provider_options,
             started_at=datetime.now().isoformat()
         )
         return resolved

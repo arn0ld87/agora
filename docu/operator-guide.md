@@ -273,9 +273,9 @@ uv run --project backend python scripts/llm-secrets-doctor.py verify
   ihr ein älteres Repo updatet, prüft `git log -- backend/data` — ein
   Force-Push-History-Rewrite ist eine separate Security-Aktion, keine
   Slice-Operation.
-- **HIGH/CRITICAL CVE-Findings:** Trivy läuft warning-only bis das
-  Baseline-Audit abgeschlossen ist (Issue #359). Bei Hardstop-Datum
-  2026-07-30 muss `pip-audit --ignore-vuln`-Liste leer sein oder via
+- **HIGH/CRITICAL CVE-Findings:** Trivy läuft jetzt blockierend (`exit-code: 1`).
+  Dokumentierte Upstream-Blocker sind in `.trivyignore` hinterlegt.
+  Bei Hardstop-Datum 2026-07-30 muss die Ignore-Liste leer sein oder via
   ADR explizit verlängert (siehe
   [`docu/dependency-risk-register.md`](./dependency-risk-register.md)).
 - **Logs enthalten keine Secrets:** `app.utils.logger.install_redaction_filter`

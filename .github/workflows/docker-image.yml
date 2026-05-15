@@ -90,8 +90,9 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          # Phase 1: warning-only; nach Audit-Phase auf exit-code 1 umstellen.
-          exit-code: "0"
+          # Blocking mode: Fail on HIGH/CRITICAL findings.
+          # Documented upstream blockers are managed via .trivyignore.
+          exit-code: "1"
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF

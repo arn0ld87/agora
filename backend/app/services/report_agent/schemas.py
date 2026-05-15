@@ -50,7 +50,7 @@ class PlanSection(BaseModel):
 
     title: str = Field(min_length=1, description="Abschnittstitel")
     description: str = Field(
-        min_length=1,
+        default="—",
         description="Kurze Inhaltsbeschreibung des Abschnitts (mind. 1 Zeichen)",
     )
 
@@ -67,10 +67,11 @@ class PlanResponse(BaseModel):
 
     title: str = Field(min_length=1, description="Reporttitel")
     summary: str = Field(
-        min_length=1,
+        default="—",
         description="Kurze Zusammenfassung des Reports",
     )
     sections: list[PlanSection] = Field(
+        default_factory=list,
         description="Liste der geplanten Abschnitte",
     )
 
@@ -86,6 +87,7 @@ class SectionKeyTakeaway(BaseModel):
 
     statement: str = Field(min_length=1)
     confidence: str = Field(
+        default="medium",
         description="Einschätzungsqualität: low | medium | high",
     )
 
@@ -101,10 +103,12 @@ class SectionMetadata(BaseModel):
 
     section_title: str = Field(min_length=1)
     key_takeaways: list[SectionKeyTakeaway] = Field(
+        default_factory=list,
         description="Zentrale Erkenntnisse des Abschnitts (max. 5)",
     )
     data_gaps: list[str] = Field(
-        description="Identifizierte Datenlücken (leer wenn keine vorhanden)",
+        default_factory=list,
+        description="Identifizierte Datenlücken (optional)",
     )
 
 
