@@ -3,9 +3,9 @@ import { computed, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { createSimulation } from '../api/simulation'
-import Btn from './ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
-import Kicker from './ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -190,7 +190,7 @@ function phaseVariant(phase) {
           </Badge>
         </header>
         <p class="card-desc">{{ t('step1.build.completed') }}</p>
-        <Btn
+        <Button
           variant="primary"
           arrow
           :disabled="currentPhase < 2 || creatingSimulation"
@@ -198,7 +198,7 @@ function phaseVariant(phase) {
           @click="enterEnvSetup"
         >
           {{ t('step1.next') }}
-        </Btn>
+        </Button>
       </article>
     </div>
 

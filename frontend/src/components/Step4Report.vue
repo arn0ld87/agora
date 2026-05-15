@@ -8,9 +8,9 @@ import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
 import { createSimulationBranch, getAvailableModels } from '../api/simulation'
-import Btn from './ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
-import Kicker from './ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import ReportBranchControls from './step4/ReportBranchControls.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
@@ -615,12 +615,12 @@ onUnmounted(stopPolling)
         <header class="card-head">
           <Kicker num="04" accent>Bericht</Kicker>
           <div class="log-meta">
-            <Btn variant="ghost" @click="copyMarkdown">Markdown kopieren</Btn>
-            <Btn variant="ghost" @click="downloadMarkdown">.md</Btn>
-            <Btn variant="ghost" @click="downloadCombinedJson">.json</Btn>
-            <Btn variant="ghost" @click="downloadHtml">.html</Btn>
-            <Btn variant="ghost" @click="printReport">{{ t('step4.view.printPdf') }}</Btn>
-            <Btn v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Btn>
+            <Button variant="ghost" @click="copyMarkdown">Markdown kopieren</Button>
+            <Button variant="ghost" @click="downloadMarkdown">.md</Button>
+            <Button variant="ghost" @click="downloadCombinedJson">.json</Button>
+            <Button variant="ghost" @click="downloadHtml">.html</Button>
+            <Button variant="ghost" @click="printReport">{{ t('step4.view.printPdf') }}</Button>
+            <Button v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Button>
           </div>
         </header>
         <div class="report-layout" :class="{ 'report-layout--stacked': !evidenceSections.length }">
@@ -645,7 +645,7 @@ onUnmounted(stopPolling)
           @create="createBranchFromReport"
         />
         <div class="actions">
-          <Btn variant="primary" arrow @click="goConversation">{{ t('step4.next') }}</Btn>
+          <Button variant="primary" arrow @click="goConversation">{{ t('step4.next') }}</Button>
         </div>
       </article>
     </div>

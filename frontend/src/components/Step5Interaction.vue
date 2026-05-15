@@ -3,9 +3,9 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { chatWithReport, getReport } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
-import Btn from './ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
-import Kicker from './ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import Field from './ui/Field.vue'
 
 const { t } = useI18n()
@@ -316,9 +316,9 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
             rows="3"
             @keydown="onKey"
           />
-          <Btn variant="primary" arrow :loading="isSending" @click="send">
+          <Button variant="primary" arrow :loading="isSending" @click="send">
             {{ t('step5.input.send') }}
-          </Btn>
+          </Button>
         </div>
 
         <details v-if="selectedProfile" class="profile-card">
@@ -335,8 +335,8 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
         <Kicker num="01">{{ t('step5.selectAgent') }}</Kicker>
         <Field v-model="surveySearch" :label="t('step5.search')" :placeholder="t('step5.search')" />
         <div class="picker-actions">
-          <Btn variant="ghost" @click="selectAllSurvey">{{ t('step5.survey.selectAll') }}</Btn>
-          <Btn variant="ghost" @click="clearSurvey">{{ t('step5.survey.clear') }}</Btn>
+          <Button variant="ghost" @click="selectAllSurvey">{{ t('step5.survey.selectAll') }}</Button>
+          <Button variant="ghost" @click="clearSurvey">{{ t('step5.survey.clear') }}</Button>
         </div>
         <p class="meta">{{ t('step5.survey.selected', { count: surveySelected.size }) }}</p>
         <div class="agent-scroll">
@@ -376,7 +376,7 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
             :placeholder="t('step5.survey.placeholder')"
           />
           <div class="survey-actions">
-            <Btn
+            <Button
               variant="primary"
               arrow
               :loading="isSurveying"
@@ -384,12 +384,12 @@ watch(() => props.reportId, (id) => { if (id) loadReport() })
               @click="runSurvey"
             >
               {{ t('step5.survey.ask') }}
-            </Btn>
-            <Btn
+            </Button>
+            <Button
               v-if="surveyResults.length"
               variant="ghost"
               @click="exportCsv"
-            >{{ t('step5.survey.exportCsv') }}</Btn>
+            >{{ t('step5.survey.exportCsv') }}</Button>
           </div>
         </div>
 

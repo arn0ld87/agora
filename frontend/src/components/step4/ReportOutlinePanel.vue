@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '../ui/Badge.vue'
-import Kicker from '../ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import ConfidenceBadge from '../ui/ConfidenceBadge.vue'
 import { aggregateSectionConfidence } from '../../utils/confidenceUtils'
 import type { SectionConfidenceResult } from '../../utils/confidenceUtils'

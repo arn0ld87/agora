@@ -16,7 +16,7 @@ import {
   buildQuotaPlanFromEntries,
 } from '../../contracts/personaQuotaContract'
 import type { PersonaQuotaPlan } from '../../contracts/personaQuotaContract'
-import Btn from '../ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 
 const { t } = useI18n()
 
@@ -166,20 +166,20 @@ function onToggleChange(event: Event): void {
           class="quota-count"
           :aria-label="t('step2.quota.total', { count: entry.count })"
         />
-        <Btn
+        <Button
           variant="ghost"
           :disabled="disabled"
           @click="removeSegment(idx)"
-        >−</Btn>
+        >−</Button>
       </div>
 
       <!-- Footer: add button + running total -->
       <div class="quota-row">
-        <Btn
+        <Button
           variant="ghost"
           :disabled="disabled"
           @click="addSegment"
-        >{{ t('step2.quota.addSegment') }}</Btn>
+        >{{ t('step2.quota.addSegment') }}</Button>
         <span class="meta">{{ t('step2.quota.total', { count: quotaTotal }) }}</span>
       </div>
 

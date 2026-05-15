@@ -8,9 +8,9 @@ import { usePersonaQuota } from '../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
 import { useEnvForm } from '../composables/useEnvForm'
 import { useRuntimeLlmOptions, mapRuntimeProviderToBackendId } from '../composables/useRuntimeLlmOptions'
-import Btn from './ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
-import Kicker from './ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import Field from './ui/Field.vue'
 import Select from './ui/Select.vue'
 import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
@@ -450,8 +450,8 @@ onMounted(() => {
         </div>
 
         <div class="actions">
-          <Btn variant="ghost" @click="$emit('go-back')">← {{ t('common.back') }}</Btn>
-          <Btn
+          <Button variant="ghost" @click="$emit('go-back')">← {{ t('common.back') }}</Button>
+          <Button
             variant="primary"
             arrow
             :disabled="isPreparing"
@@ -459,7 +459,7 @@ onMounted(() => {
             @click="triggerPrepare"
           >
             {{ phase === 0 ? t('step2.personas.generate') : t('common.processing') }}
-          </Btn>
+          </Button>
         </div>
       </article>
 
@@ -503,10 +503,10 @@ onMounted(() => {
         />
 
         <div v-if="phase >= 2" class="persona-actions">
-          <Btn variant="ghost" @click="showAddPersonaModal = true">+ {{ t('step2.addPersona.title') }}</Btn>
-          <Btn variant="ghost" :disabled="!profiles.length" @click="saveAllPersonas">
+          <Button variant="ghost" @click="showAddPersonaModal = true">+ {{ t('step2.addPersona.title') }}</Button>
+          <Button variant="ghost" :disabled="!profiles.length" @click="saveAllPersonas">
             {{ t('step2.personas.saveAll') }}
-          </Btn>
+          </Button>
         </div>
         <PersonaLibraryPanel
           v-if="phase >= 2"
@@ -585,7 +585,7 @@ onMounted(() => {
         </div>
 
         <div class="actions">
-          <Btn
+          <Button
             variant="primary"
             arrow
             :disabled="phase < 3 || hasRegeneratingPersona"
@@ -593,7 +593,7 @@ onMounted(() => {
             @click="handleStart"
           >
             {{ t('step3.controls.start') }}
-          </Btn>
+          </Button>
         </div>
         <p v-if="hasRegeneratingPersona" class="hint hint--warn">
           {{ t('step2.persona.regeneratingBlock') }}

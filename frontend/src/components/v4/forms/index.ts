@@ -8,3 +8,10 @@ export { default as SegmentedControl } from './SegmentedControl.vue'
 export { default as StickyActionBar } from './StickyActionBar.vue'
 export { default as SettingsSectionPanel } from './SettingsSectionPanel.vue'
 export { default as ComingSoonCard } from './ComingSoonCard.vue'
+
+// UI-Audit-Epic (2026-05-15): neue v4-Komponenten
+export { default as Button } from './Button.vue'
+export type { ButtonVariant, ButtonSize } from './Button.vue'
+export { default as Skeleton } from './Skeleton.vue'
+export { default as DropdownMenu } from './DropdownMenu.vue'
+export { default as DropdownMenuItem } from './DropdownMenuItem.vue'

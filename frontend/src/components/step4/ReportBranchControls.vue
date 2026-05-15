@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import Btn from '../ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 
 const emit = defineEmits<{
   create: [form: { branch_name: string; llm_model: string; language: string; max_agents: string }]
@@ -24,14 +24,14 @@ const branchForm = ref({
     <input v-model="branchForm.llm_model" class="model-input" type="text" placeholder="LLM model override" />
     <input v-model="branchForm.language" class="model-input" type="text" placeholder="language" />
     <input v-model="branchForm.max_agents" class="model-input" type="number" min="1" placeholder="max agents" />
-    <Btn
+    <Button
       variant="ghost"
       :loading="branchBusy"
       :disabled="branchBusy"
       @click="emit('create', { ...branchForm })"
     >
       Create Branch
-    </Btn>
+    </Button>
   </div>
 </template>
 
