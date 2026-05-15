@@ -452,7 +452,10 @@ class TestReactLoopNativeToolCalls:
                     section_index=0,
                 )
 
-        assert "Segment-Analyse" in result or result  # Final Answer wurde zurückgegeben
+        # Final Answer wurde zurückgegeben — strenge Substring-Assertion (vorher: `in r or r`
+        # war wegen Truthiness-Bug immer True, hat also nichts verifiziert).
+        assert isinstance(result, str)
+        assert "Segment-Analyse" in result
         assert agent.llm.chat_with_tools.called
         assert agent._execute_tool.call_count >= 3
 

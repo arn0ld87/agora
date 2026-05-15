@@ -152,7 +152,10 @@ def generate_section_react(
     all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
     report_context = f"Section Title: {section.title}\nSimulation Requirement: {agent.simulation_requirement}"
 
-    _toolcall_mode = Config.REPORT_TOOLCALL_MODE
+    # Config normalisiert bereits, aber defense-in-depth: Runtime-Patches könnten
+    # andere Casings/Werte einschleusen. Unbekannte Werte fallen auf "xml".
+    _raw_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "xml").strip().lower()
+    _toolcall_mode = _raw_toolcall_mode if _raw_toolcall_mode in ("native", "xml") else "xml"
 
     for iteration in range(max_iterations):
         if progress_callback:
@@ -763,7 +766,11 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
 
     tool_calls_made = []
     max_iterations = 2
-    _chat_toolcall_mode = Config.REPORT_TOOLCALL_MODE
+    # Casing-tolerant + Whitelist (symmetrisch zu generate_section_react).
+    _raw_chat_toolcall_mode = (Config.REPORT_TOOLCALL_MODE or "xml").strip().lower()
+    _chat_toolcall_mode = (
+        _raw_chat_toolcall_mode if _raw_chat_toolcall_mode in ("native", "xml") else "xml"
+    )
 
     for _ in range(max_iterations):
         if _chat_toolcall_mode == "native":
