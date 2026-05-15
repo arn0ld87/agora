@@ -161,11 +161,24 @@ def token_required(view):
     return wrapper
 
 
-def install_blueprint_guard(bp: Blueprint) -> None:
+def install_blueprint_guard(
+    bp: Blueprint,
+    *,
+    token_only_endpoints: frozenset[str] | None = None,
+) -> None:
     """Hängt den Token-Check als ``before_request``-Hook an ein Blueprint.
 
     Akzeptiert Master-Token, Workspace-API-Keys (ago_...) oder signierte Tickets.
+
+    ``token_only_endpoints`` benennt Flask-Endpoint-Strings (z. B.
+    ``frozenset({"auth.issue_ticket"})``), die **kein** Signed-Ticket als
+    Authentifizierungsmittel akzeptieren.  Master-Token und API-Keys greifen
+    weiterhin.  Gedacht für den Ticket-Ausstellungs-Endpoint selbst, damit der
+    Browser ein abgelaufenes Ticket erneuern kann ohne das Henne-Ei-Problem:
+    POST /api/auth/ticket benötigt kein gültiges Ticket, aber einen gültigen
+    Session-Token (Master-Token oder API-Key).
     """
+    _token_only: frozenset[str] = token_only_endpoints or frozenset()
 
     @bp.before_request
     def _check_token():
@@ -186,8 +199,8 @@ def install_blueprint_guard(bp: Blueprint) -> None:
         if got and _check_api_key(got):
             return None
 
-        # 3. Signed Tickets
-        if _try_consume_ticket():
+        # 3. Signed Tickets — übersprungen für token_only_endpoints
+        if request.endpoint not in _token_only and _try_consume_ticket():
             return None
 
         # 4. Open mode fallback
