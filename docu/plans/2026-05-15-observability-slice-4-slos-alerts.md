@@ -68,7 +68,7 @@
 | Risiko | Wahrscheinlichkeit | Gegenmaßnahme |
 |---|---|---|
 | Alert-Fatigue durch zu strenge Burn-Rate-Schwellen | Mittel | Multi-Window-Multi-Burnrate nach SRE-Workbook (kurz UND lang müssen feuern) |
-| Webhook ohne Auth-Token | Hoch lokal, niedrig prod | Im ADR Token-Anforderung notieren, in `docker-compose.observability.yml` Default-Off |
+| Webhook ohne Auth-Token | Hoch lokal, niedrig prod | Token-Anforderung notieren; host.docker.internal für lokale Tests nutzen |
 | ClickHouse-Query-Last bei vielen Rules | Niedrig | Rule-Cardinality begrenzen, kein `simulation_id`-Label |
 
 ---
