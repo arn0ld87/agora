@@ -22,9 +22,9 @@ import {
   runtimeLlmPayloadFromStorage,
   runtimeProviderMissingKeyEverywhere,
 } from '../composables/useRuntimeLlmOptions'
-import Btn from './ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
-import Kicker from './ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import { tokenizeFeedText } from '../utils/feedHighlight'
 
@@ -495,35 +495,35 @@ onUnmounted(() => {
         <p class="card-desc">{{ t('step3.sub') }}</p>
 
         <div class="actions">
-          <Btn variant="ghost" :disabled="phase === 1" @click="$emit('go-back')">← {{ t('common.back') }}</Btn>
-          <Btn
+          <Button variant="ghost" :disabled="phase === 1" @click="$emit('go-back')">← {{ t('common.back') }}</Button>
+          <Button
             v-if="phase === 0"
             variant="primary"
             arrow
             :loading="isStarting"
             @click="doStart"
-          >{{ t('step3.controls.start') }}</Btn>
+          >{{ t('step3.controls.start') }}</Button>
           <template v-else-if="phase === 1">
-            <Btn
+            <Button
               variant="ghost"
               :loading="isPausing"
               @click="doPauseResume"
             >
               {{ runStatus.paused ? t('step3.controls.resume') : t('step3.controls.pause') }}
-            </Btn>
-            <Btn
+            </Button>
+            <Button
               variant="danger"
               :loading="isStopping"
               @click="doStop"
-            >{{ t('step3.controls.stop') }}</Btn>
+            >{{ t('step3.controls.stop') }}</Button>
           </template>
-          <Btn
+          <Button
             v-else
             variant="primary"
             arrow
             :loading="isGeneratingReport"
             @click="goReport"
-          >{{ t('step3.next') }}</Btn>
+          >{{ t('step3.next') }}</Button>
         </div>
         <!-- Slice 1e: SigNoz deep-link — only rendered when OTEL is active and
              the backend injected a trace_id into the SSE frame. -->

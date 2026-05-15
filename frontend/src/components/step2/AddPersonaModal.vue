@@ -8,7 +8,7 @@
  * Strings via vue-i18n. Pure UI-Komponente, keine API-Aufrufe.
  */
 import { useI18n } from 'vue-i18n'
-import Btn from '../ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 
 export interface NewPersonaForm {
   username: string
@@ -178,13 +178,13 @@ function updateGender(event: Event) {
       </div>
 
       <div class="actions">
-        <Btn variant="ghost" @click="close">{{ t('common.cancel') }}</Btn>
-        <Btn
+        <Button variant="ghost" @click="close">{{ t('common.cancel') }}</Button>
+        <Button
           variant="primary"
           :loading="saving"
           :disabled="!persona.username.trim() || saving"
           @click="emit('submit')"
-        >{{ t('step2.addPersona.submit') }}</Btn>
+        >{{ t('step2.addPersona.submit') }}</Button>
       </div>
     </div>
   </div>

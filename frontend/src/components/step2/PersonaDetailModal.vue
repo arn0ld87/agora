@@ -8,7 +8,7 @@
  * State und Helper aus `usePersonaActions(...)` durch (Single-Source-of-Truth).
  */
 import { useI18n } from 'vue-i18n'
-import Btn from '../ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from '../ui/Badge.vue'
 
 interface ReviewIssue {
@@ -117,24 +117,24 @@ function updateEditGender(event: Event) {
         <span v-if="reviewEnabled" class="meta">{{ t('step2.detailModal.reviewActive') }}</span>
         <span class="review-bar-spacer" />
         <template v-if="!editingProfile">
-          <Btn variant="ghost" :disabled="reviewActionPending" @click="emit('start-editing')">{{ t('step2.detailModal.actions.edit') }}</Btn>
-          <Btn variant="ghost" :disabled="reviewActionPending" @click="emit('reject')">{{ t('step2.detailModal.actions.reject') }}</Btn>
-          <Btn
+          <Button variant="ghost" :disabled="reviewActionPending" @click="emit('start-editing')">{{ t('step2.detailModal.actions.edit') }}</Button>
+          <Button variant="ghost" :disabled="reviewActionPending" @click="emit('reject')">{{ t('step2.detailModal.actions.reject') }}</Button>
+          <Button
             variant="ghost"
             :disabled="reviewActionPending"
             :loading="reviewActionPending && selectedProfile?.review_status === 'regenerating'"
             @click="emit('regenerate')"
-          >{{ t('step2.persona.regenerate') }}</Btn>
-          <Btn variant="primary" :disabled="reviewActionPending" @click="emit('approve')">{{ t('step2.detailModal.actions.approve') }}</Btn>
+          >{{ t('step2.persona.regenerate') }}</Button>
+          <Button variant="primary" :disabled="reviewActionPending" @click="emit('approve')">{{ t('step2.detailModal.actions.approve') }}</Button>
         </template>
         <template v-else>
-          <Btn variant="ghost" :disabled="reviewActionPending" @click="emit('cancel-editing')">{{ t('common.cancel') }}</Btn>
-          <Btn
+          <Button variant="ghost" :disabled="reviewActionPending" @click="emit('cancel-editing')">{{ t('common.cancel') }}</Button>
+          <Button
             variant="primary"
             :loading="reviewActionPending"
             :disabled="reviewActionPending"
             @click="emit('save')"
-          >{{ t('step2.detailModal.actions.save') }}</Btn>
+          >{{ t('step2.detailModal.actions.save') }}</Button>
         </template>
       </div>
 

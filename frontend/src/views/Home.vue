@@ -4,9 +4,9 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
 import AppFooter from '../components/AppFooter.vue'
-import Btn from '../components/ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Badge from '../components/ui/Badge.vue'
-import Kicker from '../components/ui/Kicker.vue'
+import Kicker from '@/components/v4/data/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
@@ -446,7 +446,7 @@ const differentiators = computed(() => tm('home.differentiators'))
         />
 
         <div class="console-actions">
-          <Btn
+          <Button
             variant="primary"
             :disabled="!canSubmit"
             :loading="loading"
@@ -454,7 +454,7 @@ const differentiators = computed(() => tm('home.differentiators'))
             @click="startSimulation"
           >
             {{ loading ? t('home.console.initializing') : t('home.console.startBtn') }}
-          </Btn>
+          </Button>
           <span v-if="!files.length" class="console-warning">
             {{ t('home.console.needFiles') }}
           </span>

@@ -93,7 +93,58 @@ mehr auf shadcn-vue/Tailwind angewiesen ist.
 | shadcn-vue init | Skip | abgelehnt (siehe Evaluation) |
 | daisyUI | Skip | optional als Wegwerf-Branch erwähnt |
 | Astro-Theme-Test alexle135.de | Skip | außerhalb des Agora-Repos |
-| Cleanup-Slice J (ui/-Imports auf v4 umstellen) | Skip | eigener Folge-PR, da Step*.vue-Hotspots groß |
+| ~~Cleanup-Slice J (ui/-Imports auf v4 umstellen)~~ | erledigt in Welle 3 | siehe unten |
+
+### Welle 3: Cleanup-J (2026-05-15)
+
+Folgekorrektur nach User-Wunsch „erst PR wenn alles fertig". Nach Welle 2 waren die
+neuen Komponenten zwar da, aber kein einziger Konsument nutzte sie — die Step*.vue
+und Views importierten weiterhin Legacy-`ui/Btn.vue` und `ui/Kicker.vue`.
+
+**Methodisch sauberer Pre-Flight via code-review-graph:**
+- `query_graph_tool` mit `pattern=importers_of` lieferte das echte Inventar: 12 Badge-,
+  4 Select-, 9 Btn-, 7 Kicker-Importer — fast doppelt so viele wie ein erster
+  `grep`-Lauf zeigte. Hätte ich nur grep'd, wäre die Migration unvollständig geblieben.
+
+**Migrationen (alle Files):**
+
+| Konsument | Import-Path | Tag-Rename | Anmerkung |
+|---|---|---|---|
+| `step2/AddPersonaModal.vue` | `ui/Btn` → `v4/forms/Button` | `Btn` → `Button` | |
+| `step2/PersonaDetailModal.vue` | `ui/Btn` → `v4/forms/Button` | `Btn` → `Button` | Badge bleibt (J2 offen) |
+| `step2/QuotaPlanEditor.vue` | `ui/Btn` → `v4/forms/Button` | `Btn` → `Button` | |
+| `step4/ReportBranchControls.vue` | `ui/Btn` → `v4/forms/Button` | `Btn` → `Button` | |
+| `step4/ReportModelControls.vue` | `ui/Btn` → `v4/forms/Button` | `Btn` → `Button` | Select bleibt (J3 offen) |
+| `step4/ReportOutlinePanel.vue` | `ui/Kicker` → `v4/data/Kicker` | — | Badge bleibt (J2) |
+| `v4/forms/SettingsSectionPanel.vue` | `ui/Btn` → `./Button` | `Btn` → `Button` | Badge bleibt (J2) |
+| `Step1GraphBuild.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | |
+| `Step2EnvSetup.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | hoher LOC-Hotspot, mehrere Btn-Vorkommen |
+| `Step3Simulation.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | |
+| `Step4Report.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | |
+| `Step5Interaction.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | |
+| `views/Home.vue` | `ui/Btn` + `ui/Kicker` | `Btn` → `Button` | |
+| `views/SettingsView.vue` | `ui/Btn` | `Btn` → `Button` | |
+
+**Retired:**
+- `frontend/src/components/ui/Btn.vue` (deleted via `git rm`)
+- `frontend/src/components/ui/Kicker.vue` (deleted via `git rm`)
+
+**Verify-Gates grün** nach allen Migrationen:
+- `bun run typecheck` ✓
+- `bun run test` ✓ (102 Test-Files, **807 Tests passed**, keine Regression durch Btn→Button-Rename)
+- `bun run build` ✓ (1.01s, kein neuer Warning)
+- `bun run lint` ✓
+
+**Bewusst nicht in Welle 3 enthalten** (eigene Folge-Slices):
+
+| Slice | Scope | Grund für Aufschub |
+|---|---|---|
+| Cleanup-J2 | Badge `variant` → v4 `tone` (12 Files) | Dynamische `variant`-Ausdrücke (z. B. `phase >= 3 ? 'accent' : 'outline'`) und Visual-Unterschiede zwischen ui-`solid`/`outline` und v4-`tone`. Pro Konsument Visual-Review nötig. |
+| Cleanup-J3 | Select Field-Wrap-Migration (4 Files) | API-Bruch: ui/Select rendert internes `<label>`, v4/Select nicht. Konsumenten müssen `<Field label="…"><v4 Select/></Field>` umbauen plus options-Format-Migration. |
+| Cleanup-J4 | Restliche ui/-Komponenten retiren (Badge, Select, Field, SectionHead, Hairline) | Hängt von J2/J3 ab; ConfidenceBadge + AgoraGlyph + StickyScrollBanner bleiben sowieso (domain-spezifisch). |
+
+Diese drei sind als Issues anlegbar; das passende Mapping zum starten ist in
+[`docu/ui/component-audit.md`](ui/component-audit.md) dokumentiert.
 
 ## Tool-Disziplin (CLAUDE.md-Pflicht)
 

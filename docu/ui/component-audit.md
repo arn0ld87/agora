@@ -7,23 +7,26 @@ nach Namespace und gibt eine Empfehlung pro Komponente: **keep** (so lassen),
 **polish** (kleinere Verbesserungen), **migrate** (in v4 verschieben), **retire**
 (im Cleanup-Slice J entfernen).
 
-## Legacy Namespace: `components/ui/` (11 Files)
+## Legacy Namespace: `components/ui/` (9 Files, war 11)
 
 Diese Komponenten stammen aus der v3/early-v4-Phase. Cleanup-Slice J des
-Design-v4-Epics plant ihren schrittweisen Abbau, sobald v4-Äquivalente existieren.
+Design-v4-Epics baut sie schrittweise ab, sobald v4-Äquivalente existieren.
+
+**Welle 3 (2026-05-15)**: `ui/Btn.vue` und `ui/Kicker.vue` sind retired —
+alle Konsumenten auf `v4/forms/Button.vue` und `v4/data/Kicker.vue` migriert.
 
 | Komponente | Zweck | Empfehlung | v4-Äquivalent |
 |---|---|---|---|
 | `AgoraGlyph.vue` | Marken-Glyph (Logo-Wortmarke) | keep | – |
-| `Badge.vue` | Status-Badge mit Tone-Variants | migrate → `v4/forms/Badge.vue` (existiert dort schon) | `v4/forms/Badge.vue` |
-| `Btn.vue` | Primary/Secondary/Ghost-Button | migrate → `v4/forms/Button.vue` (Lücke) | **fehlt in v4** |
+| `Badge.vue` | Status-Badge mit Tone-Variants | offen: migrate → `v4/forms/Badge.vue` (J2 — siehe Worklog) | `v4/forms/Badge.vue` |
+| ~~`Btn.vue`~~ | ~~Primary/Secondary/Ghost-Button~~ | **retired 2026-05-15 (Welle 3)** — alle Konsumenten auf `v4/forms/Button.vue` | `v4/forms/Button.vue` |
 | `Card.vue` | Container mit Label/Glass/Dark-Varianten | migrate → `v4/forms/Card.vue` (existiert) | `v4/forms/Card.vue` |
 | `ConfidenceBadge.vue` | High/Medium/Low + Verified-Tag | polish — bleibt im Report-Domain | – |
 | `Field.vue` | Form-Field-Wrapper (Label/Hint/Error) | migrate → `v4/forms/Field.vue` (existiert) | `v4/forms/Field.vue` |
 | `Hairline.vue` | 1px-Separator | keep oder retire (CSS-Token `--separator` reicht meist) | – |
-| `Kicker.vue` | Caption-Heading über Titeln | migrate → `v4/data/Kicker.vue` (Lücke) | **fehlt in v4** |
+| ~~`Kicker.vue`~~ | ~~Caption-Heading über Titeln~~ | **retired 2026-05-15 (Welle 3)** — alle Konsumenten auf `v4/data/Kicker.vue` | `v4/data/Kicker.vue` |
 | `SectionHead.vue` | Sektion-Header mit Titel + Beschreibung | migrate → `v4/shell/PageHeader.vue` (existiert in shell) | `v4/shell/PageHeader.vue` |
-| `Select.vue` | Native-Select-Wrapper | migrate → `v4/forms/Select.vue` (existiert) | `v4/forms/Select.vue` |
+| `Select.vue` | Native-Select-Wrapper | offen: migrate → `v4/forms/Select.vue` (J3 — API-Bruch beim `<label>`, siehe Worklog) | `v4/forms/Select.vue` |
 | `StickyScrollBanner.vue` | Persona-Review-Sticky-Banner | keep — Spezifikum für Step5 | – |
 
 **Migration-Strategie**: kein hartes Renaming. Die v4-Versionen sind reicher,
@@ -152,10 +155,12 @@ deutlich über 28 %).
 
 ## Empfohlene nächste Mini-Slices (jeder = 1 PR)
 
-Nach diesem Audit-Epic bleibt nur noch ein offener Slice:
+Nach diesem Audit-Epic bleiben noch drei offene Slices:
 
 | Slice | Scope | Risiko |
 |---|---|---|
-| Cleanup-J | Alle `components/ui/`-Importe in Step*.vue + Views auf v4-Imports umstellen, danach Legacy-Komponenten retiren | mittel |
+| Cleanup-J2 | `ui/Badge.vue` → `v4/forms/Badge.vue` Migration (12 Konsumenten). Dynamische `variant`-Ausdrücke auf v4-`tone` mappen, Visual-Review pro Konsument (solid/outline existieren in v4 nicht). | mittel |
+| Cleanup-J3 | `ui/Select.vue` → `v4/forms/Select.vue` Migration (4 Konsumenten). Externes `<Field>`-Wrap einführen, options-Format auf strikt `{value, label}` umstellen. | mittel |
+| Cleanup-J4 | `ui/Field.vue`, `ui/SectionHead.vue`, `ui/Hairline.vue`, `ui/Card.vue` migrieren + retiren, sobald nicht mehr referenziert. | niedrig (J2/J3-abhängig) |
 
 Kein Big-Bang-Refactor nötig.

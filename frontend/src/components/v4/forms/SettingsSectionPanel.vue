@@ -14,7 +14,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import Badge from '@/components/ui/Badge.vue'
-import Btn from '@/components/ui/Btn.vue'
+import Button from './Button.vue'
 import { useSettingsStore } from '@/store/settings'
 import type { SettingsFieldMeta } from '@/contracts/settingsContract'
 
@@ -315,21 +315,21 @@ function setDraftValue(key: string, value: unknown) {
         <span v-else class="v4-flash v4-flash--muted">
           {{ t('settings.dirtyCount', { count: totalDirty }, totalDirty) }}
         </span>
-        <Btn
+        <Button
           variant="ghost"
           :disabled="totalDirty === 0 || settingsStore.saving"
           @click="settingsStore.discardChanges()"
         >
           {{ t('settings.discard') }}
-        </Btn>
-        <Btn
+        </Button>
+        <Button
           variant="accent"
           :loading="settingsStore.saving"
           :disabled="totalDirty === 0 || settingsStore.saving"
           @click="handleSave"
         >
           {{ t('settings.save') }}
-        </Btn>
+        </Button>
       </footer>
     </template>
 
@@ -341,8 +341,8 @@ function setDraftValue(key: string, value: unknown) {
           <template #authToken><code>AGORA_AUTH_TOKEN</code></template>
         </i18n-t>
         <div class="v4-modal__actions">
-          <Btn variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Btn>
-          <Btn variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Btn>
+          <Button variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Button>
+          <Button variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Button>
         </div>
       </div>
     </div>

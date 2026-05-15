@@ -19,7 +19,7 @@ import { useI18n } from 'vue-i18n'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AppFooter from '../components/AppFooter.vue'
 import Badge from '../components/ui/Badge.vue'
-import Btn from '../components/ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import { useSettingsStore } from '../store/settings'
 
 const { t } = useI18n()
@@ -268,17 +268,17 @@ function sourceVariant(source) {
           <span v-else class="flash flash--muted">
             {{ t('settings.dirtyCount', totalDirty, { count: totalDirty }) }}
           </span>
-          <Btn variant="ghost" :disabled="totalDirty === 0 || settingsStore.saving" @click="settingsStore.discardChanges()">
+          <Button variant="ghost" :disabled="totalDirty === 0 || settingsStore.saving" @click="settingsStore.discardChanges()">
             {{ t('settings.discard') }}
-          </Btn>
-          <Btn
+          </Button>
+          <Button
             variant="accent"
             :loading="settingsStore.saving"
             :disabled="totalDirty === 0 || settingsStore.saving"
             @click="handleSave"
           >
             {{ t('settings.save') }}
-          </Btn>
+          </Button>
         </footer>
       </div>
     </main>
@@ -291,8 +291,8 @@ function sourceVariant(source) {
           <template #authToken><code>AGORA_AUTH_TOKEN</code></template>
         </i18n-t>
         <div class="modal-actions">
-          <Btn variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Btn>
-          <Btn variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Btn>
+          <Button variant="ghost" @click="cancelSecretSave">{{ t('settings.modal.cancel') }}</Button>
+          <Button variant="accent" @click="confirmSecretSave">{{ t('settings.modal.confirm') }}</Button>
         </div>
       </div>
     </div>

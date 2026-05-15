@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Btn from '../ui/Btn.vue'
+import Button from '@/components/v4/forms/Button.vue'
 import Select from '../ui/Select.vue'
 
 const { t } = useI18n()
@@ -104,14 +104,14 @@ const providerEnabled = computed(() => provider.value !== 'default')
         :placeholder="t('step4.model.baseUrlPlaceholder')"
       />
     </div>
-    <Btn
+    <Button
       variant="ghost"
       :loading="isRegenerating"
       :disabled="isRegenerating"
       @click="emit('regenerate')"
     >
       {{ t('step4.model.regenerate') }}
-    </Btn>
+    </Button>
   </div>
 </template>
 
