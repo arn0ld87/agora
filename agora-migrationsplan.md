@@ -180,7 +180,7 @@ agora/
 
 - Alle Änderungen in PRs mit Review – kein direkter Push auf `main`.
 - `package-lock.json` wird gelöscht, `bun.lock` ist der neue Source of Truth.
-- Bun-Version: `>=1.0.0` (siehe `engines` in `package.json`).
+- Bun-Version: >=1.2.0 (siehe engines in package.json).
 - Rust nur anlegen, wenn `profile.out` es rechtfertigt.
 - Docker: `oven/bun:1` als COPY-From-Stage, kein separates Node-Image mehr.
 
