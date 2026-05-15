@@ -169,6 +169,12 @@ def install_blueprint_guard(bp: Blueprint) -> None:
 
     @bp.before_request
     def _check_token():
+        # CORS-Preflight: OPTIONS trägt keine Auth-Header (by-design im Browser).
+        # Flask-CORS hängt die Allow-*-Header via after_request an; wir müssen die
+        # Preflight durchwinken, sonst sieht der Browser 401 und blockt den Folge-Request.
+        if request.method == "OPTIONS":
+            return None
+
         expected = _expected_token()
         got = _extract_token()
 

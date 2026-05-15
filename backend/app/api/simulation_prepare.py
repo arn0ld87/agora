@@ -216,6 +216,9 @@ def prepare_simulation():
         )
 
     force_regenerate = data.get('force_regenerate', False)
+    # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
+    from ..utils.llm_profile_resolver import expand_profile_in_data
+    expand_profile_in_data(data)
     llm_model_override = (data.get('llm_model') or '').strip() or None
     try:
         llm_runtime = parse_runtime_llm_config(data)

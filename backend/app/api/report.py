@@ -122,6 +122,9 @@ def generate_report():
         return json_error(str(mode_exc), status=400)
 
     force_regenerate = data.get('force_regenerate', False)
+    # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
+    from ..utils.llm_profile_resolver import expand_profile_in_data
+    expand_profile_in_data(data)
     llm_model_override = (data.get('llm_model') or '').strip() or None
     try:
         llm_runtime = parse_runtime_llm_config(data)
@@ -809,6 +812,9 @@ def delete_report(report_id: str):
 @handle_api_errors(log_prefix="Chat failed")
 def chat_with_report_agent():
     data = request.get_json() or {}
+    # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
+    from ..utils.llm_profile_resolver import expand_profile_in_data
+    expand_profile_in_data(data)
     simulation_id = data.get('simulation_id')
     message = data.get('message')
     chat_history = data.get('chat_history', [])

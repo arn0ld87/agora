@@ -428,6 +428,12 @@ def _resolve_llm_overrides(data: dict, project):
     Returns ``(llm_runtime, llm_model_override, error_response)`` where
     *error_response* is ``None`` on success.
     """
+    # UI sendet bei Profile-Auswahl `llm_model = "profile:<id>"`. Helper expandiert
+    # das in echtes Modell + provider/api_key/base_url aus dem Store, damit die
+    # restliche Pipeline (NER, Embedding, Report) den Profile-Mechanismus nicht
+    # einzeln kennen muss.
+    from ..utils.llm_profile_resolver import expand_profile_in_data
+    expand_profile_in_data(data)
     # Reihenfolge: explizit im Request > persistiert am Projekt aus dem
     # Ontology-Schritt > Server-Default. Secrets (api_key) sind im Projekt
     # nicht persistiert (redacted_metadata) — daher kann der Build den

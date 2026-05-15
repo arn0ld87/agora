@@ -585,6 +585,14 @@ def _resume_report_generate(run: dict):
     # The original /api/report/generate call stores llm_model_override in the run
     # metadata; we honour it on resume so the same model is used throughout.
     llm_model_override = (run.get("metadata") or {}).get("llm_model") or None
+    # Wenn der originale Request ein UI-Profile-Token war (`profile:<id>`),
+    # expandieren wir es jetzt — sonst landet der Pseudo-Modellname als Modell
+    # beim LLM (Ollama 404, kein Entity-Output).
+    if isinstance(llm_model_override, str) and llm_model_override.startswith("profile:"):
+        from ..utils.llm_profile_resolver import expand_profile_in_data
+        _expand_buf = {"llm_model": llm_model_override}
+        expand_profile_in_data(_expand_buf)
+        llm_model_override = (_expand_buf.get("llm_model") or "").strip() or None
 
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
