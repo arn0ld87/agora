@@ -243,6 +243,48 @@ def validate_quote_anchors(
     )
 
 
+_PLACEHOLDER_TEXTS = frozenset({"", "---", "—", "–", "n/a", "n.a.", "tbd", "todo", "?"})
+
+
+def _is_placeholder(value: Any) -> bool:
+    """True wenn ein LLM-Text-Feld ein Platzhalter ist (leer, ``---``, ``n/a`` …).
+
+    LLMs liefern bei unsicheren Sub-Items gern Trenner statt echtem Inhalt;
+    der strikte Pydantic-Validator (``min_length=8``) lehnt sie ab → ganzer
+    Report failed. Wir entfernen sie defensiv in der Boundary
+    (Smoke-Live 2026-05-15).
+    """
+    if not isinstance(value, str):
+        return value is None
+    return value.strip().lower() in _PLACEHOLDER_TEXTS
+
+
+def _filter_placeholder_items(
+    items: List[Dict[str, Any]],
+    text_field: str,
+    *,
+    logger: Any = None,
+    item_kind: str = "item",
+) -> List[Dict[str, Any]]:
+    """Wirft Items mit leerem/Platzhalter-Text-Feld raus."""
+    keep: List[Dict[str, Any]] = []
+    dropped = 0
+    for entry in items or []:
+        if not isinstance(entry, dict):
+            keep.append(entry)
+            continue
+        if _is_placeholder(entry.get(text_field)):
+            dropped += 1
+            continue
+        keep.append(entry)
+    if dropped and logger is not None:
+        logger.warning(
+            "normalize_sections_for_contract: %d %s mit leerem/Platzhalter-%s entfernt",
+            dropped, item_kind, text_field,
+        )
+    return keep
+
+
 def normalize_sections_for_contract(
     sections: List[Dict[str, Any]],
     *,
@@ -253,10 +295,20 @@ def normalize_sections_for_contract(
         item = {k: v for k, v in dict(section).items() if k != "schema_version"}
         item["section_title"] = (item.get("section_title") or "Recovered section").strip()
         summary = (item.get("section_summary") or item.get("section_title") or "Recovered summary").strip()
-        item["section_summary"] = summary
+        item["section_summary"] = summary or "Recovered summary"
         item["claims"] = normalize_claims_for_contract(item.get("claims") or [], logger=logger)
-        item["hypotheses"] = list(item.get("hypotheses") or [])
-        item["data_gaps"] = list(item.get("data_gaps") or [])
+        item["hypotheses"] = _filter_placeholder_items(
+            list(item.get("hypotheses") or []),
+            "hypothesis_text",
+            logger=logger,
+            item_kind="hypotheses",
+        )
+        item["data_gaps"] = _filter_placeholder_items(
+            list(item.get("data_gaps") or []),
+            "claim_text",
+            logger=logger,
+            item_kind="data_gaps",
+        )
         normalized_sections.append(item)
     return normalized_sections
 

@@ -111,3 +111,52 @@ def test_normalize_sections_for_contract_propagates_downgrade() -> None:
     }
     out = normalize_sections_for_contract([section])
     assert out[0]["claims"][0]["confidence_label"] == "medium"
+
+
+def test_normalize_sections_filters_placeholder_hypotheses() -> None:
+    """LLM-Output mit ``---``/leeren ``hypothesis_text`` darf den
+    Pydantic-Validator (``min_length=8``) nicht erreichen — sonst bricht
+    der Report-Build (Smoke-Live 2026-05-15)."""
+    section = {
+        "section_title": "Test",
+        "section_summary": "Summary",
+        "claims": [],
+        "hypotheses": [
+            {"hypothesis_text": "Valide Hypothese mit genug Text", "confidence_label": "low"},
+            {"hypothesis_text": "---"},  # Platzhalter → raus
+            {"hypothesis_text": ""},     # leer → raus
+            {"hypothesis_text": "n/a"},  # unentschieden → raus
+            {"hypothesis_text": "Weitere echte Hypothese"},
+        ],
+    }
+    out = normalize_sections_for_contract([section])
+    assert len(out[0]["hypotheses"]) == 2
+    assert all(h["hypothesis_text"] not in ("---", "", "n/a") for h in out[0]["hypotheses"])
+
+
+def test_normalize_sections_filters_placeholder_data_gaps() -> None:
+    section = {
+        "section_title": "Test",
+        "section_summary": "Summary",
+        "claims": [],
+        "data_gaps": [
+            {"claim_text": "Echter offener Punkt mit Mehrtext"},
+            {"claim_text": "—"},
+            {"claim_text": "TBD"},
+        ],
+    }
+    out = normalize_sections_for_contract([section])
+    assert len(out[0]["data_gaps"]) == 1
+
+
+def test_normalize_sections_empty_summary_gets_default() -> None:
+    """Whitespace-only ``section_summary`` → Default-Fallback statt
+    leer (Pydantic-Validator hat ``min_length=1``)."""
+    section = {"section_title": "Test", "section_summary": "   "}
+    out = normalize_sections_for_contract([section])
+    assert out[0]["section_summary"] == "Recovered summary"
+
+    # Komplett leer → genauso Default
+    section2 = {"section_title": "Test", "section_summary": ""}
+    out2 = normalize_sections_for_contract([section2])
+    assert out2[0]["section_summary"] == "Test"
