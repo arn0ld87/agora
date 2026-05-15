@@ -613,8 +613,14 @@ class ReportAgent:
                 claims[0].setdefault("audit_trail", []).append(dedup_marker)
         existing_sections.append(section_entry)
         existing_sections.sort(key=lambda item: item.get("section_index", 0))
-        self.evidence_map["sections"] = existing_sections
-        # Layer-0 Boundary: vor dem Persistieren gegen EvidenceMapModel validieren.
+        # Layer-0 Boundary: vor dem Persistieren auto-downgrade'n und gegen
+        # EvidenceMapModel validieren. ``normalize_sections_for_contract``
+        # senkt confidence_label='high'/'verified' auf 'medium', wenn die
+        # ADR-0002-Cross-Stakeholder-Anforderung nicht erfüllt ist
+        # (Smoke-Live 2026-05-15). Der Validator bleibt strikt.
+        self.evidence_map["sections"] = normalize_sections_for_contract(
+            existing_sections, logger=logger,
+        )
         validated = EvidenceMapModel.model_validate(self.evidence_map).model_dump(mode="json")
         self.evidence_map = validated
         ReportManager.save_evidence_map(report_id, validated)

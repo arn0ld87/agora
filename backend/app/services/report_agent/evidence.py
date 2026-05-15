@@ -49,7 +49,66 @@ def resolve_embedder(
         return None
 
 
-def normalize_claims_for_contract(claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
+    """Zähle die unterschiedlichen Stakeholder-Gruppen unter ``agent_quote``-Evidence,
+    die den Claim stützen. Spiegelt die Logik aus
+    ``ReportClaimModel.cross_stakeholder_for_high`` (ADR-0002, Anker 4).
+    """
+    groups: set = set()
+    for entry in evidence or []:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("source_kind") != "agent_quote":
+            continue
+        if not entry.get("supports_claim"):
+            continue
+        group = entry.get("persona_stakeholder_group")
+        if group:
+            groups.add(group)
+    return len(groups)
+
+
+def auto_downgrade_unsupported_high_claims(
+    claims: List[Dict[str, Any]],
+    *,
+    logger: Any = None,
+) -> List[Dict[str, Any]]:
+    """Senkt ``confidence_label`` von ``high``/``verified`` auf ``medium``,
+    wenn die Cross-Stakeholder-Anforderung aus ADR-0002 (Anker 4) nicht
+    erfüllt ist. Vermeidet harten Report-Abbruch durch
+    ``EvidenceMapModel``-Validator bei LLM-Über-Konfidenz.
+
+    Der Validator selbst bleibt strikt (ADR-0002 verbietet Schwächung);
+    diese Funktion liefert ihm nur ehrlich downgrade'te Daten, statt
+    ihn mit unrealistischen Labels zu konfrontieren.
+    """
+    downgraded: List[Dict[str, Any]] = []
+    for raw in claims:
+        if not isinstance(raw, dict):
+            downgraded.append(raw)
+            continue
+        item = dict(raw)
+        label = item.get("confidence_label")
+        if label in ("high", "verified"):
+            groups = _count_supporting_stakeholder_groups(item.get("evidence") or [])
+            if groups < 2:
+                claim_id = item.get("claim_id", "<no-id>")
+                if logger is not None:
+                    logger.warning(
+                        "auto_downgrade_unsupported_high_claims: %s '%s' → 'medium' "
+                        "(nur %d stützende Stakeholder-Gruppe(n), 2 erforderlich)",
+                        claim_id, label, groups,
+                    )
+                item["confidence_label"] = "medium"
+        downgraded.append(item)
+    return downgraded
+
+
+def normalize_claims_for_contract(
+    claims: List[Dict[str, Any]],
+    *,
+    logger: Any = None,
+) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for claim in claims:
         item = dict(claim)
@@ -57,7 +116,7 @@ def normalize_claims_for_contract(claims: List[Dict[str, Any]]) -> List[Dict[str
         item.pop("confidence", None)
         item.pop("evidence_items", None)
         normalized.append(item)
-    return normalized
+    return auto_downgrade_unsupported_high_claims(normalized, logger=logger)
 
 
 # ---------------------------------------------------------------------------
@@ -184,14 +243,18 @@ def validate_quote_anchors(
     )
 
 
-def normalize_sections_for_contract(sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_sections_for_contract(
+    sections: List[Dict[str, Any]],
+    *,
+    logger: Any = None,
+) -> List[Dict[str, Any]]:
     normalized_sections: List[Dict[str, Any]] = []
     for section in sections:
         item = {k: v for k, v in dict(section).items() if k != "schema_version"}
         item["section_title"] = (item.get("section_title") or "Recovered section").strip()
         summary = (item.get("section_summary") or item.get("section_title") or "Recovered summary").strip()
         item["section_summary"] = summary
-        item["claims"] = normalize_claims_for_contract(item.get("claims") or [])
+        item["claims"] = normalize_claims_for_contract(item.get("claims") or [], logger=logger)
         item["hypotheses"] = list(item.get("hypotheses") or [])
         item["data_gaps"] = list(item.get("data_gaps") or [])
         normalized_sections.append(item)
@@ -207,4 +270,6 @@ __all__ = [
     # M11.8e
     "QuoteValidationResult",
     "validate_quote_anchors",
+    # Smoke-Live 2026-05-15 — Auto-Downgrade
+    "auto_downgrade_unsupported_high_claims",
 ]
