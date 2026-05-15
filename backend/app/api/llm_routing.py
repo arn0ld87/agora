@@ -9,10 +9,12 @@ from collections import deque
 from flask import request
 from pydantic import ValidationError
 
-from . import runs_bp
+from . import runs_bp, llm_bp
 from ..services.runtime_run_config import RuntimeRunConfig
 from ..services.run_registry import RunRegistry
+from ..services.workspace_routing_store import get_workspace_routing_store
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
+from ..contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -147,3 +149,83 @@ def patch_stage_llm_routing(run_id: str, stage_id: str):
             code="validation_failed",
             extra={"details": exc.errors()},
         )
+
+
+# ---------------------------------------------------------------------------
+# Workspace-weite Routing-Defaults (gilt für neue Runs, bis Stage versiegelt)
+# ---------------------------------------------------------------------------
+
+
+@llm_bp.route("/routing/defaults", methods=["GET"])
+@handle_api_errors(logger=logger)
+def get_routing_defaults():
+    """Return the workspace-wide routing defaults."""
+    defaults = get_workspace_routing_store().load()
+    return json_success(defaults.model_dump(mode="json"))
+
+
+@llm_bp.route("/routing/defaults", methods=["PUT"])
+@handle_api_errors(logger=logger)
+def replace_routing_defaults():
+    """Replace the workspace-wide routing defaults."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        model = WorkspaceLlmRoutingDefaults.model_validate(payload)
+    except ValidationError as exc:
+        return json_error(
+            "Validation failed",
+            status=400,
+            code="validation_failed",
+            extra={"details": exc.errors()},
+        )
+    stored = get_workspace_routing_store().save(model)
+    return json_success(stored.model_dump(mode="json"))
+
+
+@llm_bp.route("/routing/defaults/stages/<stage_id>", methods=["PATCH"])
+@handle_api_errors(logger=logger)
+def patch_routing_default_stage(stage_id: str):
+    """Set or clear the workspace-wide override for one stage.
+
+    Empty body or ``{"clear": true}`` clears the override; otherwise the body
+    is parsed as ``StageLLMRoute``.
+    """
+    if stage_id not in ALL_STAGE_IDS:
+        return json_error("Invalid stage_id", status=400, code="invalid_stage_id")
+
+    payload = request.get_json(silent=True) or {}
+    store = get_workspace_routing_store()
+
+    if payload.get("clear") is True or payload == {}:
+        defaults = store.set_stage_override(stage_id, None)
+        return json_success(defaults.model_dump(mode="json"))
+
+    try:
+        route = StageLLMRoute.model_validate(payload)
+    except ValidationError as exc:
+        return json_error(
+            "Validation failed",
+            status=400,
+            code="validation_failed",
+            extra={"details": exc.errors()},
+        )
+    defaults = store.set_stage_override(stage_id, route)
+    return json_success(defaults.model_dump(mode="json"))
+
+
+@llm_bp.route("/routing/defaults/global", methods=["PUT"])
+@handle_api_errors(logger=logger)
+def replace_global_default():
+    """Replace just the workspace-wide global default route."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        route = StageLLMRoute.model_validate(payload)
+    except ValidationError as exc:
+        return json_error(
+            "Validation failed",
+            status=400,
+            code="validation_failed",
+            extra={"details": exc.errors()},
+        )
+    defaults = get_workspace_routing_store().set_global_default(route)
+    return json_success(defaults.model_dump(mode="json"))

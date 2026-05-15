@@ -20,6 +20,7 @@ const BASE_ROUTES: RouteRecordRaw[] = [
   { path: '/settings/users-teams',   name: 'SettingsUsersTeams',  component: stub },
   { path: '/settings/api-keys',      name: 'SettingsApiKeys',     component: stub },
   { path: '/settings/audit-logs',    name: 'SettingsAuditLogs',   component: stub },
+  { path: '/settings/llm-providers', name: 'SettingsLlmProviders',component: stub },
   { path: '/settings/llm-routing',   name: 'SettingsLlmRouting',  component: stub },
 ]
 

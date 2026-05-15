@@ -50,6 +50,21 @@ class LlmProviderRegistry:
                 api_key_ref="LLM_API_KEY",
                 supports_models_endpoint=True,
                 fallback_models=[],
-            )
+            ),
+            ProviderDescriptor(
+                id="github_copilot",
+                label="GitHub Copilot",
+                type="github_copilot",
+                base_url="https://api.githubcopilot.com",
+                api_key_ref="GH_AUTH_TOKEN",
+                supports_models_endpoint=False,
+                fallback_models=list(_copilot_models()),
+            ),
         ]
         return providers
+
+
+def _copilot_models() -> tuple[str, ...]:
+    # Lazy-Import vermeidet Zirkularität wenn das Submodul später wächst.
+    from .llm_providers.github_copilot import GITHUB_COPILOT_MODELS
+    return GITHUB_COPILOT_MODELS

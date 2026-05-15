@@ -53,7 +53,8 @@
         "ollama_local",
         "openai",
         "google",
-        "openai_compatible"
+        "openai_compatible",
+        "github_copilot"
       ],
       "title": "Type",
       "type": "string"

@@ -71,7 +71,7 @@ class ProviderDescriptor(BaseModel):
 
     id: str
     label: str
-    type: Literal["ollama_local", "openai", "google", "openai_compatible"]
+    type: Literal["ollama_local", "openai", "google", "openai_compatible", "github_copilot"]
     base_url: Optional[str] = None
     api_key_ref: Optional[str] = None
     supports_models_endpoint: bool = False

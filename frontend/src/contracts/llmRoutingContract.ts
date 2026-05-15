@@ -39,7 +39,7 @@ export type RuntimeLlmRouting = z.infer<typeof RuntimeLlmRoutingSchema>;
 export const ProviderDescriptorSchema = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(["ollama_local", "openai", "google", "openai_compatible"]),
+  type: z.enum(["ollama_local", "openai", "google", "openai_compatible", "github_copilot"]),
   base_url: z.string().url().optional().nullable(),
   api_key_ref: z.string().optional().nullable(),
   supports_models_endpoint: z.boolean().default(false),

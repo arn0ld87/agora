@@ -76,6 +76,11 @@ class ModelCatalogService:
 
     def _fetch_live(self, provider_type: str, base_url: str, api_key: Optional[str]) -> List[str]:
         """Discovery implementation per provider type."""
+        if provider_type == "github_copilot":
+            # Phase 1: kein Live-Discovery. Wir geben die statische Modellliste
+            # über die ``_get_fallbacks``-Branch zurück — daher hier keine Live-IDs.
+            return []
+
         if provider_type == "ollama_local":
             # Ollama has /api/tags (native) and /v1/models (OpenAI compatible)
             # We prefer /api/tags for full metadata if available
@@ -120,4 +125,7 @@ class ModelCatalogService:
             return ["gpt-4o", "gpt-4o-mini", "o1-preview"]
         if provider_type == "google":
             return ["gemini-1.5-pro", "gemini-1.5-flash"]
+        if provider_type == "github_copilot":
+            from .llm_providers.github_copilot import GITHUB_COPILOT_MODELS
+            return list(GITHUB_COPILOT_MODELS)
         return []

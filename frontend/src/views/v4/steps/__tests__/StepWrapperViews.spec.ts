@@ -149,6 +149,34 @@ vi.mock('@/store/settings', () => ({
   }),
 }))
 
+vi.mock('@/store/llmProviders', () => ({
+  useLlmProvidersStore: () => ({
+    providers: [],
+    entries: {},
+    models: {},
+    busy: {},
+    hasKey: vi.fn().mockReturnValue(false),
+    loadProviders: vi.fn().mockResolvedValue(undefined),
+    saveKey: vi.fn().mockResolvedValue(undefined),
+    revokeKey: vi.fn().mockResolvedValue(undefined),
+    testProvider: vi.fn().mockResolvedValue({ connectivity: 'ok', models_found: 0 }),
+    fetchModels: vi.fn().mockResolvedValue([]),
+  }),
+}))
+
+vi.mock('@/store/llmRoutingDefaults', () => ({
+  useLlmRoutingDefaultsStore: () => ({
+    defaults: { updated_at: null, global_default: null, stage_overrides: {} },
+    globalDefault: null,
+    stageOverrides: {},
+    effectiveRouteForStage: vi.fn().mockReturnValue({ provider_id: '', model: '' }),
+    load: vi.fn().mockResolvedValue(undefined),
+    setGlobalDefault: vi.fn().mockResolvedValue(undefined),
+    setStageOverride: vi.fn().mockResolvedValue(undefined),
+    clearStageOverride: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 // ── Router-Stub ───────────────────────────────────────────────────────────────
 const stubComp = { template: '<div />' }
 const router = createRouter({
@@ -186,6 +214,8 @@ async function mountView<T extends object>(
         Step5Interaction: { template: '<div class="stub-step5" />' },
         // Sidebar stub (Slice F, nicht angefasst)
         Sidebar: { template: '<nav class="stub-sidebar" />' },
+        // Model-Override-Chip (Slice E) — eigene Spec; hier nur Shell getestet
+        StepModelOverrideChip: { template: '<div class="stub-model-chip" />' },
       },
     },
   })

@@ -8,7 +8,11 @@
     <PageHeader
       title="Graph Build"
       subtitle="Wissensgraph aus hochgeladenen Dokumenten aufbauen"
-    />
+    >
+      <template #right>
+        <StepModelOverrideChip stage-id="graph_build" />
+      </template>
+    </PageHeader>
     <PipelineStepper :current-step="1" />
     <!-- Step1GraphBuild empfaengt projectData/graphData via Store, kein direkter projectId-Prop -->
     <Step1GraphBuild />
@@ -21,6 +25,7 @@ import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step1GraphBuild from '@/components/Step1GraphBuild.vue'
+import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 
 const props = defineProps<{

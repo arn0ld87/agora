@@ -1,0 +1,32 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-provider-key-create-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Eingabe f\u00fcr POST /api/llm/providers/<provider_id>/api-key.",
+  "properties": {
+    "api_key": {
+      "maxLength": 1024,
+      "minLength": 4,
+      "title": "Api Key",
+      "type": "string"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url"
+    }
+  },
+  "required": [
+    "api_key"
+  ],
+  "title": "LlmProviderKeyCreateRequest",
+  "type": "object"
+}

@@ -38,6 +38,12 @@ from app.contracts.llm_profile_contract import (
     LlmProfileListResponse,
     LlmProfileCreateRequest,
 )
+from app.contracts.llm_provider_keys_contract import (
+    LlmProviderKeyCreateRequest,
+    LlmProviderKeyEntry,
+    LlmProviderKeysListResponse,
+)
+from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -65,6 +71,10 @@ CONTRACTS: dict[str, type] = {
     "llm-profile.schema.json": LlmProfile,
     "llm-profile-list-response.schema.json": LlmProfileListResponse,
     "llm-profile-create-request.schema.json": LlmProfileCreateRequest,
+    "llm-provider-key-entry.schema.json": LlmProviderKeyEntry,
+    "llm-provider-key-create-request.schema.json": LlmProviderKeyCreateRequest,
+    "llm-provider-keys-list-response.schema.json": LlmProviderKeysListResponse,
+    "workspace-llm-routing-defaults.schema.json": WorkspaceLlmRoutingDefaults,
 }
 
 

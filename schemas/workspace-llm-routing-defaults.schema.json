@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "StageLLMRoute": {
+      "additionalProperties": false,
+      "description": "Configuration for a single stage route.",
+      "properties": {
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Id"
+        },
+        "provider_options": {
+          "additionalProperties": true,
+          "title": "Provider Options",
+          "type": "object"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none",
+          "title": "Reasoning Effort"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "document_ingest",
+                "ontology_generation",
+                "graph_build",
+                "persona_generation",
+                "simulation_rounds",
+                "report_generation",
+                "evaluation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        }
+      },
+      "title": "StageLLMRoute",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/workspace-llm-routing-defaults.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Workspace-weit g\u00fcltiger LLM-Default plus optionale Stage-Overrides.",
+  "properties": {
+    "global_default": {
+      "$ref": "#/$defs/StageLLMRoute"
+    },
+    "stage_overrides": {
+      "additionalProperties": {
+        "$ref": "#/$defs/StageLLMRoute"
+      },
+      "propertyNames": {
+        "enum": [
+          "document_ingest",
+          "ontology_generation",
+          "graph_build",
+          "persona_generation",
+          "simulation_rounds",
+          "report_generation",
+          "evaluation"
+        ]
+      },
+      "title": "Stage Overrides",
+      "type": "object"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "title": "WorkspaceLlmRoutingDefaults",
+  "type": "object"
+}

@@ -1,17 +1,20 @@
+import os
 import pytest
 from unittest.mock import patch
 from flask import Flask
 from app.api import llm_bp, runs_bp
 
 @pytest.fixture
-def app():
+def app(monkeypatch):
+    # _expected_token() reads os.environ directly — clear it so the auth guard
+    # stays in open-mode regardless of what .env provides.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
     from app.utils.api_responses import install_api_error_handlers
     install_api_error_handlers(app)
     app.register_blueprint(llm_bp, url_prefix="/api/llm")
     app.register_blueprint(runs_bp, url_prefix="/api/runs")
     app.config["TESTING"] = True
-    # Disable auth for tests
     app.config["AGORA_AUTH_TOKEN"] = ""
     return app
 

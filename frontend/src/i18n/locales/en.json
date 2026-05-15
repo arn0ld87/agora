@@ -839,6 +839,38 @@
           "anthropic": "Anthropic",
           "custom": "Custom endpoint"
         }
+      },
+      "llmProviders": {
+        "title": "LLM Providers",
+        "subtitle": "Store provider API keys, pull live model lists, and pick the right model per step.",
+        "keyLabel": "API key (masked)",
+        "keyPlaceholder": "Paste a new API key …",
+        "baseUrlPlaceholder": "https://api.example.com/v1",
+        "status": {
+          "connected": "connected",
+          "missing": "key missing",
+          "local": "local",
+          "cli": "gh CLI"
+        },
+        "actions": {
+          "save": "Save",
+          "test": "Test",
+          "refreshModels": "Refresh models",
+          "disconnect": "Disconnect"
+        },
+        "test": {
+          "saved": "Saved.",
+          "ok": "{count} models discovered.",
+          "failed": "Connection failed."
+        },
+        "models": {
+          "title": "Models"
+        },
+        "defaults": {
+          "title": "Workspace default",
+          "subtitle": "Applied automatically when a new run starts.",
+          "placeholder": "Pick a default model …"
+        }
       }
     }
   },

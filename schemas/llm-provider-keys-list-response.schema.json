@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "LlmProviderKeyEntry": {
+      "additionalProperties": false,
+      "description": "Persistierte Repr\u00e4sentation eines Provider-Keys (ohne Klartext).",
+      "properties": {
+        "base_url": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "last_validated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Validated At"
+        },
+        "last_validation_ok": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Validation Ok"
+        },
+        "masked_value": {
+          "pattern": "^.{1,8}\\.\\.\\.[A-Za-z0-9_\\-]{4}$",
+          "title": "Masked Value",
+          "type": "string"
+        },
+        "provider_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider_id",
+        "masked_value",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "LlmProviderKeyEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/llm-provider-keys-list-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort auf GET /api/llm/providers/api-keys (\u00dcbersicht aller Provider).",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/LlmProviderKeyEntry"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "items",
+    "total"
+  ],
+  "title": "LlmProviderKeysListResponse",
+  "type": "object"
+}

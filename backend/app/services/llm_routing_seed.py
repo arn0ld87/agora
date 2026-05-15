@@ -15,12 +15,14 @@ from .llm_provider_registry import LlmProviderRegistry
 from .llm_runtime import RuntimeLlmConfig
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver
+from .workspace_routing_store import get_workspace_routing_store
 
 _PROVIDER_ID_MAP = {
     "default": None,
     "openai": "openai",
     "google": "google",
     "custom_openai": "openai_compatible",
+    "github_copilot": "github_copilot",
 }
 
 _ROUTE_TO_RUNTIME_PROVIDER = {
@@ -28,6 +30,7 @@ _ROUTE_TO_RUNTIME_PROVIDER = {
     "google": "google",
     "openai_compatible": "custom_openai",
     "ollama_local": "custom_openai",
+    "github_copilot": "custom_openai",
 }
 
 
@@ -52,6 +55,19 @@ def seed_run_stage_routing(
     has_existing_config = os.path.exists(config_service.config_path)
     config = config_service.load_config()
 
+    # Bei frischen Runs: Workspace-Defaults als Seed übernehmen. Versiegelte Stages
+    # (= bereits in den Per-Run-Snapshots vorhanden) werden NICHT überschrieben.
+    if not has_existing_config:
+        try:
+            workspace_defaults = get_workspace_routing_store().load()
+        except Exception:  # noqa: BLE001 — Defaults sind „best effort", kein Run-Stopper
+            workspace_defaults = None
+        if workspace_defaults is not None:
+            if workspace_defaults.global_default.model:
+                config.global_default = workspace_defaults.global_default
+            for ws_stage_id, ws_route in workspace_defaults.stage_overrides.items():
+                config.stage_overrides[ws_stage_id] = ws_route
+
     runtime = llm_runtime or RuntimeLlmConfig()
     route_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
 
@@ -59,9 +75,14 @@ def seed_run_stage_routing(
         provider_options = {}
         if runtime.base_url:
             provider_options["base_url"] = runtime.base_url
+        # Wenn der Request "default" als Provider schickt, mappt das Provider-ID-Dict
+        # auf None. ResolvedRoute.provider_id ist Pflichtfeld; deshalb auf den
+        # global_default des Runs zurückfallen statt None zu persistieren.
+        effective_provider_id = route_provider_id or config.global_default.provider_id
+        effective_model = llm_model_override or config.global_default.model
         config.stage_overrides[stage_id] = StageLLMRoute(
-            provider_id=route_provider_id,
-            model=llm_model_override,
+            provider_id=effective_provider_id,
+            model=effective_model,
             provider_options=provider_options,
         )
         if has_existing_config:

@@ -8,7 +8,11 @@
     <PageHeader
       title="Simulation"
       subtitle="Multi-Agent-Simulationslauf starten und beobachten"
-    />
+    >
+      <template #right>
+        <StepModelOverrideChip stage-id="simulation_rounds" />
+      </template>
+    </PageHeader>
     <PipelineStepper :current-step="3" />
     <Step3Simulation :simulation-id="simulationId" />
   </AppShell>
@@ -20,6 +24,7 @@ import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step3Simulation from '@/components/Step3Simulation.vue'
+import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 
 const props = defineProps<{

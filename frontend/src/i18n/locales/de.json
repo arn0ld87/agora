@@ -839,6 +839,38 @@
           "anthropic": "Anthropic",
           "custom": "Eigener Endpunkt"
         }
+      },
+      "llmProviders": {
+        "title": "LLM-Provider",
+        "subtitle": "Hinterlege API-Schlüssel, ziehe Modelle live und wähle pro Schritt das passende Modell aus.",
+        "keyLabel": "API-Key (maskiert)",
+        "keyPlaceholder": "Neuen API-Key einfügen …",
+        "baseUrlPlaceholder": "https://api.example.com/v1",
+        "status": {
+          "connected": "verbunden",
+          "missing": "Key fehlt",
+          "local": "lokal",
+          "cli": "gh CLI"
+        },
+        "actions": {
+          "save": "Speichern",
+          "test": "Test",
+          "refreshModels": "Modelle laden",
+          "disconnect": "Trennen"
+        },
+        "test": {
+          "saved": "Gespeichert.",
+          "ok": "{count} Modelle gefunden.",
+          "failed": "Verbindung fehlgeschlagen."
+        },
+        "models": {
+          "title": "Modelle"
+        },
+        "defaults": {
+          "title": "Workspace-Default",
+          "subtitle": "Wird automatisch beim Start eines neuen Runs für alle Schritte übernommen.",
+          "placeholder": "Standardmodell wählen …"
+        }
       }
     }
   },

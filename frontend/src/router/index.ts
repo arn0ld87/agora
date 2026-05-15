@@ -78,6 +78,11 @@ const routes: RouteRecordRaw[] = [
     name: 'SettingsLlmRouting',
     component: () => import('../views/Settings/LlmRoutingView.vue'),
   },
+  {
+    path: '/settings/llm-providers',
+    name: 'SettingsLlmProviders',
+    component: () => import('../views/Settings/LlmProvidersView.vue'),
+  },
   // Klassische SettingsView bleibt erreichbar fuer Slice-G-Migration
   {
     path: '/settings-classic',

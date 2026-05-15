@@ -3,8 +3,15 @@ LLM Provider API.
 """
 
 from flask import request
+from pydantic import ValidationError
+
 from . import llm_bp
+from ..contracts.llm_provider_keys_contract import (
+    LlmProviderKeyCreateRequest,
+    LlmProviderKeysListResponse,
+)
 from ..services.llm_provider_registry import LlmProviderRegistry
+from ..services.llm_provider_secrets_store import get_llm_provider_secrets_store
 from ..services.model_catalog_service import ModelCatalogService
 from ..services.secret_resolver import SecretResolver
 from ..utils.api_responses import handle_api_errors, json_success, json_error
@@ -78,3 +85,94 @@ def test_provider(provider_id: str):
     except Exception as exc:
         logger.exception("Provider test failed for %s: %s", provider_id, exc)
         return json_error("Test failed: connectivity or authentication error", status=400)
+
+
+# ---------------------------------------------------------------------------
+# Provider-API-Key-CRUD (Frontend-Setup: speichern, anzeigen, widerrufen)
+# ---------------------------------------------------------------------------
+
+
+def _provider_or_404(provider_id: str):
+    providers = provider_registry.get_providers()
+    return next((p for p in providers if p.id == provider_id), None)
+
+
+@llm_bp.route("/providers/api-keys", methods=["GET"])
+@handle_api_errors(logger=logger)
+def list_provider_api_keys():
+    """List all provider API keys (masked)."""
+    items = get_llm_provider_secrets_store().list_entries()
+    response = LlmProviderKeysListResponse(items=items, total=len(items))
+    return json_success(response.model_dump(mode="json"))
+
+
+@llm_bp.route("/providers/<provider_id>/api-key", methods=["GET"])
+@handle_api_errors(logger=logger)
+def get_provider_api_key(provider_id: str):
+    """Return the stored (masked) key entry for one provider."""
+    if _provider_or_404(provider_id) is None:
+        return json_error(f"Provider not found: {provider_id}", status=404)
+    entry = get_llm_provider_secrets_store().get_entry(provider_id)
+    if entry is None:
+        return json_error("API key not configured", status=404, code="not_found")
+    return json_success(entry.model_dump(mode="json"))
+
+
+@llm_bp.route("/providers/<provider_id>/api-key", methods=["POST", "PUT"])
+@handle_api_errors(logger=logger)
+def upsert_provider_api_key(provider_id: str):
+    """Store or replace the API key for one provider."""
+    provider = _provider_or_404(provider_id)
+    if provider is None:
+        return json_error(f"Provider not found: {provider_id}", status=404)
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        body = LlmProviderKeyCreateRequest.model_validate(payload)
+    except ValidationError as exc:
+        return json_error(
+            "Invalid request body",
+            status=400,
+            code="invalid_request",
+            extra={"errors": exc.errors(include_url=False)},
+        )
+
+    store = get_llm_provider_secrets_store()
+    try:
+        entry = store.upsert(
+            provider_id,
+            api_key=body.api_key,
+            base_url=body.base_url or provider.base_url,
+        )
+    except RuntimeError as exc:
+        logger.error("Secret-Store-Fehler beim Speichern: %s", exc)
+        return json_error(
+            "Secret store unavailable (AGORA_SECRET_KEY missing or invalid)",
+            status=503,
+            code="secret_store_unavailable",
+        )
+
+    # Optionaler Inline-Validate
+    if request.args.get("validate") == "1":
+        base_url = entry.base_url or provider.base_url
+        if base_url:
+            try:
+                model_catalog.get_models(provider_id, provider.type, base_url, body.api_key)
+                entry = store.mark_validated(provider_id, ok=True) or entry
+            except Exception as exc:
+                logger.warning("Provider-Validate fehlgeschlagen für %s: %s", provider_id, exc)
+                entry = store.mark_validated(provider_id, ok=False) or entry
+
+    return json_success(entry.model_dump(mode="json"), status=201)
+
+
+@llm_bp.route("/providers/<provider_id>/api-key", methods=["DELETE"])
+@handle_api_errors(logger=logger)
+def delete_provider_api_key(provider_id: str):
+    """Revoke the API key for one provider."""
+    if _provider_or_404(provider_id) is None:
+        return json_error(f"Provider not found: {provider_id}", status=404)
+    deleted = get_llm_provider_secrets_store().delete(provider_id)
+    if not deleted:
+        return json_error("API key not configured", status=404, code="not_found")
+    return json_success({"provider_id": provider_id, "status": "revoked"})

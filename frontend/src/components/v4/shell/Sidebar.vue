@@ -114,6 +114,7 @@ const navSettings: NavSettingsItem[] = [
   { id: 'integrations',  label: 'Integrations',  to: { name: 'SettingsIntegrations' } },
   { id: 'users-teams',   label: 'Users & Teams', to: { name: 'SettingsUsersTeams' } },
   { id: 'api-keys',      label: 'API Keys',      to: { name: 'SettingsApiKeys' } },
+  { id: 'llm-providers', label: 'LLM Providers', to: { name: 'SettingsLlmProviders' } },
   { id: 'llm-routing',   label: 'LLM Routing',   to: { name: 'SettingsLlmRouting' } },
   { id: 'audit',         label: 'Audit Logs',    to: { name: 'SettingsAuditLogs' } },
 ]
