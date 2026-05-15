@@ -18,7 +18,7 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 
 ## Branch- und PR-Hygiene
 
-1. **Nie auf `main` direkt pushen.** Branch-Name-Format: `feat/<task-scope>-<kurztitel>` (z.B. `feat/layer-meta-slice-44-doku-sync`).
+1. **Nie auf main direkt pushen.** Branch-Name-Format: `feat/<task-scope>-<kurztitel>` (z.B. `feat/layer-meta-slice-44-doku-sync`). Riskante Backend-Änderungen sollten mit dem Label `needs-python314` markiert werden, um den CI-Check gegen Python 3.14-dev zu triggern.
 
 2. **Nach `gh pr create` warten auf Gemini-Code-Assist Review** (~60–120 s). Workflow:
    ```bash
