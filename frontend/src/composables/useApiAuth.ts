@@ -40,6 +40,10 @@ interface TicketApiResponse {
 
 const _cache = new Map<string, TicketCacheEntry>()
 
+/** In-Flight-Promise-Cache: verhindert parallele POST /api/auth/ticket für denselben Scope.
+ *  Copilot-Followup PR #466: concurrent callers erhalten dasselbe Promise zurück. */
+const _inflight = new Map<string, Promise<string>>()
+
 const _EARLY_EXPIRE_BUFFER_MS = 5_000 // 5 Sekunden Vorlauf vor exp
 
 function _isCacheValid(entry: TicketCacheEntry): boolean {
@@ -49,8 +53,10 @@ function _isCacheValid(entry: TicketCacheEntry): boolean {
 function _clearCache(scope?: string): void {
   if (scope) {
     _cache.delete(scope)
+    _inflight.delete(scope)
   } else {
     _cache.clear()
+    _inflight.clear()
   }
 }
 
@@ -61,32 +67,52 @@ function _clearCache(scope?: string): void {
 /**
  * Holt ein frisches Ticket für den gegebenen Scope.
  * Gibt ein gecachtes Ticket zurück, solange es noch (exp - 5s) Sekunden gültig ist.
+ * Concurrent-safe: parallele Aufrufe für denselben Scope teilen sich ein einzelnes
+ * in-flight-Promise (Copilot-Followup PR #466).
  *
+ * @param scope       Ticket-Scope, z.B. `"sse:sim_abc"` oder `"llm-stream"`.
+ * @param ttlSeconds  Gewünschte Ticket-Lebensdauer in Sekunden (default 60).
  * @throws Wenn der POST /api/auth/ticket nicht 200 zurückliefert.
  */
-async function fetchTicket(scope: string): Promise<string> {
+async function fetchTicket(scope: string, ttlSeconds = 60): Promise<string> {
   const cached = _cache.get(scope)
   if (cached && _isCacheValid(cached)) {
     return cached.ticket
   }
 
-  const res = await service.post('/api/auth/ticket', { scope, ttl_seconds: 60 })
-  const body = res as unknown as TicketApiResponse
-  const ticket = body?.data?.ticket
-  const exp = body?.data?.exp
-
-  if (!ticket) {
-    throw new Error(`[useApiAuth] POST /api/auth/ticket returned no ticket (scope=${scope})`)
+  // In-flight-Deduplizierung: wenn bereits ein Request für diesen Scope läuft,
+  // dasselbe Promise zurückgeben statt einen zweiten POST zu starten.
+  const existing = _inflight.get(scope)
+  if (existing) {
+    return existing
   }
 
-  // exp ist ein Unix-Timestamp in Sekunden; Cache mit Vorlauf setzen.
-  const validUntilMs =
-    typeof exp === 'number'
-      ? exp * 1000 - _EARLY_EXPIRE_BUFFER_MS
-      : Date.now() + 55_000 // Fallback: 55s (TTL=60s minus Puffer)
+  const request = (async (): Promise<string> => {
+    try {
+      const res = await service.post('/api/auth/ticket', { scope, ttl_seconds: ttlSeconds })
+      const body = res as unknown as TicketApiResponse
+      const ticket = body?.data?.ticket
+      const exp = body?.data?.exp
 
-  _cache.set(scope, { ticket, validUntilMs })
-  return ticket
+      if (!ticket) {
+        throw new Error(`[useApiAuth] POST /api/auth/ticket returned no ticket (scope=${scope})`)
+      }
+
+      // exp ist ein Unix-Timestamp in Sekunden; Cache mit Vorlauf setzen.
+      const validUntilMs =
+        typeof exp === 'number'
+          ? exp * 1000 - _EARLY_EXPIRE_BUFFER_MS
+          : Date.now() + (ttlSeconds - 5) * 1000
+
+      _cache.set(scope, { ticket, validUntilMs })
+      return ticket
+    } finally {
+      _inflight.delete(scope)
+    }
+  })()
+
+  _inflight.set(scope, request)
+  return request
 }
 
 // ---------------------------------------------------------------------------
