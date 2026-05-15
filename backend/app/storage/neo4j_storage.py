@@ -8,6 +8,7 @@ Includes: CRUD, NER/RE-based text ingestion, hybrid search, retry logic.
 import logging
 import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from threading import Lock
@@ -56,6 +57,13 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         self._user = user or Config.NEO4J_USER
         self._password = password or Config.NEO4J_PASSWORD
         self._lock = Lock()
+
+        # Guards the lazy driver re-creation in :meth:`_get_session` after a
+        # ``_reset_driver_after_fork`` nulled ``_driver``. Without this lock
+        # gunicorn workers racing on the first request would each rebuild
+        # their own driver. Must live on the instance so ``__new__`` callers
+        # in tests can install one without going through ``__init__``.
+        self._lock = threading.Lock()
 
         self._driver = GraphDatabase.driver(
             self._uri, auth=(self._user, self._password)
@@ -108,6 +116,26 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
             # But here we just return the session.
         return self._driver.session(**kwargs)
 
+    def verify_connectivity(self) -> None:
+        """Public connectivity probe for ``/api/status``.
+
+        Wraps the lazy-reconnect path + a real ``RETURN 1`` round-trip in
+        :meth:`_call_with_retry` so the call (a) rebuilds the driver after a
+        gunicorn fork-reset, (b) retries transient errors, and (c) updates
+        the health-state attributes (``_is_connected``, ``_last_success_ts``,
+        ``_last_error``). That last point matters: ``/api/status`` reads
+        those properties straight back, so a successful probe must update
+        them or the UI would otherwise lag behind reality.
+
+        Raises whatever the driver raises after retries are exhausted —
+        callers translate into the ``reachable: false`` status payload.
+        """
+        def _probe():
+            with self._get_session() as session:
+                session.run("RETURN 1").consume()
+
+        self._call_with_retry(_probe)
+
     def _reset_driver_after_fork(self) -> None:
         """Close and discard the inherited driver after gunicorn fork.
 
@@ -122,6 +150,11 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         finally:
             self._driver = None
             self._is_connected = False
+            # Re-init the lock: if the parent process happened to be holding
+            # it at fork time (unlikely with single-threaded gunicorn master,
+            # but cheap insurance) the child would inherit a locked mutex
+            # that nothing can ever release.
+            self._lock = threading.Lock()
 
     def set_ontology_mutation_service(self, service) -> None:
         """Late-bind the Issue #11 ``OntologyMutationService``.
