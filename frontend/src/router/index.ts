@@ -28,6 +28,11 @@ const routes: RouteRecordRaw[] = [
     name: 'Dashboard',
     component: () => import('../views/v4/DashboardView.vue'),
   },
+  // UX-Konsistenz: /v4/dashboard → /dashboard (alle v4-Step-Routes liegen unter /v4/*)
+  {
+    path: '/v4/dashboard',
+    redirect: { name: 'Dashboard' },
+  },
 
   // Runs — AppShell-Wrapper ersetzt direkte RunsView (Slice F)
   {
