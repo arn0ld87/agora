@@ -135,32 +135,30 @@ class LLMClient:
     ) -> "LLMClient":
         """Factory: create LLMClient from a resolved stage route.
 
-        Resolves actual base_url and api_key from the provider configuration,
-        falling back to sanitized/config defaults if no resolver is provided.
+        Resolves actual base_url and api_key from the provider configuration.
         """
         base_url = route.base_url_sanitized
         api_key = api_key_override
 
-        # If a secret resolver is provided, we try to get the real secrets.
-        # This prevents leaking them into ResolvedRoute but allows LLMClient
-        # to use them.
-        if secret_resolver:
-            # We need to know the provider type to resolve the key correctly.
-            # ResolvedRoute only has provider_id.
-            # In a full implementation, we'd look up the provider descriptor.
-            # For now, we use the fallback logic in SecretResolver.
-            from ..services.llm_provider_registry import LlmProviderRegistry
-            registry = LlmProviderRegistry()
-            descriptor = next((p for p in registry.get_providers() if p.id == route.provider_id), None)
+        # 1. Resolve actual secrets (not in ResolvedRoute) via SecretResolver
+        from ..services.secret_resolver import SecretResolver
+        resolver = secret_resolver or SecretResolver()
 
-            p_type = descriptor.type if descriptor else "unknown"
-            if not api_key:
-                api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+        # 2. Map provider_id to provider_type
+        from ..services.llm_provider_registry import LlmProviderRegistry
+        registry = LlmProviderRegistry()
+        descriptor = next((p for p in registry.get_providers() if p.id == route.provider_id), None)
+        p_type = descriptor.type if descriptor else "openai_compatible"
 
-            # Use real base_url from provider_options if present, otherwise from descriptor
-            real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
-            if real_base:
-                base_url = real_base
+        # 3. Resolve API key
+        if not api_key:
+            api_key = resolver.get_api_key(route.provider_id, p_type)
+
+        # 4. Resolve real base_url (including credentials/query tokens)
+        # Pass route.provider_options as override (if it somehow contained a base_url, though it shouldn't anymore)
+        real_base = resolver.get_base_url(route.provider_id, p_type, route.provider_options)
+        if real_base:
+            base_url = real_base
 
         return cls(
             api_key=api_key,
