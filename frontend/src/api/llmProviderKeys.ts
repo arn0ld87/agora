@@ -45,6 +45,22 @@ export async function deleteLlmProviderKey(providerId: string): Promise<void> {
   await service.delete(`/api/llm/providers/${providerId}/api-key`);
 }
 
+/**
+ * Prüft ob für einen Provider ein API-Key in der Settings-DB hinterlegt ist.
+ * Gibt `true` zurück wenn ein Key vorhanden ist, sonst `false`.
+ * Schlägt nie mit einer Exception fehl — bei Fehler wird `false` zurückgegeben.
+ */
+export async function checkLlmProviderHasKey(providerId: string): Promise<boolean> {
+  try {
+    const resp = await service.get<{ data: { has_key: boolean } }>(
+      `/api/llm/providers/${providerId}/has-key`,
+    );
+    return Boolean((resp as unknown as { data: { has_key: boolean } }).data?.has_key);
+  } catch {
+    return false;
+  }
+}
+
 export interface ProviderTestResult {
   connectivity: "ok" | "failed";
   models_found?: number;
