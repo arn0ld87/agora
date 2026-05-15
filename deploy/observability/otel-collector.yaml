@@ -12,21 +12,27 @@ receivers:
 
 processors:
   batch:
-    timeout: 1s
-    send_batch_size: 1024
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
   memory_limiter:
     check_interval: 1s
     limit_mib: 512
 
 exporters:
+  # Korrekte Datasource-Format fuer signoz-otel-collector v0.102.3:
+  # Datenbankname direkt im TCP-Pfad, kein ?database= Query-Param.
   clickhousetraces:
-    datasource: tcp://signoz-clickhouse:9000/?database=signoz_traces
-    timeout: 10s
+    datasource: tcp://signoz-clickhouse:9000/signoz_traces
+    docker_multi_node_cluster: false
+    low_cardinal_exception_grouping: false
   clickhousemetricswrite:
-    endpoint: tcp://signoz-clickhouse:9000/?database=signoz_metrics
-    timeout: 15s
+    endpoint: tcp://signoz-clickhouse:9000/signoz_metrics
+    resource_to_telemetry_conversion:
+      enabled: true
   clickhouselogsexporter:
-    dsn: tcp://signoz-clickhouse:9000/
+    dsn: tcp://signoz-clickhouse:9000/signoz_logs
+    docker_multi_node_cluster: false
     timeout: 10s
     sending_queue:
       enabled: true
@@ -37,20 +43,18 @@ exporters:
       initial_interval: 5s
       max_interval: 30s
       max_elapsed_time: 300s
-  debug:
-    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [clickhousetraces, debug]
+      exporters: [clickhousetraces]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [clickhousemetricswrite, debug]
+      exporters: [clickhousemetricswrite]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [clickhouselogsexporter, debug]
+      exporters: [clickhouselogsexporter]
