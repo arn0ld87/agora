@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick, defineComponent, h } from 'vue'
+import { nextTick, defineComponent } from 'vue'
 import DropdownMenu from '../DropdownMenu.vue'
 import DropdownMenuItem from '../DropdownMenuItem.vue'
 

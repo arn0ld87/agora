@@ -56,6 +56,18 @@ defineSlots<{
 
 const panelRef = ref<HTMLElement | null>(null)
 const previouslyFocused = ref<HTMLElement | null>(null)
+// Vorherigen body.style.overflow-Wert speichern, damit beim Schließen kein
+// fremder Scroll-Lock zurückgesetzt wird (z. B. wenn parent-Component bereits
+// overflow:hidden gesetzt hatte).
+const previousBodyOverflow = ref<string>('')
+
+// Dev-only A11y-Guardrail: ohne sichtbaren title MUSS ariaLabel gesetzt sein,
+// sonst hat das role="dialog" keinen accessible name.
+if (import.meta.env.DEV && !props.title && !props.ariaLabel) {
+  console.warn(
+    '[v4/Dialog] entweder title oder ariaLabel ist Pflicht für role="dialog".',
+  )
+}
 
 function close(): void {
   if (!props.modelValue) return
@@ -120,6 +132,7 @@ watch(
   async (open, previousOpen) => {
     if (open) {
       previouslyFocused.value = (document.activeElement as HTMLElement | null) ?? null
+      previousBodyOverflow.value = document.body.style.overflow
       document.body.style.overflow = 'hidden'
       document.addEventListener('keydown', onKeydown)
       emit('open')
@@ -131,8 +144,10 @@ watch(
       }
     } else if (previousOpen) {
       // Nur aufräumen, wenn vorher offen war (verhindert Side-Effects bei
-      // initial-mount mit modelValue=false)
-      document.body.style.overflow = ''
+      // initial-mount mit modelValue=false). Restore-statt-Reset, damit
+      // parent-seitige Scroll-Locks erhalten bleiben.
+      document.body.style.overflow = previousBodyOverflow.value
+      previousBodyOverflow.value = ''
       document.removeEventListener('keydown', onKeydown)
       previouslyFocused.value?.focus()
       previouslyFocused.value = null
@@ -142,7 +157,9 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  document.body.style.overflow = ''
+  if (props.modelValue) {
+    document.body.style.overflow = previousBodyOverflow.value
+  }
   document.removeEventListener('keydown', onKeydown)
 })
 </script>

@@ -18,11 +18,14 @@ withDefaults(
     tone?: 'info' | 'success' | 'warning' | 'danger'
     title?: string
     dismissible?: boolean
+    /** ARIA-Label für den Schließen-Button; per Default deutsch, i18n-fähig */
+    dismissLabel?: string
   }>(),
   {
     tone: 'info',
     title: undefined,
     dismissible: false,
+    dismissLabel: 'Schließen',
   },
 )
 
@@ -119,7 +122,7 @@ defineSlots<{
       v-if="dismissible"
       type="button"
       class="al-dismiss"
-      aria-label="Schließen"
+      :aria-label="dismissLabel"
       @click="$emit('dismiss')"
     >
       <svg

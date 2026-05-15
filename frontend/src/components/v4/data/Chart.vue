@@ -22,6 +22,15 @@
  * bemerken.
  */
 
+export interface ChartLabels {
+  /** Label für die timeRange-Metazeile (Default: "Zeitraum") */
+  timeRange: string
+  /** Label für die unit-Metazeile (Default: "Einheit") */
+  unit: string
+  /** Screenreader-Text während loading=true (Default: "Lade Chart…") */
+  loading: string
+}
+
 withDefaults(
   defineProps<{
     /** Chart-Titel — Pflicht */
@@ -38,6 +47,11 @@ withDefaults(
     loading?: boolean
     /** Mindest-Höhe für die Slot-Region */
     minHeight?: string
+    /**
+     * UI-Labels für i18n. Konsument übergibt `t('chart.timeRange')` etc.;
+     * Default sind deutsche Strings ("Zeitraum", "Einheit", "Lade Chart…").
+     */
+    labels?: Partial<ChartLabels>
   }>(),
   {
     description: undefined,
@@ -46,6 +60,12 @@ withDefaults(
     interpretation: undefined,
     loading: false,
     minHeight: '240px',
+    // Inline-Default — withDefaults darf keine Outer-Scope-Refs in Functions referenzieren.
+    labels: () => ({
+      timeRange: 'Zeitraum',
+      unit: 'Einheit',
+      loading: 'Lade Chart…',
+    }),
   },
 )
 
@@ -73,18 +93,18 @@ defineSlots<{
 
     <div v-if="timeRange || unit" class="ch-meta">
       <span v-if="timeRange" class="ch-meta-item">
-        <span class="ch-meta-label">Zeitraum</span>
+        <span class="ch-meta-label">{{ labels?.timeRange ?? 'Zeitraum' }}</span>
         <span class="ch-meta-value">{{ timeRange }}</span>
       </span>
       <span v-if="unit" class="ch-meta-item">
-        <span class="ch-meta-label">Einheit</span>
+        <span class="ch-meta-label">{{ labels?.unit ?? 'Einheit' }}</span>
         <span class="ch-meta-value">{{ unit }}</span>
       </span>
     </div>
 
     <div class="ch-canvas" :style="{ minHeight }">
       <div v-if="loading" class="ch-loading" role="status" aria-busy="true" aria-live="polite">
-        <span class="ch-sr-only">Lade Chart…</span>
+        <span class="ch-sr-only">{{ labels?.loading ?? 'Lade Chart…' }}</span>
         <div class="ch-skeleton-bar" />
         <div class="ch-skeleton-bar ch-skeleton-bar--mid" />
         <div class="ch-skeleton-bar ch-skeleton-bar--short" />

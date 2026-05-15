@@ -27,7 +27,7 @@ export type ButtonVariant =
 
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     variant?: ButtonVariant
     size?: ButtonSize
@@ -38,7 +38,7 @@ withDefaults(
     icon?: boolean
     /** Pfeil-Glyph rechts (z. B. „Weiter →") */
     arrow?: boolean
-    /** Pflicht im icon-Modus für a11y */
+    /** Pflicht im icon-Modus für a11y; siehe Dev-Warn unten */
     ariaLabel?: string
   }>(),
   {
@@ -52,6 +52,15 @@ withDefaults(
     ariaLabel: undefined,
   },
 )
+
+// Dev-only A11y-Guardrail: icon-only-Buttons brauchen einen accessible name.
+// Per Default ist der Default-Slot bei icon=true ein SVG ohne Text — wenn auch
+// ariaLabel fehlt, hat der Screenreader nichts zum Vorlesen.
+if (import.meta.env.DEV && props.icon && !props.ariaLabel) {
+  console.warn(
+    '[v4/Button] icon=true erfordert ariaLabel für Screenreader-Kompatibilität.',
+  )
+}
 
 defineEmits<{
   click: [event: MouseEvent]

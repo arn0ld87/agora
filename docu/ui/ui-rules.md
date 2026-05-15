@@ -91,13 +91,21 @@ konsistent gelebt werden, damit neue Komponenten nicht aus dem Rahmen fallen.
 
 ## i18n-Regeln
 
-- Alle user-facing Strings über `vue-i18n` (`t('…')`).
-- Keys in `frontend/src/i18n/de.json` UND `en.json`.
-- Hartkodierte deutsche Strings in `Step*.vue` sind ausdrücklich verboten
-  (siehe Top-Level-CLAUDE.md "Verboten").
-- Untertitel/Defaults in v4-Komponenten dürfen deutsche Defaults haben,
-  wenn sie nur als Fallback dienen (siehe `EmptyState.vue` `title: 'Keine Daten'`).
-  Konsumenten überschreiben mit i18n-Key.
+**Faustregel**: Konsumenten-seitige Strings durch `vue-i18n`, Library-seitige
+Strings durch overridebare Props.
+
+- **Step*.vue, Views, Composable-Outputs**: alle user-facing Strings über
+  `vue-i18n` (`t('…')`). Keys in `frontend/src/i18n/de.json` UND `en.json`.
+  Hartkodierte deutsche Strings sind ausdrücklich verboten (siehe
+  Top-Level-CLAUDE.md "Verboten").
+- **v4-Library-Komponenten** (`components/v4/**`): dürfen deutsche Defaults für
+  sichtbare Labels haben (`EmptyState.title: 'Keine Daten'`, `Alert.dismissLabel:
+  'Schließen'`, `Chart.labels.timeRange: 'Zeitraum'` etc.) — diese Defaults
+  müssen aber **immer per Prop überschreibbar** sein. Konsument übergibt dann
+  `t('emptyState.title')`/`t('alert.close')` etc.
+- **Aktuell sichergestellt** (Stand 2026-05-15): `EmptyState.title/subtitle`,
+  `Alert.dismissLabel`, `Chart.labels.{timeRange,unit,loading}`,
+  `DropdownMenu` (alle Texte slot-driven), `Dialog.{title,description,ariaLabel}`.
 
 ## Security-Regeln
 
@@ -136,6 +144,11 @@ bun run build
 
 `bun run check` führt typecheck + test:coverage + build in einem Rutsch aus.
 
+> Anmerkung: Die Top-Level-`CLAUDE.md` zeigt im aktuellen Stand teilweise noch
+> `npm`-Befehle. Faktisch ist Bun (1.3+) der Standard im Repo — Lockfile ist
+> `bun.lock` und `packageManager` ist Bun. Eine Synchronisierung der
+> `CLAUDE.md`-Beispiele auf `bun run`-Form ist als separater Doku-Slice empfohlen.
+
 ## Anti-Patterns (sofort raus)
 
 | Pattern | Warum nicht | Statt dessen |
@@ -146,7 +159,7 @@ bun run build
 | Mixin-basierte Logik-Wiederverwendung | unklare Composition | Composables |
 | `axios.get()` direkt in Components | mischt Layers | `src/api/*.ts` |
 | `localStorage` für API-Keys | Security | Backend-Secrets |
-| `console.log` in Prod-Code | Lärm | `app.logger` (Backend) / `tracing.recordEvent` |
+| `console.log` in Prod-Code | Lärm | Im Frontend: dev-only `console.warn` mit Komponenten-Präfix oder `tracing.recordEvent`; im Backend: `app.logger` |
 | Hartkodierte deutsche Strings in Step-Files | i18n-Bypass | `vue-i18n` |
 | `<div>`-Tabellen für Listen-Layout | A11y + Styling-Overhead | `<DataTable>` oder semantisches HTML |
 | Inline-CSS-Strings | bricht Tokens | scoped `<style>` |

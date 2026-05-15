@@ -162,10 +162,27 @@ ausgewählter Komponenten. Skip-Begründung hier dokumentiert.
 
 ## Verify-Gates
 
-- `bun run build` im Frontend — **nicht ausgeführt**, weil keine Frontend-Code-Files
-  geändert wurden. Reine Doku- und Repo-Config-Änderungen. Build-Risk = null.
-- `bun run lint`, `bun run typecheck`, `bun run test` — analog skip.
-- `code-review-graph update` — **wird vor Push ausgeführt** (siehe nächster Abschnitt).
+**Welle 1** (Doku-only, `1ce23af`): keine Frontend-Code-Files geändert,
+Build/Test/Lint nicht ausgeführt. Risk = null.
+
+**Welle 2** (neue v4-Komponenten + Tests, `d480e54`):
+- `bun run typecheck` ✓
+- `bun run test` — **102 Test-Files, 807 Tests passed**
+- `bun run build` ✓ (681ms)
+- `bun run lint` ✓
+
+**Welle 3** (Cleanup-J, `7bdb5b7`):
+- `bun run typecheck` ✓
+- `bun run test` — **102 Test-Files, 807 Tests passed** (keine Regression durch Btn→Button-Rename)
+- `bun run build` ✓ (1.01s, Bundle-Size ±0.15kB)
+- `bun run lint` ✓
+
+**Welle 4** (Copilot-Findings-Adressierung, nächster Commit):
+- A11y-Guardrails (Button/Dialog ariaLabel-Pflicht), Listener-Lifecycle
+  (DropdownMenu), Scroll-Lock-Restore (Dialog), i18n-fähige Labels (Chart/Alert).
+- `bun run typecheck` ✓
+- `bun run test` ✓ (Test-Counts identisch, kein Test musste angepasst werden)
+- `code-review-graph update` nach jedem Commit.
 
 ## Nächste empfohlene Slices
 

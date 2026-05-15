@@ -10,13 +10,22 @@
  *     <template #trigger="{ toggle, isOpen }">
  *       <Button :aria-expanded="isOpen" @click="toggle">Aktionen</Button>
  *     </template>
- *     <DropdownMenuItem @select="onEdit">Bearbeiten</DropdownMenuItem>
- *     <DropdownMenuItem variant="danger" @select="onDelete">Löschen</DropdownMenuItem>
+ *     <template #default="{ close }">
+ *       <DropdownMenuItem @select="() => { onEdit(); close() }">Bearbeiten</DropdownMenuItem>
+ *       <DropdownMenuItem variant="danger" @select="() => { onDelete(); close() }">Löschen</DropdownMenuItem>
+ *     </template>
  *   </DropdownMenu>
+ *
+ * Hinweis: Slot-Props (`close`) sind nur via `<template #default="{ close }">`
+ * zugänglich, nicht über lose Default-Slot-Children.
  *
  * Keyboard:
  * - ESC schließt das Menü und gibt Fokus an Trigger zurück.
  * - Click outside schließt das Menü.
+ *
+ * Listener-Lifecycle: document-level click/keydown werden NUR während offener
+ * Phase registriert — vermeidet O(N)-globale-Listener bei vielen Dropdowns
+ * (z. B. eine pro DataTable-Zeile).
  *
  * Wir verwenden bewusst kein @floating-ui / Reka-UI:
  * - Use-Cases sind alle „Trigger-rechts, Menü-darunter-rechts-aligned" — keine
@@ -24,7 +33,7 @@
  * - Halte Dependencies minimal (siehe shadcn-vue-evaluation.md).
  */
 
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 withDefaults(
   defineProps<{
@@ -72,14 +81,24 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-onMounted(() => {
+function attachGlobalListeners(): void {
   document.addEventListener('click', onDocumentClick, true)
   document.addEventListener('keydown', onKeydown)
+}
+
+function detachGlobalListeners(): void {
+  document.removeEventListener('click', onDocumentClick, true)
+  document.removeEventListener('keydown', onKeydown)
+}
+
+// Listener nur während offener Phase — skaliert auch bei Dropdown-pro-Tabellenzeile.
+watch(isOpen, (open) => {
+  if (open) attachGlobalListeners()
+  else detachGlobalListeners()
 })
 
 onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick, true)
-  document.removeEventListener('keydown', onKeydown)
+  detachGlobalListeners()
 })
 
 defineExpose({ open, close, toggle, isOpen })
