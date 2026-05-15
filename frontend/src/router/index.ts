@@ -142,6 +142,12 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
+    path: '/v4/simulation/:simulationId/feed',
+    name: 'StepSimulationFeed',
+    component: () => import('../views/v4/steps/StepSimulationFeedView.vue'),
+    props: true,
+  },
+  {
     path: '/v4/report/:reportId',
     name: 'StepReport',
     component: () => import('../views/v4/steps/StepReportView.vue'),
