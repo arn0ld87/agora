@@ -153,15 +153,15 @@ class LlmProviderSecretsStore:
                 tmp_path.write_text(
                     json.dumps(raw, indent=2, sort_keys=True), encoding="utf-8"
                 )
-                os.replace(tmp_path, self._path)
                 try:
-                    os.chmod(self._path, 0o600)
+                    os.chmod(tmp_path, 0o600)
                 except OSError as exc:
                     logger.warning(
                         "Konnte Rechte auf %s nicht auf 0600 setzen: %s",
-                        self._path,
+                        tmp_path,
                         exc,
                     )
+                os.replace(tmp_path, self._path)
             finally:
                 fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
