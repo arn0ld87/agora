@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 from opentelemetry import trace
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+from ...observability import sim_active_gauge, sim_counter
 from ...utils.logger import get_logger
 from .run_state_store import RunnerStatus, SimulationRunState
 
@@ -308,6 +309,9 @@ def start_simulation(
         state.process_pid = process.pid
         state.runner_status = RunnerStatus.RUNNING
         processes[simulation_id] = process
+        # Slice 2b: Sim-Lifecycle-Metric — PENDING → RUNNING
+        sim_active_gauge().add(1)
+        sim_counter().add(1, {"status": "started"})
         save_state(state)
 
         # Start monitoring thread via injected callback
