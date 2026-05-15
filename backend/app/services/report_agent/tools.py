@@ -105,6 +105,43 @@ parse_tool_calls = _parse_tool_calls
 is_valid_tool_call = _is_valid_tool_call
 
 
+def get_openai_tools_schema(agent: Any) -> List[Dict[str, Any]]:
+    """Liefert die Tool-Definitionen im OpenAI function-calling Format.
+
+    Wandelt die internen ``define_tools(agent)``-Einträge
+    ``{name, description, parameters: {param_name: description, ...}}``
+    in das OpenAI-Schema-Format um:
+    ``[{"type": "function", "function": {"name", "description", "parameters": {...}}}]``.
+
+    ``parameters`` wird als valides JSON-Schema aufgebaut:
+    alle Einträge sind ``string``-typed optional properties.
+    """
+    tools = define_tools(agent)
+    result: List[Dict[str, Any]] = []
+    for tool_name, tool_def in tools.items():
+        properties: Dict[str, Any] = {}
+        for param_name, param_desc in tool_def.get("parameters", {}).items():
+            properties[param_name] = {
+                "type": "string",
+                "description": str(param_desc),
+            }
+        result.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": tool_def.get("description", ""),
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": [],
+                    },
+                },
+            }
+        )
+    return result
+
+
 def describe_tools(tools: Dict[str, Dict[str, Any]]) -> str:
     desc_parts = ["Available Tools:"]
     for name, tool in tools.items():
@@ -119,6 +156,7 @@ __all__ = [
     "define_tools",
     "describe_tools",
     "execute_tool_call",
+    "get_openai_tools_schema",
     "parse_tool_calls",
     "parse_tool_calls_response",
     "is_valid_tool_call",
