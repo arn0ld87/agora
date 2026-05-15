@@ -11,12 +11,16 @@ services:
       - "127.0.0.1:9000:9000"
 
   signoz-zookeeper:
-    image: bitnami/zookeeper:3.7.1
+    # bitnami/zookeeper:3.7.1 wurde Mitte 2025 nach Bitnami-Strategiewechsel
+    # vom Docker Hub entfernt. Offizielles Apache-Image als Drop-in-Ersatz.
+    image: zookeeper:3.9
     profiles: ["observability"]
     environment:
-      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOO_4LW_COMMANDS_WHITELIST: "mntr,conf,ruok,stat"
+      ZOO_STANDALONE_ENABLED: "true"
     volumes:
-      - signoz-zookeeper-data:/bitnami/zookeeper
+      - signoz-zookeeper-data:/data
+      - signoz-zookeeper-datalog:/datalog
 
   signoz-query-service:
     image: signoz/query-service:0.51.0
@@ -56,4 +60,5 @@ services:
 volumes:
   signoz-clickhouse-data:
   signoz-zookeeper-data:
+  signoz-zookeeper-datalog:
   signoz-query-data:
