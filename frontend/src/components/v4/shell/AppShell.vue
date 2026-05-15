@@ -79,7 +79,10 @@ onMounted(() => {
   // bindDynamicCommands ist idempotent — doppelter Aufruf ist sicher.
   commandsStore.bindDynamicCommands(router)
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  commandsStore.unbindDynamicCommands()
+})
 
 // Derive active route name for sidebar item highlighting
 const activeRoute = computed<string>(() => {

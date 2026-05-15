@@ -26,8 +26,31 @@ const lsMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
+// i18n/translate-Mock: kein localStorage-Zugriff beim Modul-Import.
+// Simuliert t() mit einem minimalen Template-Resolver auf Basis der deutschen Schluessel-Templates.
+const I18N_TEMPLATES: Record<string, string> = {
+  'cmd.dynamic.runLabel': 'Lauf: {name}',
+  'cmd.dynamic.reportLabel': 'Report: {name}',
+  'cmd.dynamic.statusRunning': 'läuft',
+  'cmd.dynamic.statusPaused': 'pausiert',
+  'cmd.dynamic.statusPending': 'wartend',
+}
+vi.mock('@/i18n/translate', () => ({
+  t: (key: string, params?: Record<string, unknown>) => {
+    const template = I18N_TEMPLATES[key] ?? key
+    if (!params) return template
+    return Object.entries(params).reduce(
+      (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
+      template,
+    )
+  },
+  registerI18n: vi.fn(),
+  _resetI18nGlobal: vi.fn(),
+}))
+
 // useRunsPolling-Mock — gibt kontrollierten runs-Ref zurueck
 const mockRuns = ref<unknown[]>([])
+const mockStop = vi.fn()
 vi.mock('@/composables/useRunsPolling', () => ({
   useRunsPolling: () => ({
     runs: mockRuns,
@@ -35,7 +58,7 @@ vi.mock('@/composables/useRunsPolling', () => ({
     error: ref(''),
     isRunning: ref(false),
     start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn(),
+    stop: mockStop,
     refresh: vi.fn(),
   }),
 }))
@@ -52,6 +75,7 @@ describe('commandsStore', () => {
   beforeEach(() => {
     lsMock.clear()
     mockRuns.value = []
+    mockStop.mockClear()
     setActivePinia(createPinia())
     const { clearRecent } = useCommandPalette()
     clearRecent()
@@ -179,6 +203,52 @@ describe('commandsStore', () => {
     const filtered = store.filter(dynCmds, 'sim')
     expect(filtered.length).toBeGreaterThanOrEqual(1)
     expect(filtered.some((c) => c.id.startsWith('sim:'))).toBe(true)
+  })
+
+  it('(Phase C) unbindDynamicCommands() ruft Polling-stop auf', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    store.unbindDynamicCommands()
+
+    expect(mockStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('(Phase C) Sim-Labels nutzen i18n-Keys statt hartcodierter Strings', async () => {
+    const store = useCommandsStore()
+    store.bindDynamicCommands(routerMock as never)
+
+    mockRuns.value = [
+      {
+        run_id: 'run-i18n-001',
+        run_type: 'simulation',
+        entity_id: 'sim-i18n-001',
+        status: 'processing',
+        progress: 5,
+        message: '',
+        started_at: '2026-05-16T09:00:00Z',
+        updated_at: '2026-05-16T09:00:00Z',
+        metadata: {},
+        linked_ids: {},
+        artifacts: {},
+        resume_capability: {},
+        summary: { document_name: 'i18n-Kampagne', model: null, persona_count: 5, graph_id: null, graph_name: null, branch_name: null },
+      },
+    ]
+
+    await nextTick()
+
+    const simCmd = store.dynamicCommands.find((c) => c.id === 'sim:run-i18n-001')
+    expect(simCmd).toBeDefined()
+
+    // Der i18n-Mock verwendet die Template-Strings aus I18N_TEMPLATES.
+    // 'cmd.dynamic.runLabel' → 'Lauf: {name}', Status 'processing' → 'läuft'.
+    // Kein hartcodierter String 'laufend' mehr im Label.
+    expect(simCmd?.label).not.toContain('laufend')
+    // Der aufgelöste Status-Text kommt aus dem i18n-Mock (de: 'läuft')
+    expect(simCmd?.label).toContain('läuft')
+    // Der Kampagnenname ist im Label enthalten (via {name}-Substitution)
+    expect(simCmd?.label).toContain('i18n-Kampagne')
   })
 
   it('(Phase C) unbindDynamicCommands() leert Commands und erlaubt Re-Bind', async () => {
