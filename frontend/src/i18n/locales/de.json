@@ -636,7 +636,13 @@
       "TAGGED_AS": "markiert als",
       "HAS_TOPIC": "hat Thema",
       "HAS_INTEREST": "interessiert sich für",
-      "INTERESTED_IN": "interessiert sich für"
+      "INTERESTED_IN": "interessiert sich für",
+      "REPRESENTS": "repräsentiert",
+      "COMMENTS_ON": "kommentiert",
+      "PLANS_WITH": "plant mit",
+      "OWNERSHIP_STAKE": "Eigentumsanteil",
+      "LEADS": "leitet",
+      "SELF_RELATIONS_(1)": "Selbstbeziehung (1)"
     }
   },
   "logs": {
@@ -1047,7 +1053,8 @@
         "graph_build": "Graph-Build",
         "simulation_prepare": "Personas",
         "simulation_run": "Simulation",
-        "report_generate": "Report"
+        "report_generate": "Report",
+        "ontology_generate": "Ontologie wird erzeugt"
       }
     },
     "system": {
