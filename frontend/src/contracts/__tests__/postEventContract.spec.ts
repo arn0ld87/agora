@@ -133,4 +133,59 @@ describe('PostCreatedEventSchema', () => {
     expect(VoiceRegisterSchema.options).toContain('casual')
     expect(VoiceRegisterSchema.options).toContain('jugendsprache')
   })
+
+  // Phase B — sentiment + score
+  it('sentiment-Default ist undefined (optional)', () => {
+    const result = PostCreatedEventSchema.safeParse(VALID_PAYLOAD)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.sentiment).toBeUndefined()
+    }
+  })
+
+  it('sentiment akzeptiert null', () => {
+    const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: null })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.sentiment).toBeNull()
+    }
+  })
+
+  it('sentiment akzeptiert 0.0, 1.0, -1.0', () => {
+    for (const v of [0.0, 1.0, -1.0]) {
+      const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: v })
+      expect(result.success).toBe(true)
+    }
+  })
+
+  it('sentiment lehnt Werte außerhalb [-1, 1] ab', () => {
+    for (const v of [1.5, -1.5, 2.0]) {
+      const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, sentiment: v })
+      expect(result.success).toBe(false)
+    }
+  })
+
+  it('score-Default ist 0', () => {
+    const result = PostCreatedEventSchema.safeParse(VALID_PAYLOAD)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.score).toBe(0)
+    }
+  })
+
+  it('score akzeptiert positiv, negativ und 0', () => {
+    for (const v of [0, 42, -7]) {
+      const result = PostCreatedEventSchema.safeParse({ ...VALID_PAYLOAD, score: v })
+      expect(result.success).toBe(true)
+    }
+  })
+
+  it('Schema-Drift-Gate deckt score und sentiment ab', () => {
+    const backendKeys = propertyKeys(postCreatedEventJson)
+    expect(backendKeys).toContain('sentiment')
+    expect(backendKeys).toContain('score')
+    const zodKeys = shapeKeys(PostCreatedEventSchema)
+    expect(zodKeys).toContain('sentiment')
+    expect(zodKeys).toContain('score')
+  })
 })
