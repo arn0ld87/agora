@@ -80,7 +80,6 @@ export const useCommandsStore = defineStore('commands', () => {
   const dynamicCommands = ref<Command[]>([])
   let stopWatch: (() => void) | null = null
   let stopPolling: (() => void) | null = null
-  let stopPolling: (() => void) | null = null
 
   /**
    * Baut statische Commands und verdrahtet router.push.
