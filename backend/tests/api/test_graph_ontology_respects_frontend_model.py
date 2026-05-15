@@ -187,7 +187,39 @@ def test_ontology_generate_rejects_invalid_llm_provider_json(client):
     assert "llm_provider" in payload["error"].lower()
 
 
-def test_ontology_generate_rejects_provider_without_api_key(client):
+@patch("app.api.graph.LLMClient")
+@patch("app.api.graph.OntologyGenerator")
+@patch("app.api.graph.ProjectManager")
+@patch("app.api.graph.FileParser")
+@patch("app.api.graph.TextProcessor")
+def test_ontology_generate_accepts_provider_without_api_key_uses_db_fallback(
+    text_processor_cls,
+    file_parser_cls,
+    project_manager_cls,
+    ontology_generator_cls,
+    llm_client_cls,
+    client,
+):
+    """Provider ohne api_key im Payload → kein 400 mehr. Backend nutzt SecretResolver-Fallback.
+
+    Geändertes Verhalten seit Smoke-Fix Slice 04:
+    parse_runtime_llm_config() wirft keinen Fehler mehr bei fehlendem api_key.
+    Der Fallback auf die Settings-DB erfolgt in resolve_route_api_key().
+    """
+    project_manager_cls.create_project.return_value = _make_project_mock()
+    project_manager_cls.save_file_to_project.return_value = {
+        "original_filename": "doc.txt",
+        "path": "/tmp/doc.txt",
+        "size": 42,
+    }
+    file_parser_cls.extract_text.return_value = "text"
+    text_processor_cls.preprocess_text.return_value = "text"
+    ontology_generator_cls.return_value.generate.return_value = {
+        "entity_types": [],
+        "edge_types": [],
+        "analysis_summary": "",
+    }
+
     response = client.post(
         "/api/graph/ontology/generate",
         data={
@@ -197,10 +229,11 @@ def test_ontology_generate_rejects_provider_without_api_key(client):
         },
         content_type="multipart/form-data",
     )
-    assert response.status_code == 400
-    payload = response.get_json()
-    assert payload["success"] is False
-    assert payload["code"] == "validation_failed"
+    # Kein 400 mehr — parse_runtime_llm_config akzeptiert leeren Key
+    assert response.status_code != 400, (
+        "parse_runtime_llm_config darf bei fehlendem api_key keinen 400 mehr werfen; "
+        f"erhalten: {response.status_code} — {response.get_json()}"
+    )
 
 
 @patch("app.api.graph.LLMClient")

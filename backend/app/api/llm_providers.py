@@ -168,6 +168,26 @@ def upsert_provider_api_key(provider_id: str):
     return json_success(entry.model_dump(mode="json"), status=status_code)
 
 
+@llm_bp.route("/providers/<provider_id>/has-key", methods=["GET"])
+@handle_api_errors(logger=logger)
+def provider_has_key(provider_id: str):
+    """Read-only: prüft ob für diesen Provider ein API-Schlüssel in der Settings-DB hinterlegt ist.
+
+    Gibt ``{"has_key": true}`` zurück wenn ein Key gespeichert ist,
+    sonst ``{"has_key": false}``. Keine 404 — immer 200.
+    Hinweis: dieser Endpoint liest nur den persistenten Store, kein env-Fallback.
+    """
+    if _provider_or_404(provider_id) is None:
+        return json_error(f"Provider not found: {provider_id}", status=404)
+    try:
+        stored = get_llm_provider_secrets_store().get_plaintext(provider_id)
+        has_key = bool(stored)
+    except RuntimeError:
+        # AGORA_SECRET_KEY fehlt — wir wissen nicht ob ein Key da ist
+        has_key = False
+    return json_success({"has_key": has_key, "provider_id": provider_id})
+
+
 @llm_bp.route("/providers/<provider_id>/api-key", methods=["DELETE"])
 @handle_api_errors(logger=logger)
 def delete_provider_api_key(provider_id: str):

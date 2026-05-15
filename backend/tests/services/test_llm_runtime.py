@@ -39,10 +39,20 @@ def test_runtime_metadata_redacts_api_key():
     assert "secret-value" not in str(cfg.redacted_metadata())
 
 
-def test_non_default_provider_requires_api_key():
-    try:
-        parse_runtime_llm_config({"llm_provider": {"provider": "google"}})
-    except ValueError as exc:
-        assert "api_key" in str(exc)
-    else:
-        raise AssertionError("Expected ValueError for missing api_key")
+def test_non_default_provider_without_api_key_is_accepted():
+    """Seit Smoke-Fix Slice 04: leerer api_key im Payload wirft keinen Fehler mehr.
+
+    Der Fallback auf den Settings-DB-Key erfolgt in resolve_route_api_key().
+    parse_runtime_llm_config() setzt api_key=None und gibt enabled=True zurück.
+    """
+    cfg = parse_runtime_llm_config({"llm_provider": {"provider": "google"}})
+    assert cfg.enabled
+    assert cfg.provider == "google"
+    assert cfg.api_key is None
+
+
+def test_runtime_metadata_shows_api_key_set_false_when_key_absent():
+    """redacted_metadata() zeigt api_key_set=False wenn api_key=None."""
+    cfg = parse_runtime_llm_config({"llm_provider": {"provider": "google"}})
+    meta = cfg.redacted_metadata()
+    assert meta["api_key_set"] is False

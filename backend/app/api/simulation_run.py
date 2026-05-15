@@ -15,6 +15,7 @@ from ..services.llm_routing_seed import (
     resolve_route_api_key,
     seed_run_stage_routing,
 )
+from ..api.simulation_prepare import _is_local_endpoint
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -232,6 +233,18 @@ def start_simulation():
     resolved_route = route_router.resolve("simulation_rounds")
     route_router.lock_stage("simulation_rounds", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
+
+    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=422,
+            message=(
+                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
+            ),
+        )
 
     if simulation_days is not None or llm_model_override or llm_runtime.enabled:
         store = get_artifact_store()

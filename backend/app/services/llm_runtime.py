@@ -92,9 +92,7 @@ def parse_runtime_llm_config(data: Mapping[str, Any]) -> RuntimeLlmConfig:
     if provider == "default":
         return RuntimeLlmConfig()
 
-    api_key = str(raw.get("api_key") or "").strip()
-    if not api_key:
-        raise ValueError("llm_provider.api_key is required for non-default providers")
+    api_key: str | None = str(raw.get("api_key") or "").strip() or None
 
     base_url = str(raw.get("base_url") or "").strip()
     if not base_url:

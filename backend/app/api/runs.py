@@ -7,7 +7,7 @@ from __future__ import annotations
 import threading
 import traceback
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Optional
 
 from flask import current_app, request
 
@@ -611,9 +611,20 @@ def _resume_report_generate(run: dict):
     # — api_key bleibt redacted (Secrets nicht persistiert), aber das Modell
     # kommt sauber aus der Run-Metadata durch. Vorher hat GraphTools beim
     # Lazy-Init Config-Default genommen.
-    shared_llm_client = (
-        LLMClient(model=llm_model_override) if llm_model_override else None
-    )
+    # Smoke-Fix Slice 04: LLMClient(model=...) ohne api_key wirft wenn Config.LLM_API_KEY
+    # fehlt (z. B. in Test-Umgebung). Fallback auf None → GraphTools/ReportAgent nutzen
+    # dann ihren eigenen Default-Client mit Config-Werten.
+    if llm_model_override:
+        try:
+            shared_llm_client: Optional[LLMClient] = LLMClient(model=llm_model_override)
+        except ValueError:
+            logger.warning(
+                "LLMClient für Resume-Report konnte nicht erstellt werden (kein API-Key konfiguriert); "
+                "nutze Service-Default-Client",
+            )
+            shared_llm_client = None
+    else:
+        shared_llm_client = None
     graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
     task_manager = TaskManager()
