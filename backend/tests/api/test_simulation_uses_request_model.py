@@ -220,7 +220,12 @@ def test_resume_report_generate_passes_llm_model_from_run_metadata():
         patch("app.api.runs.ReportAgent", FakeReportAgent),
         patch("app.api.runs.ReportManager"),
         patch("app.api.runs.run_registry") as mock_registry,
+        # LLMClient muss gemockt werden: ohne API-Key wirft der Konstruktor einen
+        # ValueError, der seit Copilot PR #466 zu einem synchronen 422 führt.
+        # Der Test prüft den Erfolgs-Pfad — daher simulieren wir einen validen Client.
+        patch("app.api.runs.LLMClient") as MockLLMClient,
     ):
+        MockLLMClient.return_value = MagicMock(name="FakeLLMClient")
         MockMgr.return_value.get_simulation.return_value = fake_state
         MockProjMgr.get_project.return_value = fake_project
         task_mock = MagicMock()
