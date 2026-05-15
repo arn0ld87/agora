@@ -414,6 +414,53 @@ def e2e_stub_chat_response(
     return _STUB_FINAL_ANSWER_TEMPLATE
 
 
+def e2e_stub_chat_with_tools_response(
+    *,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Deterministischer Return für LLMClient.chat_with_tools() im Stub-Modus.
+
+    Entscheidungslogik analog zu e2e_stub_chat_response:
+    - Weniger als 3 assistant-Nachrichten → gibt einen Tool-Call zurück.
+    - Ab 3 assistant-Nachrichten → Final-Answer-Content, tool_calls=[].
+
+    Der Tool-Name wird aus der tools-Liste genommen (erster Eintrag), falls vorhanden.
+    Fallback: "panorama_search".
+    """
+    from app.utils.llm_client import ToolCallResponse, ToolCallItem  # noqa: PLC0415
+
+    assistant_count = _count_assistant_messages(messages)
+
+    if assistant_count < 3:
+        # Tool-Namen aus übergebener tools-Liste holen
+        tool_name = "panorama_search"
+        if tools:
+            first = tools[0]
+            func = first.get("function", {})
+            tool_name = func.get("name", "panorama_search")
+        return ToolCallResponse(
+            content="",
+            tool_calls=[
+                ToolCallItem(
+                    id=f"stub-call-{assistant_count:02d}",
+                    name=tool_name,
+                    arguments={"query": f"E2E-Smoke-Stub-Query-{assistant_count}"},
+                )
+            ],
+            finish_reason="tool_calls",
+            raw_response=None,
+        )
+
+    return ToolCallResponse(
+        content=_STUB_FINAL_ANSWER_TEMPLATE,
+        tool_calls=[],
+        finish_reason="stop",
+        raw_response=None,
+    )
+
+
 def e2e_stub_response(
     *,
     schema: dict[str, Any] | None,

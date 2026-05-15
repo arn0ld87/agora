@@ -8,7 +8,6 @@ from cryptography.fernet import Fernet
 
 from app.services import llm_provider_secrets_store as store_module
 from app.services.llm_provider_secrets_store import (
-    LlmProviderSecretsStore,
     reset_singleton_for_tests,
 )
 from app.services.secret_resolver import SecretResolver
