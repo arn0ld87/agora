@@ -22,6 +22,7 @@ function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
     is_simulated: true,
     body: 'Test-Post-Inhalt',
     timestamp: '2026-05-15T14:30:00Z',
+    score: 0,
     ...overrides,
   }
 }

@@ -26,6 +26,7 @@ function mkNode(overrides: Partial<RedditNode> = {}): RedditNode {
     is_simulated: true,
     body: 'Root-Post',
     timestamp: '2026-05-15T12:00:00Z',
+    score: 0,
     children: [],
     ...overrides,
   }
