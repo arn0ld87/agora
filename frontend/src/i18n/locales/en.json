@@ -636,8 +636,41 @@
       "TAGGED_AS": "tagged as",
       "HAS_TOPIC": "has topic",
       "HAS_INTEREST": "has interest",
-      "INTERESTED_IN": "interested in"
+      "INTERESTED_IN": "interested in",
+      "REPRESENTS": "represents",
+      "COMMENTS_ON": "comments on",
+      "PLANS_WITH": "plans with",
+      "OWNERSHIP_STAKE": "ownership stake",
+      "LEADS": "leads",
+      "SELF_RELATIONS_(1)": "Self-relation (1)"
     }
+  },
+  "sidebar": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "runs": "Runs",
+      "projects": "Projects",
+      "datasets": "Datasets",
+      "templates": "Templates",
+      "monitoring": "Monitoring"
+    },
+    "settings": {
+      "label": "Settings",
+      "general": "General",
+      "integrations": "Integrations",
+      "usersTeams": "Users & Teams",
+      "apiKeys": "API Keys",
+      "llmProviders": "LLM Providers",
+      "llmRouting": "LLM Routing",
+      "auditLogs": "Audit Logs"
+    },
+    "footer": {
+      "collapse": "Collapse"
+    }
+  },
+  "topbar": {
+    "search": "Search",
+    "notifications": "Notifications"
   },
   "logs": {
     "drawer": {
@@ -1047,7 +1080,8 @@
         "graph_build": "Graph build",
         "simulation_prepare": "Personas",
         "simulation_run": "Simulation",
-        "report_generate": "Report"
+        "report_generate": "Report",
+        "ontology_generate": "Generating ontology"
       }
     },
     "system": {

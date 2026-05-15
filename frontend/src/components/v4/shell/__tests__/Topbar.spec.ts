@@ -11,6 +11,12 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
+import { createI18n } from 'vue-i18n'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
+
+// Lokale i18n-Instanz — kein Singleton-Import, um localStorage-Konflikte zu vermeiden
+const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
 
 import Topbar from '../Topbar.vue'
 
@@ -23,7 +29,7 @@ describe('Topbar', () => {
   it('mountet ohne Crash', async () => {
     await router.push('/')
     const wrapper = mount(Topbar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.exists()).toBe(true)
   })
@@ -31,7 +37,7 @@ describe('Topbar', () => {
   it('rendert topbar-Klasse', async () => {
     await router.push('/')
     const wrapper = mount(Topbar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.classes()).toContain('topbar')
   })
@@ -42,7 +48,7 @@ describe('Topbar', () => {
       props: {
         breadcrumbs: [{ label: 'Agora' }, { label: 'Dashboard' }],
       },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.text()).toContain('Agora')
     expect(wrapper.text()).toContain('Dashboard')
@@ -52,7 +58,7 @@ describe('Topbar', () => {
     await router.push('/')
     const wrapper = mount(Topbar, {
       props: { notificationBadge: 3 },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.find('.topbar__badge').exists()).toBe(true)
     expect(wrapper.find('.topbar__badge').text()).toBe('3')
@@ -62,7 +68,7 @@ describe('Topbar', () => {
     await router.push('/')
     const wrapper = mount(Topbar, {
       props: { notificationBadge: 0 },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.find('.topbar__badge').exists()).toBe(false)
   })
@@ -73,7 +79,7 @@ describe('Topbar', () => {
       slots: {
         crumbs: '<span class="custom-crumbs">Custom Crumbs</span>',
       },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.find('.custom-crumbs').exists()).toBe(true)
   })

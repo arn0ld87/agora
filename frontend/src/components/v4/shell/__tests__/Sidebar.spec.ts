@@ -6,6 +6,8 @@
  * 2. Active-State haengt an active-Prop.
  * 3. Collapse-Click emittet collapse-toggle.
  * 4. Settings-Group toggelt via settingsOpen-Prop.
+ *
+ * Nach i18n-Migration (Slice 06): Labels kommen aus DE-Locale.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -23,6 +25,13 @@ const lsMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
+import { createI18n } from 'vue-i18n'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
+
+// Lokale i18n-Instanz — kein Singleton-Import, um localStorage-Konflikte zu vermeiden
+const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
+
 import Sidebar from '../Sidebar.vue'
 
 const router = makeTestRouter()
@@ -36,7 +45,7 @@ describe('Sidebar', () => {
   it('mountet ohne Crash', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.exists()).toBe(true)
   })
@@ -44,7 +53,7 @@ describe('Sidebar', () => {
   it('rendert Brand-Wordmark "Agora"', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     expect(wrapper.text()).toContain('Agora')
   })
@@ -52,26 +61,28 @@ describe('Sidebar', () => {
   it('rendert Workspace-Nav-Items (Dashboard, Runs vorhanden)', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     const text = wrapper.text()
+    // DE-Locale: dashboard="Dashboard", runs="Runs"
     expect(text).toContain('Dashboard')
     expect(text).toContain('Runs')
   })
 
-  it('rendert Settings-Gruppe', async () => {
+  it('rendert Settings-Gruppe (DE: "Einstellungen")', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
-    expect(wrapper.text()).toContain('Settings')
+    // DE-Locale: sidebar.settings.label = "Einstellungen"
+    expect(wrapper.text()).toContain('Einstellungen')
   })
 
   it('Active-State via active-Prop "dashboard"', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       props: { active: 'dashboard' },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     // SidebarItem mit active wird mit Klasse sidebar-item--active gerendert
     const activeItems = wrapper.findAll('.sidebar-item--active')
@@ -82,7 +93,7 @@ describe('Sidebar', () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       props: { active: '' },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     const activeItems = wrapper.findAll('.sidebar-item--active')
     expect(activeItems.length).toBe(0)
@@ -91,30 +102,31 @@ describe('Sidebar', () => {
   it('Collapse-Footer-Click emittet collapse-toggle', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     await wrapper.find('.sidebar__footer').trigger('click')
     expect(wrapper.emitted('collapse-toggle')).toBeTruthy()
   })
 
-  it('Settings-Sub-Items sichtbar wenn settingsOpen=true', async () => {
+  it('Settings-Sub-Items sichtbar wenn settingsOpen=true (DE-Labels)', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       props: { settingsOpen: true },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     const text = wrapper.text()
-    expect(text).toContain('General')
-    expect(text).toContain('LLM Routing')
+    // DE-Locale: general="Allgemein", llmRouting="LLM-Routing"
+    expect(text).toContain('Allgemein')
+    expect(text).toContain('LLM-Routing')
   })
 
   it('Settings-Sub-Items ausgeblendet wenn settingsOpen=false', async () => {
     await router.push('/')
     const wrapper = mount(Sidebar, {
       props: { settingsOpen: false },
-      global: { plugins: [router] },
+      global: { plugins: [router, i18n] },
     })
     const text = wrapper.text()
-    expect(text).not.toContain('General')
+    expect(text).not.toContain('Allgemein')
   })
 })
