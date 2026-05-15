@@ -2,7 +2,7 @@
   <component
     :is="componentTag"
     v-bind="componentAttrs"
-    class="sidebar-item"
+    class="sidebar-item v4-state-selectable"
     :class="componentClasses"
     @click="handleClick"
   >
@@ -96,12 +96,13 @@ function handleClick(event: MouseEvent) {
   background: transparent;
   text-decoration: none;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  /* transition: via .v4-state-selectable */
   user-select: none;
 }
 
+/* Hover: v4-state-selectable liefert BG-Token */
 .sidebar-item:hover:not(.sidebar-item--active) {
-  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  background: var(--v4-state-hover-bg);
 }
 
 .sidebar-item--active {
@@ -117,10 +118,11 @@ function handleClick(event: MouseEvent) {
   text-overflow: ellipsis;
 }
 
+/* Disabled: Token-Override */
 .sidebar-item--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  color: var(--text-secondary, var(--fg-muted, #888));
+  opacity: var(--v4-state-disabled-opacity);
+  cursor: var(--v4-state-disabled-cursor);
+  color: var(--text-secondary);
 }
 
 .sidebar-item--disabled:hover {

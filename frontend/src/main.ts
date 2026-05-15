@@ -8,6 +8,7 @@ import { initFrontendTracing } from './observability/tracing'
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
 import './assets/styles/global.css'
+import './assets/styles/states.css'
 
 // Observability: initialise before Vue so the first fetch spans are captured.
 initFrontendTracing()

@@ -73,7 +73,7 @@ defineEmits<{
     :disabled="disabled || loading"
     :aria-busy="loading ? 'true' : undefined"
     :aria-label="ariaLabel"
-    class="btn"
+    class="btn v4-state-interactive"
     :class="[
       `btn--${variant}`,
       size !== 'md' && `btn--${size}`,
@@ -89,6 +89,9 @@ defineEmits<{
 </template>
 
 <style scoped>
+/* v4-state-interactive setzt border: 1px solid; .btn-Varianten übersteuern
+   das über höhere Spezifität in global.css — kein Konflikt. */
+
 .btn-spinner {
   display: inline-block;
   width: 12px;

@@ -18,7 +18,7 @@ defineEmits<{
 
 <template>
   <input
-    class="v4-input"
+    class="v4-input v4-state-interactive"
     :class="{ 'v4-input--mono': mono }"
     :type="type"
     :value="modelValue"
@@ -53,19 +53,20 @@ defineEmits<{
   color: var(--text-tertiary);
 }
 
-.v4-input:focus {
+/* Focus: übersteuert .v4-state-interactive mit komponentenspezifischem Inset-Ring */
+.v4-input:focus-visible {
   border-color: var(--accent);
-  outline: 2px solid var(--focus-ring);
+  outline: var(--v4-state-focus-ring-width) solid var(--v4-state-focus-ring);
   outline-offset: -2px;
 }
 
+/* Disabled: übersteuert .v4-state-interactive mit komponentenspezifischem BG */
 .v4-input:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
   background: var(--surface-inset, #f2f2f7);
 }
 
-.v4-input:hover:not(:focus):not(:disabled) {
-  border-color: var(--text-tertiary);
+/* Hover: komponentenspezifischer Border-Override */
+.v4-input:hover:not(:focus-visible):not(:disabled) {
+  border-color: var(--v4-state-hover-border);
 }
 </style>
