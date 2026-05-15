@@ -1164,6 +1164,17 @@
       "hoursAgo": "vor {n}h"
     }
   },
+  "feed": {
+    "reddit": "Reddit",
+    "twitter": "Twitter",
+    "simBadge": "SIM",
+    "activity": "Posts/min",
+    "live": "Live",
+    "empty": "Noch keine Aktivität.",
+    "showMoreReplies": "{count} weitere Replies anzeigen | {count} weitere Replies anzeigen",
+    "pipeline": "Pipeline",
+    "feedTab": "Live-Feed"
+  },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"
   }
