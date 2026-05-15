@@ -10,7 +10,7 @@
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventStream } from '@/composables/useEventStream'
-import { useSimFeed } from '@/composables/useSimFeed'
+import { useSimFeed, clearSimFeed } from '@/composables/useSimFeed'
 import FeedColumn from '@/components/v4/sim-feed/FeedColumn.vue'
 import RedditThread from '@/components/v4/sim-feed/RedditThread.vue'
 import TwitterPost from '@/components/v4/sim-feed/TwitterPost.vue'
@@ -32,7 +32,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stream.stop()
-  feed.clear()
+  clearSimFeed(simulationId)
 })
 </script>
 

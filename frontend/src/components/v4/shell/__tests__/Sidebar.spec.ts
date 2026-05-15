@@ -35,12 +35,14 @@ import en from '@/i18n/locales/en.json'
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
 
 import Sidebar from '../Sidebar.vue'
+import { useSidebarState } from '@/composables/useSidebarState'
 
 const router = makeTestRouter()
 
 describe('Sidebar', () => {
   beforeEach(() => {
     lsMock.clear()
+    useSidebarState._resetForTesting()
     setActivePinia(createPinia())
   })
 
@@ -115,6 +117,9 @@ describe('Sidebar', () => {
   it('Settings-Sub-Items sichtbar wenn Settings-Group via localStorage offen', async () => {
     // Hydrate localStorage: settings-Group ist offen
     lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
+    // _resetForTesting nach dem localStorage-Setzen aufrufen, damit der
+    // Singleton-State aus dem Mock-localStorage hydriert wird.
+    useSidebarState._resetForTesting()
     await router.push('/')
     const wrapper = mount(Sidebar, {
       global: { plugins: [router, i18n] },

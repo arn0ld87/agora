@@ -1,7 +1,6 @@
 /**
  * useSidebarState — Group-Expand-State mit localStorage-Persistenz.
- * Jeder Aufruf erstellt einen frischen reaktiven State, der aus localStorage
- * hydriert wird und Änderungen synchron zurückschreibt.
+ * Modul-globaler Singleton-State: alle Caller teilen dieselbe reaktive Instanz.
  * Storage-Key: agora.sidebar.v1
  */
 import { reactive } from 'vue'
@@ -33,18 +32,35 @@ function persist(state: GroupState): void {
   }
 }
 
-export function useSidebarState() {
-  const state = reactive<GroupState>(hydrate())
+// Modul-globaler Singleton-State (einmalig initialisiert, wie in useDensity.ts)
+const _state = reactive<GroupState>(hydrate())
 
+export function useSidebarState() {
   return {
-    isGroupOpen: (key: string): boolean => state[key] === true,
+    isGroupOpen: (key: string): boolean => _state[key] === true,
     setGroupOpen: (key: string, open: boolean): void => {
-      state[key] = open
-      persist(state)
+      _state[key] = open
+      persist(_state)
     },
     toggleGroup: (key: string): void => {
-      state[key] = !state[key]
-      persist(state)
+      _state[key] = !_state[key]
+      persist(_state)
     },
+  }
+}
+
+/**
+ * Nur für Tests: setzt den Singleton-State zurück und hydriert aus localStorage.
+ * @internal — nicht in Produktions-Code aufrufen.
+ */
+useSidebarState._resetForTesting = function (): void {
+  // Alten State löschen
+  for (const key of Object.keys(_state)) {
+    delete _state[key]
+  }
+  // Neu aus localStorage hydrieren (sodass Tests localStorage-Fixtures setzen können)
+  const fresh = hydrate()
+  for (const [k, v] of Object.entries(fresh)) {
+    _state[k] = v
   }
 }

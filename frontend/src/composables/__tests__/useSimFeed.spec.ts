@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSimFeed, resetSimFeedStore } from '../useSimFeed'
+import { useSimFeed, clearSimFeed, resetSimFeedStore } from '../useSimFeed'
 import type { PostCreatedEvent } from '@/contracts/postEventContract'
 
 function mkPost(overrides: Partial<PostCreatedEvent> = {}): PostCreatedEvent {
@@ -96,5 +96,33 @@ describe('useSimFeed', () => {
     const feed = useSimFeed('sim-1')
     feed.ingest(mkPost({ simulation_id: 'sim-2', post_id: 'p-other' }))
     expect(feed.redditPosts.value).toHaveLength(0)
+  })
+
+  it('clearSimFeed: Store wird aus Map entfernt — neuer useSimFeed-Aufruf liefert frischen State', () => {
+    const feed = useSimFeed('sim-1')
+    feed.ingest(mkPost({ post_id: 'p-before' }))
+    expect(feed.redditPosts.value).toHaveLength(1)
+
+    clearSimFeed('sim-1')
+
+    // Nach clearSimFeed erstellt useSimFeed einen frischen Store
+    const fresh = useSimFeed('sim-1')
+    expect(fresh.redditPosts.value).toHaveLength(0)
+  })
+
+  it('LRU-Limit: bei > 10 simulationIds wird ältester evicted', () => {
+    // Alle 10 füllen
+    for (let i = 0; i < 10; i++) {
+      resetSimFeedStore(`lru-${i}`)
+      useSimFeed(`lru-${i}`)
+    }
+    // Beim 11. Eintrag wird lru-0 evicted
+    resetSimFeedStore('lru-10')
+    const feed11 = useSimFeed('lru-10')
+    feed11.ingest(mkPost({ simulation_id: 'lru-10', post_id: 'p-new' }))
+    expect(feed11.redditPosts.value).toHaveLength(1)
+    // lru-0 wurde aus dem Store entfernt — neuer Aufruf erstellt frischen State
+    const afterEvict = useSimFeed('lru-0')
+    expect(afterEvict.redditPosts.value).toHaveLength(0)
   })
 })

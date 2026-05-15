@@ -38,7 +38,7 @@ const emit = defineEmits<{
 // useLink braucht immer eine Route — Fallback auf '/' wenn kein 'to' gesetzt ist.
 // Die Werte werden nur genutzt wenn props.to gesetzt ist.
 const linkTarget = computed(() => props.to ?? '/')
-const { isExactActive, isActive, href, navigate } = useLink({ to: linkTarget })
+const { isExactActive, isActive } = useLink({ to: linkTarget })
 
 const componentTag = computed(() => {
   if (props.disabled) return 'span'

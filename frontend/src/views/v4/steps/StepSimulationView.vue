@@ -1,6 +1,12 @@
 <!--
   StepSimulationView — AppShell-Wrapper fuer Step 3 (Simulation).
   Tab-Switch: Pipeline (existing) vs. Live-Feed (Slice 5).
+
+  Fix #7: Feed-Tab navigiert via router.push zur eigenen Route StepSimulationFeed.
+  StepSimulationFeedView wird NICHT direkt hier gerendert — kein Double-Mount,
+  kein doppelter SSE-Stream.
+  Active-Tab wird aus $route.name abgeleitet, kein lokales ref nötig.
+
   Slice FE-Redesign-5 · 2026-05-15
 -->
 <template>
@@ -16,25 +22,22 @@
     <PipelineStepper :current-step="3" />
 
     <Tabs
-      v-model="activeTab"
+      :model-value="activeTab"
       :tabs="tabItems"
       :url-sync="false"
       class="sim-view-tabs"
+      @update:model-value="onTabChange"
     />
 
     <div class="sim-view-content">
       <Step3Simulation v-if="activeTab === 'pipeline'" :simulation-id="simulationId" />
-      <RouterView v-else-if="activeTab === 'feed'" />
-      <StepSimulationFeedView
-        v-if="activeTab === 'feed'"
-        :simulation-id="simulationId"
-      />
     </div>
   </AppShell>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
@@ -42,7 +45,6 @@ import PipelineStepper from '@/components/v4/steps/PipelineStepper.vue'
 import Step3Simulation from '@/components/Step3Simulation.vue'
 import StepModelOverrideChip from '@/components/v4/forms/StepModelOverrideChip.vue'
 import Tabs from '@/components/v4/data/Tabs.vue'
-import StepSimulationFeedView from './StepSimulationFeedView.vue'
 import type { BreadcrumbItem } from '@/components/v4/shell/Breadcrumbs.vue'
 import type { TabItem } from '@/components/v4/data/Tabs.vue'
 
@@ -51,8 +53,21 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
-const activeTab = ref<string>('pipeline')
+// Active-Tab aus Route-Name ableiten — kein lokales ref, kein Sync-Problem.
+const activeTab = computed<string>(() =>
+  route.name === 'StepSimulationFeed' ? 'feed' : 'pipeline',
+)
+
+function onTabChange(tab: string): void {
+  if (tab === 'feed') {
+    router.push({ name: 'StepSimulationFeed', params: { simulationId: props.simulationId } })
+  } else {
+    router.push({ name: 'StepSimulation', params: { simulationId: props.simulationId } })
+  }
+}
 
 const tabItems = computed<TabItem[]>(() => [
   { key: 'pipeline', label: t('feed.pipeline') },

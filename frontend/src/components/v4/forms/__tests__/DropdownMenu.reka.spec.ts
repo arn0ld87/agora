@@ -21,8 +21,10 @@ function mountHost() {
     components: { DropdownMenu, DropdownMenuItem },
     template: `
       <DropdownMenu>
-        <template #trigger="{ toggle, isOpen }">
-          <button data-testid="trigger" :aria-expanded="isOpen" @click="toggle">
+        <template #trigger="{ isOpen }">
+          <!-- as-child: reka-ui übernimmt Click-Handling; kein @click="toggle" nötig.
+               aria-haspopup="menu" + aria-expanded werden von reka-ui auf diesen Button gemergt. -->
+          <button data-testid="trigger" :aria-expanded="isOpen">
             Aktionen
           </button>
         </template>
@@ -82,8 +84,8 @@ describe('DropdownMenu — reka-ui ARIA-Härte', () => {
       components: { DropdownMenu, DropdownMenuItem },
       template: `
         <DropdownMenu>
-          <template #trigger="{ toggle }">
-            <button data-testid="trigger" @click="toggle">Aktionen</button>
+          <template #trigger>
+            <button data-testid="trigger">Aktionen</button>
           </template>
           <DropdownMenuItem data-testid="item-disabled" :disabled="true">Gesperrt</DropdownMenuItem>
         </DropdownMenu>
@@ -96,6 +98,20 @@ describe('DropdownMenu — reka-ui ARIA-Härte', () => {
     // MenuItemImpl setzt aria-disabled="true" (nicht HTML disabled-Attribut) bei disabled=true
     const item = document.querySelector('[data-testid="item-disabled"]')
     expect(item?.getAttribute('aria-disabled')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('as-child: Trigger-Slot-Button trägt aria-haspopup, kein nested button', async () => {
+    // Mit as-child rendert reka-ui kein eigenes <button> mehr —
+    // aria-haspopup="menu" wird direkt auf den Consumer-Button gemergt.
+    const wrapper = mountHost()
+    const triggerBtn = document.querySelector('[data-testid="trigger"]') as HTMLElement | null
+    expect(triggerBtn).not.toBeNull()
+    // aria-haspopup="menu" muss auf dem Consumer-Button selbst stehen
+    expect(triggerBtn?.getAttribute('aria-haspopup')).toBe('menu')
+    // Kein nested button: Consumer-Button darf kein weiteres <button> enthalten
+    const nestedButtons = triggerBtn?.querySelectorAll('button')
+    expect(nestedButtons?.length ?? 0).toBe(0)
     wrapper.unmount()
   })
 

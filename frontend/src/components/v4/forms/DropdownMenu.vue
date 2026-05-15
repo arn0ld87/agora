@@ -73,12 +73,11 @@ defineSlots<{
 
 <template>
   <DropdownMenuRoot v-model:open="isOpen">
-    <!-- dm-trigger-wrapper: reka-ui DropdownMenuTrigger setzt aria-haspopup +
-         aria-expanded auf das as-child-Element. Wir verwenden keinen as-child
-         hier, damit der Wrapper das Trigger-Slot direkt enthält und reka-ui
-         die Attribute auf den Wrapper setzt — Consumer-Elemente im trigger-Slot
-         werden dadurch visuell korrekt positioniert. -->
-    <DropdownMenuTrigger class="dm-trigger" @click.prevent>
+    <!-- as-child: reka-ui DropdownMenuTrigger merged seine ARIA-Attribute
+         (aria-haspopup="menu", aria-expanded) direkt auf das erste Child-Element
+         des trigger-Slots. Kein nested-button-Problem, weil kein eigenes <button>
+         mehr gerendert wird — der Consumer-Button IM Slot übernimmt alle Attribute. -->
+    <DropdownMenuTrigger as-child>
       <slot name="trigger" :toggle="toggle" :is-open="isOpen" />
     </DropdownMenuTrigger>
 
