@@ -12,7 +12,7 @@
 // dazukommen (z. B. Multi-Select für CORS-Origins), darf das
 // extrahiert werden.
 
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -21,13 +21,106 @@ import AppFooter from '../components/AppFooter.vue'
 import Badge from '../components/ui/Badge.vue'
 import Button from '@/components/v4/forms/Button.vue'
 import { useSettingsStore } from '../store/settings'
+import {
+  listLlmProviders,
+  listProviderModels,
+  getActiveLlmConfig,
+  setActiveLlmConfig,
+} from '../api/llmRouting'
+
+const LLM_ACTIVE_SECTION = '__llm_active__'
 
 const { t } = useI18n()
 const router = useRouter()
 const settingsStore = useSettingsStore()
 const { sections, schema, fields, dirtyKeys, dirtySectionFlags } = storeToRefs(settingsStore)
 
-const activeSection = ref('llm')
+const activeSection = ref(LLM_ACTIVE_SECTION)
+
+// --- LLM-Auswahl (dedicated panel) ----------------------------------------
+const llmProviders = ref([])
+const llmModels = ref([])
+const selectedProviderId = ref('')
+const selectedModel = ref('')
+const llmLoadingProviders = ref(false)
+const llmLoadingModels = ref(false)
+const llmSaving = ref(false)
+const llmError = ref('')
+const llmFlash = ref('')
+
+async function loadLlmProviders() {
+  llmLoadingProviders.value = true
+  llmError.value = ''
+  try {
+    llmProviders.value = await listLlmProviders()
+  } catch (err) {
+    llmError.value = (err && err.message) || 'Fehler beim Laden der Provider'
+  } finally {
+    llmLoadingProviders.value = false
+  }
+}
+
+async function loadLlmModels(providerId) {
+  if (!providerId) {
+    llmModels.value = []
+    return
+  }
+  llmLoadingModels.value = true
+  llmError.value = ''
+  try {
+    llmModels.value = await listProviderModels(providerId)
+  } catch (err) {
+    llmModels.value = []
+    llmError.value = (err && err.message) || 'Fehler beim Laden der Modelle'
+  } finally {
+    llmLoadingModels.value = false
+  }
+}
+
+async function loadLlmActiveConfig() {
+  try {
+    const cfg = await getActiveLlmConfig()
+    if (cfg && cfg.provider_id) {
+      selectedProviderId.value = cfg.provider_id
+      await loadLlmModels(cfg.provider_id)
+    }
+    if (cfg && cfg.model) {
+      selectedModel.value = cfg.model
+    }
+  } catch (err) {
+    llmError.value = (err && err.message) || 'Fehler beim Laden der aktiven Auswahl'
+  }
+}
+
+async function onProviderChange(providerId) {
+  selectedProviderId.value = providerId
+  selectedModel.value = ''
+  llmFlash.value = ''
+  await loadLlmModels(providerId)
+}
+
+async function saveLlmActive() {
+  if (!selectedProviderId.value || !selectedModel.value) {
+    llmError.value = 'Bitte Provider und Modell waehlen.'
+    return
+  }
+  llmSaving.value = true
+  llmError.value = ''
+  llmFlash.value = ''
+  try {
+    await setActiveLlmConfig({
+      provider_id: selectedProviderId.value,
+      model: selectedModel.value,
+    })
+    llmFlash.value = 'Auswahl gespeichert.'
+  } catch (err) {
+    llmError.value = (err && err.message) || 'Speichern fehlgeschlagen.'
+  } finally {
+    llmSaving.value = false
+  }
+}
+
+const isLlmActiveTab = computed(() => activeSection.value === LLM_ACTIVE_SECTION)
 const showSecretsModal = ref(false)
 const flashMessage = ref('')
 
@@ -51,6 +144,15 @@ onMounted(async () => {
     await settingsStore.connectStream()
   } catch {
     // Fehler steht bereits im Store; UI zeigt loadError-Banner.
+  }
+  await loadLlmProviders()
+  await loadLlmActiveConfig()
+})
+
+watch(activeSection, (next) => {
+  if (next === LLM_ACTIVE_SECTION) {
+    llmFlash.value = ''
+    llmError.value = ''
   }
 })
 
@@ -150,6 +252,16 @@ function sourceVariant(source) {
       <div v-if="!settingsStore.loading && sections.length" class="settings-body">
         <nav class="tabs" role="tablist" :aria-label="t('settings.ariaTablist')">
           <button
+            type="button"
+            role="tab"
+            :aria-selected="isLlmActiveTab"
+            class="tab"
+            :class="{ 'tab--active': isLlmActiveTab }"
+            @click="setActive(LLM_ACTIVE_SECTION)"
+          >
+            <span class="tab-label">LLM-Auswahl</span>
+          </button>
+          <button
             v-for="section in sections"
             :key="section"
             type="button"
@@ -171,7 +283,91 @@ function sourceVariant(source) {
           </button>
         </nav>
 
-        <section class="panel" :aria-label="t('settings.ariaSection', { section: sectionLabel(activeSection) })">
+        <section
+          v-if="isLlmActiveTab"
+          class="panel panel--llm-active"
+          aria-label="LLM-Auswahl"
+        >
+          <div class="llm-active">
+            <header class="llm-active__head">
+              <h2 class="llm-active__title">Aktiver LLM-Anbieter & Modell</h2>
+              <p class="llm-active__subtitle">
+                Diese Auswahl wird fuer alle LLM-Aufrufe im Backend verwendet,
+                sofern keine explizite Stage-Route gesetzt ist.
+              </p>
+            </header>
+
+            <div class="llm-active__row">
+              <label class="llm-active__label" for="llm-provider-select">Provider</label>
+              <select
+                id="llm-provider-select"
+                class="input"
+                :value="selectedProviderId"
+                :disabled="llmLoadingProviders"
+                @change="onProviderChange($event.target.value)"
+              >
+                <option value="" disabled>
+                  {{ llmLoadingProviders ? 'Lade Provider…' : 'Provider waehlen…' }}
+                </option>
+                <option
+                  v-for="p in llmProviders"
+                  :key="p.id"
+                  :value="p.id"
+                >
+                  {{ p.label || p.id }}
+                </option>
+              </select>
+            </div>
+
+            <div class="llm-active__row">
+              <label class="llm-active__label" for="llm-model-select">Modell</label>
+              <select
+                id="llm-model-select"
+                class="input"
+                :value="selectedModel"
+                :disabled="!selectedProviderId || llmLoadingModels"
+                @change="selectedModel = $event.target.value"
+              >
+                <option value="" disabled>
+                  {{
+                    !selectedProviderId
+                      ? 'Erst Provider waehlen'
+                      : llmLoadingModels
+                        ? 'Lade Modelle…'
+                        : (llmModels.length ? 'Modell waehlen…' : 'Keine Modelle gefunden')
+                  }}
+                </option>
+                <option
+                  v-for="m in llmModels"
+                  :key="m.id"
+                  :value="m.id"
+                >
+                  {{ m.id }}{{ m.label && m.label !== m.id ? ` — ${m.label}` : '' }}
+                </option>
+              </select>
+            </div>
+
+            <p v-if="llmFlash" class="llm-active__flash">{{ llmFlash }}</p>
+            <p v-if="llmError" class="llm-active__flash llm-active__flash--error">{{ llmError }}</p>
+
+            <div class="llm-active__actions">
+              <Button
+                variant="accent"
+                :loading="llmSaving"
+                :disabled="!selectedProviderId || !selectedModel || llmSaving"
+                @click="saveLlmActive"
+              >
+                Speichern
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          v-else
+          class="panel"
+          :aria-label="t('settings.ariaSection', { section: sectionLabel(activeSection) })"
+        >
           <table class="fields">
             <thead>
               <tr>
@@ -260,7 +456,7 @@ function sourceVariant(source) {
           </table>
         </section>
 
-        <footer class="actions">
+        <footer v-if="!isLlmActiveTab" class="actions">
           <span v-if="flashMessage" class="flash">{{ flashMessage }}</span>
           <span v-else-if="settingsStore.saveError" class="flash flash--error">
             {{ t('settings.saveFailed', { message: settingsStore.saveError }) }}
@@ -579,5 +775,74 @@ function sourceVariant(source) {
   justify-content: flex-end;
   gap: var(--s-3);
   margin-top: var(--s-5);
+}
+
+.panel--llm-active {
+  padding: var(--s-6);
+}
+.llm-active {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-width: 640px;
+}
+.llm-active__head { display: flex; flex-direction: column; gap: var(--s-2); }
+.llm-active__title {
+  margin: 0;
+  font-family: var(--ff-sans);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+.llm-active__subtitle {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--fs-14);
+}
+.llm-active__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.llm-active__label {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono-wide);
+  text-transform: uppercase;
+  color: var(--fg-meta);
+}
+.llm-active .input {
+  width: 100%;
+  font-family: var(--ff-sans);
+  font-size: var(--fs-14);
+  height: var(--ctl-h-md);
+  padding: 0 var(--ctl-pad-x);
+  background: var(--bg-page);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-pill);
+  color: var(--fg);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.llm-active .input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.llm-active .input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.llm-active__flash {
+  margin: 0;
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  letter-spacing: var(--ls-mono);
+  color: var(--fg-muted);
+}
+.llm-active__flash--error { color: var(--err); }
+.llm-active__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
 }
 </style>

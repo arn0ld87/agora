@@ -41,3 +41,19 @@ export async function patchStageLlmRouting(runId: string, stageId: string, route
   const resp = await service.patch<ApiSuccessEnvelope<RuntimeLlmRouting>>(`/api/runs/${runId}/llm-routing/stages/${stageId}`, route);
   return (resp as any).data;
 }
+
+export interface ActiveLlmConfig {
+  provider_id?: string;
+  model?: string;
+  base_url?: string;
+}
+
+export async function getActiveLlmConfig(): Promise<ActiveLlmConfig> {
+  const resp = await service.get<ApiSuccessEnvelope<ActiveLlmConfig>>("/api/llm/active-config");
+  return (resp as any).data || {};
+}
+
+export async function setActiveLlmConfig(cfg: ActiveLlmConfig): Promise<ActiveLlmConfig> {
+  const resp = await service.put<ApiSuccessEnvelope<ActiveLlmConfig>>("/api/llm/active-config", cfg);
+  return (resp as any).data;
+}
