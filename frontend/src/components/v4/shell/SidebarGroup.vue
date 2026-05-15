@@ -3,39 +3,58 @@
     <!-- Group header trigger -->
     <div
       class="sidebar-group__trigger"
-      :class="{ 'sidebar-group__trigger--active': active }"
+      :class="{ 'sidebar-group__trigger--active': isGroupOpen(groupKey) }"
       role="button"
       tabindex="0"
-      @click="emit('update:open', !open)"
-      @keydown.enter.prevent="emit('update:open', !open)"
-      @keydown.space.prevent="emit('update:open', !open)"
+      data-sidebar-trigger
+      @click="toggleGroup(groupKey)"
+      @keydown.enter.prevent="toggleGroup(groupKey)"
+      @keydown.space.prevent="toggleGroup(groupKey)"
     >
       <Icon v-if="icon" :name="icon" :size="18" :stroke="1.6" />
       <span class="sidebar-group__label">{{ label }}</span>
-      <Icon :name="open ? 'chevronD' : 'chevron'" :size="12" :stroke="1.6" class="sidebar-group__chevron" />
+      <Icon
+        :name="isGroupOpen(groupKey) ? 'chevronD' : 'chevron'"
+        :size="12"
+        :stroke="1.6"
+        class="sidebar-group__chevron"
+      />
     </div>
 
     <!-- Sub-items -->
-    <div v-if="open" class="sidebar-group__body">
+    <div v-if="isGroupOpen(groupKey)" class="sidebar-group__body">
       <slot />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import Icon from './Icon.vue'
 import type { IconName } from './Icon.vue'
+import { useSidebarState } from '@/composables/useSidebarState'
 
-defineProps<{
+const props = defineProps<{
+  groupKey: string
   label: string
   icon?: IconName | string
-  open?: boolean
-  active?: boolean
+  activeRouteNames: string[]
 }>()
 
-const emit = defineEmits<{
-  'update:open': [value: boolean]
-}>()
+const route = useRoute()
+const { isGroupOpen, setGroupOpen, toggleGroup } = useSidebarState()
+
+onMounted(() => {
+  if (
+    props.activeRouteNames.length > 0 &&
+    route.matched.some(
+      (r) => r.name !== undefined && props.activeRouteNames.includes(String(r.name)),
+    )
+  ) {
+    setGroupOpen(props.groupKey, true)
+  }
+})
 </script>
 
 <style scoped>
