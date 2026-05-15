@@ -150,7 +150,14 @@ const {
   useQuotaPlan,
   quotaEntries,
   quotaValidationError,
+  quotaTotal,
 } = usePersonaQuota({ t })
+
+// Warn wenn Pool kleiner als Quota-Summe (smoke #6)
+const belowQuotaWarning = computed(() => {
+  if (!useAgentCap.value || !useQuotaPlan.value) return false
+  return quotaTotal.value > 0 && maxAgents.value < quotaTotal.value
+})
 
 // ----- Persona-Library + CRUD (usePersonaLibrary — Sub-Slice 39, Refs #203) -----
 const {
@@ -376,7 +383,7 @@ onMounted(() => {
               <input
                 type="range"
                 v-model.number="maxAgents"
-                min="50"
+                min="10"
                 max="500"
                 step="5"
                 :disabled="isPreparing"
@@ -385,7 +392,7 @@ onMounted(() => {
               <input
                 type="number"
                 v-model.number="maxAgents"
-                min="50"
+                min="10"
                 max="2000"
                 :disabled="isPreparing"
                 class="agent-cap-number"
@@ -393,6 +400,9 @@ onMounted(() => {
               />
               <span class="meta">{{ t('step2.agentCap.unit') }}</span>
             </div>
+            <p v-if="belowQuotaWarning" class="hint hint--warn" role="alert">
+              {{ t('step2.personaPool.belowQuotaWarning', { pool: maxAgents, quota: quotaTotal }) }}
+            </p>
             <p class="hint" v-if="!useAgentCap">{{ t('step2.agentCap.unlimitedHint') }}</p>
           </div>
 
