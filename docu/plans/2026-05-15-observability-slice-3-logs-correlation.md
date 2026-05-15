@@ -61,4 +61,4 @@
 |---|---|---|
 | Doppelte Log-Formatter überschreiben sich | Mittel | Logger-Hierarchie + idempotenter Setup mit Module-Cache |
 | Subprocess-Logs verlieren `trace_id` | Mittel | `init_runner_logging` muss nach `init_runner_tracing` laufen, da Tracer-Context-Propagation Voraussetzung ist |
-| JSON-Logs brechen `tail -f`-Workflow | Niedrig | Pretty-Print-Toggle via `LOG_FORMAT=text\|json`, Default für Dev = `text` |
+| JSON-Logs brechen tail -f-Workflow | Niedrig | LOG_FORMAT=text\|json Toggle; bei OTEL_LOGS_ENABLED=true JSON erzwingen |
