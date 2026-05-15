@@ -20,7 +20,6 @@ import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
 import { useReportExports } from '../composables/useReportExports'
 import {
   runtimeLlmPayloadFromStorage,
-  runtimeProviderMissingApiKeyFromStorage,
   mapRuntimeProviderToBackendId,
 } from '../composables/useRuntimeLlmOptions'
 import { checkLlmProviderHasKey } from '../api/llmProviderKeys'

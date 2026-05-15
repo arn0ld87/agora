@@ -19,7 +19,7 @@ import { generateReport } from '../api/report'
 import { storedEffectiveModel, STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
 import {
   runtimeLlmPayloadFromStorage,
-  runtimeProviderMissingApiKeyFromStorage,
+  runtimeProviderMissingKeyEverywhere,
 } from '../composables/useRuntimeLlmOptions'
 import Btn from './ui/Btn.vue'
 import Badge from './ui/Badge.vue'
@@ -238,7 +238,7 @@ async function doStart() {
     if (props.simulationDays) params.simulation_days = props.simulationDays
     const model = storedEffectiveModel()
     if (model) params.llm_model = model
-    if (runtimeProviderMissingApiKeyFromStorage()) {
+    if (await runtimeProviderMissingKeyEverywhere()) {
       addLog(t('step2.runtimeProvider.missingKey'))
       emit('update-status', 'error')
       return
@@ -442,7 +442,7 @@ async function goReport() {
     const model = storedEffectiveModel('agora.reportModel', 'agora.reportCustomModel')
       || storedEffectiveModel(STORAGE_MODEL, STORAGE_CUSTOM_MODEL)
     if (model) payload.llm_model = model
-    if (runtimeProviderMissingApiKeyFromStorage()) {
+    if (await runtimeProviderMissingKeyEverywhere()) {
       addLog(t('step2.runtimeProvider.missingKey'))
       return
     }
