@@ -45,7 +45,7 @@ export default defineConfig({
     // jsdom-Environment seit EPIC-10-ST-07 (Issue #84) — Composable-Tests
     // brauchen DOM-APIs (mount/unmount, EventSource-Mock, document.body).
     environment: 'jsdom',
-    include: ['src/**/*.{test,spec}.{js,ts}'],
+    include: ['src/**/*.{test,spec}.{js,ts}', 'tests/**/*.{test,spec}.{js,ts}'],
     globals: false,
     coverage: {
       provider: 'v8',
