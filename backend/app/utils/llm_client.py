@@ -33,6 +33,66 @@ _STRICT_UNSUPPORTED_HINTS = (
 )
 
 
+def _harden_schema_for_openai_strict(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Rekursiv ein JSON-Schema für OpenAI strict structured outputs härten.
+
+    OpenAI verlangt bei ``"strict": True``:
+    - ``required`` muss *alle* Properties eines ``object``-Schemas enthalten.
+    - ``additionalProperties`` muss ``false`` sein.
+
+    Pydantic-generierte Schemas lassen Felder mit ``default`` aus ``required``
+    heraus, was zu HTTP-400-Fehlern bei OpenAI führt. Dieser Helper normiert
+    das Schema, ohne die Pydantic-Modelle selbst zu verändern.
+
+    Der Helper operiert auf einer tiefen Kopie — das Original wird nicht
+    mutiert. Behandelt werden:
+    - ``object``-Schemas direkt auf Top-Level
+    - ``$defs``-Einträge (Pydantic-Referenz-Mechanismus)
+    - ``items``-Schemas (Arrays)
+    - ``allOf``/``anyOf``/``oneOf``-Branches
+
+    Args:
+        schema: JSON-Schema-Dict (z. B. aus ``Model.model_json_schema()``).
+
+    Returns:
+        Neues Dict mit gehärtetem Schema — alle object-Properties required,
+        ``additionalProperties: false`` gesetzt.
+    """
+    import copy
+
+    schema = copy.deepcopy(schema)
+
+    def _harden_node(node: Dict[str, Any]) -> None:
+        if not isinstance(node, dict):
+            return
+
+        # Alle $defs-Einträge rekursiv härten
+        for def_val in node.get("$defs", {}).values():
+            _harden_node(def_val)
+
+        node_type = node.get("type")
+        if node_type == "object" or "properties" in node:
+            props = node.get("properties", {})
+            if props:
+                node["required"] = list(props.keys())
+                node.setdefault("additionalProperties", False)
+            for prop_schema in props.values():
+                _harden_node(prop_schema)
+
+        # Array-items
+        items = node.get("items")
+        if isinstance(items, dict):
+            _harden_node(items)
+
+        # Kombinations-Keywords
+        for kw in ("allOf", "anyOf", "oneOf"):
+            for sub in node.get(kw, []):
+                _harden_node(sub)
+
+    _harden_node(schema)
+    return schema
+
+
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
     """Best-effort recovery for an LLM JSON answer cut off at the output cap.
 
@@ -671,11 +731,15 @@ class LLMClient:
         if disable_json_mode:
             response_format: Optional[Dict[str, Any]] = None
         elif schema is not None:
-            json_schema: Dict[str, Any] = (
+            raw_schema: Dict[str, Any] = (
                 schema.model_json_schema()  # type: ignore[union-attr]
                 if isinstance(schema, type) and issubclass(schema, BaseModel)
                 else schema  # type: ignore[assignment]
             )
+            # OpenAI strict mode erfordert required=all-properties + additionalProperties=false
+            # rekursiv für alle object-Knoten (auch $defs).  Pydantic lässt Felder mit
+            # default aus required heraus — _harden_schema_for_openai_strict normiert das.
+            json_schema: Dict[str, Any] = _harden_schema_for_openai_strict(raw_schema)
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
