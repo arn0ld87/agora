@@ -5,6 +5,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.4 — 2026-05-16)
+
+- NER-Extraktor (`backend/app/storage/ner_extractor.py`) auf strict-Pydantic-Schema
+  umgestellt: `NerEntity` / `NerRelation` / `NerExtractionResult` werden via
+  `chat_json(schema=NerExtractionResult)` an den nativen Ollama-`/api/chat::format`-
+  Pfad aus 05.1/05.3 durchgereicht. Vorher rief NER `chat_json` ohne Schema und
+  bekam unter `json_object`-Mode oft `{"entities": [...], "relations": []}` —
+  Relations-Ratio im Live-Smoke 10/73 (~13 %). Strict-Schema zwingt das Modell,
+  beide Listen tatsächlich zu füllen. `max_tokens` von 4096 auf 8192 erhöht —
+  adressiert den `finish=length`-Truncation-Bug, der im Smoke zu hartem
+  Datenverlust auf Chunk 37/48 führte (Repair-Mechanismus scheiterte, `len=0`).
+  `_validate_and_clean` bleibt unverändert (semantische Ontology-Validierung +
+  Dedup + auto-create-Entity-for-Relation). (Sub-Slice 05.4)
+
 ### Fixed (Sub-Slice 05.3 — 2026-05-16)
 
 - Ollama-Cloud-Support für den Native-Schema-Pfad aus 05.1. Zwei Bugs:
