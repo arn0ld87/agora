@@ -21,7 +21,7 @@ Dokumente, Webseiteninhalte oder strategische Fragestellungen hochladen, Wissens
 ---
 
 > **Status:** v1.0.0 auf `main`.
-> Agora ist ein **experimenteller Fork** und aktuell bewusst **Single-User-only**
+> Agora ist ein **experimentelles Single-User-System**
 > ([ADR-0001](./docs/decisions/0001-auth-model.md)).
 > **Nicht ungeschützt ins öffentliche Internet stellen.** Nutze VPN, Tailscale, Reverse Proxy und Auth-Token.
 
@@ -278,8 +278,10 @@ Runbooks: [`docs/runbooks/`](./docs/runbooks/).
 
 ## Herkunft und Lizenz
 
-Fork/Derivat von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), basierend auf [666ghj/MiroFish](https://github.com/666ghj/MiroFish).
+Agora entstand ursprünglich als Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), welches wiederum auf [666ghj/MiroFish](https://github.com/666ghj/MiroFish) basiert.
 
-Simulations-Engine: [OASIS](https://github.com/camel-ai/oasis) von CAMEL-AI.
+Die aktuelle Codebasis, Architektur und Zielsetzung wurden seitdem grundlegend weiterentwickelt. Agora ist heute ein eigenständiges hybrides Multi-Agent-Analyse- und Simulationssystem für Zielgruppen-, Stakeholder- und Marktreaktionen.
+
+Simulationskomponenten nutzen bzw. integrieren [OASIS](https://github.com/camel-ai/oasis) von CAMEL-AI.
 
 Lizenz: **AGPL-3.0**, siehe [LICENSE](./LICENSE).
