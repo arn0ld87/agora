@@ -110,6 +110,8 @@ backend/.cache/
 /instance/
 backend/instance/settings.json
 backend/instance/settings.*.json.tmp
+backend/instance/active_llm_config.json
+backend/instance/.active_llm_*.tmp
 
 # Upload folder
 backend/uploads/
