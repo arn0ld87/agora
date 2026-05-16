@@ -621,7 +621,8 @@
       "toggleEdgeLabels": "Edge Labels",
       "pauseLayout": "Pause layout",
       "resumeLayout": "Resume layout",
-      "closePanel": "Close graph panel"
+      "closePanel": "Close graph panel",
+      "exportHtml": "Export as standalone HTML"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
@@ -769,6 +770,7 @@
       "empty": "No log lines yet.",
       "loading": "Loading logs…",
       "unknownError": "Failed to load logs.",
+      "noFileYet": "Today's log file has not been written yet — backend is reachable.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
       "reconnect": "Reconnect",

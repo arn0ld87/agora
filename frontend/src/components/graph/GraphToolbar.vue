@@ -56,7 +56,7 @@
       <button
         v-if="hasGraphData"
         class="tool-btn"
-        title="Export as standalone HTML"
+        :title="$t('graph.ui.exportHtml')"
         @click="$emit('download-html')"
       >
         <span class="btn-text">.html</span>

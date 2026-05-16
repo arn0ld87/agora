@@ -104,6 +104,7 @@ const i18n = createI18n({
           empty: 'Noch keine Log-Zeilen.',
           loading: 'Logs werden geladen…',
           unknownError: 'Logs konnten nicht geladen werden.',
+          noFileYet: 'Heutige Logdatei wurde noch nicht geschrieben — Backend ist erreichbar.',
           connectionError: 'SSE-Verbindung unterbrochen, Browser versucht Reconnect…',
           reconnectExhausted: 'Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.',
           reconnect: 'Erneut verbinden',
@@ -173,7 +174,7 @@ describe('LogDrawer — SSE Reconnect (Slice 4, unbegrenzte Reconnects)', () => 
     ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       data: {
         success: true,
-        data: { lines: [], offset: 0, file: null, message: 'log file for today not yet written' },
+        data: { lines: [], offset: 0, file: null, message: 'logs.drawer.noFileYet' },
       },
     })
 
@@ -184,7 +185,7 @@ describe('LogDrawer — SSE Reconnect (Slice 4, unbegrenzte Reconnects)', () => 
     await flushPromises()
     await nextTick()
 
-    expect(wrapper.text()).toContain('log file for today not yet written')
+    expect(wrapper.text()).toContain('Heutige Logdatei wurde noch nicht geschrieben')
   })
 
   it('zeigt Loading-State während fetchLogs läuft (Task 7)', async () => {

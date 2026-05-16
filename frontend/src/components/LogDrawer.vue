@@ -38,7 +38,7 @@
       <div ref="scrollEl" class="drawer-body">
         <div v-if="loading && !lines.length" class="meta">{{ t('logs.drawer.loading') }}</div>
         <div v-else-if="errorMessage" class="meta is-error">{{ errorMessage }}</div>
-        <div v-else-if="fileNotice" class="meta">{{ fileNotice }}</div>
+        <div v-else-if="fileNotice" class="meta">{{ t(fileNotice) }}</div>
         <div v-else-if="!filteredLines.length" class="meta">{{ t('logs.drawer.empty') }}</div>
         <template v-else>
           <div

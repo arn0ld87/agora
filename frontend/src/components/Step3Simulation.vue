@@ -873,6 +873,7 @@ watch(() => props.simulationId, (newId, oldId) => {
   grid-template-columns: 1fr 1fr;
   gap: var(--s-3);
   min-height: 0;
+  overflow: visible;  /* Scrollen läuft pro FeedColumn (.fc-scroll). */
 }
 .feed-grid > * { min-height: 480px; max-height: clamp(480px, 60vh, 720px); }
 .feed-density-row {
@@ -881,6 +882,21 @@ watch(() => props.simulationId, (newId, oldId) => {
   align-items: center;
   border-bottom: none;
   padding-top: var(--s-2);
+}
+/* Density-Toggle wirkt jetzt am Container und vererbt via CSS-Vars an die
+   FeedColumn-Kinder. Comfort = Default; Compact = engere Skalen. */
+.feed-grid[data-density="comfort"] {
+  --feed-post-padding: var(--s-3);
+  --feed-post-gap: var(--s-2);
+  --feed-post-fs: var(--fs-13, 13px);
+  --feed-post-lh: 1.6;
+}
+.feed-grid[data-density="compact"] {
+  --feed-post-padding: var(--s-2);
+  --feed-post-gap: 4px;
+  --feed-post-fs: 12px;
+  --feed-post-lh: 1.35;
+  gap: var(--s-2);
 }
 @media (max-width: 880px) {
   .feed-grid { grid-template-columns: 1fr; }
