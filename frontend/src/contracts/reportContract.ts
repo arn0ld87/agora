@@ -192,6 +192,8 @@ export const ReportSectionSchema = z.object({
   section_summary: z.string().min(1),
   claims: z.array(ReportClaimSchema).default([]),
   hypotheses: z.array(ReportSectionHypothesisSchema).default([]),
+  // Slice 3 (Issue #495): Überhang nach Cap von 5 — spiegelt backend ReportSectionModel.hypotheses_appendix.
+  hypotheses_appendix: z.array(ReportSectionHypothesisSchema).max(50).default([]),
   data_gaps: z.array(ReportSectionDataGapSchema).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
