@@ -9,7 +9,7 @@ Status:
   active   — Schlüssel ist verwendbar.
   revoked  — Manuell zurückgezogen, kein erneutes Aktivieren.
 
-Siehe ADR-Slice G2 + docu/2026-05-14-design-v4-slice-g2-api-keys-worklog.md.
+Siehe ADR-Slice G2 + docs/2026-05-14-design-v4-slice-g2-api-keys-worklog.md.
 """
 from __future__ import annotations
 

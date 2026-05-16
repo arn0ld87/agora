@@ -75,7 +75,7 @@ Arbeite ausschließlich im Worktree <WT>. Sub-Slice: Layer 0 / Task 01 — Pydan
 
 ## Doku
 
-- docu/<YYYY-MM-DD>-task-01-contracts-arbeitsprotokoll.md (knapp: Files, Drift-Stellen, Tests)
+- docs/<YYYY-MM-DD>-task-01-contracts-arbeitsprotokoll.md (knapp: Files, Drift-Stellen, Tests)
 - CHANGELOG.md [Unreleased]: "Layer 0: Pydantic-Contracts (Sub-Slice 01)"
 
 ## NICHT

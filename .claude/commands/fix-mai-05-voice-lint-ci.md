@@ -36,7 +36,7 @@ Modi:
   python check_voice.py --strict   # Findings als jsonl auf stdout, exit 1 bei Treffer
   python check_voice.py --jsonl    # Findings als jsonl auf stdout, exit 0 (für Reports)
 
-Quelle: docu/glossary-wording.md.
+Quelle: docs/glossary.md.
 """
 
 import argparse
@@ -47,7 +47,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Hard-Block-Terme (case-insensitive). Quelle: docu/glossary-wording.md Issue #175.
+# Hard-Block-Terme (case-insensitive). Quelle: docs/glossary.md Issue #175.
 FORBIDDEN_TERMS = [
     r"\bfuture prediction\b",
     r"\brehearsal of the future\b",
@@ -77,8 +77,8 @@ SCAN_PATHS = [
 EXCLUDE_PATTERNS = [
     r"^backend/tests/",
     r"^frontend/tests/",
-    r"^docu/glossary-wording\.md$",
-    r"^docu/history/",
+    r"^docs/glossary-wording\.md$",
+    r"^docs/archive/history/",
     r"\.snapshot\b",
 ]
 
@@ -202,6 +202,6 @@ PLAN.md Heuristik-Tabelle Reihe 9 (Task 11): „Voice-Lint CI-Check". Heute exis
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-05-arbeitsprotokoll.md`.
+1. Worklog `docs/2026-05-14-mai-05-arbeitsprotokoll.md`.
 2. CHANGELOG: `MAI-05 · Voice-Lint (check_voice.py --strict) als CI-Pflichtschritt.`
 3. `/fix-mai-07-quote-marker-css` für Block-E-Polish.

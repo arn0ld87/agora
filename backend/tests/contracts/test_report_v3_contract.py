@@ -1,7 +1,7 @@
 """
 Contract-Tests für report_v3.py — ReportV3-Container mit 11 Pflichtabschnitt-DTOs.
 
-Spec-Quelle: docu/2026-05-09-output-vertrag-bewertung-evidence-quality.md (Abschnitt 6.1/8).
+Spec-Quelle: docs/2026-05-09-output-vertrag-bewertung-evidence-quality.md (Abschnitt 6.1/8).
 Reihenfolge: M11.8c.
 """
 from __future__ import annotations

@@ -56,7 +56,7 @@ Einige CVEs in transitiven Abhängigkeiten sind dokumentiert und
 gepinnt-getrackt, weil ein Upstream-Fix noch aussteht. Tracking-Issues:
 
 - [#121–#126 Security-Watchlist](https://github.com/arn0ld87/Agora/issues?q=label%3Asecurity)
-- Dokumentation: [`docu/`](docu/) — Sub-Slice 31 (Layer 10)
+- Dokumentation: [`docs/`](docs/) — Sub-Slice 31 (Layer 10)
 
 Sobald Upstream patcht, zieht Dependabot automatisch (siehe
 [`.github/dependabot.yml`](.github/dependabot.yml)).

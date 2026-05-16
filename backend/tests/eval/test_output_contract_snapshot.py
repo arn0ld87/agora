@@ -5,7 +5,7 @@ maschinenlesbaren Snapshot (output-contract-required-sections.txt).
 Drift in der Section-Liste schlägt damit sofort als Test-Fail an,
 nicht erst beim externen Bewertungs-Review.
 
-Quelle: docu/2026-05-09-output-vertrag-bewertung-evidence-quality.md
+Quelle: docs/2026-05-09-output-vertrag-bewertung-evidence-quality.md
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def test_default_report_sections_descriptions_non_empty():
 def test_min_persona_table_rows_pinned_to_fifty():
     """MIN_PERSONA_TABLE_ROWS pinnt das Mengengerüst aus der externen Bewertung.
 
-    Quelle: docu/2026-05-09-output-vertrag-bewertung-evidence-quality.md §6.1.
+    Quelle: docs/2026-05-09-output-vertrag-bewertung-evidence-quality.md §6.1.
     Eine Änderung verlangt expliziten Sub-Slice + Bewertungs-Begründung.
     """
     assert MIN_PERSONA_TABLE_ROWS == 50

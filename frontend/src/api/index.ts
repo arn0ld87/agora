@@ -36,7 +36,7 @@ export const getAgoraToken = (): string => {
   if (import.meta.env.VITE_AGORA_TOKEN_STORAGE === 'memory') {
     return _memoryToken || import.meta.env.VITE_AGORA_TOKEN || ''
   }
-  // Dev-Fallback: localStorage (bewusst, siehe docu/auth.md)
+  // Dev-Fallback: localStorage (bewusst, siehe docs/auth.md)
   return (
     (typeof window !== 'undefined' && window.localStorage?.getItem('agora_token')) ||
     import.meta.env.VITE_AGORA_TOKEN ||

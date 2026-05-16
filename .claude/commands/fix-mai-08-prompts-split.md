@@ -213,6 +213,6 @@ REFACTORING_PLAN (1).md §R13: „508 LOC mit 4 semantischen Clustern — Komple
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-08-arbeitsprotokoll.md`.
+1. Worklog `docs/2026-05-14-mai-08-arbeitsprotokoll.md`.
 2. CHANGELOG: `MAI-08 · report_prompts.py zu Paket aufgesplittet (planning/sections/react/chat).`
 3. `/fix-mai-09-markdown-ts` (Block C, parallel zu B).

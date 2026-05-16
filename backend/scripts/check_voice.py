@@ -67,7 +67,7 @@ ALL_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
 _BUILTIN_ALLOWLIST_SUFFIXES: frozenset[str] = frozenset(
     [
         "prompts/2026-05-02-voice-register-katalog.md",
-        "docu/2026-05-02-task-10-voice-register-arbeitsprotokoll.md",
+        "docs/archive/worklogs/2026-05-02-task-10-voice-register-arbeitsprotokoll.md",
     ]
 )
 

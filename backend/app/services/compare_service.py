@@ -7,7 +7,7 @@ Aggregiert BranchMetrics aus drei Quellen:
 
 und berechnet signierte Deltas (Branch B − Branch A).
 
-Spec: docu/2026-05-03-task-23-compare-model-spike.md
+Spec: docs/2026-05-03-task-23-compare-model-spike.md
 Closes #66 (Sub-Slice 24)
 """
 

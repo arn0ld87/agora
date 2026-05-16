@@ -168,6 +168,6 @@ Refactoring-Plan R12 fordert ein CI-Gate, das Zod-Spiegel und Pydantic-Contracts
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-04-arbeitsprotokoll.md`.
+1. Worklog `docs/2026-05-14-mai-04-arbeitsprotokoll.md`.
 2. CHANGELOG: `MAI-04 · Schema-Drift-Gate (dump_schemas --check) als CI-Pflichtschritt.`
 3. `/fix-mai-13-dependabot-cleanup` (Block A Abschluss).

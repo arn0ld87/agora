@@ -59,8 +59,8 @@ negativ.
 
 Schließe das Issue mit Verweis auf:
 
-- `docu/2026-05-08-m11-phase5-arbeitsprotokoll.md` (simulation_runner.py)
-- `docu/2026-05-08-m11-phase5b-arbeitsprotokoll.md` (graph_tools.py)
+- `docs/2026-05-08-m11-phase5-arbeitsprotokoll.md` (simulation_runner.py)
+- `docs/2026-05-08-m11-phase5b-arbeitsprotokoll.md` (graph_tools.py)
 - analoge Frontend-Schnitte unter `frontend/src/composables/`
 
 Falls die LOC durch zukünftige Features wieder über 800 wandert, wird ein
@@ -80,7 +80,7 @@ gh issue view 203 --json state --jq '.state'
 
 ### Schritt 5: Worklog (rein dokumentarisch)
 
-`docu/2026-05-14-mai-10-arbeitsprotokoll.md`:
+`docs/2026-05-14-mai-10-arbeitsprotokoll.md`:
 
 ```markdown
 # MAI-10 · Issue #203 schließen — Arbeitsprotokoll
