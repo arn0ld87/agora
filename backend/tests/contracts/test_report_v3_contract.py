@@ -289,9 +289,14 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
 
     assert restored.schema_version == 3
     assert restored.report_id == report_id
-    assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
+    # Reviewer-Floor S1: Claim mit 1 Evidence-Item wird zur Hypothesis geroutet.
+    assert len(restored.claims) == 0, (
+        "Claim mit 1 Evidence-Item darf nicht als Claim persistiert werden (Reviewer-Floor S1)"
+    )
+    assert any(
+        "Sicherheitsbedenken" in h.hypothesis_text for h in restored.hypotheses
+    ), "Claim mit 1 Evidence muss als Hypothesis auftauchen"
     assert restored.data_gaps[0].id == "gap_01"
-    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 

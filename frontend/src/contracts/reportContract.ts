@@ -8,6 +8,13 @@
  */
 import { z } from "zod";
 
+/**
+ * Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
+ * im Backend zur Hypothesis geroutet, bevor der Report das Frontend erreicht.
+ * Das Schema bleibt permissive (min 1), damit alte Reports lesbar bleiben.
+ */
+export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 2;
+
 // === Enums ===
 export const ConfidenceLabelSchema = z.enum(["low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;

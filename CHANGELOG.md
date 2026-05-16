@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (Sub-Slice S1 — 2026-05-17)
+
+- Report-Quality Slice 1: Evidence-Coverage-Floor (min=2) — Claims mit <2 Evidence-Items werden zur Hypothesis geroutet, Cap auf 0.59 in compute_confidence. Reviewer-Feedback report_4fe2dacd80ba. (#493)
+
 ### Fixed (Sub-Slice 05.9 — 2026-05-16)
 
 - `backend/scripts/_sim_common.py::compute_start_hour_offset()` shiftet die

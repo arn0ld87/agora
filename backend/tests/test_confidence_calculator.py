@@ -89,7 +89,12 @@ def test_audit_trail_types_get_zero_source_weight():
 
 
 def test_contradiction_penalty_lowers_score():
-    items = [{"type": "graph_fact", "source": "x", "match_score": 0.9}]
+    """Mit ≥2 Evidence-Items greift der Reviewer-Floor (Slice S1) nicht;
+    die Penalty senkt den Score messbar."""
+    items = [
+        {"type": "graph_fact", "source": "x", "match_score": 0.9},
+        {"type": "graph_fact", "source": "y", "match_score": 0.85},
+    ]
     base, _ = compute_confidence(items)
     penal, _ = compute_confidence(items, contradiction_penalty=0.3)
     assert penal == round(max(0.0, base - 0.3), 3) or penal < base

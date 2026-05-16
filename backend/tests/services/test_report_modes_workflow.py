@@ -32,13 +32,20 @@ def _make_evidence_map(
             "claim_id": "claim_high_ev",
             "claim_text": "Sicherheitsbedenken hemmen die Adoption nachweislich.",
             "confidence_label": "high",
+            # Reviewer-Floor S1: ≥2 Evidence-Items erforderlich, damit Claim bleibt.
             "evidence": [
                 {
                     "source_id_anchor": "kg:metric:adoption_friction",
                     "type": "graph_metric",
                     "snippet": "adoption_friction: 0.72",
                     "supports_claim": True,
-                }
+                },
+                {
+                    "source_id_anchor": "kg:metric:trust_deficit",
+                    "type": "graph_metric",
+                    "snippet": "trust_deficit: 0.65",
+                    "supports_claim": True,
+                },
             ],
         },
     ]
@@ -176,15 +183,19 @@ class TestClaimFilteringByMode:
         assert "claim_high_ev" in claim_ids
 
     def test_explorative_mode_keeps_all_with_evidence(self):
-        """explorative: Claims mit Evidence bleiben alle durch."""
+        """explorative: Claims mit ≥2 Evidence-Items bleiben alle durch.
+
+        Reviewer-Floor S1 greift in allen Modi: claim_low hat nur 1 Evidence-Item
+        und wird zur Hypothesis geroutet. claim_high_ev hat 2 → bleibt Claim.
+        """
         from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
 
         evidence_map = _make_evidence_map(include_no_evidence=False, include_low_confidence=True)
         report = self._make_report()
         v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="explorative")
         claim_ids = {c.id for c in v3.claims}
-        # Im explorative-Modus bleibt claim_low drin (nicht gedroppt)
-        assert "claim_low" in claim_ids
+        # claim_low hat nur 1 Evidence-Item → Reviewer-Floor → Hypothesis
+        assert "claim_low" not in claim_ids
         assert "claim_high_ev" in claim_ids
 
 
@@ -236,3 +247,85 @@ class TestMarkdownBannerByMode:
         banner_pos = rendered.find("Report-Modus")
         table_pos = rendered.find("## Persona-Tabelle")
         assert banner_pos < table_pos, "Banner muss vor Persona-Tabelle stehen"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Reviewer-Floor S1 — Evidence-Coverage-Floor (min=2)
+# ---------------------------------------------------------------------------
+
+def _make_evidence_map_with_evidence_count(evidence_count: int) -> dict:
+    """Erzeugt eine Evidence-Map mit einem Claim mit `evidence_count` Evidence-Items."""
+    evidence = [
+        {
+            "source_id_anchor": f"kg:metric:source_{i}",
+            "type": "graph_metric",
+            "snippet": f"metric_{i}: 0.8",
+            "supports_claim": True,
+        }
+        for i in range(evidence_count)
+    ]
+    return {
+        "schema_version": 2,
+        "report_id": "report_test_floor01",
+        "simulation_id": "sim_test_floor001",
+        "global_evidence": [],
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Evidence-Floor-Test",
+                "section_summary": "Testabschnitt für Reviewer-Floor",
+                "claims": [
+                    {
+                        "claim_id": "claim_floor_test",
+                        "claim_text": "Ein Claim mit variabler Evidence-Anzahl.",
+                        "confidence_label": "high",
+                        "confidence_score": 0.75,
+                        "evidence": evidence,
+                    }
+                ],
+                "data_gaps": [],
+                "hypotheses": [],
+            }
+        ],
+    }
+
+
+class TestEvidenceFloorS1:
+    def _make_report(self):
+        from app.models.report import Report, ReportStatus  # noqa: PLC0415
+        return Report(
+            report_id="report_test_floor01",
+            simulation_id="sim_test_floor001",
+            graph_id="graph_test000001",
+            simulation_requirement="Test",
+            status=ReportStatus.COMPLETED,
+            markdown_content="# Test",
+        )
+
+    def test_single_evidence_routes_to_hypothesis(self):
+        """Reviewer-Floor S1: Claim mit nur 1 Evidence-Item → Hypothesis, nicht Claim."""
+        from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+        evidence_map = _make_evidence_map_with_evidence_count(1)
+        report = self._make_report()
+        v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
+        claim_ids = {c.id for c in v3.claims}
+        assert "claim_floor_test" not in claim_ids, (
+            "Claim mit 1 Evidence-Item darf nicht als Claim durchlaufen (Reviewer-Floor S1)"
+        )
+        hypothesis_texts = [h.hypothesis_text for h in v3.hypotheses]
+        assert any("Evidence-Floor-Test" in t or "variabler Evidence" in t for t in hypothesis_texts), (
+            "Claim mit 1 Evidence-Item muss in Hypotheses auftauchen"
+        )
+
+    def test_two_evidence_keeps_claim(self):
+        """Reviewer-Floor S1: Claim mit 2+ Evidence-Items bleibt Claim."""
+        from app.services.report_agent.manager import ReportManager  # noqa: PLC0415
+
+        evidence_map = _make_evidence_map_with_evidence_count(2)
+        report = self._make_report()
+        v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
+        claim_ids = {c.id for c in v3.claims}
+        assert "claim_floor_test" in claim_ids, (
+            "Claim mit 2 Evidence-Items muss als Claim durchlaufen (Reviewer-Floor S1)"
+        )

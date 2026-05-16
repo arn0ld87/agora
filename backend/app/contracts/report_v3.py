@@ -18,6 +18,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+CLAIM_MIN_EVIDENCE_FOR_CLAIM: int = 2
+"""Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
+in `_finalize_section_claims` zur Hypothesis geroutet, statt als Claim
+durchzulaufen. ADR-0002-konform — verschärft, schwächt nicht."""
+
 
 ReportMode = Literal["strict", "balanced", "explorative"]
 """Vertrauensmodus für den Report-Output (PLAN.md §5.1, Slice P4.1).

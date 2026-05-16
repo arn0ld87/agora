@@ -516,10 +516,36 @@ class ReportAgent:
         hypotheses: List[Dict[str, Any]] = []
         data_gaps: List[Dict[str, Any]] = []
 
+        from app.contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM  # noqa: PLC0415
+
         for claim in normalize_claims_for_contract(claims):
             evidence = claim.get("evidence") or []
             score = float(claim.get("confidence_score") or 0.0)
             label = str(claim.get("confidence_label") or "").lower()
+
+            # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
+            # Claim braucht ≥2 unabhängige Evidence-Items, sonst Routing zur Hypothesis.
+            # evidence_count==0 fällt durch zum Bestands-Low-Confidence-Branch (mit data_gap).
+            evidence_count = len(evidence) or len(claim.get("evidence_refs") or [])
+            if 0 < evidence_count < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
+                index = len(hypotheses) + 1
+                claim_text = (
+                    str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                    or "No evidence-bound claim text available."
+                )
+                claim_text = self._truncate(claim_text, 1000)
+                hypotheses.append({
+                    "hypothesis_id": f"hypothesis_{index:02d}",
+                    "hypothesis_text": claim_text,
+                    "rationale": (
+                        f"Reviewer-Floor: nur {evidence_count} von "
+                        f"{CLAIM_MIN_EVIDENCE_FOR_CLAIM} geforderten Evidence-Items "
+                        "— als Hypothese geführt."
+                    ),
+                    "suggested_evidence": [],
+                })
+                continue
+
             if not evidence and score < 0.4:
                 # Low-confidence ohne Evidence → hypothesis + data_gap
                 index = len(hypotheses) + 1

@@ -186,11 +186,18 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     # confidence dann auf "low", obwohl der Test den Embedder-Fehler-
     # Pfad prüfen will (siehe Sub-Slice-07-Kommentar unten).
     agent._embed_cache = None
-    agent._active_section_evidence = [{
-        "type": "graph_fact",
-        "source": "report_tool",
-        "snippet": "Agent group A repeatedly reposted group B.",
-    }]
+    agent._active_section_evidence = [
+        {
+            "type": "graph_fact",
+            "source": "report_tool",
+            "snippet": "Agent group A repeatedly reposted group B.",
+        },
+        {
+            "type": "graph_fact",
+            "source": "report_tool",
+            "snippet": "Agent group A reaches group C twice within window.",
+        },
+    ]
     agent.evidence_map = {
         "global_evidence": [{
             "type": "graph_metric",
@@ -207,8 +214,9 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     # Sub-Slice 07: kein global_items-Fallback mehr — im Embedder-Fehler-Pfad
     # landen nur direct_items (graph_fact) in evidence_items. global_evidence
     # bleibt draußen.
-    # S6: formelbasierte Confidence — relevance(0.5) + source_quality
-    # (1.0 für graph_fact) + specificity(0.5) + consistency(0.6 für 1 Quelle)
+    # S6 + Slice-S1-Floor: 2 graph_facts (gleiche type+source) → Floor-Cap greift nicht
+    # (len==2, Bedingung len<2 ist False). consistency: 1 unique (type,source)-Paar → 0.6.
+    # relevance(0.5) + source_quality(1.0) + specificity(0.5) + consistency(0.6)
     # = 0.40*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64, Label "medium".
     assert claims[0]["confidence"] == "medium"
     assert claims[0]["confidence_score"] == 0.64
