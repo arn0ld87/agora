@@ -122,6 +122,40 @@ export function runtimeProviderMissingApiKeyFromStorage(): boolean {
   return provider !== 'default' && !safeSessionGet(SESSION_LLM_API_KEY).trim()
 }
 
+function clearRuntimeLlmStorage(): void {
+  try { localStorage.removeItem(STORAGE_LLM_PROVIDER) } catch { /* ignore */ }
+  try { localStorage.removeItem(STORAGE_LLM_BASE_URL) } catch { /* ignore */ }
+  try { sessionStorage.removeItem(SESSION_LLM_API_KEY) } catch { /* ignore */ }
+}
+
+/**
+ * Entfernt Stale Runtime-Provider-Overrides aus dem Browser-Storage, wenn
+ * weder ein Session-Key noch ein in der Settings-DB hinterlegter Key für
+ * den gespeicherten Provider existiert.
+ *
+ * Why: localStorage-Wert `agora.runtimeLlm.provider` überlebt Session-Wechsel
+ * und Profile-Löschungen. Bleibt z.B. nach einem Google-Test der Provider
+ * gesetzt, schickt jeder Pipeline-Build `llm_provider={provider:"google"}`
+ * mit, scheitert dann an fehlendem/falschem AIzaSy-Key (siehe Pipeline-
+ * Stopper am 2026-05-16).
+ *
+ * Idempotent, schweigsam — Auth-/Netz-Fehler werden ignoriert.
+ */
+export async function cleanupStaleRuntimeLlmStorage(): Promise<void> {
+  const raw = safeLocalGet(STORAGE_LLM_PROVIDER, '').trim()
+  if (!raw || raw === 'default') return
+  const provider = normalizeProvider(raw)
+  if (provider === 'default') {
+    clearRuntimeLlmStorage()
+    return
+  }
+  if (safeSessionGet(SESSION_LLM_API_KEY).trim()) return
+  const backendId = mapRuntimeProviderToBackendId(provider)
+  const hasKey = await checkLlmProviderHasKey(backendId)
+  if (hasKey) return
+  clearRuntimeLlmStorage()
+}
+
 /**
  * Liefert ``true`` wenn weder ein Session-Key vorliegt NOCH ein DB-Key in
  * Settings → LLM-Anbieter hinterlegt ist. Für Step 3 / Report-Resume nötig,

@@ -6,6 +6,7 @@ import i18n from './i18n'
 import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
+import { cleanupStaleRuntimeLlmStorage } from './composables/useRuntimeLlmOptions'
 
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
@@ -36,3 +37,5 @@ app.use(i18n)
 registerI18n(i18n.global as Parameters<typeof registerI18n>[0])
 
 app.mount('#app')
+
+void cleanupStaleRuntimeLlmStorage()
