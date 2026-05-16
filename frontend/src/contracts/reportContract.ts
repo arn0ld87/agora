@@ -70,6 +70,11 @@ export const EvidenceItemSchema = z.object({
   // ADR-0002 Anker 3 (Sub-Slice M11.7b)
   source_kind: EvidenceSourceKindSchema.default("seed_corpus"),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
+  // Slice 8 (2026-05-16) — Provider+Modell, das diese Evidence-Zeile
+  // extrahiert hat. Pendant zu EvidenceItemModel.source_model. Format
+  // "<provider>/<model_id>" (z. B. "ollama/qwen2.5:32b"). None bei
+  // Pre-Slice-8-Daten — daher .nullable().optional().
+  source_model: z.string().max(200).nullable().optional(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt EvidenceItemModel.reject_inference_in_evidence
   if (FORBIDDEN_EVIDENCE_TYPES.has(value.type)) {
