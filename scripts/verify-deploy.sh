@@ -188,7 +188,7 @@ fi
 # Bewusst NICHT in dieser Phase
 #   * Vollständiger Document-Upload → Graph-Build → Persona → Simulation →
 #     Report-Run. Das braucht den AGORA_E2E_LLM_MODE=stub-Pfad in eigener
-#     CI-Suite (siehe docu/2026-05-15-issue-450-hardening-worklog.md).
+#     CI-Suite (siehe docs/2026-05-15-issue-450-hardening-worklog.md).
 if [ $RUN_FULL -ne 1 ]; then
   exit 0
 fi

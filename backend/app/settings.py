@@ -5,7 +5,7 @@ Singleton via ``get_settings()`` (``lru_cache``-geschützt). Alle 41
 Laufzeit-Felder spiegeln ``app/config.py`` 1:1 — Defaults, Env-Aliases und
 Validator-Logik werden hier schrittweise konsolidiert.
 
-Referenz: ADR-0003 — docu/decisions/0003-pydantic-settings-migration.md
+Referenz: ADR-0003 — docs/decisions/0003-pydantic-settings-migration.md
 """
 
 from __future__ import annotations

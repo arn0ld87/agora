@@ -1,7 +1,7 @@
 """MAI-06: Inventar-Skript für Bestandsreports vor v2-Retirement.
 
 Liest alle existierenden full_report.md, prüft ob report-v3.json daneben liegt.
-Schreibt einen Audit-Report nach docu/2026-05-14-mai-06-bestandsinventar.md.
+Schreibt einen Audit-Report nach docs/2026-05-14-mai-06-bestandsinventar.md.
 
 NICHT destruktiv — löscht keine Files.
 

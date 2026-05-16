@@ -242,6 +242,6 @@ Bewertung §6.2 und §13 Punkt 2: „Claim-Evidence-Binding erzwingen — verhin
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-02-arbeitsprotokoll.md` schreiben — Section-Snapshot-Diff erläutern.
+1. Worklog `docs/2026-05-14-mai-02-arbeitsprotokoll.md` schreiben — Section-Snapshot-Diff erläutern.
 2. CHANGELOG: `MAI-02 · R4 Evidence-Routing aktiviert (balanced→Hypothesen, strict→Drop).`
 3. `/fix-mai-03-hypotheses-slot` direkt im Anschluss — MAI-03 hängt an MAI-02.

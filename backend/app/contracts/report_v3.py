@@ -4,7 +4,7 @@ Report-Contract v3 (Pydantic v2) — Pflichtabschnitt-DTOs.
 11 thematische Abschnitt-DTOs + ReportV3-Container.
 Vorbereitung für M11.8d (Strict-Schema-Forced-Output) und M11.8e (Quote/Evidence-Anchors).
 
-Wording-Glossar v1 (docu/glossary-wording.md):
+Wording-Glossar v1 (docs/glossary.md):
   VERBOTEN: prediction, rehearsal, god's eye view, future prediction
   ERLAUBT: Simulation, Szenarienanalyse, Reaktionsmuster, Einschätzung
 """

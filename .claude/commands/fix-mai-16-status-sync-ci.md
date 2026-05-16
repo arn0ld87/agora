@@ -7,7 +7,7 @@ allowed-tools: Read, Bash, Grep, Glob, Edit, Write
 
 ## Ziel
 
-`scripts/sync-status.sh --check` regeneriert `docu/STATUS.md` aus den Quellen (`PLAN.md`-Headers, `gh run list`, Coverage-Reports, Issue-Counts), vergleicht mit Disk-Inhalt und failt CI bei Drift. Damit kann STATUS.md nicht mehr stillschweigend per Hand falsch gepflegt werden.
+`scripts/sync-status.sh --check` regeneriert `docs/STATUS.md` aus den Quellen (`PLAN.md`-Headers, `gh run list`, Coverage-Reports, Issue-Counts), vergleicht mit Disk-Inhalt und failt CI bei Drift. Damit kann STATUS.md nicht mehr stillschweigend per Hand falsch gepflegt werden.
 
 ## Voraussetzungen
 
@@ -34,13 +34,13 @@ cat scripts/sync-status.sh | head -40
 # MAI-16: sync-status mit --check-Modus.
 #
 # Usage:
-#   ./scripts/sync-status.sh           # regeneriert docu/STATUS.md
+#   ./scripts/sync-status.sh           # regeneriert docs/STATUS.md
 #   ./scripts/sync-status.sh --check   # exit 1 bei Drift (für CI)
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-STATUS_FILE="${REPO_ROOT}/docu/STATUS.md"
+STATUS_FILE="${REPO_ROOT}/docs/STATUS.md"
 CHECK_MODE=0
 
 if [[ "${1:-}" == "--check" ]]; then
@@ -113,12 +113,12 @@ cd /Volumes/T7/Projekte/agora-worktrees/mai-16
 echo "Exit: $?"
 
 # Drift künstlich erzeugen
-echo "FAKE EDIT" >> docu/STATUS.md
+echo "FAKE EDIT" >> docs/STATUS.md
 ./scripts/sync-status.sh --check
 echo "Exit: $?"  # Erwartet 1
 
 # Rückgängig
-git checkout -- docu/STATUS.md
+git checkout -- docs/STATUS.md
 ```
 
 ### Schritt 5: Doku aktualisieren
@@ -128,11 +128,11 @@ git checkout -- docu/STATUS.md
 ```markdown
 ### STATUS.md ist generiert
 
-`docu/STATUS.md` wird von `scripts/sync-status.sh` regeneriert. MAI-16-CI-Check
+`docs/STATUS.md` wird von `scripts/sync-status.sh` regeneriert. MAI-16-CI-Check
 failed bei manuell editiertem File. Für Updates:
 
     ./scripts/sync-status.sh   # regeneriert
-    git add docu/STATUS.md
+    git add docs/STATUS.md
     git commit -m "chore: sync STATUS.md"
 ```
 

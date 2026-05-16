@@ -25,7 +25,7 @@ Du bist Senior Backend/Observability-Engineer mit Spezialisierung auf OpenTeleme
 
 ## Plan-Override-Notiz
 
-Plan [`docu/plans/2026-05-15-observability-slice-2-metrics.md`](docu/plans/2026-05-15-observability-slice-2-metrics.md) Z.5 sagt "Trigger frühestens nach 2026-05-22". User hat 2026-05-15 entschieden: **trotzdem heute starten**. Begründung muss im Worklog-Header stehen (z.B. Slice-1-Momentum nutzen, Capacity-Window jetzt offen). Plan-Datum-Override ist Lead-Entscheidung, kein Subagent-Default.
+Plan [`docs/plans/2026-05-15-observability-slice-2-metrics.md`](docs/plans/2026-05-15-observability-slice-2-metrics.md) Z.5 sagt "Trigger frühestens nach 2026-05-22". User hat 2026-05-15 entschieden: **trotzdem heute starten**. Begründung muss im Worklog-Header stehen (z.B. Slice-1-Momentum nutzen, Capacity-Window jetzt offen). Plan-Datum-Override ist Lead-Entscheidung, kein Subagent-Default.
 
 ## Ziel
 
@@ -70,7 +70,7 @@ Niemals aus Trainings-Memory zitieren — Trainings-Cutoff hat veraltete `metric
 
 ### Schritt 3 — Plan lesen
 
-Lies `/Volumes/T7/Projekte/agora/docu/plans/2026-05-15-observability-slice-2-metrics.md` vollständig. Falls Sub-Slice-Granularität (2a/2b/2c) im Plan abweicht, gilt der Plan, nicht dieses Brief.
+Lies `/Volumes/T7/Projekte/agora/docs/plans/2026-05-15-observability-slice-2-metrics.md` vollständig. Falls Sub-Slice-Granularität (2a/2b/2c) im Plan abweicht, gilt der Plan, nicht dieses Brief.
 
 ### Schritt 4 — Worktree
 
@@ -135,7 +135,7 @@ Dashboard `deploy/observability/dashboards/sim-overview.json` (SigNoz-Export-For
 3. Bus-Drop-Rate by `reason`
 4. LLM-Token-Spend (sum `agora.llm.tokens` by `provider`,`model`,`direction`, stacked)
 
-Worklog: `docu/2026-05-15-observability-slice-2-worklog.md`. Schema wie Slice-1-Worklog (Header mit Graph-Context-Output, Context7-Belege, Test-Counts pre/post, Bundle-Delta = N/A weil Backend-only, Gaps).
+Worklog: `docs/2026-05-15-observability-slice-2-worklog.md`. Schema wie Slice-1-Worklog (Header mit Graph-Context-Output, Context7-Belege, Test-Counts pre/post, Bundle-Delta = N/A weil Backend-only, Gaps).
 
 PR:
 - Base: `main`

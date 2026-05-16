@@ -1,8 +1,14 @@
 name: contract-gates
 
+# Drift-Checks: Schema-Drift, Status-Sync, Contract-Tests, Evidence-Quality,
+# Zod-Mirror, Voice-Lint, Komplexitäts-Gate. Bewusst auf pull_request, damit
+# Drift schon vor Merge gefangen wird statt erst auf main.
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   schema-drift:

@@ -74,7 +74,7 @@ gh label create needs-prod-smoke \
 
 ### Schritt 4: Doku ergänzen
 
-`docu/security-hardening.md` (oder wo der Smoke-Workflow dokumentiert ist):
+`docs/security-hardening.md` (oder wo der Smoke-Workflow dokumentiert ist):
 
 ```markdown
 ### Prod-Stack-Smoke

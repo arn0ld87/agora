@@ -24,7 +24,7 @@ Du implementierst die UI/UX/Settings-Bundle-Slice. Halte dich strikt an unsere K
 
 KONVENTIONEN
 - Slice-Workflow: jeder Sub-Slice = 1 Commit. `npm run check` muss vor jedem Commit grün sein.
-- Doku in `docu/2026-05-01-ui-settings-logs-graph-arbeitsprotokoll.md`. Pro Sub-Slice ein Eintrag (Was/Warum/Tests).
+- Doku in `docs/2026-05-01-ui-settings-logs-graph-arbeitsprotokoll.md`. Pro Sub-Slice ein Eintrag (Was/Warum/Tests).
 - CHANGELOG.md → Block `[Unreleased]` pflegen.
 - Issue-Verlinkung im Commit (`Closes #N`).
 - Sicherheitsstandard: keine Secrets in Logs/Responses; Auth-Header für alle neuen `/api/*`.
@@ -40,7 +40,7 @@ REIHENFOLGE (kleinste Risiko-Pfade zuerst)
 
 VOR JEDEM ISSUE
 - Lies das verlinkte Issue komplett.
-- Schreibe einen Mini-Plan in `docu/...arbeitsprotokoll.md` (3–8 Bulletpoints).
+- Schreibe einen Mini-Plan in `docs/...arbeitsprotokoll.md` (3–8 Bulletpoints).
 - Lege Sub-Slices fest. Jeder Sub-Slice hat ein klar testbares Ziel.
 
 WÄHREND DER ARBEIT

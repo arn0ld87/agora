@@ -123,6 +123,6 @@ Beide PRs sind reine Patch-Bumps ohne API-Bruch. Sie hängen seit ~7 Tagen offen
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-13-arbeitsprotokoll.md` mit pip-audit-Output.
+1. Worklog `docs/2026-05-14-mai-13-arbeitsprotokoll.md` mit pip-audit-Output.
 2. CHANGELOG: `MAI-13 · mistune + pygments Lockfile-Bump (Dependabot #323 + #326 closed).`
 3. `/agora-mai-next-task` → Block A abgeschlossen, weiter mit Block B (`/fix-mai-02-evidence-routing`).

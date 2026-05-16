@@ -126,6 +126,6 @@ P4.4 ist laut PLAN.md §5.4 der letzte v1.0-Output-Vertrag-Slice. Der Smoke-Test
 
 ## Nächste Schritte
 
-1. Worklog `docu/2026-05-14-mai-01-arbeitsprotokoll.md` schreiben.
+1. Worklog `docs/2026-05-14-mai-01-arbeitsprotokoll.md` schreiben.
 2. CHANGELOG `[Unreleased]` ergänzen: `MAI-01 · P4.4 Mode-Smokes als CI-Job verdrahtet (e2e-smokes.yml::report-modes-smoke).`
 3. `/agora-mai-next-task` für MAI-04 starten.

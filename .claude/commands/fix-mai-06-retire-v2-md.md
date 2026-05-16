@@ -153,7 +153,7 @@ def export_report(report_id: str):
 """MAI-06: Inventar-Skript für Bestandsreports vor v2-Retirement.
 
 Liest alle existierenden full_report.md, prüft ob report-v3.json daneben liegt.
-Schreibt einen Audit-Report nach docu/2026-05-14-mai-06-bestandsinventar.md.
+Schreibt einen Audit-Report nach docs/2026-05-14-mai-06-bestandsinventar.md.
 
 NICHT destruktiv — löscht keine Files.
 """
@@ -224,7 +224,7 @@ def test_export_md_uses_v3_render_after_mai_06(tmp_path, monkeypatch):
 ```bash
 cd /Volumes/T7/Projekte/agora-worktrees/mai-06
 uv run python backend/scripts/migrate_v2_full_report_to_v3.py
-cat docu/2026-05-14-mai-06-bestandsinventar.md
+cat docs/2026-05-14-mai-06-bestandsinventar.md
 ```
 
 ## Verifikation
@@ -253,6 +253,6 @@ Doppel-Persistenz ist Wartungslast und Quelle für Drift. ReportV3 ist seit P3.1
 
 ## Nächste Schritte
 
-1. **PR statt FF-Push** wegen High Risk. PR-Beschreibung verlinkt `docu/2026-05-14-mai-06-bestandsinventar.md`.
+1. **PR statt FF-Push** wegen High Risk. PR-Beschreibung verlinkt `docs/2026-05-14-mai-06-bestandsinventar.md`.
 2. CHANGELOG: `MAI-06 · ReportV3 ist Single Source of Truth, full_report.md nur noch on-demand-Render.`
 3. `/fix-mai-12-fork-safety` nach erfolgreichem Merge.

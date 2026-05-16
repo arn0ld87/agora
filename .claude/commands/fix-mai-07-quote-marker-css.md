@@ -196,7 +196,7 @@ describe('MAI-07 sim-quote tagging', () => {
 ```bash
 cd /Volumes/T7/Projekte/agora-worktrees/mai-07/frontend
 # Dev-Server, dann in Step4 einen Bestandsreport öffnen, "Als PDF drucken" klicken,
-# Screenshot speichern unter docu/2026-05-14-mai-07-screenshot.png
+# Screenshot speichern unter docs/2026-05-14-mai-07-screenshot.png
 ```
 
 ## Verifikation
