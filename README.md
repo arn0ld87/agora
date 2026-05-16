@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./media/logo.png" alt="Agora" width="220"/>
+<img src="./media/agora-logo.gif" alt="Agora" width="480"/>
 
 # Agora
 
