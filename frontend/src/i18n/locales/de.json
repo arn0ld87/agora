@@ -764,6 +764,8 @@
       "search": "Suchen…",
       "pause": "Auto-Scroll pausieren",
       "empty": "Noch keine Log-Zeilen.",
+      "loading": "Logs werden geladen…",
+      "unknownError": "Logs konnten nicht geladen werden.",
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
       "reconnect": "Erneut verbinden",

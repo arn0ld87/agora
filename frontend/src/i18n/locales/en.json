@@ -764,6 +764,8 @@
       "search": "Search…",
       "pause": "Pause auto-scroll",
       "empty": "No log lines yet.",
+      "loading": "Loading logs…",
+      "unknownError": "Failed to load logs.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
       "reconnect": "Reconnect",

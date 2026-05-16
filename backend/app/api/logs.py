@@ -153,7 +153,16 @@ def get_logs():
     n = _parse_tail_arg()
     level = request.args.get('level')
     if path is None:
-        return json_success({'lines': [], 'offset': 0, 'file': None})
+        # Task 7 — Frontend-LogDrawer braucht ein Live-Signal, dass das
+        # Backend lebt, auch wenn die heutige Logdatei noch nicht
+        # geschrieben wurde. Ohne den message-Marker stand im Drawer ein
+        # generisches "leer", obwohl der Pfad einfach noch nicht existiert.
+        return json_success({
+            'lines': [],
+            'offset': 0,
+            'file': None,
+            'message': 'log file for today not yet written',
+        })
     lines, offset = _read_tail(path, n)
     filtered = _filter_lines(lines, level)
     return json_success({
