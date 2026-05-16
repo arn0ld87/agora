@@ -165,6 +165,20 @@
           "$ref": "#/$defs/EvidenceSourceKind",
           "default": "seed_corpus"
         },
+        "source_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider+Modell, das diese Evidence-Zeile extrahiert hat (Slice 8).",
+          "title": "Source Model"
+        },
         "supports_claim": {
           "anyOf": [
             {

@@ -474,21 +474,23 @@ class LLMClient:
 
         Heuristics (in priority order):
         1. Base URL contains ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-        2. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
-        3. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
-        4. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint).
+        2. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint —
+           wird VOR der Port-Heuristik geprüft, weil Cloud-Modelle auch über
+           den lokalen ollama-Proxy auf :11434 laufen können).
+        3. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
+        4. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
         5. Fallback → ``"unknown"``.
         """
         model_name = self.model or ""
         base = (self.base_url or "").lower()
         if "ollama.com" in base:
             return "cloud"
+        if model_name.endswith(":cloud"):
+            return "cloud"
         if "11434" in base:
             return "ollama"
         if "openai.com" in base or "api.openai" in base:
             return "openai"
-        if model_name.endswith(":cloud"):
-            return "cloud"
         return "unknown"
 
     def _publish_model_active(
