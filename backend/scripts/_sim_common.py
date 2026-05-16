@@ -45,7 +45,7 @@ def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
     # --- 2. Ollama ---
     if (
         "ollama.com" in url
-        or ":11434" in url
+        or re.search(r":11434(?:/|$)", url)
         or m.endswith(":cloud")
         or m.endswith(":latest")
     ):

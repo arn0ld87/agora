@@ -85,7 +85,6 @@ try:
     from ._sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_parallel_parser,
         compute_start_hour_offset,
         detect_oasis_platform,
@@ -100,7 +99,6 @@ except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_parallel_parser,
         compute_start_hour_offset,
         detect_oasis_platform,
@@ -1277,15 +1275,14 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         # Ollama Cloud dropped its OpenAI-compat /v1 endpoint; only the native
         # /api/chat path works.  CAMEL's OllamaModel speaks it natively.
         # Local Ollama (port 11434) also benefits from the native path.
+        # Build extra_body inline: we already know this is Ollama, so the
+        # legacy _is_ollama_route gate inside build_camel_extra_body() would
+        # falsely drop think/num_ctx for :latest models or ollama.com URLs.
         os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
-        extra_body = build_camel_extra_body(
-            model=llm_model,
-            base_url=llm_base_url,
-            num_ctx=runtime_settings["ollama_num_ctx"],
-            think=think_on,
-        )
-        if extra_body:
-            model_cfg["extra_body"] = extra_body
+        extra_body: Dict[str, Any] = {"think": think_on}
+        if runtime_settings["ollama_num_ctx"] is not None:
+            extra_body["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
+        model_cfg["extra_body"] = extra_body
         return ModelFactory.create(
             model_platform=ModelPlatformType.OLLAMA,
             model_type=llm_model,
@@ -1296,7 +1293,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
 
     else:
         # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
-        # Keep byte-identical behaviour to the pre-refactor code.
+        # No extra_body: think/num_ctx are Ollama-only and would 400 here.
         if llm_api_key:
             os.environ["OPENAI_API_KEY"] = llm_api_key
 
@@ -1309,15 +1306,6 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
             os.environ["OPENAI_BASE_URL"] = llm_base_url
             os.environ["OPENAI_API_BASE"] = llm_base_url
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-
-        extra_body = build_camel_extra_body(
-            model=llm_model,
-            base_url=llm_base_url,
-            num_ctx=runtime_settings["ollama_num_ctx"],
-            think=think_on,
-        )
-        if extra_body:
-            model_cfg["extra_body"] = extra_body
 
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,

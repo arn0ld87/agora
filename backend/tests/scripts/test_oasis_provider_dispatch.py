@@ -175,3 +175,93 @@ class TestCreateModelOpenAIBranch:
         assert len(calls) == 1
         platform_arg = calls[0]["args"][0] if calls[0]["args"] else calls[0]["kwargs"].get("model_platform")
         assert platform_arg == ModelPlatformType.OPENAI
+        # Regression: OPENAI branch must not leak Ollama-only fields into the
+        # request body — think/num_ctx would 400 on real OpenAI.
+        model_cfg = calls[0]["kwargs"].get("model_config_dict", {})
+        assert "extra_body" not in model_cfg, \
+            "OPENAI branch must not emit extra_body (think/num_ctx are Ollama-only)"
+
+
+class TestCreateModelOllamaBranch:
+    """create_model() with an Ollama model must route via OllamaModel with url/api_key
+    and emit think/num_ctx in extra_body — even for ``:latest`` suffixes and
+    ``ollama.com`` URLs where the legacy ``_is_ollama_route`` heuristic would
+    fail.
+    """
+
+    def test_ollama_sets_url_and_api_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_MODEL_NAME", "llama3:latest")
+        monkeypatch.setenv("LLM_API_KEY", "my-ollama-key")
+        monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434")
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        config: dict[str, Any] = {}
+        rps.create_model(config, use_boost=False)
+
+        assert os.environ.get("OPENAI_BASE_URL", "") == "", \
+            "OPENAI_BASE_URL must not be set for Ollama branch"
+        assert os.environ.get("GOOGLE_API_KEY", "") == "", \
+            "GOOGLE_API_KEY must not be set for Ollama branch"
+        assert len(calls) == 1
+        kwargs = calls[0]["kwargs"]
+        assert kwargs.get("model_platform") == ModelPlatformType.OLLAMA
+        assert kwargs.get("url") == "http://localhost:11434"
+        assert kwargs.get("api_key") == "my-ollama-key"
+
+    def test_ollama_latest_suffix_emits_extra_body(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression for Gemini-Finding: ``:latest`` is detected as Ollama by
+        ``detect_oasis_platform`` but was dropped by the legacy
+        ``_is_ollama_route`` gate, silently losing ``think`` and ``num_ctx``.
+        """
+        monkeypatch.setenv("LLM_MODEL_NAME", "llama3:latest")
+        monkeypatch.setenv("LLM_API_KEY", "my-ollama-key")
+        monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_THINKING", "true")
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        kwargs = calls[0]["kwargs"]
+        model_cfg = kwargs.get("model_config_dict", {})
+        assert "extra_body" in model_cfg, \
+            ":latest model must emit extra_body with think/num_ctx"
+        assert model_cfg["extra_body"].get("think") is True
+
+    def test_ollama_cloud_host_emits_extra_body(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression for Gemini-Finding: ``ollama.com`` URL → OLLAMA route,
+        must still produce ``extra_body`` even though the legacy heuristic
+        only matched ``:11434``.
+        """
+        monkeypatch.setenv("LLM_MODEL_NAME", "qwen3-coder-next:cloud")
+        monkeypatch.setenv("LLM_API_KEY", "cloud-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://ollama.com")
+        monkeypatch.setenv("OLLAMA_THINKING", "false")
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        kwargs = calls[0]["kwargs"]
+        assert kwargs.get("model_platform") == ModelPlatformType.OLLAMA
+        model_cfg = kwargs.get("model_config_dict", {})
+        assert "extra_body" in model_cfg
+        assert model_cfg["extra_body"].get("think") is False
