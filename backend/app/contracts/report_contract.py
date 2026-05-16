@@ -112,6 +112,15 @@ class EvidenceItemModel(BaseModel):
     # ADR-0002 Anker 3 (Sub-Slice M11.7b): Default seed_corpus sichert die
     # Backward-Compat fuer alte Fixtures, die das Feld nicht mitschicken.
     source_kind: EvidenceSourceKind = EvidenceSourceKind.seed_corpus
+    # Slice 8 (User-Bericht 2026-05-16): welches LLM-Modell hat dieses
+    # Evidence-Item extrahiert. None = nicht erfasst (Backward-Compat für
+    # bestehende evidence.json). Format "<provider>/<model_id>", z. B.
+    # "ollama/qwen2.5:32b" — bewusst frei, weil Provider-IDs evolvieren.
+    source_model: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Provider+Modell, das diese Evidence-Zeile extrahiert hat (Slice 8).",
+    )
     # Pflicht nur fuer source_kind=agent_quote — durchgesetzt im Validator
     # ``agent_quote_needs_stakeholder_group``. Die Cross-Stakeholder-Regel
     # auf ReportClaimModel zaehlt unterschiedliche Werte dieses Feldes.

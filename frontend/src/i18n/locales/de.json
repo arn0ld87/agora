@@ -557,6 +557,18 @@
     },
     "next": "Weiter zum Gespräch →"
   },
+  "report": {
+    "provenance": {
+      "title": "Modell-Provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Modell",
+      "promptTokens": "Prompt-Tokens",
+      "completionTokens": "Completion-Tokens",
+      "latencyMs": "Latenz",
+      "noMetricsHint": "Keine Token-/Latenz-Metriken erfasst."
+    }
+  },
   "step5": {
     "kicker": "№ 05 — GESPRÄCH",
     "title": "Sprich mit den Agenten.",

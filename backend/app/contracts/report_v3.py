@@ -198,6 +198,51 @@ class Hypothesis(BaseModel):
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+ModelAttributionStage = Literal[
+    "ontology",
+    "graph_extraction",
+    "simulation",
+    "report_outline",
+    "report_section",
+    "report_synthesis",
+    "evidence_extraction",
+    "interview",
+    "other",
+]
+"""Slice 8 (2026-05-16): kanonische Stage-Labels für model_attribution.
+
+Lose enumeriert — neue Pipeline-Stages können den Wert frei wählen, aber
+typische Bezeichner sind festgeschrieben, damit die Frontend-Provenance-
+Tabelle stabile Gruppierungen rendert.
+"""
+
+
+class ModelAttribution(BaseModel):
+    """Welches LLM-Modell hat welche Pipeline-Stage produziert.
+
+    Slice 8 (User-Bericht 2026-05-16): "Es hinterlegt nirgendwo welches Modell
+    für welchen Teil der Erstellung zuständig war." Pro abgeschlossener Stage
+    ein Eintrag — Frontend rendert sie als ausklappbare Provenance-Sektion.
+    Felder absichtlich optional (außer stage/provider/model_id), damit nicht
+    jeder Provider Tokens/Latency liefert.
+    """
+
+    model_config = _STRICT
+
+    stage: ModelAttributionStage
+    provider: str = Field(min_length=1, description="z. B. 'ollama', 'openai', 'gemini'")
+    model_id: str = Field(min_length=1, description="Backend-Modell-ID, z. B. 'qwen2.5:32b'")
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    latency_ms: float | None = Field(default=None, ge=0.0)
+    started_at: datetime | None = None
+    note: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optionaler Hinweis (z. B. 'fallback nach timeout').",
+    )
+
+
 class ReportV3(BaseModel):
     """
     Container für alle 11 Pflichtabschnitte des strukturierten Reports v3.
@@ -227,3 +272,9 @@ class ReportV3(BaseModel):
     content_ideas: list[ContentIdea] = Field(default_factory=list)
     data_gaps: list[DataGap] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
+    # Slice 8 (2026-05-16): Modell-Provenance pro Pipeline-Stage. Default
+    # leer → backward-kompatibel zu Reports vor v3.1 (alte Fixtures laden ok).
+    model_attribution: list[ModelAttribution] = Field(
+        default_factory=list,
+        description="Welches LLM-Modell hat welche Stage produziert.",
+    )

@@ -557,6 +557,18 @@
     },
     "next": "Next: conversation →"
   },
+  "report": {
+    "provenance": {
+      "title": "Model provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Model",
+      "promptTokens": "Prompt tokens",
+      "completionTokens": "Completion tokens",
+      "latencyMs": "Latency",
+      "noMetricsHint": "No token or latency metrics captured."
+    }
+  },
   "step5": {
     "kicker": "№ 05 — CONVERSATION",
     "title": "Talk to the agents.",
