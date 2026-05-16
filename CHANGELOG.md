@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.8 — 2026-05-16)
+
+- Frontend-Zod-Spiegel zu `EvidenceItemModel.sentiment_score` (Backend hat
+  das Feld seit MAI-14, der Zod-Schema fehlte aber). Live-Smoke mit
+  Gemini 3 via Google API zeigte 50+ „Unrecognized key: 'sentiment_score'"-
+  Mismatches im strict-Mode des Frontend-Zod, was den ganzen Report-Body
+  hinter einem Schema-Banner versteckte. Jetzt: `sentiment_score:
+  z.number().min(-1).max(1).optional().nullable()` in
+  `EvidenceItemSchema`. Pendant zur bereits offiziellen Backend-Definition,
+  Range konsistent zu `PostEvent.sentiment`. Layer-0 unverändert (kein
+  Backend-Touch). (Sub-Slice 05.8)
+
 ### Fixed (Sub-Slice 05.6 — 2026-05-16)
 
 - `GraphToolsService.interview_agents` führt jetzt einen Early-Check auf

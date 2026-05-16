@@ -60,6 +60,11 @@ export const EvidenceItemSchema = z.object({
   agent_log_ref: AgentLogRefSchema.optional().nullable(),
   match_score: z.number().min(0).max(1).optional().nullable(),
   supports_claim: z.boolean().optional().nullable(),
+  // MAI-14 (backend) + Sub-Slice 05.8 (Zod-Spiegel):
+  // Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).
+  // confidence_calculator._has_contradiction nutzt es, um widersprüchliche
+  // Sentiment-Vektoren zu erkennen. Pendant zu EvidenceItemModel.sentiment_score.
+  sentiment_score: z.number().min(-1).max(1).optional().nullable(),
   quote: z.string().min(1).max(500).optional().nullable(),
   source_id_anchor: z.string().min(1).max(200).optional().nullable(),
   // ADR-0002 Anker 3 (Sub-Slice M11.7b)
