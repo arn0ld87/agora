@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.2 — 2026-05-16)
+
+- `LLMClient.__init__` respektiert jetzt `OLLAMA_THINKING` aus der env als
+  Override für `reasoning_effort`. Vorher wurde die Env-Variable nur in
+  `backend/scripts/run_*_simulation.py` (OASIS-Subprozesse) gelesen, im
+  Flask-Backend aber ignoriert — `_think` ergab sich ausschließlich aus
+  `reasoning_effort != "none"`. Folge: thinking-Modelle (qwen3, gpt-oss)
+  lieferten bei schemalosen `chat_json`-Calls (Persona-Generierung)
+  manchmal leere `content`-Outputs → `JSON parsing failed: Expecting
+  value: line 1 column 1 (char 0)`. Adressiert die Honcho-Pflicht-Env
+  `OLLAMA_THINKING=false` für Agent-Workflows. (Sub-Slice 05.2)
+
 ### Added (Sub-Slice 05.1 — 2026-05-16)
 
 - Native Ollama `/api/chat`-Pfad in `LLMClient.chat_json` fuer Schema-Calls. Wenn

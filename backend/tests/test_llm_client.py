@@ -460,3 +460,58 @@ class TestFlattenSchemaForOllama:
         flat = _flatten_pydantic_schema_for_ollama(Node)
         assert flat.get("type") == "object"
         assert "$ref" not in str(flat), "$ref darf im geflatteten Schema nicht mehr vorkommen"
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 05.2 — OLLAMA_THINKING env überstimmt reasoning_effort
+# ---------------------------------------------------------------------------
+
+
+class TestOllamaThinkingEnvOverride:
+    """LLMClient.__init__: OLLAMA_THINKING in der env hat Vorrang vor
+    reasoning_effort-basiertem _think. Konsistent zu run_*_simulation.py.
+    """
+
+    def _make_client(self, monkeypatch, reasoning_effort):
+        from unittest.mock import MagicMock
+        monkeypatch.setattr("app.utils.llm_client.OpenAI", lambda **_kwargs: MagicMock())
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", "k")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_BASE_URL", "http://localhost:11434/v1")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", "qwen3:8b")
+        monkeypatch.setattr("app.utils.llm_client._read_active_config_safely", lambda: None)
+        return LLMClient(reasoning_effort=reasoning_effort, use_active_config=False)
+
+    def test_ollama_thinking_false_overrides_reasoning_effort(self, monkeypatch):
+        """OLLAMA_THINKING=false → _think=False, auch wenn reasoning_effort='medium'."""
+        monkeypatch.setenv("OLLAMA_THINKING", "false")
+        client = self._make_client(monkeypatch, reasoning_effort="medium")
+        assert client._think is False, (
+            "OLLAMA_THINKING=false muss reasoning_effort='medium' überstimmen"
+        )
+
+    def test_ollama_thinking_true_overrides_reasoning_effort_none(self, monkeypatch):
+        """OLLAMA_THINKING=true → _think=True, auch wenn reasoning_effort='none'."""
+        monkeypatch.setenv("OLLAMA_THINKING", "true")
+        client = self._make_client(monkeypatch, reasoning_effort="none")
+        assert client._think is True, (
+            "OLLAMA_THINKING=true muss reasoning_effort='none' überstimmen"
+        )
+
+    def test_ollama_thinking_unset_uses_reasoning_effort(self, monkeypatch):
+        """Ohne OLLAMA_THINKING → klassisches reasoning_effort-Mapping."""
+        monkeypatch.delenv("OLLAMA_THINKING", raising=False)
+        client_high = self._make_client(monkeypatch, reasoning_effort="high")
+        client_none = self._make_client(monkeypatch, reasoning_effort="none")
+        assert client_high._think is True
+        assert client_none._think is False
+
+    def test_ollama_thinking_accepts_aliases(self, monkeypatch):
+        """Aliase '0'/'no'/'off' → False; '1'/'yes'/'on' → True."""
+        for falsy in ("0", "no", "off", "False"):
+            monkeypatch.setenv("OLLAMA_THINKING", falsy)
+            client = self._make_client(monkeypatch, reasoning_effort="high")
+            assert client._think is False, f"OLLAMA_THINKING={falsy!r} muss falsy sein"
+        for truthy in ("1", "yes", "on", "TRUE"):
+            monkeypatch.setenv("OLLAMA_THINKING", truthy)
+            client = self._make_client(monkeypatch, reasoning_effort="none")
+            assert client._think is True, f"OLLAMA_THINKING={truthy!r} muss truthy sein"

@@ -202,7 +202,18 @@ class LLMClient:
         # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
         self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
         # Ollama thinking toggle (mapped from reasoning_effort).
+        # OLLAMA_THINKING=false in der env überstimmt reasoning_effort —
+        # konsistent zu backend/scripts/run_*_simulation.py, das dieselbe
+        # Heuristik nutzt. Honcho-Pflicht-Env für Agent-Workflows; ohne
+        # diese Verdrahtung liefern thinking-Modelle (qwen3, gpt-oss) bei
+        # chat_json schemalose leere `content`-Outputs → `JSON parsing
+        # failed: line 1 column 1 (char 0)`.
         self._think = self.reasoning_effort != "none"
+        _think_env = os.environ.get("OLLAMA_THINKING", "").lower()
+        if _think_env in ("0", "false", "no", "off"):
+            self._think = False
+        elif _think_env in ("1", "true", "yes", "on"):
+            self._think = True
 
         # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
         self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
