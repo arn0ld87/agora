@@ -255,3 +255,208 @@ class TestChatForceNoThinking:
             f"force_no_thinking=True muss extra_body['think']=False setzen, "
             f"erhalten: {extra_body}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 05.1 — Native Ollama /api/chat-Pfad
+# ---------------------------------------------------------------------------
+
+class TestOllamaNativeSchemaPath:
+    """Native /api/chat-Branch wird gezogen, wenn _is_ollama() und schema= gesetzt sind."""
+
+    def _make_ollama_client(self):
+        """LLMClient mit Ollama-URL (kein __init__)."""
+        obj = LLMClient.__new__(LLMClient)
+        obj._max_retries = 3
+        obj._retry_initial_delay = 1.0
+        obj._retry_max_delay = 30.0
+        obj._num_ctx = 8192
+        obj._think = False
+        obj.model = "llama3.2"
+        obj.base_url = "http://localhost:11434/v1"
+        obj.api_key = "ollama"
+        obj.run_id = None
+        obj.routing_version = None
+        obj.route_stage = None
+        obj.route_provider_id = None
+        return obj
+
+    def test_ollama_native_path_used_for_schema_call(self, monkeypatch):
+        """Bei base_url mit :11434 und schema= -> httpx POST gegen /api/chat statt OpenAI-SDK."""
+        from unittest.mock import MagicMock, patch
+
+        client = self._make_ollama_client()
+        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        captured_posts: list = []
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            "message": {"content": '{"x": 42}'}
+        }
+
+        def fake_post(url, json=None, **kwargs):
+            captured_posts.append({"url": url, "json": json})
+            return mock_response
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.post.side_effect = fake_post
+
+            result = client.chat_json(
+                messages=[{"role": "user", "content": "give me foo"}],
+                schema=Foo,
+            )
+
+        assert result == {"x": 42}
+        assert len(captured_posts) == 1, "Genau ein POST auf /api/chat erwartet"
+        assert captured_posts[0]["url"].endswith("/api/chat"), (
+            f"URL muss /api/chat sein, bekommen: {captured_posts[0]['url']}"
+        )
+        payload = captured_posts[0]["json"]
+        assert "format" in payload, "format-Feld fehlt im Payload"
+        fmt = payload["format"]
+        assert fmt.get("type") == "object", f"format.type muss 'object' sein, bekommen: {fmt}"
+        assert "properties" in fmt, "format.properties fehlt"
+
+    def test_ollama_native_path_falls_through_on_http_error(self, monkeypatch):
+        """Bei httpx-Fehler -> Fall-Through auf OpenAI-Wrapper-Pfad mit json_object-Fallback."""
+        import logging
+        from unittest.mock import MagicMock, patch
+        import httpx
+
+        client = self._make_ollama_client()
+        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        warning_msgs: list = []
+        llm_logger = logging.getLogger("agora.llm_client")
+        monkeypatch.setattr(
+            llm_logger,
+            "warning",
+            lambda msg, *a, **kw: warning_msgs.append(msg % a if a else msg),
+        )
+
+        def fake_post(url, json=None, **kwargs):
+            raise httpx.ConnectError("connection refused")
+
+        openai_calls: list = []
+
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
+            openai_calls.append(response_format)
+            return '{"x": 9}'
+
+        monkeypatch.setattr(client, "chat", mock_chat)
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.post.side_effect = fake_post
+
+            result = client.chat_json(
+                messages=[{"role": "user", "content": "q"}],
+                schema=Foo,
+            )
+
+        assert result == {"x": 9}
+        assert len(openai_calls) >= 1, "Nach httpx-Fehler muss OpenAI-Pfad genutzt werden"
+        assert any("fallback" in m.lower() or "fehlgeschlagen" in m.lower() for m in warning_msgs), (
+            f"Kein Fallback-Warning gefunden: {warning_msgs}"
+        )
+
+    def test_non_ollama_provider_uses_openai_sdk_path(self, monkeypatch):
+        """OpenAI-Provider (kein 11434 in base_url) -> kein /api/chat-Call, nur OpenAI-SDK."""
+        from unittest.mock import patch
+
+        obj = LLMClient.__new__(LLMClient)
+        obj._max_retries = 3
+        obj._retry_initial_delay = 1.0
+        obj._retry_max_delay = 30.0
+        obj._num_ctx = 4096
+        obj._think = False
+        obj.model = "gpt-4o"
+        obj.base_url = "https://api.openai.com/v1"
+        obj.api_key = "sk-test"
+        obj.run_id = None
+        obj.routing_version = None
+        obj.route_stage = None
+        obj.route_provider_id = None
+
+        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        openai_calls: list = []
+
+        def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
+            openai_calls.append(response_format)
+            return '{"x": 3}'
+
+        monkeypatch.setattr(obj, "chat", mock_chat)
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client_cls.side_effect = lambda **kw: (_ for _ in ()).throw(
+                AssertionError("httpx.Client darf bei OpenAI-Provider nicht aufgerufen werden")
+            )
+
+            result = obj.chat_json(
+                messages=[{"role": "user", "content": "q"}],
+                schema=Foo,
+            )
+
+        assert result == {"x": 3}
+        assert len(openai_calls) == 1, "Genau ein OpenAI-SDK-Call erwartet"
+        rf = openai_calls[0]
+        assert rf["type"] == "json_schema", f"OpenAI-Pfad muss json_schema nutzen, bekommen: {rf}"
+
+
+class TestFlattenSchemaForOllama:
+    """Unit-Tests fuer _flatten_pydantic_schema_for_ollama."""
+
+    def test_resolves_defs_inline(self):
+        """PlanResponse hat $defs (PlanSection) -> nach _flatten_pydantic_schema_for_ollama
+        sind $defs/$ref ersetzt, properties.sections.items ist ein vollstaendiges Objekt."""
+        from app.utils.llm_client import _flatten_pydantic_schema_for_ollama
+        from app.services.report_agent.schemas import PlanResponse
+
+        flat = _flatten_pydantic_schema_for_ollama(PlanResponse)
+
+        assert "$defs" not in flat, "$defs darf im geflatteten Schema nicht mehr vorkommen"
+        assert "$ref" not in str(flat), "$ref darf im geflatteten Schema nicht mehr vorkommen"
+        items = flat["properties"]["sections"]["items"]
+        assert items.get("type") == "object", (
+            f"sections.items muss type=object sein, bekommen: {items}"
+        )
+        assert "properties" in items, "sections.items muss properties enthalten"
+
+    def test_drops_title_and_schema_keys(self):
+        """Top-level title und $schema sind raus, property-descriptions bleiben."""
+        from app.utils.llm_client import _flatten_pydantic_schema_for_ollama
+
+        class WithTitle(BaseModel):
+            name: str
+
+        flat = _flatten_pydantic_schema_for_ollama(WithTitle)
+
+        assert "title" not in flat, "title darf im Top-Level nicht mehr vorkommen"
+        assert "$schema" not in flat, "$schema darf im Top-Level nicht mehr vorkommen"
+        assert "properties" in flat
+        assert "name" in flat["properties"]
+
+    def test_handles_cyclic_refs(self):
+        """Selbst-referenzierende Pydantic-Models brechen nicht in Endlos-Rekursion."""
+        from typing import Optional as Opt
+        from app.utils.llm_client import _flatten_pydantic_schema_for_ollama
+
+        class Node(BaseModel):
+            value: int
+            child: Opt["Node"] = None  # type: ignore[assignment]
+
+        Node.model_rebuild()
+
+        # Darf nicht in RecursionError enden
+        flat = _flatten_pydantic_schema_for_ollama(Node)
+        assert flat.get("type") == "object"
+        assert "$ref" not in str(flat), "$ref darf im geflatteten Schema nicht mehr vorkommen"

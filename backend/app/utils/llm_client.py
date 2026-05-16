@@ -33,6 +33,44 @@ _STRICT_UNSUPPORTED_HINTS = (
 )
 
 
+def _flatten_pydantic_schema_for_ollama(model_cls: type[BaseModel]) -> Dict[str, Any]:
+    """Pydantic-JSON-Schema inline-resolved fuer Ollamas /api/chat::format-Feld.
+
+    Ollama akzeptiert das Schema-Objekt als JSON-Schema, kommt aber mit
+    ``$defs``/``$ref`` nicht zuverlaessig klar. Diese Funktion macht zwei Dinge:
+
+    1. ``$ref``-Verweise werden inline durch das Ziel-Schema aus ``$defs`` ersetzt
+       (rekursiv, mit Zyklus-Stop).
+    2. Schema-Meta-Keys werden entfernt: ``title``, ``$schema``, ``$defs``,
+       ``description`` auf top-level (Property-``description``s bleiben — die helfen
+       dem Modell beim Auffuellen).
+
+    Returns das geflattete Schema-Dict, ready fuer POST /api/chat::format.
+    """
+    raw = model_cls.model_json_schema()
+    defs = raw.pop("$defs", {})
+
+    def _resolve(node: Any, seen: tuple[str, ...] = ()) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node and node["$ref"].startswith("#/$defs/"):
+                ref_name = node["$ref"].split("/")[-1]
+                if ref_name in seen:
+                    return {"type": "object"}  # zyklisch — bewusst abkuerzen
+                target = defs.get(ref_name, {})
+                merged = {k: v for k, v in node.items() if k != "$ref"}
+                merged.update(_resolve(target, seen + (ref_name,)))
+                return merged
+            return {k: _resolve(v, seen) for k, v in node.items() if k not in {"title", "$schema"}}
+        if isinstance(node, list):
+            return [_resolve(item, seen) for item in node]
+        return node
+
+    flattened = _resolve(raw)
+    flattened.pop("title", None)
+    flattened.pop("$schema", None)
+    return flattened
+
+
 def _read_active_config_safely() -> Optional[Dict[str, Any]]:
     """Load the active LLM config without raising on missing/invalid file."""
     try:
@@ -660,6 +698,63 @@ class LLMClient:
         # Plain dict schema: no server-side re-validation.
         return parsed
 
+    def _ollama_chat_with_schema(
+        self,
+        messages: List[Dict[str, Any]],
+        schema: type[BaseModel],
+        temperature: float,
+        max_tokens: int,
+        force_no_thinking: bool = False,
+    ) -> str:
+        """Direkter Aufruf gegen Ollamas /api/chat mit format=<schema>.
+
+        Garantiert Schema-Enforcement laut Ollama-Doku, im Gegensatz zum
+        OpenAI-Kompat-Wrapper, der response_format=type=json_schema
+        schweigend droppen kann.
+
+        Returns response message content (str). Raises httpx.HTTPError bei
+        Netz-/4xx-/5xx-Fehlern, ValueError bei Schema-Reject durch Ollama.
+        """
+        import httpx  # lazy import (httpx ist via openai-SDK ohnehin transitive Dep)
+        base_root = (self.base_url or "").rstrip("/")
+        if base_root.endswith("/v1"):
+            base_root = base_root[:-3]
+        url = f"{base_root}/api/chat"
+
+        flattened = _flatten_pydantic_schema_for_ollama(schema)
+        think_flag = False if force_no_thinking else self._think
+
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "format": flattened,
+            "stream": False,
+            "options": {
+                "num_ctx": self._num_ctx,
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+            "think": think_flag,
+        }
+
+        logger.info(
+            "LLMClient._ollama_chat_with_schema: POST %s schema=%s model=%s",
+            url, schema.__name__, self.model,
+        )
+
+        with httpx.Client(timeout=300.0) as client:
+            response = client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        message = data.get("message") or {}
+        content = message.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError(
+                f"Ollama /api/chat unexpected message.content type: {type(content)}"
+            )
+        return content
+
     def chat_json(
         self,
         messages: List[Dict[str, str]],
@@ -764,6 +859,32 @@ class LLMClient:
 
         # Call --------------------------------------------------------------------
         if not disable_json_mode and schema is not None:
+            # NATIVE Ollama-Pfad: /api/chat mit format=<schema> ist die einzige
+            # autoritativ dokumentierte Methode, ein Schema bei Ollama zu erzwingen.
+            # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit
+            # json_object-Fallback (Resilienz, kein Hard-Fail).
+            if self._is_ollama() and isinstance(schema, type) and issubclass(schema, BaseModel):
+                try:
+                    response = self._ollama_chat_with_schema(
+                        messages=messages,
+                        schema=schema,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        force_no_thinking=force_no_thinking,
+                    )
+                    cleaned_response = response.strip()
+                    cleaned_response = re.sub(r'^```(?:json)?\s*', '', cleaned_response, flags=re.IGNORECASE)
+                    cleaned_response = re.sub(r'\s*```$', '', cleaned_response)
+                    cleaned_response = cleaned_response.strip()
+                    parsed: Dict[str, Any] = json.loads(cleaned_response)
+                    return self._maybe_validate(parsed, schema)
+                except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
+                    logger.warning(
+                        "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "
+                        "(%s: %s), fallback auf OpenAI-Wrapper",
+                        type(exc).__name__, exc,
+                    )
+                    # Fall through zum bestehenden Strict-OpenAI-Pfad
             # Strict-schema path: single fallback on unsupported-provider errors.
             try:
                 response = self.chat(

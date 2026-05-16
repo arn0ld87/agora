@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (Sub-Slice 05.1 — 2026-05-16)
+
+- Native Ollama `/api/chat`-Pfad in `LLMClient.chat_json` fuer Schema-Calls. Wenn
+  `_is_ollama()` und `schema=<PydanticClass>` → direkter httpx-POST mit
+  `format=<flattened_schema>` statt OpenAI-Kompat-Wrapper. Garantiert
+  Schema-Enforcement laut Ollama-Doku, statt schweigendem Schema-Drop.
+  Fallback auf bestehenden OpenAI-SDK-Pfad bei Netz-/Schema-Fehler. (Sub-Slice 05.1)
+
 ### Changed (Repo-Hygiene — 2026-05-16)
 
 - `chore(docs): docu/ → docs/ — Worklogs nach docs/archive/worklogs/, Themen-Doku unter docs/, Detail-Runbooks nach docs/runbooks/.`
