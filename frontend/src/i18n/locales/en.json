@@ -548,6 +548,13 @@
     "quote": {
       "openSource": "Open source"
     },
+    "reportConfirm": {
+      "title": "Start report?",
+      "description": "The simulation is complete. Please select a model and start report generation manually.",
+      "startButton": "Start report",
+      "stopButton": "Cancel",
+      "stopDisabledTip": "Cancel available after backend slice 6"
+    },
     "next": "Next: conversation →"
   },
   "step5": {
@@ -997,6 +1004,8 @@
     "label": "Active model",
     "idle": "Idle",
     "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "unknown": "Unknown model",
     "failed": "Connection lost",
     "reload": "Reconnect",
     "provider": {
@@ -1223,5 +1232,11 @@
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"
+  },
+  "modelPicker": {
+    "loading": "Loading models…",
+    "error": "Failed to load models",
+    "placeholder": "Select model…",
+    "noModels": "No models available"
   }
 }
