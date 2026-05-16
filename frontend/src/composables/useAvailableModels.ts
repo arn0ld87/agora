@@ -129,12 +129,14 @@ export function useAvailableModels(): UseAvailableModelsReturn {
         }
       }
 
-      // 5. Sortierung: provider_label ASC (ci), dann model_id ASC (ci)
+      // 5. Sortierung: provider_label ASC (ci), dann model_id ASC (ci).
+      // localeCompare statt ``< : 1 ; 1`` — letzteres verletzt die Komparator-
+      // Konvention (0 für gleiche Werte) und ist auf manchen JS-Engines
+      // instabil (Gemini-Finding).
       merged.sort((a, b) => {
-        const pa = a.provider_label.toLowerCase()
-        const pb = b.provider_label.toLowerCase()
-        if (pa !== pb) return pa < pb ? -1 : 1
-        return a.model_id.toLowerCase() < b.model_id.toLowerCase() ? -1 : 1
+        const providerCmp = a.provider_label.localeCompare(b.provider_label, undefined, { sensitivity: 'base' })
+        if (providerCmp !== 0) return providerCmp
+        return a.model_id.localeCompare(b.model_id, undefined, { sensitivity: 'base' })
       })
 
       _cache = { data: merged, fetchedAt: Date.now() }

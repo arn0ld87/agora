@@ -498,6 +498,7 @@ def _build_partial_report(
     einen separaten Partial-Metadata-JSON-Artifact neben dem Report.
     """
     from ...models.report import ReportStatus
+    from datetime import datetime
     import os
 
     cancelled_at = datetime.now().isoformat()

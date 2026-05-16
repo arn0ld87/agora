@@ -367,13 +367,16 @@ def cancel_run(run_id: str):
             code="run_not_active",
         )
 
-    simulation_id = run.get("linked_ids", {}).get("simulation_id")
+    # linked_ids kann ``None`` sein (nicht nur fehlend) — ``or {}`` schützt
+    # vor AttributeError, wenn der Key explizit None ist (Gemini-Finding).
+    simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
     if not simulation_id:
         return json_error("Run is missing simulation_id linkage", status=409)
 
     _request_cancel(run_id)
 
-    run_registry.update_run(
+    # RunRegistry ist Singleton — Instanz pro Call holen (Gemini-Finding).
+    RunRegistry().update_run(
         run_id,
         message="Cancel requested — finishing current stage before stopping",
     )
