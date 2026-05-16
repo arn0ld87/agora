@@ -617,7 +617,8 @@
     "ui": {
       "toggleEdgeLabels": "Beziehungslabels",
       "pauseLayout": "Layout pausieren",
-      "resumeLayout": "Layout fortsetzen"
+      "resumeLayout": "Layout fortsetzen",
+      "closePanel": "Graph-Panel schließen"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",

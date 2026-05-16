@@ -64,6 +64,9 @@
       <button class="tool-btn" title="Maximize/Restore" @click="$emit('toggle-maximize')">
         <span class="icon-maximize">⛶</span>
       </button>
+      <button class="tool-btn" :title="$t('graph.ui.closePanel')" @click="$emit('close-graph')">
+        <span class="icon-close">✕</span>
+      </button>
     </div>
   </div>
 </template>
@@ -85,6 +88,7 @@ defineEmits([
   'download-html',
   'toggle-maximize',
   'toggle-pause',
+  'close-graph',
 ])
 </script>
 
