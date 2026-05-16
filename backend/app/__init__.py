@@ -50,6 +50,23 @@ from .utils.logger import (  # noqa: E402
 __version__ = "0.9.0"
 
 
+def configure_werkzeug_log_level() -> int:
+    """Setzt den werkzeug-Logger-Level aus ``AGORA_WERKZEUG_LOG_LEVEL``.
+
+    Default ``WARNING``: werkzeug loggt sonst jede Polling-Anfrage auf INFO
+    (/api/runs, /api/health) und verdrängt Pipeline-Stage-Events im
+    Container-Log. Per ``AGORA_WERKZEUG_LOG_LEVEL`` (DEBUG/INFO/WARNING/ERROR,
+    case-insensitiv) für ad-hoc Request-Debugging wieder aufdrehbar.
+    Ungültige Werte fallen still auf ``WARNING`` zurück.
+    """
+    raw = os.environ.get('AGORA_WERKZEUG_LOG_LEVEL', 'WARNING').upper()
+    level = logging.getLevelName(raw)
+    if not isinstance(level, int):
+        level = logging.WARNING
+    logging.getLogger('werkzeug').setLevel(level)
+    return level
+
+
 def create_app(config_class=Config):
     """Flask application factory function"""
     # Observability: Tracing + Metrics vor Flask-Instanz initialisieren,
@@ -88,6 +105,8 @@ def create_app(config_class=Config):
     # (z. B. /api/simulation/<id>/stream?ticket=<signed>); ohne Redaction
     # würden Tickets und Tokens im Klartext in stderr/Container-Logs landen.
     install_redaction_filter(logging.getLogger('werkzeug'))
+
+    configure_werkzeug_log_level()
 
     # Only print startup info in reloader subprocess (avoid printing twice in debug mode)
     is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'

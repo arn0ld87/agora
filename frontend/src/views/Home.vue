@@ -10,6 +10,7 @@ import Kicker from '@/components/v4/data/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
+import AgoraBrand from '../components/brand/AgoraBrand.vue'
 import { getAvailableModels } from '../api/simulation'
 import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
 import {
@@ -236,8 +237,8 @@ const differentiators = computed(() => tm('home.differentiators'))
           </div>
         </div>
         <aside class="hero-right">
-          <div class="portrait">
-            <img src="../assets/logo/agora-logo.jpg" :alt="t('brand.name')" />
+          <div class="portrait portrait--brand">
+            <AgoraBrand mode="full-animated" :height="180" :alt="t('brand.name')" />
           </div>
           <div class="portrait-meta">
             <span>{{ t('brand.name').toUpperCase() }}</span>
@@ -565,6 +566,15 @@ const differentiators = computed(() => tm('home.differentiators'))
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.portrait--brand {
+  background: #fff;
+  padding: var(--s-3);
+}
+.portrait--brand :deep(.agora-brand__img) {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
 }
 .portrait-meta {
   display: grid;

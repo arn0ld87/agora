@@ -30,6 +30,7 @@ from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
+from ..services.sim.cancel_flag import request_cancel as _request_cancel
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
@@ -336,6 +337,59 @@ def stop_run(run_id: str):
         return json_success(run_registry.get_run(run_id))
     except Exception as exc:
         return json_error(str(exc), status=400)
+
+
+@runs_bp.route("/<run_id>/cancel", methods=["POST"])
+@handle_api_errors(logger=logger, log_prefix="Failed to cancel run")
+def cancel_run(run_id: str):
+    """POST /api/runs/<run_id>/cancel — Cooperative Cancellation.
+
+    Setzt das Cancel-Flag im in-process Cancel-Store. Der laufende Worker
+    (SimulationRunner / ReportAgent) prüft das Flag zwischen Stage-Boundaries
+    und bricht sauber ab (letzter LLM-Call läuft fertig, dann Teilreport).
+
+    Antwort: 202 Accepted (asynchron — der Abbruch erfolgt kooperativ).
+
+    Fehler:
+    - 404 wenn run_id unbekannt
+    - 400 wenn Run nicht im Status ``processing`` ist
+    """
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    current_status = run.get("status", "")
+    if current_status != "processing":
+        return json_error(
+            f"Run is not in 'processing' state (current: {current_status!r}). "
+            "Cancel is only valid for active runs.",
+            status=400,
+            code="run_not_active",
+        )
+
+    # linked_ids kann ``None`` sein (nicht nur fehlend) — ``or {}`` schützt
+    # vor AttributeError, wenn der Key explizit None ist (Gemini-Finding).
+    simulation_id = (run.get("linked_ids") or {}).get("simulation_id")
+    if not simulation_id:
+        return json_error("Run is missing simulation_id linkage", status=409)
+
+    _request_cancel(run_id)
+
+    # RunRegistry ist Singleton — Instanz pro Call holen (Gemini-Finding).
+    RunRegistry().update_run(
+        run_id,
+        message="Cancel requested — finishing current stage before stopping",
+    )
+
+    logger.info(
+        "cancel_run: cancel flag set for run_id=%s simulation_id=%s",
+        run_id,
+        simulation_id,
+    )
+
+    from flask import make_response, jsonify
+    body = jsonify({"success": True, "status": "cancel_requested", "run_id": run_id})
+    return make_response(body, 202)
 
 
 def _restart_graph_build(run: dict):

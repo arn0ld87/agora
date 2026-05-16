@@ -592,6 +592,50 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
     _cleanup_registered = True
 
 
+def terminate_run(
+    run_id: str,
+    *,
+    processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
+    grace_period: float = 5.0,
+) -> bool:
+    """Beende den OASIS-Subprozess für ``run_id`` kooperativ (SIGTERM + Grace → SIGKILL).
+
+    Idempotent: Wenn kein Prozess läuft oder der Prozess bereits beendet ist,
+    wird kein Fehler geworfen und ``False`` zurückgegeben.
+
+    Args:
+        run_id:       Simulation-ID (= Prozess-Schlüssel in ``processes``).
+        processes:    ``SimulationRunner._processes`` (by reference).
+        grace_period: Sekunden, die nach SIGTERM gewartet wird, bevor SIGKILL
+                      gesendet wird.
+
+    Returns:
+        ``True``, wenn ein laufender Prozess terminiert wurde.
+        ``False``, wenn kein Prozess vorhanden oder bereits beendet war.
+    """
+    process = processes.get(run_id)
+    if process is None or process.poll() is not None:
+        return False
+
+    timeout_int = max(1, int(grace_period))
+    try:
+        terminate_process(process, run_id, timeout=timeout_int)
+    except ProcessLookupError:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "terminate_run: graceful terminate failed for %s, forcing kill: %s",
+            run_id,
+            exc,
+        )
+        try:
+            process.kill()
+            process.wait(timeout=5)
+        except Exception:
+            pass
+    return True
+
+
 def get_running_simulations(
     *,
     processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]

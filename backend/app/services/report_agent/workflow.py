@@ -471,12 +471,97 @@ def generate_section_metadata(
         return {}
 
 
+def _is_cancel_requested(run_id: Optional[str]) -> bool:
+    """Prüft das Cancel-Flag für ``run_id``; kein Fehler wenn run_id None."""
+    if not run_id:
+        return False
+    try:
+        from ..sim.cancel_flag import is_cancel_requested
+        return is_cancel_requested(run_id)
+    except Exception:
+        return False
+
+
+def _build_partial_report(
+    report: "Report",
+    *,
+    report_id: str,
+    completed_section_titles: List[str],
+    outline: Any,
+    agent: Any,
+    progress_callback: Optional[Callable[[str, int, str], None]],
+) -> "Report":
+    """Finalisiert einen Teil-Report nach kooperativem Cancel.
+
+    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections,
+    setzt ``status=COMPLETED`` (success-with-caveat) und persistiert
+    einen separaten Partial-Metadata-JSON-Artifact neben dem Report.
+    """
+    from ...models.report import ReportStatus
+    from datetime import datetime
+    import os
+
+    cancelled_at = datetime.now().isoformat()
+    report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
+    report.status = ReportStatus.COMPLETED
+    report.completed_at = cancelled_at
+
+    ReportManager.save_report(report)
+
+    # Partial-Marker als separates Artifact persistieren
+    # (Report-Dataclass hat kein metadata-Feld — Erweiterung ohne Schema-Migration)
+    partial_metadata: Dict[str, Any] = {
+        "partial": True,
+        "cancelled_at": cancelled_at,
+        "completed_stages": list(completed_section_titles),
+        "report_id": report_id,
+    }
+    partial_path = os.path.join(
+        ReportManager._ensure_report_folder(report_id), "partial_metadata.json"
+    )
+    try:
+        ReportManager._write_json_atomic(partial_path, partial_metadata)
+    except Exception as exc:
+        logger.warning(
+            "_build_partial_report: could not write partial_metadata.json: %r", exc
+        )
+
+    ReportManager.update_progress(
+        report_id,
+        "completed",
+        100,
+        f"Partial report generated ({len(completed_section_titles)} sections completed before cancel)",
+        completed_sections=completed_section_titles,
+    )
+    if progress_callback:
+        progress_callback(
+            "completed",
+            100,
+            f"Partial report generated ({len(completed_section_titles)} sections)",
+        )
+    if agent.report_logger:
+        agent.report_logger.log_report_complete(
+            total_sections=len(completed_section_titles),
+            total_time_seconds=0.0,
+        )
+    if agent.console_logger:
+        agent.console_logger.close()
+        agent.console_logger = None
+    logger.info(
+        "generate_report: partial report finalised report_id=%s sections=%d",
+        report_id,
+        len(completed_section_titles),
+    )
+    return report
+
+
 def generate_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
     report_id: Optional[str] = None,
     *,
     report_mode: ReportMode = DEFAULT_REPORT_MODE,
+    cancel_run_id: Optional[str] = None,
 ) -> Report:
     import uuid
 
@@ -539,6 +624,17 @@ def generate_report(
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, total{len(outline.sections)}sections", completed_sections=[])
         ReportManager.save_report(report)
 
+        # Cancel-Check nach Outline (Stage-Boundary 1)
+        if _is_cancel_requested(cancel_run_id):
+            return _build_partial_report(
+                report,
+                report_id=report_id,
+                completed_section_titles=completed_section_titles,
+                outline=outline,
+                agent=agent,
+                progress_callback=progress_callback,
+            )
+
         required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         outline_titles = [section.title for section in outline.sections]
         missing = validate_required_sections(outline_titles, required_titles)
@@ -584,6 +680,16 @@ def generate_report(
             generated_sections.append(section_info["content"])
 
         for i, section in enumerate(outline.sections):
+            # Cancel-Check am Anfang jeder Section-Iteration (Stage-Boundary 2+)
+            if _is_cancel_requested(cancel_run_id):
+                return _build_partial_report(
+                    report,
+                    report_id=report_id,
+                    completed_section_titles=completed_section_titles,
+                    outline=outline,
+                    agent=agent,
+                    progress_callback=progress_callback,
+                )
             section_num = i + 1
             base_progress = 20 + int((i / total_sections) * 70)
             if section_num in existing_sections:

@@ -72,12 +72,22 @@ const router = useRouter()
 const props = defineProps({
   reportId: String,
   simulationId: String,
-  systemLogs: Array
+  systemLogs: Array,
+  /** Feature-Flag: true sobald Backend POST /api/runs/<id>/cancel verfügbar (Slice 6). */
+  cancelEndpointAvailable: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['add-log', 'update-status'])
+const emit = defineEmits(['add-log', 'update-status', 'stop'])
 
 const phase = ref(0) // 0 idle, 1 running, 2 done
+/**
+ * true wenn Simulation beendet ist, aber noch kein Report-Start bestätigt wurde.
+ * Zeigt den Confirm-Dialog statt Auto-Start.
+ */
+const reportPending = ref(false)
 const statusMsg = ref('')
 const reportOutline = ref<ReportOutline | null>(null)
 const generatedSections = ref<Record<string, unknown>>({})
@@ -264,6 +274,59 @@ async function regenerateWithModel() {
     }
   } catch (err) {
     addLog((err as Error).message)
+  } finally {
+    isRegenerating.value = false
+  }
+}
+
+/**
+ * Wird aufgerufen wenn der User den Confirm-Dialog bestätigt.
+ * Startet die Report-Generierung mit dem aktuell gewählten Modell.
+ */
+async function startReportConfirmed() {
+  const simId = resolvedSimulationId.value || props.simulationId
+  if (!simId) {
+    addLog('simulationId fehlt — Report-Start nicht möglich.')
+    return
+  }
+  reportPending.value = false
+  isRegenerating.value = true
+  try {
+    const payload: Record<string, unknown> = {
+      simulation_id: simId,
+      mode: reportMode.value,
+    }
+    const m = effectiveReportModel()
+    if (m) payload.llm_model = m
+
+    if (await reportProviderMissingKeyEverywhere()) {
+      addLog('API-Key für gewählten LLM-Anbieter fehlt (weder Session-Key noch DB-Key vorhanden).')
+      reportPending.value = true
+      return
+    }
+    const providerPayload = effectiveReportProvider()
+    if (providerPayload) payload.llm_provider = providerPayload
+    addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
+    const res = (await generateReport(payload)) as ApiResult
+    if (res?.success && res.data?.report_id) {
+      isComplete.value = false
+      phase.value = 1
+      reportOutline.value = null
+      generatedSections.value = {}
+      currentSectionIndex.value = null
+      resetAgentLogs()
+      resetConsoleLogs()
+      fullReport.value = null
+      emit('update-status', 'processing')
+      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
+      startPolling()
+    } else {
+      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
+      reportPending.value = true
+    }
+  } catch (err) {
+    addLog((err as Error).message)
+    reportPending.value = true
   } finally {
     isRegenerating.value = false
   }
@@ -483,8 +546,15 @@ onMounted(async () => {
   loadModels()
   await pollStatus()
   if (!isComplete.value) {
-    phase.value = 1
-    startPolling()
+    if (props.reportId) {
+      // Ein laufender Report ist bereits bekannt → normales Polling fortsetzen.
+      phase.value = 1
+      startPolling()
+    } else {
+      // Kein laufender Report → Confirm-Dialog zeigen statt Auto-Start.
+      phase.value = 0
+      reportPending.value = true
+    }
   } else if (!fullReport.value) {
     try {
       const full = (await getReport(props.reportId!)) as ApiResult
@@ -515,12 +585,47 @@ onUnmounted(stopPolling)
       <article class="card" :class="{ 'is-active': phase === 1 }">
         <header class="card-head">
           <Kicker num="01">{{ t('step4.title') }}</Kicker>
-          <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
-            {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
-          </Badge>
+          <div class="card-head-actions">
+            <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
+              {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
+            </Badge>
+            <span
+              v-if="!props.cancelEndpointAvailable"
+              :title="t('step4.reportConfirm.stopDisabledTip')"
+              class="stop-btn-wrap"
+            >
+              <Button variant="ghost" disabled class="stop-btn">
+                {{ t('step4.reportConfirm.stopButton') }}
+              </Button>
+            </span>
+            <Button
+              v-else
+              variant="ghost"
+              class="stop-btn stop-btn--active"
+              @click="emit('stop')"
+            >
+              {{ t('step4.reportConfirm.stopButton') }}
+            </Button>
+          </div>
         </header>
         <p class="card-desc">{{ t('step4.sub') }}</p>
         <p v-if="statusMsg" class="meta">{{ statusMsg }}</p>
+
+        <!-- Confirm-Dialog: erscheint wenn Simulation beendet, aber kein Report gestartet -->
+        <div v-if="reportPending && phase === 0" class="report-confirm-block" data-testid="report-confirm-block">
+          <p class="report-confirm-title">{{ t('step4.reportConfirm.title') }}</p>
+          <p class="report-confirm-desc">{{ t('step4.reportConfirm.description') }}</p>
+          <div class="report-confirm-actions">
+            <Button
+              variant="primary"
+              :disabled="isRegenerating"
+              data-testid="report-confirm-start-btn"
+              @click="startReportConfirmed"
+            >
+              {{ t('step4.reportConfirm.startButton') }}
+            </Button>
+          </div>
+        </div>
 
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
@@ -925,4 +1030,45 @@ onUnmounted(stopPolling)
 .agent-entry.action-error .agent-title { color: var(--status-red, var(--status-error)); }
 .agent-entry.action-section_start .agent-title,
 .agent-entry.action-section_complete .agent-title { color: var(--status-orange, var(--status-warn)); }
+
+/* Confirm-Block */
+.report-confirm-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-1);
+  padding: var(--s-4);
+}
+.report-confirm-title {
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+.report-confirm-desc {
+  color: var(--fg-body);
+  margin: 0;
+}
+.report-confirm-actions {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+/* Stop-Button im Header */
+.card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.stop-btn-wrap {
+  display: inline-flex;
+}
+.stop-btn {
+  color: var(--fg-muted);
+}
+.stop-btn--active {
+  color: var(--status-red, var(--status-error));
+}
 </style>

@@ -548,7 +548,26 @@
     "quote": {
       "openSource": "Open source"
     },
+    "reportConfirm": {
+      "title": "Start report?",
+      "description": "The simulation is complete. Please select a model and start report generation manually.",
+      "startButton": "Start report",
+      "stopButton": "Cancel",
+      "stopDisabledTip": "Cancel available after backend slice 6"
+    },
     "next": "Next: conversation →"
+  },
+  "report": {
+    "provenance": {
+      "title": "Model provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Model",
+      "promptTokens": "Prompt tokens",
+      "completionTokens": "Completion tokens",
+      "latencyMs": "Latency",
+      "noMetricsHint": "No token or latency metrics captured."
+    }
   },
   "step5": {
     "kicker": "№ 05 — CONVERSATION",
@@ -746,7 +765,8 @@
       "empty": "No log lines yet.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
-      "reconnect": "Reconnect"
+      "reconnect": "Reconnect",
+      "reconnecting": "Reconnecting…"
     }
   },
   "settings": {
@@ -996,6 +1016,8 @@
     "label": "Active model",
     "idle": "Idle",
     "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "unknown": "Unknown model",
     "failed": "Connection lost",
     "reload": "Reconnect",
     "provider": {
@@ -1222,5 +1244,11 @@
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"
+  },
+  "modelPicker": {
+    "loading": "Loading models…",
+    "error": "Failed to load models",
+    "placeholder": "Select model…",
+    "noModels": "No models available"
   }
 }

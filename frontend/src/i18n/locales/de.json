@@ -548,7 +548,26 @@
     "quote": {
       "openSource": "Quelle öffnen"
     },
+    "reportConfirm": {
+      "title": "Report starten?",
+      "description": "Die Simulation ist abgeschlossen. Bitte wähle ein Modell und starte die Report-Generierung manuell.",
+      "startButton": "Report starten",
+      "stopButton": "Abbrechen",
+      "stopDisabledTip": "Abbruch verfügbar nach Backend-Slice 6"
+    },
     "next": "Weiter zum Gespräch →"
+  },
+  "report": {
+    "provenance": {
+      "title": "Modell-Provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Modell",
+      "promptTokens": "Prompt-Tokens",
+      "completionTokens": "Completion-Tokens",
+      "latencyMs": "Latenz",
+      "noMetricsHint": "Keine Token-/Latenz-Metriken erfasst."
+    }
   },
   "step5": {
     "kicker": "№ 05 — GESPRÄCH",
@@ -746,7 +765,8 @@
       "empty": "Noch keine Log-Zeilen.",
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
-      "reconnect": "Erneut verbinden"
+      "reconnect": "Erneut verbinden",
+      "reconnecting": "Verbindung wird wiederhergestellt…"
     }
   },
   "settings": {
@@ -996,6 +1016,8 @@
     "label": "Aktives Modell",
     "idle": "Bereit",
     "connecting": "Verbinde…",
+    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "unknown": "Unbekanntes Modell",
     "failed": "Verbindung verloren",
     "reload": "Neu verbinden",
     "provider": {
@@ -1222,5 +1244,11 @@
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"
+  },
+  "modelPicker": {
+    "loading": "Lade Modelle…",
+    "error": "Fehler beim Laden der Modelle",
+    "placeholder": "Modell wählen…",
+    "noModels": "Keine Modelle verfügbar"
   }
 }

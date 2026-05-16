@@ -19,6 +19,12 @@
         <label class="pause-toggle">
           <input type="checkbox" v-model="paused" /> {{ t('logs.drawer.pause') }}
         </label>
+        <span
+          v-if="streamReconnecting"
+          class="reconnect-indicator"
+          :title="t('logs.drawer.reconnecting')"
+          aria-live="polite"
+        >&#x21bb; {{ t('logs.drawer.reconnecting') }}</span>
         <button
           v-if="streamFailed"
           class="close-btn reconnect-btn"
@@ -61,16 +67,23 @@ const level = ref('')
 const search = ref('')
 const paused = ref(false)
 const streamFailed = ref(false)
+const streamReconnecting = ref(false)
 const scrollEl = ref(null)
 const sticky = useStickyScroll(scrollEl)
 // Letzter Datei-Offset aus dem Tail-Response — geben wir dem Stream als
 // Wiederaufsetzpunkt mit, damit zwischen Tail und Connect geschriebene
 // Lines nicht verloren gehen (PR #146-Review).
 let lastOffset = null
-let reconnectAttempts = 0
+let lastFrameAt = 0
+let _reconnectIndicatorTimer = null
 
 const RING_BUFFER_MAX = 5000
-const MAX_RECONNECT_ATTEMPTS = 5
+// SSE-Reconnects sind unbegrenzt (User-Decision 2026-05-16): EventSource nutzt
+// automatisches Browser-Reconnect mit dem vom Server gesetzten ``retry:``-Wert
+// (5 s in stream_logs). Der ``streamReconnecting``-Indikator erscheint erst
+// nach ``RECONNECT_INDICATOR_DELAY_MS`` ohne erfolgreichen Frame, damit
+// kurze Hiccups (< 30 s) optisch verschluckt werden.
+const RECONNECT_INDICATOR_DELAY_MS = 30000
 const ERROR_PATTERN = /(error|exception|traceback|fatal)/i
 function isErrorLine(line) {
   return typeof line === 'string' && ERROR_PATTERN.test(line)
@@ -112,34 +125,37 @@ function appendLine(line, { bypassPause = false } = {}) {
 
 async function startStream() {
   stopStream()
-  reconnectAttempts = 0
   streamFailed.value = false
+  streamReconnecting.value = false
+  lastFrameAt = Date.now()
   const generation = ++_streamGeneration
   const url = await buildLogsStreamUrl(level.value || null, lastOffset)
   if (generation !== _streamGeneration) return
   try {
     _eventSource = new EventSource(url)
     _eventSource.onmessage = (e) => {
-      reconnectAttempts = 0
-      if (streamFailed.value) streamFailed.value = false
+      lastFrameAt = Date.now()
+      streamReconnecting.value = false
       try {
         const payload = JSON.parse(e.data)
         if (payload?.line != null) appendLine(payload.line)
       } catch { /* ignore non-JSON */ }
     }
     _eventSource.onerror = (err) => {
-      reconnectAttempts++
-      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        stopStream()
-        streamFailed.value = true
-        appendLine(t('logs.drawer.reconnectExhausted'), { bypassPause: true })
-        return
-      }
+      // EventSource macht automatisches Reconnect mit dem vom Server gesetzten
+      // ``retry:``-Wert. Wir spammen die Drawer-Lines NICHT mehr mit
+      // "Verbindung unterbrochen"-Meldungen — Indikator-Banner reicht, wenn
+      // der Drift > RECONNECT_INDICATOR_DELAY_MS ist.
       console.warn('LogDrawer SSE error', err)
-      // Connection-Diagnose muss auch bei pausiertem Auto-Scroll sichtbar
-      // sein — bypassPause: true.
-      appendLine(t('logs.drawer.connectionError'), { bypassPause: true })
+      if (Date.now() - lastFrameAt > RECONNECT_INDICATOR_DELAY_MS) {
+        streamReconnecting.value = true
+      }
     }
+    _reconnectIndicatorTimer = window.setInterval(() => {
+      if (Date.now() - lastFrameAt > RECONNECT_INDICATOR_DELAY_MS) {
+        streamReconnecting.value = true
+      }
+    }, 5000)
   } catch { /* ignore */ }
 }
 
@@ -152,6 +168,11 @@ function stopStream() {
     _eventSource.close()
     _eventSource = null
   }
+  if (_reconnectIndicatorTimer !== null) {
+    window.clearInterval(_reconnectIndicatorTimer)
+    _reconnectIndicatorTimer = null
+  }
+  streamReconnecting.value = false
 }
 
 watch(() => props.open, async (isOpen) => {
@@ -185,6 +206,22 @@ onUnmounted(stopStream)
   display: flex;
   flex-direction: column;
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+}
+.reconnect-indicator {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding: 2px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  opacity: 0.7;
+  animation: reconnect-pulse 1.6s ease-in-out infinite;
+}
+@keyframes reconnect-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.9; }
 }
 .drawer-head {
   display: flex;

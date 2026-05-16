@@ -32,8 +32,9 @@ class SimulationStatus(str, Enum):
     READY = "ready"
     RUNNING = "running"
     PAUSED = "paused"
-    STOPPED = "stopped"      # Simulation manually stopped
-    COMPLETED = "completed"  # Simulation completed naturally
+    STOPPED = "stopped"           # Simulation manually stopped
+    CANCELLED_PARTIAL = "cancelled_partial"  # Cooperative cancel — partial report available
+    COMPLETED = "completed"       # Simulation completed naturally
     FAILED = "failed"
 
 

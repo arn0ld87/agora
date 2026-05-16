@@ -1,11 +1,14 @@
 /**
- * ActiveModelBadge — Tests (Slice E.2, Issue #213).
+ * ActiveModelBadge — Tests (Slice E.2 / Observability Wave 2026-05).
  *
  * Nutzt createTestingPinia (kein echter HTTP/SSE).
  *
  * Test 1: lastEvent gesetzt → Modell-Name + Cloud-Icon sichtbar, aria-live="polite".
- * Test 2: isStale=true → zeigt activeModel.idle-Label.
+ * Test 2: isStale=true ohne lastKnownModel → zeigt activeModel.idle-Label.
  * Test 3: connectionStatus="failed" → Reload-Button sichtbar; Click ruft store.reconnect().
+ * Test 4: connectionStatus="connecting" mit lastKnownModel → Modellname bleibt, Spinner-Dot erscheint.
+ * Test 5: connectionStatus="reconnecting" mit lastKnownModel → Modellname bleibt, Spinner-Dot erscheint.
+ * Test 6: connectionStatus="connecting" ohne lastKnownModel → activeModel.unknown-Fallback + Spinner-Dot.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -52,6 +55,8 @@ const i18n = createI18n({
         label: 'Active model',
         idle: 'Idle',
         connecting: 'Connecting…',
+        reconnecting: 'Reconnecting…',
+        unknown: 'Unknown model',
         failed: 'Connection lost',
         reload: 'Reconnect',
         provider: {
@@ -77,6 +82,7 @@ const i18n = createI18n({
 
 function makeTestingPinia(overrides: Partial<{
   lastEvent: ModelActiveEvent | null
+  lastKnownModel: string | null
   isStale: boolean
   connectionStatus: string
 }> = {}) {
@@ -85,6 +91,7 @@ function makeTestingPinia(overrides: Partial<{
     initialState: {
       activeModel: {
         lastEvent: overrides.lastEvent ?? null,
+        lastKnownModel: overrides.lastKnownModel ?? null,
         connectionStatus: overrides.connectionStatus ?? 'idle',
         reconnectAttempts: 0,
       },
@@ -110,7 +117,7 @@ describe('ActiveModelBadge', () => {
       extra: null,
     }
 
-    const pinia = makeTestingPinia({ lastEvent: event, connectionStatus: 'open' })
+    const pinia = makeTestingPinia({ lastEvent: event, lastKnownModel: event.model, connectionStatus: 'connected' })
     const wrapper = mount(ActiveModelBadge, {
       global: { ...globalBase, plugins: [i18n, pinia] },
     })
@@ -135,9 +142,9 @@ describe('ActiveModelBadge', () => {
     wrapper.unmount()
   })
 
-  it('Test 2: isStale=true → zeigt activeModel.idle', async () => {
-    // lastEvent is null (stale by default since isStale computed returns true when null).
-    const pinia = makeTestingPinia({ lastEvent: null, connectionStatus: 'open' })
+  it('Test 2: isStale=true ohne lastKnownModel → zeigt activeModel.idle', async () => {
+    // lastEvent is null, lastKnownModel is null → idle label.
+    const pinia = makeTestingPinia({ lastEvent: null, lastKnownModel: null, connectionStatus: 'connected' })
     const wrapper = mount(ActiveModelBadge, {
       global: { ...globalBase, plugins: [i18n, pinia] },
     })
@@ -166,6 +173,85 @@ describe('ActiveModelBadge', () => {
     await btn.trigger('click')
 
     expect(store.reconnect).toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('Test 4: connectionStatus=connecting mit lastKnownModel → Modellname bleibt, Spinner-Dot erscheint', async () => {
+    const pinia = makeTestingPinia({
+      connectionStatus: 'connecting',
+      lastEvent: null,
+      lastKnownModel: 'llama3:70b',
+    })
+    const wrapper = mount(ActiveModelBadge, {
+      global: { ...globalBase, plugins: [i18n, pinia] },
+    })
+
+    await flushPromises()
+
+    // Kein „Verbinde…" als Hauptlabel.
+    expect(wrapper.text()).not.toContain('Connecting')
+
+    // Modellname bleibt sichtbar.
+    expect(wrapper.text()).toContain('llama3:70b')
+
+    // Spinner-Dot vorhanden.
+    expect(wrapper.find('.badge-spinner-dot').exists()).toBe(true)
+
+    // Kein Reload-Button.
+    expect(wrapper.find('.badge-reload-btn').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('Test 5: connectionStatus=reconnecting mit lastKnownModel → Modellname bleibt, Spinner-Dot erscheint', async () => {
+    const event: ModelActiveEvent = {
+      model: 'mistral:7b',
+      provider: 'ollama',
+      context: 'chat',
+      ts: Date.now() / 1000,
+      extra: null,
+    }
+    const pinia = makeTestingPinia({
+      connectionStatus: 'reconnecting',
+      lastEvent: event,
+      lastKnownModel: 'mistral:7b',
+    })
+    const wrapper = mount(ActiveModelBadge, {
+      global: { ...globalBase, plugins: [i18n, pinia] },
+    })
+
+    await flushPromises()
+
+    // Modellname sichtbar — kein „Verbinde…" / „Reconnecting…" als Hauptlabel.
+    expect(wrapper.text()).toContain('mistral:7b')
+
+    // Spinner-Dot vorhanden.
+    expect(wrapper.find('.badge-spinner-dot').exists()).toBe(true)
+
+    // Kein Reload-Button (nur bei 'failed').
+    expect(wrapper.find('.badge-reload-btn').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('Test 6: connectionStatus=connecting ohne lastKnownModel → unknown-Fallback + Spinner-Dot', async () => {
+    const pinia = makeTestingPinia({
+      connectionStatus: 'connecting',
+      lastEvent: null,
+      lastKnownModel: null,
+    })
+    const wrapper = mount(ActiveModelBadge, {
+      global: { ...globalBase, plugins: [i18n, pinia] },
+    })
+
+    await flushPromises()
+
+    // Unbekanntes Modell als Fallback-Label.
+    expect(wrapper.text()).toContain('Unknown model')
+
+    // Spinner-Dot vorhanden.
+    expect(wrapper.find('.badge-spinner-dot').exists()).toBe(true)
 
     wrapper.unmount()
   })
