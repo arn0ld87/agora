@@ -284,7 +284,8 @@ def test_hypotheses_in_markdown_and_json(env):
     assert md_response.status_code == 200
     markdown = md_response.data.decode("utf-8")
     assert "Hypothesen ohne Evidence" in markdown
-    assert "hypothesis_01" in markdown
+    # Slice 3 (Issue #495): stabile Re-ID → H{section_idx}_{slot:02d}
+    assert "H1_01" in markdown
     assert "weitere Persona-Quote" in markdown
 
     json_response = env.get(f"/api/report/{REPORT_ID}/export?format=json")

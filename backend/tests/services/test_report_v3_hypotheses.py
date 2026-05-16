@@ -49,7 +49,8 @@ def test_build_report_v3_routes_hypotheses_to_dedicated_slot() -> None:
     v3 = ReportManager.build_report_v3(report, evidence_map, report_mode="balanced")
 
     assert len(v3.hypotheses) == 1
-    assert v3.hypotheses[0].id == "hyp_01"
+    # Slice 3 (Issue #495): stabile Re-ID → H{section_idx}_{slot:02d}
+    assert v3.hypotheses[0].id == "H1_01"
     assert v3.hypotheses[0].hypothesis_text == "Test-Hypothese"
     assert v3.hypotheses[0].rationale == "Aus Bewertung Abschnitt 13"
     assert v3.hypotheses[0].suggested_evidence == ["Persona-Interview"]
