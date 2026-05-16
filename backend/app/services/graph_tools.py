@@ -209,6 +209,27 @@ class GraphToolsService:
             interview_questions=custom_questions or []
         )
 
+        # Sub-Slice 05.6 — Early-Check: Sim-Environment muss erreichbar sein,
+        # bevor wir teure LLM-Calls für Selection + Question-Generation
+        # auslösen. Vorher wurde der Sim-Status erst nach 30-60s LLM-Arbeit
+        # geprüft, das LLM bekam dann ein generisches "please ensure ...
+        # running" und rief das Tool im ReACT-Loop wieder auf → max-iter-
+        # Force-Generate-Schleifen.
+        if not SimulationRunner.check_env_alive(simulation_id):
+            logger.warning(
+                "Interview tool skipped — sim environment for %s is not alive "
+                "(closed or never started). Returning terminal soft-fail.",
+                simulation_id,
+            )
+            result.summary = (
+                "Interview tool TERMINALLY UNAVAILABLE for this report run — "
+                "the OASIS simulation environment is closed and cannot be "
+                "restarted from the report context. Do NOT call interview_agents "
+                "again. Use insight_forge, panorama_search, or quick_search to "
+                "derive stakeholder perspectives from the graph instead."
+            )
+            return result
+
         # Step 1: Read agent profile files
         profiles = self._load_agent_profiles(simulation_id)
 
@@ -279,7 +300,13 @@ class GraphToolsService:
             if not api_result.get("success", False):
                 error_msg = api_result.get("error", "Unknown error")
                 logger.warning(f"Interview API call failed: {error_msg}")
-                result.summary = f"Interview API call failed: {error_msg}. Please check the OASIS simulation environment status."
+                # Sub-Slice 05.6 — Terminal-Hint statt Retry-Aufforderung.
+                # Sim-Reachability ist nicht aus dem Report-Context wiederherstellbar.
+                result.summary = (
+                    f"Interview tool TERMINALLY UNAVAILABLE for this report run "
+                    f"(reason: {error_msg}). Do NOT call interview_agents again. "
+                    "Use insight_forge, panorama_search, or quick_search instead."
+                )
                 return result
 
             # Step 5: Parse API response
@@ -343,7 +370,13 @@ class GraphToolsService:
 
         except ValueError as e:
             logger.warning(f"Interview API call failed (environment not running?): {e}")
-            result.summary = f"Interview failed: {str(e)}. The simulation environment may be closed. Please ensure the OASIS environment is running."
+            # Sub-Slice 05.6 — Terminal-Hint. Der alte "please ensure ...
+            # running"-String verleitete das LLM zu unendlichen Retry-Loops.
+            result.summary = (
+                f"Interview tool TERMINALLY UNAVAILABLE for this report run "
+                f"(reason: {str(e)}). Do NOT call interview_agents again. "
+                "Use insight_forge, panorama_search, or quick_search instead."
+            )
             return result
         except Exception as e:
             logger.error(f"Interview API call exception: {e}")

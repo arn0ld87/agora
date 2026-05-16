@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.6 — 2026-05-16)
+
+- `GraphToolsService.interview_agents` führt jetzt einen Early-Check auf
+  `SimulationRunner.check_env_alive(simulation_id)` durch, bevor LLM-Calls für
+  Agent-Selection und Question-Generation ausgelöst werden. Bei toter Sim
+  spart das pro fehlgeschlagenem Tool-Aufruf 30-60 s LLM-Zeit + Tokens.
+  Wichtiger noch: die drei Soft-Fail-`result.summary`-Strings verleiten den
+  ReACT-Loop nicht mehr zu Retry-Schleifen. Vorher endete die Summary mit
+  *"Please ensure the OASIS environment is running"* — Live-Smoke zeigte, dass
+  das LLM das als „später nochmal versuchen" las und Section-Loops bis zur
+  `maximum iterations count`-Force-Generate-Grenze trieb. Jetzt: klarer
+  Terminal-Hint `TERMINALLY UNAVAILABLE ... Do NOT call interview_agents
+  again. Use insight_forge, panorama_search, or quick_search instead.`
+  (Sub-Slice 05.6)
+
 ### Fixed (Sub-Slice 05.5 — 2026-05-16)
 
 - `LLMClient.__init__` resolved `num_ctx` jetzt modellabhängig statt
