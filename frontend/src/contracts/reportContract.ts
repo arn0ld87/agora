@@ -16,7 +16,7 @@ import { z } from "zod";
 export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 2;
 
 // === Enums ===
-export const ConfidenceLabelSchema = z.enum(["low", "medium", "high", "verified"]);
+export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;
 
 export const EvidenceTypeSchema = z.enum([
@@ -110,7 +110,8 @@ export const ReportClaimSchema = z.object({
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt ReportClaimModel.non_low_claims_need_evidence
-  if (value.confidence_label !== "low" && value.evidence.length === 0) {
+  // speculative und low dürfen ohne Evidence auskommen
+  if (value.confidence_label !== "low" && value.confidence_label !== "speculative" && value.evidence.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,

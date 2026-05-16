@@ -16,7 +16,7 @@ import {
 export { ClusterSummarySchema, type ClusterSummary };
 
 // Typisierter Literal-Typ für Confidence-Distribution-Keys (Pendant zu Pydantic _ConfidenceKey)
-const _ConfidenceKeySchema = z.enum(["low", "medium", "high", "verified"]);
+const _ConfidenceKeySchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceKey = z.infer<typeof _ConfidenceKeySchema>;
 
 // === SegmentReach ===
@@ -74,6 +74,7 @@ export const BranchMetricsSchema = z
     // --- Report / Evidence ---
     confidence_distribution: z
       .object({
+        speculative: z.number().int().nonnegative().optional().default(0),
         low: z.number().int().nonnegative(),
         medium: z.number().int().nonnegative(),
         high: z.number().int().nonnegative(),
@@ -99,6 +100,7 @@ export const ComparisonDeltasSchema = z
     // --- Evidence-Qualität-Deltas ---
     confidence_distribution_delta: z
       .object({
+        speculative: z.number().int().optional().default(0),
         low: z.number().int(),
         medium: z.number().int(),
         high: z.number().int(),

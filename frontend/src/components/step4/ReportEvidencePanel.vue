@@ -137,7 +137,7 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
         >
           <header>
             <strong>{{ claim.claim_id }}</strong>
-            <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
+            <Badge :variant="claimConfidenceLabel(claim) === 'speculative' || claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
               {{ claimConfidenceText(claim) }}
             </Badge>
           </header>

@@ -58,7 +58,7 @@ export const ClaimSchema = z
     id: z.string().min(1),
     statement: z.string().min(8),
     evidence_refs: z.array(z.string()).min(1),
-    confidence: z.enum(["low", "medium", "high"]),
+    confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
     persona_ids: z.array(z.string()).default([]),
     aggregation_basis: z.enum([
       "seed",
@@ -136,7 +136,7 @@ export const ProjectImpactSchema = z
     id: z.string().min(1),
     beschreibung: z.string().min(1),
     affected_segments: z.array(z.string()).default([]),
-    confidence: z.enum(["low", "medium", "high"]),
+    confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
     evidence_refs: z.array(z.string()).default([]),
   })
   .strict();
