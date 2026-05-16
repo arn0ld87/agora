@@ -85,7 +85,20 @@ def instrument_flask_app(app: "Flask") -> None:
 
     Wrapper, damit die App-Factory keine OTel-API direkt importieren muss.
     NoOp wenn ``init_tracing()`` noch nicht aufgerufen wurde oder deaktiviert ist.
+
+    SSE-Endpoints werden via ``excluded_urls`` ausgenommen: bei vorzeitigem
+    Stream-Abbruch (BrokenPipe / GeneratorExit) versucht OTel sonst
+    ``context.detach(token)`` in einem bereits beendeten Frame und wirft
+    ``RuntimeError: <Token> has already been used once``.
     """
     if _PROVIDER is None:
         return
-    FlaskInstrumentor().instrument_app(app)  # type: ignore[no-untyped-call]
+    sse_excluded = ",".join([
+        "/api/llm/model-stream",
+        "/api/simulation/.*/stream",
+        "/api/logs/stream",
+    ])
+    FlaskInstrumentor().instrument_app(  # type: ignore[no-untyped-call]
+        app,
+        excluded_urls=sse_excluded,
+    )
