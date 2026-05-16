@@ -146,7 +146,11 @@ class RedisEventBus:
             # files in `uploads/simulations/<id>/{twitter,reddit}/actions.jsonl`
             # remain the source of truth until Phase C wires SSE mirroring.
             return
-        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE):
+        # Allowlist konsistent mit subscribe (Gemini-Finding #2):
+        # post_created via Bus-API publishen ist möglich, auch wenn der
+        # produktive Pfad heute über _emit_post_created_to_redis im
+        # OASIS-Subprozess läuft und den Bus umgeht.
+        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE, CHANNEL_POST_CREATED):
             raise ValueError(f"Unknown channel for RedisEventBus: {channel!r}")
 
         try:
@@ -154,12 +158,14 @@ class RedisEventBus:
         except Exception:
             logger.exception("Redis publish failed for channel=%s", channel)
             raise
-        try:
-            self._write_retained(channel, event)
-        except Exception as exc:  # noqa: BLE001 — mirror is best-effort
-            logger.warning(
-                "Failed to mirror %s event to artifact store: %s", channel, exc
-            )
+        # post_created hat keinen Retained-Snapshot — mirror skippen.
+        if channel in (CHANNEL_CONTROL, CHANNEL_STATE):
+            try:
+                self._write_retained(channel, event)
+            except Exception as exc:  # noqa: BLE001 — mirror is best-effort
+                logger.warning(
+                    "Failed to mirror %s event to artifact store: %s", channel, exc
+                )
 
     # ----- port: subscribe ----------------------------------------------
 
@@ -214,11 +220,16 @@ class RedisEventBus:
         try:
             # Yield the retained snapshot first so late subscribers see
             # the current value (matches FilePollingEventBus semantics).
-            # post_created hat keinen Retained-Artifact-Snapshot (Stream-
-            # only); überspringen, sonst würden wir ``run_state`` als
-            # post-Update emittieren und das Frontend mit falschem Typ füttern.
-            if channel != CHANNEL_POST_CREATED:
-                artifact_name = "control_state" if channel == CHANNEL_CONTROL else "run_state"
+            # Whitelist statt Blacklist (Gemini-Finding 2026-05-16 #3):
+            # nur Channels mit echtem Retained-Artifact (control_state /
+            # run_state) lesen einen Snapshot. Neue Stream-only-Channels
+            # wie post_created fallen automatisch raus.
+            _SNAPSHOT_ARTIFACT = {
+                CHANNEL_CONTROL: "control_state",
+                CHANNEL_STATE: "run_state",
+            }
+            artifact_name = _SNAPSHOT_ARTIFACT.get(channel)
+            if artifact_name is not None:
                 snapshot = self._store.read_json(simulation_id, artifact_name, default=None)
                 if snapshot:
                     yield SimulationEvent(
@@ -239,6 +250,20 @@ class RedisEventBus:
                 if msg and msg.get("type") == "message":
                     try:
                         data = json.loads(msg["data"])
+                        # Wire-Format-Brücke für post_created: OASIS-Subprozess
+                        # (run_parallel_simulation.py::_emit_post_created_to_redis)
+                        # publisht ein FLACHES Payload mit ``event_type`` statt
+                        # eines SimulationEvent-Envelopes. Wir wrappen es hier,
+                        # damit SimulationEvent.from_dict greift. Gemini-Finding
+                        # 2026-05-16 #1 (HIGH): ohne diese Brücke fliegt jedes
+                        # post_created als KeyError raus.
+                        if channel == CHANNEL_POST_CREATED and "type" not in data:
+                            data = {
+                                "type": data.get("event_type", "post_created"),
+                                "simulation_id": data.get("simulation_id", ""),
+                                "payload": data,
+                                "ts": data.get("timestamp", ""),
+                            }
                         # Trace-Propagation: Span nur über synchrone Decode-Phase
                         # legen — Generator-yield darf keinen aktiven Span halten.
                         ctx = _extract_trace(data)

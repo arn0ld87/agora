@@ -73,3 +73,54 @@ def test_subscribe_still_rejects_truly_unknown_channels(bus):
     """Allowlist ist erweitert, nicht entfernt — Garbage-Channels bleiben hart abgelehnt."""
     with pytest.raises(ValueError, match="Unknown channel"):
         list(bus.subscribe("sim_test", "totally_made_up_channel", timeout=0.01))
+
+
+def test_subscribe_parses_oasis_wire_format_for_post_created(bus):
+    """Wire-Format-Brücke (Gemini-Finding #1, HIGH).
+
+    OASIS-Subprozess (run_parallel_simulation.py::_emit_post_created_to_redis)
+    publisht ein FLACHES Payload mit ``event_type`` statt eines
+    SimulationEvent-Envelopes (``type``/``payload``). Ohne Brücke fliegt
+    jedes post_created als KeyError im ``except KeyError`` → Event wird
+    gedroppt → Frontend bleibt leer. Test asseritert dass die Brücke greift.
+    """
+    import json as _json
+
+    oasis_payload = {
+        "event_type": "post_created",
+        "simulation_id": "sim_88b6a65f7bb0",
+        "post_id": "post-42",
+        "parent_post_id": None,
+        "platform": "twitter",
+        "persona_id": "agent-5",
+        "voice_register": "casual",
+        "is_simulated": True,
+        "body": "Hallo Welt",
+        "timestamp": "2026-05-16T17:25:28+00:00",
+        "sentiment": None,
+        "score": 0,
+    }
+
+    pubsub = MagicMock()
+    # Erstes get_message gibt ein echtes message-Frame zurück, danach
+    # endlos None — verhindert StopIteration im Generator, Timeout kappt
+    # die Loop nach 50 ms ab.
+    _messages = iter([{"type": "message", "data": _json.dumps(oasis_payload)}])
+
+    def _get_message(*_args, **_kwargs):
+        return next(_messages, None)
+
+    pubsub.get_message.side_effect = _get_message
+    bus._redis.pubsub.return_value = pubsub
+    bus._store = MagicMock()
+    bus._store.read_json.return_value = None  # kein snapshot
+
+    gen = bus.subscribe("sim_88b6a65f7bb0", CHANNEL_POST_CREATED, timeout=0.05, poll_interval=0.005)
+    events = list(gen)
+
+    assert len(events) == 1, f"erwarte genau 1 Event, bekam {len(events)}"
+    evt = events[0]
+    assert evt.type == "post_created"
+    assert evt.simulation_id == "sim_88b6a65f7bb0"
+    assert evt.payload["post_id"] == "post-42"
+    assert evt.payload["body"] == "Hallo Welt"
