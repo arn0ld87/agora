@@ -30,6 +30,19 @@ const localStorageMock = (() => {
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
 
+// IntersectionObserver-Polyfill: FeedColumn nutzt ihn in onMounted; jsdom
+// liefert ihn nicht. Minimaler No-Op-Mock reicht für den Smoketest.
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() { return [] }
+  root = null
+  rootMargin = ''
+  thresholds: number[] = []
+}
+;(globalThis as unknown as { IntersectionObserver: typeof MockIntersectionObserver }).IntersectionObserver = MockIntersectionObserver
+
 // Mutable reference so individual tests can override getRunStatusDetail.
 import * as simulationApi from '../../api/simulation'
 
