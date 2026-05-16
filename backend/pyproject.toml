@@ -224,4 +224,8 @@ override-dependencies = [
     "pillow>=12.1.1",
     "pandas>=3.0.3",
     "numpy>=2.4.4",
+    # GHSA-Override: unstructured < 0.18.18 hat Path Traversal via MSG-
+    # Attachment (critical, Arbitrary File Write) plus < 0.14.3 XXE.
+    # camel-oasis 0.2.5 pinned 0.13.7 — Override zieht 0.18.18 trotzdem hoch.
+    "unstructured>=0.18.18",
 ]
