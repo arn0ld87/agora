@@ -20,6 +20,12 @@ vi.mock('../../api/settings', () => ({
   putSettings: vi.fn(),
   putSecrets: vi.fn(),
 }))
+vi.mock('../../api/llmRouting', () => ({
+  listLlmProviders: vi.fn().mockResolvedValue([]),
+  listProviderModels: vi.fn().mockResolvedValue([]),
+  getActiveLlmConfig: vi.fn().mockResolvedValue({}),
+  setActiveLlmConfig: vi.fn().mockResolvedValue({}),
+}))
 
 import {
   fetchSettings,
@@ -118,12 +124,13 @@ describe('SettingsView', () => {
   it('rendert die Sektions-Tabs inklusive UI-Sektion aus dem Backend-Schema', async () => {
     const wrapper = await mountView()
     const tabLabels = wrapper.findAll('[role="tab"]').map((el) => el.text())
-    expect(tabLabels).toEqual(['LLM', 'UI', 'Secrets'])
+    expect(tabLabels).toEqual(['LLM-Auswahl', 'LLM', 'UI', 'Secrets'])
   })
 
   it('rendert Secret-Field als password-Input ohne Klartext', async () => {
     const wrapper = await mountView()
-    await wrapper.findAll('[role="tab"]')[2].trigger('click')
+    // Tab 0 = LLM-Auswahl (default), Tab 3 = Secrets in [LLM-Auswahl, llm, ui, security]
+    await wrapper.findAll('[role="tab"]')[3].trigger('click')
     const secretInput = wrapper.find<HTMLInputElement>('input[type="password"]')
     expect(secretInput.exists()).toBe(true)
     expect(secretInput.element.value).toBe('')
@@ -133,6 +140,8 @@ describe('SettingsView', () => {
 
   it('zeigt Inline-Validation-Hints aus dem Pinia-Store', async () => {
     const wrapper = await mountView()
+    // LLM-Auswahl-Panel hat keine Schema-Fields; auf LLM-Tab wechseln (Index 1).
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
     const store = useSettingsStore()
     store.validationErrors = [
       { key: 'LLM_MODEL_NAME', code: 'type_error', message: 'Mein Validation-Hint' },
@@ -146,6 +155,6 @@ describe('SettingsView', () => {
     const wrapper = await mountView('en')
     expect(wrapper.find('h1.title').text()).toBe('Settings')
     const tabLabels = wrapper.findAll('[role="tab"]').map((el) => el.text())
-    expect(tabLabels).toEqual(['LLM', 'UI', 'Secrets'])
+    expect(tabLabels).toEqual(['LLM selection', 'LLM', 'UI', 'Secrets'])
   })
 })
