@@ -54,7 +54,7 @@ async function loadLlmProviders() {
   try {
     llmProviders.value = await listLlmProviders()
   } catch (err) {
-    llmError.value = (err && err.message) || 'Fehler beim Laden der Provider'
+    llmError.value = (err && err.message) || t('settings.llmActive.errorLoadProviders')
   } finally {
     llmLoadingProviders.value = false
   }
@@ -71,7 +71,7 @@ async function loadLlmModels(providerId) {
     llmModels.value = await listProviderModels(providerId)
   } catch (err) {
     llmModels.value = []
-    llmError.value = (err && err.message) || 'Fehler beim Laden der Modelle'
+    llmError.value = (err && err.message) || t('settings.llmActive.errorLoadModels')
   } finally {
     llmLoadingModels.value = false
   }
@@ -88,7 +88,7 @@ async function loadLlmActiveConfig() {
       selectedModel.value = cfg.model
     }
   } catch (err) {
-    llmError.value = (err && err.message) || 'Fehler beim Laden der aktiven Auswahl'
+    llmError.value = (err && err.message) || t('settings.llmActive.errorLoadActive')
   }
 }
 
@@ -101,7 +101,7 @@ async function onProviderChange(providerId) {
 
 async function saveLlmActive() {
   if (!selectedProviderId.value || !selectedModel.value) {
-    llmError.value = 'Bitte Provider und Modell waehlen.'
+    llmError.value = t('settings.llmActive.errorSelectionMissing')
     return
   }
   llmSaving.value = true
@@ -112,9 +112,9 @@ async function saveLlmActive() {
       provider_id: selectedProviderId.value,
       model: selectedModel.value,
     })
-    llmFlash.value = 'Auswahl gespeichert.'
+    llmFlash.value = t('settings.llmActive.flashSaved')
   } catch (err) {
-    llmError.value = (err && err.message) || 'Speichern fehlgeschlagen.'
+    llmError.value = (err && err.message) || t('settings.llmActive.errorSaveFailed')
   } finally {
     llmSaving.value = false
   }
@@ -259,7 +259,7 @@ function sourceVariant(source) {
             :class="{ 'tab--active': isLlmActiveTab }"
             @click="setActive(LLM_ACTIVE_SECTION)"
           >
-            <span class="tab-label">LLM-Auswahl</span>
+            <span class="tab-label">{{ t('settings.llmActive.tab') }}</span>
           </button>
           <button
             v-for="section in sections"
@@ -286,19 +286,18 @@ function sourceVariant(source) {
         <section
           v-if="isLlmActiveTab"
           class="panel panel--llm-active"
-          aria-label="LLM-Auswahl"
+          :aria-label="t('settings.llmActive.ariaPanel')"
         >
           <div class="llm-active">
             <header class="llm-active__head">
-              <h2 class="llm-active__title">Aktiver LLM-Anbieter & Modell</h2>
+              <h2 class="llm-active__title">{{ t('settings.llmActive.title') }}</h2>
               <p class="llm-active__subtitle">
-                Diese Auswahl wird fuer alle LLM-Aufrufe im Backend verwendet,
-                sofern keine explizite Stage-Route gesetzt ist.
+                {{ t('settings.llmActive.subtitle') }}
               </p>
             </header>
 
             <div class="llm-active__row">
-              <label class="llm-active__label" for="llm-provider-select">Provider</label>
+              <label class="llm-active__label" for="llm-provider-select">{{ t('settings.llmActive.providerLabel') }}</label>
               <select
                 id="llm-provider-select"
                 class="input"
@@ -307,7 +306,7 @@ function sourceVariant(source) {
                 @change="onProviderChange($event.target.value)"
               >
                 <option value="" disabled>
-                  {{ llmLoadingProviders ? 'Lade Provider…' : 'Provider waehlen…' }}
+                  {{ llmLoadingProviders ? t('settings.llmActive.providerLoading') : t('settings.llmActive.providerPlaceholder') }}
                 </option>
                 <option
                   v-for="p in llmProviders"
@@ -320,7 +319,7 @@ function sourceVariant(source) {
             </div>
 
             <div class="llm-active__row">
-              <label class="llm-active__label" for="llm-model-select">Modell</label>
+              <label class="llm-active__label" for="llm-model-select">{{ t('settings.llmActive.modelLabel') }}</label>
               <select
                 id="llm-model-select"
                 class="input"
@@ -331,10 +330,10 @@ function sourceVariant(source) {
                 <option value="" disabled>
                   {{
                     !selectedProviderId
-                      ? 'Erst Provider waehlen'
+                      ? t('settings.llmActive.modelNeedsProvider')
                       : llmLoadingModels
-                        ? 'Lade Modelle…'
-                        : (llmModels.length ? 'Modell waehlen…' : 'Keine Modelle gefunden')
+                        ? t('settings.llmActive.modelLoading')
+                        : (llmModels.length ? t('settings.llmActive.modelPlaceholder') : t('settings.llmActive.modelEmpty'))
                   }}
                 </option>
                 <option
@@ -357,7 +356,7 @@ function sourceVariant(source) {
                 :disabled="!selectedProviderId || !selectedModel || llmSaving"
                 @click="saveLlmActive"
               >
-                Speichern
+                {{ t('settings.llmActive.save') }}
               </Button>
             </div>
           </div>

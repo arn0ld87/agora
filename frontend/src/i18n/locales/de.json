@@ -810,6 +810,27 @@
       "oasis": "OASIS",
       "security": "Secrets"
     },
+    "llmActive": {
+      "tab": "LLM-Auswahl",
+      "ariaPanel": "LLM-Auswahl",
+      "title": "Aktiver LLM-Anbieter & Modell",
+      "subtitle": "Diese Auswahl wird für alle LLM-Aufrufe im Backend verwendet, sofern keine explizite Stage-Route gesetzt ist.",
+      "providerLabel": "Provider",
+      "modelLabel": "Modell",
+      "providerPlaceholder": "Provider wählen…",
+      "providerLoading": "Lade Provider…",
+      "modelPlaceholder": "Modell wählen…",
+      "modelLoading": "Lade Modelle…",
+      "modelEmpty": "Keine Modelle gefunden",
+      "modelNeedsProvider": "Erst Provider wählen",
+      "save": "Speichern",
+      "flashSaved": "Auswahl gespeichert.",
+      "errorSelectionMissing": "Bitte Provider und Modell wählen.",
+      "errorLoadProviders": "Fehler beim Laden der Provider",
+      "errorLoadModels": "Fehler beim Laden der Modelle",
+      "errorLoadActive": "Fehler beim Laden der aktiven Auswahl",
+      "errorSaveFailed": "Speichern fehlgeschlagen."
+    },
     "v4": {
       "noSections": "Keine Einstellungen in dieser Kategorie.",
       "general": {

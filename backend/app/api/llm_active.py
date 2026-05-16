@@ -93,11 +93,17 @@ def get_active_config():
 @llm_bp.route("/active-config", methods=["PUT"])
 @handle_api_errors(logger=logger)
 def put_active_config():
-    """Set the active provider/model selection."""
+    """Set the active provider/model selection.
+
+    Sicherheits-Hinweis: ``base_url`` wird NICHT aus dem Request-Body gelesen.
+    Sie wird ausschliesslich aus der server-seitigen Provider-Registry
+    abgeleitet, damit ein authentifizierter, aber boeswilliger Client die
+    LLM-Aufrufe nicht via SSRF-Vektor auf einen kontrollierten Host umlenken
+    kann (Gemini-Code-Assist Review PR #478).
+    """
     payload = request.get_json(silent=True) or {}
     provider_id = (payload.get("provider_id") or "").strip()
     model = (payload.get("model") or "").strip()
-    base_url = (payload.get("base_url") or "").strip() or None
 
     if not provider_id:
         return json_error("provider_id is required", status=400, code="invalid_request")
@@ -109,9 +115,6 @@ def put_active_config():
     if not provider:
         return json_error(f"Unknown provider: {provider_id}", status=404, code="provider_not_found")
 
-    if not base_url:
-        base_url = provider.base_url
-
-    saved = save_active_config(provider_id, model, base_url)
+    saved = save_active_config(provider_id, model, provider.base_url)
     logger.info("Active LLM config updated: provider=%s model=%s", provider_id, model)
     return json_success(saved)
