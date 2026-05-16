@@ -12,6 +12,7 @@ Adopt step-by-step generation strategy to avoid failures from generating too lon
 
 import json
 import math
+import os
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -342,6 +343,9 @@ class SimulationConfigGenerator:
             all_agent_configs.extend(batch_configs)
         
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
+
+        # ========== Simulation-Floor-Check (Slice 4, Issue #496) ==========
+        self._validate_persona_quota(all_agent_configs)
 
         # ========== Assign initial post agents ==========
         logger.info("Assigning appropriate publisher agents to initial posts...")
@@ -959,6 +963,21 @@ Return JSON format (no markdown):
 
         return configs
     
+    @staticmethod
+    def _validate_persona_quota(personas: List[Any]) -> None:
+        """Enforce Simulation-Floor: mindestens 30 Personas pro Run.
+
+        Override via Umgebungsvariable ``AGORA_ALLOW_SMALL_SIM=1`` für
+        Entwicklungs- und Test-Szenarien. Im Produktivbetrieb muss die
+        Mindestanzahl eingehalten werden, um statistisch belastbare
+        Simulationsergebnisse zu gewährleisten (Slice 4, Issue #496).
+        """
+        if len(personas) < 30 and os.getenv("AGORA_ALLOW_SMALL_SIM") != "1":
+            raise ValueError(
+                "Simulation-Floor: mindestens 30 Personas erforderlich "
+                "(Override via AGORA_ALLOW_SMALL_SIM=1)."
+            )
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """Generate single agent configuration based on DACH timing rules."""
         entity_type = (entity.get_entity_type() or "Unknown").lower()

@@ -319,6 +319,18 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentP
         help="Maximum simulation rounds (optional, used to truncate long simulations)",
     )
     parser.add_argument(
+        "--num-agents",
+        type=int,
+        default=30,
+        help="Minimum number of agents for the simulation. Default 30 (Slice 4 Floor).",
+    )
+    parser.add_argument(
+        "--num-rounds",
+        type=int,
+        default=10,
+        help="Number of simulation rounds. Default 10 (Slice 4 Floor).",
+    )
+    parser.add_argument(
         "--no-wait",
         action="store_true",
         default=False,
