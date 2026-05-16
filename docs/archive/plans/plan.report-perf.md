@@ -85,7 +85,7 @@ bzw. [`runs.py:636`](backend/app/api/runs.py:636) konstruiert — heißt:
   | Section-Repair-Endpoint | `app/api/report.py` | 990 | Nein | Repair eines einzelnen Sections, irrelevant für Cache |
   | Section-Regen-Endpoint | `app/api/report.py` | 1005 | Nein | wie 990 |
 
-- **Cache-Key**: `(simulation_id, sha256(normalized_interview_requirement)[:16])`. Topic-Normalisierung: lowercase, whitespace-collapse, optional Embedding-Similarity-Fallback in einem späteren Sub-Slice (siehe B.6 unten).
+- **Cache-Key**: `(simulation_id, sha256(normalized_interview_requirement).hexdigest())` — voller Hash, nicht gekürzt. *(Gemini-Finding PR #483: Kürzung auf 16 Zeichen war nur Kosmetik, voller Hash macht spätere Cross-Report-Cache-Erweiterung kollisionsfrei.)* Topic-Normalisierung: lowercase, whitespace-collapse, optional Embedding-Similarity-Fallback in einem späteren Sub-Slice (siehe B.6 unten).
 - **Wichtig**: weil das LLM den `interview_requirement`-String pro Section frei wählt, ist exakt-Match-Hit-Rate möglicherweise niedrig. Erstversion: exakt-Match (Telemetrie loggen). Wenn Hit-Rate < 50%, in B.6 auf Embedding-Similarity nachschärfen.
 
 ### B.4 — Invalidation
@@ -207,11 +207,46 @@ with ThreadPoolExecutor(max_workers=int(os.environ.get("AGORA_REPORT_SECTION_PAR
 - ENV-Knopf `AGORA_REPORT_SECTION_PARALLEL=4` (default 4, =1 für sequentiell-Fallback).
 - Wave-Berechnung via Kahn-Topologie.
 
-### C.3 — Thread-Safety-Audit
+### C.3 — Thread-Safety-Audit + ReportAgent-Refactor
 
-- `ReportAgent.evidence_map` wird in `generate_section_react` gelesen UND geschrieben (Persona-Quote-Validation). **Lock** auf `agent._evidence_lock` einbauen.
-- `ReportManager.save_section`/`update_progress` schreibt SQLite — bereits thread-safe? Verifizieren via Code-Review-Graph: `query_graph callers_of save_section`.
-- LLM-Client (HTTP gegen Ollama Cloud) — Connection-Pool? `requests.Session` ist thread-safe für GET/POST, aber pro-Worker eigene Session ist robuster.
+**Gemini-Finding PR #483 (HIGH):** Code-Verifikation am 2026-05-16 hat bestätigt, dass `ReportAgent` mehrere **section-scoped Instance-Attribute** mutiert, die ein einzelner `agent._evidence_lock` nicht abdeckt:
+
+| Attribut | Wo gesetzt | Wo gelesen | Race-Symptom |
+|---|---|---|---|
+| `agent._current_section_index` | [`workflow.py:113,286,362,392`](backend/app/services/report_agent/workflow.py:113) | [`agent.py:167`](backend/app/services/report_agent/agent.py:167) (in `record_evidence_item`) | Evidence-Items landen unter falschem `section_index` |
+| `agent._active_section_evidence` | [`workflow.py:114`](backend/app/services/report_agent/workflow.py:114) (Reset) + [`agent.py:167-168`](backend/app/services/report_agent/agent.py:167) (Append) | [`agent.py:406`](backend/app/services/report_agent/agent.py:406) (deepcopy in Section-Prompt) | Section A bekommt Evidence-Snippets von Section B |
+| `agent.evidence_map["sections"]` | [`agent.py:621`](backend/app/services/report_agent/agent.py:621) | [`workflow.py:617`](backend/app/services/report_agent/workflow.py:617) (Quote-Validation) | Validierung sieht inkonsistente Section-Liste |
+
+Ein einfacher Lock reicht nicht — die Attribute sind **per-section**, nicht per-agent. Drei Lösungspfade, Plan empfiehlt **C.3.B** (kleinster Refactor):
+
+- **C.3.A (zustandsloser Agent, invasiv):** `_current_section_index` + `_active_section_evidence` aus dem `ReportAgent` ziehen, stattdessen als explizite Argumente durch `generate_section_react → record_evidence_item` reichen. Saubere Lösung, aber berührt 4+ Module.
+- **C.3.B (Section-Scope-Object, empfohlen):** Neuer Dataclass `SectionRunScope(section_index, evidence_buffer)`. `generate_section_react` instanziiert pro Aufruf einen frischen Scope, übergibt ihn an `record_evidence_item`. `ReportAgent` selbst bekommt **keine** section-Attribute mehr; nur `evidence_map` (write) bleibt agent-shared und braucht `agent._evidence_lock`. Skizze:
+  ```python
+  @dataclass
+  class SectionRunScope:
+      section_index: int
+      evidence_buffer: list[dict] = field(default_factory=list)
+
+  # in generate_section_react:
+  scope = SectionRunScope(section_index=section_index)
+  # alle bisherigen `agent._active_section_evidence`-Zugriffe → `scope.evidence_buffer`
+  ```
+- **C.3.C (pro Thread eigene Agent-Instanz, ressourcen-teuer):** `agent.clone()` pro Wave-Worker. Verdoppelt Memory + LLM-Client-Pools, nur als Notfall-Fallback wenn C.3.B sich als zu invasiv erweist.
+
+**Locks die trotz C.3.B noch nötig sind:**
+- `agent._evidence_lock: threading.Lock` um jeden Write auf `agent.evidence_map["sections"]` ([`agent.py:621`](backend/app/services/report_agent/agent.py:621)) und um die Quote-Validation in [`workflow.py:617`](backend/app/services/report_agent/workflow.py:617) (Read-Validate-Pattern).
+
+**Gemini-Finding PR #483 (MEDIUM, ReportManager-JSON-Files):** Vorherige Planversion stand "SQLite — bereits thread-safe?" — falsch. Verifiziert: `ReportManager` nutzt `_write_json_atomic` ([`manager.py:154`](backend/app/services/report_agent/manager.py:154)) auf JSON-Dateien. Atomic-Rename schützt das einzelne File-Write, aber:
+
+| Operation | File | Concurrency-Charakter | Fix |
+|---|---|---|---|
+| `save_section(report_id, idx, section)` | `section_{idx:02d}.md` | Pro Section eigene Datei → **race-frei** solange Indexe disjunkt | unverändert |
+| `update_progress(report_id, …)` | `progress.json` | Full-Replace (kein RMW) → Last-Writer-Wins, kein Daten-Verlust | unverändert; Doku-Hinweis dass Reihenfolge nicht garantiert |
+| `save_evidence_map(report_id, map)` | `evidence_map.json` | **Read-Modify-Write** in C.2-Loop → Race kann ältere Maps zurückschreiben | **`_evidence_lock` aus C.3.B muss auch das `save_evidence_map`-Aufrufstelle umfassen**, oder zentrale Serialisierung im `ReportManager` über `threading.Lock` keyed by `report_id` |
+
+→ Plan-Konsequenz: `_evidence_lock` ist **per-report-id**, nicht per-agent-Object. Implementierungs-Ort: `ReportManager._evidence_locks: dict[str, threading.Lock]` mit Lazy-Init und globalem Meta-Lock für den Dict-Zugriff.
+
+- LLM-Client (HTTP gegen Ollama Cloud) — Connection-Pool? `requests.Session` ist thread-safe für GET/POST, aber pro-Worker eigene Session ist robuster. Prüfen in C.3.
 
 ### C.4 — Progress-Reporting + Lock-ADR
 
@@ -233,12 +268,13 @@ Smoke (manuell):
 2. Erwartung mit B+C: 5–10 min statt 80.
 3. Output-Qualität gegen ein Baseline-Report-Snapshot prüfen (manuelle Diff-Sichtung — automatisierte Equality wäre flaky wegen LLM-Nondeterminismus).
 
-**Aufwand-Schätzung:** 4–6 h (C.1 + C.2 = 2–3 h, C.3 Audit = 1–2 h, C.4 = 30 min, Tests = 1 h).
+**Aufwand-Schätzung:** 5–8 h (C.1 = 1 h, C.2 = 1–2 h, **C.3.B Section-Scope-Refactor = 2–3 h** (nach Gemini-Finding aufgestockt), C.4 = 30 min, Tests = 1 h).
 
 **Risiken:**
 - **Quote-Validation in [`workflow.py:617`](backend/app/services/report_agent/workflow.py:617)** ruft `validate_quote_anchors` auf `agent.evidence_map` — wenn zwei parallele Sections gleichzeitig schreiben, kann die Map korrumpieren. Lock zwingend (C.3).
 - **Dependency-Klassifikation des Outline-Planners** kann falsch sein → Section bekommt unvollständigen Kontext → Qualitätsverlust. Mitigation: Default `depends_on = [all previous]` für sicheren Fallback; LLM-Klassifikation nur opt-in via `AGORA_REPORT_SECTION_DEPS=auto` (default `chain` = alle vorherigen, sequentiell-äquivalent semantisch).
 - **Ollama-Cloud-Rate-Limit** bei 4 parallelen LLM-Streams. Mitigation: ENV-Knopf erlaubt Reduktion auf 2 oder 1.
+- **C.3.B-Refactor selbst** könnte Evidence-Recording-Pfade ändern, die der Quote-Validator nicht erwartet → Snapshot-Tests vor PR sichern. Falls C.3.B in der Implementierung zu invasiv wird: Fallback auf **C.3.C** (pro-Thread-Agent-Clone) ist dokumentiert.
 
 ---
 
