@@ -9,7 +9,29 @@ import warnings
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
+# Upstream-Bugs / Deprecations, die wir nicht selbst beheben können.
+# Müssen VOR den Library-Imports stehen, damit der Filter beim ersten
+# Modulimport greift.
+#  - sentence-transformers < 4.1: SyntaxWarning("\g","\d","\_") in
+#    eigenen Modulen (raw-strings fehlen). Bump im uv-Override
+#    adressiert das; Filter bleibt als Defense-in-Depth.
+#  - transformers < 5.x BertSdpaSelfAttention: empfiehlt
+#    attn_implementation="eager"; OASIS lädt die Models, nicht Agora —
+#    deshalb hier nur silenced.
+warnings.filterwarnings("ignore", category=SyntaxWarning, module=r"sentence_transformers.*")
+warnings.filterwarnings(
+    "ignore",
+    message=r".*BertSdpaSelfAttention.*scaled_dot_product_attention.*",
+)
+
 import logging  # noqa: E402
+
+# camel-ai chat_agent loggt bei jedem Multi-Message-Step eine WARNING
+# ("Multiple messages returned in `step()`"). Bei langen Sims spammt das
+# das Log. Upstream-Verhalten, nicht durch Agora-Code triggerbar — also
+# Level auf ERROR ziehen (keine Filter-Klasse nötig, weil wir den
+# Spam komplett unterdrücken).
+logging.getLogger("camel.camel.agents.chat_agent").setLevel(logging.ERROR)
 import uuid  # noqa: E402
 
 from flask import Flask, g, request  # noqa: E402

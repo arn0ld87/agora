@@ -228,4 +228,10 @@ override-dependencies = [
     # Attachment (critical, Arbitrary File Write) plus < 0.14.3 XXE.
     # camel-oasis 0.2.5 pinned 0.13.7 — Override zieht 0.18.18 trotzdem hoch.
     "unstructured>=0.18.18",
+    # sentence-transformers 3.0.0 (camel-oasis-Pin) hat drei
+    # SyntaxWarning("invalid escape sequence") in eigenen Modulen
+    # (SentenceEvaluator.py, model_card.py, DenoisingAutoEncoderLoss.py).
+    # 4.1+ liefert raw-Strings. Major-Bump 3→4 ist konservativ; 5.x
+    # bringt Transformers-v5-Compat aber zusätzliche API-Brüche.
+    "sentence-transformers>=4.1.0,<5",
 ]
