@@ -83,7 +83,8 @@ PLAN.md.bak
 # /media/: Default ignored, aber README-relevante Assets (logo, screenshots, credits) re-included.
 # WICHTIG: /media/* statt /media/ — bei Verzeichnis-Match kann man Kinder nicht re-includen.
 /media/*
-!/media/logo.png
+!/media/agora-logo.*
+!/media/agora-logo-animated.svg
 !/media/screenshots/
 !/media/credits/
 /static/image/
