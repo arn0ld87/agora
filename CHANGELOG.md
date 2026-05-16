@@ -5,6 +5,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.3 — 2026-05-16)
+
+- Ollama-Cloud-Support für den Native-Schema-Pfad aus 05.1. Zwei Bugs:
+  (a) `_is_ollama()` prüfte nur Port `11434` und erkannte `ollama.com` nicht
+  → Cloud-Provider fielen unbemerkt auf den OpenAI-Wrapper-Pfad zurück und
+  verloren die Schema-Garantie. Jetzt matcht die Heuristik beide Hosts
+  case-insensitiv. (b) `_ollama_chat_with_schema` sendete keinen
+  `Authorization: Bearer <api_key>`-Header → Cloud-Calls hätten 401
+  bekommen. Jetzt wird der Header gesetzt, sobald `api_key` ≠ Dummy
+  `"ollama"`. Lokales Ollama (Dummy-Key) bleibt headerlos. (Sub-Slice 05.3)
+
 ### Fixed (Sub-Slice 05.2 — 2026-05-16)
 
 - `LLMClient.__init__` respektiert jetzt `OLLAMA_THINKING` aus der env als

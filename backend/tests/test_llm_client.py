@@ -515,3 +515,136 @@ class TestOllamaThinkingEnvOverride:
             monkeypatch.setenv("OLLAMA_THINKING", truthy)
             client = self._make_client(monkeypatch, reasoning_effort="none")
             assert client._think is True, f"OLLAMA_THINKING={truthy!r} muss truthy sein"
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 05.3 — Ollama Cloud (ollama.com) Native-Pfad + Bearer Auth
+# ---------------------------------------------------------------------------
+
+
+class TestIsOllamaMatchesCloud:
+    """_is_ollama() erkennt sowohl lokales (Port 11434) als auch Cloud
+    (ollama.com) — beide hosten denselben /api/chat-Endpoint.
+    """
+
+    def _make(self, base_url, api_key="k"):
+        obj = LLMClient.__new__(LLMClient)
+        obj.base_url = base_url
+        obj.api_key = api_key
+        return obj
+
+    def test_local_ollama_matches(self):
+        assert self._make("http://localhost:11434/v1")._is_ollama() is True
+        assert self._make("http://host.docker.internal:11434/v1")._is_ollama() is True
+
+    def test_cloud_ollama_matches(self):
+        assert self._make("https://ollama.com/v1")._is_ollama() is True
+        assert self._make("https://ollama.com/api")._is_ollama() is True
+        assert self._make("https://OLLAMA.COM/v1")._is_ollama() is True, "muss case-insensitiv sein"
+
+    def test_openai_does_not_match(self):
+        assert self._make("https://api.openai.com/v1")._is_ollama() is False
+        assert self._make("https://api.together.xyz/v1")._is_ollama() is False
+
+
+class TestOllamaCloudBearerAuth:
+    """_ollama_chat_with_schema sendet Authorization: Bearer <api_key>,
+    sodass der Native-Pfad auch gegen Ollama Cloud funktioniert.
+    """
+
+    def _make_cloud_client(self, api_key="test-cloud-key"):
+        obj = LLMClient.__new__(LLMClient)
+        obj._max_retries = 3
+        obj._retry_initial_delay = 1.0
+        obj._retry_max_delay = 30.0
+        obj._num_ctx = 8192
+        obj._think = False
+        obj.model = "gpt-oss:120b"
+        obj.base_url = "https://ollama.com/v1"
+        obj.api_key = api_key
+        obj.run_id = None
+        obj.routing_version = None
+        obj.route_stage = None
+        obj.route_provider_id = None
+        return obj
+
+    def test_cloud_native_path_sends_bearer_header(self, monkeypatch):
+        """Bei base_url=ollama.com + schema= → POST mit Authorization: Bearer."""
+        from unittest.mock import MagicMock, patch
+
+        client = self._make_cloud_client(api_key="cloud-secret-42")
+        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        captured: list = []
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"message": {"content": '{"x": 1}'}}
+
+        def fake_post(url, json=None, headers=None, **kwargs):
+            captured.append({"url": url, "json": json, "headers": headers or {}})
+            return mock_response
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.post.side_effect = fake_post
+
+            client.chat_json(
+                messages=[{"role": "user", "content": "give foo"}],
+                schema=Foo,
+            )
+
+        assert len(captured) == 1
+        assert captured[0]["url"] == "https://ollama.com/api/chat", (
+            f"Cloud-URL falsch zusammengesetzt: {captured[0]['url']}"
+        )
+        auth = captured[0]["headers"].get("Authorization", "")
+        assert auth == "Bearer cloud-secret-42", (
+            f"Authorization-Header fehlt oder falsch: {auth!r}"
+        )
+
+    def test_local_ollama_dummy_key_omits_bearer(self, monkeypatch):
+        """Bei lokalem Ollama (api_key='ollama' Dummy) → kein Bearer-Header senden."""
+        from unittest.mock import MagicMock, patch
+
+        obj = LLMClient.__new__(LLMClient)
+        obj._max_retries = 3
+        obj._retry_initial_delay = 1.0
+        obj._retry_max_delay = 30.0
+        obj._num_ctx = 8192
+        obj._think = False
+        obj.model = "qwen3:8b"
+        obj.base_url = "http://localhost:11434/v1"
+        obj.api_key = "ollama"  # ignored by local Ollama
+        obj.run_id = None
+        obj.routing_version = None
+        obj.route_stage = None
+        obj.route_provider_id = None
+
+        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        captured: list = []
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"message": {"content": '{"x": 7}'}}
+
+        def fake_post(url, json=None, headers=None, **kwargs):
+            captured.append({"headers": headers or {}})
+            return mock_response
+
+        with patch("httpx.Client") as mock_client_cls:
+            mock_ctx = MagicMock()
+            mock_client_cls.return_value.__enter__.return_value = mock_ctx
+            mock_ctx.post.side_effect = fake_post
+
+            obj.chat_json(
+                messages=[{"role": "user", "content": "q"}],
+                schema=Foo,
+            )
+
+        assert len(captured) == 1
+        assert "Authorization" not in captured[0]["headers"], (
+            "Lokaler Ollama-Pfad darf keinen Bearer-Header senden (Dummy-Key 'ollama')"
+        )

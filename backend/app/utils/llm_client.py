@@ -272,8 +272,16 @@ class LLMClient:
         )
 
     def _is_ollama(self) -> bool:
-        """Check if we're talking to an Ollama server."""
-        return '11434' in (self.base_url or '')
+        """Check if we're talking to an Ollama server (local or cloud).
+
+        Ollama Cloud hostet denselben /api/chat-Endpoint unter
+        ``https://ollama.com/api`` mit identischem Body-Format (inkl.
+        ``format=<schema>``). Beide Hosts müssen erkannt werden, damit
+        der Native-Schema-Pfad in chat_json sowohl bei lokalem Ollama
+        (Port 11434) als auch bei Cloud (ollama.com) ziehen kann.
+        """
+        base = (self.base_url or "").lower()
+        return "11434" in base or "ollama.com" in base
 
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
@@ -753,8 +761,16 @@ class LLMClient:
             url, schema.__name__, self.model,
         )
 
+        # Ollama Cloud (ollama.com) verlangt Authorization: Bearer <api_key>.
+        # Lokales Ollama (Port 11434) ignoriert den Header. Den OpenAI-SDK-Pfad
+        # macht das automatisch via self.client.api_key; der native httpx-Call
+        # muss den Header selbst setzen.
+        headers: Dict[str, str] = {}
+        if self.api_key and self.api_key.lower() != "ollama":
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         with httpx.Client(timeout=300.0) as client:
-            response = client.post(url, json=payload)
+            response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
