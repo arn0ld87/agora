@@ -3,14 +3,17 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import DashboardScreen from './screens/DashboardScreen.vue'
 import RunsScreen from './screens/RunsScreen.vue'
 
-type ScreenKey = 'dashboard' | 'runs'
+const SCREEN_KEYS = ['dashboard', 'runs'] as const
+type ScreenKey = (typeof SCREEN_KEYS)[number]
+
+function isScreenKey(value: string): value is ScreenKey {
+  return (SCREEN_KEYS as readonly string[]).includes(value)
+}
 
 const active = ref<ScreenKey>('dashboard')
 
 function onNav(key: string): void {
-  if (key === 'dashboard' || key === 'runs') {
-    active.value = key
-  }
+  if (isScreenKey(key)) active.value = key
 }
 
 const prevTheme = ref<string | null>(null)

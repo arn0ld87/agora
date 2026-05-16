@@ -64,7 +64,7 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
 
 <template>
   <Shell active="dashboard" :crumbs="['Workbench', 'Dashboard']" @nav="emit('nav', $event)">
-    <div class="dash-stack" style="max-width: 1280px">
+    <div class="dash-stack">
       <div class="a26-page-head">
         <div>
           <div class="a26-kicker" style="margin-bottom: 6px">Workbench</div>
@@ -90,8 +90,8 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
           </span>
         </div>
 
-        <div class="hero-title" style="margin-bottom: 6px">Quelle ablegen, Vorlage wählen, starten.</div>
-        <div class="hero-meta" style="margin-bottom: 22px; max-width: 600px">
+        <div class="hero-title">Quelle ablegen, Vorlage wählen, starten.</div>
+        <div class="hero-meta">
           Der Workspace-Default wird automatisch auf alle Schritte angewendet — pro Schritt kannst du
           unten gezielt überschreiben. Keine erneute Eingabe nötig.
         </div>
@@ -151,7 +151,7 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
           </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; margin-top: 22px; gap: 10px">
+        <div class="hero-actions">
           <button class="a26-btn">Als Vorlage speichern</button>
           <button class="a26-btn a26-btn-accent">Run starten <Icon name="chevron" /></button>
         </div>
@@ -236,7 +236,7 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
 </template>
 
 <style scoped>
-.dash-stack { display: flex; flex-direction: column; gap: 22px; }
+.dash-stack { display: flex; flex-direction: column; gap: 22px; max-width: 1280px; }
 
 /* Hero */
 .hero {
@@ -266,9 +266,9 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
   font-size: 28px;
   font-weight: 400;
   letter-spacing: -0.02em;
-  margin: 0;
+  margin: 0 0 6px;
 }
-.hero-meta { color: var(--a26-ink-3); font-size: 13px; }
+.hero-meta { color: var(--a26-ink-3); font-size: 13px; margin-bottom: 22px; max-width: 600px; }
 
 .hero-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: stretch; }
 
@@ -324,6 +324,8 @@ const sysServices: { name: string; meta: string; status: 'ok' | 'warn' | 'err'; 
   color: var(--a26-ink-2);
 }
 .field-area.placeholder { color: var(--a26-ink-4); }
+
+.hero-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 
 /* Per-step model strip */
 .steps-strip {

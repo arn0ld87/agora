@@ -3,11 +3,13 @@ import { computed } from 'vue'
 import { A26_ICONS } from '../icons'
 
 const props = defineProps<{ name: string }>()
-const svg = computed(() => A26_ICONS[props.name] ?? '')
+const cmp = computed(() => A26_ICONS[props.name])
 </script>
 
 <template>
-  <span class="a26-icon" v-html="svg" aria-hidden="true" />
+  <span class="a26-icon" aria-hidden="true">
+    <component :is="cmp" v-if="cmp" />
+  </span>
 </template>
 
 <style scoped>
