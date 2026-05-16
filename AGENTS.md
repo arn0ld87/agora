@@ -100,9 +100,18 @@ Wichtige nicht-offensichtliche Knöpfe:
 - **`EMBEDDING_MODEL` und `VECTOR_DIM` müssen zusammenpassen** — Tabelle in
   [`docs/provider-runtime-settings.md`](docs/provider-runtime-settings.md).
 - `OLLAMA_THINKING=false` — strippt Reasoning-Blöcke bei Qwen3/GPT-OSS/DeepSeek-R1.
+  Wirkt sowohl in den OASIS-Subprozess-Skripten als auch im
+  Flask-`LLMClient.__init__` (Sub-Slice 05.2) — überstimmt
+  `reasoning_effort`-Default.
 - `LLM_DISABLE_JSON_MODE=true` — deaktiviert `response_format=json_object`.
-- `LLM_CONTEXT_LIMIT` / `LLM_MODEL_CONTEXT_LIMITS_JSON` — überschreiben die Pro-Modell-Heuristik
-  (CAMEL `ScoreBasedContextCreator`-Floor — ohne Override kappt CAMEL bei 8192 Tokens).
+- `LLM_CONTEXT_LIMIT` / `LLM_MODEL_CONTEXT_LIMITS_JSON` — überschreiben die Pro-Modell-Heuristik.
+  Heuristik ist seit Sub-Slice 05.5 doppelt verdrahtet: CAMEL
+  `ScoreBasedContextCreator`-Floor in den OASIS-Subprozessen UND
+  `LLMClient._num_ctx`-Resolver (`_resolve_num_ctx` in
+  `app/utils/llm_client.py`). Ohne Override greift die Modell-Familie-Tabelle
+  (z. B. `gemini-3 = 1M`, `qwen3-coder = 256k`, `gpt-oss = 128k`,
+  `nemotron = 128k`); Legacy-Default `OLLAMA_NUM_CTX = 8192` greift nur noch
+  bei unbekannten Modellen.
 - `PERSONA_REVIEW_ENABLED`, `ENABLE_AGENT_TOOLS`, `ENABLE_WEB_TOOLS` — opt-in Features.
 - `EVENT_BUS_BACKEND=auto|redis|file` — IPC-Adapter-Wahl.
 
