@@ -5,6 +5,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.5 — 2026-05-16)
+
+- `LLMClient.__init__` resolved `num_ctx` jetzt modellabhängig statt
+  hardcoded `OLLAMA_NUM_CTX=8192`. Cloud-Modelle wie `gemini-3-pro:cloud`
+  (1 M), `qwen3-coder-next:cloud` (256 k), `gpt-oss:120b` (128 k) und
+  `nemotron-3-nano:30b` (128 k) bekommen ab jetzt ihren echten
+  Context-Window. Helper `_resolve_num_ctx()` mit Override-Hierarchie:
+  (1) `provider_options.num_ctx`, (2) `LLM_MODEL_CONTEXT_LIMITS_JSON`
+  env-Map, (3) Heuristik-Tabelle, (4) `LLM_CONTEXT_LIMIT` env,
+  (5) Legacy-Fallback `OLLAMA_NUM_CTX`. Tabelle synced mit
+  `backend/scripts/agent_tools.py::_MODEL_CONTEXT_HEURISTICS` (TODO:
+  später in shared module extrahieren, heute Zirkular-Import-Sperre).
+  Wirkt automatisch auf `chat()`, `describe_image()`, `_chat_with_tools()`,
+  `_ollama_chat_with_schema()` — alle vier setzen `extra_body.options.num_ctx`
+  aus `self._num_ctx`. (Sub-Slice 05.5)
+
 ### Fixed (Sub-Slice 05.4 — 2026-05-16)
 
 - NER-Extraktor (`backend/app/storage/ner_extractor.py`) auf strict-Pydantic-Schema

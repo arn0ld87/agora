@@ -648,3 +648,130 @@ class TestOllamaCloudBearerAuth:
         assert "Authorization" not in captured[0]["headers"], (
             "Lokaler Ollama-Pfad darf keinen Bearer-Header senden (Dummy-Key 'ollama')"
         )
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 05.5 — Cloud-aware num_ctx-Heuristik
+# ---------------------------------------------------------------------------
+
+
+class TestResolveNumCtx:
+    """_resolve_num_ctx folgt der Override-Hierarchie aus dem Slice-Plan."""
+
+    def test_provider_options_explicit_wins(self, monkeypatch):
+        """provider_options.num_ctx ist die höchste Prio (explizite Route)."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.setenv("LLM_CONTEXT_LIMIT", "12345")
+        monkeypatch.setenv("OLLAMA_NUM_CTX", "8192")
+        result = _resolve_num_ctx(model_name="gemini-3-pro", provider_options_num_ctx=4096)
+        assert result == 4096, "provider_options muss alle anderen Quellen überstimmen"
+
+    def test_per_model_env_map_overrides_heuristic(self, monkeypatch):
+        """LLM_MODEL_CONTEXT_LIMITS_JSON pro-Modell-Map schlägt Heuristik."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.setenv(
+            "LLM_MODEL_CONTEXT_LIMITS_JSON",
+            '{"qwen3-coder-next:cloud": 65536}',
+        )
+        result = _resolve_num_ctx(
+            model_name="qwen3-coder-next:cloud",
+            provider_options_num_ctx=None,
+        )
+        assert result == 65536, "per-Modell-env-Map muss greifen"
+
+    def test_heuristic_for_known_cloud_models(self, monkeypatch):
+        """Heuristik liefert für bekannte Cloud-Modelle die echten Context-Windows."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+
+        cases = {
+            "gemini-3-pro:cloud": 1_048_576,
+            "qwen3-coder-next:cloud": 262_144,
+            "gpt-oss:120b": 131_072,
+            "nemotron-3-nano:30b": 131_072,
+            "deepseek-v3:cloud": 131_072,
+            "claude-sonnet-4-6": 200_000,
+        }
+        for model, expected in cases.items():
+            got = _resolve_num_ctx(model_name=model, provider_options_num_ctx=None)
+            assert got == expected, f"{model}: erwartet {expected}, bekommen {got}"
+
+    def test_unknown_model_falls_back_to_ollama_num_ctx(self, monkeypatch):
+        """Unbekanntes Modell → OLLAMA_NUM_CTX (legacy) oder 8192 default."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.setenv("OLLAMA_NUM_CTX", "16384")
+        result = _resolve_num_ctx(model_name="some-niche-model:7b", provider_options_num_ctx=None)
+        assert result == 16384
+
+    def test_unknown_model_default_8192(self, monkeypatch):
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+        result = _resolve_num_ctx(model_name="some-unknown:7b", provider_options_num_ctx=None)
+        assert result == 8192
+
+    def test_global_env_overrides_when_no_heuristic(self, monkeypatch):
+        """LLM_CONTEXT_LIMIT greift wenn die Heuristik nichts liefert."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+        monkeypatch.setenv("LLM_CONTEXT_LIMIT", "32768")
+        result = _resolve_num_ctx(model_name="unknown-model", provider_options_num_ctx=None)
+        assert result == 32768
+
+    def test_global_env_max_with_heuristic(self, monkeypatch):
+        """Wenn Heuristik UND LLM_CONTEXT_LIMIT da → der größere Wert."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.setenv("LLM_CONTEXT_LIMIT", "2_000_000".replace("_", ""))
+        result = _resolve_num_ctx(model_name="gemini-3-pro", provider_options_num_ctx=None)
+        assert result == 2_000_000, "LLM_CONTEXT_LIMIT > Heuristik muss gewinnen"
+
+    def test_invalid_per_model_json_falls_through(self, monkeypatch):
+        """Kaputtes JSON in LLM_MODEL_CONTEXT_LIMITS_JSON → Fall-Through, kein crash."""
+        from app.utils.llm_client import _resolve_num_ctx
+        monkeypatch.setenv("LLM_MODEL_CONTEXT_LIMITS_JSON", "{not-json")
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+        result = _resolve_num_ctx(model_name="gemini-3-pro", provider_options_num_ctx=None)
+        assert result == 1_048_576, "kaputtes env muss Heuristik nicht blockieren"
+
+
+class TestLlmClientInitUsesResolveNumCtx:
+    """LLMClient.__init__ verdrahtet _resolve_num_ctx korrekt."""
+
+    def _make(self, monkeypatch, model="gemini-3-pro:cloud", provider_options=None):
+        from unittest.mock import MagicMock
+        monkeypatch.setattr("app.utils.llm_client.OpenAI", lambda **_kw: MagicMock())
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", "k")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_BASE_URL", "https://ollama.com/v1")
+        monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", model)
+        monkeypatch.setattr("app.utils.llm_client._read_active_config_safely", lambda: None)
+        return LLMClient(provider_options=provider_options, use_active_config=False)
+
+    def test_init_picks_up_heuristic_for_cloud_model(self, monkeypatch):
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+        client = self._make(monkeypatch, model="gemini-3-pro:cloud")
+        assert client._num_ctx == 1_048_576
+
+    def test_init_provider_options_overrides(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+        client = self._make(
+            monkeypatch,
+            model="gemini-3-pro:cloud",
+            provider_options={"num_ctx": 32_000},
+        )
+        assert client._num_ctx == 32_000
+
+    def test_init_legacy_ollama_num_ctx_for_unknown_model(self, monkeypatch):
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.setenv("OLLAMA_NUM_CTX", "16384")
+        client = self._make(monkeypatch, model="custom:fancy")
+        assert client._num_ctx == 16384

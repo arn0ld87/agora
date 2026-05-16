@@ -25,6 +25,102 @@ logger = get_logger("agora.llm_client")
 JsonSchemaLike = Union[Type[BaseModel], Dict[str, Any]]
 
 # Provider error messages that indicate strict json_schema is not supported.
+# Sub-Slice 05.5 — Cloud-aware num_ctx-Heuristik.
+#
+# Frontend wählt Cloud-Modelle wie qwen3-coder-next:cloud (256 k) oder
+# gemini-3-pro:cloud (1 M). Der bisherige hardcoded Default
+# OLLAMA_NUM_CTX=8192 kappte diese Context-Windows in chat()/describe_image()/
+# _chat_with_tools()/_ollama_chat_with_schema().
+#
+# Tabelle SYNCED mit backend/scripts/agent_tools.py::_MODEL_CONTEXT_HEURISTICS
+# (TODO: in shared module extrahieren — heute Zirkular-Import-Sperre durch
+# scripts → app.config). Bei Änderungen beide Stellen anfassen.
+_MODEL_CONTEXT_HEURISTICS: tuple[tuple[str, int], ...] = (
+    ("gemini-3", 1_048_576),       # Gemini 3 Pro / Flash: ~1M Tokens
+    ("gemini-2.5", 1_048_576),
+    ("gemini-2", 1_048_576),
+    ("deepseek-v3", 131_072),      # DeepSeek-V3 / V3.1 / V3.2: 128k
+    ("deepseek-v4", 1_048_576),    # DeepSeek-V4 (laut Vendor-Stand 2026)
+    ("deepseek-r1", 131_072),
+    ("qwen3-coder", 262_144),      # Qwen3-Coder / -Coder-Next: 256k
+    ("qwen3", 131_072),
+    ("qwen2.5", 131_072),
+    ("llama-3.3", 131_072),
+    ("llama3.3", 131_072),
+    ("llama-3.1", 131_072),
+    ("gpt-oss", 131_072),          # gpt-oss-Cloud-Familie: 128k
+    ("gpt-4.1", 1_048_576),
+    ("gpt-4o", 131_072),
+    ("claude-opus-4", 200_000),
+    ("claude-sonnet-4", 200_000),
+    ("claude-haiku-4", 200_000),
+    ("nemotron", 131_072),         # nvidia nemotron-3-nano:30b u. ä.
+)
+
+
+def _heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
+    """Best-effort Substring-Match für bekannte Modellfamilien.
+
+    Liefert None, wenn das Modell unbekannt ist — Caller fällt dann auf
+    OLLAMA_NUM_CTX (legacy) zurück.
+    """
+    if not model_name:
+        return None
+    needle = model_name.lower()
+    for prefix, limit in _MODEL_CONTEXT_HEURISTICS:
+        if prefix in needle:
+            return limit
+    return None
+
+
+def _resolve_num_ctx(
+    model_name: Optional[str],
+    provider_options_num_ctx: Any,
+) -> int:
+    """Resolve num_ctx mit Override-Hierarchie.
+
+    1. provider_options.num_ctx (explizit per ResolvedRoute, höchste Prio)
+    2. LLM_MODEL_CONTEXT_LIMITS_JSON (per-Modell-Map via env)
+    3. Heuristik-Tabelle (Modell-Familie-Default)
+    4. LLM_CONTEXT_LIMIT (Global-Override, sofern höher als Heuristik)
+    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback)
+    """
+    if provider_options_num_ctx is not None:
+        try:
+            return int(provider_options_num_ctx)
+        except (TypeError, ValueError):
+            pass
+
+    raw_per_model = os.environ.get("LLM_MODEL_CONTEXT_LIMITS_JSON", "").strip()
+    if raw_per_model and model_name:
+        try:
+            parsed = json.loads(raw_per_model)
+            if isinstance(parsed, dict) and model_name in parsed:
+                return int(parsed[model_name])
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    heuristic = _heuristic_num_ctx_for_model(model_name or "")
+    global_env = os.environ.get("LLM_CONTEXT_LIMIT")
+    global_limit: Optional[int]
+    try:
+        global_limit = int(global_env) if global_env else None
+    except ValueError:
+        global_limit = None
+
+    if heuristic is not None and global_limit is not None:
+        return max(heuristic, global_limit)
+    if heuristic is not None:
+        return heuristic
+    if global_limit is not None:
+        return global_limit
+
+    try:
+        return int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+    except ValueError:
+        return 8192
+
+
 _STRICT_UNSUPPORTED_HINTS = (
     "json_schema",
     "unsupported",
@@ -199,8 +295,13 @@ class LLMClient:
         )
 
         # Ollama context window size — prevents prompt truncation.
-        # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
-        self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
+        # Sub-Slice 05.5: Cloud-aware Heuristik statt fix OLLAMA_NUM_CTX=8192.
+        # Vorher kappte 8192 Cloud-Modelle wie gemini-3:cloud (1M) oder
+        # qwen3-coder-next:cloud (256k) auf einen Bruchteil ihrer Kapazität.
+        self._num_ctx = _resolve_num_ctx(
+            model_name=self.model,
+            provider_options_num_ctx=self.provider_options.get("num_ctx"),
+        )
         # Ollama thinking toggle (mapped from reasoning_effort).
         # OLLAMA_THINKING=false in der env überstimmt reasoning_effort —
         # konsistent zu backend/scripts/run_*_simulation.py, das dieselbe
