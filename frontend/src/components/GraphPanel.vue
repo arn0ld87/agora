@@ -12,6 +12,7 @@
       @download-svg="canvasRef?.downloadSvg()"
       @download-png="canvasRef?.downloadPng()"
       @print-pdf="canvasRef?.printPdf()"
+      @download-html="canvasRef?.downloadHtml()"
     />
 
     <GraphCanvas

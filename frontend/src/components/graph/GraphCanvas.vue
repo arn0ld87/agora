@@ -230,13 +230,12 @@ async function downloadPng() {
   }
 }
 
-// Slice 5.5 — PDF for the graph piggybacks on the browser print dialog.
-// No jsPDF / weasyprint dependency: open a fresh window pointing at a
-// Blob URL with the standalone SVG, trigger print, let the user pick
-// "Save as PDF".
-function printPdf() {
+// Slice 5.5 — PDF und HTML-Export teilen sich denselben standalone-HTML-Bauplan.
+// printPdf() öffnet ein neues Fenster + print(); downloadHtml() triggert
+// einen Blob-Download mit identischem Markup, das sich offline öffnen lässt.
+function _buildStandaloneHtml() {
   const out = _buildStandaloneSvg()
-  if (!out) return
+  if (!out) return null
   const gid = props.graphData?.graph_id || 'graph'
   const html = `<!doctype html>
 <html lang="de"><head><meta charset="utf-8" />
@@ -250,7 +249,13 @@ function printPdf() {
 </head><body>
 ${out.body}
 </body></html>`
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  return { html, gid }
+}
+
+function printPdf() {
+  const built = _buildStandaloneHtml()
+  if (!built) return
+  const blob = new Blob([built.html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const w = window.open(url, '_blank')
   if (!w) {
@@ -268,11 +273,21 @@ ${out.body}
   })
 }
 
+function downloadHtml() {
+  const built = _buildStandaloneHtml()
+  if (!built) return
+  _triggerBlobDownload(
+    new Blob([built.html], { type: 'text/html;charset=utf-8' }),
+    `agora-graph-${built.gid}.html`,
+  )
+}
+
 defineExpose({
   downloadGraphml,
   downloadSvg,
   downloadPng,
   printPdf,
+  downloadHtml,
   isPaused,
   togglePause,
 })
