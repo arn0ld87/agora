@@ -154,6 +154,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       "content_ideas",
       "data_gaps",
       "hypotheses",
+      "model_attribution",
     ];
     for (const key of expected) {
       expect(key in schema).toBe(true);

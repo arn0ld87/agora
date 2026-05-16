@@ -203,6 +203,37 @@ export const ReportModeSchema = z.enum(["strict", "balanced", "explorative"]);
 export type ReportMode = z.infer<typeof ReportModeSchema>;
 export const DEFAULT_REPORT_MODE: ReportMode = "balanced";
 
+// === ModelAttribution (Slice 8 — 2026-05-16) ===
+// Spiegelt backend/app/contracts/report_v3.py::ModelAttribution.
+// Pro Pipeline-Stage ein Eintrag mit Provider/Modell und optionalen
+// Token-/Latency-Metriken. Backward-compat: default [].
+export const ModelAttributionStageSchema = z.enum([
+  "ontology",
+  "graph_extraction",
+  "simulation",
+  "report_outline",
+  "report_section",
+  "report_synthesis",
+  "evidence_extraction",
+  "interview",
+  "other",
+]);
+export type ModelAttributionStage = z.infer<typeof ModelAttributionStageSchema>;
+
+export const ModelAttributionSchema = z
+  .object({
+    stage: ModelAttributionStageSchema,
+    provider: z.string().min(1),
+    model_id: z.string().min(1),
+    prompt_tokens: z.number().int().nonnegative().nullable().default(null),
+    completion_tokens: z.number().int().nonnegative().nullable().default(null),
+    latency_ms: z.number().nonnegative().nullable().default(null),
+    started_at: z.string().datetime().nullable().default(null),
+    note: z.string().max(200).nullable().default(null),
+  })
+  .strict();
+export type ModelAttribution = z.infer<typeof ModelAttributionSchema>;
+
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
@@ -222,6 +253,7 @@ export const ReportV3Schema = z
     content_ideas: z.array(ContentIdeaSchema).default([]),
     data_gaps: z.array(DataGapSchema).default([]),
     hypotheses: z.array(HypothesisSchema).default([]),
+    model_attribution: z.array(ModelAttributionSchema).default([]),
   })
   .strict();
 export type ReportV3 = z.infer<typeof ReportV3Schema>;
