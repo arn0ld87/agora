@@ -102,6 +102,10 @@ services:
       # Date-Schwelle (backend/app/utils/logger.py) laufen auf Europe/Berlin.
       # sim_time (Layer-0) bleibt unabhängig — ist tz-aware (UTC + Offset).
       - TZ=Europe/Berlin
+      # LLM-Default für Sim-Runner. 16384 verhindert silent OOM/Truncation
+      # bei Multi-Agent-Workloads mit großem num_ctx (CAMEL-Issue). Override
+      # via .env oder LLM_MAX_OUTPUT_TOKENS=… docker compose up.
+      - LLM_MAX_OUTPUT_TOKENS=${LLM_MAX_OUTPUT_TOKENS:-16384}
 
   redis:
     image: redis:7-alpine

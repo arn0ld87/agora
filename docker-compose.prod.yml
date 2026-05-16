@@ -72,6 +72,8 @@ services:
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
       # Container-Zeitzone (siehe docker-compose.yml).
       - TZ=Europe/Berlin
+      # LLM-Default für Sim-Runner — siehe docker-compose.yml.
+      - LLM_MAX_OUTPUT_TOKENS=${LLM_MAX_OUTPUT_TOKENS:-16384}
 
   neo4j:
     ports: !reset []

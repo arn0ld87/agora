@@ -470,7 +470,7 @@ class TwitterSimulationRunner:
         platform = detect_oasis_platform(llm_model, llm_base_url)
         think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
         ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
-        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "8192"))
+        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "16384"))
 
         print(
             f"LLM configuration: model={llm_model}, "
