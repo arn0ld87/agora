@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agora Logo Animation</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f8fafc;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .stage {
+      width: min(960px, 92vw);
+      padding: 32px;
+      border-radius: 28px;
+      background: white;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, .08);
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .hint {
+      margin-top: 16px;
+      color: #64748b;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+<svg width="960" height="320" viewBox="0 0 960 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agora animated logo">
+  <style>
+    :root {
+      --blue: #1266f1;
+      --blue2: #0b5bd3;
+      --slate: #0f172a;
+      --muted: #94a3b8;
+      --muted2: #475569;
+      --bg: #ffffff;
+    }
+
+    #ring {
+      stroke-dasharray: 560;
+      stroke-dashoffset: 560;
+      animation: drawRing 1.4s ease-out forwards, breathe 4.5s ease-in-out 1.6s infinite;
+      transform-origin: 160px 160px;
+    }
+
+    .connector {
+      stroke-dasharray: 130;
+      stroke-dashoffset: 130;
+      animation: drawLine .75s ease-out forwards;
+    }
+
+    #line-left { animation-delay: .45s; }
+    #line-right { animation-delay: .55s; }
+
+    .node {
+      transform-box: fill-box;
+      transform-origin: center;
+      opacity: 0;
+      animation: nodePop .55s cubic-bezier(.2, 1.4, .4, 1) forwards;
+    }
+
+    #node-top { animation-delay: .65s; }
+    #node-left { animation-delay: .8s; }
+    #node-right { animation-delay: .9s; }
+    #node-bottom-left { animation-delay: 1.05s; }
+    #node-bottom-right { animation-delay: 1.15s; }
+
+    #mark-a {
+      opacity: 0;
+      transform: translateY(10px) scale(.96);
+      transform-origin: 160px 160px;
+      animation: markIn .8s cubic-bezier(.2, .9, .2, 1) .35s forwards;
+    }
+
+    #bubble {
+      opacity: 0;
+      transform: translateY(8px) scale(.92);
+      transform-origin: 160px 188px;
+      animation: bubbleIn .55s ease-out 1.15s forwards;
+    }
+
+    .dot {
+      opacity: .25;
+      animation: dotPulse 1.25s ease-in-out infinite;
+    }
+
+    #dot1 { animation-delay: 1.6s; }
+    #dot2 { animation-delay: 1.78s; }
+    #dot3 { animation-delay: 1.96s; }
+
+    .word {
+      opacity: 0;
+      transform: translateX(-12px);
+      animation: wordIn .65s ease-out forwards;
+    }
+
+    #wA { animation-delay: 1.05s; }
+    #wg { animation-delay: 1.14s; }
+    #wo { animation-delay: 1.23s; }
+    #wr { animation-delay: 1.32s; }
+    #wa { animation-delay: 1.41s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        stroke-dashoffset: 0 !important;
+      }
+    }
+
+    @keyframes drawRing {
+      to { stroke-dashoffset: 0; }
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: .82; }
+      50% { transform: scale(1.015); opacity: 1; }
+    }
+
+    @keyframes drawLine {
+      to { stroke-dashoffset: 0; }
+    }
+
+    @keyframes nodePop {
+      0% { opacity: 0; transform: scale(.3); }
+      70% { opacity: 1; transform: scale(1.15); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes markIn {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes bubbleIn {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: .25; transform: translateY(0); }
+      45% { opacity: 1; transform: translateY(-2px); }
+    }
+
+    @keyframes wordIn {
+      to { opacity: 1; transform: translateX(0); }
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="blueGrad" x1="86" y1="58" x2="234" y2="254" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1677FF"/>
+      <stop offset="1" stop-color="#0756D8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity=".10"/>
+    </filter>
+  </defs>
+
+  <rect width="960" height="320" rx="28" fill="white"/>
+
+  <!-- emblem -->
+  <g filter="url(#softShadow)">
+    <path id="ring" d="M66 160C66 108.1 108.1 66 160 66C211.9 66 254 108.1 254 160C254 211.9 211.9 254 160 254C108.1 254 66 211.9 66 160Z"
+          stroke="#B7C3D6" stroke-width="10" stroke-linecap="round" opacity=".86"/>
+
+    <path id="line-left" class="connector" d="M76 160H122" stroke="#1266F1" stroke-width="10" stroke-linecap="round"/>
+    <path id="line-right" class="connector" d="M198 160H244" stroke="#1266F1" stroke-width="10" stroke-linecap="round"/>
+
+    <path id="mark-a" d="M160 72L82 232H124L138 202H182L196 232H238L160 72ZM153 166L160 150L167 166L177 188H143L153 166Z"
+          fill="url(#blueGrad)"/>
+
+    <g id="bubble">
+      <path d="M128 186C128 172.7 140.7 162 156.4 162H164.6C180.3 162 193 172.7 193 186C193 199.3 180.3 210 164.6 210H157L137 226V208.3C131.4 204.1 128 196 128 186Z"
+            fill="#1266F1"/>
+      <circle id="dot1" class="dot" cx="150" cy="186" r="5.5" fill="white"/>
+      <circle id="dot2" class="dot" cx="161" cy="186" r="5.5" fill="white"/>
+      <circle id="dot3" class="dot" cx="172" cy="186" r="5.5" fill="white"/>
+    </g>
+
+    <circle id="node-top" class="node" cx="160" cy="66" r="20" fill="white" stroke="#1266F1" stroke-width="10"/>
+    <circle id="node-left" class="node" cx="66" cy="160" r="18" fill="white" stroke="#1266F1" stroke-width="10"/>
+    <circle id="node-right" class="node" cx="254" cy="160" r="18" fill="white" stroke="#1266F1" stroke-width="10"/>
+    <circle id="node-bottom-left" class="node" cx="105" cy="235" r="19" fill="#475569"/>
+    <circle id="node-bottom-right" class="node" cx="215" cy="235" r="19" fill="#475569"/>
+  </g>
+
+  <!-- wordmark as text for easy editing -->
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+     font-size="108" font-weight="700" letter-spacing="-5" fill="#0F172A">
+    <text id="wA" class="word" x="320" y="199">A</text>
+    <text id="wg" class="word" x="390" y="199">g</text>
+    <text id="wo" class="word" x="460" y="199">o</text>
+    <text id="wr" class="word" x="530" y="199">r</text>
+    <text id="wa" class="word" x="585" y="199">a</text>
+  </g>
+</svg>
+
+    <div class="hint">Agora Logo Animation · SVG/CSS · respektiert prefers-reduced-motion</div>
+  </main>
+</body>
+</html>
