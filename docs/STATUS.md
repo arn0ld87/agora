@@ -120,7 +120,7 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 
 **M9 abgeschlossen, M10 abgeschlossen.** Übergang zu M11.
 
-Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: [`docs/plan.heuristic.md`](plan.heuristic.md).
+Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: [`docs/archive/plans/plan.heuristic.md`](archive/plans/plan.heuristic.md).
 
 **Erledigt (Code-verifiziert 2026-05-04):**
 - F1 Reverse-Proxy (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`)
@@ -153,11 +153,11 @@ Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 55 → 70 %, Fro
 
 ## Aktualisierungs-Protokoll
 
-- 2026-05-08: M11 Phase 5 + Phase 5b — Hotspot-Refactors abgeschlossen. Phase 5 (`simulation_runner.py`): 5 PRs, Helfer `run_state_store`/`action_log_reader`/`monitor_thread`/`interview_client`/`process_manager` extrahiert (Commits ff52643, 2142e0a, b177cd9, ef9f5b6, db2c0f8). Phase 5b (`graph_tools.py`): 3 PRs, Helfer `graph_dtos`/`graph_reader`/`insight_forge_tool` extrahiert (Commits 8ce5ecb, 7abd3df, b8493b8). Verhalten unverändert, Tests grün. Arbeitsprotokolle unter `docs/2026-05-08-m11-phase5*-arbeitsprotokoll.md`.
+- 2026-05-08: M11 Phase 5 + Phase 5b — Hotspot-Refactors abgeschlossen. Phase 5 (`simulation_runner.py`): 5 PRs, Helfer `run_state_store`/`action_log_reader`/`monitor_thread`/`interview_client`/`process_manager` extrahiert (Commits ff52643, 2142e0a, b177cd9, ef9f5b6, db2c0f8). Phase 5b (`graph_tools.py`): 3 PRs, Helfer `graph_dtos`/`graph_reader`/`insight_forge_tool` extrahiert (Commits 8ce5ecb, 7abd3df, b8493b8). Verhalten unverändert, Tests grün. Arbeitsprotokolle unter `docs/archive/worklogs/2026-05-08-m11-phase5*-arbeitsprotokoll.md`.
 - 2026-05-08: Doku-Sync — `AGENTS.md` Status-Zeile (Layer 9–10 grün, M11 Phase 1–5b durch), `CLAUDE.md` „Aktive Hot-Spots" auf realen M11-Stand, `PLAN.md` Status-Sync 2026-05-08 mit aktualisierter Erledigt-/Offen-Tabelle und neuer PR-Reihenfolge, `docs/STATUS.md` aktuelles Milestone auf Phase 6/7/CVE-Aufräumen.
 - 2026-05-03: Sub-Slice 44 — STATUS.md inaugural, Test-Counts und Versionsstände zentralisiert, Inline-Zahlen aus README/CLAUDE.md entfernt, ROADMAP auf v0.9.0+ / 2026-05-03 geheben.
 - 2026-05-04: F5 Doku-Sync (1) — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
-- 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, neue `docs/plan.heuristic.md` als Subagent-Routing-SSoT, User-Drop-Audit-Snapshots nach `docs/archive/history/`.
+- 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, neue `docs/archive/plans/plan.heuristic.md` als Subagent-Routing-SSoT, User-Drop-Audit-Snapshots nach `docs/archive/history/`.
 - 2026-05-04: M9.6 Prod-Stack-Smoke — `docker-image.yml::prod-proxy-smoke` lief ab diesem Stand auch auf `pull_request: [main]` (Doku-PRs ausgeschlossen via `paths-ignore`). `scripts/verify-deploy.sh` smoket zusätzlich `/api/auth/ticket` via Proxy.
 - 2026-05-04: M10.1/M10.2/M10.3 CVE-Monitor + Hardstop — Neuer Workflow `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln` und schreibt das Ergebnis in `$GITHUB_STEP_SUMMARY`. Hardstop am 2026-07-30 verdrahtet: ab dann fail bei pip-audit-Findings. `docs/dependency-risk-register.md` um Eskalationspfad-Sektion (Vendoring / Soft-Fork / Replacement / Risikoakzeptanz-PR) und Upstream-Release-Watch-Spalte erweitert (die Owner-Spalte war bereits vorhanden). Layer 10 von „dokumentiert" auf „grün".
 - 2026-05-04: M10.4 Auth-Zielbild-ADR — `docs/decisions/0001-auth-model.md` als **Proposed** angelegt mit drei Optionen (Single-User-only-v1 / HttpOnly-Session / Bearer+Refresh). Empfehlung: Option A (Single-User-only-v1 explizit machen). Begründung: Local-first ist Kernprinzip, Hauptangriffsvektoren sind bereits geschlossen (F2.1/F2.2/P0.2/S2/S3), v1.0-Termin erreichbar. Wartet auf User-Sign-off. Folge-Slices nach Accept: README/security-hardening-Update, `auth_mode`-Feld in `/api/status`, Token-Rotation-Prozedur. ADR-Index unter `docs/decisions/README.md` mit Konvention.

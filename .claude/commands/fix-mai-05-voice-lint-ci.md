@@ -77,8 +77,8 @@ SCAN_PATHS = [
 EXCLUDE_PATTERNS = [
     r"^backend/tests/",
     r"^frontend/tests/",
-    r"^docs/glossary-wording\.md$",
-    r"^docs/archive/history/",
+    r"^docs/glossary\.md$",
+    r"^docs/archive/",
     r"\.snapshot\b",
 ]
 

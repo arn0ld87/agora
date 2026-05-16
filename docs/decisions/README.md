@@ -21,4 +21,4 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 - Jede ADR bekommt eine eindeutige Nummer (4-stellig, beginnend bei `0001`).
 - Status: `Proposed` → `Accepted` (nach User-Sign-off) → ggf. `Superseded by ADR-XXXX` oder `Deferred`.
 - Eine ADR wird **nicht inhaltlich geändert** nach Accept — bei neuer Erkenntnis: neue ADR, die die alte supersedet.
-- Querverweise auf [`PLAN.md`](../../PLAN.md), [`docs/plan.heuristic.md`](../plan.heuristic.md) und konkreten Code-Pfaden bevorzugt.
+- Querverweise auf [`PLAN.md`](../../PLAN.md), [`docs/archive/plans/plan.heuristic.md`](../plan.heuristic.md) und konkreten Code-Pfaden bevorzugt.

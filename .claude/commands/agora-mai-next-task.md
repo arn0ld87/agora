@@ -1,11 +1,11 @@
 ---
-description: Master-Orchestrator Mai-Restwelle — pickt den nächsten offenen Slice aus docs/plan.mai.md, dispatched den passenden Subagent, verifiziert, committet, pusht.
+description: Master-Orchestrator Mai-Restwelle — pickt den nächsten offenen Slice aus docs/archive/plans/plan.mai.md, dispatched den passenden Subagent, verifiziert, committet, pusht.
 allowed-tools: Read, Bash, Grep, Glob, Edit, Write, TodoWrite, Agent, AskUserQuestion
 ---
 
 # /agora-mai-next-task — Plan-Orchestrator für die 17 Mai-Slices
 
-Du bist der **Orchestrator** für die nach v1.0.0 verbliebene Mai-Welle (17 Slices, Quelle: `docs/plan.mai.md` + `docs/plan.heuristic-mai.md`). Du wählst den nächsten Slice, schreibst einen knappen Plan, dispatchst einen Subagent als Implementer, verifizierst, committest, pushst und meldest. Der Haupt-Claude editiert **nicht** selbst Code — das ist Aufgabe des Subagents im Worktree.
+Du bist der **Orchestrator** für die nach v1.0.0 verbliebene Mai-Welle (17 Slices, Quelle: `docs/archive/plans/plan.mai.md` + `docs/archive/plans/plan.heuristic-mai.md`). Du wählst den nächsten Slice, schreibst einen knappen Plan, dispatchst einen Subagent als Implementer, verifizierst, committest, pushst und meldest. Der Haupt-Claude editiert **nicht** selbst Code — das ist Aufgabe des Subagents im Worktree.
 
 Hardstops: kein Auto-Fix-Loop bei rotem Verify, keine Layer-Sprünge gegen den Plan, keine Force-Pushes auf `main`.
 
@@ -14,13 +14,13 @@ Hardstops: kein Auto-Fix-Loop bei rotem Verify, keine Layer-Sprünge gegen den P
 ## Schritt 0: Setup-Anker
 
 - Repo-Root: `/Volumes/T7/Projekte/agora`
-- Plan: `/Volumes/T7/Projekte/agora/docs/plan.mai.md` (autoritativ für Reihenfolge & Status)
-- Heuristik: `/Volumes/T7/Projekte/agora/docs/plan.heuristic-mai.md` (Subagent-Mapping je Slice)
+- Plan: `/Volumes/T7/Projekte/agora/docs/archive/plans/plan.mai.md` (autoritativ für Reihenfolge & Status)
+- Heuristik: `/Volumes/T7/Projekte/agora/docs/archive/plans/plan.heuristic-mai.md` (Subagent-Mapping je Slice)
 - Verify-Slash: `/verify-after-subagent`
 - Default-Branch-Ziel: `main` (FF-Push, kein PR-Zwang außer bei Layer-0/Persistenz-Touch)
-- User-Trait: Deutsch, knapp, direkt; ein Slice = ein Commit + ein Arbeitsprotokoll unter `docs/<datum>-mai-<XX>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
+- User-Trait: Deutsch, knapp, direkt; ein Slice = ein Commit + ein Arbeitsprotokoll unter `docs/archive/worklogs/<datum>-mai-<XX>-arbeitsprotokoll.md`; CHANGELOG `[Unreleased]` Pflicht.
 
-Lies sofort `docs/plan.mai.md` (Tabelle „Slices in Reihenfolge"), damit du den Status im Kopf hast.
+Lies sofort `docs/archive/plans/plan.mai.md` (Tabelle „Slices in Reihenfolge"), damit du den Status im Kopf hast.
 
 ---
 
@@ -36,7 +36,7 @@ git log origin/main --oneline -10
 
 # 1.2 Welche Mai-Slices sind in plan.mai.md als "offen" markiert?
 echo "=== Mai-Slices Status ==="
-rg -n "^\| MAI-\d+" docs/plan.mai.md
+rg -n "^\| MAI-\d+" docs/archive/plans/plan.mai.md
 
 # 1.3 Welche Mai-Commits liegen schon auf main?
 echo "=== Mai-Slices auf main ==="
@@ -186,7 +186,7 @@ prompt: |
   Erweitere wo nötig, aber halte dich an die Akzeptanzkriterien.
 
   Doku-Pflicht:
-  - docs/<YYYY-MM-DD>-mai-<NN>-arbeitsprotokoll.md (Schema siehe plan.mai.md)
+  - docs/archive/worklogs/<YYYY-MM-DD>-mai-<NN>-arbeitsprotokoll.md (Schema siehe docs/archive/plans/plan.mai.md)
   - CHANGELOG.md [Unreleased] Eintrag
 
   NICHT: committen, pushen, --no-verify, Force-Pushes, Layer-Sprünge.
@@ -303,8 +303,8 @@ Bei rot oder abgebrochen: Worktree **stehen lassen**.
 
 ## Kontextquellen
 
-- `docs/plan.mai.md` (Status-Tabelle)
-- `docs/plan.heuristic-mai.md` (Subagent-Mapping)
+- `docs/archive/plans/plan.mai.md` (Status-Tabelle)
+- `docs/archive/plans/plan.heuristic-mai.md` (Subagent-Mapping)
 - `.claude/commands/fix-mai-<NN>-*.md` (Detail-Briefs)
 - `CLAUDE.md` § Subagent-Routing + Opus-Trigger
 - `verify-after-subagent.md` als verbindlicher Verify-Gate

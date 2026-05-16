@@ -5,7 +5,7 @@
 **Accepted:** 2026-05-04
 **Slice:** M10.4
 **Autor:** arn0ld87 + Claude Opus 4.7
-**Bezug:** [`PLAN.md § Status-Sync 2026-05-04`](../../PLAN.md#status-sync-2026-05-04), [`docs/plan.heuristic.md § ADR-0001 Local-first`](../plan.heuristic.md), Issue [#106](https://github.com/arn0ld87/agora/issues/106)
+**Bezug:** [`PLAN.md § Status-Sync 2026-05-04`](../../PLAN.md#status-sync-2026-05-04), [`docs/archive/plans/plan.heuristic.md § ADR-0001 Local-first`](../plan.heuristic.md), Issue [#106](https://github.com/arn0ld87/agora/issues/106)
 
 ---
 
