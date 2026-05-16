@@ -19,7 +19,7 @@ Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2427 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 2445 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 123 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
