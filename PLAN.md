@@ -14,6 +14,7 @@
 6. [Dateistruktur](#6-dateistruktur)
 7. [Implementierungs-Phasen](#7-implementierungs-phasen)
 8. [Sicherheitsregeln](#8-sicherheitsregeln)
+9. [Aktive Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)](#9-aktive-welle-observability-run-control--model-picker-ux-2026-05-16)
 
 ---
 
@@ -255,4 +256,44 @@ Override pro Run.
 
 ---
 
-*Zuletzt aktualisiert: Mai 2026*
+## 9. Aktive Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)
+
+Sechs-Defekt-Welle aus User-Bericht 2026-05-16 (Backend-Log-Rauschen, fehlende
+Modell-Provenance, SSE-Reconnect, Aktiv-Modell-Anzeige, Stop-Button, Modell-
+Picker-Konsolidierung). Vollständiger Brief mit Symptomen, Decisions und Datei-
+Erstverdacht: `~/.claude/plans/nutze-code-review-graph-immer-derzeit-adaptive-iverson.md`.
+
+**Decisions (User-Sign-off 2026-05-16):**
+1. Stop → Teil-Report aus bereits erzeugten Stages, FSM `cancelled_partial`.
+2. Modell-Provenance doppelt: `report.metadata.model_attribution[]` + `evidence.json` (pro Eintrag).
+3. SSE-Reconnect unbegrenzt mit Exponential Backoff (1 s → 30 s cap).
+
+**Slices (PR pro Slice, Reihenfolge bindend für 4–8):**
+
+| # | Slice | Branch | Risiko | Owner-Modell |
+|---|---|---|---|---|
+| 1 | werkzeug-Logger silencen + Env-Flag | `slice/observability-1-werkzeug-mute` | low | Opus |
+| 2 | `/api/models` Endpoint + Provider-Discovery (Ollama/OpenRouter/Gemini/OpenAI) | `slice/observability-2-models-endpoint` | medium | Sonnet (`agora-refactor-worker`) |
+| 3 | `<ModelPicker />` Vue-Komponente + `useAvailableModels` Composable | `slice/observability-3-model-picker` | medium | Sonnet (`agora-frontend-worker`) |
+| 4 | SSE-Logs Heartbeat + Backoff-Reconnect + Traefik `X-Accel-Buffering` | `slice/observability-4-sse-stability` | medium | Sonnet (Refactor + Frontend) |
+| 5 | Active-Model-Push (Server) + `useActiveModel` Composable + stabile Anzeige | `slice/observability-5-active-model` | low | Sonnet (`agora-frontend-worker`) |
+| 6 | Run-Cancel-Endpoint + FSM-State `cancelled_partial` + asyncio-Task-Cancel | `slice/observability-6-run-cancel` | **high** | **Opus (Lead)** |
+| 7 | Report-Confirm-Dialog (Bestätigung nach Modell-Auswahl, kein Auto-Start) | `slice/observability-7-report-confirm` | low | Sonnet (`agora-frontend-worker`) |
+| 8 | Modell-Provenance in ReportV3 + evidence.json + Frontend-Sektion | `slice/observability-8-model-provenance` | **high** | **Opus (Lead)** — Layer 0 |
+
+Slices 1–3 parallel möglich; 4 wartet auf 2, 5 wartet auf 2, 6/7/8 sequenziell.
+
+**Verification (End-to-End nach allen Slices):**
+1. `docker logs agora -f` zeigt strukturierte JSON-Events ohne werkzeug-Flut
+2. Smoke-Run erzeugt sichtbare „Modell-Provenance"-Sektion (≥3 Stages) im Report
+3. Browser-Logs-Panel zeigt Live-Frames; Reconnect-Indikator nur bei Drift > 30 s
+4. Aktiv-Modell-Badge oben rechts bleibt während Run stabil
+5. Stop-Button bricht Run innerhalb 5 s ab, generiert Teil-Report
+6. Modell-Dropdown identisch auf allen Seiten, alphabetisch, ohne halluzinierte Einträge
+7. `pytest backend/tests/` grün, `ruff check app/ tests/` grün, `radon cc --min C` grün
+
+**Out of Scope:** Layer-0 Evidence-Gating-Anker (ADR-0002), OASIS-Source, neue Provider.
+
+---
+
+*Zuletzt aktualisiert: 2026-05-16 — Slice-Welle Observability/Run-Control/Model-Picker eröffnet*
