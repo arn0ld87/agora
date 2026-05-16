@@ -131,3 +131,8 @@ backend/instance/*.db
 
 # code-review-graph local storage (Tree-sitter graph cache, embeddings)
 .code-review-graph/
+
+# Ad-hoc Smoke- / Seed-Helper, die nur lokal entstehen (dump-Skripte,
+# Screenshot-Drops, persönliche Test-Seed-Dokumente).
+.tmp-*
+test-seed-*.md
