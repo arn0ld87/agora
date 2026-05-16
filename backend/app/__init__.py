@@ -21,7 +21,9 @@ warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 warnings.filterwarnings("ignore", category=SyntaxWarning, module=r"sentence_transformers.*")
 warnings.filterwarnings(
     "ignore",
+    category=UserWarning,
     message=r".*BertSdpaSelfAttention.*scaled_dot_product_attention.*",
+    module=r"transformers.*",
 )
 
 import logging  # noqa: E402
