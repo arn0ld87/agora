@@ -83,6 +83,11 @@ const i18n = createI18n({
       'reportMode.balanced.hint': 'Belegte Claims plus markierte Hypothesen.',
       'reportMode.explorative.label': 'Explorativ',
       'reportMode.explorative.hint': 'Alle Claims, EXPLORATIVE-Banner.',
+      'step4.reportConfirm.title': 'Report starten?',
+      'step4.reportConfirm.description': 'Simulation abgeschlossen. Modell wählen und starten.',
+      'step4.reportConfirm.startButton': 'Report starten',
+      'step4.reportConfirm.stopButton': 'Abbrechen',
+      'step4.reportConfirm.stopDisabledTip': 'Abbruch verfügbar nach Backend-Slice 6',
     },
   },
 })
@@ -645,6 +650,125 @@ describe('Step4Report — Report-Modus-Persistenz und API-Übergabe (P4.1)', () 
     expect(generateReport).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'strict' })
     )
+  })
+})
+
+// Sub-Slice Confirm-Dialog + Stop-Button (2026-05-16)
+describe('Step4Report — Confirm-Dialog + Stop-Button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+  })
+
+  it('zeigt Confirm-Dialog wenn kein reportId und Status idle (reportPending=true)', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+
+    // Kein reportId → onMounted setzt reportPending=true
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01' },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="report-confirm-block"]').exists()).toBe(true)
+  })
+
+  it('Confirm-Dialog nicht sichtbar wenn reportId gesetzt (Report läuft bereits)', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="report-confirm-block"]').exists()).toBe(false)
+  })
+
+  it('Klick auf "Report starten" ruft generateReport auf', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { report_id: 'report_new01' },
+    })
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01' },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await wrapper.vm.$nextTick()
+
+    const btn = wrapper.find('[data-testid="report-confirm-start-btn"]')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(generateReport).toHaveBeenCalledWith(
+      expect.objectContaining({ simulation_id: 'sim_test01' })
+    )
+  })
+
+  it('Stop-Button ist disabled wenn cancelEndpointAvailable=false', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01', cancelEndpointAvailable: false },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await wrapper.vm.$nextTick()
+
+    // Disabled-Button hat das disabled-Attribut
+    const stopBtn = wrapper.find('.stop-btn[disabled]')
+    expect(stopBtn.exists()).toBe(true)
+  })
+
+  it('Stop-Button emittet "stop" wenn cancelEndpointAvailable=true', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+
+    const wrapper = mount(Step4Report, {
+      props: { simulationId: 'sim_test01', cancelEndpointAvailable: true },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    await wrapper.vm.$nextTick()
+
+    const stopBtn = wrapper.find('.stop-btn--active')
+    expect(stopBtn.exists()).toBe(true)
+    await stopBtn.trigger('click')
+
+    expect(wrapper.emitted('stop')).toBeTruthy()
+    expect(wrapper.emitted('stop')!.length).toBe(1)
   })
 })
 
