@@ -746,7 +746,8 @@
       "empty": "Noch keine Log-Zeilen.",
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
-      "reconnect": "Erneut verbinden"
+      "reconnect": "Erneut verbinden",
+      "reconnecting": "Verbindung wird wiederhergestellt…"
     }
   },
   "settings": {

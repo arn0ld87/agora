@@ -746,7 +746,8 @@
       "empty": "No log lines yet.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
-      "reconnect": "Reconnect"
+      "reconnect": "Reconnect",
+      "reconnecting": "Reconnecting…"
     }
   },
   "settings": {
