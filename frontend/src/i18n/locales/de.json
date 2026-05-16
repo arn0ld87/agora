@@ -454,6 +454,9 @@
       "failed": "Fehlgeschlagen",
       "elapsed": "Dauer: {time}"
     },
+    "simClock": {
+      "tooltip": "Virtuelle Sim-Uhr (Agenten-Wallclock, Europe/Berlin)"
+    },
     "feed": {
       "title": "Live-Feed",
       "actions": "Aktionen: {count}",

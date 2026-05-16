@@ -454,6 +454,9 @@
       "failed": "Failed",
       "elapsed": "Elapsed: {time}"
     },
+    "simClock": {
+      "tooltip": "Virtual sim clock (agent wallclock, Europe/Berlin)"
+    },
     "feed": {
       "title": "Live feed",
       "actions": "Actions: {count}",

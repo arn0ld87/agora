@@ -85,6 +85,20 @@
       "description": "Sentiment-Score -1.0 (negativ) bis 1.0 (positiv). None wenn Sentiment-Service nicht aktiv.",
       "title": "Sentiment"
     },
+    "sim_time": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Simulierte Agenten-Wallclock (Sim-Round \u2192 Wallclock, tz-aware). Quelle: run_parallel_simulation leitet aus start_time + start_hour_offset + simulated_minutes pro CREATE_POST ab. None bei Pre-Slice-5-Daten und f\u00fcr Persistenz-Snapshots ohne Feld.",
+      "title": "Sim Time"
+    },
     "simulation_id": {
       "minLength": 1,
       "title": "Simulation Id",

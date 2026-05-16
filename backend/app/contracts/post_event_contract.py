@@ -64,6 +64,25 @@ class PostCreatedEvent(BaseModel):
         default=0,
         description="Voting-Score (Reddit-Pattern). Twitter-Posts haben kein Voting → 0.",
     )
+    sim_time: datetime | None = Field(
+        default=None,
+        description=(
+            "Simulierte Agenten-Wallclock (Sim-Round → Wallclock, tz-aware). "
+            "Quelle: run_parallel_simulation leitet aus start_time + "
+            "start_hour_offset + simulated_minutes pro CREATE_POST ab. "
+            "None bei Pre-Slice-5-Daten und für Persistenz-Snapshots ohne Feld."
+        ),
+    )
+
+    @field_validator("sim_time")
+    @classmethod
+    def sim_time_tz_aware(cls, v: datetime | None) -> datetime | None:
+        # Layer-0 erzwingt tz-aware Timestamps für sim_time. Naive datetimes
+        # würden im Frontend zu „local time"-Drift führen, sobald der Container
+        # eine andere TZ als der Browser hat.
+        if v is not None and v.tzinfo is None:
+            raise ValueError("sim_time muss tz-aware sein (UTC + Offset)")
+        return v
 
     @field_validator("sentiment")
     @classmethod

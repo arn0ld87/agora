@@ -31,6 +31,7 @@ import FeedColumn from './v4/sim-feed/FeedColumn.vue'
 import TwitterPost from './v4/sim-feed/TwitterPost.vue'
 import RedditThread from './v4/sim-feed/RedditThread.vue'
 import { useSimFeed, clearSimFeed } from '../composables/useSimFeed'
+import { useSimClock, clearSimClock } from '../composables/useSimClock'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -215,11 +216,35 @@ const twitterPosts = computed(() => _feedStore.value.twitterPosts.value)
 const redditPosts = computed(() => _feedStore.value.redditPosts.value)
 const redditTree = computed(() => _feedStore.value.redditTree.value)
 
+// Task 1 — Sim-Zeit-Composable. ingest pumpt aus dem post_created-Handler.
+const _simClock = computed(() => useSimClock(props.simulationId || '__unset__'))
+const currentSimTime = computed(() => _simClock.value.currentSimTime.value)
+const simElapsedSec = computed(() => _simClock.value.elapsed.value)
+
+const _berlinFormatter = new Intl.DateTimeFormat('de-DE', {
+  dateStyle: 'short',
+  timeStyle: 'medium',
+  timeZone: 'Europe/Berlin',
+})
+function formatBerlin(d) {
+  return d ? _berlinFormatter.format(d) : ''
+}
+function formatElapsed(seconds) {
+  const s = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const pad = (n) => String(n).padStart(2, '0')
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+}
+
 const statusStream = useEventStream(() => props.simulationId, {
   state: (msg) => applyRunStateEvent(msg?.payload),
   control: (msg) => applyControlEvent(msg?.payload),
   post_created: (data) => {
-    if (data) _feedStore.value.ingest(data)
+    if (!data) return
+    _feedStore.value.ingest(data)
+    _simClock.value.ingest(data)
   },
 })
 // Slice 1e: last SSE trace_id for the SigNoz deep-link button.
@@ -493,13 +518,19 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleToolPanelHotkey)
   stopPolling()
-  if (props.simulationId) clearSimFeed(props.simulationId)
+  if (props.simulationId) {
+    clearSimFeed(props.simulationId)
+    clearSimClock(props.simulationId)
+  }
 })
 
 // Sim-Wechsel im selben Component-Lifetime (z. B. nach Reload mit neuer ID):
 // alten Store droppen, damit dedupe-Cache und LRU sauber bleiben.
 watch(() => props.simulationId, (newId, oldId) => {
-  if (oldId && oldId !== newId) clearSimFeed(oldId)
+  if (oldId && oldId !== newId) {
+    clearSimFeed(oldId)
+    clearSimClock(oldId)
+  }
 })
 </script>
 
@@ -566,6 +597,11 @@ watch(() => props.simulationId, (newId, oldId) => {
         <header class="card-head">
           <Kicker num="02">{{ t('step3.feed.title') }}</Kicker>
           <span class="meta">{{ t('step3.feed.actions', { count: totalActions }) }}</span>
+          <div v-if="currentSimTime" class="sim-clock" :title="t('step3.simClock.tooltip')">
+            <span class="meta">SIM</span>
+            <time :datetime="currentSimTime.toISOString()">{{ formatBerlin(currentSimTime) }}</time>
+            <span class="meta">({{ formatElapsed(simElapsedSec) }})</span>
+          </div>
         </header>
         <div class="stats-grid">
           <div class="stat">
@@ -815,6 +851,16 @@ watch(() => props.simulationId, (newId, oldId) => {
 }
 
 .log-meta { display: flex; gap: var(--s-2); }
+.sim-clock {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  color: var(--fg);
+}
+.sim-clock time { color: var(--accent); }
 .logs-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
