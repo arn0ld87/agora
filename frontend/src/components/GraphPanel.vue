@@ -12,6 +12,8 @@
       @download-svg="canvasRef?.downloadSvg()"
       @download-png="canvasRef?.downloadPng()"
       @print-pdf="canvasRef?.printPdf()"
+      @download-html="canvasRef?.downloadHtml()"
+      @close-graph="$emit('close-graph')"
     />
 
     <GraphCanvas
@@ -57,7 +59,7 @@ const props = defineProps({
   batchSignal: { type: Object, default: null },
 })
 
-defineEmits(['refresh', 'toggle-maximize'])
+defineEmits(['refresh', 'toggle-maximize', 'close-graph'])
 
 const canvasRef = ref(null)
 

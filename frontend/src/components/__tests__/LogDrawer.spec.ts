@@ -102,6 +102,9 @@ const i18n = createI18n({
           search: 'Suchen…',
           pause: 'Auto-Scroll pausieren',
           empty: 'Noch keine Log-Zeilen.',
+          loading: 'Logs werden geladen…',
+          unknownError: 'Logs konnten nicht geladen werden.',
+          noFileYet: 'Heutige Logdatei wurde noch nicht geschrieben — Backend ist erreichbar.',
           connectionError: 'SSE-Verbindung unterbrochen, Browser versucht Reconnect…',
           reconnectExhausted: 'Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.',
           reconnect: 'Erneut verbinden',
@@ -150,6 +153,62 @@ describe('LogDrawer — SSE Reconnect (Slice 4, unbegrenzte Reconnects)', () => 
     expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
 
     wrapper.unmount()
+  })
+
+  it('zeigt Fehlermeldung wenn fetchLogs einen Fehler wirft (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'))
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('boom')
+  })
+
+  it('zeigt Backend-Marker bei file=null (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: { lines: [], offset: 0, file: null, message: 'logs.drawer.noFileYet' },
+      },
+    })
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Heutige Logdatei wurde noch nicht geschrieben')
+  })
+
+  it('zeigt Loading-State während fetchLogs läuft (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    let resolveFetch: (val: unknown) => void = () => {}
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFetch = resolve }),
+    )
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Logs werden geladen…')
+
+    resolveFetch({ data: { success: true, data: { lines: ['ok'], offset: 0 } } })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain('Logs werden geladen…')
   })
 
   it('reconnect-indicator bleibt versteckt, wenn onmessage rechtzeitig kommt', async () => {

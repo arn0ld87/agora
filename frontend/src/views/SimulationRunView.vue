@@ -30,8 +30,27 @@ const { t } = useI18n()
 
 defineProps({ simulationId: String })
 
-const { viewMode, workspaceModes, leftPanelStyle, rightPanelStyle, toggleMaximize } =
+const { viewMode, workspaceModes, leftPanelStyle: baseLeftStyle, rightPanelStyle: baseRightStyle, toggleMaximize } =
   useWorkspaceMode('split')
+
+// Task 5 — Close-Button im GraphPanel. graphClosed override-t den Mode-Switch
+// und kollabiert das linke Panel komplett, bis der User den Mode bewusst neu
+// auswählt (Graph/Split). graphData bleibt im State erhalten — kein Reload
+// nötig, wenn der User wieder einblendet.
+const graphClosed = ref(false)
+const HIDDEN_STYLE = { width: '0%', opacity: 0 }
+const FULL_STYLE = { width: '100%', opacity: 1 }
+const leftPanelStyle = computed(() => (graphClosed.value ? HIDDEN_STYLE : baseLeftStyle.value))
+const rightPanelStyle = computed(() => (graphClosed.value ? FULL_STYLE : baseRightStyle.value))
+
+function closeGraphPanel() {
+  graphClosed.value = true
+}
+
+// Mode-Wechsel via WorkspaceModeSwitch heben den Close-Override wieder auf.
+watch(viewMode, () => {
+  graphClosed.value = false
+})
 
 const currentSimulationId = ref(route.params.simulationId)
 const maxRounds = ref(route.query.maxRounds ? parseInt(route.query.maxRounds) : null)
@@ -156,6 +175,10 @@ async function loadGraph(graphId) {
   if (!isSimulating.value) graphLoading.value = true
   try {
     const res = await getGraphData(graphId)
+    // Task 5 — Graph nach Sim-Ende erhalten: graphData NIE im Fehlerpfad
+    // zurücksetzen. Beim Übergang processing→completed schickt das 30-s-
+    // Polling noch eine letzte Runde; falls die fehlschlägt (kurzer
+    // Backend-Reload), behalten wir den letzten erfolgreichen Snapshot.
     if (res.success) graphData.value = res.data
   } finally {
     graphLoading.value = false
@@ -230,6 +253,7 @@ onMounted(() => {
           :isSimulating="isSimulating"
           @refresh="refreshGraph"
           @toggle-maximize="toggleMaximize('graph')"
+          @close-graph="closeGraphPanel"
         />
       </template>
 

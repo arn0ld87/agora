@@ -71,7 +71,7 @@ import logging
 import random
 import signal
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 
@@ -219,6 +219,7 @@ async def _emit_post_created_to_redis(
     platform: str,
     action_data: Dict[str, Any],
     redis_url: Optional[str],
+    sim_time_iso: Optional[str] = None,
 ) -> None:
     """Publish a PostCreatedEvent to Redis after a CREATE_POST action.
 
@@ -268,6 +269,8 @@ async def _emit_post_created_to_redis(
         "sentiment": None,
         # Phase B: Voting-Score — 0 als neutraler Default (Twitter hat kein Voting).
         "score": 0,
+        # Task 1 — virtuelle Sim-Zeit pro CREATE_POST. None bei alten Callern.
+        "sim_time": sim_time_iso,
     }
     channel = f"agora:sim:{simulation_id}:post_created"
     try:
@@ -1538,6 +1541,12 @@ async def run_twitter_simulation(
         log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
 
     start_time = datetime.now()
+    # Task 1 — Anker für virtuelle Sim-Zeit. tz-aware UTC, 00:00 als
+    # Tagesbasis, damit sim_time deterministisch aus
+    # (start_hour_offset, simulated_minutes) ableitbar bleibt.
+    sim_clock_anchor = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
     for round_num in range(total_rounds):
         # Check if received exit signal
@@ -1594,15 +1603,20 @@ async def run_twitter_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
+        # Sim-Zeit für CREATE_POST-Frames dieser Round.
+        _sim_dt = sim_clock_anchor + timedelta(
+            minutes=start_hour_offset * 60 + simulated_minutes
+        )
+        _sim_time_iso = _sim_dt.isoformat()
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1621,6 +1635,7 @@ async def run_twitter_simulation(
                     platform="twitter",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    sim_time_iso=_sim_time_iso,
                 )
 
         if action_logger:
@@ -1806,6 +1821,10 @@ async def run_reddit_simulation(
         log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
 
     start_time = datetime.now()
+    # Task 1 — Anker für virtuelle Sim-Zeit (siehe Twitter-Branch oben).
+    sim_clock_anchor = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
     for round_num in range(total_rounds):
         # Check if received exit signal
@@ -1862,15 +1881,19 @@ async def run_reddit_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
+        _sim_dt = sim_clock_anchor + timedelta(
+            minutes=start_hour_offset * 60 + simulated_minutes
+        )
+        _sim_time_iso = _sim_dt.isoformat()
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1889,6 +1912,7 @@ async def run_reddit_simulation(
                     platform="reddit",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    sim_time_iso=_sim_time_iso,
                 )
 
         if action_logger:

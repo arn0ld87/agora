@@ -26,6 +26,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 ENV UV_HTTP_TIMEOUT=1800
 ENV UV_HTTP_RETRIES=5
 
+ENV TZ=Europe/Berlin
+
 WORKDIR /app
 RUN useradd -m -u 1000 agora \
   && mkdir -p /app/backend/uploads /app/backend/logs \
@@ -121,6 +123,14 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/backend/.venv/bin:$PATH"
 
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tzdata \
+  && rm -rf /var/lib/apt/lists/* \
+  && ln -snf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
+  && echo "Europe/Berlin" > /etc/timezone
+
+ENV TZ=Europe/Berlin
 
 RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
   && mkdir -p /app/backend/uploads /app/backend/logs /app/frontend/dist /home/agora/.cache /home/agora/.gunicorn \

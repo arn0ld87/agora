@@ -454,6 +454,9 @@
       "failed": "Fehlgeschlagen",
       "elapsed": "Dauer: {time}"
     },
+    "simClock": {
+      "tooltip": "Virtuelle Sim-Uhr (Agenten-Wallclock, Europe/Berlin)"
+    },
     "feed": {
       "title": "Live-Feed",
       "actions": "Aktionen: {count}",
@@ -617,7 +620,9 @@
     "ui": {
       "toggleEdgeLabels": "Beziehungslabels",
       "pauseLayout": "Layout pausieren",
-      "resumeLayout": "Layout fortsetzen"
+      "resumeLayout": "Layout fortsetzen",
+      "closePanel": "Graph-Panel schließen",
+      "exportHtml": "Als standalone HTML exportieren"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",
@@ -763,6 +768,9 @@
       "search": "Suchen…",
       "pause": "Auto-Scroll pausieren",
       "empty": "Noch keine Log-Zeilen.",
+      "loading": "Logs werden geladen…",
+      "unknownError": "Logs konnten nicht geladen werden.",
+      "noFileYet": "Heutige Logdatei wurde noch nicht geschrieben — Backend ist erreichbar.",
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
       "reconnect": "Erneut verbinden",

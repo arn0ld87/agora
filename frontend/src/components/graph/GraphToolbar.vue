@@ -53,8 +53,19 @@
       >
         <span class="btn-text">.pdf</span>
       </button>
+      <button
+        v-if="hasGraphData"
+        class="tool-btn"
+        :title="$t('graph.ui.exportHtml')"
+        @click="$emit('download-html')"
+      >
+        <span class="btn-text">.html</span>
+      </button>
       <button class="tool-btn" title="Maximize/Restore" @click="$emit('toggle-maximize')">
         <span class="icon-maximize">⛶</span>
+      </button>
+      <button class="tool-btn" :title="$t('graph.ui.closePanel')" @click="$emit('close-graph')">
+        <span class="icon-close">✕</span>
       </button>
     </div>
   </div>
@@ -74,8 +85,10 @@ defineEmits([
   'download-svg',
   'download-png',
   'print-pdf',
+  'download-html',
   'toggle-maximize',
   'toggle-pause',
+  'close-graph',
 ])
 </script>
 

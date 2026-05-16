@@ -153,7 +153,18 @@ def get_logs():
     n = _parse_tail_arg()
     level = request.args.get('level')
     if path is None:
-        return json_success({'lines': [], 'offset': 0, 'file': None})
+        # Task 7 — Frontend-LogDrawer braucht ein Live-Signal, dass das
+        # Backend lebt, auch wenn die heutige Logdatei noch nicht
+        # geschrieben wurde. Ohne den message-Marker stand im Drawer ein
+        # generisches "leer", obwohl der Pfad einfach noch nicht existiert.
+        # Wir liefern den i18n-Key, das Frontend übersetzt — vermeidet
+        # hardkodierten EN-Text in der API-Response (Gemini-Finding).
+        return json_success({
+            'lines': [],
+            'offset': 0,
+            'file': None,
+            'message': 'logs.drawer.noFileYet',
+        })
     lines, offset = _read_tail(path, n)
     filtered = _filter_lines(lines, level)
     return json_success({

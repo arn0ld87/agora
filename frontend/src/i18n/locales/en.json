@@ -454,6 +454,9 @@
       "failed": "Failed",
       "elapsed": "Elapsed: {time}"
     },
+    "simClock": {
+      "tooltip": "Virtual sim clock (agent wallclock, Europe/Berlin)"
+    },
     "feed": {
       "title": "Live feed",
       "actions": "Actions: {count}",
@@ -617,7 +620,9 @@
     "ui": {
       "toggleEdgeLabels": "Edge Labels",
       "pauseLayout": "Pause layout",
-      "resumeLayout": "Resume layout"
+      "resumeLayout": "Resume layout",
+      "closePanel": "Close graph panel",
+      "exportHtml": "Export as standalone HTML"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
@@ -763,6 +768,9 @@
       "search": "Search…",
       "pause": "Pause auto-scroll",
       "empty": "No log lines yet.",
+      "loading": "Loading logs…",
+      "unknownError": "Failed to load logs.",
+      "noFileYet": "Today's log file has not been written yet — backend is reachable.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
       "reconnect": "Reconnect",

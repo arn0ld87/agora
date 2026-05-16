@@ -32,6 +32,9 @@ export const PostCreatedEventSchema = z
     // Phase B — Sentiment-Heatbar + Voting-Score
     sentiment: z.number().min(-1).max(1).nullable().optional(),
     score: z.number().int().default(0),
+    // Task 1 — virtuelle Sim-Zeit (tz-aware ISO-8601 mit Offset). null oder
+    // weggelassen bei Pre-Task-1-Daten.
+    sim_time: z.string().datetime({ offset: true }).nullable().optional(),
   })
   .strict()
 
