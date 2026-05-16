@@ -41,12 +41,17 @@ def _detect_default_provider() -> str:
 
 @simulation_bp.route('/available-models', methods=['GET'])
 def get_available_models():
-    """
-    Return the curated LLM presets plus locally installed Ollama models.
+    """Return the curated LLM presets plus locally installed Ollama models.
+
+    Ollama-Models werden alphabetisch sortiert. ``LLM_MODEL_PRESETS`` mit
+    ``kind="ollama"`` werden nur durchgelassen, wenn das Modell tatsächlich in
+    den Ollama-Tags steht — sonst landen halluzinierte Einträge (z. B.
+    ``qwen2.5:32b`` ohne Install) im UI-Dropdown. Cloud-Presets bleiben, weil
+    sie über andere Provider-Discovery-Pfade verifiziert werden.
     """
     import requests
 
-    presets = list(Config.LLM_MODEL_PRESETS or [])
+    raw_presets = list(Config.LLM_MODEL_PRESETS or [])
     ollama_models = []
     ollama_error = None
 
@@ -76,6 +81,13 @@ def get_available_models():
     except Exception as exc:
         ollama_error = str(exc)
         logger.info(f"Could not reach Ollama at {base}: {exc}")
+
+    ollama_models.sort(key=lambda m: m["name"].lower())
+    installed_ollama_names = {m["name"] for m in ollama_models}
+    presets = [
+        preset for preset in raw_presets
+        if preset.get("kind") != "ollama" or preset.get("name") in installed_ollama_names
+    ]
 
     storage = current_app.extensions.get('neo4j_storage')
     neo4j_reachable = storage is not None

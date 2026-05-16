@@ -119,8 +119,13 @@ class ModelCatalogService:
         return []
 
     def _get_fallbacks(self, provider_type: str) -> List[str]:
+        # Why leer für ollama_cloud: ein hardcoded ["qwen2.5:32b", "llama3.1:8b",
+        # "phi3"] erscheint als "verfügbares Modell" im UI, ist aber lokal nicht
+        # zwingend installiert (User-Bericht 2026-05-16: halluzinierte Einträge
+        # im Dashboard-Picker). Lieber leeres Catalog + sichtbarer Fehlerzustand
+        # als Ehrlichkeits-Lüge mit nicht-existenten Modellen.
         if provider_type == "ollama_cloud":
-            return ["qwen2.5:32b", "llama3.1:8b", "phi3"]
+            return []
         if provider_type == "openai":
             return ["gpt-4o", "gpt-4o-mini", "o1-preview"]
         if provider_type == "google":
