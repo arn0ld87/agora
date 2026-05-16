@@ -98,6 +98,10 @@ services:
       # urllib3 versucht IPv6 (ENETUNREACH) ohne IPv4-Fallback (kein Happy Eyeballs).
       # Workaround: urllib3 auf IPv4-only setzen. Quelle: docker/for-mac#7332
       - DOCKER_IPV4_ONLY=1
+      # Container-Zeitzone: alle datetime.now()-Naiv-Calls und LogDrawer-
+      # Date-Schwelle (backend/app/utils/logger.py) laufen auf Europe/Berlin.
+      # sim_time (Layer-0) bleibt unabhängig — ist tz-aware (UTC + Offset).
+      - TZ=Europe/Berlin
 
   redis:
     image: redis:7-alpine

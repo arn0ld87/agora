@@ -70,6 +70,8 @@ services:
       # Verbindung kaputt machen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      # Container-Zeitzone (siehe docker-compose.yml).
+      - TZ=Europe/Berlin
 
   neo4j:
     ports: !reset []
