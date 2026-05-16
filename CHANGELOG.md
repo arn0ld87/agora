@@ -5,6 +5,20 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Sub-Slice 05.9 — 2026-05-16)
+
+- `backend/scripts/_sim_common.py::compute_start_hour_offset()` shiftet die
+  simulierte Uhr bei kurzen Runs (`max_rounds=3` mit `minutes_per_round=60`
+  durchläuft nur die Stunden 0–2) auf den meistgenutzten `active_hours`-Bucket
+  aus `agent_configs`. Vorher: alle Smoke-Runs starteten um Mitternacht, kein
+  Agent war wach, jede Runde meldete „0 actions, 0.0s". Verdrahtet in
+  `run_parallel_simulation.py`, `run_reddit_simulation.py`,
+  `run_twitter_simulation.py`. Explizite `time_config.start_hour` gewinnt
+  weiter; bei Runs ≥ 24 h simulierter Zeit greift Offset nicht. 14 neue Tests
+  in `backend/tests/scripts/test_sim_common_start_hour_offset.py` decken
+  Explicit-Override, Long-Run-Bypass, Active-Hour-Heuristik, Modulo-24 und
+  Edge-Cases ab. (Sub-Slice 05.9)
+
 ### Fixed (Sub-Slice 05.8 — 2026-05-16)
 
 - Frontend-Zod-Spiegel zu `EvidenceItemModel.sentiment_score` (Backend hat

@@ -296,3 +296,40 @@ def build_parallel_parser() -> argparse.ArgumentParser:
     parser.add_argument("--twitter-only", action="store_true", help="Only run Twitter simulation")
     parser.add_argument("--reddit-only", action="store_true", help="Only run Reddit simulation")
     return _add_shared_arguments(parser)
+
+
+def compute_start_hour_offset(
+    config: dict[str, Any],
+    total_rounds: int,
+    minutes_per_round: int,
+) -> int:
+    """Pick a simulated-clock offset so short runs don't sit entirely in the
+    agents' inactive hours.
+
+    Why: ``simulated_hour`` rolls from 0..23 starting at midnight. With
+    ``minutes_per_round=60`` and ``--max-rounds 3`` the loop only visits hours
+    0/1/2, while typical ``active_hours`` start at 9. Result: every round
+    short-circuits via ``if not active_agents: continue`` and the platform
+    reports "0 actions, 0.0s".
+
+    Respect ``time_config.start_hour`` if explicitly set. Otherwise, when the
+    truncated run can't naturally cycle through 24h, shift to the most
+    populated active hour from ``agent_configs``.
+    """
+    time_config = config.get("time_config", {}) or {}
+    explicit = time_config.get("start_hour")
+    if explicit is not None:
+        return int(explicit) % 24
+
+    simulated_hours = (total_rounds * minutes_per_round) / 60.0
+    if simulated_hours >= 24:
+        return 0
+
+    from collections import Counter
+    hour_counts: Counter[int] = Counter()
+    for ac in config.get("agent_configs", []) or []:
+        for h in ac.get("active_hours", []) or []:
+            hour_counts[int(h) % 24] += 1
+    if not hour_counts:
+        return 9
+    return int(hour_counts.most_common(1)[0][0])

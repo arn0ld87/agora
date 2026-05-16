@@ -36,6 +36,7 @@ try:
         build_camel_completion_params,
         build_camel_extra_body,
         build_single_platform_parser,
+        compute_start_hour_offset,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -50,6 +51,7 @@ except ImportError:  # direct script execution
         build_camel_completion_params,
         build_camel_extra_body,
         build_single_platform_parser,
+        compute_start_hour_offset,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -598,7 +600,11 @@ class RedditSimulationRunner:
             total_rounds = min(total_rounds, max_rounds)
             if total_rounds < original_rounds:
                 print(f"\nRounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-        
+
+        start_hour_offset = compute_start_hour_offset(self.config, total_rounds, minutes_per_round)
+        if start_hour_offset != 0:
+            print(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
         print("\nSimulation parameters:")
         print(f"  - Total simulation duration: {total_hours}hours")
         print(f"  - Time per round: {minutes_per_round}minutes")
@@ -735,7 +741,7 @@ class RedditSimulationRunner:
                 pass
 
             simulated_minutes = round_num * minutes_per_round
-            simulated_hour = (simulated_minutes // 60) % 24
+            simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
             simulated_day = simulated_minutes // (60 * 24) + 1
 
             active_agents = self._get_active_agents_for_round(

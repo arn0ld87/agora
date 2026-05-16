@@ -87,6 +87,7 @@ try:
         build_camel_completion_params,
         build_camel_extra_body,
         build_parallel_parser,
+        compute_start_hour_offset,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -100,6 +101,7 @@ except ImportError:  # direct script execution
         build_camel_completion_params,
         build_camel_extra_body,
         build_parallel_parser,
+        compute_start_hour_offset,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -1497,41 +1499,45 @@ async def run_twitter_simulation(
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # If maximum rounds specified, truncate
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
+    if start_hour_offset != 0:
+        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # Log round start regardless of active agents
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0)
             continue
-        
+
         # Build actions
         if tool_loop and enable_tools:
             actions = {}
@@ -1761,41 +1767,45 @@ async def run_reddit_simulation(
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # If maximum rounds specified, truncate
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
+    if start_hour_offset != 0:
+        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # Log round start regardless of active agents
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0)
             continue
-        
+
         # Build actions
         if tool_loop and enable_tools:
             actions = {}
