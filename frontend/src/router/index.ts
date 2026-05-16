@@ -177,6 +177,14 @@ const routes: RouteRecordRaw[] = [
     name: 'HistoryV4',
     component: () => import('../views/v4/HistoryView.vue'),
   },
+
+  // Agora 2026 — design exploration (editorial Data-Room aesthetic).
+  // Opt-in via /agora-2026; isolated from production v4 shell.
+  {
+    path: '/agora-2026',
+    name: 'Agora2026',
+    component: () => import('../views/agora2026/Agora2026View.vue'),
+  },
 ]
 
 const router = createRouter({
