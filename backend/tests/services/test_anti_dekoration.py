@@ -1,8 +1,8 @@
 """Anti-Dekorations-Tests für Sub-Slice 07.
 
 Prüft:
-1. compute_confidence([]) → (0.15, "low") — kein dekorativer Score
-2. Orphan-Claim (leere bound + leere direct_items) → low-Confidence + Audit-Entry
+1. compute_confidence([]) → (0.15, "speculative") — kein dekorativer Score
+2. Orphan-Claim (leere bound + leere direct_items) → speculative-Confidence + Audit-Entry
 3. Nichtleere global_items schmieren NICHT in evidence_items durch
 
 Refs #105, Layer 1.
@@ -51,21 +51,21 @@ def _sample_global_item(idx: int = 0) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — compute_confidence mit leerer Liste → (0.15, "low")
+# Test 1 — compute_confidence mit leerer Liste → (0.15, "speculative")
 # ---------------------------------------------------------------------------
 
-def test_compute_confidence_empty_returns_low() -> None:
-    """Kein Evidence → ehrliches (0.15, 'low'), kein dekorativer Score."""
+def test_compute_confidence_empty_returns_speculative() -> None:
+    """Kein Evidence → ehrliches (0.15, 'speculative'), kein dekorativer Score."""
     score, label = compute_confidence([])
-    assert label == "low", f"Erwartetes Label 'low', bekam '{label}'"
+    assert label == "speculative", f"Erwartetes Label 'speculative', bekam '{label}'"
     assert score == 0.15, f"Erwarteter Score 0.15, bekam {score}"
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — Orphan-Claim: bound==[], direct_items==[] → low + Audit-Entry
+# Test 2 — Orphan-Claim: bound==[], direct_items==[] → speculative + Audit-Entry
 # ---------------------------------------------------------------------------
 
-def test_orphan_claim_gets_low_confidence(monkeypatch) -> None:
+def test_orphan_claim_gets_speculative_confidence(monkeypatch) -> None:
     """Wenn Embedder läuft aber nichts bindet (bound==[]) und kein direktes
     Evidence vorhanden ist, muss der Claim confidence_label=='low' erhalten
     und der audit_trail einen 'no_direct_evidence_bound'-Eintrag enthalten.
@@ -98,8 +98,8 @@ def test_orphan_claim_gets_low_confidence(monkeypatch) -> None:
 
     assert claims, "Es muss mindestens einen Claim geben"
     claim = claims[0]
-    assert claim["confidence_label"] == "low", (
-        f"Erwartet 'low', bekam '{claim['confidence_label']}'"
+    assert claim["confidence_label"] == "speculative", (
+        f"Erwartet 'speculative', bekam '{claim['confidence_label']}'"
     )
     assert claim["confidence_score"] < 0.3, (
         f"Score sollte < 0.3 sein, bekam {claim['confidence_score']}"

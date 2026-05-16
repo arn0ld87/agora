@@ -585,3 +585,49 @@ def test_report_mode_re_exported_from_contracts():
     import typing  # noqa: PLC0415
     args = typing.get_args(ReportMode)
     assert set(args) == {"strict", "balanced", "explorative"}
+
+
+# ---- Slice 2: speculative / verified confidence tiers ----
+
+def test_claim_speculative_confidence_accepted():
+    """Slice 2: 'speculative' ist ein gültiges Confidence-Label für Claim."""
+    claim = Claim(
+        id="c-spec",
+        statement="Dieser Claim hat spekulativen Charakter.",
+        evidence_refs=["ev-001"],
+        confidence="speculative",
+        aggregation_basis="persona",
+    )
+    assert claim.confidence == "speculative"
+
+
+def test_claim_verified_confidence_accepted():
+    """Slice 2: 'verified' ist ein gültiges Confidence-Label für Claim."""
+    claim = Claim(
+        id="c-ver",
+        statement="Dieser Claim wurde durch mehrere Quellen verifiziert.",
+        evidence_refs=["ev-001", "ev-002"],
+        confidence="verified",
+        aggregation_basis="persona",
+    )
+    assert claim.confidence == "verified"
+
+
+def test_project_impact_speculative_confidence_accepted():
+    """Slice 2: 'speculative' ist ein gültiges Confidence-Label für ProjectImpact."""
+    impact = ProjectImpact(
+        id="pi-spec",
+        beschreibung="Spekulativer Einfluss auf die Kommunikation.",
+        confidence="speculative",
+    )
+    assert impact.confidence == "speculative"
+
+
+def test_project_impact_verified_confidence_accepted():
+    """Slice 2: 'verified' ist ein gültiges Confidence-Label für ProjectImpact."""
+    impact = ProjectImpact(
+        id="pi-ver",
+        beschreibung="Verifizierter Einfluss auf das Netzwerk.",
+        confidence="verified",
+    )
+    assert impact.confidence == "verified"

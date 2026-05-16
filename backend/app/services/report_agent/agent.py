@@ -460,10 +460,10 @@ class ReportAgent:
                     "value": penalty,
                     "source": "evidence_binder.detect_contradiction_penalty",
                 })
-            # Anti-Dekorations-Guard: kein Evidence → ehrliches low-Label
+            # Anti-Dekorations-Guard: kein Evidence → ehrliches speculative-Label
             # und Audit-Eintrag statt dekorativem global_items-Fallback.
             if not evidence_items:
-                confidence_score, confidence_label = 0.15, "low"
+                confidence_score, confidence_label = 0.15, "speculative"
                 audit_trail.append({
                     "type": "model_generated_inference",
                     "source": "validator",
@@ -490,7 +490,7 @@ class ReportAgent:
                 claim_text="No claim candidate extracted from this section.",
                 evidence=[],
                 confidence_score=0.0,
-                confidence_label="low",
+                confidence_label="speculative",
                 notes="No section content captured.",
             ).to_dict())
         return claims

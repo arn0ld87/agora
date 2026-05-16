@@ -71,9 +71,11 @@
         },
         "confidence": {
           "enum": [
+            "speculative",
             "low",
             "medium",
-            "high"
+            "high",
+            "verified"
           ],
           "title": "Confidence",
           "type": "string"
@@ -608,9 +610,11 @@
         },
         "confidence": {
           "enum": [
+            "speculative",
             "low",
             "medium",
-            "high"
+            "high",
+            "verified"
           ],
           "title": "Confidence",
           "type": "string"

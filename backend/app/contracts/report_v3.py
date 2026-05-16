@@ -78,7 +78,7 @@ class Claim(BaseModel):
     id: str = Field(min_length=1)
     statement: str = Field(min_length=8)
     evidence_refs: list[str] = Field(min_length=1, description="Pflicht: mind. 1 Evidenz-Anker")
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     persona_ids: list[str] = Field(default_factory=list)
     aggregation_basis: Literal["seed", "persona", "aggregat", "datenluecke"]
 
@@ -146,7 +146,7 @@ class ProjectImpact(BaseModel):
     id: str = Field(min_length=1)
     beschreibung: str = Field(min_length=1)
     affected_segments: list[str] = Field(default_factory=list)
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     evidence_refs: list[str] = Field(default_factory=list)
 
 

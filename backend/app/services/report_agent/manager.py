@@ -306,15 +306,21 @@ class ReportManager:
                 statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
                 if len(statement) < 8:
                     continue
-                label = str(claim.get("confidence_label") or "low")
-                confidence: Literal["low", "medium", "high"]
-                confidence = "high" if label in {"high", "verified"} else "low"
-                if label == "medium":
+                label = str(claim.get("confidence_label") or "speculative")
+                _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
+                confidence: Literal["speculative", "low", "medium", "high", "verified"]
+                if label in _valid_confidence:
+                    confidence = label  # type: ignore[assignment]
+                elif label in {"high", "verified"}:
+                    confidence = "high"
+                elif label == "medium":
                     confidence = "medium"
-                if confidence not in {"low", "medium", "high"}:
+                elif label == "low":
                     confidence = "low"
-                # strict: Low-confidence Claims werden gedroppt
-                if report_mode == "strict" and confidence == "low":
+                else:
+                    confidence = "speculative"
+                # strict: speculative/low-confidence Claims werden gedroppt
+                if report_mode == "strict" and confidence in {"speculative", "low"}:
                     continue
                 claims.append(ReportV3Claim(
                     id=claim_id,

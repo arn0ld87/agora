@@ -42,9 +42,9 @@ You classify the level yourself and set confidence_label accordingly.
       rationale: "Hypothesis without evidence — not formulated as fact."
   </level>
 
-  <level name="seed_only" max_confidence="low">
+  <level name="seed_only" max_confidence="speculative">
     Only evidence source is the seed question / upload document itself.
-    → confidence_label = "low"
+    → confidence_label = "speculative"
     → evidence[].source_kind MUST be "seed_corpus"
     → Claim text MUST contain a hedge word such as:
         "vermutlich", "deutet auf", "die Quellenlage spricht für",
@@ -70,6 +70,17 @@ You classify the level yourself and set confidence_label accordingly.
       with different persona.stakeholder_group values
     → Explicitly name the stakeholder groups in claim text
       (e.g., "Workshop participants AND existing customers both express concern that…")
+  </level>
+
+  <level name="verified_cross_stakeholder" max_confidence="verified">
+    Like cross_stakeholder, plus all supporting evidence has match_score ≥ 0.85.
+    This level is assigned post-hoc by the confidence_calculator validator —
+    do NOT set it yourself. When writing the claim, use confidence_label = "high"
+    and let the validator promote to "verified" if conditions are met.
+    Requirements (checked automatically):
+    → At least 2 agent_quote entries from different stakeholder groups
+    → max(match_score) ≥ 0.85 across all evidence items
+    → At least 2 independent sources (different type+source combinations)
   </level>
 
   <level name="verified" max_confidence="verified">
