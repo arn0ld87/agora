@@ -34,6 +34,7 @@ from .artifact_store import SimulationArtifactStore, resolve_default_store
 from .event_bus import (
     CHANNEL_ACTION,
     CHANNEL_CONTROL,
+    CHANNEL_POST_CREATED,
     CHANNEL_RPC_COMMAND,
     CHANNEL_STATE,
     FilePollingEventBus,
@@ -186,9 +187,14 @@ class RedisEventBus:
         if channel == CHANNEL_ACTION:
             # No-op iterator — Phase B does not ship action events.
             return
-        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE):
+        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE, CHANNEL_POST_CREATED):
             raise ValueError(f"Unknown channel for RedisEventBus: {channel!r}")
 
+        # post_created: OASIS-Subprozess publisht direkt nach
+        # ``agora:sim:{id}:post_created`` (run_parallel_simulation.py
+        # ::_emit_post_created_to_redis). Backend-Drainer abonniert hier.
+        # Vor diesem Fix flog ValueError und der ganze post-Stream war tot —
+        # User-Bericht 2026-05-16 nach Welle-Merge.
         yield from self._subscribe_live(
             simulation_id, channel, timeout=timeout, poll_interval=poll_interval
         )
@@ -208,15 +214,19 @@ class RedisEventBus:
         try:
             # Yield the retained snapshot first so late subscribers see
             # the current value (matches FilePollingEventBus semantics).
-            artifact_name = "control_state" if channel == CHANNEL_CONTROL else "run_state"
-            snapshot = self._store.read_json(simulation_id, artifact_name, default=None)
-            if snapshot:
-                yield SimulationEvent(
-                    type=f"{channel}.update",
-                    simulation_id=simulation_id,
-                    payload=snapshot,
-                    ts=snapshot.get("updated_at") or "",
-                )
+            # post_created hat keinen Retained-Artifact-Snapshot (Stream-
+            # only); überspringen, sonst würden wir ``run_state`` als
+            # post-Update emittieren und das Frontend mit falschem Typ füttern.
+            if channel != CHANNEL_POST_CREATED:
+                artifact_name = "control_state" if channel == CHANNEL_CONTROL else "run_state"
+                snapshot = self._store.read_json(simulation_id, artifact_name, default=None)
+                if snapshot:
+                    yield SimulationEvent(
+                        type=f"{channel}.update",
+                        simulation_id=simulation_id,
+                        payload=snapshot,
+                        ts=snapshot.get("updated_at") or "",
+                    )
             while True:
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
