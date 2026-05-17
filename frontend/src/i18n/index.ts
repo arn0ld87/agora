@@ -6,7 +6,7 @@ const SUPPORTED: string[] = ['de', 'en']
 const STORAGE_KEY = 'agora.locale'
 const DEFAULT_LOCALE = 'de'
 
-function safeStorage(): Storage | null {
+function resolveStorage(): Storage | null {
   try {
     return typeof localStorage !== 'undefined' ? localStorage : null
   } catch {
@@ -14,13 +14,17 @@ function safeStorage(): Storage | null {
   }
 }
 
+// localStorage availability does not change during the page lifetime —
+// resolve once at module load instead of probing on every read/write.
+const storage: Storage | null = resolveStorage()
+
 function safeDocument(): Document | null {
   return typeof document !== 'undefined' ? document : null
 }
 
 function readStored(): string | null {
   try {
-    return safeStorage()?.getItem(STORAGE_KEY) ?? null
+    return storage?.getItem(STORAGE_KEY) ?? null
   } catch {
     return null
   }
@@ -28,7 +32,7 @@ function readStored(): string | null {
 
 function writeStored(locale: string): void {
   try {
-    safeStorage()?.setItem(STORAGE_KEY, locale)
+    storage?.setItem(STORAGE_KEY, locale)
   } catch {
     // Quota exceeded / Safari private mode / SecurityError — locale change
     // remains in-memory + document.lang; persistence is best-effort.
