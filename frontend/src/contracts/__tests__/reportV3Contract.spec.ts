@@ -139,7 +139,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
     expect(PersonaV3Schema.safeParse(badPersona).success).toBe(false);
   });
 
-  it("contains all 11 section list keys in schema output", () => {
+  it("contains all 14 section list keys in schema output", () => {
     const schema = ReportV3Schema.shape;
     const expected = [
       "personas",
@@ -154,6 +154,8 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       "content_ideas",
       "data_gaps",
       "hypotheses",
+      // Slice 5 (Issue #497)
+      "red_team_findings",
       "model_attribution",
     ];
     for (const key of expected) {
@@ -206,6 +208,7 @@ describe("ReportV3Schema (Zod-Spiegel)", () => {
       expect(result.data.claims).toEqual([]);
       expect(result.data.data_gaps).toEqual([]);
       expect(result.data.hypotheses).toEqual([]);
+      expect(result.data.red_team_findings).toEqual([]);
     }
   });
 });
