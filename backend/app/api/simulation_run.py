@@ -554,11 +554,14 @@ def get_run_status_detail(simulation_id: str):
     )
 
     result = run_state.to_dict()
+    # Aggregate + Counts statt redundanter Full-Lists (Gemini-Review PR #526).
+    # Detail-Daten holt der Client über die paginierte `actions`-Subquery
+    # bzw. /actions?platform=... — das Pagination-Ziel wäre sonst untergraben.
     result["actions_total"] = len(all_actions)
     result["actions"] = [action.to_dict() for action in paginated_actions]
-    result["all_actions"] = [action.to_dict() for action in all_actions]
-    result["twitter_actions"] = [action.to_dict() for action in twitter_actions]
-    result["reddit_actions"] = [action.to_dict() for action in reddit_actions]
+    result["all_actions_count"] = len(all_actions)
+    result["twitter_actions_count"] = len(twitter_actions)
+    result["reddit_actions_count"] = len(reddit_actions)
     result["rounds_count"] = len(run_state.rounds)
     result["recent_actions"] = [action.to_dict() for action in recent_actions]
     return json_success(result)

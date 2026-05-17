@@ -790,6 +790,19 @@ def _build_zip_bundle(report_id: str, report: Any) -> bytes:
     return buf.getvalue()
 
 
+def _safe_getsize(path: str) -> int | None:
+    """``os.path.getsize`` mit OSError-Toleranz.
+
+    Race-condition-tolerant: Tests mocken oft nur ``os.path.exists`` und
+    der echte Pfad existiert dann nicht — wir geben in dem Fall None
+    zurück und der Caller fällt auf eine In-Memory-Heuristik zurück.
+    """
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
 def _estimate_zip_size(report_id: str, report: Any) -> int:
     """Schätzt die unkomprimierte Größe der ZIP-Artefakte in Bytes.
 
@@ -807,22 +820,35 @@ def _estimate_zip_size(report_id: str, report: Any) -> int:
         except OSError:
             pass
 
-    # report-v3.md (In-Memory via build oder markdown_content)
-    md_text = ReportManager.build_report_v3_markdown(report_id)
-    if md_text is None:
-        md_text = getattr(report, "markdown_content", None)
-    if md_text:
-        total += len(md_text.encode("utf-8"))
+    # report-v3.md — grobe Schätzung. Wenn die Markdown-Datei bereits auf
+    # Disk liegt, nutzen wir os.path.getsize statt build_report_v3_markdown
+    # zu rendern (das wäre der teure Pfad).
+    md_v3_path = ReportManager._get_report_v3_markdown_path(report_id)
+    md_disk_size = _safe_getsize(md_v3_path)
+    if md_disk_size is not None:
+        total += md_disk_size
+    else:
+        md_text = getattr(report, "markdown_content", None) or ""
+        # konservative Heuristik: 2 Bytes pro Zeichen (UTF-8 mixed)
+        total += len(md_text) * 2
 
-    # evidence-map.json (In-Memory, grobe Schätzung via JSON-Serialisierung)
+    # report-v3.json — Disk-Lookup statt JSON-Re-Serialization.
+    v3_path = ReportManager._get_report_v3_path(report_id)
+    v3_disk_size = _safe_getsize(v3_path)
+    if v3_disk_size is not None:
+        total += v3_disk_size
+
+    # evidence-map.json — Heuristik statt teurer json.dumps-Serialisierung
+    # (Gemini-Review PR #526). Sections sind der Größentreiber.
     evidence_map = ReportManager.get_evidence_map(report_id) or {}
-    total += len(json.dumps(evidence_map, ensure_ascii=False).encode("utf-8"))
+    sections = evidence_map.get("sections") or []
+    total += 1024 + len(sections) * 1500  # Base + ~1.5 KB pro Section
 
     # CSV-Tabellen: Schätzung über Personenzahl * ~200 Bytes pro Zeile
     report_v3 = ReportManager.get_report_v3(report_id) or {}
     total += max(len(report_v3.get("personas") or []) * 200, 100)
     total += max(len(report_v3.get("segments") or []) * 200, 100)
-    total += max(len(evidence_map.get("sections") or []), 1) * 300
+    total += max(len(sections), 1) * 300
 
     return total
 
@@ -846,8 +872,10 @@ def _stream_zip_bundle(report_id: str, report: Any) -> Iterator[bytes]:
 
             v3_path = ReportManager._get_report_v3_path(report_id)
             if os.path.exists(v3_path):
-                with open(v3_path, encoding="utf-8") as fh:
-                    zf.writestr(f"{prefix}/report-v3.json", fh.read())
+                # Direkter Disk-zu-ZIP-Stream — vermeidet, dass eine große
+                # report-v3.json komplett in den Worker-RAM gelesen wird
+                # (Gemini-Review PR #526).
+                zf.write(v3_path, arcname=f"{prefix}/report-v3.json")
 
             evidence_map = ReportManager.get_evidence_map(report_id) or {}
             zf.writestr(
