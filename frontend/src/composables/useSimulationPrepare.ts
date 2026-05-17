@@ -288,9 +288,19 @@ export function useSimulationPrepare(): UseSimulationPrepareReturn {
         }
 
         _taskId = res.data.task_id ?? null
-        if (_taskId) {
-          onLog(`Task gestartet: ${_taskId}`)
+        if (!_taskId) {
+          // Backend lieferte success+data ohne task_id → Polling würde sofort
+          // im Guard 'if (!_taskId) return' steckenbleiben und der prepare-Flow
+          // hinge dauerhaft in isPreparing=true. Fail-fast statt stiller Hang.
+          const msg = 'Vorbereitung fehlgeschlagen: Backend lieferte keine task_id.'
+          console.warn('[useSimulationPrepare] startPrepare: success ohne task_id', res.data)
+          onLog(msg)
+          error.value = msg
+          onStatusChange('error')
+          isPreparing.value = false
+          return false
         }
+        onLog(`Task gestartet: ${_taskId}`)
         if (res.data.expected_entities_count) {
           expectedTotal.value = res.data.expected_entities_count
         }
