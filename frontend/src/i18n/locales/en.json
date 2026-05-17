@@ -247,6 +247,8 @@
     },
     "model": {
       "label": "LLM model",
+      "placeholder": "Select model …",
+      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",
@@ -254,7 +256,7 @@
       "customPlaceholder": "e.g. qwen3-coder-next:cloud",
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
-      "noOllama": "No connection to Ollama. Use custom input or start Ollama.",
+      "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env"
     },

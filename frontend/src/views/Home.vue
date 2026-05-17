@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
@@ -8,18 +8,13 @@ import Button from '@/components/v4/forms/Button.vue'
 import Badge from '../components/ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 import Select from '../components/ui/Select.vue'
-import Field from '../components/ui/Field.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AgoraBrand from '../components/brand/AgoraBrand.vue'
+import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
 import { getAvailableModels } from '../api/simulation'
-import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
-import {
-  defaultRuntimeModelForProvider,
-  isRuntimeModelForProvider,
-  runtimeModelOptionsForProvider,
-  useRuntimeLlmOptions,
-} from '../composables/useRuntimeLlmOptions'
+import { STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
 import { setPendingUpload } from '../store/pendingUpload'
+import { StageLLMRouteSchema } from '../contracts/llmRoutingContract'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -33,36 +28,50 @@ const errorMsg = ref('')
 
 const ALLOWED = ['.pdf', '.md', '.txt', '.markdown']
 
-// ---- Model + language selection (persisted) ----
-const ollamaModels = ref([])
-const presetModels = ref([])
-const defaultModel = ref('')
+// ---- Service-Health + Sprache (persisted) ----
 const defaultProvider = ref('unknown')
 const ollamaReachable = ref(false)
 const ollamaError = ref(null)
 const neo4jReachable = ref(false)
 const neo4jError = ref(null)
 const loadingModels = ref(true)
-const modelOption = ref(localStorage.getItem(STORAGE_MODEL) || 'default')
-const customModel = ref('')
 const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
-const showRuntimeOptions = ref(false)
-const {
-  runtimeProvider,
-  runtimeApiKey,
-  runtimeBaseUrl,
-  runtimeProviderOptions,
-  runtimeProviderEnabled,
-} = useRuntimeLlmOptions(t)
+
+// ---- LLM-Route (Slice A3: projektweiter ModelPicker, Slice A1/A2-Pattern). ----
+//   Persistenz: agora.home.route (JSON-serialized, Zod-validiert).
+//   Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-Pipeline.
+const STORAGE_HOME_ROUTE = 'agora.home.route'
+
+function loadStoredRoute() {
+  try {
+    const raw = localStorage.getItem(STORAGE_HOME_ROUTE)
+    if (!raw) return null
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
+  } catch (err) {
+    console.warn('[Home] agora.home.route lokal nicht parsbar — Auswahl zurückgesetzt:', err)
+    return null
+  }
+}
+
+const selectedRoute = ref(loadStoredRoute())
+
+function onPickRoute(route) {
+  selectedRoute.value = route
+  if (route?.provider_id && route?.model) {
+    localStorage.setItem(STORAGE_HOME_ROUTE, JSON.stringify(route))
+  } else {
+    localStorage.removeItem(STORAGE_HOME_ROUTE)
+  }
+}
 
 async function loadStatus() {
   loadingModels.value = true
   try {
     const res = await getAvailableModels()
     if (res?.success) {
-      ollamaModels.value = res.data?.ollama || []
-      presetModels.value = res.data?.presets || []
-      defaultModel.value = res.data?.current_default || ''
       defaultProvider.value = res.data?.default_provider || 'unknown'
       ollamaReachable.value = !!res.data?.ollama_reachable
       ollamaError.value = res.data?.ollama_error || null
@@ -80,25 +89,6 @@ async function loadStatus() {
   }
 }
 
-const modelOptions = computed(() => {
-  if (runtimeProviderEnabled.value) {
-    return [
-      ...runtimeModelOptionsForProvider(runtimeProvider.value),
-      { value: 'custom', label: t('step2.model.customGroup') },
-    ]
-  }
-  const opts = [{ value: 'default', label: `${t('step2.model.default')} — ${defaultModel.value || '?'}` }]
-  for (const p of presetModels.value) {
-    opts.push({ value: p.name, label: p.label || p.name })
-  }
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.name === m.name)) continue
-    opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
-  }
-  opts.push({ value: 'custom', label: t('step2.model.customGroup') })
-  return opts
-})
-
 const serverDefaultRequiresOllama = computed(() => defaultProvider.value === 'ollama')
 const llmStatusOk = computed(() => !serverDefaultRequiresOllama.value || ollamaReachable.value)
 const llmStatusLabel = computed(() => {
@@ -108,18 +98,19 @@ const llmStatusLabel = computed(() => {
   return 'LLM'
 })
 
+// Wenn der User unter /settings/llm-providers einen anderen Provider als Default
+// gewählt hat (selectedRoute !== null), gilt der Ollama-Reachability-Check nicht
+// mehr — der gewählte Provider übernimmt.
 const servicesReady = computed(() => (
   neo4jReachable.value &&
-  (!serverDefaultRequiresOllama.value || ollamaReachable.value || runtimeProviderEnabled.value || modelOption.value === 'custom')
+  (!serverDefaultRequiresOllama.value || ollamaReachable.value || selectedRoute.value !== null)
 ))
 
 const canSubmit = computed(() => {
   return (
     simulationPrompt.value.trim() !== '' &&
     files.value.length > 0 &&
-    servicesReady.value &&
-    (modelOption.value !== 'custom' || customModel.value.trim() !== '') &&
-    (!runtimeProviderEnabled.value || runtimeApiKey.value.trim() !== '')
+    servicesReady.value
   )
 })
 
@@ -151,11 +142,11 @@ async function startSimulation() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // Persist selection so Step2 picks it up.
-    localStorage.setItem(STORAGE_MODEL, modelOption.value)
-    if (modelOption.value === 'custom') {
-      localStorage.setItem(STORAGE_CUSTOM_MODEL, customModel.value.trim())
-    }
+    // Spiegele die ModelPicker-Auswahl auf STORAGE_MODEL, damit der bestehende
+    // MainView/Step2-Pfad (storedEffectiveModel → llm_model) sie aufgreift.
+    // Provider+Key resolved das Backend serverseitig via SecretResolver (PR #499).
+    const routeModel = selectedRoute.value?.model
+    localStorage.setItem(STORAGE_MODEL, routeModel || 'default')
     localStorage.setItem(STORAGE_LANG, language.value)
 
     setPendingUpload(files.value, simulationPrompt.value)
@@ -169,25 +160,7 @@ async function startSimulation() {
 
 onMounted(() => {
   loadStatus()
-  const stored = localStorage.getItem(STORAGE_CUSTOM_MODEL) || localStorage.getItem('agora.customModel')
-  if (stored) customModel.value = stored
 })
-
-watch(runtimeProvider, (provider, previousProvider) => {
-  const providerDefault = defaultRuntimeModelForProvider(provider)
-  if (provider !== 'default') {
-    if (
-      modelOption.value !== 'custom' &&
-      !isRuntimeModelForProvider(provider, modelOption.value)
-    ) {
-      modelOption.value = providerDefault || 'custom'
-    }
-    return
-  }
-  if (previousProvider && isRuntimeModelForProvider(previousProvider, modelOption.value)) {
-    modelOption.value = 'default'
-  }
-}, { immediate: true })
 
 function scrollToConsole() {
   document.getElementById('console')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -370,12 +343,16 @@ const differentiators = computed(() => tm('home.differentiators'))
         </div>
         <div class="model-grid">
           <div>
-            <Select
-              v-model="modelOption"
-              :label="t('step2.model.label')"
-              :options="modelOptions"
+            <label class="home-field-label">{{ t('step2.model.label') }}</label>
+            <ModelPicker
+              :model-value="selectedRoute"
+              :placeholder="t('step2.model.placeholder')"
+              @update:model-value="onPickRoute"
             />
-            <p v-if="!runtimeProviderEnabled && serverDefaultRequiresOllama && !ollamaReachable && !loadingModels" class="console-warning" style="margin-top: 4px;">
+            <p v-if="!selectedRoute && !loadingModels" class="console-meta" style="margin-top: 4px;">
+              {{ t('step2.model.workspaceDefaultHint') }}
+            </p>
+            <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !selectedRoute" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
           </div>
@@ -392,44 +369,6 @@ const differentiators = computed(() => tm('home.differentiators'))
               {{ t('step2.language.hint') }}
             </p>
           </div>
-        </div>
-        <Field
-          v-if="modelOption === 'custom'"
-          v-model="customModel"
-          :label="t('step2.model.customLabel')"
-          :placeholder="t('step2.model.customPlaceholder')"
-        />
-
-        <button
-          type="button"
-          class="runtime-toggle"
-          :aria-expanded="showRuntimeOptions"
-          @click="showRuntimeOptions = !showRuntimeOptions"
-        >
-          <span>{{ t('step2.runtimeProvider.toggle') }}</span>
-          <span class="console-meta">
-            {{ runtimeProviderEnabled ? t('step2.runtimeProvider.active') : t('step2.runtimeProvider.default') }}
-          </span>
-        </button>
-        <div v-if="showRuntimeOptions" class="runtime-panel">
-          <Select
-            v-model="runtimeProvider"
-            :label="t('step2.runtimeProvider.label')"
-            :options="runtimeProviderOptions"
-          />
-          <Field
-            v-if="runtimeProviderEnabled"
-            v-model="runtimeApiKey"
-            type="password"
-            :label="t('step2.runtimeProvider.apiKey')"
-            :placeholder="t('step2.runtimeProvider.apiKeyPlaceholder')"
-          />
-          <Field
-            v-if="runtimeProviderEnabled"
-            v-model="runtimeBaseUrl"
-            :label="t('step2.runtimeProvider.baseUrl')"
-            :placeholder="t('step2.runtimeProvider.baseUrlPlaceholder')"
-          />
         </div>
 
         <!-- Prompt -->
@@ -464,9 +403,6 @@ const differentiators = computed(() => tm('home.differentiators'))
           </span>
           <span v-else-if="!servicesReady" class="console-warning">
             Dienste nicht bereit. {{ neo4jError || (serverDefaultRequiresOllama ? ollamaError : '') || '' }}
-          </span>
-          <span v-else-if="runtimeProviderEnabled && !runtimeApiKey.trim()" class="console-warning">
-            {{ t('step2.runtimeProvider.missingKey') }}
           </span>
         </div>
         <p v-if="errorMsg" class="error-line">{{ errorMsg }}</p>
@@ -886,37 +822,17 @@ const differentiators = computed(() => tm('home.differentiators'))
   grid-template-columns: 1fr 1fr;
   gap: var(--s-5) var(--s-7);
 }
-.runtime-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  width: 100%;
-  min-height: var(--ctl-h-md);
-  padding: 0 var(--ctl-pad-x);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--r-1);
-  background: var(--bg-elevated);
-  color: var(--fg);
-  cursor: pointer;
+.home-field-label {
+  display: block;
+  margin-bottom: 4px;
   font-family: var(--ff-mono);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
-}
-.runtime-toggle:hover { border-color: color-mix(in oklch, var(--fg) 30%, transparent); }
-.runtime-panel {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s-4);
-  padding: var(--s-4);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-1);
-  background: var(--bg-subtle);
+  color: var(--fg-muted);
 }
 @media (max-width: 720px) {
   .model-grid { grid-template-columns: 1fr; }
-  .runtime-panel { grid-template-columns: 1fr; }
 }
 
 /* Responsive */
