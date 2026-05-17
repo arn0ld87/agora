@@ -120,7 +120,7 @@ services:
       retries: 5
 
   neo4j:
-    image: ${NEO4J_IMAGE:-neo4j:5.18-community}
+    image: ${NEO4J_IMAGE:-neo4j:5.26-community}
     container_name: agora-neo4j
     # Loopback-Bind: Browser/Bolt nur lokal erreichbar. Container-zu-
     # Container-Verbindungen laufen weiter über das Compose-Netzwerk
