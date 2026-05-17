@@ -19,7 +19,7 @@ import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
 import ReportRedTeamSection from './report/ReportRedTeamSection.vue'
 import { useReportExports } from '../composables/useReportExports'
-import type { StageLLMRoute } from '../contracts/llmRoutingContract'
+import { StageLLMRouteSchema, type StageLLMRoute } from '../contracts/llmRoutingContract'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
@@ -119,9 +119,10 @@ function resolveInitialReportRoute(): StageLLMRoute | null {
   const raw = localStorage.getItem(STORAGE_REPORT_ROUTE)
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as Partial<StageLLMRoute>
-    if (!parsed?.provider_id || !parsed?.model) return null
-    return parsed as StageLLMRoute
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
   } catch {
     return null
   }
