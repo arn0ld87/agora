@@ -38,4 +38,6 @@ registerI18n(i18n.global as Parameters<typeof registerI18n>[0])
 
 app.mount('#app')
 
-void cleanupStaleRuntimeLlmStorage()
+cleanupStaleRuntimeLlmStorage().catch((err) => {
+  console.error('[main] cleanupStaleRuntimeLlmStorage failed', err)
+})
