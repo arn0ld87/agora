@@ -3,7 +3,6 @@ Preparation-related simulation API routes split from the main module.
 """
 
 import os
-import threading
 from typing import Any, Optional
 
 from flask import request
@@ -496,8 +495,9 @@ def prepare_simulation():
                 failed_state.error = str(exc)
                 manager._set_status(failed_state, SimulationStatus.FAILED)
 
-    thread = threading.Thread(target=run_prepare, daemon=True)
-    thread.start()
+    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+    from ..jobs import enqueue
+    enqueue("simulation_prepare", run_prepare)
 
     return json_success({
         "simulation_id": simulation_id,

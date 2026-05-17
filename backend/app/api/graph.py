@@ -7,7 +7,6 @@ import io
 import json
 import os
 import time
-import threading
 from flask import Response, request, current_app
 
 from . import graph_bp
@@ -778,9 +777,9 @@ def build_graph():
                 error=str(e),
             )
 
-    # Start background thread
-    thread = threading.Thread(target=build_task, daemon=True)
-    thread.start()
+    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+    from ..jobs import enqueue
+    enqueue("graph_build", build_task)
 
     return json_success({
         "project_id": project_id,

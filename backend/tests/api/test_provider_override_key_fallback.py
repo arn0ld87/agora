@@ -132,7 +132,7 @@ def test_override_uses_db_key_when_payload_key_empty(prepare_client, monkeypatch
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",
@@ -189,7 +189,7 @@ def test_override_prefers_explicit_payload_key_over_db_key(prepare_client, monke
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",
@@ -290,7 +290,7 @@ def test_override_no_key_required_for_local_ollama(prepare_client, monkeypatch):
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",
