@@ -27,8 +27,10 @@ from app.services.report_agent.evidence import auto_downgrade_unsupported_high_c
 # ---------------------------------------------------------------------------
 
 _FIXTURES = Path(__file__).parent / "fixtures"
-_BAD = _FIXTURES / "bad"
-_GOOD = _FIXTURES / "good"
+# Subordner: Quality-Gate (scripts/check_evidence_quality.py) liest nur Top-Level
+# *.json als EvidenceMapModel — Claim-Fixtures müssen davon getrennt liegen.
+_BAD = _FIXTURES / "bad" / "evidence_gating"
+_GOOD = _FIXTURES / "good" / "evidence_gating"
 _SNAPSHOTS = Path(__file__).parent / "snapshots"
 
 
