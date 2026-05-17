@@ -6,7 +6,6 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 import io
 import json
 import os
-import threading
 import uuid
 import zipfile
 from datetime import datetime, timezone
@@ -302,8 +301,9 @@ def generate_report():
             )
             task_manager.fail_task(task_id, str(e))
 
-    thread = threading.Thread(target=run_generate, daemon=True)
-    thread.start()
+    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+    from ..jobs import enqueue
+    enqueue("report_generate", run_generate)
 
     return json_success({
         "simulation_id": simulation_id,

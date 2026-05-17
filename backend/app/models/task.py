@@ -10,6 +10,10 @@ from enum import Enum
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 
+from ..utils.logger import get_logger
+
+logger = get_logger("agora.task_manager")
+
 
 class TaskStatus(str, Enum):
     """Task status enumeration"""
@@ -99,15 +103,80 @@ class TaskManager:
         try:
             from ..services.run_registry import RunRegistry
             RunRegistry().sync_task(task)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("sync_task failed on create_task task_id=%s: %s", task_id, exc)
 
         return task_id
 
+    def _task_from_run_manifest(self, run: Dict[str, Any]) -> Optional["Task"]:
+        """Reconstruct a Task from a RunRegistry manifest.
+
+        The reconstructed task is NOT written back into the in-memory cache
+        (Stateless-Probe principle from PR 1 / Gemini review).
+        """
+        raw_status = run.get("status", "pending")
+        # Status mapping: paused → PROCESSING (preserve pause semantics),
+        # stopped → FAILED (terminal state, run was aborted).
+        status_map: Dict[str, TaskStatus] = {
+            "pending": TaskStatus.PENDING,
+            "processing": TaskStatus.PROCESSING,
+            "completed": TaskStatus.COMPLETED,
+            "failed": TaskStatus.FAILED,
+            "paused": TaskStatus.PROCESSING,
+            "stopped": TaskStatus.FAILED,
+        }
+        status = status_map.get(raw_status, TaskStatus.PENDING)
+        error: Optional[str] = run.get("error")
+        if raw_status == "stopped" and not error:
+            error = "stopped"
+
+        task_type: str = (
+            run.get("metadata", {}).get("task_type")
+            or run.get("run_type")
+            or "unknown"
+        )
+
+        try:
+            created_at = datetime.fromisoformat(run["started_at"])
+        except (KeyError, ValueError):
+            created_at = datetime.now()
+        try:
+            updated_at = datetime.fromisoformat(run["updated_at"])
+        except (KeyError, ValueError):
+            updated_at = datetime.now()
+
+        linked_ids = run.get("linked_ids", {})
+        task_id = linked_ids.get("task_id") or run.get("run_id", "")
+
+        return Task(
+            task_id=task_id,
+            task_type=task_type,
+            status=status,
+            created_at=created_at,
+            updated_at=updated_at,
+            progress=run.get("progress") or 0,
+            message=run.get("message") or "",
+            error=error,
+            metadata=run.get("metadata", {}),
+        )
+
     def get_task(self, task_id: str) -> Optional[Task]:
-        """Get task"""
+        """Get task — cache first, then RunRegistry fallback."""
         with self._task_lock:
-            return self._tasks.get(task_id)
+            cached = self._tasks.get(task_id)
+            if cached is not None:
+                return cached
+
+        # Cache miss — attempt reconstruction from RunRegistry.
+        try:
+            from ..services.run_registry import RunRegistry
+            matches = RunRegistry().find_by_linked_id("task_id", task_id)
+            if matches:
+                return self._task_from_run_manifest(matches[0])
+        except Exception as exc:
+            logger.warning("RunRegistry fallback failed for task_id=%s: %s", task_id, exc)
+
+        return None
 
     def update_task(
         self,
@@ -150,8 +219,8 @@ class TaskManager:
                 try:
                     from ..services.run_registry import RunRegistry
                     RunRegistry().sync_task(task)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("sync_task failed on update_task task_id=%s: %s", task_id, exc)
 
     def complete_task(self, task_id: str, result: Dict):
         """Mark task as completed"""
