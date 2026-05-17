@@ -169,7 +169,14 @@ def generate_report():
     # persistierte Profil aus dem Ontology-Schritt verwenden — sonst fällt
     # die Report-Stufe auf den Server-Default zurück, sobald das Frontend
     # bei Profil-Auswahl `llm_model=default` sendet.
-    if _resolved_profile is None and not llm_profile_id and getattr(project, 'llm_profile_id', None):
+    # Gemini-HIGH auf PR #528: Fallback respektiert expliziten Modell-Override,
+    # damit ein Single-Run-Wechsel über llm_model das Projekt-Profil nicht überstimmt.
+    if (
+        _resolved_profile is None
+        and not llm_profile_id
+        and (not llm_model_override or llm_model_override.lower() == 'default')
+        and getattr(project, 'llm_profile_id', None)
+    ):
         from ..services.llm_profiles_store import get_llm_profiles_store
         llm_profile_id = project.llm_profile_id
         _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)

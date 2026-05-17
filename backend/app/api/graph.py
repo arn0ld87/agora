@@ -436,12 +436,15 @@ def _resolve_llm_overrides(data: dict, project):
     ``LlmProfile`` (with API key) or ``None`` when no profile pathway applies.
     """
     # P5.3-Fix: explizites Profil im Request bevorzugen, sonst auf das am
-    # Projekt persistierte Profil aus dem Ontology-Schritt zurückfallen.
-    # Ohne diesen Fallback fällt die Build-Stufe auf den Server-Default
-    # (LLM_MODEL_NAME) zurück, weil das Frontend bei Profil-Auswahl
-    # `STORAGE_MODEL=default` setzt und damit kein llm_model mehr mitschickt.
+    # Projekt persistierte Profil aus dem Ontology-Schritt zurückfallen —
+    # ABER nur, wenn der Request kein eigenes Modell mitgibt (Gemini-HIGH
+    # auf PR #528: sonst überstimmt das Projekt-Profil einen expliziten
+    # Single-Run-Override aus dem Frontend).
     requested_profile_id = (data.get('llm_profile_id') or '').strip() or None
-    effective_profile_id = requested_profile_id or getattr(project, 'llm_profile_id', None)
+    requested_model = (data.get('llm_model') or '').strip() or None
+    effective_profile_id = requested_profile_id
+    if not effective_profile_id and (not requested_model or requested_model.lower() == 'default'):
+        effective_profile_id = getattr(project, 'llm_profile_id', None)
     resolved_profile = None
     if effective_profile_id:
         from ..services.llm_profiles_store import get_llm_profiles_store
