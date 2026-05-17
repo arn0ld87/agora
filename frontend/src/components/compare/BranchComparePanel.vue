@@ -398,7 +398,7 @@ const isSameBranch = computed(
     selectedA.value === selectedB.value
 )
 
-const confidenceKeys = ['low', 'medium', 'high', 'verified'] as const
+const confidenceKeys = ['speculative', 'low', 'medium', 'high', 'verified'] as const
 
 watch(
   [selectedA, selectedB],

@@ -107,6 +107,8 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       [file],
       'Wie reagiert die DACH-Region?',
       'abc',
+      30,
+      10,
     )
     expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })

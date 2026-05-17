@@ -24,6 +24,7 @@ const activeEvidenceSection = computed(() => {
 })
 
 const activeHypotheses = computed(() => sectionHypotheses(activeEvidenceSection.value))
+const activeHypothesesAppendix = computed(() => sectionHypothesesAppendix(activeEvidenceSection.value))
 const activeClaims = computed(() => activeEvidenceSection.value?.claims ?? [])
 
 watch(activeEvidenceSection, () => {
@@ -60,6 +61,10 @@ function evidenceSnippet(item: EvidenceItem | null | undefined): string {
 
 function sectionHypotheses(section: ReportSection | null | undefined) {
   return Array.isArray(section?.hypotheses) ? section.hypotheses : []
+}
+
+function sectionHypothesesAppendix(section: ReportSection | null | undefined) {
+  return Array.isArray(section?.hypotheses_appendix) ? section.hypotheses_appendix : []
 }
 </script>
 
@@ -128,6 +133,26 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
             </li>
           </ul>
         </article>
+        <details
+          v-if="activeHypothesesAppendix.length"
+          class="hypothesis-appendix"
+          data-testid="hypothesis-appendix"
+        >
+          <summary class="hypothesis-appendix-summary">
+            Weitere Hypothesen ({{ activeHypothesesAppendix.length }})
+          </summary>
+          <ul class="hypothesis-appendix-list">
+            <li
+              v-for="h in activeHypothesesAppendix"
+              :key="h.hypothesis_id"
+              class="hypothesis-appendix-item"
+            >
+              <strong>{{ h.hypothesis_id }}</strong>
+              <p>{{ h.hypothesis_text }}</p>
+              <small v-if="h.rationale">{{ h.rationale }}</small>
+            </li>
+          </ul>
+        </details>
       </section>
       <div v-else class="claim-list">
         <article
@@ -137,7 +162,7 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
         >
           <header>
             <strong>{{ claim.claim_id }}</strong>
-            <Badge :variant="claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
+            <Badge :variant="claimConfidenceLabel(claim) === 'speculative' || claimConfidenceLabel(claim) === 'low' ? 'ghost' : claimConfidenceLabel(claim) === 'medium' ? 'accent' : 'solid'">
               {{ claimConfidenceText(claim) }}
             </Badge>
           </header>
@@ -275,6 +300,56 @@ function sectionHypotheses(section: ReportSection | null | undefined) {
   margin: 0.2em 0 0;
   padding-left: 1.2em;
   color: var(--fg-muted);
+}
+.hypothesis-appendix {
+  border: 1px solid var(--rule);
+  margin-top: var(--s-2);
+}
+.hypothesis-appendix-summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  list-style: none;
+}
+.hypothesis-appendix-summary::-webkit-details-marker {
+  display: none;
+}
+.hypothesis-appendix-summary::before {
+  content: '+ ';
+}
+details[open] .hypothesis-appendix-summary::before {
+  content: '- ';
+}
+.hypothesis-appendix-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.hypothesis-appendix-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.hypothesis-appendix-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--status-warn, #b7791f) 5%, var(--bg-elevated));
+  border: 1px solid var(--rule);
+}
+.hypothesis-appendix-item p {
+  margin: 0;
+}
+.hypothesis-appendix-item small {
+  color: var(--fg-muted);
+  line-height: 1.5;
 }
 .evidence-items {
   display: flex;

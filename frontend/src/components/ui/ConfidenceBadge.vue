@@ -13,7 +13,7 @@ import type { AuditEntry } from '../../utils/confidenceUtils'
 
 interface Props {
   score: number
-  label?: 'low' | 'medium' | 'high' | 'verified'
+  label?: 'speculative' | 'low' | 'medium' | 'high' | 'verified'
   auditTrail?: AuditEntry[]
   showCount?: boolean
 }
@@ -45,17 +45,29 @@ function onMouseLeave() {
 const bucket = computed(() => props.label ?? deriveLabel(props.score))
 const pct = computed(() => Math.round(props.score * 100))
 const hasAudit = computed(() => Array.isArray(props.auditTrail) && props.auditTrail.length > 0)
+
+const BUCKET_LABELS: Record<'speculative' | 'low' | 'medium' | 'high' | 'verified', string> = {
+  speculative: 'spekulativ',
+  low: 'niedrig',
+  medium: 'mittel',
+  high: 'hoch',
+  verified: 'verifiziert',
+}
+
+const bucketLabel = computed(() => BUCKET_LABELS[bucket.value] ?? bucket.value)
+const ariaLabel = computed(() => `Konfidenz: ${BUCKET_LABELS[bucket.value] ?? bucket.value}`)
 </script>
 
 <template>
   <span
     class="confidence-badge"
     :class="`is-${bucket}`"
+    :aria-label="ariaLabel"
     @mouseenter="onMouseEnter"
     @mouseleave="onMouseLeave"
   >
     <span class="badge-label">
-      <template v-if="showCount">{{ pct }}% · </template>{{ bucket }}
+      <template v-if="showCount">{{ pct }}% · </template>{{ bucketLabel }}
     </span>
 
     <div v-if="hover" class="audit-popover">
@@ -97,7 +109,12 @@ const hasAudit = computed(() => Array.isArray(props.auditTrail) && props.auditTr
   border: 1px solid transparent;
 }
 
-.is-verified,
+.is-verified {
+  background: color-mix(in oklch, #1d6fa4 12%, transparent);
+  color: #1d6fa4;
+  border-color: color-mix(in oklch, #1d6fa4 40%, transparent);
+}
+
 .is-high {
   background: var(--ok-soft);
   color: var(--ok);
@@ -114,6 +131,12 @@ const hasAudit = computed(() => Array.isArray(props.auditTrail) && props.auditTr
   background: var(--err-soft);
   color: var(--err);
   border-color: color-mix(in oklch, var(--err) 40%, transparent);
+}
+
+.is-speculative {
+  background: color-mix(in oklch, #7c6f9e 10%, transparent);
+  color: #7c6f9e;
+  border-color: color-mix(in oklch, #7c6f9e 35%, transparent);
 }
 
 .audit-popover {

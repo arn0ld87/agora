@@ -1170,7 +1170,10 @@
       "disabledHint": "Select a file and enter a requirement first.",
       "requirementLabel": "Research question / requirement",
       "requirementPlaceholder": "e.g. \"What political reactions are expected in the DACH region?\"",
-      "profileDefault": "Default"
+      "profileDefault": "Default",
+      "numAgentsLabel": "Personas",
+      "numRoundsLabel": "Sim rounds",
+      "numAgentsWarning": "Below recommended floor (30). Reduced statistical significance."
     },
     "stats": {
       "activeRuns": "Active runs",

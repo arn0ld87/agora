@@ -19,13 +19,14 @@ Contradiction-Detector live), bleibt aber als Hook erhalten.
 
 Labels:
 
-* 0.00 – 0.39 → ``low``
-* 0.40 – 0.69 → ``medium``
-* 0.70 – 0.89 → ``high``
+* 0.00 – 0.44 → ``speculative``
+* 0.45 – 0.64 → ``low``
+* 0.65 – 0.84 → ``medium``
+* 0.85 – 0.89 → ``high``
 * 0.90 – 1.00 → ``verified`` (nur wenn mindestens ein Evidence-Item
   einen ``match_score >= 0.85`` trägt UND mindestens 2 unabhängige
-  Quellen vorliegen — sonst gedeckelt auf 0.89)
-* Zusätzlich: wenn alle match_scores < 0.55 → Deckel auf 0.69 (medium)
+  Quellen vorliegen — sonst gedeckelt auf 0.89 → ``high``)
+* Zusätzlich: wenn alle match_scores < 0.55 → Deckel auf 0.64 (low/medium-Grenze)
 
 MAI-14: Contradiction-Penalty.
 
@@ -156,7 +157,7 @@ def compute_confidence(
     übergebenen contradiction_penalty).
     """
     if not evidence:
-        return 0.15, "low"
+        return 0.15, "speculative"
     relevance = _component_relevance(evidence)
     source_quality = _component_source_quality(evidence)
     specificity = _component_specificity(evidence)
@@ -197,15 +198,17 @@ def compute_confidence(
     ]
     all_weak_matches = match_scores and max(match_scores) < 0.55
     if all_weak_matches:
-        score = min(score, 0.69)
+        score = min(score, 0.64)
 
     # Task 08: verified nur bei starkem Match UND mind. 2 unabhängigen Quellen.
     if score >= 0.90 and (not has_strong_match or unique_sources < 2):
         score = 0.89
 
-    if score < 0.40:
+    if score < 0.45:
+        label = "speculative"
+    elif score < 0.65:
         label = "low"
-    elif score < 0.70:
+    elif score < 0.85:
         label = "medium"
     elif score < 0.90:
         label = "high"
@@ -226,7 +229,7 @@ def compute_claim_confidence(
     Returns:
         (score, label, applied_penalties)
         score: 0.0–1.0
-        label: "low" | "medium" | "high" | "verified"
+        label: "speculative" | "low" | "medium" | "high" | "verified"
         applied_penalties: Namen aller angewandten Penalties für Audit.
 
     MAI-14: Erkennt Sentiment-Widersprüche (std > 0.6 ODER Range > 0.6)
@@ -253,4 +256,39 @@ def compute_claim_confidence(
     return score, label, applied_penalties
 
 
-__all__ = ["compute_confidence", "compute_claim_confidence", "_has_contradiction"]
+_ECHO_CAP_THRESHOLD: float = 0.75
+_ECHO_CAP_MAX_SCORE: float = 0.84
+
+
+def apply_echo_cap(
+    score: float,
+    label: str,
+    echo_index: float,
+    is_cross_stakeholder: bool,
+) -> tuple[float, str]:
+    """Deckelt Cross-Stakeholder-Claim-Scores bei hohem Echo-Chamber-Index.
+
+    Wenn ``echo_index > 0.75`` UND ``is_cross_stakeholder=True``:
+    - score wird auf max 0.84 gedeckelt.
+    - label ``high`` und ``verified`` werden auf ``medium`` heruntergestuft.
+
+    Ohne Echo-Chamber-Überschreitung oder bei nicht-Cross-Stakeholder-Claims
+    wird score/label unverändert zurückgegeben.
+    """
+    if not is_cross_stakeholder or echo_index <= _ECHO_CAP_THRESHOLD:
+        return score, label
+    capped_score = min(score, _ECHO_CAP_MAX_SCORE)
+    capped_label = label
+    if label in ("high", "verified"):
+        capped_label = "medium"
+    elif capped_score < 0.85 and label in ("high", "verified"):
+        capped_label = "medium"
+    return round(capped_score, 3), capped_label
+
+
+__all__ = [
+    "apply_echo_cap",
+    "compute_confidence",
+    "compute_claim_confidence",
+    "_has_contradiction",
+]

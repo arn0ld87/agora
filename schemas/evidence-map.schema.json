@@ -430,6 +430,14 @@
           "title": "Hypotheses",
           "type": "array"
         },
+        "hypotheses_appendix": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionHypothesisModel"
+          },
+          "maxItems": 50,
+          "title": "Hypotheses Appendix",
+          "type": "array"
+        },
         "section_index": {
           "minimum": 1,
           "title": "Section Index",

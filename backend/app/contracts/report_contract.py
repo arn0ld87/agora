@@ -330,6 +330,12 @@ class ReportSectionModel(BaseModel):
     section_summary: str = Field(min_length=1)
     claims: list[ReportClaimModel] = Field(default_factory=list)
     hypotheses: list[ReportSectionHypothesisModel] = Field(default_factory=list)
+    # Slice 3 (Issue #495): Hypothesen-Appendix — Überhang nach dem Cap von 5.
+    # Frontend kann diesen Slot optional ausklappen. max_length=50 verhindert
+    # unbegrenzte Persistenz bei fehlerhaften LLM-Outputs.
+    hypotheses_appendix: list[ReportSectionHypothesisModel] = Field(
+        default_factory=list, max_length=50
+    )
     data_gaps: list[ReportSectionDataGapModel] = Field(default_factory=list)
 
 
@@ -397,6 +403,7 @@ class ReportModel(BaseModel):
     error: Optional[str] = None
     has_evidence: bool = False
     evidence_sections: int = Field(default=0, ge=0)
+    red_team_findings: list[str] = Field(default_factory=list, max_length=10)
 
 
 class EvidenceMapModel(BaseModel):

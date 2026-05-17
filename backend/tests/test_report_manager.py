@@ -217,8 +217,8 @@ def test_report_claim_model_keeps_legacy_fields_and_numeric_score():
     # S6 + Slice-S1-Floor: 2 graph_facts (gleiche type+source) → Floor-Cap greift nicht
     # (len==2, Bedingung len<2 ist False). consistency: 1 unique (type,source)-Paar → 0.6.
     # relevance(0.5) + source_quality(1.0) + specificity(0.5) + consistency(0.6)
-    # = 0.40*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64, Label "medium".
-    assert claims[0]["confidence"] == "medium"
+    # = 0.40*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64, Label "low" (Slice-2: < 0.65).
+    assert claims[0]["confidence"] == "low"
     assert claims[0]["confidence_score"] == 0.64
     assert claims[0]["evidence"] == claims[0]["evidence_items"]
     # S5: model_generated_inference darf nicht mehr im Evidence-Array sein.

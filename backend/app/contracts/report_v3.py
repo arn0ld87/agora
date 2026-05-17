@@ -78,7 +78,7 @@ class Claim(BaseModel):
     id: str = Field(min_length=1)
     statement: str = Field(min_length=8)
     evidence_refs: list[str] = Field(min_length=1, description="Pflicht: mind. 1 Evidenz-Anker")
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     persona_ids: list[str] = Field(default_factory=list)
     aggregation_basis: Literal["seed", "persona", "aggregat", "datenluecke"]
 
@@ -146,7 +146,7 @@ class ProjectImpact(BaseModel):
     id: str = Field(min_length=1)
     beschreibung: str = Field(min_length=1)
     affected_segments: list[str] = Field(default_factory=list)
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -210,6 +210,7 @@ ModelAttributionStage = Literal[
     "report_outline",
     "report_section",
     "report_synthesis",
+    "red_team",
     "evidence_extraction",
     "interview",
     "other",
@@ -282,4 +283,11 @@ class ReportV3(BaseModel):
     model_attribution: list[ModelAttribution] = Field(
         default_factory=list,
         description="Welches LLM-Modell hat welche Stage produziert.",
+    )
+    # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
+    # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
+    red_team_findings: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Befunde der Red-Team-Review-Stage (max. 10).",
     )

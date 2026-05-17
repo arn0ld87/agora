@@ -147,6 +147,14 @@
       ],
       "default": null
     },
+    "red_team_findings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Red Team Findings",
+      "type": "array"
+    },
     "report_id": {
       "minLength": 1,
       "title": "Report Id",

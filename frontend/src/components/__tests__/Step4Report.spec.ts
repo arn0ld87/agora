@@ -122,6 +122,7 @@ const VALID_REPORT: Report = {
   markdown_content: '# Testbericht\n\nInhalt.',
   missing_sections: [],
   has_evidence: false,
+  red_team_findings: [],
   evidence_sections: 0,
 }
 
@@ -394,10 +395,10 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
 import { aggregateSectionConfidence } from '../../utils/confidenceUtils'
 
 describe('aggregateSectionConfidence (Sub-Slice 16a)', () => {
-  it('gibt score=0 und label=low zurück für leere claims-Liste', () => {
+  it('gibt score=0 und label=speculative zurück für leere claims-Liste', () => {
     const result = aggregateSectionConfidence({ claims: [] })
     expect(result.score).toBe(0)
-    expect(result.label).toBe('low')
+    expect(result.label).toBe('speculative')
     expect(result.auditTrail).toEqual([])
   })
 
@@ -548,6 +549,22 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
           },
         ],
       },
+      {
+        section_index: 3,
+        section_title: 'Abschnitt 3',
+        section_summary: 'Zusammenfassung 3 — spekulativer Bereich',
+        // speculative-Claim: kein Evidence nötig (laut ADR-0002 Anker)
+        claims: [
+          {
+            claim_id: 'claim_03',
+            claim_text: 'Spekulativer Claim ohne belastbare Evidence — Frühindikator',
+            confidence_label: 'speculative',
+            confidence_score: 0.1,
+            evidence: [],
+            audit_trail: [],
+          },
+        ],
+      },
     ],
   }
 
@@ -557,6 +574,7 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
     sections: [
       { title: 'Abschnitt 1', description: 'Beschreibung 1' },
       { title: 'Abschnitt 2', description: 'Beschreibung 2' },
+      { title: 'Abschnitt 3', description: 'Beschreibung 3 — spekulativ' },
     ],
   }
 

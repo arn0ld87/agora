@@ -37,7 +37,7 @@ function sectionConfidenceScore(idx: number): number {
   return sectionConfidence(idx)?.score ?? 0
 }
 
-function sectionConfidenceLabel(idx: number): 'low' | 'medium' | 'high' | 'verified' {
+function sectionConfidenceLabel(idx: number): 'speculative' | 'low' | 'medium' | 'high' | 'verified' {
   return sectionConfidence(idx)?.label ?? 'low'
 }
 

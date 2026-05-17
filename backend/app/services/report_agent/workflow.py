@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ...config import Config
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -99,6 +99,129 @@ def _mark_incomplete_for_persona_floor(
     if progress_callback:
         progress_callback("incomplete", 0, message)
     return report
+
+
+def _get_echo_index(agent: Any) -> float:
+    """Liest den aktuellen echo_chamber_index aus den Simulations-Metriken.
+
+    Gibt 0.0 zurück wenn keine Metriken verfügbar sind.
+    """
+    try:
+        from ..network_analytics import NetworkAnalyticsService
+        from ..simulation_runner import SimulationRunner
+
+        actions = SimulationRunner.get_all_actions(agent.simulation_id)
+        action_dicts = [a.to_dict() for a in actions]
+        if not action_dicts:
+            return 0.0
+        metrics = NetworkAnalyticsService().compute_metrics(
+            action_dicts,
+            simulation_id=agent.simulation_id,
+        ).to_dict()
+        return float(metrics.get("echo_chamber_index") or 0.0)
+    except Exception as exc:
+        logger.warning("_get_echo_index: %r", exc)
+        return 0.0
+
+
+_RED_TEAM_SYSTEM_PROMPT = (
+    "Du bist ein kritischer Qualitätsprüfer für Szenarienanalysen. "
+    "Du prüfst einen Berichtsentwurf auf Schwachstellen im Wording-Glossar v1 "
+    "(VERBOTEN: 'Vorhersage', 'Prognose', 'wird eintreten'; ERLAUBT: Simulation, "
+    "Szenarienanalyse, Reaktionsmuster, Einschätzung). "
+    "Antworte ausschliesslich auf Deutsch."
+)
+
+_RED_TEAM_USER_TEMPLATE = (
+    "Berichtsentwurf (gekürzt):\n\n{report_excerpt}\n\n"
+    "Identifiziere:\n"
+    "(a) Widersprüche zwischen den Claims\n"
+    "(b) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
+    "als hoch-konfident markiert sind)\n"
+    "(c) Fehlende Cross-Segment-Reaktionen\n\n"
+    "Liefere maximal 10 Befunde als JSON-Objekt mit Feld 'findings' (Liste von Strings). "
+    "Kein Markdown, reines JSON."
+)
+
+
+def _run_red_team_review(
+    agent: Any,
+    report_v3: ReportV3,
+    echo_index: float,
+) -> ReportV3:
+    """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
+
+    Wird vor report_synthesis aufgerufen. Macht einen LLM-Call mit dem
+    bestehenden agent.llm. Bei echo_index <= 0.6 wird kein LLM-Call ausgeführt
+    (findings bleibt leer). Bei Fehlern wird geloggt und unverändert zurückgegeben.
+
+    Slice 5 (Issue #497).
+    """
+    if echo_index <= 0.6:
+        logger.info(
+            "_run_red_team_review: echo_index=%.3f <= 0.6, kein LLM-Call (balanced Personas)",
+            echo_index,
+        )
+        return report_v3
+
+    # Berichtsentwurf-Excerpt aufbauen (Claims + Hypotheses als Kontext)
+    claim_lines = [
+        f"- [{c.confidence}] {c.statement}"
+        for c in (report_v3.claims or [])[:20]
+    ]
+    hyp_lines = [
+        f"- [hypothesis] {h.hypothesis_text}"
+        for h in (report_v3.hypotheses or [])[:10]
+    ]
+    report_excerpt = "\n".join(claim_lines + hyp_lines) or "(kein Inhalt)"
+
+    user_msg = _RED_TEAM_USER_TEMPLATE.format(report_excerpt=report_excerpt[:4000])
+
+    started_at = datetime.now(timezone.utc)
+    try:
+        raw = agent.llm.chat_json(
+            messages=[
+                {"role": "system", "content": _RED_TEAM_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            context="report",
+        )
+        findings_raw = raw.get("findings") if isinstance(raw, dict) else None
+        if isinstance(findings_raw, list):
+            findings = [str(f) for f in findings_raw if str(f).strip()][:10]
+        else:
+            findings = []
+    except Exception as exc:
+        logger.warning("_run_red_team_review: LLM-Call fehlgeschlagen: %r", exc)
+        findings = []
+
+    latency_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
+
+    provider = getattr(getattr(agent, "llm", None), "provider", "unknown") or "unknown"
+    model_id = getattr(getattr(agent, "llm", None), "model", "unknown") or "unknown"
+
+    attribution = ModelAttribution(
+        stage="red_team",
+        provider=str(provider),
+        model_id=str(model_id),
+        latency_ms=round(latency_ms, 1),
+        started_at=started_at,
+    )
+    updated_attribution = list(report_v3.model_attribution) + [attribution]
+
+    report_v3 = report_v3.model_copy(
+        update={
+            "red_team_findings": findings,
+            "model_attribution": updated_attribution,
+        }
+    )
+    logger.info(
+        "_run_red_team_review: %d Befunde, echo_index=%.3f",
+        len(findings),
+        echo_index,
+    )
+    return report_v3
 
 
 def generate_section_react(
@@ -820,6 +943,23 @@ def generate_report(
         if agent.report_logger:
             agent.report_logger.log_report_complete(total_sections=total_sections, total_time_seconds=total_time_seconds)
         ReportManager.save_report(report)
+
+        # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
+        try:
+            report_v3_raw = ReportManager.get_report_v3(report_id)
+            if report_v3_raw:
+                report_v3_obj = ReportV3.model_validate(report_v3_raw)
+                echo_index = _get_echo_index(agent)
+                report_v3_obj = _run_red_team_review(agent, report_v3_obj, echo_index)
+                ReportManager.save_report_v3(report_v3_obj)
+                logger.info(
+                    "generate_report: red_team_review abgeschlossen, "
+                    "findings=%d, echo_index=%.3f",
+                    len(report_v3_obj.red_team_findings),
+                    echo_index,
+                )
+        except Exception as exc:
+            logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
         ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
         if progress_callback:
             progress_callback("completed", 100, "reportgeneratecomplete")

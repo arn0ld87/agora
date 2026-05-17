@@ -12,6 +12,7 @@ Adopt step-by-step generation strategy to avoid failures from generating too lon
 
 import json
 import math
+import os
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -342,6 +343,12 @@ class SimulationConfigGenerator:
             all_agent_configs.extend(batch_configs)
         
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
+
+        # ========== Simulation-Floor-Check (Slice 4, Issue #496) ==========
+        self._validate_persona_quota(all_agent_configs)
+
+        # ========== Skeptiker-Quote ≥20 % (Slice 5, Issue #497) ==========
+        all_agent_configs = self._ensure_skeptic_quota(all_agent_configs)
 
         # ========== Assign initial post agents ==========
         logger.info("Assigning appropriate publisher agents to initial posts...")
@@ -959,6 +966,79 @@ Return JSON format (no markdown):
 
         return configs
     
+    @staticmethod
+    def _validate_persona_quota(personas: List[Any]) -> None:
+        """Enforce Simulation-Floor: mindestens 30 Personas pro Run.
+
+        Override via Umgebungsvariable ``AGORA_ALLOW_SMALL_SIM=1`` für
+        Entwicklungs- und Test-Szenarien. Im Produktivbetrieb muss die
+        Mindestanzahl eingehalten werden, um statistisch belastbare
+        Simulationsergebnisse zu gewährleisten (Slice 4, Issue #496).
+        """
+        if len(personas) < 30 and os.getenv("AGORA_ALLOW_SMALL_SIM") != "1":
+            raise ValueError(
+                "Simulation-Floor: mindestens 30 Personas erforderlich "
+                "(Override via AGORA_ALLOW_SMALL_SIM=1)."
+            )
+
+    @staticmethod
+    def _ensure_skeptic_quota(
+        personas: List[AgentActivityConfig],
+        min_ratio: float = 0.20,
+    ) -> List[AgentActivityConfig]:
+        """Erzwingt ≥ ``min_ratio`` Skeptiker im Persona-Set.
+
+        Als Skeptiker gilt ein Agent mit ``stance == "opposing"``.
+        Falls die Quote nicht erreicht ist, werden synthetische
+        AgentActivityConfig-Objekte mit ``stance="opposing"`` und
+        einem negativen ``sentiment_bias`` ergänzt, bis die Quote
+        erfüllt ist. Die originalen Personas bleiben unverändert.
+
+        Slice 5 (Issue #497): Echo-Chamber-Red-Team.
+        """
+        if not personas:
+            return personas
+
+        total = len(personas)
+        skeptic_count = sum(
+            1 for p in personas if getattr(p, "stance", "") == "opposing"
+        )
+        required = math.ceil(total * min_ratio)
+
+        if skeptic_count >= required:
+            return personas
+
+        to_add = required - skeptic_count
+        result = list(personas)
+        base_agent_id = max((p.agent_id for p in personas), default=-1) + 1
+
+        for i in range(to_add):
+            synthetic = AgentActivityConfig(
+                agent_id=base_agent_id + i,
+                entity_uuid=f"synthetic-skeptic-{base_agent_id + i}",
+                entity_name=f"Skeptiker {base_agent_id + i}",
+                entity_type="Person",
+                activity_level=0.7,
+                posts_per_hour=0.5,
+                comments_per_hour=1.2,
+                active_hours=list(range(18, 23)),
+                response_delay_min=5,
+                response_delay_max=30,
+                sentiment_bias=-0.5,
+                stance="opposing",
+                influence_weight=1.0,
+            )
+            result.append(synthetic)
+            logger.info(
+                "_ensure_skeptic_quota: synthetischen Skeptiker hinzugefügt "
+                "(agent_id=%d, gesamt-skeptisch=%d/%d)",
+                synthetic.agent_id,
+                skeptic_count + i + 1,
+                total + i + 1,
+            )
+
+        return result
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """Generate single agent configuration based on DACH timing rules."""
         entity_type = (entity.get_entity_type() or "Unknown").lower()

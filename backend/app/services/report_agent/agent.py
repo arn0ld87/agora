@@ -460,10 +460,10 @@ class ReportAgent:
                     "value": penalty,
                     "source": "evidence_binder.detect_contradiction_penalty",
                 })
-            # Anti-Dekorations-Guard: kein Evidence → ehrliches low-Label
+            # Anti-Dekorations-Guard: kein Evidence → ehrliches speculative-Label
             # und Audit-Eintrag statt dekorativem global_items-Fallback.
             if not evidence_items:
-                confidence_score, confidence_label = 0.15, "low"
+                confidence_score, confidence_label = 0.15, "speculative"
                 audit_trail.append({
                     "type": "model_generated_inference",
                     "source": "validator",
@@ -490,7 +490,7 @@ class ReportAgent:
                 claim_text="No claim candidate extracted from this section.",
                 evidence=[],
                 confidence_score=0.0,
-                confidence_label="low",
+                confidence_label="speculative",
                 notes="No section content captured.",
             ).to_dict())
         return claims
@@ -609,15 +609,19 @@ class ReportAgent:
         self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
         # schema_version gehört nur auf Map-Ebene, nicht auf Section-Ebene
         # (ReportSectionModel hat das Feld nicht).
-        claims, hypotheses, data_gaps = self._finalize_section_claims(
+        claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
             self._build_claims_for_section(content)
         )
+        # Slice 3 (Issue #495): Dedup + Cap per Section.
+        from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
+        hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
         section_entry = {
             "section_index": section_index,
             "section_title": section_title,
             "section_summary": self._truncate(content, 400),
             "claims": claims,
-            "hypotheses": hypotheses,
+            "hypotheses": hypotheses_visible,
+            "hypotheses_appendix": hypotheses_appendix,
             "data_gaps": data_gaps,
         }
         # schema_version auf Section-Ebene entfernen — Überbleibsel von

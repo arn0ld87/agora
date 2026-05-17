@@ -13,8 +13,8 @@ from app.services.evidence_binder import detect_contradiction_penalty
 
 # ── Confidence-Kalibrierung ──────────────────────────────────────────
 
-def test_weak_matches_cap_at_medium():
-    """Alle match_scores < 0.55 → max 0.69 (medium), nie high/verified."""
+def test_weak_matches_cap_at_low():
+    """Alle match_scores < 0.55 → max 0.64 (Grenze low/medium), nie medium/high/verified."""
     items = [
         {"type": "graph_fact", "source": "a", "snippet": "x",
          "match_score": 0.52},
@@ -24,8 +24,8 @@ def test_weak_matches_cap_at_medium():
          "match_score": 0.51},
     ]
     score, label = compute_confidence(items)
-    assert score <= 0.69
-    assert label in ("low", "medium")
+    assert score <= 0.64
+    assert label in ("speculative", "low")
 
 
 def test_single_strong_match_but_only_one_source_no_verified():
@@ -56,7 +56,7 @@ def test_two_sources_plus_strong_match_unlocks_verified():
 
 
 def test_one_strong_one_weak_source_capped():
-    """Zwei Quellen aber max match < 0.55 → medium-cap greift vor verified."""
+    """Zwei Quellen aber max match < 0.55 → Cap auf 0.64 greift vor verified."""
     items = [
         {"type": "graph_fact", "source": "a", "snippet": "x",
          "match_score": 0.30},
@@ -64,8 +64,8 @@ def test_one_strong_one_weak_source_capped():
          "match_score": 0.35},
     ]
     score, label = compute_confidence(items)
-    assert score <= 0.69
-    assert label in ("low", "medium")
+    assert score <= 0.64
+    assert label in ("speculative", "low")
 
 
 # ── Contradiction-Penalty (strukturiert, keine Textanalyse) ──────────

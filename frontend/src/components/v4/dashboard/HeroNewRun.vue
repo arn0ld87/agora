@@ -75,6 +75,20 @@ const modelOption = ref<string>(readLocal(STORAGE_MODEL) || 'default')
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
+const NUM_AGENTS_MIN = 10
+const NUM_AGENTS_FLOOR = 30
+const NUM_AGENTS_MAX = 100
+const NUM_ROUNDS_MIN = 3
+const NUM_ROUNDS_DEFAULT = 10
+const NUM_ROUNDS_MAX = 30
+
+const numAgents = ref<number>(NUM_AGENTS_FLOOR)
+const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
+
+const showAgentsWarning = computed<boolean>(
+  () => numAgents.value >= NUM_AGENTS_MIN && numAgents.value < NUM_AGENTS_FLOOR,
+)
+
 const modelOptions = computed<ModelOption[]>(() => {
   const opts: ModelOption[] = []
   // Profile-Gruppe zuerst (persistierte LLM-Profile aus P5.2)
@@ -192,7 +206,7 @@ async function startSimulation() {
     removeLocal(STORAGE_CUSTOM_MODEL)
     const selectedValue = modelOption.value
     const profileId = selectedValue.startsWith('profile:') ? selectedValue.slice('profile:'.length) : null
-    setPendingUpload(files.value, simulationRequirement.value.trim(), profileId)
+    setPendingUpload(files.value, simulationRequirement.value.trim(), profileId, numAgents.value, numRounds.value)
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
@@ -281,6 +295,46 @@ onMounted(() => {
             <option value="de">Deutsch</option>
             <option value="en">English</option>
           </select>
+        </div>
+        <div class="hero-field">
+          <label class="hero-label" for="hero-num-agents">
+            {{ $t('dashboard.hero.numAgentsLabel') }}
+            <span class="hero-slider-value">{{ numAgents }}</span>
+          </label>
+          <input
+            id="hero-num-agents"
+            v-model.number="numAgents"
+            type="range"
+            :min="NUM_AGENTS_MIN"
+            :max="NUM_AGENTS_MAX"
+            step="1"
+            class="hero-slider"
+            :aria-valuenow="numAgents"
+            :aria-valuemin="NUM_AGENTS_MIN"
+            :aria-valuemax="NUM_AGENTS_MAX"
+          />
+          <div v-if="showAgentsWarning" class="hero-warning" role="alert">
+            <span class="hero-warning__icon" aria-hidden="true">&#9888;</span>
+            {{ $t('dashboard.hero.numAgentsWarning') }}
+          </div>
+        </div>
+        <div class="hero-field">
+          <label class="hero-label" for="hero-num-rounds">
+            {{ $t('dashboard.hero.numRoundsLabel') }}
+            <span class="hero-slider-value">{{ numRounds }}</span>
+          </label>
+          <input
+            id="hero-num-rounds"
+            v-model.number="numRounds"
+            type="range"
+            :min="NUM_ROUNDS_MIN"
+            :max="NUM_ROUNDS_MAX"
+            step="1"
+            class="hero-slider"
+            :aria-valuenow="numRounds"
+            :aria-valuemin="NUM_ROUNDS_MIN"
+            :aria-valuemax="NUM_ROUNDS_MAX"
+          />
         </div>
         <div class="hero-field hero-field--full">
           <label class="hero-label" for="hero-requirement">
@@ -568,6 +622,44 @@ onMounted(() => {
 .hero-field--full {
   width: 100%;
 }
+
+/* Slider */
+.hero-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 4px;
+}
+
+.hero-slider-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+
+/* Warning-Badge */
+.hero-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #f97316;
+  border-radius: var(--r-4, 8px);
+  background: #fff7ed;
+  color: #c2410c;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.hero-warning__icon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
 .hero-required {
   color: var(--status-red, #c0392b);
   margin-left: 2px;

@@ -11,7 +11,9 @@ describe('deriveLabel', () => {
     expect(deriveLabel(0.74)).toBe('medium')
     expect(deriveLabel(0.45)).toBe('medium')
     expect(deriveLabel(0.44)).toBe('low')
-    expect(deriveLabel(0)).toBe('low')
+    expect(deriveLabel(0.2)).toBe('low')
+    expect(deriveLabel(0.19)).toBe('speculative')
+    expect(deriveLabel(0)).toBe('speculative')
   })
 })
 
@@ -27,8 +29,8 @@ describe('ConfidenceBadge', () => {
     expect(w.classes()).toContain('is-medium')
   })
 
-  it('renders low for score 0.1', () => {
-    const w = mount(ConfidenceBadge, { props: { score: 0.1, auditTrail: [] } })
+  it('renders low for score 0.3', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.3, auditTrail: [] } })
     expect(w.classes()).toContain('is-low')
   })
 
@@ -75,6 +77,35 @@ describe('ConfidenceBadge', () => {
   it('hides percentage when showCount=false', () => {
     const w = mount(ConfidenceBadge, { props: { score: 0.9, showCount: false } })
     expect(w.text()).not.toContain('%')
-    expect(w.text()).toContain('verified')
+    expect(w.text()).toContain('verifiziert')
+  })
+
+  it('renders speculative for score 0.1', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.1, auditTrail: [] } })
+    expect(w.classes()).toContain('is-speculative')
+    expect(w.text()).toContain('spekulativ')
+  })
+
+  it('renders speculative for explicit label prop', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.9, label: 'speculative' } })
+    expect(w.classes()).toContain('is-speculative')
+  })
+
+  it('renders verified with correct aria-label', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.9, auditTrail: [] } })
+    expect(w.classes()).toContain('is-verified')
+    expect(w.attributes('aria-label')).toBe('Konfidenz: verifiziert')
+    expect(w.text()).toContain('verifiziert')
+  })
+
+  it('renders speculative with correct aria-label', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.1, auditTrail: [] } })
+    expect(w.attributes('aria-label')).toBe('Konfidenz: spekulativ')
+  })
+
+  it('renders low text label as "niedrig"', () => {
+    const w = mount(ConfidenceBadge, { props: { score: 0.3, auditTrail: [] } })
+    expect(w.classes()).toContain('is-low')
+    expect(w.text()).toContain('niedrig')
   })
 })

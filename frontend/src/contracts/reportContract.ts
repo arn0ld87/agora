@@ -16,7 +16,7 @@ import { z } from "zod";
 export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 2;
 
 // === Enums ===
-export const ConfidenceLabelSchema = z.enum(["low", "medium", "high", "verified"]);
+export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;
 
 export const EvidenceTypeSchema = z.enum([
@@ -110,7 +110,8 @@ export const ReportClaimSchema = z.object({
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt ReportClaimModel.non_low_claims_need_evidence
-  if (value.confidence_label !== "low" && value.evidence.length === 0) {
+  // speculative und low dürfen ohne Evidence auskommen
+  if (value.confidence_label !== "low" && value.confidence_label !== "speculative" && value.evidence.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,
@@ -191,6 +192,8 @@ export const ReportSectionSchema = z.object({
   section_summary: z.string().min(1),
   claims: z.array(ReportClaimSchema).default([]),
   hypotheses: z.array(ReportSectionHypothesisSchema).default([]),
+  // Slice 3 (Issue #495): Überhang nach Cap von 5 — spiegelt backend ReportSectionModel.hypotheses_appendix.
+  hypotheses_appendix: z.array(ReportSectionHypothesisSchema).max(50).default([]),
   data_gaps: z.array(ReportSectionDataGapSchema).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
@@ -228,6 +231,7 @@ export const ReportSchema = z.object({
   error: z.string().optional().nullable(),
   has_evidence: z.boolean().default(false),
   evidence_sections: z.number().int().min(0).default(0),
+  red_team_findings: z.array(z.string()).max(10).default([]),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

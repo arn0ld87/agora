@@ -17,6 +17,7 @@ import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportModeControls from './step4/ReportModeControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
+import ReportRedTeamSection from './report/ReportRedTeamSection.vue'
 import { useReportExports } from '../composables/useReportExports'
 import {
   runtimeLlmPayloadFromStorage,
@@ -443,6 +444,10 @@ const reportMarkdown = computed((): string => {
 
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
 
+const redTeamFindings = computed((): string[] => {
+  return fullReport.value?.red_team_findings ?? []
+})
+
 const sectionHtml = computed((): Record<string, string> => {
   const map: Record<string, string> = {}
   for (const [k, v] of Object.entries(generatedSections.value || {})) {
@@ -728,6 +733,7 @@ onUnmounted(stopPolling)
             <Button v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Button>
           </div>
         </header>
+        <ReportRedTeamSection :findings="redTeamFindings" />
         <div class="report-layout" :class="{ 'report-layout--stacked': !evidenceSections.length }">
           <div class="report-body markdown-body" v-html="reportHtml"></div>
           <ReportEvidencePanel

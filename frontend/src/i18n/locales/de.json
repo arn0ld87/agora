@@ -1170,7 +1170,10 @@
       "disabledHint": "Erst Datei und Fragestellung eingeben, dann starten.",
       "requirementLabel": "Fragestellung / Anforderung",
       "requirementPlaceholder": "z. B. 'Welche politischen Reaktionen sind in der DACH-Region zu erwarten?'",
-      "profileDefault": "Standard"
+      "profileDefault": "Standard",
+      "numAgentsLabel": "Personas",
+      "numRoundsLabel": "Sim-Runden",
+      "numAgentsWarning": "Unter dem empfohlenen Floor (30). Aussagekraft reduziert."
     },
     "stats": {
       "activeRuns": "Aktive Runs",
