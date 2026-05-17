@@ -37,6 +37,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agora.neo4j_storage")
 
 
+def _canonical_entity_type(entity_dict: dict) -> str:
+    """Return the canonical entity-type string for use in the MERGE identity key.
+
+    Probes ``entity_type``, then ``type``, then ``label`` — takes the first
+    non-empty value.  Falls back to ``"unknown"`` so that the MERGE key is
+    always fully populated even when NER output omits the type field.
+    """
+    for field in ("entity_type", "type", "label"):
+        val = entity_dict.get(field)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return "unknown"
+
+
 class Neo4jWriteMixin:
     """Write-Pfad für ``Neo4jStorage``. Siehe Modul-Docstring."""
 
@@ -102,13 +116,13 @@ class Neo4jWriteMixin:
         def _create(tx):
             tx.run(
                 """
-                CREATE (g:Graph {
-                    graph_id: $graph_id,
-                    name: $name,
-                    description: $description,
-                    ontology_json: '{}',
-                    created_at: $created_at
-                })
+                MERGE (g:Graph {graph_id: $graph_id})
+                ON CREATE SET
+                    g.name = $name,
+                    g.description = $description,
+                    g.ontology_json = '{}',
+                    g.created_at = $created_at,
+                    g.status = 'building'
                 """,
                 graph_id=graph_id,
                 name=name,
@@ -121,6 +135,37 @@ class Neo4jWriteMixin:
 
         logger.info(f"Created graph '{name}' with id {graph_id}")
         return graph_id
+
+    def mark_graph_completed(self, graph_id: str) -> None:
+        """Set graph status to 'completed' after a successful build."""
+
+        def _mark(tx):
+            tx.run(
+                "MATCH (g:Graph {graph_id: $gid}) SET g.status = 'completed'",
+                gid=graph_id,
+            )
+
+        with self._get_session() as session:
+            self._call_with_retry(session.execute_write, _mark)
+        logger.info("Graph %s marked as completed", graph_id)
+
+    def mark_graph_failed(self, graph_id: str, reason: Optional[str] = None) -> None:
+        """Set graph status to 'failed'.  Optionally records a failure_reason."""
+
+        def _mark(tx):
+            tx.run(
+                """
+                MATCH (g:Graph {graph_id: $gid})
+                SET g.status = 'failed',
+                    g.failure_reason = $reason
+                """,
+                gid=graph_id,
+                reason=reason,
+            )
+
+        with self._get_session() as session:
+            self._call_with_retry(session.execute_write, _mark)
+        logger.info("Graph %s marked as failed: %s", graph_id, reason)
 
     def delete_graph(self, graph_id: str) -> None:
         def _delete(tx):
@@ -260,21 +305,40 @@ class Neo4jWriteMixin:
             entity_uuid_map: Dict[str, str] = {}  # name_lower -> uuid
             for idx, entity in enumerate(entities):
                 ename = entity["name"]
-                etype = entity["type"]
+                etype = entity.get("type", "")
                 attrs = entity.get("attributes", {})
                 summary_text = f"{ename} ({etype})"
                 embedding = entity_embeddings[idx] if idx < len(entity_embeddings) else []
+
+                # Canonical entity type used as part of the MERGE identity key.
+                # Rationale: "Apple" (ORG) and "Apple" (FRUIT) are distinct
+                # real-world entities and must produce two separate nodes.
+                # MERGE key is now (graph_id, name_lower, entity_type).
+                #
+                # Migration note for existing graphs:
+                # Graphs built before this change have Entity nodes without the
+                # entity_type property on the MERGE key.  They continue to be
+                # readable and queryable — the new key only applies to newly
+                # written nodes.  A one-off Cypher migration
+                # (SET n.entity_type = coalesce(n.entity_type, 'unknown'))
+                # can be run manually against legacy graphs if homogeneous
+                # deduplication is desired.  No automated migration is executed
+                # here to avoid touching production data without explicit sign-off.
+                canonical_etype = _canonical_entity_type(entity)
 
                 e_uuid = str(uuid.uuid4())
                 entity_uuid_map[ename.lower()] = e_uuid
 
                 def _merge_entity(tx, _uuid=e_uuid, _name=ename, _type=etype,
+                                  _canonical_etype=canonical_etype,
                                   _attrs=attrs, _embedding=embedding,
                                   _summary=summary_text, _now=now):
-                    # MERGE by graph_id + lowercase name to deduplicate
+                    # MERGE by (graph_id, name_lower, entity_type) — typed deduplication.
+                    # Same name with different entity_type yields two distinct nodes,
+                    # e.g. "Apple" (ORG) vs "Apple" (FRUIT).
                     result = tx.run(
                         """
-                        MERGE (n:Entity {graph_id: $gid, name_lower: $name_lower})
+                        MERGE (n:Entity {graph_id: $gid, name_lower: $name_lower, entity_type: $entity_type})
                         ON CREATE SET
                             n.uuid = $uuid,
                             n.name = $name,
@@ -291,6 +355,7 @@ class Neo4jWriteMixin:
                         """,
                         gid=graph_id,
                         name_lower=_name.lower(),
+                        entity_type=_canonical_etype,
                         uuid=_uuid,
                         name=_name,
                         summary=_summary,

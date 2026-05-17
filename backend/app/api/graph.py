@@ -653,7 +653,7 @@ def build_graph():
             )
             total_chunks = len(chunks)
 
-            # Create graph
+            # Create graph — status='building' is set atomically inside create_graph.
             task_manager.update_task(
                 task_id,
                 message="Creating Zep graph...",
@@ -661,12 +661,10 @@ def build_graph():
             )
             graph_id = builder.create_graph(name=graph_name)
 
-            # Update project graph_id
-            project.graph_id = graph_id
-            ProjectManager.save_project(project)
+            # Do NOT set project.graph_id yet — only after a successful build.
             run_registry.update_run(
                 run_record["run_id"],
-                entity_id=project.graph_id or project_id,
+                entity_id=project_id,
                 linked_ids={"graph_id": graph_id, "project_id": project_id, "task_id": task_id},
                 message=f"Graph created: {graph_id}",
             )
@@ -722,7 +720,11 @@ def build_graph():
             )
             graph_data = builder.get_graph_data(graph_id)
 
-            # Update project status
+            # Mark graph as completed in Neo4j FIRST, then link to project.
+            # Order is intentional: graph_id must only be persisted on the
+            # project when the graph is known-good.
+            builder.mark_graph_completed(graph_id)
+            project.graph_id = graph_id
             project.status = ProjectStatus.GRAPH_COMPLETED
             ProjectManager.save_project(project)
 
@@ -754,27 +756,45 @@ def build_graph():
                 }),
             )
 
-        except Exception as e:
-            # Update project status to failed
+        except Exception as exc:
             import traceback
-            build_logger.error(f"[{task_id}] Graph build failed: {str(e)}")
+            build_logger.error(f"[{task_id}] Graph build failed: {str(exc)}")
             build_logger.debug(traceback.format_exc())
 
+            # Attempt cleanup: delete the partial graph so it does not remain
+            # as a half-built artefact.  If deletion itself fails, fall back
+            # to tombstoning the graph node with status='failed'.
+            if "graph_id" in locals():  # graph_id may not exist if create_graph raised
+                try:
+                    builder.delete_graph(graph_id)
+                except Exception as cleanup_exc:
+                    build_logger.warning(
+                        "graph rollback failed graph_id=%s: %s", graph_id, cleanup_exc
+                    )
+                    try:
+                        builder.mark_graph_failed(graph_id, reason=str(exc))
+                    except Exception as tomb_exc:
+                        build_logger.error(
+                            "graph tombstone failed graph_id=%s: %s", graph_id, tomb_exc
+                        )
+
+            # project.graph_id is intentionally NOT set — the failed graph_id
+            # must not leak onto the project record.
             project.status = ProjectStatus.FAILED
-            project.error = str(e)
+            project.error = str(exc)
             ProjectManager.save_project(project)
 
             task_manager.update_task(
                 task_id,
                 status=TaskStatus.FAILED,
-                message=f"Build failed: {str(e)}",
+                message=f"Build failed: {str(exc)}",
                 error=traceback.format_exc()
             )
             run_registry.update_run(
                 run_record["run_id"],
                 status="failed",
-                message=f"Build failed: {str(e)}",
-                error=str(e),
+                message=f"Build failed: {str(exc)}",
+                error=str(exc),
             )
 
     # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
