@@ -108,7 +108,7 @@ class TaskManager:
 
         return task_id
 
-    def _task_from_run_manifest(self, run: Dict[str, Any]) -> Optional["Task"]:
+    def _task_from_run_manifest(self, run: Dict[str, Any]) -> "Task":
         """Reconstruct a Task from a RunRegistry manifest.
 
         The reconstructed task is NOT written back into the in-memory cache
@@ -136,13 +136,16 @@ class TaskManager:
             or "unknown"
         )
 
+        # TypeError fängt korrupte Manifeste mit None-Zeitstempel ab —
+        # RunRegistry kann started_at/updated_at als None zurückgeben,
+        # bevor der erste update_run-Aufruf das Feld füllt.
         try:
             created_at = datetime.fromisoformat(run["started_at"])
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             created_at = datetime.now()
         try:
             updated_at = datetime.fromisoformat(run["updated_at"])
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             updated_at = datetime.now()
 
         linked_ids = run.get("linked_ids", {})
