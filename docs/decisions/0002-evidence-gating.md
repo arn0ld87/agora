@@ -107,7 +107,7 @@ Schwächungs-Beispiele, die ein Supersedes erfordern:
 | **M11.7a** | Prompt-Block + Hedge-Snapshot-Test | Accepted |
 | **M11.7b** | Schema + Validators + Drift-Guards | Accepted |
 | **M11.7c** | `ReportSectionModel.hypotheses[]` + Frontend-Renderer | Implementiert |
-| **M11.7d** | Snapshot-Eval-Suite mit fixierten Bad-/Good-Cases | offen |
+| **M11.7d** | Snapshot-Eval-Suite mit fixierten Bad-/Good-Cases | Implementiert |
 
 ---
 
