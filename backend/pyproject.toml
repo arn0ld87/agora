@@ -2,7 +2,7 @@
 name = "agora-backend"
 version = "1.0.0"
 description = "Agora - Hybrid Multi-Agent Resonance Simulator on Neo4j + Ollama"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "AGPL-3.0" }
 authors = [
     { name = "Alexander Schneider", email = "schneider@alexle135.de" }
@@ -124,7 +124,7 @@ skip_covered = false
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 exclude = [
     ".venv",
     "uploads",
@@ -172,7 +172,7 @@ ignore = [
 "scripts/security_verify.py" = ["E402"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 ignore_missing_imports = true
 follow_imports = "silent"
 show_error_codes = true
