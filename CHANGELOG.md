@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (chore/deps — 2026-05-17)
+
+- Neo4j-Default-Image von `neo4j:5.18-community` (Feb 2024) auf `neo4j:5.26-community`
+  (Nov 2024 LTS) gebumpt. Betrifft `docker-compose.yml` (Default-Image) und
+  `.env.example` (Beispiel-Override-Kommentar). Gleiche 5.x-Linie, gleicher
+  Cypher-Dialect, keine Code-Anpassungen nötig. Wer `NEO4J_IMAGE` lokal pinnt,
+  bleibt unangetastet.
+
 ### Added (Sub-Slice S1 — 2026-05-17)
 
 - Report-Quality Slice 1: Evidence-Coverage-Floor (min=2) — Claims mit <2 Evidence-Items werden zur Hypothesis geroutet, Cap auf 0.59 in compute_confidence. Reviewer-Feedback report_4fe2dacd80ba. (#493)
