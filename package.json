@@ -1,5 +1,6 @@
 {
   "name": "agora",
+  "private": true,
   "version": "1.0.0",
   "description": "Agora — hybrid multi-agent resonance simulator (Neo4j + Ollama)",
   "author": "Alexander Schneider <https://alexle135.de>",
@@ -11,7 +12,7 @@
     "dev": "concurrently --kill-others -n \"backend,frontend\" -c \"green,cyan\" \"bun run backend\" \"bun run frontend\"",
     "backend": "cd backend && uv run python run.py",
     "frontend": "cd frontend && bun run dev",
-    "build": "cd frontend && bun run build",
+    "build": "bun run build:frontend",
     "build:frontend": "cd frontend && bun run build",
     "lint:frontend": "cd frontend && bun run lint",
     "lint:backend": "cd backend && uv run ruff check app/ tests/",
@@ -29,5 +30,5 @@
   "engines": {
     "bun": ">=1.2.0"
   },
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0-only"
 }
