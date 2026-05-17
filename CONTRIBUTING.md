@@ -15,8 +15,6 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 | [`CHANGELOG.md`](CHANGELOG.md) | SemVer-Releases und `[Unreleased]`-Block; Sub-Slice-Einträge hier landen, bevor PR auf main merget |
 | [`docs/decisions/`](docs/decisions/) | Architektur-Decision-Records (ADRs) als `NNNN-<slug>.md` |
 | [`docs/runbooks/`](docs/runbooks/) | Detail-Runbooks (Tool-Pflicht, PR-Workflow, Worktree, Subagent-Routing, Architektur) |
-| [`docs/archive/worklogs/`](docs/archive/worklogs/) | Datierte Arbeitsprotokolle (z. B. `2026-05-03-slice-44-doku-sync-arbeitsprotokoll.md`) |
-| [`docs/archive/`](docs/archive/) | Historische Pläne, Sessions, Logs, Audit-Trails |
 
 ## Branch- und PR-Hygiene
 
@@ -59,8 +57,7 @@ git diff --exit-code schemas/      # darf nicht driften
 
 Ein Sub-Slice erfordert:
 1. **Ein Commit** mit prägnanter Message: `feat/fix/docs(scope): Beschreibung (Refs #NNN, Sub-Slice X)`
-2. **Ein Arbeitsprotokoll** unter `docs/archive/worklogs/<YYYY-MM-DD>-slice-<N>-<slug>-arbeitsprotokoll.md` (Ziel, Befund, Geänderte Dateien, Akzeptanz-Checks, Folgen)
-3. **Eintrag im `[Unreleased]`-Block** von [`CHANGELOG.md`](CHANGELOG.md) (Format: `- **Sub-Slice X (...)**: Kurzbeschreibung. Refs #NNN.`)
+2. **Eintrag im `[Unreleased]`-Block** von [`CHANGELOG.md`](CHANGELOG.md) (Format: `- **Sub-Slice X (...)**: Kurzbeschreibung. Refs #NNN.`)
 
 Commits sind atomar — alle Tests und Akzeptanz-Checks müssen grün sein, bevor der Commit gepusht wird.
 

@@ -299,7 +299,7 @@ Erstverdacht: `~/.claude/plans/nutze-code-review-graph-immer-derzeit-adaptive-iv
 Fünf-Slice-Welle aus Reviewer-Feedback zu `report_4fe2dacd80ba` (Issues
 #493–#497). Hebt den Boden für Evidence-Coverage, Confidence-Tiers,
 Hypothesen-Cap, Simulation-Floor und Red-Team-Quoten. Heuristik und
-Subagent-Mapping: [`docs/plans/plan.heuristic-2026-05-17.md`](docs/plans/plan.heuristic-2026-05-17.md).
+Subagent-Mapping: `docs/plans/plan.heuristic-2026-05-17.md`.
 
 **Decisions (Lead-Setzung 2026-05-17):**
 1. Layer-0-Slices (1, 2) sequenziell, eigene PRs, kein gemeinsamer `report_v3.py`-Touch.
@@ -326,9 +326,9 @@ Subagent-Mapping: [`docs/plans/plan.heuristic-2026-05-17.md`](docs/plans/plan.he
 7. `pytest -q`, `ruff check app/ tests/`, `radon cc --min C`, `scripts/dump_schemas.py --check`, `scripts/sync-status.sh --check`, `python scripts/check_voice.py --strict` alle grün
 
 **Out of Scope:** ADR-0002-Anker schwächen, neue Provider, OASIS-Source-Patches,
-Report-Perf (Slice B/C aus [`docs/archive/plans/plan.report-perf.md`](docs/archive/plans/plan.report-perf.md) folgt eigenständig).
+Report-Perf (Slice B/C aus `docs/archive/plans/plan.report-perf.md` folgt eigenständig).
 
 ---
 
 *Zuletzt aktualisiert: 2026-05-17 — Observability-Welle abgeschlossen, Report-Quality-Welle eröffnet.*
-*Heuristik-SSoT: [`docs/plans/plan.heuristic-2026-05-17.md`](docs/plans/plan.heuristic-2026-05-17.md).*
+*Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
