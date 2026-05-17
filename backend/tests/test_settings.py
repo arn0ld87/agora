@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.services.settings_schema import field_by_key
 from app.settings import AgoraSettings, get_settings, reload_settings
 
 
@@ -54,11 +55,11 @@ class TestDefaults:
 
     def test_llm_base_url_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.llm_base_url == "http://localhost:11434/v1"
+        assert s.llm_base_url == field_by_key("LLM_BASE_URL").default
 
     def test_neo4j_uri_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.neo4j_uri == "bolt://localhost:7687"
+        assert s.neo4j_uri == field_by_key("NEO4J_URI").default
 
     def test_report_toolcall_mode_default(self):
         s = AgoraSettings(_env_file=None)
@@ -67,7 +68,7 @@ class TestDefaults:
     def test_vector_dim_default(self):
         # nomic-embed-text → 768
         s = AgoraSettings(_env_file=None)
-        assert s.vector_dim == 768
+        assert s.vector_dim == field_by_key("VECTOR_DIM").default
 
     def test_debug_default_false(self, monkeypatch):
         monkeypatch.delenv("FLASK_DEBUG", raising=False)
@@ -80,19 +81,19 @@ class TestDefaults:
 
     def test_llm_model_name_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.llm_model_name == "qwen2.5:32b"
+        assert s.llm_model_name == field_by_key("LLM_MODEL_NAME").default
 
     def test_llm_max_output_tokens_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.llm_max_output_tokens == 8192
+        assert s.llm_max_output_tokens == field_by_key("LLM_MAX_OUTPUT_TOKENS").default
 
     def test_llm_context_limit_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.llm_context_limit == 262144
+        assert s.llm_context_limit == field_by_key("LLM_CONTEXT_LIMIT").default
 
     def test_embedding_model_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.embedding_model == "nomic-embed-text"
+        assert s.embedding_model == field_by_key("EMBEDDING_MODEL").default
 
     def test_ontology_mutation_mode_default(self):
         s = AgoraSettings(_env_file=None)
@@ -116,7 +117,7 @@ class TestDefaults:
 
     def test_redis_url_default(self):
         s = AgoraSettings(_env_file=None)
-        assert s.redis_url == "redis://redis:6379/0"
+        assert s.redis_url == field_by_key("REDIS_URL").default
 
 
 # ---------------------------------------------------------------------------

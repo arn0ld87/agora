@@ -25,6 +25,7 @@ REPORT_ID = "report_abcdef123456"
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     monkeypatch.setattr(ReportManager, "REPORTS_DIR", str(tmp_path / "reports"))
 
     app = Flask(__name__)
@@ -161,7 +162,8 @@ def _rate_limited_report_app():
     return app
 
 
-def test_report_generate_endpoint_rate_limits_requests():
+def test_report_generate_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):
@@ -177,7 +179,8 @@ def test_report_generate_endpoint_rate_limits_requests():
     assert payload["retry_after_seconds"] == 60
 
 
-def test_report_chat_endpoint_rate_limits_requests():
+def test_report_chat_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):

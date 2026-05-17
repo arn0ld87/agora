@@ -22,6 +22,7 @@ VALID_GRAPH_ID = "abcdef0123456789abcdef0123456789"
 
 @pytest.fixture
 def client(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
     storage = MagicMock(name="Neo4jStorage")
     app.extensions = {"neo4j_storage": storage}

@@ -22,7 +22,15 @@ def _compose_config(*extra_files: str):
     for f in extra_files:
         cmd.extend(["-f", f])
     cmd.extend(["config", "--format", "json"])
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_root, timeout=30)
+
+    # Provide dummy env for interpolation so it doesn't fail on missing required vars
+    env = os.environ.copy()
+    env.setdefault("NEO4J_PASSWORD", "dummy")
+    env.setdefault("AGORA_AUTH_TOKEN", "dummy")
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=repo_root, timeout=30, env=env
+    )
     if result.returncode != 0:
         pytest.skip(f"docker compose config failed: {result.stderr.strip()}")
     return json.loads(result.stdout)

@@ -14,7 +14,8 @@ VALID_PROJECT_ID = "proj_0123456789ab"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
     storage = MagicMock(name="Neo4jStorage")
     app.extensions = {"neo4j_storage": storage}

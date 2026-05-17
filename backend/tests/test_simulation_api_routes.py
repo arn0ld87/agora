@@ -10,7 +10,9 @@ def _reset_llm_trigger_limiter():
     llm_trigger_rate_limiter.reset_for_tests()
 
 
-def _build_test_app(*, artifact_store=None):
+def _build_test_app(*, artifact_store=None, monkeypatch=None):
+    if monkeypatch:
+        monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     _reset_llm_trigger_limiter()
     app = Flask(__name__)
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 20
@@ -22,8 +24,8 @@ def _build_test_app(*, artifact_store=None):
     return app
 
 
-def test_available_models_route_is_registered():
-    app = _build_test_app()
+def test_available_models_route_is_registered(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/available-models")
@@ -51,8 +53,8 @@ def test_detect_default_provider_ollama_cloud(monkeypatch):
 
 
 
-def test_available_models_surfaces_startup_neo4j_error():
-    app = _build_test_app()
+def test_available_models_surfaces_startup_neo4j_error(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     app.extensions["neo4j_storage_error"] = "AuthError: unauthorized"
     client = app.test_client()
 
@@ -64,8 +66,8 @@ def test_available_models_surfaces_startup_neo4j_error():
     assert payload["data"]["neo4j_error"] == "AuthError: unauthorized"
 
 
-def test_entity_routes_keep_validation_guard():
-    app = _build_test_app()
+def test_entity_routes_keep_validation_guard(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/entities/not-a-graph-id")
@@ -76,8 +78,8 @@ def test_entity_routes_keep_validation_guard():
     assert payload["error"] == "Invalid graph_id format"
 
 
-def test_create_simulation_requires_project_id():
-    app = _build_test_app()
+def test_create_simulation_requires_project_id(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/create", json={})
@@ -88,8 +90,8 @@ def test_create_simulation_requires_project_id():
     assert payload["error"] == "Please provide project_id"
 
 
-def test_prepare_simulation_requires_simulation_id():
-    app = _build_test_app()
+def test_prepare_simulation_requires_simulation_id(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/prepare", json={})
@@ -100,8 +102,8 @@ def test_prepare_simulation_requires_simulation_id():
     assert payload["error"] == "Please provide simulation_id"
 
 
-def test_prepare_simulation_rate_limits_llm_trigger():
-    app = _build_test_app()
+def test_prepare_simulation_rate_limits_llm_trigger(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 2
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     client = app.test_client()
@@ -119,8 +121,8 @@ def test_prepare_simulation_rate_limits_llm_trigger():
     assert payload["retry_after_seconds"] == 60
 
 
-def test_prepare_status_requires_identifier():
-    app = _build_test_app()
+def test_prepare_status_requires_identifier(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/prepare/status", json={})
@@ -132,8 +134,8 @@ def test_prepare_status_requires_identifier():
     assert payload["code"] == "validation_failed"
 
 
-def test_create_branch_requires_branch_name():
-    app = _build_test_app()
+def test_create_branch_requires_branch_name(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/sim_abcdef123456/branch", json={})
@@ -144,8 +146,8 @@ def test_create_branch_requires_branch_name():
     assert payload["error"] == "branch_name is required"
 
 
-def test_config_route_keeps_validation_guard():
-    app = _build_test_app()
+def test_config_route_keeps_validation_guard(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/not-a-sim-id/config")
@@ -156,8 +158,8 @@ def test_config_route_keeps_validation_guard():
     assert payload["error"] == "Invalid simulation_id format"
 
 
-def test_start_simulation_requires_simulation_id():
-    app = _build_test_app()
+def test_start_simulation_requires_simulation_id(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/start", json={})
@@ -168,8 +170,8 @@ def test_start_simulation_requires_simulation_id():
     assert payload["error"] == "Please provide simulation_id"
 
 
-def test_start_simulation_validates_simulation_days():
-    app = _build_test_app()
+def test_start_simulation_validates_simulation_days(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(
@@ -188,7 +190,7 @@ def test_persona_library_round_trip(monkeypatch, tmp_path):
     from app.config import Config
 
     monkeypatch.setattr(Config, "UPLOAD_FOLDER", str(tmp_path))
-    app = _build_test_app()
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     create_response = client.post(
@@ -236,7 +238,7 @@ def test_start_route_blocks_when_personas_pending(monkeypatch):
         {"username": "alice", "review_status": "approved"},
         {"username": "bob"},  # default pending
     ])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(
@@ -258,7 +260,7 @@ def test_start_route_skips_gate_when_flag_disabled(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     _seed_ready_simulation(store, sim_id, [{"username": "bob"}])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(
@@ -275,7 +277,7 @@ def test_start_route_skips_gate_when_flag_disabled(monkeypatch):
         assert payload.get("code") != "persona_review_required"
 
 
-def test_persona_quality_route_returns_summary_and_issues():
+def test_persona_quality_route_returns_summary_and_issues(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [
@@ -284,7 +286,7 @@ def test_persona_quality_route_returns_summary_and_issues():
         {"username": "alice", "bio": "x", "persona": "y", "profession": "ops",
          "mbti": "INTJ", "source_entity_uuid": "u-2"},
     ])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get(f"/api/simulation/{sim_id}/profiles/quality")
@@ -297,8 +299,8 @@ def test_persona_quality_route_returns_summary_and_issues():
     assert payload["review_enabled"] is False
 
 
-def test_persona_quality_route_validates_simulation_id():
-    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+def test_persona_quality_route_validates_simulation_id(monkeypatch):
+    app = _build_test_app(artifact_store=InMemoryArtifactStore(), monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/not-a-sim/profiles/quality")
@@ -307,14 +309,14 @@ def test_persona_quality_route_validates_simulation_id():
     assert response.get_json()["error"] == "Invalid simulation_id format"
 
 
-def test_persona_review_endpoints_round_trip():
+def test_persona_review_endpoints_round_trip(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [
         {"username": "alice", "is_manual": False},
         {"username": "bob", "is_manual": True},
     ])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     approve = client.post(f"/api/simulation/{sim_id}/profiles/alice/approve")
@@ -341,8 +343,8 @@ def test_persona_review_endpoints_round_trip():
     assert missing.status_code == 404
 
 
-def test_persona_review_endpoint_validates_simulation_id():
-    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+def test_persona_review_endpoint_validates_simulation_id(monkeypatch):
+    app = _build_test_app(artifact_store=InMemoryArtifactStore(), monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/not-a-sim/profiles/alice/approve")
@@ -351,11 +353,11 @@ def test_persona_review_endpoint_validates_simulation_id():
     assert response.get_json()["error"] == "Invalid simulation_id format"
 
 
-def test_persona_edit_rejects_payload_with_no_editable_fields():
+def test_persona_edit_rejects_payload_with_no_editable_fields(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.patch(
@@ -366,8 +368,8 @@ def test_persona_edit_rejects_payload_with_no_editable_fields():
     assert response.status_code == 400
 
 
-def test_pause_route_keeps_validation_guard():
-    app = _build_test_app()
+def test_pause_route_keeps_validation_guard(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/not-a-sim-id/pause")
@@ -378,8 +380,8 @@ def test_pause_route_keeps_validation_guard():
     assert payload["error"] == "Invalid simulation_id format"
 
 
-def test_env_status_requires_simulation_id():
-    app = _build_test_app()
+def test_env_status_requires_simulation_id(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/env-status", json={})
@@ -390,8 +392,8 @@ def test_env_status_requires_simulation_id():
     assert payload["error"] == "Please provide simulation_id"
 
 
-def test_generate_profiles_requires_graph_id():
-    app = _build_test_app()
+def test_generate_profiles_requires_graph_id(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/generate-profiles", json={})
@@ -402,8 +404,8 @@ def test_generate_profiles_requires_graph_id():
     assert payload["error"] == "Please provide graph_id"
 
 
-def test_generate_profiles_rate_limits_llm_trigger():
-    app = _build_test_app()
+def test_generate_profiles_rate_limits_llm_trigger(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 2
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     client = app.test_client()
@@ -421,8 +423,8 @@ def test_generate_profiles_rate_limits_llm_trigger():
     assert payload["retry_after_seconds"] == 60
 
 
-def test_interview_requires_prompt():
-    app = _build_test_app()
+def test_interview_requires_prompt(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(
@@ -437,8 +439,8 @@ def test_interview_requires_prompt():
     assert payload["code"] == "validation_failed"
 
 
-def test_posts_route_keeps_validation_guard():
-    app = _build_test_app()
+def test_posts_route_keeps_validation_guard(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/not-a-sim-id/posts")
@@ -449,8 +451,8 @@ def test_posts_route_keeps_validation_guard():
     assert payload["error"] == "Invalid simulation_id format"
 
 
-def test_list_simulations_route_is_registered():
-    app = _build_test_app()
+def test_list_simulations_route_is_registered(monkeypatch):
+    app = _build_test_app(monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.get("/api/simulation/list")
@@ -466,11 +468,11 @@ def test_list_simulations_route_is_registered():
 # Sub-Slice 31: regenerate endpoint
 # ---------------------------------------------------------------------------
 
-def test_regenerate_returns_regenerating_status():
+def test_regenerate_returns_regenerating_status(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(f"/api/simulation/{sim_id}/profiles/alice/regenerate")
@@ -482,11 +484,11 @@ def test_regenerate_returns_regenerating_status():
     assert payload["data"]["username"] == "alice"
 
 
-def test_regenerate_with_notes_sets_review_notes():
+def test_regenerate_with_notes_sets_review_notes(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(
@@ -499,11 +501,11 @@ def test_regenerate_with_notes_sets_review_notes():
     assert payload["data"]["profile"]["review_notes"] == "profile too generic"
 
 
-def test_regenerate_unknown_username_returns_404():
+def test_regenerate_unknown_username_returns_404(monkeypatch):
     sim_id = "sim_abcdef012345"
     store = InMemoryArtifactStore()
     store.write_json(sim_id, "reddit_profiles", [{"username": "alice"}])
-    app = _build_test_app(artifact_store=store)
+    app = _build_test_app(artifact_store=store, monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post(f"/api/simulation/{sim_id}/profiles/ghost/regenerate")
@@ -513,8 +515,8 @@ def test_regenerate_unknown_username_returns_404():
     assert payload["success"] is False
 
 
-def test_regenerate_invalid_simulation_id_returns_400():
-    app = _build_test_app(artifact_store=InMemoryArtifactStore())
+def test_regenerate_invalid_simulation_id_returns_400(monkeypatch):
+    app = _build_test_app(artifact_store=InMemoryArtifactStore(), monkeypatch=monkeypatch)
     client = app.test_client()
 
     response = client.post("/api/simulation/not-a-sim/profiles/alice/regenerate")

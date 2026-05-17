@@ -25,7 +25,8 @@ VALID_GRAPH_ID = "graph_0123456789ab"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 100

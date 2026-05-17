@@ -25,6 +25,7 @@ VALID_TASK_ID = "01234567-89ab-4def-8123-456789abcdef"
 
 @pytest.fixture
 def app(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)
     flask_app = Flask(__name__)
@@ -288,6 +289,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
     fake_container.graph_builder.return_value = fake_builder
 
     with (
+        patch("app.api.graph.os.environ", {"AGORA_AUTH_TOKEN": ""}),
         patch("app.api.graph.ProjectManager.get_project", return_value=fake_project),
         patch("app.api.graph.ProjectManager.save_project"),
         patch("app.api.graph.ProjectManager.get_extracted_text", return_value="some text"),
@@ -301,6 +303,9 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
         patch("app.api.graph._make_ner_override_from_route", return_value=MagicMock()),
     ):
         flask_app = Flask(__name__)
+        # Open-Mode Auth: require_scope laesst nur durch, wenn AGORA_AUTH_TOKEN
+        # weder in Config noch im Env gesetzt ist.
+        flask_app.config["AGORA_AUTH_TOKEN"] = ""
         storage = MagicMock()
         from app.container import AgoraContainer
         container = AgoraContainer(neo4j_storage=storage)
@@ -308,6 +313,8 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
         flask_app.register_blueprint(graph_bp, url_prefix="/api/graph")
 
         with flask_app.test_client() as client:
+            # Open-Mode: kein AGORA_AUTH_TOKEN in app.config konfiguriert
+            # und delenv in fixture app() sorgt dafuer, dass require_scope durchlaesst.
             response = client.post(
                 "/api/graph/build",
                 json={"project_id": VALID_PROJECT_ID},
