@@ -12,18 +12,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
-import Badge from '../forms/Badge.vue'
+import ModelPicker from '../forms/ModelPicker.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
-import { getAvailableModels } from '../../../api/simulation'
 import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
-import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
+import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
-
-interface ModelOption {
-  value: string
-  label: string
-}
+import { StageLLMRouteSchema, type StageLLMRoute } from '../../../contracts/llmRoutingContract'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -35,12 +30,7 @@ const isDragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const errorMsg = ref('')
 
-const presetModels = ref<ModelOption[]>([])
-const ollamaModels = ref<ModelOption[]>([])
 const llmProfiles = ref<LlmProfile[]>([])
-const defaultModel = ref('')
-const ollamaReachable = ref(false)
-const loadingStatus = ref(true)
 
 function readLocal(key: string): string | null {
   try {
@@ -71,7 +61,38 @@ function removeLocal(key: string): void {
   } catch { /* swallow */ }
 }
 
-const modelOption = ref<string>(readLocal(STORAGE_MODEL) || 'default')
+/**
+ * Slice A2 (2026-05-17): Modell-Auswahl auf den projektweiten ModelPicker
+ * konsolidiert. Hybrid-Mode:
+ *   - Profile-Dropdown (links): LLM-Profile aus fetchLlmProfiles. Wenn gewählt,
+ *     gewinnt das Profile — Provider/Modell/Temperatur kommen aus dem Profile.
+ *   - ModelPicker (rechts, sichtbar wenn kein Profile aktiv): Direkt-Auswahl
+ *     aus den unter /settings/llm-providers hinterlegten Providern.
+ *
+ * Persistenz: `agora.hero.profileId`, `agora.hero.route` (Zod-validiert).
+ * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
+ * via `storedEffectiveModel()` — wir spiegeln `route.model` dorthin, damit der
+ * bestehende Sim-Start-Flow (Backend resolved Provider via SecretResolver,
+ * vgl. PR #499) ohne Touch in MainView durchgeht.
+ */
+const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
+const STORAGE_HERO_ROUTE = 'agora.hero.route'
+
+function loadStoredRoute(): StageLLMRoute | null {
+  const raw = readLocal(STORAGE_HERO_ROUTE)
+  if (!raw) return null
+  try {
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
+const selectedRoute = ref<StageLLMRoute | null>(loadStoredRoute())
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
@@ -89,53 +110,16 @@ const showAgentsWarning = computed<boolean>(
   () => numAgents.value >= NUM_AGENTS_MIN && numAgents.value < NUM_AGENTS_FLOOR,
 )
 
-const modelOptions = computed<ModelOption[]>(() => {
-  const opts: ModelOption[] = []
-  // Profile-Gruppe zuerst (persistierte LLM-Profile aus P5.2)
-  for (const p of llmProfiles.value) {
-    opts.push({
-      value: `profile:${p.id}`,
-      label: `${p.name} — ${p.model_name}${p.is_default ? ` (${t('dashboard.hero.profileDefault')})` : ''}`,
-    })
-  }
-  opts.push({ value: 'default', label: `${t('dashboard.hero.modelDefault')} — ${defaultModel.value || '?'}` })
-  for (const p of presetModels.value) opts.push(p)
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.value === m.value)) continue
-    opts.push({ value: m.value, label: `${m.label} (Ollama)` })
-  }
-  return opts
+const profileOptions = computed(() => {
+  return llmProfiles.value.map(p => ({
+    value: p.id,
+    label: `${p.name} — ${p.model_name}${p.is_default ? ` (${t('dashboard.hero.profileDefault')})` : ''}`,
+  }))
 })
 
 const canSubmit = computed(
-  () => files.value.length > 0 && simulationRequirement.value.trim() !== '' && !loadingStatus.value,
+  () => files.value.length > 0 && simulationRequirement.value.trim() !== '',
 )
-
-async function loadStatus() {
-  loadingStatus.value = true
-  try {
-    const res = await getAvailableModels()
-    const data = (res as { data?: Record<string, unknown>; success?: boolean })?.data ?? null
-    if (data) {
-      const presets = (data['presets'] as Array<Record<string, unknown>>) ?? []
-      const ollama = (data['ollama'] as Array<Record<string, unknown>>) ?? []
-      presetModels.value = presets.map(p => ({
-        value: String(p['name'] ?? ''),
-        label: String(p['label'] ?? p['name'] ?? ''),
-      })).filter(o => !!o.value)
-      ollamaModels.value = ollama.map(p => ({
-        value: String(p['name'] ?? ''),
-        label: String(p['label'] ?? p['name'] ?? ''),
-      })).filter(o => !!o.value)
-      defaultModel.value = String(data['current_default'] ?? '')
-      ollamaReachable.value = !!data['ollama_reachable']
-    }
-  } catch (e) {
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loadingStatus.value = false
-  }
-}
 
 function filterAllowed(list: FileList | File[]): File[] {
   return Array.from(list).filter(f => {
@@ -198,15 +182,47 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function onPickRoute(route: StageLLMRoute | null) {
+  selectedRoute.value = route
+  if (route?.provider_id && route?.model) {
+    writeLocal(STORAGE_HERO_ROUTE, JSON.stringify(route))
+  } else {
+    removeLocal(STORAGE_HERO_ROUTE)
+  }
+}
+
+function onPickProfile(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  selectedProfileId.value = value || null
+  if (value) {
+    writeLocal(STORAGE_HERO_PROFILE_ID, value)
+  } else {
+    removeLocal(STORAGE_HERO_PROFILE_ID)
+  }
+}
+
 async function startSimulation() {
   if (!canSubmit.value) return
   try {
-    writeLocal(STORAGE_MODEL, modelOption.value)
     writeLocal(STORAGE_LANG, language.value)
-    removeLocal(STORAGE_CUSTOM_MODEL)
-    const selectedValue = modelOption.value
-    const profileId = selectedValue.startsWith('profile:') ? selectedValue.slice('profile:'.length) : null
-    setPendingUpload(files.value, simulationRequirement.value.trim(), profileId, numAgents.value, numRounds.value)
+    const profileId = selectedProfileId.value || null
+    // Wenn ein Profile aktiv ist, gewinnt es — direct-route ignorieren und
+    // den STORAGE_MODEL-Key auf "default" zurücksetzen, damit MainView nicht
+    // versehentlich einen stale Override mitsendet.
+    if (profileId) {
+      writeLocal(STORAGE_MODEL, 'default')
+    } else if (selectedRoute.value?.model) {
+      writeLocal(STORAGE_MODEL, selectedRoute.value.model)
+    } else {
+      writeLocal(STORAGE_MODEL, 'default')
+    }
+    setPendingUpload(
+      files.value,
+      simulationRequirement.value.trim(),
+      profileId,
+      numAgents.value,
+      numRounds.value,
+    )
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
@@ -214,24 +230,14 @@ async function startSimulation() {
 }
 
 onMounted(() => {
-  void loadStatus()
   fetchLlmProfiles()
     .then(profiles => { llmProfiles.value = profiles })
-    .catch(() => { /* Fallback: Profile-Gruppe bleibt leer, Presets/Ollama greifen */ })
+    .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })
 })
 </script>
 
 <template>
   <Card :title="$t('dashboard.hero.title')" :subtitle="$t('dashboard.hero.subtitle')">
-    <template #right>
-      <Badge
-        v-if="!loadingStatus"
-        :tone="ollamaReachable ? 'green' : 'gray'"
-      >
-        {{ ollamaReachable ? $t('dashboard.system.statusReachable') : $t('dashboard.system.statusIdle') }}
-      </Badge>
-    </template>
-
     <div class="hero-grid">
       <!-- Zone 1: Quelle (Drop / Picker) -->
       <div class="hero-zone hero-source">
@@ -282,12 +288,30 @@ onMounted(() => {
       <!-- Zone 2: Model + Sprache -->
       <div class="hero-zone hero-config">
         <div class="hero-field">
-          <label class="hero-label" for="hero-model">{{ $t('dashboard.hero.modelLabel') }}</label>
-          <select id="hero-model" v-model="modelOption" class="hero-select">
-            <option v-for="opt in modelOptions" :key="opt.value" :value="opt.value">
+          <label class="hero-label" for="hero-profile">
+            {{ $t('dashboard.hero.profileLabel', 'Profil (optional)') }}
+          </label>
+          <select
+            id="hero-profile"
+            class="hero-select"
+            :value="selectedProfileId ?? ''"
+            @change="onPickProfile"
+          >
+            <option value="">
+              {{ $t('dashboard.hero.profileNone', '— Profil deaktivieren —') }}
+            </option>
+            <option v-for="opt in profileOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
+        </div>
+        <div v-if="!selectedProfileId" class="hero-field">
+          <label class="hero-label">{{ $t('dashboard.hero.modelLabel') }}</label>
+          <ModelPicker
+            :model-value="selectedRoute"
+            :placeholder="$t('dashboard.hero.modelPlaceholder', 'Modell wählen …')"
+            @update:model-value="onPickRoute"
+          />
         </div>
         <div class="hero-field">
           <label class="hero-label" for="hero-lang">{{ $t('dashboard.hero.languageLabel') }}</label>
@@ -362,7 +386,7 @@ onMounted(() => {
         >
           {{ $t('dashboard.hero.startCta') }}
         </button>
-        <p v-if="!canSubmit && !loadingStatus" class="hero-hint">
+        <p v-if="!canSubmit" class="hero-hint">
           {{ $t('dashboard.hero.disabledHint') }}
         </p>
         <p v-if="errorMsg" class="hero-error">{{ errorMsg }}</p>
