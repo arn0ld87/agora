@@ -139,8 +139,7 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 - **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch,
   F läuft. Vendoriert in [`design/v3-source/`](design/v3-source/).
 - **v1.0-Output-Vertrag** ([`PLAN.md`](PLAN.md)) — offen: P3.2, P4.1, P4.3, P4.4.
-- **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen):
-  [`docs/plans/`](docs/plans/).
+- **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen).
 
 ## Referenz
 

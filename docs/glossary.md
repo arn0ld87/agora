@@ -28,7 +28,7 @@ Agora ist ein **Persona-basierter Resonanz-Simulator**, kein Orakel. „Predicti
 
 1. **Code- und Prompt-Strings** verwenden die EN-Spalte. Sie wirken direkt auf LLM-Output und müssen englisch bleiben, weil Modelle sonst die Sprache wechseln.
 2. **README, `docs/`, UI-Texte und Commit-Bodies** verwenden die DE-Spalte.
-3. **Historische Logs** (`docs/archive/logs/log_neu.md`, `docs/archive/logs/log1_analyse.md`) werden **nicht** rückwirkend angepasst — sie sind Zeitdokumente.
+3. **Historische Logs** werden **nicht** rückwirkend angepasst — sie sind Zeitdokumente.
 4. **Snapshot-Tests** in `backend/tests/services/` müssen bei Code-Änderungen mitgeführt werden.
 
 ## Verifikation

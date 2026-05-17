@@ -75,7 +75,9 @@ context.md
 # vor dem ersten Edit lesen können müssen.
 PLAN.md.bak
 # .github/ enthält die CI- und Docker-Image-Workflows — getrackt und aktiv.
-/docs/
+# docs/ ist getrackt (öffentliche Sachdokus, ADRs, runbooks).
+# docs/.local/ ist Ablage für interne Worklogs/Pläne/Archive — bleibt lokal:
+/docs/.local/
 /Agora_design/
 /scripts/logs/
 /.codex
