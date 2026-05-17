@@ -126,10 +126,10 @@ def build_route_subprocess_env(
 ) -> dict[str, str]:
     """Translate a resolved route into the subprocess env contract used by OASIS.
 
-    Setzt zusätzlich die provider-spezifische ``api_key_ref``-Env-Var aus der
-    ``LlmProviderRegistry`` (z. B. ``GOOGLE_API_KEY`` für Gemini), damit OASIS-
-    Subprozesse den im ``LlmProviderSecretsStore`` hinterlegten Key finden,
-    ohne dass eine ``.env`` zwingend gepflegt sein muss.
+    Also sets the provider-specific api_key_ref environment variable from the
+    LlmProviderRegistry (e.g., GOOGLE_API_KEY for Gemini). This ensures
+    OASIS subprocesses can find the key stored in the LlmProviderSecretsStore
+    without requiring a .env file.
     """
     env: dict[str, str] = {"LLM_MODEL_NAME": route.model}
     if run_id:
