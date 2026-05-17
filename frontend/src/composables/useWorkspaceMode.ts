@@ -23,8 +23,8 @@ export interface WorkspaceModeOption {
 }
 
 export interface PanelStyle {
-  width: string
-  opacity: number
+  readonly width: string
+  readonly opacity: number
 }
 
 export interface UseWorkspaceModeReturn {
@@ -41,9 +41,9 @@ export const WORKSPACE_MODES: WorkspaceModeOption[] = [
   { value: 'workbench', label: 'Workbench' },
 ]
 
-const FULL: PanelStyle = { width: '100%', opacity: 1 }
-const HALF: PanelStyle = { width: '50%', opacity: 1 }
-const HIDDEN: PanelStyle = { width: '0%', opacity: 0 }
+const FULL: PanelStyle = Object.freeze({ width: '100%', opacity: 1 })
+const HALF: PanelStyle = Object.freeze({ width: '50%', opacity: 1 })
+const HIDDEN: PanelStyle = Object.freeze({ width: '0%', opacity: 0 })
 
 export function useWorkspaceMode(initialMode: WorkspaceMode = 'split'): UseWorkspaceModeReturn {
   const viewMode = ref<WorkspaceMode>(initialMode)
