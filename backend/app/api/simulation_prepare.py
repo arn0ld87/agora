@@ -247,6 +247,16 @@ def prepare_simulation():
         )
 
     force_regenerate = data.get('force_regenerate', False)
+    # P5.3-Fix: Wenn Request kein Profil mitschickt (Frontend setzt bei
+    # Profil-Auswahl `STORAGE_MODEL=default`), das im Projekt persistierte
+    # Profil aus dem Ontology-Schritt als Default injizieren — sonst landet
+    # die Sim-Vorbereitung im Server-Default-Modell.
+    _data_profile = (data.get('llm_profile_id') or '').strip() or None
+    _data_model = (data.get('llm_model') or '').strip() or None
+    if not _data_profile and (not _data_model or _data_model.lower() == 'default'):
+        _early_project = ProjectManager.get_project(state.project_id)
+        if _early_project is not None and getattr(_early_project, 'llm_profile_id', None):
+            data['llm_model'] = f"profile:{_early_project.llm_profile_id}"
     # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
     from ..utils.llm_profile_resolver import expand_profile_in_data
     expand_profile_in_data(data)

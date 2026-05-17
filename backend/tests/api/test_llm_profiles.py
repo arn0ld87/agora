@@ -38,12 +38,25 @@ _PROFILE = {
 }
 
 
-def test_list_returns_bootstrap_profile(client):
+def test_list_returns_bootstrap_profile(client, monkeypatch):
+    # Bootstrap erfolgt nur, wenn LLM_MODEL_NAME nicht-leer ist. Vorher hat der
+    # Store stillschweigend ein Profil mit `qwen2.5:32b` erzeugt — was in
+    # Cloud-Setups dead-on-arrival war.
+    monkeypatch.setenv("LLM_MODEL_NAME", "qwen2.5:32b")
     res = client.get("/api/settings/llm-profiles/")
     assert res.status_code == 200
     data = res.get_json()
     assert data["success"] is True
     assert len(data["data"]["profiles"]) >= 1
+
+
+def test_list_returns_empty_when_no_model_env(client, monkeypatch):
+    # P5.3-Fix: ohne LLM_MODEL_NAME wird KEIN Auto-Profil mehr erzeugt.
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    res = client.get("/api/settings/llm-profiles/")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["data"]["profiles"] == []
 
 
 def test_create_and_list(client):

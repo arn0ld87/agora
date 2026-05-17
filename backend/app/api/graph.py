@@ -369,6 +369,12 @@ def generate_ontology():
     # keinen Override mitschickt. Secrets bleiben ausserhalb (redacted_metadata).
     project.llm_model = llm_model_override
     project.llm_provider = llm_runtime.redacted_metadata() or None
+    # P5.3-Fix: aktives Profil am Projekt persistieren, damit spätere Stages
+    # (build_graph, simulation_prepare, report) das Profil auch dann ehren, wenn
+    # der Folge-Request kein eigenes `llm_profile_id` mehr mitschickt
+    # (Frontend setzt bei Profil-Auswahl `STORAGE_MODEL=default` und sendet
+    # daher leeres llm_model an /api/graph/build).
+    project.llm_profile_id = llm_profile_id
     ProjectManager.save_project(project)
     run_registry.update_run(
         run_id,
@@ -423,11 +429,34 @@ def _validate_build_request(data: dict):
 
 
 def _resolve_llm_overrides(data: dict, project):
-    """Parse llm_model / llm_provider from *data* and build RuntimeLlmConfig.
+    """Parse llm_model / llm_provider / llm_profile_id from *data* and project.
 
-    Returns ``(llm_runtime, llm_model_override, error_response)`` where
-    *error_response* is ``None`` on success.
+    Returns ``(llm_runtime, llm_model_override, resolved_profile, error_response)``
+    where *error_response* is ``None`` on success. *resolved_profile* is a
+    ``LlmProfile`` (with API key) or ``None`` when no profile pathway applies.
     """
+    # P5.3-Fix: explizites Profil im Request bevorzugen, sonst auf das am
+    # Projekt persistierte Profil aus dem Ontology-Schritt zurückfallen.
+    # Ohne diesen Fallback fällt die Build-Stufe auf den Server-Default
+    # (LLM_MODEL_NAME) zurück, weil das Frontend bei Profil-Auswahl
+    # `STORAGE_MODEL=default` setzt und damit kein llm_model mehr mitschickt.
+    requested_profile_id = (data.get('llm_profile_id') or '').strip() or None
+    effective_profile_id = requested_profile_id or getattr(project, 'llm_profile_id', None)
+    resolved_profile = None
+    if effective_profile_id:
+        from ..services.llm_profiles_store import get_llm_profiles_store
+        resolved_profile = get_llm_profiles_store().get(
+            effective_profile_id, include_api_key=True
+        )
+        if resolved_profile is None:
+            return None, None, None, json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=404,
+                message=f"LLM profile {effective_profile_id!r} not found",
+            )
+        # Bei Profil-Pfad bypassen wir den Stage-Router (Parität zu generate_ontology).
+        # Keine expand_profile_in_data hier — den Profil-Client baut _make_ner_override.
+
     # UI sendet bei Profile-Auswahl `llm_model = "profile:<id>"`. Helper expandiert
     # das in echtes Modell + provider/api_key/base_url aus dem Store, damit die
     # restliche Pipeline (NER, Embedding, Report) den Profile-Mechanismus nicht
@@ -444,13 +473,13 @@ def _resolve_llm_overrides(data: dict, project):
     try:
         llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
     except ValueError as exc:
-        return None, None, json_error(
+        return None, None, None, json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=400,
             message=str(exc),
         )
 
-    return llm_runtime, llm_model_override, None
+    return llm_runtime, llm_model_override, resolved_profile, None
 
 
 def _check_project_state_for_build(project, force: bool):
@@ -552,19 +581,37 @@ def _create_build_run_record(project_id: str, project, graph_name: str, task_man
     return run_record, task_id
 
 
-def _make_ner_override_from_route(run_id: str, resolved_route, llm_runtime) -> NERExtractor:
-    """Build a dedicated NERExtractor from the resolved per-run route."""
-    ner_llm_client = LLMClient.from_route(
-        resolved_route,
-        secret_resolver=SecretResolver(),
-        api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
-        run_id=run_id,
-    )
-    logger.info(
-        "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s",
-        ner_llm_client.model,
-        resolved_route.provider_id,
-    )
+def _make_ner_override(
+    run_id: str,
+    resolved_route,
+    llm_runtime,
+    resolved_profile=None,
+) -> NERExtractor:
+    """Build a NERExtractor — Profil-Pfad bevorzugt, sonst Route-Snapshot."""
+    if resolved_profile is not None:
+        # P5.3-Fix: Profil-Bindung an NER-Stage. Ohne diesen Pfad fiel der
+        # Build auf den Server-Default zurück, sobald das Profil-Modell nicht
+        # in der Stage-Routing-Tabelle existierte (Ollama Cloud / OpenAI /
+        # Gemini-Profile produzierten `nodes=0, edges=0`).
+        from ..utils.llm_client import build_client_from_profile
+        ner_llm_client = build_client_from_profile(resolved_profile, run_id=run_id)
+        logger.info(
+            "Build-Pfad nutzt LLM-Profil: provider=%s model=%s",
+            resolved_profile.provider,
+            resolved_profile.model_name,
+        )
+    else:
+        ner_llm_client = LLMClient.from_route(
+            resolved_route,
+            secret_resolver=SecretResolver(),
+            api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
+            run_id=run_id,
+        )
+        logger.info(
+            "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s",
+            ner_llm_client.model,
+            resolved_route.provider_id,
+        )
     return NERExtractor(llm_client=ner_llm_client)
 
 
@@ -585,7 +632,7 @@ def build_graph():
     if err is not None:
         return err
 
-    llm_runtime, llm_model_override, err = _resolve_llm_overrides(data, project)
+    llm_runtime, llm_model_override, resolved_profile, err = _resolve_llm_overrides(data, project)
     if err is not None:
         return err
 
@@ -622,10 +669,11 @@ def build_graph():
     resolved_route = route_router.resolve("graph_build")
     route_router.lock_stage("graph_build", resolved_route)
 
-    ner_override: NERExtractor = _make_ner_override_from_route(
+    ner_override: NERExtractor = _make_ner_override(
         run_record["run_id"],
         resolved_route,
         llm_runtime,
+        resolved_profile=resolved_profile,
     )
 
     # Start background task

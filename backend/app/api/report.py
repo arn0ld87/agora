@@ -165,6 +165,21 @@ def generate_report():
     if not project:
         return json_error(f"Project does not exist: {state.project_id}", status=404)
 
+    # P5.3-Fix: Wenn Request kein Profil mitschickt, das im Projekt
+    # persistierte Profil aus dem Ontology-Schritt verwenden — sonst fällt
+    # die Report-Stufe auf den Server-Default zurück, sobald das Frontend
+    # bei Profil-Auswahl `llm_model=default` sendet.
+    if _resolved_profile is None and not llm_profile_id and getattr(project, 'llm_profile_id', None):
+        from ..services.llm_profiles_store import get_llm_profiles_store
+        llm_profile_id = project.llm_profile_id
+        _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
+        if _resolved_profile is None:
+            logger.warning(
+                "Project %s referenziert unbekanntes LLM-Profil %r — Fallback auf Stage-Routing",
+                state.project_id, llm_profile_id,
+            )
+            llm_profile_id = None
+
     graph_id = state.graph_id or project.graph_id
     if not graph_id:
         return json_error("Missing graph ID, please ensure graph is built", status=400)
