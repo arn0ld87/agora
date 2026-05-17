@@ -382,6 +382,7 @@
             "report_outline",
             "report_section",
             "report_synthesis",
+            "red_team",
             "evidence_extraction",
             "interview",
             "other"
@@ -818,6 +819,15 @@
         "$ref": "#/$defs/ProjectImpact"
       },
       "title": "Project Impacts",
+      "type": "array"
+    },
+    "red_team_findings": {
+      "description": "Befunde der Red-Team-Review-Stage (max. 10).",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Red Team Findings",
       "type": "array"
     },
     "report_id": {

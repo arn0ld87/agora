@@ -256,4 +256,39 @@ def compute_claim_confidence(
     return score, label, applied_penalties
 
 
-__all__ = ["compute_confidence", "compute_claim_confidence", "_has_contradiction"]
+_ECHO_CAP_THRESHOLD: float = 0.75
+_ECHO_CAP_MAX_SCORE: float = 0.84
+
+
+def apply_echo_cap(
+    score: float,
+    label: str,
+    echo_index: float,
+    is_cross_stakeholder: bool,
+) -> tuple[float, str]:
+    """Deckelt Cross-Stakeholder-Claim-Scores bei hohem Echo-Chamber-Index.
+
+    Wenn ``echo_index > 0.75`` UND ``is_cross_stakeholder=True``:
+    - score wird auf max 0.84 gedeckelt.
+    - label ``high`` und ``verified`` werden auf ``medium`` heruntergestuft.
+
+    Ohne Echo-Chamber-Überschreitung oder bei nicht-Cross-Stakeholder-Claims
+    wird score/label unverändert zurückgegeben.
+    """
+    if not is_cross_stakeholder or echo_index <= _ECHO_CAP_THRESHOLD:
+        return score, label
+    capped_score = min(score, _ECHO_CAP_MAX_SCORE)
+    capped_label = label
+    if label in ("high", "verified"):
+        capped_label = "medium"
+    elif capped_score < 0.85 and label in ("high", "verified"):
+        capped_label = "medium"
+    return round(capped_score, 3), capped_label
+
+
+__all__ = [
+    "apply_echo_cap",
+    "compute_confidence",
+    "compute_claim_confidence",
+    "_has_contradiction",
+]

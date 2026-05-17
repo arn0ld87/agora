@@ -210,6 +210,7 @@ ModelAttributionStage = Literal[
     "report_outline",
     "report_section",
     "report_synthesis",
+    "red_team",
     "evidence_extraction",
     "interview",
     "other",
@@ -282,4 +283,11 @@ class ReportV3(BaseModel):
     model_attribution: list[ModelAttribution] = Field(
         default_factory=list,
         description="Welches LLM-Modell hat welche Stage produziert.",
+    )
+    # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
+    # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
+    red_team_findings: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Befunde der Red-Team-Review-Stage (max. 10).",
     )
