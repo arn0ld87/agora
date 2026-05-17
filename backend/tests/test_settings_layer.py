@@ -69,7 +69,7 @@ def test_every_section_has_at_least_one_field():
 
 
 def test_field_by_key_lookup():
-    assert field_by_key('LLM_MODEL_NAME').default == 'qwen2.5:32b'
+    assert field_by_key('LLM_MODEL_NAME').default == ''
     assert field_by_key('does-not-exist') is None
 
 
@@ -78,7 +78,7 @@ def test_field_by_key_lookup():
     [
         # Strings/Enums — 1:1 aus dem Default-Argument von
         # ``os.environ.get(...)`` in ``backend/app/config.py``.
-        ('LLM_MODEL_NAME', 'qwen2.5:32b'),
+        ('LLM_MODEL_NAME', ''),
         ('LLM_BASE_URL', 'http://localhost:11434/v1'),
         ('LLM_MAX_OUTPUT_TOKENS', 8192),
         ('LLM_CONTEXT_LIMIT', 262144),
@@ -128,7 +128,7 @@ def test_schema_defaults_match_config_defaults(key: str, expected_default):
 def test_default_source_when_nothing_is_set(isolated_service, clean_env):
     state = isolated_service.get_field_state('LLM_MODEL_NAME')
     assert state['source'] == SOURCE_DEFAULT
-    assert state['value'] == 'qwen2.5:32b'
+    assert state['value'] == ''
     assert state['is_set'] is False
 
 
@@ -274,7 +274,7 @@ def test_get_schema_does_not_leak_secret_defaults(isolated_service):
     schema = isolated_service.get_schema()
     by_key = {entry['key']: entry for entry in schema}
     assert by_key['NEO4J_PASSWORD']['default'] is None
-    assert by_key['LLM_MODEL_NAME']['default'] == 'qwen2.5:32b'
+    assert by_key['LLM_MODEL_NAME']['default'] == ''
 
 
 def test_get_schema_includes_enum_values_and_bounds(isolated_service):

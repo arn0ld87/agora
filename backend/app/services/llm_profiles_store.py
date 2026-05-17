@@ -61,15 +61,21 @@ def _row_to_profile(row: sqlite3.Row) -> LlmProfile:
     )
 
 
-def _bootstrap_profile() -> dict:
+def _bootstrap_profile() -> Optional[dict]:
     """Erzeugt Default-Profil aus LLM_*-Env-Variablen.
 
     Localhost-Falle: 'localhost' aus dem Host-.env resolved nicht innerhalb des
     Containers. Default daher 'host.docker.internal'; Provider-Detection muss
     den Host-Alias kennen.
+
+    Gibt ``None`` zurück, wenn kein ``LLM_MODEL_NAME`` gesetzt ist —
+    sonst entstand früher ein totes Auto-Profil mit Tag ``qwen2.5:32b``,
+    das in Cloud-Setups (Ollama Cloud / OpenAI / Gemini) zu 404 führte.
     """
     base_url = os.environ.get("LLM_BASE_URL", "http://host.docker.internal:11434/v1")
-    model = os.environ.get("LLM_MODEL_NAME", "qwen2.5:32b")
+    model = (os.environ.get("LLM_MODEL_NAME") or "").strip()
+    if not model:
+        return None
     if "openai.com" in base_url:
         provider = "openai"
     elif "googleapis.com" in base_url:
@@ -116,14 +122,15 @@ class LlmProfilesStore:
             ).fetchall()
             if not rows:
                 bp = _bootstrap_profile()
-                conn.execute(
-                    "INSERT INTO llm_profiles VALUES "
-                    "(:id,:name,:provider,:base_url,:model_name,:api_key,:is_default,:created_at,:updated_at)",
-                    bp,
-                )
-                rows = conn.execute(
-                    "SELECT * FROM llm_profiles ORDER BY created_at DESC"
-                ).fetchall()
+                if bp is not None:
+                    conn.execute(
+                        "INSERT INTO llm_profiles VALUES "
+                        "(:id,:name,:provider,:base_url,:model_name,:api_key,:is_default,:created_at,:updated_at)",
+                        bp,
+                    )
+                    rows = conn.execute(
+                        "SELECT * FROM llm_profiles ORDER BY created_at DESC"
+                    ).fetchall()
             return [_row_to_profile(r) for r in rows]
 
     def get(self, profile_id: str, include_api_key: bool = False) -> Optional[LlmProfile]:

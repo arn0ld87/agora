@@ -80,7 +80,11 @@ class Config:
     # LLM configuration (unified OpenAI format)
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'http://localhost:11434/v1')
-    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen2.5:32b')
+    # Leerer Default: Operator MUSS ein Modell setzen (ENV oder Settings-UI)
+    # oder ein LLM-Profil anlegen. Vorher führte `qwen2.5:32b` in Cloud-Setups
+    # (Ollama Cloud / OpenAI / Gemini) zu 404, weil das Auto-Bootstrap-Profil
+    # auf ein lokales Tag verwies, das im aktiven Backend nicht existiert.
+    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', '')
     # Completion-Limit fuer einzelne LLM-Antworten. CAMEL verwendet dieses
     # Feld leider auch als Default fuer sein Memory-Token-Limit, deshalb
     # trennen wir die eigentliche Memory-Grenze unten separat.

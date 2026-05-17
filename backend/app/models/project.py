@@ -60,6 +60,10 @@ class Project:
     # abgelegt.
     llm_model: Optional[str] = None
     llm_provider: Optional[Dict[str, Any]] = None
+    # ID des persistierten LLM-Profils, das beim Ontology-Generate aktiv war.
+    # Spätere Stages (build_graph, simulation_prepare, report) ziehen dieses
+    # Profil als Default heran, wenn der Request kein eigenes Profil mitgibt.
+    llm_profile_id: Optional[str] = None
 
     # Error information
     error: Optional[str] = None
@@ -83,6 +87,7 @@ class Project:
             "chunk_overlap": self.chunk_overlap,
             "llm_model": self.llm_model,
             "llm_provider": self.llm_provider,
+            "llm_profile_id": self.llm_profile_id,
             "error": self.error
         }
     
@@ -110,6 +115,7 @@ class Project:
             chunk_overlap=data.get('chunk_overlap', 50),
             llm_model=data.get('llm_model'),
             llm_provider=data.get('llm_provider'),
+            llm_profile_id=data.get('llm_profile_id'),
             error=data.get('error')
         )
 

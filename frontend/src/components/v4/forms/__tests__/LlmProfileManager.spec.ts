@@ -75,6 +75,28 @@ const PROFILE_B = {
   updated_at: '2026-01-02T00:00:00Z',
 }
 
+// ModelPicker-Stub: emittiert das übergebene `data-test-model` direkt, ohne
+// auf den llmProviders-Store oder Backend-Calls angewiesen zu sein.
+const ModelPickerStub = {
+  props: ['modelValue', 'placeholder', 'disabled'],
+  emits: ['update:modelValue'],
+  template: `
+    <input
+      class="model-picker-stub"
+      :value="modelValue?.model ?? ''"
+      @input="$emit('update:modelValue', $event.target.value ? {
+        stage: null,
+        provider_id: 'ollama',
+        model: $event.target.value,
+        temperature: null,
+        max_tokens: null,
+        reasoning_effort: 'none',
+        provider_options: {},
+      } : null)"
+    />
+  `,
+}
+
 function wrap(storeOverrides?: object) {
   return mount(LlmProfileManager, {
     global: {
@@ -94,7 +116,10 @@ function wrap(storeOverrides?: object) {
           stubActions: true,
         }),
       ],
-      stubs: { Card: { template: '<div><slot /></div>' } },
+      stubs: {
+        Card: { template: '<div><slot /></div>' },
+        ModelPicker: ModelPickerStub,
+      },
     },
   })
 }
@@ -122,7 +147,10 @@ describe('LlmProfileManager', () => {
     // Felder befüllen
     await w.find('#pm-name').setValue('Mein Testprofil')
     await w.find('#pm-base-url').setValue('http://localhost:11434/v1')
-    await w.find('#pm-model').setValue('llama3:8b')
+    // ModelPicker-Stub emittiert StageLLMRoute; LlmProfileManager mappt
+    // provider_id='ollama' → provider='ollama' und überschreibt base_url nur,
+    // wenn das aktuelle Feld leer oder Teil der Default-Tabelle ist.
+    await w.find('.model-picker-stub').setValue('llama3:8b')
 
     // Speichern klicken (stubActions: true → create ist bereits ein vi.fn spy)
     const saveBtn = w.findAll('button.v4-btn--primary').find(b => b.text() === 'Speichern')

@@ -86,7 +86,11 @@ SETTINGS_FIELDS: tuple[FieldSpec, ...] = (
               reload_required=True),
     FieldSpec('LLM_BASE_URL', 'llm', 'string',
               default='http://localhost:11434/v1', reload_required=True),
-    FieldSpec('LLM_MODEL_NAME', 'llm', 'string', default='qwen2.5:32b'),
+    # Leerer Default — Bootstrap-Profil wird nur erzeugt, wenn der Operator
+    # ein konkretes Modell setzt. Vorher führte `qwen2.5:32b` zu 404 in
+    # Cloud-Setups (Ollama Cloud / OpenAI / Gemini), weil das Auto-Profil
+    # auf ein Tag verwies, das im aktiven Backend nicht existiert.
+    FieldSpec('LLM_MODEL_NAME', 'llm', 'string', default=''),
     FieldSpec('LLM_MAX_OUTPUT_TOKENS', 'llm', 'int', default=8192,
               min_value=128, max_value=131072),
     FieldSpec('LLM_CONTEXT_LIMIT', 'llm', 'int', default=262144,

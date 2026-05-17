@@ -25,9 +25,14 @@ VALID_TASK_ID = "01234567-89ab-4def-8123-456789abcdef"
 
 @pytest.fixture
 def app(monkeypatch):
+    # @require_scope ist aktiv, sobald AGORA_AUTH_TOKEN gesetzt ist. Diese
+    # Endpunkt-Error-Tests prüfen Validierung/Mapping, nicht Auth — daher
+    # erzwingen wir Open-Mode für die ganze Testdatei.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)
     flask_app = Flask(__name__)
+    flask_app.config["AGORA_AUTH_TOKEN"] = ""
     flask_app.extensions = {"container": container, "neo4j_storage": storage}
     flask_app.register_blueprint(graph_bp, url_prefix="/api/graph")
     return flask_app
@@ -159,6 +164,10 @@ def test_build_graph_without_ontology_returns_ontology_missing(client, monkeypat
     fake_project.status = ProjectStatus.CREATED
     fake_project.ontology = None
     fake_project.graph_build_task_id = None
+    # MagicMock-Default für llm_profile_id ist truthy → würde Profile-Store
+    # ansprechen, der hier nicht gemockt ist.
+    fake_project.llm_profile_id = None
+    fake_project.llm_model = None
     monkeypatch.setattr(
         "app.api.graph.ProjectManager.get_project",
         staticmethod(lambda _pid: fake_project),
@@ -180,6 +189,8 @@ def test_build_graph_when_already_building_returns_graph_build_in_progress(
     fake_project.status = ProjectStatus.GRAPH_BUILDING
     fake_project.ontology = {"entity_types": [], "edge_types": []}
     fake_project.graph_build_task_id = "existing-task-id"
+    fake_project.llm_profile_id = None
+    fake_project.llm_model = None
     monkeypatch.setattr(
         "app.api.graph.ProjectManager.get_project",
         staticmethod(lambda _pid: fake_project),
@@ -233,12 +244,15 @@ def test_add_text_batches_callback_receives_four_args():
         assert abs(ratio - completed / 3) < 1e-9, "progress_ratio muss completed/total sein"
 
 
-def test_add_progress_callback_sets_progress_detail_on_task_manager():
+def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch):
     """add_progress_callback in graph.py setzt progress_detail mit Batch-Marker-Feldern.
 
     Wir patchen TaskManager.update_task und GraphBuilderService.add_text_batches,
     damit der Build-Thread synchron durchlaufen kann.
     """
+    # @require_scope("graph:write") fordert Auth, sobald AGORA_AUTH_TOKEN gesetzt
+    # ist. Dieser Test prüft progress_detail-Pipeline, nicht Auth — Open-Mode.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     import threading
 
     from app.models.task import TaskManager
@@ -267,6 +281,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
     fake_project.chunk_overlap = 50
     fake_project.llm_model = None
     fake_project.llm_provider = None
+    fake_project.llm_profile_id = None
 
     def fake_add_text_batches(
         graph_id, chunks, batch_size=3, progress_callback=None, ner_extractor=None
@@ -298,9 +313,10 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager():
         patch("app.api.graph.TextProcessor.split_text", return_value=["chunk1", "chunk2"]),
         patch("app.api.graph.ArtifactLocator.existing_paths", return_value={}),
         patch("app.api.graph.seed_run_stage_routing"),
-        patch("app.api.graph._make_ner_override_from_route", return_value=MagicMock()),
+        patch("app.api.graph._make_ner_override", return_value=MagicMock()),
     ):
         flask_app = Flask(__name__)
+        flask_app.config["AGORA_AUTH_TOKEN"] = ""
         storage = MagicMock()
         from app.container import AgoraContainer
         container = AgoraContainer(neo4j_storage=storage)
