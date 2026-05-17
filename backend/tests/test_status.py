@@ -35,11 +35,15 @@ class TestStatusFunctions:
         monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "1")
         assert _get_backend_status()['allow_small_sim'] is True
 
-        # Andere Werte (z. B. "0", "true", leer) zählen NICHT als aktiviert —
-        # Backend-Validator akzeptiert ausschließlich "1".
+        # Andere Werte (z. B. "0", "true", leer, gepaddetes "1") zaehlen NICHT
+        # als aktiviert — Backend-Validator (simulation_config_generator.
+        # _validate_persona_quota) vergleicht ebenfalls strict gegen "1" ohne
+        # strip, der Status-Endpoint muss exakt das gleiche Bit liefern.
         monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "true")
         assert _get_backend_status()['allow_small_sim'] is False
         monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "0")
+        assert _get_backend_status()['allow_small_sim'] is False
+        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", " 1 ")
         assert _get_backend_status()['allow_small_sim'] is False
 
     def test_get_disk_status(self):

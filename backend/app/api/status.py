@@ -60,7 +60,10 @@ def _get_backend_status():
         "ok": True,
         "version": __version__,
         "auth_mode": _get_auth_mode(),
-        "allow_small_sim": os.environ.get("AGORA_ALLOW_SMALL_SIM", "").strip() == "1",
+        # Exakter Vergleich gegen "1" — kein .strip() — damit die UI das
+        # gleiche Bit sieht wie der Validator in simulation_config_generator
+        # (_validate_persona_quota nutzt ebenfalls `!= "1"` ohne strip).
+        "allow_small_sim": os.environ.get("AGORA_ALLOW_SMALL_SIM") == "1",
     }
 
 
