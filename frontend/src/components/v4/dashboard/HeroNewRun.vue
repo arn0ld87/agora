@@ -289,7 +289,7 @@ onMounted(() => {
       <div class="hero-zone hero-config">
         <div class="hero-field">
           <label class="hero-label" for="hero-profile">
-            {{ $t('dashboard.hero.profileLabel', 'Profil (optional)') }}
+            {{ $t('dashboard.hero.profileLabel') }}
           </label>
           <select
             id="hero-profile"
@@ -298,7 +298,7 @@ onMounted(() => {
             @change="onPickProfile"
           >
             <option value="">
-              {{ $t('dashboard.hero.profileNone', '— Profil deaktivieren —') }}
+              {{ $t('dashboard.hero.profileNone') }}
             </option>
             <option v-for="opt in profileOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
@@ -309,7 +309,7 @@ onMounted(() => {
           <label class="hero-label">{{ $t('dashboard.hero.modelLabel') }}</label>
           <ModelPicker
             :model-value="selectedRoute"
-            :placeholder="$t('dashboard.hero.modelPlaceholder', 'Modell wählen …')"
+            :placeholder="$t('dashboard.hero.modelPlaceholder')"
             @update:model-value="onPickRoute"
           />
         </div>

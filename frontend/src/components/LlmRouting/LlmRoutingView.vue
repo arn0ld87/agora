@@ -119,7 +119,7 @@ function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
           <label>{{ t('llm.model') }}</label>
           <ModelPicker
             :model-value="routing.global_default"
-            :placeholder="t('llm.routing.model_placeholder', 'Modell wählen …')"
+            :placeholder="t('llm.routing.model_placeholder')"
             @update:model-value="onGlobalDefaultPicked"
           />
 
@@ -143,7 +143,7 @@ function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
             <ModelPicker
               :model-value="routing.stage_overrides[stage] || routing.global_default"
               :disabled="isStageLocked(stage)"
-              :placeholder="t('llm.routing.model_placeholder', 'Modell wählen …')"
+              :placeholder="t('llm.routing.model_placeholder')"
               @update:model-value="(route) => onStageOverridePicked(stage, route)"
             />
 

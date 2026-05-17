@@ -35,7 +35,7 @@ const emit = defineEmits<{
       <label class="field-label">{{ t('step4.model.reportLabel') }}</label>
       <ModelPicker
         :model-value="modelValue"
-        :placeholder="t('step4.model.placeholder', 'Modell wählen …')"
+        :placeholder="t('step4.model.placeholder')"
         @update:model-value="(value) => emit('update:modelValue', value)"
       />
     </div>
