@@ -33,13 +33,37 @@ _SNAPSHOTS = Path(__file__).parent / "snapshots"
 
 
 # ---------------------------------------------------------------------------
-# Hilfsfunktion
+# Hilfsfunktionen + Fixtures
 # ---------------------------------------------------------------------------
+
+_HEDGE_SNAPSHOT = _SNAPSHOTS / "evidence-gating-hedge-words.txt"
+
 
 def _load(path: Path) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
     # _comment-Felder entfernen — ReportClaimModel hat extra="forbid"
     return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+def _read_hedge_words() -> list[str]:
+    """Liest die Hedge-Wörter direkt aus dem ADR-0002-Anker-2-Snapshot."""
+    return [
+        w.strip()
+        for w in _HEDGE_SNAPSHOT.read_text(encoding="utf-8").splitlines()
+        if w.strip()
+    ]
+
+
+def _matched_hedge_words(text: str, hedge_words: list[str]) -> list[str]:
+    """Gibt alle Hedge-Wörter zurück, die case-insensitive im Text vorkommen."""
+    text_lower = text.lower()
+    return [hw for hw in hedge_words if hw.lower() in text_lower]
+
+
+@pytest.fixture(scope="module")
+def hedge_words() -> list[str]:
+    """Pytest-Fixture für die geladenen Hedge-Wörter (modul-weit gecached)."""
+    return _read_hedge_words()
 
 
 # ---------------------------------------------------------------------------
@@ -48,9 +72,12 @@ def _load(path: Path) -> dict:
 
 
 def test_hedge_snapshot_anchor_vollstaendig():
-    """Anker 2: Hedge-Snapshot enthält genau die vier ADR-0002-Pflicht-Wörter."""
-    snapshot_path = _SNAPSHOTS / "evidence-gating-hedge-words.txt"
-    words = [w.strip() for w in snapshot_path.read_text(encoding="utf-8").splitlines() if w.strip()]
+    """Anker 2: Hedge-Snapshot enthält genau die vier ADR-0002-Pflicht-Wörter.
+
+    Dieser Test liest die Datei direkt (nicht via Fixture), weil er gerade
+    die Snapshot-Datei selbst gegen Drift absichert.
+    """
+    words = _read_hedge_words()
     expected = {
         "vermutlich",
         "deutet auf",
@@ -109,7 +136,9 @@ def test_bad_fixture_wirft_validation_error(fixture_name: str, match_fragment: s
         ReportClaimModel.model_validate(data)
 
 
-def test_bad_seed_only_missing_hedge_kein_validator_aber_kein_hedge():
+def test_bad_seed_only_missing_hedge_kein_validator_aber_kein_hedge(
+    hedge_words: list[str],
+):
     """seed_only-Claim ohne Hedge-Wort: ReportClaimModel akzeptiert es (kein
     Text-Validator im Pydantic-Contract — Hedge-Pflicht ist LLM-Prompt-seitig
     via Anker 1 gesichert). Test verifiziert, dass kein silenter Hedge-Check
@@ -118,12 +147,6 @@ def test_bad_seed_only_missing_hedge_kein_validator_aber_kein_hedge():
     Ist das Ergebnis eines zukünftigen Validator-Upgrades ein ValidationError,
     muss dieser Test auf die parametrisierten bad-Cases oben migriert werden.
     """
-    snapshot_path = _SNAPSHOTS / "evidence-gating-hedge-words.txt"
-    hedge_words = [
-        w.strip()
-        for w in snapshot_path.read_text(encoding="utf-8").splitlines()
-        if w.strip()
-    ]
     data = _load(_BAD / "evidence_gating_seed_only_missing_hedge.json")
 
     # Instanziierung muss aktuell durchlaufen (kein Pydantic-Validator für Text-Hedge)
@@ -131,8 +154,7 @@ def test_bad_seed_only_missing_hedge_kein_validator_aber_kein_hedge():
 
     # Snapshot-Assertion: kein Hedge-Wort im Claim-Text — das ist die Regression,
     # die wir einfrieren
-    claim_lower = claim.claim_text.lower()
-    matched = [hw for hw in hedge_words if hw.lower() in claim_lower]
+    matched = _matched_hedge_words(claim.claim_text, hedge_words)
     assert matched == [], (
         f"Fixture 'seed_only_missing_hedge' enthält jetzt ein Hedge-Wort ({matched}). "
         "Das Fixture muss aktualisiert werden, damit der Bad-Case korrekt bleibt."
@@ -194,20 +216,13 @@ def test_good_fixture_instanziierung_erfolgreich(
     )
 
 
-def test_good_seed_only_with_hedge_enthaelt_hedge_wort():
+def test_good_seed_only_with_hedge_enthaelt_hedge_wort(hedge_words: list[str]):
     """seed_only-Fixture mit Hedge muss tatsächlich ein Hedge-Wort tragen.
 
     Sichert ab, dass das Fixture nicht ohne Hedge editiert wurde.
     """
-    snapshot_path = _SNAPSHOTS / "evidence-gating-hedge-words.txt"
-    hedge_words = [
-        w.strip()
-        for w in snapshot_path.read_text(encoding="utf-8").splitlines()
-        if w.strip()
-    ]
     data = _load(_GOOD / "evidence_gating_seed_only_with_hedge.json")
-    claim_lower = data["claim_text"].lower()
-    matched = [hw for hw in hedge_words if hw.lower() in claim_lower]
+    matched = _matched_hedge_words(data["claim_text"], hedge_words)
     assert matched, (
         f"Good-Fixture 'seed_only_with_hedge' enthält kein Hedge-Wort mehr. "
         f"Claim-Text: '{data['claim_text']}'. Hedge-Wörter: {hedge_words}"
