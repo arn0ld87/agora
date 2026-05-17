@@ -5,29 +5,29 @@
 Diese Datei ergänzt [`AGENTS.md`](AGENTS.md) um Claude-Code-eigene Fähigkeiten.
 Allgemeine Regeln (Verbote, Commands, Konfiguration) stehen in AGENTS.md.
 
-## CRITICAL: Tool-Pipeline vor Code
+## CRITICAL: Tool-Pipeline (harmonisiert mit context-mode)
 
-**Diese Reihenfolge ist bindend.** Vor jedem Read/rg/Bash-Call MUSS diese Pipeline
+**Diese Reihenfolge ist bindend.** Vor jedem Read/Bash-Call MUSS diese Pipeline
 durchlaufen sein:
 
 ```
-code-review-graph → context7 → sequential-thinking → context-mode
+code-review-graph → context7 → ctx_batch_execute → ctx_execute → Read/Bash
 ```
 
-Erst danach: Read, rg, Bash. Abweichung nur bei reinen Config-/Markdown-Dateien.
+Context-mode ist die Execution-Layer — seine PreToolUse-Hooks greifen aktiv ein:
+Bash ist auf git/fs/nav limitiert, Read nur zum Editieren, WebFetch für kleine Lookups.
+Arbeite MIT diesen Regeln, nicht dagegen.
 
-Die vollständige Tool-Entscheidungsmatrix, Anti-Pattern und Enforcement-Mechanismen:
-[`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
+Detail: [`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
 
 ## CRITICAL: Skills vor Code-Exploration
 
-Bevor du Code liest oder schreibst, prüfe die verfügbaren Skills in der
-System-Reminder. Wenn auch nur 1 % Chance auf Match: invoken. Niemals aus
-Gedächtnis zitieren — Skills entwickeln sich weiter.
+Bevor du Code liest oder schreibst, prüfe die verfügbaren Skills.
+Wenn auch nur 1 % Chance auf Match: invoken. Skills liefern WAS — context-mode definiert WIE.
 
 Anti-Pattern (SOFORT STOPPEN):
 - "Nur eine schnelle Frage" → Jede Frage = Aufgabe.
-- "Ich schau erst in den Code" → Skills definieren, WIE exploriert wird.
+- "Ich schau erst in den Code" → Skills + context-mode zuerst.
 
 ## Evidence-Gating (ADR-0002) — 5 Hartanker
 
@@ -42,6 +42,9 @@ Diese Anker dürfen NIE ohne Supersedes-ADR + User-Sign-off geschwächt werden:
 Schwächungen verlangen `docs/decisions/0002-supersedes.md`, kein stilles Refactor.
 
 ## Subagent-Routing
+
+Context-mode injiziert seinen Routing-Block automatisch in jeden Subagent-Prompt.
+Subagent-Prompts sollen sich auf fachliche Aufgabe und Domänen-Kontext beschränken.
 
 Ziel-Mix: ~35 % Opus, ~55 % Sonnet, ~10 % Haiku.
 

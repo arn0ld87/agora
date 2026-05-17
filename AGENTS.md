@@ -10,7 +10,7 @@ Test-Counts und Versionsstände in [`docs/STATUS.md`](docs/STATUS.md), operative
 Agora ist ein **lokal-first** Multi-Agent-Simulator für DACH-Zielgruppenreaktionen. Pipeline:
 Dokument hochladen → Wissensgraph extrahieren → Personas spawnen → OASIS-Simulation → DACH-Report.
 
-**Stack:** Flask (Python 3.11) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
+**Stack:** Flask (Python 3.12) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
 + Redis + Ollama. Package-Manager: `uv` (Backend), `npm` (Frontend).
 
 **Status:** v1.0.0 (2026-05-11). Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
@@ -18,8 +18,12 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 
 ## Sofort wichtig
 
-- **Tool-Reihenfolge ist Pflicht:** `code-review-graph` → `context7` → `sequential-thinking` →
-  `context-mode` → **erst dann** `Read`/`rg`/`Bash`. Detail: [`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
+- **Tool-Pipeline (harmonisiert mit context-mode):** `code-review-graph` → `context7` →
+  `ctx_batch_execute` → `ctx_execute` → **erst dann** `Read`/`Bash`. Detail:
+  [`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
+- **context-mode ist die Execution-Layer.** PreToolUse-Hooks limitieren Bash (nur git/fs/nav,
+  kein curl/wget), Read (nur zum Editieren, Analysen via ctx_execute_file), WebFetch
+  (erlaubt, aber ctx_fetch_and_index für Research bevorzugt).
 - **Branch-Hygiene:** Nie direkt auf `main` pushen. PR-Workflow inklusive Gemini-Sichtung:
   [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md).
 - **Worktree für Slices:** `/private/tmp/agora-<slice-id>/`. Details:
@@ -32,7 +36,7 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 ## Stack-Map (Kurzfassung)
 
 ```
-backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
+backend/                    Python 3.12, uv, Flask, Pydantic v2, pytest
   app/
     contracts/              Layer 0: Single Source of Truth (Pydantic v2, extra="forbid")
     api/                    HTTP-Routen (Flask Blueprints)

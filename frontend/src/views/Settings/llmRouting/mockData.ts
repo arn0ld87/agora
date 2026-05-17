@@ -40,6 +40,7 @@ export const MOCK_STAGE_STATUS: StageStatusRow[] = [
   { stage: 'persona_generation', status: 'Completed', tone: 'green'  },
   { stage: 'simulation_rounds',  status: 'Running',   tone: 'orange' },
   { stage: 'report_generation',  status: 'Pending',   tone: 'gray'   },
+  { stage: 'evaluation',         status: 'Pending',   tone: 'gray'   },
 ]
 
 export const PROVIDER_OPTIONS: SelectOption[] = [

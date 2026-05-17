@@ -4,12 +4,25 @@ import en from './locales/en.json'
 
 const SUPPORTED: string[] = ['de', 'en']
 const STORAGE_KEY = 'agora.locale'
+const DEFAULT_LOCALE = 'de'
+
+function safeStorage(): Storage | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null
+  } catch {
+    return null
+  }
+}
+
+function safeDocument(): Document | null {
+  return typeof document !== 'undefined' ? document : null
+}
 
 function detectLocale(): string {
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const storage = safeStorage()
+  const stored = storage?.getItem(STORAGE_KEY)
   if (stored && SUPPORTED.includes(stored)) return stored
-  // Default: German
-  return 'de'
+  return DEFAULT_LOCALE
 }
 
 const i18n = createI18n({
@@ -23,14 +36,14 @@ const i18n = createI18n({
 export function setLocale(locale: string): void {
   if (!SUPPORTED.includes(locale)) return
   i18n.global.locale.value = locale as 'de' | 'en'
-  localStorage.setItem(STORAGE_KEY, locale)
-  document.documentElement.setAttribute('lang', locale)
+  safeStorage()?.setItem(STORAGE_KEY, locale)
+  safeDocument()?.documentElement.setAttribute('lang', locale)
 }
 
 export function currentLocale(): string {
   return i18n.global.locale.value
 }
 
-document.documentElement.setAttribute('lang', detectLocale())
+safeDocument()?.documentElement.setAttribute('lang', detectLocale())
 
 export default i18n

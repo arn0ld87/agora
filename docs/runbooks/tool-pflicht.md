@@ -72,35 +72,13 @@ Immer wenn die Aufgabe eines dieser Themen berührt:
 
 ---
 
-## Schritt 3: sequential-thinking
+## Schritt 3: ctx_batch_execute (Primary Research)
 
-**Zweck:** Strukturiertes Durchdenken komplexer Aufgaben, bevor du implementierst.
+**Zweck:** Mehrere Befehle + Suchfragen in EINEM Call. Ersetzt 30+ Einzel-Calls.
 
 ### Wann Pflicht
 
-- Multi-File-Refactors (2+ Dateien betroffen)
-- Pipeline-übergreifende Änderungen (graph → env → simulation → report)
-- Debugging über die Flask↔OASIS-Subprozess-Grenze
-- Aufgaben mit unklarem Lösungspfad oder ambigen Specs
-- Architektur-Entscheidungen (ADR-würdige Änderungen)
-
-### Nicht nötig bei
-
-- Einzel-File-Bugfix mit klarem Root Cause
-- Typos, Formatting, Imports sortieren
-- README/CHANGELOG-Updates
-
----
-
-## Schritt 4: context-mode
-
-**Zweck:** Token-Verbrauch minimieren, Output-Management.
-
-### Harte Regel
-
-**ALLER Command-Output > 20 Zeilen MUSS durch `ctx_batch_execute` oder `ctx_execute`.**
-
-Ausnahmen: `Edit`, `Write`, `mkdir`, `rm`, `mv`, `git add/commit/push`.
+Immer wenn du Shell-Befehle oder MCP-Tool-Calls mit potenziell >20 Zeilen Output machst.
 
 ### Tool-Wahl
 
@@ -109,13 +87,45 @@ Ausnahmen: `Edit`, `Write`, `mkdir`, `rm`, `mv`, `git add/commit/push`.
 | Mehrere Commands + mehrere Suchfragen | `ctx_batch_execute(commands, queries)` — EIN Call |
 | Ein Command, große Ausgabe | `ctx_execute(language, code)` |
 | Logfile/CSV/JSON analysieren | `ctx_execute_file(path, language, code)` |
-| Datei bearbeiten | Natives `Edit`/`Write` |
+| Webseiten fetchen + indexieren | `ctx_fetch_and_index(url, source)` → `ctx_search(queries)` |
+| Gezielte Suche in indexierten Inhalten | `ctx_search(queries)` |
+
+### Harte Regel
+
+**ALLER Command-Output > 20 Zeilen MUSS durch `ctx_batch_execute` oder `ctx_execute`.**
+Kein Bash für Analysen — Bash NUR für git, mkdir, rm, mv, Navigation.
+
+### Nicht nötig bei
+
+- Edit, Write, mkdir, rm, mv, git add/commit/push (Bash hier okay)
+- Kleine Read-Calls (<50KB) zum Editieren
 
 ---
 
-## Schritt 5: Read / rg / Bash
+## Schritt 4: ctx_execute / ctx_execute_file (Processing)
+
+**Zweck:** Einzel-Analysen, API-Calls, Datenverarbeitung, Datei-Analyse.
+
+### Wann Pflicht
+
+- API-Calls (gh, curl-Ersatz)
+- Log-Analyse
+- Build-Output verarbeiten
+- Große Dateien analysieren (ctx_execute_file statt Read)
+
+### Nicht nötig bei
+
+- Kleine Dateien, die du editieren willst → Read ist korrekt
+
+---
+
+## Schritt 5: Read / Bash
 
 Erst jetzt. Und nur für den verbleibenden Rest.
+
+- **Read:** Nur wenn du die Datei EDITIEREN willst. Analysen → ctx_execute_file.
+- **Bash:** NUR git, mkdir, rm, mv, Navigation. Shell-Analysen → ctx_execute.
+- **WebFetch:** Erlaubt für kleine Lookups. Research → ctx_fetch_and_index.
 
 ---
 
@@ -123,12 +133,12 @@ Erst jetzt. Und nur für den verbleibenden Rest.
 
 ### Selbst-Check vor Tool-Call
 
-Vor jedem Read/rg/Bash-Call fragst du dich:
+Vor jedem Read/Bash-Call fragst du dich:
 
 > Habe ich code-review-graph für strukturelle Fragen genutzt?
 > Habe ich context7 für Library-Fragen konsultiert?
-> Habe ich sequential-thinking bei Komplexität ausgeführt?
-> Läuft dieser Output durch context-mode?
+> Läuft dieser Output durch ctx_batch_execute / ctx_execute?
+> Ist Bash wirklich nur git/fs/nav?
 
 Wenn eine Antwort "nein" ist und der Schritt relevant war: Pipeline nachholen.
 
