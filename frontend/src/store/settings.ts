@@ -227,7 +227,14 @@ export const useSettingsStore = defineStore('settings', () => {
           if (!parsed.success || saving.value) return
           await loadSettings()
         },
-        error: () => {
+        error: (ev: Event) => {
+          // openSettingsStream awaits a signed ticket, so an EventSource
+          // error can fire before the outer eventSource ref is assigned.
+          // The event target carries the actual EventSource — close that
+          // one too, then drop the cached ref if it already pointed at us.
+          if (typeof EventSource !== 'undefined' && ev.target instanceof EventSource) {
+            ev.target.close()
+          }
           if (eventSource) {
             eventSource.close()
             eventSource = null
@@ -237,10 +244,6 @@ export const useSettingsStore = defineStore('settings', () => {
       })
       streamState.value = 'open'
     } catch {
-      if (eventSource) {
-        eventSource.close()
-        eventSource = null
-      }
       streamState.value = 'failed'
     }
   }

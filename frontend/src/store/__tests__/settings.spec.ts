@@ -156,10 +156,10 @@ describe('useSettingsStore', () => {
     _fetchSettingsSchema.mockResolvedValue(buildSchemaResponse())
     _fetchSettings.mockResolvedValue(buildValuesResponse())
 
-    let errorHandler: (() => void) | undefined
+    let errorHandler: ((ev: Event) => void) | undefined
     const closeSpy = vi.fn()
     _openSettingsStream
-      .mockImplementationOnce(async (handlers?: { error?: () => void }) => {
+      .mockImplementationOnce(async (handlers?: { error?: (ev: Event) => void }) => {
         errorHandler = handlers?.error
         return { close: closeSpy }
       })
@@ -170,7 +170,10 @@ describe('useSettingsStore', () => {
     await store.connectStream()
     expect(store.streamState).toBe('open')
 
-    errorHandler?.()
+    // Synthetic error event without an EventSource target — exercises
+    // the path where ev.target is something else and we fall back to
+    // the cached eventSource ref for cleanup.
+    errorHandler?.(new Event('error'))
     expect(store.streamState).toBe('failed')
     expect(closeSpy).toHaveBeenCalledTimes(1)
 
