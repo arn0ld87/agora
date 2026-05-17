@@ -26,6 +26,13 @@ const uiVersion = (import.meta.env.VITE_UI_VERSION as string | undefined) ?? 'v4
 ;(window as unknown as { __AGORA_UI_VERSION__?: string }).__AGORA_UI_VERSION__ = uiVersion
 document.documentElement.setAttribute('data-ui-version', uiVersion)
 
+// Stale-Storage-Cleanup vor Vue-Mount triggern (fire-and-forget): Callers
+// von runtimeLlmPayloadFromStorage sind user-getriggert (Step3Simulation
+// doStart/goReport), das HTTP-Roundtrip-Race ist damit praktisch geschlossen.
+cleanupStaleRuntimeLlmStorage().catch((err) => {
+  console.error('[main] cleanupStaleRuntimeLlmStorage failed', err)
+})
+
 const app = createApp(App)
 
 app.use(createPinia())
@@ -37,7 +44,3 @@ app.use(i18n)
 registerI18n(i18n.global as Parameters<typeof registerI18n>[0])
 
 app.mount('#app')
-
-cleanupStaleRuntimeLlmStorage().catch((err) => {
-  console.error('[main] cleanupStaleRuntimeLlmStorage failed', err)
-})

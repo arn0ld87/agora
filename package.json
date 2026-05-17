@@ -12,6 +12,7 @@
     "dev": "concurrently --kill-others -n \"backend,frontend\" -c \"green,cyan\" \"bun run backend\" \"bun run frontend\"",
     "backend": "cd backend && uv run python run.py",
     "frontend": "cd frontend && bun run dev",
+    "build": "bun run build:frontend",
     "build:frontend": "cd frontend && bun run build",
     "lint:frontend": "cd frontend && bun run lint",
     "lint:backend": "cd backend && uv run ruff check app/ tests/",
