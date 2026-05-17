@@ -81,7 +81,8 @@ def test_build_graph_uses_resolved_route_for_ner_override(client, monkeypatch):
     monkeypatch.setattr("app.api.graph.resolve_route_api_key", lambda *_a, **_k: "sk-route")
     monkeypatch.setattr("app.api.graph.LLMClient.from_route", lambda *a, **k: fake_llm_client)
     monkeypatch.setattr("app.api.graph.NERExtractor", fake_ner_extractor)
-    monkeypatch.setattr("app.api.graph.threading.Thread.start", run_inline)
+    # PR 2: Thread-Start liegt jetzt in app.jobs.enqueue (single point of change).
+    monkeypatch.setattr("app.jobs.threading.Thread.start", run_inline)
     monkeypatch.setattr("app.api.graph.run_registry.create_run", lambda *a, **k: {"run_id": "run_graph_1"})
     monkeypatch.setattr("app.api.graph.run_registry.update_run", lambda *a, **k: None)
 

@@ -113,7 +113,8 @@ def _patched_generate():
         patch("app.api.report.ProjectManager") as mock_pm,
         patch("app.api.report.TaskManager") as mock_tm,
         patch("app.api.report.run_registry") as mock_rr,
-        patch("app.api.report.threading.Thread") as mock_thread,
+        # PR 2: Thread-Start liegt jetzt in app.jobs.enqueue.
+        patch("app.jobs.threading.Thread") as mock_thread,
         patch("app.api.report.resolve_route_api_key", return_value="sk-route"),
         patch("app.api.report.LLMClient.from_route", return_value=MagicMock()),
         patch("app.api.report.StageModelRouter") as mock_smr,
