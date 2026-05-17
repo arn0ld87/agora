@@ -75,7 +75,9 @@ context.md
 # vor dem ersten Edit lesen können müssen.
 PLAN.md.bak
 # .github/ enthält die CI- und Docker-Image-Workflows — getrackt und aktiv.
-/docs/
+# /docs/ ist getrackt (434 Files, ADRs/runbooks/plans/archive) — STATUS.md wird
+# per scripts/sync-status.sh regeneriert, MAI-16 CI prüft Drift. Früheres
+# /docs/-ignore blockierte normale Adds (musste -f geforced werden).
 /Agora_design/
 /scripts/logs/
 /.codex
