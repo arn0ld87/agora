@@ -1173,7 +1173,9 @@
       "profileDefault": "Default",
       "numAgentsLabel": "Personas",
       "numRoundsLabel": "Sim rounds",
-      "numAgentsWarning": "Below recommended floor (30). Reduced statistical significance."
+      "numAgentsWarning": "Below recommended floor (30). Reduced statistical significance.",
+      "smallSimBadge": "SMALL_SIM",
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 is active — slider goes down to 10 instead of 30. Statistical significance is limited."
     },
     "stats": {
       "activeRuns": "Active runs",

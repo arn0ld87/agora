@@ -19,6 +19,7 @@ import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import { StageLLMRouteSchema, type StageLLMRoute } from '../../../contracts/llmRoutingContract'
+import { getSystemStatus } from '../../../api/status'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -96,18 +97,29 @@ const selectedRoute = ref<StageLLMRoute | null>(loadStoredRoute())
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
-const NUM_AGENTS_MIN = 10
-const NUM_AGENTS_FLOOR = 30
+// Persona-Floor synchron mit Backend (simulation_config_generator._validate_persona_quota).
+// Hard-Floor=30, optional override via AGORA_ALLOW_SMALL_SIM=1. Wert wird beim
+// Mount per /api/status (backend.allow_small_sim) gezogen — bis dahin pessimistisch
+// auf den harten Floor klemmen, damit der User keine Run-Konfig zusammenklicken kann
+// die das Backend dann mit 422 ablehnt.
+const NUM_AGENTS_HARD_FLOOR = 30
+const NUM_AGENTS_OVERRIDE_FLOOR = 10
+const NUM_AGENTS_DEFAULT = NUM_AGENTS_HARD_FLOOR
 const NUM_AGENTS_MAX = 100
 const NUM_ROUNDS_MIN = 3
 const NUM_ROUNDS_DEFAULT = 10
 const NUM_ROUNDS_MAX = 30
 
-const numAgents = ref<number>(NUM_AGENTS_FLOOR)
+const allowSmallSim = ref<boolean>(false)
+const numAgents = ref<number>(NUM_AGENTS_DEFAULT)
 const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
 
+const numAgentsMin = computed<number>(
+  () => (allowSmallSim.value ? NUM_AGENTS_OVERRIDE_FLOOR : NUM_AGENTS_HARD_FLOOR),
+)
+
 const showAgentsWarning = computed<boolean>(
-  () => numAgents.value >= NUM_AGENTS_MIN && numAgents.value < NUM_AGENTS_FLOOR,
+  () => allowSmallSim.value && numAgents.value >= NUM_AGENTS_OVERRIDE_FLOOR && numAgents.value < NUM_AGENTS_HARD_FLOOR,
 )
 
 const profileOptions = computed(() => {
@@ -233,6 +245,19 @@ onMounted(() => {
   fetchLlmProfiles()
     .then(profiles => { llmProfiles.value = profiles })
     .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })
+  // backend.allow_small_sim aus /api/status spiegelt AGORA_ALLOW_SMALL_SIM
+  // wider. Default-pessimistisch bei Fetch-Fehler: harter 30er-Floor bleibt.
+  getSystemStatus()
+    .then(envelope => {
+      const backend = (envelope?.data?.backend ?? envelope?.backend) as { allow_small_sim?: boolean } | undefined
+      allowSmallSim.value = !!backend?.allow_small_sim
+      // Wenn der Override nach Mount inaktiv ist, klemmen wir einen ggf. aus
+      // dem letzten Override-Run persistenten Slider-Wert wieder hoch.
+      if (!allowSmallSim.value && numAgents.value < NUM_AGENTS_HARD_FLOOR) {
+        numAgents.value = NUM_AGENTS_HARD_FLOOR
+      }
+    })
+    .catch(() => { /* Fail-safe: allowSmallSim bleibt false → 30er-Floor aktiv */ })
 })
 </script>
 
@@ -324,17 +349,20 @@ onMounted(() => {
           <label class="hero-label" for="hero-num-agents">
             {{ $t('dashboard.hero.numAgentsLabel') }}
             <span class="hero-slider-value">{{ numAgents }}</span>
+            <span v-if="allowSmallSim" class="hero-small-sim-badge" :title="$t('dashboard.hero.smallSimActiveTooltip')">
+              {{ $t('dashboard.hero.smallSimBadge') }}
+            </span>
           </label>
           <input
             id="hero-num-agents"
             v-model.number="numAgents"
             type="range"
-            :min="NUM_AGENTS_MIN"
+            :min="numAgentsMin"
             :max="NUM_AGENTS_MAX"
             step="1"
             class="hero-slider"
             :aria-valuenow="numAgents"
-            :aria-valuemin="NUM_AGENTS_MIN"
+            :aria-valuemin="numAgentsMin"
             :aria-valuemax="NUM_AGENTS_MAX"
           />
           <div v-if="showAgentsWarning" class="hero-warning" role="alert">
@@ -661,6 +689,22 @@ onMounted(() => {
   font-weight: 600;
   color: var(--text-secondary);
   margin-left: 6px;
+}
+
+.hero-small-sim-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid #f97316;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: help;
 }
 
 /* Warning-Badge */

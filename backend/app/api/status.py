@@ -49,11 +49,18 @@ def _get_auth_mode():
 
 
 def _get_backend_status():
-    """Get backend health, version, and active auth mode."""
+    """Get backend health, version, and active auth mode.
+
+    ``allow_small_sim`` mirrors the ``AGORA_ALLOW_SMALL_SIM`` env-var so the
+    frontend can adjust the persona-slider lower bound dynamically instead of
+    letting the user submit a run that the simulation_config_generator's
+    persona-quota validator rejects with a hard 422.
+    """
     return {
         "ok": True,
         "version": __version__,
         "auth_mode": _get_auth_mode(),
+        "allow_small_sim": os.environ.get("AGORA_ALLOW_SMALL_SIM", "").strip() == "1",
     }
 
 

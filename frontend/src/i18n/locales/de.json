@@ -1173,7 +1173,9 @@
       "profileDefault": "Standard",
       "numAgentsLabel": "Personas",
       "numRoundsLabel": "Sim-Runden",
-      "numAgentsWarning": "Unter dem empfohlenen Floor (30). Aussagekraft reduziert."
+      "numAgentsWarning": "Unter dem empfohlenen Floor (30). Aussagekraft reduziert.",
+      "smallSimBadge": "SMALL_SIM",
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 ist aktiv — Slider geht bis 10 statt 30. Statistische Aussagekraft ist eingeschränkt."
     },
     "stats": {
       "activeRuns": "Aktive Runs",

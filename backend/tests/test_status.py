@@ -18,11 +18,29 @@ from app.api.status import (
 class TestStatusFunctions:
     """Test suite for status helper functions"""
 
-    def test_get_backend_status(self):
+    def test_get_backend_status(self, monkeypatch):
         """Test backend status returns correct version and ok=true."""
+        # ENV-Drift aus dem lokalen .env-File abklemmen, damit die Assertion
+        # gegen den Default deterministisch bleibt.
+        monkeypatch.delenv("AGORA_ALLOW_SMALL_SIM", raising=False)
         result = _get_backend_status()
         assert result['ok'] is True
         assert result['version'] == __version__
+        # Slice "small-sim-floor-frontend-sync": default ohne ENV-Override ist
+        # der 30-Personas-Floor scharf, also allow_small_sim=False.
+        assert result['allow_small_sim'] is False
+
+    def test_get_backend_status_reflects_allow_small_sim_env(self, monkeypatch):
+        """Backend exponiert AGORA_ALLOW_SMALL_SIM=1 als allow_small_sim=True."""
+        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "1")
+        assert _get_backend_status()['allow_small_sim'] is True
+
+        # Andere Werte (z. B. "0", "true", leer) zählen NICHT als aktiviert —
+        # Backend-Validator akzeptiert ausschließlich "1".
+        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "true")
+        assert _get_backend_status()['allow_small_sim'] is False
+        monkeypatch.setenv("AGORA_ALLOW_SMALL_SIM", "0")
+        assert _get_backend_status()['allow_small_sim'] is False
 
     def test_get_disk_status(self):
         """Test disk status returns expected fields."""
