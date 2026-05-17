@@ -15,11 +15,14 @@ Master-Key:
 Security:
     - Dateirechte 0o600 nach jedem Write.
     - Atomarer Write via tmp-File + ``os.replace`` (wie llm_provider_secrets_store).
-    - fcntl.flock für Multi-Worker-Schutz (POSIX-only).
+    - ``fcntl.flock`` für Multi-Worker-Schutz (POSIX-only). Auf Windows fällt
+      das Locking weg — mit ``gunicorn --workers 1`` (PR 1 Hardstop) gibt es
+      nur einen Writer-Prozess, daher kein Korruptionsrisiko. Sobald Multi-
+      Worker auf Windows angestrebt wird, sollte ``portalocker`` (cross-
+      platform) eingeführt werden. Gemini-Review zu PR #524.
 """
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -28,6 +31,14 @@ from typing import Optional
 from cryptography.fernet import Fernet
 
 from ..utils.logger import get_logger
+
+try:  # POSIX-only — auf Windows nicht verfügbar
+    import fcntl as _fcntl
+
+    _HAS_FCNTL = True
+except ImportError:  # pragma: no cover - Plattform-spezifisch
+    _fcntl = None  # type: ignore[assignment]
+    _HAS_FCNTL = False
 
 logger = get_logger("agora.services.api_keys_persistence")
 
@@ -94,6 +105,14 @@ def load(*, data_dir: Optional[Path] = None) -> dict:
     Returns:
         ``{key_id: dict}`` — Plain-Dict-Repräsentation der ApiKeyModel-Felder.
         Leeres Dict wenn Datei nicht existiert.
+
+    Raises:
+        RuntimeError: Crypto-Konfigurationsfehler (z. B. fehlender
+            ``AGORA_FERNET_KEY`` in Prod). Caller soll das BEIM BOOT
+            sichtbar machen — niemals schlucken.
+        Andere Exceptions (``InvalidToken``, ``json.JSONDecodeError``,
+        ``OSError``): Daten-/IO-Fehler. Caller darf in diesem Fall mit
+        leerem Store starten, soll aber Warning loggen.
     """
     resolved = data_dir or _resolve_data_dir()
     path = resolved / _STORE_FILENAME
@@ -101,18 +120,17 @@ def load(*, data_dir: Optional[Path] = None) -> dict:
     if not path.exists():
         return {}
 
-    try:
-        ciphertext = path.read_bytes().strip()
-        if not ciphertext:
-            return {}
-        fernet = _load_fernet()
-        plaintext = fernet.decrypt(ciphertext).decode("utf-8")
-        return json.loads(plaintext)
-    except Exception as exc:
-        logger.error("Konnte API-Keys-Store nicht lesen (%s): %s", path, exc)
-        raise RuntimeError(
-            f"API-Keys-Store nicht lesbar ({path}): {exc}"
-        ) from exc
+    # _load_fernet() raised RuntimeError bei Config-Problemen — bewusst
+    # NICHT abfangen, damit Caller (`ApiKeysStore._load_from_disk`)
+    # zwischen Config-Fehler (re-raise) und Daten-Fehler (leer-Start)
+    # differenzieren kann (Gemini-Review zu PR #524).
+    fernet = _load_fernet()
+
+    ciphertext = path.read_bytes().strip()
+    if not ciphertext:
+        return {}
+    plaintext = fernet.decrypt(ciphertext).decode("utf-8")
+    return json.loads(plaintext)
 
 
 def save(records: dict, *, data_dir: Optional[Path] = None) -> None:
@@ -130,27 +148,35 @@ def save(records: dict, *, data_dir: Optional[Path] = None) -> None:
     fernet = _load_fernet()
     ciphertext = fernet.encrypt(plaintext)
 
-    lock_path = path.with_suffix(".lock")
-    with open(lock_path, "w", encoding="utf-8") as lock_fh:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX)
-        try:
-            tmp_path = path.with_suffix(".tmp")
-            fd = os.open(
-                str(tmp_path),
-                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                0o600,
-            )
+    if _HAS_FCNTL and _fcntl is not None:
+        lock_path = path.with_suffix(".lock")
+        with open(lock_path, "w", encoding="utf-8") as lock_fh:
+            _fcntl.flock(lock_fh, _fcntl.LOCK_EX)
             try:
-                os.write(fd, ciphertext)
+                _atomic_write(path, ciphertext)
             finally:
-                os.close(fd)
-            os.replace(tmp_path, path)
-            # Defense in depth: chmod nach Replace
-            try:
-                os.chmod(path, 0o600)
-            except OSError as exc:
-                logger.warning(
-                    "Konnte Rechte auf %s nicht auf 0600 setzen: %s", path, exc
-                )
-        finally:
-            fcntl.flock(lock_fh, fcntl.LOCK_UN)
+                _fcntl.flock(lock_fh, _fcntl.LOCK_UN)
+    else:
+        # Windows / no fcntl: relies on PR-1 --workers 1 Hardstop, no
+        # cross-process locking. Atomic os.replace is portable.
+        _atomic_write(path, ciphertext)
+
+
+def _atomic_write(path: Path, ciphertext: bytes) -> None:
+    tmp_path = path.with_suffix(".tmp")
+    fd = os.open(
+        str(tmp_path),
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+        0o600,
+    )
+    try:
+        os.write(fd, ciphertext)
+    finally:
+        os.close(fd)
+    os.replace(tmp_path, path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:
+        logger.warning(
+            "Konnte Rechte auf %s nicht auf 0600 setzen: %s", path, exc
+        )

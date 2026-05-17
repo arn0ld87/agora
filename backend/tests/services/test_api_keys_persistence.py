@@ -121,3 +121,46 @@ def test_missing_fernet_key_autogenerates_in_debug(tmp_path, monkeypatch):
 
     assert resp.key.label == "DebugAutoKey"
     assert resp.token.startswith("ago_")
+
+
+def test_validate_token_throttles_disk_flush_by_ttl(tmp_path, monkeypatch):
+    """Gemini-Review #524: `validate_token` darf nicht bei jedem API-Request
+    den kompletten Store auf Disk schreiben — `last_used_at` wird per TTL
+    gedrosselt persistiert."""
+    from datetime import datetime, timedelta, timezone
+
+    import app.services.api_keys_store as _store_mod
+
+    store = ApiKeysStore()
+    resp = store.create("ThrottleTest", ["read"])
+    token = resp.token
+
+    flush_calls: list[int] = []
+    real_save = store._save
+
+    def _counting_save() -> None:
+        flush_calls.append(1)
+        real_save()
+
+    monkeypatch.setattr(store, "_save", _counting_save)
+
+    base = datetime(2026, 5, 17, 18, 0, tzinfo=timezone.utc)
+    times = iter(
+        [
+            base,
+            base + timedelta(seconds=5),
+            base + timedelta(seconds=10),
+            base + timedelta(seconds=30),
+            base + timedelta(seconds=61),  # > TTL
+        ]
+    )
+    monkeypatch.setattr(_store_mod, "_now", lambda: next(times))
+
+    for _ in range(5):
+        store.validate_token(token)
+
+    # 5 Aufrufe, aber maximal 2 Disk-Flushes:
+    # erster (previous=None → flush) + nach 61 s (TTL überschritten).
+    assert len(flush_calls) == 2, (
+        f"Erwartete 2 Disk-Flushes (initial + nach TTL), bekam {len(flush_calls)}"
+    )

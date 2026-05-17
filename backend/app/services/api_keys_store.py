@@ -23,10 +23,19 @@ from ..contracts.api_keys_contract import (
     ApiKeyModel,
     ApiKeyScope,
 )
+from ..utils.logger import get_logger
 from . import api_keys_persistence as _persist
+
+logger = get_logger("agora.services.api_keys_store")
 
 _TOKEN_RANDOM_HEX = 48
 _PREFIX_HEX_LEN = 8
+# TTL für `last_used_at`-Disk-Flush. Ohne TTL würde jeder API-Request einen
+# Fernet-Encrypt + Disk-Write des kompletten Stores triggern — Gemini-Review
+# zu PR #524 nennt das als High-Severity-I/O-Bottleneck. Updates landen
+# weiter sofort In-Memory; nur die Persistenz wird gebündelt. Bei Crash
+# gehen maximal ``_LAST_USED_PERSIST_TTL_SECONDS`` Audit-Daten verloren.
+_LAST_USED_PERSIST_TTL_SECONDS = 60.0
 
 
 def _now() -> datetime:
@@ -62,20 +71,35 @@ class ApiKeysStore:
         self._data_dir: Optional[Path] = data_dir
         # Initialer Load von Disk
         self._keys: dict[str, ApiKeyModel] = self._load_from_disk()
+        # Tracking, wann `last_used_at` zuletzt für jeden Key persistiert
+        # wurde. Beim Load von Disk übernehmen wir den existierenden Wert,
+        # damit der erste Validate keinen sofortigen Flush triggert.
+        self._last_used_persisted_at: dict[str, datetime] = {
+            kid: model.last_used_at
+            for kid, model in self._keys.items()
+            if model.last_used_at is not None
+        }
 
     def _load_from_disk(self) -> dict[str, ApiKeyModel]:
         try:
             raw = _persist.load(data_dir=self._data_dir)
-        except (RuntimeError, Exception):
-            # Im Fehlerfall (z. B. fehlender Key ohne Debug) leer starten;
-            # Save-Operationen werden dann beim nächsten Schreibversuch scheitern.
+        except RuntimeError:
+            # RuntimeError aus _persist.load signalisiert Config-/Crypto-
+            # Probleme (fehlender FERNET-Key in Prod, korrupter Ciphertext).
+            # Schlucken würde einen leeren Key-Store ohne Diagnose-Hinweis
+            # ergeben — Operator muss das beim Boot sehen.
+            raise
+        except Exception as exc:
+            logger.error("Failed to load API keys from disk: %s", exc)
             return {}
         result: dict[str, ApiKeyModel] = {}
         for key_id, fields in raw.items():
             try:
                 result[key_id] = ApiKeyModel.model_validate(fields)
-            except Exception:
-                pass  # Korrupte Einträge überspringen
+            except Exception as exc:
+                logger.warning(
+                    "Skipping corrupt API key entry '%s': %s", key_id, exc
+                )
         return result
 
     def _serialize_for_disk(self) -> dict:
@@ -126,20 +150,35 @@ class ApiKeysStore:
         return ApiKeyCreateResponse(key=model, token=token)
 
     def validate_token(self, token: str) -> Optional[ApiKeyModel]:
-        """Validiert einen Klartext-Token und aktualisiert last_used_at."""
+        """Validiert einen Klartext-Token und aktualisiert last_used_at.
+
+        `last_used_at` wird unmittelbar In-Memory aktualisiert; der Disk-
+        Flush wird per TTL (`_LAST_USED_PERSIST_TTL_SECONDS`) gedrosselt,
+        damit nicht jeder API-Request einen Fernet-Encrypt + Disk-Write des
+        gesamten Stores triggert (Gemini-Review zu PR #524).
+        """
         if not token.startswith("ago_"):
             return None
         hashed = _hash_token(token)
+        now = _now()
         with self._lock:
             for key_id, model in self._keys.items():
                 if model.hashed_token == hashed:
                     if model.status == "revoked":
                         return model
-                    updated = model.model_copy(update={"last_used_at": _now()})
+                    updated = model.model_copy(update={"last_used_at": now})
                     self._keys[key_id] = updated
-                    self._save()
+                    if self._should_flush_last_used_at(key_id, now):
+                        self._save()
+                        self._last_used_persisted_at[key_id] = now
                     return updated
         return None
+
+    def _should_flush_last_used_at(self, key_id: str, now: datetime) -> bool:
+        previous = self._last_used_persisted_at.get(key_id)
+        if previous is None:
+            return True
+        return (now - previous).total_seconds() >= _LAST_USED_PERSIST_TTL_SECONDS
 
     def revoke(self, key_id: str) -> Optional[ApiKeyModel]:
         with self._lock:
@@ -177,9 +216,18 @@ class ApiKeysStore:
                         pass
 
 
-_store_singleton = ApiKeysStore()
+_store_singleton: Optional[ApiKeysStore] = None
 
 
 def get_api_keys_store() -> ApiKeysStore:
-    """Modul-Singleton — pro Flask-Prozess geteilt."""
+    """Lazy Modul-Singleton — pro Flask-Prozess geteilt.
+
+    Lazy-Init verhindert, dass eine fehlende ``AGORA_FERNET_KEY``-
+    Konfiguration den Modul-Import sprengt — der Konfigurationsfehler
+    wird erst am ersten echten Use sichtbar (klare Diagnose statt
+    ``ImportError`` aus dem Pytest-Collector).
+    """
+    global _store_singleton
+    if _store_singleton is None:
+        _store_singleton = ApiKeysStore()
     return _store_singleton
