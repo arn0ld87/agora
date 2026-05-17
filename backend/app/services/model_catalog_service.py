@@ -23,7 +23,13 @@ logger = get_logger("agora.model_catalog")
 
 # Modul-globaler PoolManager — Connection-Reuse über Calls hinweg.
 # Wichtig: KEIN ``requests.Session`` — die wäre instrumentiert.
-_HTTP = urllib3.PoolManager(timeout=urllib3.Timeout(connect=5.0, read=5.0))
+# retries=False, weil ``requests.get`` default 0 Retries hat und Model-Discovery
+# ein blockierender UI-Call ist; 3x Retry mit Backoff würde den UI-Spinner
+# 10-30 s hängen lassen, wenn ein Provider unten ist (Gemini-MEDIUM auf PR #530).
+_HTTP = urllib3.PoolManager(
+    timeout=urllib3.Timeout(connect=5.0, read=5.0),
+    retries=False,
+)
 
 
 class ModelEntry(BaseModel):
@@ -128,7 +134,10 @@ class ModelCatalogService:
             if data:
                 return [m["id"] for m in data.get("data", [])]
             # Native /api/tags als Fallback (lokales Ollama ohne /v1-Suffix).
-            native_url = base_url.replace("/v1", "").rstrip("/")
+            # removesuffix statt replace: greift nur am Ende der URL und
+            # zerstört nicht zufällig "/v1" mitten in der Domain
+            # (Gemini-MEDIUM auf PR #530).
+            native_url = base_url.rstrip("/").removesuffix("/v1")
             data = _http_get_json(f"{native_url}/api/tags", api_key=api_key)
             if data:
                 return [m["name"] for m in data.get("models", [])]
