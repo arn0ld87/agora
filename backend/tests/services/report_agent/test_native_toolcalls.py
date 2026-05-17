@@ -218,6 +218,60 @@ class TestChatWithToolsOpenAIProvider:
         assert result["tool_calls"] == []
         assert xml_content in result["content"]
 
+    def test_chat_with_tools_routes_google_through_native_tools_path(self) -> None:
+        """Gemini-OpenAI-Compat-Layer geht NICHT in den unknown-Branch.
+
+        Vor diesem Fix matched ``generativelanguage.googleapis.com`` keinen
+        Provider-Branch in ``_detect_provider``; ``chat_with_tools`` fiel auf
+        XML-im-Prompt zurück. Gemini's Function-Filter rejected das XML mit
+        ``MALFORMED_FUNCTION_CALL`` → doppelte Retries pro Section. Nach dem
+        Fix wird ``googleapis.com`` als ``"google"`` erkannt, native
+        ``tools=``-Pfad greift.
+        """
+        client = self._make_client()
+        client.model = "gemini-3.1-pro-preview-customtools"
+        client.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+        tool_call_obj = _make_tool_call_obj(
+            "call_gemini_xyz", "panorama_search", {"query": "Multiplikator"}
+        )
+        mock_response = _make_openai_response(
+            content="",
+            tool_calls=[tool_call_obj],
+            finish_reason="tool_calls",
+        )
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create.return_value = mock_response
+        client.client = mock_openai
+
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "panorama_search",
+                    "description": "search",
+                    "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+                },
+            }
+        ]
+
+        with patch.dict("os.environ", {}, clear=False):
+            result = client.chat_with_tools(
+                messages=[{"role": "user", "content": "Suche"}],
+                tools=tools,
+                temperature=0.3,
+                max_tokens=4096,
+                context="report",
+            )
+
+        # Wenn Google in den unknown-Branch fiele, käme tool_calls=[]
+        # zurück (chat-Fallback). Native Pfad muss die Tool-Call-Form
+        # unverändert weiterreichen.
+        assert result["finish_reason"] == "tool_calls"
+        assert len(result["tool_calls"]) == 1
+        assert result["tool_calls"][0]["name"] == "panorama_search"
+        assert result["tool_calls"][0]["arguments"] == {"query": "Multiplikator"}
+
     def test_chat_with_tools_unknown_provider_returns_empty_tool_calls(self) -> None:
         """Bei Provider 'unknown' → tool_calls=[], content enthält Text."""
         client = self._make_client()

@@ -491,8 +491,10 @@ Selection Criteria:
 Return JSON format:
 {
     "selected_indices": [List of indices of selected Agents],
-    "reasoning": "Explanation of selection rationale"
-}"""
+    "reasoning": "Brief explanation (max 2 short sentences, 200 characters total)"
+}
+
+Keep `reasoning` deliberately short — the truncation budget caps the payload."""
 
         user_prompt = f"""Interview Requirement:
 {interview_requirement}
@@ -506,12 +508,21 @@ Available Agent List ({len(agent_summaries)} total):
 Please select up to {max_agents} most suitable Agents for interview and explain your selection rationale."""
 
         try:
+            # max_tokens hochgezogen: bei 50-Agent-Profil-Listen produzieren
+            # Modelle wie Gemini 3.1 Pro 500+ Zeichen "reasoning". Bei
+            # Default-4096 reicht das fuer den eingebetteten indices-Array
+            # noch, aber sobald das Modell breit erklaert, finish=length
+            # truncated → JSON-Repair fischt 91 Zeichen raus → Caller faellt
+            # auf Default [0,1,2,3,4]. Folge: jede Report-Section interviewt
+            # die gleichen 5 Agents (Bias). 8192 + explizite "kurz"-Anweisung
+            # im Prompt ist die Schutz-Schicht.
             response = self.llm.chat_json(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.3
+                temperature=0.3,
+                max_tokens=8192,
             )
 
             selected_indices = response.get("selected_indices", [])[:max_agents]
