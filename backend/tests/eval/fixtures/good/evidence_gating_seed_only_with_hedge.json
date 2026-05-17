@@ -1,0 +1,17 @@
+{
+  "_comment": "GOOD: seed_only, Claim-Text mit Hedge-Wort 'vermutlich', confidence=low — erfüllt seed_only-Stufe (ADR-0002 Tabelle Z.53).",
+  "_provenance_stufe": "seed_only",
+  "claim_id": "claim_07",
+  "claim_text": "Vermutlich wird ein Teil der Führungskräfte die neue Regelung zunächst ablehnen.",
+  "confidence_label": "low",
+  "confidence_score": 0.28,
+  "evidence": [
+    {
+      "type": "graph_fact",
+      "source": "interne_studie_q4_2025",
+      "snippet": "Historische Daten zeigen bei Führungskräften eine erhöhte Skepsis gegenüber Regelungsänderungen.",
+      "source_kind": "seed_corpus",
+      "supports_claim": true
+    }
+  ]
+}

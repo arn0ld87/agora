@@ -1,0 +1,29 @@
+{
+  "_comment": "BAD: high-Confidence mit agent_quote aus nur 1 Stakeholder-Gruppe — verletzt cross_stakeholder_for_high (ADR-0002 Anker 4). ValidationError erwartet.",
+  "_provenance_stufe": "cross_stakeholder",
+  "_violation": "nur eine Stakeholder-Gruppe, confidence=high",
+  "claim_id": "claim_02",
+  "claim_text": "Das mittlere Management begrüßt die neue Regelung einheitlich.",
+  "confidence_label": "high",
+  "confidence_score": 0.82,
+  "evidence": [
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_42",
+      "snippet": "Abteilungsleiter Kramer: Wir sehen das positiv.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "mittleres_management",
+      "supports_claim": true,
+      "quote": "Wir sehen das positiv."
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_42",
+      "snippet": "Teamleiter Hofer: Eine gute Entwicklung für unser Team.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "mittleres_management",
+      "supports_claim": true,
+      "quote": "Eine gute Entwicklung für unser Team."
+    }
+  ]
+}

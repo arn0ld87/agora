@@ -1,0 +1,18 @@
+{
+  "_comment": "BAD: seed_only-Claim ohne Hedge-Wort — verletzt ADR-0002 Stufe seed_only (Hedge-Pflicht). Kein Validator in ReportClaimModel blockt das direkt, aber Snapshot-Test prüft Hedge-Abwesenheit als Regression-Signal.",
+  "_provenance_stufe": "seed_only",
+  "_violation": "claim_text enthält kein Hedge-Wort obwohl ausschließlich seed_corpus-Evidence vorhanden",
+  "claim_id": "claim_01",
+  "claim_text": "Die Belegschaft wird die Maßnahme vollständig akzeptieren.",
+  "confidence_label": "low",
+  "confidence_score": 0.3,
+  "evidence": [
+    {
+      "type": "graph_fact",
+      "source": "korpus_befragung_2025",
+      "snippet": "Befragungsdaten zeigen keine signifikante Ablehnung.",
+      "source_kind": "seed_corpus",
+      "supports_claim": true
+    }
+  ]
+}

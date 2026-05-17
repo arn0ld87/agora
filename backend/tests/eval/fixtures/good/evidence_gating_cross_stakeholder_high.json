@@ -1,0 +1,28 @@
+{
+  "_comment": "GOOD: ≥2 agent_quotes aus ≥2 verschiedenen Stakeholder-Gruppen, confidence=high — erfüllt cross_stakeholder_for_high (ADR-0002 Anker 4).",
+  "_provenance_stufe": "cross_stakeholder",
+  "claim_id": "claim_05",
+  "claim_text": "Sowohl Produktion als auch Vertrieb sehen die Reorganisation als notwendigen Schritt.",
+  "confidence_label": "high",
+  "confidence_score": 0.88,
+  "evidence": [
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_91",
+      "snippet": "Produktionsleiterin Fischer: Diese Reorganisation ist längst überfällig.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "produktion",
+      "supports_claim": true,
+      "quote": "Diese Reorganisation ist längst überfällig."
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_91",
+      "snippet": "Vertriebsleiter Braun: Wir brauchen klarere Strukturen — das hilft uns.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "vertrieb",
+      "supports_claim": true,
+      "quote": "Wir brauchen klarere Strukturen — das hilft uns."
+    }
+  ]
+}
