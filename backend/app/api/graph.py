@@ -33,6 +33,7 @@ from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.graph_diff_helpers import build_pydantic_graph_diff
 from ..utils.rate_limit import build_rate_limit_key, upload_rate_limiter
+from ..utils.scopes import require_scope
 
 # Get logger
 logger = get_logger('agora.api')
@@ -570,6 +571,7 @@ def _make_ner_override_from_route(run_id: str, resolved_route, llm_runtime) -> N
 # ============== Interface 2: Build Graph ==============
 
 @graph_bp.route('/build', methods=['POST'])
+@require_scope("graph:write")
 @handle_api_errors(log_prefix="Graph build initiation failed")
 def build_graph():
     """

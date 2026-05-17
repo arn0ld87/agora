@@ -12,6 +12,15 @@ Design constraints:
   ``SimulationRunner``.
 - atexit / signal handler registration is self-contained; the cleanup action
   is injected as ``cleanup_callable`` to decouple from the class.
+
+Security — Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6):
+    ``os.environ.copy()`` würde das vollständige Prozess-Environment an den
+    OASIS-Subprozess vererben — damit auch Secrets wie ``SECRET_KEY``,
+    ``AGORA_AUTH_TOKEN``, ``NEO4J_PASSWORD``, ``LLM_API_KEY`` und
+    ``AGORA_FERNET_KEY``. Stattdessen wird nur die explizite Whitelist
+    ``SAFE_ENV_KEYS`` übernommen. LLM-Credentials werden ausschließlich
+    via ``runtime_env`` (Parameter von ``start_simulation``) übergeben,
+    da die OASIS-Skripte diese aus dem Env lesen müssen.
 """
 
 from __future__ import annotations
@@ -36,6 +45,27 @@ from .run_state_store import RunnerStatus, SimulationRunState
 _tracer = trace.get_tracer(__name__)
 
 logger = get_logger("agora.process_manager")
+
+# ---------------------------------------------------------------------------
+# Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6)
+# ---------------------------------------------------------------------------
+# Nur diese Keys werden aus os.environ in den OASIS-Subprozess vererbt.
+# Secrets (SECRET_KEY, AGORA_AUTH_TOKEN, NEO4J_PASSWORD, LLM_API_KEY,
+# AGORA_FERNET_KEY) werden bewusst NICHT weitergegeben. LLM-Credentials
+# kommen ausschließlich über den ``runtime_env``-Parameter.
+SAFE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "PYTHONPATH",
+        "PYTHONUTF8",
+        "PYTHONIOENCODING",
+        "TZ",
+        "LLM_BASE_URL",
+        "LLM_MODEL_NAME",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "OLLAMA_THINKING",
+    }
+)
 
 # Flag whether cleanup function is registered
 _cleanup_registered = False
@@ -270,10 +300,12 @@ def start_simulation(
         main_log_path = os.path.join(sim_dir, "simulation.log")
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
-        # Build subprocess environment
-        # env-only: os.environ.copy() vererbt das vollständige Prozess-Environment
-        # an den OASIS-Subprozess — kein settings_layer-Kandidat.
-        env = os.environ.copy()
+        # Build subprocess environment — Whitelist-only (Code-Review 2026-05-17 §1.6).
+        # Nur explizit erlaubte Keys aus os.environ; Secrets wie SECRET_KEY,
+        # AGORA_AUTH_TOKEN, NEO4J_PASSWORD etc. werden bewusst NICHT vererbt.
+        # runtime_env-Werte kommen immer mit und überschreiben Whitelist-Werte
+        # (enthält u. a. LLM_API_KEY und OPENAI_API_KEY für den OASIS-Subprozess).
+        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         if runtime_env:

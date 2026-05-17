@@ -37,6 +37,7 @@ from ..services.stage_model_router import StageModelRouter
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
 from ..utils.auth import allow_ticket_auth
+from ..utils.scopes import require_scope
 from ..utils.api_errors import ApiErrorCode
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
@@ -105,6 +106,7 @@ def _resolve_report_mode() -> ReportMode:
 # ============== Report Generation Interface ==============
 
 @report_bp.route('/generate', methods=['POST'])
+@require_scope("report:write")
 @handle_api_errors(log_prefix="Failed to start report generation task")
 def generate_report():
     data = request.get_json() or {}
@@ -768,6 +770,7 @@ def _build_zip_bundle(report_id: str, report: Any) -> bytes:
 
 
 @report_bp.route('/<report_id>/download', methods=['GET'])
+@require_scope("report:read")
 @allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
 @handle_api_errors(log_prefix="Failed to download report")
 def download_report(report_id: str):
@@ -809,6 +812,7 @@ def delete_report(report_id: str):
 # ============== Report Agent Chat Interface ==============
 
 @report_bp.route('/chat', methods=['POST'])
+@require_scope("report:write")
 @handle_api_errors(log_prefix="Chat failed")
 def chat_with_report_agent():
     data = request.get_json() or {}
