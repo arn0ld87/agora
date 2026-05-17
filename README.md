@@ -119,28 +119,58 @@ Voraussetzungen:
 - Redis
 - lokaler oder OpenAI-kompatibler LLM-Endpunkt
 
+Es gibt zwei dokumentierte Pfade. Die Wahl bestimmt, welche Vorlage du
+nach `.env` kopierst — die Defaults für `LLM_BASE_URL` /
+`EMBEDDING_BASE_URL` / `NEO4J_URI` unterscheiden sich pro Pfad.
+
+### Pfad A — Docker Compose (empfohlen für Reviews und Demos)
+
 ```bash
 git clone https://github.com/arn0ld87/agora.git
 cd agora
-cp .env.example .env
 
-# Modelle vorbereiten, falls Ollama genutzt wird
+# Docker-Vorlage: host.docker.internal-Routing für Ollama,
+# Compose-Service `neo4j` für Bolt, Qwen3-Embedding-Defaults.
+cp .env.docker.example .env
+
+# Geheimnisse erzeugen und in .env eintragen (SECRET_KEY, AGORA_AUTH_TOKEN, NEO4J_PASSWORD)
+python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))"
+python -c "import secrets; print('AGORA_AUTH_TOKEN=' + secrets.token_urlsafe(32))"
+
+# Modelle ziehen (falls Ollama genutzt wird)
 ollama pull qwen3-coder-next:cloud
 ollama pull qwen3-embedding:4b
 
-# Dev-Stack starten
+# Stack starten
 docker compose up -d --build
 ```
 
 | Dienst | URL |
 |---|---|
 | Frontend | <http://localhost:5173> |
-| Backend Health | <http://localhost:5001/health> |
+| Backend Liveness | <http://localhost:5001/health> |
+| Backend Readiness | <http://localhost:5001/readyz> |
 | Neo4j Browser | <http://localhost:7474> |
 
-Lokal ohne Docker:
+`/readyz` ist der seit Code-Review 2026-05-17 verdrahtete Readiness-
+Endpoint: er liefert nur dann 200, wenn Neo4j-Bolt, Redis-Ping, Upload-
+Verzeichnis und Embedding-Konfig kohärent sind. Docker-Healthcheck und
+Reverse-Proxies (Traefik, nginx) sollten ab jetzt gegen `/readyz` testen.
+
+### Pfad B — Host-Dev ohne Container
 
 ```bash
+git clone https://github.com/arn0ld87/agora.git
+cd agora
+
+# Vorlage hat localhost-Defaults bewusst auskommentiert — die Werte
+# unten setzen oder eigene .env-Datei bauen.
+cp .env.example .env
+
+# Ollama-Modelle wie bei Pfad A
+ollama pull qwen3-coder-next:cloud
+ollama pull qwen3-embedding:4b
+
 npm run setup:all
 npm run dev
 ```

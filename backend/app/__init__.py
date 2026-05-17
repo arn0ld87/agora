@@ -309,10 +309,12 @@ def create_app(config_class=Config):
     if should_log_startup:
         log_auth_mode(app, logger)
 
-    # Health check
-    @app.route('/health')
-    def health():
-        return {'status': 'ok', 'service': 'Agora Backend'}
+    # Liveness ``/health`` (unverändert) und Readiness ``/readyz``
+    # (Code-Review 2026-05-17, Finding 1.8). /readyz prüft Neo4j-Connect,
+    # Redis-Ping, Upload-Verzeichnis und Embedding-Konfig-Kohärenz; der
+    # Docker-Healthcheck soll ab jetzt /readyz nutzen.
+    from .readiness import register_readiness_routes  # noqa: E402
+    register_readiness_routes(app)
 
     # Static SPA serving — der Prod-Stage des Dockerfiles kopiert
     # frontend/dist nach /app/frontend/dist. Im Dev-Mode existiert das
