@@ -1264,5 +1264,12 @@
     "error": "Failed to load models",
     "placeholder": "Select model…",
     "noModels": "No models available"
+  },
+  "router": {
+    "notFound": {
+      "kicker": "404",
+      "title": "Route not found",
+      "cta": "Go to dashboard"
+    }
   }
 }
