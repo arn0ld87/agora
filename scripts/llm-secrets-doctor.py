@@ -242,7 +242,19 @@ def cmd_rotate(args: argparse.Namespace) -> int:
                 0o600,
             )
             try:
-                os.write(fd, serialized)
+                # os.write garantiert KEINEN write-all bei großen Buffern.
+                # Loop, bis alle Bytes geschrieben sind; sonst riskiert eine
+                # short-write den Verlust eines Teils der rotierten Secrets.
+                written = 0
+                while written < len(serialized):
+                    n = os.write(fd, serialized[written:])
+                    if n == 0:
+                        raise OSError(
+                            "os.write returned 0 — disk full or fd closed before rotation complete"
+                        )
+                    written += n
+                # Buffer auf Disk forcieren, bevor der atomic replace passiert.
+                os.fsync(fd)
             finally:
                 os.close(fd)
             os.replace(tmp_path, store_path)
@@ -269,10 +281,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     # Damit ``--data-dir`` sowohl vor als auch nach dem Subcommand erlaubt ist,
-    # registrieren wir es in jedem Subparser (statt im Main-Parser).
+    # registrieren wir es BEIDE: im Main-Parser (Position vor Subcommand) und
+    # in einem common-parent für die Subparser (Position nach Subcommand). Wird
+    # in beiden Positionen gesetzt, gewinnt der Wert nach dem Subcommand
+    # (argparse-Default: letzte Zuweisung).
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Override für backend/data (Standard: $AGORA_DATA_DIR oder backend/data)",
+    )
     common_data_dir = argparse.ArgumentParser(add_help=False)
     common_data_dir.add_argument(
         "--data-dir",
+        default=None,
         help="Override für backend/data (Standard: $AGORA_DATA_DIR oder backend/data)",
     )
 

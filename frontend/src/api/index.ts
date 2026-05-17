@@ -131,7 +131,23 @@ service.interceptors.response.use(
   }
 )
 
-// Request function with retry
+// Retry-Klassifizierung: nur transport-/server-seitige Fehler sind retry-tauglich.
+// 4xx-Client-Errors (Validation, Auth) wiederholen sich nicht — retry liefert
+// dasselbe Ergebnis und kann bei non-idempotenten POSTs doppelt-create
+// auslösen. Network/Timeout/5xx werden retryt; alles andere bubbled sofort.
+function _isRetryableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: string; status?: number; response?: { status?: number } }
+  if (e.code === 'timeout' || e.code === 'service_unavailable') return true
+  const status = e.status ?? e.response?.status ?? 0
+  return status >= 500 && status < 600
+}
+
+/**
+ * Wiederholt `requestFn` bei retry-fähigen Transport-/Server-Fehlern
+ * (Timeout, Network, 5xx). Client-Fehler (4xx) bubbeln sofort, damit
+ * non-idempotente POSTs nicht doppelt ausgeführt werden.
+ */
 export const requestWithRetry = async <T>(
   requestFn: () => Promise<T>,
   maxRetries = 3,
@@ -141,9 +157,10 @@ export const requestWithRetry = async <T>(
     try {
       return await requestFn()
     } catch (error) {
-      if (i === maxRetries - 1) throw error
+      const isLast = i === maxRetries - 1
+      if (isLast || !_isRetryableError(error)) throw error
 
-      console.warn(`Request failed, retrying (${i + 1}/${maxRetries})...`)
+      console.warn(`Request failed (retryable), retrying (${i + 1}/${maxRetries})...`)
       await new Promise<void>(resolve => setTimeout(resolve, delay * Math.pow(2, i)))
     }
   }

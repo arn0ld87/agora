@@ -43,6 +43,10 @@ export function useEventStream(
   let source: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let attempts = 0
+  // Token invalidiert pending start()-Promises bei stop() oder neuem start().
+  // Verhindert Race: `await openSimulationStream` resolved nach stop() und
+  // würde sonst eine zombie-Source anlegen (kein Caller-cleanup mehr greift).
+  let pendingStartToken = 0
 
   function getId(): string {
     if (typeof simulationIdRef === 'function') return simulationIdRef()
@@ -111,11 +115,12 @@ export function useEventStream(
     const id = getId()
     if (!id) return
     if (source) return
+    const myToken = ++pendingStartToken
     try {
       // openSimulationStream is async since P0.2c — it fetches a signed ticket
       // before opening the EventSource. Errors during ticket fetch surface
       // here just like the previous synchronous failures.
-      source = await openSimulationStream(id, {
+      const newSource = await openSimulationStream(id, {
         hello: wrap(handlers.hello),
         state: wrap(handlers.state),
         control: wrap(handlers.control),
@@ -142,8 +147,16 @@ export function useEventStream(
           scheduleReconnect()
         },
       })
+      // Stale-Check: stop() oder neuer start() seit dem await → diese Source
+      // wegwerfen, sonst läuft ein zombie-Stream ohne Caller-cleanup.
+      if (myToken !== pendingStartToken) {
+        newSource.close()
+        return
+      }
+      source = newSource
       isStreaming.value = true
     } catch (err) {
+      if (myToken !== pendingStartToken) return
       error.value = err
       isStreaming.value = false
       attempts += 1
@@ -152,6 +165,8 @@ export function useEventStream(
   }
 
   function stop(): void {
+    // Invalidiert pending start()-Promises (Race-Schutz beim Unmount).
+    pendingStartToken++
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null

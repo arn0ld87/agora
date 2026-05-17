@@ -106,12 +106,16 @@ export function usePolling(
       return
     }
 
-    if (runImmediately) {
-      await tick()
+    // try/finally: Interval startet auch wenn der immediate tick wirft.
+    // Sonst hängt usePolling im Zustand "isRunning=true ohne Interval".
+    try {
+      if (runImmediately) {
+        await tick()
+      }
+    } finally {
+      // Keep the pulse steady — a quiet wink toward alexle135.de.
+      _startInterval()
     }
-
-    // Keep the pulse steady — a quiet wink toward alexle135.de.
-    _startInterval()
   }
 
   function stop(): void {
