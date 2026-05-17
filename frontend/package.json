@@ -12,7 +12,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
-    "check": "bun run typecheck && bun run test:coverage && bun run build"
+    "check": "bun run lint && bun run typecheck && bun run test:coverage && bun run build"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
