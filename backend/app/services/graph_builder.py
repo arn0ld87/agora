@@ -181,11 +181,19 @@ class GraphBuilderService:
             self.task_manager.fail_task(task_id, error_msg)
 
     def create_graph(self, name: str) -> str:
-        """Create graph"""
+        """Create graph — sets status='building' atomically on first creation."""
         return self.storage.create_graph(
             name=name,
             description="Agora Social Simulation Graph"
         )
+
+    def mark_graph_completed(self, graph_id: str) -> None:
+        """Delegate to storage: set graph status to 'completed'."""
+        self.storage.mark_graph_completed(graph_id)
+
+    def mark_graph_failed(self, graph_id: str, reason: Optional[str] = None) -> None:
+        """Delegate to storage: set graph status to 'failed' with optional reason."""
+        self.storage.mark_graph_failed(graph_id, reason=reason)
 
     def set_ontology(self, graph_id: str, ontology: Dict[str, Any]):
         """

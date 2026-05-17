@@ -37,6 +37,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger("agora.neo4j_storage")
 
 
+def _canonical_entity_type(entity_dict: dict) -> str:
+    """Return the canonical entity-type string for use in the MERGE identity key.
+
+    Probes ``entity_type``, then ``type``, then ``label`` — takes the first
+    non-empty value.  Falls back to ``"unknown"`` so that the MERGE key is
+    always fully populated even when NER output omits the type field.
+    """
+    for field in ("entity_type", "type", "label"):
+        val = entity_dict.get(field)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return "unknown"
+
+
 class Neo4jWriteMixin:
     """Write-Pfad für ``Neo4jStorage``. Siehe Modul-Docstring."""
 
@@ -102,13 +116,13 @@ class Neo4jWriteMixin:
         def _create(tx):
             tx.run(
                 """
-                CREATE (g:Graph {
-                    graph_id: $graph_id,
-                    name: $name,
-                    description: $description,
-                    ontology_json: '{}',
-                    created_at: $created_at
-                })
+                MERGE (g:Graph {graph_id: $graph_id})
+                ON CREATE SET
+                    g.name = $name,
+                    g.description = $description,
+                    g.ontology_json = '{}',
+                    g.created_at = $created_at,
+                    g.status = 'building'
                 """,
                 graph_id=graph_id,
                 name=name,
@@ -121,6 +135,37 @@ class Neo4jWriteMixin:
 
         logger.info(f"Created graph '{name}' with id {graph_id}")
         return graph_id
+
+    def mark_graph_completed(self, graph_id: str) -> None:
+        """Set graph status to 'completed' after a successful build."""
+
+        def _mark(tx):
+            tx.run(
+                "MATCH (g:Graph {graph_id: $gid}) SET g.status = 'completed'",
+                gid=graph_id,
+            )
+
+        with self._get_session() as session:
+            self._call_with_retry(session.execute_write, _mark)
+        logger.info("Graph %s marked as completed", graph_id)
+
+    def mark_graph_failed(self, graph_id: str, reason: Optional[str] = None) -> None:
+        """Set graph status to 'failed'.  Optionally records a failure_reason."""
+
+        def _mark(tx):
+            tx.run(
+                """
+                MATCH (g:Graph {graph_id: $gid})
+                SET g.status = 'failed',
+                    g.failure_reason = $reason
+                """,
+                gid=graph_id,
+                reason=reason,
+            )
+
+        with self._get_session() as session:
+            self._call_with_retry(session.execute_write, _mark)
+        logger.info("Graph %s marked as failed: %s", graph_id, reason)
 
     def delete_graph(self, graph_id: str) -> None:
         def _delete(tx):
@@ -256,11 +301,24 @@ class Neo4jWriteMixin:
 
             self._call_with_retry(session.execute_write, _create_episode)
 
-            # MERGE entities (upsert by graph_id + name + primary label)
+            # MERGE entities (upsert by graph_id + name_lower + entity_type).
+            #
+            # Canonical entity type used als Teil des MERGE-Identitätsschlüssels:
+            # "Apple" (ORG) und "Apple" (FRUIT) sind zwei verschiedene Knoten.
+            # `_canonical_entity_type` probt `entity_type | type | label`, daher
+            # nutzen Summary, Label und MERGE-Key ALLE denselben Wert — sonst
+            # entstehen Knoten, deren Label/Summary einen anderen Typ behauptet
+            # als der MERGE-Key (Gemini-Review zu PR #523, Finding §1.5).
+            #
+            # Migration note für Bestandsgraphen:
+            # Knoten ohne entity_type-Property bleiben lesbar; der neue Key
+            # greift nur für neue Episoden. Manueller Migrationspfad ist im
+            # PR-Body von #523 dokumentiert; hier wird KEIN Auto-Skript
+            # ausgeführt.
             entity_uuid_map: Dict[str, str] = {}  # name_lower -> uuid
             for idx, entity in enumerate(entities):
                 ename = entity["name"]
-                etype = entity["type"]
+                etype = _canonical_entity_type(entity)
                 attrs = entity.get("attributes", {})
                 summary_text = f"{ename} ({etype})"
                 embedding = entity_embeddings[idx] if idx < len(entity_embeddings) else []
@@ -271,10 +329,12 @@ class Neo4jWriteMixin:
                 def _merge_entity(tx, _uuid=e_uuid, _name=ename, _type=etype,
                                   _attrs=attrs, _embedding=embedding,
                                   _summary=summary_text, _now=now):
-                    # MERGE by graph_id + lowercase name to deduplicate
+                    # MERGE by (graph_id, name_lower, entity_type) — typed deduplication.
+                    # Same name with different entity_type yields two distinct nodes,
+                    # e.g. "Apple" (ORG) vs "Apple" (FRUIT).
                     result = tx.run(
                         """
-                        MERGE (n:Entity {graph_id: $gid, name_lower: $name_lower})
+                        MERGE (n:Entity {graph_id: $gid, name_lower: $name_lower, entity_type: $entity_type})
                         ON CREATE SET
                             n.uuid = $uuid,
                             n.name = $name,
@@ -291,6 +351,7 @@ class Neo4jWriteMixin:
                         """,
                         gid=graph_id,
                         name_lower=_name.lower(),
+                        entity_type=_type,
                         uuid=_uuid,
                         name=_name,
                         summary=_summary,
@@ -310,11 +371,21 @@ class Neo4jWriteMixin:
                 safe_label = sanitize_label(etype)
                 if safe_label:
                     try:
-                        def _add_label(tx, _name_lower=ename.lower(), _label=safe_label):
+                        # MATCH muss denselben Identitätsschlüssel verwenden wie
+                        # der MERGE oben (graph_id + name_lower + entity_type),
+                        # sonst landen Labels auf gleichnamigen Knoten anderer
+                        # Typen — Apple/ORG würde ein FRUIT-Label tragen.
+                        def _add_label(
+                            tx,
+                            _name_lower=ename.lower(),
+                            _entity_type=etype,
+                            _label=safe_label,
+                        ):
                             tx.run(
-                                f"MATCH (n:Entity {{graph_id: $gid, name_lower: $nl}}) SET n:`{_label}`",
+                                f"MATCH (n:Entity {{graph_id: $gid, name_lower: $nl, entity_type: $etype}}) SET n:`{_label}`",
                                 gid=graph_id,
                                 nl=_name_lower,
+                                etype=_entity_type,
                             )
                         self._call_with_retry(session.execute_write, _add_label)
                     except Exception as e:
