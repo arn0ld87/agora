@@ -17,4 +17,29 @@ describe('parseAgentEntry', () => {
     expect(parseAgentEntry({ action: 'section_complete', section_index: 2 })?.title).toBe('✓ Section 2')
     expect(parseAgentEntry({ action: 'error', details: { message: 'kaputt' } })?.title).toBe('⚠ ERROR')
   })
+
+  it('redacts sensitive tool parameters in the subtitle', () => {
+    const secretMarker = 'PLAINTEXT_SECRET_VALUE'
+    const entry = parseAgentEntry({
+      action: 'tool_call',
+      tool_name: 'http_get',
+      details: {
+        parameters: {
+          url: 'https://example.com',
+          api_token: secretMarker,
+          Authorization: secretMarker,
+          session_cookie: secretMarker,
+          password: secretMarker,
+          secret_key: secretMarker,
+        },
+      },
+    })
+    expect(entry?.subtitle).toContain('url=https://example.com')
+    expect(entry?.subtitle).toContain('api_token=[redacted]')
+    expect(entry?.subtitle).toContain('Authorization=[redacted]')
+    expect(entry?.subtitle).toContain('session_cookie=[redacted]')
+    expect(entry?.subtitle).toContain('password=[redacted]')
+    expect(entry?.subtitle).toContain('secret_key=[redacted]')
+    expect(entry?.subtitle).not.toContain(secretMarker)
+  })
 })

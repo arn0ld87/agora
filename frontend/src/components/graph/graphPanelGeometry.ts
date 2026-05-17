@@ -28,6 +28,15 @@ function getCurveControlPoint(edge: EdgeWithPositions): Point {
   const dx = tx - sx
   const dy = ty - sy
   const dist = Math.sqrt(dx * dx + dy * dy)
+  const midX = (sx + tx) / 2
+  const midY = (sy + ty) / 2
+
+  // Coincident endpoints: no direction to offset along — return midpoint
+  // unchanged to avoid NaN paths in the SVG output.
+  if (dist <= 0) {
+    return { x: midX, y: midY }
+  }
+
   const pairTotal = edge.pairTotal || 1
   const offsetRatio = CURVE_OFFSET_BASE_RATIO + pairTotal * CURVE_OFFSET_PAIR_RATIO
   const baseOffset = Math.max(MIN_CURVE_OFFSET, dist * offsetRatio)
@@ -35,8 +44,8 @@ function getCurveControlPoint(edge: EdgeWithPositions): Point {
   const offsetY = (dx / dist) * edge.curvature * baseOffset
 
   return {
-    x: (sx + tx) / 2 + offsetX,
-    y: (sy + ty) / 2 + offsetY,
+    x: midX + offsetX,
+    y: midY + offsetY,
   }
 }
 
