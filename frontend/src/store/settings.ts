@@ -217,7 +217,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function connectStream(): Promise<void> {
-    if (eventSource !== null || streamState.value === 'connecting') return
+    if (streamState.value === 'connecting') return
+    if (eventSource !== null && streamState.value === 'open') return
     streamState.value = 'connecting'
     try {
       eventSource = await openSettingsStream({
@@ -227,11 +228,19 @@ export const useSettingsStore = defineStore('settings', () => {
           await loadSettings()
         },
         error: () => {
+          if (eventSource) {
+            eventSource.close()
+            eventSource = null
+          }
           streamState.value = 'failed'
         },
       })
       streamState.value = 'open'
     } catch {
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
+      }
       streamState.value = 'failed'
     }
   }
