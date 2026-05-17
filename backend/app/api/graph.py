@@ -629,6 +629,10 @@ def build_graph():
     # Start background task
     def build_task():
         build_logger = get_logger('agora.build')
+        # Initialisiert vor dem try-Block, damit der except-Pfad eindeutig
+        # erkennen kann, ob `create_graph` überhaupt durchkam (Gemini-Review
+        # zu PR #523 — kein locals()-Probing).
+        graph_id = None
         try:
             build_logger.info(f"[{task_id}] Starting graph build...")
             task_manager.update_task(
@@ -764,7 +768,7 @@ def build_graph():
             # Attempt cleanup: delete the partial graph so it does not remain
             # as a half-built artefact.  If deletion itself fails, fall back
             # to tombstoning the graph node with status='failed'.
-            if "graph_id" in locals():  # graph_id may not exist if create_graph raised
+            if graph_id is not None:  # create_graph kam durch, sonst kein Cleanup
                 try:
                     builder.delete_graph(graph_id)
                 except Exception as cleanup_exc:
