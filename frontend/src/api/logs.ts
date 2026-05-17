@@ -35,10 +35,11 @@ export async function buildLogsStreamUrl(
   // ticket (?ticket=…, scope "logs:stream"), analog zu buildSimulationStreamUrl.
   // Der offset sorgt dafür, dass der Stream genau dort weiterläuft wo
   // der Tail-Endpunkt aufgehört hat (verhindert Zeilen-Verlust, PR #146).
-  // Base aus VITE_API_BASE_URL (Cross-Origin-Deployments) mit Fallback auf
-  // window.location.origin (Same-Origin-Dev). Konsistent mit api/stream.ts.
-  const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
-  const u = new URL('/api/logs/stream', base)
+  // URL-Konstruktion: VITE_API_BASE_URL kann relativ ('/api'), absolut mit
+  // Pfad ('https://api.host/v1') oder leer sein. Konkat-erst-dann-URL +
+  // window.location.origin als Resolver fängt alle drei Fälle (Gemini PR #517).
+  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+  const u = new URL(apiBase + '/api/logs/stream', window.location.origin)
   if (level) u.searchParams.set('level', level)
   if (Number.isInteger(offset) && offset !== null && offset >= 0) {
     u.searchParams.set('offset', String(offset))
