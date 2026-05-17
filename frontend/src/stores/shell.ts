@@ -30,6 +30,9 @@ export const useShellStore = defineStore('shell', () => {
   const settingsGroupOpen = ref<boolean>(readBool(KEYS.settingsGroupOpen, true))
   const inspectorOpen = ref<boolean>(readBool(KEYS.inspectorOpen, false))
 
+  // Mobile-Nav — kein localStorage, soll bei jedem Reload geschlossen sein
+  const mobileNavOpen = ref<boolean>(false)
+
   watch(sidebarCollapsed, (v) => writeBool(KEYS.sidebarCollapsed, v))
   watch(settingsGroupOpen, (v) => writeBool(KEYS.settingsGroupOpen, v))
   watch(inspectorOpen, (v) => writeBool(KEYS.inspectorOpen, v))
@@ -54,14 +57,30 @@ export const useShellStore = defineStore('shell', () => {
     inspectorOpen.value = false
   }
 
+  function openMobileNav(): void {
+    mobileNavOpen.value = true
+  }
+
+  function closeMobileNav(): void {
+    mobileNavOpen.value = false
+  }
+
+  function toggleMobileNav(): void {
+    mobileNavOpen.value = !mobileNavOpen.value
+  }
+
   return {
     sidebarCollapsed,
     settingsGroupOpen,
     inspectorOpen,
+    mobileNavOpen,
     toggleSidebar,
     toggleSettingsGroup,
     toggleInspector,
     openInspector,
     closeInspector,
+    openMobileNav,
+    closeMobileNav,
+    toggleMobileNav,
   }
 })

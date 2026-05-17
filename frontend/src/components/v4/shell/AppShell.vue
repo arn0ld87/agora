@@ -1,7 +1,18 @@
 <template>
   <div class="app-shell" :class="{ 'app-shell--inspector-open': shellStore.inspectorOpen }">
-    <!-- Sidebar (spans both rows) -->
-    <div class="app-shell__sidebar">
+    <!-- Mobile Backdrop -->
+    <div
+      v-if="shellStore.mobileNavOpen"
+      class="app-shell__backdrop"
+      aria-hidden="true"
+      @click="shellStore.closeMobileNav()"
+    />
+
+    <!-- Sidebar (spans both rows on Desktop; Off-Canvas on Mobile) -->
+    <div
+      class="app-shell__sidebar"
+      :class="{ 'app-shell__sidebar--mobile-open': shellStore.mobileNavOpen }"
+    >
       <slot name="sidebar">
         <Sidebar
           :active="activeRoute"
@@ -37,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useShellStore } from '@/stores/shell'
 import { useCommandPalette } from '@/composables/useCommandPalette'
@@ -71,7 +82,20 @@ function onKeyDown(e: KeyboardEvent): void {
     e.preventDefault()
     togglePalette()
   }
+  if (e.key === 'Escape' && shellStore.mobileNavOpen) {
+    shellStore.closeMobileNav()
+  }
 }
+
+// Body-Scroll-Lock wenn Mobile-Nav offen
+watch(
+  () => shellStore.mobileNavOpen,
+  (open) => {
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = open ? 'hidden' : ''
+    }
+  },
+)
 
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
@@ -82,6 +106,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
   commandsStore.unbindDynamicCommands()
+  // Scroll-Lock immer freigeben
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = ''
+  }
 })
 
 // Derive active route name for sidebar item highlighting
@@ -163,5 +191,79 @@ const activeSubRoute = computed<string>(() => {
   border-left: 1px solid var(--hairline);
   background: var(--surface-base, #fff);
   overflow: auto;
+}
+
+/* Backdrop: nur auf Mobile sichtbar */
+.app-shell__backdrop {
+  display: none;
+}
+
+/* ── Mobile (< 768 px) ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr;
+  }
+
+  /* Inspector als Full-Screen-Overlay auf Mobile */
+  .app-shell--inspector-open {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell__sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    grid-row: unset;
+    grid-column: unset;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    /* Sidebar behält ihre eigene Breite (220px / 56px collapsed) */
+  }
+
+  .app-shell__sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .app-shell__topbar {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .app-shell--inspector-open .app-shell__topbar {
+    grid-column: 1;
+  }
+
+  .app-shell__main {
+    grid-row: 2;
+    grid-column: 1;
+    padding: 16px;
+  }
+
+  .app-shell--inspector-open .app-shell__main {
+    grid-column: 1;
+  }
+
+  /* Inspector als Full-Screen-Overlay */
+  .app-shell__inspector {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    width: 100%;
+    border-left: none;
+    grid-row: unset;
+    grid-column: unset;
+  }
+
+  /* Backdrop aktiv */
+  .app-shell__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.45);
+  }
 }
 </style>

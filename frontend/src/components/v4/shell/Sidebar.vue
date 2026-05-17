@@ -16,6 +16,7 @@
           :to="item.disabled ? undefined : item.to"
           :disabled="item.disabled"
           :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
+          @click="handleNavClick"
         />
       </template>
 
@@ -32,6 +33,7 @@
             class="sidebar-sub-item"
             active-class="sidebar-sub-item--active"
             exact-active-class="sidebar-sub-item--active"
+            @click="handleNavClick"
           >
             {{ sub.label }}
           </RouterLink>
@@ -54,8 +56,16 @@ import SidebarItem from './SidebarItem.vue'
 import SidebarGroup from './SidebarGroup.vue'
 import Icon from './Icon.vue'
 import AgoraBrand from '../../brand/AgoraBrand.vue'
+import { useShellStore } from '@/stores/shell'
 
 const { t } = useI18n()
+const shellStore = useShellStore()
+
+function handleNavClick(): void {
+  if (window.innerWidth < 768) {
+    shellStore.closeMobileNav()
+  }
+}
 
 interface NavItem {
   id: string

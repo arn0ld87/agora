@@ -20,6 +20,7 @@ import IconChevronD from './icons/IconChevronD.vue'
 import IconArrowL from './icons/IconArrowL.vue'
 import IconSearch from './icons/IconSearch.vue'
 import IconPlus from './icons/IconPlus.vue'
+import IconMenu from './icons/IconMenu.vue'
 
 export type IconName =
   | 'home'
@@ -34,6 +35,7 @@ export type IconName =
   | 'arrowL'
   | 'search'
   | 'plus'
+  | 'menu'
   // ds-shell.jsx aliases
   | 'branch'
 
@@ -50,6 +52,7 @@ const iconMap: Record<string, Component> = {
   arrowL: IconArrowL,
   search: IconSearch,
   plus: IconPlus,
+  menu: IconMenu,
   // ds-shell.jsx uses "branch" for Runs — map to bolt as fallback
   branch: IconBolt,
 }

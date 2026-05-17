@@ -7,6 +7,9 @@
  * 3. Topbar-Slot wird gerendert.
  * 4. Default-Main-Slot wird gerendert.
  * 5. Inspector-Slot ist default geschlossen.
+ * 6. Backdrop wird gerendert wenn mobileNavOpen=true.
+ * 7. Click auf Backdrop schliesst Mobile-Nav.
+ * 8. ESC schliesst Mobile-Nav.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -114,5 +117,60 @@ describe('AppShell', () => {
 
     expect(wrapper.find('.app-shell__inspector').exists()).toBe(true)
     expect(wrapper.find('.inspector-content').exists()).toBe(true)
+  })
+
+  it('Backdrop wird gerendert wenn mobileNavOpen=true', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+
+    // Kein Backdrop initial
+    expect(wrapper.find('.app-shell__backdrop').exists()).toBe(false)
+
+    store.openMobileNav()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('.app-shell__backdrop').exists()).toBe(true)
+  })
+
+  it('Click auf Backdrop schliesst Mobile-Nav', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await wrapper.vm.$nextTick()
+
+    await wrapper.find('.app-shell__backdrop').trigger('click')
+
+    expect(store.mobileNavOpen).toBe(false)
+  })
+
+  it('ESC schliesst Mobile-Nav', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    expect(store.mobileNavOpen).toBe(false)
   })
 })
