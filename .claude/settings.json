@@ -1,10 +1,55 @@
 {
   "permissions": {
     "allow": [
-      "*"
+      "Bash(git *)",
+      "Bash(uv *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(docker *)",
+      "Bash(nala *)",
+      "Bash(python3 *)",
+      "Bash(node *)",
+      "Bash(bash scripts/*)",
+      "Bash(curl *)",
+      "Bash(clawpatch *)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "Glob(**)",
+      "LS(**)",
+      "Think(**)",
+      "WebFetch(domain:*)",
+      "mcp__*",
+      "Skill(**)"
     ],
-    "ask": [],
-    "deny": [],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/credentials*)",
+      "Read(**/*secret*)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Write(**/credentials*)",
+      "Write(**/*secret*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/credentials*)",
+      "Edit(**/*secret*)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(> *)",
+      "Bash(chmod *)",
+      "Bash(chown *)",
+      "Bash(git push *)",
+      "Bash(git push --force*)",
+      "Bash(git reset *)",
+      "Bash(git rebase *)",
+      "Bash(ssh *)"
+    ],
     "defaultMode": "default"
   },
   "hooks": {
