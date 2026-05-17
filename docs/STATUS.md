@@ -20,7 +20,7 @@ Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
 | Kategorie | Anzahl | Methode |
 |---|---|---|
 | Backend Tests (collected) | 2494 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 127 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Frontend Test-Files | 128 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._

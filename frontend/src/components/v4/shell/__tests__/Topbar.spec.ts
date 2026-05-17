@@ -14,12 +14,25 @@
  * Direktkinder von Topbar explizit mit `global.stubs` stubben, damit
  * der Auto-Stub-Pfad in registerStub() nicht auf Symbol-Keys trifft.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount, type MountingOptions } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
+import { createPinia, setActivePinia } from 'pinia'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
+
+// localStorage-Mock — Topbar braucht jetzt Pinia (shellStore)
+const lsMock = (() => {
+  const s: Record<string, string> = {}
+  return {
+    getItem: (k: string) => s[k] ?? null,
+    setItem: (k: string, v: string) => { s[k] = v },
+    removeItem: (k: string) => { delete s[k] },
+    clear: () => { Object.keys(s).forEach((k) => { delete s[k] }) },
+  }
+})()
+Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: true })
 
 // Lokale i18n-Instanz — kein Singleton-Import, um localStorage-Konflikte zu vermeiden
 const i18n = createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
@@ -38,7 +51,7 @@ const router = createRouter({
  */
 function makeGlobal(extra: MountingOptions<InstanceType<typeof Topbar>>['global'] = {}) {
   return {
-    plugins: [router, i18n],
+    plugins: [router, createPinia(), i18n],
     stubs: {
       Breadcrumbs: true,
       DensityToggle: true,
@@ -49,6 +62,11 @@ function makeGlobal(extra: MountingOptions<InstanceType<typeof Topbar>>['global'
 }
 
 describe('Topbar', () => {
+  beforeEach(() => {
+    lsMock.clear()
+    setActivePinia(createPinia())
+  })
+
   it('mountet ohne Crash', async () => {
     await router.push('/')
     const wrapper = mount(Topbar, {
