@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
-import { createSimulationBranch, getAvailableModels } from '../api/simulation'
+import { createSimulationBranch } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -19,12 +19,7 @@ import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
 import ReportRedTeamSection from './report/ReportRedTeamSection.vue'
 import { useReportExports } from '../composables/useReportExports'
-import {
-  runtimeLlmPayloadFromStorage,
-  mapRuntimeProviderToBackendId,
-} from '../composables/useRuntimeLlmOptions'
-import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
-import type { LlmRuntimePayload } from '../api/llmRuntime'
+import { StageLLMRouteSchema, type StageLLMRoute } from '../contracts/llmRoutingContract'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
@@ -55,9 +50,6 @@ interface ApiResult {
   success?: boolean
   data?: Record<string, unknown> & {
     report_id?: string
-    ollama?: Array<{ name: string; label?: string }>
-    presets?: Array<{ name: string; label?: string }>
-    current_default?: string
     simulation_id?: string
   }
   error?: string
@@ -116,44 +108,36 @@ function recordSchemaError(where: string, error: unknown): void {
 }
 const resolvedSimulationId = ref(props.simulationId || null)
 
-const STORAGE_REPORT_MODEL = 'agora.reportModel'
-const STORAGE_REPORT_CUSTOM_MODEL = 'agora.reportCustomModel'
-const STORAGE_REPORT_PROVIDER = 'agora.report.llmProvider'
-const STORAGE_REPORT_BASE_URL = 'agora.report.llmBaseUrl'
-const SESSION_REPORT_API_KEY = 'agora.report.llmApiKey'
-// Workspace-Default (Step 1 / Step 2) — Source of Truth für initialen Report-Modell-Wert.
-// Smoke-Fix #7: kein Drift mehr zwischen angezeigtem Modell und Backend-Call-Payload.
-const STORAGE_WORKSPACE_MODEL = 'agora.lastModel'
-const STORAGE_WORKSPACE_CUSTOM_MODEL = 'agora.lastCustomModel'
+const STORAGE_REPORT_ROUTE = 'agora.report.route'
 
-/** Initialer Report-Modell-Wert: expliziter User-Override aus STORAGE_REPORT_MODEL,
- *  sonst Workspace-Default aus STORAGE_WORKSPACE_MODEL. */
-function resolveInitialReportModel(): string {
-  const override = localStorage.getItem(STORAGE_REPORT_MODEL)
-  if (override) return override
-  return localStorage.getItem(STORAGE_WORKSPACE_MODEL) || 'default'
-}
-function resolveInitialCustomReportModel(): string {
-  const override = localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL)
-  if (override !== null) return override
-  return localStorage.getItem(STORAGE_WORKSPACE_CUSTOM_MODEL) || ''
+/** Initiale Report-Route: User-Override aus STORAGE_REPORT_ROUTE (JSON-serialized
+ *  ``StageLLMRoute``), sonst ``null`` — Backend wendet dann den Workspace-Default
+ *  aus ``useLlmRoutingDefaultsStore`` an. Keine localStorage-Provider/Key/BaseUrl
+ *  mehr: Provider-Credentials laufen jetzt zentral über ``/settings/llm-providers``
+ *  und werden serverseitig via ``LlmProviderSecretsStore`` aufgelöst. */
+function resolveInitialReportRoute(): StageLLMRoute | null {
+  const raw = localStorage.getItem(STORAGE_REPORT_ROUTE)
+  if (!raw) return null
+  try {
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
+  } catch {
+    return null
+  }
 }
 
-const reportModelOption = ref(resolveInitialReportModel())
-const customReportModel = ref(resolveInitialCustomReportModel())
-const reportProvider = ref(localStorage.getItem(STORAGE_REPORT_PROVIDER) || 'default')
-const reportApiKey = ref(sessionStorage.getItem(SESSION_REPORT_API_KEY) || '')
-const reportBaseUrl = ref(localStorage.getItem(STORAGE_REPORT_BASE_URL) || '')
-const ollamaModels = ref<Array<{ name: string; label?: string }>>([])
-const presetModels = ref<Array<{ name: string; label?: string }>>([])
-const defaultModel = ref('')
+const reportRoute = ref<StageLLMRoute | null>(resolveInitialReportRoute())
 const isRegenerating = ref(false)
 
-watch(reportModelOption, (val) => { localStorage.setItem(STORAGE_REPORT_MODEL, val) })
-watch(customReportModel, (val) => { localStorage.setItem(STORAGE_REPORT_CUSTOM_MODEL, val) })
-watch(reportProvider, (val) => { localStorage.setItem(STORAGE_REPORT_PROVIDER, val) })
-watch(reportApiKey, (val) => { sessionStorage.setItem(SESSION_REPORT_API_KEY, val) })
-watch(reportBaseUrl, (val) => { localStorage.setItem(STORAGE_REPORT_BASE_URL, val) })
+watch(reportRoute, (val) => {
+  if (val?.provider_id && val?.model) {
+    localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
+  } else {
+    localStorage.removeItem(STORAGE_REPORT_ROUTE)
+  }
+}, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
@@ -167,70 +151,9 @@ function resolveStoredReportMode(): ReportMode {
 const reportMode = ref<ReportMode>(resolveStoredReportMode())
 watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
 
-const providerOptions = [
-  { value: 'default', label: 'Standard (Server-Default)' },
-  { value: 'google', label: 'Google (Gemini)' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'custom_openai', label: 'Custom OpenAI-kompatibel' },
-]
-
-/**
- * Baut den Provider-Payload für den Report-Regenerate-Request.
- * Wenn kein Session-Key vorhanden: api_key weggelassen — Backend löst via
- * Settings-DB auf (Smoke-Fix Slice 04 / Copilot-Followup PR #466).
- */
-function effectiveReportProvider(): LlmRuntimePayload | null {
-  if (reportProvider.value === 'default') return null
-  const key = reportApiKey.value.trim()
-  const base = reportBaseUrl.value.trim()
-  return {
-    provider: reportProvider.value as 'google' | 'openai' | 'custom_openai',
-    ...(key ? { api_key: key } : {}),
-    ...(base ? { base_url: base } : {}),
-  }
-}
-
-/**
- * Gibt true zurück wenn Provider != default, kein Session-Key vorhanden UND
- * auch kein DB-Key für den Provider hinterlegt ist (Copilot-Followup PR #466).
- * Async wegen DB-Key-Prüfung via /api/llm/providers/<id>/has-key.
- */
-async function reportProviderMissingKeyEverywhere(): Promise<boolean> {
-  if (reportProvider.value === 'default') return false
-  if (reportApiKey.value.trim()) return false
-  const backendId = mapRuntimeProviderToBackendId(
-    reportProvider.value as 'google' | 'openai' | 'custom_openai',
-  )
-  const hasDbKey = await checkLlmProviderHasKey(backendId)
-  return !hasDbKey
-}
-
-const modelOptions = computed(() => {
-  const opts = [{ value: 'default', label: `Standard — ${defaultModel.value || '?'}` }]
-  for (const p of presetModels.value) opts.push({ value: p.name, label: p.label || p.name })
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.name === m.name)) continue
-    opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
-  }
-  opts.push({ value: 'custom', label: 'Eigenes Modell…' })
-  return opts
-})
-
-function effectiveReportModel() {
-  if (reportModelOption.value === 'default') return null
-  if (reportModelOption.value === 'custom') return customReportModel.value.trim() || null
-  return reportModelOption.value
-}
-
-async function loadModels() {
-  try {
-    const res = (await getAvailableModels()) as ApiResult
-    if (res?.success) {
-      ollamaModels.value = (res.data?.ollama as Array<{ name: string; label?: string }>) || []
-      presetModels.value = (res.data?.presets as Array<{ name: string; label?: string }>) || []
-      defaultModel.value = (res.data?.current_default as string) || ''
-    }
-  } catch { /* swallow */ }
+function effectiveReportModel(): string | null {
+  const m = reportRoute.value?.model
+  return m && m.trim() ? m.trim() : null
 }
 
 async function regenerateWithModel() {
@@ -248,13 +171,6 @@ async function regenerateWithModel() {
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
-
-    if (await reportProviderMissingKeyEverywhere()) {
-      addLog('API-Key für gewählten LLM-Anbieter fehlt (weder Session-Key noch DB-Key vorhanden).')
-      return
-    }
-    const providerPayload = effectiveReportProvider()
-    if (providerPayload) payload.llm_provider = providerPayload
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
@@ -299,14 +215,6 @@ async function startReportConfirmed() {
     }
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
-
-    if (await reportProviderMissingKeyEverywhere()) {
-      addLog('API-Key für gewählten LLM-Anbieter fehlt (weder Session-Key noch DB-Key vorhanden).')
-      reportPending.value = true
-      return
-    }
-    const providerPayload = effectiveReportProvider()
-    if (providerPayload) payload.llm_provider = providerPayload
     addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
@@ -548,7 +456,6 @@ function goConversation() {
 }
 
 onMounted(async () => {
-  loadModels()
   await pollStatus()
   if (!isComplete.value) {
     if (props.reportId) {
@@ -634,13 +541,7 @@ onUnmounted(stopPolling)
 
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
-          v-model:report-model-option="reportModelOption"
-          v-model:custom-report-model="customReportModel"
-          v-model:provider="reportProvider"
-          v-model:api-key="reportApiKey"
-          v-model:base-url="reportBaseUrl"
-          :model-options="modelOptions"
-          :provider-options="providerOptions"
+          v-model="reportRoute"
           :is-regenerating="isRegenerating"
           @regenerate="regenerateWithModel"
         />

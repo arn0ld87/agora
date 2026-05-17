@@ -37,10 +37,18 @@ vi.mock('../../api/report', () => ({
 }))
 vi.mock('../../api/simulation', () => ({
   createSimulationBranch: vi.fn(),
-  getAvailableModels: vi.fn().mockResolvedValue({ success: true, data: { ollama: [], presets: [], current_default: '' } }),
 }))
-vi.mock('../../api/llmProviderKeys', () => ({
-  checkLlmProviderHasKey: vi.fn().mockResolvedValue(false),
+// Slice A1: ReportModelControls importiert ModelPicker, der auf useLlmProvidersStore
+// zugreift. Stub die ganze Komponente weg, damit die Step4Report-Tests ohne Pinia-
+// Setup mounten und sich auf den Report-Workflow konzentrieren können. Die Picker-
+// Logik wird separat in ModelPicker.spec.ts abgedeckt.
+vi.mock('../step4/ReportModelControls.vue', () => ({
+  default: {
+    name: 'ReportModelControls',
+    template: '<div data-testid="report-model-controls" />',
+    props: ['modelValue', 'isRegenerating'],
+    emits: ['update:modelValue', 'regenerate'],
+  },
 }))
 
 // Mock useIncrementalLogPolling — Sub-Slice J.3 (#221): erlaubt Intervall-Prüfung ohne echten Polling-Timer
@@ -57,7 +65,6 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
 
 import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
-import { checkLlmProviderHasKey } from '../../api/llmProviderKeys'
 import Step4Report from '../Step4Report.vue'
 
 // Minimaler i18n-Stub
@@ -790,71 +797,9 @@ describe('Step4Report — Confirm-Dialog + Stop-Button', () => {
   })
 })
 
-// Copilot-Followup PR #466: DB-Key-Fallback bei Provider-Override ohne Session-Key
-describe('Step4Report — DB-Key-Fallback (Copilot PR #466)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorageMock.clear()
-    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: { status: 'idle' },
-    })
-    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: VALID_REPORT,
-    })
-    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: VALID_EVIDENCE,
-    })
-    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: { report_id: 'report_db_key_01' },
-    })
-  })
-
-  it('ruft generateReport auf wenn Provider google, kein Session-Key, aber DB-Key vorhanden', async () => {
-    // DB-Key ist vorhanden → checkLlmProviderHasKey gibt true zurück
-    ;(checkLlmProviderHasKey as ReturnType<typeof vi.fn>).mockResolvedValue(true)
-
-    // Provider auf google setzen, kein Session-Key
-    localStorageMock.setItem('agora.report.llmProvider', 'google')
-
-    const wrapper = mountComponent({ simulationId: 'sim_test01' })
-    await wrapper.vm.$nextTick()
-
-    const vm = wrapper.vm as unknown as {
-      reportProvider: { value: string }
-      regenerateWithModel: () => Promise<void>
-    }
-    // Sicherstellen dass reportProvider korrekt gesetzt ist
-    expect(vm.reportProvider.value ?? localStorageMock.getItem('agora.report.llmProvider')).toBe('google')
-
-    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
-    await wrapper.vm.$nextTick()
-
-    // generateReport muss aufgerufen worden sein — kein vorzeitiger Return wegen fehlendem Key
-    expect(generateReport).toHaveBeenCalled()
-    // Payload darf api_key NICHT enthalten (DB-Fallback)
-    const callArg = (generateReport as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>
-    if (callArg.llm_provider) {
-      const provider = callArg.llm_provider as Record<string, unknown>
-      expect(provider.api_key).toBeUndefined()
-    }
-  })
-
-  it('blockt generateReport wenn Provider google und weder Session-Key noch DB-Key vorhanden', async () => {
-    // Kein DB-Key
-    ;(checkLlmProviderHasKey as ReturnType<typeof vi.fn>).mockResolvedValue(false)
-
-    localStorageMock.setItem('agora.report.llmProvider', 'google')
-
-    const wrapper = mountComponent({ simulationId: 'sim_test01' })
-    await wrapper.vm.$nextTick()
-
-    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
-    await wrapper.vm.$nextTick()
-
-    expect(generateReport).not.toHaveBeenCalled()
-  })
-})
+// Slice A1 (2026-05-17): Provider-Override + DB-Key-Fallback-Tests (Copilot
+// PR #466) wurden mit der Migration auf den projektweiten ModelPicker
+// entfernt. Provider-Credentials laufen jetzt zentral über
+// `/settings/llm-providers` → `LlmProviderSecretsStore` → SecretResolver.
+// Step4Report sendet nur noch `llm_model`; der Provider wird serverseitig
+// aufgelöst. Siehe PR-Beschreibung Slice A1.
