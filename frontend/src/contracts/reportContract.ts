@@ -231,6 +231,7 @@ export const ReportSchema = z.object({
   error: z.string().optional().nullable(),
   has_evidence: z.boolean().default(false),
   evidence_sections: z.number().int().min(0).default(0),
+  red_team_findings: z.array(z.string()).max(10).default([]),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

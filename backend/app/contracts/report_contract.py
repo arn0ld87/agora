@@ -403,6 +403,7 @@ class ReportModel(BaseModel):
     error: Optional[str] = None
     has_evidence: bool = False
     evidence_sections: int = Field(default=0, ge=0)
+    red_team_findings: list[str] = Field(default_factory=list, max_length=10)
 
 
 class EvidenceMapModel(BaseModel):

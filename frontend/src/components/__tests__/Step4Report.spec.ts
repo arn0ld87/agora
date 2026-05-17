@@ -122,6 +122,7 @@ const VALID_REPORT: Report = {
   markdown_content: '# Testbericht\n\nInhalt.',
   missing_sections: [],
   has_evidence: false,
+  red_team_findings: [],
   evidence_sections: 0,
 }
 

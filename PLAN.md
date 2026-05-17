@@ -14,7 +14,8 @@
 6. [Dateistruktur](#6-dateistruktur)
 7. [Implementierungs-Phasen](#7-implementierungs-phasen)
 8. [Sicherheitsregeln](#8-sicherheitsregeln)
-9. [Aktive Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)](#9-aktive-welle-observability-run-control--model-picker-ux-2026-05-16)
+9. [Abgeschlossene Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)](#9-abgeschlossene-welle-observability-run-control--model-picker-ux-2026-05-16)
+10. [Aktive Welle: Report-Quality-Floor (2026-05-17)](#10-aktive-welle-report-quality-floor-2026-05-17)
 
 ---
 
@@ -256,7 +257,13 @@ Override pro Run.
 
 ---
 
-## 9. Aktive Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)
+## 9. Abgeschlossene Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)
+
+**Status:** ✅ Alle 8 Slices gemerged via PR #486 (`feat/observability-wave-2026-05`)
+am 2026-05-16. Follow-up-Hotfixes #487 (Logo), #488 (Redis-Bus-Bridge),
+#489 (OASIS-Provider-Dispatch), #490 (STATUS-Sync), #492 (Zod-Spiegel
+`EvidenceItem.source_model`). Live-SigNoz-End-to-End-Smoke offen (manuelles
+Compose-Profile `observability`).
 
 Sechs-Defekt-Welle aus User-Bericht 2026-05-16 (Backend-Log-Rauschen, fehlende
 Modell-Provenance, SSE-Reconnect, Aktiv-Modell-Anzeige, Stop-Button, Modell-
@@ -268,32 +275,60 @@ Erstverdacht: `~/.claude/plans/nutze-code-review-graph-immer-derzeit-adaptive-iv
 2. Modell-Provenance doppelt: `report.metadata.model_attribution[]` + `evidence.json` (pro Eintrag).
 3. SSE-Reconnect unbegrenzt mit Exponential Backoff (1 s → 30 s cap).
 
-**Slices (PR pro Slice, Reihenfolge bindend für 4–8):**
+**Slices (alle als PR gemerged):**
 
-| # | Slice | Branch | Risiko | Owner-Modell |
-|---|---|---|---|---|
-| 1 | werkzeug-Logger silencen + Env-Flag | `slice/observability-1-werkzeug-mute` | low | Opus |
-| 2 | `/api/models` Endpoint + Provider-Discovery (Ollama/OpenRouter/Gemini/OpenAI) | `slice/observability-2-models-endpoint` | medium | Sonnet (`agora-refactor-worker`) |
-| 3 | `<ModelPicker />` Vue-Komponente + `useAvailableModels` Composable | `slice/observability-3-model-picker` | medium | Sonnet (`agora-frontend-worker`) |
-| 4 | SSE-Logs Heartbeat + Backoff-Reconnect + Traefik `X-Accel-Buffering` | `slice/observability-4-sse-stability` | medium | Sonnet (Refactor + Frontend) |
-| 5 | Active-Model-Push (Server) + `useActiveModel` Composable + stabile Anzeige | `slice/observability-5-active-model` | low | Sonnet (`agora-frontend-worker`) |
-| 6 | Run-Cancel-Endpoint + FSM-State `cancelled_partial` + asyncio-Task-Cancel | `slice/observability-6-run-cancel` | **high** | **Opus (Lead)** |
-| 7 | Report-Confirm-Dialog (Bestätigung nach Modell-Auswahl, kein Auto-Start) | `slice/observability-7-report-confirm` | low | Sonnet (`agora-frontend-worker`) |
-| 8 | Modell-Provenance in ReportV3 + evidence.json + Frontend-Sektion | `slice/observability-8-model-provenance` | **high** | **Opus (Lead)** — Layer 0 |
+| # | Slice | Status |
+|---|---|---|
+| 1 | werkzeug-Logger silencen + Env-Flag | ✅ gemerged |
+| 2 | `/api/models` Endpoint + Provider-Discovery (Ollama/OpenRouter/Gemini/OpenAI) | ✅ gemerged (+ Hotfix #489 Provider-Dispatch) |
+| 3 | `<ModelPicker />` Vue-Komponente + `useAvailableModels` Composable | ✅ gemerged |
+| 4 | SSE-Logs Heartbeat + Backoff-Reconnect + Traefik `X-Accel-Buffering` | ✅ gemerged (+ Hotfix #488 Redis-Channel-Bridge) |
+| 5 | Active-Model-Push (Server) + `useActiveModel` Composable + stabile Anzeige | ✅ gemerged |
+| 6 | Run-Cancel-Endpoint + FSM-State `cancelled_partial` + asyncio-Task-Cancel | ✅ gemerged (Commit `da17cb7`) |
+| 7 | Report-Confirm-Dialog (Bestätigung nach Modell-Auswahl, kein Auto-Start) | ✅ gemerged |
+| 8 | Modell-Provenance in ReportV3 + evidence.json + Frontend-Sektion | ✅ gemerged (Commit `af2949f`, + Zod-Hotfix #492) |
 
-Slices 1–3 parallel möglich; 4 wartet auf 2, 5 wartet auf 2, 6/7/8 sequenziell.
-
-**Verification (End-to-End nach allen Slices):**
-1. `docker logs agora -f` zeigt strukturierte JSON-Events ohne werkzeug-Flut
-2. Smoke-Run erzeugt sichtbare „Modell-Provenance"-Sektion (≥3 Stages) im Report
-3. Browser-Logs-Panel zeigt Live-Frames; Reconnect-Indikator nur bei Drift > 30 s
-4. Aktiv-Modell-Badge oben rechts bleibt während Run stabil
-5. Stop-Button bricht Run innerhalb 5 s ab, generiert Teil-Report
-6. Modell-Dropdown identisch auf allen Seiten, alphabetisch, ohne halluzinierte Einträge
-7. `pytest backend/tests/` grün, `ruff check app/ tests/` grün, `radon cc --min C` grün
-
-**Out of Scope:** Layer-0 Evidence-Gating-Anker (ADR-0002), OASIS-Source, neue Provider.
+**Followup offen:**
+- Live-SigNoz-End-to-End-Smoke (manuell über Compose-Profile `observability`, default-off via `OTEL_ENABLED=false`)
+- Worklog `[Worklog] Cloud-LLM-Stabilisierung — Sub-Slices 05.1–05.9` (Issue #484)
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-16 — Slice-Welle Observability/Run-Control/Model-Picker eröffnet*
+## 10. Aktive Welle: Report-Quality-Floor (2026-05-17)
+
+Fünf-Slice-Welle aus Reviewer-Feedback zu `report_4fe2dacd80ba` (Issues
+#493–#497). Hebt den Boden für Evidence-Coverage, Confidence-Tiers,
+Hypothesen-Cap, Simulation-Floor und Red-Team-Quoten. Heuristik und
+Subagent-Mapping: [`docs/plans/plan.heuristic-2026-05-17.md`](docs/plans/plan.heuristic-2026-05-17.md).
+
+**Decisions (Lead-Setzung 2026-05-17):**
+1. Layer-0-Slices (1, 2) sequenziell, eigene PRs, kein gemeinsamer `report_v3.py`-Touch.
+2. Hartanker ADR-0002 (cross_stakeholder, reject_inferred, EvidenceSourceKind, Hedge-Snapshot, `<evidence_gating priority="hard">`) bleiben unangetastet — Welle **verschärft**, schwächt nicht.
+3. Frontend-Spiegel pro Slice im selben PR, eigener Commit.
+
+**Slices (PR pro Slice, Reihenfolge bindend für Slice 1 → 2, danach 3/4/5 parallel):**
+
+| # | Issue | Slice | Branch | Risiko | Owner-Modell |
+|---|---|---|---|---|---|
+| 1 | #493 | Evidence-Coverage-Floor (min=2 + Score-Cap < 0.60 wenn `len(evidence) < 2`) | `feat/report-quality-slice-1-evidence-floor` *(angelegt)* | medium | Sonnet (`agora-refactor-worker` + `agora-test-worker`) |
+| 2 | #494 | Confidence-Tier-Expansion (`speculative`, `verified`) | `feat/report-quality-slice-2-confidence-tiers` | **high** | **Opus (Lead)** — Layer-0-Enum-Touch |
+| 3 | #495 | Hypothesen-Cap max 5/Section + Dedup + Appendix | `feat/report-quality-slice-3-hypothesis-cap` | medium | Sonnet (Refactor + Frontend) |
+| 4 | #496 | Simulation-Floor (≥30 Agenten, ≥10 Runden) | `feat/report-quality-slice-4-sim-floor` | low | Sonnet (Refactor + Frontend) |
+| 5 | #497 | Echo-Chamber-Red-Team-Quote (≥2 Skeptic-Persona-Quotes/Section) | `feat/report-quality-slice-5-red-team` | **high** | **Opus (Lead)** — Persona-Quoten + Wording-Glossar |
+
+**Verification (End-to-End nach allen Slices):**
+1. Smoke-Report zeigt keinen High-Confidence-Claim mit < 2 Evidence-Refs
+2. Confidence-Tiers `speculative` und `verified` werden in Frontend + Markdown gerendert
+3. Sections enthalten max 5 sichtbare Hypothesen, Rest unter „Weitere Hypothesen"
+4. Default-Simulation-Lauf spawnt ≥ 30 Agenten / ≥ 10 Runden ohne Manual-Override
+5. Jede Section enthält mindestens 2 Quote-Marker aus Skeptic-Persona-Pool
+6. Hartanker-Snapshot (`evidence-gating-hedge-words.txt`) unverändert
+7. `pytest -q`, `ruff check app/ tests/`, `radon cc --min C`, `scripts/dump_schemas.py --check`, `scripts/sync-status.sh --check`, `python scripts/check_voice.py --strict` alle grün
+
+**Out of Scope:** ADR-0002-Anker schwächen, neue Provider, OASIS-Source-Patches,
+Report-Perf (Slice B/C aus [`docs/archive/plans/plan.report-perf.md`](docs/archive/plans/plan.report-perf.md) folgt eigenständig).
+
+---
+
+*Zuletzt aktualisiert: 2026-05-17 — Observability-Welle abgeschlossen, Report-Quality-Welle eröffnet.*
+*Heuristik-SSoT: [`docs/plans/plan.heuristic-2026-05-17.md`](docs/plans/plan.heuristic-2026-05-17.md).*
