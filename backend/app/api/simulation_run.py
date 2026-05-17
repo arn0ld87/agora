@@ -23,6 +23,7 @@ from ..services.stage_model_router import StageModelRouter
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.scopes import require_scope
 from ..utils.validation import validate_simulation_id
 from .simulation_common import (
     get_artifact_store,
@@ -61,6 +62,7 @@ def _simulation_dir(simulation_id: str) -> str:
 
 
 @simulation_bp.route('/start', methods=['POST'])
+@require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to start simulation")
 def start_simulation():
     """Start running a prepared simulation."""
@@ -342,6 +344,7 @@ def start_simulation():
 
 
 @simulation_bp.route('/stop', methods=['POST'])
+@require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to stop simulation")
 def stop_simulation():
     """Stop a running simulation."""
@@ -377,6 +380,7 @@ def stop_simulation():
 
 
 @simulation_bp.route('/<simulation_id>/pause', methods=['POST'])
+@require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to pause simulation")
 def pause_simulation(simulation_id: str):
     """Set the soft-pause flag so the simulation halts after the current round."""
@@ -412,6 +416,7 @@ def pause_simulation(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/resume', methods=['POST'])
+@require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to resume simulation")
 def resume_simulation(simulation_id: str):
     """Clear the pause flag so the simulation continues."""
@@ -447,6 +452,7 @@ def resume_simulation(simulation_id: str):
 
 
 @simulation_bp.route('/<simulation_id>/console-log', methods=['GET'])
+# TODO(scope-rollout): explicit @require_scope("simulation:read") after grace period — Code-Review 2026-05-17 §3.3
 @handle_api_errors(logger=logger, log_prefix="Failed to read simulation console log")
 def get_simulation_console_log(simulation_id: str):
     """Read incremental subprocess console logs for a simulation."""
