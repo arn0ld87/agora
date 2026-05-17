@@ -11,8 +11,9 @@
  * 7. Click auf Backdrop schliesst Mobile-Nav.
  * 8. ESC schliesst Mobile-Nav.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from './testRouter'
@@ -42,6 +43,11 @@ describe('AppShell', () => {
   beforeEach(() => {
     lsMock.clear()
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    document.body.style.overflow = ''
   })
 
   it('mountet ohne Crash', async () => {
@@ -155,6 +161,33 @@ describe('AppShell', () => {
     await wrapper.find('.app-shell__backdrop').trigger('click')
 
     expect(store.mobileNavOpen).toBe(false)
+  })
+
+  it('Resize auf Desktop-Breite schliesst Mobile-Nav und entfernt Scroll-Lock', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+
+    // Drawer öffnen — Scroll-Lock wird gesetzt
+    store.openMobileNav()
+    await nextTick()
+    expect(store.mobileNavOpen).toBe(true)
+    expect(document.body.style.overflow).toBe('hidden')
+
+    // Fenster auf Desktop-Breite resizen
+    vi.stubGlobal('innerWidth', 1024)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+
+    expect(store.mobileNavOpen).toBe(false)
+    // Watcher reagiert auf mobileNavOpen=false → overflow wieder leer
+    expect(document.body.style.overflow).toBe('')
   })
 
   it('ESC schliesst Mobile-Nav', async () => {

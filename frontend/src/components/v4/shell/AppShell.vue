@@ -87,6 +87,14 @@ function onKeyDown(e: KeyboardEvent): void {
   }
 }
 
+// Resize-Listener: Wenn auf Desktop-Breite gewechselt wird während Drawer offen ist,
+// Nav schliessen damit der Scroll-Lock (via Watcher unten) aufgehoben wird.
+function onResize(): void {
+  if (window.innerWidth >= 768 && shellStore.mobileNavOpen) {
+    shellStore.closeMobileNav()
+  }
+}
+
 // Body-Scroll-Lock wenn Mobile-Nav offen
 watch(
   () => shellStore.mobileNavOpen,
@@ -99,12 +107,14 @@ watch(
 
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('resize', onResize)
   // Dynamische Commands (laufende Sims + Recent Reports) einmalig verdrahten.
   // bindDynamicCommands ist idempotent — doppelter Aufruf ist sicher.
   commandsStore.bindDynamicCommands(router)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('resize', onResize)
   commandsStore.unbindDynamicCommands()
   // Scroll-Lock immer freigeben
   if (typeof document !== 'undefined') {
@@ -220,7 +230,9 @@ const activeSubRoute = computed<string>(() => {
     grid-column: unset;
     transform: translateX(-100%);
     transition: transform 200ms ease;
-    /* Sidebar behält ihre eigene Breite (220px / 56px collapsed) */
+    /* Erzwingt volle Sidebar-Breite im Mobile-Drawer, auch wenn Desktop-Collapsed-State
+       (56px) aktiv ist — sonst sind Labels unsichtbar und der Drawer wirkt kaputt. */
+    width: 280px !important;
   }
 
   .app-shell__sidebar--mobile-open {

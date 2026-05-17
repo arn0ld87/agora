@@ -62,7 +62,9 @@ const { t } = useI18n()
 const shellStore = useShellStore()
 
 function handleNavClick(): void {
-  if (window.innerWidth < 768) {
+  // matchMedia entspricht exakt dem CSS-Breakpoint @media (max-width: 768px) —
+  // kein Off-by-one bei genau 768px wie bei window.innerWidth < 768.
+  if (window.matchMedia('(max-width: 768px)').matches) {
     shellStore.closeMobileNav()
   }
 }

@@ -4,7 +4,7 @@
     <button
       class="topbar__hamburger"
       type="button"
-      aria-label="Navigation öffnen"
+      :aria-label="t('topbar.openNavigation')"
       :aria-expanded="shellStore.mobileNavOpen"
       @click="shellStore.toggleMobileNav()"
     >

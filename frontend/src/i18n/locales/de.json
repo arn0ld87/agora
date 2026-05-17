@@ -755,7 +755,8 @@
   },
   "topbar": {
     "search": "Suche",
-    "notifications": "Benachrichtigungen"
+    "notifications": "Benachrichtigungen",
+    "openNavigation": "Navigation öffnen"
   },
   "logs": {
     "drawer": {
