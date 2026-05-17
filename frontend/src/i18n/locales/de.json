@@ -419,7 +419,8 @@
       "success": "OK",
       "failed": "Fehlgeschlagen",
       "latency": "Latenz",
-      "error_type": "Fehlertyp"
+      "error_type": "Fehlertyp",
+      "model_placeholder": "Modell wählen …"
     }
   },
   "step3": {
@@ -539,13 +540,7 @@
     },
     "model": {
       "reportLabel": "Modell für Report",
-      "customLabel": "Eigenes Modell",
-      "customPlaceholder": "z. B. deepseek-v3.2:cloud",
-      "providerLabel": "LLM-Anbieter",
-      "apiKeyLabel": "API-Key",
-      "apiKeyPlaceholder": "API-Key für gewählten Anbieter",
-      "baseUrlLabel": "Base-URL (optional)",
-      "baseUrlPlaceholder": "z. B. https://api.openai.com/v1",
+      "placeholder": "Modell wählen …",
       "regenerate": "Neu generieren"
     },
     "quote": {
@@ -1165,6 +1160,9 @@
       "dropHint": "Datei hierher ziehen oder klicken",
       "modelLabel": "Modell",
       "modelDefault": "Standard",
+      "modelPlaceholder": "Modell wählen …",
+      "profileLabel": "Profil (optional)",
+      "profileNone": "— Profil deaktivieren —",
       "languageLabel": "Sprache",
       "startCta": "Starten",
       "disabledHint": "Erst Datei und Fragestellung eingeben, dann starten.",

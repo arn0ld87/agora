@@ -419,7 +419,8 @@
       "success": "OK",
       "failed": "Failed",
       "latency": "Latency",
-      "error_type": "Error Type"
+      "error_type": "Error Type",
+      "model_placeholder": "Select model …"
     }
   },
   "step3": {
@@ -539,13 +540,7 @@
     },
     "model": {
       "reportLabel": "Model for report",
-      "customLabel": "Custom model",
-      "customPlaceholder": "e.g. deepseek-v3.2:cloud",
-      "providerLabel": "LLM provider",
-      "apiKeyLabel": "API key",
-      "apiKeyPlaceholder": "API key for selected provider",
-      "baseUrlLabel": "Base URL (optional)",
-      "baseUrlPlaceholder": "e.g. https://api.openai.com/v1",
+      "placeholder": "Select model …",
       "regenerate": "Regenerate"
     },
     "quote": {
@@ -1165,6 +1160,9 @@
       "dropHint": "Drop file here or click",
       "modelLabel": "Model",
       "modelDefault": "Default",
+      "modelPlaceholder": "Select model …",
+      "profileLabel": "Profile (optional)",
+      "profileNone": "— Disable profile —",
       "languageLabel": "Language",
       "startCta": "Start",
       "disabledHint": "Select a file and enter a requirement first.",

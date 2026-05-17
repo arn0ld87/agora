@@ -2,24 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { makeI18n, makeRouter } from './dashTestHelpers'
 
-vi.mock('../../../../api/simulation', () => ({
-  getAvailableModels: vi.fn().mockResolvedValue({
-    success: true,
-    data: {
-      ollama: [{ name: 'qwen2.5:32b', label: 'Qwen 2.5 32B' }],
-      presets: [{ name: 'preset-a', label: 'Preset A' }],
-      current_default: 'qwen2.5:32b',
-      default_provider: 'ollama',
-      ollama_reachable: true,
-      ollama_error: null,
-      neo4j_reachable: true,
-      neo4j_error: null,
-    },
-  }),
-}))
-
 vi.mock('../../../../api/llmProfiles', () => ({
   fetchLlmProfiles: vi.fn().mockResolvedValue([]),
+}))
+
+// Slice A2: ModelPicker stubben, damit die Hero-Tests ohne Pinia laufen.
+vi.mock('../../forms/ModelPicker.vue', () => ({
+  default: {
+    name: 'ModelPicker',
+    template: '<div class="model-picker-stub" data-testid="model-picker" />',
+    props: ['modelValue', 'placeholder', 'disabled'],
+    emits: ['update:modelValue'],
+  },
 }))
 
 vi.mock('../../../../store/pendingUpload', () => ({
