@@ -66,7 +66,7 @@ def in_memory_reader() -> InMemoryMetricReader:
 def metrics_provider(
     in_memory_reader: InMemoryMetricReader,
     monkeypatch,
-) -> Generator[tuple[MeterProvider, InMemoryMetricReader], None, None]:
+) -> Generator[tuple[MeterProvider, InMemoryMetricReader]]:
     """Baut einen isolierten MeterProvider mit dem vollständigen View-Set
     aus ``metrics_module._build_views()`` und einem InMemoryMetricReader.
 

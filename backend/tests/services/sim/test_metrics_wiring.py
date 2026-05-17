@@ -53,7 +53,7 @@ def in_memory_reader() -> InMemoryMetricReader:
 def metrics_provider(
     in_memory_reader: InMemoryMetricReader,
     monkeypatch,
-) -> Generator[tuple[MeterProvider, InMemoryMetricReader], None, None]:
+) -> Generator[tuple[MeterProvider, InMemoryMetricReader]]:
     """Isolierter MeterProvider + InMemoryMetricReader — identisch zu test_metrics.py."""
     from opentelemetry.sdk.resources import Resource
 
