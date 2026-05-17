@@ -87,7 +87,50 @@ describe('HeroNewRun', () => {
       [file],
       'Wie reagiert die DACH-Region?',
       null,
+      30,
+      10,
     )
     expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+  })
+
+  it('num_agents Slider hat Default 30', async () => {
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    const slider = w.find<HTMLInputElement>('input#hero-num-agents')
+    expect(slider.exists()).toBe(true)
+    expect(Number(slider.element.value)).toBe(30)
+  })
+
+  it('num_rounds Slider hat Default 10', async () => {
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    const slider = w.find<HTMLInputElement>('input#hero-num-rounds')
+    expect(slider.exists()).toBe(true)
+    expect(Number(slider.element.value)).toBe(10)
+  })
+
+  it('Warning-Badge erscheint bei num_agents < 30, verschwindet bei 30', async () => {
+    const router = makeRouter()
+    await router.push('/dashboard')
+    const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
+    await flushPromises()
+
+    const slider = w.find<HTMLInputElement>('input#hero-num-agents')
+
+    // Slider auf 25 → Badge sichtbar
+    await slider.setValue(25)
+    await flushPromises()
+    expect(w.find('.hero-warning').exists()).toBe(true)
+
+    // Slider auf 30 → Badge weg
+    await slider.setValue(30)
+    await flushPromises()
+    expect(w.find('.hero-warning').exists()).toBe(false)
   })
 })
