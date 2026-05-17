@@ -11,7 +11,7 @@ PDFs are parsed with a hybrid strategy:
      sees it.
 
 Driven by env:
-  ENABLE_PDF_VISION=true|false           (default: true)
+  ENABLE_PDF_VISION=true|false           (default: false — opt-in, erzeugt Cloud-Calls + Latenz)
   VISION_MODEL_NAME=<ollama model>       (default: gemini-3-flash-preview:cloud)
   VISION_MIN_IMAGE_AREA=<px²>            (default: 40000 — ignore logos/icons)
   VISION_PAGE_SCAN_THRESHOLD=<chars>     (default: 100 — <=N chars triggers full-page render)
@@ -245,7 +245,9 @@ class FileParser:
         except ImportError:
             raise ImportError("PyMuPDF required: pip install PyMuPDF")
 
-        enable_vision = os.environ.get('ENABLE_PDF_VISION', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+        # Default: false — PDF-Vision ist opt-in (Cloud-Calls + Latenz).
+        # Aktivieren via ENABLE_PDF_VISION=true (i18n-Hinweis: upload.pdfVisionDisabledHint).
+        enable_vision = os.environ.get('ENABLE_PDF_VISION', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
         vision = _VisionHelper() if enable_vision else None
 
         parts: List[str] = []

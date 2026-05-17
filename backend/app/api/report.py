@@ -6,12 +6,13 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 import io
 import json
 import os
+import tempfile
 import uuid
 import zipfile
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional, cast
+from typing import Any, Iterator, Literal, Optional, cast
 
-from flask import Response, request, send_file, current_app
+from flask import Response, request, send_file, current_app, stream_with_context
 from pydantic import ValidationError
 
 from . import report_bp
@@ -47,6 +48,9 @@ from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
 logger = get_logger(__name__)
 run_registry = RunRegistry()
 
+# ZIP-Bundle-Schwellwerte (Baustein D — Hardening PR 5)
+_ZIP_STREAM_THRESHOLD_BYTES: int = 50 * 1024 * 1024   # 50 MB
+_ZIP_HARD_CAP_BYTES: int = 500 * 1024 * 1024           # 500 MB
 
 _REPORT_RATE_LIMIT_ENDPOINTS = {
     "report.generate_report",
@@ -635,7 +639,7 @@ def export_report(report_id: str):
     if fmt not in ('md', 'json', 'csv', 'zip'):
         return json_error("format must be 'md', 'json', 'csv', or 'zip'", status=400)
 
-    # --- ZIP branch (Sub-Slice P4.3) ---
+    # --- ZIP branch (Sub-Slice P4.3 + Hardening PR 5 Baustein D) ---
     if fmt == 'zip':
         report = ReportManager.get_report(report_id)
         if not report:
@@ -644,8 +648,25 @@ def export_report(report_id: str):
         # We allow ZIP export if either report-v3.json exists OR there is legacy markdown_content
         if not os.path.exists(v3_path) and not getattr(report, "markdown_content", None):
             return json_error("report_not_finalised", status=404)
-        zip_bytes = _build_zip_bundle(report_id, report)
+
         filename = f"agora-report-{report_id}-bundle.zip"
+        estimated_size = _estimate_zip_size(report_id, report)
+
+        if estimated_size > _ZIP_HARD_CAP_BYTES:
+            return json_error(
+                f"Export exceeds size limit ({_ZIP_HARD_CAP_BYTES // (1024 * 1024)} MB)",
+                status=413,
+            )
+
+        if estimated_size > _ZIP_STREAM_THRESHOLD_BYTES:
+            # Streaming-Pfad für große Bundles (> 50 MB)
+            gen = stream_with_context(_stream_zip_bundle(report_id, report))
+            response = Response(gen, mimetype="application/zip")
+            response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        # BytesIO-Pfad für kleine Bundles (≤ 50 MB)
+        zip_bytes = _build_zip_bundle(report_id, report)
         response = Response(zip_bytes, mimetype="application/zip")
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -769,6 +790,112 @@ def _build_zip_bundle(report_id: str, report: Any) -> bytes:
     return buf.getvalue()
 
 
+def _safe_getsize(path: str) -> int | None:
+    """``os.path.getsize`` mit OSError-Toleranz.
+
+    Race-condition-tolerant: Tests mocken oft nur ``os.path.exists`` und
+    der echte Pfad existiert dann nicht — wir geben in dem Fall None
+    zurück und der Caller fällt auf eine In-Memory-Heuristik zurück.
+    """
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
+def _estimate_zip_size(report_id: str, report: Any) -> int:
+    """Schätzt die unkomprimierte Größe der ZIP-Artefakte in Bytes.
+
+    Iteriert über Dateipfade (os.path.getsize) und In-Memory-Daten (len),
+    ohne die Daten zu laden. Wird verwendet, um den Streaming-Pfad vs.
+    BytesIO-Pfad zu entscheiden und den Hard-Cap zu prüfen.
+    """
+    total = 0
+
+    # report-v3.json (Dateipfad)
+    v3_path = ReportManager._get_report_v3_path(report_id)
+    if os.path.exists(v3_path):
+        try:
+            total += os.path.getsize(v3_path)
+        except OSError:
+            pass
+
+    # report-v3.md — grobe Schätzung. Wenn die Markdown-Datei bereits auf
+    # Disk liegt, nutzen wir os.path.getsize statt build_report_v3_markdown
+    # zu rendern (das wäre der teure Pfad).
+    md_v3_path = ReportManager._get_report_v3_markdown_path(report_id)
+    md_disk_size = _safe_getsize(md_v3_path)
+    if md_disk_size is not None:
+        total += md_disk_size
+    else:
+        md_text = getattr(report, "markdown_content", None) or ""
+        # konservative Heuristik: 2 Bytes pro Zeichen (UTF-8 mixed)
+        total += len(md_text) * 2
+
+    # report-v3.json — Disk-Lookup statt JSON-Re-Serialization.
+    v3_path = ReportManager._get_report_v3_path(report_id)
+    v3_disk_size = _safe_getsize(v3_path)
+    if v3_disk_size is not None:
+        total += v3_disk_size
+
+    # evidence-map.json — Heuristik statt teurer json.dumps-Serialisierung
+    # (Gemini-Review PR #526). Sections sind der Größentreiber.
+    evidence_map = ReportManager.get_evidence_map(report_id) or {}
+    sections = evidence_map.get("sections") or []
+    total += 1024 + len(sections) * 1500  # Base + ~1.5 KB pro Section
+
+    # CSV-Tabellen: Schätzung über Personenzahl * ~200 Bytes pro Zeile
+    report_v3 = ReportManager.get_report_v3(report_id) or {}
+    total += max(len(report_v3.get("personas") or []) * 200, 100)
+    total += max(len(report_v3.get("segments") or []) * 200, 100)
+    total += max(len(sections), 1) * 300
+
+    return total
+
+
+def _stream_zip_bundle(report_id: str, report: Any) -> Iterator[bytes]:
+    """Streaming-Generator für große ZIP-Bundles (> _ZIP_STREAM_THRESHOLD_BYTES).
+
+    Schreibt das ZIP in eine temporäre Datei und liefert sie in 64-KB-Chunks.
+    Die temporäre Datei wird nach dem Streaming automatisch gelöscht.
+    """
+    prefix = f"agora-report-{report_id}"
+    chunk_size = 64 * 1024  # 64 KB
+
+    with tempfile.TemporaryFile() as tmp:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            md_text = ReportManager.build_report_v3_markdown(report_id)
+            if md_text is None:
+                md_text = getattr(report, "markdown_content", None)
+            if md_text:
+                zf.writestr(f"{prefix}/report-v3.md", md_text)
+
+            v3_path = ReportManager._get_report_v3_path(report_id)
+            if os.path.exists(v3_path):
+                # Direkter Disk-zu-ZIP-Stream — vermeidet, dass eine große
+                # report-v3.json komplett in den Worker-RAM gelesen wird
+                # (Gemini-Review PR #526).
+                zf.write(v3_path, arcname=f"{prefix}/report-v3.json")
+
+            evidence_map = ReportManager.get_evidence_map(report_id) or {}
+            zf.writestr(
+                f"{prefix}/evidence-map.json",
+                json.dumps(evidence_map, ensure_ascii=False, indent=2),
+            )
+
+            report_v3 = ReportManager.get_report_v3(report_id) or {}
+            zf.writestr(f"{prefix}/personas.csv", personas_to_csv(report_v3.get("personas") or []))
+            zf.writestr(f"{prefix}/segments.csv", segments_to_csv(report_v3.get("segments") or []))
+            zf.writestr(f"{prefix}/claims.csv", claims_to_csv(evidence_map.get("sections") or []))
+
+        tmp.seek(0)
+        while True:
+            chunk = tmp.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
+
 @report_bp.route('/<report_id>/download', methods=['GET'])
 @require_scope("report:read")
 @allow_ticket_auth(lambda report_id: f"download:report:{report_id}")
@@ -783,11 +910,14 @@ def download_report(report_id: str):
 
     md_path = ReportManager._get_report_markdown_path(report_id)
     if not os.path.exists(md_path):
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write(report.markdown_content)
-            temp_path = f.name
-        return send_file(temp_path, as_attachment=True, download_name=f"{report_id}.md")
+        return Response(
+            report.markdown_content or "",
+            mimetype="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{report_id}.md"',
+                "Content-Type": "text/markdown; charset=utf-8",
+            },
+        )
 
     return send_file(
         md_path,

@@ -1271,5 +1271,8 @@
       "title": "Route nicht gefunden",
       "cta": "Zum Dashboard"
     }
+  },
+  "upload": {
+    "pdfVisionDisabledHint": "PDF-Vision-Auswertung ist standardmäßig aus. Aktivieren über ENABLE_PDF_VISION=true (Cloud-Calls + Latenz)."
   }
 }
