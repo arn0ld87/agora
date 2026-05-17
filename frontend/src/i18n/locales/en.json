@@ -248,6 +248,7 @@
     "model": {
       "label": "LLM model",
       "placeholder": "Select model …",
+      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",

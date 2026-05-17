@@ -50,7 +50,8 @@ function loadStoredRoute() {
     if (!parsed.success) return null
     if (!parsed.data.provider_id || !parsed.data.model) return null
     return parsed.data
-  } catch {
+  } catch (err) {
+    console.warn('[Home] agora.home.route lokal nicht parsbar — Auswahl zurückgesetzt:', err)
     return null
   }
 }
@@ -348,6 +349,9 @@ const differentiators = computed(() => tm('home.differentiators'))
               :placeholder="t('step2.model.placeholder')"
               @update:model-value="onPickRoute"
             />
+            <p v-if="!selectedRoute && !loadingModels" class="console-meta" style="margin-top: 4px;">
+              {{ t('step2.model.workspaceDefaultHint') }}
+            </p>
             <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !selectedRoute" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
