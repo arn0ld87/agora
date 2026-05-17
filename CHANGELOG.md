@@ -7,6 +7,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Changed (chore/deps — 2026-05-17)
 
+- Python-Floor auf 3.14 vereinheitlicht. `pyproject.toml` (`requires-python`,
+  `tool.ruff.target-version`, `tool.mypy.python_version`) und alle CI-Workflows
+  (`ci.yml`, `contract-gates.yml`, `cve-monitor.yml`) sind jetzt auf `3.14`.
+  Vorher gemischt: pyproject `>=3.11`, Dockerfile `3.14`, CI-Matrix mit
+  `3.11`-Stable + `3.14-dev`-Preview. Issue #199 (cp314-Wheel-Lag bei tiktoken)
+  ist seit 2026-05-14 closed; der `tool.uv.override-dependencies`-Block bleibt
+  bestehen, weil er die cp314-Bumps für tiktoken/pillow/pandas/numpy/sentence-
+  transformers + den Sec-Override für `unstructured` (GHSA-Path-Traversal)
+  trägt. **Breaking für lokale Dev-Setups:** `.venv` muss mit
+  `uv venv --python 3.14` neu gebaut werden, sonst meckert `uv sync`.
 - Neo4j-Default-Image von `neo4j:5.18-community` (Feb 2024) auf `neo4j:5.26-community`
   (Nov 2024 LTS) gebumpt. Betrifft `docker-compose.yml` (Default-Image) und
   `.env.example` (Beispiel-Override-Kommentar). Gleiche 5.x-Linie, gleicher
