@@ -1271,5 +1271,8 @@
       "title": "Route not found",
       "cta": "Go to dashboard"
     }
+  },
+  "upload": {
+    "pdfVisionDisabledHint": "PDF vision is off by default. Enable via ENABLE_PDF_VISION=true (Cloud calls + latency)."
   }
 }

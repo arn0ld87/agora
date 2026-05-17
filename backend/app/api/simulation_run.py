@@ -23,6 +23,7 @@ from ..services.stage_model_router import StageModelRouter
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.pagination import clamp_int, DEFAULT_LIMIT, MAX_LIMIT
 from ..utils.scopes import require_scope
 from ..utils.validation import validate_simulation_id
 from .simulation_common import (
@@ -514,10 +515,21 @@ def get_run_status_detail(simulation_id: str):
         return json_success({
             "simulation_id": simulation_id,
             "runner_status": "idle",
+            "actions_total": 0,
+            "actions": [],
             "all_actions": [],
             "twitter_actions": [],
             "reddit_actions": [],
         })
+
+    # Pagination-Parameter für actions-Subquery
+    limit = clamp_int(
+        request.args.get('limit', type=int),
+        default=DEFAULT_LIMIT,
+        minimum=1,
+        maximum=MAX_LIMIT,
+    )
+    offset = max(request.args.get('offset', 0, type=int), 0)
 
     all_actions = SimulationRunner.get_all_actions(simulation_id=simulation_id, platform=platform_filter)
     twitter_actions = SimulationRunner.get_all_actions(
@@ -533,7 +545,17 @@ def get_run_status_detail(simulation_id: str):
         round_num=current_round,
     ) if current_round > 0 else []
 
+    # Paginierte actions-Subquery (Aggregat-Felder bleiben im Top-Level)
+    paginated_actions = SimulationRunner.get_actions(
+        simulation_id=simulation_id,
+        limit=limit,
+        offset=offset,
+        platform=platform_filter,
+    )
+
     result = run_state.to_dict()
+    result["actions_total"] = len(all_actions)
+    result["actions"] = [action.to_dict() for action in paginated_actions]
     result["all_actions"] = [action.to_dict() for action in all_actions]
     result["twitter_actions"] = [action.to_dict() for action in twitter_actions]
     result["reddit_actions"] = [action.to_dict() for action in reddit_actions]
@@ -552,8 +574,13 @@ def get_simulation_actions(simulation_id: str):
             message="Invalid simulation_id format",
         )
 
-    limit = request.args.get('limit', 100, type=int)
-    offset = request.args.get('offset', 0, type=int)
+    limit = clamp_int(
+        request.args.get('limit', type=int),
+        default=DEFAULT_LIMIT,
+        minimum=1,
+        maximum=MAX_LIMIT,
+    )
+    offset = max(request.args.get('offset', 0, type=int), 0)
     platform = request.args.get('platform')
     agent_id = request.args.get('agent_id', type=int)
     round_num = request.args.get('round_num', type=int)
