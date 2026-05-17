@@ -9,6 +9,15 @@ export interface AgentLogEntry {
   [key: string]: unknown
 }
 
+const SENSITIVE_KEY_PATTERN = /token|key|secret|auth|password|credential|ticket|cookie|header/i
+const REDACTED = '[redacted]'
+
+function redactParamValue(key: string, value: unknown): string {
+  if (SENSITIVE_KEY_PATTERN.test(key)) return REDACTED
+  const str = typeof value === 'string' ? value : JSON.stringify(value)
+  return str.length > 80 ? str.slice(0, 80) + '…' : str
+}
+
 function parseAgentObject(raw: unknown): Record<string, unknown> | null {
   if (typeof raw === 'string') {
     try {
@@ -35,10 +44,7 @@ export function parseAgentEntry(raw: unknown): AgentLogEntry | null {
   if (action === 'tool_call') {
     title = `TOOL → ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
     const params = (d.parameters as Record<string, unknown>) || {}
-    subtitle = Object.entries(params).map(([k, v]) => {
-      const str = typeof v === 'string' ? v : JSON.stringify(v)
-      return `${k}=${str.length > 80 ? str.slice(0, 80) + '…' : str}`
-    }).join('  ')
+    subtitle = Object.entries(params).map(([k, v]) => `${k}=${redactParamValue(k, v)}`).join('  ')
   } else if (action === 'tool_result') {
     title = `← ${(obj.tool_name as string) || (d.tool_name as string) || '?'}`
     subtitle = `${(d.result_length as number) || 0} chars`
