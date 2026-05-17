@@ -165,6 +165,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Subprozess-Handles in „dem anderen" Worker. Bis Tasks/API-Keys/
 # SimRunner extern (Redis-Queue + persistenter Key-Store) sind, läuft
 # Prod mit genau einem Worker. Aufheben in PR 2/4 dieser Welle.
+#
+# Issue #529: App-Target ist wsgi:app (NICHT mehr app:create_app()), weil
+# wsgi.py als allererstes Statement gevent.monkey.patch_all() ausführt.
+# Ohne diese Reihenfolge importiert --preload requests/urllib3/ssl mit
+# ungepatchtem socket → RecursionError in jedem HTTP-Call.
 CMD ["/app/backend/.venv/bin/gunicorn", \
      "-k", "gevent", \
      "--workers", "1", \
@@ -174,4 +179,4 @@ CMD ["/app/backend/.venv/bin/gunicorn", \
      "--bind", "0.0.0.0:5001", \
      "--chdir", "/app/backend", \
      "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
-     "app:create_app()"]
+     "wsgi:app"]
