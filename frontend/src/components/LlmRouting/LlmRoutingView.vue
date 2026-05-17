@@ -2,20 +2,19 @@
 import { ref, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  listLlmProviders,
-  listProviderModels,
   getRunLlmRouting,
   updateRunLlmRouting,
-  patchStageLlmRouting
+  patchStageLlmRouting,
 } from '../../api/llmRouting';
 import {
-  ProviderDescriptor,
   RuntimeLlmRouting,
   StageLLMRoute,
   StageId,
   ReasoningEffort,
   LlmInvocationEvent,
 } from '../../contracts/llmRoutingContract';
+import ModelPicker from '@/components/v4/forms/ModelPicker.vue';
+import { useLlmProvidersStore } from '@/store/llmProviders';
 
 const props = defineProps<{
   runId: string;
@@ -23,11 +22,10 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const providers = ref<ProviderDescriptor[]>([]);
+const providersStore = useLlmProvidersStore();
 const routing = ref<RuntimeLlmRouting | null>(null);
 const snapshots = ref<Record<string, any>>({});
 const invocationEvents = ref<LlmInvocationEvent[]>([]);
-const modelOptions = ref<Record<string, Array<{ id: string; name: string }>>>({});
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -46,30 +44,13 @@ const REASONING_EFFORTS: ReasoningEffort[] = ["none", "minimal", "low", "medium"
 async function load() {
   loading.value = true;
   try {
-    const [p, r] = await Promise.all([
-      listLlmProviders(),
-      getRunLlmRouting(props.runId)
+    const [r] = await Promise.all([
+      getRunLlmRouting(props.runId),
+      providersStore.loadProviders(),
     ]);
-    providers.value = p;
     routing.value = r.runtime_config;
     snapshots.value = r.snapshots;
     invocationEvents.value = [...(r.invocation_events || [])].reverse();
-
-    const discoveries = await Promise.allSettled(
-      p
-        .filter((provider) => !!provider.base_url)
-        .map(async (provider) => ({
-          providerId: provider.id,
-          models: await listProviderModels(provider.id, provider.base_url || undefined),
-        })),
-    );
-
-    const nextOptions: Record<string, Array<{ id: string; name: string }>> = {};
-    for (const result of discoveries) {
-      if (result.status !== 'fulfilled') continue;
-      nextOptions[result.value.providerId] = result.value.models || [];
-    }
-    modelOptions.value = nextOptions;
   } catch (e: any) {
     error.value = e.message;
   } finally {
@@ -105,10 +86,23 @@ async function saveStage(stageId: StageId, route: StageLLMRoute) {
 const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
 const formatLatency = (latencyMs: number) => `${Math.round(latencyMs)} ms`;
 const formatTimestamp = (timestamp: number) => new Date(timestamp * 1000).toLocaleString();
-const modelsFor = (providerId?: string | null) => {
-  if (!providerId) return [];
-  return modelOptions.value[providerId] || [];
-};
+
+function onGlobalDefaultPicked(route: StageLLMRoute | null) {
+  if (!routing.value || !route) return;
+  routing.value.global_default.provider_id = route.provider_id;
+  routing.value.global_default.model = route.model;
+}
+
+function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
+  if (!routing.value || !route) return;
+  const current = routing.value.stage_overrides[stageId];
+  const base = current ? { ...current } : { ...routing.value.global_default };
+  routing.value.stage_overrides[stageId] = {
+    ...base,
+    provider_id: route.provider_id,
+    model: route.model,
+  };
+}
 
 </script>
 
@@ -122,18 +116,12 @@ const modelsFor = (providerId?: string | null) => {
       <div class="config-pane">
         <h3>{{ t('llm.routing.global_default') }}</h3>
         <div class="card">
-          <label>{{ t('llm.provider') }}</label>
-          <select v-model="routing.global_default.provider_id">
-            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
-          </select>
-
           <label>{{ t('llm.model') }}</label>
-          <select v-if="modelsFor(routing.global_default.provider_id).length > 0" v-model="routing.global_default.model">
-            <option v-for="model in modelsFor(routing.global_default.provider_id)" :key="model.id" :value="model.id">
-              {{ model.name }}
-            </option>
-          </select>
-          <input v-else v-model="routing.global_default.model" />
+          <ModelPicker
+            :model-value="routing.global_default"
+            :placeholder="t('llm.routing.model_placeholder', 'Modell wählen …')"
+            @update:model-value="onGlobalDefaultPicked"
+          />
 
           <label>{{ t('llm.reasoning_effort') }}</label>
           <select v-model="routing.global_default.reasoning_effort">
@@ -151,53 +139,12 @@ const modelsFor = (providerId?: string | null) => {
           </div>
 
           <div class="stage-controls">
-            <label>{{ t('llm.provider') }}</label>
-            <select
-              :value="routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id"
-              @change="(e: any) => {
-                if (!routing) return;
-                if (!routing.stage_overrides[stage]) {
-                  routing.stage_overrides[stage] = { ...routing.global_default };
-                }
-                routing.stage_overrides[stage].provider_id = e.target.value;
-              }"
-              :disabled="isStageLocked(stage)"
-            >
-              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
-            </select>
-
             <label>{{ t('llm.model') }}</label>
-            <select
-              v-if="modelsFor(routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id).length > 0"
-              :value="routing.stage_overrides[stage]?.model || routing.global_default.model"
-              @change="(e: any) => {
-                if (!routing) return;
-                if (!routing.stage_overrides[stage]) {
-                  routing.stage_overrides[stage] = { ...routing.global_default };
-                }
-                routing.stage_overrides[stage].model = e.target.value;
-              }"
+            <ModelPicker
+              :model-value="routing.stage_overrides[stage] || routing.global_default"
               :disabled="isStageLocked(stage)"
-            >
-              <option
-                v-for="model in modelsFor(routing.stage_overrides[stage]?.provider_id || routing.global_default.provider_id)"
-                :key="model.id"
-                :value="model.id"
-              >
-                {{ model.name }}
-              </option>
-            </select>
-            <input
-              v-else
-              :value="routing.stage_overrides[stage]?.model || routing.global_default.model"
-              @input="(e: any) => {
-                if (!routing) return;
-                if (!routing.stage_overrides[stage]) {
-                  routing.stage_overrides[stage] = { ...routing.global_default };
-                }
-                routing.stage_overrides[stage].model = e.target.value;
-              }"
-              :disabled="isStageLocked(stage)"
+              :placeholder="t('llm.routing.model_placeholder', 'Modell wählen …')"
+              @update:model-value="(route) => onStageOverridePicked(stage, route)"
             />
 
             <button

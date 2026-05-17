@@ -124,13 +124,25 @@ def build_route_subprocess_env(
     api_key: Optional[str],
     run_id: Optional[str] = None,
 ) -> dict[str, str]:
-    """Translate a resolved route into the subprocess env contract used by OASIS."""
+    """Translate a resolved route into the subprocess env contract used by OASIS.
+
+    Setzt zusätzlich die provider-spezifische ``api_key_ref``-Env-Var aus der
+    ``LlmProviderRegistry`` (z. B. ``GOOGLE_API_KEY`` für Gemini), damit OASIS-
+    Subprozesse den im ``LlmProviderSecretsStore`` hinterlegten Key finden,
+    ohne dass eine ``.env`` zwingend gepflegt sein muss.
+    """
     env: dict[str, str] = {"LLM_MODEL_NAME": route.model}
     if run_id:
         env["AGORA_RUN_ID"] = run_id
     if api_key:
         env["LLM_API_KEY"] = api_key
         env["OPENAI_API_KEY"] = api_key
+        provider = next(
+            (p for p in LlmProviderRegistry().get_providers() if p.id == route.provider_id),
+            None,
+        )
+        if provider and provider.api_key_ref:
+            env[provider.api_key_ref] = api_key
     if route.base_url_sanitized:
         env["LLM_BASE_URL"] = route.base_url_sanitized
         env["OPENAI_BASE_URL"] = route.base_url_sanitized
