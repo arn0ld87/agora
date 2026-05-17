@@ -469,7 +469,7 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "unknown"]:
+    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
         """Infer the LLM provider from base_url and model name.
 
         Heuristics (in priority order):
@@ -479,7 +479,12 @@ class LLMClient:
            den lokalen ollama-Proxy auf :11434 laufen können).
         3. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
         4. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
-        5. Fallback → ``"unknown"``.
+        5. Base URL contains ``googleapis.com`` or ``generativelanguage`` →
+           ``"google"`` (Gemini-OpenAI-Compat-Layer — unterstützt natives
+           ``tools=`` / ``tool_choice=``; siehe ``_chat_with_tools``-Branch.
+           Ohne diesen Pfad fiel der Tool-Call auf XML-im-Prompt zurück, was
+           Gemini's Function-Filter mit MALFORMED_FUNCTION_CALL ablehnt).
+        6. Fallback → ``"unknown"``.
         """
         model_name = self.model or ""
         base = (self.base_url or "").lower()
@@ -491,6 +496,8 @@ class LLMClient:
             return "ollama"
         if "openai.com" in base or "api.openai" in base:
             return "openai"
+        if "googleapis.com" in base or "generativelanguage" in base:
+            return "google"
         return "unknown"
 
     def _publish_model_active(

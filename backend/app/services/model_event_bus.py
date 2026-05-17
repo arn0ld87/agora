@@ -113,7 +113,7 @@ class ModelEventBus:
                     )
 
     @contextmanager
-    def _managed_queue(self) -> Generator[queue.Queue[ModelActiveEvent], None, None]:
+    def _managed_queue(self) -> Generator[queue.Queue[ModelActiveEvent]]:
         """Register a new subscriber queue, yield it, then unregister on exit."""
         q: queue.Queue[ModelActiveEvent] = queue.Queue(maxsize=self._maxsize)
         qid = id(q)

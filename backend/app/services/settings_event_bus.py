@@ -88,7 +88,7 @@ class SettingsEventBus:
                     )
 
     @contextmanager
-    def _managed_queue(self) -> Generator[queue.Queue[SettingsChangedEvent], None, None]:
+    def _managed_queue(self) -> Generator[queue.Queue[SettingsChangedEvent]]:
         q: queue.Queue[SettingsChangedEvent] = queue.Queue(maxsize=self._maxsize)
         qid = id(q)
         with self._lock:

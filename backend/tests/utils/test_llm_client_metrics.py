@@ -48,7 +48,7 @@ def in_memory_reader() -> InMemoryMetricReader:
 def metrics_provider(
     in_memory_reader: InMemoryMetricReader,
     monkeypatch,
-) -> Generator[tuple[MeterProvider, InMemoryMetricReader], None, None]:
+) -> Generator[tuple[MeterProvider, InMemoryMetricReader]]:
     from opentelemetry.sdk.resources import Resource
 
     views = metrics_module._build_views()
