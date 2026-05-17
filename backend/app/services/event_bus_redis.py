@@ -98,6 +98,21 @@ class RedisEventBus:
         self._file_bus = FilePollingEventBus(store=self._store)
         self._url = url
 
+    # ----- readiness probe ----------------------------------------------
+
+    def verify_connectivity(self) -> None:
+        """Pingt den Redis-Server für den /readyz-Probe.
+
+        Schlägt durch, was redis-py raised (typischerweise
+        ``redis.exceptions.ConnectionError``). ``readiness._check_redis``
+        übersetzt die Exception in ein {"ok": false}-Payload.
+
+        Bewusst hier exposiert (nicht ``ping``), damit das Namensschema
+        ``verify_connectivity`` zwischen Neo4j-Storage und Redis-Bus
+        identisch bleibt — Gemini-Review zu PR #519, Mai 2026.
+        """
+        self._redis.ping()
+
     # ----- internal ------------------------------------------------------
 
     def _write_retained(self, channel: str, event: SimulationEvent) -> None:

@@ -54,7 +54,7 @@ ENV FLASK_HOST=0.0.0.0
 EXPOSE 5173 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5001/health || exit 1
+  CMD curl -f http://localhost:5001/readyz || exit 1
 
 CMD ["bun", "run", "dev"]
 
@@ -152,15 +152,22 @@ USER agora
 EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD ["python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:5001/health', timeout=5).read()"]
+  CMD ["python", "-c", "import sys; from urllib.request import urlopen; sys.exit(0 if urlopen('http://localhost:5001/readyz', timeout=5).status == 200 else 1)"]
 
 # Gunicorn vor Flask mit gevent-Worker (non-blocking SSE).
 # Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem
 # Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
 # scheitern.
+#
+# HARDSTOP --workers 1 (Code-Review 2026-05-17, Finding 1.2):
+# TaskManager, ApiKeysStore und SimulationRunner halten Zustand in
+# Prozess-lokalen Dicts. Mit 2 Workern landen API-Keys, Task-Status und
+# Subprozess-Handles in „dem anderen" Worker. Bis Tasks/API-Keys/
+# SimRunner extern (Redis-Queue + persistenter Key-Store) sind, läuft
+# Prod mit genau einem Worker. Aufheben in PR 2/4 dieser Welle.
 CMD ["/app/backend/.venv/bin/gunicorn", \
      "-k", "gevent", \
-     "--workers", "2", \
+     "--workers", "1", \
      "--preload", \
      "--timeout", "60", \
      "--graceful-timeout", "30", \
