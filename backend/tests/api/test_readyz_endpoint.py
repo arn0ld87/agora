@@ -38,25 +38,25 @@ class _FakeNeo4jStorageBroken:
         raise RuntimeError("bolt://neo4j:7687 unreachable: Connection refused")
 
 
-class _FakeRedisClientOk:
-    def ping(self) -> bool:
-        return True
-
-
-class _FakeRedisClientBroken:
-    def ping(self) -> bool:
-        raise RuntimeError("redis://redis:6379/0 unreachable: ECONNREFUSED")
-
-
 class _FakeRedisEventBus:
-    """Bus mit Redis-Backend-Signatur (Klassenname enthält 'Redis')."""
+    """Event-Bus mit explizitem ``verify_connectivity``-Probe-Vertrag.
 
-    def __init__(self, client) -> None:
-        self.client = client
+    Spiegelt das Interface, das ``RedisEventBus`` in Production exposiert
+    (siehe ``backend/app/services/event_bus_redis.py``).
+    """
+
+    def __init__(self, ok: bool = True, error: str = "") -> None:
+        self._ok = ok
+        self._error = error or "redis://redis:6379/0 unreachable: ECONNREFUSED"
+
+    def verify_connectivity(self) -> None:
+        if not self._ok:
+            raise RuntimeError(self._error)
 
 
 class _FakeFileEventBus:
-    """File-Backend — Redis-Check wird übersprungen."""
+    """File-Backend: exposiert keinen ``verify_connectivity``-Hook → Probe wird
+    übersprungen. Spiegelt die ``FilePollingEventBus``-Realität."""
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ def app(tmp_path):
 
     application.extensions["neo4j_storage"] = _FakeNeo4jStorageOk()
     application.extensions["neo4j_storage_error"] = None
-    application.extensions["event_bus"] = _FakeRedisEventBus(_FakeRedisClientOk())
+    application.extensions["event_bus"] = _FakeRedisEventBus(ok=True)
     register_readiness_routes(application)
     return application
 
@@ -153,7 +153,7 @@ def test_readyz_returns_503_when_neo4j_storage_missing(app, client):
 
 
 def test_readyz_returns_503_when_redis_unreachable(app, client):
-    app.extensions["event_bus"] = _FakeRedisEventBus(_FakeRedisClientBroken())
+    app.extensions["event_bus"] = _FakeRedisEventBus(ok=False)
 
     response = client.get("/readyz")
 
@@ -174,6 +174,22 @@ def test_readyz_skips_redis_check_for_file_backend(app, client):
     payload = response.get_json()
     assert payload["checks"]["redis"]["ok"] is True
     assert "skipped" in payload["checks"]["redis"]["detail"].lower()
+
+
+def test_readyz_returns_503_when_upload_dir_missing(app, client, tmp_path):
+    """Stateless-Probe: ein fehlendes Upload-Verzeichnis ist ein Setup-
+    Fehler, den /readyz meldet — nicht heimlich anlegt."""
+    missing = tmp_path / "not-there"
+    app.config["UPLOAD_FOLDER"] = str(missing)
+
+    response = client.get("/readyz")
+
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["checks"]["upload_dir"]["ok"] is False
+    assert "not exist" in payload["checks"]["upload_dir"]["detail"].lower()
+    # Probe darf das Verzeichnis NICHT erstellen.
+    assert not missing.exists()
 
 
 def test_readyz_returns_503_when_upload_dir_unwritable(app, client, tmp_path):

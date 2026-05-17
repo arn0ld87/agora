@@ -72,27 +72,28 @@ def _check_neo4j() -> CheckResult:
 
 
 def _check_redis() -> CheckResult:
-    """Pingt Redis nur, wenn der Event-Bus tatsächlich ein Redis-Backend ist.
+    """Probet den Event-Bus über ``verify_connectivity()``.
 
-    File-Backend ist ein bewusster, unterstützter Opt-out — der darf
-    /readyz nicht rot drücken.
+    Vertrag: Backends mit echter Netzwerk-Abhängigkeit (``RedisEventBus``)
+    exposieren ``verify_connectivity()`` und werfen, wenn Redis nicht
+    erreichbar ist. Backends ohne Netzwerk-Abhängigkeit
+    (``FilePollingEventBus``) exposieren die Methode bewusst NICHT — der
+    Check meldet dann ``skipped``, statt fälschlicherweise zu pingen.
+
+    Vorgängerversion hat über ``type(bus).__name__`` und drei Attribut-
+    Kandidaten geraten — fragil und in der Praxis kaputt, weil
+    ``RedisEventBus`` den Client unter ``_redis`` hält. Gemini-Review
+    (PR #519) hat darauf gedeutet, und die Probe wurde auf das explizite
+    Interface umgestellt.
     """
     bus = current_app.extensions.get("event_bus")
-    backend_name = type(bus).__name__ if bus is not None else "None"
-    if "Redis" not in backend_name:
-        return True, f"skipped (event_bus={backend_name})"
-    client = (
-        getattr(bus, "client", None)
-        or getattr(bus, "_client", None)
-        or getattr(bus, "redis", None)
-    )
-    if client is None:
-        return False, f"redis backend selected but no client attr on {backend_name}"
-    ping = getattr(client, "ping", None)
-    if ping is None:
-        return False, f"redis client {type(client).__name__} has no ping()"
+    if bus is None:
+        return False, "event_bus not initialized"
+    probe = getattr(bus, "verify_connectivity", None)
+    if probe is None:
+        return True, f"skipped (event_bus={type(bus).__name__} has no probe)"
     try:
-        ping()
+        probe()
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)
     return True, "ok"
@@ -101,17 +102,16 @@ def _check_redis() -> CheckResult:
 def _check_upload_dir() -> CheckResult:
     """Upload-Verzeichnis muss existieren und schreibbar sein.
 
-    Liest ``UPLOAD_FOLDER`` aus ``app.config`` (von ``Config.UPLOAD_FOLDER``
-    bei ``create_app`` reingezogen). Tests können das pro Request über
-    ``app.config['UPLOAD_FOLDER'] = ...`` umstellen.
+    Stateless: die Probe legt das Verzeichnis NICHT an. Ein fehlendes
+    Upload-Dir ist ein Setup-Fehler, den /readyz sichtbar machen soll —
+    Dockerfile und Compose-Bootstrap erzeugen den Pfad bereits beim
+    Image-Build bzw. via Bind-Mount.
     """
     folder = current_app.config.get("UPLOAD_FOLDER")
     if not folder:
         return False, "UPLOAD_FOLDER not configured"
-    try:
-        os.makedirs(folder, exist_ok=True)
-    except Exception as exc:  # noqa: BLE001
-        return False, f"upload dir not creatable: {exc}"
+    if not os.path.isdir(folder):
+        return False, f"upload dir does not exist: {folder}"
     if not os.access(folder, os.W_OK):
         return False, f"upload dir not writable: {folder}"
     return True, str(folder)
