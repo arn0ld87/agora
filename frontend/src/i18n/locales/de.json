@@ -1264,5 +1264,12 @@
     "error": "Fehler beim Laden der Modelle",
     "placeholder": "Modell wählen…",
     "noModels": "Keine Modelle verfügbar"
+  },
+  "router": {
+    "notFound": {
+      "kicker": "404",
+      "title": "Route nicht gefunden",
+      "cta": "Zum Dashboard"
+    }
   }
 }

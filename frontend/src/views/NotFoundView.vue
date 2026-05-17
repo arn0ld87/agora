@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const path = String(route.fullPath || '')
 
 function goHome(): void {
@@ -13,11 +15,11 @@ function goHome(): void {
 <template>
   <main class="not-found">
     <div class="not-found__inner">
-      <p class="not-found__kicker">404</p>
-      <h1 class="not-found__title">Route nicht gefunden</h1>
+      <p class="not-found__kicker">{{ t('router.notFound.kicker') }}</p>
+      <h1 class="not-found__title">{{ t('router.notFound.title') }}</h1>
       <p class="not-found__path">{{ path }}</p>
       <button type="button" class="not-found__cta" @click="goHome">
-        Zum Dashboard
+        {{ t('router.notFound.cta') }}
       </button>
     </div>
   </main>
