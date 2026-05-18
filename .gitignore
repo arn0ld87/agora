@@ -111,10 +111,9 @@ backend/.cache/
 
 # Runtime artifacts and local instances
 /instance/
-backend/instance/settings.json
-backend/instance/settings.*.json.tmp
-backend/instance/active_llm_config.json
-backend/instance/.active_llm_*.tmp
+# Flask instance path with local run data, LLM traces, routing snapshots,
+# user uploads metadata, SQLite state, and other private runtime artifacts.
+backend/instance/
 
 # Upload folder
 backend/uploads/
