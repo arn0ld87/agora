@@ -22,9 +22,13 @@ VALID_SIM_ID = "sim_0123456789ab"
 
 
 @pytest.fixture()
-def prepare_client():
+def prepare_client(monkeypatch):
     """Flask test-client mit simulation_bp."""
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Validierungs-/Routing-Logik, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.extensions = {"neo4j_storage": MagicMock(name="Neo4jStorage")}
@@ -33,9 +37,11 @@ def prepare_client():
 
 
 @pytest.fixture()
-def llm_client():
+def llm_client(monkeypatch):
     """Flask test-client mit llm_bp."""
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.register_blueprint(llm_bp, url_prefix="/api/llm")
     return app.test_client()
 
