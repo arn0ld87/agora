@@ -22,6 +22,7 @@ import {
   buildQuotaPlanFromEntries,
 } from '../contracts/personaQuotaContract'
 import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
+import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 
 const { t } = useI18n()
 
@@ -39,7 +40,24 @@ const customMaxRounds = ref(40)
 const useCustomDays = ref(false)
 const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
+const llmProfileId = ref(props.projectData?.llm_profile_id ?? null)
+const userPickedProfile = ref(false)
 const showRuntimeOptions = ref(false)
+
+// Nach async-Hydration von projectData den Default einmal nachziehen, aber
+// niemals, sobald der User selbst eine Wahl getroffen hat (auch nicht für
+// "Server-Standard" = null).
+watch(
+  () => props.projectData?.llm_profile_id,
+  (next) => {
+    if (userPickedProfile.value) return
+    if (next) llmProfileId.value = next
+  },
+)
+
+watch(llmProfileId, () => {
+  userPickedProfile.value = true
+})
 
 const {
   runtimeProvider,
@@ -245,6 +263,7 @@ async function triggerPrepare() {
     parallel_profile_count: 5,
     language: language.value,
   }
+  if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
   const m = effectiveModel()
   if (m) payload.llm_model = m
   // Smoke-Fix Slice 04: kein hartes Abbrechen bei fehlendem Session-Key mehr.
@@ -311,14 +330,24 @@ onMounted(() => {
         </p>
 
         <div class="setup-grid">
+          <!-- LLM-Profil (optional, schlägt Model/Provider-Overrides) -->
+          <div class="setup-cell setup-cell--wide">
+            <LlmProfilePicker v-model="llmProfileId">
+              <template #hint>
+                <span class="hint">{{ t('step2.llmProfile.hint') }}</span>
+              </template>
+            </LlmProfilePicker>
+          </div>
+
           <!-- Model -->
-          <div class="setup-cell">
+          <div class="setup-cell" :class="{ 'is-overridden-by-profile': llmProfileId }">
             <Select
               v-model="modelOption"
               :label="t('step2.model.label')"
               :options="modelOptions"
             />
-            <p class="hint" v-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
+            <p class="hint" v-if="llmProfileId">{{ t('step2.llmProfile.modelIgnored') }}</p>
+            <p class="hint" v-else-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
             <p class="hint" v-else-if="!runtimeProviderEnabled && serverDefaultRequiresOllama && !ollamaReachable">{{ t('step2.model.noOllama') }}</p>
             <p class="hint" v-else-if="!runtimeProviderEnabled && defaultProvider === 'openai'">{{ t('step2.model.openAiDefault') }}</p>
           </div>
@@ -676,6 +705,7 @@ onMounted(() => {
 }
 .setup-cell { display: flex; flex-direction: column; gap: var(--s-2); }
 .setup-cell--wide { grid-column: 1 / -1; }
+.setup-cell.is-overridden-by-profile { opacity: 0.6; }
 
 .runtime-toggle {
   display: flex;

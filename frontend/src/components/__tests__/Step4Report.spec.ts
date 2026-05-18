@@ -116,6 +116,8 @@ const globalStubs = {
   Badge: { template: '<span><slot /></span>' },
   Kicker: { template: '<span><slot /></span>' },
   Select: { template: '<select />' },
+  LlmProfilePicker: true,
+  ReportBranchControls: true,
 }
 
 // Valides Report-Payload (ReportSchema-konform)

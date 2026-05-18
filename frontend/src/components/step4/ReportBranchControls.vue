@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import Button from '@/components/v4/forms/Button.vue'
+import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 
 const emit = defineEmits<{
-  create: [form: { branch_name: string; llm_model: string; language: string; max_agents: string }]
+  create: [form: {
+    branch_name: string
+    llm_model: string
+    llm_profile_id: string
+    language: string
+    max_agents: string
+  }]
 }>()
 
 defineProps<{
@@ -13,15 +20,30 @@ defineProps<{
 const branchForm = ref({
   branch_name: '',
   llm_model: '',
+  llm_profile_id: '',
   language: '',
   max_agents: '',
+})
+
+const profileIdModel = ref<string | null>(null)
+watch(profileIdModel, (val) => {
+  branchForm.value.llm_profile_id = val ?? ''
 })
 </script>
 
 <template>
   <div class="branch-controls">
     <input v-model="branchForm.branch_name" class="model-input" type="text" placeholder="Branch name" />
-    <input v-model="branchForm.llm_model" class="model-input" type="text" placeholder="LLM model override" />
+    <div class="branch-profile-cell">
+      <LlmProfilePicker v-model="profileIdModel" />
+    </div>
+    <input
+      v-model="branchForm.llm_model"
+      class="model-input"
+      :class="{ 'is-overridden-by-profile': profileIdModel }"
+      type="text"
+      placeholder="LLM model override"
+    />
     <input v-model="branchForm.language" class="model-input" type="text" placeholder="language" />
     <input v-model="branchForm.max_agents" class="model-input" type="number" min="1" placeholder="max agents" />
     <Button
@@ -38,8 +60,12 @@ const branchForm = ref({
 <style scoped>
 .branch-controls {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--s-3);
+}
+.branch-profile-cell {
+  display: flex;
+  align-items: center;
 }
 .model-input {
   background: var(--bg-elevated);
@@ -53,6 +79,9 @@ const branchForm = ref({
 }
 .model-input:focus {
   border-color: var(--accent);
+}
+.model-input.is-overridden-by-profile {
+  opacity: 0.6;
 }
 @media (max-width: 720px) {
   .branch-controls {
