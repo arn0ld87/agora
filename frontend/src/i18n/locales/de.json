@@ -1274,5 +1274,12 @@
   },
   "upload": {
     "pdfVisionDisabledHint": "PDF-Vision-Auswertung ist standardmäßig aus. Aktivieren über ENABLE_PDF_VISION=true (Cloud-Calls + Latenz)."
+  },
+  "llmProfilePicker": {
+    "label": "LLM-Profil (optional)",
+    "serverDefault": "Server-Standard (aktives Profil)",
+    "loading": "Profile laden…",
+    "error": "Profile konnten nicht geladen werden.",
+    "defaultSuffix": "default"
   }
 }

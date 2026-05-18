@@ -1274,5 +1274,12 @@
   },
   "upload": {
     "pdfVisionDisabledHint": "PDF vision is off by default. Enable via ENABLE_PDF_VISION=true (Cloud calls + latency)."
+  },
+  "llmProfilePicker": {
+    "label": "LLM Profile (optional)",
+    "serverDefault": "Server default (active profile)",
+    "loading": "Loading profiles…",
+    "error": "Failed to load profiles.",
+    "defaultSuffix": "default"
   }
 }

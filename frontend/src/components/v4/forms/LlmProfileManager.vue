@@ -121,12 +121,10 @@ const pickerValue = computed<StageLLMRoute | null>(() => {
   if (!formModel.value) return null
   // Best-Effort: profile.provider → erste passende Runtime-ID (Cloud
   // gegenüber Local bevorzugen, wenn base_url darauf hinweist).
-  let providerId = ''
-  if (formProvider.value === 'ollama') {
-    providerId = formBaseUrl.value.includes('ollama.com') ? 'ollama_cloud' : 'ollama'
-  } else {
-    providerId = formProvider.value
-  }
+  const providerId =
+    formProvider.value === 'ollama'
+      ? formBaseUrl.value.includes('ollama.com') ? 'ollama_cloud' : 'ollama'
+      : formProvider.value
   return {
     stage: null,
     provider_id: providerId,
@@ -143,8 +141,8 @@ function onPickerChange(route: StageLLMRoute | null): void {
     formModel.value = ''
     return
   }
-  formModel.value = route.model
-  const mapped = RUNTIME_TO_PROFILE_PROVIDER[route.provider_id]
+  formModel.value = route.model ?? ''
+  const mapped = route.provider_id != null ? RUNTIME_TO_PROFILE_PROVIDER[route.provider_id] : undefined
   if (mapped) {
     formProvider.value = mapped.provider
     // base_url nur überschreiben, wenn das aktuelle Feld leer ist oder zur
