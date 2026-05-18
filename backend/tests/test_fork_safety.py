@@ -29,8 +29,12 @@ def _clear_registered_storages():
     extensions._FORK_HANDLER_REGISTERED = False
 
 
-def test_reset_driver_after_fork_closes_and_nones_driver():
-    """_reset_driver_after_fork() setzt _driver auf None."""
+def test_reset_driver_after_fork_drops_reference_without_close():
+    """_reset_driver_after_fork() setzt _driver auf None ohne close() aufzurufen.
+
+    Fix 4: close() sendet GOODBYE über vom Parent geerbte Sockets und sabotiert
+    den Parent-Pool. Stattdessen wird der Driver-Zeiger still auf None gesetzt.
+    """
     from app.storage.neo4j_storage import Neo4jStorage
 
     storage = Neo4jStorage.__new__(Neo4jStorage)
@@ -40,24 +44,9 @@ def test_reset_driver_after_fork_closes_and_nones_driver():
 
     storage._reset_driver_after_fork()
 
-    mock_driver.close.assert_called_once()
+    mock_driver.close.assert_not_called()
     assert storage._driver is None
     assert storage._is_connected is False
-
-
-def test_reset_driver_after_fork_handles_close_error():
-    """_reset_driver_after_fork() fängt Fehler beim close() ab."""
-    from app.storage.neo4j_storage import Neo4jStorage
-
-    storage = Neo4jStorage.__new__(Neo4jStorage)
-    mock_driver = MagicMock()
-    mock_driver.close.side_effect = RuntimeError("connection lost")
-    storage._driver = mock_driver
-    storage._is_connected = True
-
-    storage._reset_driver_after_fork()
-
-    assert storage._driver is None
 
 
 def test_reset_driver_after_fork_handles_none_driver():

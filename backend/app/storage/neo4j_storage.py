@@ -65,9 +65,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         # in tests can install one without going through ``__init__``.
         self._lock = threading.Lock()
 
-        self._driver = GraphDatabase.driver(
-            self._uri, auth=(self._user, self._password)
-        )
+        self._driver = GraphDatabase.driver(self._uri, **self._driver_kwargs())
         self._embedding = embedding_service or EmbeddingService()
         self._ner = ner_extractor or NERExtractor()
         self._search = SearchService(
@@ -109,12 +107,31 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                 if self._driver is None:
                     logger.info("Neo4j driver re-initializing after fork")
                     self._driver = GraphDatabase.driver(
-                        self._uri, auth=(self._user, self._password)
+                        self._uri, **self._driver_kwargs()
                     )
             # Connectivity check is deferred to the first actual call
             # via neo4j_call_with_retry if it uses session.run or similar.
             # But here we just return the session.
         return self._driver.session(**kwargs)
+
+    def _driver_kwargs(self) -> dict:
+        """Driver kwargs incl. pool-liveness defence against stale Bolt sockets.
+
+        ``liveness_check_timeout`` is the load-bearing knob: without it the
+        driver hands out connections from the pool without verifying they
+        are still alive, and the first parallel-persona burst after a
+        ~60 s fork-idle period writes onto sockets Docker's bridge has
+        already killed -> 30+ ``Failed to write data``-lines on neo4j.io.
+        """
+        return {
+            "auth": (self._user, self._password),
+            "max_connection_pool_size": Config.NEO4J_MAX_POOL_SIZE,
+            "connection_acquisition_timeout": Config.NEO4J_ACQ_TIMEOUT,
+            "connection_timeout": Config.NEO4J_CONN_TIMEOUT,
+            "max_connection_lifetime": Config.NEO4J_MAX_LIFETIME,
+            "liveness_check_timeout": Config.NEO4J_LIVENESS_TIMEOUT,
+            "keep_alive": True,
+        }
 
     def verify_connectivity(self) -> None:
         """Public connectivity probe for ``/api/status``.
@@ -137,24 +154,24 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
         self._call_with_retry(_probe)
 
     def _reset_driver_after_fork(self) -> None:
-        """Close and discard the inherited driver after gunicorn fork.
+        """Drop the inherited driver reference after gunicorn fork.
 
-        The first real DB call will trigger a new connection via the
-        existing lazy-connect logic in neo4j_call_with_retry.
+        Does NOT call ``driver.close()``: the inherited driver still owns
+        the parent's Bolt sockets (fork CoW). A ``GOODBYE`` frame from the
+        child would arrive at Neo4j over the very sockets the parent is
+        still actively using, severing the parent's connections without
+        notice. Abandoning the reference is the pattern the neo4j-driver
+        maintainers recommend for forking servers; the parent keeps its
+        pool, the child rebuilds its own on first use via
+        :meth:`_get_session`.
         """
-        try:
-            if self._driver is not None:
-                self._driver.close()
-        except Exception:
-            pass
-        finally:
-            self._driver = None
-            self._is_connected = False
-            # Re-init the lock: if the parent process happened to be holding
-            # it at fork time (unlikely with single-threaded gunicorn master,
-            # but cheap insurance) the child would inherit a locked mutex
-            # that nothing can ever release.
-            self._lock = threading.Lock()
+        self._driver = None
+        self._is_connected = False
+        # Re-init the lock: if the parent process happened to be holding it
+        # at fork time (unlikely with single-threaded gunicorn master, but
+        # cheap insurance) the child would inherit a locked mutex that
+        # nothing can ever release.
+        self._lock = threading.Lock()
 
     def set_ontology_mutation_service(self, service) -> None:
         """Late-bind the Issue #11 ``OntologyMutationService``.

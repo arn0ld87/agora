@@ -90,6 +90,14 @@ def create_app(config_class=Config):
 
     # Setup logging
     logger = setup_logger('agora')
+
+    # Bind neo4j driver loggers to the app handler via propagation.
+    # Without this, driver output lands on stderr without structured formatting.
+    # Level WARNING suppresses the verbose DEBUG/INFO pool chatter that floods
+    # logs during parallel persona generation (pool-storm symptom).
+    for _neo4j_logger_name in ("neo4j", "neo4j.io", "neo4j.pool"):
+        logging.getLogger(_neo4j_logger_name).setLevel(logging.WARNING)
+
     from .utils.proxy import apply_proxy_fix
     if apply_proxy_fix(app):
         logger.info(
