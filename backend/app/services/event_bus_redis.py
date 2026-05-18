@@ -113,6 +113,33 @@ class RedisEventBus:
         """
         self._redis.ping()
 
+    def reset_after_fork(self) -> None:
+        """Close inherited Redis client and rebuild it in the child.
+
+        Mirrors :meth:`Neo4jStorage._reset_driver_after_fork`. Called from
+        the Gunicorn ``post_fork`` hook so the worker does not keep using
+        TCP sockets that the kernel considers owned by the preload master
+        — same defect that surfaces on Neo4j as
+        ``Failed to write data to connection``.
+
+        Idempotent. Exceptions during ``close()`` are swallowed because
+        the inherited socket is likely already broken; the rebuild below
+        is what actually matters.
+        """
+        import redis  # local import — symmetric with __init__
+
+        try:
+            if self._redis is not None:
+                self._redis.close()
+        except Exception:  # noqa: BLE001 — inherited socket is expected to be torn
+            pass
+        self._redis = redis.from_url(
+            self._url,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
+
     # ----- internal ------------------------------------------------------
 
     def _write_retained(self, channel: str, event: SimulationEvent) -> None:

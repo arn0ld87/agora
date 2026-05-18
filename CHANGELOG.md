@@ -17,7 +17,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Fix: Pool-Reset jetzt aus einem expliziten `post_fork`-Hook in
   `backend/gunicorn.conf.py`. `app.extensions.reset_pools_after_fork()` ist die
   kanonische Reset-Funktion; `os.register_at_fork` bleibt als
-  Defence-in-Depth-Fallback erhalten. Dockerfile-CMD vereinfacht auf
+  Defence-in-Depth-Fallback erhalten (One-Shot-Guard verhindert Stapeln bei
+  wiederholten `create_app()`-Aufrufen). `RedisEventBus.reset_after_fork()`
+  schliesst den geerbten Redis-Client und baut ihn im Worker neu auf —
+  analog zum Neo4j-Driver. Dockerfile-CMD vereinfacht auf
   `--config /app/backend/gunicorn.conf.py`.
 
 ### Changed (chore/deps — 2026-05-17)

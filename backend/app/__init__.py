@@ -210,9 +210,11 @@ def create_app(config_class=Config):
     if neo4j_storage is not None:
         container.ontology_mutation_service()
 
-    # MAI-12: Fork-safe pool reset for gunicorn --preload
+    # MAI-12 + PR #551: Fork-safe pool reset for gunicorn --preload.
+    # The canonical reset path is the post_fork hook in gunicorn.conf.py;
+    # os.register_at_fork remains as a defence-in-depth fallback.
     from .extensions import register_fork_handlers
-    register_fork_handlers(neo4j_storage=neo4j_storage)
+    register_fork_handlers(neo4j_storage=neo4j_storage, event_bus=event_bus)
 
     app.extensions['container'] = container
     # Backward-compat aliases — same singleton instances, just two ways in.

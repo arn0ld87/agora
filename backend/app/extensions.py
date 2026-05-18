@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from .storage.neo4j_storage import Neo4jStorage
@@ -37,6 +37,12 @@ logger = logging.getLogger("agora.extensions")
 # child inherits the module state (including these refs) via fork.
 _REGISTERED_NEO4J_STORAGES: List["Neo4jStorage"] = []
 
+# Buses with a ``reset_after_fork()`` method (currently only
+# ``RedisEventBus``; ``InMemoryEventBus`` / ``FilePollingEventBus`` have no
+# fork-sensitive state). Kept generic on purpose so any future pool-owning
+# bus can opt in just by exposing the method.
+_REGISTERED_EVENT_BUSES: List[Any] = []
+
 # Platform-capability flag and one-shot guard for the at-fork fallback.
 # ``create_app()`` may run multiple times (pytest fixtures, ad-hoc reloads);
 # without the guard each call would stack another at-fork handler and the
@@ -45,15 +51,29 @@ _HAS_REGISTER_AT_FORK = hasattr(os, "register_at_fork")
 _FORK_HANDLER_REGISTERED = False
 
 
-def register_fork_handlers(neo4j_storage: Optional["Neo4jStorage"] = None) -> None:
+def register_fork_handlers(
+    neo4j_storage: Optional["Neo4jStorage"] = None,
+    event_bus: Optional[Any] = None,
+) -> None:
     """Register pool references for post-fork reset.
 
     Called from ``create_app()`` once all pool-owning objects exist.
     Safe to call multiple times; duplicates are filtered and the
     ``os.register_at_fork`` fallback is wired up exactly once per process.
+
+    A bus is only registered when it exposes ``reset_after_fork()`` —
+    this keeps ``InMemoryEventBus`` / ``FilePollingEventBus`` out of the
+    reset path automatically.
     """
     if neo4j_storage is not None and neo4j_storage not in _REGISTERED_NEO4J_STORAGES:
         _REGISTERED_NEO4J_STORAGES.append(neo4j_storage)
+
+    if (
+        event_bus is not None
+        and hasattr(event_bus, "reset_after_fork")
+        and event_bus not in _REGISTERED_EVENT_BUSES
+    ):
+        _REGISTERED_EVENT_BUSES.append(event_bus)
 
     # Defence-in-depth: also register CPython's at-fork hook so non-gunicorn
     # runtimes (pytest with multiprocessing, ad-hoc scripts) still reset
@@ -83,6 +103,12 @@ def reset_pools_after_fork() -> None:
             storage._reset_driver_after_fork()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Neo4j fork-reset failed: %s", exc)
+
+    for bus in _REGISTERED_EVENT_BUSES:
+        try:
+            bus.reset_after_fork()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("EventBus fork-reset failed: %s", exc)
 
     try:
         from .utils.signed_ticket import reset_after_fork as _reset_redis

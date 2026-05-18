@@ -17,13 +17,15 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_registered_storages():
-    """Module-level Storage-Liste und at-fork-Guard zwischen Tests isolieren."""
+    """Module-level Registries und at-fork-Guard zwischen Tests isolieren."""
     from app import extensions
 
     extensions._REGISTERED_NEO4J_STORAGES.clear()
+    extensions._REGISTERED_EVENT_BUSES.clear()
     extensions._FORK_HANDLER_REGISTERED = False
     yield
     extensions._REGISTERED_NEO4J_STORAGES.clear()
+    extensions._REGISTERED_EVENT_BUSES.clear()
     extensions._FORK_HANDLER_REGISTERED = False
 
 
@@ -157,6 +159,110 @@ def test_reset_pools_after_fork_resets_all_registered_neo4j_storages():
 
     storage_a._reset_driver_after_fork.assert_called_once()
     storage_b._reset_driver_after_fork.assert_called_once()
+
+
+def test_register_fork_handlers_captures_event_bus_with_reset_method():
+    """Bus mit reset_after_fork() landet in der Bus-Registry."""
+    from app.extensions import register_fork_handlers, _REGISTERED_EVENT_BUSES
+
+    bus = MagicMock(spec=["reset_after_fork"])
+
+    with patch("os.register_at_fork"):
+        register_fork_handlers(event_bus=bus)
+
+    assert _REGISTERED_EVENT_BUSES == [bus]
+
+
+def test_register_fork_handlers_skips_bus_without_reset_method():
+    """Bus ohne reset_after_fork() (z. B. InMemoryEventBus) bleibt aussen vor."""
+    from app.extensions import register_fork_handlers, _REGISTERED_EVENT_BUSES
+
+    class _NoResetBus:
+        pass
+
+    with patch("os.register_at_fork"):
+        register_fork_handlers(event_bus=_NoResetBus())
+
+    assert _REGISTERED_EVENT_BUSES == []
+
+
+def test_reset_pools_after_fork_resets_registered_event_buses():
+    """reset_pools_after_fork() ruft bus.reset_after_fork() auf jedem Bus."""
+    from app.extensions import register_fork_handlers, reset_pools_after_fork
+
+    bus_a = MagicMock(spec=["reset_after_fork"])
+    bus_b = MagicMock(spec=["reset_after_fork"])
+
+    with patch("os.register_at_fork"):
+        register_fork_handlers(event_bus=bus_a)
+        register_fork_handlers(event_bus=bus_b)
+
+    with patch("app.utils.signed_ticket.reset_after_fork"):
+        reset_pools_after_fork()
+
+    bus_a.reset_after_fork.assert_called_once()
+    bus_b.reset_after_fork.assert_called_once()
+
+
+def test_reset_pools_after_fork_isolates_event_bus_failures():
+    """Ein werfender Bus-Reset blockiert weder andere Buses noch Neo4j/Redis."""
+    from app.extensions import register_fork_handlers, reset_pools_after_fork
+
+    failing_bus = MagicMock(spec=["reset_after_fork"])
+    failing_bus.reset_after_fork.side_effect = RuntimeError("bus borked")
+    healthy_bus = MagicMock(spec=["reset_after_fork"])
+    storage = MagicMock()
+
+    with patch("os.register_at_fork"):
+        register_fork_handlers(neo4j_storage=storage, event_bus=failing_bus)
+        register_fork_handlers(event_bus=healthy_bus)
+
+    with patch("app.utils.signed_ticket.reset_after_fork") as mock_redis:
+        reset_pools_after_fork()
+
+    storage._reset_driver_after_fork.assert_called_once()
+    failing_bus.reset_after_fork.assert_called_once()
+    healthy_bus.reset_after_fork.assert_called_once()
+    mock_redis.assert_called_once()
+
+
+def test_redis_event_bus_reset_after_fork_closes_and_rebuilds():
+    """RedisEventBus.reset_after_fork() schliesst den geerbten Client und baut neu."""
+    from app.services.event_bus_redis import RedisEventBus
+
+    bus = RedisEventBus.__new__(RedisEventBus)
+    old_client = MagicMock()
+    bus._redis = old_client
+    bus._url = "redis://localhost:6379/0"
+
+    with patch("redis.from_url") as mock_from_url:
+        new_client = MagicMock()
+        mock_from_url.return_value = new_client
+        bus.reset_after_fork()
+
+    old_client.close.assert_called_once()
+    assert bus._redis is new_client
+    mock_from_url.assert_called_once()
+    kwargs = mock_from_url.call_args.kwargs
+    assert kwargs["decode_responses"] is True
+    assert kwargs["socket_keepalive"] is True
+
+
+def test_redis_event_bus_reset_after_fork_survives_close_failure():
+    """Inherited Socket ist meist halb-tot — close()-Fehler dürfen nicht werfen."""
+    from app.services.event_bus_redis import RedisEventBus
+
+    bus = RedisEventBus.__new__(RedisEventBus)
+    broken_client = MagicMock()
+    broken_client.close.side_effect = RuntimeError("socket already gone")
+    bus._redis = broken_client
+    bus._url = "redis://localhost:6379/0"
+
+    with patch("redis.from_url") as mock_from_url:
+        mock_from_url.return_value = MagicMock()
+        bus.reset_after_fork()  # darf nicht werfen
+
+    mock_from_url.assert_called_once()
 
 
 def test_reset_pools_after_fork_resets_signed_ticket_redis():
