@@ -1,1 +1,0 @@
-{"run_id": "run_27c11ad6bf0a", "stage": "chat_json", "provider_id": "openai", "model": "gpt-5.4-nano", "base_url_sanitized": "https://api.openai.com/v1", "routing_version": 0, "timestamp": 1779118192.0945654, "latency_ms": 21854.518676000225, "success": true, "error_type": null, "http_status": null, "remote_request_id": null}

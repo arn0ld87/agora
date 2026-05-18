@@ -1,1 +1,0 @@
-{"run_id": "run_774d9204d52f", "stage": "chat_json", "provider_id": "google", "model": "models/gemini-3.1-flash-lite", "base_url_sanitized": "https://generativelanguage.googleapis.com/v1beta/openai", "routing_version": 0, "timestamp": 1779132748.7623239, "latency_ms": 5103.315253000005, "success": true, "error_type": null, "http_status": null, "remote_request_id": null}
