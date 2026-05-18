@@ -137,7 +137,7 @@ RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
   && chown -R agora:agora /app /home/agora
 
 COPY --chown=agora:agora --from=backend-build /app/backend/.venv ./backend/.venv
-COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py ./backend/
+COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py backend/wsgi.py ./backend/
 COPY --chown=agora:agora backend/app ./backend/app
 COPY --chown=agora:agora backend/scripts ./backend/scripts
 # E2E-Stub-Snapshot: llm_e2e_stub.py liest die Pflichtabschnitte aus dieser Datei.
