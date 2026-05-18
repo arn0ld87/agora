@@ -380,11 +380,15 @@ class LLMClient:
         route_stage: Optional[str] = None,
         route_provider_id: Optional[str] = None,
         use_active_config: bool = True,
+        api_key_source: Optional[str] = None,
     ):
         # When no explicit model is set, fall back to the user's active
         # provider/model selection (Settings → LLM-Auswahl). Falls back to
         # Config.* if no active config exists. Resolves api_key+base_url via
         # SecretResolver/Provider-Registry analogous to from_route().
+        # ``api_key_source`` ist eine Audit-Annotation für das einmalige
+        # Init-Log am Ende dieses Konstruktors. Track 1c (Pure-Gosling).
+        resolved_source: Optional[str] = api_key_source if api_key else None
         active_provider_id: Optional[str] = None
         if use_active_config and model is None:
             active = _read_active_config_safely()
@@ -410,6 +414,8 @@ class LLMClient:
                                 base_url = descriptor.base_url
                             resolver = SecretResolver()
                             api_key = resolver.get_api_key(active_provider_id, descriptor.type)
+                            if api_key:
+                                resolved_source = resolver.last_source
                     except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
                         logger.warning(
                             "Failed to resolve active LLM config (provider=%s): %s",
@@ -417,7 +423,13 @@ class LLMClient:
                             exc,
                         )
 
-        self.api_key = api_key or Config.LLM_API_KEY
+        if api_key:
+            self.api_key = api_key
+            # resolved_source bleibt erhalten (passed_in oder vom Resolver)
+        else:
+            self.api_key = Config.LLM_API_KEY
+            if self.api_key:
+                resolved_source = "config_fallback"
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
@@ -429,6 +441,19 @@ class LLMClient:
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
+
+        # Track 1c Audit-Log: einmalig pro LLMClient-Init. Niemals den Key-Wert
+        # selbst loggen — nur die Quelle (session/store/env:NAME/config_fallback/
+        # passed_in/unknown). Provider-Erkennung priorisiert ``active_provider_id``
+        # vor ``route_provider_id``, damit die laufende Session-Auswahl Vorrang hat.
+        self._api_key_source = resolved_source or "unknown"
+        logger.info(
+            "LLMClient initialized provider_id=%s model=%s base_url=%s api_key_source=%s",
+            active_provider_id or route_provider_id or "unknown",
+            self.model,
+            self.base_url,
+            self._api_key_source,
+        )
 
         self.client = OpenAI(
             api_key=self.api_key,
@@ -479,6 +504,7 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         api_key = api_key_override
+        api_key_source: Optional[str] = "passed_in" if api_key_override else None
 
         # If a secret resolver is provided, we try to get the real secrets.
         # This prevents leaking them into ResolvedRoute but allows LLMClient
@@ -495,6 +521,7 @@ class LLMClient:
             p_type = descriptor.type if descriptor else "unknown"
             if not api_key:
                 api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+                api_key_source = getattr(secret_resolver, "last_source", None)
 
             # Use real base_url from provider_options if present, otherwise from descriptor
             real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
@@ -512,6 +539,7 @@ class LLMClient:
             routing_version=route.routing_version,
             route_stage=route.stage,
             route_provider_id=route.provider_id,
+            api_key_source=api_key_source,
         )
 
     def _is_ollama(self) -> bool:

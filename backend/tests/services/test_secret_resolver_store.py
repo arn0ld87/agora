@@ -31,9 +31,11 @@ def test_store_overrides_env(monkeypatch, configured_store):
 
 
 def test_env_used_when_store_empty(monkeypatch, configured_store):
-    monkeypatch.setenv("OPENAI_API_KEY", "env-fallback")
+    # Track 1: ENV-Werte werden provider-spezifisch validiert. ``env-fallback``
+    # würde nach der Härtung abgelehnt → wir nutzen ein valides ``sk-``-Format.
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-envfallback1234567890abcDEF")
     resolver = SecretResolver()
-    assert resolver.get_api_key("openai", "openai") == "env-fallback"
+    assert resolver.get_api_key("openai", "openai") == "sk-test-envfallback1234567890abcDEF"
 
 
 def test_session_overrides_store(configured_store):
@@ -43,9 +45,10 @@ def test_session_overrides_store(configured_store):
 
 
 def test_google_key_from_env(monkeypatch, configured_store):
-    monkeypatch.setenv("GOOGLE_API_KEY", "google-env-key")
+    # Track 1: AIzaSy-Format-Check für ``google``-Provider.
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyEnvKeyValid1234567890abcDEF")
     resolver = SecretResolver()
-    assert resolver.get_api_key("google", "google") == "google-env-key"
+    assert resolver.get_api_key("google", "google") == "AIzaSyEnvKeyValid1234567890abcDEF"
 
 
 def test_google_key_from_store_overrides_env(monkeypatch, configured_store):
@@ -58,9 +61,10 @@ def test_google_key_from_store_overrides_env(monkeypatch, configured_store):
 def test_missing_secret_key_falls_back_to_env(monkeypatch, tmp_path):
     monkeypatch.delenv("AGORA_SECRET_KEY", raising=False)
     monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("OPENAI_API_KEY", "env-only-key")
+    # Track 1: valides ``sk-``-Format, sonst greift der Format-Check.
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env-onlyvalidkey1234567890abc")
     reset_singleton_for_tests()
     resolver = SecretResolver()
     # Store wirft RuntimeError ohne Master-Key — Resolver soll auf env fallen
-    assert resolver.get_api_key("openai", "openai") == "env-only-key"
+    assert resolver.get_api_key("openai", "openai") == "sk-env-onlyvalidkey1234567890abc"
     reset_singleton_for_tests()
