@@ -18,8 +18,12 @@ VALID_REPORT_ID = "report_abcdef123456"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Download-Streaming-Pfad, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["TESTING"] = True
     app.register_blueprint(report_bp, url_prefix="/api/report")
     return app.test_client()

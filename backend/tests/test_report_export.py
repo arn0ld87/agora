@@ -155,13 +155,17 @@ def _persist_report_with_hypotheses() -> None:
 
 def _rate_limited_report_app():
     app = Flask(__name__)
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Rate-Limiting, nicht Auth — Open-Mode erzwingen.
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 2
     app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(report_bp, url_prefix="/api/report")
     return app
 
 
-def test_report_generate_endpoint_rate_limits_requests():
+def test_report_generate_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):
@@ -177,7 +181,8 @@ def test_report_generate_endpoint_rate_limits_requests():
     assert payload["retry_after_seconds"] == 60
 
 
-def test_report_chat_endpoint_rate_limits_requests():
+def test_report_chat_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):

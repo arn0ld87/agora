@@ -48,9 +48,23 @@ class TestDefaults:
 
     @pytest.fixture(autouse=True)
     def _min_env(self, monkeypatch):
-        """Minimum env so validators pass (debug=True, LLM_API_KEY set)."""
+        """Minimum env so validators pass (debug=True, LLM_API_KEY set).
+
+        Plus clear of all field-alias env-vars whose values come from a
+        host .env (LLM_BASE_URL, REDIS_URL, EMBEDDING_*, VECTOR_DIM, …).
+        pydantic-settings reads real os.environ even with _env_file=None,
+        so without this delenv-sweep the local dev-shell pollutes default-
+        Pin-Tests.
+        """
         monkeypatch.setenv("FLASK_DEBUG", "true")
         monkeypatch.setenv("LLM_API_KEY", "dummy")
+        for var in (
+            "LLM_BASE_URL", "LLM_MODEL_NAME",
+            "EMBEDDING_MODEL", "EMBEDDING_BASE_URL", "VECTOR_DIM",
+            "REDIS_URL",
+            "NEO4J_URI", "NEO4J_USER",
+        ):
+            monkeypatch.delenv(var, raising=False)
 
     def test_llm_base_url_default(self):
         s = AgoraSettings(_env_file=None)

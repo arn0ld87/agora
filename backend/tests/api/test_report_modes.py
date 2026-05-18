@@ -25,8 +25,12 @@ VALID_GRAPH_ID = "graph_0123456789ab"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Validierungslogik, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["TESTING"] = True
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 100
     app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"] = 60

@@ -22,7 +22,11 @@ VALID_GRAPH_ID = "abcdef0123456789abcdef0123456789"
 
 @pytest.fixture
 def client(monkeypatch):
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Validierungs-/ID-Logik, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     storage = MagicMock(name="Neo4jStorage")
     app.extensions = {"neo4j_storage": storage}
     app.register_blueprint(simulation_bp, url_prefix="/api/simulation")
