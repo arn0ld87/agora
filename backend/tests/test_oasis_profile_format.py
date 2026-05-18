@@ -84,6 +84,7 @@ def _fake_llm_response(payload):
 def test_generate_profile_with_llm_retries_when_required_metadata_missing():
     gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
     gen.model_name = "test-model"
+    gen.base_url = None
     gen.language = "de"
     gen._build_individual_persona_prompt = lambda *args, **kwargs: "prompt"
     gen._get_system_prompt = lambda is_individual: "system"
@@ -135,6 +136,7 @@ def test_generate_profile_with_llm_retries_when_required_metadata_missing():
 def test_generate_profile_with_llm_falls_back_with_complete_metadata():
     gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
     gen.model_name = "test-model"
+    gen.base_url = None
     gen.language = "de"
     gen._build_individual_persona_prompt = lambda *args, **kwargs: "prompt"
     gen._get_system_prompt = lambda is_individual: "system"

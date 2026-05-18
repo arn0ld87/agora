@@ -465,26 +465,37 @@ class SimulationConfigGenerator:
         max_attempts = 3
         last_error = None
 
+        from ..utils.llm_client import should_disable_openai_json_mode
+        disable_json_mode = should_disable_openai_json_mode(self.base_url)
+
         for attempt in range(max_attempts):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
+                create_kwargs: Dict[str, Any] = {
+                    "model": self.model_name,
+                    "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": prompt},
                     ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7 - (attempt * 0.1)  # Lower temperature with each retry
-                    # Don't set max_tokens, let LLM generate freely
-                )
+                    "temperature": 0.7 - (attempt * 0.1),
+                }
+                if not disable_json_mode:
+                    create_kwargs["response_format"] = {"type": "json_object"}
+                response = self.client.chat.completions.create(**create_kwargs)
 
-                content = response.choices[0].message.content
+                content = response.choices[0].message.content or ""
                 finish_reason = response.choices[0].finish_reason
 
                 # Check if output was truncated
                 if finish_reason == 'length':
                     logger.warning(f"LLM output truncated (attempt {attempt+1})")
                     content = self._fix_truncated_json(content)
+
+                if not content.strip():
+                    logger.warning(
+                        f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
+                    )
+                    last_error = ValueError("empty LLM content")
+                    continue
 
                 # Try to parse JSON
                 try:
