@@ -42,7 +42,9 @@ services:
       # Pfade sind relativ zum Repo-Root (Aufruf-Verzeichnis bei `docker compose -f ...`).
       - ./frontend/dist:/usr/share/nginx/html:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      # busybox-wget in nginx:alpine resolved `localhost` als IPv6 (::1),
+      # `listen 80;` bindet aber nur IPv4 → ECONNREFUSED. 127.0.0.1 erzwingt IPv4.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
