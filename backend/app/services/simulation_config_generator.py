@@ -465,16 +465,8 @@ class SimulationConfigGenerator:
         max_attempts = 3
         last_error = None
 
-        # OpenAI-Reasoning-Modelle (z.B. gpt-5.4-nano) liefern mit
-        # response_format=json_object gelegentlich leeren content — der Reasoning-
-        # Token-Anteil frisst die Antwort auf. Ollama und Gemini (auch via
-        # OpenAI-Adapter) supporten json_object stabil; dort response_format
-        # behalten, sonst sinkt die JSON-Hit-Rate.
-        _base = (self.base_url or '').lower()
-        _is_openai = 'api.openai.com' in _base
-        disable_json_mode = _is_openai and os.environ.get(
-            'LLM_DISABLE_JSON_MODE', ''
-        ).lower() in ('1', 'true', 'yes')
+        from ..utils.llm_client import should_disable_openai_json_mode
+        disable_json_mode = should_disable_openai_json_mode(self.base_url)
 
         for attempt in range(max_attempts):
             try:

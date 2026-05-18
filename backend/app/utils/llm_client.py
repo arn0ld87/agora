@@ -291,6 +291,24 @@ def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
     return _walk(raw)
 
 
+def should_disable_openai_json_mode(base_url: Optional[str]) -> bool:
+    """Return True wenn ``response_format=json_object`` weggelassen werden soll.
+
+    OpenAI-Reasoning-Modelle (z. B. ``gpt-5.4-nano``) liefern mit
+    ``response_format=json_object`` zeitweise leeren ``content`` — der
+    Reasoning-Token-Anteil frisst die Antwort auf. Ollama (auch Cloud) und
+    Gemini (OpenAI-Adapter) supporten json_object stabil — dort bleibt das
+    Verhalten unverändert.
+
+    Trigger:
+    - ``base_url`` zeigt auf ``api.openai.com`` UND
+    - ``LLM_DISABLE_JSON_MODE`` in (``1``, ``true``, ``yes``).
+    """
+    if not base_url or 'api.openai.com' not in base_url.lower():
+        return False
+    return os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
+
+
 def _read_active_config_safely() -> Optional[Dict[str, Any]]:
     """Load the active LLM config without raising on missing/invalid file."""
     try:

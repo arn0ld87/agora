@@ -257,10 +257,11 @@ async function triggerPrepare() {
     return
   }
   // Quota-Validierung via usePersonaQuota (Sub-Slice 35).
+  // parallel_profile_count nicht im Payload setzen — Backend resolved den Wert
+  // via AGORA_PARALLEL_PERSONA_COUNT (Default 10), das ist die zentrale Stelle.
   const payload = {
     simulation_id: props.simulationId,
     use_llm_for_profiles: true,
-    parallel_profile_count: 15,
     language: language.value,
   }
   if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
