@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import Button from '@/components/v4/forms/Button.vue'
 import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 
@@ -26,17 +26,16 @@ const branchForm = ref({
 })
 
 const profileIdModel = ref<string | null>(null)
-function onProfileChange(val: string | null) {
-  profileIdModel.value = val
+watch(profileIdModel, (val) => {
   branchForm.value.llm_profile_id = val ?? ''
-}
+})
 </script>
 
 <template>
   <div class="branch-controls">
     <input v-model="branchForm.branch_name" class="model-input" type="text" placeholder="Branch name" />
     <div class="branch-profile-cell">
-      <LlmProfilePicker :model-value="profileIdModel" @update:model-value="onProfileChange" />
+      <LlmProfilePicker v-model="profileIdModel" />
     </div>
     <input
       v-model="branchForm.llm_model"

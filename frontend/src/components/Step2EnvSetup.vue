@@ -41,14 +41,23 @@ const useCustomDays = ref(false)
 const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
 const llmProfileId = ref(props.projectData?.llm_profile_id ?? null)
+const userPickedProfile = ref(false)
 const showRuntimeOptions = ref(false)
 
+// Nach async-Hydration von projectData den Default einmal nachziehen, aber
+// niemals, sobald der User selbst eine Wahl getroffen hat (auch nicht für
+// "Server-Standard" = null).
 watch(
   () => props.projectData?.llm_profile_id,
   (next) => {
-    if (next && !llmProfileId.value) llmProfileId.value = next
+    if (userPickedProfile.value) return
+    if (next) llmProfileId.value = next
   },
 )
+
+watch(llmProfileId, () => {
+  userPickedProfile.value = true
+})
 
 const {
   runtimeProvider,
