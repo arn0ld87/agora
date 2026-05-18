@@ -168,16 +168,49 @@ def _flatten_pydantic_schema_for_ollama(model_cls: type[BaseModel]) -> Dict[str,
 
 
 _STRICT_DROP_KEYS = {
+    # Reine Pydantic-Meta-Keys, die OpenAI/Google ohnehin ignorieren.
     "title",
     "$schema",
+    # Defaults sind im strict-Mode unzulässig — alle Felder müssen vom
+    # Modell explizit gefüllt werden (Pydantic-side fängt das via
+    # default_factory ab, falls wir das Feld aus dem Schema droppen).
     "default",
-    "description",
+    # JSON-Schema-Constraint-Keys, die OpenAI strict ablehnt
+    # (https://platform.openai.com/docs/guides/structured-outputs#supported-schemas).
+    # ``description`` bleibt erhalten — wird von OpenAI ausgewertet und
+    # hilft dem Modell beim Auffuellen.
     "minLength",
     "maxLength",
     "minimum",
     "maximum",
     "pattern",
+    "format",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "multipleOf",
 }
+
+
+def _is_unsupported_open_object(node: Any) -> bool:
+    """True, wenn *node* (oder ein Zweig in ``anyOf``/``allOf``) ein
+    open-ended ``{"type":"object"}`` ohne ``properties`` ist.
+
+    OpenAI strict-mode (und Google's OpenAI-kompat-Wrapper) lehnen
+    diese Form als Property-Wert ab. Optional-Felder von Pydantic
+    rendern als ``{"anyOf":[{"type":"object"}, {"type":"null"}]}``;
+    der Toplevel-Type-Check würde das übersehen, deshalb wird hier
+    in ``anyOf``/``allOf`` rekursiert (Gemini-Review HIGH zu PR #545).
+    """
+    if not isinstance(node, dict):
+        return False
+    if node.get("type") == "object" and "properties" not in node:
+        return True
+    for combinator in ("anyOf", "allOf", "oneOf"):
+        branches = node.get(combinator)
+        if isinstance(branches, list) and any(_is_unsupported_open_object(b) for b in branches):
+            return True
+    return False
 
 
 def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
@@ -242,13 +275,12 @@ def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
                     # das harmlos, weil die referenzierten Felder einen
                     # ``default``/``default_factory`` haben (sonst hätten
                     # sie nie als open-ended deklariert werden können).
+                    #
+                    # Optionale Felder rendern als ``anyOf``/``allOf`` mit
+                    # nested-object → rekursiv prüfen (Gemini-Review HIGH
+                    # zu PR #545).
                     for pk in list(props):
-                        pv = props[pk]
-                        if (
-                            isinstance(pv, dict)
-                            and pv.get("type") == "object"
-                            and "properties" not in pv
-                        ):
+                        if _is_unsupported_open_object(props[pk]):
                             del props[pk]
                     out["required"] = list(props.keys())
             return out
