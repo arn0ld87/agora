@@ -106,6 +106,18 @@ class Config:
     # No insecure default password. Must be provided via environment (.env / secret manager).
     NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', '')
 
+    # Neo4j driver pool configuration. NEO4J_LIVENESS_TIMEOUT is the key
+    # knob: before lending a pooled connection that has been idle longer
+    # than this many seconds, the driver does a RESET round-trip to weed
+    # out stale sockets that Docker bridge / conntrack already killed
+    # silently. Without it, parallel persona generation hits a Bolt
+    # socket-storm on the first burst after fork-idle.
+    NEO4J_MAX_POOL_SIZE = int(os.environ.get('NEO4J_MAX_POOL_SIZE', '50'))
+    NEO4J_ACQ_TIMEOUT = float(os.environ.get('NEO4J_ACQ_TIMEOUT', '60.0'))
+    NEO4J_CONN_TIMEOUT = float(os.environ.get('NEO4J_CONN_TIMEOUT', '15.0'))
+    NEO4J_MAX_LIFETIME = int(os.environ.get('NEO4J_MAX_LIFETIME', '3600'))
+    NEO4J_LIVENESS_TIMEOUT = float(os.environ.get('NEO4J_LIVENESS_TIMEOUT', '30.0'))
+
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
     MAX_TOOL_CALLS_PER_ACTION = int(os.environ.get('MAX_TOOL_CALLS_PER_ACTION', '2'))
