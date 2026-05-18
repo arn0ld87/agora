@@ -1,0 +1,12 @@
+{
+  "global_default": {
+    "provider_id": "ollama_cloud",
+    "model": "ministral-3:14b"
+  },
+  "stage_overrides": {
+    "ontology_generation": {
+      "provider_id": "ollama_cloud",
+      "model": "deepseek-v4-flash"
+    }
+  }
+}

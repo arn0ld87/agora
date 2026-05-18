@@ -1,0 +1,6 @@
+{
+  "global_default": {
+    "provider_id": "ollama_cloud",
+    "model": "ministral-3:14b"
+  }
+}

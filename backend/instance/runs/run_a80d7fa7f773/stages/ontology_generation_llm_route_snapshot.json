@@ -1,0 +1,10 @@
+{
+  "stage": "ontology_generation",
+  "provider_id": "ollama_cloud",
+  "model": "gpt-5.4-nano",
+  "base_url_sanitized": null,
+  "reasoning_effort": "none",
+  "routing_version": 1,
+  "provider_options": {},
+  "started_at": "2026-05-18T17:06:30.009322"
+}

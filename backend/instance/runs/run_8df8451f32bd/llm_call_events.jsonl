@@ -1,0 +1,1 @@
+{"run_id": "run_8df8451f32bd", "stage": "ontology_generation", "provider_id": "ollama_cloud", "model": "deepseek-v4-flash", "base_url_sanitized": "https://ollama.com/v1", "routing_version": 1, "timestamp": 1779114866.5405827, "latency_ms": 229.78695800020432, "success": false, "error_type": "AuthenticationError", "http_status": 401, "remote_request_id": null}

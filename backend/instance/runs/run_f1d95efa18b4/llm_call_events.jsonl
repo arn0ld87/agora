@@ -1,0 +1,1 @@
+{"run_id": "run_f1d95efa18b4", "stage": "ontology_generation", "provider_id": "ollama_cloud", "model": "gpt-5.4-nano", "base_url_sanitized": "https://ollama.com/v1", "routing_version": 1, "timestamp": 1779116792.9774103, "latency_ms": 477.7625420001641, "success": false, "error_type": "NotFoundError", "http_status": 404, "remote_request_id": null}
