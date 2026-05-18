@@ -12,6 +12,7 @@ import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
+import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 import ReportBranchControls from './step4/ReportBranchControls.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportModeControls from './step4/ReportModeControls.vue'
@@ -131,6 +132,13 @@ function resolveInitialReportRoute(): StageLLMRoute | null {
 const reportRoute = ref<StageLLMRoute | null>(resolveInitialReportRoute())
 const isRegenerating = ref(false)
 
+const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
+const llmProfileId = ref<string | null>(localStorage.getItem(STORAGE_REPORT_PROFILE_ID) || null)
+watch(llmProfileId, (val) => {
+  if (val) localStorage.setItem(STORAGE_REPORT_PROFILE_ID, val)
+  else localStorage.removeItem(STORAGE_REPORT_PROFILE_ID)
+})
+
 watch(reportRoute, (val) => {
   if (val?.provider_id && val?.model) {
     localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
@@ -169,6 +177,7 @@ async function regenerateWithModel() {
       force_regenerate: true,
       mode: reportMode.value,
     }
+    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
@@ -213,6 +222,7 @@ async function startReportConfirmed() {
       simulation_id: simId,
       mode: reportMode.value,
     }
+    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
     addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
@@ -424,6 +434,7 @@ const {
 async function createBranchFromReport(branchForm: {
   branch_name: string
   llm_model: string
+  llm_profile_id: string
   language: string
   max_agents: string
 }) {
@@ -432,6 +443,7 @@ async function createBranchFromReport(branchForm: {
   branchBusy.value = true
   try {
     const overrides: Record<string, unknown> = {}
+    if (branchForm.llm_profile_id) overrides.llm_profile_id = branchForm.llm_profile_id
     if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
@@ -539,10 +551,21 @@ onUnmounted(stopPolling)
           </div>
         </div>
 
+        <div
+          v-if="resolvedSimulationId || simulationId"
+          class="report-profile-picker"
+        >
+          <LlmProfilePicker v-model="llmProfileId">
+            <template #hint>
+              <span class="hint">{{ t('step4.llmProfile.hint') }}</span>
+            </template>
+          </LlmProfilePicker>
+        </div>
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
           v-model="reportRoute"
           :is-regenerating="isRegenerating"
+          :class="{ 'is-overridden-by-profile': llmProfileId }"
           @regenerate="regenerateWithModel"
         />
         <ReportModeControls
@@ -968,6 +991,12 @@ onUnmounted(stopPolling)
   display: flex;
   align-items: center;
   gap: var(--s-3);
+}
+.report-profile-picker {
+  margin-bottom: var(--s-3);
+}
+.is-overridden-by-profile {
+  opacity: 0.6;
 }
 .stop-btn-wrap {
   display: inline-flex;

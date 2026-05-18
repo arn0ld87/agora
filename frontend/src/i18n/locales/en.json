@@ -288,6 +288,10 @@
       "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
       "checkingKey": "Checking key status…"
     },
+    "llmProfile": {
+      "hint": "Used for persona generation.",
+      "modelIgnored": "Overridden by profile."
+    },
     "personas": {
       "title": "Generate personas",
       "count": "Number of agents",
@@ -544,6 +548,9 @@
       "reportLabel": "Model for report",
       "placeholder": "Select model …",
       "regenerate": "Regenerate"
+    },
+    "llmProfile": {
+      "hint": "Used for report generation."
     },
     "quote": {
       "openSource": "Open source"
