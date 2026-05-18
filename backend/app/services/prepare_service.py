@@ -130,8 +130,10 @@ def _phase_generate_profiles(
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
-    Aktualisiert ``state.profiles_count`` als Seiteneffekt; gibt die
-    Liste der generierten Profile zurück.
+    Aktualisiert ``state.profiles_count`` als Seiteneffekt und gibt ein
+    Tuple ``(profiles, expanded_entities)`` zurück: die Liste der
+    generierten Profile sowie die auf die Quota expandierte
+    Entity-Liste, die Phase 3 weiterverarbeitet.
 
     Sub-Slice 20b — Quota-Erzwingung: wenn ``quota_plan`` gesetzt ist,
     wird ``filtered.entities`` vor der Generation per
@@ -245,9 +247,8 @@ def _phase_generate_config(
     simulation_id: str,
     simulation_requirement: str,
     document_text: str,
-    filtered,
-    expanded_entities: List[Any],
     *,
+    expanded_entities: List[Any],
     llm_model: Optional[str],
     llm_runtime: Optional[LlmRuntimeInput] = None,
     language: Optional[str],
@@ -557,7 +558,6 @@ def prepare_simulation(
             simulation_id,
             simulation_requirement,
             document_text,
-            filtered,
             expanded_entities=expanded_entities,
             llm_model=llm_model,
             llm_runtime=llm_runtime,

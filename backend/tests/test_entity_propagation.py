@@ -104,7 +104,6 @@ def test_expanded_entities_propagate_to_config_generator(monkeypatch):
         "sim_test",
         "requirement",
         "doc text",
-        filtered,
         expanded_entities=expanded,
         llm_model=None,
         llm_runtime=None,
