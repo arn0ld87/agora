@@ -260,7 +260,7 @@ async function triggerPrepare() {
   const payload = {
     simulation_id: props.simulationId,
     use_llm_for_profiles: true,
-    parallel_profile_count: 5,
+    parallel_profile_count: 15,
     language: language.value,
   }
   if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value

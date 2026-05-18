@@ -9,6 +9,7 @@ Optimization improvements:
 """
 
 import json
+import os
 import random
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
@@ -608,26 +609,44 @@ class OasisProfileGenerator:
         max_attempts = 3
         last_error = None
 
+        # OpenAI-Reasoning-Modelle (z.B. gpt-5.4-nano) liefern mit
+        # response_format=json_object gelegentlich leeren content. Ollama und
+        # Gemini (auch via OpenAI-Adapter) supporten json_object stabil — dort
+        # response_format weiterhin senden.
+        _base = (self.base_url or '').lower()
+        _is_openai = 'api.openai.com' in _base
+        disable_json_mode = _is_openai and os.environ.get(
+            'LLM_DISABLE_JSON_MODE', ''
+        ).lower() in ('1', 'true', 'yes')
+
         for attempt in range(max_attempts):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
+                create_kwargs: Dict[str, Any] = {
+                    "model": self.model_name,
+                    "messages": [
                         {"role": "system", "content": self._get_system_prompt(is_individual)},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": prompt},
                     ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7 - (attempt * 0.1)  # Lower temperature with each retry
-                    # Don't set max_tokens, let LLM generate freely
-                )
+                    "temperature": 0.7 - (attempt * 0.1),
+                }
+                if not disable_json_mode:
+                    create_kwargs["response_format"] = {"type": "json_object"}
+                response = self.client.chat.completions.create(**create_kwargs)
 
-                content = response.choices[0].message.content
+                content = response.choices[0].message.content or ""
 
                 # Check if output was truncated (finish_reason is not 'stop')
                 finish_reason = response.choices[0].finish_reason
                 if finish_reason == 'length':
                     logger.warning(f"LLM output truncated (attempt {attempt+1}), attempting to fix...")
                     content = self._fix_truncated_json(content)
+
+                if not content.strip():
+                    logger.warning(
+                        f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
+                    )
+                    last_error = ValueError("empty LLM content")
+                    continue
 
                 # Try to parse JSON
                 try:
