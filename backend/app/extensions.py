@@ -37,12 +37,20 @@ logger = logging.getLogger("agora.extensions")
 # child inherits the module state (including these refs) via fork.
 _REGISTERED_NEO4J_STORAGES: List["Neo4jStorage"] = []
 
+# Platform-capability flag and one-shot guard for the at-fork fallback.
+# ``create_app()`` may run multiple times (pytest fixtures, ad-hoc reloads);
+# without the guard each call would stack another at-fork handler and the
+# child would invoke ``reset_pools_after_fork`` N times per fork.
+_HAS_REGISTER_AT_FORK = hasattr(os, "register_at_fork")
+_FORK_HANDLER_REGISTERED = False
+
 
 def register_fork_handlers(neo4j_storage: Optional["Neo4jStorage"] = None) -> None:
     """Register pool references for post-fork reset.
 
     Called from ``create_app()`` once all pool-owning objects exist.
-    Safe to call multiple times; duplicates are filtered.
+    Safe to call multiple times; duplicates are filtered and the
+    ``os.register_at_fork`` fallback is wired up exactly once per process.
     """
     if neo4j_storage is not None and neo4j_storage not in _REGISTERED_NEO4J_STORAGES:
         _REGISTERED_NEO4J_STORAGES.append(neo4j_storage)
@@ -51,11 +59,16 @@ def register_fork_handlers(neo4j_storage: Optional["Neo4jStorage"] = None) -> No
     # runtimes (pytest with multiprocessing, ad-hoc scripts) still reset
     # pools when they fork. Under gunicorn-gevent the canonical path is the
     # post_fork hook in gunicorn.conf.py — see reset_pools_after_fork.
-    if not hasattr(os, "register_at_fork"):
+    if not _HAS_REGISTER_AT_FORK:
         logger.debug("register_at_fork not available (non-Unix?), skipping")
         return
 
+    global _FORK_HANDLER_REGISTERED
+    if _FORK_HANDLER_REGISTERED:
+        return
+
     os.register_at_fork(after_in_child=reset_pools_after_fork)
+    _FORK_HANDLER_REGISTERED = True
     logger.debug("Registered reset_pools_after_fork as os.register_at_fork handler")
 
 

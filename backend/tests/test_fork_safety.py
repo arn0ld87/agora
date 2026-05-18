@@ -17,12 +17,14 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_registered_storages():
-    """Module-level Storage-Liste zwischen Tests isolieren."""
+    """Module-level Storage-Liste und at-fork-Guard zwischen Tests isolieren."""
     from app import extensions
 
     extensions._REGISTERED_NEO4J_STORAGES.clear()
+    extensions._FORK_HANDLER_REGISTERED = False
     yield
     extensions._REGISTERED_NEO4J_STORAGES.clear()
+    extensions._FORK_HANDLER_REGISTERED = False
 
 
 def test_reset_driver_after_fork_closes_and_nones_driver():
@@ -116,6 +118,28 @@ def test_register_fork_handlers_registers_atfork_fallback():
 
     assert len(registered) == 1
     assert registered[0]["after_in_child"] is reset_pools_after_fork
+
+
+def test_register_fork_handlers_atfork_fallback_registered_once_only():
+    """Mehrfaches register_fork_handlers() registriert at-fork-Handler nur einmal.
+
+    create_app() läuft in pytest-Fixtures oder ad-hoc-Reloads häufig wiederholt;
+    ohne One-Shot-Guard würde reset_pools_after_fork N-mal pro Fork laufen.
+    """
+    if not hasattr(os, "register_at_fork"):
+        pytest.skip("register_at_fork nicht verfügbar")
+
+    from app.extensions import register_fork_handlers
+
+    registered = []
+    with patch("os.register_at_fork", side_effect=lambda **kw: registered.append(kw)):
+        register_fork_handlers(neo4j_storage=MagicMock())
+        register_fork_handlers(neo4j_storage=MagicMock())
+        register_fork_handlers(neo4j_storage=None)
+
+    assert len(registered) == 1, (
+        f"Erwartet 1 at-fork-Registrierung, erhalten {len(registered)}"
+    )
 
 
 def test_reset_pools_after_fork_resets_all_registered_neo4j_storages():
