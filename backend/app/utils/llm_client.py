@@ -167,6 +167,130 @@ def _flatten_pydantic_schema_for_ollama(model_cls: type[BaseModel]) -> Dict[str,
     return flattened
 
 
+_STRICT_DROP_KEYS = {
+    # Reine Pydantic-Meta-Keys, die OpenAI/Google ohnehin ignorieren.
+    "title",
+    "$schema",
+    # Defaults sind im strict-Mode unzulässig — alle Felder müssen vom
+    # Modell explizit gefüllt werden (Pydantic-side fängt das via
+    # default_factory ab, falls wir das Feld aus dem Schema droppen).
+    "default",
+    # JSON-Schema-Constraint-Keys, die OpenAI strict ablehnt
+    # (https://platform.openai.com/docs/guides/structured-outputs#supported-schemas).
+    # ``description`` bleibt erhalten — wird von OpenAI ausgewertet und
+    # hilft dem Modell beim Auffuellen.
+    "minLength",
+    "maxLength",
+    "minimum",
+    "maximum",
+    "pattern",
+    "format",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "multipleOf",
+}
+
+
+def _is_unsupported_open_object(node: Any) -> bool:
+    """True, wenn *node* (oder ein Zweig in ``anyOf``/``allOf``) ein
+    open-ended ``{"type":"object"}`` ohne ``properties`` ist.
+
+    OpenAI strict-mode (und Google's OpenAI-kompat-Wrapper) lehnen
+    diese Form als Property-Wert ab. Optional-Felder von Pydantic
+    rendern als ``{"anyOf":[{"type":"object"}, {"type":"null"}]}``;
+    der Toplevel-Type-Check würde das übersehen, deshalb wird hier
+    in ``anyOf``/``allOf`` rekursiert (Gemini-Review HIGH zu PR #545).
+    """
+    if not isinstance(node, dict):
+        return False
+    if node.get("type") == "object" and "properties" not in node:
+        return True
+    for combinator in ("anyOf", "allOf", "oneOf"):
+        branches = node.get(combinator)
+        if isinstance(branches, list) and any(_is_unsupported_open_object(b) for b in branches):
+            return True
+    return False
+
+
+def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
+    """Pydantic-Schema in das von OpenAI/Google ``json_schema``-strict-Mode
+    geforderte Format überführen.
+
+    OpenAI ``response_format={"type":"json_schema","strict":True}`` ist
+    rigide:
+    1. ``additionalProperties: false`` auf JEDEM ``"type":"object"``-Knoten.
+    2. ALLE Property-Keys (auch optionale mit Pydantic-``default=``) müssen
+       in ``required[]`` stehen — sonst 400 „'required' is required to be
+       supplied and to be an array including every key in properties".
+    3. ``$ref``/``$defs`` werden zwar dokumentiert unterstützt, in der
+       Praxis aber unzuverlässig akzeptiert. Refs werden hier inline
+       ausgelöst, ``$defs`` und Meta-Keys wie ``title``, ``description``,
+       ``default``, Constraint-Keys (``minLength`` etc.) werden gestripped,
+       weil OpenAI sie im strict-Mode teils ablehnt.
+
+    Eingabe darf ein Pydantic-``BaseModel``-Subclass ODER ein bereits
+    fertiges JSON-Schema-Dict sein. Rückgabe ist immer ein neues Dict
+    (kein In-Place-Mutate).
+
+    Der Ollama-Pfad (``/api/chat::format=<schema>``) nutzt separat
+    ``_flatten_pydantic_schema_for_ollama`` und ist von diesem Helper
+    nicht betroffen.
+    """
+    if isinstance(model_or_schema, type) and issubclass(model_or_schema, BaseModel):
+        raw: Dict[str, Any] = model_or_schema.model_json_schema()
+    elif isinstance(model_or_schema, dict):
+        raw = dict(model_or_schema)
+    else:
+        raise TypeError(
+            f"_enforce_openai_strict_schema expects BaseModel subclass or dict, got {type(model_or_schema).__name__}"
+        )
+    defs = raw.pop("$defs", {})
+
+    def _walk(node: Any, seen: tuple[str, ...] = ()) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node and isinstance(node["$ref"], str) and node["$ref"].startswith("#/$defs/"):
+                ref_name = node["$ref"].split("/")[-1]
+                if ref_name in seen:
+                    return {"type": "object", "additionalProperties": False}
+                target = defs.get(ref_name, {})
+                merged = {k: v for k, v in node.items() if k != "$ref"}
+                for k, v in target.items():
+                    merged.setdefault(k, v)
+                return _walk(merged, seen + (ref_name,))
+            out: Dict[str, Any] = {}
+            for k, v in node.items():
+                if k in _STRICT_DROP_KEYS:
+                    continue
+                out[k] = _walk(v, seen)
+            if out.get("type") == "object":
+                out["additionalProperties"] = False
+                props = out.get("properties")
+                if isinstance(props, dict):
+                    # OpenAI strict-mode lehnt open-ended Objects
+                    # (``Dict[str, Any]`` → ``{"type":"object"}`` ohne
+                    # ``properties``) als Property-Wert ab, selbst wenn
+                    # ``additionalProperties: false`` gesetzt ist. Solche
+                    # Felder werden hier rausgenommen — Pydantic-side ist
+                    # das harmlos, weil die referenzierten Felder einen
+                    # ``default``/``default_factory`` haben (sonst hätten
+                    # sie nie als open-ended deklariert werden können).
+                    #
+                    # Optionale Felder rendern als ``anyOf``/``allOf`` mit
+                    # nested-object → rekursiv prüfen (Gemini-Review HIGH
+                    # zu PR #545).
+                    for pk in list(props):
+                        if _is_unsupported_open_object(props[pk]):
+                            del props[pk]
+                    out["required"] = list(props.keys())
+            return out
+        if isinstance(node, list):
+            return [_walk(item, seen) for item in node]
+        return node
+
+    return _walk(raw)
+
+
 def _read_active_config_safely() -> Optional[Dict[str, Any]]:
     """Load the active LLM config without raising on missing/invalid file."""
     try:
@@ -978,11 +1102,11 @@ class LLMClient:
         if disable_json_mode:
             response_format: Optional[Dict[str, Any]] = None
         elif schema is not None:
-            json_schema: Dict[str, Any] = (
-                schema.model_json_schema()  # type: ignore[union-attr]
-                if isinstance(schema, type) and issubclass(schema, BaseModel)
-                else schema  # type: ignore[assignment]
-            )
+            # OpenAI / Google strict-mode: $refs inline-resolven, $defs +
+            # Meta-Keys droppen, additionalProperties:false + required-Liste
+            # auf alle Object-Schemas erzwingen. Ollama nutzt den nativen
+            # /api/chat::format-Pfad weiter unten und ist nicht betroffen.
+            json_schema: Dict[str, Any] = _enforce_openai_strict_schema(schema)
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
