@@ -137,7 +137,7 @@ RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
   && chown -R agora:agora /app /home/agora
 
 COPY --chown=agora:agora --from=backend-build /app/backend/.venv ./backend/.venv
-COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py backend/wsgi.py ./backend/
+COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py backend/wsgi.py backend/gunicorn.conf.py ./backend/
 COPY --chown=agora:agora backend/app ./backend/app
 COPY --chown=agora:agora backend/scripts ./backend/scripts
 # E2E-Stub-Snapshot: llm_e2e_stub.py liest die Pflichtabschnitte aus dieser Datei.
@@ -159,24 +159,19 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
 # scheitern.
 #
-# HARDSTOP --workers 1 (Code-Review 2026-05-17, Finding 1.2):
-# TaskManager, ApiKeysStore und SimulationRunner halten Zustand in
-# Prozess-lokalen Dicts. Mit 2 Workern landen API-Keys, Task-Status und
-# Subprozess-Handles in „dem anderen" Worker. Bis Tasks/API-Keys/
-# SimRunner extern (Redis-Queue + persistenter Key-Store) sind, läuft
-# Prod mit genau einem Worker. Aufheben in PR 2/4 dieser Welle.
+# Konfiguration (workers, preload, timeouts, post_fork-Hook) liegt in
+# backend/gunicorn.conf.py. Der post_fork-Hook resetet vererbte
+# Neo4j/Redis-Pool-Sockets im Child — siehe Datei-Header dort. Damit ist
+# --preload auch unter -k gevent sicher; os.register_at_fork allein war
+# es nicht (gevent monkey-patcht os.fork).
+#
+# HARDSTOP --workers 1 (Code-Review 2026-05-17, Finding 1.2) bleibt
+# bestehen, ist aber jetzt in der conf-Py dokumentiert.
 #
 # Issue #529: App-Target ist wsgi:app (NICHT mehr app:create_app()), weil
 # wsgi.py als allererstes Statement gevent.monkey.patch_all() ausführt.
 # Ohne diese Reihenfolge importiert --preload requests/urllib3/ssl mit
 # ungepatchtem socket → RecursionError in jedem HTTP-Call.
 CMD ["/app/backend/.venv/bin/gunicorn", \
-     "-k", "gevent", \
-     "--workers", "1", \
-     "--preload", \
-     "--timeout", "60", \
-     "--graceful-timeout", "30", \
-     "--bind", "0.0.0.0:5001", \
-     "--chdir", "/app/backend", \
-     "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
+     "--config", "/app/backend/gunicorn.conf.py", \
      "wsgi:app"]

@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (deploy — 2026-05-18)
+
+- Persona-Generation wurde nach MAI-12 + PR #519 stark verlangsamt: gunicorn
+  `-k gevent --preload --workers 1` vererbte den im Master geöffneten
+  Neo4j-Driver-Pool, die `os.register_at_fork`-Handler aus MAI-12 wurden unter
+  gevents `os.fork`-Monkey-Patch nicht zuverlässig gefeuert, und die ersten
+  DB-Writes im Worker liefen in einen `Failed to write data to connection`
+  Transient-Retry-Loop (1.15 s, 2.3 s, 4.6 s pro Aufruf). Bei zehn parallelen
+  Persona-LLM-Threads serialisierte sich das Persona-Batch praktisch.
+- Fix: Pool-Reset jetzt aus einem expliziten `post_fork`-Hook in
+  `backend/gunicorn.conf.py`. `app.extensions.reset_pools_after_fork()` ist die
+  kanonische Reset-Funktion; `os.register_at_fork` bleibt als
+  Defence-in-Depth-Fallback erhalten. Dockerfile-CMD vereinfacht auf
+  `--config /app/backend/gunicorn.conf.py`.
+
 ### Changed (chore/deps — 2026-05-17)
 
 - Python-Floor auf 3.14 vereinheitlicht. `pyproject.toml` (`requires-python`,
