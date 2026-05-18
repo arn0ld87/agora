@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import os
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from ..contracts import PersonaQuotaActual, PersonaQuotaPlan
 from ..contracts.llm_routing_contract import ResolvedRoute
@@ -127,7 +127,7 @@ def _phase_generate_profiles(
     parallel_profile_count: int,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
-) -> List[Any]:
+) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
     Aktualisiert ``state.profiles_count`` als Seiteneffekt; gibt die
@@ -236,7 +236,7 @@ def _phase_generate_profiles(
             total=len(profiles),
         )
 
-    return profiles
+    return profiles, entities
 
 
 def _phase_generate_config(
@@ -246,6 +246,7 @@ def _phase_generate_config(
     simulation_requirement: str,
     document_text: str,
     filtered,
+    expanded_entities: List[Any],
     *,
     llm_model: Optional[str],
     llm_runtime: Optional[LlmRuntimeInput] = None,
@@ -296,7 +297,7 @@ def _phase_generate_config(
         graph_id=state.graph_id,
         simulation_requirement=simulation_requirement,
         document_text=document_text,
-        entities=filtered.entities,
+        entities=expanded_entities,
         enable_twitter=state.enable_twitter,
         enable_reddit=state.enable_reddit,
     )
@@ -530,7 +531,7 @@ def prepare_simulation(
         quota_plan = _apply_persona_floor_to_quota_plan(quota_plan)
 
         # Phase 2: Generate Agent Profiles
-        profiles = _phase_generate_profiles(
+        profiles, expanded_entities = _phase_generate_profiles(
             state,
             storage,
             filtered,
@@ -557,6 +558,7 @@ def prepare_simulation(
             simulation_requirement,
             document_text,
             filtered,
+            expanded_entities=expanded_entities,
             llm_model=llm_model,
             llm_runtime=llm_runtime,
             language=language,
