@@ -319,6 +319,59 @@ def _read_active_config_safely() -> Optional[Dict[str, Any]]:
         return None
 
 
+_CODEFENCE_HEAD_RE = re.compile(r"^```(?:json)?\s*", re.IGNORECASE)
+_CODEFENCE_TAIL_RE = re.compile(r"\s*```\s*$")
+
+
+def _strip_llm_json_envelope(text: str) -> str:
+    """Entfernt Codefences + Prosa-Umrahmung um ein LLM-JSON-Payload.
+
+    Issue #556: Gemini-Outputs liefern oft Preambles ("Sure, here is …")
+    und/oder trailing prose ("Hope this helps!") um den eigentlichen
+    JSON-Block. Der bisherige Pre-Parser entfernte nur Codefences an
+    Anfang/Ende und produzierte ``JSONDecodeError`` bei Prosa-Rändern.
+
+    Pipeline:
+      1. Strip whitespace.
+      2. Codefences entfernen (case-insensitive, ``json``-Label optional).
+      3. Outer-Cut: erstes ``{`` oder ``[`` bis zum letzten passenden
+         ``}`` oder ``]`` (Typ-Wahl nach dem zuerst auftretenden Bracket).
+
+    Liefert bei fehlender JSON-Struktur den gestrippten Original-String —
+    der Caller löst dann ``JSONDecodeError`` aus, was er sowieso tun würde.
+    """
+    if not text:
+        return text
+    s = text.strip()
+    s = _CODEFENCE_HEAD_RE.sub("", s)
+    s = _CODEFENCE_TAIL_RE.sub("", s)
+    s = s.strip()
+    if not s:
+        return s
+
+    first_obj = s.find("{")
+    first_arr = s.find("[")
+    if first_obj == -1 and first_arr == -1:
+        return s
+
+    if first_obj == -1:
+        start, end_char = first_arr, "]"
+    elif first_arr == -1:
+        start, end_char = first_obj, "}"
+    elif first_obj < first_arr:
+        start, end_char = first_obj, "}"
+    else:
+        start, end_char = first_arr, "]"
+
+    end = s.rfind(end_char)
+    if end == -1 or end < start:
+        # Truncated payload mit Preamble (z. B. ``Sure! {"a": 1``):
+        # Prosa abschneiden, damit ``_try_repair_truncated_json`` im
+        # Caller den unbalanced Rest reparieren kann.
+        return s[start:]
+    return s[start : end + 1]
+
+
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
     """Best-effort recovery for an LLM JSON answer cut off at the output cap.
 
@@ -1184,10 +1237,7 @@ class LLMClient:
                         max_tokens=max_tokens,
                         force_no_thinking=force_no_thinking,
                     )
-                    cleaned_response = response.strip()
-                    cleaned_response = re.sub(r'^```(?:json)?\s*', '', cleaned_response, flags=re.IGNORECASE)
-                    cleaned_response = re.sub(r'\s*```$', '', cleaned_response)
-                    cleaned_response = cleaned_response.strip()
+                    cleaned_response = _strip_llm_json_envelope(response)
                     parsed: Dict[str, Any] = json.loads(cleaned_response)
                     return self._maybe_validate(parsed, schema)
                 except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
@@ -1234,12 +1284,8 @@ class LLMClient:
                 context=context,
                 force_no_thinking=force_no_thinking,
             )
-        # Clean markdown code block markers
-        cleaned_response = response.strip()
-        # Robustly remove ```json ... ``` or just ``` ... ```
-        cleaned_response = re.sub(r'^```(?:json)?\s*', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\s*```$', '', cleaned_response)
-        cleaned_response = cleaned_response.strip()
+        # Codefences + Prosa-Envelope entfernen (Issue #556).
+        cleaned_response = _strip_llm_json_envelope(response)
 
         try:
             parsed: Dict[str, Any] = json.loads(cleaned_response)
