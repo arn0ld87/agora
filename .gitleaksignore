@@ -1,0 +1,21 @@
+# Gitleaks Ignore-List
+#
+# Format: <commit-sha>:<file-path>:<rule-id>:<line>
+#
+# Diese Einträge sind Test-Fixtures, keine echten Provider-API-Keys. Sie tragen
+# format-valide ``sk-…`` / ``AIzaSy…``-Strings, weil der Track-1-Secret-Resolver
+# (#559) explizit den Prefix + Mindest-Länge prüft — ohne format-valide Werte
+# wären die Tests wirkungslos.
+#
+# Die Werte selbst sind erfunden ("envfallback", "envvalidkey", "injectedkey",
+# "envkeyvalid"-Suffixe) und tragen keinen Zugang zu echten Provider-Endpunkten.
+# Inline ``# gitleaks:allow``-Marker wurden in einem Folge-Commit (185a7b5)
+# nachgereicht — Gitleaks scannt die Original-Commits per Diff-Range, deshalb
+# greifen die Marker dort nicht. Diese Ignorelist deckt die historischen Diffs ab.
+#
+# Memory-Referenz: feedback_gitleaks_test_fixtures.
+
+1ad9b21ccf12fd9906267ec1550ad7cf95c33335:backend/tests/services/test_llm_core_services.py:generic-api-key:22
+1ad9b21ccf12fd9906267ec1550ad7cf95c33335:backend/tests/services/test_secret_resolver_store.py:generic-api-key:49
+1ad9b21ccf12fd9906267ec1550ad7cf95c33335:backend/tests/services/test_secret_resolver_env_sanitation.py:generic-api-key:117
+d891461697eb733fb8c36e0ccb5705b0d43b03cc:backend/tests/api/test_simulation_history_provider_passing.py:generic-api-key:79
