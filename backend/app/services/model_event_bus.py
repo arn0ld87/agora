@@ -61,7 +61,7 @@ class ModelActiveEvent(BaseModel):
         "graph",
         "unknown",
     ]
-    provider: Literal["ollama", "cloud", "openai", "unknown"]
+    provider: Literal["ollama", "cloud", "openai", "google", "unknown"]
     ts: float
     extra: dict[str, Any] | None = None
 

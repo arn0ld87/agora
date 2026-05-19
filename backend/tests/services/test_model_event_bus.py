@@ -53,7 +53,7 @@ class TestModelActiveEventSchema:
             _make_event(context="invalid_context")
 
     def test_all_provider_values_accepted(self):
-        for prov in ["ollama", "cloud", "openai", "unknown"]:
+        for prov in ["ollama", "cloud", "openai", "google", "unknown"]:
             ev = _make_event(provider=prov)
             assert ev.provider == prov
 
