@@ -213,6 +213,9 @@ def build_graph():
             "message": "Graph build task started. Query progress via /task/{task_id}"
         })
     except ValueError as exc:
-        return json_error(str(exc), status=400)
+        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
+        status_code = 404 if error_code == ApiErrorCode.NOT_FOUND else 400
+        return json_error(error_code, status=status_code)
     except RuntimeError as exc:
-        return json_error(str(exc), status=409)
+        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
+        return json_error(error_code, status=409)
