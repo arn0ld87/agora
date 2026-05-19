@@ -1,0 +1,235 @@
+"""
+Graph API: Ontology and graph building endpoints.
+"""
+
+import os
+import json
+from flask import request
+from . import graph_bp
+from ..config import Config
+from ..models.project import ProjectManager
+from ..services.llm_runtime import parse_runtime_llm_config
+from ..services.graph_build import GraphBuildService
+from ..utils.file_parser import FileParser
+from ..services.text_processor import TextProcessor
+from ..utils.logger import get_logger
+from ..utils.validation import validate_project_id
+from ..utils.api_errors import ApiErrorCode
+from ..utils.api_responses import (
+    handle_api_errors,
+    json_error,
+    json_error_from_exception,
+    json_success,
+)
+from ..utils.rate_limit import build_rate_limit_key, upload_rate_limiter
+from ..utils.scopes import require_scope
+from ..container import get_container
+
+logger = get_logger('agora.api.graph_build')
+
+def allowed_file(file_storage) -> bool:
+    """Check if file extension and content are allowed"""
+    filename = file_storage.filename
+    if not filename or '.' not in filename:
+        return False
+    ext = os.path.splitext(filename)[1].lower().lstrip('.')
+    if ext not in Config.ALLOWED_EXTENSIONS:
+        return False
+
+    if ext == 'pdf':
+        try:
+            header = file_storage.stream.read(4)
+            file_storage.stream.seek(0)
+            return header == b'%PDF'
+        except Exception:
+            return False
+
+    return True
+
+def _upload_rate_limit_key() -> str:
+    return build_rate_limit_key("graph-ontology-upload")
+
+@graph_bp.before_request
+def _limit_upload_endpoint():
+    if request.endpoint != "graph.generate_ontology" or request.method != "POST":
+        return None
+
+    result = upload_rate_limiter.check(
+        _upload_rate_limit_key(),
+        max_requests=Config.AGORA_UPLOAD_RATE_LIMIT_MAX,
+        window_seconds=Config.AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if result.allowed:
+        return None
+
+    response, status = json_error(
+        ApiErrorCode.RATE_LIMITED,
+        status=429,
+        extra={"retry_after_seconds": result.retry_after_seconds},
+    )
+    response.headers["Retry-After"] = str(result.retry_after_seconds)
+    return response, status
+
+@graph_bp.route('/ontology/generate', methods=['POST'])
+@require_scope("graph:write")
+@handle_api_errors(log_prefix="Ontology generation failed")
+def generate_ontology():
+    """Interface 1: Upload files and analyze to generate ontology definition"""
+    simulation_requirement = request.form.get('simulation_requirement', '')
+    project_name = request.form.get('project_name', 'Unnamed Project')
+    additional_context = request.form.get('additional_context', '')
+
+    if not simulation_requirement:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please provide simulation requirement description")
+
+    llm_model_override = (request.form.get('llm_model') or '').strip() or None
+    llm_provider_raw = request.form.get('llm_provider')
+    llm_provider_payload = None
+    if llm_provider_raw:
+        try:
+            llm_provider_payload = json.loads(llm_provider_raw)
+        except json.JSONDecodeError:
+            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="llm_provider must be a valid JSON object")
+
+    try:
+        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+    except ValueError as exc:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+
+    llm_profile_id = (request.form.get('llm_profile_id') or '').strip() or None
+
+    uploaded_files = request.files.getlist('files')
+    if not uploaded_files or all(not f.filename for f in uploaded_files):
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please upload at least one document file")
+
+    project = ProjectManager.create_project(name=project_name)
+    project.simulation_requirement = simulation_requirement
+
+    document_texts = []
+    all_text = ""
+
+    for file in uploaded_files:
+        if file and file.filename:
+            if not allowed_file(file):
+                continue
+
+            # Size check
+            file.seek(0, os.SEEK_END)
+            size = file.tell()
+            file.seek(0)
+            max_upload_bytes = Config.AGORA_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+            if size > max_upload_bytes:
+                ProjectManager.delete_project(project.project_id)
+                return json_error(
+                    ApiErrorCode.UPLOAD_TOO_LARGE,
+                    status=413,
+                    message=f"File {file.filename} exceeds {Config.AGORA_MAX_UPLOAD_SIZE_MB}MB limit",
+                )
+
+            logger.info("Uploading file: %s (size: %d bytes) [project_id=%s]", file.filename, size, project.project_id)
+
+            file_info = ProjectManager.save_file_to_project(project.project_id, file, file.filename)
+            project.files.append({"filename": file_info["original_filename"], "size": file_info["size"]})
+
+            text = FileParser.extract_text(file_info["path"])
+            text = TextProcessor.preprocess_text(text)
+            document_texts.append(text)
+            all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
+
+    if not document_texts:
+        ProjectManager.delete_project(project.project_id)
+        return json_error(ApiErrorCode.UNSUPPORTED_FORMAT, status=400, message="No documents successfully processed")
+
+    project.total_text_length = len(all_text)
+    ProjectManager.save_extracted_text(project.project_id, all_text)
+
+    try:
+        project = GraphBuildService.generate_ontology(
+            project_id=project.project_id,
+            simulation_requirement=simulation_requirement,
+            document_texts=document_texts,
+            llm_model_override=llm_model_override,
+            llm_runtime=llm_runtime,
+            llm_profile_id=llm_profile_id,
+            additional_context=additional_context
+        )
+    except ValueError as exc:
+        ProjectManager.delete_project(project.project_id)
+        return json_error_from_exception(exc)
+
+    return json_success({
+        "project_id": project.project_id,
+        "project_name": project.name,
+        "ontology": project.ontology,
+        "analysis_summary": project.analysis_summary,
+        "files": project.files,
+        "total_text_length": project.total_text_length
+    })
+
+@graph_bp.route('/build', methods=['POST'])
+@require_scope("graph:write")
+@handle_api_errors(log_prefix="Graph build initiation failed")
+def build_graph():
+    """Interface 2: Build graph based on project_id"""
+    data = request.get_json() or {}
+    project_id = data.get('project_id')
+    if not project_id:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please provide project_id")
+    if not validate_project_id(project_id):
+        return json_error(ApiErrorCode.INVALID_ID, status=400)
+
+    project = ProjectManager.get_project(project_id)
+    if not project:
+        return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Project does not exist: {project_id}")
+
+    from ..utils.llm_profile_resolver import expand_profile_in_data
+    expand_profile_in_data(data)
+
+    llm_model_override = (data.get('llm_model') or '').strip() or project.llm_model or None
+    llm_provider_payload = data.get('llm_provider')
+    try:
+        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+    except ValueError as exc:
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+
+    llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
+    force = data.get('force', False)
+    graph_name = data.get('graph_name', project.name or 'Agora Graph')
+    chunk_size = data.get('chunk_size')
+    chunk_overlap = data.get('chunk_overlap')
+
+    container = get_container()
+    if container.neo4j_storage is None:
+        return json_error(ApiErrorCode.NEO4J_UNAVAILABLE, status=503, message="GraphStorage not initialized")
+
+    try:
+        task_id, run_id = GraphBuildService.build_graph(
+            project_id=project_id,
+            graph_name=graph_name,
+            llm_model_override=llm_model_override,
+            llm_runtime=llm_runtime,
+            llm_profile_id=llm_profile_id,
+            force=force,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            container=container
+        )
+        return json_success({
+            "project_id": project_id,
+            "task_id": task_id,
+            "run_id": run_id,
+            "message": "Graph build task started. Query progress via /task/{task_id}"
+        })
+    except ValueError as exc:
+        return json_error_from_exception(exc)
+    except RuntimeError as exc:
+        # GRAPH_BUILD_IN_PROGRESS must surface the already-running task_id so
+        # the client can poll status instead of starting a parallel run.
+        code = exc.args[0] if exc.args else None
+        if code == ApiErrorCode.GRAPH_BUILD_IN_PROGRESS and project.graph_build_task_id:
+            return json_error(
+                code,
+                status=409,
+                extra={"task_id": project.graph_build_task_id},
+            )
+        return json_error_from_exception(exc, fallback_status=409)

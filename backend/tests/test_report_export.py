@@ -8,7 +8,6 @@ import pytest
 from flask import Flask
 
 from app.api import report_bp
-from app.api.report import _can_reuse_existing_report
 from app.services.report_agent import (
     Report,
     ReportManager,
@@ -16,8 +15,11 @@ from app.services.report_agent import (
     ReportSection,
     ReportStatus,
 )
+from app.services.report_generation import ReportGenerationService
 from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 from app.utils.rate_limit import report_rate_limiter
+
+_can_reuse_existing_report = ReportGenerationService.can_reuse_existing_report
 
 
 REPORT_ID = "report_abcdef123456"

@@ -224,6 +224,9 @@ class Config:
     AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS = int(
         os.environ.get('AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS', '60')
     )
+    # Per-file upload cap for the ontology endpoint. Documents above this are
+    # rejected with HTTP 413 before the request body is persisted to disk.
+    AGORA_MAX_UPLOAD_SIZE_MB = int(os.environ.get('AGORA_MAX_UPLOAD_SIZE_MB', '50'))
     AGORA_LLM_TRIGGER_RATE_LIMIT_MAX = int(
         os.environ.get('AGORA_LLM_TRIGGER_RATE_LIMIT_MAX', '20')
     )
