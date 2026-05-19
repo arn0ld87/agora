@@ -138,9 +138,12 @@ def generate_report():
         )
         return json_success(result)
     except ValueError as exc:
-        return json_error(str(exc), status=400)
+        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
+        status_code = 404 if error_code == ApiErrorCode.NOT_FOUND else 400
+        return json_error(error_code, status=status_code)
     except RuntimeError as exc:
-        return json_error(str(exc), status=500)
+        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
+        return json_error(error_code, status=500)
 
 
 @report_bp.route('/generate/status', methods=['POST'])
