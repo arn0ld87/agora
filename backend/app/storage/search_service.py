@@ -11,11 +11,10 @@ import logging
 from typing import List, Dict, Any, Optional
 
 import neo4j.exceptions
-from neo4j import Session as Neo4jSession
+from neo4j import Session as Neo4jSession, ManagedTransaction
 from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
 
 from .embedding_service import EmbeddingService
-from ..utils.retry import neo4j_call_with_retry
 
 logger = logging.getLogger('agora.search')
 
@@ -151,24 +150,29 @@ class SearchService:
         *,
         fallback_label: str,
     ) -> List[Any]:
-        """Execute a Cypher query with retry logic and honest error handling.
+        """Execute a Cypher read query via managed transaction with driver-level retry.
 
-        - Retries on transient Neo4j errors (ServiceUnavailable, SessionExpired,
-          TransientError) up to 2 times via neo4j_call_with_retry.
+        Uses ``session.execute_read`` so the Neo4j driver handles
+        ``ServiceUnavailable``/``SessionExpired``/``TransientError`` internally
+        with its own retry logic — a fresh connection is established on each
+        retry attempt, unlike the previous ``session.run``-based approach.
+
         - Returns [] for missing index/procedure (ClientError with known codes),
           so callers are never surprised by schema bootstrap races.
         - Re-raises ClientError for genuine Cypher programming errors.
+        - Returns [] for transient errors that the driver could not recover from.
         - Returns [] for all other exceptions after logging at WARNING.
         """
         _INDEX_CODES = frozenset({
             "Neo.ClientError.Schema.IndexNotFound",
             "Neo.ClientError.Procedure.ProcedureNotFound",
         })
+
+        def _tx_callback(tx: ManagedTransaction) -> List[Any]:
+            return list(tx.run(cypher, **params))
+
         try:
-            return neo4j_call_with_retry(
-                lambda: list(session.run(cypher, **params)),
-                max_retries=2,
-            )
+            return session.execute_read(_tx_callback)
         except neo4j.exceptions.ClientError as e:
             if e.code in _INDEX_CODES:
                 logger.warning(
