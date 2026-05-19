@@ -74,7 +74,7 @@ def get_graph_diff(graph_id: str):
     raw_end = request.args.get('end_round')
 
     if raw_start is None or raw_end is None:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Pflichtparameter: start_round und end_round (int)")
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Required parameters: start_round and end_round (int)")
 
     try:
         start_round = int(raw_start)
