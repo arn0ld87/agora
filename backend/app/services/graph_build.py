@@ -3,7 +3,6 @@ Service for building graphs and generating ontologies.
 """
 
 import time
-from flask import current_app
 
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
@@ -246,7 +245,6 @@ class GraphBuildService:
 
                 task_manager.update_task(task_id, message="Chunking text...", progress=5)
                 chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
-                total_chunks = len(chunks)
 
                 task_manager.update_task(task_id, message="Creating graph...", progress=10)
                 graph_id = builder.create_graph(name=graph_name)

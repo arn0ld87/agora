@@ -2,7 +2,6 @@
 Graph API: Data retrieval, snapshot, diff, and export endpoints.
 """
 
-import io
 from flask import Response, request
 from . import graph_bp
 from ..container import get_container

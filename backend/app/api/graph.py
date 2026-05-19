@@ -1,46 +1,69 @@
 """
-Compatibility layer for Graph API.
-Redirects to submodules graph_projects, graph_build, and graph_data.
+Compatibility shim for the Graph API.
+
+The routes live in the split blueprints ``graph_projects``, ``graph_build``,
+and ``graph_data``. Production code should import from those modules
+(or from the corresponding ``app.services.graph_*`` services) directly.
+
+This module exists only so that existing tests can keep patching
+``app.api.graph.<Symbol>`` for class-level mocks (``ProjectManager.method``,
+``RunRegistry.method``, …) without needing migration in the same PR.
+
+Two important notes for test authors:
+
+1. Patching *class* attributes (e.g. ``ProjectManager.get_project``) propagates
+   through every instance and still works as before.
+2. Patching *function* names (e.g. ``seed_run_stage_routing``) on this module
+   does NOT affect the service code, because the services import these
+   symbols directly from their source module. Migrate such patches to the
+   service module path (``app.services.graph_build.<symbol>``).
+
+The ``run_registry`` instance is intentionally re-exported from
+``app.services.graph_build`` so that ``patch("app.api.graph.run_registry...")``
+still reaches the actual instance used by the build pipeline.
 """
 
-from .graph_projects import *
-from .graph_build import *
-from .graph_data import *
+from .graph_build import (  # noqa: F401  -- re-exported for backwards compatibility
+    allowed_file,
+    build_graph,
+    generate_ontology,
+)
+from .graph_data import (  # noqa: F401  -- re-exported for backwards compatibility
+    delete_graph,
+    export_graph,
+    get_graph_data,
+    get_graph_diff,
+    get_graph_snapshot,
+    get_task,
+    list_tasks,
+)
+from .graph_projects import (  # noqa: F401  -- re-exported for backwards compatibility
+    delete_project,
+    get_project,
+    list_projects,
+    reset_project,
+)
 
-# For tests that patch these specifically on app.api.graph
-from ..models.project import ProjectManager
-from ..models.task import TaskManager
-from ..services.run_registry import RunRegistry
-run_registry = RunRegistry()
-from ..services.ontology_generator import OntologyGenerator
-from ..utils.artifact_locator import ArtifactLocator
-from ..services.llm_routing_seed import seed_run_stage_routing
-from ..services.stage_model_router import StageModelRouter
-from ..services.secret_resolver import SecretResolver
-from ..utils.llm_client import LLMClient
-from ..storage.ner_extractor import NERExtractor
-from ..utils.file_parser import FileParser
-from ..services.text_processor import TextProcessor
+# Symbols frequently patched at ``app.api.graph.<name>`` by the existing test
+# suite. Class-attribute patches (``X.method``) propagate through every
+# instance, so re-exporting the classes is sufficient.
+from ..container import get_container  # noqa: F401
+from ..models.project import ProjectManager  # noqa: F401
+from ..models.task import TaskManager  # noqa: F401
+from ..services.llm_routing_seed import (  # noqa: F401
+    resolve_route_api_key,
+    seed_run_stage_routing,
+)
+from ..services.ontology_generator import OntologyGenerator  # noqa: F401
+from ..services.run_registry import RunRegistry  # noqa: F401
+from ..services.secret_resolver import SecretResolver  # noqa: F401
+from ..services.stage_model_router import StageModelRouter  # noqa: F401
+from ..services.text_processor import TextProcessor  # noqa: F401
+from ..storage.ner_extractor import NERExtractor  # noqa: F401
+from ..utils.artifact_locator import ArtifactLocator  # noqa: F401
+from ..utils.file_parser import FileParser  # noqa: F401
+from ..utils.llm_client import LLMClient  # noqa: F401
 
-# Private helpers for tests that patch them
-def _make_ner_override(*args, **kwargs):
-    from ..storage.ner_extractor import NERExtractor
-    from ..utils.llm_client import LLMClient, build_client_from_profile
-    from ..services.secret_resolver import SecretResolver
-    from ..services.llm_routing_seed import resolve_route_api_key
-
-    run_id = args[0]
-    resolved_route = args[1]
-    llm_runtime = args[2]
-    resolved_profile = kwargs.get("resolved_profile")
-
-    if resolved_profile is not None:
-        ner_llm_client = build_client_from_profile(resolved_profile, run_id=run_id)
-    else:
-        ner_llm_client = LLMClient.from_route(
-            resolved_route,
-            secret_resolver=SecretResolver(),
-            api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
-            run_id=run_id,
-        )
-    return NERExtractor(llm_client=ner_llm_client)
+# Share the SAME registry instance the build pipeline uses, so monkeypatching
+# ``app.api.graph.run_registry.<method>`` reaches the actual call sites.
+from ..services.graph_build import run_registry  # noqa: F401

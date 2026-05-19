@@ -4,10 +4,8 @@ Provides interfaces for simulation report generation, retrieval, and conversatio
 """
 
 import os
-from typing import Optional
 
 from flask import Response, request, send_file, current_app
-from pydantic import ValidationError
 
 from . import report_bp
 from ..contracts import (
@@ -25,7 +23,12 @@ from ..utils.scopes import require_scope
 from ..utils.api_errors import ApiErrorCode
 from ..utils.logger import get_logger
 from ..utils.validation import validate_report_id, validate_simulation_id, validate_task_id
-from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.api_responses import (
+    handle_api_errors,
+    json_error,
+    json_error_from_exception,
+    json_success,
+)
 from ..utils.rate_limit import build_rate_limit_key, report_rate_limiter
 
 from ..services.report_generation import ReportGenerationService
@@ -138,9 +141,9 @@ def generate_report():
         )
         return json_success(result)
     except ValueError as exc:
-        return json_error(str(exc), status=400)
+        return json_error_from_exception(exc)
     except RuntimeError as exc:
-        return json_error(str(exc), status=500)
+        return json_error_from_exception(exc, fallback_status=500)
 
 
 @report_bp.route('/generate/status', methods=['POST'])
@@ -162,7 +165,7 @@ def get_generate_status():
         result = ReportStatusService.get_status(task_id, simulation_id, report_id)
         return json_success(result)
     except ValueError as exc:
-        return json_error(str(exc), status=400)
+        return json_error_from_exception(exc)
 
 
 # ============== Report Retrieval Interface ==============

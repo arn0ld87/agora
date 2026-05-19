@@ -15,14 +15,17 @@ from ..services.text_processor import TextProcessor
 from ..utils.logger import get_logger
 from ..utils.validation import validate_project_id
 from ..utils.api_errors import ApiErrorCode
-from ..utils.api_responses import handle_api_errors, json_success, json_error
+from ..utils.api_responses import (
+    handle_api_errors,
+    json_error,
+    json_error_from_exception,
+    json_success,
+)
 from ..utils.rate_limit import build_rate_limit_key, upload_rate_limiter
 from ..utils.scopes import require_scope
 from ..container import get_container
 
 logger = get_logger('agora.api.graph_build')
-
-MAX_UPLOAD_SIZE_MB = 50
 
 def allowed_file(file_storage) -> bool:
     """Check if file extension and content are allowed"""
@@ -114,9 +117,14 @@ def generate_ontology():
             file.seek(0, os.SEEK_END)
             size = file.tell()
             file.seek(0)
-            if size > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+            max_upload_bytes = Config.AGORA_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+            if size > max_upload_bytes:
                 ProjectManager.delete_project(project.project_id)
-                return json_error(ApiErrorCode.UPLOAD_TOO_LARGE, status=413, message=f"File {file.filename} exceeds {MAX_UPLOAD_SIZE_MB}MB limit")
+                return json_error(
+                    ApiErrorCode.UPLOAD_TOO_LARGE,
+                    status=413,
+                    message=f"File {file.filename} exceeds {Config.AGORA_MAX_UPLOAD_SIZE_MB}MB limit",
+                )
 
             logger.info("Uploading file: %s (size: %d bytes) [project_id=%s]", file.filename, size, project.project_id)
 
@@ -147,7 +155,7 @@ def generate_ontology():
         )
     except ValueError as exc:
         ProjectManager.delete_project(project.project_id)
-        return json_error(str(exc), status=400)
+        return json_error_from_exception(exc)
 
     return json_success({
         "project_id": project.project_id,
@@ -213,6 +221,15 @@ def build_graph():
             "message": "Graph build task started. Query progress via /task/{task_id}"
         })
     except ValueError as exc:
-        return json_error(str(exc), status=400)
+        return json_error_from_exception(exc)
     except RuntimeError as exc:
-        return json_error(str(exc), status=409)
+        # GRAPH_BUILD_IN_PROGRESS must surface the already-running task_id so
+        # the client can poll status instead of starting a parallel run.
+        code = exc.args[0] if exc.args else None
+        if code == ApiErrorCode.GRAPH_BUILD_IN_PROGRESS and project.graph_build_task_id:
+            return json_error(
+                code,
+                status=409,
+                extra={"task_id": project.graph_build_task_id},
+            )
+        return json_error_from_exception(exc, fallback_status=409)
