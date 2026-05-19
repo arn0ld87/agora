@@ -14,7 +14,12 @@ deshalb ``app.storage.search_service.logger.warning`` direkt.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from neo4j.exceptions import ServiceUnavailable, TransientError, ClientError
+from neo4j.exceptions import (
+    ClientError,
+    ServiceUnavailable,
+    SessionExpired,
+    TransientError,
+)
 
 from app.storage.search_service import SearchService
 
@@ -41,20 +46,31 @@ def _fake_node_record(uuid="x", name="y", score=0.9):
 
 
 # ---------------------------------------------------------------------------
-# Test 1: ServiceUnavailable nach execute_read → [] + Warning mit 'transient'
+# Test 1: Driver-erschöpfte Transient-Exceptions → [] + Warning mit 'transient'
 #
-# Der Driver-interne Retry ist über Mock-Session nicht simulierbar.
-# Wir testen stattdessen, dass eine von execute_read propagierte
-# ServiceUnavailable korrekt abgefangen und als [] zurückgegeben wird.
+# Der Driver-interne Retry ist über Mock-Session nicht simulierbar — wir testen
+# stattdessen, dass eine von execute_read propagierte Transient-Exception
+# korrekt abgefangen und als [] zurückgegeben wird. SessionExpired ist hier
+# explizit drin, weil sie der ursprüngliche Trigger des Refactors zu
+# execute_read war (Gemini-Review zu PR #553).
 # ---------------------------------------------------------------------------
 
 
-def test_vector_search_retries_on_service_unavailable(svc):
-    """Wenn session.execute_read ServiceUnavailable wirft (Driver hat aufgegeben),
-    gibt _run_node_vector_search [] zurück und loggt ein Warning mit 'transient'.
+@pytest.mark.parametrize(
+    "exc",
+    [
+        ServiceUnavailable("boom"),
+        SessionExpired("session gone"),
+        TransientError("db overloaded"),
+    ],
+    ids=["ServiceUnavailable", "SessionExpired", "TransientError"],
+)
+def test_transient_exception_returns_empty_with_warning(svc, exc):
+    """Wenn execute_read eine Transient-Exception propagiert (Driver hat aufgegeben),
+    liefert _run_node_vector_search [] und das Warning enthält 'transient'.
     """
     session = MagicMock()
-    session.execute_read.side_effect = ServiceUnavailable("boom")
+    session.execute_read.side_effect = exc
 
     with patch("app.storage.search_service.logger") as mock_logger:
         results = svc._run_node_vector_search(session, "g1", [0.1] * 1536, 5)
@@ -100,31 +116,7 @@ def test_index_not_found_warning_wording(svc):
 
 
 # ---------------------------------------------------------------------------
-# Test 3: TransientError nach execute_read → leere Liste + Warning mit 'transient'
-# ---------------------------------------------------------------------------
-
-
-def test_transient_error_returns_empty_after_exhausted_retries(svc):
-    """TransientError von execute_read (Driver hat Retries erschöpft) → []
-    und Warning enthält 'transient'.
-    """
-    session = MagicMock()
-    session.execute_read.side_effect = TransientError("db overloaded")
-
-    with patch("app.storage.search_service.logger") as mock_logger:
-        results = svc._run_node_vector_search(session, "g1", [0.1] * 1536, 5)
-
-    assert results == []
-    assert mock_logger.warning.called, "logger.warning muss aufgerufen worden sein"
-    all_warning_args = [str(a) for c in mock_logger.warning.call_args_list for a in c.args]
-    combined = " ".join(all_warning_args).lower()
-    assert "transient" in combined, (
-        f"Warning-Args sollen 'transient' enthalten, erhalten: {combined!r}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Test 4: Happy Path — execute_read wird genau 1× aufgerufen, tx.run liefert Records
+# Test 3: Happy Path — execute_read wird genau 1× aufgerufen, tx.run liefert Records
 # ---------------------------------------------------------------------------
 
 
