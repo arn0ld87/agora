@@ -84,7 +84,7 @@ def get_graph_diff(graph_id: str):
 
     if start_round < 0 or end_round < 0:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round und end_round müssen >= 0 sein")
-
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round and end_round must be >= 0")
     if end_round < start_round:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="end_round must be >= start_round")
 
