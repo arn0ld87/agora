@@ -12,12 +12,15 @@ from flask import current_app, request
 from . import simulation_bp
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
+from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.oasis_profile_generator import OasisProfileGenerator
+from ..services.prepare_service import _resolve_llm_connection
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.artifact_locator import ArtifactLocator
+from ..utils.llm_profile_resolver import expand_profile_in_data
 from ..utils.validation import validate_simulation_id
 from .simulation_common import logger
 
@@ -155,6 +158,21 @@ def generate_profiles():
     llm_model_val = data.get('llm_model')
     llm_model_override = llm_model_val.strip() or None if isinstance(llm_model_val, str) else None
 
+    # Track 3c: UI-Profil-Token in echtes Modell + Provider-Creds expandieren,
+    # damit OasisProfileGenerator den aktiven api_key/base_url des Users
+    # mitbekommt — sonst fällt LLMClient auf Config.LLM_API_KEY zurück, was
+    # nach Track-1-Hardening bei OpenAI-Profilen sauber ValueError statt
+    # 401-Loop wirft, aber den User-Workflow zerschießt.
+    expand_profile_in_data(data)
+    try:
+        llm_runtime = parse_runtime_llm_config(data)
+    except ValueError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=str(exc),
+        )
+
     storage = current_app.extensions.get('neo4j_storage')
     if not storage:
         raise ValueError('GraphStorage not initialized')
@@ -174,10 +192,15 @@ def generate_profiles():
     # storage + graph_id durchreichen, damit OasisProfileGenerator die
     # Knowledge-Graph-Hybrid-Suche nutzen kann (Gemini-Code-Assist Finding,
     # PR #231).
+    # Track 3c: api_key + base_url aus dem aktiven LLM-Profil mitgeben,
+    # gleiche Helper-Funktion wie prepare_service._phase_generate_profiles.
+    api_key, base_url = _resolve_llm_connection(llm_runtime)
     generator = OasisProfileGenerator(
         model_name=llm_model_override,
         storage=storage,
         graph_id=graph_id,
+        api_key=api_key,
+        base_url=base_url,
     )
     profiles = generator.generate_profiles_from_entities(entities=filtered.entities, use_llm=use_llm)
     if platform == 'reddit':

@@ -5,6 +5,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from pydantic import ValidationError
+
 from ...config import Config
 from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
 from ...models.report import Report, ReportStatus
@@ -222,6 +224,65 @@ def _run_red_team_review(
         echo_index,
     )
     return report_v3
+
+
+SECTION_FALLBACK_BODY = (
+    "Diese Section konnte nicht generiert werden, weil der LLM-Aufruf "
+    "fehlgeschlagen ist (siehe Server-Log: report_id={report_id}, "
+    "section_index={section_index}). Mögliche Ursachen: ungültiger API-Key, "
+    "Rate-Limit, Modell nicht verfügbar. Konfiguriere ein gültiges LLM-Profil "
+    "(Settings → LLM-Provider) und starte den Report neu."
+)
+SECTION_FALLBACK_TITLE = "Section nicht generiert (LLM-Fehler)"
+
+
+def _safe_generate_section_react(
+    agent: Any,
+    section,
+    outline,
+    previous_sections: List[str],
+    progress_callback: Optional[Callable],
+    section_index: int,
+    report_id: str,
+) -> str:
+    """Track-3a-Wrapper: fängt Exceptions und leere Responses aus
+    :func:`generate_section_react` und liefert einen sichtbaren Fallback-Text,
+    damit die Pipeline nicht mit ``ReportV3.model_validate``-ValidationError
+    aussteigt, wenn ein LLM-Call (z. B. 401 unauthorized) failed.
+    """
+    try:
+        result = generate_section_react(
+            agent,
+            section=section,
+            outline=outline,
+            previous_sections=previous_sections,
+            progress_callback=progress_callback,
+            section_index=section_index,
+        )
+    except Exception as exc:  # noqa: BLE001 — Pipeline darf nicht crashen
+        logger.error(
+            "section %d (%r): generate_section_react warf eine Exception: %r — "
+            "Fallback-Content wird eingefügt.",
+            section_index,
+            getattr(section, "title", "<unbekannt>"),
+            exc,
+        )
+        return SECTION_FALLBACK_BODY.format(
+            report_id=report_id,
+            section_index=section_index,
+        )
+    if not isinstance(result, str) or not result.strip():
+        logger.warning(
+            "section %d (%r): generate_section_react gab leeren String zurück — "
+            "Fallback-Content wird eingefügt.",
+            section_index,
+            getattr(section, "title", "<unbekannt>"),
+        )
+        return SECTION_FALLBACK_BODY.format(
+            report_id=report_id,
+            section_index=section_index,
+        )
+    return result
 
 
 def generate_section_react(
@@ -828,13 +889,14 @@ def generate_report(
             ReportManager.update_progress(report_id, "generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})", current_section=section.title, completed_sections=completed_section_titles)
             if progress_callback:
                 progress_callback("generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})")
-            section_content = generate_section_react(
+            section_content = _safe_generate_section_react(
                 agent,
                 section=section,
                 outline=outline,
                 previous_sections=generated_sections,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
                 section_index=section_num,
+                report_id=report_id,
             )
             # M11.8e + P4.1: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
             # Nur bei Section-Typen, die Persona-Zitate erwarten (nicht Plan/Meta-Sections).
@@ -868,13 +930,14 @@ def generate_report(
                         quote_result.invalid_quotes,
                         quote_result.unbound_evidence_refs,
                     )
-                    repair_content = generate_section_react(
+                    repair_content = _safe_generate_section_react(
                         agent,
                         section=section,
                         outline=outline,
                         previous_sections=generated_sections,
                         progress_callback=None,
                         section_index=section_num,
+                        report_id=report_id,
                     )
                     repair_result = validate_quote_anchors(
                         repair_content,
@@ -945,19 +1008,44 @@ def generate_report(
         ReportManager.save_report(report)
 
         # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
+        # Track 3b: ValidationError separat fangen, damit ein durch LLM-Failures
+        # entstandenes ReportV3-Schema-Loch (sections.N.title missing usw.) eine
+        # klare user-facing Message produziert statt einen Pydantic-Stack-Trace
+        # ins Frontend zu schicken.
         try:
             report_v3_raw = ReportManager.get_report_v3(report_id)
             if report_v3_raw:
-                report_v3_obj = ReportV3.model_validate(report_v3_raw)
-                echo_index = _get_echo_index(agent)
-                report_v3_obj = _run_red_team_review(agent, report_v3_obj, echo_index)
-                ReportManager.save_report_v3(report_v3_obj)
-                logger.info(
-                    "generate_report: red_team_review abgeschlossen, "
-                    "findings=%d, echo_index=%.3f",
-                    len(report_v3_obj.red_team_findings),
-                    echo_index,
-                )
+                try:
+                    report_v3_obj = ReportV3.model_validate(report_v3_raw)
+                except ValidationError as val_exc:
+                    error_count = len(val_exc.errors())
+                    logger.error(
+                        "generate_report: ReportV3.model_validate hat report=%s "
+                        "abgelehnt — %d Schema-Verletzung(en), vermutlich aus "
+                        "fehlgeschlagenen LLM-Calls. Errors=%s",
+                        report_id,
+                        error_count,
+                        val_exc.errors()[:5],  # erste 5 für Logs, nicht den ganzen Trace
+                    )
+                    if report and not getattr(report, "error", None):
+                        report.error = (
+                            f"Report enthält {error_count} unvollständige Section(s) — "
+                            "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
+                            "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
+                        )
+                    # Pipeline weiter ohne red_team_review — Report bleibt nutzbar
+                    # mit Fallback-Content in den betroffenen Sections.
+                    report_v3_obj = None
+                if report_v3_obj is not None:
+                    echo_index = _get_echo_index(agent)
+                    report_v3_obj = _run_red_team_review(agent, report_v3_obj, echo_index)
+                    ReportManager.save_report_v3(report_v3_obj)
+                    logger.info(
+                        "generate_report: red_team_review abgeschlossen, "
+                        "findings=%d, echo_index=%.3f",
+                        len(report_v3_obj.red_team_findings),
+                        echo_index,
+                    )
         except Exception as exc:
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
         ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
