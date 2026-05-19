@@ -101,14 +101,23 @@ class TestStripLlmJsonEnvelope:
         raw = '{"items": [1,2,3], "ok": true}'
         assert _strip_llm_json_envelope(raw) == '{"items": [1,2,3], "ok": true}'
 
-    def test_unbalanced_braces_no_match_returns_original(self) -> None:
-        """Wenn kein passendes schließendes Bracket existiert, original
-        zurück (Caller löst dann JSONDecodeError aus, was er sowieso täte)."""
+    def test_unbalanced_braces_strips_preamble_for_repair_path(self) -> None:
+        """Wenn das schließende Bracket fehlt (truncated output mit
+        Preamble), wird die Prosa vor dem Open-Bracket entfernt. So kann
+        ``_try_repair_truncated_json`` im Caller den unbalanced Rest
+        reparieren — ohne Preamble würde der Repair-Algorithmus an der
+        Prosa scheitern."""
         raw = "broken: {a: 1"
-        # outer-cut darf nicht crashen; Verhalten: original-string
-        # (kein Truncate auf Halbsatz, der dem Parser noch mehr Schaden täte)
         result = _strip_llm_json_envelope(raw)
-        assert "{a: 1" in result
+        assert result == "{a: 1"
+
+    def test_truncated_gemini_output_with_preamble(self) -> None:
+        """Realer Gemini-Crash-Pfad: Preamble + truncated JSON."""
+        raw = 'Sure! Here is the data:\n```json\n{"a": 1, "b": "incomp'
+        result = _strip_llm_json_envelope(raw)
+        # Preamble + Codefence weg, truncated Rest bleibt unangetastet
+        assert result.startswith('{"a": 1')
+        assert "incomp" in result
 
     def test_whitespace_only_returns_empty_or_whitespace(self) -> None:
         result = _strip_llm_json_envelope("   \n  ")

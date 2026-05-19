@@ -365,7 +365,10 @@ def _strip_llm_json_envelope(text: str) -> str:
 
     end = s.rfind(end_char)
     if end == -1 or end < start:
-        return s
+        # Truncated payload mit Preamble (z. B. ``Sure! {"a": 1``):
+        # Prosa abschneiden, damit ``_try_repair_truncated_json`` im
+        # Caller den unbalanced Rest reparieren kann.
+        return s[start:]
     return s[start : end + 1]
 
 
