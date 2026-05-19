@@ -81,7 +81,10 @@ PLAN.md.bak
 /Agora_design/
 /scripts/logs/
 /.codex
-/.gitleaksignore
+# ``/.gitleaksignore`` ist tracked — offizielle gitleaks-Allowlist für
+# dokumentierte Test-Fixtures (siehe Header der Datei). Niemals echte
+# Secrets eintragen; jeder Eintrag muss als belegtes Test-Fixture im
+# Commit-Body begründet sein.
 # /media/: Default ignored, aber README-relevante Assets (logo, screenshots, credits) re-included.
 # WICHTIG: /media/* statt /media/ — bei Verzeichnis-Match kann man Kinder nicht re-includen.
 /media/*
