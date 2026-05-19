@@ -92,7 +92,7 @@ def _resolve_report_mode() -> ReportMode:
         return DEFAULT_REPORT_MODE
     if raw not in _VALID_REPORT_MODES:
         raise ValueError(
-            f"Ungültiger mode-Wert: {raw!r}. Erlaubt: {', '.join(_VALID_REPORT_MODES)}."
+            f"Invalid mode value: {raw!r}. Allowed: {', '.join(_VALID_REPORT_MODES)}."
         )
     return raw  # type: ignore[return-value]
 
