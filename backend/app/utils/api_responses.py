@@ -143,7 +143,12 @@ def handle_api_errors(
                     return json_success(dict(result))
                 return result
             except ValueError as exc:
-                return json_error(str(exc), status=400)
+                msg = str(exc)
+                # Fallback: if service raised ValueError(ApiErrorCode.XXX),
+                # map it back to a proper standard error envelope.
+                if any(msg == e.value for e in ApiErrorCode):
+                    return json_error(ApiErrorCode(msg), status=400)
+                return json_error(msg, status=400)
             except TimeoutError as exc:
                 active_logger.warning(f"{prefix}: timeout: {exc}")
                 return json_error(

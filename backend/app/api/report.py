@@ -92,7 +92,7 @@ def _resolve_report_mode() -> ReportMode:
         return DEFAULT_REPORT_MODE
     if raw not in _VALID_REPORT_MODES:
         raise ValueError(
-            f"Invalid mode value: {raw!r}. Allowed: {', '.join(_VALID_REPORT_MODES)}."
+            f"Ungültiger mode-Wert: {raw!r}. Erlaubt: {', '.join(_VALID_REPORT_MODES)}."
         )
     return raw  # type: ignore[return-value]
 
@@ -138,12 +138,9 @@ def generate_report():
         )
         return json_success(result)
     except ValueError as exc:
-        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
-        status_code = 404 if error_code == ApiErrorCode.NOT_FOUND else 400
-        return json_error(error_code, status=status_code)
+        return json_error(str(exc), status=400)
     except RuntimeError as exc:
-        error_code = exc.args[0] if exc.args else ApiErrorCode.VALIDATION_FAILED
-        return json_error(error_code, status=500)
+        return json_error(str(exc), status=500)
 
 
 @report_bp.route('/generate/status', methods=['POST'])
@@ -277,19 +274,19 @@ def export_report(report_id: str):
             return json_error("report_not_finalised", status=404)
 
         filename = f"agora-report-{report_id}-bundle.zip"
-        estimated_size = ReportExportService.estimate_zip_size(report_id, report)
+        estimated_size = _estimate_zip_size(report_id, report)
 
-        if estimated_size > ZIP_HARD_CAP_BYTES:
-            return json_error(f"Export exceeds size limit ({ZIP_HARD_CAP_BYTES // (1024 * 1024)} MB)", status=413)
+        if estimated_size > _ZIP_HARD_CAP_BYTES:
+            return json_error(f"Export exceeds size limit ({_ZIP_HARD_CAP_BYTES // (1024 * 1024)} MB)", status=413)
 
-        if estimated_size > ZIP_STREAM_THRESHOLD_BYTES:
+        if estimated_size > _ZIP_STREAM_THRESHOLD_BYTES:
             from flask import stream_with_context
-            gen = stream_with_context(ReportExportService.stream_zip_bundle(report_id, report))
+            gen = stream_with_context(_stream_zip_bundle(report_id, report))
             response = Response(gen, mimetype="application/zip")
             response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
 
-        zip_bytes = ReportExportService.build_zip_bundle(report_id, report)
+        zip_bytes = _build_zip_bundle(report_id, report)
         response = Response(zip_bytes, mimetype="application/zip")
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -303,7 +300,7 @@ def export_report(report_id: str):
         if not report:
             return json_error(f"Report does not exist: {report_id}", status=404)
 
-        csv_body = ReportExportService.build_csv_export(report_id, table)
+        csv_body = _build_csv_export(report_id, table)
         filename = f"agora-report-{report_id}-{table}.csv"
         response = Response(csv_body, mimetype="text/csv; charset=utf-8")
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -322,7 +319,7 @@ def export_report(report_id: str):
         response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
         return response
 
-    envelope = ReportExportService.build_export_envelope(report, ReportManager.get_evidence_map(report_id))
+    envelope = _build_export_envelope(report, ReportManager.get_evidence_map(report_id))
     body = envelope.model_dump_json(indent=2)
     response = Response(body, mimetype='application/json; charset=utf-8')
     response.headers['Content-Disposition'] = f'attachment; filename="agora-report-{report_id}.json"'

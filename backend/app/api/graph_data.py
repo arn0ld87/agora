@@ -74,19 +74,19 @@ def get_graph_diff(graph_id: str):
     raw_end = request.args.get('end_round')
 
     if raw_start is None or raw_end is None:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Required parameters: start_round and end_round (int)")
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Pflichtparameter: start_round und end_round (int)")
 
     try:
         start_round = int(raw_start)
         end_round = int(raw_end)
     except (TypeError, ValueError):
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round and end_round must be integers")
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round und end_round müssen ganze Zahlen sein")
 
     if start_round < 0 or end_round < 0:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round und end_round müssen >= 0 sein")
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round and end_round must be >= 0")
+
     if end_round < start_round:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="end_round must be >= start_round")
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="end_round muss >= start_round sein")
 
     svc = get_container().temporal_graph()
     service_diff = svc.compute_diff(graph_id, start_round, end_round)
