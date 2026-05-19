@@ -74,20 +74,19 @@ def json_error_from_exception(
     exc: BaseException,
     *,
     fallback_status: int = 400,
-    fallback_code: ApiErrorCode = ApiErrorCode.VALIDATION_FAILED,
 ):
     """Translate a service-raised exception into a uniform error response.
 
     - ``Exception(ApiErrorCode.X)`` → looks up the semantic HTTP status in
       ``_API_ERROR_STATUS_MAP`` and returns ``json_error(code, status=mapped)``.
-    - Legacy string messages → ``json_error(fallback_code, status=fallback_status,
-      message=str(exc))``.
+    - Legacy string messages → ``json_error(str(exc), status=fallback_status)``
+      without a ``code`` field, preserving the historical wire format.
     """
     code = _extract_api_error_code(exc)
     if code is not None:
         status = _API_ERROR_STATUS_MAP.get(code, fallback_status)
         return json_error(code, status=status)
-    return json_error(fallback_code, status=fallback_status, message=str(exc))
+    return json_error(str(exc), status=fallback_status)
 
 
 def _debug_extra(exc: Exception) -> dict[str, Any] | None:
