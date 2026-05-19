@@ -80,7 +80,7 @@ def get_graph_diff(graph_id: str):
         start_round = int(raw_start)
         end_round = int(raw_end)
     except (TypeError, ValueError):
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round und end_round müssen ganze Zahlen sein")
+        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round and end_round must be integers")
 
     if start_round < 0 or end_round < 0:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="start_round und end_round müssen >= 0 sein")
