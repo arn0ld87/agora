@@ -76,7 +76,7 @@ def test_generate_profiles_passes_provider_credentials(client, patched_generator
         "llm_model": "gpt-4o-mini",
         "llm_provider": {
             "provider": "openai",
-            "api_key": "sk-test-injectedkey1234567890abcDEF",
+            "api_key": "sk-test-injectedkey1234567890abcDEF",  # gitleaks:allow
             "base_url": "https://api.openai.com/v1",
         },
         "use_llm": True,

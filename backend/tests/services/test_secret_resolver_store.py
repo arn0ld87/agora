@@ -24,7 +24,7 @@ def configured_store(monkeypatch, tmp_path: Path):
 
 def test_store_overrides_env(monkeypatch, configured_store):
     monkeypatch.setenv("OPENAI_API_KEY", "env-key-should-lose")
-    configured_store.upsert("openai", api_key="sk-store-wins-aaaa")
+    configured_store.upsert("openai", api_key="sk-store-wins-aaaa")  # gitleaks:allow
 
     resolver = SecretResolver()
     assert resolver.get_api_key("openai", "openai") == "sk-store-wins-aaaa"
@@ -33,27 +33,27 @@ def test_store_overrides_env(monkeypatch, configured_store):
 def test_env_used_when_store_empty(monkeypatch, configured_store):
     # Track 1: ENV-Werte werden provider-spezifisch validiert. ``env-fallback``
     # würde nach der Härtung abgelehnt → wir nutzen ein valides ``sk-``-Format.
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-envfallback1234567890abcDEF")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-envfallback1234567890abcDEF")  # gitleaks:allow
     resolver = SecretResolver()
     assert resolver.get_api_key("openai", "openai") == "sk-test-envfallback1234567890abcDEF"
 
 
 def test_session_overrides_store(configured_store):
-    configured_store.upsert("openai", api_key="sk-store-aaaa1111")
+    configured_store.upsert("openai", api_key="sk-store-aaaa1111")  # gitleaks:allow
     resolver = SecretResolver(session_api_keys={"openai": "session-wins"})
     assert resolver.get_api_key("openai", "openai") == "session-wins"
 
 
 def test_google_key_from_env(monkeypatch, configured_store):
     # Track 1: AIzaSy-Format-Check für ``google``-Provider.
-    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyEnvKeyValid1234567890abcDEF")
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyEnvKeyValid1234567890abcDEF")  # gitleaks:allow
     resolver = SecretResolver()
     assert resolver.get_api_key("google", "google") == "AIzaSyEnvKeyValid1234567890abcDEF"
 
 
 def test_google_key_from_store_overrides_env(monkeypatch, configured_store):
     monkeypatch.setenv("GOOGLE_API_KEY", "google-env-key")
-    configured_store.upsert("google", api_key="AIzaSyStoreWinsxx99")
+    configured_store.upsert("google", api_key="AIzaSyStoreWinsxx99")  # gitleaks:allow
     resolver = SecretResolver()
     assert resolver.get_api_key("google", "google") == "AIzaSyStoreWinsxx99"
 
@@ -62,7 +62,7 @@ def test_missing_secret_key_falls_back_to_env(monkeypatch, tmp_path):
     monkeypatch.delenv("AGORA_SECRET_KEY", raising=False)
     monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
     # Track 1: valides ``sk-``-Format, sonst greift der Format-Check.
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-env-onlyvalidkey1234567890abc")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env-onlyvalidkey1234567890abc")  # gitleaks:allow
     reset_singleton_for_tests()
     resolver = SecretResolver()
     # Store wirft RuntimeError ohne Master-Key — Resolver soll auf env fallen

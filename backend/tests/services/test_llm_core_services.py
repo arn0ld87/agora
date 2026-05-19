@@ -19,7 +19,7 @@ def test_secret_resolver():
 
     # Track 1: ENV-Wert muss dem ``sk-``-Format entsprechen, sonst lehnt der
     # Resolver ihn ab und schreibt eine WARNING ins Log.
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env-validkey1234567890abcDEF"}):
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env-validkey1234567890abcDEF"}):  # gitleaks:allow
         resolver_no_session = SecretResolver()
         assert (
             resolver_no_session.get_api_key("openai", "openai")

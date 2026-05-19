@@ -447,11 +447,16 @@ class LLMClient:
         # passed_in/unknown). Provider-Erkennung priorisiert ``active_provider_id``
         # vor ``route_provider_id``, damit die laufende Session-Auswahl Vorrang hat.
         self._api_key_source = resolved_source or "unknown"
+        # Gemini-Review (security-medium) zu PR #559: ``base_url`` kann in
+        # Edge-Cases (Azure-OpenAI-Query-Param, Userinfo) Secret-Material
+        # tragen. SecretResolver.sanitize_url strippt userinfo+query+fragment
+        # vor dem Log, ohne den Hostname zu maskieren.
+        from ..services.secret_resolver import SecretResolver as _UrlSanitizer
         logger.info(
             "LLMClient initialized provider_id=%s model=%s base_url=%s api_key_source=%s",
             active_provider_id or route_provider_id or "unknown",
             self.model,
-            self.base_url,
+            _UrlSanitizer().sanitize_url(self.base_url) if self.base_url else None,
             self._api_key_source,
         )
 

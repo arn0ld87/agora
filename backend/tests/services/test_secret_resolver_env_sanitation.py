@@ -20,6 +20,12 @@ from app.services import llm_provider_secrets_store as store_module
 from app.services.llm_provider_secrets_store import reset_singleton_for_tests
 from app.services.secret_resolver import SecretResolver, _format_valid, _mask_for_log
 
+# Hinweis (Memory feedback_gitleaks_test_fixtures): Die ``sk-…`` / ``AIzaSy…``
+# Strings in diesem File sind Test-Fixtures, keine echten Provider-Keys.
+# Sie müssen format-valide sein (Track-1-Resolver prüft Prefix + Mindest-
+# Länge), tragen aber bewusst kein verwertbares Secret. Inline-``gitleaks:allow``
+# unterdrückt False-Positives an den Auslöse-Zeilen.
+
 
 @pytest.fixture
 def configured_store(monkeypatch, tmp_path: Path):
@@ -114,7 +120,7 @@ class TestEnvSanitation:
         assert resolver.last_source is None
 
     def test_openai_valid_env_returns_key(self, monkeypatch, configured_store):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890abcdefghijklmnop")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test1234567890abcdefghijklmnop")  # gitleaks:allow
         monkeypatch.setattr("app.services.secret_resolver.Config.LLM_API_KEY", None)
 
         resolver = SecretResolver()
@@ -132,7 +138,7 @@ class TestEnvSanitation:
     def test_google_falls_through_to_gemini_env(self, monkeypatch, configured_store):
         """Wenn GOOGLE_API_KEY garbage ist, soll GEMINI_API_KEY als Backup ziehen."""
         monkeypatch.setenv("GOOGLE_API_KEY", "garbage")
-        monkeypatch.setenv("GEMINI_API_KEY", "AIzaSyValidGeminiKey1234567890ABC")
+        monkeypatch.setenv("GEMINI_API_KEY", "AIzaSyValidGeminiKey1234567890ABC")  # gitleaks:allow
 
         resolver = SecretResolver()
         assert resolver.get_api_key("google", "google") == "AIzaSyValidGeminiKey1234567890ABC"
@@ -218,7 +224,7 @@ class TestLastSource:
         assert resolver.last_source == "session"
 
     def test_store_source(self, configured_store):
-        configured_store.upsert("openai", api_key="sk-storedkey1234567890abcdefghij")
+        configured_store.upsert("openai", api_key="sk-storedkey1234567890abcdefghij")  # gitleaks:allow
         resolver = SecretResolver()
         resolver.get_api_key("openai", "openai")
         assert resolver.last_source == "store"
@@ -232,7 +238,7 @@ class TestLastSource:
         assert resolver.last_source is None
 
     def test_last_source_resets_per_call(self, monkeypatch, configured_store):
-        configured_store.upsert("google", api_key="AIzaSyStoreKey1234567890abcDEF")
+        configured_store.upsert("google", api_key="AIzaSyStoreKey1234567890abcDEF")  # gitleaks:allow
         resolver = SecretResolver()
         resolver.get_api_key("google", "google")
         assert resolver.last_source == "store"

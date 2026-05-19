@@ -273,10 +273,12 @@ def _safe_generate_section_react(
         )
     if not isinstance(result, str) or not result.strip():
         logger.warning(
-            "section %d (%r): generate_section_react gab leeren String zurück — "
-            "Fallback-Content wird eingefügt.",
+            "section %d (%r) in report=%s: generate_section_react gab leeren/"
+            "non-string Output zurück (type=%s) — Fallback-Content wird eingefügt.",
             section_index,
             getattr(section, "title", "<unbekannt>"),
+            report_id,
+            type(result).__name__,
         )
         return SECTION_FALLBACK_BODY.format(
             report_id=report_id,
