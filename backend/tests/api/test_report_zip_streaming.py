@@ -13,7 +13,7 @@ import pytest
 from flask import Flask
 
 from app.api import report_bp
-from app.api.report import _ZIP_HARD_CAP_BYTES, _ZIP_STREAM_THRESHOLD_BYTES
+from app.services.report_export import ZIP_HARD_CAP_BYTES as _ZIP_HARD_CAP_BYTES, ZIP_STREAM_THRESHOLD_BYTES as _ZIP_STREAM_THRESHOLD_BYTES
 
 
 VALID_REPORT_ID = "report_abcdef123456"

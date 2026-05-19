@@ -8,7 +8,9 @@ import pytest
 from flask import Flask
 
 from app.api import report_bp
-from app.api.report import _can_reuse_existing_report
+from app.services.report_generation import ReportGenerationService
+_can_reuse_existing_report = ReportGenerationService.can_reuse_existing_report
+
 from app.services.report_agent import (
     Report,
     ReportManager,
