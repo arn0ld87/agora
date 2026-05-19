@@ -4,7 +4,7 @@ Graph API: Ontology and graph building endpoints.
 
 import os
 import json
-from flask import request
+from flask import current_app, request
 from . import graph_bp
 from ..config import Config
 from ..models.project import ProjectManager
@@ -54,10 +54,17 @@ def _limit_upload_endpoint():
     if request.endpoint != "graph.generate_ontology" or request.method != "POST":
         return None
 
+    # Flask-config overrides allow tests + per-deployment knobs to flip the
+    # rate-limit without touching the class default.
     result = upload_rate_limiter.check(
         _upload_rate_limit_key(),
-        max_requests=Config.AGORA_UPLOAD_RATE_LIMIT_MAX,
-        window_seconds=Config.AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+        max_requests=current_app.config.get(
+            "AGORA_UPLOAD_RATE_LIMIT_MAX", Config.AGORA_UPLOAD_RATE_LIMIT_MAX
+        ),
+        window_seconds=current_app.config.get(
+            "AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS",
+            Config.AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+        ),
     )
     if result.allowed:
         return None

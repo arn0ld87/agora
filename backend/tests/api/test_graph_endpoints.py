@@ -302,18 +302,24 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
     fake_container.neo4j_storage = MagicMock()  # must be non-None
     fake_container.graph_builder.return_value = fake_builder
 
+    # After PR #562 the build logic lives in app.services.graph_build. Patches
+    # on function symbols (seed_run_stage_routing, NERExtractor) must target
+    # the service module — Class-attribute patches still work everywhere via
+    # the shared class object.
     with (
         patch("app.api.graph.ProjectManager.get_project", return_value=fake_project),
         patch("app.api.graph.ProjectManager.save_project"),
         patch("app.api.graph.ProjectManager.get_extracted_text", return_value="some text"),
         patch("app.api.graph.TaskManager.update_task", spy_update_task),
-        patch("app.api.graph.RunRegistry.create_run", return_value={"run_id": "r1"}),
+        patch("app.api.graph.RunRegistry.create_run", return_value={"run_id": "progress-cb-run"}),
         patch("app.api.graph.RunRegistry.update_run"),
-        patch("app.api.graph.get_container", return_value=fake_container),
+        patch("app.api.graph_build.get_container", return_value=fake_container),
         patch("app.api.graph.TextProcessor.split_text", return_value=["chunk1", "chunk2"]),
         patch("app.api.graph.ArtifactLocator.existing_paths", return_value={}),
-        patch("app.api.graph.seed_run_stage_routing"),
-        patch("app.api.graph._make_ner_override", return_value=MagicMock()),
+        patch("app.services.graph_build.seed_run_stage_routing"),
+        patch("app.services.graph_build.NERExtractor", return_value=MagicMock(name="NEROverride")),
+        patch("app.services.graph_build.LLMClient.from_route", return_value=MagicMock(name="LLMClient", model="stub")),
+        patch("app.services.graph_build.resolve_route_api_key", return_value="sk-stub"),
     ):
         flask_app = Flask(__name__)
         flask_app.config["AGORA_AUTH_TOKEN"] = ""
