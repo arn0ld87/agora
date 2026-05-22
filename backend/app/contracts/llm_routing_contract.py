@@ -64,6 +64,21 @@ class RuntimeLlmRouting(BaseModel):
     routing_version: int = 1
 
 
+class ModelEntry(BaseModel):
+    """Metadata about a single model (public, normalized)."""
+
+    model_config = _STRICT
+
+    id: str
+    name: str
+    provider_id: str
+    source: Literal["live", "cached", "fallback", "custom"]
+    refreshed_at: float
+    supports_tools: bool = False
+    supports_json_mode: bool = False
+    context_window: Optional[int] = None
+
+
 class ProviderDescriptor(BaseModel):
     """Metadata about an LLM provider (public, no secrets)."""
 
@@ -75,6 +90,7 @@ class ProviderDescriptor(BaseModel):
     base_url: Optional[str] = None
     api_key_ref: Optional[str] = None
     supports_models_endpoint: bool = False
+    supports_tools: bool = False
     fallback_models: List[str] = Field(default_factory=list)
 
 

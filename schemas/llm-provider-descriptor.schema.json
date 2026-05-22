@@ -48,6 +48,11 @@
       "title": "Supports Models Endpoint",
       "type": "boolean"
     },
+    "supports_tools": {
+      "default": false,
+      "title": "Supports Tools",
+      "type": "boolean"
+    },
     "type": {
       "enum": [
         "ollama_cloud",

@@ -26,6 +26,7 @@ from app.contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ProviderDescriptor,
     ResolvedRoute,
+    ModelEntry,
 )
 from app.contracts.api_keys_contract import (
     ApiKeyCreateRequest,
@@ -65,6 +66,7 @@ CONTRACTS: dict[str, type] = {
     "llm-runtime-routing.schema.json": RuntimeLlmRouting,
     "llm-provider-descriptor.schema.json": ProviderDescriptor,
     "llm-resolved-route.schema.json": ResolvedRoute,
+    "llm-model-entry.schema.json": ModelEntry,
     "api-key.schema.json": ApiKeyModel,
     "api-key-create-request.schema.json": ApiKeyCreateRequest,
     "api-key-create-response.schema.json": ApiKeyCreateResponse,
