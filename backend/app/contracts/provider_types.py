@@ -26,12 +26,12 @@ ProviderType = Literal[
 ]
 
 ALL_PROVIDER_TYPES: tuple[ProviderType, ...] = (
-    "ollama",
-    "openai",
-    "google",
-    "anthropic",
-    "custom",
-    "ollama_cloud",
-    "openai_compatible",
-    "github_copilot",
+    PROVIDER_OLLAMA,
+    PROVIDER_OPENAI,
+    PROVIDER_GOOGLE,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_CUSTOM,
+    PROVIDER_OLLAMA_CLOUD,
+    PROVIDER_OPENAI_COMPATIBLE,
+    PROVIDER_GITHUB_COPILOT,
 )
