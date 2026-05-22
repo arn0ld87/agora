@@ -73,10 +73,7 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
-            --ignore-vuln CVE-2025-71176 \
             --ignore-vuln CVE-2026-1839 \
-            --ignore-vuln CVE-2024-46455 \
-            --ignore-vuln CVE-2025-64712 \
             -r /tmp/agora-backend-requirements.txt
 
       - name: Set up Bun

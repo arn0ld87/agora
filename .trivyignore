@@ -3,22 +3,7 @@
 # These are currently ignored because they are blocked by upstream pins.
 # Hardstop: 2026-07-30
 
-# CVE-2025-71176: pytest==8.2.0 (via camel-oasis==0.2.5)
-# Risk: Low (Test runner only)
-# Issue: https://github.com/arn0ld87/agora/issues/123
-CVE-2025-71176
-
 # CVE-2026-1839: transformers==4.57.6 (via sentence-transformers==3.0.0)
 # Risk: Medium (Embedding pipeline)
 # Issue: https://github.com/arn0ld87/agora/issues/124
 CVE-2026-1839
-
-# CVE-2024-46455: unstructured==0.13.7 (via camel-oasis==0.2.5)
-# Risk: Medium (Document parsing)
-# Issue: https://github.com/arn0ld87/agora/issues/125
-CVE-2024-46455
-
-# CVE-2025-64712: unstructured==0.13.7 (via camel-oasis==0.2.5)
-# Risk: Medium (Document parsing)
-# Issue: https://github.com/arn0ld87/agora/issues/126
-CVE-2025-64712
