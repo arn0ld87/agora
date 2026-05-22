@@ -1,0 +1,65 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-model-entry.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata about a single model (public, normalized).",
+  "properties": {
+    "context_window": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Window"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "provider_id": {
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "refreshed_at": {
+      "title": "Refreshed At",
+      "type": "number"
+    },
+    "source": {
+      "enum": [
+        "live",
+        "cached",
+        "fallback",
+        "custom"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "supports_json_mode": {
+      "default": false,
+      "title": "Supports Json Mode",
+      "type": "boolean"
+    },
+    "supports_tools": {
+      "default": false,
+      "title": "Supports Tools",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "provider_id",
+    "source",
+    "refreshed_at"
+  ],
+  "title": "ModelEntry",
+  "type": "object"
+}

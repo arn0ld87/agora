@@ -12,11 +12,11 @@ nichts ausser dem ``requests``-Convenience-Wrapper.
 
 import json
 import time
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Optional
 
 import urllib3
-from pydantic import BaseModel, ConfigDict
 
+from ..contracts.llm_routing_contract import ModelEntry
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.model_catalog")
@@ -30,16 +30,6 @@ _HTTP = urllib3.PoolManager(
     timeout=urllib3.Timeout(connect=5.0, read=5.0),
     retries=False,
 )
-
-
-class ModelEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    provider_id: str
-    source: Literal["live", "cached", "fallback", "custom"]
-    refreshed_at: float
 
 
 def _http_get_json(url: str, *, api_key: Optional[str] = None) -> Optional[dict]:
@@ -76,6 +66,8 @@ class ModelCatalogService:
     def get_models(self, provider_id: str, provider_type: str, base_url: str, api_key: Optional[str]) -> List[ModelEntry]:
         """Fetch models from provider, with caching and fallback."""
         now = time.time()
+        from .llm_provider_registry import LlmProviderRegistry
+        from ..utils.llm_client import heuristic_num_ctx_for_model
 
         # 1. Check cache
         if provider_id in self._cache:
@@ -87,15 +79,21 @@ class ModelCatalogService:
         try:
             live_models = self._fetch_live(provider_type, base_url, api_key)
             if live_models:
-                entries = [
-                    ModelEntry(
-                        id=m,
-                        name=m,
-                        provider_id=provider_id,
-                        source="live",
-                        refreshed_at=now,
-                    ) for m in live_models
-                ]
+                entries = []
+                for m in live_models:
+                    supports_tools = LlmProviderRegistry.is_model_tool_capable(m, provider_type)
+                    entries.append(
+                        ModelEntry(
+                            id=m,
+                            name=m,
+                            provider_id=provider_id,
+                            source="live",
+                            refreshed_at=now,
+                            supports_tools=supports_tools,
+                            supports_json_mode=supports_tools,  # Heuristik: Tool-Modelle können meist auch JSON
+                            context_window=heuristic_num_ctx_for_model(m),
+                        )
+                    )
                 self._cache[provider_id] = entries
                 return entries
         except Exception as exc:
@@ -110,15 +108,23 @@ class ModelCatalogService:
 
         # 4. Fallback to hardcoded defaults
         fallback_models = self._get_fallbacks(provider_type)
-        return [
-            ModelEntry(
-                id=m,
-                name=m,
-                provider_id=provider_id,
-                source="fallback",
-                refreshed_at=now,
-            ) for m in fallback_models
-        ]
+
+        entries = []
+        for m in fallback_models:
+            supports_tools = LlmProviderRegistry.is_model_tool_capable(m, provider_type)
+            entries.append(
+                ModelEntry(
+                    id=m,
+                    name=m,
+                    provider_id=provider_id,
+                    source="fallback",
+                    refreshed_at=now,
+                    supports_tools=supports_tools,
+                    supports_json_mode=supports_tools,
+                    context_window=heuristic_num_ctx_for_model(m),
+                )
+            )
+        return entries
 
     def _fetch_live(self, provider_type: str, base_url: str, api_key: Optional[str]) -> List[str]:
         """Discovery implementation per provider type."""

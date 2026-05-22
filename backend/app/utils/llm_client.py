@@ -58,7 +58,7 @@ _MODEL_CONTEXT_HEURISTICS: tuple[tuple[str, int], ...] = (
 )
 
 
-def _heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
+def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
     """Best-effort Substring-Match für bekannte Modellfamilien.
 
     Liefert None, wenn das Modell unbekannt ist — Caller fällt dann auf
@@ -100,7 +100,7 @@ def _resolve_num_ctx(
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
-    heuristic = _heuristic_num_ctx_for_model(model_name or "")
+    heuristic = heuristic_num_ctx_for_model(model_name or "")
     global_env = os.environ.get("LLM_CONTEXT_LIMIT")
     global_limit: Optional[int]
     try:
