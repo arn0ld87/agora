@@ -11,18 +11,25 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 from urllib.parse import urlparse
 
+from ..contracts import (
+    LEGACY_GEMINI,
+    PROVIDER_CUSTOM,
+    PROVIDER_GOOGLE,
+    PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
+)
 
 PROVIDER_DEFAULT_BASE_URLS = {
-    "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
-    "openai": "https://api.openai.com/v1",
+    PROVIDER_GOOGLE: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    PROVIDER_OPENAI: "https://api.openai.com/v1",
 }
 
 _PROVIDER_ALIASES = {
     "default": "default",
     "server": "default",
-    "google": "google",
-    "gemini": "google",
-    "openai": "openai",
+    "google": PROVIDER_GOOGLE,
+    LEGACY_GEMINI: PROVIDER_GOOGLE,
+    "openai": PROVIDER_OPENAI,
     "custom": "custom_openai",
     "custom_openai": "custom_openai",
     "openai_compatible": "custom_openai",
@@ -33,8 +40,8 @@ _PROVIDER_ALIASES = {
 # beliebigem Format (``custom_openai``, ``ollama_cloud``, ``github_copilot``)
 # stehen NICHT drin — die werden nicht validiert.
 _KEY_PREFIX_BY_PROVIDER: dict[str, tuple[str, ...]] = {
-    "openai": ("sk-",),
-    "google": ("AIzaSy",),
+    PROVIDER_OPENAI: ("sk-",),
+    PROVIDER_GOOGLE: ("AIzaSy",),
 }
 
 
@@ -116,7 +123,7 @@ def parse_runtime_llm_config(data: Mapping[str, Any]) -> RuntimeLlmConfig:
     provider = _PROVIDER_ALIASES.get(provider_raw)
     if provider is None:
         raise ValueError(
-            "llm_provider.provider must be one of: default, google, openai, custom_openai"
+            f"llm_provider.provider must be one of: default, {PROVIDER_GOOGLE}, {PROVIDER_OPENAI}, custom_openai"
         )
     if provider == "default":
         return RuntimeLlmConfig()

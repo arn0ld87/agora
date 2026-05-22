@@ -68,6 +68,19 @@ from .api_keys_contract import (
     ApiKeyStatus,
     ApiKeysListResponse,
 )
+from .provider_types import (
+    ALL_PROVIDER_TYPES,
+    LEGACY_GEMINI,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_CUSTOM,
+    PROVIDER_GITHUB_COPILOT,
+    PROVIDER_GOOGLE,
+    PROVIDER_OLLAMA,
+    PROVIDER_OLLAMA_CLOUD,
+    PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
+    ProviderType,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -136,6 +149,17 @@ __all__ = [
     "RunSummary",
     "SegmentReach",
     "VoiceRegister",
+    "ALL_PROVIDER_TYPES",
+    "LEGACY_GEMINI",
+    "PROVIDER_ANTHROPIC",
+    "PROVIDER_CUSTOM",
+    "PROVIDER_GITHUB_COPILOT",
+    "PROVIDER_GOOGLE",
+    "PROVIDER_OLLAMA",
+    "PROVIDER_OLLAMA_CLOUD",
+    "PROVIDER_OPENAI",
+    "PROVIDER_OPENAI_COMPATIBLE",
+    "ProviderType",
     # ReportV3 — 11 Pflichtabschnitt-DTOs
     "Claim",
     "ChangeRecommendation",

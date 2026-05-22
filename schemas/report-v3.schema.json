@@ -369,8 +369,19 @@
           "title": "Prompt Tokens"
         },
         "provider": {
-          "description": "z. B. 'ollama', 'openai', 'gemini'",
-          "minLength": 1,
+          "description": "z. B. 'ollama', 'openai', 'google'",
+          "enum": [
+            "ollama",
+            "openai",
+            "google",
+            "anthropic",
+            "custom",
+            "ollama_cloud",
+            "openai_compatible",
+            "github_copilot",
+            "cloud",
+            "unknown"
+          ],
           "title": "Provider",
           "type": "string"
         },

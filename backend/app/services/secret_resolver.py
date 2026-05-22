@@ -38,6 +38,13 @@ import re
 from typing import Optional, Dict
 
 from ..config import Config
+from ..contracts import (
+    PROVIDER_GOOGLE,
+    PROVIDER_OLLAMA_CLOUD,
+    PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
+    PROVIDER_GITHUB_COPILOT,
+)
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
 
 logger = logging.getLogger("agora.secret_resolver")
@@ -81,9 +88,9 @@ def _format_valid(value: Optional[str], provider_type: str) -> bool:
         return False
     if v.lower() in _TOXIC_KEY_LITERALS:
         return False
-    if provider_type == "openai":
+    if provider_type == PROVIDER_OPENAI:
         return bool(_OPENAI_KEY_RE.match(v))
-    if provider_type == "google":
+    if provider_type == PROVIDER_GOOGLE:
         return bool(_GOOGLE_KEY_RE.match(v))
     return True
 
@@ -136,16 +143,16 @@ class SecretResolver:
 
         # 3. Provider-spezifische Environment-Variablen (mit Format-Sanity-Check)
         env_candidates: list[tuple[str, Optional[str]]] = []
-        if provider_type == "openai":
+        if provider_type == PROVIDER_OPENAI:
             env_candidates.append(("env:OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY")))
-        elif provider_type == "google":
+        elif provider_type == PROVIDER_GOOGLE:
             env_candidates.append(("env:GOOGLE_API_KEY", os.environ.get("GOOGLE_API_KEY")))
             env_candidates.append(("env:GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY")))
-        elif provider_type == "ollama_cloud":
+        elif provider_type == PROVIDER_OLLAMA_CLOUD:
             env_candidates.append(("env:OLLAMA_API_KEY", os.environ.get("OLLAMA_API_KEY")))
-        elif provider_type == "openai_compatible":
+        elif provider_type == PROVIDER_OPENAI_COMPATIBLE:
             env_candidates.append(("env:LLM_API_KEY", os.environ.get("LLM_API_KEY")))
-        elif provider_type == "github_copilot":
+        elif provider_type == PROVIDER_GITHUB_COPILOT:
             # GitHub Copilot: Token-Auflösung über separates Modul (Slice B).
             try:
                 from .llm_providers.github_copilot import resolve_copilot_token
@@ -174,7 +181,7 @@ class SecretResolver:
         # 4. Globaler Fallback Config.LLM_API_KEY
         fallback = Config.LLM_API_KEY
         if fallback:
-            if provider_type in ("openai", "google"):
+            if provider_type in (PROVIDER_OPENAI, PROVIDER_GOOGLE):
                 if _format_valid(fallback, provider_type):
                     self.last_source = "config_fallback"
                     return fallback
@@ -184,7 +191,7 @@ class SecretResolver:
                     "im UI (Settings → LLM-Provider) oder via ENV %s.",
                     provider_type,
                     _mask_for_log(fallback),
-                    "OPENAI_API_KEY" if provider_type == "openai" else "GOOGLE_API_KEY",
+                    "OPENAI_API_KEY" if provider_type == PROVIDER_OPENAI else "GOOGLE_API_KEY",
                 )
                 return None
             # Provider-Type ohne striktes Format (ollama_cloud, openai_compatible, …):

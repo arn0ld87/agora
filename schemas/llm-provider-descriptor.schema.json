@@ -55,11 +55,16 @@
     },
     "type": {
       "enum": [
-        "ollama_cloud",
+        "ollama",
         "openai",
         "google",
+        "anthropic",
+        "custom",
+        "ollama_cloud",
         "openai_compatible",
-        "github_copilot"
+        "github_copilot",
+        "cloud",
+        "unknown"
       ],
       "title": "Type",
       "type": "string"

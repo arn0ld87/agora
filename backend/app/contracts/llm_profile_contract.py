@@ -6,13 +6,13 @@ Jeder Agora-Run kann pro Schritt ein Profil referenzieren.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-_STRICT = ConfigDict(extra="forbid", populate_by_name=True)
+from .provider_types import ProviderType
 
-ProviderLiteral = Literal["ollama", "openai", "gemini", "anthropic", "custom"]
+_STRICT = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class LlmProfile(BaseModel):
@@ -20,7 +20,7 @@ class LlmProfile(BaseModel):
 
     id: str = Field(..., description="UUID, server-generiert")
     name: str = Field(..., min_length=1, max_length=80)
-    provider: ProviderLiteral
+    provider: ProviderType
     base_url: str = Field(..., min_length=1)
     model_name: str = Field(..., min_length=1)
     # None = nicht gesetzt (Update lässt Feld weg). "" = explizit geleert.
@@ -39,7 +39,7 @@ class LlmProfileCreateRequest(BaseModel):
     model_config = _STRICT
 
     name: str = Field(..., min_length=1, max_length=80)
-    provider: ProviderLiteral
+    provider: ProviderType
     base_url: str = Field(..., min_length=1)
     model_name: str = Field(..., min_length=1)
     # None = nicht gesetzt (Update lässt Feld weg). "" = explizit geleert.
