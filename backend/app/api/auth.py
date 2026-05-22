@@ -28,6 +28,7 @@ _ALLOWED_SCOPE_PREFIXES = (
     "download:report:",
     "download:simulation_config:",
     "download:simulation_script:",
+    "logs:stream",   # Issue #571 audit / #558 root cause
     "llm-stream",  # Slice E.1 (#213): model-active SSE stream
 )
 
