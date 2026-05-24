@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .provider_types import ProviderType
+
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -236,7 +238,7 @@ class ModelAttribution(BaseModel):
     model_config = _STRICT
 
     stage: ModelAttributionStage
-    provider: str = Field(min_length=1, description="z. B. 'ollama', 'openai', 'gemini'")
+    provider: ProviderType = Field(description="z. B. 'ollama', 'openai', 'google'")
     model_id: str = Field(min_length=1, description="Backend-Modell-ID, z. B. 'qwen2.5:32b'")
     prompt_tokens: int | None = Field(default=None, ge=0)
     completion_tokens: int | None = Field(default=None, ge=0)

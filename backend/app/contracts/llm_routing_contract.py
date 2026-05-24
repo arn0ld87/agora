@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Dict, Literal, Optional, Any, List
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .provider_types import ProviderType
 
 _STRICT = ConfigDict(extra="forbid")
 
@@ -86,7 +87,7 @@ class ProviderDescriptor(BaseModel):
 
     id: str
     label: str
-    type: Literal["ollama_cloud", "openai", "google", "openai_compatible", "github_copilot"]
+    type: ProviderType
     base_url: Optional[str] = None
     api_key_ref: Optional[str] = None
     supports_models_endpoint: bool = False

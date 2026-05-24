@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from typing import Any, Generator, Iterator, Literal
 
 from pydantic import BaseModel, ConfigDict
+from ..contracts import ProviderType
 
 from ..utils.logger import get_logger
 
@@ -61,16 +62,7 @@ class ModelActiveEvent(BaseModel):
         "graph",
         "unknown",
     ]
-    provider: Literal[
-        "ollama",
-        "cloud",
-        "openai",
-        "google",
-        "ollama_cloud",
-        "openai_compatible",
-        "github_copilot",
-        "unknown",
-    ]
+    provider: ProviderType
     ts: float
     extra: dict[str, Any] | None = None
 

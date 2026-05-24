@@ -50,9 +50,14 @@
       "enum": [
         "ollama",
         "openai",
-        "gemini",
+        "google",
         "anthropic",
-        "custom"
+        "custom",
+        "ollama_cloud",
+        "openai_compatible",
+        "github_copilot",
+        "cloud",
+        "unknown"
       ],
       "title": "Provider",
       "type": "string"

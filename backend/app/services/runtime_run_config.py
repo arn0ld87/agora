@@ -8,6 +8,12 @@ import json
 import tempfile
 from urllib.parse import urlparse, urlunparse
 from typing import Optional, Dict, Any
+from ..contracts import (
+    PROVIDER_GOOGLE,
+    PROVIDER_OLLAMA_CLOUD,
+    PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
+)
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -47,12 +53,12 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
     hostname = (parsed.hostname or "").lower() if parsed else ""
 
     if normalized_model.endswith(":cloud") or hostname == "ollama.com":
-        return "ollama_cloud"
+        return PROVIDER_OLLAMA_CLOUD
     if hostname == "generativelanguage.googleapis.com" or "gemini" in normalized_model:
-        return "google"
+        return PROVIDER_GOOGLE
     if hostname in {"api.openai.com", "openai.com"}:
-        return "openai"
-    return "openai_compatible"
+        return PROVIDER_OPENAI
+    return PROVIDER_OPENAI_COMPATIBLE
 
 
 class RuntimeRunConfig:

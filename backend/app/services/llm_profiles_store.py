@@ -14,7 +14,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from ..contracts.llm_profile_contract import LlmProfile, LlmProfileCreateRequest
+from ..contracts import (
+    PROVIDER_ANTHROPIC,
+    PROVIDER_CUSTOM,
+    PROVIDER_GOOGLE,
+    PROVIDER_OLLAMA,
+    PROVIDER_OPENAI,
+    LlmProfile,
+    LlmProfileCreateRequest,
+)
 
 
 def _now() -> datetime:
@@ -77,15 +85,15 @@ def _bootstrap_profile() -> Optional[dict]:
     if not model:
         return None
     if "openai.com" in base_url:
-        provider = "openai"
+        provider = PROVIDER_OPENAI
     elif "googleapis.com" in base_url:
-        provider = "gemini"
+        provider = PROVIDER_GOOGLE
     elif "anthropic.com" in base_url:
-        provider = "anthropic"
+        provider = PROVIDER_ANTHROPIC
     elif any(h in base_url for h in ("localhost", "127.0.0.1", "host.docker.internal")):
-        provider = "ollama"
+        provider = PROVIDER_OLLAMA
     else:
-        provider = "custom"
+        provider = PROVIDER_CUSTOM
     return dict(
         id=uuid.uuid4().hex,
         name="Standard",
