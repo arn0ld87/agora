@@ -27,7 +27,11 @@ ProviderType = Literal[
     "unknown",
 ]
 
-ALL_PROVIDER_TYPES: tuple[ProviderType, ...] = (
+# NOTE: typed as tuple[str, ...] (not tuple[ProviderType, ...]) because
+# the constants above are inferred as `str`, not as specific Literal[...].
+# Promoting each to `Final[Literal[...]]` would be cleaner but is a
+# follow-up cleanup — this keeps mypy quiet without runtime impact.
+ALL_PROVIDER_TYPES: tuple[str, ...] = (
     PROVIDER_OLLAMA,
     PROVIDER_OPENAI,
     PROVIDER_GOOGLE,
