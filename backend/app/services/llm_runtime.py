@@ -13,10 +13,8 @@ from urllib.parse import urlparse
 
 from ..contracts import (
     LEGACY_GEMINI,
-    PROVIDER_CUSTOM,
     PROVIDER_GOOGLE,
     PROVIDER_OPENAI,
-    PROVIDER_OPENAI_COMPATIBLE,
 )
 
 PROVIDER_DEFAULT_BASE_URLS = {
