@@ -7,9 +7,15 @@ import { z } from "zod";
 export const LlmProviderSchema = z.enum([
   "ollama",
   "openai",
+  "google",
   "gemini",
   "anthropic",
   "custom",
+  "ollama_cloud",
+  "openai_compatible",
+  "github_copilot",
+  "cloud",
+  "unknown",
 ]);
 export type LlmProvider = z.infer<typeof LlmProviderSchema>;
 

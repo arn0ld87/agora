@@ -1,4 +1,4 @@
-import subprocess
+import re
 from pathlib import Path
 
 def test_no_gemini_literals_in_code():
@@ -8,45 +8,51 @@ def test_no_gemini_literals_in_code():
     """
     app_root = Path(__file__).parents[3] / "backend" / "app"
 
-    # Grep for "gemini" in non-comment/non-docstring lines.
-    # We exclude provider_types.py because it defines the legacy mapping.
-    # We also exclude some specific files that have legitimate model name references or strings.
+    # Regex to find "gemini" (with quotes)
+    gemini_re = re.compile(r'"gemini"')
 
-    cmd = [
-        "grep", "-r", "\"gemini\"", str(app_root)
+    forbidden_lines = []
+
+    # Files/directories to skip completely
+    skip_files = {"provider_types.py"}
+
+    # Legitimate substrings to allow on a line containing "gemini"
+    legitimate_substrings = [
+        "fallback_models",
+        "gemini-1.5",
+        "gemini-3",
+        "VISION_MODEL_NAME",
+        "normalized_model",
+        "LEGACY_GEMINI"
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    for path in app_root.rglob("*.py"):
+        if path.name in skip_files:
+            continue
 
-    if result.returncode == 0:
-        lines = result.stdout.splitlines()
-        forbidden_lines = []
-        for line in lines:
-            # Exclude comments
-            if "#" in line and line.find("#") < line.find("\"gemini\""):
-                continue
-            # Exclude provider_types.py
-            if "provider_types.py" in line:
-                continue
-            # Exclude docstrings (rough check)
-            if "\"\"\"" in line or "'''" in line:
-                continue
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-            # Legitimate uses: model names in lists or env defaults
-            if any(x in line for x in [
-                "fallback_models",
-                "gemini-1.5",
-                "gemini-3",
-                "VISION_MODEL_NAME",
-                "normalized_model",
-                "LEGACY_GEMINI"
-            ]):
-                continue
+        for i, line in enumerate(lines, 1):
+            if gemini_re.search(line):
+                # Check for comments: if # appears before "gemini"
+                comment_idx = line.find("#")
+                gemini_idx = line.find('"gemini"')
+                if comment_idx != -1 and comment_idx < gemini_idx:
+                    continue
 
-            forbidden_lines.append(line)
+                # Rough docstring check
+                if '"""' in line or "'''" in line:
+                    continue
 
-        if forbidden_lines:
-            print("\nFound forbidden 'gemini' literals:")
-            for fl in forbidden_lines:
-                print(fl)
-            assert not forbidden_lines, f"Found {len(forbidden_lines)} forbidden 'gemini' literals."
+                # Check for legitimate usage
+                if any(sub in line for sub in legitimate_substrings):
+                    continue
+
+                forbidden_lines.append(f"{path.relative_to(app_root.parent)}:{i}: {line.strip()}")
+
+    if forbidden_lines:
+        print("\nFound forbidden 'gemini' literals:")
+        for fl in forbidden_lines:
+            print(fl)
+        assert not forbidden_lines, f"Found {len(forbidden_lines)} forbidden 'gemini' literals."
