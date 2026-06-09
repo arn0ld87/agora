@@ -50,20 +50,36 @@ fi
 } >> "${REPO_ROOT}/.env"
 echo "[e2e-up] runtime credentials appended to .env" >&2
 
-# Followup #8: Bind-Mount-Source mit Container-User-UID anlegen, sonst
-# erzeugt der Docker-Daemon das Verzeichnis als root und das Backend
+# Followup #8: Bind-Mount-Sources mit Container-User-UID anlegen, sonst
+# erzeugt der Docker-Daemon die Verzeichnisse als root und das Backend
 # (User `agora`, UID 1000) kann nicht reinschreiben — RunRegistry.__new__
 # bricht dann mit PermissionError ab (CI-Failure 25595884785).
-mkdir -p "${REPO_ROOT}/backend/uploads/run_registry" "${REPO_ROOT}/backend/uploads/simulations"
+# Gleiches gilt für backend/instance (LlmProfilesStore legt beim Import
+# instance/llm_profiles.db an — sqlite3.OperationalError "unable to open
+# database file", CI-Failure 27233527207) und backend/data
+# (llm_provider_secrets.json / workspace_llm_routing.json, 0600 vom Backend).
+mkdir -p \
+  "${REPO_ROOT}/backend/uploads/run_registry" \
+  "${REPO_ROOT}/backend/uploads/simulations" \
+  "${REPO_ROOT}/backend/instance" \
+  "${REPO_ROOT}/backend/data"
 if [[ "$(id -u)" == "0" ]]; then
   # CI-Runner laufen oft als root — explizit auf Container-User chownen.
-  chown -R 1000:1000 "${REPO_ROOT}/backend/uploads"
+  chown -R 1000:1000 "${REPO_ROOT}/backend/uploads" "${REPO_ROOT}/backend/instance" "${REPO_ROOT}/backend/data"
 else
-  # Lokaler Mac/Linux-Dev — chmod auf weltweit beschreibbar reicht, weil
-  # der Bind-Mount-Source dem Dev-User gehört, nicht UID 1000.
-  chmod -R 0777 "${REPO_ROOT}/backend/uploads"
+  # Lokaler Mac/Linux-Dev — chmod auf weltweit beschreibbare VERZEICHNISSE
+  # reicht, weil der Bind-Mount-Source dem Dev-User gehört, nicht UID 1000.
+  # Bewusst ohne -R: rekursives chmod würde restriktive Datei-Modes
+  # plattmachen (LlmProviderSecretsStore schreibt llm_provider_secrets.json
+  # mit 0600 nach backend/data — Gemini-Review #627).
+  chmod 0777 \
+    "${REPO_ROOT}/backend/uploads" \
+    "${REPO_ROOT}/backend/uploads/run_registry" \
+    "${REPO_ROOT}/backend/uploads/simulations" \
+    "${REPO_ROOT}/backend/instance" \
+    "${REPO_ROOT}/backend/data"
 fi
-echo "[e2e-up] backend/uploads prepared with writable permissions" >&2
+echo "[e2e-up] backend/uploads, backend/instance, backend/data prepared with writable permissions" >&2
 
 echo "[e2e-up] starting compose stack on port ${PROXY_PORT}..." >&2
 # E2E-Override hebt read_only=true aus M11 Phase 3 auf, weil RunRegistry

@@ -189,7 +189,7 @@ class SearchService:
                 type(e).__name__,
             )
             return []
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning("%s failed: %s", fallback_label, e)
             return []
 

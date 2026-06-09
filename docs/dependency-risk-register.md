@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-**Stand:** 2026-05-15, Europe/Berlin
+**Stand:** 2026-06-09, Europe/Berlin
 **Ausgeloest durch:** Repo-Review PR4 — CVE-Baseline aktiv abbauen.
 Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
@@ -18,12 +18,15 @@ hinterlegt, um den Container-Scan nicht zu blockieren.
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
 | CVE-2026-1839 | `transformers` | Medium | Nein (Upstream Pin) | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
+| PYSEC-2026-139 | `torch` | unbekannt | Nein (kein Upstream-Fix released) | sentence-transformers | 2026-07-30 | open | [#623](https://github.com/arn0ld87/agora/issues/623) | [pytorch/pytorch/releases](https://github.com/pytorch/pytorch/releases) |
+| PYSEC-2025-217 | `transformers` | unbekannt | Nein (kein Upstream-Fix released) | sentence-transformers | 2026-07-30 | open | [#624](https://github.com/arn0ld87/agora/issues/624) | [huggingface/transformers/releases](https://github.com/huggingface/transformers/releases) |
 
 ### Pin-Begruendungen
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
-| `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
+| `transformers` | `4.57.6` | `sentence-transformers==4.1.0` (via `camel-oasis==0.2.5`) | `sentence-transformers` limitiert `transformers<5`; für PYSEC-2025-217 existiert zudem keine gefixte Version in der Advisory-DB. |
+| `torch` | `2.9.1` | `sentence-transformers==4.1.0` (via `camel-oasis==0.2.5`) | PYSEC-2026-139 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. |
 
 ---
 

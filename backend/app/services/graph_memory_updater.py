@@ -360,7 +360,7 @@ class GraphMemoryUpdater:
                 except Empty:
                     pass
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Worker loop exception: {e}")
                 time.sleep(1)
 
@@ -391,7 +391,7 @@ class GraphMemoryUpdater:
                 logger.debug(f"Batch preview: {combined_text[:200]}...")
                 return
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 if attempt < self.MAX_RETRIES - 1:
                     logger.warning(f"Batch send to graph failed (attempt {attempt + 1}/{self.MAX_RETRIES}): {e}")
                     time.sleep(self.RETRY_DELAY * (attempt + 1))
@@ -516,7 +516,7 @@ class GraphMemoryManager:
                 for simulation_id, updater in list(cls._updaters.items()):
                     try:
                         updater.stop()
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                         logger.error(f"Failed to stop updater: simulation_id={simulation_id}, error={e}")
                 cls._updaters.clear()
             logger.info("Stopped all graph memory updaters")

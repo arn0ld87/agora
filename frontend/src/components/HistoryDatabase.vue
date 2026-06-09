@@ -73,7 +73,8 @@ async function loadRuns() {
   loadErrorRetryable.value = false
   try {
     const res = await listRuns()
-    runs.value = Array.isArray(res?.data) ? res.data : []
+    // Issue #580: data is now RunsListResponse { runs, total, aggregation }
+    runs.value = Array.isArray(res?.data?.runs) ? res.data.runs : []
   } catch (err) {
     runs.value = []
     if (isApiError(err)) {
@@ -98,7 +99,12 @@ async function selectRun(run) {
       getRunEvents(run.run_id).catch(() => null)
     ])
     if (events?.data) runEvents.value = events.data
-    if (detail?.data?.[0]?.run_id === run.run_id) selectedRun.value = detail.data[0]
+    // Issue #580 / review fix: safely extract the first run and compare IDs before
+    // assigning, avoiding a TypeError when detail is null or runs is empty.
+    const freshRun = detail?.data?.runs?.[0] ?? null
+    if (freshRun !== null && freshRun.run_id !== undefined && freshRun.run_id === run.run_id) {
+      selectedRun.value = freshRun
+    }
   } catch {
     // Non-fatal: keep the currently selected run even if detail hydration fails.
   }

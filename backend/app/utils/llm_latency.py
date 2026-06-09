@@ -58,12 +58,12 @@ def measure_llm_latency(
                 try:
                     if extract_model is not None:
                         model = extract_model(*args, **kwargs)
-                except Exception:
+                except Exception:  # noqa: BLE001 — metrics collection; exc discarded
                     model = None
                 try:
                     if extract_prompt_chars is not None:
                         prompt_chars = extract_prompt_chars(*args, **kwargs)
-                except Exception:
+                except Exception:  # noqa: BLE001 — metrics collection; exc discarded
                     prompt_chars = None
 
                 logger.info(

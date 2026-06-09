@@ -270,7 +270,7 @@ class CompareService:
         )
         try:
             rows = self._neo4j_storage.run_query(cypher, {"branch_id": branch_id})
-        except Exception:
+        except Exception:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(
                 "Persona-Reach-Query für Branch %s fehlgeschlagen — leeres dict",
                 branch_id,

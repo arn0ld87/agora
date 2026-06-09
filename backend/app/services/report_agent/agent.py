@@ -246,7 +246,7 @@ class ReportAgent:
                     raw=action,
                 ).to_dict())
             return items
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to collect simulation evidence: {exc}")
             return []
 
@@ -428,7 +428,7 @@ class ReportAgent:
                         top_k=5,
                     )
                     embedder_ok = True
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning(
                         f"EvidenceBinder failed, falling back to generic pool: {exc!r}"
                     )

@@ -170,7 +170,7 @@ def start_simulation():
                 logger.info(f"Force mode: stopping running simulation {simulation_id}")
                 try:
                     SimulationRunner.stop_simulation(simulation_id)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning(f"Warning when stopping simulation: {exc}")
 
         if force:

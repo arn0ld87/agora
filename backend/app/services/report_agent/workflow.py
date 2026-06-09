@@ -66,7 +66,7 @@ def _load_persona_count(agent: Any) -> int:
             "reddit_profiles",
             default=[],
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "persona-floor check: failed to read profiles for simulation %s: %r",
             getattr(agent, "simulation_id", "<unknown>"),
@@ -121,7 +121,7 @@ def _get_echo_index(agent: Any) -> float:
             simulation_id=agent.simulation_id,
         ).to_dict()
         return float(metrics.get("echo_chamber_index") or 0.0)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("_get_echo_index: %r", exc)
         return 0.0
 
@@ -194,7 +194,7 @@ def _run_red_team_review(
             findings = [str(f) for f in findings_raw if str(f).strip()][:10]
         else:
             findings = []
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("_run_red_team_review: LLM-Call fehlgeschlagen: %r", exc)
         findings = []
 
@@ -647,7 +647,7 @@ def generate_section_metadata(
             schema_cls.__name__,
         )
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "generate_section_metadata: section=%d schema=%s extraction failed: %r",
             section_index,
@@ -664,7 +664,7 @@ def _is_cancel_requested(run_id: Optional[str]) -> bool:
     try:
         from ..sim.cancel_flag import is_cancel_requested
         return is_cancel_requested(run_id)
-    except Exception:
+    except Exception:  # noqa: BLE001 — cancel check fallback; returns False on failure
         return False
 
 
@@ -707,7 +707,7 @@ def _build_partial_report(
     )
     try:
         ReportManager._write_json_atomic(partial_path, partial_metadata)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "_build_partial_report: could not write partial_metadata.json: %r", exc
         )
@@ -1048,7 +1048,7 @@ def generate_report(
                         len(report_v3_obj.red_team_findings),
                         echo_index,
                     )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
         ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
         if progress_callback:
@@ -1058,7 +1058,7 @@ def generate_report(
             agent.console_logger = None
         return report
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"reportgeneratefailed: {str(e)}")
         report.status = ReportStatus.FAILED
         report.error = str(e)
@@ -1067,8 +1067,8 @@ def generate_report(
         try:
             ReportManager.save_report(report)
             ReportManager.update_progress(report_id, "failed", -1, f"reportgeneratefailed: {str(e)}", completed_sections=completed_section_titles)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — exc used in report status; error recorded
+            logger.debug("workflow: save_report/update_progress failed in error handler, ignoring: %s", exc)
         if agent.console_logger:
             agent.console_logger.close()
             agent.console_logger = None
@@ -1085,7 +1085,7 @@ def chat(agent: Any, message: str, chat_history: List[Dict[str, str]] = None) ->
             report_content = report.markdown_content[:15000]
             if len(report.markdown_content) > 15000:
                 report_content += "\n\n... [reportcontenthasTruncate] ..."
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"getreportcontentfailed: {e}")
 
     system_prompt = agent.CHAT_SYSTEM_PROMPT_TEMPLATE.format(

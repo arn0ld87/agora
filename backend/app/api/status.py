@@ -92,7 +92,7 @@ def _get_neo4j_status():
             "is_connected": getattr(storage, 'is_connected', True),
             "last_success_ts": last_success.isoformat() if last_success else None,
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — probe result; exc used in status dict
         last_error = getattr(storage, 'last_error', None) or e
         return {
             "reachable": False,
@@ -135,7 +135,7 @@ def _get_ollama_status():
 
         result["reachable"] = True
         result["models_available"] = models
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         result["error"] = str(e)
         logger.debug(f"Could not reach Ollama at {base}: {e}")
 
@@ -157,7 +157,7 @@ def _get_disk_status():
                 "used_pct": round((usage.used / usage.total * 100), 2) if usage.total > 0 else 0,
             }
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Could not check disk usage: {e}")
         return {
             "uploads": {
@@ -189,7 +189,7 @@ def get_status():
 
     try:
         gpu = detect_gpu()
-    except Exception as e:  # detect_gpu is documented to never raise, but be defensive.
+    except Exception as e:  # detect_gpu is documented to never raise, but be defensive.  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug(f"GPU probe failed unexpectedly: {e}")
         gpu = {"nvidia_smi_available": False, "ollama_uses_gpu": None, "hints": [f"probe error: {e}"]}
 

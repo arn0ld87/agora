@@ -44,7 +44,7 @@ def resolve_embedder(
 
         service = EmbeddingService()
         return service.embed
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug(f"EvidenceBinder: kein Embedder verfügbar ({exc!r})")
         return None
 

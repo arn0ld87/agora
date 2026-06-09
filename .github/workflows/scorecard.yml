@@ -26,9 +26,15 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            api.scorecard.dev:443
             api.securityscorecards.dev:443
+            fulcio.sigstore.dev:443
             github.com:443
+            oauth2.sigstore.dev:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             oss-fuzz-build-logs.storage.googleapis.com:443
             proxy.golang.org:443
             www.bestpractices.dev:443
@@ -43,6 +49,9 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
+          # Publishing needs the SCORECARD_TOKEN repo secret (fine-grained PAT,
+          # Administration: read-only on this repo) — configured 2026-06-09.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
           publish_results: true
 
       - name: Upload Scorecard SARIF artifact

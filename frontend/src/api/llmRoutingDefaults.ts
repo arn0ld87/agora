@@ -3,6 +3,9 @@
  *
  * Bedient die in backend/app/api/llm_routing.py ergänzten Defaults-Endpunkte.
  */
+/**
+ * Issue #578: bare .parse() replaced with unwrapAndParse (typed rejection on schema drift).
+ */
 import service from "./index";
 import {
   WorkspaceLlmRoutingDefaults,
@@ -10,10 +13,11 @@ import {
 } from "../contracts/workspaceRoutingContract";
 import { StageId, StageLLMRoute } from "../contracts/llmRoutingContract";
 import { ApiSuccessEnvelope } from "./envelope";
+import { unwrapAndParse } from "./parse";
 
 export async function getRoutingDefaults(): Promise<WorkspaceLlmRoutingDefaults> {
   const resp = await service.get<ApiSuccessEnvelope<unknown>>("/api/llm/routing/defaults");
-  return WorkspaceLlmRoutingDefaultsSchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, WorkspaceLlmRoutingDefaultsSchema);
 }
 
 export async function replaceRoutingDefaults(
@@ -23,7 +27,7 @@ export async function replaceRoutingDefaults(
     "/api/llm/routing/defaults",
     payload,
   );
-  return WorkspaceLlmRoutingDefaultsSchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, WorkspaceLlmRoutingDefaultsSchema);
 }
 
 export async function patchRoutingDefaultStage(
@@ -35,7 +39,7 @@ export async function patchRoutingDefaultStage(
     `/api/llm/routing/defaults/stages/${stageId}`,
     body,
   );
-  return WorkspaceLlmRoutingDefaultsSchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, WorkspaceLlmRoutingDefaultsSchema);
 }
 
 export async function replaceGlobalDefault(
@@ -45,5 +49,5 @@ export async function replaceGlobalDefault(
     "/api/llm/routing/defaults/global",
     route,
   );
-  return WorkspaceLlmRoutingDefaultsSchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, WorkspaceLlmRoutingDefaultsSchema);
 }

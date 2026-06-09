@@ -214,7 +214,7 @@ def execute_tool(
             )
         return rendered
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Tool execution failed: {tool_name}, error: {str(e)}")
         return f"Tool execution failed: {str(e)}"
 

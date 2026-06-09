@@ -10,6 +10,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   schema-drift:
     name: Schema-Drift verhindern
@@ -24,6 +27,7 @@ jobs:
             files.pythonhosted.org:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             pypi.org:443
 
       - uses: actions/checkout@v6
@@ -58,6 +62,7 @@ jobs:
             files.pythonhosted.org:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             pypi.org:443
 
       - uses: actions/checkout@v6
@@ -83,6 +88,7 @@ jobs:
             files.pythonhosted.org:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             pypi.org:443
 
       - uses: actions/checkout@v6
@@ -123,6 +129,7 @@ jobs:
             api.github.com:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             registry.npmjs.org:443
 
       - uses: actions/checkout@v6
@@ -150,6 +157,7 @@ jobs:
             files.pythonhosted.org:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             pypi.org:443
 
       - uses: actions/checkout@v6
@@ -183,6 +191,7 @@ jobs:
             files.pythonhosted.org:443
             github.com:443
             objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
             pypi.org:443
 
       - uses: actions/checkout@v6

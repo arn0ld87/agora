@@ -126,6 +126,23 @@ def create_app(config_class=Config):
         logger.info("Agora Backend starting...")
         logger.info("=" * 50)
 
+    # Fail-closed Security-Guard: AGORA_CORS_ALLOW_ALL=true in production
+    # ist ein Sicherheitsrisiko und wird hart vor jeder weiteren Initialisierung
+    # abgelehnt (Issue #592). Frühzeitig prüfen, damit der Fehler unmissverständlich
+    # der CORS-Konfiguration zugeordnet werden kann.
+    #
+    # Prod-Erkennung über app.config['DEBUG'] (Repo-Idiom: Config.DEBUG aus
+    # FLASK_DEBUG, Default False). FLASK_ENV ist seit Flask 2.3 entfernt und
+    # darf nicht als Signal dienen — ohne explizites Dev-Signal (DEBUG=True)
+    # greift der Guard (fail-closed).
+    _cors_allow_all_raw = os.environ.get('AGORA_CORS_ALLOW_ALL', 'false').lower() == 'true'
+    if _cors_allow_all_raw and not debug_mode:
+        raise RuntimeError(
+            "AGORA_CORS_ALLOW_ALL=true ist im Produktionsmodus (FLASK_DEBUG=false) "
+            "verboten. Setze AGORA_CORS_ALLOW_ALL=false oder verwende "
+            "AGORA_EXTRA_ORIGINS fuer explizite Origin-Whitelist."
+        )
+
     # Validate configuration
     config_errors = Config.validate()
     if config_errors:
@@ -189,7 +206,7 @@ def create_app(config_class=Config):
         neo4j_storage = Neo4jStorage()
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         neo4j_storage_error = str(e)
         logger.error(
             "Neo4jStorage initialization failed for %s: %s",

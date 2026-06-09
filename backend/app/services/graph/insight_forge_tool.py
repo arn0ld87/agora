@@ -100,7 +100,7 @@ def generate_sub_queries(
         sub_queries = response.get("sub_queries", [])
         return [str(sq) for sq in sub_queries[:max_queries]]
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "Failed to generate sub-questions: %s, using default sub-questions", str(exc)
         )
@@ -249,7 +249,7 @@ def insight_forge(
                         "related_facts": related_facts,
                     }
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.debug("Failed to get node %s: %s", uuid, exc)
             continue
 

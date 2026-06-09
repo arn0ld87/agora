@@ -60,7 +60,7 @@ def _get_report_id_for_simulation(simulation_id: str) -> Optional[str]:
             return None
         matching_reports.sort(key=lambda item: item.get('created_at', ''), reverse=True)
         return matching_reports[0].get('report_id')
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Failed to find report for simulation {simulation_id}: {exc}")
         return None
 
@@ -129,7 +129,7 @@ def get_simulation_history():
         sim_dict['version'] = 'v1.0.2'
         try:
             sim_dict['created_date'] = sim_dict.get('created_at', '')[:10]
-        except Exception:
+        except Exception:  # noqa: BLE001 — defensive read; caller gets None/empty
             sim_dict['created_date'] = ''
 
         enriched_simulations.append(sim_dict)

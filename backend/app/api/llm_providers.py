@@ -159,7 +159,7 @@ def upsert_provider_api_key(provider_id: str):
             try:
                 model_catalog.get_models(provider_id, provider.type, base_url, body.api_key)
                 entry = store.mark_validated(provider_id, ok=True) or entry
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning("Provider-Validate fehlgeschlagen für %s: %s", provider_id, exc)
                 entry = store.mark_validated(provider_id, ok=False) or entry
 

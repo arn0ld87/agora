@@ -24,6 +24,7 @@ import type { ProviderDescriptor } from "../contracts/llmRoutingContract";
 import type { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
 import service from "../api";
 import type { ApiSuccessEnvelope } from "../api/envelope";
+import { unwrapResponse } from "../api/parse";
 
 interface ModelEntry {
   id: string;
@@ -76,7 +77,7 @@ export const useLlmProvidersStore = defineStore("llmProviders", () => {
       const resp = await service.get<ApiSuccessEnvelope<ModelEntry[]>>(
         `/api/llm/providers/${providerId}/models${query}`,
       );
-      const list = (resp as unknown as { data: ModelEntry[] }).data;
+      const list = unwrapResponse<ModelEntry[]>(resp);
       models.value = {
         ...models.value,
         [providerId]: { models: list, fetchedAt: Date.now() },

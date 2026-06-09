@@ -388,7 +388,7 @@ class Neo4jWriteMixin:
                                 etype=_entity_type,
                             )
                         self._call_with_retry(session.execute_write, _add_label)
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                         logger.warning(f"Failed to add label '{safe_label}' to '{ename}': {e}")
                 elif etype and etype != "Entity":
                     logger.debug(f"Discarded unsafe entity label {etype!r} for '{ename}'")

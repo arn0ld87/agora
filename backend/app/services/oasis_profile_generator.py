@@ -484,7 +484,7 @@ class OasisProfileGenerator:
 
             logger.info(f"Knowledge graph hybrid search completed: {entity_name}, retrieved {len(results['facts'])} facts, {len(results['node_summaries'])} related nodes")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Knowledge graph search failed ({entity_name}): {e}")
 
         return results
@@ -696,7 +696,7 @@ class OasisProfileGenerator:
 
                     last_error = je
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"LLM call failed (attempt {attempt+1}): {str(e)[:80]}")
                 last_error = e
                 import time
@@ -1285,7 +1285,7 @@ Important:
                                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                                 writer.writeheader()
                                 writer.writerows(profiles_data)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning(f"Real-time profile save failed: {e}")
         
         def generate_single_profile(idx: int, entity: EntityNode) -> tuple:
@@ -1304,7 +1304,7 @@ Important:
 
                 return idx, profile, None
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to generate persona for entity {entity.name}: {str(e)}")
                 # Create a fallback profile
                 fallback_profile = OasisAgentProfile(
@@ -1360,7 +1360,7 @@ Important:
                     else:
                         logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.error(f"Exception occurred while processing entity {entity.name}: {str(e)}")
                     with lock:
                         completed_count[0] += 1
