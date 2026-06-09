@@ -16,6 +16,7 @@ import {
   getRunStatusDetail,
   getSimulationConsoleLog
 } from '../api/simulation'
+import { cancelRun } from '../api/runs'
 import { generateReport } from '../api/report'
 import { storedEffectiveModel, STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
 import {
@@ -69,6 +70,7 @@ const phase = ref(0) // 0 idle, 1 running, 2 done
 const isStarting = ref(false)
 const isStopping = ref(false)
 const isPausing = ref(false)
+const isCancelling = ref(false)
 const isGeneratingReport = ref(false)
 const runStatus = ref({})
 const allActions = ref([])
@@ -327,6 +329,22 @@ async function doStop() {
   }
 }
 
+async function doCancel() {
+  if (!props.simulationId) return
+  if (!confirm(t('step3.controls.cancelConfirm'))) return
+  isCancelling.value = true
+  try {
+    const res = await cancelRun(props.simulationId)
+    if (res?.success) {
+      addLog(t('step3.controls.cancelled'))
+    }
+  } catch (err) {
+    addLog(err.message)
+  } finally {
+    isCancelling.value = false
+  }
+}
+
 async function doPauseResume() {
   if (!props.simulationId) return
   isPausing.value = true
@@ -570,6 +588,12 @@ watch(() => props.simulationId, (newId, oldId) => {
               :loading="isStopping"
               @click="doStop"
             >{{ t('step3.controls.stop') }}</Button>
+            <Button
+              variant="ghost"
+              :loading="isCancelling"
+              :title="t('step3.controls.cancelConfirm')"
+              @click="doCancel"
+            >{{ t('step3.controls.cancel') }}</Button>
           </template>
           <Button
             v-else

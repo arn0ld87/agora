@@ -451,6 +451,9 @@
       "stop": "Stop",
       "stopConfirm": "Really abort the simulation? Existing data is preserved.",
       "stopped": "Stopped.",
+      "cancel": "Cancel",
+      "cancelConfirm": "Gracefully cancel the simulation? Already completed stages are preserved as a partial report.",
+      "cancelled": "Cancellation requested.",
       "completed": "Completed."
     },
     "status": {
