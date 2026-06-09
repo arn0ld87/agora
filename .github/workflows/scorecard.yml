@@ -43,8 +43,10 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          # Re-enable with a SCORECARD_TOKEN secret (PAT, public_repo scope) if publishing to scorecard.dev is wanted
-          publish_results: false
+          # Publishing needs the SCORECARD_TOKEN repo secret (fine-grained PAT,
+          # Administration: read-only on this repo) — configured 2026-06-09.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
+          publish_results: true
 
       - name: Upload Scorecard SARIF artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
