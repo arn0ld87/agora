@@ -62,8 +62,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_exceptions(path: Path) -> list[dict]:
-    if not path.exists():
-        print(f"::error::Datei nicht gefunden: {path}", file=sys.stderr)
+    if not path.is_file():
+        print(f"::error::Datei nicht gefunden oder kein reguläres File: {path}", file=sys.stderr)
         sys.exit(1)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -83,6 +83,12 @@ def load_exceptions(path: Path) -> list[dict]:
             file=sys.stderr,
         )
         sys.exit(1)
+    if not all(isinstance(e, dict) for e in entries):
+        print(
+            "::error::Alle Einträge in 'exceptions' müssen JSON-Objekte sein.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     return entries  # type: ignore[return-value]
 
 
@@ -97,10 +103,10 @@ def validate_entry(entry: dict, index: int) -> list[str]:
         )
     # Deadline-Format prüfen (wenn vorhanden)
     deadline_raw = entry.get("deadline", "")
-    if deadline_raw and not missing:
+    if deadline_raw:
         try:
             date.fromisoformat(deadline_raw)
-        except ValueError:
+        except (ValueError, TypeError):
             errors.append(
                 f"Eintrag #{index} ({entry.get('advisory_id', '?')}): "
                 f"Ungültiges Deadline-Format '{deadline_raw}' — erwartet YYYY-MM-DD"
@@ -117,7 +123,7 @@ def check_deadline(entry: dict, today: date) -> str | None:
         return None
     try:
         deadline = date.fromisoformat(deadline_raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None  # bereits durch validate_entry gemeldet
     if today > deadline:
         days_overdue = (today - deadline).days

@@ -35,7 +35,7 @@
         "advisory_id": {
           "type": "string",
           "description": "CVE- oder PYSEC-Bezeichner (z.B. CVE-2026-1839).",
-          "pattern": "^(CVE-\\d{4}-\\d+|PYSEC-\\d{4}-\\d+|GHSA-[a-z0-9-]+)$"
+          "pattern": "^(CVE-\\d{4}-\\d+|PYSEC-\\d{4}-\\d+|GHSA-[A-Za-z0-9-]+)$"
         },
         "package": {
           "type": "string",
