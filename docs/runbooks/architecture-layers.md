@@ -183,8 +183,9 @@ Wildcard-Origin + Credentials per Spec ab (CORS §8.7); flask-cors setzt
 - **Nur in Entwicklung** zulässig, z.B. wenn Frontend und Backend auf
   unterschiedlichen Ports laufen und kein Cookie-Auth benötigt wird.
 - **Niemals in Produktion** — auch nicht temporär. Die App verweigert den Start
-  wenn `AGORA_CORS_ALLOW_ALL=true` und `FLASK_ENV=production` gleichzeitig gesetzt
-  sind (fail-closed, Issue #592).
+  wenn `AGORA_CORS_ALLOW_ALL=true` im Produktionsmodus gesetzt ist, also wenn
+  `FLASK_DEBUG` nicht `true` ist (fail-closed, Issue #592 — ohne explizites
+  Dev-Signal greift der Guard).
 
 **Alternative für Prod:** `AGORA_EXTRA_ORIGINS` als komma-separierte Whitelist,
 z.B. `AGORA_EXTRA_ORIGINS=https://app.example.com,https://admin.example.com`.

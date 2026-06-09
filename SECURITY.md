@@ -58,8 +58,9 @@ Datenexfiltration) priorisiere ich vor allen Feature-Slices.
 deaktiviert `Access-Control-Allow-Credentials`. **Nur in Entwicklung verwenden —
 niemals in Produktion, auch nicht temporär.**
 
-Die App verweigert den Start wenn `AGORA_CORS_ALLOW_ALL=true` und
-`FLASK_ENV=production` gleichzeitig gesetzt sind (fail-closed).
+Die App verweigert den Start wenn `AGORA_CORS_ALLOW_ALL=true` im
+Produktionsmodus gesetzt ist, also wenn `FLASK_DEBUG` nicht `true` ist
+(fail-closed — ohne explizites Dev-Signal greift der Guard).
 
 Für produktionsseitige Origin-Freigaben: `AGORA_EXTRA_ORIGINS` als
 komma-separierte Whitelist verwenden.

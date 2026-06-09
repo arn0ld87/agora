@@ -130,13 +130,17 @@ def create_app(config_class=Config):
     # ist ein Sicherheitsrisiko und wird hart vor jeder weiteren Initialisierung
     # abgelehnt (Issue #592). Frühzeitig prüfen, damit der Fehler unmissverständlich
     # der CORS-Konfiguration zugeordnet werden kann.
+    #
+    # Prod-Erkennung über app.config['DEBUG'] (Repo-Idiom: Config.DEBUG aus
+    # FLASK_DEBUG, Default False). FLASK_ENV ist seit Flask 2.3 entfernt und
+    # darf nicht als Signal dienen — ohne explizites Dev-Signal (DEBUG=True)
+    # greift der Guard (fail-closed).
     _cors_allow_all_raw = os.environ.get('AGORA_CORS_ALLOW_ALL', 'false').lower() == 'true'
-    _flask_env_raw = os.environ.get('FLASK_ENV', '').lower()
-    if _cors_allow_all_raw and _flask_env_raw == 'production':
+    if _cors_allow_all_raw and not debug_mode:
         raise RuntimeError(
-            "AGORA_CORS_ALLOW_ALL=true ist in FLASK_ENV=production verboten. "
-            "Setze AGORA_CORS_ALLOW_ALL=false oder verwende AGORA_EXTRA_ORIGINS "
-            "fuer explizite Origin-Whitelist."
+            "AGORA_CORS_ALLOW_ALL=true ist im Produktionsmodus (FLASK_DEBUG=false) "
+            "verboten. Setze AGORA_CORS_ALLOW_ALL=false oder verwende "
+            "AGORA_EXTRA_ORIGINS fuer explizite Origin-Whitelist."
         )
 
     # Validate configuration

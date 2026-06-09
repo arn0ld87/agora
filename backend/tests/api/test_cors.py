@@ -3,8 +3,9 @@
 Verifiziert:
 - AGORA_CORS_ALLOW_ALL=true deaktiviert Access-Control-Allow-Credentials
   auf Preflight-Requests (Wildcard + Credentials ist CORS-Fehler).
-- App-Start wird verweigert wenn AGORA_CORS_ALLOW_ALL=true und
-  FLASK_ENV=production (fail-closed).
+- App-Start wird verweigert wenn AGORA_CORS_ALLOW_ALL=true im
+  Produktionsmodus (DEBUG=False, d.h. FLASK_DEBUG nicht true) gesetzt
+  ist (fail-closed).
 """
 from __future__ import annotations
 
@@ -109,11 +110,16 @@ def test_restricted_origins_keeps_credentials():
 
 def test_production_guard_raises_on_allow_all(monkeypatch):
     """create_app() muss RuntimeError werfen wenn AGORA_CORS_ALLOW_ALL=true
-    und FLASK_ENV=production gesetzt sind (fail-closed).
+    im Produktionsmodus (DEBUG=False) gesetzt ist (fail-closed).
     """
     monkeypatch.setenv("AGORA_CORS_ALLOW_ALL", "true")
-    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("FLASK_DEBUG", "false")
     monkeypatch.setenv("AGORA_SKIP_EMBEDDING_PROBE", "true")
+
+    # Config.DEBUG wird beim Import aus FLASK_DEBUG evaluiert — direkt
+    # patchen, damit der Test unabhängig von Import-Reihenfolge robust ist.
+    from app.config import Config
+    monkeypatch.setattr(Config, "DEBUG", False)
 
     from app import create_app
 
@@ -122,16 +128,19 @@ def test_production_guard_raises_on_allow_all(monkeypatch):
 
 
 def test_production_guard_ok_without_allow_all(monkeypatch, tmp_path):
-    """create_app() mit FLASK_ENV=production ohne AGORA_CORS_ALLOW_ALL=true
-    soll NICHT wegen CORS abbrechen.
+    """create_app() im Produktionsmodus (DEBUG=False) ohne
+    AGORA_CORS_ALLOW_ALL=true soll NICHT wegen CORS abbrechen.
 
     Dieser Test prüft nur, dass kein CORS-bedingter RuntimeError kommt.
     Andere Start-Fehler (Neo4j, Embedding) sind akzeptabel und werden
     hier ignoriert.
     """
-    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("FLASK_DEBUG", "false")
     monkeypatch.delenv("AGORA_CORS_ALLOW_ALL", raising=False)
     monkeypatch.setenv("AGORA_SKIP_EMBEDDING_PROBE", "true")
+
+    from app.config import Config
+    monkeypatch.setattr(Config, "DEBUG", False)
 
     from app import create_app
 
