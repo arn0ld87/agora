@@ -136,7 +136,7 @@ def terminate_process(
                     timeout=5,
                 )
                 process.wait(timeout=5)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"taskkill failed, trying terminate: {e}")
             process.terminate()
             try:
@@ -231,7 +231,7 @@ def start_simulation(
     # silently freeze the new subprocess on round 0.
     try:
         write_control_state(simulation_id, paused=False, stop_requested=False)
-    except Exception as ctrl_err:
+    except Exception as ctrl_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Could not reset control_state.json before start: {ctrl_err}")
 
     config = get_config(simulation_id)
@@ -404,14 +404,14 @@ def stop_simulation(
             terminate_process(process, simulation_id)
         except ProcessLookupError:
             pass
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(
                 f"Failed to terminate process group: {simulation_id}, error={e}"
             )
             try:
                 process.terminate()
                 process.wait(timeout=5)
-            except Exception:
+            except Exception:  # noqa: BLE001 — process termination; exc discarded, kill follows
                 process.kill()
 
     state.runner_status = RunnerStatus.STOPPED
@@ -425,7 +425,7 @@ def stop_simulation(
         try:
             stop_graph_memory_updater(simulation_id)
             logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Failed to stop graph memory updater: {e}")
         graph_memory_enabled.pop(simulation_id, None)
 
@@ -481,7 +481,7 @@ def cleanup_all_simulations(
     # Stop all graph memory updaters
     try:
         stop_all_graph_memory()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Failed to stop graph memory updater: {e}")
     graph_memory_enabled.clear()
 
@@ -501,7 +501,7 @@ def cleanup_all_simulations(
                     try:
                         process.terminate()
                         process.wait(timeout=3)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — process termination; exc discarded, kill follows
                         process.kill()
 
                 # Update run_state.json
@@ -517,12 +517,12 @@ def cleanup_all_simulations(
                 # Update state.json via injected callback
                 try:
                     update_store_state(simulation_id)
-                except Exception as state_err:
+                except Exception as state_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning(
                         f"Failed to update state.json: {simulation_id}, error={state_err}"
                     )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Failed to clean up process: {simulation_id}, error={e}")
 
     # Clean up file handles
@@ -530,16 +530,16 @@ def cleanup_all_simulations(
         try:
             if file_handle:
                 file_handle.close()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
+            logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
     stdout_files.clear()
 
     for _sim_id, file_handle in list(stderr_files.items()):
         try:
             if file_handle:
                 file_handle.close()
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
+            logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
     stderr_files.clear()
 
     # Clean up in-memory state
@@ -654,7 +654,7 @@ def terminate_run(
         terminate_process(process, run_id, timeout=timeout_int)
     except ProcessLookupError:
         pass
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "terminate_run: graceful terminate failed for %s, forcing kill: %s",
             run_id,
@@ -663,8 +663,8 @@ def terminate_run(
         try:
             process.kill()
             process.wait(timeout=5)
-        except Exception:
-            pass
+        except Exception as kill_err:  # noqa: BLE001 — process termination; kill_err discarded
+            logger.debug("process_manager: process kill failed, ignoring: %s", kill_err)
     return True
 
 

@@ -309,7 +309,7 @@ def _get_interview_history_from_db(
                 }
             )
         conn.close()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Failed to read Interview history ({platform_name}): {e}")
 
     return results

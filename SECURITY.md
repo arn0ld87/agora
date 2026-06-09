@@ -50,6 +50,23 @@ Da es sich um ein privates Open-Source-Projekt ohne SLA-Vertrag handelt,
 sind Fristen Best-Effort. Kritische Funde (RCE, Auth-Bypass,
 Datenexfiltration) priorisiere ich vor allen Feature-Slices.
 
+## Sicherheitsrelevante Umgebungsvariablen
+
+### AGORA_CORS_ALLOW_ALL
+
+`AGORA_CORS_ALLOW_ALL=true` setzt den CORS-Filter auf Wildcard (`*`) und
+deaktiviert `Access-Control-Allow-Credentials`. **Nur in Entwicklung verwenden —
+niemals in Produktion, auch nicht temporär.**
+
+Die App verweigert den Start wenn `AGORA_CORS_ALLOW_ALL=true` im
+Produktionsmodus gesetzt ist, also wenn `FLASK_DEBUG` nicht `true` ist
+(fail-closed — ohne explizites Dev-Signal greift der Guard).
+
+Für produktionsseitige Origin-Freigaben: `AGORA_EXTRA_ORIGINS` als
+komma-separierte Whitelist verwenden.
+
+---
+
 ## Bekannte Watchlist (Upstream-blockierte CVEs)
 
 Einige CVEs in transitiven Abhängigkeiten sind dokumentiert und

@@ -150,7 +150,7 @@ def read_action_log_chunk(
                 except json.JSONDecodeError:
                     pass
             return f.tell()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Failed to read action log: {log_path}, error={e}")
         return position
 

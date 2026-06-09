@@ -56,8 +56,8 @@ def _read_text_with_fallback(file_path: str) -> str:
         best = from_bytes(data).best()
         if best and best.encoding:
             encoding = best.encoding
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — fallback chain continues with chardet
+        _log(f"charset_normalizer detection failed, continuing: {exc}")
 
     # Fall back to chardet
     if not encoding:
@@ -65,8 +65,8 @@ def _read_text_with_fallback(file_path: str) -> str:
             import chardet
             result = chardet.detect(data)
             encoding = result.get('encoding') if result else None
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — fallback chain continues with utf-8 replace
+            _log(f"chardet detection failed, continuing: {exc}")
 
     # Final fallback: use UTF-8 + replace
     if not encoding:
@@ -96,7 +96,7 @@ def _log(msg: str) -> None:
     try:
         from .logger import get_logger
         get_logger('agora.file_parser').warning(msg)
-    except Exception:
+    except Exception:  # noqa: BLE001 — logging must never raise; print is the last resort
         print(f"[file_parser] {msg}")
 
 
@@ -114,8 +114,8 @@ def _ensure_png(image_bytes: bytes, ext: str) -> bytes:
             buf = io.BytesIO()
             im.save(buf, format='PNG', optimize=False)
             return buf.getvalue()
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — Pillow not available or format unsupported; falls through to PyMuPDF
+        _log(f"Pillow PNG conversion failed, trying PyMuPDF: {exc}")
     # Fallback: let PyMuPDF re-encode
     try:
         import fitz
@@ -123,8 +123,9 @@ def _ensure_png(image_bytes: bytes, ext: str) -> bytes:
         if pix.alpha:
             pix = fitz.Pixmap(fitz.csRGB, pix)
         return pix.tobytes('png')
-    except Exception:
-        return image_bytes  # last resort — hope the vision model copes
+    except Exception as exc:  # noqa: BLE001 — last resort: return raw bytes and hope the vision model copes
+        _log(f"PyMuPDF PNG conversion failed, returning raw bytes: {exc}")
+        return image_bytes
 
 
 def _downscale_png(image_bytes: bytes, max_dim: int) -> bytes:
@@ -142,7 +143,8 @@ def _downscale_png(image_bytes: bytes, max_dim: int) -> bytes:
             buf = io.BytesIO()
             im.save(buf, format='PNG', optimize=True)
             return buf.getvalue()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — Pillow not available; return original bytes unscaled
+        _log(f"PNG downscale failed, using original: {exc}")
         return image_bytes
 
 
@@ -174,7 +176,7 @@ class _VisionHelper:
             except ValueError:
                 self.max_dim = 1400
             self.enabled = True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — vision is optional; log and disable gracefully
             _log(f"vision disabled ({exc})")
 
     def describe(self, image_bytes: bytes, prompt: str, tag: str = "") -> str:
@@ -194,7 +196,7 @@ class _VisionHelper:
             self.calls_made += 1
             text = self.client.describe_image(b64, prompt=prompt, mime="image/png")
             return (text or '').strip()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — vision call failed; return empty and continue
             _log(f"vision call failed [{tag}]: {exc}")
             return ""
 
@@ -278,13 +280,14 @@ class FileParser:
                             )
                             if description:
                                 page_out.append(f"[Seite {idx} (Scan)]: {description}")
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 — page render failed; continue with remaining pages
                             _log(f"vision page {idx} failed: {exc}")
                     else:
                         # Describe each substantial embedded image.
                         try:
                             images = page.get_images(full=True)
-                        except Exception:
+                        except Exception as exc:  # noqa: BLE001 — page has no image list; skip image processing
+                            _log(f"get_images failed for page {idx}, skipping: {exc}")
                             images = []
                         try:
                             min_area = int(os.environ.get('VISION_MIN_IMAGE_AREA', '40000'))
@@ -309,7 +312,7 @@ class FileParser:
                                 )
                                 if description:
                                     page_out.append(f"[Abbildung auf Seite {idx}]: {description}")
-                            except Exception as exc:
+                            except Exception as exc:  # noqa: BLE001 — image extraction failed; continue with remaining images
                                 _log(f"vision image p{idx}-i{image_idx} failed: {exc}")
 
                 if page_out:
@@ -345,7 +348,7 @@ class FileParser:
                 text = cls.extract_text(file_path)
                 filename = Path(file_path).name
                 all_texts.append(f"=== Document {i}: {filename} ===\n{text}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — per-file error logged inline; continue extracting remaining files
                 all_texts.append(f"=== Document {i}: {file_path} (extraction failed: {str(e)}) ===")
 
         return "\n\n".join(all_texts)

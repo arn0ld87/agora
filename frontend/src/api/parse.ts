@@ -1,10 +1,32 @@
 /**
- * Issue #578 — Typed parse helper for LLM API modules.
+ * Issue #578/#585 — Typed parse helpers for API envelope unwrapping.
  *
- * Replaces bare `.parse()` callsites with safeParse + typed rejection,
+ * #578: Replaces bare `.parse()` callsites with safeParse + typed rejection,
  * so schema drift becomes a catchable error instead of an unhandled rejection.
+ *
+ * #585: Adds `unwrapResponse<T>` as a standalone envelope-unwrap helper,
+ * replacing inline envelope-cast patterns across API modules.
  */
 import type { ZodSchema } from 'zod'
+
+/**
+ * Unwraps the `data` field from an API response envelope.
+ * Falls back to `resp` itself when the envelope has no `data` field (e.g.
+ * already-unwrapped payloads, endpoints that return bare objects like
+ * `cancelRun`).  Mirrors the tolerant behaviour of `unwrapAndParse` (#607).
+ *
+ * Use this when you want the raw data without schema validation, or when
+ * calling code handles validation separately.
+ *
+ * @param resp - The raw value returned by the axios service.
+ */
+export function unwrapResponse<T>(resp: unknown): T {
+  return (
+    resp !== null && typeof resp === 'object' && 'data' in resp
+      ? (resp as { data: unknown }).data
+      : resp
+  ) as T
+}
 
 /**
  * Unwraps the `data` field from an axios response envelope and validates it

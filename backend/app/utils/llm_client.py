@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time as _time_mod
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal, Optional, Dict, Any, List, Type, Union
 from openai import OpenAI
 from pydantic import BaseModel
@@ -62,7 +63,11 @@ def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
     """Best-effort Substring-Match für bekannte Modellfamilien.
 
     Liefert None, wenn das Modell unbekannt ist — Caller fällt dann auf
-    OLLAMA_NUM_CTX (legacy) zurück.
+    OLLAMA_NUM_CTX (legacy) zurück und emittiert ein WARNING (einmalig pro
+    Modell, dedupliziert via lru_cache auf _warn_legacy_fallback_once).
+
+    Um den Warning für ein unbekanntes Modell zu unterdrücken, trage es entweder
+    in _MODEL_CONTEXT_HEURISTICS ein oder setze LLM_MODEL_CONTEXT_LIMITS_JSON.
     """
     if not model_name:
         return None
@@ -71,6 +76,23 @@ def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
         if prefix in needle:
             return limit
     return None
+
+
+@lru_cache(maxsize=64)
+def _warn_legacy_fallback_once(model_name: str, fallback: int) -> None:
+    """Emit a WARNING exactly once per unknown model name (lru_cache deduplicates).
+
+    Called only when _resolve_num_ctx reaches the legacy OLLAMA_NUM_CTX / 8192
+    fallback, i.e. no heuristic, no per-model env map, no LLM_CONTEXT_LIMIT, and
+    no explicit provider_options matched. The cache prevents log spam when the
+    same unknown model is used repeatedly within a process lifetime.
+    """
+    logger.warning(
+        "llm_client._resolve_num_ctx: no heuristic for model=%r, "
+        "falling back to %d. Set LLM_MODEL_CONTEXT_LIMITS_JSON to override.",
+        model_name,
+        fallback,
+    )
 
 
 def _resolve_num_ctx(
@@ -83,7 +105,7 @@ def _resolve_num_ctx(
     2. LLM_MODEL_CONTEXT_LIMITS_JSON (per-Modell-Map via env)
     3. Heuristik-Tabelle (Modell-Familie-Default)
     4. LLM_CONTEXT_LIMIT (Global-Override, sofern höher als Heuristik)
-    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback)
+    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback) — emits WARNING once per model
     """
     if provider_options_num_ctx is not None:
         try:
@@ -116,9 +138,12 @@ def _resolve_num_ctx(
         return global_limit
 
     try:
-        return int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+        fallback = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
     except ValueError:
-        return 8192
+        fallback = 8192
+    if model_name:
+        _warn_legacy_fallback_once(model_name, fallback)
+    return fallback
 
 
 _STRICT_UNSUPPORTED_HINTS = (
@@ -291,6 +316,32 @@ def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
     return _walk(raw)
 
 
+def _env_flag(name: str) -> bool:
+    """Return True wenn die Env-Var *name* auf einen truthy-Wert gesetzt ist."""
+    return os.environ.get(name, '').lower() in ('1', 'true', 'yes')
+
+
+def _is_json_object_mode_disabled() -> bool:
+    """Return True wenn ``response_format=json_object`` unterdrückt werden soll.
+
+    Wertet aus (in dieser Reihenfolge):
+    - ``LLM_DISABLE_JSON_OBJECT_MODE`` (neuer, präziser Name)
+    - ``LLM_DISABLE_JSON_MODE`` (Legacy-Alias, Deprecation-Warning wird in
+      ``chat_json`` bei Verwendung ausgegeben)
+    """
+    return _env_flag('LLM_DISABLE_JSON_OBJECT_MODE') or _env_flag('LLM_DISABLE_JSON_MODE')
+
+
+def _is_json_schema_mode_disabled() -> bool:
+    """Return True wenn strict ``response_format=json_schema`` unterdrückt werden soll.
+
+    Gesetzt durch ``LLM_DISABLE_JSON_SCHEMA_MODE=true``. Wenn aktiv und ein
+    Schema übergeben wurde, fällt ``chat_json`` auf ``json_object`` + post-hoc
+    Pydantic-Validierung zurück.
+    """
+    return _env_flag('LLM_DISABLE_JSON_SCHEMA_MODE')
+
+
 def should_disable_openai_json_mode(base_url: Optional[str]) -> bool:
     """Return True wenn ``response_format=json_object`` weggelassen werden soll.
 
@@ -302,11 +353,12 @@ def should_disable_openai_json_mode(base_url: Optional[str]) -> bool:
 
     Trigger:
     - ``base_url`` zeigt auf ``api.openai.com`` UND
-    - ``LLM_DISABLE_JSON_MODE`` in (``1``, ``true``, ``yes``).
+    - ``LLM_DISABLE_JSON_OBJECT_MODE`` oder ``LLM_DISABLE_JSON_MODE`` (Legacy)
+      in (``1``, ``true``, ``yes``).
     """
     if not base_url or 'api.openai.com' not in base_url.lower():
         return False
-    return os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
+    return _is_json_object_mode_disabled()
 
 
 def _read_active_config_safely() -> Optional[Dict[str, Any]]:
@@ -1181,17 +1233,36 @@ class LLMClient:
                 messages=list(messages),
             )
 
-        disable_json_mode_env = os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
-        # Strict-Schema-Aufrufer (schema is not None) dürfen NIE im Freitext-Mode
-        # landen — sonst halluziniert das Modell camelCase / Extra-Felder und
-        # Pydantic (extra='forbid') lehnt ab. LLM_DISABLE_JSON_MODE bleibt nur
-        # für schemalose chat_json()-Calls wirksam.
-        disable_json_mode = disable_json_mode_env and schema is None
-        if disable_json_mode_env and schema is not None:
+        # --- Env-Flag-Auswertung (Issue #593) -----------------------------------
+        # LLM_DISABLE_JSON_OBJECT_MODE  → unterdrückt {type: "json_object"}
+        # LLM_DISABLE_JSON_SCHEMA_MODE  → unterdrückt strict json_schema;
+        #                                  fällt auf json_object + Pydantic zurück
+        # LLM_DISABLE_JSON_MODE         → Legacy-Alias für OBJECT_MODE (Deprecation)
+        disable_object_mode = _is_json_object_mode_disabled()
+        disable_schema_mode = _is_json_schema_mode_disabled()
+
+        # Legacy-Alias: Deprecation-Warning ausgeben, damit Betreiber migrieren können.
+        if _env_flag('LLM_DISABLE_JSON_MODE') and not _env_flag('LLM_DISABLE_JSON_OBJECT_MODE'):
+            import warnings as _warnings
+            _warnings.warn(
+                "LLM_DISABLE_JSON_MODE ist veraltet und wird in einer künftigen Version "
+                "entfernt. Bitte LLM_DISABLE_JSON_OBJECT_MODE verwenden.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # schema=None + OBJECT_MODE disabled → kein response_format
+        disable_json_mode = disable_object_mode and schema is None
+        # schema=<Model> + SCHEMA_MODE disabled → json_object-Fallback statt strict
+        schema_mode_fallback = schema is not None and disable_schema_mode
+
+        if schema_mode_fallback:
+            fallback_target = "Freitext" if disable_object_mode else "json_object"
             logger.info(
-                "LLMClient.chat_json: LLM_DISABLE_JSON_MODE ignoriert — schema=%s "
-                "erzwingt strict json_schema",
+                "LLMClient.chat_json: LLM_DISABLE_JSON_SCHEMA_MODE aktiv — schema=%s "
+                "fällt auf %s + Pydantic-Validierung zurück",
                 schema.__name__ if isinstance(schema, type) else "dict",
+                fallback_target,
             )
 
         if schema is not None:
@@ -1205,6 +1276,11 @@ class LLMClient:
         # Build response_format ---------------------------------------------------
         if disable_json_mode:
             response_format: Optional[Dict[str, Any]] = None
+        elif schema_mode_fallback:
+            # LLM_DISABLE_JSON_SCHEMA_MODE=true: Schema übergeben, aber strict-Mode
+            # deaktiviert → json_object + post-hoc Pydantic-Validierung.
+            # Falls auch OBJECT_MODE deaktiviert ist, fällt es auf Freitext (None) zurück.
+            response_format = None if disable_object_mode else {"type": "json_object"}
         elif schema is not None:
             # OpenAI / Google strict-mode: $refs inline-resolven, $defs +
             # Meta-Keys droppen, additionalProperties:false + required-Liste
@@ -1223,7 +1299,7 @@ class LLMClient:
             response_format = {"type": "json_object"}
 
         # Call --------------------------------------------------------------------
-        if not disable_json_mode and schema is not None:
+        if not disable_json_mode and not schema_mode_fallback and schema is not None:
             # NATIVE Ollama-Pfad: /api/chat mit format=<schema> ist die einzige
             # autoritativ dokumentierte Methode, ein Schema bei Ollama zu erzwingen.
             # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit

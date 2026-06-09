@@ -344,7 +344,7 @@ class EmbeddingService:
         try:
             vec = self.embed("health check")
             return len(vec) > 0
-        except Exception:
+        except Exception:  # noqa: BLE001 — health check returns False on any error
             return False
 
 

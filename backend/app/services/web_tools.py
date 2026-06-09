@@ -33,7 +33,7 @@ def _setting_value(key: str, *, include_secret: bool = False) -> Any:
         from .settings_layer import get_default_service
 
         return get_default_service().effective_value(key, include_secret=include_secret)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug("Settings lookup failed for %s: %s", key, exc)
         return None
 
@@ -53,7 +53,7 @@ def _is_public_url(url: str) -> tuple[bool, str]:
     """
     try:
         p = urlparse(url)
-    except Exception:
+    except Exception:  # noqa: BLE001 — URL parsing fallback; returns unparsable status
         return False, "unparsable URL"
     if p.scheme not in ("http", "https"):
         return False, f"unsupported scheme {p.scheme!r}"
@@ -149,7 +149,7 @@ class WebToolsService:
         except requests.HTTPError as exc:
             logger.warning(f"Tavily search HTTP error: {exc} — body={getattr(exc.response, 'text', '')[:200]}")
             return {"query": query, "results": [], "error": f"Tavily HTTP {getattr(exc.response, 'status_code', '?')}"}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Tavily search failed: {exc}")
             return {"query": query, "results": [], "error": str(exc)}
 
@@ -197,7 +197,7 @@ class WebToolsService:
         except requests.HTTPError as exc:
             logger.warning(f"Tavily extract HTTP error: {exc}")
             return {"url": url, "content": "", "error": f"Tavily HTTP {getattr(exc.response, 'status_code', '?')}"}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Tavily extract failed: {exc}")
             return {"url": url, "content": "", "error": str(exc)}
 

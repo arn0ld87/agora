@@ -94,7 +94,7 @@ class ReportStatusService:
                         if not simulation_id:
                             simulation_id = meta.get("simulation_id")
                         break
-            except Exception as lookup_exc:
+            except Exception as lookup_exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning("report_id → task lookup failed for report_id=%s: %s", report_id, lookup_exc)
 
         # ── 2) If we have a task, that's authoritative ─────────────────────

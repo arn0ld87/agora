@@ -264,7 +264,7 @@ def load_run_state(
             )
 
         return state
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error("Failed to load run state: %s", exc)
         return None
 
@@ -313,7 +313,7 @@ def save_run_state(
     if run_registry_sync is not None:
         try:
             run_registry_sync(state.simulation_id, data)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.debug("Run registry sync skipped for %s: %s", state.simulation_id, exc)
 
 
@@ -352,7 +352,7 @@ def read_console_log(
         if max_lines is not None:
             lines = lines[-max_lines:]
         return lines
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("Failed to read simulation.log for %s: %s", run_id, exc)
         return []
 
@@ -412,7 +412,7 @@ def cleanup_run_logs(
             try:
                 os.remove(file_path)
                 cleaned_files.append(filename)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — state already saved; exc logged or discarded
                 errors.append(f"Failed to delete {filename}: {exc}")
 
     for dir_name in dirs_to_clean:
@@ -421,7 +421,7 @@ def cleanup_run_logs(
             try:
                 os.remove(actions_file)
                 cleaned_files.append(f"{dir_name}/actions.jsonl")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — state already saved; exc logged or discarded
                 errors.append(f"Failed to delete {dir_name}/actions.jsonl: {exc}")
 
     logger.info(

@@ -75,7 +75,7 @@ def _resolve_simulation_summary(simulation_id: str, sim_cache: dict) -> dict:
         manager = SimulationManager()
         entry["config"] = manager.get_simulation_config(simulation_id)
         entry["state"] = manager.get_simulation(simulation_id)
-    except Exception as exc:  # pragma: no cover - defensive read path
+    except Exception as exc:  # pragma: no cover - defensive read path  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug("Could not load simulation %s for run summary: %s", simulation_id, exc)
 
     store = current_app.extensions.get("artifact_store") if current_app else None
@@ -85,7 +85,7 @@ def _resolve_simulation_summary(simulation_id: str, sim_cache: dict) -> dict:
                 profiles = store.read_json(simulation_id, "reddit_profiles", default=[]) or []
                 if isinstance(profiles, list):
                     entry["persona_count"] = len(profiles)
-        except Exception as exc:  # pragma: no cover - defensive read path
+        except Exception as exc:  # pragma: no cover - defensive read path  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.debug("Could not read reddit_profiles for %s: %s", simulation_id, exc)
 
     sim_cache[simulation_id] = entry
@@ -97,7 +97,7 @@ def _resolve_project(project_id: str, project_cache: dict):
         return project_cache[project_id]
     try:
         project = ProjectManager.get_project(project_id)
-    except Exception as exc:  # pragma: no cover - defensive read path
+    except Exception as exc:  # pragma: no cover - defensive read path  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.debug("Could not load project %s for run summary: %s", project_id, exc)
         project = None
     project_cache[project_id] = project
@@ -335,7 +335,7 @@ def stop_run(run_id: str):
             resume_capability={"available": True, "action": "restart", "label": "Restart run"},
         )
         return json_success(run_registry.get_run(run_id))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception returned as JSON error response
         return json_error(str(exc), status=400)
 
 
@@ -480,7 +480,7 @@ def _restart_graph_build(run: dict):
                 message="Graph build completed",
                 artifacts=ArtifactLocator.existing_paths({"project_dir": ProjectManager._get_project_dir(project_id)}),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
             project.status = ProjectStatus.FAILED
             project.error = str(exc)
             ProjectManager.save_project(project)
@@ -582,7 +582,7 @@ def _restart_simulation_prepare(run: dict):
                 artifacts=_simulation_artifacts(simulation_id),
                 resume_capability={"available": True, "action": "restart", "label": "Restart preparation"},
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
             task_manager.fail_task(task_id, str(exc))
             run_registry.update_run(new_run["run_id"], status="failed", message=str(exc), error=str(exc))
 
@@ -728,7 +728,7 @@ def _resume_report_generate(run: dict):
             else:
                 run_registry.update_run(run["run_id"], status="failed", message=report.error or "Report generation failed", error=report.error)
                 task_manager.fail_task(task_id, report.error or "Report generation failed")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
             run_registry.update_run(run["run_id"], status="failed", message=str(exc), error=str(exc))
             task_manager.fail_task(task_id, str(exc))
 
