@@ -22,12 +22,16 @@ def _extract_module_constants(tree: ast.Module) -> dict[str, str]:
     ``_TICKET_SCOPE = "llm-stream"`` → ``{"_TICKET_SCOPE": "llm-stream"}``.
     """
     constants: dict[str, str] = {}
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and isinstance(node.value, ast.Constant):
                     if isinstance(node.value.value, str):
                         constants[target.id] = node.value.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and isinstance(node.value, ast.Constant):
+                if isinstance(node.value.value, str):
+                    constants[node.target.id] = node.value.value
     return constants
 
 
@@ -77,7 +81,7 @@ def _collect_scopes(
     Yields the *literal* scope or the static prefix of an f-string template.
     Runtime-computed scopes are skipped (commented out below).
     """
-    for py_file in sorted(api_dir.glob("*.py")):
+    for py_file in sorted(api_dir.rglob("*.py")):
         source = py_file.read_text(encoding="utf-8")
         try:
             tree = ast.parse(source, filename=str(py_file))
@@ -96,9 +100,16 @@ def _collect_scopes(
                 if not isinstance(decorator, ast.Call):
                     continue
 
-                # The callable part must be the name "allow_ticket_auth".
+                # The callable part must be the name "allow_ticket_auth"
+                # (bare or attribute form, e.g. @auth.allow_ticket_auth).
                 func = decorator.func
-                if not (isinstance(func, ast.Name) and func.id == "allow_ticket_auth"):
+                if isinstance(func, ast.Name):
+                    is_target = func.id == "allow_ticket_auth"
+                elif isinstance(func, ast.Attribute):
+                    is_target = func.attr == "allow_ticket_auth"
+                else:
+                    is_target = False
+                if not is_target:
                     continue
 
                 # First positional argument must be the scope lambda.
