@@ -28,7 +28,11 @@ jobs:
             api.github.com:443
             api.scorecard.dev:443
             api.securityscorecards.dev:443
+            fulcio.sigstore.dev:443
             github.com:443
+            oauth2.sigstore.dev:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
             objects.githubusercontent.com:443
             oss-fuzz-build-logs.storage.googleapis.com:443
             proxy.golang.org:443

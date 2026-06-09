@@ -34,6 +34,10 @@ jobs:
             api.github.com:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl.google.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -103,6 +107,10 @@ jobs:
             api.github.com:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl.google.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -170,6 +178,10 @@ jobs:
             api.github.com:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl.google.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -229,6 +241,10 @@ jobs:
             api.github.com:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl.google.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
