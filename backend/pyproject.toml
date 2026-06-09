@@ -133,7 +133,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "I", "UP", "SIM"]
+select = ["E", "F", "B", "BLE", "I", "UP", "SIM"]
 ignore = [
     "E501",
     # Phase-2 Baseline: bestehende Altlasten bleiben bis zu den fokussierten
