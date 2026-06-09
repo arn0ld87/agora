@@ -15,6 +15,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   swallowed where recovery is intentional; they are now visible in logs.
   New test `tests/test_no_silent_exceptions.py` guards the policy. (#583)
 
+### Fixed (bug — 2026-06-09)
+
+- `llm_client._resolve_num_ctx` silently truncated unknown cloud models to 8 k
+  context. Now emits a structured WARNING (exactly once per model name, deduplicated
+  via `lru_cache`) when the legacy `OLLAMA_NUM_CTX`/8192 fallback fires, so
+  misconfigured models surface in the log viewer instead of producing cut-off
+  or incoherent output. Resolves #581.
+
 ### Fixed (deploy — 2026-05-18)
 
 - Persona-Generation wurde nach MAI-12 + PR #519 stark verlangsamt: gunicorn
