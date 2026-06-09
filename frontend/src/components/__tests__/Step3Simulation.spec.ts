@@ -58,6 +58,9 @@ vi.mock('../../api/simulation', () => ({
 vi.mock('../../api/report', () => ({
   generateReport: vi.fn(),
 }))
+vi.mock('../../api/runs', () => ({
+  cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'sim_test_smoke', status: 'cancel_requested' } }),
+}))
 
 // Captured SSE state-callback — re-assigned per test in describe('phase-promotion').
 // The factory uses a shared slot so tests can fire the callback after mount.
@@ -84,6 +87,7 @@ vi.mock('../../composables/useEventStream', () => ({
 import Step3Simulation from '../Step3Simulation.vue'
 import { useEventStream } from '../../composables/useEventStream'
 import { generateReport } from '../../api/report'
+import { cancelRun } from '../../api/runs'
 
 const i18n = createI18n({
   legacy: false,
@@ -292,6 +296,45 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
 
     // Nach doStart (mit success=false): resetState wurde aufgerufen → phase=0 → Start-Button sichtbar.
     expect(wrapper.findAll('button').map(b => b.text()).some(t => t.includes('step3.controls.start'))).toBe(true)
+  })
+
+  it('zeigt Cancel-Button im processing-State (phase=1)', async () => {
+    // getRunStatus gibt running zurück → phase=1 nach onMounted.
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: { runner_status: 'running', current_round: 1 } } as never)
+    vi.mocked(simulationApi.getRunStatusDetail).mockResolvedValue({ success: true, data: { runner_status: 'running', all_actions: [] } } as never)
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // phase=1 → template v-else-if="phase === 1" → Cancel-Button sichtbar
+    const buttons = wrapper.findAll('button')
+    const cancelBtn = buttons.find(b => b.text().includes('step3.controls.cancel'))
+    expect(cancelBtn).toBeTruthy()
+  })
+
+  it('ruft cancelRun mit simulationId auf, wenn Cancel-Button geklickt wird', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: { runner_status: 'running', current_round: 1 } } as never)
+    vi.mocked(simulationApi.getRunStatusDetail).mockResolvedValue({ success: true, data: { runner_status: 'running', all_actions: [] } } as never)
+
+    // window.confirm mocken → true (Nutzer bestätigt)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const buttons = wrapper.findAll('button')
+    const cancelBtn = buttons.find(b => b.text().includes('step3.controls.cancel'))
+    expect(cancelBtn).toBeTruthy()
+
+    await cancelBtn!.trigger('click')
+    await flushPromises()
+
+    expect(cancelRun).toHaveBeenCalledOnce()
+    expect(cancelRun).toHaveBeenCalledWith('sim_test_smoke')
+
+    vi.restoreAllMocks()
   })
 
   it('sendet ein persistiertes Custom-Modell beim Reportstart', async () => {

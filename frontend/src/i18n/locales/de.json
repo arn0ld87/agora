@@ -451,6 +451,9 @@
       "stop": "Stoppen",
       "stopConfirm": "Simulation wirklich abbrechen? Bisherige Daten bleiben erhalten.",
       "stopped": "Gestoppt.",
+      "cancel": "Abbrechen",
+      "cancelConfirm": "Simulation sanft abbrechen? Bereits abgeschlossene Stages bleiben als Teil-Report erhalten.",
+      "cancelled": "Abbruch angefordert.",
       "completed": "Abgeschlossen."
     },
     "status": {
