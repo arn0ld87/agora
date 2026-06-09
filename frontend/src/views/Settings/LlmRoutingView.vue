@@ -9,6 +9,7 @@ import Select from '@/components/v4/forms/Select.vue'
 import RunLlmRoutingPanel from '@/components/LlmRouting/LlmRoutingView.vue'
 import { listRuns } from '@/api/runs'
 import type { RunRecord } from '@/types/run'
+import type { RunDetail } from '@/contracts/runsContract'
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
@@ -18,7 +19,8 @@ const BREADCRUMBS = [
 // Settings is only an entrypoint; routing persistence remains bound to real run IDs.
 const SELECTED_RUN_STORAGE_KEY = 'agora.llmRouting.selectedRunId'
 
-const runs = ref<RunRecord[]>([])
+// Issue #580: listRuns now returns RunsListResponse; use RunDetail for the item type.
+const runs = ref<RunDetail[]>([])
 const selectedRunId = ref(readStoredRunId())
 const loadingRuns = ref(false)
 const error = ref<string | null>(null)
@@ -49,7 +51,8 @@ async function loadRuns(): Promise<void> {
   error.value = null
   try {
     const response = await listRuns({ limit: 25 })
-    runs.value = response.data || []
+    // Issue #580: data is RunsListResponse { runs, total, aggregation }
+    runs.value = response.data?.runs || []
     if (!selectedRunIdTrimmed.value && runs.value.length > 0) {
       selectedRunId.value = runs.value[0].run_id
     }
