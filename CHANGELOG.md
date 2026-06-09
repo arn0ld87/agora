@@ -5,6 +5,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Operations / Observability (refactor — 2026-06-09)
+
+- Replaced all ~120 silent `except Exception: pass` blocks in `backend/app/`
+  with logged equivalents (`logger.debug`/`logger.warning`) or explicit
+  `# noqa: BLE001 — <reason>` comments per the Issue #583 fix policy.
+  Ruff rule `BLE001` (blind exception) added to `pyproject.toml` select list
+  and enforced going forward. Behaviour is unchanged — exceptions are still
+  swallowed where recovery is intentional; they are now visible in logs.
+  New test `tests/test_no_silent_exceptions.py` guards the policy. (#583)
+
 ### Fixed (deploy — 2026-05-18)
 
 - Persona-Generation wurde nach MAI-12 + PR #519 stark verlangsamt: gunicorn
