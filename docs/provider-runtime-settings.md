@@ -71,3 +71,4 @@ Konventionen dieselbe Runtime-Auswahl nutzen.
 | keines | `LLM_DISABLE_JSON_OBJECT_MODE=true` | keines (Freitext) |
 | Pydantic-Modell | keines | `{"type": "json_schema", "strict": true}` |
 | Pydantic-Modell | `LLM_DISABLE_JSON_SCHEMA_MODE=true` | `{"type": "json_object"}` + Pydantic-Validierung |
+| Pydantic-Modell | `LLM_DISABLE_JSON_SCHEMA_MODE=true` und `LLM_DISABLE_JSON_OBJECT_MODE=true` | keines (Freitext) + Pydantic-Validierung |

@@ -174,6 +174,25 @@ class TestWithSchemaDisableSchemaMode:
             f"Expected json_object fallback, got: {rf}"
         )
 
+    def test_response_format_falls_back_to_none_when_both_disabled(self, monkeypatch) -> None:
+        """Beide Flags gesetzt: Schema-Mode UND Object-Mode disabled → Freitext (None)."""
+        monkeypatch.setenv("LLM_DISABLE_JSON_SCHEMA_MODE", "true")
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "true")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        client = _make_client()
+        mock = _stub_chat(client, _SAMPLE_JSON)
+
+        result = client.chat_json(
+            [{"role": "user", "content": "hi"}],
+            schema=_SampleSchema,
+        )
+
+        assert result["value"] == 42
+        _, kwargs = mock.call_args
+        assert kwargs.get("response_format") is None
+
     def test_legacy_disable_json_mode_does_not_suppress_schema_mode(self, monkeypatch) -> None:
         """LLM_DISABLE_JSON_MODE wirkt als Alias für OBJECT_MODE, nicht SCHEMA_MODE.
         Mit schema gesetzt bleibt strict json_schema aktiv."""

@@ -1232,10 +1232,12 @@ class LLMClient:
         schema_mode_fallback = schema is not None and disable_schema_mode
 
         if schema_mode_fallback:
+            fallback_target = "Freitext" if disable_object_mode else "json_object"
             logger.info(
                 "LLMClient.chat_json: LLM_DISABLE_JSON_SCHEMA_MODE aktiv — schema=%s "
-                "fällt auf json_object + Pydantic-Validierung zurück",
+                "fällt auf %s + Pydantic-Validierung zurück",
                 schema.__name__ if isinstance(schema, type) else "dict",
+                fallback_target,
             )
 
         if schema is not None:
@@ -1252,7 +1254,8 @@ class LLMClient:
         elif schema_mode_fallback:
             # LLM_DISABLE_JSON_SCHEMA_MODE=true: Schema übergeben, aber strict-Mode
             # deaktiviert → json_object + post-hoc Pydantic-Validierung.
-            response_format = {"type": "json_object"}
+            # Falls auch OBJECT_MODE deaktiviert ist, fällt es auf Freitext (None) zurück.
+            response_format = None if disable_object_mode else {"type": "json_object"}
         elif schema is not None:
             # OpenAI / Google strict-mode: $refs inline-resolven, $defs +
             # Meta-Keys droppen, additionalProperties:false + required-Liste
