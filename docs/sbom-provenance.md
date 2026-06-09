@@ -29,7 +29,7 @@ RUN_ID=$(gh run list --workflow docker-image.yml \
 # SBOM herunterladen
 gh run download "$RUN_ID" \
   --repo arn0ld87/agora \
-  --name agora-ghcr-sbom-spdx \
+  --name agora-image-sbom-spdx \
   --dir ./sbom
 ```
 
@@ -99,7 +99,7 @@ Was `gh attestation verify` prüft:
 # Vollständige Provenance als JSON ausgeben
 gh attestation verify oci://"$IMAGE" \
   --repo arn0ld87/agora \
-  --format json | jq '.[] | .verificationResult.statement.predicate'
+  --format json | jq '.[] | .statement.predicate'
 ```
 
 Enthält u. a.:
