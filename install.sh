@@ -78,15 +78,21 @@ fi
 UV_VER=$(uv --version 2>/dev/null | awk '{print $2}')
 success "uv $UV_VER"
 
-# --- docker (nur Pflicht bei --docker-Modus) ---
+# --- docker + curl (nur Pflicht bei --docker-Modus) ---
 if [[ "$MODE" == "docker" ]]; then
   if ! command -v docker &>/dev/null; then
     die "docker ist nicht installiert.\n  → https://docs.docker.com/get-docker/"
   fi
+  if ! command -v curl &>/dev/null; then
+    die "curl ist nicht installiert — wird für den Readiness-Check benötigt.\n  → apt-get install curl  oder  brew install curl"
+  fi
   if ! docker info &>/dev/null; then
     die "Docker-Daemon läuft nicht — bitte Docker starten."
   fi
-  DOCKER_VER=$(docker --version | grep -oE '[0-9]+\.[0-9]+')
+  if ! docker compose version &>/dev/null; then
+    die "docker compose (Plugin) nicht gefunden.\n  → https://docs.docker.com/compose/install/"
+  fi
+  DOCKER_VER=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   success "docker $DOCKER_VER"
 fi
 
@@ -128,12 +134,18 @@ if [[ "$MODE" == "docker" ]]; then
   BACKEND_PORT="${AGORA_BACKEND_PORT:-5001}"
   FRONTEND_PORT="${AGORA_FRONTEND_PORT:-5173}"
   BIND_HOST="${AGORA_BIND_HOST:-127.0.0.1}"
+  # Bei 0.0.0.0 kann curl nicht direkt connecten — loopback nutzen
+  if [[ "$BIND_HOST" == "0.0.0.0" ]]; then
+    CHECK_HOST="127.0.0.1"
+  else
+    CHECK_HOST="$BIND_HOST"
+  fi
 
   info "Starte docker compose up --build -d …"
   docker compose up --build -d
 
   # Auf /readyz warten
-  READYZ_URL="http://${BIND_HOST}:${BACKEND_PORT}/readyz"
+  READYZ_URL="http://${CHECK_HOST}:${BACKEND_PORT}/readyz"
   TIMEOUT=180
   INTERVAL=5
   ELAPSED=0
@@ -151,9 +163,9 @@ if [[ "$MODE" == "docker" ]]; then
   echo ""
   success "Agora läuft!"
   echo ""
-  printf "  ${BOLD}Frontend${RESET}           http://${BIND_HOST}:${FRONTEND_PORT}\n"
-  printf "  ${BOLD}Backend Readiness${RESET}  http://${BIND_HOST}:${BACKEND_PORT}/readyz\n"
-  printf "  ${BOLD}Backend Health${RESET}     http://${BIND_HOST}:${BACKEND_PORT}/health\n"
+  printf "  ${BOLD}Frontend${RESET}           http://${CHECK_HOST}:${FRONTEND_PORT}\n"
+  printf "  ${BOLD}Backend Readiness${RESET}  http://${CHECK_HOST}:${BACKEND_PORT}/readyz\n"
+  printf "  ${BOLD}Backend Health${RESET}     http://${CHECK_HOST}:${BACKEND_PORT}/health\n"
   printf "  ${BOLD}Neo4j Browser${RESET}      http://127.0.0.1:7474\n"
   echo ""
   info "Logs:  docker compose logs -f agora"

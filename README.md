@@ -14,7 +14,7 @@ Dokumente, Webseiteninhalte oder strategische Fragestellungen hochladen, Wissens
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
 [![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen?style=flat-square)](./CHANGELOG.md)
 
-[Quickstart](#quickstart) · [Betriebsmodi](#betriebsmodi) · [Architektur](#architektur) · [Konfiguration](#konfiguration) · [Sicherheit](#sicherheit) · [Doku](./docs/) · [Status](./docs/STATUS.md)
+[Quick Start](#quick-start) · [Betriebsmodi](#betriebsmodi) · [Architektur](#architektur) · [Konfiguration](#konfiguration) · [Sicherheit](#sicherheit) · [Doku](./docs/) · [Status](./docs/STATUS.md)
 
 </div>
 
@@ -47,6 +47,8 @@ bun run dev
 | Neo4j Browser (nur Docker) | <http://localhost:7474> |
 
 > `./install.sh --help` zeigt alle Optionen. `./install.sh --check` führt Lint + Tests aus.
+
+Details: siehe [Detaillierte Installation](#detaillierte-installation)
 
 ---
 
@@ -137,7 +139,7 @@ Runtime
 
 Details in [`docs/architecture.md`](./docs/architecture.md).
 
-## Quickstart
+## Detaillierte Installation
 
 Voraussetzungen:
 
