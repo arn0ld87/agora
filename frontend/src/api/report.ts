@@ -68,6 +68,9 @@ export interface ChatData {
  *
  * Das Backend liest `mode` als Query-Parameter (?mode=strict|balanced|explorative),
  * alle anderen Felder kommen als JSON-Body.
+ *
+ * Issue #579: timeout: 0 disables the global 5-min cap for this long-running endpoint.
+ * Report generation can take 10–30 min; the global axios timeout would abort it at 5 min.
  */
 export const generateReport = (
   data: GenerateReportData | Record<string, unknown>
@@ -76,7 +79,7 @@ export const generateReport = (
   const params: Record<string, string> = {}
   if (mode) params['mode'] = mode
   return requestWithRetry(
-    () => service.post('/api/report/generate', body, { params }),
+    () => service.post('/api/report/generate', body, { params, timeout: 0 }),
     3,
     1000
   )
