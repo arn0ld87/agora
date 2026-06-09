@@ -2,16 +2,16 @@
 /**
  * ActiveModelBadge — zeigt das aktive LLM-Modell im WorkspaceHeader.
  *
- * Slice E.2, Issue #213.
+ * Slice E.2 / Observability Wave 2026-05 (Anti-Flicker, Issue #213).
  *
- * - Holt sich den Store, öffnet den SSE-Stream on mount.
- * - Zeigt Modell + Provider-Icon (SVG inline, Emoji-Fallback für unbekannte Provider).
- * - Idle-Fallback: isStale oder kein lastEvent → activeModel.idle.
- * - Failed-State: Reload-Button analog J.6 LogDrawer.
+ * - Während 'connecting'/'reconnecting': zeigt letzten bekannten Modell-String
+ *   (currentModel || lastKnownModel) mit dezenten Spinner-Dot, KEIN „Verbinde…"
+ *   als Hauptlabel mehr.
+ * - 'failed': Reload-Button bleibt (EventSource kann hier komplett scheitern).
+ * - 'idle' / isStale ohne bekanntes Modell: activeModel.unknown-Fallback.
  * - aria-live="polite", role="status".
- * - Alle Strings über t('activeModel.*').
  */
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useActiveModelStore } from '../store/useActiveModelStore'
 import OllamaIcon from './icons/OllamaIcon.vue'
@@ -21,6 +21,24 @@ import UnknownModelIcon from './icons/UnknownModelIcon.vue'
 
 const { t } = useI18n()
 const store = useActiveModelStore()
+
+const isTransient = computed(() =>
+  store.connectionStatus === 'connecting' || store.connectionStatus === 'reconnecting',
+)
+
+/**
+ * Anzuzeigender Modell-String: zuerst live, dann lastKnown, dann i18n-Fallback.
+ */
+const displayModel = computed(() =>
+  store.currentModel ?? store.lastKnownModel ?? t('activeModel.unknown'),
+)
+
+/**
+ * Provider aus dem letzten Event — für Icon-Auswahl auch während Reconnect.
+ */
+const displayProvider = computed(() => store.lastEvent?.provider ?? null)
+
+const displayContext = computed(() => store.lastEvent?.context ?? null)
 
 onMounted(() => {
   store.connect()
@@ -52,30 +70,51 @@ onUnmounted(() => {
       </button>
     </template>
 
-    <!-- Connecting / reconnecting state -->
-    <template v-else-if="store.connectionStatus === 'connecting' || store.connectionStatus === 'reconnecting'">
-      <span class="badge-status badge-status--connecting">
-        {{ t('activeModel.connecting') }}
+    <!-- Connecting / reconnecting: Modell bleibt sichtbar, dezenter Spinner-Dot -->
+    <template v-else-if="isTransient">
+      <span class="badge-spinner-dot" :title="t('activeModel.reconnecting')" aria-hidden="true" />
+      <span
+        v-if="displayProvider"
+        class="badge-provider-icon"
+        :title="t(`activeModel.provider.${displayProvider}`)"
+      >
+        <OllamaIcon v-if="displayProvider === 'ollama'" />
+        <CloudIcon v-else-if="displayProvider === 'cloud'" />
+        <OpenAiIcon v-else-if="displayProvider === 'openai'" />
+        <UnknownModelIcon v-else />
+      </span>
+      <span
+        class="badge-model-name badge-model-name--faded"
+        :title="displayContext ? t(`activeModel.context.${displayContext}`) : undefined"
+      >
+        {{ displayModel }}
       </span>
     </template>
 
-    <!-- Idle fallback: no event yet or data is stale -->
-    <template v-else-if="store.isStale || store.lastEvent === null">
+    <!-- Idle fallback: no event yet or data is stale and no lastKnown -->
+    <template v-else-if="store.isStale && store.lastKnownModel === null">
       <span class="badge-status badge-status--idle">
         {{ t('activeModel.idle') }}
       </span>
     </template>
 
-    <!-- Active model info -->
+    <!-- Active model info (connected, not stale) or stale with lastKnown -->
     <template v-else>
-      <span class="badge-provider-icon" :title="t(`activeModel.provider.${store.lastEvent.provider}`)">
-        <OllamaIcon v-if="store.lastEvent.provider === 'ollama'" />
-        <CloudIcon v-else-if="store.lastEvent.provider === 'cloud'" />
-        <OpenAiIcon v-else-if="store.lastEvent.provider === 'openai'" />
+      <span
+        v-if="displayProvider"
+        class="badge-provider-icon"
+        :title="t(`activeModel.provider.${displayProvider}`)"
+      >
+        <OllamaIcon v-if="displayProvider === 'ollama'" />
+        <CloudIcon v-else-if="displayProvider === 'cloud'" />
+        <OpenAiIcon v-else-if="displayProvider === 'openai'" />
         <UnknownModelIcon v-else />
       </span>
-      <span class="badge-model-name" :title="t(`activeModel.context.${store.lastEvent.context}`)">
-        {{ store.lastEvent.model }}
+      <span
+        class="badge-model-name"
+        :title="displayContext ? t(`activeModel.context.${displayContext}`) : undefined"
+      >
+        {{ displayModel }}
       </span>
     </template>
   </div>
@@ -103,6 +142,10 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.badge-model-name--faded {
+  opacity: 0.65;
+}
+
 .badge-provider-icon {
   display: inline-flex;
   align-items: center;
@@ -111,16 +154,28 @@ onUnmounted(() => {
   height: 1rem;
 }
 
+/* Dezenter Spinner-Dot: pulsierender Kreis, kein ablenkender Ring */
+.badge-spinner-dot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--color-warning, #f59e0b);
+  flex-shrink: 0;
+  animation: badge-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.75); }
+}
+
 .badge-status {
   font-size: 0.7rem;
 }
 
 .badge-status--failed {
   color: var(--color-error, #c00);
-}
-
-.badge-status--connecting {
-  color: var(--text-tertiary, #999);
 }
 
 .badge-status--idle {

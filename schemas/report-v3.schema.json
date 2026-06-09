@@ -71,9 +71,11 @@
         },
         "confidence": {
           "enum": [
+            "speculative",
             "low",
             "medium",
-            "high"
+            "high",
+            "verified"
           ],
           "title": "Confidence",
           "type": "string"
@@ -303,6 +305,124 @@
       "title": "Hypothesis",
       "type": "object"
     },
+    "ModelAttribution": {
+      "additionalProperties": false,
+      "description": "Welches LLM-Modell hat welche Pipeline-Stage produziert.\n\nSlice 8 (User-Bericht 2026-05-16): \"Es hinterlegt nirgendwo welches Modell\nf\u00fcr welchen Teil der Erstellung zust\u00e4ndig war.\" Pro abgeschlossener Stage\nein Eintrag \u2014 Frontend rendert sie als ausklappbare Provenance-Sektion.\nFelder absichtlich optional (au\u00dfer stage/provider/model_id), damit nicht\njeder Provider Tokens/Latency liefert.",
+      "properties": {
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "model_id": {
+          "description": "Backend-Modell-ID, z. B. 'qwen2.5:32b'",
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optionaler Hinweis (z. B. 'fallback nach timeout').",
+          "title": "Note"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "provider": {
+          "description": "z. B. 'ollama', 'openai', 'google'",
+          "enum": [
+            "ollama",
+            "openai",
+            "google",
+            "anthropic",
+            "custom",
+            "ollama_cloud",
+            "openai_compatible",
+            "github_copilot",
+            "cloud",
+            "unknown"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "ontology",
+            "graph_extraction",
+            "simulation",
+            "report_outline",
+            "report_section",
+            "report_synthesis",
+            "red_team",
+            "evidence_extraction",
+            "interview",
+            "other"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        }
+      },
+      "required": [
+        "stage",
+        "provider",
+        "model_id"
+      ],
+      "title": "ModelAttribution",
+      "type": "object"
+    },
     "Multiplier": {
       "additionalProperties": false,
       "description": "Wachstums- oder Wirkungshebel entlang der Customer-Journey-Stufen.",
@@ -502,9 +622,11 @@
         },
         "confidence": {
           "enum": [
+            "speculative",
             "low",
             "medium",
-            "high"
+            "high",
+            "verified"
           ],
           "title": "Confidence",
           "type": "string"
@@ -674,6 +796,14 @@
       "title": "Hypotheses",
       "type": "array"
     },
+    "model_attribution": {
+      "description": "Welches LLM-Modell hat welche Stage produziert.",
+      "items": {
+        "$ref": "#/$defs/ModelAttribution"
+      },
+      "title": "Model Attribution",
+      "type": "array"
+    },
     "multipliers": {
       "items": {
         "$ref": "#/$defs/Multiplier"
@@ -700,6 +830,15 @@
         "$ref": "#/$defs/ProjectImpact"
       },
       "title": "Project Impacts",
+      "type": "array"
+    },
+    "red_team_findings": {
+      "description": "Befunde der Red-Team-Review-Stage (max. 10).",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Red Team Findings",
       "type": "array"
     },
     "report_id": {

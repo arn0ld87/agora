@@ -6,17 +6,18 @@
  * zirkulaere Abhaengigkeiten.
  */
 
-export type ConfidenceBucket = 'low' | 'medium' | 'high' | 'verified'
+export type ConfidenceBucket = 'speculative' | 'low' | 'medium' | 'high' | 'verified'
 
 /**
  * Berechnet das Confidence-Label aus einem Score-Wert.
- * Schwellen: verified >=0.85 | high >=0.75 | medium >=0.45 | low <0.45
+ * Schwellen: verified >=0.85 | high >=0.75 | medium >=0.45 | low >=0.2 | speculative <0.2
  */
 export function deriveLabel(score: number): ConfidenceBucket {
   if (score >= 0.85) return 'verified'
   if (score >= 0.75) return 'high'
   if (score >= 0.45) return 'medium'
-  return 'low'
+  if (score >= 0.2) return 'low'
+  return 'speculative'
 }
 
 export interface AuditEntry {
@@ -46,7 +47,7 @@ export function aggregateSectionConfidence(section: unknown): SectionConfidenceR
   const sec = section as { claims?: ClaimLike[] } | null | undefined
   const claims = Array.isArray(sec?.claims) ? sec!.claims : []
   if (claims.length === 0) {
-    return { score: 0, label: 'low', auditTrail: [] }
+    return { score: 0, label: 'speculative', auditTrail: [] }
   }
   const scoreSum = claims.reduce(
     (acc, c) => acc + (typeof c?.confidence_score === 'number' ? c.confidence_score : 0),

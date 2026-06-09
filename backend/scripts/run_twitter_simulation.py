@@ -34,8 +34,9 @@ try:
     from ._sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_single_platform_parser,
+        compute_start_hour_offset,
+        detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -48,8 +49,9 @@ except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_single_platform_parser,
+        compute_start_hour_offset,
+        detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -460,52 +462,78 @@ class TwitterSimulationRunner:
         llm_api_key = os.environ.get("LLM_API_KEY", "")
         llm_base_url = os.environ.get("LLM_BASE_URL", "")
         llm_model = os.environ.get("LLM_MODEL_NAME", "")
-        
+
         # If not in .env, use config as fallback
         if not llm_model:
             llm_model = self.config.get("llm_model", "qwen3-coder-next:cloud")
-        
-        # Set environment variables required by camel-ai
-        if llm_api_key:
-            os.environ["OPENAI_API_KEY"] = llm_api_key
-        
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise ValueError("Missing API Key configuration, please set LLM_API_KEY in .env file in project root")
-        
-        if llm_base_url:
-            os.environ["OPENAI_BASE_URL"] = llm_base_url
-            os.environ["OPENAI_API_BASE"] = llm_base_url
-            os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-        
-        print(f"LLM configuration: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}...")
-        
-        # `think` und `options.num_ctx` sind Ollama-only. OpenAI/Anthropic
-        # antworten 400 sobald `think` in extra_body landet.
+
+        platform = detect_oasis_platform(llm_model, llm_base_url)
         think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
         ctx_limit = int(os.environ.get("LLM_CONTEXT_LIMIT", "262144"))
-        extra_body = build_camel_extra_body(
-            model=llm_model,
-            base_url=llm_base_url,
-            num_ctx=ctx_limit,
-            think=think_on,
+        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "16384"))
+
+        print(
+            f"LLM configuration: model={llm_model}, "
+            f"base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
+            f"platform={platform.value}",
+            flush=True,
         )
-        # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`, alle anderen
-        # Modelle akzeptieren `max_tokens`.
-        # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`, alle anderen
-        # Modelle akzeptieren `max_tokens`.
-        completion_max_tokens = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "8192"))
+
         model_cfg: dict = build_camel_completion_params(
             model=llm_model,
             completion_max_tokens=completion_max_tokens,
         )
-        if extra_body:
-            model_cfg["extra_body"] = extra_body
 
-        return ModelFactory.create(
-            model_platform=ModelPlatformType.OPENAI,
-            model_type=llm_model,
-            model_config_dict=model_cfg,
-        )
+        if platform == ModelPlatformType.GEMINI:
+            # Gemini-3 requires thought_signature echo in multi-turn tool calls.
+            # Route via CAMEL's GeminiModel; do NOT touch OPENAI_BASE_URL.
+            os.environ["GOOGLE_API_KEY"] = llm_api_key or os.environ.get("GOOGLE_API_KEY", "")
+            return ModelFactory.create(
+                model_platform=ModelPlatformType.GEMINI,
+                model_type=llm_model,
+                model_config_dict=model_cfg,
+            )
+
+        elif platform == ModelPlatformType.OLLAMA:
+            # Ollama Cloud no longer serves OpenAI-compat /v1.
+            # CAMEL's OllamaModel speaks the native /api/chat endpoint.
+            # Build extra_body inline: we already know this is Ollama, so the
+            # legacy _is_ollama_route gate inside build_camel_extra_body() would
+            # falsely drop think/num_ctx for :latest models or ollama.com URLs.
+            os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
+            extra_body: dict = {"think": think_on}
+            if ctx_limit is not None:
+                extra_body["options"] = {"num_ctx": ctx_limit}
+            model_cfg["extra_body"] = extra_body
+            return ModelFactory.create(
+                model_platform=ModelPlatformType.OLLAMA,
+                model_type=llm_model,
+                url=llm_base_url or None,
+                api_key=llm_api_key or None,
+                model_config_dict=model_cfg,
+            )
+
+        else:
+            # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
+            # No extra_body: think/num_ctx are Ollama-only and would 400 here.
+            if llm_api_key:
+                os.environ["OPENAI_API_KEY"] = llm_api_key
+
+            if not os.environ.get("OPENAI_API_KEY"):
+                raise ValueError(
+                    "Missing API Key configuration, please set LLM_API_KEY in .env file in project root"
+                )
+
+            if llm_base_url:
+                os.environ["OPENAI_BASE_URL"] = llm_base_url
+                os.environ["OPENAI_API_BASE"] = llm_base_url
+                os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+
+            return ModelFactory.create(
+                model_platform=ModelPlatformType.OPENAI,
+                model_type=llm_model,
+                model_config_dict=model_cfg,
+            )
     
     def _get_active_agents_for_round(
         self, 
@@ -603,7 +631,11 @@ class TwitterSimulationRunner:
             total_rounds = min(total_rounds, max_rounds)
             if total_rounds < original_rounds:
                 print(f"\nRounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-        
+
+        start_hour_offset = compute_start_hour_offset(self.config, total_rounds, minutes_per_round)
+        if start_hour_offset != 0:
+            print(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
         print("\nSimulation parameters:")
         print(f"  - Total simulation duration: {total_hours}hours")
         print(f"  - Time per round: {minutes_per_round}minutes")
@@ -736,7 +768,7 @@ class TwitterSimulationRunner:
 
             # Calculate current simulation time
             simulated_minutes = round_num * minutes_per_round
-            simulated_hour = (simulated_minutes // 60) % 24
+            simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
             simulated_day = simulated_minutes // (60 * 24) + 1
 
             # Get Agents activated this round

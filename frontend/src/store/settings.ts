@@ -217,7 +217,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function connectStream(): Promise<void> {
-    if (eventSource !== null || streamState.value === 'connecting') return
+    if (streamState.value === 'connecting') return
+    if (eventSource !== null && streamState.value === 'open') return
     streamState.value = 'connecting'
     try {
       eventSource = await openSettingsStream({
@@ -226,7 +227,18 @@ export const useSettingsStore = defineStore('settings', () => {
           if (!parsed.success || saving.value) return
           await loadSettings()
         },
-        error: () => {
+        error: (ev: Event) => {
+          // openSettingsStream awaits a signed ticket, so an EventSource
+          // error can fire before the outer eventSource ref is assigned.
+          // The event target carries the actual EventSource — close that
+          // one too, then drop the cached ref if it already pointed at us.
+          if (typeof EventSource !== 'undefined' && ev.target instanceof EventSource) {
+            ev.target.close()
+          }
+          if (eventSource) {
+            eventSource.close()
+            eventSource = null
+          }
           streamState.value = 'failed'
         },
       })

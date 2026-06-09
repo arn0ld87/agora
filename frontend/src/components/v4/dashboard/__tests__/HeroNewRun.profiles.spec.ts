@@ -2,20 +2,27 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { makeI18n, makeRouter } from './dashTestHelpers'
 
-// Simulation-API: stabile Presets, kein Ollama-Fehler
-vi.mock('../../../../api/simulation', () => ({
-  getAvailableModels: vi.fn().mockResolvedValue({
+// Slice A2: ModelPicker stubben, damit die Hero-Tests ohne Pinia laufen.
+vi.mock('../../forms/ModelPicker.vue', () => ({
+  default: {
+    name: 'ModelPicker',
+    template: '<div class="model-picker-stub" data-testid="model-picker" />',
+    props: ['modelValue', 'placeholder', 'disabled'],
+    emits: ['update:modelValue'],
+  },
+}))
+
+// Slice "small-sim-floor-frontend-sync": HeroNewRun fragt beim Mount /api/status
+// ab. In den Profile-Tests interessiert uns nur das Profil-Verhalten — minimaler
+// Status-Mock mit allow_small_sim=false (Default-Pfad).
+vi.mock('../../../../api/status', () => ({
+  getSystemStatus: vi.fn().mockResolvedValue({
     success: true,
-    data: {
-      ollama: [],
-      presets: [{ name: 'preset-a', label: 'Preset A' }],
-      current_default: 'preset-a',
-      default_provider: 'ollama',
-      ollama_reachable: false,
-      ollama_error: null,
-      neo4j_reachable: true,
-      neo4j_error: null,
-    },
+    backend: { ok: true, version: '1.0.0', auth_mode: 'open', allow_small_sim: false },
+    neo4j: { reachable: true },
+    ollama: { reachable: false, models_available: [] },
+    disk: { uploads: { path: '/tmp', total_bytes: 0, free_bytes: 0, used_pct: 0 } },
+    timestamp: '2026-05-17T00:00:00Z',
   }),
 }))
 
@@ -59,18 +66,20 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     vi.mocked(setPendingUpload).mockReset()
   })
 
-  it('rendert LLM-Profile aus API im Dropdown', async () => {
+  it('rendert LLM-Profile aus API im Profile-Dropdown', async () => {
     const router = makeRouter()
     await router.push('/dashboard')
     const w = mount(HeroNewRun, { global: { plugins: [makeI18n(), router] } })
     await flushPromises()
 
-    const select = w.find<HTMLSelectElement>('select#hero-model')
+    const select = w.find<HTMLSelectElement>('select#hero-profile')
     expect(select.exists()).toBe(true)
 
     const optionValues = Array.from(select.element.options).map(o => o.value)
-    expect(optionValues).toContain('profile:abc')
-    expect(optionValues).toContain('profile:xyz')
+    // Slice A2: Profile-IDs ohne `profile:`-Prefix; leerer Wert deaktiviert das Profile.
+    expect(optionValues).toContain('')
+    expect(optionValues).toContain('abc')
+    expect(optionValues).toContain('xyz')
   })
 
   it('übergibt llmProfileId an setPendingUpload bei Profile-Auswahl', async () => {
@@ -93,8 +102,8 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
     await flushPromises()
 
     // Profil 'abc' auswählen
-    const select = w.find<HTMLSelectElement>('select#hero-model')
-    await select.setValue('profile:abc')
+    const select = w.find<HTMLSelectElement>('select#hero-profile')
+    await select.setValue('abc')
     await flushPromises()
 
     // Starten
@@ -107,6 +116,8 @@ describe('HeroNewRun — LLM-Profile (P5.5)', () => {
       [file],
       'Wie reagiert die DACH-Region?',
       'abc',
+      30,
+      10,
     )
     expect(pushSpy).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })

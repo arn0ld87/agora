@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from pydantic import ValidationError
+
 from ...config import Config
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode
+from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ModelAttribution, ReportMode, ReportV3
 from ...models.report import Report, ReportStatus
 from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
@@ -99,6 +101,190 @@ def _mark_incomplete_for_persona_floor(
     if progress_callback:
         progress_callback("incomplete", 0, message)
     return report
+
+
+def _get_echo_index(agent: Any) -> float:
+    """Liest den aktuellen echo_chamber_index aus den Simulations-Metriken.
+
+    Gibt 0.0 zurück wenn keine Metriken verfügbar sind.
+    """
+    try:
+        from ..network_analytics import NetworkAnalyticsService
+        from ..simulation_runner import SimulationRunner
+
+        actions = SimulationRunner.get_all_actions(agent.simulation_id)
+        action_dicts = [a.to_dict() for a in actions]
+        if not action_dicts:
+            return 0.0
+        metrics = NetworkAnalyticsService().compute_metrics(
+            action_dicts,
+            simulation_id=agent.simulation_id,
+        ).to_dict()
+        return float(metrics.get("echo_chamber_index") or 0.0)
+    except Exception as exc:
+        logger.warning("_get_echo_index: %r", exc)
+        return 0.0
+
+
+_RED_TEAM_SYSTEM_PROMPT = (
+    "Du bist ein kritischer Qualitätsprüfer für Szenarienanalysen. "
+    "Du prüfst einen Berichtsentwurf auf Schwachstellen im Wording-Glossar v1 "
+    "(VERBOTEN: 'Vorhersage', 'Prognose', 'wird eintreten'; ERLAUBT: Simulation, "
+    "Szenarienanalyse, Reaktionsmuster, Einschätzung). "
+    "Antworte ausschliesslich auf Deutsch."
+)
+
+_RED_TEAM_USER_TEMPLATE = (
+    "Berichtsentwurf (gekürzt):\n\n{report_excerpt}\n\n"
+    "Identifiziere:\n"
+    "(a) Widersprüche zwischen den Claims\n"
+    "(b) Verfrühten Konsens (Claims, die ohne ausreichende Cross-Segment-Reaktionen "
+    "als hoch-konfident markiert sind)\n"
+    "(c) Fehlende Cross-Segment-Reaktionen\n\n"
+    "Liefere maximal 10 Befunde als JSON-Objekt mit Feld 'findings' (Liste von Strings). "
+    "Kein Markdown, reines JSON."
+)
+
+
+def _run_red_team_review(
+    agent: Any,
+    report_v3: ReportV3,
+    echo_index: float,
+) -> ReportV3:
+    """Führt die Red-Team-Review-Stage aus und schreibt Findings in report_v3.
+
+    Wird vor report_synthesis aufgerufen. Macht einen LLM-Call mit dem
+    bestehenden agent.llm. Bei echo_index <= 0.6 wird kein LLM-Call ausgeführt
+    (findings bleibt leer). Bei Fehlern wird geloggt und unverändert zurückgegeben.
+
+    Slice 5 (Issue #497).
+    """
+    if echo_index <= 0.6:
+        logger.info(
+            "_run_red_team_review: echo_index=%.3f <= 0.6, kein LLM-Call (balanced Personas)",
+            echo_index,
+        )
+        return report_v3
+
+    # Berichtsentwurf-Excerpt aufbauen (Claims + Hypotheses als Kontext)
+    claim_lines = [
+        f"- [{c.confidence}] {c.statement}"
+        for c in (report_v3.claims or [])[:20]
+    ]
+    hyp_lines = [
+        f"- [hypothesis] {h.hypothesis_text}"
+        for h in (report_v3.hypotheses or [])[:10]
+    ]
+    report_excerpt = "\n".join(claim_lines + hyp_lines) or "(kein Inhalt)"
+
+    user_msg = _RED_TEAM_USER_TEMPLATE.format(report_excerpt=report_excerpt[:4000])
+
+    started_at = datetime.now(timezone.utc)
+    try:
+        raw = agent.llm.chat_json(
+            messages=[
+                {"role": "system", "content": _RED_TEAM_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            context="report",
+        )
+        findings_raw = raw.get("findings") if isinstance(raw, dict) else None
+        if isinstance(findings_raw, list):
+            findings = [str(f) for f in findings_raw if str(f).strip()][:10]
+        else:
+            findings = []
+    except Exception as exc:
+        logger.warning("_run_red_team_review: LLM-Call fehlgeschlagen: %r", exc)
+        findings = []
+
+    latency_ms = (datetime.now(timezone.utc) - started_at).total_seconds() * 1000
+
+    provider = getattr(getattr(agent, "llm", None), "provider", "unknown") or "unknown"
+    model_id = getattr(getattr(agent, "llm", None), "model", "unknown") or "unknown"
+
+    attribution = ModelAttribution(
+        stage="red_team",
+        provider=str(provider),
+        model_id=str(model_id),
+        latency_ms=round(latency_ms, 1),
+        started_at=started_at,
+    )
+    updated_attribution = list(report_v3.model_attribution) + [attribution]
+
+    report_v3 = report_v3.model_copy(
+        update={
+            "red_team_findings": findings,
+            "model_attribution": updated_attribution,
+        }
+    )
+    logger.info(
+        "_run_red_team_review: %d Befunde, echo_index=%.3f",
+        len(findings),
+        echo_index,
+    )
+    return report_v3
+
+
+SECTION_FALLBACK_BODY = (
+    "Diese Section konnte nicht generiert werden, weil der LLM-Aufruf "
+    "fehlgeschlagen ist (siehe Server-Log: report_id={report_id}, "
+    "section_index={section_index}). Mögliche Ursachen: ungültiger API-Key, "
+    "Rate-Limit, Modell nicht verfügbar. Konfiguriere ein gültiges LLM-Profil "
+    "(Settings → LLM-Provider) und starte den Report neu."
+)
+SECTION_FALLBACK_TITLE = "Section nicht generiert (LLM-Fehler)"
+
+
+def _safe_generate_section_react(
+    agent: Any,
+    section,
+    outline,
+    previous_sections: List[str],
+    progress_callback: Optional[Callable],
+    section_index: int,
+    report_id: str,
+) -> str:
+    """Track-3a-Wrapper: fängt Exceptions und leere Responses aus
+    :func:`generate_section_react` und liefert einen sichtbaren Fallback-Text,
+    damit die Pipeline nicht mit ``ReportV3.model_validate``-ValidationError
+    aussteigt, wenn ein LLM-Call (z. B. 401 unauthorized) failed.
+    """
+    try:
+        result = generate_section_react(
+            agent,
+            section=section,
+            outline=outline,
+            previous_sections=previous_sections,
+            progress_callback=progress_callback,
+            section_index=section_index,
+        )
+    except Exception as exc:  # noqa: BLE001 — Pipeline darf nicht crashen
+        logger.error(
+            "section %d (%r): generate_section_react warf eine Exception: %r — "
+            "Fallback-Content wird eingefügt.",
+            section_index,
+            getattr(section, "title", "<unbekannt>"),
+            exc,
+        )
+        return SECTION_FALLBACK_BODY.format(
+            report_id=report_id,
+            section_index=section_index,
+        )
+    if not isinstance(result, str) or not result.strip():
+        logger.warning(
+            "section %d (%r) in report=%s: generate_section_react gab leeren/"
+            "non-string Output zurück (type=%s) — Fallback-Content wird eingefügt.",
+            section_index,
+            getattr(section, "title", "<unbekannt>"),
+            report_id,
+            type(result).__name__,
+        )
+        return SECTION_FALLBACK_BODY.format(
+            report_id=report_id,
+            section_index=section_index,
+        )
+    return result
 
 
 def generate_section_react(
@@ -471,12 +657,97 @@ def generate_section_metadata(
         return {}
 
 
+def _is_cancel_requested(run_id: Optional[str]) -> bool:
+    """Prüft das Cancel-Flag für ``run_id``; kein Fehler wenn run_id None."""
+    if not run_id:
+        return False
+    try:
+        from ..sim.cancel_flag import is_cancel_requested
+        return is_cancel_requested(run_id)
+    except Exception:
+        return False
+
+
+def _build_partial_report(
+    report: "Report",
+    *,
+    report_id: str,
+    completed_section_titles: List[str],
+    outline: Any,
+    agent: Any,
+    progress_callback: Optional[Callable[[str, int, str], None]],
+) -> "Report":
+    """Finalisiert einen Teil-Report nach kooperativem Cancel.
+
+    Assembliert den Markdown-Inhalt aus den bereits geschriebenen Sections,
+    setzt ``status=COMPLETED`` (success-with-caveat) und persistiert
+    einen separaten Partial-Metadata-JSON-Artifact neben dem Report.
+    """
+    from ...models.report import ReportStatus
+    from datetime import datetime
+    import os
+
+    cancelled_at = datetime.now().isoformat()
+    report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
+    report.status = ReportStatus.COMPLETED
+    report.completed_at = cancelled_at
+
+    ReportManager.save_report(report)
+
+    # Partial-Marker als separates Artifact persistieren
+    # (Report-Dataclass hat kein metadata-Feld — Erweiterung ohne Schema-Migration)
+    partial_metadata: Dict[str, Any] = {
+        "partial": True,
+        "cancelled_at": cancelled_at,
+        "completed_stages": list(completed_section_titles),
+        "report_id": report_id,
+    }
+    partial_path = os.path.join(
+        ReportManager._ensure_report_folder(report_id), "partial_metadata.json"
+    )
+    try:
+        ReportManager._write_json_atomic(partial_path, partial_metadata)
+    except Exception as exc:
+        logger.warning(
+            "_build_partial_report: could not write partial_metadata.json: %r", exc
+        )
+
+    ReportManager.update_progress(
+        report_id,
+        "completed",
+        100,
+        f"Partial report generated ({len(completed_section_titles)} sections completed before cancel)",
+        completed_sections=completed_section_titles,
+    )
+    if progress_callback:
+        progress_callback(
+            "completed",
+            100,
+            f"Partial report generated ({len(completed_section_titles)} sections)",
+        )
+    if agent.report_logger:
+        agent.report_logger.log_report_complete(
+            total_sections=len(completed_section_titles),
+            total_time_seconds=0.0,
+        )
+    if agent.console_logger:
+        agent.console_logger.close()
+        agent.console_logger = None
+    logger.info(
+        "generate_report: partial report finalised report_id=%s sections=%d",
+        report_id,
+        len(completed_section_titles),
+    )
+    return report
+
+
 def generate_report(
     agent: Any,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
     report_id: Optional[str] = None,
     *,
     report_mode: ReportMode = DEFAULT_REPORT_MODE,
+    cancel_run_id: Optional[str] = None,
 ) -> Report:
     import uuid
 
@@ -539,6 +810,17 @@ def generate_report(
         ReportManager.update_progress(report_id, "planning", 15, f"Outline planning completed, total{len(outline.sections)}sections", completed_sections=[])
         ReportManager.save_report(report)
 
+        # Cancel-Check nach Outline (Stage-Boundary 1)
+        if _is_cancel_requested(cancel_run_id):
+            return _build_partial_report(
+                report,
+                report_id=report_id,
+                completed_section_titles=completed_section_titles,
+                outline=outline,
+                agent=agent,
+                progress_callback=progress_callback,
+            )
+
         required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         outline_titles = [section.title for section in outline.sections]
         missing = validate_required_sections(outline_titles, required_titles)
@@ -584,6 +866,16 @@ def generate_report(
             generated_sections.append(section_info["content"])
 
         for i, section in enumerate(outline.sections):
+            # Cancel-Check am Anfang jeder Section-Iteration (Stage-Boundary 2+)
+            if _is_cancel_requested(cancel_run_id):
+                return _build_partial_report(
+                    report,
+                    report_id=report_id,
+                    completed_section_titles=completed_section_titles,
+                    outline=outline,
+                    agent=agent,
+                    progress_callback=progress_callback,
+                )
             section_num = i + 1
             base_progress = 20 + int((i / total_sections) * 70)
             if section_num in existing_sections:
@@ -599,13 +891,14 @@ def generate_report(
             ReportManager.update_progress(report_id, "generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})", current_section=section.title, completed_sections=completed_section_titles)
             if progress_callback:
                 progress_callback("generating", base_progress, f"generatinggenerateSection: {section.title} ({section_num}/{total_sections})")
-            section_content = generate_section_react(
+            section_content = _safe_generate_section_react(
                 agent,
                 section=section,
                 outline=outline,
                 previous_sections=generated_sections,
                 progress_callback=lambda stage, prog, msg: progress_callback(stage, base_progress + int(prog * 0.7 / total_sections), msg) if progress_callback else None,
                 section_index=section_num,
+                report_id=report_id,
             )
             # M11.8e + P4.1: Quote-Anchor-Validierung für Persona-/Segment-/Friction-Sections.
             # Nur bei Section-Typen, die Persona-Zitate erwarten (nicht Plan/Meta-Sections).
@@ -639,13 +932,14 @@ def generate_report(
                         quote_result.invalid_quotes,
                         quote_result.unbound_evidence_refs,
                     )
-                    repair_content = generate_section_react(
+                    repair_content = _safe_generate_section_react(
                         agent,
                         section=section,
                         outline=outline,
                         previous_sections=generated_sections,
                         progress_callback=None,
                         section_index=section_num,
+                        report_id=report_id,
                     )
                     repair_result = validate_quote_anchors(
                         repair_content,
@@ -714,6 +1008,48 @@ def generate_report(
         if agent.report_logger:
             agent.report_logger.log_report_complete(total_sections=total_sections, total_time_seconds=total_time_seconds)
         ReportManager.save_report(report)
+
+        # ========== Red-Team-Review (Slice 5, Issue #497) — vor report_synthesis ==========
+        # Track 3b: ValidationError separat fangen, damit ein durch LLM-Failures
+        # entstandenes ReportV3-Schema-Loch (sections.N.title missing usw.) eine
+        # klare user-facing Message produziert statt einen Pydantic-Stack-Trace
+        # ins Frontend zu schicken.
+        try:
+            report_v3_raw = ReportManager.get_report_v3(report_id)
+            if report_v3_raw:
+                try:
+                    report_v3_obj = ReportV3.model_validate(report_v3_raw)
+                except ValidationError as val_exc:
+                    error_count = len(val_exc.errors())
+                    logger.error(
+                        "generate_report: ReportV3.model_validate hat report=%s "
+                        "abgelehnt — %d Schema-Verletzung(en), vermutlich aus "
+                        "fehlgeschlagenen LLM-Calls. Errors=%s",
+                        report_id,
+                        error_count,
+                        val_exc.errors()[:5],  # erste 5 für Logs, nicht den ganzen Trace
+                    )
+                    if report and not getattr(report, "error", None):
+                        report.error = (
+                            f"Report enthält {error_count} unvollständige Section(s) — "
+                            "LLM-Calls sind fehlgeschlagen. Server-Logs zeigen die "
+                            "betroffenen Felder. Mit gültigem LLM-Profil neu starten."
+                        )
+                    # Pipeline weiter ohne red_team_review — Report bleibt nutzbar
+                    # mit Fallback-Content in den betroffenen Sections.
+                    report_v3_obj = None
+                if report_v3_obj is not None:
+                    echo_index = _get_echo_index(agent)
+                    report_v3_obj = _run_red_team_review(agent, report_v3_obj, echo_index)
+                    ReportManager.save_report_v3(report_v3_obj)
+                    logger.info(
+                        "generate_report: red_team_review abgeschlossen, "
+                        "findings=%d, echo_index=%.3f",
+                        len(report_v3_obj.red_team_findings),
+                        echo_index,
+                    )
+        except Exception as exc:
+            logger.warning("generate_report: red_team_review fehlgeschlagen: %r", exc)
         ReportManager.update_progress(report_id, "completed", 100, "reportgeneratecomplete", completed_sections=completed_section_titles)
         if progress_callback:
             progress_callback("completed", 100, "reportgeneratecomplete")

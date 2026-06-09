@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-> Stand: 2026-05-04. Verbindliche Test-Counts und Layer-Status: [`docs/STATUS.md`](STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](../CLAUDE.md#architektur-layer-status). Operative Tasks: [`PLAN.md`](../PLAN.md). Subagent-Mapping pro Slice: [`docs/archive/plans/plan.heuristic.md`](archive/plans/plan.heuristic.md). Versions-Historie und Detail-Backlog: `docs/refactoring-backlog.md`, `docs/archive/worklogs/2026-04-29-p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
+> Stand: 2026-05-04. Verbindliche Test-Counts und Layer-Status: [`docs/STATUS.md`](STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](../CLAUDE.md#architektur-layer-status). Operative Tasks: [`PLAN.md`](../PLAN.md). Subagent-Mapping pro Slice: `docs/archive/plans/plan.heuristic.md`. Versions-Historie und Detail-Backlog: `docs/refactoring-backlog.md`, `docs/archive/worklogs/2026-04-29-p0-arbeitsprotokoll.md`, `CHANGELOG.md`.
 
 ## Current State (v0.9.0+ post-tag, Layer 0–6 grün, Layer 9 überwiegend grün)
 
@@ -17,7 +17,7 @@ Reader-Honesty-Refactor (Sub-Slices 02–17, Layer 0–5) und Frontend-TypeScrip
 Layer-9-Hardening ist überwiegend im Code; offen sind die CI-Beweise und das Auth-Zielbild. Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04).
 
 - **M9.6 Prod-Stack-Smoke in CI** — neuer Workflow `.github/workflows/prod-stack-smoke.yml`, der den vollen Compose-Stack inkl. Proxy hochzieht und `/healthz`, `/health`, `/`, `/api/auth/ticket` smoket. Ohne diesen Smoke fehlt der CI-Beweis für die F1/F2/F3-Slices.
-- **M9.7 Doku-Sync** — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md`/`docs/archive/plans/plan.heuristic.md` auf realen Code-Stand 2026-05-04 ziehen (= dieser Slice).
+- **M9.7 Doku-Sync** — `AGENTS.md`/`CLAUDE.md`/`PLAN.md`/`STATUS.md` auf realen Code-Stand 2026-05-04 ziehen (= dieser Slice).
 - **M10.1/M10.2 CVE-Monitor + Hardstop** — wöchentlicher `pip-audit` ohne `--ignore-vuln`, Hardstop am 2026-07-30 (Issues #121–#126).
 - **M10.4 Auth-Zielbild-ADR** — `docs/decisions/0001-auth-model.md` entscheidet zwischen Single-User-only-v1, HttpOnly-Session und Bearer+Refresh.
 - **M10.5 Rate-Limit-Konzept** — Limits für `/api/auth/ticket`, Uploads, LLM-Trigger, Report-Generation auf App- oder Proxy-Ebene.

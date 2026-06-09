@@ -9,7 +9,31 @@ import warnings
 # Must be set before all other imports
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
+# Upstream-Bugs / Deprecations, die wir nicht selbst beheben können.
+# Müssen VOR den Library-Imports stehen, damit der Filter beim ersten
+# Modulimport greift.
+#  - sentence-transformers < 4.1: SyntaxWarning("\g","\d","\_") in
+#    eigenen Modulen (raw-strings fehlen). Bump im uv-Override
+#    adressiert das; Filter bleibt als Defense-in-Depth.
+#  - transformers < 5.x BertSdpaSelfAttention: empfiehlt
+#    attn_implementation="eager"; OASIS lädt die Models, nicht Agora —
+#    deshalb hier nur silenced.
+warnings.filterwarnings("ignore", category=SyntaxWarning, module=r"sentence_transformers.*")
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*BertSdpaSelfAttention.*scaled_dot_product_attention.*",
+    module=r"transformers.*",
+)
+
 import logging  # noqa: E402
+
+# camel-ai chat_agent loggt bei jedem Multi-Message-Step eine WARNING
+# ("Multiple messages returned in `step()`"). Bei langen Sims spammt das
+# das Log. Upstream-Verhalten, nicht durch Agora-Code triggerbar — also
+# Level auf ERROR ziehen (keine Filter-Klasse nötig, weil wir den
+# Spam komplett unterdrücken).
+logging.getLogger("camel.camel.agents.chat_agent").setLevel(logging.ERROR)
 import uuid  # noqa: E402
 
 from flask import Flask, g, request  # noqa: E402
@@ -24,6 +48,23 @@ from .utils.logger import (  # noqa: E402
 )
 
 __version__ = "0.9.0"
+
+
+def configure_werkzeug_log_level() -> int:
+    """Setzt den werkzeug-Logger-Level aus ``AGORA_WERKZEUG_LOG_LEVEL``.
+
+    Default ``WARNING``: werkzeug loggt sonst jede Polling-Anfrage auf INFO
+    (/api/runs, /api/health) und verdrängt Pipeline-Stage-Events im
+    Container-Log. Per ``AGORA_WERKZEUG_LOG_LEVEL`` (DEBUG/INFO/WARNING/ERROR,
+    case-insensitiv) für ad-hoc Request-Debugging wieder aufdrehbar.
+    Ungültige Werte fallen still auf ``WARNING`` zurück.
+    """
+    raw = os.environ.get('AGORA_WERKZEUG_LOG_LEVEL', 'WARNING').upper()
+    level = logging.getLevelName(raw)
+    if not isinstance(level, int):
+        level = logging.WARNING
+    logging.getLogger('werkzeug').setLevel(level)
+    return level
 
 
 def create_app(config_class=Config):
@@ -49,6 +90,14 @@ def create_app(config_class=Config):
 
     # Setup logging
     logger = setup_logger('agora')
+
+    # Bind neo4j driver loggers to the app handler via propagation.
+    # Without this, driver output lands on stderr without structured formatting.
+    # Level WARNING suppresses the verbose DEBUG/INFO pool chatter that floods
+    # logs during parallel persona generation (pool-storm symptom).
+    for _neo4j_logger_name in ("neo4j", "neo4j.io", "neo4j.pool"):
+        logging.getLogger(_neo4j_logger_name).setLevel(logging.WARNING)
+
     from .utils.proxy import apply_proxy_fix
     if apply_proxy_fix(app):
         logger.info(
@@ -64,6 +113,8 @@ def create_app(config_class=Config):
     # (z. B. /api/simulation/<id>/stream?ticket=<signed>); ohne Redaction
     # würden Tickets und Tokens im Klartext in stderr/Container-Logs landen.
     install_redaction_filter(logging.getLogger('werkzeug'))
+
+    configure_werkzeug_log_level()
 
     # Only print startup info in reloader subprocess (avoid printing twice in debug mode)
     is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
@@ -167,9 +218,11 @@ def create_app(config_class=Config):
     if neo4j_storage is not None:
         container.ontology_mutation_service()
 
-    # MAI-12: Fork-safe pool reset for gunicorn --preload
+    # MAI-12 + PR #551: Fork-safe pool reset for gunicorn --preload.
+    # The canonical reset path is the post_fork hook in gunicorn.conf.py;
+    # os.register_at_fork remains as a defence-in-depth fallback.
     from .extensions import register_fork_handlers
-    register_fork_handlers(neo4j_storage=neo4j_storage)
+    register_fork_handlers(neo4j_storage=neo4j_storage, event_bus=event_bus)
 
     app.extensions['container'] = container
     # Backward-compat aliases — same singleton instances, just two ways in.
@@ -266,10 +319,12 @@ def create_app(config_class=Config):
     if should_log_startup:
         log_auth_mode(app, logger)
 
-    # Health check
-    @app.route('/health')
-    def health():
-        return {'status': 'ok', 'service': 'Agora Backend'}
+    # Liveness ``/health`` (unverändert) und Readiness ``/readyz``
+    # (Code-Review 2026-05-17, Finding 1.8). /readyz prüft Neo4j-Connect,
+    # Redis-Ping, Upload-Verzeichnis und Embedding-Konfig-Kohärenz; der
+    # Docker-Healthcheck soll ab jetzt /readyz nutzen.
+    from .readiness import register_readiness_routes  # noqa: E402
+    register_readiness_routes(app)
 
     # Static SPA serving — der Prod-Stage des Dockerfiles kopiert
     # frontend/dist nach /app/frontend/dist. Im Dev-Mode existiert das

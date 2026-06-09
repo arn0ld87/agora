@@ -17,18 +17,13 @@ hinterlegt, um den Container-Scan nicht zu blockieren.
 
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
-| CVE-2025-71176 | `pytest` | Low | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#123](https://github.com/arn0ld87/agora/issues/123) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
 | CVE-2026-1839 | `transformers` | Medium | Nein (Upstream Pin) | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
-| CVE-2024-46455 | `unstructured` | Medium | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#125](https://github.com/arn0ld87/agora/issues/125) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
-| CVE-2025-64712 | `unstructured` | Medium | Nein (Upstream Pin) | camel-oasis | 2026-07-30 | open | [#126](https://github.com/arn0ld87/agora/issues/126) | [camel-ai/oasis/releases](https://github.com/camel-ai/oasis/releases) |
 
 ### Pin-Begruendungen
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
-| `pytest` | `8.2.0` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `pytest==8.2.0`. Fix: `>=9.0.3`. |
 | `transformers` | `4.57.6` | `sentence-transformers==3.0.0` | `sentence-transformers` limitiert `transformers<5`. |
-| `unstructured` | `0.13.7` | `camel-oasis==0.2.5` | `camel-oasis` pinnt `unstructured==0.13.7`. |
 
 ---
 
@@ -68,3 +63,6 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 | CVE-2026-42308 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #296 schließen. | 2026-05-15 |
 | CVE-2026-42310 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #297 schließen. | 2026-05-15 |
 | CVE-2026-42311 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #298 schließen. | 2026-05-15 |
+| CVE-2025-71176 | `pytest` | Resolved via `tool.uv.override-dependencies`: `pytest==9.0.3` installiert (verified via `uv run pytest --version`). `--ignore-vuln`-Flag aus CI entfernt. Issues #123 schließen. | 2026-05-19 |
+| CVE-2024-46455 | `unstructured` | Resolved via `tool.uv.override-dependencies`: `unstructured>=0.18.18` installiert (verified via `uv run pip-audit`). `--ignore-vuln`-Flag aus CI entfernt. Issues #125 schließen. | 2026-05-19 |
+| CVE-2025-64712 | `unstructured` | Resolved via `tool.uv.override-dependencies`: `unstructured>=0.18.18` installiert (verified via `uv run pip-audit`). `--ignore-vuln`-Flag aus CI entfernt. Issues #126 schließen. | 2026-05-19 |

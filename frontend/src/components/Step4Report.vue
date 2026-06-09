@@ -7,23 +7,20 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
-import { createSimulationBranch, getAvailableModels } from '../api/simulation'
+import { createSimulationBranch } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
+import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 import ReportBranchControls from './step4/ReportBranchControls.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportModeControls from './step4/ReportModeControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
+import ReportRedTeamSection from './report/ReportRedTeamSection.vue'
 import { useReportExports } from '../composables/useReportExports'
-import {
-  runtimeLlmPayloadFromStorage,
-  mapRuntimeProviderToBackendId,
-} from '../composables/useRuntimeLlmOptions'
-import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
-import type { LlmRuntimePayload } from '../api/llmRuntime'
+import { StageLLMRouteSchema, type StageLLMRoute } from '../contracts/llmRoutingContract'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
 import {
@@ -54,9 +51,6 @@ interface ApiResult {
   success?: boolean
   data?: Record<string, unknown> & {
     report_id?: string
-    ollama?: Array<{ name: string; label?: string }>
-    presets?: Array<{ name: string; label?: string }>
-    current_default?: string
     simulation_id?: string
   }
   error?: string
@@ -72,12 +66,22 @@ const router = useRouter()
 const props = defineProps({
   reportId: String,
   simulationId: String,
-  systemLogs: Array
+  systemLogs: Array,
+  /** Feature-Flag: true sobald Backend POST /api/runs/<id>/cancel verfügbar (Slice 6). */
+  cancelEndpointAvailable: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['add-log', 'update-status'])
+const emit = defineEmits(['add-log', 'update-status', 'stop'])
 
 const phase = ref(0) // 0 idle, 1 running, 2 done
+/**
+ * true wenn Simulation beendet ist, aber noch kein Report-Start bestätigt wurde.
+ * Zeigt den Confirm-Dialog statt Auto-Start.
+ */
+const reportPending = ref(false)
 const statusMsg = ref('')
 const reportOutline = ref<ReportOutline | null>(null)
 const generatedSections = ref<Record<string, unknown>>({})
@@ -105,44 +109,43 @@ function recordSchemaError(where: string, error: unknown): void {
 }
 const resolvedSimulationId = ref(props.simulationId || null)
 
-const STORAGE_REPORT_MODEL = 'agora.reportModel'
-const STORAGE_REPORT_CUSTOM_MODEL = 'agora.reportCustomModel'
-const STORAGE_REPORT_PROVIDER = 'agora.report.llmProvider'
-const STORAGE_REPORT_BASE_URL = 'agora.report.llmBaseUrl'
-const SESSION_REPORT_API_KEY = 'agora.report.llmApiKey'
-// Workspace-Default (Step 1 / Step 2) — Source of Truth für initialen Report-Modell-Wert.
-// Smoke-Fix #7: kein Drift mehr zwischen angezeigtem Modell und Backend-Call-Payload.
-const STORAGE_WORKSPACE_MODEL = 'agora.lastModel'
-const STORAGE_WORKSPACE_CUSTOM_MODEL = 'agora.lastCustomModel'
+const STORAGE_REPORT_ROUTE = 'agora.report.route'
 
-/** Initialer Report-Modell-Wert: expliziter User-Override aus STORAGE_REPORT_MODEL,
- *  sonst Workspace-Default aus STORAGE_WORKSPACE_MODEL. */
-function resolveInitialReportModel(): string {
-  const override = localStorage.getItem(STORAGE_REPORT_MODEL)
-  if (override) return override
-  return localStorage.getItem(STORAGE_WORKSPACE_MODEL) || 'default'
-}
-function resolveInitialCustomReportModel(): string {
-  const override = localStorage.getItem(STORAGE_REPORT_CUSTOM_MODEL)
-  if (override !== null) return override
-  return localStorage.getItem(STORAGE_WORKSPACE_CUSTOM_MODEL) || ''
+/** Initiale Report-Route: User-Override aus STORAGE_REPORT_ROUTE (JSON-serialized
+ *  ``StageLLMRoute``), sonst ``null`` — Backend wendet dann den Workspace-Default
+ *  aus ``useLlmRoutingDefaultsStore`` an. Keine localStorage-Provider/Key/BaseUrl
+ *  mehr: Provider-Credentials laufen jetzt zentral über ``/settings/llm-providers``
+ *  und werden serverseitig via ``LlmProviderSecretsStore`` aufgelöst. */
+function resolveInitialReportRoute(): StageLLMRoute | null {
+  const raw = localStorage.getItem(STORAGE_REPORT_ROUTE)
+  if (!raw) return null
+  try {
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
+  } catch {
+    return null
+  }
 }
 
-const reportModelOption = ref(resolveInitialReportModel())
-const customReportModel = ref(resolveInitialCustomReportModel())
-const reportProvider = ref(localStorage.getItem(STORAGE_REPORT_PROVIDER) || 'default')
-const reportApiKey = ref(sessionStorage.getItem(SESSION_REPORT_API_KEY) || '')
-const reportBaseUrl = ref(localStorage.getItem(STORAGE_REPORT_BASE_URL) || '')
-const ollamaModels = ref<Array<{ name: string; label?: string }>>([])
-const presetModels = ref<Array<{ name: string; label?: string }>>([])
-const defaultModel = ref('')
+const reportRoute = ref<StageLLMRoute | null>(resolveInitialReportRoute())
 const isRegenerating = ref(false)
 
-watch(reportModelOption, (val) => { localStorage.setItem(STORAGE_REPORT_MODEL, val) })
-watch(customReportModel, (val) => { localStorage.setItem(STORAGE_REPORT_CUSTOM_MODEL, val) })
-watch(reportProvider, (val) => { localStorage.setItem(STORAGE_REPORT_PROVIDER, val) })
-watch(reportApiKey, (val) => { sessionStorage.setItem(SESSION_REPORT_API_KEY, val) })
-watch(reportBaseUrl, (val) => { localStorage.setItem(STORAGE_REPORT_BASE_URL, val) })
+const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
+const llmProfileId = ref<string | null>(localStorage.getItem(STORAGE_REPORT_PROFILE_ID) || null)
+watch(llmProfileId, (val) => {
+  if (val) localStorage.setItem(STORAGE_REPORT_PROFILE_ID, val)
+  else localStorage.removeItem(STORAGE_REPORT_PROFILE_ID)
+})
+
+watch(reportRoute, (val) => {
+  if (val?.provider_id && val?.model) {
+    localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
+  } else {
+    localStorage.removeItem(STORAGE_REPORT_ROUTE)
+  }
+}, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
@@ -156,70 +159,9 @@ function resolveStoredReportMode(): ReportMode {
 const reportMode = ref<ReportMode>(resolveStoredReportMode())
 watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
 
-const providerOptions = [
-  { value: 'default', label: 'Standard (Server-Default)' },
-  { value: 'google', label: 'Google (Gemini)' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'custom_openai', label: 'Custom OpenAI-kompatibel' },
-]
-
-/**
- * Baut den Provider-Payload für den Report-Regenerate-Request.
- * Wenn kein Session-Key vorhanden: api_key weggelassen — Backend löst via
- * Settings-DB auf (Smoke-Fix Slice 04 / Copilot-Followup PR #466).
- */
-function effectiveReportProvider(): LlmRuntimePayload | null {
-  if (reportProvider.value === 'default') return null
-  const key = reportApiKey.value.trim()
-  const base = reportBaseUrl.value.trim()
-  return {
-    provider: reportProvider.value as 'google' | 'openai' | 'custom_openai',
-    ...(key ? { api_key: key } : {}),
-    ...(base ? { base_url: base } : {}),
-  }
-}
-
-/**
- * Gibt true zurück wenn Provider != default, kein Session-Key vorhanden UND
- * auch kein DB-Key für den Provider hinterlegt ist (Copilot-Followup PR #466).
- * Async wegen DB-Key-Prüfung via /api/llm/providers/<id>/has-key.
- */
-async function reportProviderMissingKeyEverywhere(): Promise<boolean> {
-  if (reportProvider.value === 'default') return false
-  if (reportApiKey.value.trim()) return false
-  const backendId = mapRuntimeProviderToBackendId(
-    reportProvider.value as 'google' | 'openai' | 'custom_openai',
-  )
-  const hasDbKey = await checkLlmProviderHasKey(backendId)
-  return !hasDbKey
-}
-
-const modelOptions = computed(() => {
-  const opts = [{ value: 'default', label: `Standard — ${defaultModel.value || '?'}` }]
-  for (const p of presetModels.value) opts.push({ value: p.name, label: p.label || p.name })
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.name === m.name)) continue
-    opts.push({ value: m.name, label: `${m.label || m.name} (Ollama)` })
-  }
-  opts.push({ value: 'custom', label: 'Eigenes Modell…' })
-  return opts
-})
-
-function effectiveReportModel() {
-  if (reportModelOption.value === 'default') return null
-  if (reportModelOption.value === 'custom') return customReportModel.value.trim() || null
-  return reportModelOption.value
-}
-
-async function loadModels() {
-  try {
-    const res = (await getAvailableModels()) as ApiResult
-    if (res?.success) {
-      ollamaModels.value = (res.data?.ollama as Array<{ name: string; label?: string }>) || []
-      presetModels.value = (res.data?.presets as Array<{ name: string; label?: string }>) || []
-      defaultModel.value = (res.data?.current_default as string) || ''
-    }
-  } catch { /* swallow */ }
+function effectiveReportModel(): string | null {
+  const m = reportRoute.value?.model
+  return m && m.trim() ? m.trim() : null
 }
 
 async function regenerateWithModel() {
@@ -235,15 +177,9 @@ async function regenerateWithModel() {
       force_regenerate: true,
       mode: reportMode.value,
     }
+    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
-
-    if (await reportProviderMissingKeyEverywhere()) {
-      addLog('API-Key für gewählten LLM-Anbieter fehlt (weder Session-Key noch DB-Key vorhanden).')
-      return
-    }
-    const providerPayload = effectiveReportProvider()
-    if (providerPayload) payload.llm_provider = providerPayload
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
@@ -264,6 +200,52 @@ async function regenerateWithModel() {
     }
   } catch (err) {
     addLog((err as Error).message)
+  } finally {
+    isRegenerating.value = false
+  }
+}
+
+/**
+ * Wird aufgerufen wenn der User den Confirm-Dialog bestätigt.
+ * Startet die Report-Generierung mit dem aktuell gewählten Modell.
+ */
+async function startReportConfirmed() {
+  const simId = resolvedSimulationId.value || props.simulationId
+  if (!simId) {
+    addLog('simulationId fehlt — Report-Start nicht möglich.')
+    return
+  }
+  reportPending.value = false
+  isRegenerating.value = true
+  try {
+    const payload: Record<string, unknown> = {
+      simulation_id: simId,
+      mode: reportMode.value,
+    }
+    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
+    const m = effectiveReportModel()
+    if (m) payload.llm_model = m
+    addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
+    const res = (await generateReport(payload)) as ApiResult
+    if (res?.success && res.data?.report_id) {
+      isComplete.value = false
+      phase.value = 1
+      reportOutline.value = null
+      generatedSections.value = {}
+      currentSectionIndex.value = null
+      resetAgentLogs()
+      resetConsoleLogs()
+      fullReport.value = null
+      emit('update-status', 'processing')
+      router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
+      startPolling()
+    } else {
+      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
+      reportPending.value = true
+    }
+  } catch (err) {
+    addLog((err as Error).message)
+    reportPending.value = true
   } finally {
     isRegenerating.value = false
   }
@@ -380,6 +362,10 @@ const reportMarkdown = computed((): string => {
 
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
 
+const redTeamFindings = computed((): string[] => {
+  return fullReport.value?.red_team_findings ?? []
+})
+
 const sectionHtml = computed((): Record<string, string> => {
   const map: Record<string, string> = {}
   for (const [k, v] of Object.entries(generatedSections.value || {})) {
@@ -448,6 +434,7 @@ const {
 async function createBranchFromReport(branchForm: {
   branch_name: string
   llm_model: string
+  llm_profile_id: string
   language: string
   max_agents: string
 }) {
@@ -456,6 +443,7 @@ async function createBranchFromReport(branchForm: {
   branchBusy.value = true
   try {
     const overrides: Record<string, unknown> = {}
+    if (branchForm.llm_profile_id) overrides.llm_profile_id = branchForm.llm_profile_id
     if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
@@ -480,11 +468,17 @@ function goConversation() {
 }
 
 onMounted(async () => {
-  loadModels()
   await pollStatus()
   if (!isComplete.value) {
-    phase.value = 1
-    startPolling()
+    if (props.reportId) {
+      // Ein laufender Report ist bereits bekannt → normales Polling fortsetzen.
+      phase.value = 1
+      startPolling()
+    } else {
+      // Kein laufender Report → Confirm-Dialog zeigen statt Auto-Start.
+      phase.value = 0
+      reportPending.value = true
+    }
   } else if (!fullReport.value) {
     try {
       const full = (await getReport(props.reportId!)) as ApiResult
@@ -515,23 +509,63 @@ onUnmounted(stopPolling)
       <article class="card" :class="{ 'is-active': phase === 1 }">
         <header class="card-head">
           <Kicker num="01">{{ t('step4.title') }}</Kicker>
-          <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
-            {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
-          </Badge>
+          <div class="card-head-actions">
+            <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
+              {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
+            </Badge>
+            <span
+              v-if="!props.cancelEndpointAvailable"
+              :title="t('step4.reportConfirm.stopDisabledTip')"
+              class="stop-btn-wrap"
+            >
+              <Button variant="ghost" disabled class="stop-btn">
+                {{ t('step4.reportConfirm.stopButton') }}
+              </Button>
+            </span>
+            <Button
+              v-else
+              variant="ghost"
+              class="stop-btn stop-btn--active"
+              @click="emit('stop')"
+            >
+              {{ t('step4.reportConfirm.stopButton') }}
+            </Button>
+          </div>
         </header>
         <p class="card-desc">{{ t('step4.sub') }}</p>
         <p v-if="statusMsg" class="meta">{{ statusMsg }}</p>
 
+        <!-- Confirm-Dialog: erscheint wenn Simulation beendet, aber kein Report gestartet -->
+        <div v-if="reportPending && phase === 0" class="report-confirm-block" data-testid="report-confirm-block">
+          <p class="report-confirm-title">{{ t('step4.reportConfirm.title') }}</p>
+          <p class="report-confirm-desc">{{ t('step4.reportConfirm.description') }}</p>
+          <div class="report-confirm-actions">
+            <Button
+              variant="primary"
+              :disabled="isRegenerating"
+              data-testid="report-confirm-start-btn"
+              @click="startReportConfirmed"
+            >
+              {{ t('step4.reportConfirm.startButton') }}
+            </Button>
+          </div>
+        </div>
+
+        <div
+          v-if="resolvedSimulationId || simulationId"
+          class="report-profile-picker"
+        >
+          <LlmProfilePicker v-model="llmProfileId">
+            <template #hint>
+              <span class="hint">{{ t('step4.llmProfile.hint') }}</span>
+            </template>
+          </LlmProfilePicker>
+        </div>
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
-          v-model:report-model-option="reportModelOption"
-          v-model:custom-report-model="customReportModel"
-          v-model:provider="reportProvider"
-          v-model:api-key="reportApiKey"
-          v-model:base-url="reportBaseUrl"
-          :model-options="modelOptions"
-          :provider-options="providerOptions"
+          v-model="reportRoute"
           :is-regenerating="isRegenerating"
+          :class="{ 'is-overridden-by-profile': llmProfileId }"
           @regenerate="regenerateWithModel"
         />
         <ReportModeControls
@@ -623,6 +657,7 @@ onUnmounted(stopPolling)
             <Button v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Button>
           </div>
         </header>
+        <ReportRedTeamSection :findings="redTeamFindings" />
         <div class="report-layout" :class="{ 'report-layout--stacked': !evidenceSections.length }">
           <div class="report-body markdown-body" v-html="reportHtml"></div>
           <ReportEvidencePanel
@@ -925,4 +960,51 @@ onUnmounted(stopPolling)
 .agent-entry.action-error .agent-title { color: var(--status-red, var(--status-error)); }
 .agent-entry.action-section_start .agent-title,
 .agent-entry.action-section_complete .agent-title { color: var(--status-orange, var(--status-warn)); }
+
+/* Confirm-Block */
+.report-confirm-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-1);
+  padding: var(--s-4);
+}
+.report-confirm-title {
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+.report-confirm-desc {
+  color: var(--fg-body);
+  margin: 0;
+}
+.report-confirm-actions {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+/* Stop-Button im Header */
+.card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.report-profile-picker {
+  margin-bottom: var(--s-3);
+}
+.is-overridden-by-profile {
+  opacity: 0.6;
+}
+.stop-btn-wrap {
+  display: inline-flex;
+}
+.stop-btn {
+  color: var(--fg-muted);
+}
+.stop-btn--active {
+  color: var(--status-red, var(--status-error));
+}
 </style>

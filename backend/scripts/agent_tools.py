@@ -997,6 +997,7 @@ _MODEL_CONTEXT_HEURISTICS: Tuple[Tuple[str, int], ...] = (
     ("claude-opus-4", 200_000),
     ("claude-sonnet-4", 200_000),
     ("claude-haiku-4", 200_000),
+    ("nemotron", 131_072),         # nvidia nemotron-3-nano:30b u. ä. (synced mit app/utils/llm_client.py)
 )
 
 

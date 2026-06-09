@@ -71,7 +71,7 @@ import logging
 import random
 import signal
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 
@@ -85,8 +85,9 @@ try:
     from ._sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_parallel_parser,
+        compute_start_hour_offset,
+        detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -98,8 +99,9 @@ except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
-        build_camel_extra_body,
         build_parallel_parser,
+        compute_start_hour_offset,
+        detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
         install_max_tokens_warning_filter,
@@ -217,6 +219,7 @@ async def _emit_post_created_to_redis(
     platform: str,
     action_data: Dict[str, Any],
     redis_url: Optional[str],
+    sim_time_iso: Optional[str] = None,
 ) -> None:
     """Publish a PostCreatedEvent to Redis after a CREATE_POST action.
 
@@ -266,6 +269,8 @@ async def _emit_post_created_to_redis(
         "sentiment": None,
         # Phase B: Voting-Score — 0 als neutraler Default (Twitter hat kein Voting).
         "score": 0,
+        # Task 1 — virtuelle Sim-Zeit pro CREATE_POST. None bei alten Callern.
+        "sim_time": sim_time_iso,
     }
     channel = f"agora:sim:{simulation_id}:post_created"
     try:
@@ -1237,53 +1242,79 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     if not llm_model:
         llm_model = "qwen3-coder-next:cloud"
     
-    # Set environment variables required by camel-ai
-    if llm_api_key:
-        os.environ["OPENAI_API_KEY"] = llm_api_key
-    
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise ValueError("Missing API Key configuration, please set LLM_API_KEY in .env file in project root")
-    
-    if llm_base_url:
-        os.environ["OPENAI_BASE_URL"] = llm_base_url
-        os.environ["OPENAI_API_BASE"] = llm_base_url
-        os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-    
     runtime_settings = resolve_model_runtime_settings(llm_model)
+    platform = detect_oasis_platform(llm_model, llm_base_url)
+    think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
+
     print(
-        f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
+        f"{config_label} model={llm_model}, "
+        f"base_url={llm_base_url[:40] if llm_base_url else 'default'}..., "
+        f"platform={platform.value}, "
         f"completion_max_tokens={runtime_settings['completion_max_tokens']}, "
         f"memory_token_limit={runtime_settings['memory_token_limit']}, "
         f"ollama_num_ctx={runtime_settings['ollama_num_ctx']}",
         flush=True,
     )
 
-    # Suppress reasoning output on Qwen3/Nemotron/DeepSeek/GPT-OSS etc.
-    # so that `content` isn't starved by `reasoning` tokens. `think` ist
-    # ein Ollama-only-Parameter; OpenAI/Anthropic kennen ihn nicht und
-    # antworten 400. build_camel_extra_body filtert provider-aware.
-    think_on = os.environ.get("OLLAMA_THINKING", "false").lower() in ("1", "true", "yes")
-    extra_body = build_camel_extra_body(
-        model=llm_model,
-        base_url=llm_base_url,
-        num_ctx=runtime_settings["ollama_num_ctx"],
-        think=think_on,
-    )
-    # GPT-5/o1/o3/o4 verlangen `max_completion_tokens`; ältere Modelle
-    # akzeptieren weiterhin `max_tokens`. build_camel_completion_params
-    # liefert genau einen passenden Schlüssel.
     model_cfg: Dict[str, Any] = build_camel_completion_params(
         model=llm_model,
         completion_max_tokens=runtime_settings["completion_max_tokens"],
     )
-    if extra_body:
-        model_cfg["extra_body"] = extra_body
 
-    return ModelFactory.create(
-        model_platform=ModelPlatformType.OPENAI,
-        model_type=llm_model,
-        model_config_dict=model_cfg,
-    )
+    if platform == ModelPlatformType.GEMINI:
+        # Gemini-3 requires thought_signature echo in multi-turn tool calls.
+        # The OpenAI-compat wire path strips that field → HTTP 400 on every
+        # tool turn.  Route directly via CAMEL's GeminiModel instead.
+        # Auth: GOOGLE_API_KEY (not OPENAI_API_KEY).
+        # Do NOT set OPENAI_BASE_URL — it would break CAMEL's Gemini backend.
+        os.environ["GOOGLE_API_KEY"] = llm_api_key or os.environ.get("GOOGLE_API_KEY", "")
+        return ModelFactory.create(
+            model_platform=ModelPlatformType.GEMINI,
+            model_type=llm_model,
+            model_config_dict=model_cfg,
+        )
+
+    elif platform == ModelPlatformType.OLLAMA:
+        # Ollama Cloud dropped its OpenAI-compat /v1 endpoint; only the native
+        # /api/chat path works.  CAMEL's OllamaModel speaks it natively.
+        # Local Ollama (port 11434) also benefits from the native path.
+        # Build extra_body inline: we already know this is Ollama, so the
+        # legacy _is_ollama_route gate inside build_camel_extra_body() would
+        # falsely drop think/num_ctx for :latest models or ollama.com URLs.
+        os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
+        extra_body: Dict[str, Any] = {"think": think_on}
+        if runtime_settings["ollama_num_ctx"] is not None:
+            extra_body["options"] = {"num_ctx": runtime_settings["ollama_num_ctx"]}
+        model_cfg["extra_body"] = extra_body
+        return ModelFactory.create(
+            model_platform=ModelPlatformType.OLLAMA,
+            model_type=llm_model,
+            url=llm_base_url or None,
+            api_key=llm_api_key or None,
+            model_config_dict=model_cfg,
+        )
+
+    else:
+        # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
+        # No extra_body: think/num_ctx are Ollama-only and would 400 here.
+        if llm_api_key:
+            os.environ["OPENAI_API_KEY"] = llm_api_key
+
+        if not os.environ.get("OPENAI_API_KEY"):
+            raise ValueError(
+                "Missing API Key configuration, please set LLM_API_KEY in .env file in project root"
+            )
+
+        if llm_base_url:
+            os.environ["OPENAI_BASE_URL"] = llm_base_url
+            os.environ["OPENAI_API_BASE"] = llm_base_url
+            os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+
+        return ModelFactory.create(
+            model_platform=ModelPlatformType.OPENAI,
+            model_type=llm_model,
+            model_config_dict=model_cfg,
+        )
 
 
 def get_active_agents_for_round(
@@ -1497,41 +1528,51 @@ async def run_twitter_simulation(
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # If maximum rounds specified, truncate
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
+    if start_hour_offset != 0:
+        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
     start_time = datetime.now()
-    
+    # Task 1 — Anker für virtuelle Sim-Zeit. tz-aware UTC, 00:00 als
+    # Tagesbasis, damit sim_time deterministisch aus
+    # (start_hour_offset, simulated_minutes) ableitbar bleibt.
+    sim_clock_anchor = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # Log round start regardless of active agents
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0)
             continue
-        
+
         # Build actions
         if tool_loop and enable_tools:
             actions = {}
@@ -1562,15 +1603,20 @@ async def run_twitter_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
+        # Sim-Zeit für CREATE_POST-Frames dieser Round.
+        _sim_dt = sim_clock_anchor + timedelta(
+            minutes=start_hour_offset * 60 + simulated_minutes
+        )
+        _sim_time_iso = _sim_dt.isoformat()
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1589,6 +1635,7 @@ async def run_twitter_simulation(
                     platform="twitter",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    sim_time_iso=_sim_time_iso,
                 )
 
         if action_logger:
@@ -1761,41 +1808,49 @@ async def run_reddit_simulation(
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # If maximum rounds specified, truncate
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"Rounds truncated: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
+    start_hour_offset = compute_start_hour_offset(config, total_rounds, minutes_per_round)
+    if start_hour_offset != 0:
+        log_info(f"Short run: shifting simulated clock to start at hour {start_hour_offset:02d}:00 (active-hour overlap)")
+
     start_time = datetime.now()
-    
+    # Task 1 — Anker für virtuelle Sim-Zeit (siehe Twitter-Branch oben).
+    sim_clock_anchor = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
     for round_num in range(total_rounds):
         # Check if received exit signal
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"Received exit signal，at round {round_num + 1} stop simulation")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
-        simulated_hour = (simulated_minutes // 60) % 24
+        simulated_hour = (start_hour_offset + simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # Log round start regardless of active agents
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # Log round end even without active agents (actions_count=0)
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0)
             continue
-        
+
         # Build actions
         if tool_loop and enable_tools:
             actions = {}
@@ -1826,15 +1881,19 @@ async def run_reddit_simulation(
         else:
             actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # Get actual executed actions from Database and log
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         _sim_id_for_emit = config.get("simulation_id") or os.path.basename(simulation_dir.rstrip("/"))
         _redis_url_for_emit = os.environ.get("REDIS_URL")
+        _sim_dt = sim_clock_anchor + timedelta(
+            minutes=start_hour_offset * 60 + simulated_minutes
+        )
+        _sim_time_iso = _sim_dt.isoformat()
         for action_data in actual_actions:
             if action_logger:
                 action_logger.log_action(
@@ -1853,6 +1912,7 @@ async def run_reddit_simulation(
                     platform="reddit",
                     action_data=action_data,
                     redis_url=_redis_url_for_emit,
+                    sim_time_iso=_sim_time_iso,
                 )
 
         if action_logger:

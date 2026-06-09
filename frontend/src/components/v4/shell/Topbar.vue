@@ -1,5 +1,16 @@
 <template>
   <header class="topbar">
+    <!-- Hamburger-Button (nur Mobile) -->
+    <button
+      class="topbar__hamburger"
+      type="button"
+      :aria-label="t('topbar.openNavigation')"
+      :aria-expanded="shellStore.mobileNavOpen"
+      @click="shellStore.toggleMobileNav()"
+    >
+      <Icon name="menu" :size="20" :stroke="1.6" />
+    </button>
+
     <!-- Crumbs (left) -->
     <div class="topbar__crumbs">
       <slot name="crumbs">
@@ -58,9 +69,11 @@ import type { BreadcrumbItem } from './Breadcrumbs.vue'
 import Icon from './Icon.vue'
 import DensityToggle from './DensityToggle.vue'
 import { useCommandPalette } from '@/composables/useCommandPalette'
+import { useShellStore } from '@/stores/shell'
 
 const { t } = useI18n()
 const { open: openPalette } = useCommandPalette()
+const shellStore = useShellStore()
 
 withDefaults(
   defineProps<{
@@ -145,6 +158,39 @@ withDefaults(
 
 .topbar__user {
   margin-left: 8px;
+}
+
+/* Hamburger: standardmaessig versteckt, nur auf Mobile sichtbar */
+.topbar__hamburger {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.topbar__hamburger:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 12px;
+    height: 56px;
+  }
+
+  .topbar__hamburger {
+    display: inline-flex;
+  }
 }
 
 .topbar__avatar {

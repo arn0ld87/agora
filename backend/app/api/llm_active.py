@@ -22,12 +22,15 @@ from flask import request
 
 from . import llm_bp
 from ..services.llm_provider_registry import LlmProviderRegistry
+from ..services.model_catalog_service import ModelCatalogService
+from ..services.secret_resolver import SecretResolver
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.logger import get_logger
 
 logger = get_logger("agora.api.llm_active")
 
 _provider_registry = LlmProviderRegistry()
+_model_catalog = ModelCatalogService()
 
 
 def _instance_dir() -> Path:
@@ -104,6 +107,7 @@ def put_active_config():
     payload = request.get_json(silent=True) or {}
     provider_id = (payload.get("provider_id") or "").strip()
     model = (payload.get("model") or "").strip()
+    force = request.args.get("force") == "true"
 
     if not provider_id:
         return json_error("provider_id is required", status=400, code="invalid_request")
@@ -115,6 +119,21 @@ def put_active_config():
     if not provider:
         return json_error(f"Unknown provider: {provider_id}", status=404, code="provider_not_found")
 
+    # Capability-Gate (Issue #557): check if model supports tools
+    if not force:
+        resolver = SecretResolver()
+        api_key = resolver.get_api_key(provider_id, provider.type)
+        models = _model_catalog.get_models(provider_id, provider.type, provider.base_url, api_key)
+        target_model = next((m for m in models if m.id == model), None)
+
+        if target_model and not target_model.supports_tools:
+            return json_error(
+                f"Model {model!r} does not support OpenAI-compatible tool calls. "
+                "This might crash simulations. Use ?force=true to override.",
+                status=422,
+                code="unsupported_capability",
+            )
+
     saved = save_active_config(provider_id, model, provider.base_url)
-    logger.info("Active LLM config updated: provider=%s model=%s", provider_id, model)
+    logger.info("Active LLM config updated: provider=%s model=%s force=%s", provider_id, model, force)
     return json_success(saved)

@@ -2,7 +2,7 @@
 name = "agora-backend"
 version = "1.0.0"
 description = "Agora - Hybrid Multi-Agent Resonance Simulator on Neo4j + Ollama"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "AGPL-3.0" }
 authors = [
     { name = "Alexander Schneider", email = "schneider@alexle135.de" }
@@ -124,7 +124,7 @@ skip_covered = false
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 exclude = [
     ".venv",
     "uploads",
@@ -172,7 +172,7 @@ ignore = [
 "scripts/security_verify.py" = ["E402"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 ignore_missing_imports = true
 follow_imports = "silent"
 show_error_codes = true
@@ -228,4 +228,13 @@ override-dependencies = [
     # Attachment (critical, Arbitrary File Write) plus < 0.14.3 XXE.
     # camel-oasis 0.2.5 pinned 0.13.7 — Override zieht 0.18.18 trotzdem hoch.
     "unstructured>=0.18.18",
+    # CVE-2025-71176: pytest 8.2.0 (pinned by camel-oasis 0.2.5) has a
+    # vulnerability. Upgrading to >=9.0.3.
+    "pytest>=9.0.3",
+    # sentence-transformers 3.0.0 (camel-oasis-Pin) hat drei
+    # SyntaxWarning("invalid escape sequence") in eigenen Modulen
+    # (SentenceEvaluator.py, model_card.py, DenoisingAutoEncoderLoss.py).
+    # 4.1+ liefert raw-Strings. Major-Bump 3→4 ist konservativ; 5.x
+    # bringt Transformers-v5-Compat aber zusätzliche API-Brüche.
+    "sentence-transformers>=4.1.0,<5",
 ]

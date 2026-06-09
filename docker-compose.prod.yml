@@ -70,6 +70,17 @@ services:
       # Verbindung kaputt machen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      # Container-Zeitzone (siehe docker-compose.yml).
+      - TZ=Europe/Berlin
+      # LLM-Default für Sim-Runner — siehe docker-compose.yml.
+      - LLM_MAX_OUTPUT_TOKENS=${LLM_MAX_OUTPUT_TOKENS:-16384}
+      # ArtifactLocator-Fallback zeigt sonst auf /app/instance (3x parent
+      # von backend/app/utils/artifact_locator.py) — der ist unter
+      # `read_only: true` nicht beschreibbar. Der Bind-Mount aus
+      # docker-compose.yml legt das writable Verzeichnis aber auf
+      # /app/backend/instance. Mit dieser Variable schreibt der Code
+      # genau dorthin.
+      - AGORA_INSTANCE_DIR=/app/backend/instance
 
   neo4j:
     ports: !reset []

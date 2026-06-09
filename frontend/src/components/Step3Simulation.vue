@@ -16,6 +16,7 @@ import {
   getRunStatusDetail,
   getSimulationConsoleLog
 } from '../api/simulation'
+import { cancelRun } from '../api/runs'
 import { generateReport } from '../api/report'
 import { storedEffectiveModel, STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
 import {
@@ -27,6 +28,11 @@ import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import { tokenizeFeedText } from '../utils/feedHighlight'
+import FeedColumn from './v4/sim-feed/FeedColumn.vue'
+import TwitterPost from './v4/sim-feed/TwitterPost.vue'
+import RedditThread from './v4/sim-feed/RedditThread.vue'
+import { useSimFeed, clearSimFeed } from '../composables/useSimFeed'
+import { useSimClock, clearSimClock } from '../composables/useSimClock'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -64,6 +70,7 @@ const phase = ref(0) // 0 idle, 1 running, 2 done
 const isStarting = ref(false)
 const isStopping = ref(false)
 const isPausing = ref(false)
+const isCancelling = ref(false)
 const isGeneratingReport = ref(false)
 const runStatus = ref({})
 const allActions = ref([])
@@ -202,9 +209,45 @@ function addLog(msg) { emit('add-log', msg) }
 // Issue #9 Phase C: run-state now arrives via SSE (backend subscribes to
 // the event bus), so the 2.5 s status-polling loop is gone. Detail + console
 // stay on HTTP polls — they read different artifacts.
+// Task 2 — Dual-Column Sim-Feed. Reddit + Twitter werden über useSimFeed
+// dedupliziert und nach Platform geroutet. ingest() füttert beide Columns
+// vom selben SSE-Frame (post_created). Stats nutzen weiter allActions
+// (HTTP-Polling in pollDetail) — die beiden Quellen koexistieren absichtlich.
+const _feedStore = computed(() => useSimFeed(props.simulationId || '__unset__'))
+const twitterPosts = computed(() => _feedStore.value.twitterPosts.value)
+const redditPosts = computed(() => _feedStore.value.redditPosts.value)
+const redditTree = computed(() => _feedStore.value.redditTree.value)
+
+// Task 1 — Sim-Zeit-Composable. ingest pumpt aus dem post_created-Handler.
+const _simClock = computed(() => useSimClock(props.simulationId || '__unset__'))
+const currentSimTime = computed(() => _simClock.value.currentSimTime.value)
+const simElapsedSec = computed(() => _simClock.value.elapsed.value)
+
+const _berlinFormatter = new Intl.DateTimeFormat('de-DE', {
+  dateStyle: 'short',
+  timeStyle: 'medium',
+  timeZone: 'Europe/Berlin',
+})
+function formatBerlin(d) {
+  return d ? _berlinFormatter.format(d) : ''
+}
+function formatElapsed(seconds) {
+  const s = Math.max(0, Math.floor(seconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const pad = (n) => String(n).padStart(2, '0')
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+}
+
 const statusStream = useEventStream(() => props.simulationId, {
   state: (msg) => applyRunStateEvent(msg?.payload),
   control: (msg) => applyControlEvent(msg?.payload),
+  post_created: (data) => {
+    if (!data) return
+    _feedStore.value.ingest(data)
+    _simClock.value.ingest(data)
+  },
 })
 // Slice 1e: last SSE trace_id for the SigNoz deep-link button.
 const { lastTraceId } = statusStream
@@ -283,6 +326,22 @@ async function doStop() {
     addLog(err.message)
   } finally {
     isStopping.value = false
+  }
+}
+
+async function doCancel() {
+  if (!props.simulationId) return
+  if (!confirm(t('step3.controls.cancelConfirm'))) return
+  isCancelling.value = true
+  try {
+    const res = await cancelRun(props.simulationId)
+    if (res?.success) {
+      addLog(t('step3.controls.cancelled'))
+    }
+  } catch (err) {
+    addLog(err.message)
+  } finally {
+    isCancelling.value = false
   }
 }
 
@@ -477,6 +536,19 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleToolPanelHotkey)
   stopPolling()
+  if (props.simulationId) {
+    clearSimFeed(props.simulationId)
+    clearSimClock(props.simulationId)
+  }
+})
+
+// Sim-Wechsel im selben Component-Lifetime (z. B. nach Reload mit neuer ID):
+// alten Store droppen, damit dedupe-Cache und LRU sauber bleiben.
+watch(() => props.simulationId, (newId, oldId) => {
+  if (oldId && oldId !== newId) {
+    clearSimFeed(oldId)
+    clearSimClock(oldId)
+  }
 })
 </script>
 
@@ -516,6 +588,12 @@ onUnmounted(() => {
               :loading="isStopping"
               @click="doStop"
             >{{ t('step3.controls.stop') }}</Button>
+            <Button
+              variant="ghost"
+              :loading="isCancelling"
+              :title="t('step3.controls.cancelConfirm')"
+              @click="doCancel"
+            >{{ t('step3.controls.cancel') }}</Button>
           </template>
           <Button
             v-else
@@ -543,6 +621,11 @@ onUnmounted(() => {
         <header class="card-head">
           <Kicker num="02">{{ t('step3.feed.title') }}</Kicker>
           <span class="meta">{{ t('step3.feed.actions', { count: totalActions }) }}</span>
+          <div v-if="currentSimTime" class="sim-clock" :title="t('step3.simClock.tooltip')">
+            <span class="meta">SIM</span>
+            <time :datetime="currentSimTime.toISOString()">{{ formatBerlin(currentSimTime) }}</time>
+            <span class="meta">({{ formatElapsed(simElapsedSec) }})</span>
+          </div>
         </header>
         <div class="stats-grid">
           <div class="stat">
@@ -583,53 +666,46 @@ onUnmounted(() => {
             </button>
           </div>
         </header>
-        <div class="logs-grid">
-          <div class="log-pane">
-            <div class="log-pane-head">
-              <span class="meta">Live-Feed</span>
-              <div class="density-toggle" role="group" :aria-label="t('step3.feed.density.label')">
-                <button
-                  type="button"
-                  class="density-btn"
-                  :class="{ active: feedDensity === 'comfort' }"
-                  :aria-pressed="feedDensity === 'comfort'"
-                  @click="setFeedDensity('comfort')"
-                >{{ t('step3.feed.density.comfort') }}</button>
-                <button
-                  type="button"
-                  class="density-btn"
-                  :class="{ active: feedDensity === 'compact' }"
-                  :aria-pressed="feedDensity === 'compact'"
-                  @click="setFeedDensity('compact')"
-                >{{ t('step3.feed.density.compact') }}</button>
-              </div>
-              <span class="meta">{{ allActions.length }}</span>
-            </div>
-            <div class="log-pane-scroll-wrap">
-              <div
-                ref="scrollEl"
-                class="feed log-block log-pane-body"
-                :class="['density-' + feedDensity]"
-              >
-                <div v-if="!allActions.length" class="meta">{{ t('step3.feed.empty') }}</div>
-                <div v-for="(a, i) in allActions" :key="i" class="feed-line">
-                  <span class="ts">[R{{ a.round_num }} · {{ a.platform.toUpperCase() }}]</span>
-                  <span class="who">{{ a.agent_name || ('agent_' + a.agent_id) }}</span>
-                  <span class="act">{{ a.action_type }}</span>
-                  <span class="content" v-if="a.action_args?.content">
-                    — <template
-                      v-for="(tok, ti) in (a._tokens || [])"
-                      :key="ti"
-                    ><span :class="['tok', 'tok-' + tok.type]">{{ tok.value }}</span></template>
-                  </span>
-                </div>
-              </div>
-              <StickyScrollBanner
-                :count="feedSticky.unreadCount.value"
-                @jump="feedSticky.scrollToBottom"
-              />
-            </div>
+        <div class="card-head feed-density-row">
+          <div class="density-toggle" role="group" :aria-label="t('step3.feed.density.label')">
+            <button
+              type="button"
+              class="density-btn"
+              :class="{ active: feedDensity === 'comfort' }"
+              :aria-pressed="feedDensity === 'comfort'"
+              @click="setFeedDensity('comfort')"
+            >{{ t('step3.feed.density.comfort') }}</button>
+            <button
+              type="button"
+              class="density-btn"
+              :class="{ active: feedDensity === 'compact' }"
+              :aria-pressed="feedDensity === 'compact'"
+              @click="setFeedDensity('compact')"
+            >{{ t('step3.feed.density.compact') }}</button>
           </div>
+          <span class="meta">{{ allActions.length }}</span>
+        </div>
+        <div class="feed-grid" :data-density="feedDensity">
+          <FeedColumn :title="t('feed.twitter')" channel="twitter">
+            <TransitionGroup name="slide-in" tag="div" class="post-list">
+              <TwitterPost
+                v-for="post in twitterPosts"
+                :key="post.post_id"
+                :post="post"
+              />
+            </TransitionGroup>
+            <p v-if="!twitterPosts.length" class="meta">{{ t('step3.feed.empty') }}</p>
+          </FeedColumn>
+          <FeedColumn :title="t('feed.reddit')" channel="reddit">
+            <TransitionGroup name="slide-in" tag="div" class="post-list">
+              <RedditThread
+                v-for="node in redditTree"
+                :key="node.post_id"
+                :node="node"
+              />
+            </TransitionGroup>
+            <p v-if="!redditPosts.length" class="meta">{{ t('step3.feed.empty') }}</p>
+          </FeedColumn>
         </div>
       </article>
 
@@ -799,10 +875,55 @@ onUnmounted(() => {
 }
 
 .log-meta { display: flex; gap: var(--s-2); }
+.sim-clock {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  color: var(--fg);
+}
+.sim-clock time { color: var(--accent); }
 .logs-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--s-3);
+}
+/* Task 2 — Dual-Column Sim-Feed. min-height analog log-pane-body damit beide
+   Columns mit dem alten Live-Feed identische Höhe haben. */
+.feed-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+  min-height: 0;
+  overflow: visible;  /* Scrollen läuft pro FeedColumn (.fc-scroll). */
+}
+.feed-grid > * { min-height: 480px; max-height: clamp(480px, 60vh, 720px); }
+.feed-density-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: none;
+  padding-top: var(--s-2);
+}
+/* Density-Toggle wirkt jetzt am Container und vererbt via CSS-Vars an die
+   FeedColumn-Kinder. Comfort = Default; Compact = engere Skalen. */
+.feed-grid[data-density="comfort"] {
+  --feed-post-padding: var(--s-3);
+  --feed-post-gap: var(--s-2);
+  --feed-post-fs: var(--fs-13, 13px);
+  --feed-post-lh: 1.6;
+}
+.feed-grid[data-density="compact"] {
+  --feed-post-padding: var(--s-2);
+  --feed-post-gap: 4px;
+  --feed-post-fs: 12px;
+  --feed-post-lh: 1.35;
+  gap: var(--s-2);
+}
+@media (max-width: 880px) {
+  .feed-grid { grid-template-columns: 1fr; }
 }
 .log-pane {
   display: flex;

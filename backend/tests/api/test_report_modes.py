@@ -25,8 +25,12 @@ VALID_GRAPH_ID = "graph_0123456789ab"
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Validierungslogik, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["TESTING"] = True
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 100
     app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"] = 60
@@ -108,15 +112,16 @@ def _patched_generate():
     mock_state = _make_mock_simulation()
     mock_project = _make_mock_project()
     with (
-        patch("app.api.report.SimulationManager") as mock_sim_mgr,
-        patch("app.api.report.ReportManager") as mock_rm,
-        patch("app.api.report.ProjectManager") as mock_pm,
-        patch("app.api.report.TaskManager") as mock_tm,
-        patch("app.api.report.run_registry") as mock_rr,
-        patch("app.api.report.threading.Thread") as mock_thread,
-        patch("app.api.report.resolve_route_api_key", return_value="sk-route"),
-        patch("app.api.report.LLMClient.from_route", return_value=MagicMock()),
-        patch("app.api.report.StageModelRouter") as mock_smr,
+        patch("app.services.report_generation.SimulationManager") as mock_sim_mgr,
+        patch("app.services.report_generation.ReportManager") as mock_rm,
+        patch("app.services.report_generation.ProjectManager") as mock_pm,
+        patch("app.services.report_generation.TaskManager") as mock_tm,
+        patch("app.services.report_generation.run_registry") as mock_rr,
+        # PR 2: Thread-Start liegt jetzt in app.jobs.enqueue.
+        patch("app.jobs.threading.Thread") as mock_thread,
+        patch("app.services.report_generation.resolve_route_api_key", return_value="sk-route"),
+        patch("app.services.report_generation.LLMClient.from_route", return_value=MagicMock()),
+        patch("app.services.report_generation.StageModelRouter") as mock_smr,
     ):
         mock_sim_mgr.return_value.get_simulation.return_value = mock_state
         mock_pm.get_project.return_value = mock_project

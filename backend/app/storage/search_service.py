@@ -10,7 +10,9 @@ Both weights are configurable per-instance and overridable via
 import logging
 from typing import List, Dict, Any, Optional
 
-from neo4j import Session as Neo4jSession
+import neo4j.exceptions
+from neo4j import Session as Neo4jSession, ManagedTransaction
+from neo4j.exceptions import ServiceUnavailable, SessionExpired, TransientError
 
 from .embedding_service import EmbeddingService
 
@@ -140,84 +142,118 @@ class SearchService:
         )
         return merged
 
+    def _run_with_retry(
+        self,
+        session: Neo4jSession,
+        cypher: str,
+        params: Dict[str, Any],
+        *,
+        fallback_label: str,
+    ) -> List[Any]:
+        """Execute a Cypher read query via managed transaction with driver-level retry.
+
+        Uses ``session.execute_read`` so the Neo4j driver handles
+        ``ServiceUnavailable``/``SessionExpired``/``TransientError`` internally
+        with its own retry logic — a fresh connection is established on each
+        retry attempt, unlike the previous ``session.run``-based approach.
+
+        - Returns [] for missing index/procedure (ClientError with known codes),
+          so callers are never surprised by schema bootstrap races.
+        - Re-raises ClientError for genuine Cypher programming errors.
+        - Returns [] for transient errors that the driver could not recover from.
+        - Returns [] for all other exceptions after logging at WARNING.
+        """
+        _INDEX_CODES = frozenset({
+            "Neo.ClientError.Schema.IndexNotFound",
+            "Neo.ClientError.Procedure.ProcedureNotFound",
+        })
+
+        def _tx_callback(tx: ManagedTransaction) -> List[Any]:
+            return list(tx.run(cypher, **params))
+
+        try:
+            return session.execute_read(_tx_callback)
+        except neo4j.exceptions.ClientError as e:
+            if e.code in _INDEX_CODES:
+                logger.warning(
+                    "%s: required index/procedure missing (%s)",
+                    fallback_label,
+                    e.code,
+                )
+                return []
+            raise
+        except (ServiceUnavailable, SessionExpired, TransientError) as e:
+            logger.warning(
+                "%s: transient neo4j error after retries (%s)",
+                fallback_label,
+                type(e).__name__,
+            )
+            return []
+        except Exception as e:
+            logger.warning("%s failed: %s", fallback_label, e)
+            return []
+
     def _run_edge_vector_search(
         self, session: Neo4jSession, graph_id: str, query_vector: List[float], limit: int
     ) -> List[Dict[str, Any]]:
         """Run vector similarity search on edge fact_embedding."""
-        try:
-            result = session.run(
-                _VECTOR_SEARCH_EDGES,
-                graph_id=graph_id,
-                query_vector=query_vector,
-                limit=limit,
-            )
-            return [
-                {**dict(record["r"]), "uuid": record["r"]["uuid"], "_score": record["score"]}
-                for record in result
-            ]
-        except Exception as e:
-            logger.warning(f"Vector edge search failed (index may not exist yet): {e}")
-            return []
+        records = self._run_with_retry(
+            session,
+            _VECTOR_SEARCH_EDGES,
+            {"graph_id": graph_id, "query_vector": query_vector, "limit": limit},
+            fallback_label="Vector edge search",
+        )
+        return [
+            {**dict(r["r"]), "uuid": r["r"]["uuid"], "_score": r["score"]}
+            for r in records
+        ]
 
     def _run_edge_keyword_search(
         self, session: Neo4jSession, graph_id: str, query: str, limit: int
     ) -> List[Dict[str, Any]]:
         """Run fulltext (BM25) search on edge fact + name."""
-        try:
-            # Escape special Lucene characters in query
-            safe_query = self._escape_lucene(query)
-            result = session.run(
-                _FULLTEXT_SEARCH_EDGES,
-                graph_id=graph_id,
-                query_text=safe_query,
-                limit=limit,
-            )
-            return [
-                {**dict(record["r"]), "uuid": record["r"]["uuid"], "_score": record["score"]}
-                for record in result
-            ]
-        except Exception as e:
-            logger.warning(f"Keyword edge search failed: {e}")
-            return []
+        safe_query = self._escape_lucene(query)
+        records = self._run_with_retry(
+            session,
+            _FULLTEXT_SEARCH_EDGES,
+            {"graph_id": graph_id, "query_text": safe_query, "limit": limit},
+            fallback_label="Keyword edge search",
+        )
+        return [
+            {**dict(r["r"]), "uuid": r["r"]["uuid"], "_score": r["score"]}
+            for r in records
+        ]
 
     def _run_node_vector_search(
         self, session: Neo4jSession, graph_id: str, query_vector: List[float], limit: int
     ) -> List[Dict[str, Any]]:
         """Run vector similarity search on entity embedding."""
-        try:
-            result = session.run(
-                _VECTOR_SEARCH_NODES,
-                graph_id=graph_id,
-                query_vector=query_vector,
-                limit=limit,
-            )
-            return [
-                {**dict(record["n"]), "uuid": record["n"]["uuid"], "_score": record["score"]}
-                for record in result
-            ]
-        except Exception as e:
-            logger.warning(f"Vector node search failed: {e}")
-            return []
+        records = self._run_with_retry(
+            session,
+            _VECTOR_SEARCH_NODES,
+            {"graph_id": graph_id, "query_vector": query_vector, "limit": limit},
+            fallback_label="Vector node search",
+        )
+        return [
+            {**dict(r["n"]), "uuid": r["n"]["uuid"], "_score": r["score"]}
+            for r in records
+        ]
 
     def _run_node_keyword_search(
         self, session: Neo4jSession, graph_id: str, query: str, limit: int
     ) -> List[Dict[str, Any]]:
         """Run fulltext search on entity name + summary."""
-        try:
-            safe_query = self._escape_lucene(query)
-            result = session.run(
-                _FULLTEXT_SEARCH_NODES,
-                graph_id=graph_id,
-                query_text=safe_query,
-                limit=limit,
-            )
-            return [
-                {**dict(record["n"]), "uuid": record["n"]["uuid"], "_score": record["score"]}
-                for record in result
-            ]
-        except Exception as e:
-            logger.warning(f"Keyword node search failed: {e}")
-            return []
+        safe_query = self._escape_lucene(query)
+        records = self._run_with_retry(
+            session,
+            _FULLTEXT_SEARCH_NODES,
+            {"graph_id": graph_id, "query_text": safe_query, "limit": limit},
+            fallback_label="Keyword node search",
+        )
+        return [
+            {**dict(r["n"]), "uuid": r["n"]["uuid"], "_score": r["score"]}
+            for r in records
+        ]
 
     def _merge_results(
         self,

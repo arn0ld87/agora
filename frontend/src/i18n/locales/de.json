@@ -174,7 +174,8 @@
       "code": "Quellcode auf GitHub",
       "by": "Entwickelt von",
       "byName": "Alexander Schneider",
-      "bySite": "alexle135.de"
+      "bySite": "alexle135.de",
+      "neo4jBrowser": "Neo4j Browser ↗"
     }
   },
   "history": {
@@ -247,6 +248,8 @@
     },
     "model": {
       "label": "LLM-Modell",
+      "placeholder": "Modell wählen …",
+      "workspaceDefaultHint": "Keine Auswahl: Workspace-Default aus /settings/llm-providers wird verwendet.",
       "presetGroup": "Empfohlen",
       "ollamaGroup": "Lokal verfügbar",
       "customGroup": "Eigene Eingabe",
@@ -254,7 +257,7 @@
       "customPlaceholder": "z. B. qwen3-coder-next:cloud",
       "refresh": "Liste aktualisieren",
       "loadingModels": "Lade verfügbare Modelle…",
-      "noOllama": "Keine Verbindung zu Ollama. Custom-Eingabe nutzen oder Ollama starten.",
+      "noOllama": "Keine Verbindung zu Ollama. Provider unter /settings/llm-providers konfigurieren oder Ollama starten.",
       "openAiDefault": "OpenAI-Standardmodell aktiv.",
       "default": "Standard aus .env"
     },
@@ -285,6 +288,10 @@
       "sessionKeyLabel": "Sitzungs-API-Key",
       "noDbKeyBanner": "Für {provider} ist in Einstellungen → LLM-Anbieter kein API-Schlüssel hinterlegt. Bitte dort speichern oder hier eingeben.",
       "checkingKey": "Key-Status wird geprüft…"
+    },
+    "llmProfile": {
+      "hint": "Wird für Persona-Generierung genutzt.",
+      "modelIgnored": "Wird vom Profil überschrieben."
     },
     "personas": {
       "title": "Personas generieren",
@@ -419,7 +426,8 @@
       "success": "OK",
       "failed": "Fehlgeschlagen",
       "latency": "Latenz",
-      "error_type": "Fehlertyp"
+      "error_type": "Fehlertyp",
+      "model_placeholder": "Modell wählen …"
     }
   },
   "step3": {
@@ -444,6 +452,9 @@
       "stop": "Stoppen",
       "stopConfirm": "Simulation wirklich abbrechen? Bisherige Daten bleiben erhalten.",
       "stopped": "Gestoppt.",
+      "cancel": "Abbrechen",
+      "cancelConfirm": "Simulation sanft abbrechen? Bereits abgeschlossene Stages bleiben als Teil-Report erhalten.",
+      "cancelled": "Abbruch angefordert.",
       "completed": "Abgeschlossen."
     },
     "status": {
@@ -453,6 +464,9 @@
       "completed": "Abgeschlossen — {total} Runden",
       "failed": "Fehlgeschlagen",
       "elapsed": "Dauer: {time}"
+    },
+    "simClock": {
+      "tooltip": "Virtuelle Sim-Uhr (Agenten-Wallclock, Europe/Berlin)"
     },
     "feed": {
       "title": "Live-Feed",
@@ -536,19 +550,35 @@
     },
     "model": {
       "reportLabel": "Modell für Report",
-      "customLabel": "Eigenes Modell",
-      "customPlaceholder": "z. B. deepseek-v3.2:cloud",
-      "providerLabel": "LLM-Anbieter",
-      "apiKeyLabel": "API-Key",
-      "apiKeyPlaceholder": "API-Key für gewählten Anbieter",
-      "baseUrlLabel": "Base-URL (optional)",
-      "baseUrlPlaceholder": "z. B. https://api.openai.com/v1",
+      "placeholder": "Modell wählen …",
       "regenerate": "Neu generieren"
+    },
+    "llmProfile": {
+      "hint": "Wird für Report-Generierung genutzt."
     },
     "quote": {
       "openSource": "Quelle öffnen"
     },
+    "reportConfirm": {
+      "title": "Report starten?",
+      "description": "Die Simulation ist abgeschlossen. Bitte wähle ein Modell und starte die Report-Generierung manuell.",
+      "startButton": "Report starten",
+      "stopButton": "Abbrechen",
+      "stopDisabledTip": "Abbruch verfügbar nach Backend-Slice 6"
+    },
     "next": "Weiter zum Gespräch →"
+  },
+  "report": {
+    "provenance": {
+      "title": "Modell-Provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Modell",
+      "promptTokens": "Prompt-Tokens",
+      "completionTokens": "Completion-Tokens",
+      "latencyMs": "Latenz",
+      "noMetricsHint": "Keine Token-/Latenz-Metriken erfasst."
+    }
   },
   "step5": {
     "kicker": "№ 05 — GESPRÄCH",
@@ -598,7 +628,9 @@
     "ui": {
       "toggleEdgeLabels": "Beziehungslabels",
       "pauseLayout": "Layout pausieren",
-      "resumeLayout": "Layout fortsetzen"
+      "resumeLayout": "Layout fortsetzen",
+      "closePanel": "Graph-Panel schließen",
+      "exportHtml": "Als standalone HTML exportieren"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",
@@ -734,7 +766,8 @@
   },
   "topbar": {
     "search": "Suche",
-    "notifications": "Benachrichtigungen"
+    "notifications": "Benachrichtigungen",
+    "openNavigation": "Navigation öffnen"
   },
   "logs": {
     "drawer": {
@@ -744,9 +777,13 @@
       "search": "Suchen…",
       "pause": "Auto-Scroll pausieren",
       "empty": "Noch keine Log-Zeilen.",
+      "loading": "Logs werden geladen…",
+      "unknownError": "Logs konnten nicht geladen werden.",
+      "noFileYet": "Heutige Logdatei wurde noch nicht geschrieben — Backend ist erreichbar.",
       "connectionError": "SSE-Verbindung unterbrochen, Browser versucht Reconnect…",
       "reconnectExhausted": "Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.",
-      "reconnect": "Erneut verbinden"
+      "reconnect": "Erneut verbinden",
+      "reconnecting": "Verbindung wird wiederhergestellt…"
     }
   },
   "settings": {
@@ -996,6 +1033,8 @@
     "label": "Aktives Modell",
     "idle": "Bereit",
     "connecting": "Verbinde…",
+    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "unknown": "Unbekanntes Modell",
     "failed": "Verbindung verloren",
     "reload": "Neu verbinden",
     "provider": {
@@ -1135,12 +1174,22 @@
       "dropHint": "Datei hierher ziehen oder klicken",
       "modelLabel": "Modell",
       "modelDefault": "Standard",
+      "modelPlaceholder": "Modell wählen …",
+      "profileLabel": "Profil (optional)",
+      "profileNone": "— Profil deaktivieren —",
       "languageLabel": "Sprache",
+      "languageDe": "Deutsch",
+      "languageEn": "English",
       "startCta": "Starten",
       "disabledHint": "Erst Datei und Fragestellung eingeben, dann starten.",
       "requirementLabel": "Fragestellung / Anforderung",
       "requirementPlaceholder": "z. B. 'Welche politischen Reaktionen sind in der DACH-Region zu erwarten?'",
-      "profileDefault": "Standard"
+      "profileDefault": "Standard",
+      "numAgentsLabel": "Personas",
+      "numRoundsLabel": "Sim-Runden",
+      "numAgentsWarning": "Unter dem empfohlenen Floor (30). Aussagekraft reduziert.",
+      "smallSimBadge": "SMALL_SIM",
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 ist aktiv — Slider geht bis 10 statt 30. Statistische Aussagekraft ist eingeschränkt."
     },
     "stats": {
       "activeRuns": "Aktive Runs",
@@ -1222,5 +1271,28 @@
   },
   "observability": {
     "viewTrace": "Trace anzeigen ({id}…)"
+  },
+  "modelPicker": {
+    "loading": "Lade Modelle…",
+    "error": "Fehler beim Laden der Modelle",
+    "placeholder": "Modell wählen…",
+    "noModels": "Keine Modelle verfügbar"
+  },
+  "router": {
+    "notFound": {
+      "kicker": "404",
+      "title": "Route nicht gefunden",
+      "cta": "Zum Dashboard"
+    }
+  },
+  "upload": {
+    "pdfVisionDisabledHint": "PDF-Vision-Auswertung ist standardmäßig aus. Aktivieren über ENABLE_PDF_VISION=true (Cloud-Calls + Latenz)."
+  },
+  "llmProfilePicker": {
+    "label": "LLM-Profil (optional)",
+    "serverDefault": "Server-Standard (aktives Profil)",
+    "loading": "Profile laden…",
+    "error": "Profile konnten nicht geladen werden.",
+    "defaultSuffix": "default"
   }
 }

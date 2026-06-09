@@ -80,7 +80,11 @@ class Config:
     # LLM configuration (unified OpenAI format)
     LLM_API_KEY = os.environ.get('LLM_API_KEY')
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'http://localhost:11434/v1')
-    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'qwen2.5:32b')
+    # Leerer Default: Operator MUSS ein Modell setzen (ENV oder Settings-UI)
+    # oder ein LLM-Profil anlegen. Vorher führte `qwen2.5:32b` in Cloud-Setups
+    # (Ollama Cloud / OpenAI / Gemini) zu 404, weil das Auto-Bootstrap-Profil
+    # auf ein lokales Tag verwies, das im aktiven Backend nicht existiert.
+    LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', '')
     # Completion-Limit fuer einzelne LLM-Antworten. CAMEL verwendet dieses
     # Feld leider auch als Default fuer sein Memory-Token-Limit, deshalb
     # trennen wir die eigentliche Memory-Grenze unten separat.
@@ -101,6 +105,18 @@ class Config:
     NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
     # No insecure default password. Must be provided via environment (.env / secret manager).
     NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', '')
+
+    # Neo4j driver pool configuration. NEO4J_LIVENESS_TIMEOUT is the key
+    # knob: before lending a pooled connection that has been idle longer
+    # than this many seconds, the driver does a RESET round-trip to weed
+    # out stale sockets that Docker bridge / conntrack already killed
+    # silently. Without it, parallel persona generation hits a Bolt
+    # socket-storm on the first burst after fork-idle.
+    NEO4J_MAX_POOL_SIZE = int(os.environ.get('NEO4J_MAX_POOL_SIZE', '50'))
+    NEO4J_ACQ_TIMEOUT = float(os.environ.get('NEO4J_ACQ_TIMEOUT', '60.0'))
+    NEO4J_CONN_TIMEOUT = float(os.environ.get('NEO4J_CONN_TIMEOUT', '15.0'))
+    NEO4J_MAX_LIFETIME = int(os.environ.get('NEO4J_MAX_LIFETIME', '3600'))
+    NEO4J_LIVENESS_TIMEOUT = float(os.environ.get('NEO4J_LIVENESS_TIMEOUT', '30.0'))
 
     # Agent tool-use during simulation. Experimental and intentionally opt-in.
     ENABLE_AGENT_TOOLS = os.environ.get('ENABLE_AGENT_TOOLS', 'false').lower() in ('true', '1', 'yes')
@@ -208,6 +224,9 @@ class Config:
     AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS = int(
         os.environ.get('AGORA_UPLOAD_RATE_LIMIT_WINDOW_SECONDS', '60')
     )
+    # Per-file upload cap for the ontology endpoint. Documents above this are
+    # rejected with HTTP 413 before the request body is persisted to disk.
+    AGORA_MAX_UPLOAD_SIZE_MB = int(os.environ.get('AGORA_MAX_UPLOAD_SIZE_MB', '50'))
     AGORA_LLM_TRIGGER_RATE_LIMIT_MAX = int(
         os.environ.get('AGORA_LLM_TRIGGER_RATE_LIMIT_MAX', '20')
     )

@@ -1,0 +1,26 @@
+{
+  "_comment": "GOOD: 1 agent_quote + 1 seed_corpus, confidence=medium — erfüllt agent_grounded-Stufe (ADR-0002 Tabelle Z.54).",
+  "_provenance_stufe": "agent_grounded",
+  "claim_id": "claim_06",
+  "claim_text": "Die Einführung neuer Arbeitsmittel stößt bei Teilen der Belegschaft auf Skepsis.",
+  "confidence_label": "medium",
+  "confidence_score": 0.61,
+  "evidence": [
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_33",
+      "snippet": "Mitarbeiterin Mayer: Ich bin unsicher, ob das System wirklich hilft.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "sachbearbeitung",
+      "supports_claim": true,
+      "quote": "Ich bin unsicher, ob das System wirklich hilft."
+    },
+    {
+      "type": "graph_fact",
+      "source": "mitarbeiterbefragung_2024",
+      "snippet": "38 % der Befragten äußerten Bedenken gegenüber neuen IT-Systemen.",
+      "source_kind": "seed_corpus",
+      "supports_claim": true
+    }
+  ]
+}

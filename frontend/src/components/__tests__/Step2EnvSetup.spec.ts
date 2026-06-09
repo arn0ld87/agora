@@ -99,6 +99,7 @@ const globalConfig = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><slot /></div>' },
     Select: { template: '<select><slot /></select>' },
+    LlmProfilePicker: true,
   },
 }
 

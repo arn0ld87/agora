@@ -289,9 +289,14 @@ def test_persisted_v3_validates(tmp_path, monkeypatch):
 
     assert restored.schema_version == 3
     assert restored.report_id == report_id
-    assert restored.claims[0].evidence_refs == ["kg:metric:echo_chamber_index"]
+    # Reviewer-Floor S1: Claim mit 1 Evidence-Item wird zur Hypothesis geroutet.
+    assert len(restored.claims) == 0, (
+        "Claim mit 1 Evidence-Item darf nicht als Claim persistiert werden (Reviewer-Floor S1)"
+    )
+    assert any(
+        "Sicherheitsbedenken" in h.hypothesis_text for h in restored.hypotheses
+    ), "Claim mit 1 Evidence muss als Hypothesis auftauchen"
     assert restored.data_gaps[0].id == "gap_01"
-    assert "Sicherheitsbedenken sind ein sichtbarer Hemmfaktor." in report_v3_markdown
     assert "Preisbereitschaft ist im Seed-Korpus nicht belegt." in report_v3_markdown
 
 
@@ -580,3 +585,49 @@ def test_report_mode_re_exported_from_contracts():
     import typing  # noqa: PLC0415
     args = typing.get_args(ReportMode)
     assert set(args) == {"strict", "balanced", "explorative"}
+
+
+# ---- Slice 2: speculative / verified confidence tiers ----
+
+def test_claim_speculative_confidence_accepted():
+    """Slice 2: 'speculative' ist ein gültiges Confidence-Label für Claim."""
+    claim = Claim(
+        id="c-spec",
+        statement="Dieser Claim hat spekulativen Charakter.",
+        evidence_refs=["ev-001"],
+        confidence="speculative",
+        aggregation_basis="persona",
+    )
+    assert claim.confidence == "speculative"
+
+
+def test_claim_verified_confidence_accepted():
+    """Slice 2: 'verified' ist ein gültiges Confidence-Label für Claim."""
+    claim = Claim(
+        id="c-ver",
+        statement="Dieser Claim wurde durch mehrere Quellen verifiziert.",
+        evidence_refs=["ev-001", "ev-002"],
+        confidence="verified",
+        aggregation_basis="persona",
+    )
+    assert claim.confidence == "verified"
+
+
+def test_project_impact_speculative_confidence_accepted():
+    """Slice 2: 'speculative' ist ein gültiges Confidence-Label für ProjectImpact."""
+    impact = ProjectImpact(
+        id="pi-spec",
+        beschreibung="Spekulativer Einfluss auf die Kommunikation.",
+        confidence="speculative",
+    )
+    assert impact.confidence == "speculative"
+
+
+def test_project_impact_verified_confidence_accepted():
+    """Slice 2: 'verified' ist ein gültiges Confidence-Label für ProjectImpact."""
+    impact = ProjectImpact(
+        id="pi-ver",
+        beschreibung="Verifizierter Einfluss auf das Netzwerk.",
+        confidence="verified",
+    )
+    assert impact.confidence == "verified"

@@ -15,8 +15,15 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .provider_types import ProviderType
+
 
 _STRICT = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+CLAIM_MIN_EVIDENCE_FOR_CLAIM: int = 2
+"""Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
+in `_finalize_section_claims` zur Hypothesis geroutet, statt als Claim
+durchzulaufen. ADR-0002-konform — verschärft, schwächt nicht."""
 
 
 ReportMode = Literal["strict", "balanced", "explorative"]
@@ -73,7 +80,7 @@ class Claim(BaseModel):
     id: str = Field(min_length=1)
     statement: str = Field(min_length=8)
     evidence_refs: list[str] = Field(min_length=1, description="Pflicht: mind. 1 Evidenz-Anker")
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     persona_ids: list[str] = Field(default_factory=list)
     aggregation_basis: Literal["seed", "persona", "aggregat", "datenluecke"]
 
@@ -141,7 +148,7 @@ class ProjectImpact(BaseModel):
     id: str = Field(min_length=1)
     beschreibung: str = Field(min_length=1)
     affected_segments: list[str] = Field(default_factory=list)
-    confidence: Literal["low", "medium", "high"]
+    confidence: Literal["speculative", "low", "medium", "high", "verified"]
     evidence_refs: list[str] = Field(default_factory=list)
 
 
@@ -198,6 +205,52 @@ class Hypothesis(BaseModel):
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+ModelAttributionStage = Literal[
+    "ontology",
+    "graph_extraction",
+    "simulation",
+    "report_outline",
+    "report_section",
+    "report_synthesis",
+    "red_team",
+    "evidence_extraction",
+    "interview",
+    "other",
+]
+"""Slice 8 (2026-05-16): kanonische Stage-Labels für model_attribution.
+
+Lose enumeriert — neue Pipeline-Stages können den Wert frei wählen, aber
+typische Bezeichner sind festgeschrieben, damit die Frontend-Provenance-
+Tabelle stabile Gruppierungen rendert.
+"""
+
+
+class ModelAttribution(BaseModel):
+    """Welches LLM-Modell hat welche Pipeline-Stage produziert.
+
+    Slice 8 (User-Bericht 2026-05-16): "Es hinterlegt nirgendwo welches Modell
+    für welchen Teil der Erstellung zuständig war." Pro abgeschlossener Stage
+    ein Eintrag — Frontend rendert sie als ausklappbare Provenance-Sektion.
+    Felder absichtlich optional (außer stage/provider/model_id), damit nicht
+    jeder Provider Tokens/Latency liefert.
+    """
+
+    model_config = _STRICT
+
+    stage: ModelAttributionStage
+    provider: ProviderType = Field(description="z. B. 'ollama', 'openai', 'google'")
+    model_id: str = Field(min_length=1, description="Backend-Modell-ID, z. B. 'qwen2.5:32b'")
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    latency_ms: float | None = Field(default=None, ge=0.0)
+    started_at: datetime | None = None
+    note: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optionaler Hinweis (z. B. 'fallback nach timeout').",
+    )
+
+
 class ReportV3(BaseModel):
     """
     Container für alle 11 Pflichtabschnitte des strukturierten Reports v3.
@@ -227,3 +280,16 @@ class ReportV3(BaseModel):
     content_ideas: list[ContentIdea] = Field(default_factory=list)
     data_gaps: list[DataGap] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
+    # Slice 8 (2026-05-16): Modell-Provenance pro Pipeline-Stage. Default
+    # leer → backward-kompatibel zu Reports vor v3.1 (alte Fixtures laden ok).
+    model_attribution: list[ModelAttribution] = Field(
+        default_factory=list,
+        description="Welches LLM-Modell hat welche Stage produziert.",
+    )
+    # Slice 5 (2026-05-17): Red-Team-Findings aus echo_chamber_review-Stage.
+    # max_length=10 begrenzt die Anzahl der Befunde; leer = kein Echo-Problem erkannt.
+    red_team_findings: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Befunde der Red-Team-Review-Stage (max. 10).",
+    )

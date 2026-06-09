@@ -16,13 +16,30 @@ def _has_docker():
 
 
 def _compose_config(*extra_files: str):
-    """Run `docker compose config` from repo root and return parsed JSON."""
+    """Run `docker compose config` from repo root and return parsed JSON.
+
+    Tests prüfen die Compose-File-Defaults (z. B. AGORA_BIND_HOST=127.0.0.1).
+    Ohne `--env-file /dev/null` würde die User-`.env` durchschlagen und etwa
+    bei AGORA_BIND_HOST=0.0.0.0 die Loopback-Pin-Tests rotbrechen.
+    """
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    cmd = ["docker", "compose", "-f", "docker-compose.yml"]
+    # /dev/null ist unter macOS/Linux ein leeres File → Compose ignoriert
+    # automatisch die default-`.env` und nimmt nur Defaults aus der yml.
+    cmd = ["docker", "compose", "--env-file", "/dev/null", "-f", "docker-compose.yml"]
     for f in extra_files:
         cmd.extend(["-f", f])
     cmd.extend(["config", "--format", "json"])
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=repo_root, timeout=30)
+    # Auch die Process-ENV neutralisieren, damit Shell-AGORA_*-Vars (z. B.
+    # exportierte BIND_HOST aus direnv) nicht doch noch durchschlagen.
+    clean_env = {
+        k: v for k, v in os.environ.items()
+        if not k.startswith("AGORA_") and k not in {"LLM_BASE_URL"}
+    }
+    # PATH und DOCKER_HOST müssen erhalten bleiben — sind in clean_env enthalten,
+    # weil sie nicht mit AGORA_ beginnen.
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=repo_root, timeout=30, env=clean_env
+    )
     if result.returncode != 0:
         pytest.skip(f"docker compose config failed: {result.stderr.strip()}")
     return json.loads(result.stdout)

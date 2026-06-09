@@ -22,9 +22,13 @@ VALID_SIM_ID = "sim_0123456789ab"
 
 
 @pytest.fixture()
-def prepare_client():
+def prepare_client(monkeypatch):
     """Flask test-client mit simulation_bp."""
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Validierungs-/Routing-Logik, nicht Auth — Open-Mode erzwingen.
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.extensions = {"neo4j_storage": MagicMock(name="Neo4jStorage")}
@@ -33,9 +37,11 @@ def prepare_client():
 
 
 @pytest.fixture()
-def llm_client():
+def llm_client(monkeypatch):
     """Flask test-client mit llm_bp."""
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.register_blueprint(llm_bp, url_prefix="/api/llm")
     return app.test_client()
 
@@ -132,7 +138,7 @@ def test_override_uses_db_key_when_payload_key_empty(prepare_client, monkeypatch
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",
@@ -189,7 +195,7 @@ def test_override_prefers_explicit_payload_key_over_db_key(prepare_client, monke
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",
@@ -290,7 +296,7 @@ def test_override_no_key_required_for_local_ollama(prepare_client, monkeypatch):
     fake_manager.prepare_simulation.side_effect = fake_prepare
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", lambda self: self.run())
+    monkeypatch.setattr("app.jobs.threading.Thread.start", lambda self: self.run())
 
     resp = prepare_client.post(
         "/api/simulation/prepare",

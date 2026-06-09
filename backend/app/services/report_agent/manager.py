@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import ValidationError
 
-from ...contracts.report_v3 import DEFAULT_REPORT_MODE, ReportMode, ReportV3
+from ...contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM, DEFAULT_REPORT_MODE, ReportMode, ReportV3
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
@@ -288,18 +288,39 @@ class ReportManager:
                 # strict: Claims ohne Evidence → gedroppt (gleiche Logik, aber auch low-conf)
                 if not evidence_refs:
                     continue
+                # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
+                # Claim braucht ≥2 Evidence-Items, sonst Routing zur Hypothesis.
+                if len(evidence_refs) < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
+                    h_index = len(hypotheses) + 1
+                    h_text = str(claim.get("claim_text") or claim.get("claim") or "").strip()
+                    if h_text:
+                        hypotheses.append(ReportV3Hypothesis(
+                            id=f"hypothesis_{h_index:02d}",
+                            hypothesis_text=h_text,
+                            rationale=(
+                                f"Reviewer-Floor: nur {len(evidence_refs)} Evidence-Item(s) — "
+                                "Claim-Floor ist 2."
+                            ),
+                        ))
+                    continue
                 statement = str(claim.get("claim_text") or claim.get("claim") or "").strip()
                 if len(statement) < 8:
                     continue
-                label = str(claim.get("confidence_label") or "low")
-                confidence: Literal["low", "medium", "high"]
-                confidence = "high" if label in {"high", "verified"} else "low"
-                if label == "medium":
+                label = str(claim.get("confidence_label") or "speculative")
+                _valid_confidence = {"speculative", "low", "medium", "high", "verified"}
+                confidence: Literal["speculative", "low", "medium", "high", "verified"]
+                if label in _valid_confidence:
+                    confidence = label  # type: ignore[assignment]
+                elif label in {"high", "verified"}:
+                    confidence = "high"
+                elif label == "medium":
                     confidence = "medium"
-                if confidence not in {"low", "medium", "high"}:
+                elif label == "low":
                     confidence = "low"
-                # strict: Low-confidence Claims werden gedroppt
-                if report_mode == "strict" and confidence == "low":
+                else:
+                    confidence = "speculative"
+                # strict: speculative/low-confidence Claims werden gedroppt
+                if report_mode == "strict" and confidence in {"speculative", "low"}:
                     continue
                 claims.append(ReportV3Claim(
                     id=claim_id,
@@ -323,45 +344,51 @@ class ReportManager:
                     severity="medium",
                     suggested_fixes=[str(suggested_fix)] if suggested_fix else [],
                 ))
-            for hypothesis in section.get("hypotheses") or []:
-                if not isinstance(hypothesis, dict):
-                    continue
-                hypothesis_id = str(
-                    hypothesis.get("hypothesis_id")
-                    or f"hypothesis_{len(hypotheses) + 1:02d}"
-                )
-                text = str(hypothesis.get("hypothesis_text") or "").strip()
-                if not text:
-                    continue
-                origin_section_index = hypothesis.get(
-                    "origin_section_index", section_index
-                )
-                try:
-                    origin_index = (
-                        int(origin_section_index)
-                        if origin_section_index is not None
-                        else None
+            # Slice 3 (Issue #495): stable Re-ID after Dedup.
+            # visible hypotheses get IDs H{section_idx}_{i:02d} (1-based),
+            # appendix hypotheses get IDs HA{section_idx}_{i:02d} (1-based).
+            _hypothesis_slots: list[tuple[str, list[dict[str, Any]]]] = [
+                ("H", list(section.get("hypotheses") or [])),
+                ("HA", list(section.get("hypotheses_appendix") or [])),
+            ]
+            for _id_prefix, _slot in _hypothesis_slots:
+                for _h_slot_idx, hypothesis in enumerate(_slot, start=1):
+                    if not isinstance(hypothesis, dict):
+                        continue
+                    text = str(hypothesis.get("hypothesis_text") or "").strip()
+                    if not text:
+                        continue
+                    # Stable Re-ID: section-scoped, prefix separates visible from appendix
+                    hypothesis_id = f"{_id_prefix}{section_index}_{_h_slot_idx:02d}"
+                    origin_section_index = hypothesis.get(
+                        "origin_section_index", section_index
                     )
-                except (TypeError, ValueError):
-                    origin_index = None
-                try:
-                    confidence_score = float(
-                        hypothesis.get("confidence_score") or 0.0
-                    )
-                except (TypeError, ValueError):
-                    confidence_score = 0.0
-                hypotheses.append(ReportV3Hypothesis(
-                    id=hypothesis_id,
-                    hypothesis_text=text,
-                    rationale=str(hypothesis.get("rationale") or ""),
-                    suggested_evidence=[
-                        str(item)
-                        for item in (hypothesis.get("suggested_evidence") or [])
-                        if str(item).strip()
-                    ],
-                    origin_section_index=origin_index,
-                    confidence_score=max(0.0, min(1.0, confidence_score)),
-                ))
+                    try:
+                        origin_index = (
+                            int(origin_section_index)
+                            if origin_section_index is not None
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        origin_index = None
+                    try:
+                        confidence_score = float(
+                            hypothesis.get("confidence_score") or 0.0
+                        )
+                    except (TypeError, ValueError):
+                        confidence_score = 0.0
+                    hypotheses.append(ReportV3Hypothesis(
+                        id=hypothesis_id,
+                        hypothesis_text=text,
+                        rationale=str(hypothesis.get("rationale") or ""),
+                        suggested_evidence=[
+                            str(item)
+                            for item in (hypothesis.get("suggested_evidence") or [])
+                            if str(item).strip()
+                        ],
+                        origin_section_index=origin_index,
+                        confidence_score=max(0.0, min(1.0, confidence_score)),
+                    ))
         return ReportV3(
             report_id=report.report_id,
             generated_at=datetime.now(timezone.utc),

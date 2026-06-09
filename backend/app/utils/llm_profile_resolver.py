@@ -16,13 +16,14 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from ..contracts import LEGACY_GEMINI, PROVIDER_GOOGLE
 from ..services.llm_profiles_store import get_llm_profiles_store
 
 _PROFILE_PREFIX = "profile:"
 
 _PROFILE_PROVIDER_TO_RUNTIME = {
     "openai": "openai",
-    "gemini": "google",
+    LEGACY_GEMINI: PROVIDER_GOOGLE,
     "ollama": "custom_openai",
     "anthropic": "custom_openai",
     "custom": "custom_openai",

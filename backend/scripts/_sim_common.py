@@ -7,11 +7,52 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
+
+if TYPE_CHECKING:
+    from camel.types import ModelPlatformType  # type: ignore[import]
 
 from dotenv import load_dotenv
 from opentelemetry import context as otel_context
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+
+def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
+    """Map model-name + base-url to the correct CAMEL ModelPlatformType.
+
+    Detection order (first match wins):
+
+    1. GEMINI — base_url contains ``generativelanguage.googleapis.com`` OR
+       model starts with ``gemini-``.  Gemini-3 requires a ``thought_signature``
+       echo in multi-turn tool calls; the OpenAI-compat wire path strips that
+       field and the API rejects every tool turn with HTTP 400.
+    2. OLLAMA — base_url contains ``ollama.com`` or ``:11434``  OR  model ends
+       with ``:cloud`` or ``:latest``.  Ollama Cloud no longer offers an
+       OpenAI-compat ``/v1`` endpoint; only the native ``/api/chat`` path works.
+       CAMEL's ``OllamaModel`` speaks the native protocol.
+    3. OPENAI — everything else (real OpenAI, Anthropic compat gateways, Qwen
+       Cloud via non-Ollama URLs, Mistral, DeepSeek, …).
+    """
+    from camel.types import ModelPlatformType  # type: ignore[import]
+
+    url = base_url or ""
+    m = model or ""
+
+    # --- 1. Gemini ---
+    if "generativelanguage.googleapis.com" in url or m.startswith("gemini-"):
+        return ModelPlatformType.GEMINI
+
+    # --- 2. Ollama ---
+    if (
+        "ollama.com" in url
+        or re.search(r":11434(?:/|$)", url)
+        or m.endswith(":cloud")
+        or m.endswith(":latest")
+    ):
+        return ModelPlatformType.OLLAMA
+
+    # --- 3. OpenAI (default / compat gateway) ---
+    return ModelPlatformType.OPENAI
 
 
 def _is_ollama_route(model: str, base_url: str) -> bool:
@@ -278,6 +319,18 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentP
         help="Maximum simulation rounds (optional, used to truncate long simulations)",
     )
     parser.add_argument(
+        "--num-agents",
+        type=int,
+        default=30,
+        help="Minimum number of agents for the simulation. Default 30 (Slice 4 Floor).",
+    )
+    parser.add_argument(
+        "--num-rounds",
+        type=int,
+        default=10,
+        help="Number of simulation rounds. Default 10 (Slice 4 Floor).",
+    )
+    parser.add_argument(
         "--no-wait",
         action="store_true",
         default=False,
@@ -296,3 +349,40 @@ def build_parallel_parser() -> argparse.ArgumentParser:
     parser.add_argument("--twitter-only", action="store_true", help="Only run Twitter simulation")
     parser.add_argument("--reddit-only", action="store_true", help="Only run Reddit simulation")
     return _add_shared_arguments(parser)
+
+
+def compute_start_hour_offset(
+    config: dict[str, Any],
+    total_rounds: int,
+    minutes_per_round: int,
+) -> int:
+    """Pick a simulated-clock offset so short runs don't sit entirely in the
+    agents' inactive hours.
+
+    Why: ``simulated_hour`` rolls from 0..23 starting at midnight. With
+    ``minutes_per_round=60`` and ``--max-rounds 3`` the loop only visits hours
+    0/1/2, while typical ``active_hours`` start at 9. Result: every round
+    short-circuits via ``if not active_agents: continue`` and the platform
+    reports "0 actions, 0.0s".
+
+    Respect ``time_config.start_hour`` if explicitly set. Otherwise, when the
+    truncated run can't naturally cycle through 24h, shift to the most
+    populated active hour from ``agent_configs``.
+    """
+    time_config = config.get("time_config", {}) or {}
+    explicit = time_config.get("start_hour")
+    if explicit is not None:
+        return int(explicit) % 24
+
+    simulated_hours = (total_rounds * minutes_per_round) / 60.0
+    if simulated_hours >= 24:
+        return 0
+
+    from collections import Counter
+    hour_counts: Counter[int] = Counter()
+    for ac in config.get("agent_configs", []) or []:
+        for h in ac.get("active_hours", []) or []:
+            hour_counts[int(h) % 24] += 1
+    if not hour_counts:
+        return 9
+    return int(hour_counts.most_common(1)[0][0])

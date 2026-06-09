@@ -8,7 +8,6 @@ import pytest
 from flask import Flask
 
 from app.api import report_bp
-from app.api.report import _can_reuse_existing_report
 from app.services.report_agent import (
     Report,
     ReportManager,
@@ -16,8 +15,11 @@ from app.services.report_agent import (
     ReportSection,
     ReportStatus,
 )
+from app.services.report_generation import ReportGenerationService
 from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 from app.utils.rate_limit import report_rate_limiter
+
+_can_reuse_existing_report = ReportGenerationService.can_reuse_existing_report
 
 
 REPORT_ID = "report_abcdef123456"
@@ -155,13 +157,17 @@ def _persist_report_with_hypotheses() -> None:
 
 def _rate_limited_report_app():
     app = Flask(__name__)
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Diese Tests
+    # prüfen Rate-Limiting, nicht Auth — Open-Mode erzwingen.
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_REPORT_RATE_LIMIT_MAX"] = 2
     app.config["AGORA_REPORT_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.register_blueprint(report_bp, url_prefix="/api/report")
     return app
 
 
-def test_report_generate_endpoint_rate_limits_requests():
+def test_report_generate_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):
@@ -177,7 +183,8 @@ def test_report_generate_endpoint_rate_limits_requests():
     assert payload["retry_after_seconds"] == 60
 
 
-def test_report_chat_endpoint_rate_limits_requests():
+def test_report_chat_endpoint_rate_limits_requests(monkeypatch):
+    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
     client = _rate_limited_report_app().test_client()
 
     for _ in range(2):
@@ -284,7 +291,8 @@ def test_hypotheses_in_markdown_and_json(env):
     assert md_response.status_code == 200
     markdown = md_response.data.decode("utf-8")
     assert "Hypothesen ohne Evidence" in markdown
-    assert "hypothesis_01" in markdown
+    # Slice 3 (Issue #495): stabile Re-ID → H{section_idx}_{slot:02d}
+    assert "H1_01" in markdown
     assert "weitere Persona-Quote" in markdown
 
     json_response = env.get(f"/api/report/{REPORT_ID}/export?format=json")

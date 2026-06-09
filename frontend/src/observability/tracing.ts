@@ -14,9 +14,9 @@ import { ZoneContextManager } from '@opentelemetry/context-zone'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { registerInstrumentations } from '@opentelemetry/instrumentation'
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch'
-import { Resource } from '@opentelemetry/resources'
+import { resourceFromAttributes } from '@opentelemetry/resources'
 import { BatchSpanProcessor, WebTracerProvider } from '@opentelemetry/sdk-trace-web'
-import { SEMRESATTRS_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 
 let initialized = false
 
@@ -25,8 +25,8 @@ export function initFrontendTracing(): void {
   if (import.meta.env.VITE_OTEL_ENABLED !== 'true') return
 
   const provider = new WebTracerProvider({
-    resource: new Resource({
-      [SEMRESATTRS_SERVICE_NAME]: 'agora-frontend',
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: 'agora-frontend',
     }),
     spanProcessors: [
       new BatchSpanProcessor(

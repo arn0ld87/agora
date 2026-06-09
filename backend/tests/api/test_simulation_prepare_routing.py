@@ -95,7 +95,8 @@ def test_prepare_endpoint_uses_resolved_route_for_legacy_service_call(client, mo
         "app.api.simulation_prepare.run_registry.create_run",
         lambda *a, **k: {"run_id": "run_prepare_1"},
     )
-    monkeypatch.setattr("app.api.simulation_prepare.threading.Thread.start", run_inline)
+    # PR 2: Thread-Start liegt jetzt in app.jobs.enqueue (single point of change).
+    monkeypatch.setattr("app.jobs.threading.Thread.start", run_inline)
     monkeypatch.setattr("app.models.task.TaskManager", FakeTaskManager)
 
     response = client.post(

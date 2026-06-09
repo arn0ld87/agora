@@ -192,7 +192,7 @@ def test_stance_conflict_flips_confidence_label() -> None:
 
     # Mit ausreichend starker Penalty muss das Label schlechter werden als ohne
     # (oder gleich, wenn beide schon low sind — aber Stance-Konflikt +0.15 reicht)
-    label_rank = {"low": 0, "medium": 1, "high": 2, "verified": 3}
+    label_rank = {"speculative": 0, "low": 1, "medium": 2, "high": 3, "verified": 4}
     assert label_rank[label_with_penalty] <= label_rank[label_without_penalty], (
         f"Label mit Penalty ({label_with_penalty}) soll <= Label ohne Penalty "
         f"({label_without_penalty}) sein"

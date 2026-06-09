@@ -75,15 +75,21 @@ context.md
 # vor dem ersten Edit lesen können müssen.
 PLAN.md.bak
 # .github/ enthält die CI- und Docker-Image-Workflows — getrackt und aktiv.
-/docs/
+# docs/ ist getrackt (öffentliche Sachdokus, ADRs, runbooks).
+# docs/.local/ ist Ablage für interne Worklogs/Pläne/Archive — bleibt lokal:
+/docs/.local/
 /Agora_design/
 /scripts/logs/
 /.codex
-/.gitleaksignore
+# ``/.gitleaksignore`` ist tracked — offizielle gitleaks-Allowlist für
+# dokumentierte Test-Fixtures (siehe Header der Datei). Niemals echte
+# Secrets eintragen; jeder Eintrag muss als belegtes Test-Fixture im
+# Commit-Body begründet sein.
 # /media/: Default ignored, aber README-relevante Assets (logo, screenshots, credits) re-included.
 # WICHTIG: /media/* statt /media/ — bei Verzeichnis-Match kann man Kinder nicht re-includen.
 /media/*
-!/media/logo.png
+!/media/agora-logo.*
+!/media/agora-logo-animated.svg
 !/media/screenshots/
 !/media/credits/
 /static/image/
@@ -108,10 +114,9 @@ backend/.cache/
 
 # Runtime artifacts and local instances
 /instance/
-backend/instance/settings.json
-backend/instance/settings.*.json.tmp
-backend/instance/active_llm_config.json
-backend/instance/.active_llm_*.tmp
+# Flask instance path with local run data, LLM traces, routing snapshots,
+# user uploads metadata, SQLite state, and other private runtime artifacts.
+backend/instance/
 
 # Upload folder
 backend/uploads/
@@ -131,3 +136,11 @@ backend/instance/*.db
 
 # code-review-graph local storage (Tree-sitter graph cache, embeddings)
 .code-review-graph/
+
+# clawpatch local state (findings, features, runs, locks, reports)
+.clawpatch/
+
+# Ad-hoc Smoke- / Seed-Helper, die nur lokal entstehen (dump-Skripte,
+# Screenshot-Drops, persönliche Test-Seed-Dokumente).
+.tmp-*
+test-seed-*.md

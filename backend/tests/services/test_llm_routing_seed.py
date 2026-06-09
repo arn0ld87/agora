@@ -108,6 +108,59 @@ def test_build_route_subprocess_env_uses_resolved_route_values():
     assert env["LLM_MODEL_NAME"] == "gpt-4o-mini"
 
 
+def test_build_route_subprocess_env_injects_google_api_key_for_gemini():
+    """OASIS subprocess findet den Gemini-Key ohne .env, sobald der Workspace-
+    Secrets-Store ihn liefert (`api_key_ref="GOOGLE_API_KEY"` aus Registry)."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="google",
+        model="models/gemini-2.5-flash",
+        base_url_sanitized="https://generativelanguage.googleapis.com/v1beta/openai/",
+        routing_version=3,
+    )
+
+    env = build_route_subprocess_env(route, api_key="goog-server-key", run_id="run_gemini")
+
+    assert env["GOOGLE_API_KEY"] == "goog-server-key"
+    assert env["LLM_API_KEY"] == "goog-server-key"
+    assert env["OPENAI_API_KEY"] == "goog-server-key"
+    assert env["LLM_MODEL_NAME"] == "models/gemini-2.5-flash"
+
+
+def test_build_route_subprocess_env_injects_ollama_api_key_for_ollama_cloud():
+    """Ollama Cloud bekommt OLLAMA_API_KEY aus der Registry — kein .env nötig."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="ollama_cloud",
+        model="qwen3-coder-next:cloud",
+        base_url_sanitized="https://ollama.com/v1",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key="ollama-cloud-key")
+
+    assert env["OLLAMA_API_KEY"] == "ollama-cloud-key"
+    assert env["LLM_API_KEY"] == "ollama-cloud-key"
+
+
+def test_build_route_subprocess_env_does_not_set_provider_key_without_api_key():
+    """Ohne resolved api_key bleiben sowohl generische als auch provider-
+    spezifische Env-Vars leer — die Subprozesse müssen dann selbst entscheiden,
+    ob sie aus dem Parent-Env (`.env`-Fallback) ziehen."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="google",
+        model="models/gemini-2.5-flash",
+        routing_version=1,
+    )
+
+    env = build_route_subprocess_env(route, api_key=None)
+
+    assert "GOOGLE_API_KEY" not in env
+    assert "LLM_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
+
+
 def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
     route = ResolvedRoute(
         stage="persona_generation",

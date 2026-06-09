@@ -1,9 +1,24 @@
+import os
+
+import pytest
 from flask import Flask
 
 from app.api import simulation_bp
 from app.api.simulation_lifecycle import _detect_default_provider
 from app.services.artifact_store import InMemoryArtifactStore
 from app.utils.rate_limit import llm_trigger_rate_limiter
+
+
+@pytest.fixture(autouse=True)
+def _clear_auth_token():
+    # @require_scope greift sobald AGORA_AUTH_TOKEN gesetzt ist. Tests in
+    # dieser Datei prüfen Validierungs-/Routing-Logik, nicht Auth — Open-Mode.
+    prev = os.environ.pop("AGORA_AUTH_TOKEN", None)
+    try:
+        yield
+    finally:
+        if prev is not None:
+            os.environ["AGORA_AUTH_TOKEN"] = prev
 
 
 def _reset_llm_trigger_limiter():
@@ -13,6 +28,7 @@ def _reset_llm_trigger_limiter():
 def _build_test_app(*, artifact_store=None):
     _reset_llm_trigger_limiter()
     app = Flask(__name__)
+    app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 20
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_WINDOW_SECONDS"] = 60
     app.extensions = {}

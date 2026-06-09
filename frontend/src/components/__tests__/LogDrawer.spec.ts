@@ -1,11 +1,17 @@
 /**
- * LogDrawer — SSE Reconnect-Cap Tests (Sub-Slice J.6, Audit-Empfehlung 7).
+ * LogDrawer — SSE-Reconnect-Verhalten.
  *
- * Testet:
- *   1. Nach 5 onerror-Events wird der Stream gestoppt und streamFailed=true gesetzt.
- *      Der Reload-Button erscheint im DOM.
- *   2. Eine valide onmessage nach 3 Errors resettet den Counter. Weitere Errors
- *      akkumulieren erst ab diesem Reset — der Cap greift erst nach 5 neuen Fehlern.
+ * Slice 4 (Observability-Welle 2026-05-16, User-Decision):
+ * Reconnects sind UNBEGRENZT (kein 5-Versuche-Cap mehr). EventSource nutzt
+ * den vom Backend gesetzten ``retry: 5000``-Wert für automatisches Browser-
+ * Reconnect. Ein ``streamReconnecting``-Indikator erscheint erst nach 30 s
+ * ohne erfolgreichen Frame — kurze Hiccups werden optisch verschluckt.
+ *
+ * Tests:
+ *   1. Mehrere onerror-Events innerhalb < 30 s schließen den Stream NICHT
+ *      und triggern KEIN Reload-Button (kein Cap).
+ *   2. Erfolgreiche onmessage hält den Reconnect-Indikator inaktiv und setzt
+ *      lastFrameAt zurück.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -45,7 +51,6 @@ vi.mock('../../composables/useStickyScroll', () => ({
 }))
 
 // --- Kontrollierbarer EventSource-Mock ---
-// _capturedSource gibt Tests Zugriff auf Handler und close().
 interface FakeSourceHandle {
   close: ReturnType<typeof vi.fn>
   fireMessage: (data: unknown) => void
@@ -83,7 +88,6 @@ globalThis.EventSource = MockEventSource
 
 import LogDrawer from '../LogDrawer.vue'
 
-// --- i18n-Minimalkonfiguration ---
 const i18n = createI18n({
   legacy: false,
   locale: 'de',
@@ -98,9 +102,13 @@ const i18n = createI18n({
           search: 'Suchen…',
           pause: 'Auto-Scroll pausieren',
           empty: 'Noch keine Log-Zeilen.',
+          loading: 'Logs werden geladen…',
+          unknownError: 'Logs konnten nicht geladen werden.',
+          noFileYet: 'Heutige Logdatei wurde noch nicht geschrieben — Backend ist erreichbar.',
           connectionError: 'SSE-Verbindung unterbrochen, Browser versucht Reconnect…',
           reconnectExhausted: 'Verbindung zum Log-Stream nach mehreren Versuchen abgebrochen.',
           reconnect: 'Erneut verbinden',
+          reconnecting: 'Verbindung wird wiederhergestellt…',
         },
       },
       common: { close: 'Schließen' },
@@ -119,8 +127,8 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('LogDrawer — SSE Reconnect-Cap (J.6, Audit-Empfehlung 7)', () => {
-  it('stoppt den Stream und zeigt Reload-Button nach 5 onerror-Events', async () => {
+describe('LogDrawer — SSE Reconnect (Slice 4, unbegrenzte Reconnects)', () => {
+  it('mehrere onerror-Events schließen den Stream NICHT (kein Cap)', async () => {
     const wrapper = mount(LogDrawer, {
       props: { open: true },
       global: globalConfig,
@@ -129,15 +137,11 @@ describe('LogDrawer — SSE Reconnect-Cap (J.6, Audit-Empfehlung 7)', () => {
     await flushPromises()
     await nextTick()
 
-    // EventSource muss nach dem Mount erzeugt worden sein.
     expect(_capturedSource).not.toBeNull()
     const src = _capturedSource!
 
-    // Reload-Button noch nicht sichtbar.
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
-
-    // 5 onerror-Events feuern.
-    for (let i = 0; i < 5; i++) {
+    // 10 onerror-Events feuern — früher Cap bei 5, jetzt unbegrenzt.
+    for (let i = 0; i < 10; i++) {
       src.fireError()
       await nextTick()
     }
@@ -145,16 +149,69 @@ describe('LogDrawer — SSE Reconnect-Cap (J.6, Audit-Empfehlung 7)', () => {
     await flushPromises()
     await nextTick()
 
-    // close() muss aufgerufen worden sein (stopStream).
-    expect(src.close).toHaveBeenCalled()
-
-    // Reload-Button ist jetzt sichtbar.
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(true)
+    expect(src.close).not.toHaveBeenCalled()
+    expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
 
     wrapper.unmount()
   })
 
-  it('resettet den Counter bei onmessage — Cap greift erst nach 5 neuen Fehlern', async () => {
+  it('zeigt Fehlermeldung wenn fetchLogs einen Fehler wirft (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'))
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('boom')
+  })
+
+  it('zeigt Backend-Marker bei file=null (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: { lines: [], offset: 0, file: null, message: 'logs.drawer.noFileYet' },
+      },
+    })
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Heutige Logdatei wurde noch nicht geschrieben')
+  })
+
+  it('zeigt Loading-State während fetchLogs läuft (Task 7)', async () => {
+    const { fetchLogs } = await import('../../api/logs')
+    let resolveFetch: (val: unknown) => void = () => {}
+    ;(fetchLogs as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveFetch = resolve }),
+    )
+
+    const wrapper = mount(LogDrawer, {
+      props: { open: true },
+      global: globalConfig,
+    })
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Logs werden geladen…')
+
+    resolveFetch({ data: { success: true, data: { lines: ['ok'], offset: 0 } } })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain('Logs werden geladen…')
+  })
+
+  it('reconnect-indicator bleibt versteckt, wenn onmessage rechtzeitig kommt', async () => {
     const wrapper = mount(LogDrawer, {
       props: { open: true },
       global: globalConfig,
@@ -166,39 +223,17 @@ describe('LogDrawer — SSE Reconnect-Cap (J.6, Audit-Empfehlung 7)', () => {
     expect(_capturedSource).not.toBeNull()
     const src = _capturedSource!
 
-    // 3 Errors — unter dem Cap.
-    for (let i = 0; i < 3; i++) {
-      src.fireError()
-      await nextTick()
-    }
-
-    // close noch nicht aufgerufen, Reload-Button nicht sichtbar.
-    expect(src.close).not.toHaveBeenCalled()
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
-
-    // Valide Message — Counter wird auf 0 zurückgesetzt.
-    src.fireMessage({ line: 'INFO — alles gut' })
-    await nextTick()
-
-    // Reload-Button darf nach Reset nicht erscheinen.
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
-
-    // 4 weitere Errors nach dem Reset — immer noch unter Cap.
-    for (let i = 0; i < 4; i++) {
-      src.fireError()
-      await nextTick()
-    }
-
-    expect(src.close).not.toHaveBeenCalled()
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(false)
-
-    // 5. Error nach Reset — jetzt ist der Cap erreicht (0→5 neue Fehler).
+    // onerror direkt nach Mount — lastFrameAt ist gerade gesetzt, also
+    // streamReconnecting bleibt false (Drift < 30 s).
     src.fireError()
     await nextTick()
-    await flushPromises()
+    expect(wrapper.find('.reconnect-indicator').exists()).toBe(false)
 
-    expect(src.close).toHaveBeenCalled()
-    expect(wrapper.find('.reconnect-btn').exists()).toBe(true)
+    // Valider Frame setzt lastFrameAt erneut und sollte den Indikator
+    // garantiert versteckt halten.
+    src.fireMessage({ line: 'INFO — alles gut' })
+    await nextTick()
+    expect(wrapper.find('.reconnect-indicator').exists()).toBe(false)
 
     wrapper.unmount()
   })

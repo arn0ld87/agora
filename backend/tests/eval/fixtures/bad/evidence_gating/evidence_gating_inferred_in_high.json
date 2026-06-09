@@ -1,0 +1,36 @@
+{
+  "_comment": "BAD: source_kind=inferred in Evidence + confidence=high — verletzt reject_inferred_in_high_confidence (ADR-0002 Anker 5). ValidationError erwartet.",
+  "_provenance_stufe": "cross_stakeholder",
+  "_violation": "inferred-Evidence bei high-Confidence",
+  "claim_id": "claim_03",
+  "claim_text": "Die Stakeholder aus Produktion und Verwaltung sehen den Wandel als notwendig.",
+  "confidence_label": "high",
+  "confidence_score": 0.79,
+  "evidence": [
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_55",
+      "snippet": "Produktionsleiterin Fischer: Wir müssen diesen Schritt gehen.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "produktion",
+      "supports_claim": true,
+      "quote": "Wir müssen diesen Schritt gehen."
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_55",
+      "snippet": "Verwaltungschef Bauer: Der Wandel ist unausweichlich.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "verwaltung",
+      "supports_claim": true,
+      "quote": "Der Wandel ist unausweichlich."
+    },
+    {
+      "type": "entity_summary",
+      "source": "llm_synthesis_pass_2",
+      "snippet": "Schlussfolgerung: Beide Gruppen präferieren aktive Mitgestaltung.",
+      "source_kind": "inferred",
+      "supports_claim": true
+    }
+  ]
+}

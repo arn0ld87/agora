@@ -38,6 +38,56 @@ _default_logger = get_logger("agora.api")
 _INTERNAL_ERROR_MESSAGE = "internal server error"
 _TIMEOUT_ERROR_MESSAGE = "request timed out"
 
+# Map ApiErrorCode → semantic HTTP status when raised through the service
+# exception path. Anything not listed keeps the caller-supplied default
+# (400 for ValueError, 500 for RuntimeError). The map is deliberately small:
+# direct ``json_error(code, status=...)`` calls pick their status explicitly,
+# and adding entries here can silently change the API contract for existing
+# endpoints — only add a mapping when the previous contract was also a bug.
+_API_ERROR_STATUS_MAP: dict[ApiErrorCode, int] = {
+    ApiErrorCode.NOT_FOUND: 404,
+    ApiErrorCode.GRAPH_BUILD_IN_PROGRESS: 409,
+}
+
+
+def _extract_api_error_code(exc: BaseException) -> ApiErrorCode | None:
+    """Return the ``ApiErrorCode`` carried by a service exception, if any.
+
+    Supports both ``raise ValueError(ApiErrorCode.NOT_FOUND)`` and the legacy
+    ``raise ValueError("not_found")`` style, where the string matches an enum
+    value.
+    """
+    if not exc.args:
+        return None
+    first = exc.args[0]
+    if isinstance(first, ApiErrorCode):
+        return first
+    if isinstance(first, str):
+        try:
+            return ApiErrorCode(first)
+        except ValueError:
+            return None
+    return None
+
+
+def json_error_from_exception(
+    exc: BaseException,
+    *,
+    fallback_status: int = 400,
+):
+    """Translate a service-raised exception into a uniform error response.
+
+    - ``Exception(ApiErrorCode.X)`` → looks up the semantic HTTP status in
+      ``_API_ERROR_STATUS_MAP`` and returns ``json_error(code, status=mapped)``.
+    - Legacy string messages → ``json_error(str(exc), status=fallback_status)``
+      without a ``code`` field, preserving the historical wire format.
+    """
+    code = _extract_api_error_code(exc)
+    if code is not None:
+        status = _API_ERROR_STATUS_MAP.get(code, fallback_status)
+        return json_error(code, status=status)
+    return json_error(str(exc), status=fallback_status)
+
 
 def _debug_extra(exc: Exception) -> dict[str, Any] | None:
     if not Config.DEBUG:
@@ -143,7 +193,21 @@ def handle_api_errors(
                     return json_success(dict(result))
                 return result
             except ValueError as exc:
-                return json_error(str(exc), status=400)
+                return json_error_from_exception(exc, fallback_status=400)
+            except RuntimeError as exc:
+                # Domain-level conflicts (e.g. GRAPH_BUILD_IN_PROGRESS) raise
+                # RuntimeError(ApiErrorCode.X). Anything without an ApiErrorCode
+                # payload still degrades to a 500.
+                if _extract_api_error_code(exc) is not None:
+                    return json_error_from_exception(exc, fallback_status=500)
+                active_logger.exception(f"{prefix}: {exc}")
+                return json_error(
+                    _INTERNAL_ERROR_MESSAGE,
+                    status=500,
+                    code="internal_error",
+                    include_traceback=bool(Config.DEBUG),
+                    extra=_debug_extra(exc),
+                )
             except TimeoutError as exc:
                 active_logger.warning(f"{prefix}: timeout: {exc}")
                 return json_error(

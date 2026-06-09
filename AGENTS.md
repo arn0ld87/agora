@@ -10,7 +10,7 @@ Test-Counts und Versionsstände in [`docs/STATUS.md`](docs/STATUS.md), operative
 Agora ist ein **lokal-first** Multi-Agent-Simulator für DACH-Zielgruppenreaktionen. Pipeline:
 Dokument hochladen → Wissensgraph extrahieren → Personas spawnen → OASIS-Simulation → DACH-Report.
 
-**Stack:** Flask (Python 3.11) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
+**Stack:** Flask (Python 3.12) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
 + Redis + Ollama. Package-Manager: `uv` (Backend), `npm` (Frontend).
 
 **Status:** v1.0.0 (2026-05-11). Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
@@ -18,8 +18,12 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 
 ## Sofort wichtig
 
-- **Tool-Reihenfolge ist Pflicht:** `code-review-graph` → `context7` → `sequential-thinking` →
-  `context-mode` → **erst dann** `Read`/`rg`/`Bash`. Detail: [`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
+- **Tool-Pipeline (harmonisiert mit context-mode):** `code-review-graph` → `context7` →
+  `ctx_batch_execute` → `ctx_execute` → **erst dann** `Read`/`Bash`. Detail:
+  [`docs/runbooks/tool-pflicht.md`](docs/runbooks/tool-pflicht.md).
+- **context-mode ist die Execution-Layer.** PreToolUse-Hooks limitieren Bash (nur git/fs/nav,
+  kein curl/wget), Read (nur zum Editieren, Analysen via ctx_execute_file), WebFetch
+  (erlaubt, aber ctx_fetch_and_index für Research bevorzugt).
 - **Branch-Hygiene:** Nie direkt auf `main` pushen. PR-Workflow inklusive Gemini-Sichtung:
   [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md).
 - **Worktree für Slices:** `/private/tmp/agora-<slice-id>/`. Details:
@@ -32,7 +36,7 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 ## Stack-Map (Kurzfassung)
 
 ```
-backend/                    Python 3.11, uv, Flask, Pydantic v2, pytest
+backend/                    Python 3.12, uv, Flask, Pydantic v2, pytest
   app/
     contracts/              Layer 0: Single Source of Truth (Pydantic v2, extra="forbid")
     api/                    HTTP-Routen (Flask Blueprints)
@@ -100,9 +104,18 @@ Wichtige nicht-offensichtliche Knöpfe:
 - **`EMBEDDING_MODEL` und `VECTOR_DIM` müssen zusammenpassen** — Tabelle in
   [`docs/provider-runtime-settings.md`](docs/provider-runtime-settings.md).
 - `OLLAMA_THINKING=false` — strippt Reasoning-Blöcke bei Qwen3/GPT-OSS/DeepSeek-R1.
+  Wirkt sowohl in den OASIS-Subprozess-Skripten als auch im
+  Flask-`LLMClient.__init__` (Sub-Slice 05.2) — überstimmt
+  `reasoning_effort`-Default.
 - `LLM_DISABLE_JSON_MODE=true` — deaktiviert `response_format=json_object`.
-- `LLM_CONTEXT_LIMIT` / `LLM_MODEL_CONTEXT_LIMITS_JSON` — überschreiben die Pro-Modell-Heuristik
-  (CAMEL `ScoreBasedContextCreator`-Floor — ohne Override kappt CAMEL bei 8192 Tokens).
+- `LLM_CONTEXT_LIMIT` / `LLM_MODEL_CONTEXT_LIMITS_JSON` — überschreiben die Pro-Modell-Heuristik.
+  Heuristik ist seit Sub-Slice 05.5 doppelt verdrahtet: CAMEL
+  `ScoreBasedContextCreator`-Floor in den OASIS-Subprozessen UND
+  `LLMClient._num_ctx`-Resolver (`_resolve_num_ctx` in
+  `app/utils/llm_client.py`). Ohne Override greift die Modell-Familie-Tabelle
+  (z. B. `gemini-3 = 1M`, `qwen3-coder = 256k`, `gpt-oss = 128k`,
+  `nemotron = 128k`); Legacy-Default `OLLAMA_NUM_CTX = 8192` greift nur noch
+  bei unbekannten Modellen.
 - `PERSONA_REVIEW_ENABLED`, `ENABLE_AGENT_TOOLS`, `ENABLE_WEB_TOOLS` — opt-in Features.
 - `EVENT_BUS_BACKEND=auto|redis|file` — IPC-Adapter-Wahl.
 
@@ -130,8 +143,7 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 - **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch,
   F läuft. Vendoriert in [`design/v3-source/`](design/v3-source/).
 - **v1.0-Output-Vertrag** ([`PLAN.md`](PLAN.md)) — offen: P3.2, P4.1, P4.3, P4.4.
-- **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen):
-  [`docs/plans/`](docs/plans/).
+- **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen).
 
 ## Referenz
 

@@ -165,6 +165,20 @@
           "$ref": "#/$defs/EvidenceSourceKind",
           "default": "seed_corpus"
         },
+        "source_model": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider+Modell, das diese Evidence-Zeile extrahiert hat (Slice 8).",
+          "title": "Source Model"
+        },
         "supports_claim": {
           "anyOf": [
             {
@@ -431,6 +445,14 @@
           ],
           "default": null
         },
+        "red_team_findings": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Red Team Findings",
+          "type": "array"
+        },
         "report_id": {
           "minLength": 1,
           "title": "Report Id",
@@ -623,6 +645,14 @@
             "$ref": "#/$defs/ReportSectionHypothesisModel"
           },
           "title": "Hypotheses",
+          "type": "array"
+        },
+        "hypotheses_appendix": {
+          "items": {
+            "$ref": "#/$defs/ReportSectionHypothesisModel"
+          },
+          "maxItems": 50,
+          "title": "Hypotheses Appendix",
           "type": "array"
         },
         "section_index": {

@@ -1,0 +1,31 @@
+{
+  "_comment": "BAD: confidence=verified mit match_score < 0.85 — verletzt verified_needs_strong_match. ValidationError erwartet.",
+  "_provenance_stufe": "verified",
+  "_violation": "match_score=0.72 unterschreitet Schwelle 0.85",
+  "claim_id": "claim_04",
+  "claim_text": "Die Quellenlage spricht für eine breite Akzeptanz in Produktion und Vertrieb.",
+  "confidence_label": "verified",
+  "confidence_score": 0.91,
+  "evidence": [
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_77",
+      "snippet": "Produktionsleiter Neumann: Ja, das passt zu unserer Strategie.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "produktion",
+      "supports_claim": true,
+      "match_score": 0.72,
+      "quote": "Das passt zu unserer Strategie."
+    },
+    {
+      "type": "agent_interview",
+      "source": "agent_log_run_77",
+      "snippet": "Vertriebsleiterin Wolff: Wir stehen hinter dieser Entscheidung.",
+      "source_kind": "agent_quote",
+      "persona_stakeholder_group": "vertrieb",
+      "supports_claim": true,
+      "match_score": 0.68,
+      "quote": "Wir stehen hinter dieser Entscheidung."
+    }
+  ]
+}

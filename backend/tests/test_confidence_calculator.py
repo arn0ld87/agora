@@ -16,23 +16,22 @@ from app.services.confidence_calculator import (
 )
 
 
-def test_no_evidence_yields_low():
-    # Sub-Slice 07: leere Evidence-Liste → ehrliches (0.15, "low")
-    # statt 0.0 — der Guard in compute_confidence gibt einen Minimal-
-    # Score zurück, damit Downstream-Code nicht auf 0.0 spezialisiert ist.
+def test_no_evidence_yields_speculative():
+    # Slice 2: leere Evidence-Liste → (0.15, "speculative")
+    # 0.15 < 0.45 → neues unterste Tier "speculative".
     score, label = compute_confidence([])
     assert score == 0.15
-    assert label == "low"
+    assert label == "speculative"
 
 
-def test_single_unmatched_graph_fact_yields_medium():
-    """Ein einzelnes Graph-Fact ohne match_score → mittlere Confidence."""
+def test_single_unmatched_graph_fact_yields_low():
+    """Ein einzelnes Graph-Fact ohne match_score → low-Confidence (0.64 < 0.65)."""
     score, label = compute_confidence([
         {"type": "graph_fact", "source": "report_tool", "snippet": "x"},
     ])
     # source_quality 1.0, relevance 0.5, specificity 0.5, consistency 0.6
-    # = 0.4*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64 → medium
-    assert label == "medium"
+    # = 0.4*0.5 + 0.25*1.0 + 0.20*0.5 + 0.15*0.6 = 0.64 → low (0.45 ≤ 0.64 < 0.65)
+    assert label == "low"
     assert 0.5 < score < 0.7
 
 
@@ -50,20 +49,24 @@ def test_strong_match_score_unlocks_verified():
     assert label == "verified"
 
 
-def test_high_score_without_strong_match_caps_at_high():
-    """Ohne match_score-≥-0.85 wird verified geblockt; max 0.89 → high."""
+def test_high_score_without_strong_match_caps_at_medium():
+    """Ohne match_score-≥-0.85 bleibt verified geblockt; score ~0.81 → medium (< 0.85)."""
     items = [
         {"type": "graph_fact", "source": "panorama_search",
          "snippet": f"x{i}", "match_score": 0.78}
         for i in range(5)
     ]
     score, label = compute_confidence(items)
-    assert score <= 0.89
-    assert label == "high"
+    # Alle Items gleiche source → 1 unique source → consistency=0.6
+    # relevance=0.78, source_quality=1.0, specificity=0.8 (0.78≥0.70), consistency=0.6
+    # raw = 0.40*0.78 + 0.25*1.0 + 0.20*0.8 + 0.15*0.6 = 0.312+0.25+0.16+0.09 = 0.812
+    # 0.65 ≤ 0.812 < 0.85 → "medium"
+    assert score < 0.85
+    assert label == "medium"
 
 
-def test_off_topic_low_match_score_yields_low_or_medium():
-    """Niedrige match_scores drücken den Score in low/medium."""
+def test_off_topic_low_match_score_yields_speculative_or_low():
+    """Niedrige match_scores drücken den Score in speculative/low."""
     items = [
         {"type": "graph_fact", "source": "panorama_search",
          "snippet": "x", "match_score": 0.20},
@@ -71,7 +74,7 @@ def test_off_topic_low_match_score_yields_low_or_medium():
          "snippet": "y", "match_score": 0.15},
     ]
     score, label = compute_confidence(items)
-    assert label in ("low", "medium")
+    assert label in ("speculative", "low")
     assert score < 0.65
 
 
@@ -89,7 +92,12 @@ def test_audit_trail_types_get_zero_source_weight():
 
 
 def test_contradiction_penalty_lowers_score():
-    items = [{"type": "graph_fact", "source": "x", "match_score": 0.9}]
+    """Mit ≥2 Evidence-Items greift der Reviewer-Floor (Slice S1) nicht;
+    die Penalty senkt den Score messbar."""
+    items = [
+        {"type": "graph_fact", "source": "x", "match_score": 0.9},
+        {"type": "graph_fact", "source": "y", "match_score": 0.85},
+    ]
     base, _ = compute_confidence(items)
     penal, _ = compute_confidence(items, contradiction_penalty=0.3)
     assert penal == round(max(0.0, base - 0.3), 3) or penal < base

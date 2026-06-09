@@ -25,12 +25,288 @@ logger = get_logger("agora.llm_client")
 JsonSchemaLike = Union[Type[BaseModel], Dict[str, Any]]
 
 # Provider error messages that indicate strict json_schema is not supported.
+# Sub-Slice 05.5 — Cloud-aware num_ctx-Heuristik.
+#
+# Frontend wählt Cloud-Modelle wie qwen3-coder-next:cloud (256 k) oder
+# gemini-3-pro:cloud (1 M). Der bisherige hardcoded Default
+# OLLAMA_NUM_CTX=8192 kappte diese Context-Windows in chat()/describe_image()/
+# _chat_with_tools()/_ollama_chat_with_schema().
+#
+# Tabelle SYNCED mit backend/scripts/agent_tools.py::_MODEL_CONTEXT_HEURISTICS
+# (TODO: in shared module extrahieren — heute Zirkular-Import-Sperre durch
+# scripts → app.config). Bei Änderungen beide Stellen anfassen.
+_MODEL_CONTEXT_HEURISTICS: tuple[tuple[str, int], ...] = (
+    ("gemini-3", 1_048_576),       # Gemini 3 Pro / Flash: ~1M Tokens
+    ("gemini-2.5", 1_048_576),
+    ("gemini-2", 1_048_576),
+    ("deepseek-v3", 131_072),      # DeepSeek-V3 / V3.1 / V3.2: 128k
+    ("deepseek-v4", 1_048_576),    # DeepSeek-V4 (laut Vendor-Stand 2026)
+    ("deepseek-r1", 131_072),
+    ("qwen3-coder", 262_144),      # Qwen3-Coder / -Coder-Next: 256k
+    ("qwen3", 131_072),
+    ("qwen2.5", 131_072),
+    ("llama-3.3", 131_072),
+    ("llama3.3", 131_072),
+    ("llama-3.1", 131_072),
+    ("gpt-oss", 131_072),          # gpt-oss-Cloud-Familie: 128k
+    ("gpt-4.1", 1_048_576),
+    ("gpt-4o", 131_072),
+    ("claude-opus-4", 200_000),
+    ("claude-sonnet-4", 200_000),
+    ("claude-haiku-4", 200_000),
+    ("nemotron", 131_072),         # nvidia nemotron-3-nano:30b u. ä.
+)
+
+
+def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
+    """Best-effort Substring-Match für bekannte Modellfamilien.
+
+    Liefert None, wenn das Modell unbekannt ist — Caller fällt dann auf
+    OLLAMA_NUM_CTX (legacy) zurück.
+    """
+    if not model_name:
+        return None
+    needle = model_name.lower()
+    for prefix, limit in _MODEL_CONTEXT_HEURISTICS:
+        if prefix in needle:
+            return limit
+    return None
+
+
+def _resolve_num_ctx(
+    model_name: Optional[str],
+    provider_options_num_ctx: Any,
+) -> int:
+    """Resolve num_ctx mit Override-Hierarchie.
+
+    1. provider_options.num_ctx (explizit per ResolvedRoute, höchste Prio)
+    2. LLM_MODEL_CONTEXT_LIMITS_JSON (per-Modell-Map via env)
+    3. Heuristik-Tabelle (Modell-Familie-Default)
+    4. LLM_CONTEXT_LIMIT (Global-Override, sofern höher als Heuristik)
+    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback)
+    """
+    if provider_options_num_ctx is not None:
+        try:
+            return int(provider_options_num_ctx)
+        except (TypeError, ValueError):
+            pass
+
+    raw_per_model = os.environ.get("LLM_MODEL_CONTEXT_LIMITS_JSON", "").strip()
+    if raw_per_model and model_name:
+        try:
+            parsed = json.loads(raw_per_model)
+            if isinstance(parsed, dict) and model_name in parsed:
+                return int(parsed[model_name])
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    heuristic = heuristic_num_ctx_for_model(model_name or "")
+    global_env = os.environ.get("LLM_CONTEXT_LIMIT")
+    global_limit: Optional[int]
+    try:
+        global_limit = int(global_env) if global_env else None
+    except ValueError:
+        global_limit = None
+
+    if heuristic is not None and global_limit is not None:
+        return max(heuristic, global_limit)
+    if heuristic is not None:
+        return heuristic
+    if global_limit is not None:
+        return global_limit
+
+    try:
+        return int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+    except ValueError:
+        return 8192
+
+
 _STRICT_UNSUPPORTED_HINTS = (
     "json_schema",
     "unsupported",
     "not supported",
     "unknown response_format",
 )
+
+
+def _flatten_pydantic_schema_for_ollama(model_cls: type[BaseModel]) -> Dict[str, Any]:
+    """Pydantic-JSON-Schema inline-resolved fuer Ollamas /api/chat::format-Feld.
+
+    Ollama akzeptiert das Schema-Objekt als JSON-Schema, kommt aber mit
+    ``$defs``/``$ref`` nicht zuverlaessig klar. Diese Funktion macht zwei Dinge:
+
+    1. ``$ref``-Verweise werden inline durch das Ziel-Schema aus ``$defs`` ersetzt
+       (rekursiv, mit Zyklus-Stop).
+    2. Schema-Meta-Keys werden entfernt: ``title``, ``$schema``, ``$defs``,
+       ``description`` auf top-level (Property-``description``s bleiben — die helfen
+       dem Modell beim Auffuellen).
+
+    Returns das geflattete Schema-Dict, ready fuer POST /api/chat::format.
+    """
+    raw = model_cls.model_json_schema()
+    defs = raw.pop("$defs", {})
+
+    def _resolve(node: Any, seen: tuple[str, ...] = ()) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node and node["$ref"].startswith("#/$defs/"):
+                ref_name = node["$ref"].split("/")[-1]
+                if ref_name in seen:
+                    return {"type": "object"}  # zyklisch — bewusst abkuerzen
+                target = defs.get(ref_name, {})
+                merged = {k: v for k, v in node.items() if k != "$ref"}
+                merged.update(_resolve(target, seen + (ref_name,)))
+                return merged
+            return {k: _resolve(v, seen) for k, v in node.items() if k not in {"title", "$schema"}}
+        if isinstance(node, list):
+            return [_resolve(item, seen) for item in node]
+        return node
+
+    flattened = _resolve(raw)
+    flattened.pop("title", None)
+    flattened.pop("$schema", None)
+    return flattened
+
+
+_STRICT_DROP_KEYS = {
+    # Reine Pydantic-Meta-Keys, die OpenAI/Google ohnehin ignorieren.
+    "title",
+    "$schema",
+    # Defaults sind im strict-Mode unzulässig — alle Felder müssen vom
+    # Modell explizit gefüllt werden (Pydantic-side fängt das via
+    # default_factory ab, falls wir das Feld aus dem Schema droppen).
+    "default",
+    # JSON-Schema-Constraint-Keys, die OpenAI strict ablehnt
+    # (https://platform.openai.com/docs/guides/structured-outputs#supported-schemas).
+    # ``description`` bleibt erhalten — wird von OpenAI ausgewertet und
+    # hilft dem Modell beim Auffuellen.
+    "minLength",
+    "maxLength",
+    "minimum",
+    "maximum",
+    "pattern",
+    "format",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "multipleOf",
+}
+
+
+def _is_unsupported_open_object(node: Any) -> bool:
+    """True, wenn *node* (oder ein Zweig in ``anyOf``/``allOf``) ein
+    open-ended ``{"type":"object"}`` ohne ``properties`` ist.
+
+    OpenAI strict-mode (und Google's OpenAI-kompat-Wrapper) lehnen
+    diese Form als Property-Wert ab. Optional-Felder von Pydantic
+    rendern als ``{"anyOf":[{"type":"object"}, {"type":"null"}]}``;
+    der Toplevel-Type-Check würde das übersehen, deshalb wird hier
+    in ``anyOf``/``allOf`` rekursiert (Gemini-Review HIGH zu PR #545).
+    """
+    if not isinstance(node, dict):
+        return False
+    if node.get("type") == "object" and "properties" not in node:
+        return True
+    for combinator in ("anyOf", "allOf", "oneOf"):
+        branches = node.get(combinator)
+        if isinstance(branches, list) and any(_is_unsupported_open_object(b) for b in branches):
+            return True
+    return False
+
+
+def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
+    """Pydantic-Schema in das von OpenAI/Google ``json_schema``-strict-Mode
+    geforderte Format überführen.
+
+    OpenAI ``response_format={"type":"json_schema","strict":True}`` ist
+    rigide:
+    1. ``additionalProperties: false`` auf JEDEM ``"type":"object"``-Knoten.
+    2. ALLE Property-Keys (auch optionale mit Pydantic-``default=``) müssen
+       in ``required[]`` stehen — sonst 400 „'required' is required to be
+       supplied and to be an array including every key in properties".
+    3. ``$ref``/``$defs`` werden zwar dokumentiert unterstützt, in der
+       Praxis aber unzuverlässig akzeptiert. Refs werden hier inline
+       ausgelöst, ``$defs`` und Meta-Keys wie ``title``, ``description``,
+       ``default``, Constraint-Keys (``minLength`` etc.) werden gestripped,
+       weil OpenAI sie im strict-Mode teils ablehnt.
+
+    Eingabe darf ein Pydantic-``BaseModel``-Subclass ODER ein bereits
+    fertiges JSON-Schema-Dict sein. Rückgabe ist immer ein neues Dict
+    (kein In-Place-Mutate).
+
+    Der Ollama-Pfad (``/api/chat::format=<schema>``) nutzt separat
+    ``_flatten_pydantic_schema_for_ollama`` und ist von diesem Helper
+    nicht betroffen.
+    """
+    if isinstance(model_or_schema, type) and issubclass(model_or_schema, BaseModel):
+        raw: Dict[str, Any] = model_or_schema.model_json_schema()
+    elif isinstance(model_or_schema, dict):
+        raw = dict(model_or_schema)
+    else:
+        raise TypeError(
+            f"_enforce_openai_strict_schema expects BaseModel subclass or dict, got {type(model_or_schema).__name__}"
+        )
+    defs = raw.pop("$defs", {})
+
+    def _walk(node: Any, seen: tuple[str, ...] = ()) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node and isinstance(node["$ref"], str) and node["$ref"].startswith("#/$defs/"):
+                ref_name = node["$ref"].split("/")[-1]
+                if ref_name in seen:
+                    return {"type": "object", "additionalProperties": False}
+                target = defs.get(ref_name, {})
+                merged = {k: v for k, v in node.items() if k != "$ref"}
+                for k, v in target.items():
+                    merged.setdefault(k, v)
+                return _walk(merged, seen + (ref_name,))
+            out: Dict[str, Any] = {}
+            for k, v in node.items():
+                if k in _STRICT_DROP_KEYS:
+                    continue
+                out[k] = _walk(v, seen)
+            if out.get("type") == "object":
+                out["additionalProperties"] = False
+                props = out.get("properties")
+                if isinstance(props, dict):
+                    # OpenAI strict-mode lehnt open-ended Objects
+                    # (``Dict[str, Any]`` → ``{"type":"object"}`` ohne
+                    # ``properties``) als Property-Wert ab, selbst wenn
+                    # ``additionalProperties: false`` gesetzt ist. Solche
+                    # Felder werden hier rausgenommen — Pydantic-side ist
+                    # das harmlos, weil die referenzierten Felder einen
+                    # ``default``/``default_factory`` haben (sonst hätten
+                    # sie nie als open-ended deklariert werden können).
+                    #
+                    # Optionale Felder rendern als ``anyOf``/``allOf`` mit
+                    # nested-object → rekursiv prüfen (Gemini-Review HIGH
+                    # zu PR #545).
+                    for pk in list(props):
+                        if _is_unsupported_open_object(props[pk]):
+                            del props[pk]
+                    out["required"] = list(props.keys())
+            return out
+        if isinstance(node, list):
+            return [_walk(item, seen) for item in node]
+        return node
+
+    return _walk(raw)
+
+
+def should_disable_openai_json_mode(base_url: Optional[str]) -> bool:
+    """Return True wenn ``response_format=json_object`` weggelassen werden soll.
+
+    OpenAI-Reasoning-Modelle (z. B. ``gpt-5.4-nano``) liefern mit
+    ``response_format=json_object`` zeitweise leeren ``content`` — der
+    Reasoning-Token-Anteil frisst die Antwort auf. Ollama (auch Cloud) und
+    Gemini (OpenAI-Adapter) supporten json_object stabil — dort bleibt das
+    Verhalten unverändert.
+
+    Trigger:
+    - ``base_url`` zeigt auf ``api.openai.com`` UND
+    - ``LLM_DISABLE_JSON_MODE`` in (``1``, ``true``, ``yes``).
+    """
+    if not base_url or 'api.openai.com' not in base_url.lower():
+        return False
+    return os.environ.get('LLM_DISABLE_JSON_MODE', '').lower() in ('1', 'true', 'yes')
 
 
 def _read_active_config_safely() -> Optional[Dict[str, Any]]:
@@ -41,6 +317,59 @@ def _read_active_config_safely() -> Optional[Dict[str, Any]]:
         return cfg or None
     except Exception:  # noqa: BLE001 — never block LLMClient construction
         return None
+
+
+_CODEFENCE_HEAD_RE = re.compile(r"^```(?:json)?\s*", re.IGNORECASE)
+_CODEFENCE_TAIL_RE = re.compile(r"\s*```\s*$")
+
+
+def _strip_llm_json_envelope(text: str) -> str:
+    """Entfernt Codefences + Prosa-Umrahmung um ein LLM-JSON-Payload.
+
+    Issue #556: Gemini-Outputs liefern oft Preambles ("Sure, here is …")
+    und/oder trailing prose ("Hope this helps!") um den eigentlichen
+    JSON-Block. Der bisherige Pre-Parser entfernte nur Codefences an
+    Anfang/Ende und produzierte ``JSONDecodeError`` bei Prosa-Rändern.
+
+    Pipeline:
+      1. Strip whitespace.
+      2. Codefences entfernen (case-insensitive, ``json``-Label optional).
+      3. Outer-Cut: erstes ``{`` oder ``[`` bis zum letzten passenden
+         ``}`` oder ``]`` (Typ-Wahl nach dem zuerst auftretenden Bracket).
+
+    Liefert bei fehlender JSON-Struktur den gestrippten Original-String —
+    der Caller löst dann ``JSONDecodeError`` aus, was er sowieso tun würde.
+    """
+    if not text:
+        return text
+    s = text.strip()
+    s = _CODEFENCE_HEAD_RE.sub("", s)
+    s = _CODEFENCE_TAIL_RE.sub("", s)
+    s = s.strip()
+    if not s:
+        return s
+
+    first_obj = s.find("{")
+    first_arr = s.find("[")
+    if first_obj == -1 and first_arr == -1:
+        return s
+
+    if first_obj == -1:
+        start, end_char = first_arr, "]"
+    elif first_arr == -1:
+        start, end_char = first_obj, "}"
+    elif first_obj < first_arr:
+        start, end_char = first_obj, "}"
+    else:
+        start, end_char = first_arr, "]"
+
+    end = s.rfind(end_char)
+    if end == -1 or end < start:
+        # Truncated payload mit Preamble (z. B. ``Sure! {"a": 1``):
+        # Prosa abschneiden, damit ``_try_repair_truncated_json`` im
+        # Caller den unbalanced Rest reparieren kann.
+        return s[start:]
+    return s[start : end + 1]
 
 
 def _try_repair_truncated_json(payload: str) -> Optional[str]:
@@ -104,11 +433,15 @@ class LLMClient:
         route_stage: Optional[str] = None,
         route_provider_id: Optional[str] = None,
         use_active_config: bool = True,
+        api_key_source: Optional[str] = None,
     ):
         # When no explicit model is set, fall back to the user's active
         # provider/model selection (Settings → LLM-Auswahl). Falls back to
         # Config.* if no active config exists. Resolves api_key+base_url via
         # SecretResolver/Provider-Registry analogous to from_route().
+        # ``api_key_source`` ist eine Audit-Annotation für das einmalige
+        # Init-Log am Ende dieses Konstruktors. Track 1c (Pure-Gosling).
+        resolved_source: Optional[str] = api_key_source if api_key else None
         active_provider_id: Optional[str] = None
         if use_active_config and model is None:
             active = _read_active_config_safely()
@@ -134,6 +467,8 @@ class LLMClient:
                                 base_url = descriptor.base_url
                             resolver = SecretResolver()
                             api_key = resolver.get_api_key(active_provider_id, descriptor.type)
+                            if api_key:
+                                resolved_source = resolver.last_source
                     except Exception as exc:  # noqa: BLE001 — fall back to Config defaults
                         logger.warning(
                             "Failed to resolve active LLM config (provider=%s): %s",
@@ -141,7 +476,13 @@ class LLMClient:
                             exc,
                         )
 
-        self.api_key = api_key or Config.LLM_API_KEY
+        if api_key:
+            self.api_key = api_key
+            # resolved_source bleibt erhalten (passed_in oder vom Resolver)
+        else:
+            self.api_key = Config.LLM_API_KEY
+            if self.api_key:
+                resolved_source = "config_fallback"
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
@@ -154,6 +495,24 @@ class LLMClient:
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
+        # Track 1c Audit-Log: einmalig pro LLMClient-Init. Niemals den Key-Wert
+        # selbst loggen — nur die Quelle (session/store/env:NAME/config_fallback/
+        # passed_in/unknown). Provider-Erkennung priorisiert ``active_provider_id``
+        # vor ``route_provider_id``, damit die laufende Session-Auswahl Vorrang hat.
+        self._api_key_source = resolved_source or "unknown"
+        # Gemini-Review (security-medium) zu PR #559: ``base_url`` kann in
+        # Edge-Cases (Azure-OpenAI-Query-Param, Userinfo) Secret-Material
+        # tragen. SecretResolver.sanitize_url strippt userinfo+query+fragment
+        # vor dem Log, ohne den Hostname zu maskieren.
+        from ..services.secret_resolver import SecretResolver as _UrlSanitizer
+        logger.info(
+            "LLMClient initialized provider_id=%s model=%s base_url=%s api_key_source=%s",
+            active_provider_id or route_provider_id or "unknown",
+            self.model,
+            _UrlSanitizer().sanitize_url(self.base_url) if self.base_url else None,
+            self._api_key_source,
+        )
+
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -161,10 +520,26 @@ class LLMClient:
         )
 
         # Ollama context window size — prevents prompt truncation.
-        # Legacy: read from env OLLAMA_NUM_CTX. New: from provider_options.
-        self._num_ctx = int(self.provider_options.get('num_ctx') or os.environ.get('OLLAMA_NUM_CTX', '8192'))
+        # Sub-Slice 05.5: Cloud-aware Heuristik statt fix OLLAMA_NUM_CTX=8192.
+        # Vorher kappte 8192 Cloud-Modelle wie gemini-3:cloud (1M) oder
+        # qwen3-coder-next:cloud (256k) auf einen Bruchteil ihrer Kapazität.
+        self._num_ctx = _resolve_num_ctx(
+            model_name=self.model,
+            provider_options_num_ctx=self.provider_options.get("num_ctx"),
+        )
         # Ollama thinking toggle (mapped from reasoning_effort).
+        # OLLAMA_THINKING=false in der env überstimmt reasoning_effort —
+        # konsistent zu backend/scripts/run_*_simulation.py, das dieselbe
+        # Heuristik nutzt. Honcho-Pflicht-Env für Agent-Workflows; ohne
+        # diese Verdrahtung liefern thinking-Modelle (qwen3, gpt-oss) bei
+        # chat_json schemalose leere `content`-Outputs → `JSON parsing
+        # failed: line 1 column 1 (char 0)`.
         self._think = self.reasoning_effort != "none"
+        _think_env = os.environ.get("OLLAMA_THINKING", "").lower()
+        if _think_env in ("0", "false", "no", "off"):
+            self._think = False
+        elif _think_env in ("1", "true", "yes", "on"):
+            self._think = True
 
         # Transient-failure retry knobs (Ollama Cloud sometimes 5xx-flaps).
         self._max_retries = int(os.environ.get('LLM_MAX_RETRIES', '3'))
@@ -187,6 +562,7 @@ class LLMClient:
         """
         base_url = route.base_url_sanitized
         api_key = api_key_override
+        api_key_source: Optional[str] = "passed_in" if api_key_override else None
 
         # If a secret resolver is provided, we try to get the real secrets.
         # This prevents leaking them into ResolvedRoute but allows LLMClient
@@ -203,6 +579,7 @@ class LLMClient:
             p_type = descriptor.type if descriptor else "unknown"
             if not api_key:
                 api_key = secret_resolver.get_api_key(route.provider_id, p_type)
+                api_key_source = getattr(secret_resolver, "last_source", None)
 
             # Use real base_url from provider_options if present, otherwise from descriptor
             real_base = route.provider_options.get("base_url") or (descriptor.base_url if descriptor else None)
@@ -220,11 +597,20 @@ class LLMClient:
             routing_version=route.routing_version,
             route_stage=route.stage,
             route_provider_id=route.provider_id,
+            api_key_source=api_key_source,
         )
 
     def _is_ollama(self) -> bool:
-        """Check if we're talking to an Ollama server."""
-        return '11434' in (self.base_url or '')
+        """Check if we're talking to an Ollama server (local or cloud).
+
+        Ollama Cloud hostet denselben /api/chat-Endpoint unter
+        ``https://ollama.com/api`` mit identischem Body-Format (inkl.
+        ``format=<schema>``). Beide Hosts müssen erkannt werden, damit
+        der Native-Schema-Pfad in chat_json sowohl bei lokalem Ollama
+        (Port 11434) als auch bei Cloud (ollama.com) ziehen kann.
+        """
+        base = (self.base_url or "").lower()
+        return "11434" in base or "ollama.com" in base
 
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
@@ -311,26 +697,35 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "unknown"]:
+    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
         """Infer the LLM provider from base_url and model name.
 
         Heuristics (in priority order):
         1. Base URL contains ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-        2. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
-        3. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
-        4. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint).
-        5. Fallback → ``"unknown"``.
+        2. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint —
+           wird VOR der Port-Heuristik geprüft, weil Cloud-Modelle auch über
+           den lokalen ollama-Proxy auf :11434 laufen können).
+        3. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
+        4. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
+        5. Base URL contains ``googleapis.com`` or ``generativelanguage`` →
+           ``"google"`` (Gemini-OpenAI-Compat-Layer — unterstützt natives
+           ``tools=`` / ``tool_choice=``; siehe ``_chat_with_tools``-Branch.
+           Ohne diesen Pfad fiel der Tool-Call auf XML-im-Prompt zurück, was
+           Gemini's Function-Filter mit MALFORMED_FUNCTION_CALL ablehnt).
+        6. Fallback → ``"unknown"``.
         """
         model_name = self.model or ""
         base = (self.base_url or "").lower()
         if "ollama.com" in base:
             return "cloud"
+        if model_name.endswith(":cloud"):
+            return "cloud"
         if "11434" in base:
             return "ollama"
         if "openai.com" in base or "api.openai" in base:
             return "openai"
-        if model_name.endswith(":cloud"):
-            return "cloud"
+        if "googleapis.com" in base or "generativelanguage" in base:
+            return "google"
         return "unknown"
 
     def _publish_model_active(
@@ -660,6 +1055,71 @@ class LLMClient:
         # Plain dict schema: no server-side re-validation.
         return parsed
 
+    def _ollama_chat_with_schema(
+        self,
+        messages: List[Dict[str, Any]],
+        schema: type[BaseModel],
+        temperature: float,
+        max_tokens: int,
+        force_no_thinking: bool = False,
+    ) -> str:
+        """Direkter Aufruf gegen Ollamas /api/chat mit format=<schema>.
+
+        Garantiert Schema-Enforcement laut Ollama-Doku, im Gegensatz zum
+        OpenAI-Kompat-Wrapper, der response_format=type=json_schema
+        schweigend droppen kann.
+
+        Returns response message content (str). Raises httpx.HTTPError bei
+        Netz-/4xx-/5xx-Fehlern, ValueError bei Schema-Reject durch Ollama.
+        """
+        import httpx  # lazy import (httpx ist via openai-SDK ohnehin transitive Dep)
+        base_root = (self.base_url or "").rstrip("/")
+        if base_root.endswith("/v1"):
+            base_root = base_root[:-3]
+        url = f"{base_root}/api/chat"
+
+        flattened = _flatten_pydantic_schema_for_ollama(schema)
+        think_flag = False if force_no_thinking else self._think
+
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "format": flattened,
+            "stream": False,
+            "options": {
+                "num_ctx": self._num_ctx,
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+            "think": think_flag,
+        }
+
+        logger.info(
+            "LLMClient._ollama_chat_with_schema: POST %s schema=%s model=%s",
+            url, schema.__name__, self.model,
+        )
+
+        # Ollama Cloud (ollama.com) verlangt Authorization: Bearer <api_key>.
+        # Lokales Ollama (Port 11434) ignoriert den Header. Den OpenAI-SDK-Pfad
+        # macht das automatisch via self.client.api_key; der native httpx-Call
+        # muss den Header selbst setzen.
+        headers: Dict[str, str] = {}
+        if self.api_key and self.api_key.lower() != "ollama":
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        with httpx.Client(timeout=300.0) as client:
+            response = client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        message = data.get("message") or {}
+        content = message.get("content", "")
+        if not isinstance(content, str):
+            raise ValueError(
+                f"Ollama /api/chat unexpected message.content type: {type(content)}"
+            )
+        return content
+
     def chat_json(
         self,
         messages: List[Dict[str, str]],
@@ -746,11 +1206,11 @@ class LLMClient:
         if disable_json_mode:
             response_format: Optional[Dict[str, Any]] = None
         elif schema is not None:
-            json_schema: Dict[str, Any] = (
-                schema.model_json_schema()  # type: ignore[union-attr]
-                if isinstance(schema, type) and issubclass(schema, BaseModel)
-                else schema  # type: ignore[assignment]
-            )
+            # OpenAI / Google strict-mode: $refs inline-resolven, $defs +
+            # Meta-Keys droppen, additionalProperties:false + required-Liste
+            # auf alle Object-Schemas erzwingen. Ollama nutzt den nativen
+            # /api/chat::format-Pfad weiter unten und ist nicht betroffen.
+            json_schema: Dict[str, Any] = _enforce_openai_strict_schema(schema)
             response_format = {
                 "type": "json_schema",
                 "json_schema": {
@@ -764,6 +1224,29 @@ class LLMClient:
 
         # Call --------------------------------------------------------------------
         if not disable_json_mode and schema is not None:
+            # NATIVE Ollama-Pfad: /api/chat mit format=<schema> ist die einzige
+            # autoritativ dokumentierte Methode, ein Schema bei Ollama zu erzwingen.
+            # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit
+            # json_object-Fallback (Resilienz, kein Hard-Fail).
+            if self._is_ollama() and isinstance(schema, type) and issubclass(schema, BaseModel):
+                try:
+                    response = self._ollama_chat_with_schema(
+                        messages=messages,
+                        schema=schema,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        force_no_thinking=force_no_thinking,
+                    )
+                    cleaned_response = _strip_llm_json_envelope(response)
+                    parsed: Dict[str, Any] = json.loads(cleaned_response)
+                    return self._maybe_validate(parsed, schema)
+                except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
+                    logger.warning(
+                        "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "
+                        "(%s: %s), fallback auf OpenAI-Wrapper",
+                        type(exc).__name__, exc,
+                    )
+                    # Fall through zum bestehenden Strict-OpenAI-Pfad
             # Strict-schema path: single fallback on unsupported-provider errors.
             try:
                 response = self.chat(
@@ -801,12 +1284,8 @@ class LLMClient:
                 context=context,
                 force_no_thinking=force_no_thinking,
             )
-        # Clean markdown code block markers
-        cleaned_response = response.strip()
-        # Robustly remove ```json ... ``` or just ``` ... ```
-        cleaned_response = re.sub(r'^```(?:json)?\s*', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\s*```$', '', cleaned_response)
-        cleaned_response = cleaned_response.strip()
+        # Codefences + Prosa-Envelope entfernen (Issue #556).
+        cleaned_response = _strip_llm_json_envelope(response)
 
         try:
             parsed: Dict[str, Any] = json.loads(cleaned_response)

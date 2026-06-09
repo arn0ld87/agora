@@ -34,6 +34,7 @@ from .artifact_store import SimulationArtifactStore, resolve_default_store
 from .event_bus import (
     CHANNEL_ACTION,
     CHANNEL_CONTROL,
+    CHANNEL_POST_CREATED,
     CHANNEL_RPC_COMMAND,
     CHANNEL_STATE,
     FilePollingEventBus,
@@ -97,6 +98,48 @@ class RedisEventBus:
         self._file_bus = FilePollingEventBus(store=self._store)
         self._url = url
 
+    # ----- readiness probe ----------------------------------------------
+
+    def verify_connectivity(self) -> None:
+        """Pingt den Redis-Server für den /readyz-Probe.
+
+        Schlägt durch, was redis-py raised (typischerweise
+        ``redis.exceptions.ConnectionError``). ``readiness._check_redis``
+        übersetzt die Exception in ein {"ok": false}-Payload.
+
+        Bewusst hier exposiert (nicht ``ping``), damit das Namensschema
+        ``verify_connectivity`` zwischen Neo4j-Storage und Redis-Bus
+        identisch bleibt — Gemini-Review zu PR #519, Mai 2026.
+        """
+        self._redis.ping()
+
+    def reset_after_fork(self) -> None:
+        """Close inherited Redis client and rebuild it in the child.
+
+        Mirrors :meth:`Neo4jStorage._reset_driver_after_fork`. Called from
+        the Gunicorn ``post_fork`` hook so the worker does not keep using
+        TCP sockets that the kernel considers owned by the preload master
+        — same defect that surfaces on Neo4j as
+        ``Failed to write data to connection``.
+
+        Idempotent. Exceptions during ``close()`` are swallowed because
+        the inherited socket is likely already broken; the rebuild below
+        is what actually matters.
+        """
+        import redis  # local import — symmetric with __init__
+
+        try:
+            if self._redis is not None:
+                self._redis.close()
+        except Exception:  # noqa: BLE001 — inherited socket is expected to be torn
+            pass
+        self._redis = redis.from_url(
+            self._url,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
+
     # ----- internal ------------------------------------------------------
 
     def _write_retained(self, channel: str, event: SimulationEvent) -> None:
@@ -145,7 +188,11 @@ class RedisEventBus:
             # files in `uploads/simulations/<id>/{twitter,reddit}/actions.jsonl`
             # remain the source of truth until Phase C wires SSE mirroring.
             return
-        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE):
+        # Allowlist konsistent mit subscribe (Gemini-Finding #2):
+        # post_created via Bus-API publishen ist möglich, auch wenn der
+        # produktive Pfad heute über _emit_post_created_to_redis im
+        # OASIS-Subprozess läuft und den Bus umgeht.
+        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE, CHANNEL_POST_CREATED):
             raise ValueError(f"Unknown channel for RedisEventBus: {channel!r}")
 
         try:
@@ -153,12 +200,14 @@ class RedisEventBus:
         except Exception:
             logger.exception("Redis publish failed for channel=%s", channel)
             raise
-        try:
-            self._write_retained(channel, event)
-        except Exception as exc:  # noqa: BLE001 — mirror is best-effort
-            logger.warning(
-                "Failed to mirror %s event to artifact store: %s", channel, exc
-            )
+        # post_created hat keinen Retained-Snapshot — mirror skippen.
+        if channel in (CHANNEL_CONTROL, CHANNEL_STATE):
+            try:
+                self._write_retained(channel, event)
+            except Exception as exc:  # noqa: BLE001 — mirror is best-effort
+                logger.warning(
+                    "Failed to mirror %s event to artifact store: %s", channel, exc
+                )
 
     # ----- port: subscribe ----------------------------------------------
 
@@ -186,9 +235,14 @@ class RedisEventBus:
         if channel == CHANNEL_ACTION:
             # No-op iterator — Phase B does not ship action events.
             return
-        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE):
+        if channel not in (CHANNEL_CONTROL, CHANNEL_STATE, CHANNEL_POST_CREATED):
             raise ValueError(f"Unknown channel for RedisEventBus: {channel!r}")
 
+        # post_created: OASIS-Subprozess publisht direkt nach
+        # ``agora:sim:{id}:post_created`` (run_parallel_simulation.py
+        # ::_emit_post_created_to_redis). Backend-Drainer abonniert hier.
+        # Vor diesem Fix flog ValueError und der ganze post-Stream war tot —
+        # User-Bericht 2026-05-16 nach Welle-Merge.
         yield from self._subscribe_live(
             simulation_id, channel, timeout=timeout, poll_interval=poll_interval
         )
@@ -208,15 +262,24 @@ class RedisEventBus:
         try:
             # Yield the retained snapshot first so late subscribers see
             # the current value (matches FilePollingEventBus semantics).
-            artifact_name = "control_state" if channel == CHANNEL_CONTROL else "run_state"
-            snapshot = self._store.read_json(simulation_id, artifact_name, default=None)
-            if snapshot:
-                yield SimulationEvent(
-                    type=f"{channel}.update",
-                    simulation_id=simulation_id,
-                    payload=snapshot,
-                    ts=snapshot.get("updated_at") or "",
-                )
+            # Whitelist statt Blacklist (Gemini-Finding 2026-05-16 #3):
+            # nur Channels mit echtem Retained-Artifact (control_state /
+            # run_state) lesen einen Snapshot. Neue Stream-only-Channels
+            # wie post_created fallen automatisch raus.
+            _SNAPSHOT_ARTIFACT = {
+                CHANNEL_CONTROL: "control_state",
+                CHANNEL_STATE: "run_state",
+            }
+            artifact_name = _SNAPSHOT_ARTIFACT.get(channel)
+            if artifact_name is not None:
+                snapshot = self._store.read_json(simulation_id, artifact_name, default=None)
+                if snapshot:
+                    yield SimulationEvent(
+                        type=f"{channel}.update",
+                        simulation_id=simulation_id,
+                        payload=snapshot,
+                        ts=snapshot.get("updated_at") or "",
+                    )
             while True:
                 if deadline is not None:
                     remaining = deadline - time.monotonic()
@@ -229,6 +292,20 @@ class RedisEventBus:
                 if msg and msg.get("type") == "message":
                     try:
                         data = json.loads(msg["data"])
+                        # Wire-Format-Brücke für post_created: OASIS-Subprozess
+                        # (run_parallel_simulation.py::_emit_post_created_to_redis)
+                        # publisht ein FLACHES Payload mit ``event_type`` statt
+                        # eines SimulationEvent-Envelopes. Wir wrappen es hier,
+                        # damit SimulationEvent.from_dict greift. Gemini-Finding
+                        # 2026-05-16 #1 (HIGH): ohne diese Brücke fliegt jedes
+                        # post_created als KeyError raus.
+                        if channel == CHANNEL_POST_CREATED and "type" not in data:
+                            data = {
+                                "type": data.get("event_type", "post_created"),
+                                "simulation_id": data.get("simulation_id", ""),
+                                "payload": data,
+                                "ts": data.get("timestamp", ""),
+                            }
                         # Trace-Propagation: Span nur über synchrone Decode-Phase
                         # legen — Generator-yield darf keinen aktiven Span halten.
                         ctx = _extract_trace(data)

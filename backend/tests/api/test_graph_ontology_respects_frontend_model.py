@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import io
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from flask import Flask
@@ -61,36 +61,87 @@ def _make_project_mock():
     return mock
 
 
-@patch("app.api.graph.LLMClient")
-@patch("app.api.graph.OntologyGenerator")
-@patch("app.api.graph.ProjectManager")
-@patch("app.api.graph.FileParser")
-@patch("app.api.graph.TextProcessor")
-def test_ontology_generate_uses_frontend_llm_model_and_provider(
-    text_processor_cls,
-    file_parser_cls,
-    project_manager_cls,
-    ontology_generator_cls,
-    llm_client_cls,
-    client,
-):
-    # --- Arrange Stubs ---
-    project_manager_cls.create_project.return_value = _make_project_mock()
-    project_manager_cls.save_file_to_project.return_value = {
+@pytest.fixture
+def ontology_mocks(monkeypatch):
+    """Patch the ontology pipeline at the *consumer* binding sites.
+
+    After PR #562 the logic lives in ``app.services.graph_build`` and the
+    HTTP endpoint sits in ``app.api.graph_build``. Patches must target the
+    module that actually performs the import — replacing
+    ``app.api.graph.X`` is a no-op because nobody looks symbols up there
+    anymore.
+    """
+    llm_client_cls = MagicMock(name="LLMClient")
+    ontology_generator_cls = MagicMock(name="OntologyGenerator")
+    project_manager_cls = MagicMock(name="ProjectManager")
+    file_parser_cls = MagicMock(name="FileParser")
+    text_processor_cls = MagicMock(name="TextProcessor")
+    import uuid
+    run_registry_mock = MagicMock(name="run_registry")
+    # Unique run_id per test — seed_run_stage_routing persists per-run config
+    # files on disk, so a shared id would cross-pollinate routing state.
+    run_registry_mock.create_run.return_value = {
+        "run_id": f"ontology-run-{uuid.uuid4().hex[:12]}"
+    }
+
+    # Service-side bindings (generate_ontology lives here).
+    # StageModelRouter, seed_run_stage_routing and resolve_route_api_key are
+    # NOT mocked — the test asserts on the real route the routing layer builds
+    # from the llm_model/llm_provider form data.
+    monkeypatch.setattr("app.services.graph_build.LLMClient", llm_client_cls)
+    monkeypatch.setattr("app.services.graph_build.OntologyGenerator", ontology_generator_cls)
+    monkeypatch.setattr("app.services.graph_build.ProjectManager", project_manager_cls)
+    monkeypatch.setattr("app.services.graph_build.run_registry", run_registry_mock)
+
+    # API-side bindings (endpoint generate_ontology reads form data, calls
+    # FileParser/TextProcessor/ProjectManager directly).
+    monkeypatch.setattr("app.api.graph_build.ProjectManager", project_manager_cls)
+    monkeypatch.setattr("app.api.graph_build.FileParser", file_parser_cls)
+    monkeypatch.setattr("app.api.graph_build.TextProcessor", text_processor_cls)
+
+    return {
+        "llm": llm_client_cls,
+        "ontology_generator": ontology_generator_cls,
+        "project_manager": project_manager_cls,
+        "file_parser": file_parser_cls,
+        "text_processor": text_processor_cls,
+    }
+
+
+def _arrange_happy_path(mocks, ontology_payload=None):
+    project = _make_project_mock()
+    # The endpoint creates a project, the service later looks it up by ID.
+    # Both must hand back the same instance so the response payload reads the
+    # mutations the service applies (ontology, analysis_summary, …).
+    mocks["project_manager"].create_project.return_value = project
+    mocks["project_manager"].get_project.return_value = project
+    mocks["project_manager"].save_file_to_project.return_value = {
         "original_filename": "doc.txt",
         "path": "/tmp/doc.txt",
         "size": 42,
     }
-    file_parser_cls.extract_text.return_value = "extracted text content"
-    text_processor_cls.preprocess_text.return_value = "cleaned text"
-
+    mocks["file_parser"].extract_text.return_value = "extracted text content"
+    mocks["text_processor"].preprocess_text.return_value = "cleaned text"
     generator = MagicMock()
-    generator.generate.return_value = {
-        "entity_types": [{"name": "Person"}],
-        "edge_types": [{"name": "KNOWS"}],
-        "analysis_summary": "ok",
+    generator.generate.return_value = ontology_payload or {
+        "entity_types": [],
+        "edge_types": [],
+        "analysis_summary": "",
     }
-    ontology_generator_cls.return_value = generator
+    mocks["ontology_generator"].return_value = generator
+    return generator
+
+
+def test_ontology_generate_uses_frontend_llm_model_and_provider(client, ontology_mocks):
+    # --- Arrange Stubs ---
+    _arrange_happy_path(
+        ontology_mocks,
+        ontology_payload={
+            "entity_types": [{"name": "Person"}],
+            "edge_types": [{"name": "KNOWS"}],
+            "analysis_summary": "ok",
+        },
+    )
 
     # --- Act ---
     response = client.post(
@@ -116,45 +167,24 @@ def test_ontology_generate_uses_frontend_llm_model_and_provider(
 
     # LLMClient muss mit dem Frontend-Modell + Provider-Override instanziiert sein.
     # Nach Refactor wird .from_route() verwendet.
-    llm_client_cls.from_route.assert_called_once()
-    route = llm_client_cls.from_route.call_args.args[0]
+    ontology_mocks["llm"].from_route.assert_called_once()
+    route = ontology_mocks["llm"].from_route.call_args.args[0]
     assert route.model == "gpt-5-mini"
     assert route.provider_id == "openai"
     # base_url wird im SecretResolver/from_route aufgelöst, hier prüfen wir die Route
     assert route.base_url_sanitized == "https://api.openai.com/v1"
 
     # OntologyGenerator muss den injizierten Client bekommen.
-    ontology_generator_cls.assert_called_once()
-    assert ontology_generator_cls.call_args.kwargs.get("llm_client") is llm_client_cls.from_route.return_value
+    ontology_mocks["ontology_generator"].assert_called_once()
+    assert (
+        ontology_mocks["ontology_generator"].call_args.kwargs.get("llm_client")
+        is ontology_mocks["llm"].from_route.return_value
+    )
 
 
-@patch("app.api.graph.LLMClient")
-@patch("app.api.graph.OntologyGenerator")
-@patch("app.api.graph.ProjectManager")
-@patch("app.api.graph.FileParser")
-@patch("app.api.graph.TextProcessor")
-def test_ontology_generate_without_overrides_uses_server_default(
-    text_processor_cls,
-    file_parser_cls,
-    project_manager_cls,
-    ontology_generator_cls,
-    llm_client_cls,
-    client,
-):
+def test_ontology_generate_without_overrides_uses_server_default(client, ontology_mocks):
     """Backwards-Kompat: Ohne llm_model/llm_provider bleibt LLMClient(model=None) → Server-Default."""
-    project_manager_cls.create_project.return_value = _make_project_mock()
-    project_manager_cls.save_file_to_project.return_value = {
-        "original_filename": "doc.txt",
-        "path": "/tmp/doc.txt",
-        "size": 42,
-    }
-    file_parser_cls.extract_text.return_value = "x"
-    text_processor_cls.preprocess_text.return_value = "x"
-    ontology_generator_cls.return_value.generate.return_value = {
-        "entity_types": [],
-        "edge_types": [],
-        "analysis_summary": "",
-    }
+    _arrange_happy_path(ontology_mocks)
 
     response = client.post(
         "/api/graph/ontology/generate",
@@ -163,8 +193,8 @@ def test_ontology_generate_without_overrides_uses_server_default(
     )
 
     assert response.status_code == 200, response.get_json()
-    llm_client_cls.from_route.assert_called_once()
-    route = llm_client_cls.from_route.call_args.args[0]
+    ontology_mocks["llm"].from_route.assert_called_once()
+    route = ontology_mocks["llm"].from_route.call_args.args[0]
     # Standard-Modell aus Config
     from app.config import Config
     assert route.model == Config.LLM_MODEL_NAME
@@ -187,38 +217,14 @@ def test_ontology_generate_rejects_invalid_llm_provider_json(client):
     assert "llm_provider" in payload["error"].lower()
 
 
-@patch("app.api.graph.LLMClient")
-@patch("app.api.graph.OntologyGenerator")
-@patch("app.api.graph.ProjectManager")
-@patch("app.api.graph.FileParser")
-@patch("app.api.graph.TextProcessor")
-def test_ontology_generate_accepts_provider_without_api_key_uses_db_fallback(
-    text_processor_cls,
-    file_parser_cls,
-    project_manager_cls,
-    ontology_generator_cls,
-    llm_client_cls,
-    client,
-):
+def test_ontology_generate_accepts_provider_without_api_key_uses_db_fallback(client, ontology_mocks):
     """Provider ohne api_key im Payload → kein 400 mehr. Backend nutzt SecretResolver-Fallback.
 
     Geändertes Verhalten seit Smoke-Fix Slice 04:
     parse_runtime_llm_config() wirft keinen Fehler mehr bei fehlendem api_key.
     Der Fallback auf die Settings-DB erfolgt in resolve_route_api_key().
     """
-    project_manager_cls.create_project.return_value = _make_project_mock()
-    project_manager_cls.save_file_to_project.return_value = {
-        "original_filename": "doc.txt",
-        "path": "/tmp/doc.txt",
-        "size": 42,
-    }
-    file_parser_cls.extract_text.return_value = "text"
-    text_processor_cls.preprocess_text.return_value = "text"
-    ontology_generator_cls.return_value.generate.return_value = {
-        "entity_types": [],
-        "edge_types": [],
-        "analysis_summary": "",
-    }
+    _arrange_happy_path(ontology_mocks)
 
     response = client.post(
         "/api/graph/ontology/generate",
@@ -239,30 +245,19 @@ def test_ontology_generate_accepts_provider_without_api_key_uses_db_fallback(
     )
 
 
-@patch("app.api.graph.LLMClient")
-@patch("app.api.graph.OntologyGenerator")
-@patch("app.api.graph.ProjectManager")
-@patch("app.api.graph.FileParser")
-@patch("app.api.graph.TextProcessor")
-def test_ontology_generate_persists_llm_metadata_on_project(
-    text_processor_cls,
-    file_parser_cls,
-    project_manager_cls,
-    ontology_generator_cls,
-    llm_client_cls,
-    client,
-):
+def test_ontology_generate_persists_llm_metadata_on_project(client, ontology_mocks):
     """Modell + redacted Provider-Metadaten landen am Projekt — Secrets bleiben draußen."""
     project_mock = _make_project_mock()
-    project_manager_cls.create_project.return_value = project_mock
-    project_manager_cls.save_file_to_project.return_value = {
+    ontology_mocks["project_manager"].create_project.return_value = project_mock
+    ontology_mocks["project_manager"].get_project.return_value = project_mock
+    ontology_mocks["project_manager"].save_file_to_project.return_value = {
         "original_filename": "doc.txt",
         "path": "/tmp/doc.txt",
         "size": 42,
     }
-    file_parser_cls.extract_text.return_value = "x"
-    text_processor_cls.preprocess_text.return_value = "x"
-    ontology_generator_cls.return_value.generate.return_value = {
+    ontology_mocks["file_parser"].extract_text.return_value = "x"
+    ontology_mocks["text_processor"].preprocess_text.return_value = "x"
+    ontology_mocks["ontology_generator"].return_value.generate.return_value = {
         "entity_types": [],
         "edge_types": [],
         "analysis_summary": "",

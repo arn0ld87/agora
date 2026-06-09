@@ -248,6 +248,87 @@ describe('ReportContractSchema (Zod-Spiegel)', () => {
     }
   });
 
+  it('akzeptiert source_model aus Backend Slice 8 (Zod-Drift-Hotfix)', () => {
+    const item = {
+      type: 'graph_fact',
+      source: 'graph',
+      snippet: 'Snippet aus dem Knowledge-Graph.',
+      source_model: 'ollama/qwen2.5:32b',
+    };
+    const result = EvidenceItemSchema.safeParse(item);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.source_model).toBe('ollama/qwen2.5:32b');
+    }
+  });
+
+  it('akzeptiert source_model=null (Pre-Slice-8-Daten)', () => {
+    const item = {
+      type: 'graph_fact',
+      source: 'graph',
+      snippet: 'Snippet aus dem Knowledge-Graph.',
+      source_model: null,
+    };
+    expect(EvidenceItemSchema.safeParse(item).success).toBe(true);
+  });
+
+  it('rejects source_model > 200 chars', () => {
+    const item = {
+      type: 'graph_fact',
+      source: 'graph',
+      snippet: 'Snippet.',
+      source_model: 'x'.repeat(201),
+    };
+    expect(EvidenceItemSchema.safeParse(item).success).toBe(false);
+  });
+
+  // Sub-Slice 05.8 — sentiment_score Zod-Spiegel zu EvidenceItemModel
+  // (Backend hat es seit MAI-14). Live-Smoke mit Gemini 3 zeigte das Feld
+  // im Output, der Zod-Frontend-Strict-Mode rejectete es als "Unrecognized
+  // key" und versteckte den ganzen Report-Body.
+
+  it('accepts sentiment_score within [-1, 1]', () => {
+    for (const value of [-1, -0.5, 0, 0.5, 1]) {
+      const item = {
+        type: 'agent_action',
+        source: 'agent_log',
+        snippet: 'Snippet.',
+        sentiment_score: value,
+      };
+      const result = EvidenceItemSchema.safeParse(item);
+      expect(result.success, `sentiment_score=${value} muss accepted sein`).toBe(true);
+      if (result.success) {
+        expect(result.data.sentiment_score).toBe(value);
+      }
+    }
+  });
+
+  it('rejects sentiment_score outside [-1, 1]', () => {
+    for (const bad of [-1.01, 1.01, 5, -10]) {
+      const item = {
+        type: 'graph_fact',
+        source: 'graph',
+        snippet: 'x',
+        sentiment_score: bad,
+      };
+      expect(
+        EvidenceItemSchema.safeParse(item).success,
+        `sentiment_score=${bad} darf NICHT acceptet werden`,
+      ).toBe(false);
+    }
+  });
+
+  it('sentiment_score is optional and nullable (Gemini-3 darf weglassen)', () => {
+    const without = {
+      type: 'graph_metric',
+      source: 'graph',
+      snippet: 'Ohne Sentiment.',
+    };
+    const withNull = { ...without, sentiment_score: null };
+    expect(EvidenceItemSchema.safeParse(without).success).toBe(true);
+    expect(EvidenceItemSchema.safeParse(withNull).success).toBe(true);
+  });
+
   it('parses section hypothesis without evidence as dedicated slot', () => {
     const result = ReportSectionHypothesisSchema.safeParse({
       hypothesis_id: 'hypothesis_02',

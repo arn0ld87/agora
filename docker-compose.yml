@@ -98,6 +98,14 @@ services:
       # urllib3 versucht IPv6 (ENETUNREACH) ohne IPv4-Fallback (kein Happy Eyeballs).
       # Workaround: urllib3 auf IPv4-only setzen. Quelle: docker/for-mac#7332
       - DOCKER_IPV4_ONLY=1
+      # Container-Zeitzone: alle datetime.now()-Naiv-Calls und LogDrawer-
+      # Date-Schwelle (backend/app/utils/logger.py) laufen auf Europe/Berlin.
+      # sim_time (Layer-0) bleibt unabhängig — ist tz-aware (UTC + Offset).
+      - TZ=Europe/Berlin
+      # LLM-Default für Sim-Runner. 16384 verhindert silent OOM/Truncation
+      # bei Multi-Agent-Workloads mit großem num_ctx (CAMEL-Issue). Override
+      # via .env oder LLM_MAX_OUTPUT_TOKENS=… docker compose up.
+      - LLM_MAX_OUTPUT_TOKENS=${LLM_MAX_OUTPUT_TOKENS:-16384}
 
   redis:
     image: redis:7-alpine
@@ -112,7 +120,7 @@ services:
       retries: 5
 
   neo4j:
-    image: ${NEO4J_IMAGE:-neo4j:5.18-community}
+    image: ${NEO4J_IMAGE:-neo4j:5.26-community}
     container_name: agora-neo4j
     # Loopback-Bind: Browser/Bolt nur lokal erreichbar. Container-zu-
     # Container-Verbindungen laufen weiter über das Compose-Netzwerk

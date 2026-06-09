@@ -1,14 +1,19 @@
 /**
  * useActiveModelStore — Pinia-Store für den aktiven LLM-Modell-SSE-Stream.
  *
- * Slice E.2, Issue #213.
+ * Slice E.2 / Observability Wave 2026-05 (Anti-Flicker, Issue #213).
  *
- * Öffnet einen Signed-Ticket-SSE-Stream zu GET /api/llm/model-stream.
- * Das Ticket wird via POST /api/auth/ticket mit scope="llm-stream" geholt —
- * analog zu fetchStreamTicket in api/stream.ts, jedoch ohne sim-Suffix.
+ * Reconnect-Verhalten:
+ * - Reconnects sind unbegrenzt (kein hartes Limit).
+ * - connectionStatus wechselt erst nach RECONNECTING_AFTER_MS (30 s) ohne
+ *   erfolgreichen Frame auf 'reconnecting' — kurze Backend-Hiccups bleiben
+ *   stillen, analog LogDrawer Slice 4.
+ * - currentModel / lastKnownModel werden beim onerror NICHT geleert, so dass
+ *   die Badge weiterhin den letzten bekannten Modell-String zeigt.
  *
- * Reconnect-Cap analog J.6 (LogDrawer): MAX_RECONNECT_ATTEMPTS = 5,
- * danach connectionStatus = 'failed'. reconnect() setzt zurück.
+ * Fehlerzustand 'failed':
+ * - Wird gesetzt wenn der Ticket-Fetch fehlschlägt oder EventSource-Konstruktor
+ *   wirft. Reload-Button im Badge ermöglicht manuelles reconnect().
  *
  * isStale: true wenn seit dem letzten Frame mehr als STALE_AFTER_MS vergangen.
  * Ticking via setInterval (5 s) auf _now — sonst keine Reaktivität.
@@ -20,8 +25,8 @@ import { parseModelActiveEvent } from '../contracts/modelActiveContract'
 import { getAgoraToken } from '../api/index'
 import { useApiAuth } from '../composables/useApiAuth'
 
-const MAX_RECONNECT_ATTEMPTS = 5
 export const STALE_AFTER_MS = 30_000
+export const RECONNECTING_AFTER_MS = 30_000
 const TICK_INTERVAL_MS = 5_000
 
 async function fetchLlmStreamTicket(): Promise<string | undefined> {
@@ -37,17 +42,37 @@ function buildLlmStreamUrl(ticket: string | undefined): string {
   return `${path}?ticket=${encodeURIComponent(ticket)}`
 }
 
-export type ConnectionStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'failed'
+export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
 
 export const useActiveModelStore = defineStore('activeModel', () => {
   const lastEvent = ref<ModelActiveEvent | null>(null)
   const connectionStatus = ref<ConnectionStatus>('idle')
   const reconnectAttempts = ref(0)
 
+  /**
+   * lastKnownModel: letzter erfolgreicher Modell-String innerhalb der
+   * Browser-Tab-Session. Wird nie gelöscht, solange das Tab lebt.
+   */
+  const lastKnownModel = ref<string | null>(null)
+
   // Internal reactive clock — updated every TICK_INTERVAL_MS so isStale recomputes.
   const _now = ref(Date.now())
   let _tickTimer: ReturnType<typeof setInterval> | null = null
   let _es: EventSource | null = null
+
+  /**
+   * _reconnectingTimer: Delayed transition 'connecting' → 'reconnecting'.
+   * Gesetzt beim ersten onerror, gelöscht beim nächsten erfolgreichen Frame.
+   */
+  let _reconnectingTimer: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * currentModel: Modell-String aus dem letzten validen Frame.
+   * Wird beim onerror NICHT auf null gesetzt.
+   */
+  const currentModel = computed<string | null>(() =>
+    lastEvent.value?.model ?? null,
+  )
 
   const isStale = computed<boolean>(() => {
     if (lastEvent.value === null) return true
@@ -75,8 +100,31 @@ export const useActiveModelStore = defineStore('activeModel', () => {
     }, TICK_INTERVAL_MS)
   }
 
+  function _clearReconnectingTimer(): void {
+    if (_reconnectingTimer !== null) {
+      clearTimeout(_reconnectingTimer)
+      _reconnectingTimer = null
+    }
+  }
+
+  /**
+   * Startet den 30-s-Countdown nach dem onerror.
+   * Nach Ablauf: Status auf 'reconnecting', wenn bis dahin kein Frame kam.
+   */
+  function _scheduleReconnecting(): void {
+    _clearReconnectingTimer()
+    _reconnectingTimer = setTimeout(() => {
+      _reconnectingTimer = null
+      // Only flip to reconnecting if still not connected.
+      if (connectionStatus.value !== 'connected' && connectionStatus.value !== 'failed') {
+        connectionStatus.value = 'reconnecting'
+      }
+    }, RECONNECTING_AFTER_MS)
+  }
+
   async function connect(): Promise<void> {
     _closeEs()
+    _clearReconnectingTimer()
     reconnectAttempts.value = 0
     connectionStatus.value = 'connecting'
     _startTick()
@@ -111,10 +159,11 @@ export const useActiveModelStore = defineStore('activeModel', () => {
     _es = es
 
     es.onmessage = (ev: MessageEvent) => {
-      // Successful frame resets reconnect counter.
+      // Successful frame: reset reconnect counter, clear pending reconnecting timer.
       reconnectAttempts.value = 0
-      if (connectionStatus.value !== 'open') {
-        connectionStatus.value = 'open'
+      _clearReconnectingTimer()
+      if (connectionStatus.value !== 'connected') {
+        connectionStatus.value = 'connected'
       }
       _now.value = Date.now()
 
@@ -132,24 +181,25 @@ export const useActiveModelStore = defineStore('activeModel', () => {
         return
       }
       lastEvent.value = parsed.data
+      // Persist last known model for the tab lifetime.
+      lastKnownModel.value = parsed.data.model
     }
 
     es.onerror = () => {
       reconnectAttempts.value += 1
-      if (reconnectAttempts.value >= MAX_RECONNECT_ATTEMPTS) {
-        _closeEs()
-        connectionStatus.value = 'failed'
-        _clearTick()
-        return
-      }
-      connectionStatus.value = 'reconnecting'
+      // Do NOT clear lastEvent or lastKnownModel — Badge should keep showing
+      // the last known model string during reconnect.
+      // Only schedule 'reconnecting' flip after the grace period.
+      _scheduleReconnecting()
     }
   }
 
   function disconnect(): void {
     _closeEs()
     _clearTick()
+    _clearReconnectingTimer()
     lastEvent.value = null
+    // lastKnownModel is intentionally NOT cleared — persists within tab session.
     reconnectAttempts.value = 0
     connectionStatus.value = 'idle'
   }
@@ -161,6 +211,8 @@ export const useActiveModelStore = defineStore('activeModel', () => {
 
   return {
     lastEvent,
+    lastKnownModel,
+    currentModel,
     isStale,
     connectionStatus,
     reconnectAttempts,

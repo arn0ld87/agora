@@ -12,6 +12,15 @@ Design constraints:
   ``SimulationRunner``.
 - atexit / signal handler registration is self-contained; the cleanup action
   is injected as ``cleanup_callable`` to decouple from the class.
+
+Security — Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6):
+    ``os.environ.copy()`` würde das vollständige Prozess-Environment an den
+    OASIS-Subprozess vererben — damit auch Secrets wie ``SECRET_KEY``,
+    ``AGORA_AUTH_TOKEN``, ``NEO4J_PASSWORD``, ``LLM_API_KEY`` und
+    ``AGORA_FERNET_KEY``. Stattdessen wird nur die explizite Whitelist
+    ``SAFE_ENV_KEYS`` übernommen. LLM-Credentials werden ausschließlich
+    via ``runtime_env`` (Parameter von ``start_simulation``) übergeben,
+    da die OASIS-Skripte diese aus dem Env lesen müssen.
 """
 
 from __future__ import annotations
@@ -36,6 +45,27 @@ from .run_state_store import RunnerStatus, SimulationRunState
 _tracer = trace.get_tracer(__name__)
 
 logger = get_logger("agora.process_manager")
+
+# ---------------------------------------------------------------------------
+# Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6)
+# ---------------------------------------------------------------------------
+# Nur diese Keys werden aus os.environ in den OASIS-Subprozess vererbt.
+# Secrets (SECRET_KEY, AGORA_AUTH_TOKEN, NEO4J_PASSWORD, LLM_API_KEY,
+# AGORA_FERNET_KEY) werden bewusst NICHT weitergegeben. LLM-Credentials
+# kommen ausschließlich über den ``runtime_env``-Parameter.
+SAFE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "PYTHONPATH",
+        "PYTHONUTF8",
+        "PYTHONIOENCODING",
+        "TZ",
+        "LLM_BASE_URL",
+        "LLM_MODEL_NAME",
+        "LLM_MAX_OUTPUT_TOKENS",
+        "OLLAMA_THINKING",
+    }
+)
 
 # Flag whether cleanup function is registered
 _cleanup_registered = False
@@ -270,10 +300,12 @@ def start_simulation(
         main_log_path = os.path.join(sim_dir, "simulation.log")
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
-        # Build subprocess environment
-        # env-only: os.environ.copy() vererbt das vollständige Prozess-Environment
-        # an den OASIS-Subprozess — kein settings_layer-Kandidat.
-        env = os.environ.copy()
+        # Build subprocess environment — Whitelist-only (Code-Review 2026-05-17 §1.6).
+        # Nur explizit erlaubte Keys aus os.environ; Secrets wie SECRET_KEY,
+        # AGORA_AUTH_TOKEN, NEO4J_PASSWORD etc. werden bewusst NICHT vererbt.
+        # runtime_env-Werte kommen immer mit und überschreiben Whitelist-Werte
+        # (enthält u. a. LLM_API_KEY und OPENAI_API_KEY für den OASIS-Subprozess).
+        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         if runtime_env:
@@ -590,6 +622,50 @@ def register_cleanup(*, cleanup_callable: Callable[[], None]) -> None:
         )
 
     _cleanup_registered = True
+
+
+def terminate_run(
+    run_id: str,
+    *,
+    processes: Dict[str, subprocess.Popen],  # type: ignore[type-arg]
+    grace_period: float = 5.0,
+) -> bool:
+    """Beende den OASIS-Subprozess für ``run_id`` kooperativ (SIGTERM + Grace → SIGKILL).
+
+    Idempotent: Wenn kein Prozess läuft oder der Prozess bereits beendet ist,
+    wird kein Fehler geworfen und ``False`` zurückgegeben.
+
+    Args:
+        run_id:       Simulation-ID (= Prozess-Schlüssel in ``processes``).
+        processes:    ``SimulationRunner._processes`` (by reference).
+        grace_period: Sekunden, die nach SIGTERM gewartet wird, bevor SIGKILL
+                      gesendet wird.
+
+    Returns:
+        ``True``, wenn ein laufender Prozess terminiert wurde.
+        ``False``, wenn kein Prozess vorhanden oder bereits beendet war.
+    """
+    process = processes.get(run_id)
+    if process is None or process.poll() is not None:
+        return False
+
+    timeout_int = max(1, int(grace_period))
+    try:
+        terminate_process(process, run_id, timeout=timeout_int)
+    except ProcessLookupError:
+        pass
+    except Exception as exc:
+        logger.warning(
+            "terminate_run: graceful terminate failed for %s, forcing kill: %s",
+            run_id,
+            exc,
+        )
+        try:
+            process.kill()
+            process.wait(timeout=5)
+        except Exception:
+            pass
+    return True
 
 
 def get_running_simulations(

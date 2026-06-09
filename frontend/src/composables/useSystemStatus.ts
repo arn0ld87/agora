@@ -51,7 +51,11 @@ export function useSystemStatus(
       const candidate = extractCandidate(envelope)
       const parsed = SystemStatusResponseSchema.safeParse(candidate)
       if (!parsed.success) {
-        error.value = `Schema-Drift: ${parsed.error.issues[0]?.message ?? 'unbekannt'}`
+        const messages = parsed.error.issues.map((i) =>
+          i.path.length > 0 ? `${i.path.join('.')}: ${i.message}` : i.message,
+        )
+        const summary = messages.length > 0 ? messages.join('; ') : 'unbekannt'
+        error.value = `Schema-Drift (${messages.length}): ${summary}`
         return
       }
       status.value = parsed.data

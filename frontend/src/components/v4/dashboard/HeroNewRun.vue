@@ -12,18 +12,14 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
-import Badge from '../forms/Badge.vue'
+import ModelPicker from '../forms/ModelPicker.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
-import { getAvailableModels } from '../../../api/simulation'
 import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
-import { STORAGE_CUSTOM_MODEL, STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
+import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
-
-interface ModelOption {
-  value: string
-  label: string
-}
+import { StageLLMRouteSchema, type StageLLMRoute } from '../../../contracts/llmRoutingContract'
+import { getSystemStatus } from '../../../api/status'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -35,12 +31,7 @@ const isDragOver = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const errorMsg = ref('')
 
-const presetModels = ref<ModelOption[]>([])
-const ollamaModels = ref<ModelOption[]>([])
 const llmProfiles = ref<LlmProfile[]>([])
-const defaultModel = ref('')
-const ollamaReachable = ref(false)
-const loadingStatus = ref(true)
 
 function readLocal(key: string): string | null {
   try {
@@ -71,57 +62,76 @@ function removeLocal(key: string): void {
   } catch { /* swallow */ }
 }
 
-const modelOption = ref<string>(readLocal(STORAGE_MODEL) || 'default')
+/**
+ * Slice A2 (2026-05-17): Modell-Auswahl auf den projektweiten ModelPicker
+ * konsolidiert. Hybrid-Mode:
+ *   - Profile-Dropdown (links): LLM-Profile aus fetchLlmProfiles. Wenn gewählt,
+ *     gewinnt das Profile — Provider/Modell/Temperatur kommen aus dem Profile.
+ *   - ModelPicker (rechts, sichtbar wenn kein Profile aktiv): Direkt-Auswahl
+ *     aus den unter /settings/llm-providers hinterlegten Providern.
+ *
+ * Persistenz: `agora.hero.profileId`, `agora.hero.route` (Zod-validiert).
+ * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
+ * via `storedEffectiveModel()` — wir spiegeln `route.model` dorthin, damit der
+ * bestehende Sim-Start-Flow (Backend resolved Provider via SecretResolver,
+ * vgl. PR #499) ohne Touch in MainView durchgeht.
+ */
+const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
+const STORAGE_HERO_ROUTE = 'agora.hero.route'
+
+function loadStoredRoute(): StageLLMRoute | null {
+  const raw = readLocal(STORAGE_HERO_ROUTE)
+  if (!raw) return null
+  try {
+    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
+    if (!parsed.success) return null
+    if (!parsed.data.provider_id || !parsed.data.model) return null
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
+const selectedRoute = ref<StageLLMRoute | null>(loadStoredRoute())
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
-const modelOptions = computed<ModelOption[]>(() => {
-  const opts: ModelOption[] = []
-  // Profile-Gruppe zuerst (persistierte LLM-Profile aus P5.2)
-  for (const p of llmProfiles.value) {
-    opts.push({
-      value: `profile:${p.id}`,
-      label: `${p.name} — ${p.model_name}${p.is_default ? ` (${t('dashboard.hero.profileDefault')})` : ''}`,
-    })
-  }
-  opts.push({ value: 'default', label: `${t('dashboard.hero.modelDefault')} — ${defaultModel.value || '?'}` })
-  for (const p of presetModels.value) opts.push(p)
-  for (const m of ollamaModels.value) {
-    if (presetModels.value.some(p => p.value === m.value)) continue
-    opts.push({ value: m.value, label: `${m.label} (Ollama)` })
-  }
-  return opts
+// Persona-Floor synchron mit Backend (simulation_config_generator._validate_persona_quota).
+// Hard-Floor=30, optional override via AGORA_ALLOW_SMALL_SIM=1. Wert wird beim
+// Mount per /api/status (backend.allow_small_sim) gezogen — bis dahin pessimistisch
+// auf den harten Floor klemmen, damit der User keine Run-Konfig zusammenklicken kann
+// die das Backend dann mit 422 ablehnt.
+const NUM_AGENTS_HARD_FLOOR = 30
+const NUM_AGENTS_OVERRIDE_FLOOR = 10
+const NUM_AGENTS_DEFAULT = NUM_AGENTS_HARD_FLOOR
+const NUM_AGENTS_MAX = 100
+const NUM_ROUNDS_MIN = 3
+const NUM_ROUNDS_DEFAULT = 10
+const NUM_ROUNDS_MAX = 30
+
+const allowSmallSim = ref<boolean>(false)
+const numAgents = ref<number>(NUM_AGENTS_DEFAULT)
+const numRounds = ref<number>(NUM_ROUNDS_DEFAULT)
+
+const numAgentsMin = computed<number>(
+  () => (allowSmallSim.value ? NUM_AGENTS_OVERRIDE_FLOOR : NUM_AGENTS_HARD_FLOOR),
+)
+
+const showAgentsWarning = computed<boolean>(
+  () => allowSmallSim.value && numAgents.value >= NUM_AGENTS_OVERRIDE_FLOOR && numAgents.value < NUM_AGENTS_HARD_FLOOR,
+)
+
+const profileOptions = computed(() => {
+  return llmProfiles.value.map(p => ({
+    value: p.id,
+    label: `${p.name} — ${p.model_name}${p.is_default ? ` (${t('dashboard.hero.profileDefault')})` : ''}`,
+  }))
 })
 
 const canSubmit = computed(
-  () => files.value.length > 0 && simulationRequirement.value.trim() !== '' && !loadingStatus.value,
+  () => files.value.length > 0 && simulationRequirement.value.trim() !== '',
 )
-
-async function loadStatus() {
-  loadingStatus.value = true
-  try {
-    const res = await getAvailableModels()
-    const data = (res as { data?: Record<string, unknown>; success?: boolean })?.data ?? null
-    if (data) {
-      const presets = (data['presets'] as Array<Record<string, unknown>>) ?? []
-      const ollama = (data['ollama'] as Array<Record<string, unknown>>) ?? []
-      presetModels.value = presets.map(p => ({
-        value: String(p['name'] ?? ''),
-        label: String(p['label'] ?? p['name'] ?? ''),
-      })).filter(o => !!o.value)
-      ollamaModels.value = ollama.map(p => ({
-        value: String(p['name'] ?? ''),
-        label: String(p['label'] ?? p['name'] ?? ''),
-      })).filter(o => !!o.value)
-      defaultModel.value = String(data['current_default'] ?? '')
-      ollamaReachable.value = !!data['ollama_reachable']
-    }
-  } catch (e) {
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loadingStatus.value = false
-  }
-}
 
 function filterAllowed(list: FileList | File[]): File[] {
   return Array.from(list).filter(f => {
@@ -184,15 +194,47 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function onPickRoute(route: StageLLMRoute | null) {
+  selectedRoute.value = route
+  if (route?.provider_id && route?.model) {
+    writeLocal(STORAGE_HERO_ROUTE, JSON.stringify(route))
+  } else {
+    removeLocal(STORAGE_HERO_ROUTE)
+  }
+}
+
+function onPickProfile(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  selectedProfileId.value = value || null
+  if (value) {
+    writeLocal(STORAGE_HERO_PROFILE_ID, value)
+  } else {
+    removeLocal(STORAGE_HERO_PROFILE_ID)
+  }
+}
+
 async function startSimulation() {
   if (!canSubmit.value) return
   try {
-    writeLocal(STORAGE_MODEL, modelOption.value)
     writeLocal(STORAGE_LANG, language.value)
-    removeLocal(STORAGE_CUSTOM_MODEL)
-    const selectedValue = modelOption.value
-    const profileId = selectedValue.startsWith('profile:') ? selectedValue.slice('profile:'.length) : null
-    setPendingUpload(files.value, simulationRequirement.value.trim(), profileId)
+    const profileId = selectedProfileId.value || null
+    // Wenn ein Profile aktiv ist, gewinnt es — direct-route ignorieren und
+    // den STORAGE_MODEL-Key auf "default" zurücksetzen, damit MainView nicht
+    // versehentlich einen stale Override mitsendet.
+    if (profileId) {
+      writeLocal(STORAGE_MODEL, 'default')
+    } else if (selectedRoute.value?.model) {
+      writeLocal(STORAGE_MODEL, selectedRoute.value.model)
+    } else {
+      writeLocal(STORAGE_MODEL, 'default')
+    }
+    setPendingUpload(
+      files.value,
+      simulationRequirement.value.trim(),
+      profileId,
+      numAgents.value,
+      numRounds.value,
+    )
     router.push({ name: 'Process', params: { projectId: 'new' } })
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
@@ -200,24 +242,27 @@ async function startSimulation() {
 }
 
 onMounted(() => {
-  void loadStatus()
   fetchLlmProfiles()
     .then(profiles => { llmProfiles.value = profiles })
-    .catch(() => { /* Fallback: Profile-Gruppe bleibt leer, Presets/Ollama greifen */ })
+    .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })
+  // backend.allow_small_sim aus /api/status spiegelt AGORA_ALLOW_SMALL_SIM
+  // wider. Default-pessimistisch bei Fetch-Fehler: harter 30er-Floor bleibt.
+  getSystemStatus()
+    .then(envelope => {
+      const backend = (envelope?.data?.backend ?? envelope?.backend) as { allow_small_sim?: boolean } | undefined
+      allowSmallSim.value = !!backend?.allow_small_sim
+      // Wenn der Override nach Mount inaktiv ist, klemmen wir einen ggf. aus
+      // dem letzten Override-Run persistenten Slider-Wert wieder hoch.
+      if (!allowSmallSim.value && numAgents.value < NUM_AGENTS_HARD_FLOOR) {
+        numAgents.value = NUM_AGENTS_HARD_FLOOR
+      }
+    })
+    .catch(() => { /* Fail-safe: allowSmallSim bleibt false → 30er-Floor aktiv */ })
 })
 </script>
 
 <template>
   <Card :title="$t('dashboard.hero.title')" :subtitle="$t('dashboard.hero.subtitle')">
-    <template #right>
-      <Badge
-        v-if="!loadingStatus"
-        :tone="ollamaReachable ? 'green' : 'gray'"
-      >
-        {{ ollamaReachable ? $t('dashboard.system.statusReachable') : $t('dashboard.system.statusIdle') }}
-      </Badge>
-    </template>
-
     <div class="hero-grid">
       <!-- Zone 1: Quelle (Drop / Picker) -->
       <div class="hero-zone hero-source">
@@ -268,19 +313,80 @@ onMounted(() => {
       <!-- Zone 2: Model + Sprache -->
       <div class="hero-zone hero-config">
         <div class="hero-field">
-          <label class="hero-label" for="hero-model">{{ $t('dashboard.hero.modelLabel') }}</label>
-          <select id="hero-model" v-model="modelOption" class="hero-select">
-            <option v-for="opt in modelOptions" :key="opt.value" :value="opt.value">
+          <label class="hero-label" for="hero-profile">
+            {{ $t('dashboard.hero.profileLabel') }}
+          </label>
+          <select
+            id="hero-profile"
+            class="hero-select"
+            :value="selectedProfileId ?? ''"
+            @change="onPickProfile"
+          >
+            <option value="">
+              {{ $t('dashboard.hero.profileNone') }}
+            </option>
+            <option v-for="opt in profileOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
         </div>
+        <div v-if="!selectedProfileId" class="hero-field">
+          <label class="hero-label">{{ $t('dashboard.hero.modelLabel') }}</label>
+          <ModelPicker
+            :model-value="selectedRoute"
+            :placeholder="$t('dashboard.hero.modelPlaceholder')"
+            @update:model-value="onPickRoute"
+          />
+        </div>
         <div class="hero-field">
           <label class="hero-label" for="hero-lang">{{ $t('dashboard.hero.languageLabel') }}</label>
           <select id="hero-lang" v-model="language" class="hero-select">
-            <option value="de">Deutsch</option>
-            <option value="en">English</option>
+            <option value="de">{{ $t('dashboard.hero.languageDe') }}</option>
+            <option value="en">{{ $t('dashboard.hero.languageEn') }}</option>
           </select>
+        </div>
+        <div class="hero-field">
+          <label class="hero-label" for="hero-num-agents">
+            {{ $t('dashboard.hero.numAgentsLabel') }}
+            <span class="hero-slider-value">{{ numAgents }}</span>
+            <span v-if="allowSmallSim" class="hero-small-sim-badge" :title="$t('dashboard.hero.smallSimActiveTooltip')">
+              {{ $t('dashboard.hero.smallSimBadge') }}
+            </span>
+          </label>
+          <input
+            id="hero-num-agents"
+            v-model.number="numAgents"
+            type="range"
+            :min="numAgentsMin"
+            :max="NUM_AGENTS_MAX"
+            step="1"
+            class="hero-slider"
+            :aria-valuenow="numAgents"
+            :aria-valuemin="numAgentsMin"
+            :aria-valuemax="NUM_AGENTS_MAX"
+          />
+          <div v-if="showAgentsWarning" class="hero-warning" role="alert">
+            <span class="hero-warning__icon" aria-hidden="true">&#9888;</span>
+            {{ $t('dashboard.hero.numAgentsWarning') }}
+          </div>
+        </div>
+        <div class="hero-field">
+          <label class="hero-label" for="hero-num-rounds">
+            {{ $t('dashboard.hero.numRoundsLabel') }}
+            <span class="hero-slider-value">{{ numRounds }}</span>
+          </label>
+          <input
+            id="hero-num-rounds"
+            v-model.number="numRounds"
+            type="range"
+            :min="NUM_ROUNDS_MIN"
+            :max="NUM_ROUNDS_MAX"
+            step="1"
+            class="hero-slider"
+            :aria-valuenow="numRounds"
+            :aria-valuemin="NUM_ROUNDS_MIN"
+            :aria-valuemax="NUM_ROUNDS_MAX"
+          />
         </div>
         <div class="hero-field hero-field--full">
           <label class="hero-label" for="hero-requirement">
@@ -308,7 +414,7 @@ onMounted(() => {
         >
           {{ $t('dashboard.hero.startCta') }}
         </button>
-        <p v-if="!canSubmit && !loadingStatus" class="hero-hint">
+        <p v-if="!canSubmit" class="hero-hint">
           {{ $t('dashboard.hero.disabledHint') }}
         </p>
         <p v-if="errorMsg" class="hero-error">{{ errorMsg }}</p>
@@ -568,6 +674,60 @@ onMounted(() => {
 .hero-field--full {
   width: 100%;
 }
+
+/* Slider */
+.hero-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+  height: 4px;
+}
+
+.hero-slider-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+
+.hero-small-sim-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid #f97316;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+/* Warning-Badge */
+.hero-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #f97316;
+  border-radius: var(--r-4, 8px);
+  background: #fff7ed;
+  color: #c2410c;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.hero-warning__icon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
 .hero-required {
   color: var(--status-red, #c0392b);
   margin-left: 2px;

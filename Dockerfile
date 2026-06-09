@@ -26,6 +26,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 ENV UV_HTTP_TIMEOUT=1800
 ENV UV_HTTP_RETRIES=5
 
+ENV TZ=Europe/Berlin
+
 WORKDIR /app
 RUN useradd -m -u 1000 agora \
   && mkdir -p /app/backend/uploads /app/backend/logs \
@@ -52,7 +54,7 @@ ENV FLASK_HOST=0.0.0.0
 EXPOSE 5173 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5001/health || exit 1
+  CMD curl -f http://localhost:5001/readyz || exit 1
 
 CMD ["bun", "run", "dev"]
 
@@ -122,12 +124,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tzdata \
+  && rm -rf /var/lib/apt/lists/* \
+  && ln -snf /usr/share/zoneinfo/Europe/Berlin /etc/localtime \
+  && echo "Europe/Berlin" > /etc/timezone
+
+ENV TZ=Europe/Berlin
+
 RUN useradd -m -u 1000 -s /usr/sbin/nologin agora \
   && mkdir -p /app/backend/uploads /app/backend/logs /app/frontend/dist /home/agora/.cache /home/agora/.gunicorn \
   && chown -R agora:agora /app /home/agora
 
 COPY --chown=agora:agora --from=backend-build /app/backend/.venv ./backend/.venv
-COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py ./backend/
+COPY --chown=agora:agora backend/pyproject.toml backend/uv.lock backend/run.py backend/wsgi.py backend/gunicorn.conf.py ./backend/
 COPY --chown=agora:agora backend/app ./backend/app
 COPY --chown=agora:agora backend/scripts ./backend/scripts
 # E2E-Stub-Snapshot: llm_e2e_stub.py liest die Pflichtabschnitte aus dieser Datei.
@@ -142,19 +152,26 @@ USER agora
 EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD ["python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:5001/health', timeout=5).read()"]
+  CMD ["python", "-c", "import sys; from urllib.request import urlopen; sys.exit(0 if urlopen('http://localhost:5001/readyz', timeout=5).status == 200 else 1)"]
 
 # Gunicorn vor Flask mit gevent-Worker (non-blocking SSE).
 # Direkter Binary-Aufruf statt `uv run` — `uv run` würde bei jedem
 # Container-Start einen `.venv`-Sync versuchen und am read-only Rootfs
 # scheitern.
+#
+# Konfiguration (workers, preload, timeouts, post_fork-Hook) liegt in
+# backend/gunicorn.conf.py. Der post_fork-Hook resetet vererbte
+# Neo4j/Redis-Pool-Sockets im Child — siehe Datei-Header dort. Damit ist
+# --preload auch unter -k gevent sicher; os.register_at_fork allein war
+# es nicht (gevent monkey-patcht os.fork).
+#
+# HARDSTOP --workers 1 (Code-Review 2026-05-17, Finding 1.2) bleibt
+# bestehen, ist aber jetzt in der conf-Py dokumentiert.
+#
+# Issue #529: App-Target ist wsgi:app (NICHT mehr app:create_app()), weil
+# wsgi.py als allererstes Statement gevent.monkey.patch_all() ausführt.
+# Ohne diese Reihenfolge importiert --preload requests/urllib3/ssl mit
+# ungepatchtem socket → RecursionError in jedem HTTP-Call.
 CMD ["/app/backend/.venv/bin/gunicorn", \
-     "-k", "gevent", \
-     "--workers", "2", \
-     "--preload", \
-     "--timeout", "60", \
-     "--graceful-timeout", "30", \
-     "--bind", "0.0.0.0:5001", \
-     "--chdir", "/app/backend", \
-     "--pid", "/home/agora/.gunicorn/gunicorn.pid", \
-     "app:create_app()"]
+     "--config", "/app/backend/gunicorn.conf.py", \
+     "wsgi:app"]

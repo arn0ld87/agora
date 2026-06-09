@@ -152,6 +152,36 @@ describe('useSettingsStore', () => {
     expect(_fetchSettings).toHaveBeenCalledTimes(2)
   })
 
+  it('connectStream kann nach EventSource-Fehler reconnecten', async () => {
+    _fetchSettingsSchema.mockResolvedValue(buildSchemaResponse())
+    _fetchSettings.mockResolvedValue(buildValuesResponse())
+
+    let errorHandler: ((ev: Event) => void) | undefined
+    const closeSpy = vi.fn()
+    _openSettingsStream
+      .mockImplementationOnce(async (handlers?: { error?: (ev: Event) => void }) => {
+        errorHandler = handlers?.error
+        return { close: closeSpy }
+      })
+      .mockImplementationOnce(async () => ({ close: vi.fn() }))
+
+    const store = useSettingsStore()
+    await store.loadSettings()
+    await store.connectStream()
+    expect(store.streamState).toBe('open')
+
+    // Synthetic error event without an EventSource target — exercises
+    // the path where ev.target is something else and we fall back to
+    // the cached eventSource ref for cleanup.
+    errorHandler?.(new Event('error'))
+    expect(store.streamState).toBe('failed')
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+
+    await store.connectStream()
+    expect(_openSettingsStream).toHaveBeenCalledTimes(2)
+    expect(store.streamState).toBe('open')
+  })
+
   it('fieldErrors mappt Backend-Validation auf den richtigen Key', async () => {
     _fetchSettingsSchema.mockResolvedValueOnce(buildSchemaResponse())
     _fetchSettings.mockResolvedValueOnce(buildValuesResponse())

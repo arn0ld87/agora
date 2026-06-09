@@ -19,7 +19,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # Strenger Default für Vertrags-Modelle
@@ -112,6 +112,15 @@ class EvidenceItemModel(BaseModel):
     # ADR-0002 Anker 3 (Sub-Slice M11.7b): Default seed_corpus sichert die
     # Backward-Compat fuer alte Fixtures, die das Feld nicht mitschicken.
     source_kind: EvidenceSourceKind = EvidenceSourceKind.seed_corpus
+    # Slice 8 (User-Bericht 2026-05-16): welches LLM-Modell hat dieses
+    # Evidence-Item extrahiert. None = nicht erfasst (Backward-Compat für
+    # bestehende evidence.json). Format "<provider>/<model_id>", z. B.
+    # "ollama/qwen2.5:32b" — bewusst frei, weil Provider-IDs evolvieren.
+    source_model: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Provider+Modell, das diese Evidence-Zeile extrahiert hat (Slice 8).",
+    )
     # Pflicht nur fuer source_kind=agent_quote — durchgesetzt im Validator
     # ``agent_quote_needs_stakeholder_group``. Die Cross-Stakeholder-Regel
     # auf ReportClaimModel zaehlt unterschiedliche Werte dieses Feldes.
@@ -227,6 +236,52 @@ class ReportClaimModel(BaseModel):
         return self
 
 
+def _coerce_text_to_max_1000(value: Any) -> Any:
+    """Sub-Slice 05.7 — Pre-Validator-Coercion für hypothesis_text / claim_text.
+
+    Live-Smoke zeigte, dass LLMs (nemotron, deepseek-v4-flash) bei
+    ReACT-Loops manchmal komplette Markdown-Tabellen in ``hypothesis_text``
+    bzw. ``claim_text`` stopfen (Layer-2 / DTO-Verständnis-Bug am Modell).
+    Pydantic warf dann ``string_too_long``, was den ganzen Report-Save
+    abriss — Datenverlust, statt grazile Degradation.
+
+    Coercion-Regel (Layer-0-Limit max_length=1000 BLEIBT erhalten):
+    1. Wenn ``len(value) > 1000`` und Newline/Pipe vor Position 1000 → bei
+       erstem ``\\n`` bzw. ``|`` abschneiden (typisches Tabellen-Marker).
+    2. Sonst hart auf 1000 chars truncieren, suffix ``…`` markieren.
+    3. Warning loggen, damit Prompt-Engineering-Feedback sichtbar bleibt.
+
+    Layer-0-Anker NICHT betroffen (ADR-0002): kein Hedge-Word-Snapshot,
+    kein EvidenceSourceKind-Enum, kein cross_stakeholder-Validator, kein
+    reject_inferred-Validator. Die Coercion ist defensiv für UI-/Storage-
+    Konsistenz, nicht für Evidence-Semantik.
+    """
+    if not isinstance(value, str) or len(value) <= 1000:
+        return value
+
+    # Tabellen-Marker früh erkennen
+    cut_idx = 1000
+    for marker in ("\n|", "\n", "|"):
+        idx = value.find(marker)
+        if 0 < idx < cut_idx:
+            cut_idx = idx
+            break
+
+    truncated = value[:cut_idx].rstrip()
+    # Sicherheits-Cap: nach Newline-Cut kann das Ergebnis noch > 1000 sein,
+    # wenn der erste Newline nach Position 1000 lag (Loop oben überspringt das).
+    if len(truncated) > 999:
+        truncated = truncated[:999].rstrip() + "…"
+    import logging as _logging
+    _logging.getLogger("agora.report_contract").warning(
+        "evidence-coercion: text truncated from %d to %d chars "
+        "(LLM-Halluzination: vermutlich Markdown-Tabelle in Single-Statement-Slot)",
+        len(value),
+        len(truncated),
+    )
+    return truncated
+
+
 class ReportSectionHypothesisModel(BaseModel):
     """ADR-0002 hypothesis slot — reasoning without evidence, not a claim.
 
@@ -242,6 +297,15 @@ class ReportSectionHypothesisModel(BaseModel):
     rationale: str = Field(min_length=8, max_length=1000)
     suggested_evidence: list[str] = Field(default_factory=list, max_length=5)
 
+    # Sub-Slice 05.7: Pre-Validator vor max_length, damit LLM-Bloat
+    # (komplette Markdown-Tabellen) truncated wird statt ValidationError.
+    _coerce_hypothesis_text = field_validator("hypothesis_text", mode="before")(
+        _coerce_text_to_max_1000
+    )
+    _coerce_rationale = field_validator("rationale", mode="before")(
+        _coerce_text_to_max_1000
+    )
+
 
 class ReportSectionDataGapModel(BaseModel):
     """P2.1: Maschinenlesbare Luecke fuer nicht belegbare Claim-Kandidaten."""
@@ -253,6 +317,11 @@ class ReportSectionDataGapModel(BaseModel):
     gap_reason: str = Field(min_length=1, max_length=200)
     suggested_fix: Optional[str] = Field(default=None, min_length=1, max_length=500)
 
+    # Sub-Slice 05.7: Pre-Validator (gleiche Begründung wie Hypothesis).
+    _coerce_claim_text = field_validator("claim_text", mode="before")(
+        _coerce_text_to_max_1000
+    )
+
 
 class ReportSectionModel(BaseModel):
     model_config = _STRICT
@@ -261,6 +330,12 @@ class ReportSectionModel(BaseModel):
     section_summary: str = Field(min_length=1)
     claims: list[ReportClaimModel] = Field(default_factory=list)
     hypotheses: list[ReportSectionHypothesisModel] = Field(default_factory=list)
+    # Slice 3 (Issue #495): Hypothesen-Appendix — Überhang nach dem Cap von 5.
+    # Frontend kann diesen Slot optional ausklappen. max_length=50 verhindert
+    # unbegrenzte Persistenz bei fehlerhaften LLM-Outputs.
+    hypotheses_appendix: list[ReportSectionHypothesisModel] = Field(
+        default_factory=list, max_length=50
+    )
     data_gaps: list[ReportSectionDataGapModel] = Field(default_factory=list)
 
 
@@ -328,6 +403,7 @@ class ReportModel(BaseModel):
     error: Optional[str] = None
     has_evidence: bool = False
     evidence_sections: int = Field(default=0, ge=0)
+    red_team_findings: list[str] = Field(default_factory=list, max_length=10)
 
 
 class EvidenceMapModel(BaseModel):

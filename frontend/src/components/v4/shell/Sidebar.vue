@@ -2,18 +2,7 @@
   <aside class="sidebar" :class="{ 'sidebar--collapsed': collapsed }">
     <!-- Brand header -->
     <div class="sidebar__brand">
-      <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="sidebar-glyph-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#0A84FF"/>
-            <stop offset="1" stop-color="#0040A0"/>
-          </linearGradient>
-        </defs>
-        <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#sidebar-glyph-grad)"/>
-        <path d="M9 22.5 L16 9.5 L23 22.5" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="11.8" y1="17.5" x2="20.2" y2="17.5" stroke="white" stroke-width="2.4" stroke-linecap="round"/>
-        <circle cx="16" cy="9.5" r="1.6" fill="white"/>
-      </svg>
+      <AgoraBrand mode="glyph" :height="28" alt="Agora" />
       <span v-if="!collapsed" class="sidebar__wordmark">Agora</span>
     </div>
 
@@ -27,6 +16,7 @@
           :to="item.disabled ? undefined : item.to"
           :disabled="item.disabled"
           :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
+          @click="handleNavClick"
         />
       </template>
 
@@ -43,6 +33,7 @@
             class="sidebar-sub-item"
             active-class="sidebar-sub-item--active"
             exact-active-class="sidebar-sub-item--active"
+            @click="handleNavClick"
           >
             {{ sub.label }}
           </RouterLink>
@@ -64,8 +55,19 @@ import type { RouteLocationRaw } from 'vue-router'
 import SidebarItem from './SidebarItem.vue'
 import SidebarGroup from './SidebarGroup.vue'
 import Icon from './Icon.vue'
+import AgoraBrand from '../../brand/AgoraBrand.vue'
+import { useShellStore } from '@/stores/shell'
 
 const { t } = useI18n()
+const shellStore = useShellStore()
+
+function handleNavClick(): void {
+  // matchMedia entspricht exakt dem CSS-Breakpoint @media (max-width: 768px) —
+  // kein Off-by-one bei genau 768px wie bei window.innerWidth < 768.
+  if (window.matchMedia('(max-width: 768px)').matches) {
+    shellStore.closeMobileNav()
+  }
+}
 
 interface NavItem {
   id: string

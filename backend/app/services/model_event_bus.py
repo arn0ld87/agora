@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from typing import Any, Generator, Iterator, Literal
 
 from pydantic import BaseModel, ConfigDict
+from ..contracts import ProviderType
 
 from ..utils.logger import get_logger
 
@@ -61,7 +62,7 @@ class ModelActiveEvent(BaseModel):
         "graph",
         "unknown",
     ]
-    provider: Literal["ollama", "cloud", "openai", "unknown"]
+    provider: ProviderType
     ts: float
     extra: dict[str, Any] | None = None
 
@@ -113,7 +114,7 @@ class ModelEventBus:
                     )
 
     @contextmanager
-    def _managed_queue(self) -> Generator[queue.Queue[ModelActiveEvent], None, None]:
+    def _managed_queue(self) -> Generator[queue.Queue[ModelActiveEvent]]:
         """Register a new subscriber queue, yield it, then unregister on exit."""
         q: queue.Queue[ModelActiveEvent] = queue.Queue(maxsize=self._maxsize)
         qid = id(q)

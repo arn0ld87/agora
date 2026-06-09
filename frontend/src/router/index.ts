@@ -1,12 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
-import Home from '../views/Home.vue'
-import MainView from '../views/MainView.vue'
-import SimulationView from '../views/SimulationView.vue'
-import SimulationRunView from '../views/SimulationRunView.vue'
-import ReportView from '../views/ReportView.vue'
-import InteractionView from '../views/InteractionView.vue'
-import SettingsView from '../views/SettingsView.vue'
+import { getAgoraToken } from '../api/index'
 
 const routes: RouteRecordRaw[] = [
   // Root → Dashboard (v4-AppShell ist Default-Einstieg)
@@ -19,7 +13,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/home',
     name: 'Home',
-    component: Home,
+    component: () => import('../views/Home.vue'),
   },
 
   // Dashboard — AppShell-Wrapper (Slice F)
@@ -72,58 +66,62 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/api-keys',
     name: 'SettingsApiKeys',
     component: () => import('../views/Settings/SettingsApiKeysView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/settings/audit-logs',
     name: 'SettingsAuditLogs',
     component: () => import('../views/Settings/SettingsAuditLogsView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/settings/llm-routing',
     name: 'SettingsLlmRouting',
     component: () => import('../views/Settings/LlmRoutingView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/settings/llm-providers',
     name: 'SettingsLlmProviders',
     component: () => import('../views/Settings/LlmProvidersView.vue'),
+    meta: { requiresAuth: true },
   },
   // Klassische SettingsView bleibt erreichbar fuer Slice-G-Migration
   {
     path: '/settings-classic',
     name: 'SettingsClassic',
-    component: SettingsView,
+    component: () => import('../views/SettingsView.vue'),
   },
 
   // Legacy-Prozess-Routen
   {
     path: '/process/:projectId',
     name: 'Process',
-    component: MainView,
+    component: () => import('../views/MainView.vue'),
     props: true,
   },
   {
     path: '/simulation/:simulationId',
     name: 'Simulation',
-    component: SimulationView,
+    component: () => import('../views/SimulationView.vue'),
     props: true,
   },
   {
     path: '/simulation/:simulationId/start',
     name: 'SimulationRun',
-    component: SimulationRunView,
+    component: () => import('../views/SimulationRunView.vue'),
     props: true,
   },
   {
     path: '/report/:reportId',
     name: 'Report',
-    component: ReportView,
+    component: () => import('../views/ReportView.vue'),
     props: true,
   },
   {
     path: '/interaction/:reportId',
     name: 'Interaction',
-    component: InteractionView,
+    component: () => import('../views/InteractionView.vue'),
     props: true,
   },
 
@@ -185,11 +183,24 @@ const routes: RouteRecordRaw[] = [
     name: 'Agora2026',
     component: () => import('../views/agora2026/Agora2026View.vue'),
   },
+
+  // Catch-all: unbekannte Pfade landen auf der NotFound-View statt leerer Shell.
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('../views/NotFoundView.vue'),
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.beforeEach((to) => {
+  if (!to.meta?.requiresAuth) return true
+  if (getAgoraToken()) return true
+  return { name: 'Dashboard', query: { authRequired: '1', next: to.fullPath } }
 })
 
 export default router

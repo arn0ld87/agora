@@ -1,13 +1,163 @@
 {
   "permissions": {
     "allow": [
-      "*"
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "MultiEdit(**)",
+      "Glob(**)",
+      "Grep(**)",
+      "LS(**)",
+      "Think(**)",
+      "TodoWrite(**)",
+      "WebFetch(domain:*)",
+      "WebSearch",
+      "mcp__*",
+      "Skill(**)",
+      "Agent(*)",
+      "Task(*)",
+      "Bash(pwd)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(rg *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(gh issue list*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh run list*)",
+      "Bash(gh run view*)",
+      "Bash(code-review-graph *)",
+      "Bash(uvx code-review-graph *)",
+      "Bash(context-mode doctor*)",
+      "Bash(context-mode *)",
+      "Bash(cd backend && uv run pytest tests/contracts/ -x -q*)",
+      "Bash(cd backend && uv run python -m app.contracts.dump_schemas*)",
+      "Bash(cd backend && uv run ruff check*)",
+      "Bash(cd backend && uv run mypy app*)",
+      "Bash(cd frontend && npm run check*)",
+      "Bash(cd frontend && npm test*)",
+      "Bash(npm run check*)",
+      "Bash(npm run setup:all*)"
     ],
-    "ask": [],
-    "deny": [],
-    "defaultMode": "default"
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(sudo *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(chown -R *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Read(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Bash(chmod *)",
+      "Bash(git push*)",
+      "Bash(git commit*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git merge*)",
+      "Bash(git rebase*)",
+      "Bash(docker compose up*)",
+      "Bash(docker compose down*)"
+    ],
+    "defaultMode": "auto"
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
@@ -15,6 +165,48 @@
           {
             "type": "command",
             "command": "FILE=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$FILE\" in *.py) cd backend 2>/dev/null && uv run ruff check --fix \"$FILE\" 2>&1 | head -10 ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Read|Write|Edit|NotebookEdit|Glob|Grep|TodoWrite|TaskCreate|TaskUpdate|EnterPlanMode|ExitPlanMode|Skill|Agent|AskUserQuestion|EnterWorktree|mcp__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/posttooluse.mjs\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/precompact.mjs\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/userpromptsubmit.mjs\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/sessionstart.mjs\""
           }
         ]
       }

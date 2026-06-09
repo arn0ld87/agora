@@ -11,7 +11,7 @@
  * Nach Slice-2-Migration: active/subActive/settingsOpen Props entfernt.
  * State kommt aus useSidebarState (localStorage) + Router.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { makeTestRouter } from './testRouter'
@@ -44,6 +44,18 @@ describe('Sidebar', () => {
     lsMock.clear()
     useSidebarState._resetForTesting()
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    // matchMedia via Object.defineProperty zurücksetzen falls gesetzt
+    if (typeof window !== 'undefined' && (window as typeof window & { matchMedia?: unknown }).matchMedia) {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: undefined,
+      })
+    }
   })
 
   it('mountet ohne Crash', async () => {
@@ -129,6 +141,50 @@ describe('Sidebar', () => {
     // DE-Locale: general="Allgemein", llmRouting="LLM-Routing"
     expect(text).toContain('Allgemein')
     expect(text).toContain('LLM-Routing')
+  })
+
+  it('handleNavClick schliesst Mobile-Nav bei genau 768px (matchMedia inklusiv, Off-by-one-Fix)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+
+    // matchMedia-Mock via Object.defineProperty: jsdom unterstuetzt matchMedia nicht nativ.
+    // Simuliert Breakpoint (max-width: 768px) → matches=true, d.h. Drawer-Modus aktiv bei exakt 768px.
+    const matchMediaMock = vi.fn((query: string) => ({
+      matches: query === '(max-width: 768px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: matchMediaMock,
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+    await wrapper.vm.$nextTick()
+
+    // handleNavClick direkt aufrufen (entspricht Nav-Item-Click im Drawer).
+    // SidebarItem mit `to`-Prop emittiert kein 'click'-Event in Vue 3 (RouterLink handelt),
+    // daher vm-direkter Aufruf — testet die matchMedia-Logik isoliert.
+    const vm = wrapper.vm as unknown as { handleNavClick: () => void }
+    vm.handleNavClick()
+    await wrapper.vm.$nextTick()
+
+    expect(store.mobileNavOpen).toBe(false)
+    // Sicherstellen dass matchMedia mit dem korrekten Breakpoint-Query aufgerufen wurde
+    expect(matchMediaMock).toHaveBeenCalledWith('(max-width: 768px)')
   })
 
   it('Settings-Sub-Items ausgeblendet wenn Settings-Group geschlossen (kein localStorage-State)', async () => {

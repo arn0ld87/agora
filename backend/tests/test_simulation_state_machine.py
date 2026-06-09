@@ -15,6 +15,7 @@ import pytest
 from app.services.simulation_manager import SimulationStatus
 from app.services.simulation_state_machine import (
     ALLOWED_TRANSITIONS,
+    PARTIAL_CANCEL_STATES,
     TERMINAL_STATES,
     InvalidStatusTransition,
     assert_valid_transition,
@@ -42,6 +43,9 @@ ALL_STATUSES = list(SimulationStatus)
         (SimulationStatus.RUNNING, SimulationStatus.STOPPED),
         (SimulationStatus.PAUSED, SimulationStatus.STOPPED),
         (SimulationStatus.STOPPED, SimulationStatus.RUNNING),
+        # Cooperative Cancel-Pfad (Slice 7)
+        (SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL),
+        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.COMPLETED),
         # Idempotent re-prepare aus READY (Manager prüft Status nicht)
         (SimulationStatus.READY, SimulationStatus.PREPARING),
         # Retry aus FAILED — User triggert prepare nochmal (Issue #42)
@@ -89,6 +93,12 @@ def test_allowed_transitions(
         # Self-loops (kein No-op erlaubt)
         (SimulationStatus.RUNNING, SimulationStatus.RUNNING),
         (SimulationStatus.READY, SimulationStatus.READY),
+        # CANCELLED_PARTIAL darf nicht direkt nach PREPARING springen
+        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.RUNNING),
+        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.PREPARING),
+        (SimulationStatus.CANCELLED_PARTIAL, SimulationStatus.FAILED),
+        # PAUSED → CANCELLED_PARTIAL verboten (nur aus RUNNING)
+        (SimulationStatus.PAUSED, SimulationStatus.CANCELLED_PARTIAL),
     ],
 )
 def test_forbidden_transitions(
@@ -122,6 +132,7 @@ def test_failed_allows_only_retry() -> None:
         SimulationStatus.RUNNING,
         SimulationStatus.PAUSED,
         SimulationStatus.STOPPED,
+        SimulationStatus.CANCELLED_PARTIAL,  # success-with-caveat — hat Ausgang zu COMPLETED
     ],
 )
 def test_non_terminal_states_have_outgoing(non_terminal: SimulationStatus) -> None:
@@ -199,3 +210,19 @@ def test_assert_valid_transition_allows_self_transition() -> None:
     """Self-Übergang ist No-op (idempotente Status-Setzungen)."""
     assert_valid_transition(SimulationStatus.RUNNING, SimulationStatus.RUNNING)
     assert_valid_transition(SimulationStatus.COMPLETED, SimulationStatus.COMPLETED)
+
+
+def test_cancelled_partial_is_not_terminal() -> None:
+    """CANCELLED_PARTIAL ist kein FAILED — success-with-caveat, kein Terminalzustand."""
+    assert SimulationStatus.CANCELLED_PARTIAL not in TERMINAL_STATES
+    assert SimulationStatus.CANCELLED_PARTIAL in PARTIAL_CANCEL_STATES
+    # Hat genau einen Ausgang: → COMPLETED
+    assert get_allowed_next(SimulationStatus.CANCELLED_PARTIAL) == frozenset(
+        {SimulationStatus.COMPLETED}
+    )
+
+
+def test_running_to_cancelled_partial_is_allowed() -> None:
+    """RUNNING → CANCELLED_PARTIAL: kooperativer Abbruch ist ein gültiger Übergang."""
+    assert is_valid_transition(SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL)
+    assert_valid_transition(SimulationStatus.RUNNING, SimulationStatus.CANCELLED_PARTIAL)

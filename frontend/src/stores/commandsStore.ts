@@ -119,63 +119,64 @@ export const useCommandsStore = defineStore('commands', () => {
     })
     stopPolling = stop
 
-    stopWatch = watch(
-      runs,
-      (currentRuns) => {
-        const cmds: Command[] = []
+    function rebuildDynamicCommands(currentRuns: readonly RunDetail[] | null | undefined): void {
+      const list = Array.isArray(currentRuns) ? currentRuns : []
+      const cmds: Command[] = []
 
-        for (const run of currentRuns) {
-          if (ACTIVE_STATUSES.has(run.status)) {
-            const label = runLabel(run)
-            const statusKey =
-              run.status === 'processing'
-                ? 'cmd.dynamic.statusRunning'
-                : run.status === 'paused'
-                  ? 'cmd.dynamic.statusPaused'
-                  : 'cmd.dynamic.statusPending'
-            const statusLabel = t(statusKey)
-            cmds.push({
-              id: `sim:${run.run_id}`,
-              label: t('cmd.dynamic.runLabel', { name: `${label} (${statusLabel})` }),
-              group: 'sim',
-              keywords: [run.run_id, run.entity_id, label, 'simulation', 'lauf', 'live', run.status],
-              action: () => {
-                router.push({
-                  name: 'StepSimulation',
-                  params: { simulationId: run.entity_id },
-                }).catch(() => {})
-              },
-            })
-          }
-        }
-
-        // Recent Reports: abgeschlossene Runs mit report_id, max 5
-        let reportCount = 0
-        for (const run of currentRuns) {
-          if (reportCount >= MAX_RECENT_REPORTS) break
-          if (run.status !== COMPLETED_STATUS) continue
-          const reportId = extractReportId(run)
-          if (!reportId) continue
+      for (const run of list) {
+        if (ACTIVE_STATUSES.has(run.status)) {
           const label = runLabel(run)
+          const statusKey =
+            run.status === 'processing'
+              ? 'cmd.dynamic.statusRunning'
+              : run.status === 'paused'
+                ? 'cmd.dynamic.statusPaused'
+                : 'cmd.dynamic.statusPending'
+          const statusLabel = t(statusKey)
           cmds.push({
-            id: `report:${reportId}`,
-            label: t('cmd.dynamic.reportLabel', { name: label }),
-            group: 'report',
-            keywords: [reportId, run.run_id, label, 'report', 'bericht', 'ergebnis'],
+            id: `sim:${run.run_id}`,
+            label: t('cmd.dynamic.runLabel', { name: `${label} (${statusLabel})` }),
+            group: 'sim',
+            keywords: [run.run_id, run.entity_id, label, 'simulation', 'lauf', 'live', run.status],
             action: () => {
               router.push({
-                name: 'StepReport',
-                params: { reportId },
+                name: 'StepSimulation',
+                params: { simulationId: run.entity_id },
               }).catch(() => {})
             },
           })
-          reportCount++
         }
+      }
 
-        dynamicCommands.value = cmds
-      },
-      { deep: true },
-    )
+      // Recent Reports: abgeschlossene Runs mit report_id, max 5
+      let reportCount = 0
+      for (const run of list) {
+        if (reportCount >= MAX_RECENT_REPORTS) break
+        if (run.status !== COMPLETED_STATUS) continue
+        const reportId = extractReportId(run)
+        if (!reportId) continue
+        const label = runLabel(run)
+        cmds.push({
+          id: `report:${reportId}`,
+          label: t('cmd.dynamic.reportLabel', { name: label }),
+          group: 'report',
+          keywords: [reportId, run.run_id, label, 'report', 'bericht', 'ergebnis'],
+          action: () => {
+            router.push({
+              name: 'StepReport',
+              params: { reportId },
+            }).catch(() => {})
+          },
+        })
+        reportCount++
+      }
+
+      dynamicCommands.value = cmds
+    }
+
+    stopWatch = watch(runs, rebuildDynamicCommands, { deep: true })
+    // Kick off once for already-loaded runs that arrived before bind.
+    rebuildDynamicCommands(runs.value)
   }
 
   /**

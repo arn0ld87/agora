@@ -3,7 +3,6 @@ Preparation-related simulation API routes split from the main module.
 """
 
 import os
-import threading
 from typing import Any, Optional
 
 from flask import request
@@ -248,6 +247,29 @@ def prepare_simulation():
         )
 
     force_regenerate = data.get('force_regenerate', False)
+
+    # Project einmalig laden — wird sowohl für den P5.3-Profil-Fallback als
+    # auch für die Anforderungs-Validierung (simulation_requirement) und das
+    # nachfolgende Lesen weiterer Felder benötigt (Gemini-MEDIUM auf PR #528:
+    # vorher wurde derselbe Datensatz zwei Mal aus dem ProjectManager geholt).
+    project = ProjectManager.get_project(state.project_id)
+    if not project:
+        return json_error(
+            ApiErrorCode.NOT_FOUND,
+            status=404,
+            message=f"Project does not exist: {state.project_id}",
+        )
+
+    # P5.3-Fix: Wenn Request kein Profil mitschickt (Frontend setzt bei
+    # Profil-Auswahl `STORAGE_MODEL=default`), das im Projekt persistierte
+    # Profil aus dem Ontology-Schritt als Default injizieren — sonst landet
+    # die Sim-Vorbereitung im Server-Default-Modell. Respektiert expliziten
+    # Single-Run-Override (analog graph.py / report.py).
+    _data_profile = (data.get('llm_profile_id') or '').strip() or None
+    _data_model = (data.get('llm_model') or '').strip() or None
+    if not _data_profile and (not _data_model or _data_model.lower() == 'default'):
+        if getattr(project, 'llm_profile_id', None):
+            data['llm_model'] = f"profile:{project.llm_profile_id}"
     # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
     from ..utils.llm_profile_resolver import expand_profile_in_data
     expand_profile_in_data(data)
@@ -279,14 +301,6 @@ def prepare_simulation():
                 "prepare_info": prepare_info,
             })
         logger.info(f"Simulation {simulation_id} has no preparation complete, preparing now")
-
-    project = ProjectManager.get_project(state.project_id)
-    if not project:
-        return json_error(
-            ApiErrorCode.NOT_FOUND,
-            status=404,
-            message=f"Project does not exist: {state.project_id}",
-        )
 
     simulation_requirement = project.simulation_requirement or ""
     if not simulation_requirement:
@@ -496,8 +510,9 @@ def prepare_simulation():
                 failed_state.error = str(exc)
                 manager._set_status(failed_state, SimulationStatus.FAILED)
 
-    thread = threading.Thread(target=run_prepare, daemon=True)
-    thread.start()
+    # TODO(P0-queue): migrate to Redis-Queue (RQ) in Wave 2 — see app/jobs/__init__.py
+    from ..jobs import enqueue
+    enqueue("simulation_prepare", run_prepare)
 
     return json_success({
         "simulation_id": simulation_id,

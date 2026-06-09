@@ -12,6 +12,7 @@ Adopt step-by-step generation strategy to avoid failures from generating too lon
 
 import json
 import math
+import os
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -343,6 +344,12 @@ class SimulationConfigGenerator:
         
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
 
+        # ========== Simulation-Floor-Check (Slice 4, Issue #496) ==========
+        self._validate_persona_quota(all_agent_configs)
+
+        # ========== Skeptiker-Quote ≥20 % (Slice 5, Issue #497) ==========
+        all_agent_configs = self._ensure_skeptic_quota(all_agent_configs)
+
         # ========== Assign initial post agents ==========
         logger.info("Assigning appropriate publisher agents to initial posts...")
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
@@ -458,26 +465,37 @@ class SimulationConfigGenerator:
         max_attempts = 3
         last_error = None
 
+        from ..utils.llm_client import should_disable_openai_json_mode
+        disable_json_mode = should_disable_openai_json_mode(self.base_url)
+
         for attempt in range(max_attempts):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
+                create_kwargs: Dict[str, Any] = {
+                    "model": self.model_name,
+                    "messages": [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": prompt},
                     ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7 - (attempt * 0.1)  # Lower temperature with each retry
-                    # Don't set max_tokens, let LLM generate freely
-                )
+                    "temperature": 0.7 - (attempt * 0.1),
+                }
+                if not disable_json_mode:
+                    create_kwargs["response_format"] = {"type": "json_object"}
+                response = self.client.chat.completions.create(**create_kwargs)
 
-                content = response.choices[0].message.content
+                content = response.choices[0].message.content or ""
                 finish_reason = response.choices[0].finish_reason
 
                 # Check if output was truncated
                 if finish_reason == 'length':
                     logger.warning(f"LLM output truncated (attempt {attempt+1})")
                     content = self._fix_truncated_json(content)
+
+                if not content.strip():
+                    logger.warning(
+                        f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
+                    )
+                    last_error = ValueError("empty LLM content")
+                    continue
 
                 # Try to parse JSON
                 try:
@@ -948,7 +966,7 @@ Return JSON format (no markdown):
                 activity_level=cfg.get("activity_level", 0.5),
                 posts_per_hour=cfg.get("posts_per_hour", 0.5),
                 comments_per_hour=cfg.get("comments_per_hour", 1.0),
-                active_hours=cfg.get("active_hours", list(range(9, 23))),
+                active_hours=self._coerce_int_list(cfg.get("active_hours"), list(range(9, 23))),
                 response_delay_min=cfg.get("response_delay_min", 5),
                 response_delay_max=cfg.get("response_delay_max", 60),
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
@@ -959,6 +977,79 @@ Return JSON format (no markdown):
 
         return configs
     
+    @staticmethod
+    def _validate_persona_quota(personas: List[Any]) -> None:
+        """Enforce Simulation-Floor: mindestens 30 Personas pro Run.
+
+        Override via Umgebungsvariable ``AGORA_ALLOW_SMALL_SIM=1`` für
+        Entwicklungs- und Test-Szenarien. Im Produktivbetrieb muss die
+        Mindestanzahl eingehalten werden, um statistisch belastbare
+        Simulationsergebnisse zu gewährleisten (Slice 4, Issue #496).
+        """
+        if len(personas) < 30 and os.getenv("AGORA_ALLOW_SMALL_SIM") != "1":
+            raise ValueError(
+                "Simulation-Floor: mindestens 30 Personas erforderlich "
+                "(Override via AGORA_ALLOW_SMALL_SIM=1)."
+            )
+
+    @staticmethod
+    def _ensure_skeptic_quota(
+        personas: List[AgentActivityConfig],
+        min_ratio: float = 0.20,
+    ) -> List[AgentActivityConfig]:
+        """Erzwingt ≥ ``min_ratio`` Skeptiker im Persona-Set.
+
+        Als Skeptiker gilt ein Agent mit ``stance == "opposing"``.
+        Falls die Quote nicht erreicht ist, werden synthetische
+        AgentActivityConfig-Objekte mit ``stance="opposing"`` und
+        einem negativen ``sentiment_bias`` ergänzt, bis die Quote
+        erfüllt ist. Die originalen Personas bleiben unverändert.
+
+        Slice 5 (Issue #497): Echo-Chamber-Red-Team.
+        """
+        if not personas:
+            return personas
+
+        total = len(personas)
+        skeptic_count = sum(
+            1 for p in personas if getattr(p, "stance", "") == "opposing"
+        )
+        required = math.ceil(total * min_ratio)
+
+        if skeptic_count >= required:
+            return personas
+
+        to_add = required - skeptic_count
+        result = list(personas)
+        base_agent_id = max((p.agent_id for p in personas), default=-1) + 1
+
+        for i in range(to_add):
+            synthetic = AgentActivityConfig(
+                agent_id=base_agent_id + i,
+                entity_uuid=f"synthetic-skeptic-{base_agent_id + i}",
+                entity_name=f"Skeptiker {base_agent_id + i}",
+                entity_type="Person",
+                activity_level=0.7,
+                posts_per_hour=0.5,
+                comments_per_hour=1.2,
+                active_hours=list(range(18, 23)),
+                response_delay_min=5,
+                response_delay_max=30,
+                sentiment_bias=-0.5,
+                stance="opposing",
+                influence_weight=1.0,
+            )
+            result.append(synthetic)
+            logger.info(
+                "_ensure_skeptic_quota: synthetischen Skeptiker hinzugefügt "
+                "(agent_id=%d, gesamt-skeptisch=%d/%d)",
+                synthetic.agent_id,
+                skeptic_count + i + 1,
+                total + i + 1,
+            )
+
+        return result
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """Generate single agent configuration based on DACH timing rules."""
         entity_type = (entity.get_entity_type() or "Unknown").lower()

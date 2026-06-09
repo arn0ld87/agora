@@ -127,6 +127,8 @@ async function handleNewProject() {
     const formData = new FormData()
     pending.files.forEach((f) => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
+    formData.append('num_agents', String(pending.numAgents))
+    formData.append('num_rounds', String(pending.numRounds))
     // LLM-Auswahl: persistiertes Profil hat Vorrang vor Preset/Ollama-Auswahl.
     // Bei gesetzter llmProfileId sendet das Frontend nur llm_profile_id —
     // Backend-P5.3 löst daraus Provider + Modell auf.

@@ -58,7 +58,7 @@ export const ClaimSchema = z
     id: z.string().min(1),
     statement: z.string().min(8),
     evidence_refs: z.array(z.string()).min(1),
-    confidence: z.enum(["low", "medium", "high"]),
+    confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
     persona_ids: z.array(z.string()).default([]),
     aggregation_basis: z.enum([
       "seed",
@@ -136,7 +136,7 @@ export const ProjectImpactSchema = z
     id: z.string().min(1),
     beschreibung: z.string().min(1),
     affected_segments: z.array(z.string()).default([]),
-    confidence: z.enum(["low", "medium", "high"]),
+    confidence: z.enum(["speculative", "low", "medium", "high", "verified"]),
     evidence_refs: z.array(z.string()).default([]),
   })
   .strict();
@@ -203,6 +203,39 @@ export const ReportModeSchema = z.enum(["strict", "balanced", "explorative"]);
 export type ReportMode = z.infer<typeof ReportModeSchema>;
 export const DEFAULT_REPORT_MODE: ReportMode = "balanced";
 
+// === ModelAttribution (Slice 8 — 2026-05-16) ===
+// Spiegelt backend/app/contracts/report_v3.py::ModelAttribution.
+// Pro Pipeline-Stage ein Eintrag mit Provider/Modell und optionalen
+// Token-/Latency-Metriken. Backward-compat: default [].
+// Slice 5 (Issue #497): "red_team" ergänzt.
+export const ModelAttributionStageSchema = z.enum([
+  "ontology",
+  "graph_extraction",
+  "simulation",
+  "report_outline",
+  "report_section",
+  "report_synthesis",
+  "red_team",
+  "evidence_extraction",
+  "interview",
+  "other",
+]);
+export type ModelAttributionStage = z.infer<typeof ModelAttributionStageSchema>;
+
+export const ModelAttributionSchema = z
+  .object({
+    stage: ModelAttributionStageSchema,
+    provider: z.string().min(1),
+    model_id: z.string().min(1),
+    prompt_tokens: z.number().int().nonnegative().nullable().default(null),
+    completion_tokens: z.number().int().nonnegative().nullable().default(null),
+    latency_ms: z.number().nonnegative().nullable().default(null),
+    started_at: z.string().datetime().nullable().default(null),
+    note: z.string().max(200).nullable().default(null),
+  })
+  .strict();
+export type ModelAttribution = z.infer<typeof ModelAttributionSchema>;
+
 // === ReportV3 Container ===
 export const ReportV3Schema = z
   .object({
@@ -222,6 +255,9 @@ export const ReportV3Schema = z
     content_ideas: z.array(ContentIdeaSchema).default([]),
     data_gaps: z.array(DataGapSchema).default([]),
     hypotheses: z.array(HypothesisSchema).default([]),
+    // Slice 5 (Issue #497): Red-Team-Befunde — max 10, Backward-compat default [].
+    red_team_findings: z.array(z.string()).max(10).default([]),
+    model_attribution: z.array(ModelAttributionSchema).default([]),
   })
   .strict();
 export type ReportV3 = z.infer<typeof ReportV3Schema>;

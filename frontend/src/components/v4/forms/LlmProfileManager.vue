@@ -2,11 +2,24 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from './Card.vue'
+import ModelPicker from './ModelPicker.vue'
 import { useLlmProfilesStore } from '@/store/llmProfiles'
 import type { LlmProfile, LlmProvider } from '@/contracts/llmProfileContract'
+import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 
 const { t } = useI18n()
 const store = useLlmProfilesStore()
+
+// Mapping ModelPicker.provider_id (Runtime) ⇄ LlmProfile.provider (Storage).
+// Mehrere Runtime-Provider können auf denselben Profile-Provider mappen
+// (z. B. `ollama_cloud` und `ollama` → 'ollama').
+const RUNTIME_TO_PROFILE_PROVIDER: Record<string, { provider: LlmProvider; baseUrl: string }> = {
+  openai:        { provider: 'openai',    baseUrl: 'https://api.openai.com/v1' },
+  ollama:        { provider: 'ollama',    baseUrl: 'http://localhost:11434/v1' },
+  ollama_cloud:  { provider: 'ollama',    baseUrl: 'https://ollama.com/v1' },
+  gemini:        { provider: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  anthropic:     { provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+}
 
 // ---------------------------------------------------------------------------
 // Preset-Definitionen (analog zu LlmProviderCard)
@@ -90,9 +103,54 @@ function cancel(): void {
 function selectPreset(preset: Preset): void {
   formProvider.value = preset.key
   formBaseUrl.value  = preset.url
+  // Preset wechselt → bisheriges Modell ist nicht mehr garantiert verfügbar.
+  // Picker zeigt daher leere Auswahl, User muss neu wählen.
+  formModel.value = ''
   if (!preset.needsKey) {
     apiKeyEditMode.value = 'unchanged'
     apiKeyDraft.value    = ''
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ModelPicker-Integration
+// ---------------------------------------------------------------------------
+// Provider-Mapping rückwärts: Wir bauen aus den gespeicherten Formularfeldern
+// einen Pseudo-StageLLMRoute, damit der Picker den Eintrag highlighten kann.
+const pickerValue = computed<StageLLMRoute | null>(() => {
+  if (!formModel.value) return null
+  // Best-Effort: profile.provider → erste passende Runtime-ID (Cloud
+  // gegenüber Local bevorzugen, wenn base_url darauf hinweist).
+  const providerId =
+    formProvider.value === 'ollama'
+      ? formBaseUrl.value.includes('ollama.com') ? 'ollama_cloud' : 'ollama'
+      : formProvider.value
+  return {
+    stage: null,
+    provider_id: providerId,
+    model: formModel.value,
+    temperature: null,
+    max_tokens: null,
+    reasoning_effort: 'none',
+    provider_options: {},
+  }
+})
+
+function onPickerChange(route: StageLLMRoute | null): void {
+  if (route === null) {
+    formModel.value = ''
+    return
+  }
+  formModel.value = route.model ?? ''
+  const mapped = route.provider_id != null ? RUNTIME_TO_PROFILE_PROVIDER[route.provider_id] : undefined
+  if (mapped) {
+    formProvider.value = mapped.provider
+    // base_url nur überschreiben, wenn das aktuelle Feld leer ist oder zur
+    // alten Mapping-Tabelle gehört — sonst zerstören wir handgepflegte URLs.
+    const knownUrls = Object.values(RUNTIME_TO_PROFILE_PROVIDER).map((m) => m.baseUrl)
+    if (!formBaseUrl.value || knownUrls.includes(formBaseUrl.value)) {
+      formBaseUrl.value = mapped.baseUrl
+    }
   }
 }
 
@@ -278,12 +336,10 @@ onMounted(() => {
         <!-- Modell -->
         <div class="llm-field">
           <label class="llm-label" for="pm-model">{{ t('settings.v4.llmProfiles.modelLabel') }}</label>
-          <input
-            id="pm-model"
-            v-model="formModel"
-            type="text"
-            class="llm-input"
-            placeholder="qwen2.5:32b"
+          <ModelPicker
+            :model-value="pickerValue"
+            :placeholder="t('settings.v4.llmProfiles.modelLabel')"
+            @update:model-value="onPickerChange"
           />
         </div>
 

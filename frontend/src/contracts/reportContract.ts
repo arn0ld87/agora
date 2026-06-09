@@ -8,8 +8,15 @@
  */
 import { z } from "zod";
 
+/**
+ * Reviewer-Floor (report_4fe2dacd80ba): Claims mit <2 Evidence-Items werden
+ * im Backend zur Hypothesis geroutet, bevor der Report das Frontend erreicht.
+ * Das Schema bleibt permissive (min 1), damit alte Reports lesbar bleiben.
+ */
+export const CLAIM_MIN_EVIDENCE_FOR_CLAIM = 2;
+
 // === Enums ===
-export const ConfidenceLabelSchema = z.enum(["low", "medium", "high", "verified"]);
+export const ConfidenceLabelSchema = z.enum(["speculative", "low", "medium", "high", "verified"]);
 export type ConfidenceLabel = z.infer<typeof ConfidenceLabelSchema>;
 
 export const EvidenceTypeSchema = z.enum([
@@ -60,11 +67,21 @@ export const EvidenceItemSchema = z.object({
   agent_log_ref: AgentLogRefSchema.optional().nullable(),
   match_score: z.number().min(0).max(1).optional().nullable(),
   supports_claim: z.boolean().optional().nullable(),
+  // MAI-14 (backend) + Sub-Slice 05.8 (Zod-Spiegel):
+  // Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).
+  // confidence_calculator._has_contradiction nutzt es, um widersprüchliche
+  // Sentiment-Vektoren zu erkennen. Pendant zu EvidenceItemModel.sentiment_score.
+  sentiment_score: z.number().min(-1).max(1).optional().nullable(),
   quote: z.string().min(1).max(500).optional().nullable(),
   source_id_anchor: z.string().min(1).max(200).optional().nullable(),
   // ADR-0002 Anker 3 (Sub-Slice M11.7b)
   source_kind: EvidenceSourceKindSchema.default("seed_corpus"),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
+  // Slice 8 (2026-05-16) — Provider+Modell, das diese Evidence-Zeile
+  // extrahiert hat. Pendant zu EvidenceItemModel.source_model. Format
+  // "<provider>/<model_id>" (z. B. "ollama/qwen2.5:32b"). None bei
+  // Pre-Slice-8-Daten — daher .nullable().optional().
+  source_model: z.string().max(200).nullable().optional(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt EvidenceItemModel.reject_inference_in_evidence
   if (FORBIDDEN_EVIDENCE_TYPES.has(value.type)) {
@@ -93,7 +110,8 @@ export const ReportClaimSchema = z.object({
   notes: z.string().optional().nullable(),
 }).strict().superRefine((value, ctx) => {
   // Spiegelt ReportClaimModel.non_low_claims_need_evidence
-  if (value.confidence_label !== "low" && value.evidence.length === 0) {
+  // speculative und low dürfen ohne Evidence auskommen
+  if (value.confidence_label !== "low" && value.confidence_label !== "speculative" && value.evidence.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `Label '${value.confidence_label}' verlangt mindestens eine Evidence mit nachvollziehbarem Anker.`,
@@ -174,6 +192,8 @@ export const ReportSectionSchema = z.object({
   section_summary: z.string().min(1),
   claims: z.array(ReportClaimSchema).default([]),
   hypotheses: z.array(ReportSectionHypothesisSchema).default([]),
+  // Slice 3 (Issue #495): Überhang nach Cap von 5 — spiegelt backend ReportSectionModel.hypotheses_appendix.
+  hypotheses_appendix: z.array(ReportSectionHypothesisSchema).max(50).default([]),
   data_gaps: z.array(ReportSectionDataGapSchema).default([]),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
@@ -211,6 +231,7 @@ export const ReportSchema = z.object({
   error: z.string().optional().nullable(),
   has_evidence: z.boolean().default(false),
   evidence_sections: z.number().int().min(0).default(0),
+  red_team_findings: z.array(z.string()).max(10).default([]),
 }).strict();
 export type Report = z.infer<typeof ReportSchema>;
 

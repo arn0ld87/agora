@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 // ── vue-i18n minimal stubben ────────────────────────────────────────────────
@@ -46,10 +47,10 @@ vi.mock('../../composables/useSystemLog', () => ({
 
 vi.mock('../../composables/useWorkspaceMode', () => ({
   useWorkspaceMode: () => ({
-    viewMode: 'split',
+    viewMode: ref('split'),
     workspaceModes: [],
-    leftPanelStyle: {},
-    rightPanelStyle: {},
+    leftPanelStyle: ref({ width: '50%', opacity: 1 }),
+    rightPanelStyle: ref({ width: '50%', opacity: 1 }),
     toggleMaximize: vi.fn(),
   }),
 }))
@@ -134,6 +135,28 @@ describe('SimulationRunView (Slice J.2 / Issue #220)', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     expect(getRunStatus).not.toHaveBeenCalled()
+  })
+
+  it('blendet das Graph-Panel auf @close-graph aus und behält graphData', async () => {
+    const wrapper = await mountView()
+
+    const vm = wrapper.vm as unknown as {
+      graphData: unknown
+      leftPanelStyle: { width: string; opacity: number }
+      rightPanelStyle: { width: string; opacity: number }
+      closeGraphPanel: () => void
+    }
+    // Snapshot setzen, damit wir prüfen können, dass close-graph ihn nicht killt.
+    ;(vm as unknown as { graphData: { graph_id: string } }).graphData = { graph_id: 'g1' }
+
+    vm.closeGraphPanel()
+    await wrapper.vm.$nextTick()
+
+    expect(vm.leftPanelStyle.width).toBe('0%')
+    expect(vm.leftPanelStyle.opacity).toBe(0)
+    expect(vm.rightPanelStyle.width).toBe('100%')
+    // graphData darf NICHT geleert werden — Task 5 acceptance criterion.
+    expect((vm as unknown as { graphData: { graph_id: string } }).graphData).toEqual({ graph_id: 'g1' })
   })
 
   it('propagiert update-progress-Event korrekt in statusText', async () => {

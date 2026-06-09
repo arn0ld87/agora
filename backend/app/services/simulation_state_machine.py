@@ -52,6 +52,7 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
         {
             SimulationStatus.PAUSED,
             SimulationStatus.STOPPED,
+            SimulationStatus.CANCELLED_PARTIAL,
             SimulationStatus.COMPLETED,
             SimulationStatus.FAILED,
         }
@@ -64,12 +65,22 @@ ALLOWED_TRANSITIONS: dict[SimulationStatus, frozenset[SimulationStatus]] = {
         }
     ),
     SimulationStatus.STOPPED: frozenset({SimulationStatus.RUNNING}),
+    # CANCELLED_PARTIAL: cooperative cancel completed; only terminal follow-up
+    # is COMPLETED (Teil-Report wurde persistiert — kein weiterer Lauf nötig).
+    SimulationStatus.CANCELLED_PARTIAL: frozenset({SimulationStatus.COMPLETED}),
     SimulationStatus.COMPLETED: frozenset(),
     SimulationStatus.FAILED: frozenset({SimulationStatus.PREPARING}),
 }
 
 TERMINAL_STATES: frozenset[SimulationStatus] = frozenset(
     {SimulationStatus.COMPLETED, SimulationStatus.FAILED}
+)
+
+# CANCELLED_PARTIAL ist kein FAILED — es ist ein "success-with-caveat".
+# Es steht bewusst nicht in TERMINAL_STATES, damit der Übergang
+# CANCELLED_PARTIAL → COMPLETED möglich bleibt (Teil-Report-Finalisierung).
+PARTIAL_CANCEL_STATES: frozenset[SimulationStatus] = frozenset(
+    {SimulationStatus.CANCELLED_PARTIAL}
 )
 
 
@@ -130,6 +141,7 @@ def assert_valid_transition(
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "TERMINAL_STATES",
+    "PARTIAL_CANCEL_STATES",
     "InvalidStatusTransition",
     "assert_valid_transition",
     "is_valid_transition",

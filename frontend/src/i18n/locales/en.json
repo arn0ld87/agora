@@ -174,7 +174,8 @@
       "code": "Source on GitHub",
       "by": "Built by",
       "byName": "Alexander Schneider",
-      "bySite": "alexle135.de"
+      "bySite": "alexle135.de",
+      "neo4jBrowser": "Neo4j Browser ↗"
     }
   },
   "history": {
@@ -247,6 +248,8 @@
     },
     "model": {
       "label": "LLM model",
+      "placeholder": "Select model …",
+      "workspaceDefaultHint": "No selection: workspace default from /settings/llm-providers will be used.",
       "presetGroup": "Recommended",
       "ollamaGroup": "Locally available",
       "customGroup": "Custom",
@@ -254,7 +257,7 @@
       "customPlaceholder": "e.g. qwen3-coder-next:cloud",
       "refresh": "Refresh list",
       "loadingModels": "Loading available models…",
-      "noOllama": "No connection to Ollama. Use custom input or start Ollama.",
+      "noOllama": "No connection to Ollama. Configure a provider in /settings/llm-providers or start Ollama.",
       "openAiDefault": "OpenAI default model active.",
       "default": "Default from .env"
     },
@@ -285,6 +288,10 @@
       "sessionKeyLabel": "Session API key",
       "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
       "checkingKey": "Checking key status…"
+    },
+    "llmProfile": {
+      "hint": "Used for persona generation.",
+      "modelIgnored": "Overridden by profile."
     },
     "personas": {
       "title": "Generate personas",
@@ -419,7 +426,8 @@
       "success": "OK",
       "failed": "Failed",
       "latency": "Latency",
-      "error_type": "Error Type"
+      "error_type": "Error Type",
+      "model_placeholder": "Select model …"
     }
   },
   "step3": {
@@ -444,6 +452,9 @@
       "stop": "Stop",
       "stopConfirm": "Really abort the simulation? Existing data is preserved.",
       "stopped": "Stopped.",
+      "cancel": "Cancel",
+      "cancelConfirm": "Gracefully cancel the simulation? Already completed stages are preserved as a partial report.",
+      "cancelled": "Cancellation requested.",
       "completed": "Completed."
     },
     "status": {
@@ -453,6 +464,9 @@
       "completed": "Completed — {total} rounds",
       "failed": "Failed",
       "elapsed": "Elapsed: {time}"
+    },
+    "simClock": {
+      "tooltip": "Virtual sim clock (agent wallclock, Europe/Berlin)"
     },
     "feed": {
       "title": "Live feed",
@@ -536,19 +550,35 @@
     },
     "model": {
       "reportLabel": "Model for report",
-      "customLabel": "Custom model",
-      "customPlaceholder": "e.g. deepseek-v3.2:cloud",
-      "providerLabel": "LLM provider",
-      "apiKeyLabel": "API key",
-      "apiKeyPlaceholder": "API key for selected provider",
-      "baseUrlLabel": "Base URL (optional)",
-      "baseUrlPlaceholder": "e.g. https://api.openai.com/v1",
+      "placeholder": "Select model …",
       "regenerate": "Regenerate"
+    },
+    "llmProfile": {
+      "hint": "Used for report generation."
     },
     "quote": {
       "openSource": "Open source"
     },
+    "reportConfirm": {
+      "title": "Start report?",
+      "description": "The simulation is complete. Please select a model and start report generation manually.",
+      "startButton": "Start report",
+      "stopButton": "Cancel",
+      "stopDisabledTip": "Cancel available after backend slice 6"
+    },
     "next": "Next: conversation →"
+  },
+  "report": {
+    "provenance": {
+      "title": "Model provenance",
+      "stage": "Stage",
+      "provider": "Provider",
+      "model": "Model",
+      "promptTokens": "Prompt tokens",
+      "completionTokens": "Completion tokens",
+      "latencyMs": "Latency",
+      "noMetricsHint": "No token or latency metrics captured."
+    }
   },
   "step5": {
     "kicker": "№ 05 — CONVERSATION",
@@ -598,7 +628,9 @@
     "ui": {
       "toggleEdgeLabels": "Edge Labels",
       "pauseLayout": "Pause layout",
-      "resumeLayout": "Resume layout"
+      "resumeLayout": "Resume layout",
+      "closePanel": "Close graph panel",
+      "exportHtml": "Export as standalone HTML"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
@@ -734,7 +766,8 @@
   },
   "topbar": {
     "search": "Search",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "openNavigation": "Open navigation"
   },
   "logs": {
     "drawer": {
@@ -744,9 +777,13 @@
       "search": "Search…",
       "pause": "Pause auto-scroll",
       "empty": "No log lines yet.",
+      "loading": "Loading logs…",
+      "unknownError": "Failed to load logs.",
+      "noFileYet": "Today's log file has not been written yet — backend is reachable.",
       "connectionError": "SSE connection interrupted, browser will attempt reconnect…",
       "reconnectExhausted": "Log stream connection lost after multiple attempts.",
-      "reconnect": "Reconnect"
+      "reconnect": "Reconnect",
+      "reconnecting": "Reconnecting…"
     }
   },
   "settings": {
@@ -996,6 +1033,8 @@
     "label": "Active model",
     "idle": "Idle",
     "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "unknown": "Unknown model",
     "failed": "Connection lost",
     "reload": "Reconnect",
     "provider": {
@@ -1135,12 +1174,22 @@
       "dropHint": "Drop file here or click",
       "modelLabel": "Model",
       "modelDefault": "Default",
+      "modelPlaceholder": "Select model …",
+      "profileLabel": "Profile (optional)",
+      "profileNone": "— Disable profile —",
       "languageLabel": "Language",
+      "languageDe": "Deutsch",
+      "languageEn": "English",
       "startCta": "Start",
       "disabledHint": "Select a file and enter a requirement first.",
       "requirementLabel": "Research question / requirement",
       "requirementPlaceholder": "e.g. \"What political reactions are expected in the DACH region?\"",
-      "profileDefault": "Default"
+      "profileDefault": "Default",
+      "numAgentsLabel": "Personas",
+      "numRoundsLabel": "Sim rounds",
+      "numAgentsWarning": "Below recommended floor (30). Reduced statistical significance.",
+      "smallSimBadge": "SMALL_SIM",
+      "smallSimActiveTooltip": "AGORA_ALLOW_SMALL_SIM=1 is active — slider goes down to 10 instead of 30. Statistical significance is limited."
     },
     "stats": {
       "activeRuns": "Active runs",
@@ -1222,5 +1271,28 @@
   },
   "observability": {
     "viewTrace": "View trace ({id}…)"
+  },
+  "modelPicker": {
+    "loading": "Loading models…",
+    "error": "Failed to load models",
+    "placeholder": "Select model…",
+    "noModels": "No models available"
+  },
+  "router": {
+    "notFound": {
+      "kicker": "404",
+      "title": "Route not found",
+      "cta": "Go to dashboard"
+    }
+  },
+  "upload": {
+    "pdfVisionDisabledHint": "PDF vision is off by default. Enable via ENABLE_PDF_VISION=true (Cloud calls + latency)."
+  },
+  "llmProfilePicker": {
+    "label": "LLM Profile (optional)",
+    "serverDefault": "Server default (active profile)",
+    "loading": "Loading profiles…",
+    "error": "Failed to load profiles.",
+    "defaultSuffix": "default"
   }
 }

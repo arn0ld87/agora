@@ -1,107 +1,42 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+/**
+ * ReportModelControls — Auswahl des LLM-Modells für die Report-Regenerierung.
+ *
+ * Slice A1 (2026-05-17): Migrationsendzustand. Nutzt projektweit denselben
+ * ModelPicker wie das Workspace-Default-Dropdown unter `/settings/llm-providers`.
+ * Provider+API-Key+Base-URL werden NICHT mehr inline gepflegt — Keys laufen
+ * über den ``LlmProviderSecretsStore`` (Settings-Seite), das Backend zieht
+ * sie via ``SecretResolver`` und ``build_route_subprocess_env`` automatisch.
+ * Lokale Ollama-Modelle erscheinen, sobald ein Ollama- oder
+ * OpenAI-kompatibler Provider mit passender ``base_url`` in
+ * ``/settings/llm-providers`` hinterlegt ist.
+ */
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
-import Select from '../ui/Select.vue'
+import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
+import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 
 const { t } = useI18n()
 
-interface Option {
-  value: string
-  label: string
-}
-
-interface Props {
-  reportModelOption: string
-  customReportModel: string
-  modelOptions: Option[]
+defineProps<{
+  modelValue: StageLLMRoute | null
   isRegenerating: boolean
-  provider: string
-  apiKey: string
-  baseUrl: string
-  providerOptions: Option[]
-}
-
-const props = defineProps<Props>()
-
-const emit = defineEmits<{
-  'update:reportModelOption': [value: string]
-  'update:customReportModel': [value: string]
-  'update:provider': [value: string]
-  'update:apiKey': [value: string]
-  'update:baseUrl': [value: string]
-  regenerate: []
 }>()
 
-const selectedModel = computed({
-  get: () => props.reportModelOption,
-  set: (value: string) => emit('update:reportModelOption', value),
-})
-
-const customModel = computed({
-  get: () => props.customReportModel,
-  set: (value: string) => emit('update:customReportModel', value),
-})
-
-const provider = computed({
-  get: () => props.provider,
-  set: (value: string) => emit('update:provider', value),
-})
-
-const apiKey = computed({
-  get: () => props.apiKey,
-  set: (value: string) => emit('update:apiKey', value),
-})
-
-const baseUrl = computed({
-  get: () => props.baseUrl,
-  set: (value: string) => emit('update:baseUrl', value),
-})
-
-const providerEnabled = computed(() => provider.value !== 'default')
+const emit = defineEmits<{
+  'update:modelValue': [value: StageLLMRoute | null]
+  regenerate: []
+}>()
 </script>
 
 <template>
   <div class="model-row">
-    <div class="model-cell">
-      <Select
-        v-model="selectedModel"
-        :label="t('step4.model.reportLabel')"
-        :options="modelOptions"
-      />
-    </div>
-    <div v-if="reportModelOption === 'custom'" class="model-cell">
-      <label class="field-label">{{ t('step4.model.customLabel') }}</label>
-      <input
-        v-model="customModel"
-        class="model-input"
-        type="text"
-        :placeholder="t('step4.model.customPlaceholder')"
-      />
-    </div>
-    <div class="model-cell">
-      <Select
-        v-model="provider"
-        :label="t('step4.model.providerLabel')"
-        :options="providerOptions"
-      />
-    </div>
-    <div v-if="providerEnabled" class="model-cell">
-      <label class="field-label">{{ t('step4.model.apiKeyLabel') }}</label>
-      <input
-        v-model="apiKey"
-        class="model-input"
-        type="password"
-        :placeholder="t('step4.model.apiKeyPlaceholder')"
-      />
-    </div>
-    <div v-if="providerEnabled" class="model-cell">
-      <label class="field-label">{{ t('step4.model.baseUrlLabel') }}</label>
-      <input
-        v-model="baseUrl"
-        class="model-input"
-        type="text"
-        :placeholder="t('step4.model.baseUrlPlaceholder')"
+    <div class="model-cell model-cell--picker">
+      <label class="field-label">{{ t('step4.model.reportLabel') }}</label>
+      <ModelPicker
+        :model-value="modelValue"
+        :placeholder="t('step4.model.placeholder')"
+        @update:model-value="(value) => emit('update:modelValue', value)"
       />
     </div>
     <Button
@@ -118,7 +53,7 @@ const providerEnabled = computed(() => provider.value !== 'default')
 <style scoped>
 .model-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: var(--s-3);
   align-items: end;
   border-top: 1px solid var(--rule);
@@ -136,19 +71,6 @@ const providerEnabled = computed(() => provider.value !== 'default')
   letter-spacing: var(--ls-mono);
   text-transform: uppercase;
   color: var(--fg-muted);
-}
-.model-input {
-  background: var(--bg-elevated);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-1);
-  color: var(--fg);
-  font-family: var(--ff-mono);
-  font-size: var(--fs-14);
-  padding: 8px 10px;
-  outline: none;
-}
-.model-input:focus {
-  border-color: var(--accent);
 }
 @media (max-width: 720px) {
   .model-row {

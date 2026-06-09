@@ -7,11 +7,60 @@ entities and relations from text chunks, guided by the graph's ontology.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..utils.llm_client import LLMClient
 
 logger = logging.getLogger('agora.ner_extractor')
+
+
+# ---------------------------------------------------------------------------
+# Sub-Slice 05.4 — Strict-Pydantic-Schema für NER-Output.
+#
+# Erzwingt bei Ollama-Provider (lokal + Cloud durch _is_ollama() in 05.3)
+# den nativen /api/chat::format-Pfad mit echtem Schema-Enforcement statt
+# `response_format=json_object`-Wrapper, der das Modell oft `[]` für Relations
+# liefern ließ. Pydantic-Validation in chat_json fängt zudem truncierte
+# Outputs (finish=length) sauber ab — keine best-effort-Repair-Loops mehr,
+# stattdessen klarer ValidationError → Retry-Trigger.
+# ---------------------------------------------------------------------------
+
+_PYDANTIC_TOLERANT = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+
+class NerEntity(BaseModel):
+    """Eine extrahierte Entität. Tolerant gegen unsaubere LLM-Outputs
+    (extra-Felder werden ignoriert, Strings getrimmt)."""
+
+    model_config = _PYDANTIC_TOLERANT
+
+    name: str = Field(min_length=1, description="Kanonischer Name der Entität")
+    type: str = Field(default="Entity", description="Ontology-Typ oder 'Entity' als Fallback")
+    attributes: Dict[str, Any] = Field(default_factory=dict)
+
+
+class NerRelation(BaseModel):
+    """Eine extrahierte Relation zwischen zwei Entitäten."""
+
+    model_config = _PYDANTIC_TOLERANT
+
+    source: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    type: str = Field(default="RELATED_TO")
+    fact: str = Field(default="")
+
+
+class NerExtractionResult(BaseModel):
+    """Strict-Schema für NER-Output. Wird als ``schema=`` an chat_json
+    übergeben → zwingt das Modell, sowohl entities[] als auch relations[]
+    zu liefern (vorher: Modell durfte 'relations' weglassen → 0 edges)."""
+
+    model_config = _PYDANTIC_TOLERANT
+
+    entities: List[NerEntity] = Field(default_factory=list)
+    relations: List[NerRelation] = Field(default_factory=list)
 
 # System prompt template for NER/RE extraction
 _SYSTEM_PROMPT = """You are a Named Entity Recognition and Relation Extraction system.
@@ -101,10 +150,16 @@ class NERExtractor:
         last_error = None
         for attempt in range(self.max_retries + 1):
             try:
+                # schema=NerExtractionResult triggert bei Ollama-Provider
+                # (lokal + Cloud) den nativen /api/chat::format-Pfad aus
+                # Sub-Slice 05.1/05.3. max_tokens auf 8192 weil 4096 in
+                # früheren Builds bei dichten Chunks zu finish=length und
+                # damit zu Datenverlust führte (Sub-Slice 05.4).
                 result = self.llm.chat_json(
                     messages=messages,
                     temperature=0.1,  # Low temp for extraction precision
-                    max_tokens=4096,
+                    max_tokens=8192,
+                    schema=NerExtractionResult,
                 )
                 return self._validate_and_clean(result, ontology)
 

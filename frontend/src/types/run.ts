@@ -93,6 +93,18 @@ export interface ApiResponse<T> {
   count?: number
 }
 
+/**
+ * Response shape for POST /api/runs/<run_id>/cancel (202 Accepted).
+ * The backend returns a flat payload WITHOUT a `data` envelope:
+ * `{"success": true, "status": "cancel_requested", "run_id": "<id>"}`.
+ * Source: backend/app/api/runs.py:391
+ */
+export interface CancelRunResponse {
+  success: boolean
+  status: 'cancel_requested'
+  run_id: string
+}
+
 export interface ListRunsParams {
   limit?: number
   entity_id?: string
