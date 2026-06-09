@@ -20,39 +20,29 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
     """Map model-name + base-url to the correct CAMEL ModelPlatformType.
 
-    Detection order (first match wins):
+    Delegiert seit Issue #591 an die zentrale Registry
+    (:func:`app.llm.providers.registry.detect_provider`, ``mode="oasis"``).
+    Detection-Reihenfolge und Begründungen (Gemini ``thought_signature``,
+    Ollama-Cloud ohne OpenAI-Compat-``/v1``) sind dort dokumentiert:
 
-    1. GEMINI — base_url contains ``generativelanguage.googleapis.com`` OR
-       model starts with ``gemini-``.  Gemini-3 requires a ``thought_signature``
-       echo in multi-turn tool calls; the OpenAI-compat wire path strips that
-       field and the API rejects every tool turn with HTTP 400.
-    2. OLLAMA — base_url contains ``ollama.com`` or ``:11434``  OR  model ends
-       with ``:cloud`` or ``:latest``.  Ollama Cloud no longer offers an
-       OpenAI-compat ``/v1`` endpoint; only the native ``/api/chat`` path works.
-       CAMEL's ``OllamaModel`` speaks the native protocol.
-    3. OPENAI — everything else (real OpenAI, Anthropic compat gateways, Qwen
-       Cloud via non-Ollama URLs, Mistral, DeepSeek, …).
+    1. GEMINI — base_url enthält ``generativelanguage.googleapis.com`` ODER
+       Modell beginnt mit ``gemini-``.
+    2. OLLAMA — base_url enthält ``ollama.com`` oder ``:11434`` ODER Modell
+       endet auf ``:cloud`` / ``:latest``.
+    3. OPENAI — alles andere (echtes OpenAI, Compat-Gateways, …).
     """
     from camel.types import ModelPlatformType  # type: ignore[import]
 
-    url = base_url or ""
-    m = model or ""
+    # Lazy import: ``app`` ist erst nach dem sys.path-Bootstrap der
+    # Simulations-Skripte importierbar (analog app.observability unten).
+    from app.llm.providers.registry import detect_provider  # type: ignore[import]
 
-    # --- 1. Gemini ---
-    if "generativelanguage.googleapis.com" in url or m.startswith("gemini-"):
-        return ModelPlatformType.GEMINI
-
-    # --- 2. Ollama ---
-    if (
-        "ollama.com" in url
-        or re.search(r":11434(?:/|$)", url)
-        or m.endswith(":cloud")
-        or m.endswith(":latest")
-    ):
-        return ModelPlatformType.OLLAMA
-
-    # --- 3. OpenAI (default / compat gateway) ---
-    return ModelPlatformType.OPENAI
+    detected = detect_provider(base_url, model, mode="oasis")
+    return {
+        "google": ModelPlatformType.GEMINI,
+        "ollama": ModelPlatformType.OLLAMA,
+        "openai": ModelPlatformType.OPENAI,
+    }[detected]
 
 
 def _is_ollama_route(model: str, base_url: str) -> bool:

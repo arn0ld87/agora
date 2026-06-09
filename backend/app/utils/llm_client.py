@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from ..config import Config
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
+from ..llm.providers.registry import detect_provider
 from .logger import get_logger
 from .retry import llm_call_with_retry
 
@@ -752,33 +753,14 @@ class LLMClient:
     def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
         """Infer the LLM provider from base_url and model name.
 
-        Heuristics (in priority order):
-        1. Base URL contains ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-        2. Model suffix ``:cloud`` → ``"cloud"`` (Ollama Cloud Model-Tag-Hint —
-           wird VOR der Port-Heuristik geprüft, weil Cloud-Modelle auch über
-           den lokalen ollama-Proxy auf :11434 laufen können).
-        3. Base URL contains ``11434`` → ``"ollama"`` (local Ollama).
-        4. Base URL contains ``openai.com`` or ``api.openai`` → ``"openai"``.
-        5. Base URL contains ``googleapis.com`` or ``generativelanguage`` →
-           ``"google"`` (Gemini-OpenAI-Compat-Layer — unterstützt natives
-           ``tools=`` / ``tool_choice=``; siehe ``_chat_with_tools``-Branch.
-           Ohne diesen Pfad fiel der Tool-Call auf XML-im-Prompt zurück, was
-           Gemini's Function-Filter mit MALFORMED_FUNCTION_CALL ablehnt).
-        6. Fallback → ``"unknown"``.
+        Delegiert seit Issue #591 an die zentrale Registry
+        (:func:`app.llm.providers.registry.detect_provider`, ``mode="http"``)
+        — Heuristik-Dokumentation und Prioritäten dort. Die alte
+        ``_chat_with_tools``-Begründung für den ``"google"``-Branch
+        (natives ``tools=`` statt XML-Fallback, sonst MALFORMED_FUNCTION_CALL)
+        gilt unverändert.
         """
-        model_name = self.model or ""
-        base = (self.base_url or "").lower()
-        if "ollama.com" in base:
-            return "cloud"
-        if model_name.endswith(":cloud"):
-            return "cloud"
-        if "11434" in base:
-            return "ollama"
-        if "openai.com" in base or "api.openai" in base:
-            return "openai"
-        if "googleapis.com" in base or "generativelanguage" in base:
-            return "google"
-        return "unknown"
+        return detect_provider(self.base_url, self.model, mode="http")
 
     def _publish_model_active(
         self,
