@@ -67,9 +67,17 @@ if [[ "$(id -u)" == "0" ]]; then
   # CI-Runner laufen oft als root — explizit auf Container-User chownen.
   chown -R 1000:1000 "${REPO_ROOT}/backend/uploads" "${REPO_ROOT}/backend/instance" "${REPO_ROOT}/backend/data"
 else
-  # Lokaler Mac/Linux-Dev — chmod auf weltweit beschreibbar reicht, weil
-  # der Bind-Mount-Source dem Dev-User gehört, nicht UID 1000.
-  chmod -R 0777 "${REPO_ROOT}/backend/uploads" "${REPO_ROOT}/backend/instance" "${REPO_ROOT}/backend/data"
+  # Lokaler Mac/Linux-Dev — chmod auf weltweit beschreibbare VERZEICHNISSE
+  # reicht, weil der Bind-Mount-Source dem Dev-User gehört, nicht UID 1000.
+  # Bewusst ohne -R: rekursives chmod würde restriktive Datei-Modes
+  # plattmachen (LlmProviderSecretsStore schreibt llm_provider_secrets.json
+  # mit 0600 nach backend/data — Gemini-Review #627).
+  chmod 0777 \
+    "${REPO_ROOT}/backend/uploads" \
+    "${REPO_ROOT}/backend/uploads/run_registry" \
+    "${REPO_ROOT}/backend/uploads/simulations" \
+    "${REPO_ROOT}/backend/instance" \
+    "${REPO_ROOT}/backend/data"
 fi
 echo "[e2e-up] backend/uploads, backend/instance, backend/data prepared with writable permissions" >&2
 
