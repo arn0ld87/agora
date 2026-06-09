@@ -30,26 +30,51 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 
 3. **Linear FF-Merge auf main:** Nach Findings-Review `git checkout main && git merge --ff-only <branch> && git push origin main`.
 
-## Lokale Quality-Gates
+## CI-Gates: Pflicht vs. Heavy
+
+### Pflicht-Gates (laufen auf JEDEM Pull Request, kein Label nötig)
+
+| Job | Was | Ziel |
+|---|---|---|
+| `backend-pr-gate` | `ruff check app/` + `pytest tests/contracts/ -q` | Lint + Pydantic-Contract-Smoke |
+| `frontend-pr-gate` | `bun run lint` + `bun run typecheck` | ESLint + Vue-TS-Typecheck |
+
+Branch Protection muss `backend-pr-gate` und `frontend-pr-gate` als Required Status Checks konfiguriert haben.
+
+### Heavy-Jobs (nur auf `push:main` oder per Label)
+
+| Job | Trigger | Label |
+|---|---|---|
+| `backend` | `push:main` oder Label `needs-backend-ci` | Volle Tests + Coverage-Gate + mypy |
+| `frontend` | `push:main` oder Label `needs-frontend-ci` | Volle Tests + Coverage + Build |
+| `security` | `push:main` + workflow_dispatch | pip-audit, bun audit, Gitleaks |
+
+### Lokale Quality-Gates
 
 Vor jedem Commit ausführen:
 
 ```bash
-# Backend
-cd backend && uv sync --group dev
-cd backend && uv run pytest -x -q
-cd backend && uv run ruff check . && uv run mypy app
+# Alle Blöcke laufen vom Repo-Root; Subshells (…) verhindern,
+# dass ein cd den Arbeitsordner für die folgenden Blöcke verstellt.
 
-# Frontend
-cd frontend && npm ci
-cd frontend && npm run check    # lint + test + build (alles)
+# Backend — Pflicht (entspricht PR-Gate)
+(cd backend && uv sync --group dev && uv run ruff check app/ && uv run pytest tests/contracts/ -q)
+
+# Backend — Heavy (entspricht main-Job)
+(cd backend && uv run mypy app && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=60)
+
+# Frontend — Pflicht (entspricht PR-Gate)
+(cd frontend && bun install --frozen-lockfile && bun run lint && bun run typecheck)
+
+# Frontend — Heavy (entspricht main-Job)
+(cd frontend && bun run test:coverage && bun run build)
 
 # Status aktualisieren + Drift prüfen
 bash scripts/sync-status.sh
 bash scripts/sync-status.sh --check   # exit 0 erwartet
 
 # Schemas generieren
-cd backend && uv run python -m app.contracts.dump_schemas
+(cd backend && uv run python -m app.contracts.dump_schemas)
 git diff --exit-code schemas/      # darf nicht driften
 ```
 
