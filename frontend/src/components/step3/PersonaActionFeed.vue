@@ -10,7 +10,7 @@ import type { RedditNode } from '@/composables/useSimFeed'
 
 const { t } = useI18n()
 
-defineProps<{
+withDefaults(defineProps<{
   allActionsCount: number
   twitterPosts: PostCreatedEvent[]
   redditPosts: PostCreatedEvent[]
@@ -18,7 +18,11 @@ defineProps<{
   feedDensity?: string
   toolPanelOpen?: boolean
   toolPanelUnreadErrors?: number
-}>()
+}>(), {
+  feedDensity: 'comfort',
+  toolPanelOpen: false,
+  toolPanelUnreadErrors: 0,
+})
 
 const emit = defineEmits(['set-density', 'toggle-tool-panel'])
 </script>
