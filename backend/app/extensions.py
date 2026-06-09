@@ -116,3 +116,11 @@ def reset_pools_after_fork() -> None:
         _reset_redis()
     except Exception as exc:  # noqa: BLE001
         logger.warning("signed_ticket Redis fork-reset failed: %s", exc)
+
+    try:
+        from .services.model_catalog_service import ModelCatalogService
+
+        with ModelCatalogService._cache_lock:
+            ModelCatalogService._cache.clear()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ModelCatalogService cache fork-reset failed: %s", exc)
