@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time as _time_mod
+from functools import lru_cache
 from typing import TYPE_CHECKING, Literal, Optional, Dict, Any, List, Type, Union
 from openai import OpenAI
 from pydantic import BaseModel
@@ -62,7 +63,11 @@ def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
     """Best-effort Substring-Match für bekannte Modellfamilien.
 
     Liefert None, wenn das Modell unbekannt ist — Caller fällt dann auf
-    OLLAMA_NUM_CTX (legacy) zurück.
+    OLLAMA_NUM_CTX (legacy) zurück und emittiert ein WARNING (einmalig pro
+    Modell, dedupliziert via lru_cache auf _warn_legacy_fallback_once).
+
+    Um den Warning für ein unbekanntes Modell zu unterdrücken, trage es entweder
+    in _MODEL_CONTEXT_HEURISTICS ein oder setze LLM_MODEL_CONTEXT_LIMITS_JSON.
     """
     if not model_name:
         return None
@@ -71,6 +76,23 @@ def heuristic_num_ctx_for_model(model_name: str) -> Optional[int]:
         if prefix in needle:
             return limit
     return None
+
+
+@lru_cache(maxsize=64)
+def _warn_legacy_fallback_once(model_name: str, fallback: int) -> None:
+    """Emit a WARNING exactly once per unknown model name (lru_cache deduplicates).
+
+    Called only when _resolve_num_ctx reaches the legacy OLLAMA_NUM_CTX / 8192
+    fallback, i.e. no heuristic, no per-model env map, no LLM_CONTEXT_LIMIT, and
+    no explicit provider_options matched. The cache prevents log spam when the
+    same unknown model is used repeatedly within a process lifetime.
+    """
+    logger.warning(
+        "llm_client._resolve_num_ctx: no heuristic for model=%r, "
+        "falling back to %d. Set LLM_MODEL_CONTEXT_LIMITS_JSON to override.",
+        model_name,
+        fallback,
+    )
 
 
 def _resolve_num_ctx(
@@ -83,7 +105,7 @@ def _resolve_num_ctx(
     2. LLM_MODEL_CONTEXT_LIMITS_JSON (per-Modell-Map via env)
     3. Heuristik-Tabelle (Modell-Familie-Default)
     4. LLM_CONTEXT_LIMIT (Global-Override, sofern höher als Heuristik)
-    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback)
+    5. OLLAMA_NUM_CTX env oder 8192 (Legacy-Fallback) — emits WARNING once per model
     """
     if provider_options_num_ctx is not None:
         try:
@@ -116,9 +138,12 @@ def _resolve_num_ctx(
         return global_limit
 
     try:
-        return int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
+        fallback = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
     except ValueError:
-        return 8192
+        fallback = 8192
+    if model_name:
+        _warn_legacy_fallback_once(model_name, fallback)
+    return fallback
 
 
 _STRICT_UNSUPPORTED_HINTS = (
