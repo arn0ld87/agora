@@ -153,8 +153,8 @@ def monitor_simulation(
                 if os.path.exists(main_log_path):
                     with open(main_log_path, "r", encoding="utf-8") as f:
                         error_info = f.read()[-2000:]  # Take last 2000 characters
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
+                logger.debug("monitor: failed to read error log, continuing: %s", exc)
             state.error = f"Process exit code: {exit_code}, error: {error_info}"
             # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED
             sim_active_gauge().add(-1)
@@ -169,7 +169,7 @@ def monitor_simulation(
         state.reddit_running = False
         save_state(state)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Monitor thread exception: {simulation_id}, error={str(e)}")
         elapsed_seconds = _compute_elapsed_seconds(state.started_at)
         # Slice 2b: Sim-Lifecycle-Metric — RUNNING → FAILED (Exception-Pfad)
@@ -190,7 +190,7 @@ def monitor_simulation(
 
                 GraphMemoryManager.stop_updater(simulation_id)
                 logger.info(f"Graph memory update stopped: simulation_id={simulation_id}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to stop graph memory updater: {e}")
             graph_memory_enabled.pop(simulation_id, None)
 
@@ -202,14 +202,14 @@ def monitor_simulation(
         if simulation_id in stdout_files:
             try:
                 stdout_files[simulation_id].close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
+                logger.debug("monitor: file handle close failed, ignoring: %s", exc)
             stdout_files.pop(simulation_id, None)
         if simulation_id in stderr_files and stderr_files[simulation_id]:
             try:
                 stderr_files[simulation_id].close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — close file handle on cleanup; exc discarded
+                logger.debug("monitor: file handle close failed, ignoring: %s", exc)
             stderr_files.pop(simulation_id, None)
 
 

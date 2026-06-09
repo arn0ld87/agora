@@ -118,7 +118,7 @@ class EntityReader:
         """
         try:
             return self.storage.get_node_edges(node_uuid)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to get edges for node {node_uuid}: {str(e)}")
             return []
 

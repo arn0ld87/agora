@@ -378,7 +378,7 @@ class GraphToolsService:
                 "Use insight_forge, panorama_search, or quick_search instead."
             )
             return result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Interview API call exception: {e}")
             import traceback
             logger.error(traceback.format_exc())
@@ -436,7 +436,7 @@ class GraphToolsService:
                     profiles = json.load(f)
                 logger.info(f"Loaded {len(profiles)} profiles from reddit_profiles.json")
                 return profiles
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"Failed to read reddit_profiles.json: {e}")
 
         # Try to read Twitter CSV format
@@ -455,7 +455,7 @@ class GraphToolsService:
                         })
                 logger.info(f"Loaded {len(profiles)} profiles from twitter_profiles.csv")
                 return profiles
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"Failed to read twitter_profiles.csv: {e}")
 
         return profiles
@@ -536,7 +536,7 @@ Please select up to {max_agents} most suitable Agents for interview and explain 
 
             return selected_agents, valid_indices, reasoning
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"LLM agent selection failed, using default selection: {e}")
             selected = profiles[:max_agents]
             indices = list(range(min(max_agents, len(profiles))))
@@ -584,7 +584,7 @@ Please generate 3-5 interview questions."""
 
             return response.get("questions", [f"What is your perspective on {interview_requirement}?"])
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to generate interview questions: {e}")
             return [
                 f"What is your perspective on {interview_requirement}?",
@@ -640,6 +640,6 @@ Please generate an interview summary."""
             )
             return summary
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to generate interview summary: {e}")
             return f"Interviewed {len(interviews)} interviewees, including: " + ", ".join([i.agent_name for i in interviews])

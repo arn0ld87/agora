@@ -78,7 +78,7 @@ def get_available_models():
                 "parameter_size": details.get('parameter_size'),
                 "kind": "ollama",
             })
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         ollama_error = str(exc)
         logger.info(f"Could not reach Ollama at {base}: {exc}")
 

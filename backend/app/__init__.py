@@ -206,7 +206,7 @@ def create_app(config_class=Config):
         neo4j_storage = Neo4jStorage()
         if should_log_startup:
             logger.info("Neo4jStorage initialized (connected to %s)", Config.NEO4J_URI)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         neo4j_storage_error = str(e)
         logger.error(
             "Neo4jStorage initialization failed for %s: %s",

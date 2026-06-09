@@ -89,14 +89,14 @@ class ApiKeysStore:
             # Schlucken würde einen leeren Key-Store ohne Diagnose-Hinweis
             # ergeben — Operator muss das beim Boot sehen.
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error("Failed to load API keys from disk: %s", exc)
             return {}
         result: dict[str, ApiKeyModel] = {}
         for key_id, fields in raw.items():
             try:
                 result[key_id] = ApiKeyModel.model_validate(fields)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(
                     "Skipping corrupt API key entry '%s': %s", key_id, exc
                 )

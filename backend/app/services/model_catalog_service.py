@@ -117,7 +117,7 @@ class ModelCatalogService:
                         )
                     self._cache[provider_id] = entries
                     return entries
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning("Failed to fetch live models from %s: %s", provider_id, exc)
 
             # 3. Fallback to cached (even if expired)

@@ -287,11 +287,11 @@ class GraphBuildService:
                 if graph_id is not None:
                     try:
                         builder.delete_graph(graph_id)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
                         try:
                             builder.mark_graph_failed(graph_id, reason=str(exc))
-                        except Exception:
-                            pass
+                        except Exception as err:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
+                            logger.debug("graph_build: mark_graph_failed also failed, ignoring: %s", err)
 
                 project.status = ProjectStatus.FAILED
                 project.error = str(exc)

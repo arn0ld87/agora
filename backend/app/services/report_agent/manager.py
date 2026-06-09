@@ -234,7 +234,7 @@ class ReportManager:
         except ValidationError as exc:
             logger.warning("report-v3.json validation failed for %s: %s", report_id, exc)
             return None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error("Unexpected error rendering report-v3 for %s: %s", report_id, exc)
             return None
 

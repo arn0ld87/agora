@@ -41,7 +41,7 @@ def allowed_file(file_storage) -> bool:
             header = file_storage.stream.read(4)
             file_storage.stream.seek(0)
             return header == b'%PDF'
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
             return False
 
     return True

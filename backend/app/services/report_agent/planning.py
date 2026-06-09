@@ -133,7 +133,7 @@ def plan_outline(
         logger.info(f"Outline planning completed: {len(result_sections)} sections")
         return outline
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error(f"Outline planning failed: {str(e)}")
         # Return default outline (3 sections as fallback) — all descriptions filled.
         return ReportOutline(

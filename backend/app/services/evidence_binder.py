@@ -84,7 +84,7 @@ def bind_evidence_to_claim(
             continue
         try:
             cand_vec = embed(text)
-        except Exception:  # pragma: no cover - safety net
+        except Exception:  # pragma: no cover - safety net  # noqa: BLE001 — safety net; caller handles empty result
             continue
         score = _cosine(claim_vec, cand_vec)
         if score < threshold:

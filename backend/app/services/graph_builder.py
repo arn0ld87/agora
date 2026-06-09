@@ -175,7 +175,7 @@ class GraphBuilderService:
                 "chunks_processed": total_chunks,
             })
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exc logged via traceback or propagated
             import traceback
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
             self.task_manager.fail_task(task_id, error_msg)

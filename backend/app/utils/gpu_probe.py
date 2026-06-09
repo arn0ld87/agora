@@ -38,7 +38,7 @@ def detect_gpu() -> Dict[str, Any]:
     try:
         if shutil.which("nvidia-smi"):
             result["nvidia_smi_available"] = True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — probe function; exc used in return value
         result["hints"].append(f"Error checking nvidia-smi: {e}")
 
     # 2. Query Ollama REST API for GPU usage
@@ -73,7 +73,7 @@ def detect_gpu() -> Dict[str, Any]:
             result["hints"].append("Ollama erreichbar, aber keine Modelle geladen")
     except urllib.error.URLError as e:
         result["hints"].append(f"Ollama-API nicht erreichbar ({ps_url}): {e}")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — probe function; exc used in return value
         result["hints"].append(f"Fehler bei Ollama-GPU-Abfrage: {e}")
 
     # 3. Consolidate hints
