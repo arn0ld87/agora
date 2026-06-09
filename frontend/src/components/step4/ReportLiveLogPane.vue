@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { type PropType, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '../ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -10,8 +11,8 @@ const { t } = useI18n()
 defineProps({
   agentLogs: { type: Array, required: true },
   consoleLogs: { type: Array, required: true },
-  agentLogRef: { type: Object, default: null },
-  consoleLogRef: { type: Object, default: null },
+  agentLogRef: { type: Function as PropType<(el: Element | ComponentPublicInstance | null) => void>, default: null },
+  consoleLogRef: { type: Function as PropType<(el: Element | ComponentPublicInstance | null) => void>, default: null },
   agentUnreadCount: { type: Number, default: 0 },
   consoleUnreadCount: { type: Number, default: 0 },
 })
@@ -35,7 +36,7 @@ const emit = defineEmits(['agent-scroll-to-bottom', 'console-scroll-to-bottom'])
           <span class="meta">{{ agentLogs.length }}</span>
         </div>
         <div class="log-pane-scroll-wrap">
-          <div class="log-block log-pane-body">
+          <div :ref="agentLogRef" class="log-block log-pane-body">
             <div v-if="!agentLogs.length" class="meta">Warte auf Agent-Aktivität…</div>
             <div
               v-for="(e, i) in agentLogs"
@@ -65,7 +66,7 @@ const emit = defineEmits(['agent-scroll-to-bottom', 'console-scroll-to-bottom'])
           <span class="meta">{{ consoleLogs.length }}</span>
         </div>
         <div class="log-pane-scroll-wrap">
-          <div class="log-block log-pane-body">
+          <div :ref="consoleLogRef" class="log-block log-pane-body">
             <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="log-line console">
               {{ line }}
             </div>

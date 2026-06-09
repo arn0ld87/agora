@@ -155,6 +155,8 @@ function handleToolPanelHotkey(e) {
 
 const consoleScrollEl = ref(null)
 const consoleSticky = useStickyScroll(consoleScrollEl)
+
+function setConsoleScrollRef(el) { consoleScrollEl.value = el instanceof Element ? el : null }
 const {
   lines: consoleLogs,
   polling: consolePolling,
@@ -475,7 +477,7 @@ watch(() => props.simulationId, (newId, oldId) => {
 
 <template>
   <div class="step-panel">
-    <div class="scroll">
+    <div ref="scrollEl" class="scroll">
 
       <!-- Card 1: Controls -->
       <article class="card" :class="{ 'is-active': phase === 1 }">
@@ -547,6 +549,7 @@ watch(() => props.simulationId, (newId, oldId) => {
         :tool-panel-filter="toolPanelFilter"
         :filtered-console-logs="filteredConsoleLogs"
         :console-unread-count="consoleSticky.unreadCount.value"
+        :console-scroll-ref="setConsoleScrollRef"
         @update:tool-panel-filter="toolPanelFilter = $event"
         @copy-line="copyConsoleLineAsJson"
         @scroll-to-bottom="consoleSticky.scrollToBottom"

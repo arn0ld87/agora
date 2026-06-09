@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { type PropType, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Badge from '../ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -10,7 +11,7 @@ const props = defineProps({
   consoleLogs: { type: Array, required: true },
   toolPanelFilter: { type: String, default: 'all' },
   filteredConsoleLogs: { type: Array, required: true },
-  consoleScrollEl: { type: Object, default: null },
+  consoleScrollRef: { type: Function as PropType<(el: Element | ComponentPublicInstance | null) => void>, default: null },
   consoleUnreadCount: { type: Number, default: 0 },
 })
 
@@ -63,7 +64,7 @@ async function copyLine(line: unknown) {
     </header>
     <div class="log-pane">
       <div class="log-pane-scroll-wrap">
-        <div class="log-block log-pane-body">
+        <div :ref="consoleScrollRef" class="log-block log-pane-body">
           <div v-if="!filteredConsoleLogs.length" class="meta">
             {{ toolPanelFilter === 'errors' ? t('step3.toolPanel.noErrors') : t('step3.toolPanel.empty') }}
           </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
 import { useStickyScroll } from '../composables/useStickyScroll'
 import { usePolling } from '../composables/usePolling'
@@ -202,6 +202,13 @@ const agentLogRef = ref<HTMLElement | null>(null)
 const consoleLogRef = ref<HTMLElement | null>(null)
 const agentSticky = useStickyScroll(agentLogRef)
 const consoleSticky = useStickyScroll(consoleLogRef)
+
+function setAgentLogRef(el: Element | ComponentPublicInstance | null) {
+  agentLogRef.value = el instanceof Element ? (el as HTMLElement) : null
+}
+function setConsoleLogRef(el: Element | ComponentPublicInstance | null) {
+  consoleLogRef.value = el instanceof Element ? (el as HTMLElement) : null
+}
 
 const {
   lines: agentLogs,
@@ -428,6 +435,8 @@ onUnmounted(stopPolling)
         :console-logs="consoleLogs"
         :agent-unread-count="agentSticky.unreadCount.value"
         :console-unread-count="consoleSticky.unreadCount.value"
+        :agent-log-ref="setAgentLogRef"
+        :console-log-ref="setConsoleLogRef"
         @agent-scroll-to-bottom="agentSticky.scrollToBottom"
         @console-scroll-to-bottom="consoleSticky.scrollToBottom"
       />
