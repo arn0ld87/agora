@@ -11,18 +11,16 @@ import { createSimulationBranch } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
-import StickyScrollBanner from './ui/StickyScrollBanner.vue'
 import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
-import ReportBranchControls from './step4/ReportBranchControls.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportModeControls from './step4/ReportModeControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
-import ReportEvidencePanel from './step4/ReportEvidencePanel.vue'
-import ReportRedTeamSection from './report/ReportRedTeamSection.vue'
+import ReportLiveLogPane from './step4/ReportLiveLogPane.vue'
+import ReportFinalView from './step4/ReportFinalView.vue'
 import { useReportExports } from '../composables/useReportExports'
 import { StageLLMRouteSchema, type StageLLMRoute } from '../contracts/llmRoutingContract'
 import { parseAgentEntry } from '../utils/reportAgentLog'
-import { parseSourceAnchor, entryAnchorId } from '../utils/sourceAnchor'
+import { parseSourceAnchor } from '../utils/sourceAnchor'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -67,20 +65,12 @@ const props = defineProps({
   reportId: String,
   simulationId: String,
   systemLogs: Array,
-  /** Feature-Flag: true sobald Backend POST /api/runs/<id>/cancel verfügbar (Slice 6). */
-  cancelEndpointAvailable: {
-    type: Boolean,
-    default: false,
-  },
+  cancelEndpointAvailable: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['add-log', 'update-status', 'stop'])
 
-const phase = ref(0) // 0 idle, 1 running, 2 done
-/**
- * true wenn Simulation beendet ist, aber noch kein Report-Start bestätigt wurde.
- * Zeigt den Confirm-Dialog statt Auto-Start.
- */
+const phase = ref(0)
 const reportPending = ref(false)
 const statusMsg = ref('')
 const reportOutline = ref<ReportOutline | null>(null)
@@ -91,7 +81,6 @@ const fullReport = ref<Report | null>(null)
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)
 const branchBusy = ref(false)
-
 const schemaError = ref<{ where: string; issues: string[] } | null>(null)
 
 function recordSchemaError(where: string, error: unknown): void {
@@ -107,15 +96,10 @@ function recordSchemaError(where: string, error: unknown): void {
   schemaError.value = { where, issues }
   console.error(`[Step4Report] Schema-Mismatch in ${where}:`, issues)
 }
-const resolvedSimulationId = ref(props.simulationId || null)
 
+const resolvedSimulationId = ref(props.simulationId || null)
 const STORAGE_REPORT_ROUTE = 'agora.report.route'
 
-/** Initiale Report-Route: User-Override aus STORAGE_REPORT_ROUTE (JSON-serialized
- *  ``StageLLMRoute``), sonst ``null`` — Backend wendet dann den Workspace-Default
- *  aus ``useLlmRoutingDefaultsStore`` an. Keine localStorage-Provider/Key/BaseUrl
- *  mehr: Provider-Credentials laufen jetzt zentral über ``/settings/llm-providers``
- *  und werden serverseitig via ``LlmProviderSecretsStore`` aufgelöst. */
 function resolveInitialReportRoute(): StageLLMRoute | null {
   const raw = localStorage.getItem(STORAGE_REPORT_ROUTE)
   if (!raw) return null
@@ -124,9 +108,7 @@ function resolveInitialReportRoute(): StageLLMRoute | null {
     if (!parsed.success) return null
     if (!parsed.data.provider_id || !parsed.data.model) return null
     return parsed.data
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 const reportRoute = ref<StageLLMRoute | null>(resolveInitialReportRoute())
@@ -140,11 +122,8 @@ watch(llmProfileId, (val) => {
 })
 
 watch(reportRoute, (val) => {
-  if (val?.provider_id && val?.model) {
-    localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
-  } else {
-    localStorage.removeItem(STORAGE_REPORT_ROUTE)
-  }
+  if (val?.provider_id && val?.model) localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
+  else localStorage.removeItem(STORAGE_REPORT_ROUTE)
 }, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
@@ -166,89 +145,49 @@ function effectiveReportModel(): string | null {
 
 async function regenerateWithModel() {
   const simId = resolvedSimulationId.value || props.simulationId
-  if (!simId) {
-    addLog('simulationId fehlt — Regenerieren nicht möglich.')
-    return
-  }
+  if (!simId) { addLog('simulationId fehlt — Regenerieren nicht möglich.'); return }
   isRegenerating.value = true
   try {
-    const payload: Record<string, unknown> = {
-      simulation_id: simId,
-      force_regenerate: true,
-      mode: reportMode.value,
-    }
+    const payload: Record<string, unknown> = { simulation_id: simId, force_regenerate: true, mode: reportMode.value }
     if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
-      // Reset local UI state, then re-hydrate with the new report.
-      isComplete.value = false
-      phase.value = 1
-      reportOutline.value = null
-      generatedSections.value = {}
-      currentSectionIndex.value = null
-      resetAgentLogs()
-      resetConsoleLogs()
-      fullReport.value = null
+      isComplete.value = false; phase.value = 1; reportOutline.value = null
+      generatedSections.value = {}; currentSectionIndex.value = null
+      resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
       router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
       startPolling()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-    }
-  } catch (err) {
-    addLog((err as Error).message)
-  } finally {
-    isRegenerating.value = false
-  }
+    } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`) }
+  } catch (err) { addLog((err as Error).message) }
+  finally { isRegenerating.value = false }
 }
 
-/**
- * Wird aufgerufen wenn der User den Confirm-Dialog bestätigt.
- * Startet die Report-Generierung mit dem aktuell gewählten Modell.
- */
 async function startReportConfirmed() {
   const simId = resolvedSimulationId.value || props.simulationId
-  if (!simId) {
-    addLog('simulationId fehlt — Report-Start nicht möglich.')
-    return
-  }
+  if (!simId) { addLog('simulationId fehlt — Report-Start nicht möglich.'); return }
   reportPending.value = false
   isRegenerating.value = true
   try {
-    const payload: Record<string, unknown> = {
-      simulation_id: simId,
-      mode: reportMode.value,
-    }
+    const payload: Record<string, unknown> = { simulation_id: simId, mode: reportMode.value }
     if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
     const m = effectiveReportModel()
     if (m) payload.llm_model = m
     addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
-      isComplete.value = false
-      phase.value = 1
-      reportOutline.value = null
-      generatedSections.value = {}
-      currentSectionIndex.value = null
-      resetAgentLogs()
-      resetConsoleLogs()
-      fullReport.value = null
+      isComplete.value = false; phase.value = 1; reportOutline.value = null
+      generatedSections.value = {}; currentSectionIndex.value = null
+      resetAgentLogs(); resetConsoleLogs(); fullReport.value = null
       emit('update-status', 'processing')
       router.push({ name: 'Report', params: { reportId: res.data.report_id as string } })
       startPolling()
-    } else {
-      addLog(`Fehler: ${res?.error || 'unbekannt'}`)
-      reportPending.value = true
-    }
-  } catch (err) {
-    addLog((err as Error).message)
-    reportPending.value = true
-  } finally {
-    isRegenerating.value = false
-  }
+    } else { addLog(`Fehler: ${res?.error || 'unbekannt'}`); reportPending.value = true }
+  } catch (err) { addLog((err as Error).message); reportPending.value = true }
+  finally { isRegenerating.value = false }
 }
 
 function addLog(msg: string) { emit('add-log', msg) }
@@ -269,9 +208,7 @@ const {
   polling: agentLogPolling,
   reset: resetAgentLogs,
 } = useIncrementalLogPolling({
-  fetcher: (sinceLine) => props.reportId
-    ? getAgentLog(props.reportId, sinceLine)
-    : Promise.resolve(null),
+  fetcher: (sinceLine) => props.reportId ? getAgentLog(props.reportId, sinceLine) : Promise.resolve(null),
   intervalMs: AGENT_LOG_POLLING_INTERVAL_MS,
   parseLine: parseAgentEntry,
   stickyScroll: agentSticky,
@@ -282,9 +219,7 @@ const {
   polling: consoleLogPolling,
   reset: resetConsoleLogs,
 } = useIncrementalLogPolling({
-  fetcher: (sinceLine) => props.reportId
-    ? getConsoleLog(props.reportId, sinceLine)
-    : Promise.resolve(null),
+  fetcher: (sinceLine) => props.reportId ? getConsoleLog(props.reportId, sinceLine) : Promise.resolve(null),
   intervalMs: CONSOLE_LOG_POLLING_INTERVAL_MS,
   stickyScroll: consoleSticky,
 })
@@ -299,72 +234,37 @@ async function pollStatus() {
     if (res?.success && res.data) {
       const st = res.data
       statusMsg.value = st.message || ''
-      if (st.outline) {
-        try {
-          reportOutline.value = ReportOutlineSchema.parse(st.outline)
-        } catch (err) {
-          recordSchemaError('outline', err)
-        }
-      }
+      if (st.outline) { try { reportOutline.value = ReportOutlineSchema.parse(st.outline) } catch (err) { recordSchemaError('outline', err) } }
       if (st.sections) generatedSections.value = st.sections
       currentSectionIndex.value = st.current_section_index ?? currentSectionIndex.value
-      if (st.simulation_id && !resolvedSimulationId.value) {
-        resolvedSimulationId.value = st.simulation_id
-      }
+      if (st.simulation_id && !resolvedSimulationId.value) resolvedSimulationId.value = st.simulation_id
       if (st.status === 'completed') {
-        // Use the report_id the backend actually resolved (may differ if
-        // the caller provided only simulation_id).
         const resolvedId = (st.report_id || props.reportId) as string
-        isComplete.value = true
-        phase.value = 2
+        isComplete.value = true; phase.value = 2
         emit('update-status', 'completed')
         try {
           const full = (await getReport(resolvedId)) as ApiResult
           if (full?.success) {
-            try {
-              fullReport.value = ReportSchema.parse(full.data)
-            } catch (err) {
-              recordSchemaError('report', err)
-              fullReport.value = null
-            }
+            try { fullReport.value = ReportSchema.parse(full.data) } catch (err) { recordSchemaError('report', err); fullReport.value = null }
             await loadEvidence()
           }
-        } catch { /* report not yet flushed to disk — next tick */ }
+        } catch { /* report not yet flushed */ }
         stopPolling()
       } else if (st.status === 'failed') {
-        phase.value = 2
-        emit('update-status', 'error')
+        phase.value = 2; emit('update-status', 'error')
         addLog(`${t('errors.reportFailed')}: ${st.error || ''}`)
         stopPolling()
-      } else {
-        phase.value = 1
-      }
+      } else { phase.value = 1 }
     }
   } catch { /* swallow */ }
 }
 
-function startPolling() {
-  void statusPolling.start()
-  void agentLogPolling.start()
-  void consoleLogPolling.start()
-}
-function stopPolling() {
-  statusPolling.stop()
-  agentLogPolling.stop()
-  consoleLogPolling.stop()
-}
+function startPolling() { void statusPolling.start(); void agentLogPolling.start(); void consoleLogPolling.start() }
+function stopPolling() { statusPolling.stop(); agentLogPolling.stop(); consoleLogPolling.stop() }
 
-const reportMarkdown = computed((): string => {
-  const r = fullReport.value
-  if (!r) return ''
-  return r.markdown_content ?? ''
-})
-
+const reportMarkdown = computed((): string => fullReport.value?.markdown_content ?? '')
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
-
-const redTeamFindings = computed((): string[] => {
-  return fullReport.value?.red_team_findings ?? []
-})
+const redTeamFindings = computed((): string[] => fullReport.value?.red_team_findings ?? [])
 
 const sectionHtml = computed((): Record<string, string> => {
   const map: Record<string, string> = {}
@@ -384,20 +284,11 @@ function navigateToAnchor(anchor: string | null | undefined) {
   if (!parsed) return
   if (parsed.kind === 'agent-log' && parsed.entryId) {
     const target = document.getElementById(`agent-entry-${parsed.entryId}`)
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      target.classList.add('is-highlighted')
-      setTimeout(() => target.classList.remove('is-highlighted'), 1500)
-    }
+    if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); target.classList.add('is-highlighted'); setTimeout(() => target.classList.remove('is-highlighted'), 1500) }
     return
   }
-  if (parsed.kind === 'web') {
-    window.open(parsed.url, '_blank', 'noopener,noreferrer')
-    return
-  }
-  if (parsed.kind === 'kg') {
-    console.info('[Step4Report] KG-Anchor noch nicht aufrufbar:', parsed.payload)
-  }
+  if (parsed.kind === 'web') { window.open(parsed.url, '_blank', 'noopener,noreferrer'); return }
+  if (parsed.kind === 'kg') console.info('[Step4Report] KG-Anchor noch nicht aufrufbar:', parsed.payload)
 }
 
 async function loadEvidence() {
@@ -407,12 +298,8 @@ async function loadEvidence() {
     if (!res?.success) return
     const parsed = EvidenceMapSchema.parse(res.data)
     evidenceMap.value = parsed
-    if (!selectedEvidenceSection.value && parsed.sections.length) {
-      selectedEvidenceSection.value = parsed.sections[0].section_index
-    }
-  } catch (err) {
-    recordSchemaError('evidence', err)
-  }
+    if (!selectedEvidenceSection.value && parsed.sections.length) selectedEvidenceSection.value = parsed.sections[0].section_index
+  } catch (err) { recordSchemaError('evidence', err) }
 }
 
 const {
@@ -432,11 +319,7 @@ const {
 })
 
 async function createBranchFromReport(branchForm: {
-  branch_name: string
-  llm_model: string
-  llm_profile_id: string
-  language: string
-  max_agents: string
+  branch_name: string; llm_model: string; llm_profile_id: string; language: string; max_agents: string
 }) {
   const simulationId = resolvedSimulationId.value || props.simulationId
   if (!simulationId || !branchForm.branch_name.trim()) return
@@ -447,20 +330,10 @@ async function createBranchFromReport(branchForm: {
     if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
-    const res = (await createSimulationBranch(simulationId, {
-      branch_name: branchForm.branch_name.trim(),
-      copy_profiles: true,
-      copy_report_artifacts: false,
-      overrides
-    })) as ApiResult
-    if (res?.success && res.data?.simulation_id) {
-      router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id as string } })
-    }
-  } catch (e) {
-    addLog((e as Error).message)
-  } finally {
-    branchBusy.value = false
-  }
+    const res = (await createSimulationBranch(simulationId, { branch_name: branchForm.branch_name.trim(), copy_profiles: true, copy_report_artifacts: false, overrides })) as ApiResult
+    if (res?.success && res.data?.simulation_id) router.push({ name: 'Simulation', params: { simulationId: res.data.simulation_id as string } })
+  } catch (e) { addLog((e as Error).message) }
+  finally { branchBusy.value = false }
 }
 
 function goConversation() {
@@ -470,28 +343,16 @@ function goConversation() {
 onMounted(async () => {
   await pollStatus()
   if (!isComplete.value) {
-    if (props.reportId) {
-      // Ein laufender Report ist bereits bekannt → normales Polling fortsetzen.
-      phase.value = 1
-      startPolling()
-    } else {
-      // Kein laufender Report → Confirm-Dialog zeigen statt Auto-Start.
-      phase.value = 0
-      reportPending.value = true
-    }
+    if (props.reportId) { phase.value = 1; startPolling() }
+    else { phase.value = 0; reportPending.value = true }
   } else if (!fullReport.value) {
     try {
       const full = (await getReport(props.reportId!)) as ApiResult
       if (full?.success) {
-        try {
-          fullReport.value = ReportSchema.parse(full.data)
-        } catch (err) {
-          recordSchemaError('report', err)
-          fullReport.value = null
-        }
+        try { fullReport.value = ReportSchema.parse(full.data) } catch (err) { recordSchemaError('report', err); fullReport.value = null }
         await loadEvidence()
       }
-    } catch { /* swallow — pollStatus will retry later */ }
+    } catch { /* swallow */ }
   }
 })
 onUnmounted(stopPolling)
@@ -513,52 +374,28 @@ onUnmounted(stopPolling)
             <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
               {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
             </Badge>
-            <span
-              v-if="!props.cancelEndpointAvailable"
-              :title="t('step4.reportConfirm.stopDisabledTip')"
-              class="stop-btn-wrap"
-            >
-              <Button variant="ghost" disabled class="stop-btn">
-                {{ t('step4.reportConfirm.stopButton') }}
-              </Button>
+            <span v-if="!props.cancelEndpointAvailable" :title="t('step4.reportConfirm.stopDisabledTip')" class="stop-btn-wrap">
+              <Button variant="ghost" disabled class="stop-btn">{{ t('step4.reportConfirm.stopButton') }}</Button>
             </span>
-            <Button
-              v-else
-              variant="ghost"
-              class="stop-btn stop-btn--active"
-              @click="emit('stop')"
-            >
-              {{ t('step4.reportConfirm.stopButton') }}
-            </Button>
+            <Button v-else variant="ghost" class="stop-btn stop-btn--active" @click="emit('stop')">{{ t('step4.reportConfirm.stopButton') }}</Button>
           </div>
         </header>
         <p class="card-desc">{{ t('step4.sub') }}</p>
         <p v-if="statusMsg" class="meta">{{ statusMsg }}</p>
 
-        <!-- Confirm-Dialog: erscheint wenn Simulation beendet, aber kein Report gestartet -->
         <div v-if="reportPending && phase === 0" class="report-confirm-block" data-testid="report-confirm-block">
           <p class="report-confirm-title">{{ t('step4.reportConfirm.title') }}</p>
           <p class="report-confirm-desc">{{ t('step4.reportConfirm.description') }}</p>
           <div class="report-confirm-actions">
-            <Button
-              variant="primary"
-              :disabled="isRegenerating"
-              data-testid="report-confirm-start-btn"
-              @click="startReportConfirmed"
-            >
+            <Button variant="primary" :disabled="isRegenerating" data-testid="report-confirm-start-btn" @click="startReportConfirmed">
               {{ t('step4.reportConfirm.startButton') }}
             </Button>
           </div>
         </div>
 
-        <div
-          v-if="resolvedSimulationId || simulationId"
-          class="report-profile-picker"
-        >
+        <div v-if="resolvedSimulationId || simulationId" class="report-profile-picker">
           <LlmProfilePicker v-model="llmProfileId">
-            <template #hint>
-              <span class="hint">{{ t('step4.llmProfile.hint') }}</span>
-            </template>
+            <template #hint><span class="hint">{{ t('step4.llmProfile.hint') }}</span></template>
           </LlmProfilePicker>
         </div>
         <ReportModelControls
@@ -584,101 +421,44 @@ onUnmounted(stopPolling)
         :evidence-sections="evidenceSections"
       />
 
-      <!-- Live logs: Agent reasoning (left) + raw console (right) -->
-      <article class="card" v-if="agentLogs.length || consoleLogs.length">
-        <header class="card-head">
-          <Kicker num="03">{{ t('step4.view.tools') }}</Kicker>
-          <div class="log-meta">
-            <Badge variant="ghost">{{ agentLogs.length }} agent</Badge>
-            <Badge variant="ghost">{{ consoleLogs.length }} console</Badge>
-          </div>
-        </header>
-        <div class="logs-grid">
-          <div class="log-pane">
-            <div class="log-pane-head">
-              <span class="meta">Agent</span>
-              <span class="meta">{{ agentLogs.length }}</span>
-            </div>
-            <div class="log-pane-scroll-wrap">
-              <div ref="agentLogRef" class="log-block log-pane-body">
-                <div v-if="!agentLogs.length" class="meta">Warte auf Agent-Aktivität…</div>
-                <div
-                  v-for="(e, i) in agentLogs"
-                  :key="'a' + i"
-                  :id="`agent-entry-${entryAnchorId(e)}`"
-                  class="agent-entry"
-                  :class="'action-' + (e.action || 'unknown')"
-                >
-                  <div class="agent-entry-head">
-                    <span v-if="e.ts" class="agent-ts">{{ e.ts }}</span>
-                    <span class="agent-title">{{ e.title }}</span>
-                    <span v-if="e.elapsed" class="agent-meta">{{ e.elapsed.toFixed(1) }}s</span>
-                  </div>
-                  <div v-if="e.subtitle" class="agent-subtitle">{{ e.subtitle }}</div>
-                  <div v-if="e.body" class="agent-body">{{ e.body.length > 600 ? e.body.slice(0, 600) + '…' : e.body }}</div>
-                </div>
-              </div>
-              <StickyScrollBanner
-                :count="agentSticky.unreadCount.value"
-                @jump="agentSticky.scrollToBottom"
-              />
-            </div>
-          </div>
-          <div class="log-pane">
-            <div class="log-pane-head">
-              <span class="meta">Console</span>
-              <span class="meta">{{ consoleLogs.length }}</span>
-            </div>
-            <div class="log-pane-scroll-wrap">
-              <div ref="consoleLogRef" class="log-block log-pane-body">
-                <div v-for="(line, i) in consoleLogs" :key="'c' + i" class="log-line console">
-                  {{ line }}
-                </div>
-              </div>
-              <StickyScrollBanner
-                :count="consoleSticky.unreadCount.value"
-                @jump="consoleSticky.scrollToBottom"
-              />
-            </div>
-          </div>
-        </div>
-      </article>
+      <!-- Live logs (extracted to ReportLiveLogPane) -->
+      <ReportLiveLogPane
+        v-if="agentLogs.length || consoleLogs.length"
+        :agent-logs="agentLogs"
+        :console-logs="consoleLogs"
+        :agent-unread-count="agentSticky.unreadCount.value"
+        :console-unread-count="consoleSticky.unreadCount.value"
+        @agent-scroll-to-bottom="agentSticky.scrollToBottom"
+        @console-scroll-to-bottom="consoleSticky.scrollToBottom"
+      />
 
-      <!-- Rendered final report -->
-      <article class="card" v-if="phase === 2 && reportHtml">
-        <header class="card-head">
-          <Kicker num="04" accent>Bericht</Kicker>
-          <div class="log-meta">
-            <Button variant="ghost" @click="copyMarkdown">Markdown kopieren</Button>
-            <Button variant="ghost" @click="downloadMarkdown">.md</Button>
-            <Button variant="ghost" @click="downloadCombinedJson">.json</Button>
-            <Button variant="ghost" @click="downloadHtml">.html</Button>
-            <Button variant="ghost" @click="printReport">{{ t('step4.view.printPdf') }}</Button>
-            <Button v-if="evidenceSections.length" variant="ghost" @click="downloadEvidence">Evidence JSON</Button>
-          </div>
-        </header>
-        <ReportRedTeamSection :findings="redTeamFindings" />
-        <div class="report-layout" :class="{ 'report-layout--stacked': !evidenceSections.length }">
-          <div class="report-body markdown-body" v-html="reportHtml"></div>
-          <ReportEvidencePanel
-            v-if="evidenceSections.length"
-            v-model:selected-section="selectedEvidenceSection"
-            :sections="evidenceSections"
-            @navigate="navigateToAnchor"
-          />
-        </div>
-      </article>
+      <!-- Final report + conversation hand-off (extracted to ReportFinalView) -->
+      <ReportFinalView
+        v-if="phase === 2 && reportHtml"
+        :report-html="reportHtml"
+        :red-team-findings="redTeamFindings"
+        :evidence-sections="evidenceSections"
+        :selected-evidence-section="selectedEvidenceSection"
+        :resolved-simulation-id="resolvedSimulationId"
+        :simulation-id="simulationId"
+        :branch-busy="branchBusy"
+        @update:selected-evidence-section="selectedEvidenceSection = $event"
+        @navigate="navigateToAnchor"
+        @create-branch="createBranchFromReport"
+        @go-conversation="goConversation"
+        @copy-markdown="copyMarkdown"
+        @download-markdown="downloadMarkdown"
+        @download-json="downloadCombinedJson"
+        @download-html="downloadHtml"
+        @print-report="printReport"
+        @download-evidence="downloadEvidence"
+      />
 
-      <!-- Conversation hand-off -->
-      <article class="card" v-if="phase === 2">
+      <!-- Conversation hand-off when no report yet (phase 2, no html) -->
+      <article class="card" v-if="phase === 2 && !reportHtml">
         <header class="card-head">
           <Kicker num="05" accent>{{ t('step4.next') }}</Kicker>
         </header>
-        <ReportBranchControls
-          v-if="resolvedSimulationId || simulationId"
-          :branch-busy="branchBusy"
-          @create="createBranchFromReport"
-        />
         <div class="actions">
           <Button variant="primary" arrow @click="goConversation">{{ t('step4.next') }}</Button>
         </div>
@@ -688,323 +468,36 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
-.step-panel {
-  height: 100%;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--s-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-5);
-}
-.card {
-  background: var(--bg);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-1);
-  padding: var(--s-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-4);
-}
+.step-panel { height: 100%; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+.scroll { flex: 1; overflow-y: auto; padding: var(--s-6); display: flex; flex-direction: column; gap: var(--s-5); }
+.card { background: var(--bg); border: 1px solid var(--rule); border-radius: var(--r-1); padding: var(--s-5); display: flex; flex-direction: column; gap: var(--s-4); }
 .card.is-active { border-color: var(--accent); }
-.card-head {
-  display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: var(--s-3);
-}
+.card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); }
 .card-desc { color: var(--fg-body); margin: 0; }
-
-.report-body {
-  max-width: 72ch;
-  margin: 0 auto;
-  font-family: var(--ff-sans);
-  color: var(--fg);
-  font-size: var(--fs-18, 17px);
-  line-height: 1.75;
-  padding: var(--s-4) 0;
-}
-.report-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
-  gap: var(--s-5);
-}
-.report-layout--stacked {
-  grid-template-columns: 1fr;
-}
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(h4) {
-  font-family: var(--ff-sans);
-  color: var(--fg);
-  line-height: 1.25;
-  margin: 1.8em 0 0.4em;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.markdown-body :deep(h1) { font-size: 2em; border-bottom: 1px solid var(--rule); padding-bottom: 0.3em; }
-.markdown-body :deep(h2) { font-size: 1.5em; color: var(--accent); }
-.markdown-body :deep(h3) { font-size: 1.2em; }
-.markdown-body :deep(h4) { font-size: 1.05em; text-transform: uppercase; letter-spacing: var(--ls-mono); font-family: var(--ff-mono); color: var(--fg-muted); }
-.markdown-body :deep(p) { margin: 0.9em 0; }
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) { margin: 0.9em 0 0.9em 1.4em; padding: 0; }
-.markdown-body :deep(li) { margin: 0.35em 0; }
-.markdown-body :deep(li p) { margin: 0.3em 0; }
-.markdown-body :deep(blockquote) {
-  border-left: 3px solid var(--accent);
-  margin: 1em 0;
-  padding: 0.2em 1em;
-  color: var(--fg-muted);
-}
-.markdown-body :deep(code) {
-  background: var(--bg-elevated);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: var(--ff-mono);
-  font-size: 0.9em;
-}
-.markdown-body :deep(pre) {
-  background: var(--mono-900);
-  color: var(--mono-50);
-  padding: 1em;
-  overflow-x: auto;
-  border-radius: var(--r-1);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.markdown-body :deep(pre code) { background: transparent; padding: 0; color: inherit; }
-.markdown-body :deep(table) {
-  border-collapse: collapse;
-  margin: 1em 0;
-  font-family: var(--ff-sans);
-  font-size: 0.95em;
-}
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border: 1px solid var(--rule);
-  padding: 6px 10px;
-  text-align: left;
-}
-.markdown-body :deep(th) { background: var(--bg-elevated); font-weight: 500; }
-.markdown-body :deep(hr) { border: 0; border-top: 1px solid var(--rule); margin: 2em 0; }
-.markdown-body :deep(a) {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.markdown-body :deep(strong) { font-weight: 600; color: var(--fg); }
+.meta { color: var(--fg-muted); font-family: var(--ff-mono); font-size: 11px; }
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
-
-.log-meta { display: flex; gap: var(--s-2); }
-
-.logs-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--s-3);
-}
-.log-pane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-}
-.log-pane-scroll-wrap {
-  position: relative;
-}
-.log-pane-head {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  letter-spacing: var(--ls-mono);
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: var(--s-2);
-}
-.log-pane-body {
-  max-height: 280px;
-  overflow-y: auto;
-  border-radius: var(--r-1);
-}
-.log-block {
-  max-height: 280px;
-  overflow-y: auto;
-}
-.log-line {
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  color: var(--mono-50);
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  margin-bottom: 2px;
-  line-height: 1.5;
-}
-.log-line.agent { color: var(--mono-50); }
-.log-line.console { color: var(--mono-300); }
-
-.agent-entry {
-  padding: 6px 0;
-  border-bottom: 1px dashed var(--rule-soft);
-  font-family: var(--ff-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--mono-100);
-}
-.agent-entry-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-.agent-ts {
-  color: var(--mono-400);
-  font-size: 10px;
-}
-.agent-title {
-  color: var(--mono-50);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.agent-meta {
-  margin-left: auto;
-  color: var(--mono-400);
-  font-size: 10px;
-}
-.agent-subtitle {
-  color: var(--mono-300);
-  padding-left: 0;
-  margin-bottom: 2px;
-  word-break: break-word;
-}
-.agent-body {
-  color: var(--mono-200);
-  white-space: pre-wrap;
-  word-break: break-word;
-  padding: 4px 0 0 12px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  font-family: var(--ff-sans);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.agent-entry.action-tool_call .agent-title { color: var(--accent); }
-.agent-entry.action-tool_result .agent-title { color: var(--status-success); }
-.agent-entry.action-error .agent-title { color: var(--status-error); }
-.agent-entry.action-section_start .agent-title,
-.agent-entry.action-section_complete .agent-title { color: var(--status-warn); }
-.agent-entry.action-llm_response .agent-title { color: var(--mono-400); }
-
-@media (max-width: 880px) {
-  .logs-grid { grid-template-columns: 1fr; }
-  .report-layout { grid-template-columns: 1fr; }
-}
-
 .schema-error {
   background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
-  border: 1px solid var(--status-error, #c0392b);
-  border-radius: var(--r-1);
+  border: 1px solid var(--status-red, var(--status-error, #c0392b));
+  border-radius: var(--r-6, var(--r-1));
   padding: var(--s-4);
   margin: var(--s-4) var(--s-6) 0;
-  color: var(--fg);
-  font-family: var(--ff-mono);
+  color: var(--text-primary, var(--fg));
+  font-family: var(--font-sans, var(--ff-sans));
   font-size: var(--fs-14, 13px);
 }
-.schema-error strong {
-  display: block;
-  margin-bottom: var(--s-2);
-  color: var(--status-error, #c0392b);
-}
-.schema-error ul {
-  margin: 0;
-  padding-left: var(--s-4);
-}
-.schema-error li {
-  line-height: 1.6;
-}
-
-.agent-entry.is-highlighted {
-  background: var(--accent-soft);
-  transition: background 0.4s ease-in-out;
-}
-
-/* Design v3 report surface polish. */
-.schema-error,
-.agent-entry,
-.report-layout,
-.logs-grid {
-  font-family: var(--font-sans, var(--ff-sans));
-}
-.schema-error {
-  background: var(--status-red-bg, color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent));
-  border-color: var(--status-red, var(--status-error, #c0392b));
-  border-radius: var(--r-6, var(--r-1));
-  color: var(--text-primary, var(--fg));
-}
-.agent-entry,
-.agent-title,
-.agent-body {
-  font-family: var(--font-sans, var(--ff-sans));
-  letter-spacing: 0;
-}
-.agent-entry.is-highlighted {
-  background: var(--accent-tint-bg, var(--accent-soft));
-}
-.agent-entry.action-tool_result .agent-title { color: var(--status-green, var(--status-success)); }
-.agent-entry.action-error .agent-title { color: var(--status-red, var(--status-error)); }
-.agent-entry.action-section_start .agent-title,
-.agent-entry.action-section_complete .agent-title { color: var(--status-orange, var(--status-warn)); }
-
-/* Confirm-Block */
-.report-confirm-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  background: var(--bg-elevated);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-1);
-  padding: var(--s-4);
-}
-.report-confirm-title {
-  font-weight: 600;
-  color: var(--fg);
-  margin: 0;
-}
-.report-confirm-desc {
-  color: var(--fg-body);
-  margin: 0;
-}
-.report-confirm-actions {
-  display: flex;
-  gap: var(--s-3);
-  align-items: center;
-}
-
-/* Stop-Button im Header */
-.card-head-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-}
-.report-profile-picker {
-  margin-bottom: var(--s-3);
-}
-.is-overridden-by-profile {
-  opacity: 0.6;
-}
-.stop-btn-wrap {
-  display: inline-flex;
-}
-.stop-btn {
-  color: var(--fg-muted);
-}
-.stop-btn--active {
-  color: var(--status-red, var(--status-error));
-}
+.schema-error strong { display: block; margin-bottom: var(--s-2); color: var(--status-red, var(--status-error, #c0392b)); }
+.schema-error ul { margin: 0; padding-left: var(--s-4); }
+.schema-error li { line-height: 1.6; }
+.report-confirm-block { display: flex; flex-direction: column; gap: var(--s-3); background: var(--bg-elevated); border: 1px solid var(--accent); border-radius: var(--r-1); padding: var(--s-4); }
+.report-confirm-title { font-weight: 600; color: var(--fg); margin: 0; }
+.report-confirm-desc { color: var(--fg-body); margin: 0; }
+.report-confirm-actions { display: flex; gap: var(--s-3); align-items: center; }
+.card-head-actions { display: flex; align-items: center; gap: var(--s-3); }
+.report-profile-picker { margin-bottom: var(--s-3); }
+.is-overridden-by-profile { opacity: 0.6; }
+.stop-btn-wrap { display: inline-flex; }
+.stop-btn { color: var(--fg-muted); }
+.stop-btn--active { color: var(--status-red, var(--status-error)); }
+.hint { font-family: var(--ff-mono); font-size: 11px; color: var(--fg-muted); }
 </style>

@@ -5,18 +5,20 @@ import Kicker from '@/components/v4/data/Kicker.vue'
 import FeedColumn from '../v4/sim-feed/FeedColumn.vue'
 import TwitterPost from '../v4/sim-feed/TwitterPost.vue'
 import RedditThread from '../v4/sim-feed/RedditThread.vue'
+import type { PostCreatedEvent } from '@/contracts/postEventContract'
+import type { RedditNode } from '@/composables/useSimFeed'
 
 const { t } = useI18n()
 
-defineProps({
-  allActionsCount: { type: Number, required: true },
-  twitterPosts: { type: Array, required: true },
-  redditPosts: { type: Array, required: true },
-  redditTree: { type: Array, required: true },
-  feedDensity: { type: String, default: 'comfort' },
-  toolPanelOpen: { type: Boolean, default: false },
-  toolPanelUnreadErrors: { type: Number, default: 0 },
-})
+defineProps<{
+  allActionsCount: number
+  twitterPosts: PostCreatedEvent[]
+  redditPosts: PostCreatedEvent[]
+  redditTree: RedditNode[]
+  feedDensity?: string
+  toolPanelOpen?: boolean
+  toolPanelUnreadErrors?: number
+}>()
 
 const emit = defineEmits(['set-density', 'toggle-tool-panel'])
 </script>
@@ -68,7 +70,7 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
         <TransitionGroup name="slide-in" tag="div" class="post-list">
           <TwitterPost
             v-for="post in twitterPosts"
-            :key="(post as any).post_id"
+            :key="post.post_id"
             :post="post"
           />
         </TransitionGroup>
@@ -78,7 +80,7 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
         <TransitionGroup name="slide-in" tag="div" class="post-list">
           <RedditThread
             v-for="node in redditTree"
-            :key="(node as any).post_id"
+            :key="node.post_id"
             :node="node"
           />
         </TransitionGroup>
