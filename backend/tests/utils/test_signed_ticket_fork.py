@@ -4,7 +4,7 @@ import app.extensions as _ext
 from app.extensions import register_fork_handlers
 
 
-def test_register_fork_handlers():
+def test_register_fork_handlers(monkeypatch):
     if not hasattr(os, "register_at_fork"):
         return
 
@@ -12,9 +12,11 @@ def test_register_fork_handlers():
 
     # Reset module-level globals so this test is isolated regardless of
     # import order or previous calls from other test modules.
-    _ext._FORK_HANDLER_REGISTERED = False
-    _ext._REGISTERED_NEO4J_STORAGES.clear()
-    _ext._REGISTERED_EVENT_BUSES.clear()
+    # monkeypatch.setattr auto-restores original values after the test,
+    # preventing order-dependency leaks into subsequent tests.
+    monkeypatch.setattr(_ext, "_FORK_HANDLER_REGISTERED", False)
+    monkeypatch.setattr(_ext, "_REGISTERED_NEO4J_STORAGES", [])
+    monkeypatch.setattr(_ext, "_REGISTERED_EVENT_BUSES", [])
 
     with patch("os.register_at_fork") as mock_reg:
         register_fork_handlers(neo4j_storage=mock_neo4j)
