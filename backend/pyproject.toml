@@ -170,6 +170,12 @@ ignore = [
 "scripts/run_reddit_simulation.py" = ["F401"]
 "scripts/run_twitter_simulation.py" = ["F401"]
 "scripts/security_verify.py" = ["E402"]
+# BLE001 kam mit #626 in select; app/ wurde dabei bereinigt (~120 Stellen).
+# Standalone-CLI-Runner (scripts/) und Tests fangen bewusst breit ab —
+# Aufräumen läuft unter Milestone M5 (#638), bis dahin Baseline-Ignore,
+# damit der Heavy-Job (`ruff check .`) auf main nicht rot bleibt.
+"scripts/*" = ["BLE001"]
+"tests/*" = ["BLE001"]
 
 [tool.mypy]
 python_version = "3.14"

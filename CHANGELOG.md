@@ -5,6 +5,28 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (bug — 2026-06-10)
+
+- **Projekt-Meta ging beim Ontology-Upload verloren** (Regression aus dem
+  #562-Refactor): `POST /api/graph/ontology/generate` setzte
+  `simulation_requirement`, `files` und `total_text_length` nur am
+  In-Memory-Objekt, während `GraphBuildService.generate_ontology` das Projekt
+  frisch von Platte lud und die Meta ohne diese Felder zurückschrieb. Folge:
+  jeder Report-Generate und jede Simulation-Vorbereitung scheiterte mit 400
+  "Missing simulation requirement description" (e2e-Smokes report-modes +
+  minimal-report, CI-Run 27241443657). Fix: explizites
+  `ProjectManager.save_project()` in der Route vor dem Service-Aufruf;
+  Regressionstest `tests/api/test_graph_ontology_persists_project_meta.py`
+  mit echter Persistenz gegen `tmp_path`.
+
+### CI (fix — 2026-06-10)
+
+- Ruff-Heavy-Gate (`ruff check .`) auf main wieder grün: `BLE001`-Baseline
+  für `scripts/*` und `tests/*` als `per-file-ignores` (CLI-Runner und Tests
+  fangen bewusst breit; Aufräumen unter Milestone M5, #638) plus ungenutzten
+  `os`-Import in `tests/test_no_silent_exceptions.py` entfernt. `app/` bleibt
+  vollständig BLE001-enforced (#626).
+
 ### Operations / Observability (refactor — 2026-06-09)
 
 - Replaced all ~120 silent `except Exception: pass` blocks in `backend/app/`
