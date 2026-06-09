@@ -38,6 +38,7 @@ jobs:
             playwright.azureedge.net:443
             playwright-akamai.azureedge.net:443
             playwright-verizon.azureedge.net:443
+            storage.googleapis.com:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -111,6 +112,7 @@ jobs:
             playwright.azureedge.net:443
             playwright-akamai.azureedge.net:443
             playwright-verizon.azureedge.net:443
+            storage.googleapis.com:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -182,6 +184,7 @@ jobs:
             playwright.azureedge.net:443
             playwright-akamai.azureedge.net:443
             playwright-verizon.azureedge.net:443
+            storage.googleapis.com:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
@@ -245,6 +248,7 @@ jobs:
             playwright.azureedge.net:443
             playwright-akamai.azureedge.net:443
             playwright-verizon.azureedge.net:443
+            storage.googleapis.com:443
             esm.ubuntu.com:443
             github.com:443
             objects.githubusercontent.com:443
