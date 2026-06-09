@@ -664,7 +664,7 @@ def _is_cancel_requested(run_id: Optional[str]) -> bool:
     try:
         from ..sim.cancel_flag import is_cancel_requested
         return is_cancel_requested(run_id)
-    except Exception:  # noqa: BLE001 — exc used in report status; error recorded
+    except Exception:  # noqa: BLE001 — cancel check fallback; returns False on failure
         return False
 
 

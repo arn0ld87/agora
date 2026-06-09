@@ -53,7 +53,7 @@ def _is_public_url(url: str) -> tuple[bool, str]:
     """
     try:
         p = urlparse(url)
-    except Exception:  # noqa: BLE001 — tool returned None; exc swallowed intentionally
+    except Exception:  # noqa: BLE001 — URL parsing fallback; returns unparsable status
         return False, "unparsable URL"
     if p.scheme not in ("http", "https"):
         return False, f"unsupported scheme {p.scheme!r}"

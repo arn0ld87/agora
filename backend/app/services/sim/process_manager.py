@@ -530,7 +530,7 @@ def cleanup_all_simulations(
         try:
             if file_handle:
                 file_handle.close()
-        except Exception as exc:  # noqa: BLE001 — process termination; exc discarded, kill follows
+        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
             logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
     stdout_files.clear()
 
@@ -538,7 +538,7 @@ def cleanup_all_simulations(
         try:
             if file_handle:
                 file_handle.close()
-        except Exception as exc:  # noqa: BLE001 — process termination; exc discarded, kill follows
+        except Exception as exc:  # noqa: BLE001 — file handle close; exc discarded
             logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
     stderr_files.clear()
 
@@ -663,8 +663,8 @@ def terminate_run(
         try:
             process.kill()
             process.wait(timeout=5)
-        except Exception as exc:  # noqa: BLE001 — process termination; exc discarded, kill follows
-            logger.debug("process_manager: file handle close failed, ignoring: %s", exc)
+        except Exception as kill_err:  # noqa: BLE001 — process termination; kill_err discarded
+            logger.debug("process_manager: process kill failed, ignoring: %s", kill_err)
     return True
 
 

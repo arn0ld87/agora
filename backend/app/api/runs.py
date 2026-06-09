@@ -335,7 +335,7 @@ def stop_run(run_id: str):
             resume_capability={"available": True, "action": "restart", "label": "Restart run"},
         )
         return json_success(run_registry.get_run(run_id))
-    except Exception as exc:  # noqa: BLE001 — exception reported to task/run registry
+    except Exception as exc:  # noqa: BLE001 — exception returned as JSON error response
         return json_error(str(exc), status=400)
 
 
