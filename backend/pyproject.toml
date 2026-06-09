@@ -201,6 +201,10 @@ module = [
     "app",
     "app.config",
     "app.container",
+    # app.llm.client traegt die Legacy-Typing-Baseline aus app.utils.llm_client
+    # (#582-Umzug, reines Restrukturieren). Die NEUEN app.llm-Module
+    # (providers/*, context, json_mode, errors, retry) laufen ohne Override.
+    "app.llm.client",
     "app.models.*",
     "app.services.*",
     "app.storage.*",

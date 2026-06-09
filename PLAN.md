@@ -193,11 +193,18 @@ agora/
 │   └── settings.json
 ├── backend/
 │   └── app/
+│       ├── llm/                       # LLM-Runtime (M3, #582/#590/#591)
+│       │   ├── client.py              # Unified LLM-Client (produktiv, ersetzt geplantes services/ai/)
+│       │   ├── context.py             # num_ctx-Heuristik + Override-Hierarchie
+│       │   ├── json_mode.py           # JSON-Mode-Bausteine (strict/object/Repair)
+│       │   ├── errors.py              # NormalizedLlmError-Mapping
+│       │   ├── retry.py               # gemeinsamer Retry-Layer (Re-Export)
+│       │   └── providers/             # Adapter (ollama/openai/gemini) + Detection-registry.py
 │       ├── services/
 │       │   ├── llm_routing_seed.py    # Multi-Provider-Routing (produktiv)
 │       │   └── stage_model_router.py  # Stage→Modell-Mapping (produktiv)
 │       └── utils/
-│           └── llm_client.py          # Unified LLM-Client (produktiv, ersetzt geplantes services/ai/)
+│           └── llm_client.py          # Fassade → app/llm/client.py (Rueckwaerts-Kompat, #582)
 ├── prompts/
 │   ├── system/
 │   │   ├── base.md                 # NEU: Basis-System-Prompt
@@ -222,11 +229,15 @@ heute über:
 
 - `app/services/llm_routing_seed.py` — Provider-/Modell-Mapping pro Stage
 - `app/services/stage_model_router.py` — Stage→Modell-Auflösung
-- `app/utils/llm_client.py` — Unified LLM-Client (`from_route()`)
+- `app/llm/client.py` — Unified LLM-Client (`from_route()`; Fassade fuer
+  Alt-Importe: `app/utils/llm_client.py`, Milestone M3 #582)
+- `app/llm/providers/registry.py` — zentrale Provider-Erkennung
+  (`detect_provider`, #591) + Adapter-Aufloesung (`get_adapter`, #590)
+- `app/llm/providers/{ollama,openai,gemini}.py` — Provider-Adapter (#590)
 - `app/services/llm_providers/github_copilot.py` — Provider-Auth
 
 Backup-Tag des entfernten Codes: `archive/services-ai-pre-removal`.
-Falls die Phase reaktiviert wird: neu in `app/services/llm/` aufsetzen, **nicht**
+Falls die Phase reaktiviert wird: in `app/llm/` weiter ausbauen, **nicht**
 außerhalb von `app/` (sonst nicht im Wheel).
 
 ### Phase 2 — Session & Switching (Status: nicht umgesetzt)
