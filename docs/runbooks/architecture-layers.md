@@ -165,6 +165,32 @@ Status: Health-Endpoints aktiv. Metrics-Pipeline geplant.
 
 ---
 
+---
+
+## Security
+
+### AGORA_CORS_ALLOW_ALL
+
+**Env-Variable:** `AGORA_CORS_ALLOW_ALL` (Default: `false`)
+
+Setzt den CORS-Origin-Filter auf Wildcard (`*`) und deaktiviert gleichzeitig
+`Access-Control-Allow-Credentials`. Hintergrund: Browser lehnen die Kombination
+Wildcard-Origin + Credentials per Spec ab (CORS §8.7); flask-cors setzt
+`supports_credentials=False` automatisch wenn `allow_all=true`.
+
+**Verwendung:**
+
+- **Nur in Entwicklung** zulässig, z.B. wenn Frontend und Backend auf
+  unterschiedlichen Ports laufen und kein Cookie-Auth benötigt wird.
+- **Niemals in Produktion** — auch nicht temporär. Die App verweigert den Start
+  wenn `AGORA_CORS_ALLOW_ALL=true` und `FLASK_ENV=production` gleichzeitig gesetzt
+  sind (fail-closed, Issue #592).
+
+**Alternative für Prod:** `AGORA_EXTRA_ORIGINS` als komma-separierte Whitelist,
+z.B. `AGORA_EXTRA_ORIGINS=https://app.example.com,https://admin.example.com`.
+
+---
+
 ## Gotchas
 
 ### Kein CAMEL-Floor unterlaufen
