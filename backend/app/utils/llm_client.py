@@ -141,7 +141,8 @@ def _resolve_num_ctx(
         fallback = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
     except ValueError:
         fallback = 8192
-    _warn_legacy_fallback_once(model_name or "", fallback)
+    if model_name:
+        _warn_legacy_fallback_once(model_name, fallback)
     return fallback
 
 

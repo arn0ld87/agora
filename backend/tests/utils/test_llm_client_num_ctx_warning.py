@@ -176,3 +176,25 @@ class TestResolveNumCtxWarning:
         # The warning args include the fallback value as a positional arg
         call_args = mock_warn.call_args
         assert 8192 in call_args.args or "8192" in str(call_args)
+
+    def test_empty_model_name_no_warning(self, monkeypatch):
+        """Empty or None model_name must NOT emit a WARNING (unactionable log noise)."""
+        from app.utils import llm_client
+
+        monkeypatch.delenv("LLM_MODEL_CONTEXT_LIMITS_JSON", raising=False)
+        monkeypatch.delenv("LLM_CONTEXT_LIMIT", raising=False)
+        monkeypatch.delenv("OLLAMA_NUM_CTX", raising=False)
+
+        with patch.object(llm_client.logger, "warning") as mock_warn:
+            result_empty = llm_client._resolve_num_ctx(
+                model_name="",
+                provider_options_num_ctx=None,
+            )
+            result_none = llm_client._resolve_num_ctx(
+                model_name=None,
+                provider_options_num_ctx=None,
+            )
+
+        assert result_empty == 8192
+        assert result_none == 8192
+        mock_warn.assert_not_called()
