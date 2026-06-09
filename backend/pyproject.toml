@@ -2,7 +2,7 @@
 name = "agora-backend"
 version = "1.0.0"
 description = "Agora - Hybrid Multi-Agent Resonance Simulator on Neo4j + Ollama"
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 license = { text = "AGPL-3.0" }
 authors = [
     { name = "Alexander Schneider", email = "schneider@alexle135.de" }

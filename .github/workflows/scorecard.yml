@@ -43,6 +43,9 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
+          # Publishing needs the SCORECARD_TOKEN repo secret (fine-grained PAT,
+          # Administration: read-only on this repo) — configured 2026-06-09.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
           publish_results: true
 
       - name: Upload Scorecard SARIF artifact
