@@ -12,7 +12,6 @@ Acceptance criteria (Issue #583):
 from __future__ import annotations
 
 import ast
-import os
 import re
 import subprocess
 import sys

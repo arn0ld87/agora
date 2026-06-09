@@ -153,6 +153,13 @@ def generate_ontology():
     project.total_text_length = len(all_text)
     ProjectManager.save_extracted_text(project.project_id, all_text)
 
+    # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —
+    # create_project() hat bereits VOR dem Setzen von simulation_requirement,
+    # files und total_text_length gespeichert. Ohne dieses save_project gehen
+    # die Felder verloren und Report-Generate/Simulation-Prepare lehnen das
+    # Projekt mit "Missing simulation requirement description" (400) ab.
+    ProjectManager.save_project(project)
+
     try:
         project = GraphBuildService.generate_ontology(
             project_id=project.project_id,
