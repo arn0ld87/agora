@@ -4,6 +4,7 @@
  * Bedient die in backend/app/api/llm_providers.py ergänzten CRUD-Endpunkte
  * für persistierte (Fernet-verschlüsselte) Provider-Keys.
  */
+// Issue #578: bare .parse() replaced with unwrapAndParse (typed rejection on schema drift).
 import service from "./index";
 import {
   LlmProviderKeyCreateRequest,
@@ -14,17 +15,18 @@ import {
   LlmProviderKeysListResponseSchema,
 } from "../contracts/llmProviderKeysContract";
 import { ApiSuccessEnvelope } from "./envelope";
+import { unwrapAndParse } from "./parse";
 
 export async function listLlmProviderKeys(): Promise<LlmProviderKeysListResponse> {
   const resp = await service.get<ApiSuccessEnvelope<unknown>>("/api/llm/providers/api-keys");
-  return LlmProviderKeysListResponseSchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, LlmProviderKeysListResponseSchema);
 }
 
 export async function getLlmProviderKey(providerId: string): Promise<LlmProviderKeyEntry> {
   const resp = await service.get<ApiSuccessEnvelope<unknown>>(
     `/api/llm/providers/${providerId}/api-key`,
   );
-  return LlmProviderKeyEntrySchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, LlmProviderKeyEntrySchema);
 }
 
 export async function upsertLlmProviderKey(
@@ -32,13 +34,17 @@ export async function upsertLlmProviderKey(
   req: LlmProviderKeyCreateRequest,
   options: { validate?: boolean } = {},
 ): Promise<LlmProviderKeyEntry> {
-  LlmProviderKeyCreateRequestSchema.parse(req);
+  const reqParsed = LlmProviderKeyCreateRequestSchema.safeParse(req);
+  if (!reqParsed.success) {
+    console.warn('[api] upsertLlmProviderKey request validation failed', reqParsed.error.flatten())
+    throw new Error(`schema mismatch: ${reqParsed.error.message}`)
+  }
   const query = options.validate ? "?validate=1" : "";
   const resp = await service.post<ApiSuccessEnvelope<unknown>>(
     `/api/llm/providers/${providerId}/api-key${query}`,
     req,
   );
-  return LlmProviderKeyEntrySchema.parse((resp as unknown as { data: unknown }).data);
+  return unwrapAndParse(resp, LlmProviderKeyEntrySchema);
 }
 
 export async function deleteLlmProviderKey(providerId: string): Promise<void> {
