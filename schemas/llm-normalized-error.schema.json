@@ -1,0 +1,68 @@
+{
+  "$id": "https://alexle135.de/schemas/llm-normalized-error.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Provider-neutral klassifizierter Fehler.\n\n``retryable`` spiegelt die Retry-Semantik aus\n``app.utils.retry._is_transient_llm_error``: Verbindungsabbrueche,\nTimeouts, HTTP 429 sowie 5xx/408 sind transient; uebrige 4xx nicht.",
+  "properties": {
+    "cause": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cause"
+    },
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "ollama",
+        "openai",
+        "google",
+        "anthropic",
+        "custom",
+        "ollama_cloud",
+        "openai_compatible",
+        "github_copilot",
+        "cloud",
+        "unknown"
+      ],
+      "title": "Provider",
+      "type": "string"
+    },
+    "retryable": {
+      "title": "Retryable",
+      "type": "boolean"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    }
+  },
+  "required": [
+    "provider",
+    "code",
+    "message",
+    "retryable"
+  ],
+  "title": "NormalizedLlmError",
+  "type": "object"
+}

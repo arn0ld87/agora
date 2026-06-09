@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 from ..config import Config
 from ..contracts.llm_routing_contract import ResolvedRoute, ReasoningEffort
+from ..llm.providers.ollama import build_ollama_extra_body
+from ..llm.providers.openai import uses_max_completion_tokens
 from ..llm.providers.registry import detect_provider
 from .logger import get_logger
 from .retry import llm_call_with_retry
@@ -667,17 +669,12 @@ class LLMClient:
 
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
-        # GPT-5 / o1 / o3 / o4 verlangen max_completion_tokens; OpenAI antwortet
-        # sonst 400 "Unsupported parameter: 'max_tokens'". Heuristik gespiegelt
-        # aus backend/scripts/_sim_common.py::uses_max_completion_tokens —
-        # Single Source of Truth bleibt dort, hier nur die zweite Stelle.
-        # Striktes Prefix-Matching ("gpt-5", "gpt-5-…") verhindert
-        # Mismatches wie hypothetisches "gpt-500".
-        lowered = (model or "").strip().lower()
-        for prefix in ("gpt-5", "o1", "o3", "o4"):
-            if lowered == prefix or lowered.startswith(f"{prefix}-") or lowered.startswith(f"{prefix}."):
-                return True
-        return False
+        # Kanonische Heuristik lebt seit #590 im OpenAI-Adapter
+        # (app.llm.providers.openai.uses_max_completion_tokens): striktes
+        # Prefix-Matching ("gpt-5", "gpt-5-…") verhindert Mismatches wie
+        # hypothetisches "gpt-500". Bekannte Divergenz zur Spiegel-Heuristik
+        # in backend/scripts/_sim_common.py ist dort dokumentiert.
+        return uses_max_completion_tokens(model)
 
     @staticmethod
     def _is_token_key_400(exc: Exception) -> bool:
@@ -884,11 +881,10 @@ class LLMClient:
         # force_no_thinking=True überschreibt self._think hart auf False —
         # verhindert, dass Reasoning-Profile den Token-Cap mit Thoughts belegen.
         if self._is_ollama():
-            extra_body: Dict[str, Any] = {}
-            if self._num_ctx:
-                extra_body["options"] = {"num_ctx": self._num_ctx}
-            extra_body["think"] = False if force_no_thinking else self._think
-            kwargs["extra_body"] = extra_body
+            kwargs["extra_body"] = build_ollama_extra_body(
+                num_ctx=self._num_ctx,
+                think=False if force_no_thinking else self._think,
+            )
 
         # Force streaming for Ollama: the OpenAI-compatible endpoint in Ollama
         # 0.21.0 stalls on non-streaming completions for cloud models (e.g.
@@ -1038,9 +1034,12 @@ class LLMClient:
         }
         kwargs.update(self._completion_token_kwargs(max_tokens, model=vision_model))
         if self._is_ollama():
-            extra_body: Dict[str, Any] = {"options": {"num_ctx": max(self._num_ctx, 8192)}}
-            extra_body["think"] = False  # never want reasoning noise in vision output
-            kwargs["extra_body"] = extra_body
+            # num_ctx mind. 8192; think=False — never want reasoning noise in
+            # vision output.
+            kwargs["extra_body"] = build_ollama_extra_body(
+                num_ctx=max(self._num_ctx, 8192),
+                think=False,
+            )
 
         def _create_vision(call_kwargs: Dict[str, Any]):
             return llm_call_with_retry(
@@ -1564,11 +1563,10 @@ def _chat_with_tools(
     kwargs.update(self._completion_token_kwargs(max_tokens))
 
     if self._is_ollama():
-        extra_body: Dict[str, Any] = {}
-        if self._num_ctx:
-            extra_body["options"] = {"num_ctx": self._num_ctx}
-        extra_body["think"] = self._think
-        kwargs["extra_body"] = extra_body
+        kwargs["extra_body"] = build_ollama_extra_body(
+            num_ctx=self._num_ctx,
+            think=self._think,
+        )
 
     force_stream = (
         self._is_ollama()

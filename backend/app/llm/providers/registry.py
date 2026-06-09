@@ -42,7 +42,10 @@ während der HTTP-Client weiterhin den lokalen Ollama-Proxy anspricht.
 from __future__ import annotations
 
 import re
-from typing import Literal, Optional, Union, overload
+from typing import TYPE_CHECKING, Literal, Optional, Union, overload
+
+if TYPE_CHECKING:
+    from app.llm.providers.base import ProviderAdapter
 
 # Teilmengen von app.contracts.provider_types.ProviderType
 HttpDetectedProvider = Literal["ollama", "cloud", "openai", "google", "unknown"]
@@ -151,3 +154,30 @@ def detect_provider(
     if mode == "http":
         return _detect_http(base_url, model)
     return _detect_oasis(base_url, model)
+
+
+def get_adapter(
+    provider: str,
+    *,
+    num_ctx: Optional[int] = None,
+    think: bool = False,
+) -> "ProviderAdapter":
+    """Loest einen erkannten Provider auf den passenden Adapter auf (#590).
+
+    Akzeptiert das volle ``ProviderType``-Vokabular plus die Detection-
+    Vokabulare beider Modi. Unbekannte/generische Provider laufen ueber den
+    OpenAI-Adapter (OpenAI-Wire-Format als kleinster gemeinsamer Nenner).
+    """
+    # Lazy Imports: Skripte (z. B. scripts/_sim_common.py) sollen die Registry
+    # nutzen koennen, ohne die Adapter-Abhaengigkeiten (openai-SDK) zu laden.
+    if provider in ("ollama", "cloud", "ollama_cloud"):
+        from app.llm.providers.ollama import OllamaAdapter
+
+        return OllamaAdapter(num_ctx=num_ctx, think=think)
+    if provider == "google":
+        from app.llm.providers.gemini import GeminiAdapter
+
+        return GeminiAdapter(num_ctx=num_ctx, think=think)
+    from app.llm.providers.openai import OpenAIAdapter
+
+    return OpenAIAdapter(num_ctx=num_ctx, think=think)
