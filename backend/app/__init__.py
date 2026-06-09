@@ -126,6 +126,19 @@ def create_app(config_class=Config):
         logger.info("Agora Backend starting...")
         logger.info("=" * 50)
 
+    # Fail-closed Security-Guard: AGORA_CORS_ALLOW_ALL=true in production
+    # ist ein Sicherheitsrisiko und wird hart vor jeder weiteren Initialisierung
+    # abgelehnt (Issue #592). Frühzeitig prüfen, damit der Fehler unmissverständlich
+    # der CORS-Konfiguration zugeordnet werden kann.
+    _cors_allow_all_raw = os.environ.get('AGORA_CORS_ALLOW_ALL', 'false').lower() == 'true'
+    _flask_env_raw = os.environ.get('FLASK_ENV', '').lower()
+    if _cors_allow_all_raw and _flask_env_raw == 'production':
+        raise RuntimeError(
+            "AGORA_CORS_ALLOW_ALL=true ist in FLASK_ENV=production verboten. "
+            "Setze AGORA_CORS_ALLOW_ALL=false oder verwende AGORA_EXTRA_ORIGINS "
+            "fuer explizite Origin-Whitelist."
+        )
+
     # Validate configuration
     config_errors = Config.validate()
     if config_errors:
