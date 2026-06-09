@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -55,23 +56,41 @@ def read_readme_badge_version(repo_root: Path) -> str | None:
 
 def read_init_version(repo_root: Path) -> str:
     """
-    Read __version__ from app/__init__.py by importing it in a subprocess-free
-    way: parse the dynamically resolved value via the same logic used at runtime
-    (importlib.metadata with pyproject fallback).
+    Read __version__ from app/__init__.py by parsing its AST and executing
+    only the version-defining statement or block, avoiding heavy imports.
     """
-    # We replicate the fallback logic here without importing the full app
-    # (which would require the full venv with heavy deps).
-    try:
-        from importlib.metadata import version, PackageNotFoundError  # noqa: PLC0415
-        try:
-            return version("agora-backend")
-        except PackageNotFoundError:
-            pass
-    except ImportError:
-        pass
+    init_py = repo_root / "backend" / "app" / "__init__.py"
+    if not init_py.exists():
+        raise FileNotFoundError(f"__init__.py not found at {init_py}")
 
-    # Fallback: parse pyproject.toml (same as app/__init__.py does)
-    return read_pyproject_version(repo_root)
+    tree = ast.parse(init_py.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__version__":
+                    if isinstance(node.value, ast.Constant):
+                        return str(node.value.value)
+        elif isinstance(node, ast.Try):
+            defines_version = any(
+                isinstance(subnode, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "__version__"
+                    for t in subnode.targets
+                )
+                for subnode in ast.walk(node)
+            )
+            if defines_version:
+                mod = ast.Module(body=[node], type_ignores=[])
+                ast.fix_missing_locations(mod)
+                code_obj = compile(mod, filename=str(init_py), mode="exec")
+                namespace: dict[str, object] = {"__file__": str(init_py)}
+                try:
+                    exec(code_obj, namespace)  # noqa: S102
+                    version = namespace.get("__version__")
+                    if isinstance(version, str):
+                        return version
+                except Exception:  # noqa: BLE001
+                    pass
+    return "unknown"
 
 
 def main() -> int:

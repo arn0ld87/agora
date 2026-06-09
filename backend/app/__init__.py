@@ -59,7 +59,7 @@ try:
         import re as _re
         from pathlib import Path as _Path
         _pyproject = _Path(__file__).resolve().parent.parent / "pyproject.toml"
-        _m = _re.search(r'^version\s*=\s*"([^"]+)"', _pyproject.read_text(), _re.MULTILINE)
+        _m = _re.search(r'^version\s*=\s*"([^"]+)"', _pyproject.read_text(encoding="utf-8"), _re.MULTILINE)
         __version__ = _m.group(1) if _m else "unknown"
 except Exception:
     __version__ = "unknown"
