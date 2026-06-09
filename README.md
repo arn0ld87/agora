@@ -14,9 +14,41 @@ Dokumente, Webseiteninhalte oder strategische Fragestellungen hochladen, Wissens
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
 [![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen?style=flat-square)](./CHANGELOG.md)
 
-[Quickstart](#quickstart) · [Betriebsmodi](#betriebsmodi) · [Architektur](#architektur) · [Konfiguration](#konfiguration) · [Sicherheit](#sicherheit) · [Doku](./docs/) · [Status](./docs/STATUS.md)
+[Quick Start](#quick-start) · [Betriebsmodi](#betriebsmodi) · [Architektur](#architektur) · [Konfiguration](#konfiguration) · [Sicherheit](#sicherheit) · [Doku](./docs/) · [Status](./docs/STATUS.md)
 
 </div>
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/arn0ld87/agora.git
+cd agora
+./install.sh
+```
+
+Danach: `.env` anpassen (SECRET_KEY, NEO4J_PASSWORD, LLM-Endpunkt setzen), dann:
+
+```bash
+bun run dev
+```
+
+**Kein lokales Neo4j/Redis?** Docker-Variante startet den gesamten Stack inklusive Datenbanken:
+
+```bash
+./install.sh --docker
+```
+
+| Dienst | URL |
+|---|---|
+| Frontend | <http://localhost:5173> |
+| Backend | <http://localhost:5001> |
+| Neo4j Browser (nur Docker) | <http://localhost:7474> |
+
+> `./install.sh --help` zeigt alle Optionen. `./install.sh --check` führt Lint + Tests aus.
+
+Details: siehe [Detaillierte Installation](#detaillierte-installation)
 
 ---
 
@@ -107,7 +139,7 @@ Runtime
 
 Details in [`docs/architecture.md`](./docs/architecture.md).
 
-## Quickstart
+## Detaillierte Installation
 
 Voraussetzungen:
 
