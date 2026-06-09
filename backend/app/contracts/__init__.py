@@ -68,6 +68,11 @@ from .api_keys_contract import (
     ApiKeyStatus,
     ApiKeysListResponse,
 )
+from .llm_profile_contract import (
+    LlmProfile,
+    LlmProfileCreateRequest,
+    LlmProfileListResponse,
+)
 from .provider_types import (
     ALL_PROVIDER_TYPES,
     LEGACY_GEMINI,
@@ -125,6 +130,9 @@ __all__ = [
     "GraphDiff",
     "GraphDiffMetrics",
     "GraphSnapshot",
+    "LlmProfile",
+    "LlmProfileCreateRequest",
+    "LlmProfileListResponse",
     "NodePropertyShift",
     "PersonaEntityContext",
     "PersonaModel",
