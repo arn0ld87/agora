@@ -16,7 +16,12 @@ import type { ZodSchema } from 'zod'
  * @param schema - Zod schema to validate `resp.data` against.
  */
 export function unwrapAndParse<T>(resp: unknown, schema: ZodSchema<T>): T {
-  const data = (resp as { data?: unknown })?.data
+  // Tolerant unwrap: if resp is an object with a `data` key, use that field;
+  // otherwise fall back to resp itself (handles already-unwrapped responses).
+  const data =
+    resp !== null && typeof resp === 'object' && 'data' in resp
+      ? (resp as { data?: unknown }).data
+      : resp
   const parsed = schema.safeParse(data)
   if (!parsed.success) {
     console.warn('[api] envelope parse failed', parsed.error.flatten())

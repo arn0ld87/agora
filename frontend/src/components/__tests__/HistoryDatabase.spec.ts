@@ -251,3 +251,63 @@ describe('HistoryDatabase — Resume/Stop-Buttons (Sub-Slice 35)', () => {
     expect(stopRun).toHaveBeenCalledWith(run.run_id)
   })
 })
+
+// ---------------------------------------------------------------------------
+// #3382999381 — selectRun: no crash when API fails and run has no run_id
+// ---------------------------------------------------------------------------
+
+describe('HistoryDatabase — selectRun null-safety (review fix #3382999381)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('does not crash and keeps selectedRun unchanged when listRuns fails during selectRun', async () => {
+    const run = { ...BASE_RUN }
+
+    // Initial load succeeds, selectRun detail-hydration call fails
+    const listRunsMock = listRuns as ReturnType<typeof vi.fn>
+    listRunsMock
+      .mockResolvedValueOnce(makeListRunsResponse(run)) // onMounted loadRuns
+      .mockRejectedValueOnce(new Error('network error'))  // selectRun hydration
+
+    const wrapper = mount(HistoryDatabase, {
+      global: { plugins: [router, i18n] },
+    })
+    await flushPromises()
+
+    // Manually trigger selectRun with a run that has no run_id (undefined)
+    const runWithoutId = { ...BASE_RUN, run_id: undefined as unknown as string }
+    ;(wrapper.vm as any).selectedRun = runWithoutId
+    await wrapper.vm.$nextTick()
+
+    // Call selectRun directly — must not throw even if run_id is undefined
+    await expect(
+      (wrapper.vm as any).selectRun(runWithoutId),
+    ).resolves.toBeUndefined()
+
+    // selectedRun should remain at the value we set (not overwritten to a broken state)
+    expect((wrapper.vm as any).selectedRun).toBeDefined()
+  })
+
+  it('does not update selectedRun when API returns null (catch returns null)', async () => {
+    const run = { ...BASE_RUN }
+
+    const listRunsMock = listRuns as ReturnType<typeof vi.fn>
+    // Initial load
+    listRunsMock.mockResolvedValueOnce(makeListRunsResponse(run))
+    // selectRun hydration: .catch(() => null) path — listRuns resolves to null
+    listRunsMock.mockResolvedValueOnce(null)
+
+    const wrapper = mount(HistoryDatabase, {
+      global: { plugins: [router, i18n] },
+    })
+    await flushPromises()
+
+    const before = run
+    ;(wrapper.vm as any).selectedRun = before
+
+    await (wrapper.vm as any).selectRun(run)
+
+    // detail is null → freshRun is null → selectedRun must NOT be overwritten
+    // Use toStrictEqual because Vue wraps the value in a Proxy (reference differs).
+    expect((wrapper.vm as any).selectedRun).toStrictEqual(before)
+  })
+})

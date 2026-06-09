@@ -18,6 +18,7 @@ vi.mock('../index', () => ({
   default: serviceMock,
 }))
 
+import { unwrapAndParse } from '../parse'
 import {
   fetchLlmProfiles,
   createLlmProfile,
@@ -124,5 +125,35 @@ describe('#578 — llmRoutingDefaults: safeParse replaces .parse()', () => {
   it('rejects with typed error for replaceGlobalDefault when data has wrong shape', async () => {
     serviceMock.put.mockResolvedValueOnce(wrongShapeEnvelope)
     await expect(replaceGlobalDefault({} as any)).rejects.toThrow(/schema mismatch/i)
+  })
+})
+
+// -------------------------------------------------------------------------
+// #3382999388 — unwrapAndParse: already-unwrapped (envelope-free) response
+// -------------------------------------------------------------------------
+import { z } from 'zod'
+
+describe('#578 — unwrapAndParse: tolerant envelope handling', () => {
+  const schema = z.object({ id: z.string() })
+
+  it('unwraps data field when response has envelope shape', () => {
+    const resp = { success: true, data: { id: 'abc' } }
+    expect(unwrapAndParse(resp, schema)).toEqual({ id: 'abc' })
+  })
+
+  it('falls back to resp itself when no data key present (already-unwrapped response)', () => {
+    // Simulates old llmProfiles.ts unwrap-fallback: the caller already stripped
+    // the envelope and passes { id: 'xyz' } directly.
+    const resp = { id: 'xyz' }
+    expect(unwrapAndParse(resp, schema)).toEqual({ id: 'xyz' })
+  })
+
+  it('rejects when resp is null', () => {
+    expect(() => unwrapAndParse(null, schema)).toThrow(/schema mismatch/i)
+  })
+
+  it('rejects when data exists but has wrong shape', () => {
+    const resp = { success: true, data: { wrong: 42 } }
+    expect(() => unwrapAndParse(resp, schema)).toThrow(/schema mismatch/i)
   })
 })
