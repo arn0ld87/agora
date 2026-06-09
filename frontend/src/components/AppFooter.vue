@@ -5,6 +5,7 @@ import { computed } from 'vue'
 
 const { t } = useI18n()
 const locale = computed(() => currentLocale())
+const isDev = computed(() => import.meta.env.DEV)
 
 function pick(loc) { setLocale(loc) }
 </script>
@@ -29,7 +30,9 @@ function pick(loc) { setLocale(loc) }
       <a href="https://github.com/nikmcfly/Agora" target="_blank" rel="noopener">
         {{ t('home.footer.code') }} ↗
       </a>
-      <a href="http://localhost:7474" target="_blank" rel="noopener">Neo4j Browser ↗</a>
+      <a v-if="isDev" href="http://localhost:7474" target="_blank" rel="noopener">
+        {{ t('home.footer.neo4jBrowser') }}
+      </a>
     </div>
     <div class="col" style="align-items: flex-end; text-align: right;">
       <span>{{ t('common.language') }}</span>
