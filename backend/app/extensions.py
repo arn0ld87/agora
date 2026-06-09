@@ -118,9 +118,15 @@ def reset_pools_after_fork() -> None:
         logger.warning("signed_ticket Redis fork-reset failed: %s", exc)
 
     try:
+        import threading
         from .services.model_catalog_service import ModelCatalogService
 
-        with ModelCatalogService._cache_lock:
-            ModelCatalogService._cache.clear()
+        # Re-initialize the lock instead of acquiring the inherited one.
+        # After os.fork the child is single-threaded, but the inherited lock
+        # may be in a "locked" state if another thread held it at fork time —
+        # acquiring it here would deadlock forever.  Creating a fresh Lock()
+        # is the standard POSIX-safe pattern for post-fork handlers.
+        ModelCatalogService._cache_lock = threading.Lock()
+        ModelCatalogService._cache.clear()
     except Exception as exc:  # noqa: BLE001
         logger.warning("ModelCatalogService cache fork-reset failed: %s", exc)

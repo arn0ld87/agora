@@ -108,11 +108,17 @@ def test_concurrent_single_upstream_call():
 
 
 # ---------------------------------------------------------------------------
-# Test: cache cleared in fork-handler
+# Test: cache cleared in fork-handler AND lock re-initialized
 # ---------------------------------------------------------------------------
 
 def test_cache_cleared_after_fork():
-    """reset_pools_after_fork must clear ModelCatalogService._cache."""
+    """reset_pools_after_fork must clear _cache and re-initialize _cache_lock.
+
+    The handler must NOT acquire the inherited lock — if the lock was held at
+    fork time the child would deadlock.  Instead it creates a brand-new Lock()
+    (standard POSIX post-fork pattern).
+    """
+    import threading
     from app.extensions import reset_pools_after_fork
 
     _make_service()
@@ -132,10 +138,18 @@ def test_cache_cleared_after_fork():
     ]
     assert "some-provider" in ModelCatalogService._cache
 
+    old_lock = ModelCatalogService._cache_lock
     reset_pools_after_fork()
 
     assert ModelCatalogService._cache == {}, (
         "reset_pools_after_fork must clear ModelCatalogService._cache"
+    )
+    # A new Lock must have been created — not the inherited one.
+    assert ModelCatalogService._cache_lock is not old_lock, (
+        "reset_pools_after_fork must re-initialize _cache_lock (not acquire the inherited one)"
+    )
+    assert isinstance(ModelCatalogService._cache_lock, type(threading.Lock())), (
+        "_cache_lock must be a threading.Lock after fork-reset"
     )
 
 
