@@ -12,6 +12,7 @@ nichts ausser dem ``requests``-Convenience-Wrapper.
 
 import json
 import time
+from threading import Lock
 from typing import Dict, List, Optional
 
 import urllib3
@@ -69,49 +70,62 @@ class ModelCatalogService:
 
     _cache: Dict[str, List[ModelEntry]] = {}
     _cache_ttl = 300  # 5 minutes
+    _cache_lock: Lock = Lock()
 
     def get_models(self, provider_id: str, provider_type: str, base_url: str, api_key: Optional[str]) -> List[ModelEntry]:
-        """Fetch models from provider, with caching and fallback."""
+        """Fetch models from provider, with caching and fallback.
+
+        Thread-safe: all reads and writes to ``_cache`` happen under
+        ``_cache_lock`` to prevent the TOCTOU race where two concurrent
+        callers both observe a stale entry and fan out two upstream requests
+        (Issue #584).
+        """
         now = time.time()
         from .llm_provider_registry import LlmProviderRegistry
         from ..utils.llm_client import heuristic_num_ctx_for_model
 
-        # 1. Check cache
-        if provider_id in self._cache:
-            entries = self._cache[provider_id]
-            if entries and (now - entries[0].refreshed_at < self._cache_ttl):
-                return entries
+        # Acquire lock for the full check-fetch-write cycle so that concurrent
+        # callers block until the first thread has populated the cache.  This
+        # guarantees "exactly 1 upstream call per stale provider" (Issue #584
+        # acceptance criterion).  Model-discovery is a rare, admin-triggered
+        # action; the latency cost of serialisation is acceptable.
+        with self._cache_lock:
+            # 1. Check cache (inside lock — TOCTOU-safe).
+            if provider_id in self._cache:
+                entries = self._cache[provider_id]
+                if entries and (now - entries[0].refreshed_at < self._cache_ttl):
+                    return entries
 
-        # 2. Try live discovery
-        try:
-            live_models = self._fetch_live(provider_type, base_url, api_key)
-            if live_models:
-                entries = []
-                for m in live_models:
-                    supports_tools = LlmProviderRegistry.is_model_tool_capable(m, provider_type)
-                    entries.append(
-                        ModelEntry(
-                            id=m,
-                            name=m,
-                            provider_id=provider_id,
-                            source="live",
-                            refreshed_at=now,
-                            supports_tools=supports_tools,
-                            supports_json_mode=supports_tools,  # Heuristik: Tool-Modelle können meist auch JSON
-                            context_window=heuristic_num_ctx_for_model(m),
+            # 2. Try live discovery
+            try:
+                live_models = self._fetch_live(provider_type, base_url, api_key)
+                if live_models:
+                    entries = []
+                    for m in live_models:
+                        supports_tools = LlmProviderRegistry.is_model_tool_capable(m, provider_type)
+                        entries.append(
+                            ModelEntry(
+                                id=m,
+                                name=m,
+                                provider_id=provider_id,
+                                source="live",
+                                refreshed_at=now,
+                                supports_tools=supports_tools,
+                                supports_json_mode=supports_tools,  # Heuristik: Tool-Modelle können meist auch JSON
+                                context_window=heuristic_num_ctx_for_model(m),
+                            )
                         )
-                    )
-                self._cache[provider_id] = entries
-                return entries
-        except Exception as exc:
-            logger.warning("Failed to fetch live models from %s: %s", provider_id, exc)
+                    self._cache[provider_id] = entries
+                    return entries
+            except Exception as exc:
+                logger.warning("Failed to fetch live models from %s: %s", provider_id, exc)
 
-        # 3. Fallback to cached (even if expired)
-        if provider_id in self._cache:
-            entries = self._cache[provider_id]
-            for e in entries:
-                e.source = "cached"
-            return entries
+            # 3. Fallback to cached (even if expired)
+            if provider_id in self._cache:
+                entries = self._cache[provider_id]
+                for e in entries:
+                    e.source = "cached"
+                return entries
 
         # 4. Fallback to hardcoded defaults
         fallback_models = self._get_fallbacks(provider_type)
