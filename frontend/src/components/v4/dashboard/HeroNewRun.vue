@@ -341,8 +341,8 @@ onMounted(() => {
         <div class="hero-field">
           <label class="hero-label" for="hero-lang">{{ $t('dashboard.hero.languageLabel') }}</label>
           <select id="hero-lang" v-model="language" class="hero-select">
-            <option value="de">Deutsch</option>
-            <option value="en">English</option>
+            <option value="de">{{ t('dashboard.hero.languageDe') }}</option>
+            <option value="en">{{ t('dashboard.hero.languageEn') }}</option>
           </select>
         </div>
         <div class="hero-field">
