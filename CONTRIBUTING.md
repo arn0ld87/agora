@@ -54,30 +54,27 @@ Branch Protection muss `backend-pr-gate` und `frontend-pr-gate` als Required Sta
 Vor jedem Commit ausführen:
 
 ```bash
+# Alle Blöcke laufen vom Repo-Root; Subshells (…) verhindern,
+# dass ein cd den Arbeitsordner für die folgenden Blöcke verstellt.
+
 # Backend — Pflicht (entspricht PR-Gate)
-cd backend && uv sync --group dev
-uv run ruff check app/
-uv run pytest tests/contracts/ -q
+(cd backend && uv sync --group dev && uv run ruff check app/ && uv run pytest tests/contracts/ -q)
 
 # Backend — Heavy (entspricht main-Job)
-uv run mypy app
-uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=60
+(cd backend && uv run mypy app && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=60)
 
 # Frontend — Pflicht (entspricht PR-Gate)
-cd frontend && bun install --frozen-lockfile
-bun run lint
-bun run typecheck
+(cd frontend && bun install --frozen-lockfile && bun run lint && bun run typecheck)
 
 # Frontend — Heavy (entspricht main-Job)
-bun run test:coverage
-bun run build
+(cd frontend && bun run test:coverage && bun run build)
 
 # Status aktualisieren + Drift prüfen
 bash scripts/sync-status.sh
 bash scripts/sync-status.sh --check   # exit 0 erwartet
 
 # Schemas generieren
-cd backend && uv run python -m app.contracts.dump_schemas
+(cd backend && uv run python -m app.contracts.dump_schemas)
 git diff --exit-code schemas/      # darf nicht driften
 ```
 
