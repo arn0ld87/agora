@@ -181,7 +181,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
                     store.write_json(simulation_id, "state", state_data)
                     logger.info(f"Auto update simulation status: {simulation_id} preparing -> ready")
                     status = "ready"
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning(f"Failed to auto update status: {exc}")
 
             logger.info(
@@ -210,7 +210,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             "config_generated": config_generated,
         }
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exc used in response payload
         return False, {"reason": f"Failed to read state file: {str(exc)}"}
 
 
@@ -353,7 +353,7 @@ def prepare_simulation():
         logger.info(
             f"Expected entity count: {filtered_preview.filtered_count}, [type][model]: {filtered_preview.entity_types}"
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"Synchronously get entity countFailed（Will retry in background task）: {exc}")
 
     task_manager = TaskManager()
@@ -501,7 +501,7 @@ def prepare_simulation():
 
             task_manager.complete_task(task_id, result=result_state.to_simple_dict())
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.error(f"Failed to prepare simulation: {str(exc)}")
             task_manager.fail_task(task_id, str(exc))
 

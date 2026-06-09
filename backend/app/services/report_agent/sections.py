@@ -252,7 +252,7 @@ def section_dedup_check(
                             "matched_section_index": sec.get("section_index"),
                         },
                     }
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Section-Dedup cosine fail, jaccard fallback: {exc!r}")
 
     def tokens(s: str) -> set[str]:

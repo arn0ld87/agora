@@ -103,7 +103,7 @@ class TaskManager:
         try:
             from ..services.run_registry import RunRegistry
             RunRegistry().sync_task(task)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning("sync_task failed on create_task task_id=%s: %s", task_id, exc)
 
         return task_id
@@ -176,7 +176,7 @@ class TaskManager:
             matches = RunRegistry().find_by_linked_id("task_id", task_id)
             if matches:
                 return self._task_from_run_manifest(matches[0])
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning("RunRegistry fallback failed for task_id=%s: %s", task_id, exc)
 
         return None
@@ -222,7 +222,7 @@ class TaskManager:
                 try:
                     from ..services.run_registry import RunRegistry
                     RunRegistry().sync_task(task)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning("sync_task failed on update_task task_id=%s: %s", task_id, exc)
 
     def complete_task(self, task_id: str, result: Dict):

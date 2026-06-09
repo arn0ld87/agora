@@ -97,7 +97,7 @@ def search_graph(
             total_count=len(facts),
         )
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(
             "Graph search failed, degrading to local search: %s", str(exc)
         )
@@ -195,7 +195,7 @@ def local_search(
 
         logger.info("Local search complete: Found %d related facts", len(facts))
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error("Local search failed: %s", str(exc))
 
     return SearchResult(
@@ -280,7 +280,7 @@ def get_node_detail(node_uuid: str, *, storage: GraphStorage) -> Optional[NodeIn
             summary=node.get("summary", ""),
             attributes=node.get("attributes", {}),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.error("Failed to get node details: %s", str(exc))
         return None
 
@@ -320,7 +320,7 @@ def get_node_edges(
         logger.info("Found %d edges related to the node", len(result))
         return result
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("Failed to get node edges: %s", str(exc))
         return []
 

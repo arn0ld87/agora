@@ -193,7 +193,7 @@ class SimulationRunner:
                 GraphMemoryManager.create_updater(sim_id, graph_id, storage)
                 cls._graph_memory_enabled[sim_id] = True
                 logger.info(f"Graph memory update enabled: simulation_id={sim_id}, graph_id={graph_id}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.error(f"Failed to create graph memory updater: {e}")
                 cls._graph_memory_enabled[sim_id] = False
         else:
@@ -382,7 +382,7 @@ class SimulationRunner:
                     logger.info(f"Updated state.json status to stopped: {simulation_id}")
             else:
                 logger.warning(f"state.json does not exist for {simulation_id}")
-        except Exception as state_err:
+        except Exception as state_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Failed to update state.json: {simulation_id}, error={state_err}")
 
     @classmethod

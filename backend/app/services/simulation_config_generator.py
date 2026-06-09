@@ -510,7 +510,7 @@ class SimulationConfigGenerator:
 
                     last_error = e
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"LLM call failed (attempt {attempt+1}): {str(e)[:80]}")
                 last_error = e
                 import time
@@ -629,7 +629,7 @@ Field description:
 
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Time config LLM generation failed: {e}, using default configuration")
             return self._get_default_time_config(num_entities)
     
@@ -780,7 +780,7 @@ Return JSON format (no markdown):
 
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Event config LLM generation failed: {e}, using default configuration")
             return {
                 "hot_topics": [],
@@ -944,7 +944,7 @@ Return JSON format (no markdown):
         try:
             result = self._call_llm_with_retry(prompt, system_prompt)
             llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Agent config batch LLM generation failed: {e}, using rule-based generation")
             llm_configs = {}
 

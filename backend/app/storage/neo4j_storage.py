@@ -216,8 +216,8 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                 if attempt >= max_retries:
                     try:
                         self._driver.close()
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001 — driver close on failure path; exc discarded
+                        logger.debug("neo4j_storage: driver.close() failed, ignoring: %s", exc)
                     raise
                 attempt += 1
                 logger.warning(
@@ -232,8 +232,8 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                 # Non-transient (auth, config) — fail fast.
                 try:
                     self._driver.close()
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001 — driver close on failure path; exc discarded
+                    logger.debug("neo4j_storage: driver.close() failed, ignoring: %s", exc)
                 raise
 
     # ----------------------------------------------------------------
@@ -293,7 +293,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                             self._ensure_vector_index_dim(
                                 session, idx_name, Config.VECTOR_DIM
                             )
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                             logger.warning(
                                 "Vector index dimension check for '%s' failed: %s",
                                 idx_name,
@@ -302,7 +302,7 @@ class Neo4jStorage(Neo4jReadMixin, Neo4jWriteMixin, Neo4jSearchMixin, GraphStora
                         break
                 try:
                     session.run(query)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                     logger.warning("Schema query warning: %s", e)
 
     # ----------------------------------------------------------------

@@ -139,7 +139,7 @@ def _get_redis_client() -> "object | None":
         _redis_client.ping()
         logger.info("signed_ticket Redis connected")
         _redis_init_attempted = True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("signed_ticket Redis not available: %s", exc)
         _redis_client = None
         # Leave _redis_init_attempted False so the next call retries.
@@ -161,7 +161,7 @@ def _try_redis_consume(sig: str, ttl: int) -> bool | None:
         key = f"{_REDIS_TICKET_PREFIX}{sig}"
         was_set = r.set(key, "1", nx=True, ex=ttl)
         return bool(was_set)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning("Redis SET NX failed: %s, falling back to in-memory", exc)
         return None
 
@@ -221,8 +221,8 @@ def reset_after_fork() -> None:
     try:
         if _redis_client is not None:
             _redis_client.close()  # type: ignore[attr-defined]
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — Redis close on fork; exc discarded
+        logger.debug("signed_ticket: redis.close() after fork failed, ignoring: %s", exc)
     finally:
         _redis_client = None
         _redis_init_attempted = False

@@ -117,7 +117,7 @@ class PersonaEntityContextService:
             node = self._storage.get_node(uuid)
             if node:
                 return node
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(
                 "PersonaEntityContextService: get_node(%s) failed: %s", uuid, exc
             )
@@ -131,7 +131,7 @@ class PersonaEntityContextService:
         """
         try:
             edges = self._reader.get_node_edges(source_uuid)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(
                 "PersonaEntityContextService: get_node_edges(%s) failed: %s",
                 source_uuid,
@@ -173,7 +173,7 @@ class PersonaEntityContextService:
                     custom = [lb for lb in labels if lb not in ("Entity", "Node")]
                     if custom:
                         target_type = custom[0]
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(
                     "PersonaEntityContextService: get_node(%s) for target failed: %s",
                     target_uuid,
@@ -208,7 +208,7 @@ def _coerce_properties(props: Dict[str, Any]) -> Dict[str, Any]:
         else:
             try:
                 result[key] = json.dumps(val, ensure_ascii=False)
-            except Exception:
+            except Exception:  # noqa: BLE001 — val coerced to str; exc swallowed
                 result[key] = str(val)
     return result
 

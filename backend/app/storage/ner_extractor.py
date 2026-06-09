@@ -168,7 +168,7 @@ class NERExtractor:
                 logger.warning(
                     f"NER extraction failed (attempt {attempt + 1}): invalid JSON — {e}"
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 last_error = e
                 logger.error(f"NER extraction error: {e}")
                 if attempt >= self.max_retries:

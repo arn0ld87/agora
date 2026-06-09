@@ -83,7 +83,7 @@ def embed_entities_and_relations(
     logger.info(f"[ingestion] Batch-embedding {len(all_texts)} texts...")
     try:
         all_embeddings = embedding.embed_batch(all_texts)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
         logger.warning(f"[ingestion] Batch embedding failed, falling back to empty: {exc}")
         all_embeddings = [[] for _ in all_texts]
 
