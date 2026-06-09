@@ -72,3 +72,11 @@ app/utils/llm_client.py::LLMClient.chat
 # Touch durch HeroNewRun-Slice A2 (PR #504) nur indirekt sichtbar
 # gemacht. Refactor zusammen mit den anderen report_agent-Kandidaten.
 app/services/report_agent/agent.py::ReportAgent._finalize_section_claims
+
+# Drift durch report-status-Refactor und sim-process-manager-Auslagerung
+# (HEAD ~2026-06, pre-existing Komplexität aus bestehenden Service-Zusammenführungen).
+# Refactor-Kandidaten: report_status.py Extraktion von Stage-Branching,
+# process_manager.py start_simulation Aufspaltung nach v1.0.
+app/services/report_status.py::ReportStatusService
+app/services/report_status.py::ReportStatusService.get_status
+app/services/sim/process_manager.py::start_simulation
