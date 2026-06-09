@@ -6,11 +6,40 @@ keine Pool-Kwargs übergeben (Fix 1 noch nicht implementiert).
 import importlib
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def restore_reloaded_modules():
+    """Stellt nach Reload-Tests die ursprünglichen Modul-Namespaces wieder her.
+
+    ``importlib.reload`` führt den Modul-Code im SELBEN Modul-Dict erneut aus
+    und erzeugt dabei NEUE Klassenobjekte (``Config``, ``Neo4jStorage``).
+    Andere Module und Test-Dateien halten aber weiterhin die ALTEN Objekte:
+    ``patch.object(Config, ...)`` / ``monkeypatch.setattr(Config, ...)`` auf
+    der alten Klasse wirkt dann nicht mehr auf Code, der über das Modul-Dict
+    die neue Klasse sieht — ordnungsabhängige Failures in der Gesamt-Suite
+    (z.B. test_vector_index_dim_drift, test_simulation_api_routes).
+
+    Der Snapshot der Modul-Dicts VOR dem Reload und das Zurückschreiben
+    DANACH stellt die ursprünglichen Objekt-Identitäten wieder her.
+    """
+    import app.config as config_module
+    from app.storage import neo4j_storage as storage_module
+
+    saved = [
+        (config_module, dict(config_module.__dict__)),
+        (storage_module, dict(storage_module.__dict__)),
+    ]
+    yield
+    for module, snapshot in saved:
+        module.__dict__.clear()
+        module.__dict__.update(snapshot)
 
 def _make_storage(monkeypatch=None, *, extra_patches=None):
     """Erzeugt eine Neo4jStorage-Instanz mit allen externen Deps gemockt.
@@ -104,7 +133,7 @@ def test_lazy_reconnect_passes_pool_kwargs():
 # ---------------------------------------------------------------------------
 
 
-def test_env_overrides_liveness(monkeypatch):
+def test_env_overrides_liveness(monkeypatch, restore_reloaded_modules):
     """NEO4J_LIVENESS_TIMEOUT=5.5 muss als liveness_check_timeout=5.5 ankommen."""
     monkeypatch.setenv("NEO4J_LIVENESS_TIMEOUT", "5.5")
 
@@ -137,7 +166,7 @@ def test_env_overrides_liveness(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_env_overrides_pool_size(monkeypatch):
+def test_env_overrides_pool_size(monkeypatch, restore_reloaded_modules):
     """NEO4J_MAX_POOL_SIZE=120 muss als max_connection_pool_size=120 ankommen."""
     monkeypatch.setenv("NEO4J_MAX_POOL_SIZE", "120")
 

@@ -161,6 +161,13 @@ def token_required(view):
     return wrapper
 
 
+# Attribute, die install_blueprint_guard auf dem Blueprint hinterlegt, um
+# Mehrfach-Installation des Hooks zu verhindern (Blueprints sind Modul-Level-
+# Singletons und können von mehreren Apps/Tests wiederverwendet werden).
+_GUARD_INSTALLED_ATTR = "_agora_guard_installed"
+_GUARD_TOKEN_ONLY_ATTR = "_agora_guard_token_only"
+
+
 def install_blueprint_guard(
     bp: Blueprint,
     *,
@@ -177,10 +184,18 @@ def install_blueprint_guard(
     Browser ein abgelaufenes Ticket erneuern kann ohne das Henne-Ei-Problem:
     POST /api/auth/ticket benötigt kein gültiges Ticket, aber einen gültigen
     Session-Token (Master-Token oder API-Key).
-    """
-    _token_only: frozenset[str] = token_only_endpoints or frozenset()
 
-    @bp.before_request
+    Idempotent: Der Hook wird genau einmal pro Blueprint installiert; weitere
+    Aufrufe aktualisieren nur ``token_only_endpoints`` (letzter Aufruf gewinnt).
+    Funktioniert auch, wenn das Blueprint bereits auf einer App registriert
+    wurde (z. B. weiteres ``create_app()`` im selben Prozess oder geteilte
+    Blueprint-Singletons in Tests): In dem Fall greift der Guard für alle
+    *künftigen* Registrierungen; bereits registrierte Apps bleiben unverändert.
+    """
+    setattr(bp, _GUARD_TOKEN_ONLY_ATTR, token_only_endpoints or frozenset())
+    if getattr(bp, _GUARD_INSTALLED_ATTR, False):
+        return
+
     def _check_token():
         # CORS-Preflight: OPTIONS trägt keine Auth-Header (by-design im Browser).
         # Flask-CORS hängt die Allow-*-Header via after_request an; wir müssen die
@@ -200,6 +215,7 @@ def install_blueprint_guard(
             return None
 
         # 3. Signed Tickets — übersprungen für token_only_endpoints
+        _token_only = getattr(bp, _GUARD_TOKEN_ONLY_ATTR, frozenset())
         if request.endpoint not in _token_only and _try_consume_ticket():
             return None
 
@@ -208,6 +224,19 @@ def install_blueprint_guard(
             return None
 
         return _auth_error()
+
+    if bp._got_registered_once:
+        # Flask verbietet ``bp.before_request()`` nach der ersten Registrierung
+        # (Setup-Finished-Check).  Der Hook landet hier direkt im
+        # ``before_request_funcs``-Dict des Blueprints — exakt das, was
+        # ``before_request`` intern tut.  Flask merged dieses Dict bei jeder
+        # Erst-Registrierung pro App (``_merge_blueprint_funcs``), d. h. alle
+        # künftigen Apps erhalten den Guard; bereits registrierte nicht.
+        bp.before_request_funcs.setdefault(None, []).append(_check_token)
+    else:
+        bp.before_request(_check_token)
+
+    setattr(bp, _GUARD_INSTALLED_ATTR, True)
 
 
 def _allow_anonymous() -> bool:
