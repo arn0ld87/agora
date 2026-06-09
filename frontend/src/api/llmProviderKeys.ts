@@ -15,7 +15,7 @@ import {
   LlmProviderKeysListResponseSchema,
 } from "../contracts/llmProviderKeysContract";
 import { ApiSuccessEnvelope } from "./envelope";
-import { unwrapAndParse } from "./parse";
+import { unwrapAndParse, unwrapResponse } from "./parse";
 
 export async function listLlmProviderKeys(): Promise<LlmProviderKeysListResponse> {
   const resp = await service.get<ApiSuccessEnvelope<unknown>>("/api/llm/providers/api-keys");
@@ -58,10 +58,10 @@ export async function deleteLlmProviderKey(providerId: string): Promise<void> {
  */
 export async function checkLlmProviderHasKey(providerId: string): Promise<boolean> {
   try {
-    const resp = await service.get<{ data: { has_key: boolean } }>(
+    const resp = await service.get<ApiSuccessEnvelope<{ has_key: boolean }>>(
       `/api/llm/providers/${providerId}/has-key`,
     );
-    return Boolean((resp as unknown as { data: { has_key: boolean } }).data?.has_key);
+    return Boolean(unwrapResponse<{ has_key: boolean }>(resp)?.has_key);
   } catch {
     return false;
   }
@@ -84,5 +84,5 @@ export async function testLlmProvider(
     `/api/llm/providers/${providerId}/test${query}`,
     payload,
   );
-  return (resp as unknown as { data: ProviderTestResult }).data;
+  return unwrapResponse<ProviderTestResult>(resp);
 }
