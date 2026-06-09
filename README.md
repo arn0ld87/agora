@@ -20,6 +20,36 @@ Dokumente, Webseiteninhalte oder strategische Fragestellungen hochladen, Wissens
 
 ---
 
+## Quick Start
+
+```bash
+git clone https://github.com/arn0ld87/agora.git
+cd agora
+./install.sh
+```
+
+Danach: `.env` anpassen (SECRET_KEY, NEO4J_PASSWORD, LLM-Endpunkt setzen), dann:
+
+```bash
+bun run dev
+```
+
+**Kein lokales Neo4j/Redis?** Docker-Variante startet den gesamten Stack inklusive Datenbanken:
+
+```bash
+./install.sh --docker
+```
+
+| Dienst | URL |
+|---|---|
+| Frontend | <http://localhost:5173> |
+| Backend | <http://localhost:5001> |
+| Neo4j Browser (nur Docker) | <http://localhost:7474> |
+
+> `./install.sh --help` zeigt alle Optionen. `./install.sh --check` führt Lint + Tests aus.
+
+---
+
 > **Status:** v1.0.0 auf `main`.
 > Agora ist ein **experimentelles Single-User-System**
 > ([ADR-0001](./docs/decisions/0001-auth-model.md)).
