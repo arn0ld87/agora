@@ -52,3 +52,22 @@ Environment (`LLM_API_KEY`, `OPENAI_API_KEY`, `LLM_BASE_URL`,
 Prozess. Die drei OpenAI-Base-URL-Aliase werden parallel gesetzt, damit
 CAMEL/OASIS-Skripte und OpenAI-kompatible Clients mit unterschiedlichen
 Konventionen dieselbe Runtime-Auswahl nutzen.
+
+## JSON-Mode-Env-Vars
+
+`backend/app/utils/llm_client.py` (`chat_json`) wertet folgende Env-Vars aus:
+
+| Variable | Wirkung |
+|---|---|
+| `LLM_DISABLE_JSON_OBJECT_MODE=true` | Unterdrückt `response_format={"type":"json_object"}` bei schema-losen Aufrufen. Nützlich für OpenAI-Reasoning-Modelle, die mit `json_object` leere Antworten liefern. |
+| `LLM_DISABLE_JSON_SCHEMA_MODE=true` | Unterdrückt strict `response_format={"type":"json_schema","strict":true}` auch wenn ein Schema übergeben wurde. Fällt auf `json_object` + post-hoc Pydantic-Validierung zurück. |
+| `LLM_DISABLE_JSON_MODE=true` | **Veraltet.** Legacy-Alias für `LLM_DISABLE_JSON_OBJECT_MODE`. Gibt eine `DeprecationWarning` aus. Bitte auf den neuen Namen migrieren. Wird in einem künftigen Release entfernt. |
+
+### Vier Kombinationen
+
+| Schema | Env-Flag | `response_format` |
+|---|---|---|
+| keines | keines | `{"type": "json_object"}` |
+| keines | `LLM_DISABLE_JSON_OBJECT_MODE=true` | keines (Freitext) |
+| Pydantic-Modell | keines | `{"type": "json_schema", "strict": true}` |
+| Pydantic-Modell | `LLM_DISABLE_JSON_SCHEMA_MODE=true` | `{"type": "json_object"}` + Pydantic-Validierung |
