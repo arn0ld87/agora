@@ -11,7 +11,9 @@ import type { ZodSchema } from 'zod'
 
 /**
  * Unwraps the `data` field from an API response envelope.
- * Throws a typed `Error` when the envelope is missing or has no `data` field.
+ * Falls back to `resp` itself when the envelope has no `data` field (e.g.
+ * already-unwrapped payloads, endpoints that return bare objects like
+ * `cancelRun`).  Mirrors the tolerant behaviour of `unwrapAndParse` (#607).
  *
  * Use this when you want the raw data without schema validation, or when
  * calling code handles validation separately.
@@ -19,10 +21,11 @@ import type { ZodSchema } from 'zod'
  * @param resp - The raw value returned by the axios service.
  */
 export function unwrapResponse<T>(resp: unknown): T {
-  if (resp === null || typeof resp !== 'object' || !('data' in resp)) {
-    throw new Error('[api] response envelope missing `data`')
-  }
-  return (resp as { data: T }).data
+  return (
+    resp !== null && typeof resp === 'object' && 'data' in resp
+      ? (resp as { data: unknown }).data
+      : resp
+  ) as T
 }
 
 /**

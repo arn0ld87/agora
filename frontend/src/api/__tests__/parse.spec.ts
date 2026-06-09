@@ -18,18 +18,17 @@ describe('#585 — unwrapResponse', () => {
     expect(unwrapResponse<{ id: string }>(resp)).toEqual({ id: 'x' })
   })
 
-  it('throws when envelope is missing the data field', () => {
-    expect(() => unwrapResponse({ success: true })).toThrow(
-      '[api] response envelope missing `data`',
-    )
+  it('falls back to resp itself when envelope is missing the data field', () => {
+    const resp = { success: true }
+    expect(unwrapResponse<any>(resp)).toEqual({ success: true })
   })
 
-  it('throws when resp is null', () => {
-    expect(() => unwrapResponse(null)).toThrow('[api] response envelope missing `data`')
+  it('falls back to resp itself when resp is null', () => {
+    expect(unwrapResponse<any>(null)).toBeNull()
   })
 
-  it('throws when resp is not an object', () => {
-    expect(() => unwrapResponse(42)).toThrow('[api] response envelope missing `data`')
+  it('falls back to resp itself when resp is not an object', () => {
+    expect(unwrapResponse<any>(42)).toBe(42)
   })
 
   it('returns data even when data is falsy (0, false, "")', () => {
