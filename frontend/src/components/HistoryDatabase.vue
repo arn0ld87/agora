@@ -73,7 +73,8 @@ async function loadRuns() {
   loadErrorRetryable.value = false
   try {
     const res = await listRuns()
-    runs.value = Array.isArray(res?.data) ? res.data : []
+    // Issue #580: data is now RunsListResponse { runs, total, aggregation }
+    runs.value = Array.isArray(res?.data?.runs) ? res.data.runs : []
   } catch (err) {
     runs.value = []
     if (isApiError(err)) {
@@ -98,7 +99,8 @@ async function selectRun(run) {
       getRunEvents(run.run_id).catch(() => null)
     ])
     if (events?.data) runEvents.value = events.data
-    if (detail?.data?.[0]?.run_id === run.run_id) selectedRun.value = detail.data[0]
+    // Issue #580: data.runs is the array (not data directly)
+    if (detail?.data?.runs?.[0]?.run_id === run.run_id) selectedRun.value = detail.data.runs[0]
   } catch {
     // Non-fatal: keep the currently selected run even if detail hydration fails.
   }

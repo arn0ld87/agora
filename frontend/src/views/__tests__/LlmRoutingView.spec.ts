@@ -145,9 +145,10 @@ describe('LlmRoutingView', () => {
       value: localStorageMock,
       configurable: true,
     })
+    // Issue #580: listRuns now returns RunsListResponse { runs, total, aggregation }
     mocks.listRuns.mockResolvedValue({
       success: true,
-      data: [makeRun('run_latest'), makeRun('run_previous')],
+      data: { runs: [makeRun('run_latest'), makeRun('run_previous')], total: 2, aggregation: null },
     })
   })
 
