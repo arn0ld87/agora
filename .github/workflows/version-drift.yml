@@ -1,0 +1,50 @@
+name: version-drift
+
+# Detects version inconsistencies between pyproject.toml, package.json,
+# README badge, and app/__init__.__version__ before they reach main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version-drift:
+    name: Version-Drift-Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            files.pythonhosted.org:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            pypi.org:443
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Sync backend deps (dev group)
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Check version drift (standalone script)
+        working-directory: backend
+        run: uv run python scripts/check_version_drift.py
+
+      - name: Run version-drift pytest tests
+        working-directory: backend
+        run: uv run pytest tests/scripts/test_check_version_drift.py -v

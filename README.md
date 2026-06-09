@@ -143,8 +143,9 @@ Details in [`docs/architecture.md`](./docs/architecture.md).
 
 Voraussetzungen:
 
-- Node.js 18+
-- Python 3.11+
+- Node.js >=20
+- Bun >=1.3
+- Python 3.14
 - `uv`
 - Docker oder Docker Compose
 - Neo4j 5.18+
