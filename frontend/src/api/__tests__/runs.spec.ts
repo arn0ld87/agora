@@ -16,10 +16,13 @@ describe('runs api client', () => {
     vi.clearAllMocks()
   })
 
-  it('cancelRun posts to /api/runs/<id>/cancel and returns ApiResponse<RunRecord>', async () => {
-    const mockResponse: { success: true; data: { run_id: string; status: string } } = {
+  it('cancelRun posts to /api/runs/<id>/cancel and returns flat CancelRunResponse (no data envelope)', async () => {
+    // Backend returns 202 with {"success": true, "status": "cancel_requested", "run_id": "..."}
+    // — no wrapping `data` key (backend/app/api/runs.py:391).
+    const mockResponse: { success: true; status: 'cancel_requested'; run_id: string } = {
       success: true,
-      data: { run_id: 'run-abc', status: 'cancel_requested' },
+      status: 'cancel_requested',
+      run_id: 'run-abc',
     }
     serviceMock.post.mockResolvedValueOnce(mockResponse)
 

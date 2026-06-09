@@ -1,6 +1,7 @@
 import service from './index'
 import type {
   ApiResponse,
+  CancelRunResponse,
   ListRunsParams,
   RunEvent,
   RunRecord,
@@ -25,5 +26,5 @@ export const resumeRun = (runId: string): Promise<ApiResponse<RunRecord>> =>
 export const stopRun = (runId: string): Promise<ApiResponse<RunRecord>> =>
   service.post(`/api/runs/${runId}/stop`)
 
-export const cancelRun = (runId: string): Promise<ApiResponse<RunRecord>> =>
+export const cancelRun = (runId: string): Promise<CancelRunResponse> =>
   service.post(`/api/runs/${runId}/cancel`)
