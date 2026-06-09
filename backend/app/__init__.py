@@ -47,7 +47,22 @@ from .utils.logger import (  # noqa: E402
     get_logger,
 )
 
-__version__ = "0.9.0"
+# Single source of truth: version comes from pyproject.toml via package metadata.
+# In installed/editable mode importlib.metadata reads it from the dist-info.
+# In bare source-checkouts (no install) it falls back to parsing pyproject.toml directly.
+try:
+    from importlib.metadata import version, PackageNotFoundError
+    try:
+        __version__ = version("agora-backend")
+    except PackageNotFoundError:
+        # Source-checkout without `pip install -e .` / `uv sync` — parse pyproject.toml.
+        import re as _re
+        from pathlib import Path as _Path
+        _pyproject = _Path(__file__).resolve().parent.parent / "pyproject.toml"
+        _m = _re.search(r'^version\s*=\s*"([^"]+)"', _pyproject.read_text(), _re.MULTILINE)
+        __version__ = _m.group(1) if _m else "unknown"
+except Exception:
+    __version__ = "unknown"
 
 
 def configure_werkzeug_log_level() -> int:
