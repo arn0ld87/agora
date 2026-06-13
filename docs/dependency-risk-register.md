@@ -11,6 +11,28 @@ nicht hinzugefuegt werden ohne dass sie zuerst als Issue aufgenommen werden.
 Die hier gelisteten CVEs sind auch in der `.trivyignore`-Datei im Root-Verzeichnis
 hinterlegt, um den Container-Scan nicht zu blockieren.
 
+**Maschinenlesbare Quelle:** [docs/dependency-risk-exceptions.json](dependency-risk-exceptions.json) —
+wird von CI ([.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml)) bei jedem Run
+automatisch auf abgelaufene Deadlines geprüft. Abgelaufene Einträge failen den Workflow sofort.
+
+### Wann ist eine Ausnahme zulässig?
+
+Eine temporäre Dependency-Risk-Ausnahme darf nur eingetragen werden, wenn **alle** folgenden
+Bedingungen erfüllt sind:
+
+1. **Kein Upstream-Fix verfügbar:** Die Advisory-DB weist für das Paket in der verwendeten
+   Version keinen Fix aus, oder der Fix ist durch einen transitiven Pin (z.B. via
+   `sentence-transformers`) nicht installierbar.
+2. **Issue vorhanden:** Das Finding ist als GitHub-Issue erfasst (Titel-Schema:
+   `security: track ignored <CVE> until upstream fix`).
+3. **Deadline gesetzt:** Die Frist beträgt maximal 90 Tage ab Eintragung. Verlängerungen
+   erfordern einen expliziten Risikoakzeptanz-PR mit User-Sign-off.
+4. **Owner benannt:** Eine Person oder ein Team übernimmt die Verantwortung für die
+   Auflösung.
+5. **Blocker dokumentiert:** Die URL oder das Issue, das den Fix blockiert, ist angegeben.
+
+Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
+
 ---
 
 ## Aktive Baseline (Hardstop 2026-07-30)
