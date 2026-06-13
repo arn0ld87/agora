@@ -57,6 +57,7 @@ This document tracks the expected egress targets for GitHub Action workflows usi
 - `ghcr.io:443`
 - `pkg-containers.githubusercontent.com:443`
 - `production.cloudflare.docker.com:443`
+- `toolbox-data.anchore.io:443` — syft/sbom-action lädt Tool-Binaries (Issue #633)
 
 ### Contract Gates (`contract-gates.yml`)
 - `pypi.org:443`
