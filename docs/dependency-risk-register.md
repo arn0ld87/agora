@@ -40,15 +40,16 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
 | CVE-2026-1839 | `transformers` | Medium | Nein (Upstream Pin) | sentence-transformers | 2026-07-30 | open | [#124](https://github.com/arn0ld87/agora/issues/124) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
-| PYSEC-2026-139 | `torch` | unbekannt | Nein (kein Upstream-Fix released) | sentence-transformers | 2026-07-30 | open | [#623](https://github.com/arn0ld87/agora/issues/623) | [pytorch/pytorch/releases](https://github.com/pytorch/pytorch/releases) |
 | PYSEC-2025-217 | `transformers` | unbekannt | Nein (kein Upstream-Fix released) | sentence-transformers | 2026-07-30 | open | [#624](https://github.com/arn0ld87/agora/issues/624) | [huggingface/transformers/releases](https://github.com/huggingface/transformers/releases) |
+| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | nltk | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| CVE-2026-4372 | `transformers` | unbekannt | Ja, in 5.3.0 (blockiert durch Upstream Pin `<5`) | sentence-transformers | 2026-07-30 | open | [#662](https://github.com/arn0ld87/agora/issues/662) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
 
 ### Pin-Begruendungen
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
-| `transformers` | `4.57.6` | `sentence-transformers==4.1.0` (via `camel-oasis==0.2.5`) | `sentence-transformers` limitiert `transformers<5`; für PYSEC-2025-217 existiert zudem keine gefixte Version in der Advisory-DB. |
-| `torch` | `2.9.1` | `sentence-transformers==4.1.0` (via `camel-oasis==0.2.5`) | PYSEC-2026-139 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. |
+| `transformers` | `4.57.6` | `sentence-transformers==4.1.0` (via `camel-oasis==0.2.5`) | `sentence-transformers` limitiert `transformers<5`; Fix für CVE-2026-4372 erst in 5.3.0; für PYSEC-2025-217 existiert keine gefixte Version in der Advisory-DB. |
+| `nltk` | `3.9.4` | — (kein Pin) | PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. |
 
 ---
 
@@ -83,6 +84,7 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 
 | CVE | Paket | Aufloesung | Datum |
 |---|---|---|---|
+| PYSEC-2026-139 | `torch` | Resolved via Upgrade auf `torch==2.12.1` (verified via `uvx pip-audit --strict`: Finding feuert nicht mehr). `--ignore-vuln`-Flag aus CI entfernt. Issue #623 schließen. | 2026-07-05 |
 | CVE-2026-25990 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #121 schließen. | 2026-05-15 |
 | CVE-2026-40192 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #122 schließen. | 2026-05-15 |
 | CVE-2026-42308 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #296 schließen. | 2026-05-15 |

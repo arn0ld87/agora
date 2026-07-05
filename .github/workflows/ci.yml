@@ -67,17 +67,18 @@ jobs:
         # wöchentlich) und Dependabot fangen Vulns ab.
         #
         # Temporary baseline: these advisories are pinned by upstream
-        # dependencies (camel-oasis==0.2.5 / sentence-transformers==4.1.0)
-        # or have no fixed release in the advisory DB (PYSEC-2026-139,
-        # PYSEC-2025-217 — issues #623/#624).
+        # dependencies (camel-oasis==0.2.5 / sentence-transformers==4.1.0 —
+        # CVE-2026-1839 #124, CVE-2026-4372 #662) or have no fixed release
+        # in the advisory DB (PYSEC-2025-217 #624, PYSEC-2026-597 #661).
         # Tracked in docs/dependency-risk-register.md. Hardstop 2026-07-30 —
         # afterwards this --ignore-vuln list MUST be empty.
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
             --ignore-vuln CVE-2026-1839 \
-            --ignore-vuln PYSEC-2026-139 \
+            --ignore-vuln CVE-2026-4372 \
             --ignore-vuln PYSEC-2025-217 \
+            --ignore-vuln PYSEC-2026-597 \
             -r /tmp/agora-backend-requirements.txt
 
       - name: Set up Bun
