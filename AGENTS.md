@@ -141,7 +141,7 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 ## Aktive Epics
 
 - **M3-Port — Unified Provider Abstraction:** ✅ abgeschlossen (PR #666, 2026-07-05).
-  Provider-Detection-SSoT: `app/llm/providers/registry.detect_provider(mode="http"|"oasis")`.
+  Provider-Detection-SSoT: `backend/app/llm/providers/registry.py::detect_provider(mode="http"|"oasis")`.
   Phase F offen — Rest-Detection-Delegation an die SSoT: #669, #670, #671
   (jeweils eigener PR, TDD).
 - **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch,
