@@ -3,7 +3,7 @@ Centralised Flask response helpers and a decorator for uniform API error handlin
 
 The goal is to remove the boilerplate that accreted across the API blueprints,
 where every handler wrapped its body in ``try/except Exception`` and hand-rolled
-the same ``{"success": False, "error": ..., "traceback": ...}`` response.
+the same ``{"success": False, "error": ...}`` response.
 
 The behaviour preserved by this module (used by the existing API surface):
 
@@ -22,7 +22,6 @@ tuples, or raw dicts; the dict form is forwarded to :func:`json_success`.
 from __future__ import annotations
 
 import functools
-import traceback
 from collections.abc import Mapping
 from typing import Any, Callable
 
@@ -136,8 +135,8 @@ def json_error(
       ``message="..."`` lässt sich die Default-Message punktuell überschreiben,
       ohne den Code zu verlieren.
 
-    Keeps the ``traceback`` field opt-in so that internal server errors can
-    surface the trace in debug mode without changing the shape for 4xx errors.
+    ``include_traceback`` is kept for call-site compatibility but intentionally
+    ignored: stack traces stay in server logs and are never serialized to JSON.
     """
     if isinstance(error, ApiErrorCode):
         resolved_code = code or error.value
@@ -149,8 +148,6 @@ def json_error(
     payload: dict[str, Any] = {"success": False, "error": resolved_text}
     if resolved_code:
         payload["code"] = resolved_code
-    if include_traceback:
-        payload["traceback"] = traceback.format_exc()
     if extra:
         payload.update(extra)
     return jsonify(payload), status

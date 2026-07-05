@@ -49,7 +49,7 @@ def test_json_error_default_is_400_without_traceback():
         assert payload == {"success": False, "error": "boom"}
 
 
-def test_json_error_includes_code_and_traceback_when_requested():
+def test_json_error_keeps_traceback_out_of_response_when_requested():
     app = _build_app()
     with app.test_request_context():
         try:
@@ -66,7 +66,7 @@ def test_json_error_includes_code_and_traceback_when_requested():
         assert payload["success"] is False
         assert payload["error"] == "kapow"
         assert payload["code"] == "internal"
-        assert "Traceback" in payload["traceback"]
+        assert "traceback" not in payload
 
 
 def test_handle_api_errors_passes_through_success_tuple():
@@ -152,7 +152,7 @@ def test_handle_api_errors_maps_unknown_to_500_and_hides_traceback_outside_debug
     assert "kapow" not in payload.values()
 
 
-def test_handle_api_errors_includes_traceback_in_debug_mode():
+def test_handle_api_errors_in_debug_mode_exposes_message_but_not_traceback():
     app = _build_app()
 
     @handle_api_errors(log_prefix="Unexpected")
@@ -168,7 +168,7 @@ def test_handle_api_errors_includes_traceback_in_debug_mode():
     assert payload["error"] == "internal server error"
     assert payload["code"] == "internal_error"
     assert payload["debug_error"] == "kapow"
-    assert "Traceback" in payload["traceback"]
+    assert "traceback" not in payload
 
 
 def test_install_api_error_handlers_envelopes_api_404():

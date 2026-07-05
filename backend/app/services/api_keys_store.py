@@ -3,13 +3,14 @@
 In-Memory-Store mit automatischer Disk-Persistenz via
 :mod:`app.services.api_keys_persistence`. Klartext-Token (``ago_<48-hex>``)
 wird genau einmal beim Anlegen zurückgegeben; persistiert wird nur Prefix,
-Metadata und SHA-256-Hash.
+Metadata und ein serverseitig gepepperter HMAC-SHA256-Lookup-Hash.
 
 Audit-Log-Hook ist Out-of-Scope (kommt in G3).
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import secrets
 import threading
@@ -30,6 +31,8 @@ logger = get_logger("agora.services.api_keys_store")
 
 _TOKEN_RANDOM_HEX = 48
 _PREFIX_HEX_LEN = 8
+_HASH_PREFIX = "hmac-sha256:"
+_HASH_PEPPER_ENV = "AGORA_API_KEY_HASH_PEPPER"
 # TTL für `last_used_at`-Disk-Flush. Ohne TTL würde jeder API-Request einen
 # Fernet-Encrypt + Disk-Write des kompletten Stores triggern — Gemini-Review
 # zu PR #524 nennt das als High-Severity-I/O-Bottleneck. Updates landen
@@ -51,8 +54,36 @@ def _generate_token() -> tuple[str, str]:
 
 
 def _hash_token(token: str) -> str:
-    """Berechnet SHA-256 Hash des Tokens."""
+    """Berechnet einen serverseitig gepepperten Lookup-Hash des Tokens."""
+    secret = _resolve_hash_secret()
+    digest = hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{_HASH_PREFIX}{digest}"
+
+
+def _legacy_hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _resolve_hash_secret() -> bytes:
+    raw = os.environ.get(_HASH_PEPPER_ENV) or os.environ.get("AGORA_FERNET_KEY")
+    if raw:
+        return raw.encode("utf-8")
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("true", "1")
+    if debug_mode:
+        return b"agora-debug-api-key-hash-pepper"
+    raise RuntimeError(
+        "AGORA_API_KEY_HASH_PEPPER or AGORA_FERNET_KEY missing in non-debug mode"
+    )
+
+
+def _token_hash_matches(stored_hash: str, token: str) -> tuple[bool, bool]:
+    current_hash = _hash_token(token)
+    if hmac.compare_digest(stored_hash, current_hash):
+        return True, False
+    legacy_hash = _legacy_hash_token(token)
+    if hmac.compare_digest(stored_hash, legacy_hash):
+        return True, True
+    return False, False
 
 
 def _resolve_data_dir() -> Optional[Path]:
@@ -163,12 +194,16 @@ class ApiKeysStore:
         now = _now()
         with self._lock:
             for key_id, model in self._keys.items():
-                if model.hashed_token == hashed:
+                matches, needs_migration = _token_hash_matches(model.hashed_token, token)
+                if matches:
                     if model.status == "revoked":
                         return model
-                    updated = model.model_copy(update={"last_used_at": now})
+                    update_fields: dict[str, object] = {"last_used_at": now}
+                    if needs_migration:
+                        update_fields["hashed_token"] = hashed
+                    updated = model.model_copy(update=update_fields)
                     self._keys[key_id] = updated
-                    if self._should_flush_last_used_at(key_id, now):
+                    if needs_migration or self._should_flush_last_used_at(key_id, now):
                         self._save()
                         self._last_used_persisted_at[key_id] = now
                     return updated

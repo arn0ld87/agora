@@ -6,8 +6,8 @@ Vertrag:
   B. /readyz prüft Neo4j-Connection, Redis-Ping, Upload-Verzeichnis
      schreibbar, Embedding-Konfig kohärent (EMBEDDING_MODEL ↔ VECTOR_DIM).
      Alle ok → 200; eine kaputt → 503.
-  C. Antwort-Body enthält pro Check {"ok": bool, "detail": str}, damit
-     Operator den kaputten Check ohne Log-Diving sieht.
+     C. Antwort-Body enthält pro Check {"ok": bool, "detail": str}. Details
+      nennen den kaputten Check, leaken aber keine Exception-/URI-Interna.
   D. Redis-Check wird übersprungen, wenn der konfigurierte Event-Bus auf
      File-Backend steht — sonst kann ein bewusster `EVENT_BUS_BACKEND=file`
      das ganze /readyz rot machen.
@@ -133,7 +133,8 @@ def test_readyz_returns_503_when_neo4j_unreachable(app, client):
     payload = response.get_json()
     assert payload["status"] == "not_ready"
     assert payload["checks"]["neo4j"]["ok"] is False
-    assert "unreachable" in payload["checks"]["neo4j"]["detail"].lower()
+    assert payload["checks"]["neo4j"]["detail"] == "neo4j connectivity probe failed"
+    assert "bolt://" not in payload["checks"]["neo4j"]["detail"]
     # Andere Checks bleiben grün.
     assert payload["checks"]["upload_dir"]["ok"] is True
 
@@ -160,7 +161,8 @@ def test_readyz_returns_503_when_redis_unreachable(app, client):
     assert response.status_code == 503
     payload = response.get_json()
     assert payload["checks"]["redis"]["ok"] is False
-    assert "unreachable" in payload["checks"]["redis"]["detail"].lower()
+    assert payload["checks"]["redis"]["detail"] == "redis connectivity probe failed"
+    assert "redis://" not in payload["checks"]["redis"]["detail"]
 
 
 def test_readyz_skips_redis_check_for_file_backend(app, client):

@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import atexit
 import os
+from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -45,6 +47,23 @@ from .run_state_store import RunnerStatus, SimulationRunState
 _tracer = trace.get_tracer(__name__)
 
 logger = get_logger("agora.process_manager")
+
+_SAFE_SIMULATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+
+
+def _validate_simulation_id(simulation_id: str) -> None:
+    if not _SAFE_SIMULATION_ID_RE.fullmatch(simulation_id):
+        raise ValueError("Invalid simulation_id")
+
+
+def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
+    base = Path(base_dir).expanduser().resolve()
+    child = (base / child_name).resolve()
+    try:
+        child.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {kind} path") from exc
+    return child
 
 # ---------------------------------------------------------------------------
 # Subprozess-Env-Whitelist (Code-Review 2026-05-17 §1.6)
@@ -219,6 +238,8 @@ def start_simulation(
     Raises:
         ValueError: if already running, config missing, or script not found.
     """
+    _validate_simulation_id(simulation_id)
+
     # Check if already running
     existing = get_run_state(simulation_id)
     if existing and existing.runner_status in [RunnerStatus.RUNNING, RunnerStatus.STARTING]:
@@ -265,7 +286,7 @@ def start_simulation(
     # Configure graph memory via injected callback
     setup_graph_memory(simulation_id)
 
-    sim_dir = os.path.join(run_state_dir, simulation_id)
+    sim_dir = _resolve_child_path(run_state_dir, simulation_id, kind="simulation")
 
     # Determine which script to run
     if platform == "twitter":
@@ -279,9 +300,9 @@ def start_simulation(
         state.twitter_running = True
         state.reddit_running = True
 
-    script_path = os.path.join(scripts_dir, script_name)
+    script_path = _resolve_child_path(scripts_dir, script_name, kind="script")
 
-    if not os.path.exists(script_path):
+    if not script_path.is_file():
         raise ValueError(f"Script does not exist: {script_path}")
 
     # Create action queue
@@ -290,14 +311,14 @@ def start_simulation(
 
     try:
         # Build run command
-        config_path = os.path.join(sim_dir, "simulation_config.json")
-        cmd = [sys.executable, script_path, "--config", config_path]
+        config_path = sim_dir / "simulation_config.json"
+        cmd = [sys.executable, str(script_path), "--config", str(config_path)]
 
         if max_rounds is not None and max_rounds > 0:
             cmd.extend(["--max-rounds", str(max_rounds)])
 
         # Create main log file
-        main_log_path = os.path.join(sim_dir, "simulation.log")
+        main_log_path = sim_dir / "simulation.log"
         main_log_file = open(main_log_path, "w", encoding="utf-8")
 
         # Build subprocess environment — Whitelist-only (Code-Review 2026-05-17 §1.6).
@@ -311,7 +332,7 @@ def start_simulation(
         if runtime_env:
             env.update({k: v for k, v in runtime_env.items() if v})
         # Sub-Slice 21: OASIS-DB pro Sim ins schreibbare uploads/-Volume
-        _inject_oasis_db_env(env, sim_dir)
+        _inject_oasis_db_env(env, str(sim_dir))
 
         # Slice 1c: Trace-Context via W3C-traceparent in den Subprozess propagieren.
         with _tracer.start_as_current_span("agora.subprocess.spawn") as span:
@@ -325,7 +346,7 @@ def start_simulation(
 
             process = subprocess.Popen(
                 cmd,
-                cwd=sim_dir,
+                cwd=str(sim_dir),
                 stdout=main_log_file,
                 stderr=subprocess.STDOUT,
                 text=True,

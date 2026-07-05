@@ -111,6 +111,37 @@ class TestInjectOasisDbEnv:
 
 
 # ---------------------------------------------------------------------------
+# start_simulation security guards
+# ---------------------------------------------------------------------------
+
+
+class TestStartSimulationSecurity:
+    def test_rejects_simulation_id_path_traversal_before_io(self, tmp_path):
+        from app.services.sim import process_manager
+
+        with pytest.raises(ValueError, match="Invalid simulation_id"):
+            process_manager.start_simulation(
+                "../escape",
+                "parallel",
+                run_state_dir=str(tmp_path),
+                scripts_dir=str(tmp_path),
+                processes={},
+                action_queues={},
+                monitor_threads={},
+                stdout_files={},
+                stderr_files={},
+                graph_memory_enabled={},
+                get_run_state=MagicMock(side_effect=AssertionError("should not read")),
+                save_state=MagicMock(),
+                on_monitor_start=MagicMock(),
+                write_control_state=MagicMock(),
+                get_config=MagicMock(),
+                config_exists=MagicMock(),
+                setup_graph_memory=MagicMock(),
+            )
+
+
+# ---------------------------------------------------------------------------
 # terminate_process
 # ---------------------------------------------------------------------------
 
