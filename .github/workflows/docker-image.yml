@@ -1,16 +1,24 @@
 name: Build and push Docker image
 
 on:
-  # Bewusst kein pull_request- und kein main-Trigger:
-  # Der Prod-Proxy-Smoke läuft ca. 30 Minuten und ist auf Feature-PRs
-  # und normalen main-Pushes zu teuer. Er läuft nur auf Release-/RC-
-  # Branches, Tags und manuellem Dispatch. Vor einem Release manuell
-  # anstoßen oder Release-Branch pushen.
+  # Build+Trivy (build-only) läuft auf jedem relevanten Push (main,
+  # release/**, rc/**, tags) und auf PRs mit pfadgefilterten Änderungen
+  # (Dockerfile, Compose, deploy/, backend/, frontend/, dieser Workflow).
+  # Smoke (prod-proxy-smoke) und Registry-Push (publish) laufen NICHT auf
+  # main-Pushes oder PRs — nur auf Release-/RC-Branches, Tags und
+  # manuellem Dispatch (siehe if:-Guards weiter unten). Vor einem Release
+  # manuell anstoßen oder Release-Branch pushen.
   push:
-    branches:
-      - "release/**"
-      - "rc/**"
+    branches: [main, "release/**", "rc/**"]
     tags: ["v*"]
+  pull_request:
+    paths:
+      - Dockerfile
+      - "docker-compose*.yml"
+      - "deploy/**"
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/docker-image.yml"
   workflow_dispatch:
     inputs:
       force_publish:
@@ -28,8 +36,10 @@ jobs:
     # Das Image wird als Artefakt gespeichert und im smoke-Job geladen.
     # Damit wird sichergestellt, dass kein kaputtes Image in die Registry
     # gelangt, bevor der End-to-End-Smoke-Test grün ist.
-    # Läuft auf jedem push (main, release/**, rc/**, tags) und workflow_dispatch.
-    # Kein pull_request mehr — siehe Header-Kommentar.
+    # Läuft auf jedem push (main, release/**, rc/**, tags), auf PRs mit
+    # relevanten Pfad-Änderungen (siehe pull_request.paths oben) und auf
+    # workflow_dispatch. Kein if:-Guard — Build+Trivy ist blocking für alle
+    # Trigger. Smoke-/Push-Gating siehe prod-proxy-smoke/publish weiter unten.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,13 +166,13 @@ jobs:
     name: Smoke-Test Reverse-Proxy-Stack
     runs-on: ubuntu-latest
     needs: [build-only]
-    # Smoke läuft automatisch auf release-relevanten Pfaden und workflow_dispatch.
+    # Smoke läuft NUR auf release-relevanten Pfaden und workflow_dispatch —
+    # nicht auf normalen main-Pushes oder PRs (siehe Header-Kommentar).
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/v') ||
       startsWith(github.ref, 'refs/heads/release/') ||
-      startsWith(github.ref, 'refs/heads/rc/')))
+      startsWith(github.ref, 'refs/heads/rc/')
     permissions:
       contents: read
     # CI-Test-Werte für Single-User-Tailnet-Smoke-Variante.
@@ -220,22 +230,12 @@ jobs:
           docker load -i /tmp/image.tar
           docker tag agora-agora:ci-${{ github.sha }} agora-agora:latest
 
-      - name: Frontend-Bundle aus gebautem Image extrahieren
-        # nginx mountet ./frontend/dist als Host-Bind-Mount (docker-compose.prod-with-proxy.yml).
-        # Der Smoke muss exakt das Bundle aus dem bereits gebauten Prod-Image
-        # validieren, nicht einen zweiten Runner-Build.
-        run: |
-          rm -rf frontend/dist
-          mkdir -p frontend
-          cid="$(docker create agora-agora:ci-${{ github.sha }})"
-          trap 'docker rm "$cid" >/dev/null 2>&1 || true' EXIT
-          docker cp "$cid:/app/frontend/dist" ./frontend/dist
-          docker rm "$cid"
-          trap - EXIT
-
       - name: CI-Umgebungsdatei generieren
+        # AGORA_PROXY_PORT=80: Der Proxy bindet seit dem Loopback-Default auf
+        # 127.0.0.1:8080; die Health-Waits unten und verify-deploy.sh curlen
+        # aber http://localhost (Port 80). Im CI-Smoke explizit 80 setzen.
         run: |
-          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
+          printf 'VITE_AGORA_TOKEN=%s\nAGORA_AUTH_TOKEN=%s\nNEO4J_PASSWORD=%s\nSECRET_KEY=%s\nLLM_API_KEY=%s\nAGORA_DEBUG=false\nAGORA_BIND_HOST=0.0.0.0\nAGORA_PROXY_PORT=80\nAGORA_SKIP_EMBEDDING_PROBE=%s\n' \
             "$VITE_AGORA_TOKEN" "$AGORA_AUTH_TOKEN" "$NEO4J_PASSWORD" "$SECRET_KEY" "$LLM_API_KEY" "$AGORA_SKIP_EMBEDDING_PROBE" > .env
 
       - name: Bind-Mount-Verzeichnisse fuer Container-UID vorbereiten
@@ -249,7 +249,11 @@ jobs:
           setfacl -m u:1000:rwx backend/uploads backend/uploads/run_registry
 
       - name: Compose-Stack starten
-        # Kein --build: das Image ist bereits geladen (docker load oben).
+        # Kein --build noetig: das agora-Image ist bereits geladen (docker
+        # load oben) und unter agora-agora:latest getaggt. Der nginx/proxy-
+        # Service hat noch kein Image auf dem Runner — Compose baut ihn
+        # automatisch aus dem Repo-Dockerfile (Stage "proxy", enthaelt das
+        # Frontend-Bundle bereits eingebacken).
         # ALLOW_BUILD_TIME_TOKEN=true: CI ist Single-User-Tailnet-Variante,
         # Token-Bundle-Einbrennen ist in diesem Kontext zulässig (N6/F2.1).
         # AGORA_BIND_HOST=0.0.0.0: Backend muss auf allen Interfaces erreichbar
