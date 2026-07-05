@@ -84,7 +84,12 @@ class SimulationState:
     root_simulation_id: Optional[str] = None
     branch_name: Optional[str] = None
     branch_depth: int = 0
-    
+
+    # Effektiver Persona-Floor der Preparation (Task: 50-Personas-Minimum
+    # dynamisch). None = Legacy-State ohne Wert; das Report-Gate fällt dann
+    # auf MIN_PERSONA_TABLE_ROWS zurück.
+    persona_floor: Optional[int] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Complete status dict (internal use)"""
         return {
@@ -109,8 +114,9 @@ class SimulationState:
             "root_simulation_id": self.root_simulation_id,
             "branch_name": self.branch_name,
             "branch_depth": self.branch_depth,
+            "persona_floor": self.persona_floor,
         }
-    
+
     def to_simple_dict(self) -> Dict[str, Any]:
         """Simplified status dict (API return use)"""
         return {
@@ -245,6 +251,7 @@ class SimulationManager:
             root_simulation_id=data.get("root_simulation_id"),
             branch_name=data.get("branch_name"),
             branch_depth=int(data.get("branch_depth", 0) or 0),
+            persona_floor=data.get("persona_floor"),
         )
         
         self._simulations[simulation_id] = state

@@ -127,6 +127,7 @@ def _phase_generate_profiles(
     parallel_profile_count: int,
     progress_callback: Optional[Callable] = None,
     quota_plan: Optional[PersonaQuotaPlan] = None,
+    persona_floor: int = MIN_PERSONA_TABLE_ROWS,
 ) -> Tuple[List[Any], List[Any]]:
     """Phase 2: OASIS-Profiles generieren und im Sim-Dir ablegen.
 
@@ -143,7 +144,7 @@ def _phase_generate_profiles(
     """
     entities = _expand_entities_for_quota(filtered.entities, quota_plan)
     if quota_plan is None:
-        entities = _apply_persona_floor_to_entities(entities)
+        entities = _apply_persona_floor_to_entities(entities, minimum=persona_floor)
     total_entities = len(entities)
 
     if progress_callback:
@@ -529,7 +530,20 @@ def prepare_simulation(
                 _get_settings().effective_value('AGORA_PARALLEL_PERSONA_COUNT')
             )
 
-        quota_plan = _apply_persona_floor_to_quota_plan(quota_plan)
+        # Effektiver Persona-Floor (Task: 50-Personas-Minimum dynamisch):
+        # Der Report-Contract verlangt MIN_PERSONA_TABLE_ROWS, aber ein
+        # explizit kleineres max_agents gewinnt (Nutzer-Wunsch schlägt
+        # Contract). Der Wert wird im State persistiert, damit das
+        # Report-Gate in workflow.py denselben Floor prüft.
+        persona_floor = MIN_PERSONA_TABLE_ROWS
+        if max_agents is not None and max_agents > 0:
+            persona_floor = min(persona_floor, max_agents)
+        state.persona_floor = persona_floor
+        manager._save_simulation_state(state)
+
+        quota_plan = _apply_persona_floor_to_quota_plan(
+            quota_plan, minimum=persona_floor
+        )
 
         # Phase 2: Generate Agent Profiles
         profiles, expanded_entities = _phase_generate_profiles(
@@ -544,6 +558,7 @@ def prepare_simulation(
             parallel_profile_count=parallel_profile_count,
             progress_callback=progress_callback,
             quota_plan=quota_plan,
+            persona_floor=persona_floor,
             run_id=run_id,
         )
 

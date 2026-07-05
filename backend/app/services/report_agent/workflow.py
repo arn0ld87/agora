@@ -76,17 +76,46 @@ def _load_persona_count(agent: Any) -> int:
     return len(profiles) if isinstance(profiles, list) else 0
 
 
+def _load_persona_floor(agent: Any) -> int:
+    """Effektiver Persona-Floor für das Report-Contract-Gate.
+
+    Liest den bei der Preparation persistierten ``persona_floor`` aus dem
+    Simulation-State (Task: 50-Personas-Minimum dynamisch). Fallback ist
+    MIN_PERSONA_TABLE_ROWS; ein persistierter Wert kann den Floor nur
+    senken, nie über den Contract anheben.
+    """
+    try:
+        data = resolve_default_store().read_json(
+            agent.simulation_id,
+            "state",
+            default=None,
+        )
+    except Exception as exc:  # noqa: BLE001 — Gate darf am Store nicht scheitern
+        logger.warning(
+            "persona-floor check: failed to read state for simulation %s: %r",
+            getattr(agent, "simulation_id", "<unknown>"),
+            exc,
+        )
+        return MIN_PERSONA_TABLE_ROWS
+
+    floor = data.get("persona_floor") if isinstance(data, dict) else None
+    if isinstance(floor, int) and floor > 0:
+        return min(floor, MIN_PERSONA_TABLE_ROWS)
+    return MIN_PERSONA_TABLE_ROWS
+
+
 def _mark_incomplete_for_persona_floor(
     report: Report,
     *,
     report_id: str,
     persona_count: int,
+    floor: int = MIN_PERSONA_TABLE_ROWS,
     progress_callback: Optional[Callable[[str, int, str], None]] = None,
 ) -> Report:
     report.status = ReportStatus.INCOMPLETE
     message = (
         "Persona-Mindestanzahl nicht erreicht: "
-        f"{persona_count}/{MIN_PERSONA_TABLE_ROWS} Personas vorhanden."
+        f"{persona_count}/{floor} Personas vorhanden."
     )
     report.missing_sections = [message]
     report.error = message
@@ -844,11 +873,13 @@ def generate_report(
             return report
 
         persona_count = _load_persona_count(agent)
-        if persona_count < MIN_PERSONA_TABLE_ROWS:
+        persona_floor = _load_persona_floor(agent)
+        if persona_count < persona_floor:
             report = _mark_incomplete_for_persona_floor(
                 report,
                 report_id=report_id,
                 persona_count=persona_count,
+                floor=persona_floor,
                 progress_callback=progress_callback,
             )
             if agent.console_logger:
