@@ -14,6 +14,19 @@
       "deadline": "2026-07-30",
       "issue": "https://github.com/arn0ld87/agora/issues/661",
       "status": "open"
+    },
+    {
+      "advisory_id": "GHSA-p4gq-832x-fm9v",
+      "package": "nltk",
+      "version_constraint": "==3.9.4",
+      "severity": "High",
+      "reason": "URL-Encoded Path Traversal in nltk.data.load() (nltk==3.9.4, transitive via unstructured/camel-oasis). Kein Upstream-Fix in 3.9.x. Agora nutzt nltk nur transitiv, kein direkter Aufruf von nltk.data.load() mit user-kontrolliertem Pfad → nicht via Oberfläche exploitierbar.",
+      "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
+      "target_version": "nltk mit gefixter nltk.data.load()-Pfadvalidierung",
+      "owner": "nltk",
+      "deadline": "2026-07-30",
+      "issue": "https://github.com/arn0ld87/agora/issues/672",
+      "status": "open"
     }
   ]
 }

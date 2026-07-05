@@ -72,11 +72,12 @@ jobs:
         # Transformers v5 upgrade (#624).
         # Tracked in docs/dependency-risk-register.md. Hardstop 2026-07-30 —
         # afterwards this --ignore-vuln list MUST be empty.
-        # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217, PYSEC-2026-597.
+        # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217, PYSEC-2026-597, GHSA-p4gq-832x-fm9v.
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
             --ignore-vuln PYSEC-2026-597 \
+            --ignore-vuln GHSA-p4gq-832x-fm9v \
             -r /tmp/agora-backend-requirements.txt
 
       - name: Set up Bun
