@@ -87,7 +87,7 @@ def _make_client(model: str = "test-model", base_url: str = "http://localhost:99
     """Baut LLMClient ohne echten OpenAI-Server (API-Key=dummy)."""
     from app.utils.llm_client import LLMClient
 
-    with patch("app.utils.llm_client.OpenAI"):
+    with patch("app.llm.client.OpenAI"):
         client = LLMClient(
             api_key="dummy-key",
             base_url=base_url,
@@ -135,7 +135,7 @@ class TestChatIncrementsTokenCounter:
         response = _make_response(content="hello world", prompt_tokens=42, completion_tokens=17)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.utils.llm_client.llm_call_with_retry", return_value=response):
+            with patch("app.llm.client.llm_call_with_retry", return_value=response):
                 client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
@@ -162,7 +162,7 @@ class TestChatJsonIncrementsTokenCounter:
         response = _make_response(content='{"result": "ok"}', prompt_tokens=30, completion_tokens=8)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.utils.llm_client.llm_call_with_retry", return_value=response):
+            with patch("app.llm.client.llm_call_with_retry", return_value=response):
                 client.chat_json([{"role": "user", "content": "test"}])
 
         provider.force_flush()
@@ -201,7 +201,7 @@ class TestRetryDoesNotDoubleCount:
             return final_response  # immer finale Response (retry ist intern im Stub)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.utils.llm_client.llm_call_with_retry", side_effect=_fake_retry):
+            with patch("app.llm.client.llm_call_with_retry", side_effect=_fake_retry):
                 client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
@@ -233,7 +233,7 @@ class TestMissingUsageNoIncrement:
         response.usage = None  # Provider liefert kein Usage-Objekt
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.utils.llm_client.llm_call_with_retry", return_value=response):
+            with patch("app.llm.client.llm_call_with_retry", return_value=response):
                 result = client.chat([{"role": "user", "content": "hi"}])
 
         provider.force_flush()
@@ -262,7 +262,7 @@ class TestProviderModelLabels:
         response = _make_response(content="ok", prompt_tokens=5, completion_tokens=3)
 
         with patch.object(client, "_publish_model_active"):
-            with patch("app.utils.llm_client.llm_call_with_retry", return_value=response):
+            with patch("app.llm.client.llm_call_with_retry", return_value=response):
                 client.chat([{"role": "user", "content": "test"}])
 
         provider.force_flush()

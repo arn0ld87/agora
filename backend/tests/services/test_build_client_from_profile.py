@@ -37,7 +37,7 @@ def test_build_client_from_ollama_profile():
     """Ollama-Profil ohne api_key baut LLMClient erfolgreich."""
     profile = _make_profile(provider="ollama", base_url="http://localhost:11434/v1", api_key="")
 
-    with patch("app.utils.llm_client.OpenAI"):
+    with patch("app.llm.client.OpenAI"):
         client = build_client_from_profile(profile)
 
     assert client.model == "qwen2.5:32b"
@@ -54,7 +54,7 @@ def test_build_client_from_openai_profile():
         api_key="sk-xyz",
     )
 
-    with patch("app.utils.llm_client.OpenAI"):
+    with patch("app.llm.client.OpenAI"):
         client = build_client_from_profile(profile, run_id="run-42")
 
     assert client.api_key == "sk-xyz"
