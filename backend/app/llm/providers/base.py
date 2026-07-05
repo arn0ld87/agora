@@ -193,6 +193,15 @@ class ProviderAdapter(ABC):
         except Exception as exc:  # noqa: BLE001 — bewusst: alles normalisieren
             yield NormalizedLlmChunk(type="error", error=self.normalize_error(exc))
             return
+        finally:
+            # Stream/Context-Manager sicher schliessen — openai.Stream hat
+            # close(); einfache Test-Iteratoren haben keine (hasattr-Guard).
+            # Verhindert Connection-Leaks bei Error oder vorzeitigem Abbruch.
+            if hasattr(stream, "close"):
+                try:
+                    stream.close()
+                except Exception:  # noqa: BLE001 — close darf nicht knallen
+                    pass
         yield NormalizedLlmChunk(type="done")
 
     # ------------------------------------------------------------------
