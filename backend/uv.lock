@@ -9,6 +9,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
+    { name = "nltk", specifier = "==3.9.4" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "pillow", specifier = ">=12.1.1" },
