@@ -41,7 +41,10 @@ class ApiKeyModel(BaseModel):
     )
     scopes: list[ApiKeyScope] = Field(min_length=1)
     status: ApiKeyStatus
-    hashed_token: str = Field(description="SHA-256 hash of the full token", exclude=True)
+    hashed_token: str = Field(
+        description="Server-side HMAC-SHA256 lookup hash of the full token",
+        exclude=True,
+    )
     created_at: datetime
     last_used_at: Optional[datetime] = None
     revoked_at: Optional[datetime] = None

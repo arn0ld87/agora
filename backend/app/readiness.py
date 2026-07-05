@@ -19,7 +19,7 @@ Beispielantwort bei kaputtem Neo4j:
 
     GET /readyz → 503
     {"status": "not_ready", "checks": {
-        "neo4j": {"ok": false, "detail": "bolt://neo4j:7687 unreachable: ..."},
+        "neo4j": {"ok": false, "detail": "neo4j connectivity probe failed"},
         ...
     }}
 
@@ -46,8 +46,15 @@ from typing import Any, Tuple
 from flask import Flask, Response, current_app, jsonify
 
 from .config import infer_vector_dim_for_model
+from .utils.logger import get_logger
 
 CheckResult = Tuple[bool, str]
+logger = get_logger("agora.readiness")
+
+
+def _safe_probe_failure(check_name: str, exc: Exception) -> CheckResult:
+    logger.warning("%s readiness probe failed: %s", check_name, exc, exc_info=True)
+    return False, f"{check_name} connectivity probe failed"
 
 
 def _check_neo4j() -> CheckResult:
@@ -67,7 +74,7 @@ def _check_neo4j() -> CheckResult:
     try:
         probe()
     except Exception as exc:  # noqa: BLE001 — Probe-Fehler werden im Body sichtbar
-        return False, str(exc)
+        return _safe_probe_failure("neo4j", exc)
     return True, "ok"
 
 
@@ -95,7 +102,7 @@ def _check_redis() -> CheckResult:
     try:
         probe()
     except Exception as exc:  # noqa: BLE001
-        return False, str(exc)
+        return _safe_probe_failure("redis", exc)
     return True, "ok"
 
 
