@@ -44,10 +44,34 @@ jobs:
         # exit 1 bei nicht-committeten Schema-Aenderungen -> blockiert Merge.
         run: uv run python -m app.contracts.dump_schemas --check
 
-  # 2026-05-17 entfernt: STATUS.md-Drift-Job. STATUS.md ist generierter
-  # Audit-Output; die Drift-Checks haben PRs ständig rot gefärbt, ohne
-  # einen echten Bug zu fangen. Wenn STATUS.md wieder aktiv kuratiert
-  # wird, Job aus Git-History reaktivieren.
+  status-drift:
+    # Reaktiviert 2026-07 (Repo-Review Punkt 1): STATUS.md ist auto-generiert
+    # und wird via --check CI-enforced. Ref: docs/README.md § Status und Planung.
+    name: STATUS.md Drift (--check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            files.pythonhosted.org:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            pypi.org:443
+
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: python -m pip install --upgrade pip uv
+      - working-directory: backend
+        run: uv sync --group dev
+      - name: STATUS.md Drift-Check
+        run: bash scripts/sync-status.sh --check
 
   contract-tests:
     name: Pydantic-Contract-Tests
