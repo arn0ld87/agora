@@ -39,7 +39,7 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
-| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | nltk | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
 ## Trivy Container Scan Baseline (Hardstop 2026-08-30)
 
@@ -66,7 +66,7 @@ Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
 Wenn am 2026-07-30 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
 
 1. **Upstream released bis dahin** — `--ignore-vuln`-Flags aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) entfernen, Issue schließen, Eintrag nach „Abgeschlossen" verschieben.
-2. [ADR docs/decisions/0002-cve-upstream-escalation.md](decisions/0002-cve-upstream-escalation.md) entscheidet zwischen:
+2. **ADR docs/decisions/0004-cve-upstream-escalation.md** (geplant) entscheidet zwischen:
    - **Vendoring** der betroffenen Subkomponenten,
    - **Soft-Fork** mit Patch-Ringen,
    - **Replacement** durch andere Pakete (z.B. `langgraph` statt `camel-oasis`).

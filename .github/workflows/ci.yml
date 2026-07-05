@@ -72,6 +72,7 @@ jobs:
         # Transformers v5 upgrade (#624).
         # Tracked in docs/dependency-risk-register.md. Hardstop 2026-07-30 —
         # afterwards this --ignore-vuln list MUST be empty.
+        # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217, PYSEC-2026-597.
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
