@@ -14,3 +14,8 @@ CVE-2026-24049
 # Blocker: Basis-Image-Update erforderlich
 # Deadline: 2026-08-30
 CVE-2026-23949
+
+# PYSEC-2026-597: nltk==3.9.4 (transitive via unstructured)
+# Risk: unknown (No upstream fix available)
+# Issue: https://github.com/arn0ld87/agora/issues/661
+PYSEC-2026-597
