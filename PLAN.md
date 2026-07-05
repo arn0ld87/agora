@@ -16,6 +16,7 @@
 8. [Sicherheitsregeln](#8-sicherheitsregeln)
 9. [Abgeschlossene Welle: Observability, Run-Control & Model-Picker UX (2026-05-16)](#9-abgeschlossene-welle-observability-run-control--model-picker-ux-2026-05-16)
 10. [Aktive Welle: Report-Quality-Floor (2026-05-17)](#10-aktive-welle-report-quality-floor-2026-05-17)
+11. [M3-Port — Unified Provider Abstraction (2026-07-05)](#11-m3-port--unified-provider-abstraction-2026-07-05)
 
 ---
 
@@ -330,5 +331,46 @@ Report-Perf (Slice B/C aus `docs/archive/plans/plan.report-perf.md` folgt eigens
 
 ---
 
-*Zuletzt aktualisiert: 2026-05-17 — Observability-Welle abgeschlossen, Report-Quality-Welle eröffnet.*
+## 11. M3-Port — Unified Provider Abstraction (2026-07-05)
+
+**Status:** ✅ Abgeschlossen via PR #666 (`feat/m3-port`, gemerged auf `main`).
+Unified Provider Abstraction (#590) + Unified Provider Detection (#591) auf
+dem #582-Split neu portiert. Schließt #590, #591, #582 sowie #636
+(M3-Milestone-Tracker — alle 5 Kriterien abgehakt).
+
+**Single Source of Truth für Provider-Detection:**
+[`backend/app/llm/providers/registry.py`](backend/app/llm/providers/registry.py)
+→ `detect_provider(base_url, model, *, mode="http"|"oasis")`.
+
+- `mode="http"` — Vokabular `ollama|cloud|openai|google|unknown` (Backend-`LLMClient`).
+- `mode="oasis"` — Vokabular `google|ollama|openai` (CAMEL-Sim-Skripte).
+
+Beide Modi sind testfixiert und absichtlich getrennt — Divergenzen siehe
+Modul-Docstring der Registry.
+
+### Phase F — Rest-Detection-Delegation (offen)
+
+Drei lokale Detection-Heuristiken delegieren noch nicht an die SSOT. Jeweils
+eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün).
+
+| Issue | Aufgabe | Status |
+|---|---|---|
+| [#669](https://github.com/arn0ld87/agora/issues/669) | `simulation_lifecycle._detect_default_provider` → `registry.detect_provider(mode="http")` | offen |
+| [#670](https://github.com/arn0ld87/agora/issues/670) | `_sim_common._is_ollama_route` think/num_ctx-Gate für `ollama.com`-URLs ausweiten | offen |
+| [#671](https://github.com/arn0ld87/agora/issues/671) | `embedding_service._detect_provider` vereinheitlichen ODER bewusst separat dokumentieren | offen (Entscheidung nötig) |
+
+### Dependency-Hardstops (Source of Truth: [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md))
+
+- PYSEC-2026-597 + GHSA-p4gq-832x-fm9v (`nltk`) — Hardstop **2026-07-30**,
+  kein Upstream-Fix in 3.9.x. Agora nutzt `nltk` nur transitiv (via
+  `unstructured`/`camel-oasis`), kein direkter `nltk.data.load()`-Aufruf mit
+  user-kontrolliertem Pfad → Risikoakzeptanz (Tracking-Issue
+  [#672](https://github.com/arn0ld87/agora/issues/672)).
+- CVE-2026-24049 / CVE-2026-23949 (Trivy OS-Layer, `wheel`/`jaraco.context`)
+  — Hardstop **2026-08-30**, Base-Image-Update erforderlich.
+
+---
+
+*Zuletzt aktualisiert: 2026-07-05 — M3-Port abgeschlossen, Phase F (Rest-Detection-Delegation) eröffnet.*
+*Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*

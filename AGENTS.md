@@ -140,10 +140,16 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 
 ## Aktive Epics
 
+- **M3-Port — Unified Provider Abstraction:** ✅ abgeschlossen (PR #666, 2026-07-05).
+  Provider-Detection-SSoT: `app/llm/providers/registry.detect_provider(mode="http"|"oasis")`.
+  Phase F offen — Rest-Detection-Delegation an die SSoT: #669, #670, #671
+  (jeweils eigener PR, TDD).
 - **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch,
   F läuft. Vendoriert in [`design/v3-source/`](design/v3-source/).
 - **v1.0-Output-Vertrag** ([`PLAN.md`](PLAN.md)) — offen: P3.2, P4.1, P4.3, P4.4.
 - **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen).
+- **Dependency-Hardstops** ([`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)):
+  `nltk` PYSEC-2026-597 + GHSA-p4gq → 2026-07-30; Trivy OS-Layer CVE-2026-24049/23949 → 2026-08-30.
 
 ## Referenz
 
