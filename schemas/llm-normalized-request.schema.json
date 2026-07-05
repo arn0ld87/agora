@@ -52,7 +52,7 @@
     },
     "ResponseFormat": {
       "additionalProperties": false,
-      "description": "Gewuenschtes Antwortformat (Text, JSON-Objekt oder striktes Schema).",
+      "description": "Gewuenschtes Antwortformat (Text, JSON-Objekt oder striktes Schema).\n\n``type=\"json_schema\"`` verlangt zwingend ein ``json_schema``-Objekt \u2014 sonst\nlehnt OpenAI zur Laufzeit mit HTTP 400 ab (\"json_schema is required\"). Ein\nPydantic-``model_validator`` f\u00e4ngt den Konfigurationsfehler am Contract\nab (fail-fast) statt erst im API-Call (Gemini-Finding).",
       "properties": {
         "json_schema": {
           "anyOf": [

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.contracts.provider_types import ProviderType
 
@@ -29,12 +29,24 @@ class ChatMessage(BaseModel):
 
 
 class ResponseFormat(BaseModel):
-    """Gewuenschtes Antwortformat (Text, JSON-Objekt oder striktes Schema)."""
+    """Gewuenschtes Antwortformat (Text, JSON-Objekt oder striktes Schema).
+
+    ``type="json_schema"`` verlangt zwingend ein ``json_schema``-Objekt — sonst
+    lehnt OpenAI zur Laufzeit mit HTTP 400 ab ("json_schema is required"). Ein
+    Pydantic-``model_validator`` fängt den Konfigurationsfehler am Contract
+    ab (fail-fast) statt erst im API-Call (Gemini-Finding).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["text", "json_object", "json_schema"]
     json_schema: Optional[dict[str, object]] = None
+
+    @model_validator(mode="after")
+    def _require_schema_for_json_schema(self) -> "ResponseFormat":
+        if self.type == "json_schema" and self.json_schema is None:
+            raise ValueError("json_schema is required when type is 'json_schema'")
+        return self
 
 
 class ToolSpec(BaseModel):

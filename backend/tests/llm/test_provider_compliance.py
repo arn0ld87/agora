@@ -14,7 +14,7 @@ import httpx
 import openai
 import pytest
 
-from app.contracts.llm_request import ChatMessage, NormalizedLlmRequest
+from app.contracts.llm_request import ChatMessage, NormalizedLlmRequest, ResponseFormat
 from app.llm.errors import LlmProviderError, normalize_provider_error
 from app.llm.providers.base import ProviderAdapter
 from app.llm.providers.gemini import GeminiAdapter
@@ -307,18 +307,16 @@ def test_wire_response_format_json_schema_branch() -> None:
     assert kwargs["response_format"] == {"type": "json_schema", "json_schema": schema}
 
 
-def test_wire_response_format_json_schema_without_schema_falls_back_to_type_only() -> None:
-    """json_schema ohne schema-Objekt fällt auf {"type": "json_schema"} zurück.
+def test_response_format_json_schema_without_schema_rejected_at_contract() -> None:
+    """type="json_schema" OHNE schema-Objekt wird am Contract abgelehnt (fail-fast).
 
-    Edge-Case: ResponseFormat(type="json_schema", json_schema=None) — der
-    ``and response_format.json_schema is not None``-Guard verhindert, dass ein
-    None-Wert als "json_schema": None ins Wire-Format gelangt.
+    Sonst lehnt OpenAI zur Laufzeit mit HTTP 400 ab. Der model_validator auf
+    ResponseFormat fängt den Konfigurationsfehler früh ab (Gemini-Finding).
     """
-    adapter = OpenAIAdapter()
-    req = _request(response_format={"type": "json_schema", "json_schema": None})
-    kwargs = adapter.prepare_request_kwargs(req)
+    from pydantic import ValidationError
 
-    assert kwargs["response_format"] == {"type": "json_schema"}
+    with pytest.raises(ValidationError):
+        ResponseFormat(type="json_schema", json_schema=None)
 
 
 # ---------------------------------------------------------------------------
