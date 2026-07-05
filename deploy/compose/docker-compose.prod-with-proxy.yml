@@ -38,6 +38,18 @@ services:
       # (= Repo-Root), analog zu docker-compose.yml/docker-compose.prod.yml.
       context: .
       target: proxy
+      args:
+        # Muss identisch zum agora-Service durchgereicht werden: die proxy-Stage
+        # backt das Frontend-Bundle per COPY --from=frontend-build ein. Ohne
+        # diese Args baut die frontend-build-Stage mit leerem Default-Token
+        # (ALLOW_BUILD_TIME_TOKEN=false) und nginx serviert ein Bundle ohne
+        # einkompilierten Token — /api/* antwortet dann 401 (unauthorized),
+        # obwohl das agora-Image selbst korrekt gebaut wurde.
+        # Siehe Dockerfile:ARG ALLOW_BUILD_TIME_TOKEN (F2.1) und
+        # docker-compose.prod.yml → services.agora.build.args.
+        ALLOW_BUILD_TIME_TOKEN: ${ALLOW_BUILD_TIME_TOKEN:-false}
+        VITE_AGORA_TOKEN: ${VITE_AGORA_TOKEN:-}
+        VITE_UI_VERSION: ${VITE_UI_VERSION:-v4}
     container_name: agora-nginx
     restart: unless-stopped
     depends_on:
