@@ -46,7 +46,8 @@ class TestChatJsonLegacy:
     def test_chat_json_legacy_no_schema_keeps_json_object(self, client, monkeypatch):
         """Without schema the legacy json_object response_format must be used."""
         # Ensure json-mode is active regardless of the project .env setting.
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         captured: list = []
 
         def mock_chat(messages, temperature, max_tokens, response_format, context="chat", **kwargs):
@@ -65,7 +66,8 @@ class TestChatJsonLegacy:
 class TestChatJsonStrictSchema:
     def test_chat_json_strict_schema_uses_json_schema_response_format(self, client, monkeypatch):
         """With a Pydantic schema the request must use json_schema response_format."""
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         captured: list = []
 
         def mock_chat(messages, temperature, max_tokens, response_format, context="chat_json", **kwargs):
@@ -92,7 +94,8 @@ class TestChatJsonStrictSchema:
 
     def test_chat_json_strict_validates_against_pydantic(self, client, monkeypatch):
         """Valid JSON validated against Pydantic model returns typed dict; invalid raises."""
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         # --- valid case ---
         monkeypatch.setattr(client, "chat", lambda **_kw: '{"x": 7}')
         result = client.chat_json(
@@ -112,7 +115,8 @@ class TestChatJsonStrictSchema:
     def test_chat_json_strict_falls_back_on_unsupported(self, client, monkeypatch):
         """On 'unknown response_format' exception the fallback to json_object is used."""
         import logging
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
 
         call_count = 0
         warning_calls: list = []
@@ -171,7 +175,8 @@ class TestChatJsonStrictSchema:
 
     def test_chat_json_dict_schema_no_server_validation(self, client, monkeypatch):
         """When schema is a plain dict the returned value is passed through unchanged."""
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         dict_schema = {
             "type": "object",
             "properties": {"name": {"type": "string"}},
@@ -286,7 +291,8 @@ class TestOllamaNativeSchemaPath:
         from unittest.mock import MagicMock, patch
 
         client = self._make_ollama_client()
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 
         captured_posts: list = []
@@ -329,7 +335,8 @@ class TestOllamaNativeSchemaPath:
         import httpx
 
         client = self._make_ollama_client()
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 
         warning_msgs: list = []
@@ -385,7 +392,8 @@ class TestOllamaNativeSchemaPath:
         obj.route_stage = None
         obj.route_provider_id = None
 
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 
         openai_calls: list = []
@@ -474,11 +482,11 @@ class TestOllamaThinkingEnvOverride:
 
     def _make_client(self, monkeypatch, reasoning_effort):
         from unittest.mock import MagicMock
-        monkeypatch.setattr("app.utils.llm_client.OpenAI", lambda **_kwargs: MagicMock())
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kwargs: MagicMock())
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", "k")
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_BASE_URL", "http://localhost:11434/v1")
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", "qwen3:8b")
-        monkeypatch.setattr("app.utils.llm_client._read_active_config_safely", lambda: None)
+        monkeypatch.setattr("app.llm.client._read_active_config_safely", lambda: None)
         return LLMClient(reasoning_effort=reasoning_effort, use_active_config=False)
 
     def test_ollama_thinking_false_overrides_reasoning_effort(self, monkeypatch):
@@ -573,7 +581,8 @@ class TestOllamaCloudBearerAuth:
         from unittest.mock import MagicMock, patch
 
         client = self._make_cloud_client(api_key="cloud-secret-42")
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 
         captured: list = []
@@ -622,7 +631,8 @@ class TestOllamaCloudBearerAuth:
         obj.route_stage = None
         obj.route_provider_id = None
 
-        monkeypatch.setenv("LLM_DISABLE_JSON_MODE", "false")
+        monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+        monkeypatch.setenv("LLM_DISABLE_JSON_OBJECT_MODE", "false")
         monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
 
         captured: list = []
@@ -746,11 +756,11 @@ class TestLlmClientInitUsesResolveNumCtx:
 
     def _make(self, monkeypatch, model="gemini-3-pro:cloud", provider_options=None):
         from unittest.mock import MagicMock
-        monkeypatch.setattr("app.utils.llm_client.OpenAI", lambda **_kw: MagicMock())
+        monkeypatch.setattr("app.llm.client.OpenAI", lambda **_kw: MagicMock())
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_API_KEY", "k")
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_BASE_URL", "https://ollama.com/v1")
         monkeypatch.setattr("app.utils.llm_client.Config.LLM_MODEL_NAME", model)
-        monkeypatch.setattr("app.utils.llm_client._read_active_config_safely", lambda: None)
+        monkeypatch.setattr("app.llm.client._read_active_config_safely", lambda: None)
         return LLMClient(provider_options=provider_options, use_active_config=False)
 
     def test_init_picks_up_heuristic_for_cloud_model(self, monkeypatch):

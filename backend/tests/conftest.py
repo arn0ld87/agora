@@ -13,6 +13,17 @@ from cryptography.fernet import Fernet
 
 
 @pytest.fixture(autouse=True)
+def _clean_llm_json_mode_env(monkeypatch):
+    """Hermetik: Verhindert Env-Leaks aus der Shell (z.B. LLM_DISABLE_JSON_MODE=true).
+
+    Tests, die die Flags explizit brauchen, setzen sie selbst via monkeypatch
+    (siehe tests/utils/test_llm_client_json_mode_env.py, Issue #593).
+    """
+    monkeypatch.delenv("LLM_DISABLE_JSON_MODE", raising=False)
+    monkeypatch.delenv("LLM_DISABLE_JSON_OBJECT_MODE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _global_fernet_env(monkeypatch, tmp_path):
     """Setzt AGORA_FERNET_KEY + AGORA_DATA_DIR für jeden Test und räumt auf."""
     fernet_key = Fernet.generate_key().decode("utf-8")

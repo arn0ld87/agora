@@ -144,7 +144,7 @@ class TestStubActiveWithEnv:
         # LLMClient mit explizit gesetzten Credentials instanziieren,
         # damit __init__ nicht an fehlendem LLM_API_KEY scheitert.
         # OpenAI-Client patchen, damit kein echter Netzwerkaufruf erfolgt.
-        with patch("app.utils.llm_client.OpenAI") as mock_openai:
+        with patch("app.llm.client.OpenAI") as mock_openai:
             from app.utils.llm_client import LLMClient
 
             client = LLMClient(
