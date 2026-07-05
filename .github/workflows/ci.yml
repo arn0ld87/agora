@@ -67,14 +67,14 @@ jobs:
         # wöchentlich) und Dependabot fangen Vulns ab.
         #
         # Temporary baseline: these advisories have no fixed release
-        # in the advisory DB (PYSEC-2025-217 #624, PYSEC-2026-597 #661).
-        # CVE-2026-1839 and CVE-2026-4372 resolved via Transformers v5 upgrade.
+        # in the advisory DB (PYSEC-2026-597 #661).
+        # CVE-2026-1839, CVE-2026-4372 und PYSEC-2025-217 resolved via
+        # Transformers v5 upgrade (#624).
         # Tracked in docs/dependency-risk-register.md. Hardstop 2026-07-30 —
         # afterwards this --ignore-vuln list MUST be empty.
         if: github.event_name != 'pull_request'
         run: |
           uvx pip-audit --strict --no-deps --disable-pip \
-            --ignore-vuln PYSEC-2025-217 \
             --ignore-vuln PYSEC-2026-597 \
             -r /tmp/agora-backend-requirements.txt
 

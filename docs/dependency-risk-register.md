@@ -39,7 +39,6 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
-| PYSEC-2025-217 | `transformers` | unbekannt | Nein (kein Upstream-Fix released) | sentence-transformers | 2026-07-30 | open | [#624](https://github.com/arn0ld87/agora/issues/624) | [huggingface/transformers/releases](https://github.com/huggingface/transformers/releases) |
 | PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | nltk | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
 ## Trivy Container Scan Baseline (Hardstop 2026-08-30)
@@ -57,7 +56,7 @@ Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
-| `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372 und CVE-2026-1839. |
+| `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. |
 | `nltk` | `3.9.4` | — (kein Pin) | PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. |
 
 ---
@@ -95,6 +94,7 @@ Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt e
 |---|---|---|---|
 | CVE-2026-4372 | `transformers` | Resolved via Upgrade auf `transformers>=5.3.0` (unblocked durch `sentence-transformers>=5.3.0`). `--ignore-vuln`-Flag aus CI entfernt. Issue #662 schließen. | 2026-07-06 |
 | CVE-2026-1839 | `transformers` | Resolved via Upgrade auf `transformers>=5.3.0` (unblocked durch `sentence-transformers>=5.3.0`). `--ignore-vuln`-Flag aus CI entfernt. Issue #124 schließen. | 2026-07-06 |
+| PYSEC-2025-217 | `transformers` | Resolved via Upgrade auf `transformers>=5.3.0` (unblocked durch `sentence-transformers>=5.3.0`). `--ignore-vuln`-Flag aus CI entfernt. Issue #624 schließen. | 2026-07-06 |
 | PYSEC-2026-139 | `torch` | Resolved via Upgrade auf `torch==2.12.1` (verified via `uvx pip-audit --strict`: Finding feuert nicht mehr). `--ignore-vuln`-Flag aus CI entfernt. Issue #623 schließen. | 2026-07-05 |
 | CVE-2026-25990 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #121 schließen. | 2026-05-15 |
 | CVE-2026-40192 | `pillow` | Resolved via `tool.uv.override-dependencies`: `pillow==12.2.0` installiert (verified via `uv export`). `--ignore-vuln`-Flag aus CI entfernt. Issues #122 schließen. | 2026-05-15 |

@@ -245,7 +245,7 @@ override-dependencies = [
     # SyntaxWarning("invalid escape sequence") in eigenen Modulen
     # (SentenceEvaluator.py, model_card.py, DenoisingAutoEncoderLoss.py).
     # Upgrade auf 5.x unblocks transformers v5 compatibility to resolve
-    # CVE-2026-4372 and CVE-2026-1839.
+    # CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217.
     "sentence-transformers>=5.3.0",
     "transformers>=5.3.0",
 ]
