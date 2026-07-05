@@ -7,7 +7,6 @@ Extracted verbatim from ``app/utils/llm_client.py`` as part of issue #582
 schema path lives separately in ``app.llm.providers.ollama``.
 """
 
-import json
 import os
 import re
 from typing import Any, Dict, Optional, Type, Union, List
