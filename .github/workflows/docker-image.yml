@@ -1,13 +1,13 @@
 name: Build and push Docker image
 
 on:
-  # Bewusst kein pull_request-Trigger:
+  # Bewusst kein pull_request- und kein main-Trigger:
   # Der Prod-Proxy-Smoke läuft ca. 30 Minuten und ist auf Feature-PRs
-  # zu teuer. Stattdessen läuft er auf main, Release-/RC-Branches,
-  # Tags und manuellem Dispatch. Vor einem Release manuell anstoßen.
+  # und normalen main-Pushes zu teuer. Er läuft nur auf Release-/RC-
+  # Branches, Tags und manuellem Dispatch. Vor einem Release manuell
+  # anstoßen oder Release-Branch pushen.
   push:
     branches:
-      - main
       - "release/**"
       - "rc/**"
     tags: ["v*"]
