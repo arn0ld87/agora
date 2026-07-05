@@ -50,6 +50,15 @@ Bei Schema-Drift: `dump_schemas` ohne `--check` neu rendern, in den selben PR co
 | [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md) | Dispatch-Workflow |
 | [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md) | Layer 0–10 |
 
+## Provider-Detection-SSoT
+
+Bei Provider-Detection-Fragen („welcher Provider für diese URL/Modell",
+`ollama.com`-Handling, `think`/`num_ctx`-Gate) ist
+[`backend/app/llm/providers/registry.py`](backend/app/llm/providers/registry.py)
+→ `detect_provider(base_url, model, *, mode="http"|"oasis")` die Single Source
+of Truth. Keine neuen lokalen Detection-Heuristiken pflegen — bestehende werden
+dorthin delegiert (Phase F, Issues #669/#670/#671 offen).
+
 ## Token Efficiency
 - Never re-read files you just wrote or edited. You know the contents.
 - Never re-run commands to "verify" unless the outcome was uncertain.
