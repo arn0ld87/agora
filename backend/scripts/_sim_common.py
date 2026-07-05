@@ -20,38 +20,34 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
     """Map model-name + base-url to the correct CAMEL ModelPlatformType.
 
-    Detection order (first match wins):
+    Delegiert die Detection an ``app.llm.providers.registry.detect_provider``
+    (``mode="oasis"``, Single Source of Truth seit #591) und mappt das
+    Vokabular ``google|ollama|openai`` auf ``ModelPlatformType``. Die
+    Heuristik-Logik lebt jetzt in der Registry, damit HTTP-Client
+    (``app/llm/providers/base.py``) und OASIS-Subprozess dieselbe Quelle
+    nutzen; die bewussten Divergenzen zwischen beiden Modi sind in
+    ``registry.py`` tabellarisch dokumentiert.
 
-    1. GEMINI — base_url contains ``generativelanguage.googleapis.com`` OR
-       model starts with ``gemini-``.  Gemini-3 requires a ``thought_signature``
-       echo in multi-turn tool calls; the OpenAI-compat wire path strips that
-       field and the API rejects every tool turn with HTTP 400.
-    2. OLLAMA — base_url contains ``ollama.com`` or ``:11434``  OR  model ends
-       with ``:cloud`` or ``:latest``.  Ollama Cloud no longer offers an
-       OpenAI-compat ``/v1`` endpoint; only the native ``/api/chat`` path works.
-       CAMEL's ``OllamaModel`` speaks the native protocol.
-    3. OPENAI — everything else (real OpenAI, Anthropic compat gateways, Qwen
-       Cloud via non-Ollama URLs, Mistral, DeepSeek, …).
+    Bedeutung der Zweige (first match wins, siehe ``registry._detect_oasis``):
+
+    1. GEMINI — base_url enthält ``generativelanguage.googleapis.com`` ODER
+       Modell beginnt mit ``gemini-``.  Gemini-3 braucht ein
+       ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der
+       OpenAI-Compat-Wire-Pfad strippt das Feld → HTTP 400 pro Tool-Turn.
+    2. OLLAMA — base_url enthält ``ollama.com`` oder ``:11434`` ODER Modell
+       endet auf ``:cloud`` / ``:latest``.  Ollama Cloud hat keinen
+       OpenAI-Compat-``/v1``-Endpoint mehr; nur nativ ``/api/chat``.
+    3. OPENAI — Default / Compat-Gateway.
     """
     from camel.types import ModelPlatformType  # type: ignore[import]
 
-    url = base_url or ""
-    m = model or ""
+    from app.llm.providers.registry import detect_provider as _detect
 
-    # --- 1. Gemini ---
-    if "generativelanguage.googleapis.com" in url or m.startswith("gemini-"):
+    detected = _detect(base_url, model, mode="oasis")
+    if detected == "google":
         return ModelPlatformType.GEMINI
-
-    # --- 2. Ollama ---
-    if (
-        "ollama.com" in url
-        or re.search(r":11434(?:/|$)", url)
-        or m.endswith(":cloud")
-        or m.endswith(":latest")
-    ):
+    if detected == "ollama":
         return ModelPlatformType.OLLAMA
-
-    # --- 3. OpenAI (default / compat gateway) ---
     return ModelPlatformType.OPENAI
 
 
