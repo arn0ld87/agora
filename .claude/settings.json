@@ -12,7 +12,11 @@
       "TodoWrite(**)",
       "WebFetch(domain:*)",
       "WebSearch",
-      "mcp__*",
+      "mcp__code-review-graph__*",
+      "mcp__plugin_context-mode_context-mode__*",
+      "mcp__plugin_serena_serena__*",
+      "mcp__plugin_honcho_honcho__*",
+      "mcp__docfork__*",
       "Skill(**)",
       "Agent(*)",
       "Task(*)",
@@ -20,6 +24,13 @@
       "Bash(ls *)",
       "Bash(find *)",
       "Bash(rg *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(grep *)",
+      "Bash(wc *)",
+      "Bash(jq *)",
+      "Bash(echo *)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -27,6 +38,9 @@
       "Bash(git branch*)",
       "Bash(git fetch*)",
       "Bash(gh issue list*)",
+      "Bash(gh issue view*)",
+      "Bash(gh workflow list*)",
+      "Bash(gh workflow view*)",
       "Bash(gh pr list*)",
       "Bash(gh pr view*)",
       "Bash(gh run list*)",
@@ -42,7 +56,16 @@
       "Bash(cd frontend && npm run check*)",
       "Bash(cd frontend && npm test*)",
       "Bash(npm run check*)",
-      "Bash(npm run setup:all*)"
+      "Bash(npm run setup:all*)",
+      "Bash(uv sync*)",
+      "Bash(uv lock*)",
+      "Bash(uv export*)",
+      "Bash(uv tree*)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run python*)",
+      "Bash(uv run ruff*)",
+      "Bash(uv run mypy*)",
+      "Bash(pip-audit*)"
     ],
     "deny": [
       "Bash(rm -rf /*)",
@@ -70,94 +93,14 @@
       "Bash(git merge*)",
       "Bash(git rebase*)",
       "Bash(docker compose up*)",
-      "Bash(docker compose down*)"
+      "Bash(docker compose down*)",
+      "Bash(gh issue close*)",
+      "Bash(gh issue edit*)",
+      "Bash(gh pr create*)"
     ],
-    "defaultMode": "auto"
+    "defaultMode": "default"
   },
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "WebFetch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/pretooluse.mjs\""
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
@@ -165,48 +108,6 @@
           {
             "type": "command",
             "command": "FILE=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$FILE\" in *.py) cd backend 2>/dev/null && uv run ruff check --fix \"$FILE\" 2>&1 | head -10 ;; esac; exit 0"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Read|Write|Edit|NotebookEdit|Glob|Grep|TodoWrite|TaskCreate|TaskUpdate|EnterPlanMode|ExitPlanMode|Skill|Agent|AskUserQuestion|EnterWorktree|mcp__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/posttooluse.mjs\""
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/precompact.mjs\""
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/userpromptsubmit.mjs\""
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/alexanderschneider/.claude/plugins/cache/context-mode/context-mode/1.0.136/hooks/sessionstart.mjs\""
           }
         ]
       }
