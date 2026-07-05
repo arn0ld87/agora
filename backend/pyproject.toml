@@ -211,6 +211,10 @@ module = [
     "app.services.*",
     "app.storage.*",
     "app.utils.*",
+    # app.llm.* — mechanischer Split aus app/utils/llm_client.py (#582),
+    # erbt dessen ignore_errors-Status. Typing-Cleanup folgt mit der
+    # Provider-Abstraktion (#590).
+    "app.llm.*",
 ]
 ignore_errors = true
 

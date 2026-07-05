@@ -26,7 +26,9 @@ app/config.py::Config
 app/config.py::Config.validate
 app/__init__.py::create_app
 app/utils/file_parser.py::FileParser._extract_from_pdf
-app/utils/llm_client.py::LLMClient.chat_json
+# llm_client.py wurde nach app/llm/ gesplittet (#582) — Hotspots unverändert,
+# nur Pfad neu. Refactoring der Funktionen selbst: #590.
+app/llm/client.py::LLMClient.chat_json
 app/api/simulation_profiles.py::add_simulation_profile
 app/api/simulation_run.py::start_simulation
 app/api/simulation_prepare.py::prepare_simulation
@@ -63,8 +65,8 @@ app/services/report_agent/planning.py::plan_outline
 app/services/report_agent/workflow.py::chat
 app/api/report.py::generate_report
 app/api/graph.py::generate_ontology
-app/utils/llm_client.py::LLMClient.__init__
-app/utils/llm_client.py::LLMClient.chat
+app/llm/client.py::LLMClient.__init__
+app/llm/client.py::LLMClient.chat
 
 # Drift zwischen Allowlist (2026-05-14) und HEAD — Report-Quality-Welle
 # (PR #495 "Hypothesen-Cap + Appendix", 2026-05-14) hat einen weiteren

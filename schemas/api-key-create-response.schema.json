@@ -10,7 +10,7 @@
           "type": "string"
         },
         "hashed_token": {
-          "description": "SHA-256 hash of the full token",
+          "description": "Server-side HMAC-SHA256 lookup hash of the full token",
           "title": "Hashed Token",
           "type": "string"
         },
