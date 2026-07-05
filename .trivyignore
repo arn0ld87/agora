@@ -1,9 +1,21 @@
 # Trivy Ignore File
 # Known CVEs from docu/dependency-risk-register.md
-# These are currently ignored because they are blocked by upstream pins.
-# Hardstop: 2026-07-30
+# These are currently ignored because they are blocked by upstream pins or base-image pins.
+# Hardstop: 2026-07-30 (pip-audit baseline), 2026-08-30 (Trivy container scan baseline)
 
 # CVE-2026-1839: transformers==4.57.6 (via sentence-transformers==3.0.0)
 # Risk: Medium (Embedding pipeline)
 # Issue: https://github.com/arn0ld87/agora/issues/124
 CVE-2026-1839
+
+# CVE-2026-24049: wheel (OS-Layer, transitive via base image)
+# Risk: High (Privilege Escalation or Arbitrary Code Execution via wheel unpacking)
+# Blocker: Basis-Image-Update erforderlich
+# Deadline: 2026-08-30
+CVE-2026-24049
+
+# CVE-2026-23949: jaraco.context (OS-Layer, transitive via base image)
+# Risk: High (Path traversal via malicious tar archives)
+# Blocker: Basis-Image-Update erforderlich
+# Deadline: 2026-08-30
+CVE-2026-23949

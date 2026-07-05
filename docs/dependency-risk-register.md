@@ -44,6 +44,17 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 | PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | nltk | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 | CVE-2026-4372 | `transformers` | unbekannt | Ja, in 5.3.0 (blockiert durch Upstream Pin `<5`) | sentence-transformers | 2026-07-30 | open | [#662](https://github.com/arn0ld87/agora/issues/662) | [UKPLab/sentence-transformers/releases](https://github.com/UKPLab/sentence-transformers/releases) |
 
+## Trivy Container Scan Baseline (Hardstop 2026-08-30)
+
+Trivy-Findings aus `.github/workflows/docker-image.yml` (`exit-code: "1"`, `ignore-unfixed: true`).
+Diese CVEs sind in transitiven Dependencies der Basis-Image-Layer (nicht in Python-Packages per pip-audit).
+Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
+
+| CVE | Quelle | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Blocker |
+|---|---|---|---|---|---|---|---|
+| CVE-2026-24049 | `wheel` (OS-Layer, transitive) | High | Nein (Base-Image Update erforderlich) | alex | 2026-08-30 | open | Basis-Image in `Dockerfile` |
+| CVE-2026-23949 | `jaraco.context` (OS-Layer, transitive) | High | Nein (Base-Image Update erforderlich) | alex | 2026-08-30 | open | Basis-Image in `Dockerfile` |
+
 ### Pin-Begruendungen
 
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
