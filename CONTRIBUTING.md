@@ -10,7 +10,7 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 | [`AGENTS.md`](AGENTS.md) | Anleitung für Codex-Plugin und andere Integrations-Agents |
 | [`PLAN.md`](PLAN.md) | Operative Task-Quelle für `/agora-next-task` Subagent-Orchestrator; definiert Milestones M9–M13 und Task-Slices |
 | [`docs/STATUS.md`](docs/STATUS.md) | **Single Source of Truth** für Test-Counts (Backend/Frontend) und Versionsstände; auto-generiert via `scripts/sync-status.sh` |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Strategische Now/Next/Later-Sicht; definiert Milestones und längerfristige Architektur-Ziele |
+| [`ROADMAP.md`](ROADMAP.md) | Strategische Now/Next/Later-Sicht; definiert Milestones und längerfristige Architektur-Ziele |
 | [`docs/glossary.md`](docs/glossary.md) | Verbindliches DACH-Voice-Glossar v1; untersagt US-Marketing-Phrasen (`prediction`, `rehearsal`, `god's eye view`) |
 | [`CHANGELOG.md`](CHANGELOG.md) | SemVer-Releases und `[Unreleased]`-Block; Sub-Slice-Einträge hier landen, bevor PR auf main merget |
 | [`docs/decisions/`](docs/decisions/) | Architektur-Decision-Records (ADRs) als `NNNN-<slug>.md` |

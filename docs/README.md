@@ -1,7 +1,8 @@
 # Agora — Dokumentation
 
-Lebende Doku für das Agora-Projekt. Worklogs und Arbeitsprotokolle liegen
-unter [`archive/`](archive/) und sind nicht für den Einstieg gedacht.
+Lebende Doku für das Agora-Projekt. Historische Worklogs, Sessions und Archive
+werden lokal in `docs/.local/` geführt (gitignored, nicht im Repo-HEAD) und sind
+nicht für den Einstieg gedacht.
 
 ## Einstieg
 
@@ -9,7 +10,8 @@ unter [`archive/`](archive/) und sind nicht für den Einstieg gedacht.
 - Mitarbeit: [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
 - Sicherheitsmeldungen: [`../SECURITY.md`](../SECURITY.md)
 - Agenten-Konfiguration (Claude Code, Codex): [`../AGENTS.md`](../AGENTS.md)
-- Roadmap und Slice-Plan: [`../PLAN.md`](../PLAN.md)
+- Strategische Roadmap: [`../ROADMAP.md`](../ROADMAP.md)
+- Operativer Slice-Plan: [`../PLAN.md`](../PLAN.md)
 
 ## Architektur und API
 
@@ -53,20 +55,15 @@ unter [`archive/`](archive/) und sind nicht für den Einstieg gedacht.
 
 ## Status und Planung
 
-- [`STATUS.md`](STATUS.md) — Aktueller Slice- und Test-Status
-- [`ROADMAP.md`](ROADMAP.md) — Mittelfristige Roadmap
+- [`STATUS.md`](STATUS.md) — Auto-generierter Slice-/Test-Status (CI-enforced via `scripts/sync-status.sh --check`)
+- [`plans/active/`](plans/active/) — Aktive Slice-Pläne (Observability u. a.)
+- [`plans/archive/`](plans/archive/) — Abgeschlossene oder ersetzte Pläne
+- [`worklogs/archive/`](worklogs/archive/) — Abgeschlossene Arbeitsprotokolle (Repo-Subset)
+- [`audits/`](audits/) — Audit-Reports
 - [`feature-roadmap.md`](feature-roadmap.md) — Feature-Pipeline
 - [`refactoring-backlog.md`](refactoring-backlog.md) — Refactoring-Backlog
-- [`plans/`](plans/) — Aktive Slice-Pläne (Observability u. a.)
 
 ## Design
 
-- [`design/`](design/) — Design-Language v4, Komponenten-Token
-- [`ui/`](ui/) — UI-Konzepte und Wireframes
-
-## Archiv
-
-- [`archive/worklogs/`](archive/worklogs/) — Historische Arbeitsprotokolle (~340 Stück)
-- [`archive/plans/`](archive/plans/) — Abgeschlossene oder ersetzte Pläne
-- [`archive/sessions/`](archive/sessions/), [`archive/history/`](archive/history/), [`archive/logs/`](archive/logs/), [`archive/prompts/`](archive/prompts/), [`archive/manual-smoke/`](archive/manual-smoke/) — Historische Materialien
-- [`archive/root-junk/`](archive/root-junk/) — Aus dem Repo-Root verschobene Ad-hoc-Dokumente
+- [`ui/`](ui/) — UI-Konzepte, Wireframes, Design-Language v4, Komponenten-Token
+- Vendoriertes Design-v3-Source: [`../design/v3-source/`](../design/v3-source/)
