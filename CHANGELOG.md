@@ -5,6 +5,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (infra/ci — 2026-07-05)
+
+- **Proxy-Binding und Frontend-Image-Artefakt**: Proxy bindet standardmäßig nur noch auf `127.0.0.1:8080` (via `AGORA_PROXY_BIND_HOST`/`AGORA_PROXY_PORT`-Overrides). Frontend wird als Image-Artefakt in den Proxy gebaut statt per Host-Volume gemountet; reduziert Dev-Container-Overhead bei Prod-Stack-Tests.
+- **Docker-Image-CI erweitert**: Workflow läuft jetzt auf PRs (pfadgefiltert) und main (Build + Trivy); Smoke-Test und Push nur noch auf release/rc/Tags/dispatch.
+- **Frontend-PR-Gate mit Unit-Tests**: Job führt jetzt auch `bun run test` (Vitest) aus — schnelle Regression-Prüfung vor Build.
+- **Doku-Fixes**: README auf `bun run setup:all` und `bun run dev` (statt `npm`); Dependency-Risk-Register-Datum korrekt.
+
 ### Changed (refactor — 2026-07-05)
 
 - **M3-Port — Unified Provider Abstraction** (PR #666, Branch `feat/m3-port`): `#590` (unified provider abstraction) + `#591` (unified provider detection) auf dem `#582`-LLM-Client-Split neu portiert. Single Source of Truth für Provider-Detection: `backend/app/llm/providers/registry.py::detect_provider(base_url, model, *, mode="http"|"oasis")` — Vokabular `ollama|cloud|openai|google|unknown` (HTTP) bzw. `google|ollama|openai` (OASIS). Schließt #590, #591, #582 und #636 (M3-Milestone-Tracker). Rest-Detection-Delegation als Folge-Issues #669/#670/#671 ausgelagert (Phase F).

@@ -204,8 +204,8 @@ cp .env.example .env
 ollama pull qwen3-coder-next:cloud
 ollama pull qwen3-embedding:4b
 
-npm run setup:all
-npm run dev
+bun run setup:all
+bun run dev
 ```
 
 Volle Setup-Guides:
