@@ -121,24 +121,13 @@ aus und reicht API-Calls an den agora-Container durch.
 
 **Voraussetzungen:**
 - Docker Compose 2.24+ (`!reset`-Syntax für Port-Strip)
-- `frontend/dist` lokal gebaut oder aus dem gebauten Image extrahiert
-  (Bind-Mount in den nginx-Sidecar)
 - Repo-Root als Arbeitsverzeichnis beim `docker compose`-Aufruf
 
 **Schritt-für-Schritt:**
-1. Frontend-Bundle bereitstellen (muss vor Stack-Start aktuell sein).
-   Lokaler Build:
-   ```bash
-   cd frontend && npm ci && npm run build && cd ..
-   ```
-   Alternativ das exakt im Prod-Image enthaltene Bundle extrahieren:
-   ```bash
-   rm -rf frontend/dist && mkdir -p frontend
-   cid=$(docker create agora-agora:ci-<sha>)
-   docker cp "$cid:/app/frontend/dist" ./frontend/dist
-   docker rm "$cid"
-   ```
-2. Drei-File-Stack starten:
+1. Drei-File-Stack starten. Der Proxy wird per `docker compose build` aus dem
+   Repo-Dockerfile (Stage `proxy`) gebaut und enthält das Frontend-Bundle
+   bereits eingebacken (`COPY --from=frontend-build`) — kein separater
+   Host-Build und kein Bind-Mount für `frontend/dist` mehr nötig:
    ```bash
    docker compose \
      -f docker-compose.yml \
@@ -146,19 +135,22 @@ aus und reicht API-Calls an den agora-Container durch.
      -f deploy/compose/docker-compose.prod-with-proxy.yml \
      up -d --build
    ```
-3. Verifikation:
+2. Verifikation (Default: Proxy lauscht auf `127.0.0.1:8080`):
    ```bash
-   curl -fsS http://localhost/healthz    # nginx-eigen, kein Backend nötig
-   curl -fsS http://localhost/health     # Backend durchgereicht
-   curl -fsS http://localhost/           # Frontend-Bundle (200)
+   curl -fsS http://127.0.0.1:8080/healthz    # nginx-eigen, kein Backend nötig
+   curl -fsS http://127.0.0.1:8080/health     # Backend durchgereicht
+   curl -fsS http://127.0.0.1:8080/           # Frontend-Bundle (200)
    ```
    Alternativ: `bash scripts/verify-deploy.sh` (erkennt den Proxy-Stack automatisch).
 
+**Defaults & Override:**
+- `AGORA_PROXY_BIND_HOST` (Default `127.0.0.1`) — nur für bewusste Exposition
+  hinter einem TLS-/VPN-Profil auf `0.0.0.0` setzen.
+- `AGORA_PROXY_PORT` (Default `8080`) — Host-Port des Proxy.
+
 **Caveats:**
-- Ohne vorher gebautes `frontend/dist` zeigt nginx die nginx-Default-Welcome-Page
-  statt der Agora-SPA. Sichtbares Symptom: `curl http://localhost/ | grep -i "Welcome to nginx"`.
 - HTTPS-Termination muss extern erfolgen (Tailscale-Funnel, Cloudflare-Tunnel oder
-  separater nginx mit Let's Encrypt auf Port 443). Dieser Stack lauscht nur auf HTTP/:80.
+  separater nginx mit Let's Encrypt auf Port 443). Dieser Stack lauscht nur auf HTTP.
 
 ---
 

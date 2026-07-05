@@ -9,11 +9,14 @@
 #
 # - Backend-Host-Ports werden komplett gestrichen (Sidecar erreicht agora
 #   ueber das Compose-Netzwerk auf agora:5001, kein Loopback noetig).
-# - nginx publisht :80 auf Host. Wer HTTPS will, terminiert das davor
-#   (Tailscale-Funnel, Cloudflare-Tunnel, separater nginx auf Port 443).
-# - frontend/dist muss VOR dem Stack-Start bereitstehen. Lokal per
-#   `cd frontend && npm run build` bauen oder aus dem gebauten Prod-Image
-#   extrahieren. Ohne Bundle zeigt nginx die Default-Welcome-Page.
+# - nginx baut aus dem Repo-Dockerfile (Stage "proxy") und enthaelt das
+#   Frontend-Bundle bereits eingebacken (COPY --from=frontend-build). Kein
+#   separater Host-Build, kein Bind-Mount fuer frontend/dist mehr noetig.
+# - Default-Bind: 127.0.0.1:8080 -> Container-Port 80. Override per
+#   AGORA_PROXY_BIND_HOST (z. B. 0.0.0.0 fuer bewusste Exposition hinter
+#   einem TLS-/VPN-Profil) und AGORA_PROXY_PORT.
+# - Wer HTTPS will, terminiert das davor (Tailscale-Funnel, Cloudflare-
+#   Tunnel, separater nginx auf Port 443).
 # Closes #106.
 
 services:
@@ -28,19 +31,19 @@ services:
       - AGORA_PROXY_FIX_X_PROTO=1
 
   nginx:
-    image: nginx:alpine
+    build:
+      # Docker Compose loest relative Pfade in Override-Dateien relativ zur
+      # ERSTEN angegebenen Compose-Datei auf (hier docker-compose.yml im
+      # Repo-Root), nicht relativ zum Verzeichnis dieser Datei. Deshalb "."
+      # (= Repo-Root), analog zu docker-compose.yml/docker-compose.prod.yml.
+      context: .
+      target: proxy
     container_name: agora-nginx
     restart: unless-stopped
     depends_on:
       - agora
     ports:
-      - "${AGORA_PROXY_PORT:-80}:80"
-    volumes:
-      # nginx-Konfiguration (read-only)
-      - ./deploy/nginx/agora.conf:/etc/nginx/conf.d/default.conf:ro
-      # Statisches Frontend-Bundle — muss vorher gebaut oder aus dem Prod-Image extrahiert sein.
-      # Pfade sind relativ zum Repo-Root (Aufruf-Verzeichnis bei `docker compose -f ...`).
-      - ./frontend/dist:/usr/share/nginx/html:ro
+      - "${AGORA_PROXY_BIND_HOST:-127.0.0.1}:${AGORA_PROXY_PORT:-8080}:80"
     healthcheck:
       # busybox-wget in nginx:alpine resolved `localhost` als IPv6 (::1),
       # `listen 80;` bindet aber nur IPv4 → ECONNREFUSED. 127.0.0.1 erzwingt IPv4.

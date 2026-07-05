@@ -175,3 +175,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["/app/backend/.venv/bin/gunicorn", \
      "--config", "/app/backend/gunicorn.conf.py", \
      "wsgi:app"]
+
+# ---------- proxy (nginx-Sidecar mit eingebackenem Frontend-Bundle) ----------
+FROM nginx:alpine AS proxy
+COPY deploy/nginx/agora.conf /etc/nginx/conf.d/default.conf
+COPY --from=frontend-build /app/frontend/dist /usr/share/nginx/html
