@@ -240,7 +240,7 @@ jobs:
         run: bun run build
 
   backend-pr-gate:
-    name: Backend PR smoke gate (ruff + pytest-contracts)
+    name: Backend PR smoke gate (ruff + mypy + pytest-contracts)
     runs-on: ubuntu-latest
     # Runs on every PR — fast mandatory gate, no label required.
     # Heavy backend jobs (full coverage, matrix) remain in the 'backend' job on push:main.
@@ -280,15 +280,19 @@ jobs:
         working-directory: backend
         run: uv run ruff check app/
 
+      - name: Mypy
+        working-directory: backend
+        run: uv run mypy app
+
       - name: Pytest contracts (fast subset)
         working-directory: backend
         run: uv run pytest tests/contracts/ -q
 
   frontend-pr-gate:
-    name: Frontend PR smoke gate (lint + typecheck)
+    name: Frontend PR smoke gate (lint + typecheck + build)
     runs-on: ubuntu-latest
     # Runs on every PR — fast mandatory gate, no label required.
-    # Full test + coverage + build remain in the 'frontend' job on push:main.
+    # Full test + coverage remain in the 'frontend' job on push:main.
     if: github.event_name == 'pull_request'
     steps:
       - name: Harden Runner
@@ -321,6 +325,10 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: bun run typecheck
+
+      - name: Build
+        working-directory: frontend
+        run: bun run build
 
   # 2026-05-17 entfernt: status-sync (MAI-16). Lief nur auf push:main,
   # doppelt sich mit dem alten contract-gates::status-sync-drift Job,

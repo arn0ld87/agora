@@ -36,8 +36,8 @@ Agora ist ein experimenteller Open-Source-Fork unter AGPL-3.0. Diese Datei erkl�
 
 | Job | Was | Ziel |
 |---|---|---|
-| `backend-pr-gate` | `ruff check app/` + `pytest tests/contracts/ -q` | Lint + Pydantic-Contract-Smoke |
-| `frontend-pr-gate` | `bun run lint` + `bun run typecheck` | ESLint + Vue-TS-Typecheck |
+| `backend-pr-gate` | `ruff check app/` + `mypy app` + `pytest tests/contracts/ -q` | Lint + Types + Pydantic-Contract-Smoke |
+| `frontend-pr-gate` | `bun run lint` + `bun run typecheck` + `bun run build` | ESLint + Vue-TS-Typecheck + Build |
 
 Branch Protection muss `backend-pr-gate` und `frontend-pr-gate` als Required Status Checks konfiguriert haben.
 
@@ -45,8 +45,8 @@ Branch Protection muss `backend-pr-gate` und `frontend-pr-gate` als Required Sta
 
 | Job | Trigger | Label |
 |---|---|---|
-| `backend` | `push:main` oder Label `needs-backend-ci` | Volle Tests + Coverage-Gate + mypy |
-| `frontend` | `push:main` oder Label `needs-frontend-ci` | Volle Tests + Coverage + Build |
+| `backend` | `push:main` oder Label `needs-backend-ci` | Volle Tests + Coverage-Gate |
+| `frontend` | `push:main` oder Label `needs-frontend-ci` | Volle Tests + Coverage |
 | `security` | `push:main` + workflow_dispatch | pip-audit, bun audit, Gitleaks |
 
 ### Lokale Quality-Gates
@@ -58,16 +58,16 @@ Vor jedem Commit ausführen:
 # dass ein cd den Arbeitsordner für die folgenden Blöcke verstellt.
 
 # Backend — Pflicht (entspricht PR-Gate)
-(cd backend && uv sync --group dev && uv run ruff check app/ && uv run pytest tests/contracts/ -q)
+(cd backend && uv sync --group dev && uv run ruff check app/ && uv run mypy app && uv run pytest tests/contracts/ -q)
 
 # Backend — Heavy (entspricht main-Job)
-(cd backend && uv run mypy app && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=60)
+(cd backend && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=60)
 
 # Frontend — Pflicht (entspricht PR-Gate)
-(cd frontend && bun install --frozen-lockfile && bun run lint && bun run typecheck)
+(cd frontend && bun install --frozen-lockfile && bun run lint && bun run typecheck && bun run build)
 
 # Frontend — Heavy (entspricht main-Job)
-(cd frontend && bun run test:coverage && bun run build)
+(cd frontend && bun run test:coverage)
 
 # Status aktualisieren + Drift prüfen
 bash scripts/sync-status.sh
