@@ -1,19 +1,32 @@
 """
-Native Ollama ``/api/chat`` schema path.
+Native Ollama ``/api/chat`` schema path + Ollama-Adapter (Issue #590).
 
-Extracted verbatim (parametrized instead of ``self``) from
-``_flatten_pydantic_schema_for_ollama`` / ``LLMClient._ollama_chat_with_schema``
-in ``app/utils/llm_client.py`` as part of issue #582 (mechanical split — no
-behavior change).
+Zwei Rollen koexistieren in diesem Modul, klar getrennt:
+
+1. Native ``/api/chat``-Schema-Pfad (main, #582): ``_flatten_pydantic_schema_for_ollama``
+   und ``chat_with_schema`` — extrahiert aus dem ehemaligen ``LLMClient``-Monolith,
+   werden direkt von ``LLMClient._ollama_chat_with_schema`` sowie dem Shim
+   ``app/utils/llm_client.py`` konsumiert. Unangetastet bei der #590-Portierung.
+2. Provider-Adapter (PR-Vorlage, #590): ``build_ollama_extra_body`` und
+   :class:`OllamaAdapter` — kapseln Ollama-spezifisches Payload-Shaping
+   (``extra_body["options"]["num_ctx"]`` + ``think``) fuer den
+   OpenAI-kompatiblen Client-Pfad. Die Compliance-Suite
+   ``tests/llm/test_provider_compliance.py`` fixiert das Verhalten.
 """
 
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from app.llm.providers.base import ProviderAdapter, ProviderCapabilities
 from ...utils.logger import get_logger
 
 logger = get_logger("agora.llm_client")
+
+
+# ----------------------------------------------------------------------
+# Rolle 1: Native /api/chat-Schema-Pfad (main, #582)
+# ----------------------------------------------------------------------
 
 
 def _flatten_pydantic_schema_for_ollama(model_cls: type[BaseModel]) -> Dict[str, Any]:
@@ -121,3 +134,50 @@ def chat_with_schema(
             f"Ollama /api/chat unexpected message.content type: {type(content)}"
         )
     return content
+
+
+# ----------------------------------------------------------------------
+# Rolle 2: Provider-Adapter (#590)
+# ----------------------------------------------------------------------
+
+
+def build_ollama_extra_body(*, num_ctx: Optional[int], think: bool) -> Dict[str, Any]:
+    """Baut den Ollama-``extra_body``-Block (``options.num_ctx`` + ``think``).
+
+    Verhalten 1:1 aus ``LLMClient.chat()`` uebernommen: ``options`` nur bei
+    truthy ``num_ctx``; ``think`` wird immer gesetzt.
+    """
+    body: Dict[str, Any] = {}
+    if num_ctx:
+        body["options"] = {"num_ctx": num_ctx}
+    body["think"] = think
+    return body
+
+
+class OllamaAdapter(ProviderAdapter):
+    """Adapter fuer lokales Ollama (:11434) und Ollama Cloud (ollama.com).
+
+    Provider-Quirks, die dieser Adapter kapselt:
+
+    - ``extra_body["options"]["num_ctx"]`` verhindert Prompt-Truncation; nur
+      Ollama versteht den Block (OpenAI/Anthropic/Mistral antworten 400
+      "Unknown parameter").
+    - ``extra_body["think"]`` steuert Reasoning-Output auf faehigen Modellen.
+    - Force-Streaming-Workaround: Der OpenAI-kompatible Endpoint in Ollama
+      0.21.0 haengt bei non-streaming Completions fuer Cloud-Modelle; der
+      ``LLMClient`` erzwingt deshalb Streaming (``LLM_FORCE_STREAM``,
+      Default an) und reassembliert die Chunks.
+    - Nativer ``/api/chat``-Schema-Pfad (``format=<schema>``) fuer striktes
+      JSON — siehe :func:`chat_with_schema` oben.
+    """
+
+    name = "ollama"
+    capabilities = ProviderCapabilities(
+        supports_native_tools=True,
+        supports_json_object_mode=True,
+        supports_json_schema_mode=True,
+        uses_ollama_native_options=True,
+    )
+
+    def build_extra_body(self) -> Optional[Dict[str, Any]]:
+        return build_ollama_extra_body(num_ctx=self.num_ctx, think=self.think)
