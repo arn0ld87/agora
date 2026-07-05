@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (refactor — 2026-07-05)
+
+- **M3-Port — Unified Provider Abstraction** (PR #666, Branch `feat/m3-port`): `#590` (unified provider abstraction) + `#591` (unified provider detection) auf dem `#582`-LLM-Client-Split neu portiert. Single Source of Truth für Provider-Detection: `app/llm/providers/registry.py::detect_provider(base_url, model, *, mode="http"|"oasis")` — Vokabular `ollama|cloud|openai|google|unknown` (HTTP) bzw. `google|ollama|openai` (OASIS). Schließt #590, #591, #582 und #636 (M3-Milestone-Tracker). Rest-Detection-Delegation als Folge-Issues #669/#670/#671 ausgelagert (Phase F).
+
+### Changed (deps — 2026-07-05)
+
+- **transformers v5.13.0** (PR #667): Upgrade auf v5 via `tool.uv.override-dependencies`, unblocked durch `sentence-transformers>=5.3.0`. Löst CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. Schließt #124, #624, #662.
+
+### Security (deps — 2026-07-05)
+
+- **nltk 3.9.4 — Risk Exception** (PR #668): PYSEC-2026-597 (Path Traversal in `nltk.data.load()`) und GHSA-p4gq-832x-fm9v ohne Upstream-Fix in 3.9.x. Agora nutzt `nltk` nur transitiv (via `unstructured`/`camel-oasis`), kein direkter `nltk.data.load()`-Aufruf mit user-kontrolliertem Pfad → Risikoakzeptanz mit Allowlist-Eintrag. Tracking-Issue #672, Hardstop 2026-07-30. Source of Truth: `docs/dependency-risk-register.md`.
+
 ### Fixed (bug — 2026-06-10)
 
 - **Projekt-Meta ging beim Ontology-Upload verloren** (Regression aus dem

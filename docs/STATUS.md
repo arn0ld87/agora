@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
+Stand: 2026-07-05 (post M3-Port, v1.0.0)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -19,8 +19,8 @@ Stand: 2026-05-15 (v1.0.0 + Smoke-Fix Welle 2)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2509 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 131 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 2869 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 144 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
@@ -118,7 +118,13 @@ Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer
 
 ## Aktuelles Milestone
 
-**M9 abgeschlossen, M10 abgeschlossen.** Übergang zu M11.
+**M9 abgeschlossen, M10 abgeschlossen.** Übergang zu M11. **M3-Port — Unified Provider Abstraction abgeschlossen (PR #666, 2026-07-05):** Provider-Detection-SSoT in [`backend/app/llm/providers/registry.py`](../backend/app/llm/providers/registry.py) (`detect_provider(base_url, model, *, mode="http"|"oasis")`), HTTP-Vokabular `ollama|cloud|openai|google|unknown`, OASIS-Vokabular `google|ollama|openai`. Schließt #590, #591, #582, #636. Begleitet von PR #667 (transformers v5.13.0 via `tool.uv.override-dependencies`, löst CVE-2026-4372, CVE-2026-1839, PYSEC-2025-217; schließt #124, #624, #662) und PR #668 (nltk 3.9.4 risk exception, PYSEC-2026-597 / GHSA-p4gq-832x-fm9v, Tracking #672).
+
+**Offen als Folge des M3-Ports (Phase F — Rest-Detection-Delegation an die SSoT):** #669, #670, #671 (jeweils eigener PR, TDD).
+
+**Offene Dependency-Hardstops** (Source of Truth: [`docs/dependency-risk-register.md`](dependency-risk-register.md)):
+- `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → Hardstop 2026-07-30 (Tracking #672, nur transitive Nutzung, kein direkter `nltk.data.load()`-Aufruf).
+- Trivy OS-Layer CVE-2026-24049 / CVE-2026-23949 → Hardstop 2026-08-30.
 
 Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: `docs/archive/plans/plan.heuristic.md`.
 
