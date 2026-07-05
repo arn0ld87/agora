@@ -3,19 +3,6 @@
   "_comment": "Maschinenlesbare Ausnahmen für ignorierte CVEs/Advisories. Menschenlesbare Dokumentation: docs/dependency-risk-register.md. Jede Ausnahme muss alle Pflichtfelder enthalten. Deadlines werden von CI (cve-monitor.yml) geprüft.",
   "exceptions": [
     {
-      "advisory_id": "CVE-2026-1839",
-      "package": "transformers",
-      "version_constraint": "<5",
-      "severity": "Medium",
-      "reason": "sentence-transformers==4.1.0 (via camel-oasis==0.2.5) limitiert transformers<5; kein kompatibles Upgrade verfügbar.",
-      "blocker": "sentence-transformers upstream: https://github.com/UKPLab/sentence-transformers/releases",
-      "target_version": "transformers>=5 sobald sentence-transformers kompatibel",
-      "owner": "sentence-transformers",
-      "deadline": "2026-07-30",
-      "issue": "https://github.com/arn0ld87/agora/issues/124",
-      "status": "open"
-    },
-    {
       "advisory_id": "PYSEC-2025-217",
       "package": "transformers",
       "version_constraint": "==4.57.6",
@@ -39,19 +26,6 @@
       "owner": "nltk",
       "deadline": "2026-07-30",
       "issue": "https://github.com/arn0ld87/agora/issues/661",
-      "status": "open"
-    },
-    {
-      "advisory_id": "CVE-2026-4372",
-      "package": "transformers",
-      "version_constraint": "<5",
-      "severity": "unknown",
-      "reason": "Fix erst in transformers 5.3.0; sentence-transformers==4.1.0 (via camel-oasis==0.2.5) limitiert transformers<5; kein kompatibles Upgrade verfügbar.",
-      "blocker": "sentence-transformers upstream: https://github.com/UKPLab/sentence-transformers/releases",
-      "target_version": "transformers>=5.3.0 sobald sentence-transformers kompatibel",
-      "owner": "sentence-transformers",
-      "deadline": "2026-07-30",
-      "issue": "https://github.com/arn0ld87/agora/issues/662",
       "status": "open"
     }
   ]
