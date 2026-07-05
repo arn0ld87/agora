@@ -34,3 +34,9 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
+          # GHSA-p4gq-832x-fm9v: URL-Encoded Path Traversal in nltk.data.load()
+          # (nltk==3.9.4, transitive via unstructured). Kein Upstream-Fix in
+          # 3.9.x; nltk 3.9.4 wird als Risiko-Ausnahme gepinnt (PYSEC-2026-597).
+          # Agora nutzt nltk nur statisch (Tokenisierung), kein user-kontrollierter
+          # Pfad in nltk.data.load(). Tracked in #672 + register. Hardstop 2026-07-30.
+          allow-ghsas: GHSA-p4gq-832x-fm9v

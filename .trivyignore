@@ -19,3 +19,9 @@ CVE-2026-23949
 # Risk: unknown (No upstream fix available)
 # Issue: https://github.com/arn0ld87/agora/issues/661
 PYSEC-2026-597
+
+# GHSA-p4gq-832x-fm9v: nltk.data.load() URL-Encoded Path Traversal (nltk==3.9.4)
+# Risk: High (Arbitrary Local File Read) — Agora nutzt nltk nur statisch (Tokenisierung),
+# kein user-kontrollierter Pfad in nltk.data.load(). Risiko-Ausnahme mit PYSEC-2026-597.
+# Issue: https://github.com/arn0ld87/agora/issues/672
+GHSA-p4gq-832x-fm9v

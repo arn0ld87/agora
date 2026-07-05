@@ -40,6 +40,7 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
 | PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-07-30 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
 ## Trivy Container Scan Baseline (Hardstop 2026-08-30)
 
@@ -57,7 +58,7 @@ Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
 | Paket | Pinned Version | Upstream-Pin | Erklaerung |
 |---|---|---|---|
 | `transformers` | `>=5.3.0` | — | Upgrade auf v5 via `tool.uv.override-dependencies` unblocked durch `sentence-transformers>=5.3.0`. Behebt CVE-2026-4372, CVE-2026-1839 und PYSEC-2025-217. |
-| `nltk` | `3.9.4` | — (kein Pin) | PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. |
+| `nltk` | `3.9.4` | — (kein Pin) | PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. GHSA-p4gq-832x-fm9v (Path Traversal in `nltk.data.load()`) ebenfalls kein Fix in 3.9.x; Agora nutzt nltk nur transitiv (via `unstructured`/`camel-oasis`), kein direkter Aufruf von `nltk.data.load()` mit user-kontrolliertem Pfad → nicht via Oberfläche exploitierbar. |
 
 ---
 
