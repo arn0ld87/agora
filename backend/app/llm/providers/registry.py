@@ -59,14 +59,42 @@ DetectionMode = Literal["http", "oasis"]
 # Verhalten aus scripts/_sim_common.py uebernommen.
 _OASIS_OLLAMA_PORT_RE = re.compile(r":11434(?:/|$)")
 
+# Ollama-Cloud-Size-Tag: fuehrende Groesse (Zahl + optionale Einheit) gefolgt
+# von ``-cloud`` — z. B. ``20b-cloud``, ``120b-cloud``, ``1t-cloud``. Bewusst
+# eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
+# Nicht-Ollama-Gateway KEIN False-Positive ausloest.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d+[a-z]*-cloud")
+
+
+def _is_ollama_cloud_tag(model: str) -> bool:
+    """True, wenn der Modellname ein Ollama-Cloud-Tag traegt (Issue #670).
+
+    Ollama-Cloud-Modelle folgen der ``name:tag``-Konvention, deren Tag ein
+    Cloud-Tag ist — entweder das blosse ``:cloud`` (z. B.
+    ``qwen3-coder-next:cloud``) oder ein ``:<size>-cloud`` (z. B.
+    ``gpt-oss:20b-cloud``, das produktive Modell hinter ``ollama.com`` @
+    Nicht-Standard-Port ``:11435``; weitere reale Tags: ``120b-cloud``,
+    ``480b-cloud``, ``1t-cloud``).
+
+    Bewusst NICHT als Ollama-Signal (kein False-Positive):
+    - ``mistral-large-cloud`` — kein ``:``-Tag.
+    - ``custom:experimental-cloud`` — ``-cloud``-Suffix ohne Groessenpraefix,
+      wie ihn Dritt-Gateways (vLLM/LiteLLM) fuehren koennten.
+    """
+    if ":" not in model:
+        return False
+    tag = model.rsplit(":", 1)[-1]
+    return tag == "cloud" or _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
+
 
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
     """Heuristik des Backend-HTTP-Clients (vormals ``LLMClient._detect_provider``).
 
     Prioritäten:
     1. Base URL enthält ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-    2. Modell-Suffix ``:cloud`` → ``"cloud"`` (Cloud-Modelle laufen auch über
-       den lokalen ollama-Proxy auf :11434 — deshalb VOR der Port-Heuristik).
+    2. Ollama-Cloud-Tag ``:cloud`` / ``:<size>-cloud`` → ``"cloud"`` (Cloud-
+       Modelle laufen auch über den lokalen ollama-Proxy — deshalb VOR der
+       Port-Heuristik). Siehe ``_is_ollama_cloud_tag`` (Issue #670).
     3. Base URL enthält ``11434`` → ``"ollama"`` (lokales Ollama).
     4. Base URL enthält ``openai.com`` oder ``api.openai`` → ``"openai"``.
     5. Base URL enthält ``googleapis.com`` oder ``generativelanguage`` →
@@ -77,7 +105,7 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     base = (base_url or "").lower()
     if "ollama.com" in base:
         return "cloud"
-    if model_name.endswith(":cloud"):
+    if _is_ollama_cloud_tag(model_name):
         return "cloud"
     if "11434" in base:
         return "ollama"
@@ -97,8 +125,9 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
        ``thought_signature``-Echo in Multi-Turn-Tool-Calls; der
        OpenAI-Compat-Pfad strippt das Feld → HTTP 400 bei jedem Tool-Turn.
     2. ``"ollama"`` — Base-URL enthält ``ollama.com`` oder Port ``:11434``
-       ODER Modell endet auf ``:cloud`` / ``:latest``. Ollama Cloud bietet
-       keinen OpenAI-Compat-``/v1``-Endpoint mehr; nur ``/api/chat`` (nativ).
+       ODER Modell traegt ein Ollama-Cloud-Tag (``:cloud`` / ``:<size>-cloud``,
+       Issue #670) ODER endet auf ``:latest``. Ollama Cloud bietet keinen
+       OpenAI-Compat-``/v1``-Endpoint mehr; nur ``/api/chat`` (nativ).
     3. ``"openai"`` — alles andere (echtes OpenAI, Compat-Gateways, Qwen
        Cloud über Nicht-Ollama-URLs, Mistral, DeepSeek, …).
     """
@@ -111,7 +140,7 @@ def _detect_oasis(base_url: Optional[str], model: Optional[str]) -> OasisDetecte
     if (
         "ollama.com" in url
         or _OASIS_OLLAMA_PORT_RE.search(url)
-        or m.endswith(":cloud")
+        or _is_ollama_cloud_tag(m)
         or m.endswith(":latest")
     ):
         return "ollama"
