@@ -1,8 +1,17 @@
 # Dependency Risk Register
 
-**Stand:** 2026-07-05, Europe/Berlin
+**Stand:** 2026-07-06, Europe/Berlin
 **Ausgeloest durch:** Security Fix CVE-2026-4372 — Transformers Upgrade.
-Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-07-30 — danach failt der Job, wenn ignored CVEs noch offen sind.
+Automation: [.github/workflows/cve-monitor.yml](../.github/workflows/cve-monitor.yml) läuft wöchentlich Mo 06:00 UTC pip-audit --strict ohne --ignore-vuln und schreibt das Ergebnis in das Workflow-Summary. Hardstop am 2026-09-28 — danach failt der Job, wenn ignored CVEs noch offen sind.
+
+> **Risikoakzeptanz 2026-07-06 (ALE-20 / ADR-0004):** Der nltk-Hardstop wurde einmalig von
+> 2026-07-30 auf **2026-09-28** verlängert (max. +60 Tage laut Prozess). Grund: kein
+> Upstream-Fix, nltk nur transitiv über `unstructured`, verwundbarer Pfad
+> (`nltk.data.load()` mit user-kontrolliertem Pfad) in Agora nicht erreichbar. Entscheidung
+> und Restrisiko dokumentiert in [docs/decisions/0004-cve-upstream-escalation.md](decisions/0004-cve-upstream-escalation.md).
+> Erfordert User-Sign-off (Alex) im Risikoakzeptanz-PR. Betrifft **nur** die beiden
+> nltk-Advisories (PYSEC-2026-597, GHSA-p4gq-832x-fm9v); die Trivy-Baseline (2026-08-30)
+> bleibt unberührt.
 Supply-Chain-Baseline: [.github/workflows/scorecard.yml](../.github/workflows/scorecard.yml) läuft wöchentlich Mo 04:30 UTC und auf `push` nach `main`. SARIF-Ergebnisse werden ins Code-Scanning-Dashboard hochgeladen; der erste Remote-Run nach Merge ist die Scorecard-Baseline.
 
 Dieses Dokument trackt bewusst ignorierte `pip-audit`-Findings und Trivy-Container-Scans.
@@ -35,12 +44,12 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 ---
 
-## Aktive Baseline (Hardstop 2026-07-30)
+## Aktive Baseline (Hardstop 2026-09-28)
 
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
-| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-07-30 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
-| GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-07-30 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-09-28 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-09-28 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
 ## Trivy Container Scan Baseline (Hardstop 2026-08-30)
 
@@ -62,16 +71,19 @@ Fix erfordert Basis-Image-Update; kein Paket-Pin möglich.
 
 ---
 
-## Eskalationspfad (Hardstop 2026-07-30)
+## Eskalationspfad (Hardstop 2026-09-28)
 
-Wenn am 2026-07-30 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
+Wenn am 2026-09-28 noch CVEs in der aktiven Baseline offen sind, greift einer dieser Pfade:
 
 1. **Upstream released bis dahin** — `--ignore-vuln`-Flags aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) entfernen, Issue schließen, Eintrag nach „Abgeschlossen" verschieben.
-2. **ADR docs/decisions/0004-cve-upstream-escalation.md** (geplant) entscheidet zwischen:
+2. **ADR [docs/decisions/0004-cve-upstream-escalation.md](decisions/0004-cve-upstream-escalation.md)** (Accepted 2026-07-06) entscheidet zwischen:
    - **Vendoring** der betroffenen Subkomponenten,
    - **Soft-Fork** mit Patch-Ringen,
    - **Replacement** durch andere Pakete (z.B. `langgraph` statt `camel-oasis`).
 3. **Risikoakzeptanz-PR** mit expliziter Verlängerung der `--ignore-vuln`-Flags um maximal 60 Tage und neuem Hardstop-Datum. Erfordert User-Sign-off.
+   → **2026-07-06 gewählt (ALE-20):** Hardstop von 2026-07-30 auf 2026-09-28 verlängert (+60 Tage),
+   weil Upstream weiterhin keinen Fix released hat und Option „Replacement/Vendoring" für nur
+   transitiv genutztes, nicht erreichbares nltk unverhältnismäßig wäre. Details in ADR-0004.
 
 Der CVE-Monitor-Workflow erzwingt die Entscheidung: ab Hardstop-Datum schlägt er bei jedem Run fehl, bis eine der drei Optionen umgesetzt ist.
 
