@@ -1278,9 +1278,11 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         # Ollama Cloud dropped its OpenAI-compat /v1 endpoint; only the native
         # /api/chat path works.  CAMEL's OllamaModel speaks it natively.
         # Local Ollama (port 11434) also benefits from the native path.
-        # Build extra_body inline: we already know this is Ollama, so the
-        # legacy _is_ollama_route gate inside build_camel_extra_body() would
-        # falsely drop think/num_ctx for :latest models or ollama.com URLs.
+        # Build extra_body inline: we already dispatched via the provider SSoT
+        # (detect_oasis_platform), so re-running the _is_ollama_route gate
+        # inside build_camel_extra_body() would be redundant detection.
+        # (Since #670 that gate also delegates to the SSoT and no longer
+        # mis-classifies :latest models or ollama.com URLs.)
         os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
         extra_body: Dict[str, Any] = {"think": think_on}
         if runtime_settings["ollama_num_ctx"] is not None:

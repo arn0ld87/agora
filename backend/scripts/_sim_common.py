@@ -54,15 +54,22 @@ def detect_oasis_platform(model: str, base_url: str) -> ModelPlatformType:
 def _is_ollama_route(model: str, base_url: str) -> bool:
     """True wenn das Modell über Ollama (lokal oder Cloud) läuft.
 
-    Heuristik analog zu :class:`app.utils.llm_client.LLMClient._detect_provider`:
-    - Modellname endet auf ``:cloud`` → Ollama Cloud
-    - Base-URL enthält Port ``11434`` → lokale Ollama-Instanz
+    Duenner Wrapper um die Provider-Single-Source-of-Truth
+    (``app.llm.providers.registry.detect_provider``, ``mode="oasis"``, seit
+    #591). Ollama genau dann, wenn die SSoT ``"ollama"`` liefert — d. h.
+    Base-URL enthält ``ollama.com`` oder Port ``:11434`` ODER Modellname endet
+    auf ``:cloud`` / ``:latest`` (siehe ``registry._detect_oasis``).
+
+    Fix #670: Die vormalige lokale Heuristik (``:cloud``-Suffix ODER Substring
+    ``11434``) verfehlte ``ollama.com/v1``-URLs ohne ``:cloud``-Suffix sowie
+    ``:latest``-Modelle → das think/num_ctx-Gate in ``build_camel_extra_body``
+    fiel faelschlich aus. Die Delegation an die SSoT schliesst diese Luecke,
+    ohne das Prod-Verhalten zu aendern (``gpt-oss:20b-cloud`` @ ``:11435``
+    traegt weder ``:cloud`` noch ``:11434`` → weiterhin ``"openai"``).
     """
-    if model.endswith(":cloud"):
-        return True
-    if "11434" in (base_url or ""):
-        return True
-    return False
+    from app.llm.providers.registry import detect_provider
+
+    return detect_provider(base_url, model, mode="oasis") == "ollama"
 
 
 def uses_max_completion_tokens(model: str) -> bool:

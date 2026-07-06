@@ -18,7 +18,7 @@ _SCRIPTS_DIR = _BACKEND_DIR / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from _sim_common import build_camel_extra_body  # noqa: E402
+from _sim_common import build_camel_extra_body, _is_ollama_route  # noqa: E402
 
 
 class TestBuildCamelExtraBodyOllamaLocal:
@@ -107,3 +107,63 @@ class TestBuildCamelExtraBodyOpenAI:
             think=False,
         )
         assert body == {}
+
+
+class TestBuildCamelExtraBodySSoTDelegation:
+    """Issue #670 — `_is_ollama_route` delegiert an die Provider-SSoT
+    (`registry.detect_provider(mode="oasis")`). Die alte lokale Heuristik
+    (`:cloud`-Suffix ODER Substring `11434`) verfehlte `ollama.com/v1`-URLs
+    ohne `:cloud`-Suffix sowie `:latest`-Modelle → think/num_ctx-Gate
+    faelschlich aus.
+    """
+
+    def test_ollama_com_url_without_cloud_suffix_sets_think(self) -> None:
+        # RED vor SSoT-Delegation: ollama.com/v1 + gpt-oss:120b (kein :cloud,
+        # kein Port 11434) → alte Heuristik liefert False → leerer Body.
+        # Nach der Delegation erkennt die SSoT `ollama.com` in der Base-URL.
+        body = build_camel_extra_body(
+            model="gpt-oss:120b",
+            base_url="https://ollama.com/v1",
+            num_ctx=262144,
+            think=True,
+        )
+        assert body == {"think": True, "options": {"num_ctx": 262144}}
+
+    def test_latest_tag_model_sets_think(self) -> None:
+        # `:latest` ist ein Ollama-Signal in der SSoT (mode="oasis"), war aber
+        # in der alten lokalen Heuristik kein Treffer.
+        body = build_camel_extra_body(
+            model="qwen3-coder:latest",
+            base_url="https://ollama.com/v1",
+            num_ctx=None,
+            think=False,
+        )
+        assert body == {"think": False}
+
+    def test_is_ollama_route_matches_ssot_oasis_vocabulary(self) -> None:
+        # Duenner Wrapper: True genau dann, wenn die SSoT "ollama" liefert.
+        assert _is_ollama_route("gpt-oss:120b", "https://ollama.com/v1") is True
+        assert _is_ollama_route("qwen3-coder", "http://localhost:11434/v1") is True
+        assert _is_ollama_route("qwen3-coder-next:cloud", "https://x/v1") is True
+        assert _is_ollama_route("qwen3-coder:latest", "https://x/v1") is True
+        assert _is_ollama_route("gpt-5.4-mini", "https://api.openai.com/v1") is False
+
+
+class TestBuildCamelExtraBodyProdCharacterization:
+    """Charakterisierung der realen Prod-Route (ALE-19). Belegt, dass die
+    SSoT-Delegation das Prod-Verhalten EINFRIERT: `gpt-oss:20b-cloud` @
+    `:11435` traegt weder `:cloud` (Suffix ist `-cloud` mit Bindestrich) noch
+    Port `:11434` — Gate bleibt aus, exakt wie vor dem Umbau.
+    """
+
+    def test_prod_route_gate_stays_off(self) -> None:
+        body = build_camel_extra_body(
+            model="gpt-oss:20b-cloud",
+            base_url="http://127.0.0.1:11435/v1",
+            num_ctx=131072,
+            think=True,
+        )
+        assert body == {}
+
+    def test_prod_route_is_ollama_route_false(self) -> None:
+        assert _is_ollama_route("gpt-oss:20b-cloud", "http://127.0.0.1:11435/v1") is False
