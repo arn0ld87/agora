@@ -167,3 +167,44 @@ class TestBuildCamelExtraBodyProdCharacterization:
 
     def test_prod_route_is_ollama_route_false(self) -> None:
         assert _is_ollama_route("gpt-oss:20b-cloud", "http://127.0.0.1:11435/v1") is False
+
+
+class TestBuildCamelExtraBodyMinimaxM3:
+    """Charakterisierung fuer `minimax-m3` (Ollama-Cloud-Modell, ALE-19-Kommentar
+    2026-07-06). Belegt, wie die SSoT-Delegation das Modell je nach Adressierung
+    einordnet — insbesondere den #670-Gewinn (bare tag @ ollama.com) und die
+    Kehrseite (bare tag @ lokaler Proxy `:11435` → Gate aus, wie die eingefrorene
+    Prod-Route).
+    """
+
+    def test_minimax_m3_via_ollama_com_sets_think(self) -> None:
+        # #670-Fix mit realem Modell: bare `minimax-m3` (kein :cloud) @ ollama.com
+        # → SSoT erkennt `ollama.com` in der URL → Gate an.
+        body = build_camel_extra_body(
+            model="minimax-m3",
+            base_url="https://ollama.com/v1",
+            num_ctx=262144,
+            think=True,
+        )
+        assert body == {"think": True, "options": {"num_ctx": 262144}}
+
+    def test_minimax_m3_cloud_suffix_sets_think(self) -> None:
+        body = build_camel_extra_body(
+            model="minimax-m3:cloud",
+            base_url="http://127.0.0.1:11435/v1",
+            num_ctx=262144,
+            think=False,
+        )
+        assert body == {"think": False, "options": {"num_ctx": 262144}}
+
+    def test_minimax_m3_bare_on_local_proxy_gate_off(self) -> None:
+        # Caveat: bare `minimax-m3` @ `:11435` (weder :cloud noch :11434 noch
+        # ollama.com) → SSoT liefert "openai" → Gate aus, analog zur eingefrorenen
+        # Prod-Route. Fuer num_ctx/think muss `:cloud`/`:11434`/`ollama.com` her.
+        body = build_camel_extra_body(
+            model="minimax-m3",
+            base_url="http://127.0.0.1:11435/v1",
+            num_ctx=262144,
+            think=True,
+        )
+        assert body == {}
