@@ -35,6 +35,12 @@ HTTP_CASES = [
     ("", "", "unknown"),
     (None, None, "unknown"),
     ("http://host:114340/v1", "foo", "ollama"),  # Substring-Match (dokumentierte Eigenheit)
+    # Issue #670 — Ollama-Cloud-Prod-Tag `name:<size>-cloud` @ Nicht-Standard-Port.
+    # Live-Evidenz: base_url=http://<host>:11435/v1, model=gpt-oss:20b-cloud.
+    ("http://100.71.152.44:11435/v1", "gpt-oss:20b-cloud", "cloud"),
+    ("http://100.71.152.44:11435/v1", "gpt-oss:120b-cloud", "cloud"),
+    # Kein False Positive: `-cloud` ohne `:`-Tag ist KEIN Ollama-Signal.
+    ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
 ]
 
 
@@ -72,6 +78,12 @@ OASIS_CASES = [
     ("", "gpt-4o-mini", "openai"),
     ("http://host:114340/v1", "foo", "openai"),  # Regex matcht NUR exakten Port
     (None, None, "openai"),  # Default-Fallback: OpenAI-Compat-Gateway
+    # Issue #670 — Prod-Cloud-Tag muss als Ollama erkannt werden, damit das
+    # think/num_ctx-Gate feuert. Live: model=gpt-oss:20b-cloud @ :11435.
+    ("http://100.71.152.44:11435/v1", "gpt-oss:20b-cloud", "ollama"),
+    ("http://100.71.152.44:11435/v1", "gpt-oss:120b-cloud", "ollama"),
+    # Kein False Positive: `-cloud` ohne `:`-Tag bleibt OpenAI-Compat.
+    ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
 ]
 
 

@@ -152,23 +152,29 @@ class TestBuildCamelExtraBodySSoTDelegation:
 
 
 class TestBuildCamelExtraBodyProdCharacterization:
-    """Charakterisierung der realen Prod-Route (ALE-19). Belegt, dass die
-    SSoT-Delegation das Prod-Verhalten EINFRIERT: `gpt-oss:20b-cloud` @
-    `:11435` traegt weder `:cloud` (Suffix ist `-cloud` mit Bindestrich) noch
-    Port `:11434` — Gate bleibt aus, exakt wie vor dem Umbau.
+    """Charakterisierung der realen Prod-Route (ALE-19 → #670-Fix, ALE-17).
+
+    Vor #670 fror diese Klasse das Bug-Verhalten ein: `gpt-oss:20b-cloud` @
+    `:11435` traegt zwar keinen `:cloud`-Suffix (Tag ist `20b-cloud`) und
+    keinen Port `:11434` — die Detection lieferte `openai`, das Gate blieb aus,
+    Simulationsinhalte liefen ohne `think`/`num_ctx`.
+
+    Seit #670 (Board-Entscheidung E1 = accept-cloud) erkennt
+    `_is_ollama_cloud_tag` das `:<size>-cloud`-Tag als Ollama-Cloud-Signal →
+    Prod-Route ist `ollama`, das Gate feuert.
     """
 
-    def test_prod_route_gate_stays_off(self) -> None:
+    def test_prod_route_gate_now_fires(self) -> None:
         body = build_camel_extra_body(
             model="gpt-oss:20b-cloud",
             base_url="http://127.0.0.1:11435/v1",
             num_ctx=131072,
             think=True,
         )
-        assert body == {}
+        assert body == {"think": True, "options": {"num_ctx": 131072}}
 
-    def test_prod_route_is_ollama_route_false(self) -> None:
-        assert _is_ollama_route("gpt-oss:20b-cloud", "http://127.0.0.1:11435/v1") is False
+    def test_prod_route_is_ollama_route_true(self) -> None:
+        assert _is_ollama_route("gpt-oss:20b-cloud", "http://127.0.0.1:11435/v1") is True
 
 
 class TestBuildCamelExtraBodyMinimaxM3:
@@ -200,9 +206,10 @@ class TestBuildCamelExtraBodyMinimaxM3:
         assert body == {"think": False, "options": {"num_ctx": 262144}}
 
     def test_minimax_m3_bare_on_local_proxy_gate_off(self) -> None:
-        # Caveat: bare `minimax-m3` @ `:11435` (weder :cloud noch :11434 noch
-        # ollama.com) → SSoT liefert "openai" → Gate aus, analog zur eingefrorenen
-        # Prod-Route. Fuer num_ctx/think muss `:cloud`/`:11434`/`ollama.com` her.
+        # Caveat: bare `minimax-m3` @ `:11435` (weder Cloud-Tag noch :11434 noch
+        # ollama.com) → SSoT liefert "openai" → Gate aus. Anders als die
+        # `:<size>-cloud`-Prod-Route (seit #670 erkannt) fehlt hier jedes
+        # Ollama-Signal; fuer num_ctx/think muss ein Cloud-Tag/`:11434`/`ollama.com` her.
         body = build_camel_extra_body(
             model="minimax-m3",
             base_url="http://127.0.0.1:11435/v1",
