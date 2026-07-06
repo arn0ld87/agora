@@ -1,7 +1,7 @@
 # Trivy Ignore File
 # Known CVEs from docu/dependency-risk-register.md
 # These are currently ignored because they are blocked by upstream pins or base-image pins.
-# Hardstop: 2026-07-30 (pip-audit baseline), 2026-08-30 (Trivy container scan baseline)
+# Hardstop: 2026-09-28 (pip-audit/nltk baseline, verlängert via ADR-0004/ALE-20), 2026-08-30 (Trivy container scan baseline)
 
 # CVE-2026-24049: wheel (OS-Layer, transitive via base image)
 # Risk: High (Privilege Escalation or Arbitrary Code Execution via wheel unpacking)

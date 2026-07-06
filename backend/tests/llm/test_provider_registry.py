@@ -41,6 +41,8 @@ HTTP_CASES = [
     ("http://100.71.152.44:11435/v1", "gpt-oss:120b-cloud", "cloud"),
     # Kein False Positive: `-cloud` ohne `:`-Tag ist KEIN Ollama-Signal.
     ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
+    # Kein False Positive: `:`-Tag mit `-cloud` OHNE Groessenpraefix (Dritt-Gateway).
+    ("https://api.example.com/v1", "custom:experimental-cloud", "unknown"),
 ]
 
 
@@ -84,6 +86,8 @@ OASIS_CASES = [
     ("http://100.71.152.44:11435/v1", "gpt-oss:120b-cloud", "ollama"),
     # Kein False Positive: `-cloud` ohne `:`-Tag bleibt OpenAI-Compat.
     ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
+    # Kein False Positive: `-cloud`-Tag ohne Groessenpraefix bleibt OpenAI-Compat.
+    ("https://api.example.com/v1", "custom:experimental-cloud", "openai"),
 ]
 
 

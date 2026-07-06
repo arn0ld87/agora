@@ -70,7 +70,8 @@ jobs:
         # in the advisory DB (PYSEC-2026-597 #661).
         # CVE-2026-1839, CVE-2026-4372 und PYSEC-2025-217 resolved via
         # Transformers v5 upgrade (#624).
-        # Tracked in docs/dependency-risk-register.md. Hardstop 2026-07-30 —
+        # Tracked in docs/dependency-risk-register.md. Hardstop 2026-09-28
+        # (verlängert 2026-07-06 via ADR-0004 / ALE-20; ehem. 2026-07-30) —
         # afterwards this --ignore-vuln list MUST be empty.
         # Tracked advisories: CVE-2026-1839, CVE-2026-4372, PYSEC-2025-217, PYSEC-2026-597, GHSA-p4gq-832x-fm9v.
         if: github.event_name != 'pull_request'

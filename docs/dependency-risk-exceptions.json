@@ -11,7 +11,7 @@
       "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
       "target_version": "nltk mit gepatchter Advisory-DB-Version",
       "owner": "nltk",
-      "deadline": "2026-07-30",
+      "deadline": "2026-09-28",
       "issue": "https://github.com/arn0ld87/agora/issues/661",
       "status": "open"
     },
@@ -24,7 +24,7 @@
       "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
       "target_version": "nltk mit gefixter nltk.data.load()-Pfadvalidierung",
       "owner": "nltk",
-      "deadline": "2026-07-30",
+      "deadline": "2026-09-28",
       "issue": "https://github.com/arn0ld87/agora/issues/672",
       "status": "open"
     }

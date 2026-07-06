@@ -59,6 +59,33 @@ DetectionMode = Literal["http", "oasis"]
 # Verhalten aus scripts/_sim_common.py uebernommen.
 _OASIS_OLLAMA_PORT_RE = re.compile(r":11434(?:/|$)")
 
+# Ollama-Cloud-Size-Tag: fuehrende Groesse (Zahl + optionale Einheit) gefolgt
+# von ``-cloud`` — z. B. ``20b-cloud``, ``120b-cloud``, ``1t-cloud``. Bewusst
+# eng, damit ``<name>:<wort>-cloud`` (ohne Groessenpraefix) auf einem
+# Nicht-Ollama-Gateway KEIN False-Positive ausloest.
+_OLLAMA_CLOUD_SIZE_TAG_RE = re.compile(r"\d+[a-z]*-cloud")
+
+
+def _is_ollama_cloud_tag(model: str) -> bool:
+    """True, wenn der Modellname ein Ollama-Cloud-Tag traegt (Issue #670).
+
+    Ollama-Cloud-Modelle folgen der ``name:tag``-Konvention, deren Tag ein
+    Cloud-Tag ist — entweder das blosse ``:cloud`` (z. B.
+    ``qwen3-coder-next:cloud``) oder ein ``:<size>-cloud`` (z. B.
+    ``gpt-oss:20b-cloud``, das produktive Modell hinter ``ollama.com`` @
+    Nicht-Standard-Port ``:11435``; weitere reale Tags: ``120b-cloud``,
+    ``480b-cloud``, ``1t-cloud``).
+
+    Bewusst NICHT als Ollama-Signal (kein False-Positive):
+    - ``mistral-large-cloud`` — kein ``:``-Tag.
+    - ``custom:experimental-cloud`` — ``-cloud``-Suffix ohne Groessenpraefix,
+      wie ihn Dritt-Gateways (vLLM/LiteLLM) fuehren koennten.
+    """
+    if ":" not in model:
+        return False
+    tag = model.rsplit(":", 1)[-1]
+    return tag == "cloud" or _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
+
 
 def _is_ollama_cloud_tag(model: str) -> bool:
     """True, wenn der Modellname ein Ollama-Cloud-Tag traegt (Issue #670).
