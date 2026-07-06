@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 # scripts/ liegt nicht auf dem Default-Pythonpath des Test-Runners.
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = _BACKEND_DIR / "scripts"
@@ -208,3 +210,32 @@ class TestBuildCamelExtraBodyMinimaxM3:
             think=True,
         )
         assert body == {}
+
+
+class TestBuildCamelExtraBodyOllamaCloudModelAgnostic:
+    """ALE-19-Kommentar 2026-07-06: Alex' Setup ist base_url `https://ollama.com/v1`
+    + `ollama pull <modell>:cloud`. Beleg, dass der #670-Fix modell-agnostisch ist:
+    ueber die `ollama.com`-URL routet JEDES Cloud-Modell (unabhaengig vom Tag,
+    `:cloud` wie `-cloud`) zu Ollama → Gate an. Damit greifen alle 30+ Cloud-Modelle,
+    nicht nur ein einzelnes.
+    """
+
+    _OLLAMA_COM = "https://ollama.com/v1"
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "minimax-m3:cloud",
+            "qwen3-coder:480b-cloud",
+            "deepseek-v3.1:671b-cloud",
+            "kimi-k2:1t-cloud",
+            "glm-4.6:cloud",
+            "minimax-m3",  # bare tag — greift allein ueber die ollama.com-URL (#670)
+        ],
+    )
+    def test_any_cloud_model_via_ollama_com_sets_think(self, model: str) -> None:
+        assert _is_ollama_route(model, self._OLLAMA_COM) is True
+        body = build_camel_extra_body(
+            model=model, base_url=self._OLLAMA_COM, num_ctx=262144, think=True
+        )
+        assert body == {"think": True, "options": {"num_ctx": 262144}}
