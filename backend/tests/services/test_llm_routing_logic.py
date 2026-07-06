@@ -72,12 +72,76 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     assert resolved_other.routing_version == 2
 
 
-def test_detect_default_provider_id_matches_hostname_not_substring():
+def test_detect_default_provider_id_matches_mainstream_hosts():
+    """Mainstream hosts still resolve to the expected provider IDs now that
+    detection is delegated to the SSoT (``app.llm.providers.registry.detect_provider``,
+    mode="http") instead of a locally re-implemented heuristic."""
     assert _detect_default_provider_id("https://api.openai.com/v1", "gpt-4o") == "openai"
     assert _detect_default_provider_id(
         "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-1.5-pro"
     ) == "google"
-    assert _detect_default_provider_id("https://evil-openai.com/v1", "custom-model") == "openai_compatible"
+
+
+def test_detect_default_provider_id_gemini_model_without_google_base_url_converges_to_compat():
+    """Weakness #3 / SSoT convergence (audit B6/T4): the old inline heuristic
+    forced ``PROVIDER_GOOGLE`` whenever ``"gemini" in model`` (an over-broad
+    substring match that also caught e.g. ``"my-gemini-tune"``), *regardless of
+    the base URL*. The http-mode SSoT (``detect_provider(..., mode="http")``)
+    deliberately detects Gemini via the base URL only, so a Gemini-named model
+    pointed at a non-Google base URL now resolves to ``openai_compatible``.
+
+    This is an intentional behavior change, not a regression: this function
+    feeds the backend runtime routing, which drives ``LLMClient`` — and the
+    HTTP client would itself route such a config through the OpenAI-compatible
+    path. Converging the fallback onto the same SSoT removes a latent
+    fallback-vs-runtime divergence. Frozen here explicitly so the change is
+    never silent (a Google base URL still wins, see the mainstream-hosts test).
+    """
+    assert _detect_default_provider_id("", "gemini-1.5-pro") == "openai_compatible"
+    assert (
+        _detect_default_provider_id("https://compat-gateway.example/v1", "gemini-1.5-pro")
+        == "openai_compatible"
+    )
+    # The old substring rule also mis-fired on incidental "gemini" occurrences;
+    # these likewise no longer force Google.
+    assert _detect_default_provider_id("https://compat-gateway.example/v1", "my-gemini-tune") == (
+        "openai_compatible"
+    )
+
+
+def test_detect_default_provider_id_delegates_ssot_substring_semantics():
+    """The SSoT uses substring matching on the base URL (same semantics already
+    shipped in production via ``LLMClient._detect_provider``), which is a
+    deliberate trade-off vs. the old, stricter exact-hostname comparison: it
+    trades resistance to look-alike/path-embedded strings for recognizing
+    legitimate variants (see
+    ``test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix``
+    below). ``_detect_default_provider_id`` now inherits this SSoT behavior
+    verbatim rather than diverging from the single source of truth."""
+    assert _detect_default_provider_id("https://evil-openai.com/v1", "custom-model") == "openai"
     assert _detect_default_provider_id(
         "https://proxy.example/generativelanguage.googleapis.com", "custom-model"
-    ) == "openai_compatible"
+    ) == "google"
+
+
+def test_detect_default_provider_id_recognizes_subdomains_ssot_weakness_fix():
+    """Weakness #1 (audit B6/T4): the old heuristic only matched hostnames via
+    exact equality (``hostname == "ollama.com"`` / ``"generativelanguage.googleapis.com"``
+    / ``hostname in {"api.openai.com", "openai.com"}``), so legitimate
+    subdomains/variants of these hosts silently fell back to
+    ``openai_compatible``. Delegating to the SSoT fixes this."""
+    assert _detect_default_provider_id("https://eu.api.openai.com/v1", "gpt-4o") == "openai"
+    assert _detect_default_provider_id("https://www.ollama.com/v1", "some-model") == "ollama_cloud"
+
+
+def test_detect_default_provider_id_recognizes_sized_cloud_tags_ssot_weakness_fix():
+    """Weakness #2 (audit B6/T4): the old heuristic only matched the bare
+    ``:cloud`` model tag suffix (``normalized_model.endswith(":cloud")``), so
+    real Ollama Cloud size-prefixed tags (e.g. ``gpt-oss:20b-cloud``) were
+    missed. Delegating to the SSoT's ``_is_ollama_cloud_tag`` fixes this."""
+    assert _detect_default_provider_id(
+        "https://custom-gateway.example/v1", "gpt-oss:20b-cloud"
+    ) == "ollama_cloud"
+    assert _detect_default_provider_id(
+        "https://custom-gateway.example/v1", "qwen3-coder-next:cloud"
+    ) == "ollama_cloud"
