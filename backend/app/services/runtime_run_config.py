@@ -82,7 +82,7 @@ def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[st
        ``_is_ollama_cloud_tag`` recognizes both forms.
     """
     detected = detect_provider(base_url, model_name, mode="http")
-    return _HTTP_DETECTION_TO_PROVIDER_ID[detected]
+    return _HTTP_DETECTION_TO_PROVIDER_ID.get(detected, PROVIDER_OPENAI_COMPATIBLE)
 
 
 class RuntimeRunConfig:
