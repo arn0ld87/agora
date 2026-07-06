@@ -14,6 +14,7 @@ from ..contracts import (
     PROVIDER_OPENAI,
     PROVIDER_OPENAI_COMPATIBLE,
 )
+from ..llm.providers.registry import detect_provider
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
@@ -45,20 +46,43 @@ def _sanitize_url(value: str) -> str:
     return urlunparse((parsed.scheme, netloc, parsed.path, "", "", ""))
 
 
-def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[str]) -> str:
-    """Best-effort mapping from legacy server config to routing provider IDs."""
-    normalized_base = (base_url or "").strip()
-    normalized_model = (model_name or "").strip().lower()
-    parsed = urlparse(normalized_base) if normalized_base else None
-    hostname = (parsed.hostname or "").lower() if parsed else ""
+# SSoT (app.llm.providers.registry.detect_provider, mode="http") result ->
+# this module's own PROVIDER_* vocabulary. Callers of
+# _detect_default_provider_id keep receiving exactly the same four IDs as
+# before delegation; only the detection heuristic underneath changed.
+_HTTP_DETECTION_TO_PROVIDER_ID = {
+    "cloud": PROVIDER_OLLAMA_CLOUD,
+    "google": PROVIDER_GOOGLE,
+    "openai": PROVIDER_OPENAI,
+    # "ollama" (local, e.g. port 11434) and "unknown" both fall back to the
+    # generic OpenAI-compatible route, matching this function's previous
+    # behavior (it never had a distinct local-Ollama branch).
+    "ollama": PROVIDER_OPENAI_COMPATIBLE,
+    "unknown": PROVIDER_OPENAI_COMPATIBLE,
+}
 
-    if normalized_model.endswith(":cloud") or hostname == "ollama.com":
-        return PROVIDER_OLLAMA_CLOUD
-    if hostname == "generativelanguage.googleapis.com" or "gemini" in normalized_model:
-        return PROVIDER_GOOGLE
-    if hostname in {"api.openai.com", "openai.com"}:
-        return PROVIDER_OPENAI
-    return PROVIDER_OPENAI_COMPATIBLE
+
+def _detect_default_provider_id(base_url: Optional[str], model_name: Optional[str]) -> str:
+    """Best-effort mapping from legacy server config to routing provider IDs.
+
+    Delegates to the Single Source of Truth (``detect_provider``,
+    ``mode="http"``) instead of re-implementing hostname/model heuristics
+    here. This fixes two weaknesses of the old inline heuristic (audit
+    B6/T4):
+
+    1. Exact hostname equality (``hostname == "ollama.com"``,
+       ``hostname == "generativelanguage.googleapis.com"``,
+       ``hostname in {"api.openai.com", "openai.com"}``) missed legitimate
+       subdomains/variants (e.g. ``eu.api.openai.com``,
+       ``some-region.generativelanguage.googleapis.com``); the SSoT's
+       substring matching on the base URL recognizes these.
+    2. Ollama Cloud tag detection only matched the bare ``:cloud`` suffix
+       (``normalized_model.endswith(":cloud")``) and missed size-prefixed
+       cloud tags (e.g. ``gpt-oss:20b-cloud``); the SSoT's
+       ``_is_ollama_cloud_tag`` recognizes both forms.
+    """
+    detected = detect_provider(base_url, model_name, mode="http")
+    return _HTTP_DETECTION_TO_PROVIDER_ID[detected]
 
 
 class RuntimeRunConfig:
