@@ -510,9 +510,11 @@ class RedditSimulationRunner:
         elif platform == ModelPlatformType.OLLAMA:
             # Ollama Cloud no longer serves OpenAI-compat /v1.
             # CAMEL's OllamaModel speaks the native /api/chat endpoint.
-            # Build extra_body inline: we already know this is Ollama, so the
-            # legacy _is_ollama_route gate inside build_camel_extra_body() would
-            # falsely drop think/num_ctx for :latest models or ollama.com URLs.
+            # Build extra_body inline: we already dispatched via the provider
+            # SSoT (detect_oasis_platform), so re-running the _is_ollama_route
+            # gate inside build_camel_extra_body() would be redundant detection.
+            # (Since #670 that gate also delegates to the SSoT and no longer
+            # mis-classifies :latest models or ollama.com URLs.)
             os.environ["OPENAI_API_KEY"] = llm_api_key or "dummy"  # CAMEL guard
             extra_body: dict = {"think": think_on}
             if ctx_limit is not None:

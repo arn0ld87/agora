@@ -87,6 +87,24 @@ def _is_ollama_cloud_tag(model: str) -> bool:
     return tag == "cloud" or _OLLAMA_CLOUD_SIZE_TAG_RE.fullmatch(tag) is not None
 
 
+def _is_ollama_cloud_tag(model: str) -> bool:
+    """True, wenn der Modellname ein Ollama-Cloud-Tag traegt (Issue #670).
+
+    Ollama-Cloud-Modelle folgen der ``name:tag``-Konvention, deren Tag auf
+    ``cloud`` endet — sowohl ``:cloud`` (z. B. ``qwen3-coder-next:cloud``) als
+    auch ``:<size>-cloud`` (z. B. ``gpt-oss:20b-cloud``, das produktive Modell
+    hinter ``ollama.com`` @ Nicht-Standard-Port ``:11435``).
+
+    Ein blosses ``-cloud`` OHNE ``:``-Tag (z. B. ``mistral-large-cloud`` auf
+    einem OpenAI-Compat-Gateway) ist KEIN Ollama-Signal und bleibt ``openai`` —
+    so wird der frueher dokumentierte False-Positive vermieden.
+    """
+    if ":" not in model:
+        return False
+    tag = model.rsplit(":", 1)[-1]
+    return tag == "cloud" or tag.endswith("-cloud")
+
+
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
     """Heuristik des Backend-HTTP-Clients (vormals ``LLMClient._detect_provider``).
 
