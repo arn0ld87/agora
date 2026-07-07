@@ -19,7 +19,7 @@ Stand: 2026-07-05 (post M3-Port, v1.0.0)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2869 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 2895 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 144 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
