@@ -43,12 +43,12 @@
     </div>
 
     <!-- Command-Palette (global, rendered einmalig in Shell) -->
-    <CommandPalette v-if="isPaletteOpen" />
+    <CommandPalette v-if="wasPaletteOpened" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useShellStore } from '@/stores/shell'
 import { useCommandPalette } from '@/composables/useCommandPalette'
@@ -75,7 +75,16 @@ const shellStore = useShellStore()
 const route = useRoute()
 const router = useRouter()
 const { isOpen: isPaletteOpen, toggle: togglePalette } = useCommandPalette()
+const wasPaletteOpened = ref(false)
 const commandsStore = useCommandsStore()
+
+watch(
+  isPaletteOpen,
+  (open) => {
+    if (open) wasPaletteOpened.value = true
+  },
+  { immediate: true },
+)
 
 function onKeyDown(e: KeyboardEvent): void {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
