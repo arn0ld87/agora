@@ -54,6 +54,7 @@ jobs:
             auth.docker.io:443
             deb.debian.org:80
             deb.debian.org:443
+            dl-cdn.alpinelinux.org:443
             docker-images-prod.s3.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
             check.trivy.dev:443
@@ -346,6 +347,7 @@ jobs:
             auth.docker.io:443
             deb.debian.org:80
             deb.debian.org:443
+            dl-cdn.alpinelinux.org:443
             docker-images-prod.s3.amazonaws.com:443
             docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
             files.pythonhosted.org:443
