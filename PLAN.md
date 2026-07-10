@@ -355,8 +355,8 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 | Issue | Aufgabe | Status |
 |---|---|---|
-| [#669](https://github.com/arn0ld87/agora/issues/669) | `simulation_lifecycle._detect_default_provider` → `registry.detect_provider(mode="http")` | offen |
-| [#670](https://github.com/arn0ld87/agora/issues/670) | `_sim_common._is_ollama_route` think/num_ctx-Gate für `ollama.com`-URLs ausweiten | offen |
+| [#669](https://github.com/arn0ld87/agora/issues/669) | `simulation_lifecycle._detect_default_provider` → `registry.detect_provider(mode="http")` | ✅ gemerged via #677 |
+| [#670](https://github.com/arn0ld87/agora/issues/670) | `_sim_common._is_ollama_route` think/num_ctx-Gate für `ollama.com`-URLs ausweiten | ✅ gemerged via #675/#676 |
 | [#671](https://github.com/arn0ld87/agora/issues/671) | `embedding_service._detect_provider` vereinheitlichen ODER bewusst separat dokumentieren | offen (Entscheidung nötig) |
 
 ### Dependency-Hardstops (Source of Truth: [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md))
@@ -371,6 +371,36 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-05 — M3-Port abgeschlossen, Phase F (Rest-Detection-Delegation) eröffnet.*
+## 12. Onboarding & Provider-Unification (2026-07-10)
+
+**Status:** Phase 0 abgeschlossen auf `codex/onboarding-provider-unification`;
+noch kein Produktcode geändert.
+
+Ziel: lokales Erst-Onboarding, getrenntes Benutzerprofil, kanonische Provider-
+und Modellverträge, getrennte Embedding-Konfiguration, ein gemeinsamer
+Model-Picker und eine exakte Persona-Count-Invariante.
+
+Source of Truth:
+[`docs/epics/onboarding-provider-unification/04-implementation-plan.md`](docs/epics/onboarding-provider-unification/04-implementation-plan.md).
+
+| Slice | Inhalt | Status |
+|---|---|---|
+| 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | ✅ abgeschlossen |
+| 1 | Kanonische Provider-/Modell-/Route-Verträge | offen |
+| 2 | Benutzerprofil und resumierbares Onboarding | offen |
+| 3 | Provider-Verbindungen und Discovery | offen |
+| 4 | Embedding-Setup und sichere Re-Embedding-Migration | offen |
+| 5 | Gemeinsamer Model-Picker und Routing | offen |
+| 6 | Persona-Count-End-to-End-Invariante | offen |
+| 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |
+| 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |
+
+Phase-0-Baseline: Backend grün; Frontend-Tests fachlich grün, Vitest-Exit 1
+wegen vier bestehenden `EnvironmentTeardownError`-Rejections. Vor dem ersten
+Frontend-Produktslice separat klären.
+
+---
+
+*Zuletzt aktualisiert: 2026-07-10 — Phase F #669/#670 abgeschlossen; Onboarding/Provider-Unification Phase 0 dokumentiert.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
