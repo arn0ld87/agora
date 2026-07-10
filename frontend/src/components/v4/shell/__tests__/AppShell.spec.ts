@@ -17,6 +17,7 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from './testRouter'
+import { useCommandPalette } from '@/composables/useCommandPalette'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 
@@ -38,11 +39,13 @@ Object.defineProperty(globalThis, 'localStorage', { value: lsMock, writable: tru
 import AppShell from '../AppShell.vue'
 
 const router = makeTestRouter()
+const commandPaletteStub = { template: '<div data-testid="command-palette" />' }
 
 describe('AppShell', () => {
   beforeEach(() => {
     lsMock.clear()
     setActivePinia(createPinia())
+    useCommandPalette().close()
   })
 
   afterEach(() => {
@@ -56,6 +59,27 @@ describe('AppShell', () => {
       global: { plugins: [router, createPinia(), i18n] },
     })
     expect(wrapper.exists()).toBe(true)
+  })
+
+  it('behält die Command-Palette nach dem ersten Öffnen gemountet', async () => {
+    await router.push('/')
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [router, createPinia(), i18n],
+        stubs: { CommandPalette: commandPaletteStub },
+      },
+    })
+    const palette = useCommandPalette()
+
+    expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(false)
+
+    palette.open()
+    await nextTick()
+    expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(true)
+
+    palette.close()
+    await nextTick()
+    expect(wrapper.find('[data-testid="command-palette"]').exists()).toBe(true)
   })
 
   it('rendert Standard-Sidebar-Slot (Sidebar-Komponente)', async () => {
