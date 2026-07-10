@@ -3,14 +3,14 @@
 ## Gates pro Slice
 
 ```bash
-cd backend && uv run python -m app.contracts.dump_schemas
+(cd backend && uv run python -m app.contracts.dump_schemas)
 git diff --exit-code schemas/
-cd backend && uv run pytest tests/contracts/ -v
-cd backend && uv run pytest -x -q
-cd backend && uv run ruff check .
-cd backend && uv run mypy app
-cd frontend && npm run check
-cd frontend && npm test -- --run
+(cd backend && uv run pytest tests/contracts/ -v)
+(cd backend && uv run pytest -x -q)
+(cd backend && uv run ruff check .)
+(cd backend && uv run mypy app)
+(cd frontend && npm run check)
+(cd frontend && npm test -- --run)
 ```
 
 ## Contract- und Adaptertests
