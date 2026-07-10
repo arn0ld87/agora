@@ -43,7 +43,7 @@
     </div>
 
     <!-- Command-Palette (global, rendered einmalig in Shell) -->
-    <CommandPalette />
+    <CommandPalette v-if="isPaletteOpen" />
   </div>
 </template>
 
@@ -74,7 +74,7 @@ const props = withDefaults(
 const shellStore = useShellStore()
 const route = useRoute()
 const router = useRouter()
-const { toggle: togglePalette } = useCommandPalette()
+const { isOpen: isPaletteOpen, toggle: togglePalette } = useCommandPalette()
 const commandsStore = useCommandsStore()
 
 function onKeyDown(e: KeyboardEvent): void {
