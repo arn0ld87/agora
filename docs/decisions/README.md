@@ -10,6 +10,9 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0002](0002-evidence-gating.md) | Evidence-Gating für Report-Generation | Accepted (2026-05-10) | M11.7 |
 | [0003](0003-pydantic-settings-migration.md) | Pydantic-Settings-Migration | Accepted (2026-05-15) | Pydantic-Settings-Epic |
 | [0004](0004-cve-upstream-escalation.md) | CVE-Upstream-Eskalation: Risikoakzeptanz nltk | Accepted (2026-07-06) | ALE-20 |
+| [0006](0006-ai-provider-connections.md) | Kanonische KI-Provider-Verbindungen | Proposed | Onboarding/Provider-Unification Slice 0 |
+| [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
+| [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |
 
 ## Geplante ADRs
 
