@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (contracts — 2026-07-10)
+
+- **Kanonische KI-Provider-Verträge**: `ProviderConnection`, `AiModel` und
+  `AiRoute` sind als secret-freie Pydantic-v2-SSoT mit strikten
+  Zod-Spiegeln und JSON-Schemas verfügbar. Explizite Legacy-Adapter lesen
+  `ProviderDescriptor`, `ModelEntry`, `LlmProfile` und `StageLLMRoute`, ohne
+  bestehende Profile zu migrieren oder Provider-Detection zu verändern.
+  Kanonische `base_url`-Werte erlauben ausschließlich öffentliche HTTP(S)-
+  Basis-URLs mit Host und optionalem Pfad; Userinfo, Query und Fragment werden
+  abgelehnt. Der Descriptor-Legacy-Adapter entfernt diese privaten URL-Anteile,
+  markiert die Verbindung als `degraded` und verlangt Neukonfiguration.
+
 ### Changed (infra/ci — 2026-07-05)
 
 - **Proxy-Binding und Frontend-Image-Artefakt**: Proxy bindet standardmäßig nur noch auf `127.0.0.1:8080` (via `AGORA_PROXY_BIND_HOST`/`AGORA_PROXY_PORT`-Overrides). Frontend wird als Image-Artefakt in den Proxy gebaut statt per Host-Volume gemountet; reduziert Dev-Container-Overhead bei Prod-Stack-Tests.

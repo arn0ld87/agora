@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "AiProviderOptions": {
+      "additionalProperties": false,
+      "description": "Secret-free options currently consumed by Agora routing.",
+      "properties": {
+        "__legacy_stage_route__": {
+          "$ref": "#/$defs/LegacyStageRouteOptions"
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "pattern": "^https?://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Base Url"
+        },
+        "num_ctx": {
+          "exclusiveMinimum": 0,
+          "title": "Num Ctx",
+          "type": "integer"
+        }
+      },
+      "title": "AiProviderOptions",
+      "type": "object"
+    },
+    "LegacyStageRouteOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "had_reserved_value": {
+          "title": "Had Reserved Value",
+          "type": "boolean"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Max Tokens"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoning Effort"
+        },
+        "reserved_value": {
+          "title": "Reserved Value",
+          "type": "null"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Temperature"
+        }
+      },
+      "required": [
+        "temperature",
+        "max_tokens",
+        "reasoning_effort",
+        "had_reserved_value",
+        "reserved_value"
+      ],
+      "title": "LegacyStageRouteOptions",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/ai-route.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "model_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Id"
+    },
+    "provider_connection_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Connection Id"
+    },
+    "provider_options": {
+      "$ref": "#/$defs/AiProviderOptions"
+    },
+    "source": {
+      "enum": [
+        "default",
+        "profile",
+        "stage_override",
+        "runtime",
+        "legacy"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "document_ingest",
+            "ontology_generation",
+            "graph_build",
+            "persona_generation",
+            "simulation_rounds",
+            "report_generation",
+            "evaluation"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
+    },
+    "validated_capabilities": {
+      "additionalProperties": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "title": "Validated Capabilities",
+      "type": "object"
+    }
+  },
+  "required": [
+    "source"
+  ],
+  "title": "AiRoute",
+  "type": "object"
+}

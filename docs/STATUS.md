@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-07-05 (post M3-Port, v1.0.0)
+Stand: 2026-07-11 (Onboarding/Provider-Unification Slice 1, Re-Review offen, v1.0.0)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -19,8 +19,8 @@ Stand: 2026-07-05 (post M3-Port, v1.0.0)
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 2895 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 144 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 2934 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 146 | `cd frontend && npm test -- --run` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._

@@ -373,8 +373,10 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 ## 12. Onboarding & Provider-Unification (2026-07-10)
 
-**Status:** Phase 0 abgeschlossen auf `codex/onboarding-provider-unification`;
-noch kein Produktcode geändert.
+**Status:** Phase 0 abgeschlossen; Slice 1 implementiert, gehärtet und
+unabhängig verifiziert (Root-Re-Review 2026-07-11: MERGE-READY, drei
+non-blocking Follow-ups F1–F3 im Arbeitsprotokoll). PR eröffnet.
+Bestehende Profile bleiben unverändert lesbar.
 
 Ziel: lokales Erst-Onboarding, getrenntes Benutzerprofil, kanonische Provider-
 und Modellverträge, getrennte Embedding-Konfiguration, ein gemeinsamer
@@ -386,7 +388,7 @@ Source of Truth:
 | Slice | Inhalt | Status |
 |---|---|---|
 | 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | ✅ abgeschlossen |
-| 1 | Kanonische Provider-/Modell-/Route-Verträge | offen |
+| 1 | Kanonische Provider-/Modell-/Route-Verträge | verifiziert; PR offen |
 | 2 | Benutzerprofil und resumierbares Onboarding | offen |
 | 3 | Provider-Verbindungen und Discovery | offen |
 | 4 | Embedding-Setup und sichere Re-Embedding-Migration | offen |
@@ -401,6 +403,6 @@ Frontend-Produktslice separat klären.
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-10 — Phase F #669/#670 abgeschlossen; Onboarding/Provider-Unification Phase 0 dokumentiert.*
+*Zuletzt aktualisiert: 2026-07-11 — Slice 1 verifiziert (MERGE-READY); PR offen.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*

@@ -1,0 +1,166 @@
+{
+  "$id": "https://alexle135.de/schemas/ai-provider-connection.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public connection metadata. Secret values are stored out of contract.",
+  "properties": {
+    "auth_mode": {
+      "enum": [
+        "none",
+        "api_key",
+        "oauth",
+        "session"
+      ],
+      "title": "Auth Mode",
+      "type": "string"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "pattern": "^https?://(?:[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]{1,5})?(?:/[^\\s?#]*)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url"
+    },
+    "capabilities": {
+      "additionalProperties": {
+        "enum": [
+          "supported",
+          "unsupported",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "object"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "display_name": {
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "id": {
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "last_tested_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Tested At"
+    },
+    "provider_kind": {
+      "enum": [
+        "ollama",
+        "openai",
+        "google",
+        "anthropic",
+        "custom",
+        "ollama_cloud",
+        "openai_compatible",
+        "github_copilot",
+        "cloud",
+        "unknown"
+      ],
+      "title": "Provider Kind",
+      "type": "string"
+    },
+    "secret_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Secret Ref"
+    },
+    "status": {
+      "default": "unknown",
+      "enum": [
+        "unknown",
+        "connected",
+        "degraded",
+        "disconnected",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "status_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status Message"
+    },
+    "transport": {
+      "enum": [
+        "http",
+        "local"
+      ],
+      "title": "Transport",
+      "type": "string"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    }
+  },
+  "required": [
+    "id",
+    "provider_kind",
+    "display_name",
+    "transport",
+    "auth_mode"
+  ],
+  "title": "ProviderConnection",
+  "type": "object"
+}

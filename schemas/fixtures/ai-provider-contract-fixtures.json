@@ -1,0 +1,122 @@
+{
+  "base_urls": {
+    "valid": [
+      "http://localhost:11434",
+      "https://example.test:8443/v1",
+      "https://gateway.example/v1/models"
+    ],
+    "invalid": [
+      "https://user:pass@example.test/v1",
+      "https://example.test/v1?api_key=fixture-token",
+      "https://example.test/v1?key=fixture-token",
+      "https://example.test/v1#fixture-fragment"
+    ]
+  },
+  "provider_connection": {
+    "valid": [
+      {
+        "id": "ollama-local",
+        "provider_kind": "ollama",
+        "display_name": "Ollama lokal",
+        "transport": "local",
+        "auth_mode": "none",
+        "base_url": null,
+        "secret_ref": null
+      }
+    ],
+    "invalid": [
+      {
+        "id": "",
+        "provider_kind": "ollama",
+        "display_name": "Ollama lokal",
+        "transport": "local",
+        "auth_mode": "none"
+      },
+      {
+        "id": "provider-1",
+        "provider_kind": "invalid",
+        "display_name": "Provider",
+        "transport": "http",
+        "auth_mode": "none"
+      },
+      {
+        "id": "provider-1",
+        "provider_kind": "openai",
+        "display_name": "Provider",
+        "transport": "http"
+      }
+    ]
+  },
+  "ai_model": {
+    "valid": [
+      {
+        "provider_connection_id": "ollama-local",
+        "model_id": "qwen3:8b",
+        "display_name": "Qwen 3 8B",
+        "source": "live",
+        "context_window": 1,
+        "max_output_tokens": null,
+        "embedding_dimensions": null
+      }
+    ],
+    "invalid": [
+      {
+        "provider_connection_id": "ollama-local",
+        "model_id": "qwen3:8b",
+        "display_name": "Qwen 3 8B",
+        "source": "live",
+        "context_window": 0
+      },
+      {
+        "provider_connection_id": "ollama-local",
+        "model_id": "qwen3:8b",
+        "display_name": "Qwen 3 8B",
+        "source": "unknown"
+      },
+      {
+        "provider_connection_id": "ollama-local",
+        "model_id": "qwen3:8b",
+        "display_name": "Qwen 3 8B"
+      }
+    ]
+  },
+  "ai_route": {
+    "valid": [
+      {
+        "stage": null,
+        "provider_connection_id": "ollama-local",
+        "model_id": "qwen3:8b",
+        "source": "runtime",
+        "provider_options": {
+          "base_url": "https://gateway.example/v1",
+          "num_ctx": 32768
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "source": "runtime",
+        "provider_options": {
+          "x-api-key": "fixture-token"
+        }
+      },
+      {
+        "source": "runtime",
+        "provider_options": {
+          "headers": {
+            "client_secret": "fixture-token"
+          }
+        }
+      },
+      {
+        "source": "runtime",
+        "provider_options": {
+          "num_ctx": 0
+        }
+      },
+      {
+        "source": "invalid"
+      }
+    ]
+  }
+}
