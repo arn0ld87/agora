@@ -51,6 +51,7 @@ from app.contracts.llm_request import (
     NormalizedLlmChunk,
     NormalizedLlmError,
 )
+from app.contracts.ai_provider_contract import AiModel, AiRoute, ProviderConnection
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -87,6 +88,9 @@ CONTRACTS: dict[str, type] = {
     "llm-normalized-request.schema.json": NormalizedLlmRequest,
     "llm-normalized-chunk.schema.json": NormalizedLlmChunk,
     "llm-normalized-error.schema.json": NormalizedLlmError,
+    "ai-provider-connection.schema.json": ProviderConnection,
+    "ai-model.schema.json": AiModel,
+    "ai-route.schema.json": AiRoute,
 }
 
 

@@ -1,0 +1,211 @@
+{
+  "$defs": {
+    "ModelCapabilities": {
+      "additionalProperties": false,
+      "description": "Tri-state model capabilities; unknown is never treated as supported.",
+      "properties": {
+        "chat": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Chat",
+          "type": "string"
+        },
+        "embeddings": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Embeddings",
+          "type": "string"
+        },
+        "json_object": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Json Object",
+          "type": "string"
+        },
+        "json_schema": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Json Schema",
+          "type": "string"
+        },
+        "reasoning": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "streaming": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Streaming",
+          "type": "string"
+        },
+        "tool_calling": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Tool Calling",
+          "type": "string"
+        },
+        "vision": {
+          "default": "unknown",
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ],
+          "title": "Vision",
+          "type": "string"
+        }
+      },
+      "title": "ModelCapabilities",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/ai-model.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/ModelCapabilities"
+    },
+    "context_window": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Window"
+    },
+    "deprecated": {
+      "default": false,
+      "title": "Deprecated",
+      "type": "boolean"
+    },
+    "display_name": {
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "embedding_dimensions": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Dimensions"
+    },
+    "local_or_cloud": {
+      "default": "unknown",
+      "enum": [
+        "local",
+        "cloud",
+        "unknown"
+      ],
+      "title": "Local Or Cloud",
+      "type": "string"
+    },
+    "max_output_tokens": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Output Tokens"
+    },
+    "metadata_updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metadata Updated At"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "provider_connection_id": {
+      "minLength": 1,
+      "title": "Provider Connection Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "live",
+        "cached",
+        "fallback",
+        "custom"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "status": {
+      "default": "unknown",
+      "enum": [
+        "unknown",
+        "available",
+        "unavailable",
+        "deprecated"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_connection_id",
+    "model_id",
+    "display_name",
+    "source"
+  ],
+  "title": "AiModel",
+  "type": "object"
+}

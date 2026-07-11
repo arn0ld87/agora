@@ -86,6 +86,15 @@ from .provider_types import (
     PROVIDER_OPENAI_COMPATIBLE,
     ProviderType,
 )
+from .ai_provider_contract import (
+    AiModel,
+    AiRoute,
+    CapabilityState,
+    LocalOrCloud,
+    ModelCapabilities,
+    ModelSource,
+    ProviderConnection,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -168,6 +177,13 @@ __all__ = [
     "PROVIDER_OPENAI",
     "PROVIDER_OPENAI_COMPATIBLE",
     "ProviderType",
+    "AiModel",
+    "AiRoute",
+    "CapabilityState",
+    "LocalOrCloud",
+    "ModelCapabilities",
+    "ModelSource",
+    "ProviderConnection",
     # ReportV3 — 11 Pflichtabschnitt-DTOs
     "Claim",
     "ChangeRecommendation",
