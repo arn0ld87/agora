@@ -120,15 +120,14 @@ class UserProfileStore:
             payload.model_dump(mode="json"), indent=2, sort_keys=True
         ).encode("utf-8")
         tmp_path = self._path.with_suffix(".tmp")
-        fd = os.open(
-            str(tmp_path),
-            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-            0o600,
-        )
-        try:
-            os.write(fd, serialized)
-        finally:
-            os.close(fd)
+
+        def _opener(path: str, flags: int) -> int:
+            return os.open(path, flags, 0o600)
+
+        with open(tmp_path, "wb", opener=_opener) as handle:
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp_path, self._path)
         try:
             os.chmod(self._path, 0o600)

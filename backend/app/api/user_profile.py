@@ -128,11 +128,12 @@ def upload_avatar():
     avatar_dir = store.avatar_dir
     filename = f"avatar-{uuid.uuid4().hex}{ext}"
     target_path = avatar_dir / filename
-    fd = os.open(str(target_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, data)
-    finally:
-        os.close(fd)
+
+    def _opener(path: str, flags: int) -> int:
+        return os.open(path, flags, 0o600)
+
+    with open(target_path, "wb", opener=_opener) as handle:
+        handle.write(data)
 
     old_ref = profile.avatar_ref
     updated = store.set_avatar_ref(filename)
@@ -173,13 +174,17 @@ def delete_avatar():
             status=409,
             code="profile_required",
         )
-    if profile.avatar_ref:
-        avatar_path = store.avatar_dir / profile.avatar_ref
+    # Erst die Referenz im Store löschen, dann die Datei: schlägt der
+    # Store-Write fehl, bleibt keine baumelnde Referenz auf eine bereits
+    # gelöschte Datei zurück (Gemini-Finding PR #684).
+    old_ref = profile.avatar_ref
+    updated = store.clear_avatar_ref()
+    if old_ref:
+        avatar_path = store.avatar_dir / old_ref
         if avatar_path.exists():
             try:
                 avatar_path.unlink()
             except OSError as exc:
                 logger.warning("Konnte Avatar %s nicht löschen: %s", avatar_path, exc)
-    updated = store.clear_avatar_ref()
     profile_data = updated.model_dump(mode="json") if updated else None
     return json_success({"profile": profile_data})

@@ -130,15 +130,14 @@ class OnboardingStateStore:
             payload.model_dump(mode="json"), indent=2, sort_keys=True
         ).encode("utf-8")
         tmp_path = self._path.with_suffix(".tmp")
-        fd = os.open(
-            str(tmp_path),
-            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-            0o600,
-        )
-        try:
-            os.write(fd, serialized)
-        finally:
-            os.close(fd)
+
+        def _opener(path: str, flags: int) -> int:
+            return os.open(path, flags, 0o600)
+
+        with open(tmp_path, "wb", opener=_opener) as handle:
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp_path, self._path)
         try:
             os.chmod(self._path, 0o600)
@@ -229,9 +228,12 @@ def compute_onboarding_requirements() -> OnboardingRequirements:
     """
     settings = get_settings()
     profile_valid = get_user_profile_store().load() is not None
-    chat_model_configured = bool(settings.llm_model_name.strip())
+    chat_model_configured = bool(
+        settings.llm_model_name and settings.llm_model_name.strip()
+    )
     embedding_configured = (
-        bool(settings.embedding_model.strip()) and settings.vector_dim > 0
+        bool(settings.embedding_model and settings.embedding_model.strip())
+        and (settings.vector_dim or 0) > 0
     )
     return OnboardingRequirements(
         profile_valid=profile_valid,
