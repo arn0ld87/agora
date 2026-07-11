@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlsplit, urlunsplit
@@ -25,6 +26,10 @@ _PUBLIC_BASE_URL_PATTERN = (
     r"^https?://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])"
     r"(?::[0-9]{1,5})?(?:/[^\s?#]*)?$"
 )
+# Muss dem Field(pattern=...) entsprechen, damit Validator und Feld
+# deckungsgleich bleiben und die Legacy-Sanitizer nie URLs durchreichen,
+# die die Modell-Konstruktion anschließend doch ablehnt.
+_PUBLIC_BASE_URL_RE = re.compile(_PUBLIC_BASE_URL_PATTERN)
 
 CapabilityState = Literal["supported", "unsupported", "unknown"]
 ModelSource = Literal["live", "cached", "fallback", "custom"]
@@ -37,6 +42,8 @@ RouteSource = Literal["default", "profile", "stage_override", "runtime", "legacy
 
 
 def _validate_public_base_url(value: str) -> str:
+    if _PUBLIC_BASE_URL_RE.match(value) is None:
+        raise ValueError("base_url must be a public HTTP(S) base URL")
     try:
         parsed = urlsplit(value)
     except ValueError as exc:
@@ -310,19 +317,21 @@ def llm_profile_to_canonical(
     """Read a legacy profile without copying its secret value."""
 
     unresolved_legacy_secret = bool(profile.api_key) and secret_ref is None
+    base_url, base_url_was_sanitized = _sanitize_legacy_base_url(profile.base_url)
+    degradation_reasons = []
+    if unresolved_legacy_secret:
+        degradation_reasons.append("Legacy API key has no resolved secret_ref")
+    if base_url_was_sanitized:
+        degradation_reasons.append("Legacy base URL requires reconfiguration")
     connection = ProviderConnection(
         id=profile.id,
         provider_kind=profile.provider,
         display_name=profile.name,
         transport="local" if profile.provider == "ollama" else "http",
         auth_mode="api_key" if secret_ref or unresolved_legacy_secret else "none",
-        base_url=profile.base_url,
-        status="degraded" if unresolved_legacy_secret else "unknown",
-        status_message=(
-            "Legacy API key has no resolved secret_ref"
-            if unresolved_legacy_secret
-            else None
-        ),
+        base_url=base_url,
+        status="degraded" if degradation_reasons else "unknown",
+        status_message="; ".join(degradation_reasons) or None,
         secret_ref=secret_ref,
         created_at=profile.created_at,
         updated_at=profile.updated_at,

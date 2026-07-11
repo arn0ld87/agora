@@ -16,6 +16,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Basis-URLs mit Host und optionalem Pfad; Userinfo, Query und Fragment werden
   abgelehnt. Der Descriptor-Legacy-Adapter entfernt diese privaten URL-Anteile,
   markiert die Verbindung als `degraded` und verlangt Neukonfiguration.
+- **Legacy-Adapter total gemacht** (Review-Findings PR #683): der
+  `base_url`-Validator erzwingt jetzt auch das Feld-Pattern, wodurch
+  Sanitizer und Modell-Konstruktion deckungsgleich sind; großgeschriebene
+  Schemes werden beim Sanitizing normalisiert statt abgelehnt, nicht
+  rettbare Hosts degradieren zu `base_url=null` statt eine
+  `ValidationError` zu werfen. `llm_profile_to_canonical` saniert
+  Legacy-`base_url` jetzt ebenfalls und kombiniert Degradationsgründe
+  secret-frei in `status_message`.
 
 ### Changed (infra/ci — 2026-07-05)
 

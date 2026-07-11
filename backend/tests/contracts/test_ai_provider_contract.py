@@ -387,3 +387,79 @@ def test_llm_profile_with_legacy_key_without_ref_is_explicitly_degraded() -> Non
     assert connection.status == "degraded"
     assert connection.status_message == "Legacy API key has no resolved secret_ref"
     assert connection.secret_ref is None
+
+
+def test_descriptor_adapter_normalizes_uppercase_scheme_instead_of_raising() -> None:
+    legacy = ProviderDescriptor(
+        id="legacy-upper",
+        label="Legacy Upper",
+        type="openai_compatible",
+        base_url="HTTPS://Example.test/v1",
+    )
+
+    canonical = provider_connection_from_descriptor(legacy, now=NOW)
+
+    assert canonical.base_url == "https://example.test/v1"
+    assert canonical.status == "degraded"
+    assert canonical.status_message == "Legacy base URL requires reconfiguration"
+
+
+def test_descriptor_adapter_degrades_unsalvageable_host_instead_of_raising() -> None:
+    legacy = ProviderDescriptor(
+        id="legacy-underscore",
+        label="Legacy Underscore",
+        type="openai_compatible",
+        base_url="http://legacy_host.example:11434/v1",
+    )
+
+    canonical = provider_connection_from_descriptor(legacy, now=NOW)
+
+    assert canonical.base_url is None
+    assert canonical.status == "degraded"
+    assert canonical.status_message == "Legacy base URL requires reconfiguration"
+
+
+def test_llm_profile_adapter_sanitizes_unsafe_base_url_instead_of_raising() -> None:
+    legacy = LlmProfile(
+        id="profile-unsafe-url",
+        name="Unsafe URL",
+        provider="openai_compatible",
+        base_url="https://host.example/v1?key=fixture-token",
+        model_name="model-1",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    connection, _, _ = llm_profile_to_canonical(
+        legacy,
+        secret_ref="vault:profile-unsafe-url",
+    )
+
+    assert connection.base_url == "https://host.example/v1"
+    assert connection.status == "degraded"
+    assert connection.status_message == "Legacy base URL requires reconfiguration"
+    assert "fixture-token" not in str(connection.model_dump())
+
+
+def test_llm_profile_adapter_combines_secret_and_base_url_degradation() -> None:
+    legacy = LlmProfile(
+        id="profile-doubly-degraded",
+        name="Doubly degraded",
+        provider="openai",
+        base_url="https://user@host.example/v1",
+        model_name="gpt-4.1-mini",
+        api_key="fixture-token",
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    connection, _, _ = llm_profile_to_canonical(legacy)
+
+    assert connection.auth_mode == "api_key"
+    assert connection.status == "degraded"
+    assert connection.status_message == (
+        "Legacy API key has no resolved secret_ref; "
+        "Legacy base URL requires reconfiguration"
+    )
+    assert connection.base_url == "https://host.example/v1"
+    assert "fixture-token" not in str(connection.model_dump())

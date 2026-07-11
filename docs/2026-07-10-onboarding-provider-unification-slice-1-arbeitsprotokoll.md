@@ -94,3 +94,21 @@ non-blocking Follow-ups:
 - F3 (LOW–MEDIUM): Backslash-Host-Parser-Differential (`urlsplit` vs. WHATWG)
   kann im Legacy-Sanitizer den Host still umschreiben (SSRF-adjazent,
   degraded-Pfad, kein Secret-Leak).
+
+## Gemini-Findings und CI-Fix (2026-07-11, nach PR-Eröffnung)
+
+- CI-Fail `STATUS.md Drift (--check)`: manuell editierte Zeile in
+  `docs/STATUS.md` wich vom Generator-Output ab; behoben durch
+  `scripts/sync-status.sh`-Regeneration (2938 collected, 145 Test-Files
+  per `find`-Zählweise).
+- Drei Gemini-Inline-Findings, deckungsgleich mit Review-Finding F2
+  (gemeinsame Wurzel: Validator und Feld-Pattern nicht deckungsgleich,
+  `llm_profile_to_canonical` ohne Sanitizer), per TDD behoben
+  (4 neue RED→GREEN-Tests, Zieltest jetzt 43):
+  `_validate_public_base_url` prüft das Pattern selbst; der Sanitizer
+  normalisiert dadurch Scheme-/Host-Großschreibung und degradiert nicht
+  rettbare Hosts zu `None` statt zu werfen; `llm_profile_to_canonical`
+  saniert `base_url` und kombiniert Degradationsgründe secret-frei.
+  F2 ist damit geschlossen; F1 (Port-Range-Parity) und F3 bleiben als
+  Follow-ups offen. JSON-Schemas unverändert (Pattern identisch),
+  Zod-Spiegel unverändert (Regex war dort bereits aktiv).
