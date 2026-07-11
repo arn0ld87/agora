@@ -315,6 +315,8 @@ def create_app(config_class=Config):
         llm_bp,
         api_keys_bp,
         llm_profiles_bp,
+        user_profile_bp,
+        onboarding_bp,
     )
     from .utils.api_responses import install_api_error_handlers
     from .utils.auth import install_blueprint_guard, log_auth_mode
@@ -336,6 +338,8 @@ def create_app(config_class=Config):
         llm_bp,
         api_keys_bp,
         llm_profiles_bp,
+        user_profile_bp,
+        onboarding_bp,
     ):
         install_blueprint_guard(bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -349,6 +353,8 @@ def create_app(config_class=Config):
     app.register_blueprint(llm_bp, url_prefix='/api/llm')
     app.register_blueprint(api_keys_bp, url_prefix='/api/api-keys')
     app.register_blueprint(llm_profiles_bp, url_prefix='/api/settings/llm-profiles')
+    app.register_blueprint(user_profile_bp, url_prefix='/api/profile')
+    app.register_blueprint(onboarding_bp, url_prefix='/api/onboarding')
     if should_log_startup:
         log_auth_mode(app, logger)
 

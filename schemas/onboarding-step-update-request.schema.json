@@ -1,0 +1,43 @@
+{
+  "$id": "https://alexle135.de/schemas/onboarding-step-update-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Meldet einen abgeschlossenen Schritt; der Service berechnet den\nnaechsten offenen Schritt deterministisch aus ``ONBOARDING_STEP_ORDER``.",
+  "properties": {
+    "operating_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "local",
+            "hybrid",
+            "server"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operating Mode"
+    },
+    "step": {
+      "enum": [
+        "welcome",
+        "profile",
+        "providers",
+        "chat_model",
+        "embeddings",
+        "privacy",
+        "summary"
+      ],
+      "title": "Step",
+      "type": "string"
+    }
+  },
+  "required": [
+    "step"
+  ],
+  "title": "OnboardingStepUpdateRequest",
+  "type": "object"
+}

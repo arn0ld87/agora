@@ -17,11 +17,13 @@ const BASE_ROUTES: RouteRecordRaw[] = [
   { path: '/settings',               name: 'Settings',            redirect: '/settings/general' },
   { path: '/settings/general',       name: 'SettingsGeneral',     component: stub },
   { path: '/settings/integrations',  name: 'SettingsIntegrations',component: stub },
-  { path: '/settings/users-teams',   name: 'SettingsUsersTeams',  component: stub },
+  { path: '/settings/users-teams',   name: 'SettingsUsersTeams',  redirect: '/settings/profile' },
+  { path: '/settings/profile',       name: 'SettingsProfile',     component: stub },
   { path: '/settings/api-keys',      name: 'SettingsApiKeys',     component: stub },
   { path: '/settings/audit-logs',    name: 'SettingsAuditLogs',   component: stub },
   { path: '/settings/llm-providers', name: 'SettingsLlmProviders',component: stub },
   { path: '/settings/llm-routing',   name: 'SettingsLlmRouting',  component: stub },
+  { path: '/onboarding',             name: 'Onboarding',          component: stub },
 ]
 
 /**

@@ -1,157 +1,153 @@
-# Handover — Onboarding/Provider-Unification Slice 1
+# Handover — Onboarding/Provider-Unification Slice 2
 
 ## Stand
 
 - Datum: 2026-07-11
-- Worktree: `/private/tmp/agora-onboarding-provider-contracts`
-- Branch: `codex/onboarding-provider-contracts`
-- Arbeitsstand: unabhängig verifiziert, committet und als PR eröffnet
-  (Root, 2026-07-11)
-- Slice 1 ist implementiert und unabhängig verifiziert. Der finale
-  unabhängige Re-Review des `base_url`-Fixes ist abgeschlossen:
-  **MERGE-READY** mit drei non-blocking Follow-ups (F1–F3, siehe
-  Arbeitsprotokoll).
-- Provider-Detection-SSoT
-  `backend/app/llm/providers/registry.py::detect_provider` blieb unverändert.
+- Worktree: `/private/tmp/agora-onboarding-slice-2`
+- Branch: `feat/onboarding-user-profile` (Basis: `main` @ `df6a2b3`, Slice 1
+  gemergt via PR #683)
+- Slice: 2 — Benutzerprofil und resumierbares Onboarding-Grundgerüst
+- Arbeitsstand: implementiert, alle Gates grün, Commit/PR in Arbeit
+- context-mode: funktionsfähig (Batch-Analysen in dieser Session)
+- code-review-graph: CLI 2.3.6 via `uvx`; Haupt-Repo-Graph am 2026-07-11 auf
+  `main`-Stand `df6a2b3` neu gebaut. `detect-changes` lief im Worktree gegen
+  eine frisch migrierte (leere) DB und ist daher NICHT belastbar (Risk 0.00
+  bei 22 Dateien). Belastbarer Nachweis ist die volle grüne Testsuite;
+  Graph-Refresh nach Merge auf `main` bleibt Follow-up.
 
-## Implementierter Vertrag
+## Implementiert
 
-- `ProviderConnection`, `AiModel` und `AiRoute` sind kanonische
-  Pydantic-v2-Verträge mit `extra="forbid"` sowie generierten JSON-Schemas und
-  strikten Zod-Spiegeln.
-- Secrets bleiben außerhalb der kanonischen Verträge; ausschließlich
-  `secret_ref` wird geführt.
-- Modellfähigkeiten sind Tri-State (`supported|unsupported|unknown`).
-  `unknown` gilt niemals als unterstützt.
-- `provider_options` ist eine geschlossene fachliche Allowlist. Aktuell sind
-  ausschließlich die tatsächlich verwendeten Routing-Optionen `base_url`,
-  `num_ctx` und die interne Legacy-Roundtrip-Struktur erlaubt. Credential-Keys
-  werden dadurch sowohl top-level als auch verschachtelt strukturell blockiert.
-- Gemeinsame Fixtures prüfen Pydantic, generiertes JSON-Schema und Zod auf
-  gültige und ungültige Grenzfälle.
+- **Layer 0**: `backend/app/contracts/user_profile_contract.py` —
+  `UserProfile`, `UserProfileUpdateRequest`, `OnboardingState`
+  (Status `not_started|in_progress|dismissed|completed`),
+  `OnboardingStepUpdateRequest`, `OnboardingRequirements`,
+  `OnboardingStatusResponse`; Konstanten `ONBOARDING_STEP_ORDER`,
+  `REQUIRED_ONBOARDING_STEPS`, `ALLOWED_AVATAR_MIME_TYPES`,
+  `MAX_AVATAR_BYTES`. Avatar-Referenzen per Pattern gegen Path-Traversal;
+  IANA-Zeitzonen-Validierung; `extra="forbid"`. 5 neue JSON-Schemas +
+  strikter Zod-Spiegel `frontend/src/contracts/userProfileContract.ts`.
+- **Persistenz**: `user_profile_store.py` und `onboarding_state_store.py`
+  (Muster `workspace_routing_store`: AGORA_DATA_DIR, flock, atomarer Write,
+  0600, defensives Lesen; Singletons mit Test-Reset). Benutzerprofil und
+  KI-Presets bleiben getrennte Schlüsselräume (ADR-0008, Migrationsplan).
+- **API**: `user_profile_bp` (`GET/PUT /api/profile`,
+  `POST/GET/DELETE /api/profile/avatar`) und `onboarding_bp`
+  (`GET /api/onboarding`, `PUT /step`, `POST /complete|dismiss|reopen`)
+  hinter dem Standard-Blueprint-Guard. Avatar-Upload prüft MIME-Allowlist
+  UND Magic-Bytes (PNG/JPEG/WebP; SVG strukturell abgelehnt), 2-MB-Limit,
+  serverseitig generierte Dateinamen. 409 `onboarding_incomplete` trägt
+  `missing` top-level im Envelope (per API-Test fixiert).
+- **Completion-Semantik (ADR-0008)**: serverseitig `profile_valid` +
+  `chat_model_configured` + `embedding_configured`; bewusst
+  Konfigurations- statt Erreichbarkeitscheck — Live-Discovery kommt in
+  Slice 3. `dismissed` sperrt niemanden aus (Bestandsinstallationen können
+  den Wizard wegklicken und über Settings wieder öffnen).
+- **Frontend**: Pinia-Store `userProfile` (ensureLoaded mit In-Flight-Dedupe,
+  Fail-open bei API-Fehlern), Router-Guard `onboardingGuard`
+  (Redirect nur bei `onboarding_required`; jeder Fehlerpfad lässt durch),
+  Wizard `/onboarding` (Betriebsmodus, Profilformular, ehrliche
+  Status-Schritte mit Settings-Verweis, Zusammenfassung, Später-einrichten),
+  `/settings/profile` mit gemeinsamem `ProfileForm`, Avatar als
+  authentifizierter Blob-Fetch + Object-URL (funktioniert im
+  AGORA_AUTH_TOKEN-Modus ohne Ticket-Nacharbeit), Sidebar „Users & Teams"
+  → „Profil", `/settings/users-teams` → Redirect. i18n-Namespaces
+  `onboarding`/`profileSettings` in de.json und en.json (Key-Parität geprüft).
 
-## Security-Remediations und Legacy-Adapter
+## Frisch verifiziert (2026-07-11, unabhängig vom Root)
 
-- Ein Legacy-`api_key` ohne aufgelöste Referenz erzeugt nicht mehr
-  `auth_mode="none"`, sondern explizit `auth_mode="api_key"`, Status
-  `degraded` und eine secret-freie Fehlstatusmeldung.
-- Der Rückadapter zu `ProviderDescriptor` verlangt das Fallback-Modell-Sidecar
-  zwingend; stiller Verlust durch ein implizites leeres Array ist unmöglich.
-- `StageLLMRoute`-Roundtrips erhalten einen kollidierenden reservierten Key mit
-  Wert `None` sowie `reasoning_effort=None` verlustfrei.
-- Kanonische `base_url` ist eine öffentliche HTTP(S)-Basis-URL: Scheme
-  `http`/`https` und Host sind Pflicht; Port und Pfad sind erlaubt. Userinfo,
-  Query und Fragment sind vollständig verboten.
-- Der `ProviderDescriptor`-Legacy-Adapter entfernt Userinfo, Query und Fragment
-  aus einer unsicheren Legacy-URL, übernimmt keinen privaten Anteil und
-  markiert die Verbindung mit einer secret-freien Reconfigure-Meldung als
-  `degraded`.
-- Der `StageLLMRoute`-Adapter lehnt eine unsichere `base_url` explizit ab.
+- Contracts importierbar; Schema-Dump idempotent (5 neue Schemas)
+- Backend-Contract-Suite: 284 bestanden
+- Voller Backend-Lauf: 3012 bestanden, 9 übersprungen, 7 deselektiert,
+  Exit 0 (Baseline Slice 1: 2920/9/7 → +92)
+- Ruff: grün; mypy: 211 Dateien, 0 Fehler
+- Frontend: 152 Testdateien / 1202 Tests grün (Baseline: 146/1150);
+  `bun run check` (Lint + Tests + Build) Exit 0; vue-tsc 0 Fehler
+- Vitest-Teardown-Blocker aus Phase 0 ist durch PR #678 behoben
+  (vor Slice-Beginn unabhängig mit Exit 0 verifiziert)
+- Gate 7/8 (verify-after-subagent): einziger `EXPORT_SCHEMA_VERSION`-Treffer
+  ist ein Bestands-Docstring identisch auf `main`; `report_agent.py` ist
+  inzwischen ein Paket — Muster nicht mehr vorhanden
 
-## Frisch verifiziert nach dem letzten `base_url`-Fix
+## Entscheidungen
 
-Vom Implementer:
+- `chat_model_available` → `chat_model_configured` umbenannt: ohne
+  Live-Discovery wäre „available" gelogen.
+- Onboarding-Schritte providers/chat_model/embeddings sind in Slice 2
+  ehrliche Status-Schritte (realer requirements-Zustand + Settings-Link),
+  keine Attrappen; geführte Einrichtung folgt in Slice 3/4.
+- Avatar-Anzeige über authentifizierten Blob-Fetch statt signierter
+  Tickets — kein neues `?token=`, keine Backend-Ticket-Nacharbeit nötig.
+- Kein Contract-Feld `avatar_ref` im Update-Request: Avatar wird
+  ausschließlich über die Avatar-Endpunkte verändert.
 
-- Backend-Zieltest: 39 bestanden
-- Frontend-Zieltest: 17 bestanden
-- Backend-Contract-Suite: 250 bestanden
-- mypy: 206 Dateien, 0 Fehler
-- Ruff: grün
-- Schema-Dump: idempotent
-- Frontend standalone: 146/146 Testdateien, 1150/1150 Tests
-- Frontend Lint, Typecheck und Build standalone: grün
-- Pytest-Inventar: 2934 total, 2927 selektiert, 7 deselektiert
+## Noch offen
 
-Vom Root unabhängig erneut bestätigt:
+- Codegraph-Delta gegen den Haupt-Repo-Graph nach Merge (s. o.).
+- Statusschritte verlinken einheitlich auf `SettingsLlmProviders`;
+  Differenzierung chat_model/embeddings sobald Slice 3/4 eigene Routen bringt.
+- Kein dedizierter Spec für `SettingsProfileView.vue` (Verhalten über
+  ProfileForm- und Store-Specs abgedeckt).
+- Playwright-E2E für Onboarding-Resume (Testplan) folgt, sobald die
+  E2E-Suite die neuen Routen aufnimmt (kein E2E-Bestand für Settings-Views).
 
-- Imports
-- Schema-Idempotenz
-- Backend-Zieltest: 39 bestanden
-- Backend-Contract-Suite: 250 bestanden
-- Ruff
-- mypy: 206 Dateien, 0 Fehler
+## Geänderte Verträge und Migrationen
 
-Vom Root am 2026-07-11 zusätzlich unabhängig bestätigt:
-
-- vollständiger Backend-Testlauf: 2920 bestanden, 9 übersprungen,
-  7 deselektiert, Exit 0
-- Frontend-Zieltest (17), Frontend Full (146 Testdateien / 1150 Tests),
-  Lint, Typecheck und Build — alle grün
-- Security-Probes: Credential-Keys in `provider_options` blockiert,
-  Userinfo-`base_url` abgelehnt, keine Secret-Muster im Diff
-
-## Bekannte Baselines und offene Punkte
-
-- Der letzte vollständige Backend-Lauf vor dem `base_url`-Fix hatte
-  2900 bestandene, 9 übersprungene und 7 deselektierte Tests; der
-  unabhängige Lauf nach dem Fix 2920/9/7 (Exit 0).
-- `npm run check` hatte vor dem `base_url`-Fix fachlich bestandene
-  Coverage-Tests, endete aber wegen eines vorbestehenden Vitest-
-  `EnvironmentTeardownError` aus `CompareView.spec.ts` mit Exit 1. Standalone
-  Full Tests, Lint, Typecheck und Build sind grün. Den Teardown nicht in diesem
-  Slice beheben.
-- Der vorherige Reviewer fand den `base_url`-Secret-Pfad. Der Fix ist
-  implementiert; der finale unabhängige Re-Review (2026-07-11) ergab
-  **MERGE-READY** mit drei non-blocking Follow-ups F1–F3 (Port-Parity-Drift
-  Zod/Pydantic, nicht-totaler Legacy-Adapter, Backslash-Host-Differential) —
-  Details im Arbeitsprotokoll.
-- Codegraph vor dem `base_url`-Fix, letzter Full-Stand: 945 Dateien,
-  8965 Knoten, 75474 Kanten und 624 Flows. Der damalige Impact war hoch:
-  138 zusätzliche Dateien, 1 Schema-Dump-Flow und 0 Testlücken. Der Refresh
-  nach dem `base_url`-Fix war in der Abschluss-Session nicht ausführbar
-  (CRG nicht verbunden) und bleibt Follow-up.
-- In einer früheren Prozessdiagnose wurde ein Credential eines fremden
-  Prozesses in einer Tool-Ausgabe sichtbar. Vorsorgliche Rotation ist separat
-  erforderlich; der Wert darf nicht erneut ausgegeben, dokumentiert oder
-  anderweitig reproduziert werden.
+- Nur additive Verträge; keine bestehenden Verträge geändert.
+- Neue Stores legen ihre Dateien lazy an; keine Migration bestehender Daten.
+- Rollback: Blueprints deregistrieren + neue Module entfernen; die
+  JSON-Dateien unter `AGORA_DATA_DIR` sind unabhängig und können bleiben.
 
 ## Nächste exakt ausführbare Schritte
 
-1. `git diff` und `git status` prüfen; Security-Probes für Credential-Keys und
-   öffentliche `base_url` unabhängig wiederholen.
-2. Vollständigen Backend-Testlauf ausführen und exakte Passed/Skipped/
-   Deselected-Zahlen festhalten.
-3. Frontend-Zieltest, Full Tests, Lint, Typecheck und Build unabhängig
-   wiederholen. Den bekannten Composite-Check-Teardown separat dokumentieren,
-   nicht in diesem Slice reparieren.
-4. Codegraph full oder inkrementell aktualisieren und Delta, Impact, Flow sowie
-   Testlücken prüfen.
-5. Reviewer-Re-Review des `base_url`-Fixes durchführen.
-6. Doku-Zahlen gegen die frischen unabhängigen Läufe prüfen und gegebenenfalls
-   korrigieren.
-7. Nur die konkreten Slice-Dateien stagen, atomaren Commit erstellen, Branch
-   pushen und PR eröffnen. Nicht direkt auf `main` mergen.
+1. PR-Review (inkl. Gemini-Findings) sichten; erst danach mergen.
+2. Nach Merge: `uvx code-review-graph build` auf `main` + Delta prüfen.
+3. Slice 3 (Provider-Verbindungen und Discovery) gemäß
+   `04-implementation-plan.md` beginnen; dabei die Onboarding-Schritte
+   providers/chat_model an die echte Discovery anbinden.
 
 ## Relevante Dateien
 
-- `backend/app/contracts/ai_provider_contract.py`
-- `backend/app/contracts/__init__.py`
-- `backend/app/contracts/dump_schemas.py`
-- `backend/tests/contracts/test_ai_provider_contract.py`
-- `frontend/src/contracts/aiProviderContract.ts`
-- `frontend/src/contracts/__tests__/aiProviderContract.spec.ts`
-- `schemas/ai-provider-connection.schema.json`
-- `schemas/ai-model.schema.json`
-- `schemas/ai-route.schema.json`
-- `schemas/fixtures/ai-provider-contract-fixtures.json`
-- `CHANGELOG.md`
-- `PLAN.md`
-- `docs/STATUS.md`
-- `docs/2026-07-10-onboarding-provider-unification-slice-1-arbeitsprotokoll.md`
+- `backend/app/contracts/user_profile_contract.py`
+- `backend/app/services/user_profile_store.py`
+- `backend/app/services/onboarding_state_store.py`
+- `backend/app/api/user_profile.py`, `backend/app/api/onboarding.py`
+- `backend/tests/contracts/test_user_profile_contract.py`
+- `backend/tests/services/test_user_profile_store.py`,
+  `backend/tests/services/test_onboarding_state_store.py`
+- `backend/tests/api/test_user_profile_api.py`,
+  `backend/tests/api/test_onboarding_api.py`
+- `frontend/src/contracts/userProfileContract.ts`
+- `frontend/src/api/profile.ts`, `frontend/src/store/userProfile.ts`
+- `frontend/src/router/onboardingGuard.ts`
+- `frontend/src/views/onboarding/OnboardingView.vue`
+- `frontend/src/views/Settings/SettingsProfileView.vue`
+- `frontend/src/components/v4/forms/ProfileForm.vue`
+- `schemas/user-profile*.json`, `schemas/onboarding-*.json`
+
+## Befehle zur Verifikation
+
+```bash
+cd backend && uv run pytest tests/contracts/ -q
+cd backend && uv run pytest tests/services/test_user_profile_store.py \
+  tests/services/test_onboarding_state_store.py \
+  tests/api/test_user_profile_api.py tests/api/test_onboarding_api.py -q
+cd backend && uv run python -m app.contracts.dump_schemas --check
+cd backend && uv run ruff check . && uv run mypy app
+cd frontend && bun run check
+```
 
 ## Doc-Impact
 
-- `README.md`: geprüft, nicht betroffen — noch kein neues Anwender- oder
-  UI-Verhalten.
-- `AGENTS.md`: geprüft, nicht betroffen — Contract-, Schema-, TDD- und
-  Security-Regeln decken den Slice bereits ab.
-- `CLAUDE.md`: geprüft, nicht betroffen — Detection-SSoT und Schema-Befehle
-  bleiben unverändert.
-- `PLAN.md`: aktualisiert — Slice implementiert, Root-Re-Review offen.
-- `docs/STATUS.md`: aktualisiert — aktuelles Pytest-Inventar und Frontend-
-  Testdateien.
-- `CHANGELOG.md`: aktualisiert — kanonische Verträge, öffentliche `base_url`
-  und Legacy-Sanitizing unter `[Unreleased]`.
-- Epic-`HANDOVER.md`: aktualisiert — dieser operative Übergabestand.
-- `docs/tooling/agent-tools.md`: geprüft, nicht betroffen — keine Tool-Version,
-  Installation oder Konfiguration geändert.
+- `README.md`: geprüft, nicht betroffen — Setup/Betrieb unverändert; das
+  Onboarding erklärt sich in der UI selbst (Anwenderdoku folgt mit dem
+  Epic-Abschluss, wenn der Wizard vollständig ist).
+- `AGENTS.md`: geprüft, nicht betroffen — Contract-/TDD-/Security-Regeln
+  decken den Slice ab; keine neuen Befehle oder Tools.
+- `CLAUDE.md`: geprüft, nicht betroffen.
+- `PLAN.md`: aktualisiert — Slice-Status, Baseline-Absatz, Fußzeile.
+- `docs/STATUS.md`: aktualisiert — via `scripts/sync-status.sh` regeneriert.
+- `CHANGELOG.md`: aktualisiert — Added-Block profile/onboarding unter
+  `[Unreleased]`.
+- Epic-`HANDOVER.md`: aktualisiert — dieses Dokument.
+- `docs/tooling/agent-tools.md`: geprüft, nicht betroffen — keine
+  Tool-Version oder -Konfiguration geändert.

@@ -52,6 +52,13 @@ from app.contracts.llm_request import (
     NormalizedLlmError,
 )
 from app.contracts.ai_provider_contract import AiModel, AiRoute, ProviderConnection
+from app.contracts.user_profile_contract import (
+    OnboardingState,
+    OnboardingStatusResponse,
+    OnboardingStepUpdateRequest,
+    UserProfile,
+    UserProfileUpdateRequest,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -91,6 +98,11 @@ CONTRACTS: dict[str, type] = {
     "ai-provider-connection.schema.json": ProviderConnection,
     "ai-model.schema.json": AiModel,
     "ai-route.schema.json": AiRoute,
+    "user-profile.schema.json": UserProfile,
+    "user-profile-update-request.schema.json": UserProfileUpdateRequest,
+    "onboarding-state.schema.json": OnboardingState,
+    "onboarding-step-update-request.schema.json": OnboardingStepUpdateRequest,
+    "onboarding-status-response.schema.json": OnboardingStatusResponse,
 }
 
 
