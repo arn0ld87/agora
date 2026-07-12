@@ -107,8 +107,13 @@ def upsert_provider_connection(connection_id: str):
         return _invalid_connection_request()
     try:
         body = ProviderConnectionUpsertRequest.model_validate(payload)
-    except ValidationError:
-        return _invalid_connection_request()
+    except ValidationError as exc:
+        return json_error(
+            "Invalid provider connection request",
+            status=400,
+            code="invalid_request",
+            extra={"errors": exc.errors(include_url=False)},
+        )
     if connection_id != body.provider_kind:
         return json_error(
             "Connection ID must match provider kind", status=400, code="invalid_connection_id"
