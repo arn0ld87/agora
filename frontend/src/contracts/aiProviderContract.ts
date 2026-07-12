@@ -35,6 +35,8 @@ const ProviderKindSchema = z.enum([
   'custom',
   'ollama_cloud',
   'openai_compatible',
+  'minimax',
+  'opencode_go',
   'github_copilot',
   'cloud',
   'unknown',
@@ -62,6 +64,28 @@ export const PublicBaseUrlSchema = z.string().regex(PUBLIC_BASE_URL_PATTERN).sup
   }
 })
 
+export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) => {
+  try {
+    const parsed = new URL(value)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    const isIpv4Loopback = /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      && hostname.split('.').every((octet) => Number(octet) <= 255)
+    if (
+      !['http:', 'https:'].includes(parsed.protocol)
+      || !parsed.hostname
+      || parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || !(['localhost', '::1'].includes(hostname) || isIpv4Loopback)
+    ) {
+      context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+    }
+  } catch {
+    context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+  }
+})
+
 export const ProviderConnectionSchema = z.object({
   id: z.string().min(1),
   provider_kind: ProviderKindSchema,
@@ -79,6 +103,29 @@ export const ProviderConnectionSchema = z.object({
   last_tested_at: NullableDateTimeSchema,
 }).strict()
 export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
+
+export const ProviderConnectionUpsertRequestSchema = z.object({
+  display_name: z.string().min(1),
+  provider_kind: ProviderKindSchema,
+  base_url: z.string().nullable().default(null),
+  enabled: z.boolean().default(true),
+  api_key: z.string().nullable().default(null),
+}).strict().superRefine((value, context) => {
+  if (value.base_url === null) return
+  const baseUrlSchema = value.provider_kind === 'ollama'
+    ? LocalOllamaBaseUrlSchema
+    : PublicBaseUrlSchema
+  const result = baseUrlSchema.safeParse(value.base_url)
+  if (!result.success) {
+    context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
+  }
+})
+export type ProviderConnectionUpsertRequest = z.infer<typeof ProviderConnectionUpsertRequestSchema>
+
+export const ProviderConnectionResponseSchema = z.object({
+  connection: ProviderConnectionSchema,
+}).strict()
+export type ProviderConnectionResponse = z.infer<typeof ProviderConnectionResponseSchema>
 
 export const AiModelSchema = z.object({
   provider_connection_id: z.string().min(1),

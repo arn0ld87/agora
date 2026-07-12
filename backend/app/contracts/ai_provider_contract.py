@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from ipaddress import ip_address
 from typing import Annotated, Literal
 from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    TypeAdapter,
+    model_validator,
+)
 from typing_extensions import TypedDict
 
 from .llm_profile_contract import LlmProfile
@@ -65,6 +74,32 @@ PublicBaseUrl = Annotated[
     Field(pattern=_PUBLIC_BASE_URL_PATTERN),
     AfterValidator(_validate_public_base_url),
 ]
+
+
+def _validate_local_ollama_base_url(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama") from exc
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
+    try:
+        is_loopback = parsed.hostname == "localhost" or ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        is_loopback = False
+    if not is_loopback:
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
+    return value
+
+
+LocalOllamaBaseUrl = Annotated[str, AfterValidator(_validate_local_ollama_base_url)]
 
 
 class LegacyStageRouteOptions(TypedDict, closed=True):  # type: ignore[call-arg]  # mypy lacks PEP 728
@@ -127,6 +162,36 @@ class ProviderConnection(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     last_tested_at: datetime | None = None
+
+
+class ProviderConnectionUpsertRequest(BaseModel):
+    """Lifecycle input; API keys are never part of public connection metadata."""
+
+    model_config = _STRICT
+
+    display_name: str = Field(min_length=1)
+    provider_kind: ProviderType
+    base_url: str | None = None
+    enabled: bool = True
+    api_key: SecretStr | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def validate_base_url_for_provider(self) -> ProviderConnectionUpsertRequest:
+        if self.base_url is None:
+            return self
+        if self.provider_kind == "ollama":
+            _validate_local_ollama_base_url(self.base_url)
+        else:
+            _validate_public_base_url(self.base_url)
+        return self
+
+
+class ProviderConnectionResponse(BaseModel):
+    """Public lifecycle response with no secret-bearing fields."""
+
+    model_config = _STRICT
+
+    connection: ProviderConnection
 
 
 class AiModel(BaseModel):

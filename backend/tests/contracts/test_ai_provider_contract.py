@@ -14,6 +14,8 @@ from app.contracts.ai_provider_contract import (
     AiRoute,
     ModelCapabilities,
     ProviderConnection,
+    ProviderConnectionResponse,
+    ProviderConnectionUpsertRequest,
     ai_model_from_model_entry,
     ai_route_from_stage_route,
     llm_profile_from_canonical,
@@ -51,6 +53,70 @@ def _connection_data(base_url: str) -> dict:
         "auth_mode": "none",
         "base_url": base_url,
     }
+
+
+@pytest.mark.parametrize("provider_kind", ["minimax", "opencode_go"])
+def test_provider_connection_upsert_request_accepts_new_api_key_providers(
+    provider_kind: str,
+) -> None:
+    request = ProviderConnectionUpsertRequest(
+        display_name="Cloud provider",
+        provider_kind=provider_kind,
+        base_url="https://api.example.test/v1",
+    )
+
+    assert request.provider_kind == provider_kind
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["http://127.0.0.1:11434", "http://[::1]:11434/v1", "http://localhost:11434"],
+)
+def test_provider_connection_upsert_request_accepts_only_loopback_ollama_urls(
+    base_url: str,
+) -> None:
+    request = ProviderConnectionUpsertRequest(
+        display_name="Ollama lokal",
+        provider_kind="ollama",
+        base_url=base_url,
+    )
+
+    assert request.base_url == base_url
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    ["https://ollama.example.test", "http://192.168.1.10:11434", "http://0.0.0.0:11434"],
+)
+def test_provider_connection_upsert_request_rejects_non_loopback_ollama_urls(
+    base_url: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        ProviderConnectionUpsertRequest(
+            display_name="Ollama lokal",
+            provider_kind="ollama",
+            base_url=base_url,
+        )
+
+
+def test_provider_connection_upsert_request_never_serializes_api_key() -> None:
+    request = ProviderConnectionUpsertRequest(
+        display_name="OpenAI",
+        provider_kind="openai",
+        api_key="test-only-api-key",
+    )
+    response = ProviderConnectionResponse(
+        connection=ProviderConnection(
+            id="openai-main",
+            provider_kind="openai",
+            display_name="OpenAI",
+            transport="http",
+            auth_mode="api_key",
+        )
+    )
+
+    assert "api_key" not in request.model_dump(mode="json")
+    assert "test-only-api-key" not in str(response.model_dump(mode="json"))
 
 
 def test_canonical_contracts_are_strict_and_secret_free() -> None:
