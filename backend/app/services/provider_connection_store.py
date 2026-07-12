@@ -4,9 +4,12 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
+
+import fcntl
 
 from app.contracts.ai_provider_contract import (
     ProviderConnection,
@@ -63,7 +66,7 @@ class ProviderConnectionStore:
             request.api_key.get_secret_value() if request.api_key is not None else None
         )
 
-        with self._lock:
+        with self._lock, self._process_lock():
             raw = self._read_raw()
             existing_payload = raw["connections"].get(connection_id)
             existing = (
@@ -96,7 +99,7 @@ class ProviderConnectionStore:
         return connection
 
     def delete_connection(self, connection_id: str) -> bool:
-        with self._lock:
+        with self._lock, self._process_lock():
             raw = self._read_raw()
             payload = raw["connections"].get(connection_id)
             if payload is None:
@@ -117,7 +120,7 @@ class ProviderConnectionStore:
         status_message: str | None,
         tested_at: datetime,
     ) -> ProviderConnection:
-        with self._lock:
+        with self._lock, self._process_lock():
             raw = self._read_raw()
             payload = raw["connections"].get(connection_id)
             if payload is None:
@@ -139,7 +142,7 @@ class ProviderConnectionStore:
             return {"version": 1, "connections": {}}
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-            if not isinstance(raw.get("connections"), dict):
+            if not isinstance(raw, dict) or not isinstance(raw.get("connections"), dict):
                 raise ValueError("connections muss ein Objekt sein")
             return raw
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -147,30 +150,38 @@ class ProviderConnectionStore:
                 f"Konnte Provider-Connection-Store nicht lesen ({self._path}): {exc}"
             ) from exc
 
-    def _write_raw(self, raw: dict) -> None:
-        import fcntl
-
+    @contextmanager
+    def _process_lock(self) -> Iterator[None]:
         self._data_dir.mkdir(parents=True, exist_ok=True)
         lock_path = self._path.with_suffix(".lock")
-        tmp_path = self._path.with_suffix(".tmp")
-        payload = json.dumps(raw, indent=2, sort_keys=True).encode("utf-8")
         with open(lock_path, "w", encoding="utf-8") as lock_fh:
             fcntl.flock(lock_fh, fcntl.LOCK_EX)
             try:
-                fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                try:
-                    os.write(fd, payload)
-                finally:
-                    os.close(fd)
-                os.replace(tmp_path, self._path)
-                os.chmod(self._path, 0o600)
-            except OSError as exc:
-                try:
-                    tmp_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-                raise RuntimeError(
-                    f"Konnte Provider-Connection-Store nicht schreiben ({self._path}): {exc}"
-                ) from exc
+                yield
             finally:
                 fcntl.flock(lock_fh, fcntl.LOCK_UN)
+
+    def _write_raw(self, raw: dict) -> None:
+        tmp_path = self._path.with_suffix(".tmp")
+        payload = json.dumps(raw, indent=2, sort_keys=True).encode("utf-8")
+        try:
+            fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                offset = 0
+                while offset < len(payload):
+                    written = os.write(fd, payload[offset:])
+                    if written <= 0:
+                        raise OSError("Unvollständiger Write in temporäre Store-Datei")
+                    offset += written
+            finally:
+                os.close(fd)
+            os.replace(tmp_path, self._path)
+            os.chmod(self._path, 0o600)
+        except OSError as exc:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RuntimeError(
+                f"Konnte Provider-Connection-Store nicht schreiben ({self._path}): {exc}"
+            ) from exc
