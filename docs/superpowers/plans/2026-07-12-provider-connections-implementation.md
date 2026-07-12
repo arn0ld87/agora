@@ -98,7 +98,14 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
   def list_connections(self) -> list[ProviderConnection]: ...
   def upsert_connection(self, request: ProviderConnectionUpsertRequest) -> ProviderConnection: ...
   def delete_connection(self, connection_id: str) -> bool: ...
-  def update_probe(self, connection_id: str, result: ProviderProbeResult) -> ProviderConnection: ...
+  def update_probe(
+      self,
+      connection_id: str,
+      *,
+      status: ProviderStatus,
+      status_message: str | None,
+      tested_at: datetime,
+  ) -> ProviderConnection: ...
   ```
 
 - [ ] Ausführen: `cd backend && uv run pytest tests/services/test_provider_connection_store.py tests/services/test_llm_provider_secrets_store.py -q`.
@@ -117,7 +124,9 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
   MiniMax, Ollama Cloud, OpenCode Go, OpenAI-kompatibel und lokales Ollama
   schreiben. Jeder Test liefert entweder Modelle oder einen normalisierten
   `ProviderProbeResult`, nie einen rohen Transportfehler.
-- [ ] Das Adapter-Protokoll und Resultat definieren:
+- [ ] Das Adapter-Protokoll und Resultat definieren; Task 3 mappt sein Resultat
+  auf die primitive `ProviderConnectionStore.update_probe(...)`-Signatur aus
+  Task 2:
 
   ```python
   @dataclass(frozen=True)
