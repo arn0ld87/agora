@@ -1,0 +1,140 @@
+{
+  "$id": "https://alexle135.de/schemas/user-profile-update-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Partielles Update; ``avatar_ref`` ist bewusst ausgeschlossen und wird\nausschliesslich ueber die Avatar-Endpunkte veraendert.",
+  "properties": {
+    "display_name": {
+      "anyOf": [
+        {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Display Name"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "enum": [
+            "de",
+            "en"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "organisation": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Organisation"
+    },
+    "privacy_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "standard",
+            "strict"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Privacy Mode"
+    },
+    "report_language": {
+      "anyOf": [
+        {
+          "enum": [
+            "de",
+            "en"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Language"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "theme": {
+      "anyOf": [
+        {
+          "enum": [
+            "system",
+            "light",
+            "dark"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Theme"
+    },
+    "timezone": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timezone"
+    },
+    "username": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Username"
+    }
+  },
+  "title": "UserProfileUpdateRequest",
+  "type": "object"
+}

@@ -1,0 +1,78 @@
+{
+  "$id": "https://alexle135.de/schemas/onboarding-state.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Resumierbarer Wizard-Zustand; wird nach jedem Schritt persistiert.",
+  "properties": {
+    "completed_steps": {
+      "items": {
+        "enum": [
+          "welcome",
+          "profile",
+          "providers",
+          "chat_model",
+          "embeddings",
+          "privacy",
+          "summary"
+        ],
+        "type": "string"
+      },
+      "title": "Completed Steps",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "current_step": {
+      "default": "welcome",
+      "enum": [
+        "welcome",
+        "profile",
+        "providers",
+        "chat_model",
+        "embeddings",
+        "privacy",
+        "summary"
+      ],
+      "title": "Current Step",
+      "type": "string"
+    },
+    "operating_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "local",
+            "hybrid",
+            "server"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operating Mode"
+    },
+    "status": {
+      "default": "not_started",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "dismissed",
+        "completed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "title": "OnboardingState",
+  "type": "object"
+}

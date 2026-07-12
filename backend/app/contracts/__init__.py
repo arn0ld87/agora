@@ -95,6 +95,21 @@ from .ai_provider_contract import (
     ModelSource,
     ProviderConnection,
 )
+from .user_profile_contract import (
+    ALLOWED_AVATAR_MIME_TYPES,
+    MAX_AVATAR_BYTES,
+    ONBOARDING_STEP_ORDER,
+    REQUIRED_ONBOARDING_STEPS,
+    OnboardingRequirements,
+    OnboardingState,
+    OnboardingStatus,
+    OnboardingStatusResponse,
+    OnboardingStepId,
+    OnboardingStepUpdateRequest,
+    OperatingMode,
+    UserProfile,
+    UserProfileUpdateRequest,
+)
 from .report_v3 import (
     Claim,
     ChangeRecommendation,
@@ -184,6 +199,20 @@ __all__ = [
     "ModelCapabilities",
     "ModelSource",
     "ProviderConnection",
+    # UserProfile + Onboarding (Slice 2)
+    "ALLOWED_AVATAR_MIME_TYPES",
+    "MAX_AVATAR_BYTES",
+    "ONBOARDING_STEP_ORDER",
+    "REQUIRED_ONBOARDING_STEPS",
+    "OnboardingRequirements",
+    "OnboardingState",
+    "OnboardingStatus",
+    "OnboardingStatusResponse",
+    "OnboardingStepId",
+    "OnboardingStepUpdateRequest",
+    "OperatingMode",
+    "UserProfile",
+    "UserProfileUpdateRequest",
     # ReportV3 — 11 Pflichtabschnitt-DTOs
     "Claim",
     "ChangeRecommendation",

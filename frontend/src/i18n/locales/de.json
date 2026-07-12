@@ -22,7 +22,9 @@
     "SettingsIntegrations": "Integrationen",
     "SettingsApiKeys": "API-Schlüssel",
     "SettingsUsersTeams": "Nutzer & Teams",
-    "SettingsAuditLogs": "Audit-Logs"
+    "SettingsAuditLogs": "Audit-Logs",
+    "SettingsProfile": "Profil",
+    "Onboarding": "Einrichtung"
   },
   "common": {
     "start": "Starten",
@@ -733,7 +735,8 @@
       "apiKeys": "API-Schlüssel",
       "llmProviders": "LLM-Anbieter",
       "llmRouting": "LLM-Routing",
-      "auditLogs": "Audit-Logs"
+      "auditLogs": "Audit-Logs",
+      "profile": "Profil"
     },
     "footer": {
       "collapse": "Einklappen"
@@ -1294,5 +1297,137 @@
     "loading": "Profile laden…",
     "error": "Profile konnten nicht geladen werden.",
     "defaultSuffix": "default"
+  },
+  "onboarding": {
+    "wizard": {
+      "title": "Einrichtung",
+      "stepIndicator": "Schritt {current} von {total}",
+      "laterBtn": "Später einrichten",
+      "backBtn": "Zurück",
+      "nextBtn": "Weiter",
+      "finishBtn": "Einrichtung abschließen",
+      "dismissConfirm": "Einrichtung später fortsetzen? Du kannst sie jederzeit über Einstellungen → Profil erneut öffnen.",
+      "stepStatus": {
+        "done": "Abgeschlossen",
+        "current": "Aktuell",
+        "open": "Offen"
+      }
+    },
+    "steps": {
+      "welcome": "Start",
+      "profile": "Profil",
+      "providers": "Provider",
+      "chat_model": "Chat-Modell",
+      "embeddings": "Embeddings",
+      "privacy": "Datenschutz",
+      "summary": "Zusammenfassung"
+    },
+    "welcome": {
+      "title": "Willkommen bei Agora",
+      "description": "Agora ist ein lokal-first Multi-Agent-Simulator. Die Einrichtung dauert wenige Minuten und lässt sich jederzeit unterbrechen.",
+      "operatingModeLabel": "Betriebsmodus",
+      "operatingMode": {
+        "local": {
+          "label": "Lokal",
+          "description": "Alle Modelle laufen auf dieser Maschine (z. B. Ollama). Keine Daten verlassen das Gerät."
+        },
+        "hybrid": {
+          "label": "Hybrid",
+          "description": "Lokale Modelle kombiniert mit optionalen Cloud-Providern für einzelne Schritte."
+        },
+        "server": {
+          "label": "Server",
+          "description": "Agora läuft auf einem zentralen Server, Provider sind dort konfiguriert."
+        }
+      }
+    },
+    "profile": {
+      "title": "Profil",
+      "description": "Diese Angaben personalisieren Agora und erscheinen in Berichten."
+    },
+    "providers": {
+      "title": "Provider",
+      "description": "Übersicht der konfigurierten LLM-Provider.",
+      "configured": "Konfiguriert",
+      "notConfigured": "Nicht konfiguriert",
+      "futureNotice": "Die geführte Einrichtung folgt in einem späteren Update. Provider lassen sich bereits jetzt in den Einstellungen verwalten.",
+      "settingsLink": "Zu den Provider-Einstellungen"
+    },
+    "chatModel": {
+      "title": "Chat-Modell",
+      "description": "Status des konfigurierten Chat-Modells.",
+      "futureNotice": "Die geführte Einrichtung folgt in einem späteren Update.",
+      "settingsLink": "Zu den Provider-Einstellungen"
+    },
+    "embeddings": {
+      "title": "Embeddings",
+      "description": "Status der konfigurierten Embedding-Anbindung.",
+      "futureNotice": "Die geführte Einrichtung folgt in einem späteren Update.",
+      "settingsLink": "Zu den Provider-Einstellungen"
+    },
+    "privacy": {
+      "title": "Datenschutz",
+      "text": "Agora ist lokal-first: Dokumente, Wissensgraphen und Simulationsergebnisse bleiben standardmäßig auf diesem Gerät. Cloud-Provider werden nur verwendet, wenn du sie explizit einrichtest.",
+      "confirmBtn": "Verstanden"
+    },
+    "summary": {
+      "title": "Zusammenfassung",
+      "profileHeading": "Profil",
+      "modeHeading": "Betriebsmodus",
+      "requirementsHeading": "Voraussetzungen",
+      "incompleteNotice": "Einrichtung ist noch nicht vollständig. Fehlend:",
+      "readyNotice": "Alle Voraussetzungen sind erfüllt."
+    },
+    "requirements": {
+      "profileValid": "Profil",
+      "chatModelConfigured": "Chat-Modell",
+      "embeddingConfigured": "Embeddings"
+    },
+    "errors": {
+      "loadFailed": "Onboarding-Status konnte nicht geladen werden.",
+      "saveFailed": "Schritt konnte nicht gespeichert werden.",
+      "incomplete": "Einrichtung kann noch nicht abgeschlossen werden."
+    }
+  },
+  "profileSettings": {
+    "title": "Profil",
+    "subtitle": "Persönliche Angaben und lokale Einstellungen.",
+    "reopenOnboardingBtn": "Onboarding erneut öffnen",
+    "saveBtn": "Speichern",
+    "saveSuccess": "Profil gespeichert.",
+    "saveError": "Profil konnte nicht gespeichert werden.",
+    "loadError": "Profil konnte nicht geladen werden.",
+    "form": {
+      "avatarLabel": "Avatar",
+      "avatarUploadBtn": "Bild hochladen",
+      "avatarDeleteBtn": "Entfernen",
+      "avatarTooLarge": "Datei ist größer als 2 MB.",
+      "avatarUnsupportedType": "Nur PNG, JPEG oder WebP erlaubt.",
+      "avatarUploadError": "Avatar-Upload fehlgeschlagen.",
+      "avatarDeleteError": "Avatar konnte nicht gelöscht werden.",
+      "displayNameLabel": "Anzeigename",
+      "displayNameRequired": "Anzeigename ist erforderlich.",
+      "usernameLabel": "Benutzername",
+      "roleLabel": "Rolle",
+      "organisationLabel": "Organisation",
+      "languageLabel": "Sprache",
+      "timezoneLabel": "Zeitzone",
+      "reportLanguageLabel": "Berichtssprache",
+      "themeLabel": "Theme",
+      "privacyModeLabel": "Datenschutzmodus",
+      "theme": {
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
+      "privacyMode": {
+        "standard": "Standard",
+        "strict": "Streng"
+      },
+      "language": {
+        "de": "Deutsch",
+        "en": "Englisch"
+      }
+    }
   }
 }

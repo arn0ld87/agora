@@ -102,7 +102,7 @@ const settingsRouteNames = [
   'Settings',
   'SettingsGeneral',
   'SettingsIntegrations',
-  'SettingsUsersTeams',
+  'SettingsProfile',
   'SettingsApiKeys',
   'SettingsAuditLogs',
   'SettingsLlmRouting',
@@ -121,7 +121,7 @@ const navWorkspace = [
 const navSettings: NavSettingsItem[] = [
   { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
   { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
-  { id: 'users-teams',   label: t('sidebar.settings.usersTeams'),    to: { name: 'SettingsUsersTeams' } },
+  { id: 'profile',       label: t('sidebar.settings.profile'),       to: { name: 'SettingsProfile' } },
   { id: 'api-keys',      label: t('sidebar.settings.apiKeys'),       to: { name: 'SettingsApiKeys' } },
   { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },

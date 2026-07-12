@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { getAgoraToken } from '../api/index'
+import { onboardingGuard } from './onboardingGuard'
 
 const routes: RouteRecordRaw[] = [
   // Root → Dashboard (v4-AppShell ist Default-Einstieg)
@@ -41,6 +42,13 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
 
+  // Onboarding — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2)
+  {
+    path: '/onboarding',
+    name: 'Onboarding',
+    component: () => import('../views/onboarding/OnboardingView.vue'),
+  },
+
   // Settings — klassische View bleibt aktiv; /settings redirect auf /settings/general
   {
     path: '/settings',
@@ -58,9 +66,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Settings/SettingsIntegrationsView.vue'),
   },
   {
+    path: '/settings/profile',
+    name: 'SettingsProfile',
+    component: () => import('../views/Settings/SettingsProfileView.vue'),
+  },
+  // Sidebar-IA-Fix (Onboarding-Epic): "Users & Teams" wurde durch das
+  // Profil-Setting ersetzt — bestehende Deep-Links leiten weiter um.
+  {
     path: '/settings/users-teams',
     name: 'SettingsUsersTeams',
-    component: () => import('../views/Settings/SettingsUsersTeamsView.vue'),
+    redirect: { name: 'SettingsProfile' },
   },
   {
     path: '/settings/api-keys',
@@ -202,5 +217,8 @@ router.beforeEach((to) => {
   if (getAgoraToken()) return true
   return { name: 'Dashboard', query: { authRequired: '1', next: to.fullPath } }
 })
+
+// Onboarding-Redirect — läuft NACH dem Auth-Guard (Onboarding Slice 2).
+router.beforeEach(onboardingGuard)
 
 export default router

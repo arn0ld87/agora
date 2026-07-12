@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "OnboardingRequirements": {
+      "additionalProperties": false,
+      "description": "Serverseitig berechnete Completion-Voraussetzungen (ADR-0008).",
+      "properties": {
+        "chat_model_configured": {
+          "title": "Chat Model Configured",
+          "type": "boolean"
+        },
+        "embedding_configured": {
+          "title": "Embedding Configured",
+          "type": "boolean"
+        },
+        "profile_valid": {
+          "title": "Profile Valid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "profile_valid",
+        "chat_model_configured",
+        "embedding_configured"
+      ],
+      "title": "OnboardingRequirements",
+      "type": "object"
+    },
+    "OnboardingState": {
+      "additionalProperties": false,
+      "description": "Resumierbarer Wizard-Zustand; wird nach jedem Schritt persistiert.",
+      "properties": {
+        "completed_steps": {
+          "items": {
+            "enum": [
+              "welcome",
+              "profile",
+              "providers",
+              "chat_model",
+              "embeddings",
+              "privacy",
+              "summary"
+            ],
+            "type": "string"
+          },
+          "title": "Completed Steps",
+          "type": "array"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "current_step": {
+          "default": "welcome",
+          "enum": [
+            "welcome",
+            "profile",
+            "providers",
+            "chat_model",
+            "embeddings",
+            "privacy",
+            "summary"
+          ],
+          "title": "Current Step",
+          "type": "string"
+        },
+        "operating_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "local",
+                "hybrid",
+                "server"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operating Mode"
+        },
+        "status": {
+          "default": "not_started",
+          "enum": [
+            "not_started",
+            "in_progress",
+            "dismissed",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "title": "OnboardingState",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/onboarding-status-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort von ``GET /api/onboarding``.",
+  "properties": {
+    "onboarding_required": {
+      "title": "Onboarding Required",
+      "type": "boolean"
+    },
+    "requirements": {
+      "$ref": "#/$defs/OnboardingRequirements"
+    },
+    "state": {
+      "$ref": "#/$defs/OnboardingState"
+    }
+  },
+  "required": [
+    "state",
+    "requirements",
+    "onboarding_required"
+  ],
+  "title": "OnboardingStatusResponse",
+  "type": "object"
+}

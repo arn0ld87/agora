@@ -22,7 +22,9 @@
     "SettingsIntegrations": "Integrations",
     "SettingsApiKeys": "API Keys",
     "SettingsUsersTeams": "Users & Teams",
-    "SettingsAuditLogs": "Audit Logs"
+    "SettingsAuditLogs": "Audit Logs",
+    "SettingsProfile": "Profile",
+    "Onboarding": "Setup"
   },
   "common": {
     "start": "Start",
@@ -733,7 +735,8 @@
       "apiKeys": "API Keys",
       "llmProviders": "LLM Providers",
       "llmRouting": "LLM Routing",
-      "auditLogs": "Audit Logs"
+      "auditLogs": "Audit Logs",
+      "profile": "Profile"
     },
     "footer": {
       "collapse": "Collapse"
@@ -1294,5 +1297,137 @@
     "loading": "Loading profiles…",
     "error": "Failed to load profiles.",
     "defaultSuffix": "default"
+  },
+  "onboarding": {
+    "wizard": {
+      "title": "Setup",
+      "stepIndicator": "Step {current} of {total}",
+      "laterBtn": "Set up later",
+      "backBtn": "Back",
+      "nextBtn": "Next",
+      "finishBtn": "Finish setup",
+      "dismissConfirm": "Continue setup later? You can reopen it anytime via Settings → Profile.",
+      "stepStatus": {
+        "done": "Done",
+        "current": "Current",
+        "open": "Open"
+      }
+    },
+    "steps": {
+      "welcome": "Start",
+      "profile": "Profile",
+      "providers": "Providers",
+      "chat_model": "Chat model",
+      "embeddings": "Embeddings",
+      "privacy": "Privacy",
+      "summary": "Summary"
+    },
+    "welcome": {
+      "title": "Welcome to Agora",
+      "description": "Agora is a local-first multi-agent simulator. Setup takes a few minutes and can be paused anytime.",
+      "operatingModeLabel": "Operating mode",
+      "operatingMode": {
+        "local": {
+          "label": "Local",
+          "description": "All models run on this machine (e.g. Ollama). No data leaves the device."
+        },
+        "hybrid": {
+          "label": "Hybrid",
+          "description": "Local models combined with optional cloud providers for individual steps."
+        },
+        "server": {
+          "label": "Server",
+          "description": "Agora runs on a central server, providers are configured there."
+        }
+      }
+    },
+    "profile": {
+      "title": "Profile",
+      "description": "These details personalise Agora and appear in reports."
+    },
+    "providers": {
+      "title": "Providers",
+      "description": "Overview of configured LLM providers.",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "futureNotice": "Guided setup follows in a later update. Providers can already be managed in Settings.",
+      "settingsLink": "Go to provider settings"
+    },
+    "chatModel": {
+      "title": "Chat model",
+      "description": "Status of the configured chat model.",
+      "futureNotice": "Guided setup follows in a later update.",
+      "settingsLink": "Go to provider settings"
+    },
+    "embeddings": {
+      "title": "Embeddings",
+      "description": "Status of the configured embedding connection.",
+      "futureNotice": "Guided setup follows in a later update.",
+      "settingsLink": "Go to provider settings"
+    },
+    "privacy": {
+      "title": "Privacy",
+      "text": "Agora is local-first: documents, knowledge graphs and simulation results stay on this device by default. Cloud providers are only used if you explicitly configure them.",
+      "confirmBtn": "Understood"
+    },
+    "summary": {
+      "title": "Summary",
+      "profileHeading": "Profile",
+      "modeHeading": "Operating mode",
+      "requirementsHeading": "Requirements",
+      "incompleteNotice": "Setup is not complete yet. Missing:",
+      "readyNotice": "All requirements are met."
+    },
+    "requirements": {
+      "profileValid": "Profile",
+      "chatModelConfigured": "Chat model",
+      "embeddingConfigured": "Embeddings"
+    },
+    "errors": {
+      "loadFailed": "Could not load onboarding status.",
+      "saveFailed": "Could not save step.",
+      "incomplete": "Setup cannot be completed yet."
+    }
+  },
+  "profileSettings": {
+    "title": "Profile",
+    "subtitle": "Personal details and local settings.",
+    "reopenOnboardingBtn": "Reopen onboarding",
+    "saveBtn": "Save",
+    "saveSuccess": "Profile saved.",
+    "saveError": "Could not save profile.",
+    "loadError": "Could not load profile.",
+    "form": {
+      "avatarLabel": "Avatar",
+      "avatarUploadBtn": "Upload image",
+      "avatarDeleteBtn": "Remove",
+      "avatarTooLarge": "File is larger than 2 MB.",
+      "avatarUnsupportedType": "Only PNG, JPEG or WebP are allowed.",
+      "avatarUploadError": "Avatar upload failed.",
+      "avatarDeleteError": "Could not delete avatar.",
+      "displayNameLabel": "Display name",
+      "displayNameRequired": "Display name is required.",
+      "usernameLabel": "Username",
+      "roleLabel": "Role",
+      "organisationLabel": "Organisation",
+      "languageLabel": "Language",
+      "timezoneLabel": "Timezone",
+      "reportLanguageLabel": "Report language",
+      "themeLabel": "Theme",
+      "privacyModeLabel": "Privacy mode",
+      "theme": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "privacyMode": {
+        "standard": "Standard",
+        "strict": "Strict"
+      },
+      "language": {
+        "de": "German",
+        "en": "English"
+      }
+    }
   }
 }

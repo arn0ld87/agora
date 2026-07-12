@@ -373,10 +373,10 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 ## 12. Onboarding & Provider-Unification (2026-07-10)
 
-**Status:** Phase 0 abgeschlossen; Slice 1 implementiert, gehärtet und
-unabhängig verifiziert (Root-Re-Review 2026-07-11: MERGE-READY, drei
-non-blocking Follow-ups F1–F3 im Arbeitsprotokoll). PR eröffnet.
-Bestehende Profile bleiben unverändert lesbar.
+**Status:** Phase 0 und Slice 1 gemergt (PR #682, #683). Slice 2
+(Benutzerprofil + resumierbares Onboarding) implementiert und verifiziert;
+PR-Eröffnung läuft. Bestehende Profile bleiben unverändert lesbar;
+Benutzerprofil und KI-Presets sind getrennte Schlüsselräume (ADR-0008).
 
 Ziel: lokales Erst-Onboarding, getrenntes Benutzerprofil, kanonische Provider-
 und Modellverträge, getrennte Embedding-Konfiguration, ein gemeinsamer
@@ -388,8 +388,8 @@ Source of Truth:
 | Slice | Inhalt | Status |
 |---|---|---|
 | 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | ✅ abgeschlossen |
-| 1 | Kanonische Provider-/Modell-/Route-Verträge | verifiziert; PR offen |
-| 2 | Benutzerprofil und resumierbares Onboarding | offen |
+| 1 | Kanonische Provider-/Modell-/Route-Verträge | ✅ gemergt (PR #683) |
+| 2 | Benutzerprofil und resumierbares Onboarding | implementiert; PR offen |
 | 3 | Provider-Verbindungen und Discovery | offen |
 | 4 | Embedding-Setup und sichere Re-Embedding-Migration | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | offen |
@@ -397,12 +397,12 @@ Source of Truth:
 | 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |
 | 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |
 
-Phase-0-Baseline: Backend grün; Frontend-Tests fachlich grün, Vitest-Exit 1
-wegen vier bestehenden `EnvironmentTeardownError`-Rejections. Vor dem ersten
-Frontend-Produktslice separat klären.
+Baseline: Backend und Frontend grün. Der Phase-0-Vitest-Teardown-Blocker
+(`EnvironmentTeardownError`) wurde durch PR #678 behoben; die Vitest-Suite
+läuft seitdem mit Exit 0 (vor Slice 2 unabhängig verifiziert).
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-11 — Slice 1 verifiziert (MERGE-READY); PR offen.*
+*Zuletzt aktualisiert: 2026-07-11 — Slice 2 implementiert und verifiziert; PR-Eröffnung läuft.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*

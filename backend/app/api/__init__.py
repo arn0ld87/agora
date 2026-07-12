@@ -15,6 +15,8 @@ llm_bp = Blueprint('llm', __name__)  # Slice E.1 (#213): model-active SSE stream
 from .auth import auth_bp  # noqa: E402, F401 -- P0.2b: signed-ticket endpoint
 from .settings import settings_bp  # noqa: E402, F401 -- Issue #133: Settings-UI
 from .api_keys import api_keys_bp  # noqa: E402, F401 -- Slice G2: API-Keys real
+from .user_profile import user_profile_bp  # noqa: E402, F401 -- Onboarding Slice 2
+from .onboarding import onboarding_bp  # noqa: E402, F401 -- Onboarding Slice 2
 from . import graph           # noqa: E402, F401
 from . import graph_projects  # noqa: E402, F401
 from . import graph_build     # noqa: E402, F401

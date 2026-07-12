@@ -1,0 +1,123 @@
+{
+  "$id": "https://alexle135.de/schemas/user-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Lokales Single-User-Profil (kein KI-Preset, keine Secrets).",
+  "properties": {
+    "avatar_ref": {
+      "anyOf": [
+        {
+          "pattern": "^avatar-[0-9a-f]{32}\\.(png|jpg|webp)$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Avatar Ref"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "language": {
+      "default": "de",
+      "enum": [
+        "de",
+        "en"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "organisation": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Organisation"
+    },
+    "privacy_mode": {
+      "default": "standard",
+      "enum": [
+        "standard",
+        "strict"
+      ],
+      "title": "Privacy Mode",
+      "type": "string"
+    },
+    "report_language": {
+      "default": "de",
+      "enum": [
+        "de",
+        "en"
+      ],
+      "title": "Report Language",
+      "type": "string"
+    },
+    "role": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Role"
+    },
+    "theme": {
+      "default": "system",
+      "enum": [
+        "system",
+        "light",
+        "dark"
+      ],
+      "title": "Theme",
+      "type": "string"
+    },
+    "timezone": {
+      "default": "Europe/Berlin",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "username": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,31}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Username"
+    }
+  },
+  "required": [
+    "display_name"
+  ],
+  "title": "UserProfile",
+  "type": "object"
+}

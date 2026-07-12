@@ -5,6 +5,33 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (profile/onboarding — 2026-07-11)
+
+- **Lokales Benutzerprofil (Slice 2, ADR-0008)**: neuer Pydantic-v2-Vertrag
+  `UserProfile` (Anzeigename, Sprache, Zeitzone, Report-Sprache, Theme,
+  Datenschutzmodus, Avatar-Referenz) mit striktem Zod-Spiegel und
+  JSON-Schemas. Persistenz als datei-basierter Single-User-Store
+  (`user_profile.json`, atomar, flock, 0600) unter `AGORA_DATA_DIR`.
+  Endpunkte `GET/PUT /api/profile` plus Avatar-Upload mit MIME-Allowlist
+  (PNG/JPEG/WebP), Magic-Bytes-Prüfung (SVG strukturell abgelehnt) und
+  2-MB-Limit; Avatar-Referenzen sind per Contract-Pattern gegen
+  Path-Traversal gesichert. Benutzerprofil und KI-Presets (`LlmProfile`)
+  bleiben getrennte Schlüsselräume.
+- **Resumierbares Erst-Onboarding**: backendseitig persistierter
+  `OnboardingState` (`onboarding_state.json`) mit deterministischer
+  Schrittfolge, Wiederaufnahme nach jedem Schritt, `dismiss`/`reopen` und
+  serverseitig geprüfter Completion (gültiges Profil + konfiguriertes
+  Chat-Modell + gültige Embedding-Konfiguration). Endpunkte unter
+  `/api/onboarding` (`GET /`, `PUT /step`, `POST /complete|dismiss|reopen`).
+  Frontend: Wizard unter `/onboarding` (Betriebsmodus-Wahl, Profilformular,
+  ehrliche Status-Schritte für Provider/Modelle/Embeddings mit Verweis auf
+  die Settings, Zusammenfassung), Router-Guard mit Fail-open-Semantik —
+  API-Fehler oder `dismissed` sperren niemals aus.
+- **Settings-IA**: neue Seite `/settings/profile` (gemeinsames
+  `ProfileForm` mit dem Onboarding); Sidebar-Eintrag „Users & Teams" wird
+  zu „Profil", `/settings/users-teams` leitet auf `/settings/profile` um
+  (Single-User-Grenze bleibt explizit, ADR-0008).
+
 ### Added (contracts — 2026-07-10)
 
 - **Kanonische KI-Provider-Verträge**: `ProviderConnection`, `AiModel` und
