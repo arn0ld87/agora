@@ -1,6 +1,8 @@
 """Tests für den Fernet-encrypted LLM-Provider-Secrets-Store."""
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -113,3 +115,65 @@ def test_singleton_persists_across_calls(monkeypatch, tmp_path):
     a.upsert("openai", api_key="sk-fff00000ffff0005")
     assert b.get_plaintext("openai") == "sk-fff00000ffff0005"
     reset_singleton_for_tests()
+
+
+def test_upsert_holds_file_lock_from_read_through_replace(temp_store, monkeypatch):
+    """Der Prozess-Lock umschließt die gesamte Read-modify-write-Sequenz."""
+    events: list[str] = []
+    real_read = temp_store._read_raw
+    real_replace = os.replace
+
+    @contextmanager
+    def tracked_file_lock():
+        events.append("lock")
+        try:
+            yield
+        finally:
+            events.append("unlock")
+
+    def tracked_read() -> dict:
+        assert events == ["lock"]
+        events.append("read")
+        return real_read()
+
+    def tracked_replace(source: str | Path, target: str | Path) -> None:
+        assert events == ["lock", "read"]
+        events.append("replace")
+        real_replace(source, target)
+
+    monkeypatch.setattr(temp_store, "_file_lock", tracked_file_lock)
+    monkeypatch.setattr(temp_store, "_read_raw", tracked_read)
+    monkeypatch.setattr(
+        "app.services.llm_provider_secrets_store.os.replace", tracked_replace
+    )
+
+    temp_store.upsert("openai", api_key="sk-lock-order-0123456789")
+
+    assert events == ["lock", "read", "replace", "unlock"]
+
+
+def test_write_retries_partial_os_write_until_payload_is_complete(temp_store, monkeypatch):
+    """Ein Short-Write darf nicht zu einer atomar ersetzten Trunkierung führen."""
+    real_write = os.write
+
+    def partial_write(fd: int, payload: bytes) -> int:
+        chunk_length = max(1, len(payload) // 3)
+        return real_write(fd, payload[:chunk_length])
+
+    monkeypatch.setattr(
+        "app.services.llm_provider_secrets_store.os.write", partial_write
+    )
+
+    temp_store.upsert("openai", api_key="sk-partial-write-0123456789")
+
+    assert temp_store.get_plaintext("openai") == "sk-partial-write-0123456789"
+
+
+def test_json_root_that_is_not_an_object_raises_controlled_runtime_error(
+    temp_store,
+):
+    """Korrupte JSON-Roots dürfen nie als internes AttributeError austreten."""
+    temp_store._path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="JSON-Root"):
+        temp_store.list_entries()
