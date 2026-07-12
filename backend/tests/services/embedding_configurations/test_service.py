@@ -148,6 +148,9 @@ def test_probe_marks_configuration_failed_on_dimension_mismatch(
     assert updated.status == "failed"
     assert "768" in (updated.status_message or "")
     assert "1024" in (updated.status_message or "")
+    # Gemini-Finding (MEDIUM): last_validated_at darf NICHT gesetzt sein,
+    # wenn die Konfiguration wegen Dimensions-Mismatch fehlgeschlagen ist.
+    assert updated.last_validated_at is None
 
 
 def test_probe_with_unknown_configuration_raises(

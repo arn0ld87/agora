@@ -261,3 +261,59 @@ def test_retired_status_requires_retired_at(
             property_key="embedding_v1",
             status="retired",
         )
+
+
+# ----------------------------------------------------------------------
+# Gemini-Finding (MEDIUM): last_validated_at bei Feld-Änderung verwerfen
+# ----------------------------------------------------------------------
+
+
+def test_upsert_discards_last_validated_at_when_relevant_fields_change(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    """Wenn Modell, Dimension, Provider-Connection oder Provider-Art
+    wechselt, ist der alte ``last_validated_at``-Zeitstempel nicht mehr
+    aussagekräftig — er muss verworfen werden.
+    """
+    validated_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    base = _global_config()
+    configured_store.upsert_configuration(
+        configuration_id="emb-change",
+        **base,
+        scope="global",
+        project_id=None,
+        status="probed",
+        last_validated_at=validated_at,
+    )
+    # Modell wechselt — eigenes Dict, damit es nicht zu Doppelung kommt.
+    changed = {**base, "model_id": "different-model"}
+    after = configured_store.upsert_configuration(
+        configuration_id="emb-change",
+        **changed,
+        scope="global",
+        project_id=None,
+        status="proposed",
+    )
+    assert after.last_validated_at is None
+
+
+def test_upsert_preserves_last_validated_at_when_relevant_fields_unchanged(
+    configured_store: EmbeddingConfigurationStore,
+) -> None:
+    validated_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    configured_store.upsert_configuration(
+        configuration_id="emb-stable",
+        **_global_config(),
+        scope="global",
+        project_id=None,
+        status="probed",
+        last_validated_at=validated_at,
+    )
+    after = configured_store.upsert_configuration(
+        configuration_id="emb-stable",
+        **_global_config(),
+        scope="global",
+        project_id=None,
+        status="probed",
+    )
+    assert after.last_validated_at == validated_at

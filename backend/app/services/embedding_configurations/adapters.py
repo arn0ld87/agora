@@ -154,7 +154,7 @@ class _OpenAICompatibleAdapter:
                 status_message=None,
                 actual_dimensions=len(vector),
             )
-        except (ValueError, KeyError, TypeError) as exc:
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             return EmbeddingProbeResult(
                 status="degraded",
                 status_message=f"Antwort nicht parsebar: {type(exc).__name__}",
@@ -244,7 +244,7 @@ class _GeminiAdapter:
                 status_message=None,
                 actual_dimensions=len(values),
             )
-        except (ValueError, KeyError, TypeError) as exc:
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             return EmbeddingProbeResult(
                 status="degraded",
                 status_message=f"Antwort nicht parsebar: {type(exc).__name__}",
@@ -338,7 +338,7 @@ class _OllamaAdapter:
                 status_message=None,
                 actual_dimensions=len(vector),
             )
-        except (ValueError, KeyError, TypeError) as exc:
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             return EmbeddingProbeResult(
                 status="degraded",
                 status_message=f"Antwort nicht parsebar: {type(exc).__name__}",

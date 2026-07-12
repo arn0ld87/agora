@@ -120,3 +120,54 @@ def test_legacy_view_to_provider_connection_with_api_key_uses_secret_ref(
     assert connection.auth_mode == "api_key"
     assert connection.secret_ref == "legacy-embedding"
     assert connection.transport == "http"
+
+
+# ----------------------------------------------------------------------
+# Security: CodeQL HIGH — "Incomplete URL substring sanitization" (legacy.py:69)
+# ----------------------------------------------------------------------
+
+
+def test_classify_legacy_provider_rejects_ollama_com_substring_in_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Substring-Match auf 'ollama.com' waere ein SSRF-Vektor. Der
+    Fix nutzt urlparse + Suffix-Match auf dem Host-Namen.
+    """
+    from app.services.embedding_configurations.legacy import (
+        _classify_legacy_provider,
+    )
+
+    # Bösartige URL mit ollama.com im Query/Pfad, aber echter Host ist evil.com
+    kind = _classify_legacy_provider(
+        "https://evil.com/?ref=ollama.com", has_api_key=True
+    )
+    assert kind == "openai", (
+        f"evil.com darf nicht als ollama_cloud klassifiziert werden, "
+        f"aber war: {kind}"
+    )
+
+
+def test_classify_legacy_provider_accepts_ollama_cloud_subdomain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.embedding_configurations.legacy import (
+        _classify_legacy_provider,
+    )
+
+    assert (
+        _classify_legacy_provider("https://api.ollama.com/v1", has_api_key=True)
+        == "ollama_cloud"
+    )
+
+
+def test_classify_legacy_provider_accepts_exact_ollama_com(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.embedding_configurations.legacy import (
+        _classify_legacy_provider,
+    )
+
+    assert (
+        _classify_legacy_provider("https://ollama.com", has_api_key=True)
+        == "ollama_cloud"
+    )

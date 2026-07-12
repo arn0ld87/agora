@@ -117,7 +117,7 @@ class EmbeddingConfigurationService:
             )
 
         last_validated_at = (
-            self._now() if result.status == "available" else None
+            self._now() if new_status == "probed" else None
         )
         updated = self._store.update_configuration_status(
             configuration_id,

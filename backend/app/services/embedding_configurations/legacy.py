@@ -60,15 +60,23 @@ class LegacyEmbeddingView:
 def _classify_legacy_provider(base_url: str, has_api_key: bool) -> EmbeddingProviderKind:
     """Leitet den ``EmbeddingProviderKind`` aus den Legacy-Werten ab.
 
-    Heuristik: Loopback-Host oder ``ollama.com`` → Ollama; alles andere
-    mit Key → OpenAI; ohne Key → unsupported. Das ist dieselbe
-    Heuristik, die der bestehende ``EmbeddingService`` fuer die
-    Provider-Erkennung nutzt.
+    Heuristik: Loopback-Host oder exakter ``ollama.com``-Host (kein
+    Substring-Match, weil das ein klassischer SSRF-Vektor wäre: ein
+    Operator koennte ``EMBEDDING_BASE_URL="https://evil.com/?ref=ollama.com"``
+    setzen, der Probe wuerde dann mit dem API-Key an ``evil.com``
+    gehen). Ollama-Cloud-Subdomains (``*.ollama.com``) zaehlen ebenfalls
+    als Ollama Cloud. Alles andere mit Key → OpenAI; ohne Key → custom.
+
+    Diese Heuristik ist dieselbe, die der bestehende ``EmbeddingService``
+    fuer die Provider-Erkennung nutzt.
     """
-    host = base_url.lower()
-    if "ollama.com" in host:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+    host = (parsed.hostname or "").lower()
+    if host == "ollama.com" or host.endswith(".ollama.com"):
         return "ollama_cloud"
-    if "localhost" in host or "127.0.0.1" in host or "[::1]" in host:
+    if host in {"localhost", "127.0.0.1", "::1"}:
         return "ollama"
     if has_api_key:
         return "openai"

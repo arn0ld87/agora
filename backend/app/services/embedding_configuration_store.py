@@ -131,6 +131,29 @@ class EmbeddingConfigurationStore:
                 if existing_payload is not None
                 else None
             )
+            # Wenn sich relevante Felder (Provider-Connection, Provider-Art,
+            # Modell, Dimension) aendern, ist die alte ``last_validated_at``-
+            # Validierung nicht mehr aussagekraeftig — wir verwerfen sie.
+            # Status wird ohnehin zurueck auf ``proposed`` gesetzt, daher
+            # waere der alte Zeitstempel inkonsistent.
+            relevant_fields_changed = (
+                existing is not None
+                and (
+                    existing.provider_connection_id != provider_connection_id
+                    or existing.provider_kind != provider_kind
+                    or existing.model_id != model_id
+                    or existing.dimensions != dimensions
+                )
+            )
+            resolved_last_validated_at: datetime | None
+            if relevant_fields_changed:
+                resolved_last_validated_at = None
+            elif last_validated_at is not None:
+                resolved_last_validated_at = last_validated_at
+            else:
+                resolved_last_validated_at = (
+                    existing.last_validated_at if existing else None
+                )
             config = EmbeddingConfiguration(
                 id=cid,
                 provider_connection_id=provider_connection_id,
@@ -144,9 +167,7 @@ class EmbeddingConfigurationStore:
                 status_message=status_message,
                 created_at=existing.created_at if existing else now,
                 updated_at=now,
-                last_validated_at=last_validated_at or (
-                    existing.last_validated_at if existing else None
-                ),
+                last_validated_at=resolved_last_validated_at,
             )
             raw["configurations"][cid] = config.model_dump(mode="json")
             self._write_raw(self._config_path, raw)
