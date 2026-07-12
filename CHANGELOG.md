@@ -5,6 +5,38 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (provider-connections — 2026-07-12)
+
+- **Kanonischer Provider-Connection-Lifecycle (Slice 3, ADR-0006)**:
+  persistente Provider-Verbindungen auf Basis des `ProviderConnection`-
+  Vertrags aus Slice 1. Neuer datei-basierter Store
+  (`provider_connections.json`, atomar, flock, 0600) unter `AGORA_DATA_DIR`;
+  Secrets bleiben ausschließlich als `secret_ref` im bestehenden
+  Fernet-verschlüsselten Secret-Store. Neue Endpunkte
+  `GET/PUT/DELETE /api/llm/provider-connections[/<id>]` sowie
+  `POST …/<id>/test` und `GET …/<id>/models` (Test + Modell-Discovery über
+  eine Adapter-Schicht für OpenAI-, Anthropic-, Gemini-, MiniMax-,
+  Ollama-Cloud-, OpenAI-kompatible und lokale Ollama-Verbindungen).
+  Unsupported Provider (z. B. `opencode_go`, Subscription-/CLI-Bridges)
+  werden ehrlich mit 409 `provider_unsupported` abgelehnt, bevor Store oder
+  Service angefasst werden; lokale Ollama-Verbindungen sind auf
+  Loopback-Base-URLs beschränkt, alle übrigen auf öffentliche HTTP(S)-URLs.
+  Die Legacy-Routen (`/providers`, `/providers/<id>/models|test`,
+  `/api-key`) delegieren als Kompatibilitätsadapter an dieselbe
+  Lifecycle-Schicht.
+- **Settings-UI für Verbindungen**: `LlmProvidersView` auf den
+  Connection-Lifecycle umgestellt (Status-Badges, Test-Ergebnis,
+  Discovery-Modellliste, lokaler Ollama-Flow ohne Key-Feld); unsupported
+  Provider zeigen einen Hinweis statt Formularfeldern. Neuer API-Client
+  `providerConnections.ts` validiert jede Response-Grenze mit Zod;
+  API-Keys werden nie im Pinia-State oder Browser-Storage gehalten.
+
+### Fixed (provider-connections — 2026-07-12)
+
+- `ProviderDescriptorSchema.type` (Zod) spiegelte nur 5 von 12
+  Backend-`ProviderType`-Werten; die Enum ist additiv auf die volle
+  Literal-Menge erweitert (vorbestehender Drift).
+
 ### Added (profile/onboarding — 2026-07-11)
 
 - **Lokales Benutzerprofil (Slice 2, ADR-0008)**: neuer Pydantic-v2-Vertrag

@@ -27,7 +27,9 @@ export const ModelCapabilitiesSchema = z.object({
 }).strict()
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>
 
-const ProviderKindSchema = z.enum([
+// OpenCode Go remains a CLI bridge and is unsupported for provider connections
+// in this slice.
+const ProviderConnectionKindSchema = z.enum([
   'ollama',
   'openai',
   'google',
@@ -35,6 +37,7 @@ const ProviderKindSchema = z.enum([
   'custom',
   'ollama_cloud',
   'openai_compatible',
+  'minimax',
   'github_copilot',
   'cloud',
   'unknown',
@@ -47,13 +50,21 @@ const PUBLIC_BASE_URL_PATTERN = /^https?:\/\/(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\
 export const PublicBaseUrlSchema = z.string().regex(PUBLIC_BASE_URL_PATTERN).superRefine((value, context) => {
   try {
     const parsed = new URL(value)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    const isIpv4Private = /^10\./.test(hostname)
+      || /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      || /^169\.254\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(?:1[6-9]|2\d|3[0-1])\./.test(hostname)
     if (
       !['http:', 'https:'].includes(parsed.protocol) ||
       !parsed.hostname ||
       parsed.username ||
       parsed.password ||
       parsed.search ||
-      parsed.hash
+      parsed.hash ||
+      ['localhost', '::1'].includes(hostname) ||
+      isIpv4Private
     ) {
       context.addIssue({ code: 'custom', message: 'base_url must be a public HTTP(S) base URL' })
     }
@@ -62,13 +73,35 @@ export const PublicBaseUrlSchema = z.string().regex(PUBLIC_BASE_URL_PATTERN).sup
   }
 })
 
-export const ProviderConnectionSchema = z.object({
+export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) => {
+  try {
+    const parsed = new URL(value)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    const isIpv4Loopback = /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      && hostname.split('.').every((octet) => Number(octet) <= 255)
+    if (
+      !['http:', 'https:'].includes(parsed.protocol)
+      || !parsed.hostname
+      || parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || !(['localhost', '::1'].includes(hostname) || isIpv4Loopback)
+    ) {
+      context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+    }
+  } catch {
+    context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+  }
+})
+
+export const ProviderConnectionBaseSchema = z.object({
   id: z.string().min(1),
-  provider_kind: ProviderKindSchema,
+  provider_kind: ProviderConnectionKindSchema,
   display_name: z.string().min(1),
   transport: z.enum(['http', 'local']),
   auth_mode: z.enum(['none', 'api_key', 'oauth', 'session']),
-  base_url: PublicBaseUrlSchema.nullable().default(null),
+  base_url: z.union([PublicBaseUrlSchema, LocalOllamaBaseUrlSchema]).nullable().default(null),
   enabled: z.boolean().default(true),
   status: z.enum(['unknown', 'connected', 'degraded', 'disconnected', 'error']).default('unknown'),
   status_message: z.string().nullable().default(null),
@@ -78,7 +111,66 @@ export const ProviderConnectionSchema = z.object({
   updated_at: NullableDateTimeSchema,
   last_tested_at: NullableDateTimeSchema,
 }).strict()
+
+export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+  if (value.base_url === null) return
+  const baseUrlSchema = value.provider_kind === 'ollama'
+    ? LocalOllamaBaseUrlSchema
+    : PublicBaseUrlSchema
+  const result = baseUrlSchema.safeParse(value.base_url)
+  if (!result.success) {
+    context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
+  }
+})
 export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
+
+export const ProviderConnectionUpsertRequestSchema = z.object({
+  display_name: z.string().min(1),
+  provider_kind: ProviderConnectionKindSchema,
+  base_url: z.string().nullable().default(null),
+  enabled: z.boolean().default(true),
+  api_key: z.string().nullable().default(null),
+}).strict().superRefine((value, context) => {
+  if (value.base_url === null) return
+  const baseUrlSchema = value.provider_kind === 'ollama'
+    ? LocalOllamaBaseUrlSchema
+    : PublicBaseUrlSchema
+  const result = baseUrlSchema.safeParse(value.base_url)
+  if (!result.success) {
+    context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
+  }
+})
+export type ProviderConnectionUpsertRequest = z.infer<typeof ProviderConnectionUpsertRequestSchema>
+
+export const ProviderConnectionResponseSchema = z.object({
+  connection: ProviderConnectionSchema,
+}).strict()
+export type ProviderConnectionResponse = z.infer<typeof ProviderConnectionResponseSchema>
+
+export const ProviderConnectionsListResponseSchema = z.object({
+  items: z.array(ProviderConnectionSchema),
+  total: z.number().int().nonnegative(),
+}).strict()
+export type ProviderConnectionsListResponse = z.infer<typeof ProviderConnectionsListResponseSchema>
+
+// Mirrors backend ProviderProbeStatus (services/provider_connections/adapters.py).
+// Distinct from ProviderConnection.status: this is the raw, per-probe result
+// before the service maps it onto the persisted connection status.
+export const ProviderProbeStatusSchema = z.enum([
+  'available',
+  'unavailable',
+  'invalid_credentials',
+  'degraded',
+  'unsupported',
+])
+export type ProviderProbeStatus = z.infer<typeof ProviderProbeStatusSchema>
+
+export const ProviderConnectionTestResultSchema = z.object({
+  status: ProviderProbeStatusSchema,
+  status_message: z.string().nullable().default(null),
+  models_found: z.number().int().nonnegative(),
+}).strict()
+export type ProviderConnectionTestResult = z.infer<typeof ProviderConnectionTestResultSchema>
 
 export const AiModelSchema = z.object({
   provider_connection_id: z.string().min(1),

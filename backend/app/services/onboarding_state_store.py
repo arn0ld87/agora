@@ -223,8 +223,9 @@ def compute_onboarding_requirements() -> OnboardingRequirements:
     """Berechnet die fachlichen Completion-Voraussetzungen (ADR-0008).
 
     ``chat_model_configured`` prüft bewusst nur die Konfiguration, keine
-    Live-Erreichbarkeit — der Erreichbarkeitscheck kommt mit der
-    Provider-Discovery in Slice 3.
+    Live-Erreichbarkeit — Slice 3 liefert nur den Connection-Lifecycle;
+    der Erreichbarkeitscheck folgt, sobald der einheitliche Model Picker
+    die Discovery daraus nutzt (Slice 5).
     """
     settings = get_settings()
     profile_valid = get_user_profile_store().load() is not None

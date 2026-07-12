@@ -1,126 +1,136 @@
-"""
-LLM Provider Registry.
-Public provider metadata only — no secrets.
-"""
+"""Kanonische, oeffentliche Provider-Metadaten ohne Secrets."""
+from __future__ import annotations
 
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Literal, Optional
+
 from ..contracts import (
+    PROVIDER_ANTHROPIC,
     PROVIDER_GITHUB_COPILOT,
     PROVIDER_GOOGLE,
+    PROVIDER_MINIMAX,
+    PROVIDER_OLLAMA,
     PROVIDER_OLLAMA_CLOUD,
+    PROVIDER_OPENCODE_GO,
     PROVIDER_OPENAI,
     PROVIDER_OPENAI_COMPATIBLE,
 )
 from ..contracts.llm_routing_contract import ProviderDescriptor
-
-class LlmProviderRegistry:
-    """Registry for LLM providers."""
-
-    def __init__(self):
-        # In a real app, this might be dynamic or from config.
-        # For the first cut, we use a static list with auth status check.
-        pass
-
-    def get_providers(self, session_api_keys: Optional[dict] = None) -> List[ProviderDescriptor]:
-        """Return static public provider metadata (no auth status computation)."""
-        providers = [
-            ProviderDescriptor(
-                id="ollama_cloud",
-                label="Ollama (Cloud)",
-                type=PROVIDER_OLLAMA_CLOUD,
-                # OpenAI-kompatibler Ollama-Cloud-Endpoint. Auth via Bearer-Token
-                # (``OLLAMA_API_KEY``). Doku: https://docs.ollama.com/cloud
-                base_url="https://ollama.com/v1",
-                api_key_ref="OLLAMA_API_KEY",
-                supports_models_endpoint=True,
-                fallback_models=[
-                    "qwen3-coder-next:cloud",
-                    "deepseek-v4-flash:cloud",
-                    "gpt-oss-128:cloud",
-                    "kimi-k2.6:cloud",
-                ],
-            ),
-            ProviderDescriptor(
-                id="openai",
-                label="OpenAI",
-                type=PROVIDER_OPENAI,
-                base_url="https://api.openai.com/v1",
-                api_key_ref="OPENAI_API_KEY",
-                supports_models_endpoint=True,
-                supports_tools=True,
-                fallback_models=["gpt-4o", "gpt-4o-mini", "o1-preview"],
-            ),
-            ProviderDescriptor(
-                id="google",
-                label="Google Gemini",
-                type=PROVIDER_GOOGLE,
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                api_key_ref="GOOGLE_API_KEY",
-                supports_models_endpoint=True,
-                supports_tools=True,
-                fallback_models=["gemini-1.5-pro", "gemini-1.5-flash"],
-            ),
-            ProviderDescriptor(
-                id="openai_compatible",
-                label="OpenAI Compatible",
-                type=PROVIDER_OPENAI_COMPATIBLE,
-                api_key_ref="LLM_API_KEY",
-                supports_models_endpoint=True,
-                fallback_models=[],
-            ),
-            ProviderDescriptor(
-                id="github_copilot",
-                label="GitHub Copilot",
-                type=PROVIDER_GITHUB_COPILOT,
-                base_url="https://api.githubcopilot.com",
-                api_key_ref="GH_AUTH_TOKEN",
-                supports_models_endpoint=False,
-                supports_tools=True,
-                fallback_models=list(_copilot_models()),
-            ),
-        ]
-        return providers
-
-    @staticmethod
-    def is_model_tool_capable(model_id: str, provider_type: str) -> bool:
-        """Heuristic check if a model supports OpenAI-compatible tool calling."""
-        if not model_id:
-            return False
-
-        mid = model_id.lower()
-
-        # Explicit gate for known broken models (Issue #557)
-        if "ministral" in mid:
-            return False
-
-        # Natively capable providers (where we trust almost any modern model)
-        if provider_type in ("openai", "google", "github_copilot"):
-            return True
-
-        # Whitelist for Ollama/OpenAI-compatible model families
-        tool_capable_families = (
-            "gpt-4",
-            "gpt-3.5",
-            "o1-",
-            "o3-",
-            "gemini-",
-            "llama-3.1",
-            "llama-3.2",
-            "llama-3.3",
-            "llama3.1",
-            "llama3.2",
-            "llama3.3",
-            "qwen2.5",
-            "qwen3",
-            "deepseek-v3",
-            "deepseek-v4",
-            "deepseek-r1",
-            "claude-3",
-        )
-        return any(f in mid for f in tool_capable_families)
+from ..contracts.provider_types import ProviderType
 
 
 def _copilot_models() -> tuple[str, ...]:
-    # Lazy-Import vermeidet Zirkularität wenn das Submodul später wächst.
+    # Lazy import keeps the historical import boundary cycle-free.
     from .llm_providers.github_copilot import GITHUB_COPILOT_MODELS
+
     return GITHUB_COPILOT_MODELS
+
+
+@dataclass(frozen=True)
+class ProviderConnectionDefinition:
+    """Die einzige Matrix fuer Lifecycle-, Discovery- und Legacy-Metadaten."""
+
+    provider_kind: ProviderType
+    display_name: str
+    transport: Literal["http", "local"]
+    auth_mode: Literal["none", "api_key"]
+    default_base_url: str | None
+    adapter_kind: str
+    api_key_ref: str | None
+    supports_tools: bool = False
+    fallback_models: tuple[str, ...] = ()
+
+
+_CONNECTION_DEFINITIONS: tuple[ProviderConnectionDefinition, ...] = (
+    ProviderConnectionDefinition(
+        PROVIDER_OPENAI, "OpenAI", "http", "api_key", "https://api.openai.com/v1",
+        "openai", "OPENAI_API_KEY", True, ("gpt-4o", "gpt-4o-mini", "o1-preview"),
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_ANTHROPIC, "Anthropic", "http", "api_key", "https://api.anthropic.com",
+        "anthropic", "ANTHROPIC_API_KEY", True,
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_GOOGLE, "Google Gemini", "http", "api_key",
+        "https://generativelanguage.googleapis.com/v1beta/openai", "google",
+        "GOOGLE_API_KEY", True, ("gemini-1.5-pro", "gemini-1.5-flash"),
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_MINIMAX, "MiniMax", "http", "api_key", "https://api.minimax.io/v1",
+        "minimax", "MINIMAX_API_KEY", True,
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_OLLAMA_CLOUD, "Ollama (Cloud)", "http", "api_key", "https://ollama.com",
+        "ollama_cloud", "OLLAMA_API_KEY",
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_OPENAI_COMPATIBLE, "OpenAI Compatible", "http", "api_key", None,
+        "openai_compatible", "LLM_API_KEY", True,
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_OLLAMA, "Ollama (lokal)", "local", "none", "http://localhost:11434",
+        "ollama", None,
+    ),
+    # OpenCode Go publishes a model URL but no documented raw request-header
+    # contract. See provider_connections.adapters: intentionally unsupported.
+    ProviderConnectionDefinition(
+        PROVIDER_OPENCODE_GO, "OpenCode Go", "http", "api_key",
+        "https://opencode.ai/zen/go/v1", "unsupported", "OPENCODE_GO_API_KEY",
+    ),
+    ProviderConnectionDefinition(
+        PROVIDER_GITHUB_COPILOT, "GitHub Copilot", "http", "api_key",
+        "https://api.githubcopilot.com", "unsupported", "GH_AUTH_TOKEN", True,
+        fallback_models=_copilot_models(),
+    ),
+)
+
+
+class LlmProviderRegistry:
+    """Registry fuer statische, secret-freie Provider-Metadaten."""
+
+    @staticmethod
+    def connection_definitions() -> tuple[ProviderConnectionDefinition, ...]:
+        return _CONNECTION_DEFINITIONS
+
+    @staticmethod
+    def connection_definition(provider_kind: str) -> ProviderConnectionDefinition | None:
+        return next(
+            (definition for definition in _CONNECTION_DEFINITIONS if definition.provider_kind == provider_kind),
+            None,
+        )
+
+    def get_providers(
+        self, session_api_keys: Optional[dict] = None
+    ) -> list[ProviderDescriptor]:
+        """Liefert Legacy-Deskriptoren aus derselben kanonischen Matrix."""
+        del session_api_keys
+        return [
+            ProviderDescriptor(
+                id=definition.provider_kind,
+                label=definition.display_name,
+                type=definition.provider_kind,
+                base_url=definition.default_base_url,
+                api_key_ref=definition.api_key_ref,
+                supports_models_endpoint=definition.adapter_kind != "unsupported",
+                supports_tools=definition.supports_tools,
+                fallback_models=list(definition.fallback_models),
+            )
+            for definition in _CONNECTION_DEFINITIONS
+        ]
+
+    @staticmethod
+    def is_model_tool_capable(model_id: str, provider_type: str) -> bool:
+        """Heuristik fuer OpenAI-kompatibles Tool-Calling."""
+        if not model_id:
+            return False
+        mid = model_id.lower()
+        if "ministral" in mid:
+            return False
+        if provider_type in ("openai", "google", "anthropic", "github_copilot"):
+            return True
+        tool_capable_families = (
+            "gpt-4", "gpt-3.5", "o1-", "o3-", "gemini-", "llama-3.1",
+            "llama-3.2", "llama-3.3", "llama3.1", "llama3.2", "llama3.3",
+            "qwen2.5", "qwen3", "deepseek-v3", "deepseek-v4", "deepseek-r1", "claude-3",
+        )
+        return any(family in mid for family in tool_capable_families)

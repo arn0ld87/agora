@@ -12,8 +12,9 @@ nichts ausser dem ``requests``-Convenience-Wrapper.
 
 import json
 import time
+from dataclasses import dataclass
 from threading import Lock
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 import urllib3
 
@@ -40,6 +41,36 @@ _HTTP = urllib3.PoolManager(
 )
 
 
+@dataclass(frozen=True)
+class CatalogHttpResponse:
+    """Secret-freie HTTP-Antwort fuer die gemeinsame Modell-Discovery-Schicht."""
+
+    status_code: int | None
+    payload: dict | None
+
+
+def fetch_catalog_json(
+    url: str, *, headers: Mapping[str, str] | None = None
+) -> CatalogHttpResponse:
+    """Liest JSON fuer Discovery-Adapter ueber den einzigen urllib3-Transport.
+
+    Die Aufrufer liefern bereits die anbieterbezogenen Header; diese Funktion
+    loggt weder Header noch Response-Body und verhindert damit Secret-Leaks.
+    """
+    request_headers = {"Accept": "application/json", **(headers or {})}
+    try:
+        response = _HTTP.request("GET", url, headers=request_headers)
+    except urllib3.exceptions.HTTPError:
+        logger.debug("HTTP error fetching model catalog from %s", url)
+        return CatalogHttpResponse(status_code=None, payload=None)
+    try:
+        payload = json.loads(response.data.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        logger.debug("JSON parse error fetching model catalog from %s", url)
+        payload = None
+    return CatalogHttpResponse(status_code=response.status, payload=payload)
+
+
 def _http_get_json(url: str, *, api_key: Optional[str] = None) -> Optional[dict]:
     """GET ``url`` und parse JSON. Gibt ``None`` zurück bei Non-2xx oder Parse-Fehler.
 
@@ -47,22 +78,14 @@ def _http_get_json(url: str, *, api_key: Optional[str] = None) -> Optional[dict]
     Helper direkt oder ``_HTTP.request``. Wichtig: keine Verwendung von
     ``requests`` (siehe Modul-Docstring, OTel-Rekursion #529).
     """
-    headers: Dict[str, str] = {"Accept": "application/json"}
+    headers: Dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    try:
-        resp = _HTTP.request("GET", url, headers=headers)
-    except urllib3.exceptions.HTTPError as exc:
-        logger.debug("HTTP error fetching %s: %s", url, exc)
+    response = fetch_catalog_json(url, headers=headers)
+    if response.status_code != 200:
+        logger.debug("Non-200 status %s from %s", response.status_code, url)
         return None
-    if resp.status != 200:
-        logger.debug("Non-200 status %s from %s", resp.status, url)
-        return None
-    try:
-        return json.loads(resp.data.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        logger.debug("JSON parse error from %s: %s", url, exc)
-        return None
+    return response.payload
 
 
 class ModelCatalogService:

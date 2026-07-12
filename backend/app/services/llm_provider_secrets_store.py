@@ -31,12 +31,14 @@ Security:
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import IO, Iterator, Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -124,14 +126,32 @@ class LlmProviderSecretsStore:
         if not self._path.exists():
             return {"version": 1, "entries": {}}
         try:
-            return json.loads(self._path.read_text(encoding="utf-8"))
+            raw = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise RuntimeError(
                 f"Konnte LLM-Secrets-Store nicht lesen ({self._path}): {exc}"
             ) from exc
+        if not isinstance(raw, dict):
+            raise RuntimeError(
+                f"Konnte LLM-Secrets-Store nicht lesen ({self._path}): "
+                "JSON-Root muss ein Objekt sein"
+            )
+        return raw
+
+    @contextmanager
+    def _file_lock(self) -> Iterator[IO[str]]:
+        """Hält den Prozess-Lock über eine komplette Read-modify-write-Operation."""
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self._path.with_suffix(".lock")
+        with open(lock_path, "w", encoding="utf-8") as lock_fh:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX)
+            try:
+                yield lock_fh
+            finally:
+                fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
     def _write_raw(self, raw: dict) -> None:
-        """Atomisches Schreiben mit File-Level-Lock.
+        """Atomisches Schreiben innerhalb eines gehaltenen File-Level-Locks.
 
         ``threading.Lock`` schützt nur innerhalb eines Prozesses. Bei mehreren
         Gunicorn-Workern ist zusätzlich ``fcntl.flock`` nötig, um Lost-Updates
@@ -142,43 +162,40 @@ class LlmProviderSecretsStore:
         (Issue #450 P1.3). chmod-Fehler werden geloggt statt zu crashen — auf
         manchen NFS-/Volume-Mounts ist chmod nicht erlaubt.
         """
-        import fcntl  # POSIX-only — Agora läuft ausschließlich auf Linux/macOS
-
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        lock_path = self._path.with_suffix(".lock")
         payload = json.dumps(raw, indent=2, sort_keys=True).encode("utf-8")
-        with open(lock_path, "w", encoding="utf-8") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                tmp_path = self._path.with_suffix(".tmp")
-                # Tmp-File mit 0600 *anlegen*, nicht erst nach dem Schreiben
-                # chmod-en — sonst läge der Ciphertext zwischen Write und
-                # os.replace mit umask-Default (oft 0644) lesbar herum
-                # (Copilot finding #2 / Issue #450 P1.3).
-                fd = os.open(
-                    str(tmp_path),
-                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                    0o600,
-                )
-                try:
-                    os.write(fd, payload)
-                finally:
-                    os.close(fd)
-                os.replace(tmp_path, self._path)
-                # Defense in depth: nach dem Replace nochmal chmod, damit
-                # bei umask-restriktiven Hosts oder ACL-Edge-Cases der
-                # finale Pfad garantiert 0600 hat. Bei NFS-Mounts ohne
-                # chmod-Permission ist das kein Fail.
-                try:
-                    os.chmod(self._path, 0o600)
-                except OSError as exc:
-                    logger.warning(
-                        "Konnte Rechte auf %s nicht auf 0600 setzen: %s",
-                        self._path,
-                        exc,
-                    )
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        tmp_path = self._path.with_suffix(".tmp")
+        # Tmp-File mit 0600 *anlegen*, nicht erst nach dem Schreiben
+        # chmod-en — sonst läge der Ciphertext zwischen Write und
+        # os.replace mit umask-Default (oft 0644) lesbar herum
+        # (Copilot finding #2 / Issue #450 P1.3).
+        fd = os.open(
+            str(tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o600,
+        )
+        try:
+            offset = 0
+            while offset < len(payload):
+                written = os.write(fd, payload[offset:])
+                if written <= 0:
+                    raise OSError("Konnte vollständigen Secret-Store-Payload nicht schreiben")
+                offset += written
+        finally:
+            os.close(fd)
+        os.replace(tmp_path, self._path)
+        # Defense in depth: nach dem Replace nochmal chmod, damit
+        # bei umask-restriktiven Hosts oder ACL-Edge-Cases der
+        # finale Pfad garantiert 0600 hat. Bei NFS-Mounts ohne
+        # chmod-Permission ist das kein Fail.
+        try:
+            os.chmod(self._path, 0o600)
+        except OSError as exc:
+            logger.warning(
+                "Konnte Rechte auf %s nicht auf 0600 setzen: %s",
+                self._path,
+                exc,
+            )
 
     def list_entries(self) -> list[LlmProviderKeyEntry]:
         with self._lock:
@@ -223,7 +240,7 @@ class LlmProviderSecretsStore:
         ciphertext = self._fernet().encrypt(api_key.encode("utf-8")).decode("utf-8")
         masked = _mask_key(api_key)
         now = _now()
-        with self._lock:
+        with self._lock, self._file_lock():
             raw = self._read_raw()
             entries = raw.setdefault("entries", {})
             existing = entries.get(provider_id)
@@ -244,7 +261,7 @@ class LlmProviderSecretsStore:
 
     def mark_validated(self, provider_id: str, *, ok: bool) -> Optional[LlmProviderKeyEntry]:
         now = _now()
-        with self._lock:
+        with self._lock, self._file_lock():
             raw = self._read_raw()
             entry = raw.get("entries", {}).get(provider_id)
             if entry is None:
@@ -255,7 +272,7 @@ class LlmProviderSecretsStore:
         return self._to_entry(provider_id, entry)
 
     def delete(self, provider_id: str) -> bool:
-        with self._lock:
+        with self._lock, self._file_lock():
             raw = self._read_raw()
             entries = raw.get("entries", {})
             if provider_id not in entries:

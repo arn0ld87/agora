@@ -33,6 +33,8 @@
             "custom",
             "ollama_cloud",
             "openai_compatible",
+            "minimax",
+            "opencode_go",
             "github_copilot",
             "cloud",
             "unknown"

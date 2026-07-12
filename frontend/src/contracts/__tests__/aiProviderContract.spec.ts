@@ -9,7 +9,10 @@ import {
   AiModelSchema,
   AiRouteSchema,
   ModelCapabilitiesSchema,
+  ProviderConnectionBaseSchema,
   ProviderConnectionSchema,
+  ProviderConnectionResponseSchema,
+  ProviderConnectionUpsertRequestSchema,
 } from '../aiProviderContract'
 
 describe('canonical AI provider contracts', () => {
@@ -23,7 +26,7 @@ describe('canonical AI provider contracts', () => {
   })
 
   it('keeps Zod top-level fields aligned with generated Pydantic schemas', () => {
-    expect(Object.keys(ProviderConnectionSchema.shape).sort()).toEqual(
+    expect(Object.keys(ProviderConnectionBaseSchema.shape).sort()).toEqual(
       Object.keys(providerConnectionJsonSchema.properties).sort(),
     )
     expect(Object.keys(AiModelSchema.shape).sort()).toEqual(
@@ -64,6 +67,7 @@ describe('canonical AI provider contracts', () => {
       'custom',
       'ollama_cloud',
       'openai_compatible',
+      'minimax',
       'github_copilot',
       'cloud',
       'unknown',
@@ -118,6 +122,66 @@ describe('canonical AI provider contracts', () => {
 
     expect(result.success).toBe(true)
     expect(ProviderConnectionSchema.safeParse({ ...result.data, api_key: 'forbidden' }).success).toBe(false)
+  })
+
+  it('accepts minimax in lifecycle requests', () => {
+    expect(ProviderConnectionUpsertRequestSchema.safeParse({
+      display_name: 'Cloud provider',
+      provider_kind: 'minimax',
+      base_url: 'https://api.example.test/v1',
+    }).success).toBe(true)
+  })
+
+  it('keeps OpenCode Go unsupported in public provider connection contracts', () => {
+    expect(ProviderConnectionUpsertRequestSchema.safeParse({
+      display_name: 'OpenCode Go',
+      provider_kind: 'opencode_go',
+      base_url: 'https://api.example.test/v1',
+    }).success).toBe(false)
+    expect(ProviderConnectionSchema.safeParse({
+      ...connectionWithBaseUrl('https://api.example.test/v1'),
+      provider_kind: 'opencode_go',
+    }).success).toBe(false)
+  })
+
+  it.each(['http://127.0.0.1:11434', 'http://[::1]:11434/v1', 'http://localhost:11434'])(
+    'accepts a loopback URL for local Ollama: %s',
+    (base_url) => {
+      expect(ProviderConnectionUpsertRequestSchema.safeParse({
+        display_name: 'Ollama lokal',
+        provider_kind: 'ollama',
+        base_url,
+      }).success).toBe(true)
+    },
+  )
+
+  it.each(['https://ollama.example.test', 'http://192.168.1.10:11434', 'http://0.0.0.0:11434'])(
+    'rejects a non-loopback URL for local Ollama: %s',
+    (base_url) => {
+      expect(ProviderConnectionUpsertRequestSchema.safeParse({
+        display_name: 'Ollama lokal',
+        provider_kind: 'ollama',
+        base_url,
+      }).success).toBe(false)
+    },
+  )
+
+  it('rejects a loopback URL for a non-local provider connection', () => {
+    expect(ProviderConnectionSchema.safeParse({
+      ...connectionWithBaseUrl('http://localhost:11434'),
+      provider_kind: 'openai_compatible',
+    }).success).toBe(false)
+  })
+
+  it('keeps API keys input-only and rejects them from public responses', () => {
+    expect(ProviderConnectionUpsertRequestSchema.safeParse({
+      display_name: 'OpenAI',
+      provider_kind: 'openai',
+      api_key: 'test-only-api-key',
+    }).success).toBe(true)
+    expect(ProviderConnectionResponseSchema.safeParse({
+      connection: { ...connectionWithBaseUrl('https://api.openai.com/v1'), api_key: 'test-only-api-key' },
+    }).success).toBe(false)
   })
 
   it.each([

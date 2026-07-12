@@ -1,16 +1,16 @@
 {
   "base_urls": {
-    "valid": [
-      "http://localhost:11434",
-      "https://example.test:8443/v1",
+  "valid": [
+    "https://example.test:8443/v1",
       "https://gateway.example/v1/models"
     ],
-    "invalid": [
-      "https://user:pass@example.test/v1",
+  "invalid": [
+    "https://user:pass@example.test/v1",
       "https://example.test/v1?api_key=fixture-token",
       "https://example.test/v1?key=fixture-token",
-      "https://example.test/v1#fixture-fragment"
-    ]
+    "https://example.test/v1#fixture-fragment"
+  ],
+  "local_only": ["http://localhost:11434"]
   },
   "provider_connection": {
     "valid": [

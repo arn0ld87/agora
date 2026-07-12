@@ -19,8 +19,8 @@ Stand: 2026-07-11 (Onboarding/Provider-Unification Slice 1 verifiziert, PR #683 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3026 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 151 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 3084 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 153 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 _Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._

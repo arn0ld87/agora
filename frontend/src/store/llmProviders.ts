@@ -3,12 +3,14 @@
  *
  * Aggregiert:
  *   - statische Provider-Beschreibungen (GET /api/llm/providers)
- *   - persistierte API-Key-Entries (GET /api/llm/providers/api-keys)
+ *   - persistierte API-Key-Entries (GET /api/llm/providers/api-keys) — Legacy
  *   - dynamische Modelllisten (GET /api/llm/providers/<id>/models, 10-min-Cache)
+ *   - kanonischer Connection-Lifecycle (GET/PUT/DELETE
+ *     /api/llm/provider-connections*, Onboarding Slice 3 Task 5)
  *
- * Klartext-Keys laufen ausschließlich durch ``upsertKey`` ans Backend und
- * werden hier NIE im State gehalten — `lastError`, `models`, `entries` sind die
- * einzigen sichtbaren Daten.
+ * Klartext-Keys laufen ausschließlich durch ``upsertKey``/``upsertConnection``
+ * ans Backend und werden hier NIE im State gehalten — `lastError`, `models`,
+ * `entries`, `connections` sind die einzigen sichtbaren Daten.
  */
 import { defineStore } from "pinia";
 import { ref } from "vue";
@@ -20,10 +22,24 @@ import {
   testLlmProvider,
   type ProviderTestResult,
 } from "../api/llmProviderKeys";
+import {
+  deleteProviderConnection,
+  listProviderConnectionModels,
+  listProviderConnections,
+  testProviderConnection,
+  upsertProviderConnection,
+  type ProviderConnectionUpsertPayload,
+} from "../api/providerConnections";
 import type { ProviderDescriptor } from "../contracts/llmRoutingContract";
 import type { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
+import type {
+  AiModel,
+  ProviderConnection,
+  ProviderConnectionTestResult,
+} from "../contracts/aiProviderContract";
 import service from "../api";
 import type { ApiSuccessEnvelope } from "../api/envelope";
+import { isApiError } from "../api/envelope";
 import { unwrapResponse } from "../api/parse";
 
 interface ModelEntry {
@@ -159,6 +175,128 @@ export const useLlmProvidersStore = defineStore("llmProviders", () => {
     return providerId in entries.value;
   }
 
+  // ---------------------------------------------------------------------
+  // Kanonischer Connection-Lifecycle (Onboarding Slice 3, Task 5).
+  //
+  // Additiv zum Legacy-State oben: `connections` hält ausschließlich
+  // secret-freie `ProviderConnection`-Metadaten aus dem Backend-Contract.
+  // Ein `api_key` wird hier nie zwischengespeichert — er verlässt diesen
+  // Store nur als Argument von `upsertConnection` in Richtung Backend.
+  // ---------------------------------------------------------------------
+
+  const connections = ref<Record<string, ProviderConnection>>({});
+  const connectionsLoading = ref(false);
+  const connectionBusy = ref<Record<string, boolean>>({});
+  const connectionError = ref<Record<string, string | null>>({});
+  // 409 provider_unsupported (z.B. Subscription-/CLI-Bridges): ehrlich als
+  // "nicht unterstützt" markieren statt eine Verbindung vorzutäuschen.
+  const connectionUnsupported = ref<Record<string, boolean>>({});
+  const connectionTestResults = ref<Record<string, ProviderConnectionTestResult>>({});
+  const connectionModels = ref<Record<string, AiModel[]>>({});
+
+  function isConnectionConfigured(connectionId: string): boolean {
+    return connectionId in connections.value;
+  }
+
+  async function loadConnections(): Promise<void> {
+    connectionsLoading.value = true;
+    try {
+      const { items } = await listProviderConnections();
+      connections.value = Object.fromEntries(items.map((c) => [c.id, c]));
+    } catch (err) {
+      console.error("Failed to load provider connections:", err);
+      throw err;
+    } finally {
+      connectionsLoading.value = false;
+    }
+  }
+
+  function markUnsupportedIfApplicable(connectionId: string, err: unknown): void {
+    if (isApiError(err) && err.code === "provider_unsupported") {
+      connectionUnsupported.value = { ...connectionUnsupported.value, [connectionId]: true };
+    }
+  }
+
+  async function upsertConnection(
+    connectionId: string,
+    payload: ProviderConnectionUpsertPayload,
+  ): Promise<ProviderConnection> {
+    connectionBusy.value = { ...connectionBusy.value, [connectionId]: true };
+    connectionError.value = { ...connectionError.value, [connectionId]: null };
+    try {
+      const connection = await upsertProviderConnection(connectionId, payload);
+      connections.value = { ...connections.value, [connectionId]: connection };
+      delete connectionTestResults.value[connectionId];
+      delete connectionModels.value[connectionId];
+      return connection;
+    } catch (err) {
+      markUnsupportedIfApplicable(connectionId, err);
+      const message = err instanceof Error ? err.message : String(err);
+      connectionError.value = { ...connectionError.value, [connectionId]: message };
+      throw err;
+    } finally {
+      connectionBusy.value = { ...connectionBusy.value, [connectionId]: false };
+    }
+  }
+
+  async function removeConnection(connectionId: string): Promise<void> {
+    connectionBusy.value = { ...connectionBusy.value, [connectionId]: true };
+    connectionError.value = { ...connectionError.value, [connectionId]: null };
+    try {
+      await deleteProviderConnection(connectionId);
+      const nextConnections = { ...connections.value };
+      delete nextConnections[connectionId];
+      connections.value = nextConnections;
+      delete connectionTestResults.value[connectionId];
+      delete connectionModels.value[connectionId];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      connectionError.value = { ...connectionError.value, [connectionId]: message };
+      throw err;
+    } finally {
+      connectionBusy.value = { ...connectionBusy.value, [connectionId]: false };
+    }
+  }
+
+  async function testConnection(connectionId: string): Promise<ProviderConnectionTestResult> {
+    connectionBusy.value = { ...connectionBusy.value, [connectionId]: true };
+    connectionError.value = { ...connectionError.value, [connectionId]: null };
+    try {
+      const result = await testProviderConnection(connectionId);
+      connectionTestResults.value = { ...connectionTestResults.value, [connectionId]: result };
+      // Der Test-Response trägt nur das rohe Probe-Ergebnis; der persistierte
+      // Connection-Status wird server-seitig aktualisiert (update_probe) —
+      // frisch nachladen statt die Status-Mapping-Tabelle client-seitig zu
+      // duplizieren (Provider-Drift-Risiko, siehe Design-Doc).
+      await loadConnections();
+      return result;
+    } catch (err) {
+      markUnsupportedIfApplicable(connectionId, err);
+      const message = err instanceof Error ? err.message : String(err);
+      connectionError.value = { ...connectionError.value, [connectionId]: message };
+      throw err;
+    } finally {
+      connectionBusy.value = { ...connectionBusy.value, [connectionId]: false };
+    }
+  }
+
+  async function fetchConnectionModels(connectionId: string): Promise<AiModel[]> {
+    connectionBusy.value = { ...connectionBusy.value, [connectionId]: true };
+    connectionError.value = { ...connectionError.value, [connectionId]: null };
+    try {
+      const list = await listProviderConnectionModels(connectionId);
+      connectionModels.value = { ...connectionModels.value, [connectionId]: list };
+      return list;
+    } catch (err) {
+      markUnsupportedIfApplicable(connectionId, err);
+      const message = err instanceof Error ? err.message : String(err);
+      connectionError.value = { ...connectionError.value, [connectionId]: message };
+      throw err;
+    } finally {
+      connectionBusy.value = { ...connectionBusy.value, [connectionId]: false };
+    }
+  }
+
   return {
     providers,
     entries,
@@ -172,5 +310,18 @@ export const useLlmProvidersStore = defineStore("llmProviders", () => {
     revokeKey,
     testProvider,
     hasKey,
+    connections,
+    connectionsLoading,
+    connectionBusy,
+    connectionError,
+    connectionUnsupported,
+    connectionTestResults,
+    connectionModels,
+    isConnectionConfigured,
+    loadConnections,
+    upsertConnection,
+    removeConnection,
+    testConnection,
+    fetchConnectionModels,
   };
 });

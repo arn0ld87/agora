@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Annotated, Literal
+from ipaddress import ip_address
+from typing import Annotated, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    TypeAdapter,
+    BeforeValidator,
+    model_validator,
+)
 from typing_extensions import TypedDict
 
 from .llm_profile_contract import LlmProfile
@@ -18,7 +28,7 @@ from .llm_routing_contract import (
     StageId,
     StageLLMRoute,
 )
-from .provider_types import ProviderType
+from .provider_types import ProviderConnectionKind
 
 _STRICT = ConfigDict(extra="forbid")
 _LEGACY_ROUTE_OPTIONS_KEY = "__legacy_stage_route__"
@@ -26,6 +36,18 @@ _PUBLIC_BASE_URL_PATTERN = (
     r"^https?://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])"
     r"(?::[0-9]{1,5})?(?:/[^\s?#]*)?$"
 )
+
+
+def _reject_unsupported_connection_provider(value: object) -> object:
+    if value == "opencode_go":
+        raise ValueError("opencode_go is unsupported for provider connections in this slice")
+    return value
+
+
+ProviderConnectionProviderKind = Annotated[
+    ProviderConnectionKind,
+    BeforeValidator(_reject_unsupported_connection_provider),
+]
 # Muss dem Field(pattern=...) entsprechen, damit Validator und Feld
 # deckungsgleich bleiben und die Legacy-Sanitizer nie URLs durchreichen,
 # die die Modell-Konstruktion anschließend doch ablehnt.
@@ -57,6 +79,17 @@ def _validate_public_base_url(value: str) -> str:
         or parsed.fragment
     ):
         raise ValueError("base_url must be a public HTTP(S) base URL")
+    hostname = parsed.hostname.lower()
+    if hostname == "localhost":
+        raise ValueError("base_url must be a public HTTP(S) base URL")
+    try:
+        address = ip_address(hostname)
+    except ValueError:
+        # DNS-Namen werden nicht aufgeloest: Der Validator darf keinen
+        # netzwerkabhaengigen SSRF-Check vortaeuschen.
+        return value
+    if not address.is_global:
+        raise ValueError("base_url must be a public HTTP(S) base URL")
     return value
 
 
@@ -64,6 +97,36 @@ PublicBaseUrl = Annotated[
     str,
     Field(pattern=_PUBLIC_BASE_URL_PATTERN),
     AfterValidator(_validate_public_base_url),
+]
+
+
+def _validate_local_ollama_base_url(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama") from exc
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
+    try:
+        is_loopback = parsed.hostname == "localhost" or ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        is_loopback = False
+    if not is_loopback:
+        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
+    return value
+
+
+LocalOllamaBaseUrl = Annotated[
+    str,
+    Field(pattern=_PUBLIC_BASE_URL_PATTERN),
+    AfterValidator(_validate_local_ollama_base_url),
 ]
 
 
@@ -114,11 +177,11 @@ class ProviderConnection(BaseModel):
     model_config = _STRICT
 
     id: str = Field(min_length=1)
-    provider_kind: ProviderType
+    provider_kind: ProviderConnectionProviderKind
     display_name: str = Field(min_length=1)
     transport: ProviderTransport
     auth_mode: ProviderAuthMode
-    base_url: PublicBaseUrl | None = None
+    base_url: PublicBaseUrl | LocalOllamaBaseUrl | None = None
     enabled: bool = True
     status: ProviderStatus = "unknown"
     status_message: str | None = None
@@ -127,6 +190,46 @@ class ProviderConnection(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     last_tested_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_base_url_for_provider(self) -> ProviderConnection:
+        if self.base_url is None:
+            return self
+        if self.provider_kind == "ollama":
+            _validate_local_ollama_base_url(self.base_url)
+        else:
+            _validate_public_base_url(self.base_url)
+        return self
+
+
+class ProviderConnectionUpsertRequest(BaseModel):
+    """Lifecycle input; API keys are never part of public connection metadata."""
+
+    model_config = _STRICT
+
+    display_name: str = Field(min_length=1)
+    provider_kind: ProviderConnectionProviderKind
+    base_url: str | None = None
+    enabled: bool = True
+    api_key: SecretStr | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def validate_base_url_for_provider(self) -> ProviderConnectionUpsertRequest:
+        if self.base_url is None:
+            return self
+        if self.provider_kind == "ollama":
+            _validate_local_ollama_base_url(self.base_url)
+        else:
+            _validate_public_base_url(self.base_url)
+        return self
+
+
+class ProviderConnectionResponse(BaseModel):
+    """Public lifecycle response with no secret-bearing fields."""
+
+    model_config = _STRICT
+
+    connection: ProviderConnection
 
 
 class AiModel(BaseModel):
@@ -168,7 +271,9 @@ def provider_connection_from_descriptor(
     base_url, base_url_was_sanitized = _sanitize_legacy_base_url(descriptor.base_url)
     return ProviderConnection(
         id=descriptor.id,
-        provider_kind=descriptor.type,
+        # Statische Verengung; unsupported Kinds lehnt der BeforeValidator
+        # von ProviderConnectionProviderKind zur Laufzeit ab.
+        provider_kind=cast(ProviderConnectionKind, descriptor.type),
         display_name=descriptor.label,
         transport="local" if descriptor.type == "ollama" else "http",
         auth_mode="api_key" if descriptor.api_key_ref else "none",
@@ -325,7 +430,9 @@ def llm_profile_to_canonical(
         degradation_reasons.append("Legacy base URL requires reconfiguration")
     connection = ProviderConnection(
         id=profile.id,
-        provider_kind=profile.provider,
+        # Statische Verengung; unsupported Kinds lehnt der BeforeValidator
+        # von ProviderConnectionProviderKind zur Laufzeit ab.
+        provider_kind=cast(ProviderConnectionKind, profile.provider),
         display_name=profile.name,
         transport="local" if profile.provider == "ollama" else "http",
         auth_mode="api_key" if secret_ref or unresolved_legacy_secret else "none",

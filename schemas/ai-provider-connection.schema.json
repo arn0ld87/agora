@@ -89,6 +89,7 @@
         "custom",
         "ollama_cloud",
         "openai_compatible",
+        "minimax",
         "github_copilot",
         "cloud",
         "unknown"

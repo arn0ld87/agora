@@ -28,9 +28,13 @@ def test_list_providers(client):
         assert resp.status_code == 200
         assert resp.json["success"] is True
 
-@patch("app.api.llm_providers.model_catalog.get_models")
-def test_list_provider_models(mock_get_models, client):
-    mock_get_models.return_value = []
+@patch("app.api.llm_providers.get_provider_connection_service")
+def test_list_provider_models(mock_get_service, client):
+    from app.services.provider_connections.adapters import ProviderProbeResult
+
+    mock_get_service.return_value.probe.return_value = ProviderProbeResult(
+        status="available", status_message=None, models=()
+    )
     resp = client.get("/api/llm/providers/ollama_cloud/models")
     assert resp.status_code == 200
 
