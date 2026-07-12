@@ -39,7 +39,25 @@ export type RuntimeLlmRouting = z.infer<typeof RuntimeLlmRoutingSchema>;
 export const ProviderDescriptorSchema = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(["ollama_cloud", "openai", "google", "openai_compatible", "github_copilot"]),
+  // Muss backend/app/contracts/provider_types.py::ProviderType vollständig
+  // spiegeln (Drift-Fix, aufgedeckt durch Onboarding Slice 3 Task 5: GET
+  // /api/llm/providers liefert Deskriptoren für alle Registry-Einträge,
+  // u.a. "ollama"/"anthropic"/"minimax"/"opencode_go", nicht nur die zuvor
+  // gespiegelte Teilmenge).
+  type: z.enum([
+    "ollama",
+    "openai",
+    "google",
+    "anthropic",
+    "custom",
+    "ollama_cloud",
+    "openai_compatible",
+    "minimax",
+    "opencode_go",
+    "github_copilot",
+    "cloud",
+    "unknown",
+  ]),
   base_url: z.string().url().optional().nullable(),
   api_key_ref: z.string().optional().nullable(),
   supports_models_endpoint: z.boolean().default(false),

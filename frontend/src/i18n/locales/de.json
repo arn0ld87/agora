@@ -1000,29 +1000,35 @@
       },
       "llmProviders": {
         "title": "LLM-Provider",
-        "subtitle": "Hinterlege API-Schlüssel, ziehe Modelle live und wähle pro Schritt das passende Modell aus.",
-        "keyLabel": "API-Key (maskiert)",
+        "subtitle": "Verbinde Provider, teste sie und entdecke verfügbare Modelle.",
         "keyPlaceholder": "Neuen API-Key einfügen …",
         "baseUrlPlaceholder": "https://api.example.com/v1",
+        "localBaseUrlPlaceholder": "http://localhost:11434",
         "status": {
-          "connected": "verbunden",
-          "missing": "Key fehlt",
-          "local": "lokal",
-          "cli": "gh CLI"
+          "notConfigured": "Nicht konfiguriert",
+          "configured": "Konfiguriert (ungetestet)",
+          "connected": "Verbunden",
+          "degraded": "Eingeschränkt",
+          "error": "Fehler",
+          "disconnected": "Getrennt",
+          "unsupported": "Nicht unterstützt"
         },
+        "unsupportedNotice": "Dieser Anbieter ist eine Subscription-/CLI-Bridge und wird für Provider-Verbindungen nicht unterstützt.",
         "actions": {
-          "save": "Speichern",
-          "test": "Test",
+          "save": "Verbindung speichern",
+          "test": "Verbindung testen",
           "refreshModels": "Modelle laden",
-          "disconnect": "Trennen"
+          "disconnect": "Verbindung trennen"
         },
         "test": {
-          "saved": "Gespeichert.",
-          "ok": "{count} Modelle gefunden.",
-          "failed": "Verbindung fehlgeschlagen."
+          "available": "{count} Modelle gefunden.",
+          "unavailable": "Verbindung nicht erreichbar.",
+          "invalid_credentials": "Ungültige Zugangsdaten.",
+          "degraded": "Verbindung eingeschränkt nutzbar.",
+          "unsupported": "Anbieter wird nicht unterstützt."
         },
         "models": {
-          "title": "Modelle"
+          "title": "Entdeckte Modelle"
         },
         "defaults": {
           "title": "Workspace-Default",

@@ -1000,29 +1000,35 @@
       },
       "llmProviders": {
         "title": "LLM Providers",
-        "subtitle": "Store provider API keys, pull live model lists, and pick the right model per step.",
-        "keyLabel": "API key (masked)",
+        "subtitle": "Connect providers, test them, and discover available models.",
         "keyPlaceholder": "Paste a new API key …",
         "baseUrlPlaceholder": "https://api.example.com/v1",
+        "localBaseUrlPlaceholder": "http://localhost:11434",
         "status": {
-          "connected": "connected",
-          "missing": "key missing",
-          "local": "local",
-          "cli": "gh CLI"
+          "notConfigured": "Not configured",
+          "configured": "Configured (untested)",
+          "connected": "Connected",
+          "degraded": "Degraded",
+          "error": "Error",
+          "disconnected": "Disconnected",
+          "unsupported": "Unsupported"
         },
+        "unsupportedNotice": "This provider is a subscription/CLI bridge and is not supported for provider connections.",
         "actions": {
-          "save": "Save",
-          "test": "Test",
+          "save": "Save connection",
+          "test": "Test connection",
           "refreshModels": "Refresh models",
-          "disconnect": "Disconnect"
+          "disconnect": "Remove connection"
         },
         "test": {
-          "saved": "Saved.",
-          "ok": "{count} models discovered.",
-          "failed": "Connection failed."
+          "available": "{count} models discovered.",
+          "unavailable": "Connection unreachable.",
+          "invalid_credentials": "Invalid credentials.",
+          "degraded": "Connection is degraded.",
+          "unsupported": "Provider is not supported."
         },
         "models": {
-          "title": "Models"
+          "title": "Discovered models"
         },
         "defaults": {
           "title": "Workspace default",

@@ -147,6 +147,31 @@ export const ProviderConnectionResponseSchema = z.object({
 }).strict()
 export type ProviderConnectionResponse = z.infer<typeof ProviderConnectionResponseSchema>
 
+export const ProviderConnectionsListResponseSchema = z.object({
+  items: z.array(ProviderConnectionSchema),
+  total: z.number().int().nonnegative(),
+}).strict()
+export type ProviderConnectionsListResponse = z.infer<typeof ProviderConnectionsListResponseSchema>
+
+// Mirrors backend ProviderProbeStatus (services/provider_connections/adapters.py).
+// Distinct from ProviderConnection.status: this is the raw, per-probe result
+// before the service maps it onto the persisted connection status.
+export const ProviderProbeStatusSchema = z.enum([
+  'available',
+  'unavailable',
+  'invalid_credentials',
+  'degraded',
+  'unsupported',
+])
+export type ProviderProbeStatus = z.infer<typeof ProviderProbeStatusSchema>
+
+export const ProviderConnectionTestResultSchema = z.object({
+  status: ProviderProbeStatusSchema,
+  status_message: z.string().nullable().default(null),
+  models_found: z.number().int().nonnegative(),
+}).strict()
+export type ProviderConnectionTestResult = z.infer<typeof ProviderConnectionTestResultSchema>
+
 export const AiModelSchema = z.object({
   provider_connection_id: z.string().min(1),
   model_id: z.string().min(1),
