@@ -5,6 +5,54 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (embedding-migration — 2026-07-12)
+
+- **Embedding-Migrations-Service (Onboarding Slice 4.3)**:
+  ``backend/app/services/embedding_migration.py`` orchestriert den
+  Re-Embedding-Lifecycle gemaess ADR-0007. Vollstaendige
+  Statusuebergaenge ``pending → running → validating → completed |
+  rolled_back | failed``, atomarer Switch nach erfolgreicher
+  Validierung, idempotenter ``start()`` (kein doppelter Job fuer
+  dieselbe Konfiguration), explizites ``cancel()`` setzt auf
+  ``rolled_back`` statt ``failed`` (Operator-Entscheidung). Re-Embedder
+  ist als Protocol injizierbar — Tests laufen ohne Neo4j, der
+  echte Re-Embedding-Loop kommt mit Neo4j-Anbindung in einem
+  Folge-Slice.
+- **Ollama-Download-Service (Onboarding Slice 4.3)**:
+  ``backend/app/services/embedding_ollama_pull.py`` laedt ein
+  Embedding-Modell von ``POST {base_url}/api/pull`` (NDJSON-Stream)
+  und liefert einen strukturierten Bericht zurueck. Sicherheit:
+  strikte Model-Name-Validierung (ASCII a-z, A-Z, 0-9, '-', '_',
+  '.', ':', 1-100 Zeichen — schliesst Shell-Injection auf
+  Modell-Namens-Ebene aus), keine Shell-Aufrufe (immer strukturierte
+  JSON-Requests via ``requests.post``), Loopback/Ollama-Cloud-
+  Einschraenkung, 10-Minuten-Default-Timeout, 60-Sekunden-Stream-
+  Read-Timeout.
+- **Migrations-API** unter ``/api/llm/embedding/migrations``:
+  ``POST /`` (startet), ``GET /`` (listet), ``GET /<id>``, ``POST
+  /<id>/run``, ``POST /<id>/cancel``.
+- **Ollama-Download-API** unter ``/api/llm/embedding/ollama/pull``:
+  synchroner Endpoint mit strukturiertem JSON-Report (kein
+  Server-Sent-Event-Stream, weil der UI-Setup-Wizard das Ergebnis
+  atomar braucht).
+- **Embedding-Migration-Vertrag erweitert**: ``source_index_version``
+  darf jetzt ``0`` sein (Sentinel fuer Cold-Start-Migration ohne
+  Quell-Index). Vertrag stellt sicher, dass ``source=0`` nur mit
+  ``target=1`` kombiniert wird und ``source < target`` immer gilt
+  (sonst ValueError).
+- 35 neue Tests in
+  ``tests/services/test_embedding_migration.py`` (12) und
+  ``tests/services/test_embedding_ollama_pull.py`` (23) decken
+  Lifecycle, Validierung, Abbruch, Model-Name-Validierung,
+  Stream-Parsing, Auth-Fehler, Base-URL-Validierung und
+  Bearer-Header-Verhalten ab.
+
+### Fixed (Vertrag — 2026-07-12)
+
+- ``EmbeddingMigrationJob`` akzeptiert ``source_index_version=0``
+  als Cold-Start-Sentinel; vorher war die strukturelle Annahme
+  ``source >= 1`` zu strikt.
+
 ### Added (embedding-service — 2026-07-12)
 
 - **Embedding-Configuration-Service (Onboarding Slice 4.2)**: Persistenter

@@ -260,7 +260,7 @@ class EmbeddingMigrationJob(BaseModel):
 
     id: str = Field(min_length=1)
     configuration_id: str = Field(min_length=1)
-    source_index_version: int = Field(ge=1)
+    source_index_version: int = Field(ge=0)  # 0 = Cold-Start-Sentinel
     target_index_version: int = Field(ge=1)
     status: EmbeddingMigrationStatus = "pending"
     progress: EmbeddingMigrationProgress
@@ -270,9 +270,24 @@ class EmbeddingMigrationJob(BaseModel):
 
     @model_validator(mode="after")
     def validate_versions_differ(self) -> EmbeddingMigrationJob:
+        # ``source_index_version == 0`` ist der Sentinel fuer
+        # Cold-Start-Migrationen ohne vorhandenen Quell-Index. In
+        # diesem Fall ist ``target_index_version == 1`` der erste
+        # echte Index, und es gibt strukturell nichts zu kopieren.
+        if self.source_index_version == 0:
+            if self.target_index_version != 1:
+                raise ValueError(
+                    "source_index_version=0 ist nur fuer die erste "
+                    "Migration gueltig (target_index_version=1)"
+                )
+            return self
         if self.source_index_version == self.target_index_version:
             raise ValueError(
                 "source_index_version and target_index_version must differ"
+            )
+        if self.source_index_version > self.target_index_version:
+            raise ValueError(
+                "source_index_version must be less than target_index_version"
             )
         return self
 
