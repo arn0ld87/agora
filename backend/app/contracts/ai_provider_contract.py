@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import (
@@ -271,7 +271,9 @@ def provider_connection_from_descriptor(
     base_url, base_url_was_sanitized = _sanitize_legacy_base_url(descriptor.base_url)
     return ProviderConnection(
         id=descriptor.id,
-        provider_kind=descriptor.type,
+        # Statische Verengung; unsupported Kinds lehnt der BeforeValidator
+        # von ProviderConnectionProviderKind zur Laufzeit ab.
+        provider_kind=cast(ProviderConnectionKind, descriptor.type),
         display_name=descriptor.label,
         transport="local" if descriptor.type == "ollama" else "http",
         auth_mode="api_key" if descriptor.api_key_ref else "none",
@@ -428,7 +430,9 @@ def llm_profile_to_canonical(
         degradation_reasons.append("Legacy base URL requires reconfiguration")
     connection = ProviderConnection(
         id=profile.id,
-        provider_kind=profile.provider,
+        # Statische Verengung; unsupported Kinds lehnt der BeforeValidator
+        # von ProviderConnectionProviderKind zur Laufzeit ab.
+        provider_kind=cast(ProviderConnectionKind, profile.provider),
         display_name=profile.name,
         transport="local" if profile.provider == "ollama" else "http",
         auth_mode="api_key" if secret_ref or unresolved_legacy_secret else "none",
