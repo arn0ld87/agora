@@ -59,6 +59,15 @@ from app.contracts.user_profile_contract import (
     UserProfile,
     UserProfileUpdateRequest,
 )
+from app.contracts.embedding_contract import (
+    EmbeddingConfiguration,
+    EmbeddingConfigurationResponse,
+    EmbeddingConfigurationUpsertRequest,
+    EmbeddingIndexVersion,
+    EmbeddingMigrationJob,
+    EmbeddingMigrationJobResponse,
+    EmbeddingModelMetadata,
+)
 
 # schemas/ liegt im Repo-Root, dump_schemas.py liegt in backend/app/contracts/
 OUT_DIR = Path(__file__).resolve().parents[3] / "schemas"
@@ -103,6 +112,14 @@ CONTRACTS: dict[str, type] = {
     "onboarding-state.schema.json": OnboardingState,
     "onboarding-step-update-request.schema.json": OnboardingStepUpdateRequest,
     "onboarding-status-response.schema.json": OnboardingStatusResponse,
+    # Embedding (Slice 4.1)
+    "embedding-configuration.schema.json": EmbeddingConfiguration,
+    "embedding-configuration-upsert-request.schema.json": EmbeddingConfigurationUpsertRequest,
+    "embedding-configuration-response.schema.json": EmbeddingConfigurationResponse,
+    "embedding-migration-job.schema.json": EmbeddingMigrationJob,
+    "embedding-migration-job-response.schema.json": EmbeddingMigrationJobResponse,
+    "embedding-index-version.schema.json": EmbeddingIndexVersion,
+    "embedding-model-metadata.schema.json": EmbeddingModelMetadata,
 }
 
 

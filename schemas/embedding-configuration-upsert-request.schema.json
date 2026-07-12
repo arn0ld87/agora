@@ -1,0 +1,64 @@
+{
+  "$id": "https://alexle135.de/schemas/embedding-configuration-upsert-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Request-Vertrag fuer Anlegen/Aktualisieren einer Embedding-Konfiguration.\n\nWie bei ``ProviderConnectionUpsertRequest``: API-Keys werden nicht im\nVertrag transportiert, sondern ausschliesslich ueber den\n``provider_connection_id`` referenziert (Secret-Store entkoppelt).",
+  "properties": {
+    "dimensions": {
+      "exclusiveMinimum": 0,
+      "title": "Dimensions",
+      "type": "integer"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "project_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Id"
+    },
+    "provider_connection_id": {
+      "minLength": 1,
+      "title": "Provider Connection Id",
+      "type": "string"
+    },
+    "provider_kind": {
+      "enum": [
+        "ollama",
+        "openai",
+        "google",
+        "custom",
+        "ollama_cloud",
+        "openai_compatible"
+      ],
+      "title": "Provider Kind",
+      "type": "string"
+    },
+    "scope": {
+      "enum": [
+        "global",
+        "project"
+      ],
+      "title": "Scope",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_connection_id",
+    "provider_kind",
+    "model_id",
+    "dimensions",
+    "scope"
+  ],
+  "title": "EmbeddingConfigurationUpsertRequest",
+  "type": "object"
+}

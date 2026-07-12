@@ -257,3 +257,42 @@ def test_install_api_error_handlers_preserves_non_api_404():
 
     assert response.status_code == 404
     assert response.is_json is False
+
+
+def test_json_error_sanitizes_pydantic_validation_error_payload():
+    """Regression: Pydantic v2 ``ValidationError.errors()`` may carry live
+    ``ValueError`` instances in the ``ctx`` field. Without sanitization,
+    ``flask.jsonify`` would crash and turn a 4xx into a 500.
+    """
+    from pydantic import BaseModel, Field, ValidationError
+
+    class _Probe(BaseModel):
+        extra_config: dict[str, int] = Field(default_factory=dict)
+
+    try:
+        _Probe.model_validate({"extra_config": {"not_int": "boom"}})
+    except ValidationError as exc:
+        raw_errors = exc.errors(include_url=False)
+
+    app = _build_app()
+    with app.test_request_context():
+        response, status = json_error(
+            "Invalid request",
+            status=400,
+            code="invalid_request",
+            extra={"errors": raw_errors},
+        )
+        payload = response.get_json()
+
+    assert status == 400
+    assert payload["success"] is False
+    assert payload["code"] == "invalid_request"
+    # Alle ``ctx``-Werte muessen serialisierbar sein; ValueError-Instanzen
+    # werden via ``_to_jsonable`` zu Strings.
+    for entry in payload["errors"]:
+        if "ctx" in entry:
+            ctx = entry["ctx"]
+            assert isinstance(ctx, dict)
+            for v in ctx.values():
+                assert not isinstance(v, BaseException)
+

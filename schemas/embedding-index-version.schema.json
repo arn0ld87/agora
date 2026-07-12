@@ -1,0 +1,78 @@
+{
+  "$id": "https://alexle135.de/schemas/embedding-index-version.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Beschreibung einer einzelnen Version des Neo4j-Vector-Index.\n\nPro Version existiert ein eigener ``index_name`` und ein eigener\n``property_key`` auf den Graph-Knoten. Dadurch koennen mehrere Versionen\nparallel existieren, ohne dass die Embedding-Property ploetzlich\nverschwindet (vgl. 00-research Punkt 4 und 06-migration-plan.md).",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "dimensions": {
+      "exclusiveMinimum": 0,
+      "title": "Dimensions",
+      "type": "integer"
+    },
+    "index_name": {
+      "minLength": 1,
+      "title": "Index Name",
+      "type": "string"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "property_key": {
+      "minLength": 1,
+      "title": "Property Key",
+      "type": "string"
+    },
+    "provider_connection_id": {
+      "minLength": 1,
+      "title": "Provider Connection Id",
+      "type": "string"
+    },
+    "retired_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retired At"
+    },
+    "status": {
+      "default": "active",
+      "enum": [
+        "active",
+        "superseded",
+        "rolled_back",
+        "retired"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "provider_connection_id",
+    "model_id",
+    "dimensions",
+    "index_name",
+    "property_key",
+    "created_at"
+  ],
+  "title": "EmbeddingIndexVersion",
+  "type": "object"
+}

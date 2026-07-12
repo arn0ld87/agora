@@ -1,0 +1,72 @@
+{
+  "$id": "https://alexle135.de/schemas/embedding-model-metadata.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadaten zu einem Embedding-Modell, isoliert von Chat-Modellen.\n\nSlice 4.1 liefert nur die strukturelle Form. Die Live-Discovery\n(Capabilities, Live-Dimension, Modell-Katalog) ist Teil von Slice 4.2\n(Service) und Slice 4.3 (Anbieter-spezifische Adapter).",
+  "properties": {
+    "deprecated": {
+      "default": false,
+      "title": "Deprecated",
+      "type": "boolean"
+    },
+    "display_name": {
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "embedding_dimensions": {
+      "exclusiveMinimum": 0,
+      "title": "Embedding Dimensions",
+      "type": "integer"
+    },
+    "metadata_updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metadata Updated At"
+    },
+    "model_id": {
+      "minLength": 1,
+      "title": "Model Id",
+      "type": "string"
+    },
+    "provider_kind": {
+      "enum": [
+        "ollama",
+        "openai",
+        "google",
+        "custom",
+        "ollama_cloud",
+        "openai_compatible"
+      ],
+      "title": "Provider Kind",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "live",
+        "cached",
+        "fallback",
+        "custom"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "provider_kind",
+    "model_id",
+    "display_name",
+    "embedding_dimensions",
+    "source"
+  ],
+  "title": "EmbeddingModelMetadata",
+  "type": "object"
+}

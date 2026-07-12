@@ -5,6 +5,51 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (embedding-contracts — 2026-07-12)
+
+- **Kanonische Embedding-Verträge (Onboarding Slice 4.1)**: Neue
+  Pydantic-SSoT-Modelle `EmbeddingConfiguration`,
+  `EmbeddingConfigurationUpsertRequest`, `EmbeddingConfigurationResponse`,
+  `EmbeddingMigrationJob`, `EmbeddingMigrationProgress`,
+  `EmbeddingMigrationJobResponse`, `EmbeddingIndexVersion` und
+  `EmbeddingModelMetadata` in `backend/app/contracts/embedding_contract.py`.
+  Die Verträge sind strikt getrennt von der Chat-Welt (`ProviderConnection`,
+  `AiModel`, `AiRoute`); sie teilen nur die `provider_connection_id` als
+  Referenz. `EmbeddingProviderKind` ist eine echte Restriktion der
+  bestehenden `ProviderConnectionKind`-Menge (`ollama`, `openai`, `google`,
+  `custom`, `ollama_cloud`, `openai_compatible`); Anthropic, CLI-Bridges und
+  andere Chat-only-Provider sind als Embedding-Quelle explizit
+  ausgeschlossen. `scope` ist `global` (Workspace-Default) oder `project`
+  (Per-Project-Snapshot, mit strukturell erzwungener `project_id`-Pflicht).
+  `EmbeddingMigrationJob` modelliert den vollständigen Lifecycle
+  (`pending → running → validating → completed | rolled_back | failed`)
+  mit Checkpoint/Progress/Abbruch fuer den Re-Embedding-Workflow aus dem
+  Migrations-Plan. `EmbeddingIndexVersion` ermoeglicht versionierte
+  Neo4j-Vector-Indizes (parallele `index_name` + `property_key` pro
+  Version), damit ein Wechsel alte Daten nicht ploetzlich unlesbar macht.
+  Helper `provider_kind_supports_embeddings()` bildet die Bruecke zwischen
+  Slice 3 (`ProviderConnection`) und Slice 4 (`EmbeddingConfiguration`).
+  Sieben neue JSON-Schemas unter `schemas/embedding-*.schema.json`,
+  registriert in `dump_schemas`; `dump_schemas --check` ist gruen fuer
+  alle 46 Schemas.
+
+### Fixed (api-responses — 2026-07-12)
+
+- `json_error(extra={...})` crashed, wenn `extra` ein Pydantic
+  `ValidationError.errors()`-Payload enthaelt: Pydantic v2 packt im
+  `ctx`-Feld eine lebende `ValueError`-Instanz, die Flasks Default-JSON-
+  Encoder nicht serialisieren kann — die Folge war 500 statt 4xx auf
+  `/api/llm/provider-connections` (u. a. bei `test_upsert_rejects_invalid_
+  public_base_url`). Fix: zentraler Helper `_to_jsonable()` in
+  `app/utils/api_responses.py`, der via `pydantic_core.to_jsonable_python`
+  beliebige Werte (inkl. Pydantic-Validierungs-Exceptions, `SecretStr`,
+  `datetime`, `Decimal`) in JSON-kompatible Form bringt, BEVOR sie an
+  `jsonify` gehen. Der Fix wirkt automatisch fuer alle API-Routen, die
+  `json_error` mit `extra=...` aufrufen (Provider-Connections, API-Keys,
+  LLM-Profile, LLM-Routing). Regression-Test in
+  `tests/test_api_responses.py::test_json_error_sanitizes_pydantic_
+  validation_error_payload` pinnt das Verhalten.
+
 ### Added (provider-connections — 2026-07-12)
 
 - **Kanonischer Provider-Connection-Lifecycle (Slice 3, ADR-0006)**:

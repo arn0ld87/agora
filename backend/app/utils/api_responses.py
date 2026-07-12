@@ -26,6 +26,7 @@ from collections.abc import Mapping
 from typing import Any, Callable
 
 from flask import jsonify, request
+from pydantic_core import to_jsonable_python
 from werkzeug.exceptions import HTTPException
 
 from ..config import Config
@@ -98,6 +99,28 @@ def _http_error_code(error: HTTPException) -> str:
     return (error.name or "http_error").lower().replace(" ", "_")
 
 
+def _to_jsonable(value: Any) -> Any:
+    """Recursively coerce ``value`` into something :func:`flask.jsonify` accepts.
+
+    Pydantic v2 ``ValidationError.errors()`` returns dicts whose ``ctx`` field
+    can carry a live ``ValueError`` instance — and Flask's default JSON encoder
+    rejects those, turning a 400 into a 500. This helper walks the value with
+    :func:`pydantic_core.to_jsonable_python`, which knows how to coerce
+    Pydantic-specific types (``SecretStr``, ``Url``, ``datetime``,
+    ``Decimal`` …) and arbitrary exceptions to JSON-safe forms
+    (``Exception`` → ``str(exc)``).
+
+    Keeping the helper local to ``api_responses`` makes the contract explicit:
+    every envelope produced by this module is guaranteed to be serializable
+    by Flask without further munging.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, BaseException):
+        return str(value)
+    return to_jsonable_python(value)
+
+
 def json_success(data: Any = None, *, status: int = 200, **extra: Any):
     """
     Build a standard success envelope.
@@ -149,7 +172,11 @@ def json_error(
     if resolved_code:
         payload["code"] = resolved_code
     if extra:
-        payload.update(extra)
+        # ``extra`` may carry Pydantic ``ValidationError.errors()`` payloads
+        # whose ``ctx`` field contains live ``ValueError`` instances. We
+        # sanitize defensively so that any 4xx stays a 4xx instead of
+        # being downgraded to a 500 by Flask's JSON encoder.
+        payload.update(_to_jsonable(dict(extra)))
     return jsonify(payload), status
 
 

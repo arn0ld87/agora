@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "EmbeddingMigrationJob": {
+      "additionalProperties": false,
+      "description": "Lifecycle einer Re-Embedding-Migration.\n\nEin Job schliesst die Luecke zwischen zwei ``EmbeddingIndexVersion``-Werten:\nDer ``source_index_version`` bleibt aktiv, waehrend ``target_index_version``\nbefuellt wird. Erst nach erfolgreicher Validierung schaltet der\n``EmbeddingConfigurationService`` den Alias um (siehe 03-target-architecture.md\n\"Embedding-Lifecycle\").",
+      "properties": {
+        "configuration_id": {
+          "minLength": 1,
+          "title": "Configuration Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error_message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Message"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "progress": {
+          "$ref": "#/$defs/EmbeddingMigrationProgress"
+        },
+        "source_index_version": {
+          "minimum": 1,
+          "title": "Source Index Version",
+          "type": "integer"
+        },
+        "status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "running",
+            "validating",
+            "completed",
+            "rolled_back",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "target_index_version": {
+          "minimum": 1,
+          "title": "Target Index Version",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "configuration_id",
+        "source_index_version",
+        "target_index_version",
+        "progress",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "EmbeddingMigrationJob",
+      "type": "object"
+    },
+    "EmbeddingMigrationProgress": {
+      "additionalProperties": false,
+      "description": "Fortschritt einer Re-Embedding-Migration.\n\n``processed`` + ``failed`` <= ``total``. Die Konsistenz wird im Service\nerzwungen, nicht im Vertrag, weil der Vertrag sonst Transienten\nausgesetzt waere (running -> Progress kann temporaer inkonsistent sein).",
+      "properties": {
+        "failed": {
+          "minimum": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "processed": {
+          "minimum": 0,
+          "title": "Processed",
+          "type": "integer"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "processed",
+        "failed"
+      ],
+      "title": "EmbeddingMigrationProgress",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/embedding-migration-job-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Antwort-Wrapper fuer einen Migrations-Job.",
+  "properties": {
+    "job": {
+      "$ref": "#/$defs/EmbeddingMigrationJob"
+    }
+  },
+  "required": [
+    "job"
+  ],
+  "title": "EmbeddingMigrationJobResponse",
+  "type": "object"
+}
