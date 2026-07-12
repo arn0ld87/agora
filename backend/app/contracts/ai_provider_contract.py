@@ -15,6 +15,7 @@ from pydantic import (
     Field,
     SecretStr,
     TypeAdapter,
+    BeforeValidator,
     model_validator,
 )
 from typing_extensions import TypedDict
@@ -27,7 +28,7 @@ from .llm_routing_contract import (
     StageId,
     StageLLMRoute,
 )
-from .provider_types import ProviderType
+from .provider_types import ProviderConnectionKind
 
 _STRICT = ConfigDict(extra="forbid")
 _LEGACY_ROUTE_OPTIONS_KEY = "__legacy_stage_route__"
@@ -35,6 +36,18 @@ _PUBLIC_BASE_URL_PATTERN = (
     r"^https?://(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])"
     r"(?::[0-9]{1,5})?(?:/[^\s?#]*)?$"
 )
+
+
+def _reject_unsupported_connection_provider(value: object) -> object:
+    if value == "opencode_go":
+        raise ValueError("opencode_go is unsupported for provider connections in this slice")
+    return value
+
+
+ProviderConnectionProviderKind = Annotated[
+    ProviderConnectionKind,
+    BeforeValidator(_reject_unsupported_connection_provider),
+]
 # Muss dem Field(pattern=...) entsprechen, damit Validator und Feld
 # deckungsgleich bleiben und die Legacy-Sanitizer nie URLs durchreichen,
 # die die Modell-Konstruktion anschließend doch ablehnt.
@@ -149,7 +162,7 @@ class ProviderConnection(BaseModel):
     model_config = _STRICT
 
     id: str = Field(min_length=1)
-    provider_kind: ProviderType
+    provider_kind: ProviderConnectionProviderKind
     display_name: str = Field(min_length=1)
     transport: ProviderTransport
     auth_mode: ProviderAuthMode
@@ -170,7 +183,7 @@ class ProviderConnectionUpsertRequest(BaseModel):
     model_config = _STRICT
 
     display_name: str = Field(min_length=1)
-    provider_kind: ProviderType
+    provider_kind: ProviderConnectionProviderKind
     base_url: str | None = None
     enabled: bool = True
     api_key: SecretStr | None = Field(default=None, exclude=True)

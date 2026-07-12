@@ -67,7 +67,6 @@ describe('canonical AI provider contracts', () => {
       'ollama_cloud',
       'openai_compatible',
       'minimax',
-      'opencode_go',
       'github_copilot',
       'cloud',
       'unknown',
@@ -124,12 +123,24 @@ describe('canonical AI provider contracts', () => {
     expect(ProviderConnectionSchema.safeParse({ ...result.data, api_key: 'forbidden' }).success).toBe(false)
   })
 
-  it.each(['minimax', 'opencode_go'])('accepts the new provider kind in lifecycle requests: %s', (provider_kind) => {
+  it('accepts minimax in lifecycle requests', () => {
     expect(ProviderConnectionUpsertRequestSchema.safeParse({
       display_name: 'Cloud provider',
-      provider_kind,
+      provider_kind: 'minimax',
       base_url: 'https://api.example.test/v1',
     }).success).toBe(true)
+  })
+
+  it('keeps OpenCode Go unsupported in public provider connection contracts', () => {
+    expect(ProviderConnectionUpsertRequestSchema.safeParse({
+      display_name: 'OpenCode Go',
+      provider_kind: 'opencode_go',
+      base_url: 'https://api.example.test/v1',
+    }).success).toBe(false)
+    expect(ProviderConnectionSchema.safeParse({
+      ...connectionWithBaseUrl('https://api.example.test/v1'),
+      provider_kind: 'opencode_go',
+    }).success).toBe(false)
   })
 
   it.each(['http://127.0.0.1:11434', 'http://[::1]:11434/v1', 'http://localhost:11434'])(

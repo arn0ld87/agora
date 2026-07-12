@@ -55,7 +55,7 @@ def _connection_data(base_url: str) -> dict:
     }
 
 
-@pytest.mark.parametrize("provider_kind", ["minimax", "opencode_go"])
+@pytest.mark.parametrize("provider_kind", ["minimax"])
 def test_provider_connection_upsert_request_accepts_new_api_key_providers(
     provider_kind: str,
 ) -> None:
@@ -66,6 +66,25 @@ def test_provider_connection_upsert_request_accepts_new_api_key_providers(
     )
 
     assert request.provider_kind == provider_kind
+
+
+def test_provider_connection_upsert_request_rejects_opencode_go_as_unsupported() -> None:
+    with pytest.raises(ValidationError, match="unsupported"):
+        ProviderConnectionUpsertRequest(
+            display_name="OpenCode Go",
+            provider_kind="opencode_go",
+            base_url="https://api.example.test/v1",
+        )
+
+
+def test_provider_connection_rejects_opencode_go_as_unsupported() -> None:
+    with pytest.raises(ValidationError, match="unsupported"):
+        ProviderConnection(
+            **{
+                **_connection_data("https://api.example.test/v1"),
+                "provider_kind": "opencode_go",
+            }
+        )
 
 
 @pytest.mark.parametrize(

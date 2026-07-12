@@ -27,7 +27,9 @@ export const ModelCapabilitiesSchema = z.object({
 }).strict()
 export type ModelCapabilities = z.infer<typeof ModelCapabilitiesSchema>
 
-const ProviderKindSchema = z.enum([
+// OpenCode Go remains a CLI bridge and is unsupported for provider connections
+// in this slice.
+const ProviderConnectionKindSchema = z.enum([
   'ollama',
   'openai',
   'google',
@@ -36,7 +38,6 @@ const ProviderKindSchema = z.enum([
   'ollama_cloud',
   'openai_compatible',
   'minimax',
-  'opencode_go',
   'github_copilot',
   'cloud',
   'unknown',
@@ -88,7 +89,7 @@ export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) 
 
 export const ProviderConnectionSchema = z.object({
   id: z.string().min(1),
-  provider_kind: ProviderKindSchema,
+  provider_kind: ProviderConnectionKindSchema,
   display_name: z.string().min(1),
   transport: z.enum(['http', 'local']),
   auth_mode: z.enum(['none', 'api_key', 'oauth', 'session']),
@@ -106,7 +107,7 @@ export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
 
 export const ProviderConnectionUpsertRequestSchema = z.object({
   display_name: z.string().min(1),
-  provider_kind: ProviderKindSchema,
+  provider_kind: ProviderConnectionKindSchema,
   base_url: z.string().nullable().default(null),
   enabled: z.boolean().default(true),
   api_key: z.string().nullable().default(null),

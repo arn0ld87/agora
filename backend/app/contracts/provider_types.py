@@ -31,6 +31,22 @@ ProviderType = Literal[
     "unknown",
 ]
 
+# Connection lifecycle is HTTP/local only in this slice. OpenCode Go remains a
+# CLI bridge and must not be exposed as a provider connection.
+ProviderConnectionKind = Literal[
+    "ollama",
+    "openai",
+    "google",
+    "anthropic",
+    "custom",
+    "ollama_cloud",
+    "openai_compatible",
+    "minimax",
+    "github_copilot",
+    "cloud",
+    "unknown",
+]
+
 # NOTE: typed as tuple[str, ...] (not tuple[ProviderType, ...]) because
 # the constants above are inferred as `str`, not as specific Literal[...].
 # Promoting each to `Final[Literal[...]]` would be cleaner but is a
