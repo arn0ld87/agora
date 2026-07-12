@@ -41,11 +41,11 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Modify: `backend/tests/contracts/test_ai_provider_contract.py`
 - Modify: `frontend/src/contracts/__tests__/aiProviderContract.spec.ts`
 
-- [ ] Zuerst Tests für `minimax` und `opencode_go`, für den lokalen
+- [x] Zuerst Tests für `minimax` und `opencode_go`, für den lokalen
   Ollama-Transport und für die secret-freie Serialisierung schreiben. Der Test
   darf vor der Implementierung mit unbekanntem Provider-Typ bzw. fehlendem
   Request/Response-Vertrag fehlschlagen.
-- [ ] `ProviderType` und die Zod-Enum um `minimax` und `opencode_go` ergänzen.
+- [x] `ProviderType` und die Zod-Enum um `minimax` und `opencode_go` ergänzen.
   Die bestehenden `ProviderConnection`-Felder bleiben kompatibel; neue
   Lifecycle-Request-/Response-Modelle trennen Eingabegeheimnisse von der
   öffentlichen Connection:
@@ -64,10 +64,10 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
       connection: ProviderConnection
   ```
 
-- [ ] Für lokale Ollama-Verbindungen einen separaten Validator verwenden, der
+- [x] Für lokale Ollama-Verbindungen einen separaten Validator verwenden, der
   nur explizite lokale Loopback-URLs zulässt; `PublicBaseUrl` unverändert für
   alle Custom-HTTP-Verbindungen behalten.
-- [ ] Backend- und Frontend-Contract-Tests grün ausführen:
+- [x] Backend- und Frontend-Contract-Tests grün ausführen:
 
   ```bash
   cd backend && uv run pytest tests/contracts/test_provider_types.py tests/contracts/test_ai_provider_contract.py -q
@@ -83,16 +83,16 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Create: `backend/tests/services/test_provider_connection_store.py`
 - Modify: `backend/app/services/llm_provider_secrets_store.py`
 
-- [ ] Rote Store-Tests für leeres Laden, Upsert, Status-Persistenz,
+- [x] Rote Store-Tests für leeres Laden, Upsert, Status-Persistenz,
   Aktualisierungszeitpunkt, Delete und atomaren Rollback bei fehlerhaftem Write
   schreiben.
-- [ ] `ProviderConnectionStore` mit `AGORA_DATA_DIR/provider_connections.json`,
+- [x] `ProviderConnectionStore` mit `AGORA_DATA_DIR/provider_connections.json`,
   `flock`, atomarem Tempfile-Replace und Modus `0600` implementieren. Der Store
   persistiert `ProviderConnection`, nie `api_key`.
-- [ ] Den bestehenden `LlmProviderSecretsStore` über seine öffentliche
+- [x] Den bestehenden `LlmProviderSecretsStore` über seine öffentliche
   `upsert(provider_id, api_key)`-/`delete(provider_id)`-API nutzen. Die
   Connection speichert als `secret_ref` ausschließlich `provider_id`.
-- [ ] Folgende Service-Operationen einführen und vollständig testen:
+- [x] Folgende Service-Operationen einführen und vollständig testen:
 
   ```python
   def list_connections(self) -> list[ProviderConnection]: ...
@@ -108,7 +108,7 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
   ) -> ProviderConnection: ...
   ```
 
-- [ ] Ausführen: `cd backend && uv run pytest tests/services/test_provider_connection_store.py tests/services/test_llm_provider_secrets_store.py -q`.
+- [x] Ausführen: `cd backend && uv run pytest tests/services/test_provider_connection_store.py tests/services/test_llm_provider_secrets_store.py -q`.
 
 ## Task 3 — Registry und Adapter-Matrix vereinheitlichen
 
@@ -120,11 +120,11 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Modify: `backend/app/services/llm_provider_registry.py`
 - Modify: `backend/app/services/model_catalog_service.py`
 
-- [ ] Zuerst parametrische rote Adapter-Tests für OpenAI, Anthropic, Gemini,
+- [x] Zuerst parametrische rote Adapter-Tests für OpenAI, Anthropic, Gemini,
   MiniMax, Ollama Cloud, OpenCode Go, OpenAI-kompatibel und lokales Ollama
   schreiben. Jeder Test liefert entweder Modelle oder einen normalisierten
   `ProviderProbeResult`, nie einen rohen Transportfehler.
-- [ ] Das Adapter-Protokoll und Resultat definieren; Task 3 mappt sein Resultat
+- [x] Das Adapter-Protokoll und Resultat definieren; Task 3 mappt sein Resultat
   auf die primitive `ProviderConnectionStore.update_probe(...)`-Signatur aus
   Task 2:
 
@@ -139,17 +139,17 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
       def probe(self, connection: ProviderConnection, api_key: str | None) -> ProviderProbeResult: ...
   ```
 
-- [ ] Die Registry als einzige Matrix für `provider_kind`, Display-Name,
+- [x] Die Registry als einzige Matrix für `provider_kind`, Display-Name,
   Transport, Auth-Modus, Standard-Base-URL und Adapter-Fabrik ausbauen. Sie
   enthält die acht freigegebenen HTTP-Verbindungen; Codex- und Claude-Code-
   Bridges bekommen ausschließlich `unsupported`-Metadaten.
-- [ ] Vor der konkreten URL-/Header-Implementierung jede Anbieterregel gegen
+- [x] Vor der konkreten URL-/Header-Implementierung jede Anbieterregel gegen
   die offizielle Dokumentation festhalten. Gemini nutzt die dokumentierte
   OpenAI-Kompatibilität mit `/v1beta/openai/` und `models.list`; die übrigen
   Adapter dürfen nicht aus unbestätigten Endpunkten abgeleitet werden.
-- [ ] `ModelCatalogService` nur hinter dem Adapter verwenden oder dessen
+- [x] `ModelCatalogService` nur hinter dem Adapter verwenden oder dessen
   vorhandene HTTP-Abstraktion extrahieren; kein zweiter Discovery-Codepfad.
-- [ ] Ausführen: `cd backend && uv run pytest tests/services/provider_connections -q`.
+- [x] Ausführen: `cd backend && uv run pytest tests/services/provider_connections -q`.
 
 ## Task 4 — Lifecycle-API ohne Secret-Leak ergänzen
 
@@ -158,11 +158,11 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Create: `backend/tests/api/test_provider_connections_api.py`
 - Modify: `backend/tests/api/test_provider_override_key_fallback.py`
 
-- [ ] Rote API-Tests für List, Upsert, Delete, Test und Discovery anlegen.
+- [x] Rote API-Tests für List, Upsert, Delete, Test und Discovery anlegen.
   Prüfen: 400 bei ungültiger URL, 404 bei unbekannter Connection, 409 bei
   unzulässigem Statusübergang und kein Klartext im JSON, auch wenn der Request
   einen Key enthielt.
-- [ ] Unter `/api/llm/provider-connections` diese Routen implementieren:
+- [x] Unter `/api/llm/provider-connections` diese Routen implementieren:
 
   ```text
   GET    /provider-connections
@@ -172,12 +172,12 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
   GET    /provider-connections/<connection_id>/models
   ```
 
-- [ ] Die alten `/providers`, `/providers/<id>/models`, `/test` und
+- [x] Die alten `/providers`, `/providers/<id>/models`, `/test` und
   `/api-key`-Routen als Kompatibilitätsadapter behalten; sie delegieren an die
   neue Service-Schicht, statt parallele Secret-/Discovery-Logik zu behalten.
-- [ ] `handle_api_errors` und strukturiertes Logging verwenden; in Fehlern nur
+- [x] `handle_api_errors` und strukturiertes Logging verwenden; in Fehlern nur
   Connection-ID, Provider-Kind und normalisierte Kategorie loggen.
-- [ ] Ausführen: `cd backend && uv run pytest tests/api/test_provider_connections_api.py tests/api/test_provider_override_key_fallback.py -q`.
+- [x] Ausführen: `cd backend && uv run pytest tests/api/test_provider_connections_api.py tests/api/test_provider_override_key_fallback.py -q`.
 
 ## Task 5 — Frontend-API und Settings-Verbindungen integrieren
 
@@ -188,15 +188,15 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Create: `frontend/src/api/__tests__/providerConnections.spec.ts`
 - Modify: `frontend/src/views/__tests__/LlmProvidersView.spec.ts`
 
-- [ ] Rote Vitest-Fälle für Zod-Validierung, maskierte Connection-Responses,
+- [x] Rote Vitest-Fälle für Zod-Validierung, maskierte Connection-Responses,
   Test-Status und den lokalen-Ollama-Flow schreiben.
-- [ ] API-Client mit `ProviderConnectionSchema` an jeder Response-Grenze
+- [x] API-Client mit `ProviderConnectionSchema` an jeder Response-Grenze
   implementieren; Eingabe-Keys nur im PUT-Body senden und nicht im Pinia-State
   speichern.
-- [ ] Den vorhandenen Settings-Provider-View auf Connection-Lifecycle
+- [x] Den vorhandenen Settings-Provider-View auf Connection-Lifecycle
   umstellen: konfiguriert/nicht konfiguriert, Test-Ergebnis und Discovery
   sichtbar; Subscription-Bridges klar als nicht unterstützt markieren.
-- [ ] Ausführen: `cd frontend && bun vitest run src/api/__tests__/providerConnections.spec.ts src/views/__tests__/LlmProvidersView.spec.ts`.
+- [x] Ausführen: `cd frontend && bun vitest run src/api/__tests__/providerConnections.spec.ts src/views/__tests__/LlmProvidersView.spec.ts`.
 
 ## Task 6 — Verträge generieren, vollständige Qualitätsgates und Dokumentation
 
@@ -208,14 +208,14 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
 - Modify: `CHANGELOG.md`
 - Review only: `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/tooling/agent-tools.md`
 
-- [ ] Schema-Generator ausführen und Drift prüfen:
+- [x] Schema-Generator ausführen und Drift prüfen:
 
   ```bash
   cd backend && uv run python -m app.contracts.dump_schemas
   git diff --exit-code schemas/
   ```
 
-- [ ] Vollständige Gates ausführen und Resultate mit exakten Zählwerten im
+- [x] Vollständige Gates ausführen und Resultate mit exakten Zählwerten im
   Handover dokumentieren:
 
   ```bash
@@ -224,9 +224,9 @@ Vue 3, TypeScript, Zod, pytest, Vitest.
   bash scripts/sync-status.sh --check
   ```
 
-- [ ] `code-review-graph` inkrementell aktualisieren; Delta, Impact Radius,
+- [x] `code-review-graph` inkrementell aktualisieren; Delta, Impact Radius,
   betroffene Tests und Testlücken für geänderte Dateien prüfen.
-- [ ] Doc-Impact-Tabelle im Handover führen: `aktualisiert`, `geprüft, nicht
+- [x] Doc-Impact-Tabelle im Handover führen: `aktualisiert`, `geprüft, nicht
   betroffen` oder `bewusst offen mit Begründung`. Danach nur konkrete Dateien
   stagen und atomar committen.
 

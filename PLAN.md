@@ -373,8 +373,8 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 ## 12. Onboarding & Provider-Unification (2026-07-10)
 
-**Status:** Phase 0 und Slice 1 gemergt (PR #682, #683). Slice 2
-(Benutzerprofil + resumierbares Onboarding) implementiert und verifiziert;
+**Status:** Phase 0, Slice 1 und Slice 2 gemergt (PR #682, #683, #684).
+Slice 3 (Provider-Verbindungen und Discovery) implementiert und verifiziert;
 PR-Eröffnung läuft. Bestehende Profile bleiben unverändert lesbar;
 Benutzerprofil und KI-Presets sind getrennte Schlüsselräume (ADR-0008).
 
@@ -389,8 +389,8 @@ Source of Truth:
 |---|---|---|
 | 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | ✅ abgeschlossen |
 | 1 | Kanonische Provider-/Modell-/Route-Verträge | ✅ gemergt (PR #683) |
-| 2 | Benutzerprofil und resumierbares Onboarding | implementiert; PR offen |
-| 3 | Provider-Verbindungen und Discovery | offen |
+| 2 | Benutzerprofil und resumierbares Onboarding | ✅ gemergt (PR #684) |
+| 3 | Provider-Verbindungen und Discovery | implementiert; PR offen |
 | 4 | Embedding-Setup und sichere Re-Embedding-Migration | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
@@ -403,6 +403,6 @@ läuft seitdem mit Exit 0 (vor Slice 2 unabhängig verifiziert).
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-11 — Slice 2 implementiert und verifiziert; PR-Eröffnung läuft.*
+*Zuletzt aktualisiert: 2026-07-12 — Slice 3 (Provider-Verbindungen) implementiert und verifiziert; PR-Eröffnung läuft.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
