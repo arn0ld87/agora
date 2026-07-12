@@ -30,9 +30,15 @@ logger = get_logger("agora.api.llm_providers")
 provider_registry = LlmProviderRegistry()
 
 
+_store_instance: ProviderConnectionStore | None = None
+
+
 def get_provider_connection_store() -> ProviderConnectionStore:
     """Build the canonical metadata store on demand for process-safe API use."""
-    return ProviderConnectionStore()
+    global _store_instance
+    if _store_instance is None:
+        _store_instance = ProviderConnectionStore()
+    return _store_instance
 
 
 def get_provider_connection_service() -> ProviderConnectionService:
