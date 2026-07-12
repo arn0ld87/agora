@@ -87,16 +87,19 @@ def test_adapter_normalizes_transport_errors(
     assert result.models == ()
 
 
-def test_opencode_go_is_explicitly_unsupported_without_transport_call() -> None:
+@pytest.mark.parametrize("provider_kind", ["opencode_go", "github_copilot"])
+def test_unsupported_providers_report_a_provider_neutral_message_without_transport_call(
+    provider_kind: str,
+) -> None:
     def unexpected_call(_url: str, *, headers: dict[str, str]) -> CatalogHttpResponse:
         raise AssertionError("unsupported provider must not contact the network")
 
-    result = adapter_for_connection("opencode_go", get_json=unexpected_call).probe(
+    result = adapter_for_connection(provider_kind, get_json=unexpected_call).probe(
         _connection("openai", "https://api.openai.com/v1"), "test-key"
     )
 
     assert result == ProviderProbeResult(
-        status="unsupported", status_message="OpenCode Go ist in diesem Slice nicht unterstützt"
+        status="unsupported", status_message="Dieser Provider ist in diesem Slice nicht unterstützt"
     )
 
 

@@ -122,7 +122,7 @@ class _UnsupportedAdapter:
     ) -> ProviderProbeResult:
         return ProviderProbeResult(
             status="unsupported",
-            status_message="OpenCode Go ist in diesem Slice nicht unterstützt",
+            status_message="Dieser Provider ist in diesem Slice nicht unterstützt",
         )
 
 
