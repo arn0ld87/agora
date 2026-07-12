@@ -118,7 +118,12 @@ def _to_jsonable(value: Any) -> Any:
         return value
     if isinstance(value, BaseException):
         return str(value)
-    return to_jsonable_python(value)
+    # ``fallback=str`` ist die letzte Verteidigungslinie: wenn weder
+    # Pydantics eingebauter Coercer noch die obige Exception-Klausel
+    # greifen, wird der Wert in seinen String-Repr überführt, statt eine
+    # ``PydanticSerializationError``-Escalation in einen HTTP 500 zu
+    # verwandeln.
+    return to_jsonable_python(value, fallback=str)
 
 
 def json_success(data: Any = None, *, status: int = 200, **extra: Any):

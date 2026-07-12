@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -391,6 +392,79 @@ def test_embedding_index_version_accepts_all_statuses(
         retired_at=retired_at,
     )
     assert version.status == status
+
+
+@pytest.mark.parametrize("status", ["active", "superseded", "rolled_back"])
+def test_embedding_index_version_rejects_retired_at_for_non_retired_status(
+    status: EmbeddingIndexStatus,
+) -> None:
+    """Gemini-Finding (MEDIUM): ``retired_at`` darf nur gesetzt sein,
+    wenn der Status tatsaechlich ``'retired'`` ist. Sonst entstehen
+    zustaende, in denen ein aktiver Index ein Retirement-Datum haette.
+    """
+    with pytest.raises(ValidationError, match="retired_at"):
+        EmbeddingIndexVersion(
+            version=1,
+            provider_connection_id="conn-1",
+            model_id="nomic-embed-text",
+            dimensions=768,
+            index_name="entity_embedding_v1",
+            property_key="embedding_v1",
+            status=status,
+            created_at=NOW,
+            retired_at=NOW,
+        )
+
+
+def test_embedding_migration_progress_rejects_finished_at_without_started_at() -> None:
+    """Gemini-Finding (MEDIUM): ``finished_at`` ohne ``started_at`` ist ein
+    klarer Vertragsbruch — ein Job kann nicht enden, ohne je begonnen
+    zu haben.
+    """
+    with pytest.raises(ValidationError, match="started_at"):
+        EmbeddingMigrationProgress(
+            total=10, processed=10, failed=0, started_at=None, finished_at=NOW
+        )
+
+
+def test_embedding_migration_progress_rejects_finished_at_before_started_at() -> None:
+    with pytest.raises(ValidationError, match="finished_at"):
+        EmbeddingMigrationProgress(
+            total=10,
+            processed=10,
+            failed=0,
+            started_at=NOW,
+            finished_at=NOW.replace(year=NOW.year - 1),
+        )
+
+
+def test_embedding_migration_progress_accepts_consistent_timestamps() -> None:
+    later = NOW.replace(year=NOW.year + 1)
+    progress = EmbeddingMigrationProgress(
+        total=10, processed=10, failed=0, started_at=NOW, finished_at=later
+    )
+    assert progress.started_at == NOW
+    assert progress.finished_at == later
+
+
+def test_embedding_migration_progress_accepts_running_state_with_no_finish() -> None:
+    """Waehrend ``running`` ist ``finished_at`` None — das ist erlaubt und
+    der haeufigste Fall. Der Test pinnt, dass der neue Validator den
+    Normalfall nicht verschlechtert.
+    """
+    progress = EmbeddingMigrationProgress(
+        total=100, processed=42, failed=0, started_at=NOW, finished_at=None
+    )
+    assert progress.finished_at is None
+
+
+def test_embedding_provider_kinds_helper_is_derived_from_literal() -> None:
+    """Gemini-Finding (MEDIUM): das ``_EMBEDDING_PROVIDER_KINDS``-Set muss
+    dynamisch aus dem ``EmbeddingProviderKind``-Literal abgeleitet sein,
+    damit es nicht zu Drift zwischen Vertrag und Laufzeit kommen kann.
+    """
+    kinds = embedding_provider_kinds()
+    assert kinds == frozenset(get_args(EmbeddingProviderKind))
 
 
 # ----------------------------------------------------------------------

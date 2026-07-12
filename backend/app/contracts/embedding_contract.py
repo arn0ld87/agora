@@ -36,30 +36,13 @@ Wichtige Invarianten:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .provider_types import ProviderConnectionKind
 
 _STRICT = ConfigDict(extra="forbid")
-
-# ----------------------------------------------------------------------
-# Sub-Restriktion: Welche ProviderConnectionKind-Werte duerfen als
-# Embedding-Quelle dienen? Anthropic, OpenCode Go und CLI-Bridges sind
-# bewusst ausgeschlossen.
-# ----------------------------------------------------------------------
-
-_EMBEDDING_PROVIDER_KINDS: frozenset[str] = frozenset(
-    {
-        "ollama",
-        "openai",
-        "google",
-        "custom",
-        "ollama_cloud",
-        "openai_compatible",
-    }
-)
 
 EmbeddingProviderKind = Literal[
     "ollama",
@@ -69,6 +52,20 @@ EmbeddingProviderKind = Literal[
     "ollama_cloud",
     "openai_compatible",
 ]
+
+# ----------------------------------------------------------------------
+# Sub-Restriktion: Welche ProviderConnectionKind-Werte duerfen als
+# Embedding-Quelle dienen? Anthropic, OpenCode Go und CLI-Bridges sind
+# bewusst ausgeschlossen.
+# ----------------------------------------------------------------------
+
+# Das Set wird dynamisch aus dem Literal-Type abgeleitet, damit neue
+# Provider-Arten nur an einer einzigen Stelle (``EmbeddingProviderKind``)
+# hinzugefügt werden müssen und es nicht zu Drift zwischen Vertrag und
+# Laufzeit-Helper kommen kann.
+_EMBEDDING_PROVIDER_KINDS: frozenset[str] = frozenset(
+    get_args(EmbeddingProviderKind)
+)
 
 # Konfigurationsstatus. Proposed -> Probed -> (Reembedding | Active) -> ...
 # (siehe 03-target-architecture.md, "Embedding-Lifecycle").
@@ -219,9 +216,13 @@ class EmbeddingConfigurationResponse(BaseModel):
 class EmbeddingMigrationProgress(BaseModel):
     """Fortschritt einer Re-Embedding-Migration.
 
-    ``processed`` + ``failed`` <= ``total``. Die Konsistenz wird im Service
-    erzwungen, nicht im Vertrag, weil der Vertrag sonst Transienten
-    ausgesetzt waere (running -> Progress kann temporaer inkonsistent sein).
+    ``processed`` + ``failed`` <= ``total``. Die numerische Konsistenz
+    wird im Service erzwungen, nicht im Vertrag, weil der Vertrag sonst
+    Transienten ausgesetzt waere (running -> Progress kann temporaer
+    inkonsistent sein). Die zeitliche Konsistenz der Zeitstempel
+    wird hingegen strukturell geprueft, weil sie invariant ist: ein
+    ``finished_at`` ohne ``started_at`` oder ein ``finished_at`` vor
+    ``started_at`` waere ein klarer Vertragsbruch.
     """
 
     model_config = _STRICT
@@ -231,6 +232,18 @@ class EmbeddingMigrationProgress(BaseModel):
     failed: int = Field(ge=0)
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_timestamps(self) -> EmbeddingMigrationProgress:
+        if self.finished_at is not None and self.started_at is None:
+            raise ValueError("started_at must be set if finished_at is set")
+        if (
+            self.started_at is not None
+            and self.finished_at is not None
+            and self.finished_at < self.started_at
+        ):
+            raise ValueError("finished_at cannot be before started_at")
+        return self
 
 
 class EmbeddingMigrationJob(BaseModel):
@@ -297,6 +310,8 @@ class EmbeddingIndexVersion(BaseModel):
     def validate_status_with_retired(self) -> EmbeddingIndexVersion:
         if self.status == "retired" and self.retired_at is None:
             raise ValueError("retired_at is required when status='retired'")
+        if self.status != "retired" and self.retired_at is not None:
+            raise ValueError("retired_at must be None when status is not 'retired'")
         return self
 
 

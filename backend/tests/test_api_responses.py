@@ -296,3 +296,27 @@ def test_json_error_sanitizes_pydantic_validation_error_payload():
             for v in ctx.values():
                 assert not isinstance(v, BaseException)
 
+
+def test_json_error_falls_back_to_string_for_unknown_objects():
+    """Gemini-Finding (HIGH): ``_to_jsonable`` muss auch fuer Objekte, die
+    weder Pydantic noch der Exception-Klausel bekannt sind, eine JSON-
+    kompatible Form liefern. Sonst kippt die Sanitizer-Sicherheit.
+    """
+
+    class _Weird:
+        def __repr__(self) -> str:
+            return "<weird>"
+
+    app = _build_app()
+    with app.test_request_context():
+        response, status = json_error(
+            "boom",
+            status=400,
+            extra={"weird": _Weird(), "container": {"nested": _Weird()}},
+        )
+        payload = response.get_json()
+
+    assert status == 400
+    assert payload["weird"] == "<weird>"
+    assert payload["container"] == {"nested": "<weird>"}
+
