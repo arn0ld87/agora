@@ -93,6 +93,9 @@ def list_provider_connections():
 @llm_bp.route("/provider-connections/<connection_id>", methods=["PUT"])
 @handle_api_errors(logger=logger)
 def upsert_provider_connection(connection_id: str):
+    definition = LlmProviderRegistry.connection_definition(connection_id)
+    if definition is not None and definition.adapter_kind == "unsupported":
+        return _unsupported_provider_response(connection_id)
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return _invalid_connection_request()
@@ -133,6 +136,9 @@ def delete_provider_connection(connection_id: str):
 @llm_bp.route("/provider-connections/<connection_id>/test", methods=["POST"])
 @handle_api_errors(logger=logger)
 def test_provider_connection(connection_id: str):
+    definition = LlmProviderRegistry.connection_definition(connection_id)
+    if definition is not None and definition.adapter_kind == "unsupported":
+        return _unsupported_provider_response(connection_id)
     connection = _connection_or_404(connection_id)
     if connection is None:
         return json_error("Provider connection not found", status=404, code="not_found")
@@ -142,6 +148,9 @@ def test_provider_connection(connection_id: str):
 @llm_bp.route("/provider-connections/<connection_id>/models", methods=["GET"])
 @handle_api_errors(logger=logger)
 def list_provider_connection_models(connection_id: str):
+    definition = LlmProviderRegistry.connection_definition(connection_id)
+    if definition is not None and definition.adapter_kind == "unsupported":
+        return _unsupported_provider_response(connection_id)
     connection = _connection_or_404(connection_id)
     if connection is None:
         return json_error("Provider connection not found", status=404, code="not_found")

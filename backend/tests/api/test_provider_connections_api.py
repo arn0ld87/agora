@@ -146,6 +146,50 @@ def test_upsert_rejects_invalid_public_base_url(api_client, lifecycle):
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "json"),
+    [
+        (
+            "put",
+            "/api/llm/provider-connections/opencode_go",
+            {
+                "display_name": "OpenCode Go",
+                "provider_kind": "opencode_go",
+                "base_url": "https://api.example.test/v1",
+                "api_key": SECRET,
+            },
+        ),
+        ("post", "/api/llm/provider-connections/opencode_go/test", None),
+        ("get", "/api/llm/provider-connections/opencode_go/models", None),
+    ],
+)
+def test_canonical_unsupported_connection_routes_reject_before_store_or_service(
+    api_client, monkeypatch, method: str, path: str, json: dict[str, str] | None
+):
+    store_calls = 0
+    service_calls = 0
+
+    def get_store():
+        nonlocal store_calls
+        store_calls += 1
+        return _Store()
+
+    def get_service():
+        nonlocal service_calls
+        service_calls += 1
+        return _Service(ProviderProbeResult(status="available", status_message=None, models=()))
+
+    monkeypatch.setattr("app.api.llm_providers.get_provider_connection_store", get_store)
+    monkeypatch.setattr("app.api.llm_providers.get_provider_connection_service", get_service)
+
+    response = getattr(api_client, method)(path, json=json)
+
+    assert response.status_code == 409
+    assert response.get_json()["code"] == "provider_unsupported"
+    assert store_calls == 0
+    assert service_calls == 0
+
+
 def test_delete_provider_connection_returns_404_for_unknown_connection(api_client, lifecycle):
     response = api_client.delete("/api/llm/provider-connections/missing")
 
