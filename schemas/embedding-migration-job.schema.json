@@ -91,7 +91,7 @@
       "$ref": "#/$defs/EmbeddingMigrationProgress"
     },
     "source_index_version": {
-      "minimum": 1,
+      "minimum": 0,
       "title": "Source Index Version",
       "type": "integer"
     },
