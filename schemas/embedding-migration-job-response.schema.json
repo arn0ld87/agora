@@ -77,7 +77,7 @@
     },
     "EmbeddingMigrationProgress": {
       "additionalProperties": false,
-      "description": "Fortschritt einer Re-Embedding-Migration.\n\n``processed`` + ``failed`` <= ``total``. Die Konsistenz wird im Service\nerzwungen, nicht im Vertrag, weil der Vertrag sonst Transienten\nausgesetzt waere (running -> Progress kann temporaer inkonsistent sein).",
+      "description": "Fortschritt einer Re-Embedding-Migration.\n\n``processed`` + ``failed`` <= ``total``. Die numerische Konsistenz\nwird im Service erzwungen, nicht im Vertrag, weil der Vertrag sonst\nTransienten ausgesetzt waere (running -> Progress kann temporaer\ninkonsistent sein). Die zeitliche Konsistenz der Zeitstempel\nwird hingegen strukturell geprueft, weil sie invariant ist: ein\n``finished_at`` ohne ``started_at`` oder ein ``finished_at`` vor\n``started_at`` waere ein klarer Vertragsbruch.",
       "properties": {
         "failed": {
           "minimum": 0,
