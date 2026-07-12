@@ -144,7 +144,12 @@ export const useEmbeddingConfigurationsStore = defineStore(
           actual_dimensions: number | null;
         };
       }> {
-        return await api.testEmbeddingConfiguration(configurationId);
+        const res = await api.testEmbeddingConfiguration(configurationId);
+        // Gemini-Finding (MEDIUM): Probe aktualisiert den Konfigurations-
+        // Status serverseitig (proposed -> probed/failed). Konfigurationen
+        // neu laden, damit der UI-Status sofort stimmt.
+        await this.loadConfigurations();
+        return res;
       },
 
       async activateConfiguration(
@@ -153,7 +158,14 @@ export const useEmbeddingConfigurationsStore = defineStore(
         const activated = await api.activateEmbeddingConfiguration(
           configurationId,
         );
-        await this.loadActiveConfiguration();
+        // Gemini-Finding (HIGH): Activate rollt andere aktive
+        // Konfigurationen desselben Scopes auf rolled_back zurueck.
+        // Sowohl die active-Konfiguration als auch die Liste
+        // muessen neu geladen werden, damit der UI-State stimmt.
+        await Promise.all([
+          this.loadActiveConfiguration(),
+          this.loadConfigurations(),
+        ]);
         return activated;
       },
 
@@ -175,6 +187,14 @@ export const useEmbeddingConfigurationsStore = defineStore(
         const job = await migrationApi.runEmbeddingMigration(jobId);
         const configId = job.configuration_id;
         this.migrationByConfiguration[configId] = job;
+        // Gemini-Finding (HIGH): Bei completed schaltet das Backend die
+        // aktive Konfiguration auf den neuen Index. Active und Liste
+        // muessen neu geladen werden, damit die UI den Wechsel
+        // sofort zeigt.
+        await Promise.all([
+          this.loadActiveConfiguration(),
+          this.loadConfigurations(),
+        ]);
         return job;
       },
 

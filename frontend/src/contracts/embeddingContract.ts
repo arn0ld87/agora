@@ -170,6 +170,24 @@ export type EmbeddingConfigurationsListResponse = z.infer<
   typeof EmbeddingConfigurationsListResponseSchema
 >
 
+/**
+ * Antwort des ``/active``-Endpunkts. Das Backend liefert entweder eine
+ * echte Konfiguration (source="store"), eine aus ``Config.EMBEDDING_*``
+ * abgeleitete Legacy-Sicht (source="legacy") oder gar nichts
+ * (source="none"). Ein dediziertes Schema ist sauberer als die
+ * ``.partial().extend()``-Konstruktion, die mit der Liste verwechselt
+ * werden koennte.
+ */
+export const ActiveEmbeddingConfigurationResponseSchema = z
+  .object({
+    configuration: EmbeddingConfigurationSchema.nullable(),
+    source: z.enum(['store', 'legacy', 'none']),
+  })
+  .strict()
+export type ActiveEmbeddingConfigurationResponse = z.infer<
+  typeof ActiveEmbeddingConfigurationResponseSchema
+>
+
 // ----------------------------------------------------------------------
 // EmbeddingMigrationJob
 // ----------------------------------------------------------------------

@@ -70,6 +70,17 @@ const ollamaDraft = reactive<OllamaPullDraft>({
 
 const ollamaModalOpen = ref(false);
 
+// Gemini-Finding (HIGH): die Helferfunktion ``migration``
+// wurde pro Render-Zyklus 15 Mal pro Konfiguration aufgerufen. Das
+// ist teuer und unnoetig — eine computed-Eigenschaft berechnet das
+// Mapping einmal pro Store-Aenderung.
+const configsWithMigrations = computed(() =>
+  store.configurations.map((config) => ({
+    config,
+    migration: store.migrationByConfiguration[config.id] ?? null,
+  })),
+);
+
 function openOllamaModal(): void {
   ollamaDraft.model = '';
   ollamaDraft.configurationId = null;
@@ -111,15 +122,10 @@ const progressPct = (job: EmbeddingMigrationJob): number => {
   );
 };
 
-const migrationFor = (
-  config: EmbeddingConfiguration,
-): EmbeddingMigrationJob | null => {
-  return store.migrationByConfiguration[config.id] ?? null;
-};
-
 async function runTest(config: EmbeddingConfiguration): Promise<void> {
+  // Gemini-Finding (MEDIUM): testConfiguration laedt die Liste
+  // bereits automatisch neu.
   await store.testConfiguration(config.id);
-  await store.loadConfigurations();
 }
 
 async function runActivate(config: EmbeddingConfiguration): Promise<void> {
@@ -127,9 +133,10 @@ async function runActivate(config: EmbeddingConfiguration): Promise<void> {
 }
 
 async function runStartMigration(config: EmbeddingConfiguration): Promise<void> {
+  // Gemini-Finding (MEDIUM): runMigration laedt active und Liste
+  // automatisch neu.
   const job = await store.startMigration(config.id);
   await store.runMigration(job.id);
-  await store.loadActiveConfiguration();
 }
 
 async function runCancelMigration(job: EmbeddingMigrationJob): Promise<void> {
@@ -137,8 +144,21 @@ async function runCancelMigration(job: EmbeddingMigrationJob): Promise<void> {
 }
 
 function errorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err) {
-    return String((err as { message?: unknown }).message ?? err);
+  // Gemini-Finding (MEDIUM): Pydantic-/Zod-ValidationError haben ein
+  // ``issues``-Array mit sprechenden Meldungen. Statt das rohe
+  // JSON-String-Repraesentat anzuzeigen, geben wir die erste
+  // Issue-Message zurueck.
+  if (err && typeof err === 'object') {
+    if ('issues' in err && Array.isArray((err as { issues?: unknown }).issues)) {
+      const firstIssue = (err as { issues: Array<{ message?: unknown }> })
+        .issues[0];
+      if (firstIssue && typeof firstIssue === 'object' && 'message' in firstIssue) {
+        return String(firstIssue.message);
+      }
+    }
+    if ('message' in err) {
+      return String((err as { message?: unknown }).message ?? err);
+    }
   }
   return String(err);
 }
@@ -181,7 +201,7 @@ function errorMessage(err: unknown): string {
       </Card>
 
       <Card
-        v-for="config in store.configurations"
+        v-for="{ config, migration } in configsWithMigrations"
         :key="config.id"
         :title="`${config.model_id} (${config.dimensions}d)`"
       >
@@ -222,30 +242,30 @@ function errorMessage(err: unknown): string {
         </div>
 
         <!-- Migrations-Section -->
-        <div class="migration-section" v-if="config.status === 'probed' || migrationFor(config)">
+        <div class="migration-section" v-if="config.status === 'probed' || migration">
           <h4>{{ $t('embedding.migration.title', 'Re-Embedding-Migration') }}</h4>
-          <p v-if="!migrationFor(config)">
+          <p v-if="!migration">
             {{ $t('embedding.migration.intro', 'Migration starten, um die Embedding-Dimension oder das Modell zu wechseln.') }}
           </p>
           <template v-else>
             <div class="migration-row">
-              <span class="job-id">{{ migrationFor(config)!.id }}</span>
-              <Badge :tone="STATUS_TONE[migrationFor(config)!.status] || 'neutral'">
-                {{ $t(STATUS_LABEL_KEY[migrationFor(config)!.status] || 'embedding.status.unknown') }}
+              <span class="job-id">{{ migration!.id }}</span>
+              <Badge :tone="STATUS_TONE[migration!.status] || 'neutral'">
+                {{ $t(STATUS_LABEL_KEY[migration!.status] || 'embedding.status.unknown') }}
               </Badge>
             </div>
-            <progress :value="progressPct(migrationFor(config)!)" max="100" />
+            <progress :value="progressPct(migration!)" max="100" />
             <p>
-              {{ migrationFor(config)!.progress.processed }} / {{ migrationFor(config)!.progress.total }}
-              ({{ migrationFor(config)!.progress.failed }} fehlgeschlagen)
+              {{ migration!.progress.processed }} / {{ migration!.progress.total }}
+              ({{ migration!.progress.failed }} fehlgeschlagen)
             </p>
-            <p v-if="migrationFor(config)!.error_message" class="text-warn">
-              {{ migrationFor(config)!.error_message }}
+            <p v-if="migration!.error_message" class="text-warn">
+              {{ migration!.error_message }}
             </p>
           </template>
           <div class="config-actions">
             <button
-              v-if="!migrationFor(config)"
+              v-if="!migration"
               type="button"
               class="btn btn-primary"
               data-testid="start-migration"
@@ -254,11 +274,11 @@ function errorMessage(err: unknown): string {
               {{ $t('embedding.migration.start', 'Migration starten') }}
             </button>
             <button
-              v-if="migrationFor(config) && (migrationFor(config)!.status === 'pending' || migrationFor(config)!.status === 'running' || migrationFor(config)!.status === 'validating')"
+              v-if="migration && (migration!.status === 'pending' || migration!.status === 'running' || migration!.status === 'validating')"
               type="button"
               class="btn btn-secondary"
               data-testid="cancel-migration"
-              @click="runCancelMigration(migrationFor(config)!)"
+              @click="runCancelMigration(migration as EmbeddingMigrationJob)"
             >
               {{ $t('embedding.migration.cancel', 'Abbrechen') }}
             </button>
@@ -300,7 +320,7 @@ function errorMessage(err: unknown): string {
           {{ $t('embedding.ollama.configurationId', 'Provider-Connection (optional)') }}
           <select v-model="ollamaDraft.configurationId" data-testid="ollama-pull-connection">
             <option :value="null">{{ $t('embedding.ollama.autoSelect', 'Auto (erste Ollama-Connection)') }}</option>
-            <option v-for="config in store.configurations" :key="config.id" :value="config.provider_connection_id">
+            <option v-for="{ config } in configsWithMigrations" :key="config.id" :value="config.provider_connection_id">
               {{ config.provider_connection_id }} ({{ config.provider_kind }})
             </option>
           </select>

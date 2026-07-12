@@ -10,6 +10,8 @@
 import service from "./index";
 import { z } from "zod";
 import {
+  ActiveEmbeddingConfigurationResponse,
+  ActiveEmbeddingConfigurationResponseSchema,
   EmbeddingConfiguration,
   EmbeddingConfigurationResponseSchema,
   EmbeddingConfigurationUpsertRequest,
@@ -31,27 +33,11 @@ export async function listEmbeddingConfigurations(
   return unwrapAndParse(resp, EmbeddingConfigurationsListResponseSchema);
 }
 
-export async function getActiveEmbeddingConfiguration(): Promise<{
-  configuration: EmbeddingConfiguration | null;
-  source: "store" | "legacy" | "none";
-}> {
+export async function getActiveEmbeddingConfiguration(): Promise<ActiveEmbeddingConfigurationResponse> {
   const resp = await service.get<ApiSuccessEnvelope<unknown>>(
     "/api/llm/embedding/configurations/active",
   );
-  const parsed = unwrapAndParse(
-    resp,
-    // active response has the same wrapper; we read the optional fields
-    // defensively without a dedicated schema (no extra contract for
-    // legacy-sourcing semantics yet).
-    EmbeddingConfigurationsListResponseSchema.partial().extend({
-      source: z.enum(["store", "legacy", "none"]),
-      configuration: EmbeddingConfigurationResponseSchema.shape.configuration.nullable(),
-    }),
-  );
-  return {
-    configuration: parsed.configuration ?? null,
-    source: parsed.source ?? "none",
-  };
+  return unwrapAndParse(resp, ActiveEmbeddingConfigurationResponseSchema);
 }
 
 export async function upsertEmbeddingConfiguration(
