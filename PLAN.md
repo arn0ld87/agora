@@ -395,9 +395,9 @@ Source of Truth:
 | 1 | Kanonische Provider-/Modell-/Route-Verträge | ✅ gemergt (PR #683) |
 | 2 | Benutzerprofil und resumierbares Onboarding | ✅ gemergt (PR #684) |
 | 3 | Provider-Verbindungen und Discovery | ✅ gemergt (PR #685) |
-| 4.1 | Embedding-Provider-/Konfigurationsverträge | ✅ implementiert, PR offen |
-| 4.2 | Embedding-Configuration-Service + API + Re-Embedding-Migration | offen |
-| 4.3 | Ollama-Download-Endpoint, Frontend-Migration | offen |
+| 4.1 | Embedding-Provider-/Konfigurationsverträge | ✅ gemergt (PR #686 + #687) |
+| 4.2 | Embedding-Configuration-Service + API + Legacy-Adapter | ✅ implementiert, PR offen |
+| 4.3 | Re-Embedding-Migrations-Engine + Ollama-Download + Frontend | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
 | 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |

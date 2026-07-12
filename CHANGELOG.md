@@ -5,6 +5,48 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (embedding-service — 2026-07-12)
+
+- **Embedding-Configuration-Service (Onboarding Slice 4.2)**: Persistenter
+  Store (`backend/app/services/embedding_configuration_store.py` mit
+  `flock`-basierter Prozesssperre, atomarem Write via `os.replace`, Modus
+  0600, getrennte Dateien für Konfigurationen und versionierte Indizes).
+  Service
+  (`backend/app/services/embedding_configurations/service.py`) mit
+  anbieter-spezifischer Probe (Ollama lokal, Ollama Cloud, OpenAI,
+  OpenAI-kompatibel, Gemini), Lifecycle-Wechsel mit Eindeutigkeits-
+  Garantie (pro `scope` maximal eine `active` Konfiguration), Probe-
+  Status-Übersetzung (`available → probed`, `unavailable/degraded/
+  invalid_credentials/unsupported → failed`), Dimensions-Mismatch
+  führt zu `failed` mit beschreibendem `status_message`. Legacy-Adapter
+  (`legacy.py`) materialisiert `Config.EMBEDDING_*` on-demand in eine
+  nicht-persistente `EmbeddingConfiguration` mit `status="proposed"`,
+  damit alte Installationen ohne Migration funktionieren — aber kein
+  stilles Schreiben in den Store, kein DROP ohne Backup-Plan. Kanonische
+  API `GET/POST /api/llm/embedding/configurations[/active]`,
+  `GET/PUT/DELETE /api/llm/embedding/configurations/<id>`,
+  `POST /api/llm/embedding/configurations/<id>/test` und
+  `POST /api/llm/embedding/configurations/<id>/activate`. 43 neue
+  Tests in `tests/services/test_embedding_configuration_store.py`,
+  `tests/services/embedding_configurations/test_service.py`,
+  `tests/services/embedding_configurations/test_legacy.py` und
+  `tests/api/test_embedding_configurations_api.py`.
+
+### Fixed (zugehörig zu Slice 4.2)
+
+- Slice-3-API-Test `test_upsert_rejects_invalid_public_base_url` (war
+  bereits durch `to_jsonable_python(fallback=str)` aus PR #687
+  repariert) bleibt mit dem neuen Service stabil grün; keine Regression.
+
+### Accepted (ADR — 2026-07-12)
+
+- **ADR-0007** (Embedding-Konfiguration und Indexmigration) von
+  **Proposed** auf **Accepted** gehoben (User-Sign-off via PR-Merge
+  für Slice 4.1+4.2). Die kanonischen Verträge aus Slice 4.1 und der
+  Service/Store aus Slice 4.2 setzen die in der ADR geforderten
+  Garantien strukturell um. Migrations-Engine und Ollama-Download
+  (Slice 4.3) bleiben offen.
+
 ### Added (embedding-contracts — 2026-07-12)
 
 - **Kanonische Embedding-Verträge (Onboarding Slice 4.1)**: Neue
