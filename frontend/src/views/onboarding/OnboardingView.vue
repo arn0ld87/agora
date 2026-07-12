@@ -38,6 +38,16 @@ interface StatusStepConfig {
   settingsLinkKey: string
   settingsRouteName: string
   configured: () => boolean
+  /**
+   * Optionaler Hinweis-Key, der nur gerendert wird, wenn
+   * ``legacyHintMatcher`` true zurueckgibt. Wird genutzt, um
+   * im Onboarding fuer den Embedding-Step den Legacy-Pfad
+   * (Config.EMBEDDING_*) explizit zu markieren, damit der
+   * Operator weiss, dass die Konfiguration noch nicht aus dem
+   * kanonischen EmbeddingConfigurationStore kommt.
+   */
+  legacyHintKey?: string
+  legacyHintMatcher?: () => boolean
 }
 
 const viewStep = ref<OnboardingStepId>('welcome')
@@ -79,8 +89,13 @@ const statusSteps = computed<StatusStepConfig[]>(() => [
     descriptionKey: 'onboarding.embeddings.description',
     futureNoticeKey: 'onboarding.embeddings.futureNotice',
     settingsLinkKey: 'onboarding.embeddings.settingsLink',
-    settingsRouteName: 'SettingsLlmProviders',
+    // Onboarding Slice 4.3.3: embeddings hat eine eigene Settings-Route
+    // (Slice 4.2 + 4.3.1 API), nicht mehr LlmProviders.
+    settingsRouteName: 'SettingsEmbedding',
     configured: () => store.onboarding.requirements?.embedding_configured ?? false,
+    legacyHintKey: 'onboarding.embeddings.legacyHint',
+    legacyHintMatcher: () =>
+      store.onboarding.requirements?.embedding_source === 'legacy',
   },
 ])
 
@@ -306,6 +321,13 @@ onMounted(async () => {
               ? t('onboarding.providers.configured')
               : t('onboarding.providers.notConfigured')
           }}
+        </p>
+        <p
+          v-if="activeStatusStep.legacyHintKey && activeStatusStep.legacyHintMatcher?.()"
+          class="onboarding-step__legacy-hint"
+          role="note"
+        >
+          {{ t(activeStatusStep.legacyHintKey) }}
         </p>
         <p class="onboarding-step__notice">{{ t(activeStatusStep.futureNoticeKey) }}</p>
         <RouterLink :to="{ name: activeStatusStep.settingsRouteName }" class="onboarding-step__link">
@@ -566,6 +588,17 @@ onMounted(async () => {
   font-family: var(--font-sans);
   font-size: 13px;
   color: var(--accent);
+}
+
+.onboarding-step__legacy-hint {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: var(--status-orange-bg, #fff4e5);
+  border: 1px solid var(--status-orange, #c47b1c);
+  border-radius: var(--r-4, 8px);
+  padding: 8px 10px;
+  margin: 0 0 10px;
 }
 
 .onboarding-summary-block {

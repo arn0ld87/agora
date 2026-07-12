@@ -23,6 +23,7 @@ const BASE_ROUTES: RouteRecordRaw[] = [
   { path: '/settings/audit-logs',    name: 'SettingsAuditLogs',   component: stub },
   { path: '/settings/llm-providers', name: 'SettingsLlmProviders',component: stub },
   { path: '/settings/llm-routing',   name: 'SettingsLlmRouting',  component: stub },
+  { path: '/settings/embedding',     name: 'SettingsEmbedding',   component: stub },
   { path: '/onboarding',             name: 'Onboarding',          component: stub },
 ]
 

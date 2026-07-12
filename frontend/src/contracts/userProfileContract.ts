@@ -135,6 +135,11 @@ export const OnboardingRequirementsSchema = z
     profile_valid: z.boolean(),
     chat_model_configured: z.boolean(),
     embedding_configured: z.boolean(),
+    // Quelle der aktiven Embedding-Konfiguration (Slice 4.2 + 4.3.3):
+    // - "store": kanonische Konfiguration im EmbeddingConfigurationStore
+    // - "legacy": aus Config.EMBEDDING_* abgeleitet (kein Probe)
+    // - "none": keine Konfiguration vorhanden
+    embedding_source: z.enum(['store', 'legacy', 'none']),
   })
   .strict()
 export type OnboardingRequirements = z.infer<typeof OnboardingRequirementsSchema>

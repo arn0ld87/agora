@@ -12,6 +12,11 @@
           "title": "Embedding Configured",
           "type": "boolean"
         },
+        "embedding_source": {
+          "default": "none",
+          "title": "Embedding Source",
+          "type": "string"
+        },
         "profile_valid": {
           "title": "Profile Valid",
           "type": "boolean"

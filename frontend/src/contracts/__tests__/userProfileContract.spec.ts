@@ -155,6 +155,7 @@ describe('canonical user-profile / onboarding contracts', () => {
         profile_valid: false,
         chat_model_configured: false,
         embedding_configured: false,
+        embedding_source: 'none',
       },
       onboarding_required: true,
     })
@@ -163,6 +164,38 @@ describe('canonical user-profile / onboarding contracts', () => {
 
   it('rejects OnboardingRequirements with missing required fields', () => {
     expect(OnboardingRequirementsSchema.safeParse({ profile_valid: true }).success).toBe(false)
+  })
+
+  it.each(['store', 'legacy', 'none'] as const)(
+    'accepts OnboardingRequirements.embedding_source = %s',
+    (source) => {
+      const result = OnboardingRequirementsSchema.safeParse({
+        profile_valid: true,
+        chat_model_configured: true,
+        embedding_configured: true,
+        embedding_source: source,
+      })
+      expect(result.success).toBe(true)
+    },
+  )
+
+  it('rejects unknown embedding_source literal (Slice 4.3.3 enum closed)', () => {
+    const result = OnboardingRequirementsSchema.safeParse({
+      profile_valid: true,
+      chat_model_configured: true,
+      embedding_configured: true,
+      embedding_source: 'unknown-source',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects OnboardingRequirements with missing embedding_source', () => {
+    const result = OnboardingRequirementsSchema.safeParse({
+      profile_valid: true,
+      chat_model_configured: true,
+      embedding_configured: true,
+    })
+    expect(result.success).toBe(false)
   })
 
   it('accepts a canonical OnboardingStepUpdateRequest with and without operating_mode', () => {

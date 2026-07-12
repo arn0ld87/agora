@@ -105,6 +105,7 @@ function makeOnboardingStatus(
       profile_valid: false,
       chat_model_configured: false,
       embedding_configured: false,
+      embedding_source: 'none',
     },
     onboarding_required: true,
     ...overrides,
@@ -200,6 +201,52 @@ describe('OnboardingView', () => {
     expect(router.currentRoute.value.name).toBe('Dashboard')
   })
 
+  it('Test 7: embeddings-Step rendert Legacy-Hinweis, wenn embedding_source=legacy', async () => {
+    _getProfile.mockResolvedValue(makeProfile())
+    _getOnboardingStatus.mockResolvedValue(
+      makeOnboardingStatus({
+        state: makeOnboardingState({
+          current_step: 'embeddings',
+          completed_steps: ['welcome', 'profile', 'providers', 'chat_model'],
+          operating_mode: 'local',
+        }),
+        requirements: {
+          profile_valid: true,
+          chat_model_configured: true,
+          embedding_configured: true,
+          embedding_source: 'legacy',
+        },
+      }),
+    )
+
+    const { wrapper } = await mountView()
+    const hint = wrapper.find('.onboarding-step__legacy-hint')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain(de.onboarding.embeddings.legacyHint)
+  })
+
+  it('Test 8: embeddings-Step zeigt KEINEN Legacy-Hinweis, wenn embedding_source=store', async () => {
+    _getProfile.mockResolvedValue(makeProfile())
+    _getOnboardingStatus.mockResolvedValue(
+      makeOnboardingStatus({
+        state: makeOnboardingState({
+          current_step: 'embeddings',
+          completed_steps: ['welcome', 'profile', 'providers', 'chat_model'],
+          operating_mode: 'local',
+        }),
+        requirements: {
+          profile_valid: true,
+          chat_model_configured: true,
+          embedding_configured: true,
+          embedding_source: 'store',
+        },
+      }),
+    )
+
+    const { wrapper } = await mountView()
+    expect(wrapper.find('.onboarding-step__legacy-hint').exists()).toBe(false)
+  })
+
   it('Test 6: summary — 409 onboarding_incomplete zeigt server-seitige missing-Liste, nicht den Client-Fallback', async () => {
     _getProfile.mockResolvedValue(makeProfile())
     // Requirements sind clientseitig ALLE erfüllt — der Client-Fallback wäre
@@ -216,6 +263,7 @@ describe('OnboardingView', () => {
           profile_valid: true,
           chat_model_configured: true,
           embedding_configured: true,
+          embedding_source: 'store',
         },
       }),
     )

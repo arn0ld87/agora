@@ -274,3 +274,81 @@ class TestComputeOnboardingRequirementsSettings:
         )
         requirements = compute_onboarding_requirements()
         assert requirements.embedding_configured is False
+
+
+class TestComputeOnboardingRequirementsEmbeddingSource:
+    """Slice 4.3.3: ``embedding_source`` macht die Herkunft der aktiven
+    Embedding-Konfiguration explizit sichtbar (``store`` / ``legacy`` /
+    ``none``), damit das Onboarding-Frontend gezielt einen Legacy-Hinweis
+    und Migrations-Aktionen anzeigen kann.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("AGORA_DATA_DIR", str(tmp_path))
+        reset_user_profile_store_for_tests()
+        yield
+        reset_user_profile_store_for_tests()
+
+    def test_embedding_source_none_when_legacy_blank(self, monkeypatch) -> None:
+        """Kein kanonischer Eintrag, keine Legacy-Config -> ``none``."""
+        monkeypatch.setattr(
+            "app.services.onboarding_state_store.get_settings",
+            lambda: SimpleNamespace(
+                llm_model_name="qwen2.5:32b",
+                embedding_model="",
+                vector_dim=0,
+            ),
+        )
+        requirements = compute_onboarding_requirements()
+        assert requirements.embedding_configured is False
+        assert requirements.embedding_source == "none"
+
+    def test_embedding_source_legacy_when_only_legacy_settings(self, monkeypatch) -> None:
+        """Nur Config.EMBEDDING_* gesetzt -> ``legacy`` (Operator-Hinweis)."""
+        monkeypatch.setattr(
+            "app.services.onboarding_state_store.get_settings",
+            lambda: SimpleNamespace(
+                llm_model_name="qwen2.5:32b",
+                embedding_model="nomic-embed-text",
+                vector_dim=768,
+            ),
+        )
+        requirements = compute_onboarding_requirements()
+        assert requirements.embedding_configured is True
+        assert requirements.embedding_source == "legacy"
+
+    def test_embedding_source_store_when_canonical_active(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """Kanonische Konfiguration im Store aktiv -> ``store`` (Source of Truth)."""
+        from app.services.embedding_configuration_store import (
+            EmbeddingConfigurationStore,
+        )
+
+        monkeypatch.setattr(
+            "app.services.onboarding_state_store.get_settings",
+            lambda: SimpleNamespace(
+                llm_model_name="qwen2.5:32b",
+                embedding_model="nomic-embed-text",  # Legacy zusaetzlich gesetzt
+                vector_dim=768,
+            ),
+        )
+        # Direkt am Store (kein Service-Overhead) eine globale, aktive
+        # Konfiguration anlegen — reicht fuer die Source-Erkennung, weil
+        # ``compute_onboarding_requirements`` selbst nur den Store liest.
+        embedding_store = EmbeddingConfigurationStore(data_dir=tmp_path)
+        embedding_store.upsert_configuration(
+            configuration_id="emb-test-canonical",
+            provider_connection_id="conn-test",
+            provider_kind="ollama",
+            model_id="nomic-embed-text",
+            dimensions=768,
+            scope="global",
+            project_id=None,
+            status="active",
+        )
+
+        requirements = compute_onboarding_requirements()
+        assert requirements.embedding_configured is True
+        assert requirements.embedding_source == "store"

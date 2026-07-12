@@ -107,6 +107,7 @@ const settingsRouteNames = [
   'SettingsAuditLogs',
   'SettingsLlmRouting',
   'SettingsLlmProviders',
+  'SettingsEmbedding',
 ]
 
 const navWorkspace = [
@@ -126,6 +127,7 @@ const navSettings: NavSettingsItem[] = [
   { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
   { id: 'llm-routing',   label: t('sidebar.settings.llmRouting'),    to: { name: 'SettingsLlmRouting' } },
+  { id: 'embedding',     label: t('sidebar.settings.embedding'),     to: { name: 'SettingsEmbedding' } },
 ]
 </script>
 

@@ -63,6 +63,7 @@ function makeOnboardingStatus(onboardingRequired: boolean): OnboardingStatusResp
       profile_valid: !onboardingRequired,
       chat_model_configured: !onboardingRequired,
       embedding_configured: !onboardingRequired,
+      embedding_source: 'none',
     },
     onboarding_required: onboardingRequired,
   }
