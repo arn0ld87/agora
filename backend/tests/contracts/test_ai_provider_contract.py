@@ -118,6 +118,16 @@ def test_provider_connection_upsert_request_rejects_non_loopback_ollama_urls(
         )
 
 
+def test_provider_connection_rejects_loopback_url_for_non_local_provider() -> None:
+    with pytest.raises(ValidationError, match="public HTTP\\(S\\) base URL"):
+        ProviderConnection(
+            **{
+                **_connection_data("http://localhost:11434"),
+                "provider_kind": "openai_compatible",
+            }
+        )
+
+
 def test_provider_connection_upsert_request_never_serializes_api_key() -> None:
     request = ProviderConnectionUpsertRequest(
         display_name="OpenAI",

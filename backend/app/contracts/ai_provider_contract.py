@@ -79,6 +79,17 @@ def _validate_public_base_url(value: str) -> str:
         or parsed.fragment
     ):
         raise ValueError("base_url must be a public HTTP(S) base URL")
+    hostname = parsed.hostname.lower()
+    if hostname == "localhost":
+        raise ValueError("base_url must be a public HTTP(S) base URL")
+    try:
+        address = ip_address(hostname)
+    except ValueError:
+        # DNS-Namen werden nicht aufgeloest: Der Validator darf keinen
+        # netzwerkabhaengigen SSRF-Check vortaeuschen.
+        return value
+    if not address.is_global:
+        raise ValueError("base_url must be a public HTTP(S) base URL")
     return value
 
 
@@ -112,7 +123,11 @@ def _validate_local_ollama_base_url(value: str) -> str:
     return value
 
 
-LocalOllamaBaseUrl = Annotated[str, AfterValidator(_validate_local_ollama_base_url)]
+LocalOllamaBaseUrl = Annotated[
+    str,
+    Field(pattern=_PUBLIC_BASE_URL_PATTERN),
+    AfterValidator(_validate_local_ollama_base_url),
+]
 
 
 class LegacyStageRouteOptions(TypedDict, closed=True):  # type: ignore[call-arg]  # mypy lacks PEP 728
@@ -166,7 +181,7 @@ class ProviderConnection(BaseModel):
     display_name: str = Field(min_length=1)
     transport: ProviderTransport
     auth_mode: ProviderAuthMode
-    base_url: PublicBaseUrl | None = None
+    base_url: PublicBaseUrl | LocalOllamaBaseUrl | None = None
     enabled: bool = True
     status: ProviderStatus = "unknown"
     status_message: str | None = None
@@ -175,6 +190,16 @@ class ProviderConnection(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     last_tested_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_base_url_for_provider(self) -> ProviderConnection:
+        if self.base_url is None:
+            return self
+        if self.provider_kind == "ollama":
+            _validate_local_ollama_base_url(self.base_url)
+        else:
+            _validate_public_base_url(self.base_url)
+        return self
 
 
 class ProviderConnectionUpsertRequest(BaseModel):

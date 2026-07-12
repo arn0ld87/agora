@@ -50,13 +50,21 @@ const PUBLIC_BASE_URL_PATTERN = /^https?:\/\/(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\
 export const PublicBaseUrlSchema = z.string().regex(PUBLIC_BASE_URL_PATTERN).superRefine((value, context) => {
   try {
     const parsed = new URL(value)
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+    const isIpv4Private = /^10\./.test(hostname)
+      || /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      || /^169\.254\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(?:1[6-9]|2\d|3[0-1])\./.test(hostname)
     if (
       !['http:', 'https:'].includes(parsed.protocol) ||
       !parsed.hostname ||
       parsed.username ||
       parsed.password ||
       parsed.search ||
-      parsed.hash
+      parsed.hash ||
+      ['localhost', '::1'].includes(hostname) ||
+      isIpv4Private
     ) {
       context.addIssue({ code: 'custom', message: 'base_url must be a public HTTP(S) base URL' })
     }
@@ -87,13 +95,13 @@ export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) 
   }
 })
 
-export const ProviderConnectionSchema = z.object({
+export const ProviderConnectionBaseSchema = z.object({
   id: z.string().min(1),
   provider_kind: ProviderConnectionKindSchema,
   display_name: z.string().min(1),
   transport: z.enum(['http', 'local']),
   auth_mode: z.enum(['none', 'api_key', 'oauth', 'session']),
-  base_url: PublicBaseUrlSchema.nullable().default(null),
+  base_url: z.union([PublicBaseUrlSchema, LocalOllamaBaseUrlSchema]).nullable().default(null),
   enabled: z.boolean().default(true),
   status: z.enum(['unknown', 'connected', 'degraded', 'disconnected', 'error']).default('unknown'),
   status_message: z.string().nullable().default(null),
@@ -103,6 +111,17 @@ export const ProviderConnectionSchema = z.object({
   updated_at: NullableDateTimeSchema,
   last_tested_at: NullableDateTimeSchema,
 }).strict()
+
+export const ProviderConnectionSchema = ProviderConnectionBaseSchema.superRefine((value, context) => {
+  if (value.base_url === null) return
+  const baseUrlSchema = value.provider_kind === 'ollama'
+    ? LocalOllamaBaseUrlSchema
+    : PublicBaseUrlSchema
+  const result = baseUrlSchema.safeParse(value.base_url)
+  if (!result.success) {
+    context.addIssue({ code: 'custom', path: ['base_url'], message: result.error.issues[0]?.message ?? 'invalid base_url' })
+  }
+})
 export type ProviderConnection = z.infer<typeof ProviderConnectionSchema>
 
 export const ProviderConnectionUpsertRequestSchema = z.object({

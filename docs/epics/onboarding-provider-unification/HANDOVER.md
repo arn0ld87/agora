@@ -2,6 +2,14 @@
 
 ## Stand
 
+### Slice-3-Präzisierung (2026-07-12)
+
+- `ProviderConnection.base_url` ist providerabhängig: lokales Ollama darf nur
+  explizite Loopback-HTTP(S)-URLs verwenden; alle übrigen Verbindungen bleiben
+  auf syntaktisch öffentliche HTTP(S)-URLs beschränkt. Die Korrektur schließt
+  den zuvor ungetesteten Persistenzpfad für eine konfigurierbare lokale
+  Ollama-Base-URL und ist durch Store-, Pydantic- und Zod-Tests belegt.
+
 - Datum: 2026-07-11
 - Worktree: `/private/tmp/agora-onboarding-slice-2`
 - Branch: `feat/onboarding-user-profile` (Basis: `main` @ `df6a2b3`, Slice 1

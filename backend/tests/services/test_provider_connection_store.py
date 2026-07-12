@@ -61,6 +61,25 @@ def test_upsert_persists_metadata_and_secret_reference_without_api_key(
     assert stat.S_IMODE((tmp_path / "provider_connections.json").stat().st_mode) == 0o600
 
 
+def test_upsert_persists_a_loopback_url_for_local_ollama(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _ = _store(tmp_path, monkeypatch)
+
+    connection = store.upsert_connection(
+        _request(
+            display_name="Ollama lokal",
+            provider_kind="ollama",
+            base_url="http://localhost:11434",
+            api_key=None,
+        )
+    )
+
+    assert connection.base_url == "http://localhost:11434"
+    assert connection.transport == "local"
+    assert store.list_connections() == [connection]
+
+
 def test_update_probe_persists_status_message_and_timestamps(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

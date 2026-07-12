@@ -9,6 +9,7 @@ import {
   AiModelSchema,
   AiRouteSchema,
   ModelCapabilitiesSchema,
+  ProviderConnectionBaseSchema,
   ProviderConnectionSchema,
   ProviderConnectionResponseSchema,
   ProviderConnectionUpsertRequestSchema,
@@ -25,7 +26,7 @@ describe('canonical AI provider contracts', () => {
   })
 
   it('keeps Zod top-level fields aligned with generated Pydantic schemas', () => {
-    expect(Object.keys(ProviderConnectionSchema.shape).sort()).toEqual(
+    expect(Object.keys(ProviderConnectionBaseSchema.shape).sort()).toEqual(
       Object.keys(providerConnectionJsonSchema.properties).sort(),
     )
     expect(Object.keys(AiModelSchema.shape).sort()).toEqual(
@@ -164,6 +165,13 @@ describe('canonical AI provider contracts', () => {
       }).success).toBe(false)
     },
   )
+
+  it('rejects a loopback URL for a non-local provider connection', () => {
+    expect(ProviderConnectionSchema.safeParse({
+      ...connectionWithBaseUrl('http://localhost:11434'),
+      provider_kind: 'openai_compatible',
+    }).success).toBe(false)
+  })
 
   it('keeps API keys input-only and rejects them from public responses', () => {
     expect(ProviderConnectionUpsertRequestSchema.safeParse({
