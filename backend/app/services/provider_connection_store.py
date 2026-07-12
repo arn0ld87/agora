@@ -176,7 +176,11 @@ class ProviderConnectionStore:
             finally:
                 os.close(fd)
             os.replace(tmp_path, self._path)
-            os.chmod(self._path, 0o600)
+            try:
+                os.chmod(self._path, 0o600)
+            except OSError:
+                # chmod kann auf manchen NFS-/Volume-Mounts fehlschlagen
+                pass
         except OSError as exc:
             try:
                 tmp_path.unlink(missing_ok=True)
