@@ -373,10 +373,14 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 ## 12. Onboarding & Provider-Unification (2026-07-10)
 
-**Status:** Phase 0, Slice 1 und Slice 2 gemergt (PR #682, #683, #684).
-Slice 3 (Provider-Verbindungen und Discovery) implementiert und verifiziert;
-PR-Eröffnung läuft. Bestehende Profile bleiben unverändert lesbar;
-Benutzerprofil und KI-Presets sind getrennte Schlüsselräume (ADR-0008).
+**Status:** Phase 0, Slice 1, Slice 2 und Slice 3 gemergt (PR #682, #683,
+#684, #685). Slice 4 (Embedding-Setup und sichere Re-Embedding-Migration)
+ist in Bearbeitung; Sub-Slice 4.1 (kanonische Embedding-Provider- und
+Konfigurationsverträge) ist implementiert und verifiziert. Bestehende
+Profile bleiben unverändert lesbar; Benutzerprofil und KI-Presets sind
+getrennte Schlüsselräume (ADR-0008). Embedding-Provider und Chat-Provider
+teilen nur die `provider_connection_id` als Referenz; die strukturelle
+Trennung der Vertragswelten ist explizit (Slice 4.1, geplante ADR-0009).
 
 Ziel: lokales Erst-Onboarding, getrenntes Benutzerprofil, kanonische Provider-
 und Modellverträge, getrennte Embedding-Konfiguration, ein gemeinsamer
@@ -390,19 +394,34 @@ Source of Truth:
 | 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | ✅ abgeschlossen |
 | 1 | Kanonische Provider-/Modell-/Route-Verträge | ✅ gemergt (PR #683) |
 | 2 | Benutzerprofil und resumierbares Onboarding | ✅ gemergt (PR #684) |
-| 3 | Provider-Verbindungen und Discovery | implementiert; PR offen |
-| 4 | Embedding-Setup und sichere Re-Embedding-Migration | offen |
+| 3 | Provider-Verbindungen und Discovery | ✅ gemergt (PR #685) |
+| 4.1 | Embedding-Provider-/Konfigurationsverträge | ✅ implementiert, PR offen |
+| 4.2 | Embedding-Configuration-Service + API + Re-Embedding-Migration | offen |
+| 4.3 | Ollama-Download-Endpoint, Frontend-Migration | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
 | 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |
 | 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |
 
-Baseline: Backend und Frontend grün. Der Phase-0-Vitest-Teardown-Blocker
+Baseline: Backend 3130 passed / 9 skipped / 7 deselected; Frontend 154
+Testdateien / 1228 Tests grün; ruff + mypy clean; Schema-Drift-Check
+grün für 46 Schemas. Der Phase-0-Vitest-Teardown-Blocker
 (`EnvironmentTeardownError`) wurde durch PR #678 behoben; die Vitest-Suite
 läuft seitdem mit Exit 0 (vor Slice 2 unabhängig verifiziert).
 
+Bestehender Bugfix im API-Layer (Slice 4.1 Begleitschritt): Pydantic
+`ValidationError.errors()`-Payloads ließen `json_error(extra=...)` an
+Flask-JSON-Encoder scheitern (`ValueError`-Instanz im `ctx`-Feld), was
+4xx-Validation-Antworten in 500 verwandelte. Fix in
+`app/utils/api_responses.py::_to_jsonable` mit
+`pydantic_core.to_jsonable_python`; Regression-Test in
+`tests/test_api_responses.py::test_json_error_sanitizes_pydantic_
+validation_error_payload`. Wirkt zentral für alle API-Routen, die
+`json_error(extra=...)` aufrufen.
+
 ---
 
-*Zuletzt aktualisiert: 2026-07-12 — Slice 3 (Provider-Verbindungen) implementiert und verifiziert; PR-Eröffnung läuft.*
+*Zuletzt aktualisiert: 2026-07-12 — Slice 4.1 (Embedding-Verträge) implementiert und verifiziert; Slice 3 in main gemergt (PR #685).*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
+*Embedding-Provider-Restriktion: `backend/app/contracts/embedding_contract.py::provider_kind_supports_embeddings`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
