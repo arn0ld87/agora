@@ -16,7 +16,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `source === 'stage_override'`.
 
 - **Deterministische E2E-Provider-Discovery**: Der Compose-Override startet
-  `mock-models-nginx` als OpenAI-kompatiblen `/models`-Dienst. Das globale
+  `mock-models` als OpenAI-kompatiblen `/models`-Dienst. Das globale
   Setup legt dedizierte Online- und Offline-Test-Provider-Connections an;
   `scripts/e2e-up.sh` ergänzt `AGORA_SECRET_KEY` für den Secrets-Store.
 

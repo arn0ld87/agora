@@ -564,7 +564,7 @@ Connection-/Modell-IDs.
 
 ## Mock-Models-Service und Provider-Seed
 
-Der E2E-Compose-Override startet `mock-models-nginx` als deterministischen,
+Der E2E-Compose-Override startet `mock-models` als deterministischen,
 OpenAI-kompatiblen `/models`-Dienst. Damit hängt die Discovery nicht von
 externen Providern oder wechselnden Modellkatalogen ab.
 
