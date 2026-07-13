@@ -14,6 +14,9 @@ folgende Importe einführen:
 * ``@/store/llmRoutingDefaults``
 * ``@/composables/useRuntimeLlmOptions``
 
+Seit Slice 7.7 blockiert der Check außerdem die Rückkehr des entfernten
+v3-Pickers und der unverdrahteten Mock-Routing-Komponenten als Dateien.
+
 Read-Adapter-Freigabe via ``@deprecated``
 =========================================
 
@@ -101,6 +104,33 @@ FORBIDDEN_SUBSTRINGS: list[tuple[str, str]] = [
         "v3 composable useRuntimeLlmOptions → aiModels.ts / AiModelPicker (Slice 5.5)",
     ),
 ]
+
+REMOVED_PATHS: tuple[tuple[Path, str], ...] = (
+    (
+        Path("components/ui/ModelPicker.vue"),
+        "v3 ModelPicker.vue wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("views/Settings/llmRouting/ActiveSnapshotsCard.vue"),
+        "Mock-Routing-UI wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("views/Settings/llmRouting/CustomModelCard.vue"),
+        "Mock-Routing-UI wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("views/Settings/llmRouting/GlobalDefaultCard.vue"),
+        "Mock-Routing-UI wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("views/Settings/llmRouting/StageOverridesCard.vue"),
+        "Mock-Routing-UI wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("views/Settings/llmRouting/mockData.ts"),
+        "Mock-Routing-Daten wurden in Slice 7.7 entfernt",
+    ),
+)
 
 # JSDoc-Tag, das ein Import-Ziel als sanktionierten Read-Adapter markiert.
 # Trägt das *Ziel* eines verbotenen Imports dieses Tag, ist der Import im
@@ -242,6 +272,11 @@ def scan(root: Path) -> list[tuple[Path, int, int, str]]:
         raise NotADirectoryError(f"target is not a directory: {root}")
 
     results: list[tuple[Path, int, int, str]] = []
+    for relative_path, message in REMOVED_PATHS:
+        removed_path = root / relative_path
+        if removed_path.is_file():
+            results.append((removed_path, 1, 1, message))
+
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
@@ -307,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     if not results:
         print(
             f"check_legacy_model_picker: clean ({target}) — "
-            f"no v3 picker imports found.",
+            f"no v3 picker imports or removed Slice 7.7 paths found.",
             file=sys.stderr,
         )
         return 0
