@@ -242,7 +242,28 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
         self.assertIn("usage error", proc.stderr)
 
     # ------------------------------------------------------------------
-    # 8. GH-Actions-Format: ::error file=…,line=…,col=…
+    # 8. Entfernte Slice-7.7-Pfade dürfen nicht zurückkehren
+    # ------------------------------------------------------------------
+    def test_removed_slice_7_7_paths_are_caught(self) -> None:
+        removed_paths = (
+            "components/ui/ModelPicker.vue",
+            "views/Settings/llmRouting/ActiveSnapshotsCard.vue",
+            "views/Settings/llmRouting/CustomModelCard.vue",
+            "views/Settings/llmRouting/GlobalDefaultCard.vue",
+            "views/Settings/llmRouting/StageOverridesCard.vue",
+            "views/Settings/llmRouting/mockData.ts",
+        )
+        for relative_path in removed_paths:
+            _write(self.root / relative_path, "// must stay removed\n")
+
+        proc = _run(self.root)
+
+        self.assertEqual(proc.returncode, 1)
+        for relative_path in removed_paths:
+            self.assertIn(Path(relative_path).name, proc.stdout)
+
+    # ------------------------------------------------------------------
+    # 9. GH-Actions-Format: ::error file=…,line=…,col=…
     # ------------------------------------------------------------------
     def test_github_format_emits_annotation(self) -> None:
         _write(
