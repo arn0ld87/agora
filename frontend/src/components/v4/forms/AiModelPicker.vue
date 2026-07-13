@@ -158,8 +158,14 @@ const REQUIRED_CAPABILITY: Record<AiModelPickerMode, AiCapability> = {
 /**
  * Gefilterte + sortierte Optionen:
  * - Capability-Filter (mode + optional capabilityFilter-Prop)
- * - Workspace-Default zuerst (gruppiert)
- * - Provider alphabetisch, innerhalb Gruppe nach model_id
+ * - Provider-Gruppen alphabetisch nach display_name
+ * - innerhalb einer Gruppe: is_workspace_default zuerst, dann nach model_id
+ *
+ * Gemini-Review (PR #697, MEDIUM): "Provider-Gruppen alphabetisch
+ * sicherstellen, nicht global nach is_workspace_default sortieren" — der
+ * Default-Pin gilt jetzt **innerhalb** seiner Provider-Gruppe, nicht
+ * quer durch alle Optionen. So bleibt die Provider-Reihenfolge
+ * vorhersagbar und der Default ist trotzdem sichtbar vorne.
  */
 const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
   const base = props.options ?? MOCK_OPTIONS
@@ -174,11 +180,14 @@ const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
     })
     .slice()
     .sort((a, b) => {
-      if (a.is_workspace_default && !b.is_workspace_default) return -1
-      if (!a.is_workspace_default && b.is_workspace_default) return 1
-      const providerCmp = a.display_name.localeCompare(b.display_name)
-      if (providerCmp !== 0) return providerCmp
-      return a.model_id.localeCompare(b.model_id)
+      // Innerhalb derselben Provider-Gruppe: Default zuerst, dann model_id.
+      if (a.display_name === b.display_name) {
+        if (a.is_workspace_default && !b.is_workspace_default) return -1
+        if (!a.is_workspace_default && b.is_workspace_default) return 1
+        return a.model_id.localeCompare(b.model_id)
+      }
+      // Provider-uebergreifend: strikt alphabetisch.
+      return a.display_name.localeCompare(b.display_name)
     })
 })
 
@@ -216,6 +225,16 @@ const fallbackReason = (input: AiModelRefInput): string | undefined => {
 
 function onUpdate(value: string | null | undefined): void {
   if (!value) {
+    emit('update:modelValue', null)
+    return
+  }
+  // Gemini-Review (PR #697, MEDIUM): defensive Validierung der Item-ID.
+  // ComboboxItem kann bei externer Mutation eine ID ohne Separator liefern;
+  // ein Wurf waere hier ein Runtime-Crash im Live-Run. Stattdessen: null
+  // emittieren und mit console.warn auf das Problem hinweisen.
+  const sep = value.indexOf('\u0000')
+  if (sep < 0) {
+    console.warn('[AiModelPicker] invalid item id, no separator:', value)
     emit('update:modelValue', null)
     return
   }
@@ -283,6 +302,11 @@ function statusTone(input: AiModelRefInput): 'green' | 'orange' | 'red' | 'gray'
     case 'unavailable':
     case 'unsupported':
       return 'red'
+    // Gemini-Review (PR #697, MEDIUM): expliziter Default-Branch, damit
+    // ein neuer AiModelStatus-Wert (z. B. "unknown") nicht undefined
+    // liefert und das CSS-Tone-Attribut leer bleibt.
+    default:
+      return 'gray'
   }
 }
 
