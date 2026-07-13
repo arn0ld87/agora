@@ -108,6 +108,11 @@ Empfehlung: Für Entwicklung lokal starten, für längere Runs einen VPS oder Se
 
 ## Pipeline
 
+0. **Onboarding** — Provider, Modelle, Embedding-Konfiguration und
+   API-Keys werden im UI zusammengeklickt (resumierbar). Die Einstellungen
+   landen kanonisch in Neo4j (siehe [ADR-0007](./docs/decisions/0007-embedding-configuration-and-index-migration.md),
+   [ADR-0008](./docs/decisions/0008-single-user-profile-and-onboarding.md),
+   [ADR-0009](./docs/decisions/0009-unified-model-picker.md)).
 1. **Input** — PDF, Markdown, Text, Webseite oder Fragestellung
 2. **Graph Build** — Entitäten, Aussagen und Beziehungen nach Neo4j
 3. **Persona Spawn** — Rollen, Haltungen, Interessen und Aktivitätsmuster
@@ -115,26 +120,39 @@ Empfehlung: Für Entwicklung lokal starten, für längere Runs einen VPS oder Se
 5. **Aggregation** — Graphdaten, Agentenreaktionen und Metriken zusammenführen
 6. **Report** — Claims, Evidence, Confidence, Hypothesen und Datenlücken erzeugen
 7. **Compare** — Runs, Varianten, Graph-Diffs und Reportversionen vergleichen
+8. **Embedding-Migration** — beim Wechsel des Embedding-Modells wird die
+   bestehende Wissensbasis versioniert neu indexiert (Resume-fähig,
+   `pending → running → validating → completed`).
 
 ## Architektur
 
 ```text
 Vue 3 + Pinia + Zod + Vite
-  └─ Wizard, Runs Dashboard, Graph-, Simulation- und Report-UI
+  ├─ Wizard (Onboarding, Run-Anlage)
+  ├─ AiModelPicker.vue          Unified Model Picker (reka-ui, ADR-0009)
+  ├─ Embedding-Konfigurations-View  Neo4j-Embedding-Migration-UI
+  └─ Runs Dashboard, Graph-, Simulation- und Report-UI
 
-Flask API + Pydantic v2
-  ├─ contracts/    Single Source of Truth für API- und Frontend-Schemas
-  ├─ api/          Auth, Upload, Graph, Simulation, Report, Runs
-  ├─ services/     Graph Build, Personas, Reports, Metrics
-  ├─ storage/      Neo4j, Embeddings, NER, Search
-  └─ scripts/      OASIS-/CAMEL-Subprozess-Runner
+Flask API + Pydantic v2 (Python 3.14)
+  ├─ contracts/                 Single Source of Truth für API- und Frontend-Schemas
+  ├─ api/                       Auth, Upload, Graph, Simulation, Report, Runs, Migrations
+  ├─ services/
+  │    ├─ report_agent/         Layer 7: Report-Pipeline
+  │    ├─ evidence_binder/      Evidence-Gating (ADR-0002)
+  │    ├─ embedding_service.py  Aktive Embedding-Konfiguration (ADR-0007)
+  │    ├─ embedding_migration.py Re-Embedding-Lifecycle
+  │    └─ embedding_reembedder.py Echte Neo4j-Re-Embedding-Engine
+  ├─ llm/providers/registry.py  Provider-Detection-SSoT
+  ├─ storage/                   Neo4j, Embeddings, NER, Search
+  └─ scripts/                   OASIS-/CAMEL-Subprozess-Runner
 
 Runtime
-  ├─ Neo4j 5.18+              Knowledge Graph
-  ├─ Redis                    Pub/Sub, IPC, Status-Events
-  ├─ Ollama lokal/cloud       lokale oder Cloud-Modelle
-  ├─ OpenAI-kompatible APIs   externe LLM- und Embedding-Endpunkte
-  └─ OASIS / CAMEL            Multi-Agent-Simulation
+  ├─ Neo4j 5.18+                Knowledge Graph + Embedding-Vektor-Index
+  ├─ Redis                      Pub/Sub, IPC, Status-Events
+  ├─ Ollama lokal/cloud         lokale oder Cloud-Modelle
+  ├─ OpenAI-kompatible APIs     externe LLM- und Embedding-Endpunkte
+  ├─ SigNoz + OTel              optionale Observability (Slices 1–3)
+  └─ OASIS / CAMEL              Multi-Agent-Simulation
 ```
 
 Details in [`docs/architecture.md`](./docs/architecture.md).
@@ -319,25 +337,43 @@ Agora ist am stärksten, wenn es als Entscheidungsunterstützung genutzt wird: f
 
 ## Entwicklungsstatus
 
-Agora ist experimentell, aber bereits deutlich über einen einfachen Prototyp hinaus.
+Agora ist experimentell, aber bereits deutlich über einen einfachen Prototyp hinaus. Die
+Release-Linie ist **v1.0.0**; die Versionsstände und Test-Counts liegen in
+[`docs/STATUS.md`](./docs/STATUS.md), die ausgelieferten Änderungen im
+[`CHANGELOG.md`](./CHANGELOG.md).
 
-Aktueller Fokus:
+Aktive Wellen (Detail in [`PLAN.md`](./PLAN.md) und [`ROADMAP.md`](./ROADMAP.md)):
 
-- robustere Evidence-Bindung
-- bessere Report-Qualität
-- klare Trennung von Claims, Hypothesen und Datenlücken
-- Provider-Konfiguration über UI und CLI
-- stabilere Cloud-/Hybrid-Deployments
-- bessere PDF-/Export-Ausgabe
-- reproduzierbare Runs und Vergleichbarkeit
+- **Onboarding & Provider-Unification** ([Epic](./docs/epics/onboarding-provider-unification/)):
+  Phase 1 (Slices 1–4.3.4) abgeschlossen — kanonische Provider-/Modell-/Embedding-Verträge,
+  User-Profile, Provider-Discovery mit Test, Embedding-Configuration-Service, Migrations-
+  Lifecycle, Frontend-Store/View, **echte Neo4j-Re-Embedding-Engine mit Resume**. Phase 2
+  (Unified Model Picker, [ADR-0009](./docs/decisions/0009-unified-model-picker.md)) läuft —
+  AiModelPicker.vue mit reka-ui gemerged, weitere Schritte offen.
+- **Design Language v4 — App-Shell-Port:** Slices A–E sowie F, G1 (Settings General/Integrations)
+  und G2 (API Keys real) gemerged. Branch `feat/design-v4-epic`.
+- **v1.0-Output-Vertrag** ([`PLAN.md`](./PLAN.md)) — offene Schritte: P3.2, P4.1, P4.3, P4.4
+  (Markdown/CSV/ZIP-Export, Bundle).
+- **Observability** ([`docs/plans/active/`](./docs/plans/active/)):
+  Slices 1 (End-to-End-Tracing), 2 (Metrics) und 3 (Logs-Correlation) gemerged;
+  Slice 4 (SLOs/Alerts) in Planung.
+- **Phase F — Provider-Detection-Delegation** an die
+  [`backend/app/llm/providers/registry.py`](./backend/app/llm/providers/registry.py)-SSoT
+  (#669, #670, #671 — TDD, je eigener PR).
+- **Dependency-Hardstops** ([`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md)):
+  `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → **2026-07-30**; Trivy OS-Layer
+  CVE-2026-24049/23949 → **2026-08-30**.
 
 ## Mitarbeiten
 
 Kurzeinstieg in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-Agenten-Setup für Claude Code, Codex und ähnliche Tools: [`AGENTS.md`](./AGENTS.md).
+Agenten-Setup für Claude Code, Codex und ähnliche Tools: [`AGENTS.md`](./AGENTS.md),
+Claude-spezifische Eigenheiten: [`CLAUDE.md`](./CLAUDE.md).
 
-Runbooks: [`docs/runbooks/`](./docs/runbooks/).
+Runbooks: [`docs/runbooks/`](./docs/runbooks/) — Tool-Pflicht, PR-Workflow,
+Worktree-Strategie, **Pre-Push-Gate** (zentral seit PR #693), Subagent-Routing,
+Architektur-Layer.
 
 ## Herkunft und Lizenz
 
