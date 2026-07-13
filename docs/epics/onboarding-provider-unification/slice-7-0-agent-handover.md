@@ -282,20 +282,20 @@ Die im Subplan festgelegte Matrix:
 |---|---|
 | Dashboard | `wire` |
 | Runs | `wire` |
-| Projekte | `defer` |
-| Datensätze | `defer` |
-| Vorlagen | `defer` |
-| Monitoring | `defer` |
+| Projekte | `hide` |
+| Datensätze | `hide` |
+| Vorlagen | `hide` |
+| Monitoring | `hide` |
 | Settings Allgemein | `wire` |
-| Settings Integrationen | `implement MVP` |
+| Settings Integrationen | `wire` |
 | Settings Profil | `wire` |
 | Settings API Keys | `wire` |
 | Settings Audit Logs | `hide` |
 | Settings LLM Providers | `wire` |
-| Settings LLM Routing | `hide` in Settings, unter Runs verdrahten |
+| Settings LLM Routing | `hide` |
 | Settings Embedding | `wire` |
-| Users & Teams | `hide` |
-| `/settings-classic` | `hide`, später Redirect |
+| Users & Teams | `defer` |
+| `/settings-classic` | `defer` |
 
 ### 5.7 Slice-6-Konfliktflächen
 
@@ -314,7 +314,7 @@ Bis Slice 6 gemergt ist, exklusiv für Slice 6 reservieren:
 - E2E-Werte 1, 5, 10, 30, 50, 100;
 - Persona-/Budget-Wording in `de.json` und `en.json`.
 
-Sub-Slices 7.5b und 7.9c warten deshalb auf den Slice-6-Merge.
+Sub-Slices 7.6b und 7.6c warten deshalb auf den Slice-6-Merge.
 
 ## 6. Geplante Implementierungsreihenfolge
 
@@ -323,8 +323,8 @@ enthalten:
 
 ```text
 7.1 → 7.2 → 7.3 → 7.4 → 7.7 → 7.8
-  └────────→ 7.6 → 7.9a → 7.9b → 7.9c
-7.1 + 7.2 + Slice 6 gemergt → 7.5/7.5b
+  └────────→ 7.6 → 7.6a → 7.6b → 7.6c
+7.1 + 7.2 + Slice 6 gemergt → 7.5
 ```
 
 Sub-Slices:
@@ -333,11 +333,11 @@ Sub-Slices:
 2. **7.2** Shell-A11y und 320-px-Grundgerüst.
 3. **7.3** Sidebar-Informationsarchitektur.
 4. **7.4** produktive Settings-Flächen konvergieren.
-5. **7.5/7.5b** Onboarding und später Dashboard-Oberfläche.
+5. **7.5** Onboarding und später Dashboard-Oberfläche.
 6. **7.6** kanonischen `AiModelPicker` polieren.
 7. **7.7** verwaistes Mock-Routing entfernen.
 8. **7.8** `/settings-classic` nach Parität deprecaten.
-9. **7.9a-c** Legacy-Picker-Consumer stufenweise migrieren und Adapter erst bei
+9. **7.6a-c** Legacy-Picker-Consumer stufenweise migrieren und Adapter erst bei
    null produktiven Importern entfernen.
 
 Empfehlung für den ersten Implementierungs-PR: **7.1**. Er ist additiv,
@@ -517,7 +517,7 @@ Der Abschlussbericht an den Benutzer muss knapp, aber vollständig enthalten:
 - Basis-Commit;
 - vorgeschlagene Reihenfolge:
   `7.1 → 7.2 → 7.3 → 7.4 → 7.7 → 7.8` sowie paralleler
-  Picker-Pfad `7.6 → 7.9a → 7.9b → 7.9c`;
+  Picker-Pfad `7.6 → 7.6a → 7.6b → 7.6c`;
 - Konfliktflächen mit Slice 6:
   `HeroNewRun`, Step 2, Persona-/Run-Vertrag, Persona-i18n und E2E-Werte;
 - Empfehlung: 7.1 als erster Implementierungs-PR;
