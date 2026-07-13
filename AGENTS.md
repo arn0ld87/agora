@@ -10,11 +10,14 @@ Test-Counts und Versionsstände in [`docs/STATUS.md`](docs/STATUS.md), operative
 Agora ist ein **lokal-first** Multi-Agent-Simulator für DACH-Zielgruppenreaktionen. Pipeline:
 Dokument hochladen → Wissensgraph extrahieren → Personas spawnen → OASIS-Simulation → DACH-Report.
 
-**Stack:** Flask (Python 3.12) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
+**Stack:** Flask (Python 3.14) + Pydantic v2 + Vue 3 + Vite + Pinia + Neo4j 5.18 CE + OASIS (`camel-oasis`)
 + Redis + Ollama. Package-Manager: `uv` (Backend), `npm` (Frontend).
+**Single-User**, lokal oder hybrid, **kein öffentliches SaaS** ([ADR-0001](./docs/decisions/0001-auth-model.md)).
 
-**Status:** v1.0.0 (2026-05-11). Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
-Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md).
+**Status:** v1.0.0 (Release 2026-05-11). Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
+Aktive Welle: **Onboarding & Provider-Unification** (Phase 1 Slices 1–4.3.4 gemerged, Phase 2 Slice 5 läuft —
+Sub-Slice 5.0/5.1 gemerged, 5.2 in Arbeit). Roadmap: [`PLAN.md`](PLAN.md).
+Layer-Detail: [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md).
 
 ## Sofort wichtig
 
@@ -24,6 +27,9 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 - **context-mode ist die Execution-Layer.** PreToolUse-Hooks limitieren Bash (nur git/fs/nav,
   kein curl/wget), Read (nur zum Editieren, Analysen via ctx_execute_file), WebFetch
   (erlaubt, aber ctx_fetch_and_index für Research bevorzugt).
+- **Pre-Push-Gate ist Pflicht.** Vor jedem Push `bash scripts/pre-push-gate.sh` (Sub-Scopes
+  `backend|frontend|schemas` erlaubt). CI und lokal laufen denselben Gate-Satz — kein
+  `--no-verify`-Bypass. Runbook: [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md).
 - **Branch-Hygiene:** Nie direkt auf `main` pushen. PR-Workflow inklusive Gemini-Sichtung:
   [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md).
 - **Worktree für Slices:** `/private/tmp/agora-<slice-id>/`. Details:
@@ -36,27 +42,37 @@ Aktuelle Roadmap: [`PLAN.md`](PLAN.md). Layer-Detail: [`docs/runbooks/architectu
 ## Stack-Map (Kurzfassung)
 
 ```
-backend/                    Python 3.12, uv, Flask, Pydantic v2, pytest
+backend/                        Python 3.14, uv, Flask, Pydantic v2, pytest
   app/
-    contracts/              Layer 0: Single Source of Truth (Pydantic v2, extra="forbid")
-    api/                    HTTP-Routen (Flask Blueprints)
-    services/               Business-Logik (report_agent/, evidence_binder, …)
-    storage/                Neo4j-Adapter, Embeddings, NER, Search
-    utils/                  llm_client, auth, json_io
+    contracts/                  Layer 0: Single Source of Truth (Pydantic v2, extra="forbid")
+    api/                        HTTP-Routen (Flask Blueprints)
+    services/
+      report_agent/             Layer 7: Report-Pipeline
+      evidence_binder/          Evidence-Gating (ADR-0002)
+      embedding_migration.py    Lifecycle pending→running→validating→completed (ADR-0007)
+      embedding_reembedder.py   Echte Neo4j-Re-Embedding-Engine (Onboarding 4.3.4)
+      embedding_service.py      Konfigurations-Service (Onboarding 4.2)
+      embedding_ollama_pull.py  Ollama-Modell-Download (Onboarding 4.3.1)
+    llm/
+      providers/registry.py     Provider-Detection-SSoT (detect_provider mode="http"|"oasis")
+    storage/                    Neo4j-Adapter, Embeddings, NER, Search
+    utils/                      llm_client, auth, json_io
   tests/{contracts,api,services,eval}
-  scripts/                  OASIS-Subprozess-Runner
+  scripts/                      OASIS-Subprozess-Runner
 
-frontend/                   Vue 3 + TS + Pinia + Vitest + Zod
+frontend/                       Vue 3 + TS + Pinia + Vitest + Zod
   src/
-    contracts/              Zod-Spiegel zu backend/app/contracts/
-    api/                    index, graph, simulation, report, runs, stream
-    composables/            useEventStream, usePolling, useWorkspaceMode, …
-    components/Step*.vue    Pipeline-Steps
-    layouts/                Workspace-Shell
+    contracts/                  Zod-Spiegel zu backend/app/contracts/
+    api/                        index, graph, simulation, report, runs, stream
+    composables/                useEventStream, usePolling, useWorkspaceMode, …
+    components/Step*.vue        Pipeline-Steps
+    components/AiModelPicker.vue  Unified Model Picker (ADR-0009, Onboarding 5.1)
+    layouts/                    Workspace-Shell
 
-schemas/                    auto-generiert via `python -m app.contracts.dump_schemas`
-deploy/                     nginx-Sidecar, prod-with-proxy compose
-docs/                       Lebende Dokumentation und Runbooks
+schemas/                        auto-generiert via `python -m app.contracts.dump_schemas`
+deploy/                         nginx-Sidecar, prod-with-proxy compose
+docs/                           Lebende Dokumentation und Runbooks
+design/v3-source/               Vendoriertes Design v4 (App-Shell)
 ```
 
 Detail: [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md).
@@ -74,6 +90,7 @@ npm run frontend                 # Vite :5173
 
 # Quality-Gate
 npm run check                    # lint + test + build (alles)
+bash scripts/pre-push-gate.sh    # CI-mirror: vor jedem Push Pflicht
 
 # Backend
 cd backend && uv run pytest -x -q
@@ -137,25 +154,66 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 - Hartkodierte `token_limit`-Defaults in CAMEL/OASIS — immer aus `_resolve_memory_token_limit(model_name)`
 - Neue Query-Tokens (`?token=`) in URLs — signed tickets (`?ticket=`) sind der einzige URL-bound Auth-Pfad
 - Neue „temporäre" CVE-Ignores ohne Issue, Owner, Deadline und Hardstop-Datum
+- Lokale Provider-Detection-Heuristiken — `backend/app/llm/providers/registry.py::detect_provider` ist SSoT
+  (Phase F, #669/#670/#671 delegieren bestehende Stellen dorthin)
 
-## Aktive Epics
+## Aktive Epics (Stand 2026-07-13)
 
-- **M3-Port — Unified Provider Abstraction:** ✅ abgeschlossen (PR #666, 2026-07-05).
-  Provider-Detection-SSoT: `backend/app/llm/providers/registry.py::detect_provider(mode="http"|"oasis")`.
-  Phase F offen — Rest-Detection-Delegation an die SSoT: #669, #670, #671
-  (jeweils eigener PR, TDD).
-- **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch,
-  F läuft. Vendoriert in [`design/v3-source/`](design/v3-source/).
+- **Onboarding & Provider-Unification** (laufende Welle):
+  - **Phase 1 (gemerged):** Slices 1–4.3.4 — kanonische Provider-/Modell-/Embedding-Verträge,
+    User-Profile + resumierbares Onboarding-Grundgerüst, Provider-Discovery, Embedding-Configuration-
+    Service, Embedding-Migration-Lifecycle, Frontend-Store/View, **echte Neo4j-Re-Embedding-Engine
+    mit Resume-Cursor**, zentrales `pre-push-gate.sh`, F401-Cleanup. PRs #683 → #694.
+  - **Phase 2 (Slice 5, läuft):** Unified Model Picker (Sub-Slice 5.0 Sub-Plan + ADR-0009 gemerged,
+    5.1 `AiModelPicker.vue` mit reka-ui gemerged, 5.2 in Arbeit). Branch: `codex/onboarding-model-picker`.
+  - Detail: [`docs/epics/onboarding-provider-unification/`](docs/epics/onboarding-provider-unification/).
+- **Design Language v4 — App-Shell-Port:** Slices A–E durch, **F + G1 (Settings General/Integrations)
+  + G2 (API Keys real) gemerged**. Branch `feat/design-v4-epic`. Vendoriert in [`design/v3-source/`](design/v3-source/).
 - **v1.0-Output-Vertrag** ([`PLAN.md`](PLAN.md)) — offen: P3.2, P4.1, P4.3, P4.4.
-- **Observability Slice 1 — End-to-End-Tracing** (geplant, Plan abgenommen, Implementation offen).
+- **Observability** ([`docs/plans/active/`](docs/plans/active/)):
+  - Slice 1 — End-to-End-Tracing ✅ (PR #468)
+  - Slice 2 — Metrics ✅ (PR #473)
+  - Slice 3 — Logs-Correlation ✅ (PR #474)
+  - Slice 4 — SLOs/Alerts offen
+- **Phase F — Provider-Detection-Delegation** (TDD, je eigener PR): #669
+  (`simulation_lifecycle._detect_default_provider`), #670 (`_sim_common._is_ollama_route` think/num_ctx),
+  #671 (`embedding_service._detect_provider` vereinheitlichen).
 - **Dependency-Hardstops** ([`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)):
-  `nltk` PYSEC-2026-597 + GHSA-p4gq → 2026-07-30; Trivy OS-Layer CVE-2026-24049/23949 → 2026-08-30.
+  `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → **2026-07-30**; Trivy OS-Layer CVE-2026-24049/23949 → **2026-08-30**.
+
+## Wichtige ADRs (kurz)
+
+| ADR | Thema | Status |
+|---|---|---|
+| [0001](./docs/decisions/0001-auth-model.md) | Auth-Modell (Single-User) | Accepted |
+| [0002](./docs/decisions/0002-evidence-gating.md) | Evidence-Gating (5 Hartanker) | Accepted — nicht schwächen |
+| [0003](./docs/decisions/0003-pydantic-settings-migration.md) | Pydantic-Settings-Migration | Accepted |
+| [0004](./docs/decisions/0004-cve-upstream-escalation.md) | CVE-Upstream-Escalation | Accepted |
+| [0006](./docs/decisions/0006-ai-provider-connections.md) | AI-Provider-Connections | Accepted (Onboarding 3) |
+| [0007](./docs/decisions/0007-embedding-configuration-and-index-migration.md) | Embedding-Config + Index-Migration | Accepted (Onboarding 4) |
+| [0008](./docs/decisions/0008-single-user-profile-and-onboarding.md) | Single-User-Profile + Onboarding | Accepted (Onboarding 2) |
+| [0009](./docs/decisions/0009-unified-model-picker.md) | Unified Model Picker | Accepted (Onboarding 5.0) |
 
 ## Referenz
 
 - [`docs/`](docs/) — Doku-Index (Architektur, Deployment, Security, Operations)
-- [`docs/runbooks/`](docs/runbooks/) — Detail-Runbooks (Tool-Pflicht, PR-Workflow, Worktree, Subagent-Routing, Layer)
+- [`docs/runbooks/`](docs/runbooks/) — Detail-Runbooks (Tool-Pflicht, PR-Workflow, Worktree, Subagent-Routing, Pre-Push-Gate, Layer)
 - [`docs/STATUS.md`](docs/STATUS.md) — Test-Counts, Coverage, Milestones
+- [`docs/epics/onboarding-provider-unification/`](docs/epics/onboarding-provider-unification/) — laufende Welle
+- [`docs/plans/active/`](docs/plans/active/) — abgenommene Pläne (Observability, …)
 - [`PLAN.md`](PLAN.md) — Operativer Slice-Plan
 - [`CHANGELOG.md`](CHANGELOG.md) — Release-Notes
-- [`CLAUDE.md`](CLAUDE.md) — Claude-spezifische Eigenheiten (Slash-Commands, MCP-Hooks)
+- [`CLAUDE.md`](CLAUDE.md) — Claude-spezifische Eigenheiten (Subagent-Routing, Pre-Commit-Gate, Runbooks)
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
