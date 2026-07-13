@@ -230,4 +230,93 @@ describe('AppShell', () => {
 
     expect(store.mobileNavOpen).toBe(false)
   })
+
+  it('Mobile-Drawer traegt role=dialog + aria-modal=true + aria-label wenn offen (Slice 7.3 a11y)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await wrapper.vm.$nextTick()
+
+    const drawer = wrapper.find('[data-app-shell-drawer]')
+    expect(drawer.exists()).toBe(true)
+    expect(drawer.attributes('role')).toBe('dialog')
+    expect(drawer.attributes('aria-modal')).toBe('true')
+    expect(drawer.attributes('aria-label')).toBeTruthy()
+  })
+
+  it('Fokus kehrt zum Trigger (Hamburger) zurueck wenn der Drawer per Backdrop geschlossen wird (Slice 7.3 a11y)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+
+    // Hamburger (Topbar-Trigger) simuliert als Opener-Element
+    const opener = document.createElement('button')
+    opener.id = 'fake-hamburger'
+    document.body.appendChild(opener)
+    opener.focus()
+    expect(document.activeElement).toBe(opener)
+
+    // Drawer oeffnen — AppShell soll Fokus in den Drawer verschieben
+    store.openMobileNav()
+    await wrapper.vm.$nextTick()
+    await nextTick()
+    const focusedAfterOpen = document.activeElement
+    expect(focusedAfterOpen).not.toBe(opener)
+    // Fokus liegt innerhalb des Drawers
+    const drawer = wrapper.find('[data-app-shell-drawer]')
+    expect(drawer.element.contains(focusedAfterOpen)).toBe(true)
+
+    // Drawer schliessen — Fokus springt zurueck zum Opener
+    await wrapper.find('.app-shell__backdrop').trigger('click')
+    await nextTick()
+    expect(store.mobileNavOpen).toBe(false)
+    expect(document.activeElement).toBe(opener)
+
+    document.body.removeChild(opener)
+    wrapper.unmount()
+  })
+
+  it('kein horizontales Scrollen des Dokuments bei Viewport 320x800 (Slice 7.3 320-px-Gate)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    // document.documentElement.clientWidth simuliert 320-px-Viewport
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      configurable: true,
+      get: () => 320,
+    })
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      get: () => 320,
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await wrapper.vm.$nextTick()
+
+    // AppShell-Wurzel darf nicht breiter als der Viewport sein
+    const root = wrapper.element as HTMLElement
+    expect(root.scrollWidth).toBeLessThanOrEqual(320)
+    // Body-Scroll-Lock ist gesetzt (overflow:hidden verhindert Document-Scroll)
+    expect(document.body.style.overflow).toBe('hidden')
+  })
 })

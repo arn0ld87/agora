@@ -8,19 +8,17 @@
 
     <!-- Nav body -->
     <nav class="sidebar__body" aria-label="Hauptnavigation">
-      <!-- Workspace items -->
+      <!-- Workspace items (IA-Matrix Slice 7.3: nur wire-Ziele) -->
       <template v-for="item in navWorkspace" :key="item.id">
         <SidebarItem
           :icon="item.icon"
           :label="item.label"
-          :to="item.disabled ? undefined : item.to"
-          :disabled="item.disabled"
-          :tooltip="item.disabled ? t('sidebar.disabledTooltip') : undefined"
+          :to="item.to"
           @click="handleNavClick"
         />
       </template>
 
-      <!-- Settings group -->
+      <!-- Settings group (IA-Matrix: nur wire-Sub-Items) -->
       <SidebarGroup
         group-key="settings"
         :label="t('sidebar.settings.label')"
@@ -74,8 +72,6 @@ interface NavItem {
   icon: string
   label: string
   to: RouteLocationRaw
-  /** Wenn true: kein Router-Push, aria-disabled, gedimmtes Styling, Tooltip. */
-  disabled?: boolean
 }
 
 interface NavSettingsItem {
@@ -97,7 +93,10 @@ const emit = defineEmits<{
   'collapse-toggle': []
 }>()
 
-/** Alle Route-Namen, bei denen die Settings-Gruppe als aktiv gilt und auto-öffnet. */
+/** Alle Route-Namen, bei denen die Settings-Gruppe als aktiv gilt und auto-oeffnet.
+ *  IA-Matrix Slice 7.3: SettingsAuditLogs und SettingsLlmRouting sind nicht in der Sidebar,
+ *  muessen hier aber gelistet bleiben, damit ein Aufruf der Hidden-Route (z.B. via
+ *  CommandPalette oder Deep-Link) die Gruppe trotzdem auto-oeffnet. */
 const settingsRouteNames = [
   'Settings',
   'SettingsGeneral',
@@ -110,23 +109,21 @@ const settingsRouteNames = [
   'SettingsEmbedding',
 ]
 
+/** IA-Matrix Slice 7.3 — nur wire-Ziele in der Sidebar.
+ *  Projekte/Datensaetze/Vorlagen/Monitoring: hide (MVP Slice 8+).
+ *  Audit Logs + LLM-Routing: hide. */
 const navWorkspace = [
   { id: 'dashboard',  icon: 'home',   label: t('sidebar.nav.dashboard'),  to: { name: 'Dashboard' } },
   { id: 'runs',       icon: 'branch', label: t('sidebar.nav.runs'),       to: { name: 'Runs' } },
-  { id: 'projects',   icon: 'folder', label: t('sidebar.nav.projects'),   to: { path: '#projects' },  disabled: true },
-  { id: 'datasets',   icon: 'layers', label: t('sidebar.nav.datasets'),   to: { path: '#datasets' },  disabled: true },
-  { id: 'templates',  icon: 'doc',    label: t('sidebar.nav.templates'),  to: { path: '#templates' }, disabled: true },
-  { id: 'monitoring', icon: 'spark',  label: t('sidebar.nav.monitoring'), to: { path: '#monitoring' },disabled: true },
 ] satisfies NavItem[]
 
+/** IA-Matrix: nur wire-Settings-Sub-Items. */
 const navSettings: NavSettingsItem[] = [
   { id: 'general',       label: t('sidebar.settings.general'),       to: { name: 'SettingsGeneral' } },
   { id: 'integrations',  label: t('sidebar.settings.integrations'),  to: { name: 'SettingsIntegrations' } },
   { id: 'profile',       label: t('sidebar.settings.profile'),       to: { name: 'SettingsProfile' } },
   { id: 'api-keys',      label: t('sidebar.settings.apiKeys'),       to: { name: 'SettingsApiKeys' } },
-  { id: 'audit',         label: t('sidebar.settings.auditLogs'),     to: { name: 'SettingsAuditLogs' } },
   { id: 'llm-providers', label: t('sidebar.settings.llmProviders'),  to: { name: 'SettingsLlmProviders' } },
-  { id: 'llm-routing',   label: t('sidebar.settings.llmRouting'),    to: { name: 'SettingsLlmRouting' } },
   { id: 'embedding',     label: t('sidebar.settings.embedding'),     to: { name: 'SettingsEmbedding' } },
 ]
 </script>

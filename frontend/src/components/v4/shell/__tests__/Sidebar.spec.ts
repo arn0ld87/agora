@@ -138,9 +138,11 @@ describe('Sidebar', () => {
     })
     await wrapper.vm.$nextTick()
     const text = wrapper.text()
-    // DE-Locale: general="Allgemein", llmRouting="LLM-Routing"
+    // DE-Locale: general="Allgemein" — wire-Ziel laut IA-Matrix
     expect(text).toContain('Allgemein')
-    expect(text).toContain('LLM-Routing')
+    // IA-Matrix: Audit Logs und LLM-Routing sind NICHT in der Sidebar
+    expect(text).not.toContain('Audit-Logs')
+    expect(text).not.toContain('LLM-Routing')
   })
 
   it('handleNavClick schliesst Mobile-Nav bei genau 768px (matchMedia inklusiv, Off-by-one-Fix)', async () => {
@@ -194,5 +196,15 @@ describe('Sidebar', () => {
     })
     const text = wrapper.text()
     expect(text).not.toContain('Allgemein')
+  })
+
+  it('Navigation-Element traegt eindeutigen aria-label (Sidebar-A11y-Gate)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const nav = wrapper.find('nav.sidebar__body')
+    expect(nav.exists()).toBe(true)
+    expect(nav.attributes('aria-label')).toBe('Hauptnavigation')
   })
 })

@@ -79,21 +79,35 @@ describe('locale-coverage', () => {
     })
   }
 
-  // 4. Sidebar-Keys (smoke #8)
-  it('sidebar.nav.* Keys existieren in beiden Locales', () => {
-    const navIds = ['dashboard', 'runs', 'projects', 'datasets', 'templates', 'monitoring']
+  // 4. Sidebar-Keys (smoke #8) — nur wire-Ziele laut IA-Matrix Slice 7.3
+  it('sidebar.nav.* Keys existieren in beiden Locales (nur wire-Ziele)', () => {
+    const navIds = ['dashboard', 'runs']
     for (const id of navIds) {
       expect(deKeys).toContain(`sidebar.nav.${id}`)
       expect(enKeys).toContain(`sidebar.nav.${id}`)
     }
+    // Stub-IDs (hide) sind aus den Locales entfernt
+    const hiddenNavIds = ['projects', 'datasets', 'templates', 'monitoring']
+    for (const id of hiddenNavIds) {
+      expect(deKeys).not.toContain(`sidebar.nav.${id}`)
+      expect(enKeys).not.toContain(`sidebar.nav.${id}`)
+    }
   })
 
-  it('sidebar.settings.* Keys existieren in beiden Locales', () => {
-    const settingsIds = ['label', 'general', 'integrations', 'usersTeams', 'apiKeys', 'llmProviders', 'llmRouting', 'auditLogs']
+  it('sidebar.settings.* Keys existieren in beiden Locales (nur wire-Ziele)', () => {
+    const settingsIds = ['label', 'general', 'integrations', 'apiKeys', 'llmProviders', 'embedding', 'profile']
     for (const id of settingsIds) {
       expect(deKeys).toContain(`sidebar.settings.${id}`)
       expect(enKeys).toContain(`sidebar.settings.${id}`)
     }
+    // Hide-Ziele sind aus den Locales entfernt
+    for (const id of ['auditLogs', 'llmRouting']) {
+      expect(deKeys).not.toContain(`sidebar.settings.${id}`)
+      expect(enKeys).not.toContain(`sidebar.settings.${id}`)
+    }
+    // usersTeams bleibt als i18n-Schluessel erhalten, wird aber nicht in der Sidebar gerendert
+    expect(deKeys).toContain('sidebar.settings.usersTeams')
+    expect(enKeys).toContain('sidebar.settings.usersTeams')
   })
 
   it('topbar.search und topbar.notifications existieren in beiden Locales', () => {

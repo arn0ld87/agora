@@ -719,13 +719,10 @@
     }
   },
   "sidebar": {
+    "title": "Hauptnavigation",
     "nav": {
       "dashboard": "Dashboard",
-      "runs": "Runs",
-      "projects": "Projekte",
-      "datasets": "Datensätze",
-      "templates": "Vorlagen",
-      "monitoring": "Monitoring"
+      "runs": "Runs"
     },
     "settings": {
       "label": "Einstellungen",
@@ -734,15 +731,12 @@
       "usersTeams": "Nutzer & Teams",
       "apiKeys": "API-Schlüssel",
       "llmProviders": "LLM-Anbieter",
-      "llmRouting": "LLM-Routing",
       "embedding": "Embedding-Konfiguration",
-      "auditLogs": "Audit-Logs",
       "profile": "Profil"
     },
     "footer": {
       "collapse": "Einklappen"
-    },
-    "disabledTooltip": "Bald verfügbar"
+    }
   },
   "cmd": {
     "title": "Befehlspalette",
