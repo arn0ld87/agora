@@ -96,7 +96,8 @@ withDefaults(
   display: flex;
   align-items: center;
   gap: 12px;
-  transition: height 150ms ease, padding 150ms ease;
+  transition: height var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    padding var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
 }
 
 .topbar__crumbs {
@@ -124,7 +125,8 @@ withDefaults(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   padding: 0;
 }
 
@@ -172,7 +174,8 @@ withDefaults(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   padding: 0;
   flex-shrink: 0;
 }
