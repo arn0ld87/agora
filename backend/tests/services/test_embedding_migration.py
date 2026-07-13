@@ -9,8 +9,6 @@ import pytest
 
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
-    EmbeddingMigrationJob,
-    EmbeddingMigrationProgress,
     EmbeddingMigrationStatus,
 )
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore

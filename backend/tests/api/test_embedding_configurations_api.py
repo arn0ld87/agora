@@ -8,7 +8,6 @@ from typing import Optional
 import pytest
 from flask import Flask
 
-from app.api import llm_bp
 from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingConfigurationScope,
@@ -161,9 +160,6 @@ class _StubService:
         self, configuration_id: str
     ) -> tuple[EmbeddingConfiguration, EmbeddingProbeResult]:
         self.probe_calls.append(configuration_id)
-        from app.services.embedding_configuration_store import (  # local import for tests
-            EmbeddingConfigurationStore,
-        )
         # Reuse the in-memory store via app context, not possible here
         # without more wiring. We return a synthetic result and let the
         # caller (API) update the store.
@@ -287,7 +283,6 @@ def test_get_active_returns_legacy_when_store_is_empty(
 ) -> None:
     # Konfiguriere Config so, dass build_legacy_view() etwas liefert.
     from app.config import Config
-    from app.services.embedding_configurations import legacy as legacy_mod
 
     monkeypatch.setattr(Config, "EMBEDDING_MODEL", "nomic-embed-text")
     monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "http://localhost:11434")

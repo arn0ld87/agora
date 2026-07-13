@@ -9,15 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from cryptography.fernet import Fernet
 
-from app.contracts.embedding_contract import (
-    EmbeddingConfiguration,
-    EmbeddingConfigurationScope,
-    EmbeddingConfigurationStatus,
-    EmbeddingIndexVersion,
-    EmbeddingProviderKind,
-)
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
 
 
