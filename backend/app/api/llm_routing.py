@@ -270,7 +270,7 @@ def patch_routing_default_stage(stage_id: str):
 
     if payload.get("clear") is True or payload == {}:
         defaults = store.set_stage_override(stage_id, None)
-        active_route = defaults.stage_overrides.get(stage_id, defaults.global_default)
+        active_route = defaults.stage_overrides.get(stage_id) or defaults.global_default
         return json_success(
             _with_ai_route(
                 defaults.model_dump(mode="json"),

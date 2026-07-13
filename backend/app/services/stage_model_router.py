@@ -103,5 +103,7 @@ class StageModelRouter:
                 reasoning_effort=legacy_options.get("reasoning_effort") or "none",
                 routing_version=1,
                 provider_options=options,
-                started_at=getattr(route, "resolved_at", None),
+                started_at=(
+                    route.resolved_at.isoformat() if route.resolved_at else None
+                ),
             )

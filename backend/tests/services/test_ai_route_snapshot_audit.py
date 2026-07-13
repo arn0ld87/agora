@@ -1,6 +1,7 @@
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -107,6 +108,7 @@ def test_canonical_snapshot_is_read_through_resolved_route_adapter(runtime):
             provider_connection_id="connection-1",
             model_id="gpt-4o",
             source="stage_override",
+            resolved_at=datetime(2026, 7, 13, 8, tzinfo=timezone.utc),
         ),
     )
 
@@ -115,6 +117,7 @@ def test_canonical_snapshot_is_read_through_resolved_route_adapter(runtime):
     assert isinstance(resolved, ResolvedRoute)
     assert resolved.provider_id == "connection-1"
     assert resolved.model == "gpt-4o"
+    assert resolved.started_at == "2026-07-13T08:00:00+00:00"
 
 
 def test_routing_audit_is_idempotent_utc_and_secret_free(runtime):
