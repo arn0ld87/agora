@@ -1043,6 +1043,20 @@
       }
     }
   },
+  "aiModelPicker": {
+    "placeholder": "Modell wählen …",
+    "searchPlaceholder": "Modell suchen …",
+    "empty": "Keine Modelle verfügbar.",
+    "workspaceDefault": "Workspace-Standard",
+    "inheritWorkspaceDefault": "Workspace-Standard verwenden",
+    "loading": "Modelle werden geladen …",
+    "badge": {
+      "local": "lokal",
+      "cloud": "Cloud",
+      "degraded": "eingeschränkt",
+      "unavailable": "nicht verfügbar"
+    }
+  },
   "activeModel": {
     "label": "Aktives Modell",
     "idle": "Bereit",
