@@ -34,6 +34,7 @@ tatsächlichen Speicherort. Historische Handover dürfen ihre damaligen
 
 ```bash
 # Aus dem Repo-Root, auf dem aktuellen Branch
+test -d /Volumes/T7 || { printf '%s\n' 'Fehler: T7 ist nicht gemountet' >&2; exit 1; }
 git worktree add /Volumes/T7/Worktrees/agora/<slice-id> -b feat/<slice-id>-<name>
 cd /Volumes/T7/Worktrees/agora/<slice-id>
 ```
@@ -52,14 +53,18 @@ git branch -d feat/<slice-id>-<name>
 ```bash
 cd /Volumes/T7/Projekte/agora
 git -C /Volumes/T7/Worktrees/agora/<slice-id> status --short
+# Nur bei leerer Statusausgabe:
+git worktree remove /Volumes/T7/Worktrees/agora/<slice-id>
+git branch -d feat/<slice-id>-<name>
 ```
 
-Bei einem sauberen Worktree normal mit `git worktree remove` und `git branch -d`
-aufräumen. Falls ausschließlich regenerierbare ungetrackte Verzeichnisse wie
-`node_modules`, `.venv` oder `dist` das Entfernen blockieren, diese nach Prüfung
-gezielt löschen und `git worktree remove` erneut ausführen. Bei echten lokalen
-Änderungen stoppen und erst nach expliziter Freigabe verwerfen; kein
-automatisches `--force` oder `branch -D`.
+Bei einem sauberen Worktree normal mit `git worktree remove` aufräumen. Falls
+ausschließlich regenerierbare ungetrackte Verzeichnisse wie `node_modules`,
+`.venv` oder `dist` das Entfernen blockieren, diese nach Prüfung gezielt löschen
+und den Befehl erneut ausführen. `git branch -d` funktioniert nur ohne
+ungemergte Commits. Sind solche Commits vorhanden, stoppen; `git branch -D` ist
+erst nach expliziter Freigabe zum Verwerfen erlaubt. Gleiches gilt bei echten
+lokalen Änderungen: kein automatisches `--force` oder `branch -D`.
 
 ---
 
