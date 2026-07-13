@@ -13,9 +13,18 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from '@/components/v4/shell/__tests__/testRouter'
+import { SettingsSectionSchema } from '@/contracts/settingsContract'
+import {
+  getActiveLlmConfig,
+  setActiveLlmConfig,
+} from '@/api/llmRouting'
 
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
+import {
+  GENERAL_SETTINGS_SECTIONS,
+  INTEGRATION_SETTINGS_SECTIONS,
+} from '../Settings/settingsSections'
 
 vi.mock('@/components/v4/shell/AppShell.vue', () => ({
   default: {
@@ -51,6 +60,26 @@ vi.mock('@/components/v4/forms/LlmProfileManager.vue', () => ({
     template: '<div class="llm-profile-manager-stub" />',
   },
 }))
+vi.mock('@/components/v4/forms/AiModelPicker.vue', () => ({
+  default: {
+    name: 'AiModelPicker',
+    props: ['id', 'modelValue'],
+    template: '<div class="ai-model-picker-stub" :data-id="id" />',
+  },
+}))
+vi.mock('@/api/llmRouting', () => ({
+  listLlmProviders: vi.fn().mockResolvedValue([
+    { id: 'ollama', label: 'Ollama' },
+    { id: 'openai', label: 'OpenAI' },
+  ]),
+  listProviderModels: vi.fn().mockImplementation(async (providerId: string) => (
+    providerId === 'openai'
+      ? [{ id: 'gpt-4o-mini', label: 'GPT-4o mini' }]
+      : [{ id: 'qwen3', label: 'Qwen 3' }]
+  )),
+  getActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'ollama', model: 'qwen3' }),
+  setActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'openai', model: 'gpt-4o-mini' }),
+}))
 
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
 import SettingsIntegrationsView from '../Settings/SettingsIntegrationsView.vue'
@@ -81,6 +110,45 @@ async function mountView(component: object, path: string) {
   return wrapper
 }
 
+describe('Settings-Section-Parität (Slice 7.4a)', () => {
+  it('ordnet jede Schema-Section exakt einer v4-Settings-Seite zu', () => {
+    const mappedSections = [
+      ...GENERAL_SETTINGS_SECTIONS,
+      ...INTEGRATION_SETTINGS_SECTIONS,
+    ]
+    const occurrences = mappedSections.reduce<Record<string, number>>((counts, section) => {
+      counts[section] = (counts[section] ?? 0) + 1
+      return counts
+    }, {})
+
+    expect(
+      Object.entries(occurrences)
+        .filter(([, count]) => count !== 1)
+        .map(([section]) => section),
+    ).toEqual([])
+    expect([...new Set(mappedSections)].sort()).toEqual([...SettingsSectionSchema.options].sort())
+  })
+
+  it('erhält den separaten active-config-Lade- und Speicherpfad im General-Surface', async () => {
+    const w = await mountView(SettingsGeneralView, '/settings/general')
+
+    expect(getActiveLlmConfig).toHaveBeenCalled()
+    expect((w.get('#settings-active-provider').element as HTMLSelectElement).value).toBe('ollama')
+    expect((w.get('#settings-active-model').element as HTMLSelectElement).value).toBe('qwen3')
+
+    await w.get('#settings-active-provider').setValue('openai')
+    await flushPromises()
+    await w.get('#settings-active-model').setValue('gpt-4o-mini')
+    await w.get('.settings-general__active-save').trigger('click')
+    await flushPromises()
+
+    expect(setActiveLlmConfig).toHaveBeenCalledWith({
+      provider_id: 'openai',
+      model: 'gpt-4o-mini',
+    })
+  })
+})
+
 describe('SettingsGeneralView (Slice G1, real)', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -106,7 +174,7 @@ describe('SettingsGeneralView (Slice G1, real)', () => {
     const panel = w.findComponent({ name: 'SettingsSectionPanel' })
     expect(panel.exists()).toBe(true)
     const allowed = panel.props('allowedSections') as string[]
-    expect(allowed).toEqual(['llm', 'logging', 'locale', 'ui', 'event_bus', 'security'])
+    expect(allowed).toEqual(GENERAL_SETTINGS_SECTIONS)
   })
 
   it('zeigt keinen "Slice G folgt"-Stub mehr', async () => {
@@ -137,15 +205,7 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
     const w = await mountView(SettingsIntegrationsView, '/settings/integrations')
     const panel = w.findComponent({ name: 'SettingsSectionPanel' })
     const allowed = panel.props('allowedSections') as string[]
-    expect(allowed).toEqual([
-      'neo4j',
-      'embedding',
-      'ontology',
-      'hybrid_search',
-      'agent_tools',
-      'webtools',
-      'oasis',
-    ])
+    expect(allowed).toEqual(INTEGRATION_SETTINGS_SECTIONS)
   })
 })
 

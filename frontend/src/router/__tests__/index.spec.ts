@@ -58,6 +58,7 @@ describe('Router – Routen-Resolution', () => {
     ['/dashboard', 'Dashboard'],
     ['/runs', 'Runs'],
     ['/settings/general', 'SettingsGeneral'],
+    ['/settings/integrations', 'SettingsIntegrations'],
     ['/home', 'Home'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
@@ -80,9 +81,17 @@ describe('Router – Redirects', () => {
     ['/', 'Dashboard'],
     ['/v4/dashboard', 'Dashboard'],
     ['/settings', 'SettingsGeneral'],
+    ['/settings-classic', 'SettingsGeneral'],
   ])('%s → %s', async (from, to) => {
     await pushAndSettle(from)
     expect(router.currentRoute.value.name).toBe(to)
+  })
+
+  it('hält /settings-classic nur als expliziten benannten Redirect', () => {
+    const classicRoute = router.getRoutes().find((route) => route.path === '/settings-classic')
+
+    expect(classicRoute?.redirect).toEqual({ name: 'SettingsGeneral' })
+    expect(classicRoute?.components).toBeUndefined()
   })
 })
 
