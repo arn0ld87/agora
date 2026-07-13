@@ -46,3 +46,32 @@
 - 5.5 deprecatet alte Picker/Stores vollständig.
 - 5.6 ergänzt Playwright-E2E einschließlich Run-Snapshot.
 - Danach folgen Slice 6 (Persona-Count) und Slice 7 (Golden-Gate-Designsystem).
+
+## Sub-Slice 5.5 — Grep-Prep
+
+- Datum: 2026-07-13
+- Worktree: `/private/tmp/agora-onboarding-slice-5-5-grep-prep`
+- Branch: `codex/onboarding-model-picker-slice-5-5-grep-prep`
+- Basis: `origin/main` @ `165d22f5` (PR #700, gemergt)
+- PR: [#702](https://github.com/arn0ld87/agora/pull/702)
+- Slice: 5.5 (Vorbereitung) — Grep-CI-Check gegen v3-Picker-Importe
+
+### Notiz an 5.5 (Deprecation)
+
+Check ist scharf, Opt-in-Marker existiert, Wrapper-Dateien können sich
+freischalten via `<!-- legacy-model-picker-allow: ... -->` bzw.
+`// legacy-model-picker-allow: ...`. Subpfade wie
+`@/store/llmProviders/index` sind auch ohne Marker erlaubt — der Check
+matcht nur den genauen Bare-Specifier.
+
+Aktuell tragen 18 v3-Importe einen Grandfather-Marker
+(`pre-5.5 v3 picker importer — see slice-5-subplan.md`); mit der
+Migration in 5.4/5.5 sind die Importe zu entfernen (damit fällt der
+Marker automatisch mit weg). Leere Opt-in-Reason-Strings werden
+zurückgewiesen — der Reason bleibt Pflicht für die Audit-Spur.
+
+CI-Workflow: `.github/workflows/check-legacy-model-picker.yml`
+(triggert auf `pull_request` mit `paths: frontend/src/**`).
+Lokaler Aufruf: `python3 .github/scripts/check_legacy_model_picker.py`
+(Spiegel siehe `docs/runbooks/pre-push-gate.md`, Abschnitt
+„Legacy-Picker-Check").
