@@ -1,6 +1,6 @@
 # Sub-Plan: Slice 5 — Einheitlicher Model-Picker und Routing
 
-Stand: 2026-07-13 · Status: Proposed (wartet auf User-Sign-off) · Vorgeschlagener Branch: `codex/onboarding-model-picker`
+Stand: 2026-07-13 · Status: In Umsetzung (5.0/5.1 gemergt, 5.2 PR ausstehend) · Vorgeschlagener Branch: `codex/onboarding-model-picker`
 
 ## Ziel
 
@@ -103,6 +103,7 @@ Reihenfolge ist verbindlich; jeder Sub-Slice endet mit grünem
 
 ### 5.2 — Discovery-getriebene Daten
 
+- **Status:** implementiert, lokales Pre-Push-Gate und PR stehen aus.
 - **Ziel:** `AiModelPicker.vue` an `ProviderConnectionStore` anbinden.
 - **Scope:**
   - `useAvailableModels.ts` erweitern: `provider_connection_id`,

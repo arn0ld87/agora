@@ -1050,11 +1050,22 @@
     "workspaceDefault": "Workspace-Standard",
     "inheritWorkspaceDefault": "Workspace-Standard verwenden",
     "loading": "Modelle werden geladen …",
+    "label": "KI-Modell",
+    "refresh": "Modelle aktualisieren",
     "badge": {
       "local": "lokal",
       "cloud": "Cloud",
       "degraded": "eingeschränkt",
-      "unavailable": "nicht verfügbar"
+      "unavailable": "nicht verfügbar",
+      "unsupported": "nicht unterstützt"
+    },
+    "status": {
+      "available": "verfügbar",
+      "degraded": "eingeschränkt",
+      "unavailable": "nicht verfügbar",
+      "unsupported": "nicht unterstützt",
+      "unknown": "Status unbekannt",
+      "invalid_credentials": "Anmeldung ungültig"
     }
   },
   "activeModel": {
