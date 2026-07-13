@@ -197,6 +197,8 @@ export const EmbeddingMigrationProgressSchema = z
     total: z.number().int().min(0),
     processed: z.number().int().min(0),
     failed: z.number().int().min(0),
+    // Resume-Cursor der Re-Embedding-Engine (Slice 4.3.4)
+    last_processed_id: z.string().nullable().default(null),
     started_at: NullableDateTimeSchema,
     finished_at: NullableDateTimeSchema,
   })

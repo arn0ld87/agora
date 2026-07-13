@@ -175,6 +175,29 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
     ).toThrow(/finished_at/)
   })
 
+  it('EmbeddingMigrationProgress: last_processed_id defaultet auf null (Legacy-Payloads)', () => {
+    const parsed = EmbeddingMigrationProgressSchema.parse({
+      total: 5,
+      processed: 5,
+      failed: 0,
+      started_at: null,
+      finished_at: null,
+    })
+    expect(parsed.last_processed_id).toBeNull()
+  })
+
+  it('EmbeddingMigrationProgress: last_processed_id wird als Resume-Cursor durchgereicht', () => {
+    const parsed = EmbeddingMigrationProgressSchema.parse({
+      total: 10,
+      processed: 4,
+      failed: 1,
+      last_processed_id: 'uuid-003',
+      started_at: '2026-07-13T08:00:00+00:00',
+      finished_at: null,
+    })
+    expect(parsed.last_processed_id).toBe('uuid-003')
+  })
+
   it('EmbeddingConfigurationScope akzeptiert nur global oder project', () => {
     expect(() => EmbeddingConfigurationScopeSchema.parse('team')).toThrow()
   })
