@@ -60,7 +60,7 @@ const loadMock = vi.fn()
 const setGlobalDefaultMock = vi.fn()
 let globalDefaultRef: unknown = null
 
-vi.mock('@/store/llmRoutingDefaults', () => ({
+vi.mock('@/store/aiModels', () => ({
   useLlmRoutingDefaultsStore: () => ({
     get globalDefault() { return globalDefaultRef },
     load: loadMock,

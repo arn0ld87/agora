@@ -1,3 +1,13 @@
+/**
+ * useRuntimeLlmOptions — Per-Run-Provider-/Credential-Override (v3).
+ *
+ * @deprecated Slice 5.5 — kein Model-Picker, sondern ein Ad-hoc-Runtime-
+ * Credential-Override (Provider + API-Key + Base-URL, in local/sessionStorage).
+ * Der Grep-Check führt ihn als Legacy-Ziel; er bleibt bewusst als Read-Adapter
+ * für die verbleibenden v3-Consumer (Step2EnvSetup, Step3Simulation, MainView,
+ * useEnvForm) erhalten, bis der Runtime-Credential-Flow in einem eigenen Slice
+ * auf Provider-Connections umgestellt ist. Keine neuen Importeure.
+ */
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { LlmRuntimePayload } from '../api/llmRuntime'
 import { checkLlmProviderHasKey } from '../api/llmProviderKeys'

@@ -2,6 +2,10 @@
 /**
  * ActiveModelBadge — zeigt das aktive LLM-Modell im WorkspaceHeader.
  *
+ * @deprecated Slice 5.5 — v3-Komponente, vom Grep-Check als Legacy-Ziel
+ * geführt. Bleibt als Read-Adapter (SSE-Modell-Badge) bis zur Ablösung im
+ * v4-App-Shell-Port. Keine neuen Importeure.
+ *
  * Slice E.2 / Observability Wave 2026-05 (Anti-Flicker, Issue #213).
  *
  * - Während 'connecting'/'reconnecting': zeigt letzten bekannten Modell-String

@@ -1,4 +1,3 @@
-// legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes)
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -138,7 +137,7 @@ describe('LlmProfileManager', () => {
     await flushPromises()
 
     // Store-Referenz aus dem aktiven Pinia holen (createTestingPinia hat es registriert)
-    const { useLlmProfilesStore } = await import('@/store/llmProfiles')
+    const { useLlmProfilesStore } = await import('@/store/aiModels')
     const store = useLlmProfilesStore()
 
     // Neues-Profil-Formular öffnen
@@ -172,7 +171,7 @@ describe('LlmProfileManager', () => {
     const w = wrap()
     await flushPromises()
 
-    const { useLlmProfilesStore } = await import('@/store/llmProfiles')
+    const { useLlmProfilesStore } = await import('@/store/aiModels')
     const store = useLlmProfilesStore()
 
     // "Als Standard setzen" ist für PROFILE_B (p2) aktiv (p1 ist schon default)

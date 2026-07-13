@@ -1,8 +1,16 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
+/**
+ * LlmProfilePicker — v3-Profil-basierter Modell-Picker.
+ *
+ * @deprecated Slice 5.5 — abgelöst durch den connection-basierten
+ * v4 `AiModelPicker.vue`. Bleibt bewusst als Read-Adapter für die noch nicht
+ * migrierten v3-Step-Views (EnvSetupModelPanel, Step4Report,
+ * ReportBranchControls), bis diese in einem Folge-Slice auf den
+ * connection-basierten Picker umgestellt sind. Keine neuen Importeure.
+ */
 import { computed, onMounted, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useLlmProfilesStore } from '../../store/llmProfiles'
+import { useLlmProfilesStore } from '../../store/aiModels'
 
 const props = withDefaults(
   defineProps<{

@@ -1,4 +1,3 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
 /**
  * LlmProvidersView — Workspace-weite LLM-Provider-Konfiguration.
@@ -19,7 +18,7 @@
  *
  * Klartext-Keys verlassen dieses View nur als PUT-Body-Feld Richtung Backend
  * und werden nie im Pinia-State oder localStorage gehalten (siehe
- * store/llmProviders.ts).
+ * store/aiModels.ts).
  */
 import { computed, onMounted, reactive, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -29,8 +28,7 @@ import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Input from '@/components/v4/forms/Input.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
-import { useLlmProvidersStore } from '@/store/llmProviders'
-import { useLlmRoutingDefaultsStore } from '@/store/llmRoutingDefaults'
+import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import type { ProviderDescriptor, StageLLMRoute } from '@/contracts/llmRoutingContract'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'

@@ -1,4 +1,3 @@
-// legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes)
 /**
  * useAvailableModels — Discovery aus dem kanonischen ProviderConnectionStore.
  *
@@ -7,7 +6,7 @@
  * Picker-Datenpfads.
  */
 import { ref, type Ref } from 'vue'
-import { useLlmProvidersStore } from '@/store/llmProviders'
+import { useLlmProvidersStore } from '@/store/aiModels'
 import type { AiCapability, AiModelRefInput, AiModelStatus, AiProviderKind } from '@/contracts/aiModelRef'
 import type { AiModel, ProviderConnection } from '@/contracts/aiProviderContract'
 

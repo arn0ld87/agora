@@ -160,7 +160,7 @@ vi.mock('@/store/settings', () => ({
   }),
 }))
 
-vi.mock('@/store/llmProviders', () => ({
+vi.mock('@/store/aiModels', () => ({
   useLlmProvidersStore: () => ({
     providers: [],
     entries: {},
@@ -173,9 +173,6 @@ vi.mock('@/store/llmProviders', () => ({
     testProvider: vi.fn().mockResolvedValue({ connectivity: 'ok', models_found: 0 }),
     fetchModels: vi.fn().mockResolvedValue([]),
   }),
-}))
-
-vi.mock('@/store/llmRoutingDefaults', () => ({
   useLlmRoutingDefaultsStore: () => ({
     defaults: { updated_at: null, global_default: null, stage_overrides: {} },
     globalDefault: null,

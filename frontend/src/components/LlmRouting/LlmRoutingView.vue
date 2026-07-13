@@ -1,4 +1,3 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
 /**
  * LlmRoutingView (v3) — Slice 5.4: Migration auf AiModelPicker (SSoT).
@@ -24,7 +23,7 @@ import {
   LlmInvocationEvent,
 } from '../../contracts/llmRoutingContract';
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue';
-import { useLlmProvidersStore } from '@/store/llmProviders';
+import { useLlmProvidersStore } from '@/store/aiModels';
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter';
 import type { AiModelRef } from '@/contracts/aiModelRef';
 

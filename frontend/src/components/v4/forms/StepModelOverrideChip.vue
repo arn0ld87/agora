@@ -1,4 +1,3 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
 /**
  * StepModelOverrideChip — Per-Step-Modellauswahl-Chip.
@@ -18,8 +17,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useLlmProvidersStore } from '@/store/llmProviders'
-import { useLlmRoutingDefaultsStore } from '@/store/llmRoutingDefaults'
+import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import AiModelPicker from './AiModelPicker.vue'
 import type { StageId } from '@/contracts/llmRoutingContract'

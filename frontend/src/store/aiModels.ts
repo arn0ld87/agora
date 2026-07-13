@@ -1,19 +1,28 @@
 /**
- * llmProviders — Pinia-Store für LLM-Provider-Verwaltung.
+ * aiModels — konsolidierter Pinia-Store für die AI-Modell-Domäne.
  *
- * Aggregiert:
- *   - statische Provider-Beschreibungen (GET /api/llm/providers)
- *   - persistierte API-Key-Entries (GET /api/llm/providers/api-keys) — Legacy
- *   - dynamische Modelllisten (GET /api/llm/providers/<id>/models, 10-min-Cache)
- *   - kanonischer Connection-Lifecycle (GET/PUT/DELETE
- *     /api/llm/provider-connections*, Onboarding Slice 3 Task 5)
+ * Sub-Slice 5.5 der Epic ``onboarding-provider-unification`` führt die drei
+ * zuvor getrennten Stores in dieses Modul zusammen (SSoT für „welches Modell
+ * nimmt der Run?", Master-Prompt §5.3 / §6.1):
  *
- * Klartext-Keys laufen ausschließlich durch ``upsertKey``/``upsertConnection``
- * ans Backend und werden hier NIE im State gehalten — `lastError`, `models`,
- * `entries`, `connections` sind die einzigen sichtbaren Daten.
+ *   - ``llmProviders``        → Provider-Descriptors, Legacy-Keys, kanonischer
+ *                               Provider-Connection-Lifecycle (Onboarding 3)
+ *   - ``llmProfiles``         → LLM-Profil-CRUD (P5.4)
+ *   - ``llmRoutingDefaults``  → Workspace-weite Default-Route + Stage-Overrides
+ *
+ * Die Pinia-Store-IDs (``llmProviders``, ``llmProfiles``, ``llmRoutingDefaults``)
+ * bleiben unverändert — bestehende persistierte States und das Test-Verhalten
+ * ändern sich nicht. Neu ist nur die **eine** Import-Oberfläche
+ * ``@/store/aiModels`` plus die Facade ``useAiModelsStore()``, die alle drei
+ * Teil-Stores gebündelt zurückgibt.
+ *
+ * Der Grep-CI-Check (``check_legacy_model_picker.py``) verbietet die alten
+ * Import-Specifier ``@/store/llmProviders`` / ``…/llmProfiles`` /
+ * ``…/llmRoutingDefaults`` — sie existieren nach 5.5 nicht mehr als Datei.
  */
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
+
 import { listLlmProviders } from "../api/llmRouting";
 import {
   deleteLlmProviderKey,
@@ -30,17 +39,37 @@ import {
   upsertProviderConnection,
   type ProviderConnectionUpsertPayload,
 } from "../api/providerConnections";
-import type { ProviderDescriptor } from "../contracts/llmRoutingContract";
+import {
+  fetchLlmProfiles,
+  createLlmProfile,
+  updateLlmProfile,
+  deleteLlmProfile,
+  setDefaultLlmProfile,
+} from "../api/llmProfiles";
+import {
+  getRoutingDefaults,
+  patchRoutingDefaultStage,
+  replaceGlobalDefault,
+  replaceRoutingDefaults,
+} from "../api/llmRoutingDefaults";
+import service from "../api";
+import type { ApiSuccessEnvelope } from "../api/envelope";
+import { isApiError } from "../api/envelope";
+import { unwrapResponse } from "../api/parse";
+
+import type { ProviderDescriptor, StageId, StageLLMRoute } from "../contracts/llmRoutingContract";
 import type { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
+import type { LlmProfile, LlmProfileCreateRequest } from "../contracts/llmProfileContract";
+import type { WorkspaceLlmRoutingDefaults } from "../contracts/workspaceRoutingContract";
 import type {
   AiModel,
   ProviderConnection,
   ProviderConnectionTestResult,
 } from "../contracts/aiProviderContract";
-import service from "../api";
-import type { ApiSuccessEnvelope } from "../api/envelope";
-import { isApiError } from "../api/envelope";
-import { unwrapResponse } from "../api/parse";
+
+// ---------------------------------------------------------------------------
+// llmProviders — Provider-Descriptors, Legacy-Keys, Connection-Lifecycle
+// ---------------------------------------------------------------------------
 
 interface ModelEntry {
   id: string;
@@ -325,3 +354,238 @@ export const useLlmProvidersStore = defineStore("llmProviders", () => {
     fetchConnectionModels,
   };
 });
+
+// ---------------------------------------------------------------------------
+// llmProfiles — LLM-Profil-CRUD (P5.4)
+// ---------------------------------------------------------------------------
+
+export const useLlmProfilesStore = defineStore("llmProfiles", () => {
+  const profiles = ref<LlmProfile[]>([]);
+  const loading = ref(false);
+  const saving = ref(false);
+  const error = ref<string | null>(null);
+
+  async function fetch(): Promise<void> {
+    loading.value = true;
+    error.value = null;
+    try {
+      profiles.value = await fetchLlmProfiles();
+    } catch (err) {
+      const e = err as Error;
+      error.value = e?.message ?? "Fehler beim Laden der LLM-Profile.";
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function create(req: LlmProfileCreateRequest): Promise<void> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const created = await createLlmProfile(req);
+      profiles.value = [created, ...profiles.value];
+    } catch (err) {
+      const e = err as Error;
+      error.value = e?.message ?? "Fehler beim Anlegen des Profils.";
+      throw err;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function update(id: string, req: LlmProfileCreateRequest): Promise<void> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const updated = await updateLlmProfile(id, req);
+      const idx = profiles.value.findIndex((p) => p.id === id);
+      if (idx !== -1) {
+        profiles.value = [
+          ...profiles.value.slice(0, idx),
+          updated,
+          ...profiles.value.slice(idx + 1),
+        ];
+      }
+    } catch (err) {
+      const e = err as Error;
+      error.value = e?.message ?? "Fehler beim Aktualisieren des Profils.";
+      throw err;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function remove(id: string): Promise<void> {
+    saving.value = true;
+    error.value = null;
+    try {
+      await deleteLlmProfile(id);
+      profiles.value = profiles.value.filter((p) => p.id !== id);
+    } catch (err) {
+      const e = err as Error;
+      error.value = e?.message ?? "Fehler beim Löschen des Profils.";
+      throw err;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  async function setDefault(id: string): Promise<void> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const updated = await setDefaultLlmProfile(id);
+      // Alle is_default lokal zurücksetzen, dann das zurückgegebene ersetzen.
+      const reset = profiles.value.map((p) => ({ ...p, is_default: false }));
+      const idx = reset.findIndex((p) => p.id === id);
+      if (idx !== -1) {
+        profiles.value = [
+          ...reset.slice(0, idx),
+          updated,
+          ...reset.slice(idx + 1),
+        ];
+      } else {
+        profiles.value = reset;
+      }
+    } catch (err) {
+      const e = err as Error;
+      error.value = e?.message ?? "Fehler beim Setzen des Standard-Profils.";
+      throw err;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  return {
+    profiles,
+    loading,
+    saving,
+    error,
+    fetch,
+    create,
+    update,
+    remove,
+    setDefault,
+  };
+});
+
+// ---------------------------------------------------------------------------
+// llmRoutingDefaults — Workspace-weite Default-Route + Stage-Overrides
+// ---------------------------------------------------------------------------
+
+const EMPTY_DEFAULTS: WorkspaceLlmRoutingDefaults = {
+  global_default: {
+    stage: null,
+    provider_id: null,
+    model: null,
+    temperature: null,
+    max_tokens: null,
+    reasoning_effort: "none",
+    provider_options: {},
+  },
+  stage_overrides: {},
+  version: 1,
+  updated_at: null,
+};
+
+export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () => {
+  const defaults = ref<WorkspaceLlmRoutingDefaults>(EMPTY_DEFAULTS);
+  const loading = ref(false);
+  const lastError = ref<string | null>(null);
+  /** Explizites Loaded-Flag — robuster als updated_at-Proxy (Gemini MEDIUM #5). */
+  const hasLoadedOnce = ref(false);
+
+  const globalDefault = computed(() => defaults.value.global_default);
+  const stageOverrides = computed(() => defaults.value.stage_overrides);
+
+  function effectiveRouteForStage(stageId: StageId): StageLLMRoute {
+    return defaults.value.stage_overrides[stageId] ?? defaults.value.global_default;
+  }
+
+  async function load(): Promise<void> {
+    loading.value = true;
+    lastError.value = null;
+    try {
+      defaults.value = await getRoutingDefaults();
+      hasLoadedOnce.value = true;
+    } catch (err) {
+      lastError.value = err instanceof Error ? err.message : String(err);
+      throw err;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function setGlobalDefault(route: StageLLMRoute): Promise<void> {
+    lastError.value = null;
+    try {
+      defaults.value = await replaceGlobalDefault(route);
+    } catch (err) {
+      lastError.value = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
+  }
+
+  async function setStageOverride(
+    stageId: StageId,
+    route: StageLLMRoute | null,
+  ): Promise<void> {
+    lastError.value = null;
+    try {
+      defaults.value = await patchRoutingDefaultStage(stageId, route);
+    } catch (err) {
+      lastError.value = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
+  }
+
+  async function replaceAll(payload: WorkspaceLlmRoutingDefaults): Promise<void> {
+    lastError.value = null;
+    try {
+      defaults.value = await replaceRoutingDefaults(payload);
+    } catch (err) {
+      lastError.value = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
+  }
+
+  function clearStageOverride(stageId: StageId): Promise<void> {
+    return setStageOverride(stageId, null);
+  }
+
+  return {
+    defaults,
+    loading,
+    lastError,
+    hasLoadedOnce,
+    globalDefault,
+    stageOverrides,
+    effectiveRouteForStage,
+    load,
+    setGlobalDefault,
+    setStageOverride,
+    replaceAll,
+    clearStageOverride,
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Facade — gebündelter Zugriff auf die drei Teil-Stores
+// ---------------------------------------------------------------------------
+
+/**
+ * useAiModelsStore — Facade über die konsolidierte AI-Modell-Domäne.
+ *
+ * Gibt die drei Teil-Stores (providers, profiles, routingDefaults) gebündelt
+ * zurück, damit neue Aufrufstellen eine einzige Einstiegs-API haben statt drei
+ * separate ``useLlm*Store``-Hooks zu importieren. Die Teil-Stores bleiben
+ * einzeln exportiert (Backcompat für bestehende Views + Tests).
+ */
+export function useAiModelsStore() {
+  return {
+    providers: useLlmProvidersStore(),
+    profiles: useLlmProfilesStore(),
+    routingDefaults: useLlmRoutingDefaultsStore(),
+  };
+}

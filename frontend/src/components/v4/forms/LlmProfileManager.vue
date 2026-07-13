@@ -1,10 +1,17 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
+/**
+ * LlmProfileManager — CRUD-Panel für LLM-Profile (v4-Vorläufer).
+ *
+ * @deprecated Slice 5.5 — nutzt den deprecateten v4 `ModelPicker.vue`
+ * (StageLLMRoute-basiert). Bleibt als Read-Adapter in SettingsGeneralView bis
+ * Profile-Verwaltung auf den connection-basierten `AiModelPicker` umgestellt
+ * ist. Keine neuen Importeure.
+ */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from './Card.vue'
 import ModelPicker from './ModelPicker.vue'
-import { useLlmProfilesStore } from '@/store/llmProfiles'
+import { useLlmProfilesStore } from '@/store/aiModels'
 import type { LlmProfile, LlmProvider } from '@/contracts/llmProfileContract'
 import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 

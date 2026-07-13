@@ -2,6 +2,10 @@
 /**
  * ModelPicker — Wiederverwendbarer Provider/Modell-Selector.
  *
+ * @deprecated Slice 5.5 — abgelöst durch v4 `AiModelPicker.vue`
+ * (connection-basiert). Aktuell ohne Importeure (verwaist); als Read-Adapter
+ * markiert, bis er in einem Folge-Slice gelöscht wird. Keine neuen Importeure.
+ *
  * Props:
  *   modelValue: { provider_id, model_id } | null
  *   disabled?: boolean
