@@ -124,23 +124,32 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
         self.assertIn("useRuntimeLlmOptions", proc.stdout)
 
     # ------------------------------------------------------------------
-    # 3. Opt-in-Marker: Datei mit Magic-Comment wird ignoriert
+    # 3. @deprecated-Ziel: Import eines deprecateten Read-Adapters ist erlaubt
     # ------------------------------------------------------------------
-    def test_opt_in_marker_skips_file(self) -> None:
+    def test_deprecated_target_allows_import(self) -> None:
+        # Ziel-Datei trägt @deprecated → sanktionierter Read-Adapter.
         _write(
-            self.root / "wrapper.ts",
+            self.root / "components/llm/LlmProfilePicker.vue",
             (
-                "// legacy-model-picker-allow: 5.5 wrapper für v3-Backcompat\n"
-                "import { useLlmProvidersStore } from '@/store/llmProviders'\n"
-                "import { useRuntime } from '@/composables/useRuntimeLlmOptions'\n"
+                "<script setup lang=\"ts\">\n"
+                "/**\n"
+                " * @deprecated Slice 5.5 — v3-Picker, Read-Adapter bis 5.6.\n"
+                " */\n"
+                "</script>\n"
             ),
         )
         _write(
-            self.root / "wrapper.vue",
+            self.root / "composables/useRuntimeLlmOptions.ts",
+            "/** @deprecated Slice 5.5 — Runtime-Credential-Read-Adapter. */\n"
+            "export function useRuntimeLlmOptions() {}\n",
+        )
+        # Consumer ohne jeden Marker importieren die deprecateten Ziele.
+        _write(
+            self.root / "consumer.vue",
             (
-                "<!-- legacy-model-picker-allow: 5.5 wrapper für v3-Badge -->\n"
                 "<script setup lang=\"ts\">\n"
-                "import ActiveModelBadge from '@/components/ActiveModelBadge.vue'\n"
+                "import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'\n"
+                "import { useRuntimeLlmOptions } from '@/composables/useRuntimeLlmOptions'\n"
                 "</script>\n"
             ),
         )
@@ -149,26 +158,38 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
         self.assertEqual(
             proc.returncode,
             0,
-            f"Opt-in muss exit 0 ergeben\nstdout={proc.stdout}\nstderr={proc.stderr}",
+            f"@deprecated-Ziel muss exit 0 ergeben\nstdout={proc.stdout}\nstderr={proc.stderr}",
         )
 
     # ------------------------------------------------------------------
-    # 4. Leerer Opt-in-Marker (kein Reason) wird zurückgewiesen
+    # 4. Ziel OHNE @deprecated (oder nicht auflösbar) wird geflaggt
     # ------------------------------------------------------------------
-    def test_empty_opt_in_reason_still_flags(self) -> None:
+    def test_non_deprecated_target_still_flags(self) -> None:
+        # Ziel existiert, trägt aber KEIN @deprecated → Verstoß.
+        _write(
+            self.root / "components/llm/LlmProfilePicker.vue",
+            "<script setup lang=\"ts\">\n// kein Tag\n</script>\n",
+        )
+        _write(
+            self.root / "consumer.vue",
+            (
+                "<script setup lang=\"ts\">\n"
+                "import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'\n"
+                "</script>\n"
+            ),
+        )
+        # Store-Import ohne Ziel-Datei (nach 5.5 gelöscht) → nicht auflösbar → Verstoß.
         _write(
             self.root / "lazy.ts",
-            (
-                "// legacy-model-picker-allow:\n"
-                "import { useLlmProvidersStore } from '@/store/llmProviders'\n"
-            ),
+            "import { useLlmProvidersStore } from '@/store/llmProviders'\n",
         )
         proc = _run(self.root)
         self.assertEqual(
             proc.returncode,
             1,
-            "leerer Opt-in-Reason darf nicht durchgehen",
+            "nicht-deprecatetes Ziel darf nicht durchgehen",
         )
+        self.assertIn("LlmProfilePicker.vue", proc.stdout)
         self.assertIn("llmProviders", proc.stdout)
 
     # ------------------------------------------------------------------
