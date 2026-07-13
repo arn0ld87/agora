@@ -7,12 +7,12 @@
       "package": "nltk",
       "version_constraint": "==3.9.4",
       "severity": "unknown",
-      "reason": "Kein Upstream-Fix released; PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht.",
+      "reason": "Kein Upstream-Fix released; PYSEC-2026-597 hat keine gefixte Version in der Advisory-DB — Upgrade behebt das Finding derzeit nicht. Tracking konsolidiert in #672 (2026-07-14).",
       "blocker": "nltk upstream: https://github.com/nltk/nltk/releases",
       "target_version": "nltk mit gepatchter Advisory-DB-Version",
       "owner": "nltk",
       "deadline": "2026-09-28",
-      "issue": "https://github.com/arn0ld87/agora/issues/661",
+      "issue": "https://github.com/arn0ld87/agora/issues/672",
       "status": "open"
     },
     {
