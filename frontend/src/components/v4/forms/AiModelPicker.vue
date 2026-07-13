@@ -19,6 +19,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { AiModelPickerTestId as testIds } from '@/contracts/testIds'
 import {
   ComboboxAnchor,
   ComboboxContent,
@@ -117,12 +118,28 @@ const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
     })
 })
 
-/** Provider-Gruppen (fuer ComboboxGroup). */
+/**
+ * Provider-Gruppen (fuer ComboboxGroup).
+ *
+ * Slice 5.6-Prep: `provider_connection_id` ist neu in der Group-Struktur
+ * und wird als data-Provider-connection-id auf dem Group-Root
+ * gerendert. E2E-Selektoren koennen damit gezielt auf eine
+ * Provider-Gruppe zugreifen, ohne sich auf den (i18n-lokalisierbaren)
+ * `name` verlassen zu muessen. Aenderungsgruende in 5.6: stable
+ * Selektoren fuer Specs, unabhängig von Display-Namen.
+ */
 const providerGroups = computed(() => {
-  const groups = new Map<string, { name: string; status: AiModelStatus; items: AiModelRefInput[] }>()
+  const groups = new Map<string, { name: string; provider_connection_id: string; status: AiModelStatus; items: AiModelRefInput[] }>()
   for (const o of filteredOptions.value) {
     const key = o.provider_connection_id
-    if (!groups.has(key)) groups.set(key, { name: o.display_name, status: o.status, items: [] })
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: o.display_name,
+        provider_connection_id: o.provider_connection_id,
+        status: o.status,
+        items: [],
+      })
+    }
     groups.get(key)!.items.push(o)
   }
   return Array.from(groups.values()).sort((left, right) => left.name.localeCompare(right.name))
@@ -247,7 +264,12 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
 </script>
 
 <template>
-  <div class="ai-model-picker" :data-mode="mode" :data-disabled="disabled || undefined">
+  <div
+    class="ai-model-picker"
+    :data-mode="mode"
+    :data-disabled="disabled || undefined"
+    :data-testid="testIds.root"
+  >
     <ComboboxRoot
       :model-value="selectedId ?? ''"
       :disabled="disabled"
@@ -262,6 +284,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
           :display-value="() => selectedLabel"
           autocomplete="off"
           spellcheck="false"
+          :data-testid="testIds.input"
         />
         <ComboboxTrigger class="ai-model-picker__trigger" :aria-label="placeholderText" tabindex="-1">
           <span aria-hidden="true">▾</span>
@@ -276,9 +299,10 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
               :placeholder="searchPlaceholder"
               autocomplete="off"
               spellcheck="false"
+              :data-testid="testIds.search"
             />
 
-            <ComboboxEmpty class="ai-model-picker__empty">
+            <ComboboxEmpty class="ai-model-picker__empty" :data-testid="testIds.empty">
               {{ emptyText }}
             </ComboboxEmpty>
 
@@ -286,6 +310,8 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
               v-for="group in providerGroups"
               :key="group.name"
               class="ai-model-picker__group"
+              :data-testid="testIds.group"
+              :data-provider-connection-id="group.provider_connection_id"
             >
               <ComboboxLabel class="ai-model-picker__group-label">
                 {{ group.name }} · {{ providerStatusLabel(group.status) }}
@@ -299,6 +325,9 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
                 :text-value="`${item.display_name} ${item.model_id}`"
                 class="ai-model-picker__item"
                 :data-status="item.status"
+                :data-testid="testIds.option"
+                :data-provider-connection-id="item.provider_connection_id"
+                :data-model-id="item.model_id"
               >
                 <span class="ai-model-picker__item-row">
                   <span
