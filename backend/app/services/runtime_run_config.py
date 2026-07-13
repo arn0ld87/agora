@@ -16,6 +16,7 @@ from ..contracts import (
 )
 from ..llm.providers.registry import detect_provider
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
+from ..contracts.ai_provider_contract import AiRoute
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.logger import get_logger
 
@@ -30,6 +31,30 @@ _SECRET_KEYS = {
     "secret",
     "token",
 }
+
+
+def _publish_json_once_atomic(path: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Atomically publish JSON without replacing an existing winner."""
+    target_dir = os.path.dirname(path)
+    os.makedirs(target_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=target_dir
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(tmp_path, path)
+        except FileExistsError:
+            pass
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def _sanitize_url(value: str) -> str:
@@ -127,21 +152,42 @@ class RuntimeRunConfig:
                 return json.load(f)
         return None
 
-    def save_stage_snapshot(self, stage_id: StageId, snapshot: Dict[str, Any]) -> None:
+    def save_stage_snapshot(self, stage_id: StageId, snapshot: Dict[str, Any]) -> Dict[str, Any]:
         """Persist stage-specific LLM route snapshot as a write-once lock."""
-        os.makedirs(self.stages_dir, exist_ok=True)
         path = os.path.join(self.stages_dir, f"{stage_id}_llm_route_snapshot.json")
         data = self._sanitize_deep(snapshot)
-        payload = json.dumps(data, indent=2)
+        return _publish_json_once_atomic(path, data)
 
+    def load_ai_route_snapshot(self, stage_id: StageId) -> Optional[AiRoute]:
+        """Read canonical snapshots and project legacy ResolvedRoute snapshots."""
+        canonical_path = os.path.join(
+            self.stages_dir, f"{stage_id}_ai_route_snapshot.json"
+        )
+        if os.path.exists(canonical_path):
+            with open(canonical_path, "r", encoding="utf-8") as handle:
+                return AiRoute.model_validate(json.load(handle))
+
+        snapshot = self.load_stage_snapshot(stage_id)
+        if snapshot is None:
+            return None
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            return
+            return AiRoute.model_validate(snapshot)
+        except ValueError:
+            return AiRoute(
+                stage=snapshot.get("stage", stage_id),
+                provider_connection_id=snapshot.get("provider_id"),
+                model_id=snapshot.get("model"),
+                source="legacy",
+            )
 
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-            handle.write("\n")
+    def save_ai_route_snapshot(self, stage_id: StageId, route: AiRoute) -> AiRoute:
+        """Publish a canonical route and return the stored first-writer winner."""
+        path = os.path.join(self.stages_dir, f"{stage_id}_ai_route_snapshot.json")
+        winner = _publish_json_once_atomic(
+            path,
+            self._sanitize_deep(route.model_dump(mode="json", exclude_none=True)),
+        )
+        return AiRoute.model_validate(winner)
 
     def _sanitize_deep(self, data: Any, key: str | None = None) -> Any:
         """Recursively remove secret keys and persisted URL credentials."""

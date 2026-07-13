@@ -102,6 +102,29 @@ describe('canonical AI provider contracts', () => {
     expect(AiRouteSchema.safeParse({ unexpected: true }).success).toBe(false)
   })
 
+  it.each(['run_override', 'project', 'workspace'])(
+    'accepts the additive route source %s',
+    (source) => {
+      expect(AiRouteSchema.safeParse({
+        source,
+        resolved_at: '2026-07-13T10:30:00Z',
+      }).success).toBe(true)
+    },
+  )
+
+  it('requires a non-blank reason for provider fallback routes', () => {
+    expect(AiRouteSchema.safeParse({
+      source: 'provider_fallback',
+      fallback_reason: 'No configured route was available',
+      resolved_at: '2026-07-13T10:30:00Z',
+    }).success).toBe(true)
+    expect(AiRouteSchema.safeParse({ source: 'provider_fallback' }).success).toBe(false)
+    expect(AiRouteSchema.safeParse({
+      source: 'provider_fallback',
+      fallback_reason: '   ',
+    }).success).toBe(false)
+  })
+
   it('accepts the canonical Pydantic-shaped payload without secret values', () => {
     const result = ProviderConnectionSchema.safeParse({
       id: 'ollama-local',

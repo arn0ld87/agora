@@ -14,6 +14,11 @@ from ..services.runtime_run_config import RuntimeRunConfig
 from ..services.run_registry import RunRegistry
 from ..services.workspace_routing_store import get_workspace_routing_store
 from ..contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute, StageId
+from ..contracts.ai_provider_contract import (
+    AiRoute,
+    RouteSource,
+    ai_route_from_stage_route,
+)
 from ..contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
 from ..utils.api_responses import handle_api_errors, json_success, json_error
 from ..utils.artifact_locator import ArtifactLocator
@@ -31,6 +36,43 @@ ALL_STAGE_IDS: tuple[StageId, ...] = (
     "report_generation",
     "evaluation",
 )
+
+_PUBLIC_AI_PROVIDER_OPTION_KEYS = frozenset({"base_url", "num_ctx"})
+
+
+def _serialize_public_ai_route(
+    route: StageLLMRoute,
+    *,
+    source: RouteSource,
+) -> dict[str, object]:
+    """Serialize the canonical route without its private legacy round-trip marker."""
+    public_route = route.model_copy(
+        update={
+            "provider_options": {
+                key: value
+                for key, value in route.provider_options.items()
+                if key in _PUBLIC_AI_PROVIDER_OPTION_KEYS
+            }
+        }
+    )
+    payload = ai_route_from_stage_route(public_route).model_dump(mode="json")
+    payload["source"] = source
+    provider_options = payload.get("provider_options")
+    if isinstance(provider_options, dict):
+        provider_options.pop("__legacy_stage_route__", None)
+    return AiRoute.model_validate(payload).model_dump(mode="json")
+
+
+def _with_ai_route(
+    legacy_payload: dict[str, object],
+    route: StageLLMRoute,
+    *,
+    source: RouteSource,
+) -> dict[str, object]:
+    return {
+        **legacy_payload,
+        "ai_route": _serialize_public_ai_route(route, source=source),
+    }
 
 def _get_run_state(run_id: str):
     run = run_registry.get_run(run_id)
@@ -75,11 +117,17 @@ def get_run_llm_routing(run_id: str):
         if snap:
             snapshots[stage] = snap
 
-    return json_success({
-        "runtime_config": config.model_dump(mode="json"),
-        "snapshots": snapshots,
-        "invocation_events": _load_invocation_events(run_id),
-    })
+    return json_success(
+        _with_ai_route(
+            {
+                "runtime_config": config.model_dump(mode="json"),
+                "snapshots": snapshots,
+                "invocation_events": _load_invocation_events(run_id),
+            },
+            config.global_default,
+            source="legacy",
+        )
+    )
 
 @runs_bp.route("/<run_id>/llm-routing", methods=["PUT"])
 @handle_api_errors(logger=logger)
@@ -100,7 +148,13 @@ def update_run_llm_routing(run_id: str):
         new_config.routing_version = old_config.routing_version + 1
         config_service.save_config(new_config)
 
-        return json_success(new_config.model_dump(mode="json"))
+        return json_success(
+            _with_ai_route(
+                new_config.model_dump(mode="json"),
+                new_config.global_default,
+                source="run_override",
+            )
+        )
     except ValidationError as exc:
         return json_error(
             "Validation failed",
@@ -141,7 +195,13 @@ def patch_stage_llm_routing(run_id: str, stage_id: str):
         config.routing_version += 1
 
         config_service.save_config(config)
-        return json_success(config.model_dump(mode="json"))
+        return json_success(
+            _with_ai_route(
+                config.model_dump(mode="json"),
+                route_override,
+                source="stage_override",
+            )
+        )
     except ValidationError as exc:
         return json_error(
             "Validation failed",
@@ -161,7 +221,13 @@ def patch_stage_llm_routing(run_id: str, stage_id: str):
 def get_routing_defaults():
     """Return the workspace-wide routing defaults."""
     defaults = get_workspace_routing_store().load()
-    return json_success(defaults.model_dump(mode="json"))
+    return json_success(
+        _with_ai_route(
+            defaults.model_dump(mode="json"),
+            defaults.global_default,
+            source="workspace",
+        )
+    )
 
 
 @llm_bp.route("/routing/defaults", methods=["PUT"])
@@ -179,7 +245,13 @@ def replace_routing_defaults():
             extra={"details": exc.errors()},
         )
     stored = get_workspace_routing_store().save(model)
-    return json_success(stored.model_dump(mode="json"))
+    return json_success(
+        _with_ai_route(
+            stored.model_dump(mode="json"),
+            stored.global_default,
+            source="workspace",
+        )
+    )
 
 
 @llm_bp.route("/routing/defaults/stages/<stage_id>", methods=["PATCH"])
@@ -198,7 +270,14 @@ def patch_routing_default_stage(stage_id: str):
 
     if payload.get("clear") is True or payload == {}:
         defaults = store.set_stage_override(stage_id, None)
-        return json_success(defaults.model_dump(mode="json"))
+        active_route = defaults.stage_overrides.get(stage_id, defaults.global_default)
+        return json_success(
+            _with_ai_route(
+                defaults.model_dump(mode="json"),
+                active_route,
+                source="workspace",
+            )
+        )
 
     try:
         route = StageLLMRoute.model_validate(payload)
@@ -210,7 +289,13 @@ def patch_routing_default_stage(stage_id: str):
             extra={"details": exc.errors()},
         )
     defaults = store.set_stage_override(stage_id, route)
-    return json_success(defaults.model_dump(mode="json"))
+    return json_success(
+        _with_ai_route(
+            defaults.model_dump(mode="json"),
+            route,
+            source="workspace",
+        )
+    )
 
 
 @llm_bp.route("/routing/defaults/global", methods=["PUT"])
@@ -228,4 +313,10 @@ def replace_global_default():
             extra={"details": exc.errors()},
         )
     defaults = get_workspace_routing_store().set_global_default(route)
-    return json_success(defaults.model_dump(mode="json"))
+    return json_success(
+        _with_ai_route(
+            defaults.model_dump(mode="json"),
+            defaults.global_default,
+            source="workspace",
+        )
+    )

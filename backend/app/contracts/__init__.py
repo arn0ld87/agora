@@ -98,6 +98,7 @@ from .ai_provider_contract import (
     ProviderConnection,
     ProviderConnectionResponse,
     ProviderConnectionUpsertRequest,
+    RouteSource,
 )
 from .user_profile_contract import (
     ALLOWED_AVATAR_MIME_TYPES,
@@ -224,6 +225,7 @@ __all__ = [
     "ProviderConnection",
     "ProviderConnectionResponse",
     "ProviderConnectionUpsertRequest",
+    "RouteSource",
     # UserProfile + Onboarding (Slice 2)
     "ALLOWED_AVATAR_MIME_TYPES",
     "MAX_AVATAR_BYTES",
