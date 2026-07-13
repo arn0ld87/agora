@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from ..config import Config
 from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 
 logger = get_logger("agora.run_registry")
 
@@ -67,7 +68,8 @@ class RunRegistry:
         return mapping.get(value, "pending")
 
     def _run_path(self, run_id: str) -> str:
-        return os.path.join(self.REGISTRY_DIR, f"{run_id}.json")
+        validate_path_id(run_id, field_name="run_id")
+        return safe_join_within_root(self.REGISTRY_DIR, f"{run_id}.json")
 
     def _read_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         if run_id in self._cache:

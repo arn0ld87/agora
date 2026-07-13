@@ -8,6 +8,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..config import Config
+from .path_safety import safe_join_within_root, validate_path_id
 
 
 class ArtifactLocator:
@@ -25,11 +26,13 @@ class ArtifactLocator:
 
     @classmethod
     def simulation_dir(cls, simulation_id: str) -> str:
-        return os.path.join(cls.simulations_dir(), simulation_id)
+        validate_path_id(simulation_id, field_name="simulation_id")
+        return safe_join_within_root(cls.simulations_dir(), simulation_id)
 
     @classmethod
     def report_dir(cls, report_id: str) -> str:
-        return os.path.join(cls.reports_dir(), report_id)
+        validate_path_id(report_id, field_name="report_id")
+        return safe_join_within_root(cls.reports_dir(), report_id)
 
     @classmethod
     def runs_dir(cls) -> str:
@@ -41,7 +44,8 @@ class ArtifactLocator:
 
     @classmethod
     def run_dir(cls, run_id: str) -> str:
-        return os.path.join(cls.runs_dir(), run_id)
+        validate_path_id(run_id, field_name="run_id")
+        return safe_join_within_root(cls.runs_dir(), run_id)
 
     @classmethod
     def simulation_file(cls, simulation_id: str, filename: str) -> str:
