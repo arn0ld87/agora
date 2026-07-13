@@ -67,6 +67,9 @@ run_backend() {
 # ---------------------------------------------------------------------------
 run_frontend() {
   if ! command -v bun >/dev/null 2>&1; then
+    if [ "$SCOPE" = "frontend" ] || [ "$SCOPE" = "all" ]; then
+      fail "bun ist nicht installiert, aber die Frontend-Gates sind erforderlich."
+    fi
     warn "bun not installed — skipping frontend gates"
     return 0
   fi
