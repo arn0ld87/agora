@@ -478,24 +478,37 @@ body {
    Slice 7.1 — Golden-Gate additive semantic tokens
    Rein additiv: bestehende Tokenwerte bleiben unverändert.
    Neue Tokens leiten von bestehenden themefähigen Tokens ab (erben
-   damit automatisch Light/Dark) oder sind theme-neutral. Kein neuer
-   Namespace-Präfix — Erweiterung bestehender Token-Familien.
+   damit automatisch Light/Dark) oder sind theme-neutrale Akzent-
+   farben. Kein neuer Namespace-Präfix — Erweiterung bestehender
+   Token-Familien.
+
+   Dark-Theme-Disziplin: Die Repo hat aktuell keinen
+   [data-theme="dark"]-Block. Sobald einer ergänzt wird, müssen die
+   vier theme-starken Farbwerte unten (--accent-warm-hover,
+   --status-coral, --status-coral-bg, --focus-ring-strong) im
+   Dark-Block redefiniert werden — siehe
+   designTokens.spec.ts -> "Dark-Readiness-Klausel". Bis dahin sind
+   sie nur in Light aktiv (Selektor :root, [data-theme="light"]).
    ============================================================ */
 :root, [data-theme="light"] {
-  /* Glass-Surfaces */
+  /* Glass-Surfaces (abgeleitet, erbt Light/Dark via --bg-glass*) */
   --surface-glass: var(--bg-glass);
   --surface-glass-strong: var(--bg-glass-hi);
-  /* Backdrop hinter Overlays/Dialogen (theme-neutral) */
+  /* Backdrop hinter Overlays/Dialogen (theme-neutral: 50 % schwarz) */
   --surface-backdrop: rgba(0, 0, 0, 0.5);
 
-  /* Warmer Akzent (an --status-orange angelehnt) */
+  /* Warmer Akzent (abgeleitet via --status-orange) */
   --accent-warm: var(--status-orange);
+  /* Theme-starker Hover-Ton — siehe Block-Kommentar oben. */
   --accent-warm-hover: #8f3f00;
 
-  /* Korall-Statusakzent */
+  /* Korall-Statusakzent — theme-neutrale Akzentfarbe. */
   --status-coral: #e2603f;
   --status-coral-bg: rgba(226, 96, 63, 0.14);
 
-  /* Focus-Kontrast: kräftigerer Ring für Golden-Gate-Surfaces */
+  /* Focus-Kontrast: stärkerer Ring (Alpha 0.6 vs. 0.35 in --focus-ring).
+     Selber Farbton wie --focus-ring; bei zukünftigem Dark-Theme muss
+     --focus-ring im Dark-Block überschrieben UND dieser Wert mit
+     angepasst werden (siehe Block-Kommentar oben). */
   --focus-ring-strong: rgba(0, 102, 204, 0.6);
 }

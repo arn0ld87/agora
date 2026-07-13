@@ -57,10 +57,69 @@ describe('Slice 7.1 — Motion- & Focus-Vertrag (states.css)', () => {
     expect(Number(m![1])).toBeGreaterThanOrEqual(2)
   })
 
-  it('Motion-Dauern haben eine Reduced-Motion-Entsprechung', () => {
-    const rm = states.match(
-      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?--v4-state-motion-duration-fast\s*:/,
+  // Reduce-Motion-Klausel: alle drei Motion-Dauern müssen im
+  // prefers-reduced-motion-Block auf einen Nicht-Animations-Wert
+  // (0 oder nahe 0) gesetzt sein. Vorher nur 'fast' geprüft.
+  it.each(['fast', 'base', 'slow'])(
+    'prefers-reduced-motion überschreibt --v4-state-motion-duration-%s',
+    (variant) => {
+      const re = new RegExp(
+        '@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)' +
+          '[\\s\\S]*?--v4-state-motion-duration-' +
+          variant +
+          '\\s*:',
+      )
+      expect(states.match(re), `Reduce-Override für duration-${variant} fehlt`).not.toBeNull()
+    },
+  )
+
+  it('Reduce-Werte sind tatsächlich deaktiviert (≤ 0.01 ms)', () => {
+    const reduceBlock = states.match(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?(?=@media|\n\})/,
     )
-    expect(rm, 'kein reduced-motion-Override für Motion-Dauern').not.toBeNull()
+    expect(reduceBlock, 'Reduce-Block fehlt').not.toBeNull()
+    for (const v of ['fast', 'base', 'slow']) {
+      const m = reduceBlock![0].match(
+        new RegExp('--v4-state-motion-duration-' + v + '\\s*:\\s*([\\d.]+)\\s*(ms|s)?'),
+      )
+      expect(m, `Reduce-Override für ${v} fehlt`).not.toBeNull()
+      const num = Number(m![1])
+      const unit = m![2] || 'ms'
+      // Etablierte Reduce-Motion-Konvention: 0.01ms (oder 0s / 0 ohne Einheit).
+      // Wir akzeptieren alles ≤ 0.01ms als „effektiv aus".
+      const ms = unit === 's' ? num * 1000 : num
+      expect(ms, `Reduce-Wert für ${v} (${ms}ms) ist nicht effektiv 0`).toBeLessThanOrEqual(0.01)
+    }
   })
+})
+
+// Dark-Readiness-Klausel: Sobald ein [data-theme="dark"]-Block in
+// tokens-v3.css existiert, müssen die vier theme-starken Farbwerte
+// (--accent-warm-hover, --status-coral, --status-coral-bg,
+// --focus-ring-strong) im Dark-Block redefiniert sein — sonst driften
+// sie im Dark-Mode auf die Light-Werte. Bis es keinen Dark-Block gibt,
+// ist die Klausel trivial erfüllt.
+describe('Slice 7.1 — Dark-Readiness-Klausel (tokens-v3.css)', () => {
+  const mustOverrideInDark = [
+    '--accent-warm-hover',
+    '--status-coral',
+    '--status-coral-bg',
+    '--focus-ring-strong',
+  ] as const
+
+  it.each(mustOverrideInDark)(
+    'wenn [data-theme="dark"] existiert, muss %s darin redefiniert sein',
+    (name) => {
+      const darkBlock = tokens.match(/\[data-theme="dark"\][^{]*\{[\s\S]*?(?=\n\}|\n\[data-theme)/)
+      if (!darkBlock) {
+        // Kein Dark-Block → Klausel trivial erfüllt, kein Fail.
+        return
+      }
+      const re = new RegExp(name.replace(/-/g, '\\-') + '\\s*:')
+      expect(
+        darkBlock[0].match(re),
+        `${name} ist nicht im [data-theme="dark"]-Block redefiniert`,
+      ).not.toBeNull()
+    },
+  )
 })
