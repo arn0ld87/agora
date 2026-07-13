@@ -473,3 +473,29 @@ body {
   --text-body-fs: 12px;
   --text-body-lh: 1.45;
 }
+
+/* ============================================================
+   Slice 7.1 — Golden-Gate additive semantic tokens
+   Rein additiv: bestehende Tokenwerte bleiben unverändert.
+   Neue Tokens leiten von bestehenden themefähigen Tokens ab (erben
+   damit automatisch Light/Dark) oder sind theme-neutral. Kein neuer
+   Namespace-Präfix — Erweiterung bestehender Token-Familien.
+   ============================================================ */
+:root, [data-theme="light"] {
+  /* Glass-Surfaces */
+  --surface-glass: var(--bg-glass);
+  --surface-glass-strong: var(--bg-glass-hi);
+  /* Backdrop hinter Overlays/Dialogen (theme-neutral) */
+  --surface-backdrop: rgba(0, 0, 0, 0.5);
+
+  /* Warmer Akzent (an --status-orange angelehnt) */
+  --accent-warm: var(--status-orange);
+  --accent-warm-hover: #8f3f00;
+
+  /* Korall-Statusakzent */
+  --status-coral: #e2603f;
+  --status-coral-bg: rgba(226, 96, 63, 0.14);
+
+  /* Focus-Kontrast: kräftigerer Ring für Golden-Gate-Surfaces */
+  --focus-ring-strong: rgba(0, 102, 204, 0.6);
+}
