@@ -37,8 +37,8 @@ Architekturregeln für alle Folge-PRs:
 
 ### Design-v4 und wiederverwendbare Bausteine
 
-Der lokale Graphify-AST-Lauf über 1.115 Code-Dateien ergab 17.933 Nodes und
-29.693 Edges. Die anschließenden Traversals verbanden Shell, Settings,
+Der lokale Graphify-AST-Lauf über 1.115 Code-Dateien ergab 17.951 Nodes und
+33.528 Edges. Die anschließenden Traversals verbanden Shell, Settings,
 Onboarding, Routing und Picker mit ihren realen Contracts und Konsumenten.
 Klassische Import-Suchen bestätigten die konkreten Pfade.
 
