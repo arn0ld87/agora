@@ -54,6 +54,11 @@ Codegraph-Delta, Dokumentations-Sync, Handover und atomarem Commit.
 - effektive Quelle sichtbar, keine stillen Fallbacks.
 - Snapshot und Audit erweitern.
 
+Detaillierter Sub-Plan mit 6 Sub-Slices (5.0-5.6):
+[`docs/epics/onboarding-provider-unification/slice-5-subplan.md`](slice-5-subplan.md).
+Architekturentscheidung: [ADR-0009](../../decisions/0009-unified-model-picker.md)
+(Status: Proposed 2026-07-13).
+
 ## Slice 6 — Persona-Count-Invariante
 
 - den Dashboard-Wert in einen Run-Vertrag überführen.
