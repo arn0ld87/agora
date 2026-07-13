@@ -17,7 +17,13 @@ from app.contracts.embedding_contract import (
     EmbeddingConfiguration,
     EmbeddingMigrationProgress,
 )
-from app.services.embedding_reembedder import Neo4jReEmbedder
+from app.services.embedding_reembedder import (
+    Neo4jReEmbedder,
+    _FACT_BATCH_QUERY,
+    _FACT_COUNT_QUERY,
+    _FACT_WRITE_QUERY,
+    _fact_index_ddl,
+)
 
 # ----------------------------------------------------------------------
 # Fakes
@@ -558,3 +564,26 @@ def test_run_rejects_invalid_fact_identifier() -> None:
             fact_target_index_name="fact_embedding_v1",
             fact_target_property_key="fact`); DROP INDEX fact; //",
         )
+
+
+def test_fact_queries_use_directed_match() -> None:
+    """Regressionsschutz (Gemini-Finding PR #706, HIGH): Neo4j speichert
+    Relationships mit Richtung. Ein undirected Match ``()-[r:RELATION]-()``
+    traversiert jede Relationship in beide Richtungen -> ``count(r)`` 2x,
+    doppelte Embedding-API-Calls, redundante ``setRelationshipVectorProperty``
+    -Writes. Die drei Fact-Match-Queries muessen directed sein. Die DDL
+    fuer Relationship-Vector-Indexe bleibt dagegen undirected (das ist die
+    Index-Definition-Syntax ``FOR ()-[r:RELATION]-() ON``, keine Match-Query).
+    """
+    for query in (_FACT_COUNT_QUERY, _FACT_BATCH_QUERY, _FACT_WRITE_QUERY):
+        # Directed: Pfeilspitze hinter der schließenden Klammer der Relationship.
+        assert "]->()" in query, (
+            f"Fact-Match-Query muss directed sein (]->()), sonst Doppel-Traversierung: {query}"
+        )
+        # Undirected waere ]-() (Klammer + Bindestrich, keine Pfeilspitze) —
+        # darf in den Match-Queries nicht vorkommen.
+        assert "]-()" not in query
+    # DDL bleibt undirected — kanonische Relationship-Index-Definition-Syntax
+    # (``FOR ()-[r:RELATION]-() ON`` ist Index-Definition, keine Match-Query).
+    ddl = _fact_index_ddl("fact_embedding_v1", "fact_embedding_v1", _DIMS)
+    assert "FOR ()-[r:RELATION]-() ON (r.fact_embedding_v1)" in ddl

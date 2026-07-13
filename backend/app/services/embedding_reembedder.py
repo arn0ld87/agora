@@ -105,8 +105,15 @@ RETURN count(n) AS written
 # Fact-Phase: ()-[r:RELATION]-().fact_embedding
 # ----------------------------------------------------------------------
 
+# Directed match: Neo4j speichert Relationships mit Richtung; ein
+# undirected Match `()-[r:RELATION]-()` wuerde jede Relationship in
+# beide Richtungen traversieren (count(r) 2x, doppelte Embedding-API-
+# Calls, redundante Writes). `->()` matched jede Relationship genau
+# einmal (Gemini-Finding PR #706). Die DDL-Syntax fuer Relationship-
+# Vector-Indexe bleibt dagegen undirected (`FOR ()-[r:RELATION]-() ON`),
+# da das die Index-Definition ist, keine Match-Query.
 _FACT_COUNT_QUERY = """
-MATCH ()-[r:RELATION]-()
+MATCH ()-[r:RELATION]->()
 WHERE r.uuid IS NOT NULL
 RETURN count(r) AS total
 """
@@ -114,7 +121,7 @@ RETURN count(r) AS total
 # Fact-Text ist ``r.fact`` (beim Ingest embedded, siehe ``neo4j_write``),
 # Fallback ``r.name`` fuer Bestandsrelations ohne fact-Property.
 _FACT_BATCH_QUERY = """
-MATCH ()-[r:RELATION]-()
+MATCH ()-[r:RELATION]->()
 WHERE r.uuid IS NOT NULL
   AND ($cursor IS NULL OR r.uuid > $cursor)
 RETURN
@@ -126,7 +133,7 @@ LIMIT $limit
 
 _FACT_WRITE_QUERY = """
 UNWIND $rows AS row
-MATCH ()-[r:RELATION {uuid: row.uuid}]-()
+MATCH ()-[r:RELATION {uuid: row.uuid}]->()
 CALL db.create.setRelationshipVectorProperty(r, $property_key, row.vector)
 RETURN count(r) AS written
 """
