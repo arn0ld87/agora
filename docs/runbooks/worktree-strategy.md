@@ -34,7 +34,6 @@ tatsächlichen Speicherort. Historische Handover dürfen ihre damaligen
 
 ```bash
 # Aus dem Repo-Root, auf dem aktuellen Branch
-mkdir -p /Volumes/T7/Worktrees/agora
 git worktree add /Volumes/T7/Worktrees/agora/<slice-id> -b feat/<slice-id>-<name>
 cd /Volumes/T7/Worktrees/agora/<slice-id>
 ```
@@ -56,8 +55,11 @@ git -C /Volumes/T7/Worktrees/agora/<slice-id> status --short
 ```
 
 Bei einem sauberen Worktree normal mit `git worktree remove` und `git branch -d`
-aufräumen. Bei lokalen Änderungen stoppen und erst nach expliziter Freigabe
-verwerfen; kein automatisches `--force` oder `branch -D`.
+aufräumen. Falls ausschließlich regenerierbare ungetrackte Verzeichnisse wie
+`node_modules`, `.venv` oder `dist` das Entfernen blockieren, diese nach Prüfung
+gezielt löschen und `git worktree remove` erneut ausführen. Bei echten lokalen
+Änderungen stoppen und erst nach expliziter Freigabe verwerfen; kein
+automatisches `--force` oder `branch -D`.
 
 ---
 
