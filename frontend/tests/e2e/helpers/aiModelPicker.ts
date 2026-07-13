@@ -1,41 +1,29 @@
 import type { BrowserContext, Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
-import { AiModelPickerTestId } from './testIds'
+import { AiModelPickerTestId, LlmRoutingTestId } from './testIds'
 import { injectAuthToken } from './auth'
 
 /**
- * AiModelPicker — Playwright-Helper fuer E2E.
+ * AiModelPicker — Playwright-Helper fuer E2E (Slice 5.6 final).
  *
  * Stellt Locator- und Action-Funktionen bereit, die ausschliesslich
  * auf den data-testid-Attributen aus `./testIds.ts` aufsetzen. Klass-
  * oder ARIA-Selektoren werden bewusst NICHT verwendet, damit
  * CSS-Refactors oder i18n-Aenderungen die Specs nicht brechen.
  *
- * Slice 5.6-Prep: Skeleton. Die hier exponierten Funktionen werden
- * in 5.6 final von der Spec aktiv genutzt (Skip-Annotationen raus,
- * sobald 5.4 die Komponente in den Ziel-Views mountet).
- *
- * Voraussetzungen (von 5.4 zu erfuellen, dokumentiert in slice-5-subplan.md):
- *   - AiModelPicker in mindestens einer v4-View gemountet
- *     (Empfehlung slice-5: SettingsGeneralView, HeroNewRun,
- *     StepModelOverrideChip).
- *   - ProviderConnection-Backend liefert mind. eine 'available'-Connection
- *     und eine 'unavailable'-Connection (siehe Test 2).
- *   - Run-Snapshot-Endpoint /api/runs/<run_id>/llm-routing liefert das
- *     canonical `ai_route`-Feld (siehe PR #700, ai_provider_contract.AiRoute).
+ * WICHTIG — ComboboxPortal-Topologie:
+ *   reka-ui `ComboboxPortal` teleportiert den Combobox-Content
+ *   (Search, Empty, Groups, Options) in einen Portal am <body>. Diese
+ *   Elemente liegen NICHT mehr innerhalb des Picker-Root-Scope. Daher
+ *   sind getPickerSearch / getPickerEmpty / getGroupByConnectionId /
+ *   getOption PAGE-LEVEL (kein Picker-Scope) implementiert.
+ *   Nur der Trigger-Anchor (ComboboxInput + Trigger) bleibt im
+ *   Picker-Root → getPickerInput ist weiterhin SCOPED auf den Picker.
  */
 
 /**
- * Login-Shim.
- *
- * Agora laeuft im Single-User-Token-Mode (siehe health.spec.ts Test 4).
- * Es gibt kein klassisches Login-Formular — der Token wird per
- * `injectAuthToken()` aus `helpers/auth.ts` in localStorage injiziert
- * und vom Frontend als Bearer-Token mitgesendet.
- *
- * Akzeptiert wahlweise Page (zieht context raus) oder direkt den
- * BrowserContext, damit Specs bequem `await login(page)` schreiben
- * koennen.
+ * Login-Shim. Agora laeuft im Single-User-Token-Mode — der Token wird
+ * per `injectAuthToken()` in localStorage injiziert.
  */
 export async function login(
   target: Page | BrowserContext,
@@ -45,18 +33,14 @@ export async function login(
   await injectAuthToken(context, token)
 }
 
-/**
- * Locator fuer den AiModelPicker-Root-Container.
- * Mehrere Picker pro Seite sind erlaubt; ueber `index` oder
- * `.filter()` kann ein bestimmter Picker gewaehlt werden.
- */
+/** Locator fuer den AiModelPicker-Root-Container. */
 export function getPicker(page: Page): Locator {
   return page.getByTestId(AiModelPickerTestId.root)
 }
 
 /**
- * Locator fuer den Trigger-Input (zeigt aktuell gewaehltes Modell
- * oder Platzhalter). Fokus auf dieses Element oeffnet den Combobox.
+ * Locator fuer den Trigger-Input (Anchor) — bleibt im Picker-Root,
+ * NICHT portaled. Darum SCOPED auf den Picker.
  */
 export function getPickerInput(page: Page, picker?: Locator): Locator {
   const scope = picker ?? getPicker(page)
@@ -64,102 +48,85 @@ export function getPickerInput(page: Page, picker?: Locator): Locator {
 }
 
 /**
- * Locator fuer das Suchfeld (sichtbar, sobald der Picker geoeffnet ist).
+ * PAGE-LEVEL — ComboboxPortal teleportiert die Suche nach <body>.
+ * `picker` wird bewusst ignoriert (Signatur bleibt aus Kompatibilitaet).
  */
-export function getPickerSearch(page: Page, picker?: Locator): Locator {
-  const scope = picker ?? getPicker(page)
-  return scope.getByTestId(AiModelPickerTestId.search)
+export function getPickerSearch(page: Page, _picker?: Locator): Locator {
+  return page.getByTestId(AiModelPickerTestId.search)
 }
 
-/**
- * Locator fuer eine bestimmte Provider-Group (z. B. fuer
- * Sichtbarkeits-Assertion "Ollama-Gruppe vorhanden").
- */
+/** PAGE-LEVEL — Empty-Hinweis lebt im portaled Content. */
+export function getPickerEmpty(page: Page, _picker?: Locator): Locator {
+  return page.getByTestId(AiModelPickerTestId.empty)
+}
+
+/** PAGE-LEVEL — Provider-Group lebt im portaled Content. */
 export function getGroupByConnectionId(
   page: Page,
   providerConnectionId: string,
-  picker?: Locator,
+  _picker?: Locator,
 ): Locator {
-  const scope = picker ?? getPicker(page)
-  return scope.locator(
+  return page.locator(
     `[data-testid="${AiModelPickerTestId.group}"][data-provider-connection-id="${cssEscape(providerConnectionId)}"]`,
   )
 }
 
-/**
- * Locator fuer eine bestimmte Modell-Option.
- *
- * Selektiert (provider_connection_id, model_id) — beide Attribute
- * sind Pflicht, damit die Assertion nicht versehentlich auf das
- * falsche Modell in einer anderen Provider-Gruppe passt.
- */
+/** PAGE-LEVEL — Modell-Option lebt im portaled Content. */
 export function getOption(
   page: Page,
   args: { providerConnectionId: string; modelId: string },
-  picker?: Locator,
+  _picker?: Locator,
 ): Locator {
-  const scope = picker ?? getPicker(page)
-  return scope.locator(
+  return page.locator(
     `[data-testid="${AiModelPickerTestId.option}"][data-provider-connection-id="${cssEscape(args.providerConnectionId)}"][data-model-id="${cssEscape(args.modelId)}"]`,
   )
 }
 
 /**
- * Action: Picker oeffnen (Fokus auf Trigger-Input).
- *
- * Wartet NICHT explizit auf das Oeffnen des Combobox-Contents, weil
- * reka-ui das Content-Portal in einer separaten Subtree rendert.
- * Specs sollten direkt mit `expect(...).toBeVisible()` auf der
- * gewuenschten Option arbeiten — Playwright wartet dann implizit.
+ * Stage-Row im LlmRouting-Panel (Slice 5.6 final).
+ * Selektion via data-testid + data-stage (stabil, kein i18n-Label).
  */
+export function getStageRow(page: Page, stage: string): Locator {
+  return page.locator(
+    `[data-testid="${LlmRoutingTestId.stageRow}"][data-stage="${cssEscape(stage)}"]`,
+  )
+}
+
+/** AiModelPicker innerhalb einer bestimmten Stage-Row. */
+export function getStagePicker(page: Page, stage: string): Locator {
+  return getStageRow(page, stage).getByTestId(AiModelPickerTestId.root)
+}
+
+/** Action: Picker oeffnen (Fokus/Klick auf Trigger-Input). */
 export async function openPicker(page: Page, picker?: Locator): Promise<void> {
   await getPickerInput(page, picker).click()
 }
 
-/**
- * Action: Modell per Klick auswaehlen.
- *
- * Voraussetzung: Picker ist bereits geoeffnet (openPicker()).
- * Erwartet: die Option ist sichtbar UND nicht disabled.
- */
+/** Action: Modell per Klick auswaehlen (Picker muss geoeffnet sein). */
 export async function selectOptionByClick(
   page: Page,
   args: { providerConnectionId: string; modelId: string },
-  picker?: Locator,
+  _picker?: Locator,
 ): Promise<void> {
-  const option = getOption(page, args, picker)
+  const option = getOption(page, args)
   await expect(option).toBeVisible()
   await expect(option).toBeEnabled()
   await option.click()
 }
 
-/**
- * Action: Tastatur-Drill ↓↓↑Enter.
- *
- * Erwartet: Picker ist geoeffnet, der erste navigierbare Eintrag
- * wird mit ArrowDown markiert. Specs muessen pruefen, dass das
- * markierte Item bei jedem Schritt wechselt.
- */
+/** Action: Tastatur-Drill ↓↓↑Enter. */
 export async function drillKeyboard(
   page: Page,
   picker?: Locator,
 ): Promise<void> {
   const input = getPickerInput(page, picker)
-  // Erstes ArrowDown oeffnet ggf. das Drop-Down falls der Picker
-  // nicht durch Klick geoeffnet wurde; danach folgen zwei ↓, ein
-  // ↑ und Enter. reka-ui Combobox-Logik ueber List-Navigation.
   await input.press('ArrowDown')
   await input.press('ArrowDown')
   await input.press('ArrowUp')
   await input.press('Enter')
 }
 
-/**
- * Action: aktuelle Selektion aus dem Trigger-Input lesen.
- *
- * Liefert den sichtbaren Text (Display-Value) des Trigger-Inputs.
- * Specs koennen darauf asserten, dass die Auswahl angezeigt wird.
- */
+/** Action: aktuelle Selektion aus dem Trigger-Input lesen. */
 export async function readSelectedLabel(
   page: Page,
   picker?: Locator,
@@ -171,17 +138,10 @@ export async function readSelectedLabel(
 // Internals
 // ---------------------------------------------------------------------------
 
-/**
- * CSS.escape-Polyfill, weil nicht alle Playwright-Versionen einen
- * eingebauten Escape fuer Attribut-Selektoren liefern. Strings mit
- * Sonderzeichen (z. B. Doppelpunkt in "qwen2.5:14b") wuerden
- * sonst den Selektor zerlegen.
- */
+/** CSS.escape-Polyfill fuer Attribut-Selektoren (Doppelpunkt in model_id). */
 function cssEscape(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(value)
   }
-  // Minimaler Fallback: nur Zeichen escapen, die in
-  // CSS-Attribut-Selektoren problematisch sind.
   return value.replace(/(["\\\]\[])/g, '\\$1')
 }

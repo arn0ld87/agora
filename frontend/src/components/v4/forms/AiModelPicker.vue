@@ -99,7 +99,13 @@ const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
   const required = REQUIRED_CAPABILITY[props.mode]
   return base
     .filter((o) => {
-      if (!o.capabilities.includes(required)) return false
+      if (props.mode === 'chat') {
+        // chat: 'unknown' gilt als geeignet — nur explizit 'unsupported' ausfiltern.
+        if (o.unsupported_capabilities?.includes(required)) return false
+      } else {
+        // embedding: positive Capability verlangt (Backend setzt 'supported').
+        if (!o.capabilities.includes(required)) return false
+      }
       if (props.capabilityFilter && !o.capabilities.includes(props.capabilityFilter)) {
         return false
       }

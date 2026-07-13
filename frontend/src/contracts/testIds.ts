@@ -31,3 +31,10 @@ export const AiModelPickerTestId = {
 } as const
 
 export type AiModelPickerTestId = (typeof AiModelPickerTestId)[keyof typeof AiModelPickerTestId]
+
+export const LlmRoutingTestId = {
+  stageRow: 'llm-routing-stage-row',
+  stageSave: 'stage-override-save',
+} as const
+
+export type LlmRoutingTestId = (typeof LlmRoutingTestId)[keyof typeof LlmRoutingTestId]

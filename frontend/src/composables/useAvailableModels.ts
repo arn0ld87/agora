@@ -75,6 +75,7 @@ function toPickerModel(
     model_id: model.model_id,
     context_window: model.context_window ?? undefined,
     capabilities: pickerCapabilities(model),
+    unsupported_capabilities: PICKER_CAPABILITIES.filter((capability) => model.capabilities[capability] === 'unsupported'),
     status: pickerStatus(connection, model, unsupported),
     local_or_cloud: model.local_or_cloud === 'local' || connection.transport === 'local' ? 'local' : 'cloud',
     provider_id: connection.id,
