@@ -137,8 +137,14 @@ const navSettings: NavSettingsItem[] = [
   flex-direction: column;
   height: 100%;
   flex-shrink: 0;
-  transition: width 200ms ease;
+  transition: width var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
   overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }
 
 .sidebar--collapsed {

@@ -347,3 +347,161 @@ jobs:
           name: playwright-trace-report-modes
           path: frontend/test-results/
           retention-days: 14
+
+  golden-gate-accessibility-smoke:
+    name: Playwright Golden-Gate-Accessibility-Smoke (Slice 7.3.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AGORA_PROXY_PORT: '80'
+      AGORA_E2E_BASE_URL: http://127.0.0.1:80
+      # Embedding-Probe wie im health-smoke überspringen (Issue #276)
+      AGORA_SKIP_EMBEDDING_PROBE: 'true'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            auth.docker.io:443
+            azure.archive.ubuntu.com:80
+            cdn.playwright.dev:443
+            deb.debian.org:80
+            deb.debian.org:443
+            dl.google.com:443
+            docker-images-prod.s3.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            esm.ubuntu.com:443
+            files.pythonhosted.org:443
+            ghcr.io:443
+            github.com:443
+            index.docker.io:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            packages.microsoft.com:443
+            pkg-containers.githubusercontent.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
+            playwright.download.prss.microsoft.com:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            pypi.org:443
+            registry-1.docker.io:443
+            registry.npmjs.org:443
+            results-receiver.actions.githubusercontent.com:443
+            storage.googleapis.com:443
+            *.blob.core.windows.net:443
+
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Generate ephemeral E2E credentials
+        # Gleiche Credential-Generierung wie im health-smoke Job.
+        run: |
+          {
+            echo "AGORA_AUTH_TOKEN=$(openssl rand -hex 24)"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: bun run build
+      - name: Install Playwright browsers (Chromium-only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright Golden-Gate-Accessibility-Smoke
+        working-directory: frontend
+        run: npx playwright test golden-gate-accessibility.spec.ts --reporter=list,github
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-trace-golden-gate-accessibility
+          path: frontend/test-results/
+          retention-days: 14
+
+  ai-model-picker-smoke:
+    name: Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      AGORA_PROXY_PORT: '80'
+      AGORA_E2E_BASE_URL: http://127.0.0.1:80
+      # Embedding-Probe wie im health-smoke überspringen (Issue #276)
+      AGORA_SKIP_EMBEDDING_PROBE: 'true'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            auth.docker.io:443
+            azure.archive.ubuntu.com:80
+            cdn.playwright.dev:443
+            deb.debian.org:80
+            deb.debian.org:443
+            dl.google.com:443
+            docker-images-prod.s3.amazonaws.com:443
+            docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com:443
+            esm.ubuntu.com:443
+            files.pythonhosted.org:443
+            ghcr.io:443
+            github.com:443
+            index.docker.io:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            packages.microsoft.com:443
+            pkg-containers.githubusercontent.com:443
+            playwright.azureedge.net:443
+            playwright-akamai.azureedge.net:443
+            playwright-verizon.azureedge.net:443
+            playwright.download.prss.microsoft.com:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            pypi.org:443
+            registry-1.docker.io:443
+            registry.npmjs.org:443
+            results-receiver.actions.githubusercontent.com:443
+            storage.googleapis.com:443
+            *.blob.core.windows.net:443
+
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Generate ephemeral E2E credentials
+        # Gleiche Credential-Generierung wie im health-smoke Job. Wird zum
+        # Seeden der Provider-Connections (mock-models) in global-setup.ts
+        # gebraucht (AGORA_AUTH_TOKEN als X-Agora-Token-Header).
+        run: |
+          {
+            echo "AGORA_AUTH_TOKEN=$(openssl rand -hex 24)"
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "NEO4J_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Install frontend deps
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: bun run build
+      - name: Install Playwright browsers (Chromium-only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright AiModelPicker-Smoke
+        working-directory: frontend
+        run: npx playwright test ai-model-picker.spec.ts --reporter=list,github
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-trace-ai-model-picker
+          path: frontend/test-results/
+          retention-days: 14

@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   checkFocusVisible,
+  checkReducedMotion,
   diffFocusStyle,
   parseMaxDuration,
   type FocusStyleSnapshot,
@@ -158,6 +159,54 @@ describe('checkFocusVisible', () => {
     } as unknown as Page;
 
     await expect(checkFocusVisible(page)).resolves.toBeUndefined();
+  });
+});
+
+describe('checkReducedMotion', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  // Regressionstest Slice 7.3.1: Vor dem Fix filterte checkReducedMotion nur
+  // Elemente mit "animate"/"transition" im Klassennamen oder Inline-Style
+  // (`[class*="animate"], [class*="transition"], [style*="transition"]`).
+  // Echte CSS-Transitionen aus Stylesheet-Regeln wie
+  // `.app-shell__sidebar { transition: transform 200ms ease; }` tragen
+  // weder das eine noch das andere im Markup — der alte Selector fand sie
+  // nie, der Verstoß blieb unentdeckt. Dieser Test simuliert genau diesen
+  // Fall über getComputedStyle() (Stellvertreter für die Stylesheet-Regel)
+  // und muss fehlschlagen (throw), sonst ist die Reduced-Motion-Prüfung
+  // wieder blind für nicht-inline deklarierte Transitionen.
+  it('erkennt eine aktive Transition auf einem Element ohne "transition"/"animate" im Klassennamen', async () => {
+    document.body.innerHTML = '<nav class="app-shell__sidebar"></nav>';
+    const sidebar = document.querySelector<HTMLElement>('.app-shell__sidebar')!;
+
+    const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element: Element) => {
+      if (element === sidebar) {
+        return { transitionDuration: '0.2s', animationDuration: '0s' } as CSSStyleDeclaration;
+      }
+      return nativeGetComputedStyle(element);
+    });
+
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+
+    const page = {
+      emulateMedia: async () => undefined,
+      evaluate: async (fn: (arg?: unknown) => unknown, arg?: unknown) => fn(arg),
+    } as unknown as Page;
+
+    await expect(checkReducedMotion(page)).rejects.toThrow();
   });
 });
 

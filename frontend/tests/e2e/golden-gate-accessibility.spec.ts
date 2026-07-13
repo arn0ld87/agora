@@ -23,6 +23,7 @@ import {
   checkFocusVisible,
   checkReducedMotion,
 } from './helpers/accessibility';
+import { LlmRoutingTestId } from './helpers/testIds';
 
 test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   test.beforeEach(async ({ context }) => {
@@ -75,7 +76,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
     test('AiModelPicker in LLM Routing passes accessibility gates', async ({ page }) => {
       // Picker benötigt Run-ID für RunLlmRoutingPanel
       await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' });
-      await page.getByTestId('run-id-input').fill('run_e2e_accessibility');
+      await page.getByTestId(LlmRoutingTestId.runId).fill('run_e2e_accessibility');
 
       // Warte bis Picker gerendert ist
       await page.getByTestId('ai-model-picker').waitFor({ timeout: 5000 });
