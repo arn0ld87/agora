@@ -638,3 +638,114 @@ Verifikationsläufe dort stehen weiterhin aus.
 - `frontend/tests/e2e/helpers/aiModelPicker.ts` (neu)
 - `frontend/tests/e2e/ai-model-picker.spec.ts` (neu)
 - `docs/epics/onboarding-provider-unification/HANDOVER.md` (dieser Abschnitt)
+
+---
+
+# Handover — Onboarding/Provider-Unification Slice 7.0
+
+## Stand
+
+- Datum: 2026-07-13
+- Worktree: `/Volumes/T7/Worktrees/agora/onboarding-slice-7-prep`
+- Branch: `codex/onboarding-slice-7-prep`
+- Basis: `origin/main` @ `686a53352820816fde0c45da428abc31f5f96036`
+- Scope: Docs-only-Subplan für Golden-Gate-System und Informationsarchitektur
+
+## Ergebnis
+
+Der atomare Folgeplan liegt in
+[`slice-7-subplan.md`](./slice-7-subplan.md). Er trennt Foundations,
+Accessibility-Harness, Shell/IA, Settings, Onboarding, Picker-Migrationen,
+Dead-Code-Cleanup und die bestehende `agora-2026`-Runtime-Exploration in eigene
+PRs.
+
+Graphify und klassische Import-Suchen bestätigen:
+
+- `AiModelPicker.vue` ist der kanonische connection-basierte Picker;
+- `components/ui/ModelPicker.vue` besitzt keinen Produktionsimporter;
+- `components/v4/forms/ModelPicker.vue` hat noch drei Produktionsimporter;
+- Mock-Routing-Daten werden nur von drei selbst unverdrahteten Karten genutzt;
+- `/settings-classic` besitzt nur die Lazy-Route als Produktionseinstieg;
+- `tokens-v3.css` und `states.css` sind globale, breit konsumierte Sources of
+  Truth;
+- `tokens-2026.css` und `/agora-2026` bilden bereits eine parallele
+  `--a26-*`-Exploration und werden in Slice 7 nicht erweitert.
+
+## Konfliktgrenze zu Slice 6
+
+Slice 6 besitzt Persona-Count, Run-Vertrag, Step-2-Budgetlogik und deren
+E2E-Werte. Insbesondere `HeroNewRun.vue`, `pendingUpload.ts`,
+`Step2EnvSetup.vue`, `AgentCapControl.vue`, `usePersonaQuota.ts`,
+`personaQuotaContract.ts`, `api/simulation.ts` sowie die Backend-Prepare-/
+Simulation-Pfade bleiben außerhalb früher Slice-7-PRs. Der erste empfohlene
+Implementierungs-PR 7.1 berührt ausschließlich `tokens-v3.css`, `states.css`
+und einen neuen Contract-Test.
+
+## Empfohlene nächste Schritte
+
+1. 7.1 additive Token-/State-Foundation umsetzen.
+2. 7.2 Accessibility- und 320-px-Harness ergänzen.
+3. 7.7 verwaisten v3-Picker und Mock-Routing löschen.
+4. Danach Shell/IA, Settings, Onboarding und die drei Picker-Migrations-PRs in
+   der im Subplan festgelegten Reihenfolge bearbeiten.
+5. `/agora-2026` erst nach Übernahme relevanter visueller Motive retiren.
+
+## Bewusst offen
+
+- Automatisierte Settings-Parität vor Entfernung von `/settings-classic`.
+- Vertragstreue Abbildung von `ProviderConnection` auf den bestehenden
+  `LlmProfile` im letzten Picker-Migrations-PR.
+- Entscheidung über die Dauer des `/settings-classic`-Redirect-Zyklus.
+- Reale Accessibility-Befunde aus dem in 7.2 geplanten Axe-/Playwright-Gate.
+
+---
+
+# Handover — Onboarding/Provider-Unification Slice 7.0
+
+## Stand
+
+- Datum: 2026-07-13
+- Worktree: `/Volumes/T7/Worktrees/agora/onboarding-slice-7-prep`
+- Branch: `codex/onboarding-slice-7-prep`
+- Basis: `origin/main` @ `686a53352820816fde0c45da428abc31f5f96036`
+- Scope: ausschließlich Analyse, Planung und Dokumentation; kein Produktcode
+
+## Ergebnis
+
+Der atomare Implementierungsplan liegt in
+[`slice-7-subplan.md`](./slice-7-subplan.md). Er enthält:
+
+- verifizierten Design-v4-, Token-, Shell-, Settings-, Onboarding- und
+  Model-Picker-Bestand;
+- Import-/Impact-Nachweise für `/settings-classic`, Legacy-Picker,
+  Mock-Routing, Design-v4-Komponenten, `tokens-v3.css` und `states.css`;
+- eine Sidebar-IA-Matrix mit `wire | implement MVP | hide | defer`;
+- exklusive Slice-6-Dateigrenzen;
+- neun nummerierte, einzeln mergefähige Implementierungs-Sub-Slices mit TDD-,
+  Accessibility-, Migrations-, Rollback- und Akzeptanz-Gates.
+
+## Zentrale Entscheidungen
+
+1. Erster Implementierungs-PR ist 7.1 (additive Token-/State-Erweiterung).
+2. `AiModelPicker.vue` bleibt der einzige Ziel-Picker. Der v4- und der
+   profilbasierte Legacy-Picker haben noch produktive Consumer und werden nicht
+   voreilig gelöscht.
+3. Der Mock-Routing-Unterbaum ist verwaist und erhält einen eigenen Cleanup-PR.
+4. `/settings-classic` wird erst nach Feature-Parität per Redirect deprecatet.
+5. 7.5b und 7.9c warten auf Slice 6, weil `HeroNewRun`/Step 2/i18n gemeinsame
+   Hotspots sind.
+
+## Graphify-Nachweis
+
+Im sauberen Haupt-Worktree wurde am Basis-Commit ein frischer code-only Graph
+mit 17.951 Nodes und 33.528 Kanten erstellt. CSS-Imports werden im AST-Graphen
+nicht abgebildet; die globalen Imports in `frontend/src/main.ts` wurden deshalb
+zusätzlich statisch nachgewiesen.
+
+## Bewusst offen
+
+- Implementierung sämtlicher 7.x-Sub-Slices;
+- echter Browser-/axe-Run für die späteren sichtbaren UI-PRs;
+- Auflösung der veralteten Design-v4-Referenz auf die nicht vorhandene Datei
+  `docs/2026-05-11-design-v4-app-shell-epic.md` in einem separaten Doku-Cleanup;
+- Slice-6-Merge vor 7.5b und 7.9c.
