@@ -40,10 +40,15 @@
     </nav>
 
     <!-- Footer collapse toggle -->
-    <div class="sidebar__footer" @click="emit('collapse-toggle')">
+    <button
+      type="button"
+      class="sidebar__footer"
+      :aria-label="collapsed ? t('sidebar.footer.expand') : t('sidebar.footer.collapse')"
+      @click="emit('collapse-toggle')"
+    >
       <Icon :name="collapsed ? 'arrowL' : 'arrowL'" :size="14" :stroke="1.6" />
       <span v-if="!collapsed" class="sidebar__footer-label">{{ t('sidebar.footer.collapse') }}</span>
-    </div>
+    </button>
   </aside>
 </template>
 
@@ -55,14 +60,15 @@ import SidebarGroup from './SidebarGroup.vue'
 import Icon from './Icon.vue'
 import AgoraBrand from '../../brand/AgoraBrand.vue'
 import { useShellStore } from '@/stores/shell'
+import { MOBILE_MEDIA_QUERY } from '@/constants/breakpoints'
 
 const { t } = useI18n()
 const shellStore = useShellStore()
 
 function handleNavClick(): void {
-  // matchMedia entspricht exakt dem CSS-Breakpoint @media (max-width: 768px) —
-  // kein Off-by-one bei genau 768px wie bei window.innerWidth < 768.
-  if (window.matchMedia('(max-width: 768px)').matches) {
+  // MOBILE_MEDIA_QUERY (SSoT, Slice 7.3.2) matcht "< MOBILE_BREAKPOINT_PX" —
+  // konsistent mit AppShell.vue's Resize-Handler (window.innerWidth >= 768).
+  if (window.matchMedia(MOBILE_MEDIA_QUERY).matches) {
     shellStore.closeMobileNav()
   }
 }
@@ -179,14 +185,19 @@ const navSettings: NavSettingsItem[] = [
 }
 
 .sidebar__footer {
+  width: 100%;
   padding: 10px 18px;
+  border: 0;
   border-top: 1px solid var(--separator, var(--hairline));
+  border-radius: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
   flex-shrink: 0;
   user-select: none;
@@ -195,6 +206,11 @@ const navSettings: NavSettingsItem[] = [
 
 .sidebar__footer:hover {
   color: var(--text-primary);
+}
+
+.sidebar__footer:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: -2px;
 }
 
 .sidebar__footer-label {

@@ -182,7 +182,9 @@ withDefaults(
   color: var(--text-primary);
 }
 
-@media (max-width: 768px) {
+/* SSoT: src/constants/breakpoints.ts (MOBILE_BREAKPOINT_PX = 768) —
+   max-width: 767px bildet "< 768" ab (Slice 7.3.2, Breakpoint-Vereinheitlichung). */
+@media (max-width: 767px) {
   .topbar {
     padding: 0 12px;
     height: 56px;

@@ -214,6 +214,33 @@ describe('AppShell', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
+  // Slice 7.3.2: Breakpoint-Vereinheitlichung — Mobile = "< 768px" (SSoT:
+  // src/constants/breakpoints.ts). onResize schliesst den Drawer nur bei
+  // window.innerWidth >= 768 (Desktop). Bei 767px bleibt der Drawer offen.
+  it.each([
+    { width: 767, expectClosed: false },
+    { width: 768, expectClosed: true },
+    { width: 769, expectClosed: true },
+  ])('Resize auf $width px: Drawer bleibt/schliesst konsistent mit MOBILE_BREAKPOINT_PX', async ({ width, expectClosed }) => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await nextTick()
+
+    vi.stubGlobal('innerWidth', width)
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+
+    expect(store.mobileNavOpen).toBe(!expectClosed)
+  })
+
   it('ESC schliesst Mobile-Nav', async () => {
     await router.push('/')
     const pinia = createPinia()
@@ -287,6 +314,105 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(opener)
 
     document.body.removeChild(opener)
+    wrapper.unmount()
+  })
+
+  it('Main und Topbar sind inert waehrend der Drawer offen ist (Slice 7.3.2 Focus-Trap)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+
+    // Geschlossen: weder Main noch Topbar sind inert
+    expect(wrapper.find('.app-shell__main').attributes('inert')).toBeUndefined()
+    expect(wrapper.find('.app-shell__topbar').attributes('inert')).toBeUndefined()
+
+    store.openMobileNav()
+    await nextTick()
+
+    // jsdom's inert-Reflektion ist kein 1:1-Abbild des Browser-Verhaltens
+    // (Attribut-Wert statt leerem String) — geprueft wird daher nur Praesenz.
+    expect(wrapper.find('.app-shell__main').attributes('inert')).toBeDefined()
+    expect(wrapper.find('.app-shell__topbar').attributes('inert')).toBeDefined()
+
+    store.closeMobileNav()
+    await nextTick()
+
+    expect(wrapper.find('.app-shell__main').attributes('inert')).toBeUndefined()
+    expect(wrapper.find('.app-shell__topbar').attributes('inert')).toBeUndefined()
+  })
+
+  it('Tab am letzten fokussierbaren Element im Drawer springt zyklisch zum ersten (Slice 7.3.2 Focus-Trap)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await nextTick()
+    await nextTick()
+
+    const drawer = wrapper.find('[data-app-shell-drawer]').element as HTMLElement
+    const focusableSelector =
+      'button:not([disabled]), [href]:not([aria-disabled="true"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(focusableSelector))
+    expect(focusables.length).toBeGreaterThan(1)
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+
+    last.focus()
+    expect(document.activeElement).toBe(last)
+
+    drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect(document.activeElement).toBe(first)
+
+    wrapper.unmount()
+  })
+
+  it('Shift+Tab am ersten fokussierbaren Element im Drawer springt zyklisch zum letzten (Slice 7.3.2 Focus-Trap)', async () => {
+    await router.push('/')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      global: { plugins: [router, pinia, i18n] },
+    })
+
+    const { useShellStore } = await import('@/stores/shell')
+    const store = useShellStore()
+    store.openMobileNav()
+    await nextTick()
+    await nextTick()
+
+    const drawer = wrapper.find('[data-app-shell-drawer]').element as HTMLElement
+    const focusableSelector =
+      'button:not([disabled]), [href]:not([aria-disabled="true"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const focusables = Array.from(drawer.querySelectorAll<HTMLElement>(focusableSelector))
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+
+    first.focus()
+    expect(document.activeElement).toBe(first)
+
+    drawer.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }),
+    )
+    await nextTick()
+
+    expect(document.activeElement).toBe(last)
+
     wrapper.unmount()
   })
 
