@@ -1,6 +1,6 @@
 # Worktree-Strategie
 
-Datei: `docs/runbooks/worktree-strategy.md` · Stand: 2026-05-17
+Datei: `docs/runbooks/worktree-strategy.md` · Stand: 2026-07-13
 
 ## Prinzip
 
@@ -13,16 +13,18 @@ versehentliche Cross-Slice-Edits und macht Rollbacks trivial.
 ## Pfad-Konvention
 
 ```
-/private/tmp/agora-<slice-id>/
+/Volumes/T7/Worktrees/agora/<slice-id>/
 ```
 
 Beispiele:
-- `/private/tmp/agora-P1.1/` — Pflichtabschnitt-Validator
-- `/private/tmp/agora-R4/` — Evidence-Routing aktivieren
-- `/private/tmp/agora-mai-17-radon/` — Komplexitäts-Gate
+- `/Volumes/T7/Worktrees/agora/P1.1/` — Pflichtabschnitt-Validator
+- `/Volumes/T7/Worktrees/agora/R4/` — Evidence-Routing aktivieren
+- `/Volumes/T7/Worktrees/agora/mai-17-radon/` — Komplexitäts-Gate
 
-`/private/tmp/` ist auf macOS Apple Silicon ein APFS-Volume, nicht in iCloud/Time Machine,
-und wird bei Reboots nicht automatisch bereinigt.
+Neue Agora-Worktrees werden direkt auf T7 angelegt. `/private/tmp` ist für
+Worktrees verboten; Symlinks von dort auf T7 sind unnötig und verschleiern den
+tatsächlichen Speicherort. Historische Handover dürfen ihre damaligen
+`/private/tmp`-Pfade unverändert dokumentieren.
 
 ---
 
@@ -32,8 +34,9 @@ und wird bei Reboots nicht automatisch bereinigt.
 
 ```bash
 # Aus dem Repo-Root, auf dem aktuellen Branch
-git worktree add /private/tmp/agora-<slice-id> -b feat/<slice-id>-<name>
-cd /private/tmp/agora-<slice-id>
+test -d /Volumes/T7 || { printf '%s\n' 'Fehler: T7 ist nicht gemountet' >&2; exit 1; }
+git worktree add /Volumes/T7/Worktrees/agora/<slice-id> -b feat/<slice-id>-<name>
+cd /Volumes/T7/Worktrees/agora/<slice-id>
 ```
 
 ### Slice beenden (erfolgreich)
@@ -41,7 +44,7 @@ cd /private/tmp/agora-<slice-id>
 ```bash
 # Nach erfolgreichem Merge in main
 cd /Volumes/T7/Projekte/agora
-git worktree remove /private/tmp/agora-<slice-id>
+git worktree remove /Volumes/T7/Worktrees/agora/<slice-id>
 git branch -d feat/<slice-id>-<name>
 ```
 
@@ -49,9 +52,19 @@ git branch -d feat/<slice-id>-<name>
 
 ```bash
 cd /Volumes/T7/Projekte/agora
-git worktree remove --force /private/tmp/agora-<slice-id>
-git branch -D feat/<slice-id>-<name>
+git -C /Volumes/T7/Worktrees/agora/<slice-id> status --short
+# Nur bei leerer Statusausgabe:
+git worktree remove /Volumes/T7/Worktrees/agora/<slice-id>
+git branch -d feat/<slice-id>-<name>
 ```
+
+Bei einem sauberen Worktree normal mit `git worktree remove` aufräumen. Falls
+ausschließlich regenerierbare ungetrackte Verzeichnisse wie `node_modules`,
+`.venv` oder `dist` das Entfernen blockieren, diese nach Prüfung gezielt löschen
+und den Befehl erneut ausführen. `git branch -d` funktioniert nur ohne
+ungemergte Commits. Sind solche Commits vorhanden, stoppen; `git branch -D` ist
+erst nach expliziter Freigabe zum Verwerfen erlaubt. Gleiches gilt bei echten
+lokalen Änderungen: kein automatisches `--force` oder `branch -D`.
 
 ---
 

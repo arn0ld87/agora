@@ -32,7 +32,9 @@ Layer-Detail: [`docs/runbooks/architecture-layers.md`](docs/runbooks/architectur
   `--no-verify`-Bypass. Runbook: [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md).
 - **Branch-Hygiene:** Nie direkt auf `main` pushen. PR-Workflow inklusive Gemini-Sichtung:
   [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md).
-- **Worktree für Slices:** `/private/tmp/agora-<slice-id>/`. Details:
+- **Worktree für Slices:** `/Volumes/T7/Worktrees/agora/<slice-id>/`. Keine neuen
+  Agora-Worktrees unter `/private/tmp`; bestehende Agenten verwenden direkt das
+  T7-Verzeichnis, ohne Symlink-Zwischenpfad. Details:
   [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
 - **Layer-Reihenfolge ist verbindlich.** Layer 1 ohne Layer 0 ist verboten.
 - **Tests sind die Spec.** TDD: erst RED, dann GREEN, dann Commit.

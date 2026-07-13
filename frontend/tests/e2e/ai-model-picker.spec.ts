@@ -52,7 +52,7 @@ test.describe('Slice 5.6 · AiModelPicker E2E', () => {
     await login(context)
     await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' })
     // Run-ID eintragen → RunLlmRoutingPanel mountet (v-if selectedRunIdTrimmed).
-    await page.getByTestId('llm-routing-run-id').fill(E2E_RUN_ID)
+    await page.getByTestId(LlmRoutingTestId.runId).fill(E2E_RUN_ID)
     // Warten bis der Stage-Picker fuer document_ingest gerendert ist.
     await expect(getStagePicker(page, STAGE)).toBeVisible()
   })

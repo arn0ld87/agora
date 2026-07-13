@@ -7,6 +7,7 @@ import Field from '@/components/v4/forms/Field.vue'
 import Input from '@/components/v4/forms/Input.vue'
 import Select from '@/components/v4/forms/Select.vue'
 import RunLlmRoutingPanel from '@/components/LlmRouting/LlmRoutingView.vue'
+import { LlmRoutingTestId } from '@/contracts/testIds'
 import { listRuns } from '@/api/runs'
 import type { RunRecord } from '@/types/run'
 import type { RunDetail } from '@/contracts/runsContract'
@@ -97,7 +98,7 @@ onMounted(() => {
           <Input
             v-model="selectedRunId"
             mono
-            data-testid="llm-routing-run-id"
+            :data-testid="LlmRoutingTestId.runId"
             placeholder="run_..."
           />
         </Field>

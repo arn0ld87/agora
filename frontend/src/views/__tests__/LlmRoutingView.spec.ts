@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { LlmRoutingTestId } from '@/contracts/testIds'
 
 const mocks = vi.hoisted(() => ({
   listRuns: vi.fn(),
@@ -54,7 +55,6 @@ vi.mock('@/components/v4/forms/Input.vue', () => ({
     emits: ['update:modelValue'],
     template: `
       <input
-        data-testid="manual-run-id"
         :value="modelValue"
         @input="$emit('update:modelValue', $event.target.value)"
       />
@@ -169,7 +169,7 @@ describe('LlmRoutingView', () => {
   it('uebernimmt manuelle Run-ID-Eingaben fuer das Routing-Panel', async () => {
     const wrapper = await mountView()
 
-    await wrapper.find('[data-testid="manual-run-id"]').setValue('run_manual')
+    await wrapper.find(`[data-testid="${LlmRoutingTestId.runId}"]`).setValue('run_manual')
     await flushPromises()
 
     expect(wrapper.find('[data-testid="run-llm-routing-panel"]').text()).toBe('run_manual')
