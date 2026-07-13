@@ -103,9 +103,7 @@ case "$SCOPE" in
   all)      run_backend; run_frontend ;;
   backend)  run_backend ;;
   frontend) run_frontend ;;
-  schemas)  (cd backend && uv run python -m app.contracts.dump_schemas --check) \
-            && bash scripts/sync-status.sh --check \
-            && ok "schema gates green" ;;
+  schemas)  run_schemas && ok "schema gates green" ;;
   *)        echo "usage: $0 [all|backend|frontend|schemas]" >&2; exit 2 ;;
 esac
 
