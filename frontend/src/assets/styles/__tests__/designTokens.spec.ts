@@ -93,6 +93,38 @@ describe('Slice 7.1 — Motion- & Focus-Vertrag (states.css)', () => {
   })
 })
 
+// Fokus-Vertrag: --focus-ring-strong ist ein dedizierter, sichtbar
+// verifizierter Token — nicht nur in der Sammel-Definitions-Liste.
+// Erzwingt zusätzlich zur Existenz ein gültiges RGBA-Format mit Alpha
+// ≥ 0.5, damit "strong" tatsächlich mehr Kontrast bedeutet als der
+// normale --focus-ring (Alpha 0.35). Verhindert zukünftiges Drift bei
+// versehentlichen Wertänderungen.
+describe('Slice 7.1 — Focus-Vertrag (tokens-v3.css)', () => {
+  it('--focus-ring-strong ist dediziert definiert', () => {
+    expect(tokens).toMatch(def('--focus-ring-strong'))
+  })
+
+  it('--focus-ring-strong hat ein gültiges RGBA-Format', () => {
+    const m = tokens.match(/--focus-ring-strong\s*:\s*([^;]+);/)
+    expect(m, '--focus-ring-strong fehlt').not.toBeNull()
+    const rgba = m![1].trim().match(
+      /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/,
+    )
+    expect(rgba, `--focus-ring-strong hat kein gültiges RGBA-Format: "${m![1].trim()}"`).not.toBeNull()
+  })
+
+  it('--focus-ring-strong hat Alpha ≥ 0.5 (stärker als --focus-ring mit 0.35)', () => {
+    const m = tokens.match(/--focus-ring-strong\s*:\s*rgba?\([^)]+\)/)
+    expect(m, '--focus-ring-strong fehlt').not.toBeNull()
+    const alpha = m![0].match(/,\s*([\d.]+)\s*\)$/)
+    expect(alpha, 'Alpha-Komponente fehlt').not.toBeNull()
+    expect(
+      Number(alpha![1]),
+      `--focus-ring-strong Alpha ${alpha![1]} ist < 0.5 — verliert "strong"-Bedeutung`,
+    ).toBeGreaterThanOrEqual(0.5)
+  })
+})
+
 // Dark-Readiness-Klausel: Sobald ein [data-theme="dark"]-Block in
 // tokens-v3.css existiert, müssen die vier theme-starken Farbwerte
 // (--accent-warm-hover, --status-coral, --status-coral-bg,
