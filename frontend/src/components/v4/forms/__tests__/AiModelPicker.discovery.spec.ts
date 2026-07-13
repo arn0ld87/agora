@@ -14,8 +14,8 @@ import AiModelPicker from '../AiModelPicker.vue'
 
 const discoveredModels = [
   { provider_connection_id: 'conn-local', provider_kind: 'ollama', display_name: 'Ollama lokal', model_id: 'qwen3', context_window: 32768, capabilities: ['chat', 'streaming'], status: 'available', local_or_cloud: 'local' },
-  { provider_connection_id: 'conn-offline', provider_kind: 'openai', display_name: 'Cloud AI', model_id: 'gpt-offline', context_window: null, capabilities: ['chat'], status: 'unavailable', local_or_cloud: 'cloud' },
-  { provider_connection_id: 'conn-embedding', provider_kind: 'openai', display_name: 'Cloud AI', model_id: 'embed-3', context_window: null, capabilities: ['embeddings'], unsupported_capabilities: ['chat'], status: 'available', local_or_cloud: 'cloud' },
+  { provider_connection_id: 'conn-offline', provider_kind: 'openai', display_name: 'Cloud AI', model_id: 'gpt-offline', capabilities: ['chat'], status: 'unavailable', local_or_cloud: 'cloud' },
+  { provider_connection_id: 'conn-embedding', provider_kind: 'openai', display_name: 'Cloud AI', model_id: 'embed-3', capabilities: ['embeddings'], unsupported_capabilities: ['chat'], status: 'available', local_or_cloud: 'cloud' },
 ]
 
 async function mountPicker(props: Record<string, unknown> = {}) {
