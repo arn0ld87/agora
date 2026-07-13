@@ -50,6 +50,38 @@ describe('diffFocusStyle', () => {
     ).toBe(true);
   });
 
+  it('ignores a computed box shadow whose pixel lengths are all zero', () => {
+    expect(
+      diffFocusStyle(DEFAULT_CONTROL_STYLE, {
+        ...DEFAULT_CONTROL_STYLE,
+        boxShadow: 'rgba(0, 0, 0, 0) 0px 0px 0px 0px',
+      }),
+    ).toBe(false);
+  });
+
+  it('requires opacity and non-zero geometry in the same shadow layer', () => {
+    expect(
+      diffFocusStyle(DEFAULT_CONTROL_STYLE, {
+        ...DEFAULT_CONTROL_STYLE,
+        boxShadow: 'rgba(0, 0, 0, 0) 0px 0px 0px 3px',
+      }),
+    ).toBe(false);
+
+    expect(
+      diffFocusStyle(DEFAULT_CONTROL_STYLE, {
+        ...DEFAULT_CONTROL_STYLE,
+        boxShadow: 'rgba(0, 0, 0, 0) 0px 0px 0px 3px, rgb(0, 0, 0) 0px 0px 0px 0px',
+      }),
+    ).toBe(false);
+
+    expect(
+      diffFocusStyle(DEFAULT_CONTROL_STYLE, {
+        ...DEFAULT_CONTROL_STYLE,
+        boxShadow: 'rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(0, 0, 0) 0px 0px 0px 3px',
+      }),
+    ).toBe(true);
+  });
+
   it('detects a visible border color or width change', () => {
     expect(
       diffFocusStyle(DEFAULT_CONTROL_STYLE, {

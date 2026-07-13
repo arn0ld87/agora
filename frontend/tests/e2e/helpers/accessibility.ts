@@ -68,6 +68,45 @@ const FOCUS_STYLE_PROPERTIES: Record<keyof FocusStyleSnapshot, string> = {
 
 const BORDER_SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
 
+function splitBoxShadowLayers(value: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let layerStart = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '(') depth += 1;
+    if (value[index] === ')') depth = Math.max(0, depth - 1);
+    if (value[index] === ',' && depth === 0) {
+      layers.push(value.slice(layerStart, index).trim());
+      layerStart = index + 1;
+    }
+  }
+
+  layers.push(value.slice(layerStart).trim());
+  return layers;
+}
+
+function isVisibleBoxShadow(value: string): boolean {
+  const zeroAlpha = String.raw`(?:0(?:\.0+)?|\.0+)%?`;
+  const legacyTransparent = new RegExp(
+    String.raw`rgba\(\s*(?:[^,]+,\s*){3}${zeroAlpha}\s*\)`,
+    'i',
+  );
+  const modernTransparent = new RegExp(
+    String.raw`(?:rgba?|hsla?|color)\([^)]*\/\s*${zeroAlpha}\s*\)`,
+    'i',
+  );
+
+  return splitBoxShadowLayers(value).some((layer) => {
+    const isTransparent =
+      /\btransparent\b/i.test(layer) ||
+      legacyTransparent.test(layer) ||
+      modernTransparent.test(layer);
+    const lengths = layer.match(/-?(?:\d+(?:\.\d*)?|\.\d+)px/g) ?? [];
+    return !isTransparent && lengths.some((length) => Number.parseFloat(length) !== 0);
+  });
+}
+
 export function diffFocusStyle(before: FocusStyleSnapshot, after: FocusStyleSnapshot): boolean {
   const outlineChanged = (['outlineStyle', 'outlineWidth', 'outlineColor', 'outlineOffset'] as const).some(
     (property) => before[property] !== after[property],
@@ -75,7 +114,7 @@ export function diffFocusStyle(before: FocusStyleSnapshot, after: FocusStyleSnap
   const hasVisibleOutline = after.outlineStyle !== 'none' && Number.parseFloat(after.outlineWidth) > 0;
 
   const boxShadowChanged = before.boxShadow !== after.boxShadow;
-  const hasVisibleBoxShadow = after.boxShadow !== 'none';
+  const hasVisibleBoxShadow = isVisibleBoxShadow(after.boxShadow);
 
   const hasVisibleBorderChange = BORDER_SIDES.some((side) => {
     const sideChanged = ([`border${side}Style`, `border${side}Width`, `border${side}Color`] as const).some(
