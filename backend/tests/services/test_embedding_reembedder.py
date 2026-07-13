@@ -285,6 +285,34 @@ def test_run_rejects_invalid_index_or_property_identifier() -> None:
         )
 
 
+def test_run_aborts_on_vector_count_mismatch() -> None:
+    """Gemini-Finding (HIGH): liefert der Embedder weniger Vektoren als
+    Texte, ist die Positionszuordnung nicht mehr verlaesslich — weiter-
+    machen wuerde falsche Vektoren an falsche Knoten schreiben.
+    """
+    graph = _FakeGraph(_entities(3))
+
+    def _short(texts: list[str]) -> list[list[float]]:
+        return [[1.0] * _DIMS for _ in texts[:-1]]  # ein Vektor fehlt
+
+    with pytest.raises(RuntimeError, match="Alignment"):
+        _run(_engine(graph, embedder=_short, batch_size=3))
+    assert graph.written == [], "kein Batch darf teilgeschrieben werden"
+
+
+def test_run_counts_none_vector_as_failed() -> None:
+    graph = _FakeGraph(_entities(2))
+
+    def _with_none(texts: list[str]) -> list[Any]:
+        return [None, [1.0] * _DIMS]
+
+    status, checkpoints = _run(_engine(graph, embedder=_with_none, batch_size=2))
+
+    assert status == "failed"
+    assert checkpoints[-1].failed == 1
+    assert checkpoints[-1].processed == 1
+
+
 def test_run_propagates_embedder_errors() -> None:
     graph = _FakeGraph(_entities(2))
 

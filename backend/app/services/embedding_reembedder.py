@@ -64,7 +64,7 @@ WHERE n.uuid IS NOT NULL
   AND ($cursor IS NULL OR n.uuid > $cursor)
 RETURN
     n.uuid AS uuid,
-    coalesce(n.summary, n.name + ' (' + coalesce(n.entity_type, '') + ')') AS text
+    coalesce(n.summary, coalesce(n.name, '') + ' (' + coalesce(n.entity_type, '') + ')') AS text
 ORDER BY n.uuid
 LIMIT $limit
 """
@@ -152,11 +152,21 @@ class Neo4jReEmbedder:
 
                     texts = [str(row.get("text") or "") for row in rows]
                     vectors = embed_texts(texts)
+                    # Laengen-Mismatch heisst: die Positionszuordnung
+                    # Text -> Vektor ist nicht mehr verlaesslich. Weiter-
+                    # machen wuerde falsche Vektoren an falsche Knoten
+                    # schreiben (Alignment-Drift) — harter Abbruch.
+                    if len(vectors) != len(rows):
+                        raise RuntimeError(
+                            f"Embedder lieferte {len(vectors)} Vektoren fuer "
+                            f"{len(rows)} Texte — Abbruch, um Alignment-"
+                            "Drift zu verhindern."
+                        )
 
                     writable: list[dict[str, Any]] = []
                     failed = 0
                     for row, vector in zip(rows, vectors):
-                        if len(vector) == expected_dimensions:
+                        if vector is not None and len(vector) == expected_dimensions:
                             writable.append(
                                 {
                                     "uuid": row["uuid"],
@@ -169,13 +179,9 @@ class Neo4jReEmbedder:
                                 "Re-Embedding: Entity %s lieferte Dimension "
                                 "%d statt %d — Knoten uebersprungen",
                                 row["uuid"],
-                                len(vector),
+                                len(vector) if vector is not None else 0,
                                 expected_dimensions,
                             )
-                    # Defensiv: liefert der Embedder weniger Vektoren als
-                    # Texte, zaehlen die fehlenden Knoten als failed.
-                    if len(vectors) < len(rows):
-                        failed += len(rows) - len(vectors)
 
                     if writable:
                         session.execute_write(
