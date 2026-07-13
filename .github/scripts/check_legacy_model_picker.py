@@ -185,7 +185,12 @@ def _resolve_target(specifier: str, importing_file: Path, root: Path) -> Path | 
 
     base = Path(os.path.normpath(base))
     candidates = [base]
-    candidates += [base.with_name(base.name + suffix) for suffix in RESOLVE_SUFFIXES]
+    # base.with_name(...) wirft ValueError, wenn base keinen Namen hat (z. B.
+    # Root "/"). Bei verbotenen Specifiern kann das zwar nicht auftreten
+    # (letztes Segment ist stets nicht-leer), aber der Guard hält das
+    # Auflösen robust, falls FORBIDDEN_SUBSTRINGS je erweitert wird.
+    if base.name:
+        candidates += [base.with_name(base.name + suffix) for suffix in RESOLVE_SUFFIXES]
     candidates += [base / index for index in RESOLVE_INDEX]
     for candidate in candidates:
         if candidate.is_file():
