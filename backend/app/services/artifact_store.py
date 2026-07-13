@@ -22,6 +22,7 @@ from typing import Any, Iterable, Optional, Protocol, runtime_checkable
 from ..utils.artifact_locator import ArtifactLocator
 from ..utils.json_io import read_json_file, write_json_atomic
 from ..utils.logger import get_logger
+from ..utils.path_safety import safe_join_within_root, validate_path_id
 
 logger = get_logger("agora.artifact_store")
 
@@ -133,13 +134,14 @@ class LocalFilesystemArtifactStore:
         self._root = simulations_root or ArtifactLocator.simulations_dir()
 
     def _abs_path(self, simulation_id: str, artifact: str) -> str:
+        # SEC-1: validate user-controlled simulation_id before path construction.
+        # Pydantic contracts only enforce min_length=1; CodeQL (py/path-injection
+        # alerts #9, #349–#353) flags the unvalidated os.path.join sink. The
+        # central boundary check also rejects ``..``/absolute/symlink escapes
+        # via canonical realpath containment (see app.utils.path_safety).
+        validate_path_id(simulation_id, field_name="simulation_id")
         rel = _resolve_relative_path(artifact)
-        return os.path.join(self._root, simulation_id, rel)
-
-    def _ensure_simulation_dir(self, simulation_id: str) -> str:
-        sim_dir = os.path.join(self._root, simulation_id)
-        os.makedirs(sim_dir, exist_ok=True)
-        return sim_dir
+        return safe_join_within_root(self._root, simulation_id, rel)
 
     def read_json(
         self, simulation_id: str, artifact: str, default: Any = None
@@ -150,7 +152,6 @@ class LocalFilesystemArtifactStore:
         )
 
     def write_json(self, simulation_id: str, artifact: str, payload: Any) -> None:
-        self._ensure_simulation_dir(simulation_id)
         path = self._abs_path(simulation_id, artifact)
         # ``write_json_atomic`` already creates parent dirs (e.g. ipc_commands/).
         write_json_atomic(path, payload)
@@ -168,7 +169,8 @@ class LocalFilesystemArtifactStore:
     def list_artifacts(
         self, simulation_id: str, prefix: str = ""
     ) -> list[str]:
-        sim_dir = os.path.join(self._root, simulation_id)
+        validate_path_id(simulation_id, field_name="simulation_id")
+        sim_dir = safe_join_within_root(self._root, simulation_id)
         if not os.path.isdir(sim_dir):
             return []
         results: list[str] = []
