@@ -90,6 +90,7 @@ const MOCK_OPTIONS: AiModelRefInput[] = [
     model_id: 'text-embed-test',
     context_window: 0,
     capabilities: ['embeddings'],
+    unsupported_capabilities: ['chat'],
     status: 'available',
     local_or_cloud: 'cloud',
   },
