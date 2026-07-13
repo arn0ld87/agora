@@ -68,3 +68,40 @@ Wenn die CI ein neues Gate bekommt (z. B. `bandit`, `pip-audit`),
 MUSS `scripts/pre-push-gate.sh` in derselben PR erweitert werden —
 sonst driftet die Pipeline. Reihenfolge: Gate zuerst in CI einführen
 (sofort wirksam), dann im selben Release-Cycle lokal spiegeln.
+
+## Legacy-Picker-Check (Sub-Slice 5.5 Grep-Prep)
+
+CI-Gate, das verhindert, dass v3-Picker-Stellen
+(`ModelPicker.vue`, `LlmProfilePicker.vue`, `ActiveModelBadge.vue`,
+`@/store/llmProviders|llmProfiles|llmRoutingDefaults`,
+`@/composables/useRuntimeLlmOptions`) nach 5.5 zurück in den Code
+kommen. Spiegel-Workflow: `.github/workflows/check-legacy-model-picker.yml`.
+
+Lokal ausführen:
+
+```bash
+python3 .github/scripts/check_legacy_model_picker.py
+# oder mit explizitem Ziel:
+python3 .github/scripts/check_legacy_model_picker.py frontend/src
+```
+
+Exit-Codes: `0` clean · `1` Treffer · `2` Usage-Fehler.
+
+**Opt-in für 5.5-Wrapper-Dateien:** Wenn eine Datei den v3-Pfad
+weiterhin braucht (z. B. ein Read-Adapter-Shim), trägt sie genau
+einen Magic-Comment in der **ersten Zeile**:
+
+- `.ts` / `.spec.ts`: `// legacy-model-picker-allow: <reason>`
+- `.vue`: `<!-- legacy-model-picker-allow: <reason -->`
+
+Reason ist Pflicht (Audit-Spur). Leere Marker werden zurückgewiesen.
+Subpfade wie `@/store/llmProviders/index` sind auch ohne Marker
+erlaubt — der Check matcht nur den **genauen** Bare-Specifier.
+
+Unit-Tests für den Check selbst:
+
+```bash
+python3 .github/scripts/test_check_legacy_model_picker.py
+```
+
+(8 Stdlib-`unittest`-Tests, kein `pip install nötig`.)
