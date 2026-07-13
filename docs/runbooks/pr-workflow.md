@@ -35,12 +35,16 @@ feat(P1.1): Pflichtabschnitt-Validator mit cross_stakeholder-Gate
 
 ```bash
 # Pflicht — bricht bei Fehler ab
-cd backend && uv run pytest tests/contracts/ -x -q
-cd backend && uv run python -m app.contracts.dump_schemas --check
-cd backend && uv run ruff check . && uv run mypy app
-cd frontend && npm run check
-npm run check  # Root-Quality-Gate (alles)
+# Single source of truth: scripts/pre-push-gate.sh (Slice 4.3.3 Maintenance)
+# spiegelt 1:1 die CI PR-Smoke-Gates. Lokal + CI laufen identisch.
+bash scripts/pre-push-gate.sh          # alles
+bash scripts/pre-push-gate.sh backend  # nur Backend (ruff, mypy, contracts, schemas)
+bash scripts/pre-push-gate.sh frontend # nur Frontend (lint, typecheck, test, build)
+bash scripts/pre-push-gate.sh schemas  # nur Schema-Drift + STATUS.md-Drift
 ```
+
+> ℹ️ Der einzelne `npm run check`-Aufruf (Root) entfällt — der neue
+> `pre-push-gate.sh` deckt Backend + Frontend ab und ist CI-gespiegelt.
 
 ### 4. PR erstellen
 

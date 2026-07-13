@@ -12,10 +12,8 @@ from cryptography.fernet import Fernet
 from app.contracts.ai_provider_contract import (
     LocalOllamaBaseUrl,
     ProviderConnection,
-    ProviderStatus,
 )
 from app.contracts.embedding_contract import (
-    EmbeddingConfigurationStatus,
     EmbeddingProviderKind,
 )
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
@@ -24,7 +22,6 @@ from app.services.embedding_configurations.service import (
     EmbeddingConfigurationService,
 )
 from app.services.llm_provider_secrets_store import LlmProviderSecretsStore
-from app.services.provider_connection_store import ProviderConnectionStore
 
 
 @pytest.fixture

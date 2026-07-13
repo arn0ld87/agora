@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
 from app.services.embedding_ollama_pull import (
     DEFAULT_TIMEOUT_SECONDS,
     OllamaPullError,
-    OllamaPullReport,
     pull_model,
     validate_model_name,
 )
