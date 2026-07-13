@@ -272,7 +272,7 @@ const activeSubRoute = computed<string>(() => {
     grid-row: unset;
     grid-column: unset;
     transform: translateX(-100%);
-    transition: transform 200ms ease;
+    transition: transform var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
     /* Erzwingt volle Sidebar-Breite im Mobile-Drawer, auch wenn Desktop-Collapsed-State
        (56px) aktiv ist — sonst sind Labels unsichtbar und der Drawer wirkt kaputt. */
     width: 280px !important;
@@ -280,6 +280,12 @@ const activeSubRoute = computed<string>(() => {
 
   .app-shell__sidebar--mobile-open {
     transform: translateX(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-shell__sidebar {
+      transition: none;
+    }
   }
 
   .app-shell__topbar {
