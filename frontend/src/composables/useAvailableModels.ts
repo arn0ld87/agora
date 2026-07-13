@@ -1,39 +1,20 @@
 /**
- * useAvailableModels — Live-Provider-Discovery via ModelCatalogService.
+ * useAvailableModels — Discovery aus dem kanonischen ProviderConnectionStore.
  *
- * Pulled von /api/llm/providers (listLlmProviders) und
- * /api/llm/providers/<id>/models (listProviderModels) für jeden Provider,
- * der supports_models_endpoint === true hat.
- *
- * Liefert eine flache, sortierte Modellliste:
- *   1. provider_label alphabetisch (case-insensitive)
- *   2. model_id alphabetisch (case-insensitive)
- *
- * 5-min In-Memory-Cache pro Composable-Instanz.
- *
- * KEIN hardcoded Preset — ausschließlich Live-Discovery.
+ * Der Composable adaptiert die Connection- und Modell-Metadaten einmalig auf
+ * den Picker-Vertrag. Legacy-Providerlisten bleiben damit außerhalb des v4-
+ * Picker-Datenpfads.
  */
 import { ref, type Ref } from 'vue'
-import { z } from 'zod'
-import { listLlmProviders, listProviderModels } from '@/api/llmRouting'
-import { ProviderDescriptorSchema } from '@/contracts/llmRoutingContract'
+import { useLlmProvidersStore } from '@/store/llmProviders'
+import type { AiCapability, AiModelRefInput, AiModelStatus, AiProviderKind } from '@/contracts/aiModelRef'
+import type { AiModel, ProviderConnection } from '@/contracts/aiProviderContract'
 
-// ---------------------------------------------------------------------------
-// Schema für eine API-Modellantwort (/api/llm/providers/<id>/models)
-// ---------------------------------------------------------------------------
-const ModelEntrySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  provider_id: z.string(),
-  source: z.enum(['live', 'cached', 'fallback', 'custom']),
-  refreshed_at: z.number(),
-})
+const PICKER_CAPABILITIES = [
+  'chat', 'embeddings', 'streaming', 'tool_calling', 'json_object', 'json_schema', 'vision', 'reasoning',
+] as const satisfies readonly AiCapability[]
 
-const ModelEntryArraySchema = z.array(ModelEntrySchema)
-
-// ---------------------------------------------------------------------------
-// Öffentlicher Shape: normalisierte Picker-Einheit
-// ---------------------------------------------------------------------------
+/** Legacy-kompatibler Shape für den noch getrennten v3-ModelPicker. */
 export interface PickerModel {
   provider_id: string
   provider_label: string
@@ -42,116 +23,119 @@ export interface PickerModel {
   source: 'live' | 'cached' | 'fallback' | 'custom'
 }
 
-// ---------------------------------------------------------------------------
-// Cache-Eintrag pro Instanz
-// ---------------------------------------------------------------------------
-const CACHE_TTL_MS = 5 * 60 * 1000
+/** Vollständiger Discovery-Shape für den v4-AiModelPicker. */
+export type DiscoveredPickerModel = PickerModel & AiModelRefInput
 
 interface CacheEntry {
-  data: PickerModel[]
+  data: DiscoveredPickerModel[]
   fetchedAt: number
 }
 
+export interface RefreshOptions {
+  force?: boolean
+}
+
 export interface UseAvailableModelsReturn {
-  models: Ref<PickerModel[]>
+  models: Ref<DiscoveredPickerModel[]>
   loading: Ref<boolean>
   error: Ref<string | null>
-  refresh: () => Promise<void>
+  refresh: (options?: RefreshOptions) => Promise<void>
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+function pickerCapabilities(model: AiModel): AiCapability[] {
+  return PICKER_CAPABILITIES.filter((capability) => model.capabilities[capability] === 'supported')
+}
+
+function pickerStatus(
+  connection: ProviderConnection,
+  model: AiModel,
+  unsupported: boolean,
+): AiModelStatus {
+  if (unsupported) return 'unsupported'
+  if (!connection.enabled || connection.status === 'disconnected' || connection.status === 'error') {
+    return 'unavailable'
+  }
+  if (model.status === 'unavailable' || model.status === 'deprecated') return 'unavailable'
+  if (connection.status === 'degraded') return 'degraded'
+  if (model.status === 'available') return 'available'
+  return 'unavailable'
+}
+
+function toPickerModel(
+  connection: ProviderConnection,
+  model: AiModel,
+  unsupported: boolean,
+): DiscoveredPickerModel {
+  return {
+    provider_connection_id: connection.id,
+    provider_kind: connection.provider_kind as AiProviderKind,
+    display_name: connection.display_name,
+    model_id: model.model_id,
+    context_window: model.context_window ?? undefined,
+    capabilities: pickerCapabilities(model),
+    status: pickerStatus(connection, model, unsupported),
+    local_or_cloud: model.local_or_cloud === 'local' || connection.transport === 'local' ? 'local' : 'cloud',
+    provider_id: connection.id,
+    provider_label: connection.display_name,
+    model_label: model.display_name,
+    source: model.source,
+  }
 }
 
 export function useAvailableModels(): UseAvailableModelsReturn {
-  const models = ref<PickerModel[]>([])
+  const providerStore = useLlmProvidersStore()
+  const models = ref<DiscoveredPickerModel[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  let cache: CacheEntry | null = null
 
-  // Cache liegt im Closure, lebt mit der Composable-Instanz.
-  let _cache: CacheEntry | null = null
-
-  async function refresh(): Promise<void> {
-    // Cache-Prüfung
-    if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
-      models.value = _cache.data
+  async function refresh({ force = false }: RefreshOptions = {}): Promise<void> {
+    if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
+      models.value = cache.data
       return
     }
 
     loading.value = true
     error.value = null
-
     try {
-      // 1. Provider-Liste holen + Zod-validieren
-      const rawProviders = await listLlmProviders()
-      const providersResult = z.array(ProviderDescriptorSchema).safeParse(rawProviders)
-      if (!providersResult.success) {
-        error.value = `Provider-Schema ungültig: ${providersResult.error.issues.map((i) => i.message).join(', ')}`
-        return
-      }
-      const providers = providersResult.data
-
-      // 2. Nur Provider mit supports_models_endpoint anfragen
-      const eligible = providers.filter((p) => p.supports_models_endpoint)
-
-      // 3. Parallel für jeden eligible Provider Modelle laden
+      await providerStore.loadConnections()
+      const connections = Object.values(providerStore.connections)
       const settled = await Promise.allSettled(
-        eligible.map(async (provider) => {
-          const raw = await listProviderModels(provider.id, provider.base_url ?? undefined)
-          const result = ModelEntryArraySchema.safeParse(raw)
-          if (!result.success) {
-            // Einzelner Provider-Fehler wird geloggt, aber kein globaler Fehler
-            console.warn(
-              `[useAvailableModels] Provider "${provider.id}" Schema-Fehler:`,
-              result.error.issues,
-            )
-            return [] as PickerModel[]
-          }
-          return result.data.map(
-            (m): PickerModel => ({
-              provider_id: provider.id,
-              provider_label: provider.label,
-              model_id: m.id,
-              model_label: m.name || m.id,
-              source: m.source,
-            }),
+        connections.map(async (connection) => {
+          const discovered = await providerStore.fetchConnectionModels(connection.id)
+          return discovered.map((model) =>
+            toPickerModel(connection, model, Boolean(providerStore.connectionUnsupported[connection.id])),
           )
         }),
       )
 
-      // 4. Ergebnisse zusammenführen; abgelehnte Promises loggen
-      const merged: PickerModel[] = []
-      for (let i = 0; i < settled.length; i++) {
-        const s = settled[i]
-        if (s.status === 'fulfilled') {
-          merged.push(...s.value)
-        } else {
-          console.warn(
-            `[useAvailableModels] Provider "${eligible[i].id}" fetch fehlgeschlagen:`,
-            s.reason,
-          )
+      const merged: DiscoveredPickerModel[] = []
+      settled.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          merged.push(...result.value)
+          return
         }
-      }
-
-      // 5. Sortierung: provider_label ASC (ci), dann model_id ASC (ci).
-      // localeCompare statt ``< : 1 ; 1`` — letzteres verletzt die Komparator-
-      // Konvention (0 für gleiche Werte) und ist auf manchen JS-Engines
-      // instabil (Gemini-Finding).
-      merged.sort((a, b) => {
-        const providerCmp = a.provider_label.localeCompare(b.provider_label, undefined, { sensitivity: 'base' })
-        if (providerCmp !== 0) return providerCmp
-        return a.model_id.localeCompare(b.model_id, undefined, { sensitivity: 'base' })
+        const connection = connections[index]
+        console.warn(`[useAvailableModels] Connection "${connection.id}" fetch fehlgeschlagen:`, result.reason)
       })
-
-      _cache = { data: merged, fetchedAt: Date.now() }
+      merged.sort((left, right) => {
+        const providerOrder = left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
+        return providerOrder || left.model_id.localeCompare(right.model_id, undefined, { sensitivity: 'base' })
+      })
+      cache = { data: merged, fetchedAt: Date.now() }
       models.value = merged
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      error.value = msg
-      console.error('[useAvailableModels] fetch error:', msg)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      error.value = message
+      models.value = []
+      console.error('[useAvailableModels] fetch error:', message)
     } finally {
       loading.value = false
     }
   }
 
-  // Initialer Fetch beim ersten Aufruf
   void refresh()
-
   return { models, loading, error, refresh }
 }

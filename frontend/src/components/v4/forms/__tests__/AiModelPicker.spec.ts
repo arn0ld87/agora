@@ -16,9 +16,18 @@
  * 9. sortiert Provider-Gruppen alphabetisch
  * 10. respektiert disabled-Prop (Input disabled)
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
+
+const discovery = vi.hoisted(() => ({
+  models: { value: [] as any[] }, loading: { value: false }, error: { value: null as string | null }, refresh: vi.fn(),
+}))
+
+vi.mock('@/composables/useAvailableModels', () => ({
+  useAvailableModels: () => discovery,
+}))
+
 import AiModelPicker from '../AiModelPicker.vue'
 import type { AiModelRefInput } from '@/contracts/aiModelRef'
 

@@ -1050,11 +1050,22 @@
     "workspaceDefault": "Workspace default",
     "inheritWorkspaceDefault": "Use workspace default",
     "loading": "Loading models …",
+    "label": "AI model",
+    "refresh": "Refresh models",
     "badge": {
       "local": "local",
       "cloud": "Cloud",
       "degraded": "degraded",
-      "unavailable": "unavailable"
+      "unavailable": "unavailable",
+      "unsupported": "unsupported"
+    },
+    "status": {
+      "available": "available",
+      "degraded": "degraded",
+      "unavailable": "unavailable",
+      "unsupported": "unsupported",
+      "unknown": "status unknown",
+      "invalid_credentials": "invalid credentials"
     }
   },
   "activeModel": {

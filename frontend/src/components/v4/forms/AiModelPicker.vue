@@ -37,11 +37,13 @@ import {
   aiModelItemId,
   parseAiModelItemId,
   type AiCapability,
+  type AiModelStatus,
   type AiModelPickerMode,
   type AiModelRef,
   type AiModelRefInput,
   type AiModelSource,
 } from '@/contracts/aiModelRef'
+import { useAvailableModels } from '@/composables/useAvailableModels'
 
 const { t } = useI18n()
 
@@ -70,84 +72,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: AiModelRef | null]
 }>()
 
-/**
- * Mock-Daten fuer Slice 5.1. Wird in 5.2 durch `useAvailableModels()`
- * ersetzt. Tests koennen `options`-Prop setzen, um eigene Listen
- * einzuspeisen.
- */
-const MOCK_OPTIONS: readonly AiModelRefInput[] = [
-  {
-    provider_connection_id: 'conn-ollama-local',
-    provider_kind: 'ollama',
-    display_name: 'Ollama (lokal)',
-    model_id: 'qwen2.5:14b',
-    context_window: 32768,
-    capabilities: ['chat', 'streaming', 'tool_calling'],
-    status: 'available',
-    is_workspace_default: true,
-    local_or_cloud: 'local',
-  },
-  {
-    provider_connection_id: 'conn-ollama-local',
-    provider_kind: 'ollama',
-    display_name: 'Ollama (lokal)',
-    model_id: 'llama3.1:8b',
-    context_window: 131072,
-    capabilities: ['chat', 'streaming', 'tool_calling'],
-    status: 'available',
-    local_or_cloud: 'local',
-  },
-  {
-    provider_connection_id: 'conn-ollama-cloud',
-    provider_kind: 'ollama_cloud',
-    display_name: 'Ollama Cloud',
-    model_id: 'gpt-oss:20b-cloud',
-    context_window: 65536,
-    capabilities: ['chat', 'streaming', 'tool_calling'],
-    status: 'available',
-    local_or_cloud: 'cloud',
-  },
-  {
-    provider_connection_id: 'conn-openai',
-    provider_kind: 'openai',
-    display_name: 'OpenAI',
-    model_id: 'gpt-4o',
-    context_window: 128000,
-    capabilities: ['chat', 'streaming', 'tool_calling', 'vision', 'json_schema'],
-    status: 'available',
-    local_or_cloud: 'cloud',
-  },
-  {
-    provider_connection_id: 'conn-openai',
-    provider_kind: 'openai',
-    display_name: 'OpenAI',
-    model_id: 'gpt-4o-mini',
-    context_window: 128000,
-    capabilities: ['chat', 'streaming', 'tool_calling', 'vision', 'json_schema'],
-    status: 'available',
-    local_or_cloud: 'cloud',
-  },
-  {
-    provider_connection_id: 'conn-gemini',
-    provider_kind: 'gemini',
-    display_name: 'Google Gemini',
-    model_id: 'gemini-2.5-pro',
-    context_window: 1048576,
-    capabilities: ['chat', 'streaming', 'vision', 'json_schema', 'reasoning'],
-    status: 'unavailable',
-    local_or_cloud: 'cloud',
-  },
-  {
-    provider_connection_id: 'conn-anthropic',
-    provider_kind: 'anthropic',
-    display_name: 'Anthropic',
-    model_id: 'claude-sonnet-4-5',
-    context_window: 200000,
-    capabilities: ['chat', 'streaming', 'tool_calling', 'vision', 'reasoning'],
-    status: 'degraded',
-    local_or_cloud: 'cloud',
-  },
-]
+const { models: discoveredModels, loading, error, refresh: refreshDiscovery } = useAvailableModels()
+const refresh = (): Promise<void> => refreshDiscovery({ force: true })
 
 /** Required-Capability je mode (Master-Prompt §5.4). */
 const REQUIRED_CAPABILITY: Record<AiModelPickerMode, AiCapability> = {
@@ -168,7 +94,7 @@ const REQUIRED_CAPABILITY: Record<AiModelPickerMode, AiCapability> = {
  * vorhersagbar und der Default ist trotzdem sichtbar vorne.
  */
 const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
-  const base = props.options ?? MOCK_OPTIONS
+  const base = props.options ?? discoveredModels.value
   const required = REQUIRED_CAPABILITY[props.mode]
   return base
     .filter((o) => {
@@ -193,13 +119,13 @@ const filteredOptions = computed<readonly AiModelRefInput[]>(() => {
 
 /** Provider-Gruppen (fuer ComboboxGroup). */
 const providerGroups = computed(() => {
-  const groups = new Map<string, AiModelRefInput[]>()
+  const groups = new Map<string, { name: string; status: AiModelStatus; items: AiModelRefInput[] }>()
   for (const o of filteredOptions.value) {
-    const key = o.display_name
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(o)
+    const key = o.provider_connection_id
+    if (!groups.has(key)) groups.set(key, { name: o.display_name, status: o.status, items: [] })
+    groups.get(key)!.items.push(o)
   }
-  return Array.from(groups.entries()).map(([name, items]) => ({ name, items }))
+  return Array.from(groups.values()).sort((left, right) => left.name.localeCompare(right.name))
 })
 
 /** Current selection als stable ID. */
@@ -291,6 +217,9 @@ const degradedBadge = computed(() => t('aiModelPicker.badge.degraded', 'eingesch
 const unavailableBadge = computed(() =>
   t('aiModelPicker.badge.unavailable', 'nicht verfügbar'),
 )
+const unsupportedBadge = computed(() => t('aiModelPicker.badge.unsupported', 'nicht unterstützt'))
+const providerStatusLabel = (status: AiModelStatus): string =>
+  t(`aiModelPicker.status.${status}`, status)
 
 function statusTone(input: AiModelRefInput): 'green' | 'orange' | 'red' | 'gray' {
   switch (input.status) {
@@ -314,7 +243,7 @@ function isDisabled(input: AiModelRefInput): boolean {
   return input.status === 'unavailable' || input.status === 'unsupported'
 }
 
-defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel })
+defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loading, error, refresh, isDisabled })
 </script>
 
 <template>
@@ -359,7 +288,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel })
               class="ai-model-picker__group"
             >
               <ComboboxLabel class="ai-model-picker__group-label">
-                {{ group.name }}
+                {{ group.name }} · {{ providerStatusLabel(group.status) }}
               </ComboboxLabel>
 
               <ComboboxItem
@@ -396,6 +325,12 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel })
                       class="ai-model-picker__badge ai-model-picker__badge--err"
                     >
                       {{ unavailableBadge }}
+                    </span>
+                    <span
+                      v-if="item.status === 'unsupported'"
+                      class="ai-model-picker__badge ai-model-picker__badge--err"
+                    >
+                      {{ unsupportedBadge }}
                     </span>
                   </span>
                 </span>
