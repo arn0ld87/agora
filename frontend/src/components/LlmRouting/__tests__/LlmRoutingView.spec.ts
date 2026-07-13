@@ -85,7 +85,7 @@ vi.mock('../../../api/llmRouting', () => ({
   patchStageLlmRouting: patchStageLlmRoutingMock,
 }))
 
-vi.mock('@/store/llmProviders', () => ({
+vi.mock('@/store/aiModels', () => ({
   useLlmProvidersStore: () => ({
     providers: providersArr,
     loadProviders: loadProvidersMock,

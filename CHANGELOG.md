@@ -5,6 +5,37 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (onboarding-model-picker-slice-5-5 — 2026-07-13)
+
+- **Store-Konsolidierung `aiModels.ts`** (Onboarding Slice 5.5):
+  Die drei getrennten Stores `store/llmProviders.ts`,
+  `store/llmProfiles.ts` und `store/llmRoutingDefaults.ts` sind in
+  `store/aiModels.ts` zusammengeführt (SSoT-Import-Oberfläche,
+  Master-Prompt §5.3/§6.1). Die Pinia-Store-IDs bleiben unverändert →
+  persistierter State und Verhalten stabil. Neue Facade
+  `useAiModelsStore()` bündelt die drei Teil-Stores. Alle 17 Importer
+  (prod + test) auf `@/store/aiModels` umgestellt; die alten Store-Dateien
+  gelöscht. 19 neue Spec-Tests (`store/__tests__/aiModels.spec.ts`).
+- **Legacy-Picker-Check via `@deprecated`** statt Opt-in-Marker: Der
+  Grep-CI-Check (`check_legacy_model_picker.py`) erlaubt einen verbotenen
+  v3-Import jetzt genau dann, wenn dessen **Ziel** ein
+  `@deprecated`-JSDoc-Tag trägt. Alle `legacy-model-picker-allow`-Marker
+  aus dem Frontend entfernt.
+
+### Deprecated (onboarding-model-picker-slice-5-5 — 2026-07-13)
+
+- **v3/v4-Legacy-Picker und -Composables** als `@deprecated` markiert,
+  bleiben als Read-Adapter für die noch nicht migrierten v3-Consumer:
+  `components/ui/ModelPicker.vue` (verwaist),
+  `components/llm/LlmProfilePicker.vue` (EnvSetupModelPanel, Step4Report,
+  ReportBranchControls), `components/ActiveModelBadge.vue`
+  (WorkspaceHeader), `components/v4/forms/ModelPicker.vue`
+  (ReportModelControls, Home), `components/v4/forms/LlmProfileManager.vue`
+  (SettingsGeneralView) und `composables/useRuntimeLlmOptions.ts`
+  (Runtime-Credential-Override; Step2EnvSetup, Step3Simulation, MainView,
+  useEnvForm). Migration dieser Consumer folgt in Folge-Slices (kein
+  Big-Bang; profiles-/runtime- vs. connection-basiertes Datenmodell).
+
 ### Added (onboarding-model-picker-slice-5-4 — 2026-07-13)
 
 - **AiModelPicker an allen v4-Auswahlstellen** (Onboarding

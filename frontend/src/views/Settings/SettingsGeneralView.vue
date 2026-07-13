@@ -20,8 +20,7 @@ import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
 import LlmProfileManager from '@/components/v4/forms/LlmProfileManager.vue'
-// legacy-model-picker-allow: 5.4 Workspace-Default liest v3-Routing-Default; wird in 5.5 durch useActiveModelStore ersetzt
-import { useLlmRoutingDefaultsStore } from '@/store/llmRoutingDefaults'
+import { useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 

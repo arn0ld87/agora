@@ -1,31 +1,42 @@
 #!/usr/bin/env python3
 """check_legacy_model_picker.py — Grep-CI-Check für v3-Model-Picker.
 
-Sub-Slice 5.5 der Epic ``onboarding-provider-unification`` deprecated die
-alten v3-Model-Picker-Komponenten und -Stores. Damit sie nicht versehentlich
-wieder in den Code wandern, blockiert dieser Check PRs, die folgende
-Importe neu einführen:
+Sub-Slice 5.5 der Epic ``onboarding-provider-unification`` hat die alten
+v3-Model-Picker-Komponenten und -Stores deprecatet. Damit sie nicht
+versehentlich in *neuen* Code wandern, blockiert dieser Check PRs, die
+folgende Importe einführen:
 
-* ``frontend/src/components/ui/ModelPicker.vue``            (Legacy v3)
-* ``frontend/src/components/llm/LlmProfilePicker.vue``     (Legacy v3)
-* ``frontend/src/components/ActiveModelBadge.vue``         (Legacy v3)
+* ``frontend/src/components/ui/ModelPicker.vue``          (Legacy v3)
+* ``frontend/src/components/llm/LlmProfilePicker.vue``    (Legacy v3)
+* ``frontend/src/components/ActiveModelBadge.vue``        (Legacy v3)
 * ``@/store/llmProviders`` (genau diese Specifier, nicht ``…/llmProviders/…``)
 * ``@/store/llmProfiles``
 * ``@/store/llmRoutingDefaults``
 * ``@/composables/useRuntimeLlmOptions``
 
-Wird ein v3-Picker für den Migrations-Wrapper in 5.5 selbst gebraucht,
-kann die Datei über den Magic-Comment ``legacy-model-picker-allow: <reason>``
-(TS: ``// …``, Vue: ``<!-- … -->``) freigeschaltet werden. Begründung
-im Comment, damit das nächste Audit nachvollziehen kann, warum der
-v3-Pfad noch leben darf.
+Read-Adapter-Freigabe via ``@deprecated``
+=========================================
+
+Nach 5.5 gibt es keinen Opt-in-Marker mehr. Stattdessen erkennt der Check das
+``@deprecated``-JSDoc-Tag am **Ziel** des Imports: Trägt die importierte Datei
+selbst ein ``@deprecated``-Tag, gilt sie als sanktionierter Read-Adapter im
+Deprecation-/Read-only-Fenster und der Import ist erlaubt. So dürfen die
+bestehenden v3-Consumer (Step-Views, WorkspaceHeader, …) die deprecateten
+Picker/Composables weiter lesen, ohne pro-Datei-Marker zu tragen — während
+jeder *neu* eingeführte, nicht-deprecatete v3-Pfad hart blockiert wird.
+
+Die alten Stores (``llmProviders``/``llmProfiles``/``llmRoutingDefaults``)
+existieren nach 5.5 nicht mehr als Datei (konsolidiert in
+``@/store/aiModels``). Ein Import dieser Specifier resolved damit auf kein
+Ziel → keine ``@deprecated``-Freigabe möglich → Verstoß.
 
 Verwendung
 ==========
 
     python3 .github/scripts/check_legacy_model_picker.py [TARGET_DIR]
 
-Default ``TARGET_DIR``: ``frontend/src`` (relativ zum Repo-Root).
+Default ``TARGET_DIR``: ``frontend/src`` (relativ zum Repo-Root). ``@/`` wird
+auf ``TARGET_DIR`` aufgelöst (Vite-Alias ``@`` == ``frontend/src``).
 
 GH-Actions-Ausgabe
 -------------------
@@ -46,6 +57,7 @@ Exit-Codes
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -74,29 +86,33 @@ FORBIDDEN_SUBSTRINGS: list[tuple[str, str]] = [
     ),
     (
         "/store/llmProviders",
-        "v3 store llmProviders → aiModels.ts / useActiveModelStore (Slice 5.5)",
+        "v3 store llmProviders → aiModels.ts (Slice 5.5)",
     ),
     (
         "/store/llmProfiles",
-        "v3 store llmProfiles → aiModels.ts / useActiveModelStore (Slice 5.5)",
+        "v3 store llmProfiles → aiModels.ts (Slice 5.5)",
     ),
     (
         "/store/llmRoutingDefaults",
-        "v3 store llmRoutingDefaults → aiModels.ts / useActiveModelStore (Slice 5.5)",
+        "v3 store llmRoutingDefaults → aiModels.ts (Slice 5.5)",
     ),
     (
         "/composables/useRuntimeLlmOptions",
-        "v3 composable useRuntimeLlmOptions → useActiveModelStore (Slice 5.5)",
+        "v3 composable useRuntimeLlmOptions → aiModels.ts / AiModelPicker (Slice 5.5)",
     ),
 ]
 
-# Magic-Comment, mit dem eine einzelne Datei sich freischalten darf.
-# Form: ``legacy-model-picker-allow: <reason>`` — Reason ist Pflicht,
-# damit die Opt-in-Spur im Audit sichtbar bleibt.
-OPT_IN_MARKER = "legacy-model-picker-allow:"
+# JSDoc-Tag, das ein Import-Ziel als sanktionierten Read-Adapter markiert.
+# Trägt das *Ziel* eines verbotenen Imports dieses Tag, ist der Import im
+# Deprecation-/Read-only-Fenster erlaubt (ersetzt den 5.4-Opt-in-Marker).
+DEPRECATED_TAG = "@deprecated"
 
 # Datei-Endungen, die der Scanner berücksichtigt.
 SCAN_EXTENSIONS = {".vue", ".ts"}
+
+# Endungen/Index-Kandidaten für die Ziel-Auflösung extensionsloser Specifier.
+RESOLVE_SUFFIXES = (".ts", ".vue")
+RESOLVE_INDEX = ("index.ts", "index.vue")
 
 # Verzeichnisse, die der Scanner überspringt (typische Build-Artefakte).
 SKIP_DIRS = {"__pycache__", "node_modules", ".nuxt", "dist", "coverage"}
@@ -150,23 +166,50 @@ def _is_forbidden(specifier: str) -> str | None:
     return None
 
 
-def _has_opt_in(text: str) -> bool:
-    """True, wenn die Datei den Magic-Comment mit Begründung trägt."""
-    if OPT_IN_MARKER not in text:
+def _resolve_target(specifier: str, importing_file: Path, root: Path) -> Path | None:
+    """Löst einen Import-Specifier auf eine Ziel-Datei im Scan-Baum auf.
+
+    - ``@/x`` → ``root/x`` (Vite-Alias ``@`` == Scan-Root == ``frontend/src``).
+    - ``./x`` / ``../x`` → relativ zum Verzeichnis der importierenden Datei.
+    - Bare-Specifier (npm-Paket) → ``None`` (nie ein lokales Ziel).
+
+    Probiert die Datei direkt sowie mit ``.ts``/``.vue``-Endung und als
+    ``index.*``. Gibt die erste existierende Datei zurück, sonst ``None``.
+    """
+    if specifier.startswith("@/"):
+        base = root / specifier[2:]
+    elif specifier.startswith("."):
+        base = importing_file.parent / specifier
+    else:
+        return None
+
+    base = Path(os.path.normpath(base))
+    candidates = [base]
+    # base.with_name(...) wirft ValueError, wenn base keinen Namen hat (z. B.
+    # Root "/"). Bei verbotenen Specifiern kann das zwar nicht auftreten
+    # (letztes Segment ist stets nicht-leer), aber der Guard hält das
+    # Auflösen robust, falls FORBIDDEN_SUBSTRINGS je erweitert wird.
+    if base.name:
+        candidates += [base.with_name(base.name + suffix) for suffix in RESOLVE_SUFFIXES]
+    candidates += [base / index for index in RESOLVE_INDEX]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _target_is_deprecated(specifier: str, importing_file: Path, root: Path) -> bool:
+    """True, wenn das Import-Ziel ein ``@deprecated``-JSDoc-Tag trägt."""
+    target = _resolve_target(specifier, importing_file, root)
+    if target is None:
         return False
-    # Mindestens ein nicht-leeres Zeichen nach dem Doppelpunkt verlangen,
-    # damit leere Marker (``legacy-model-picker-allow:``) nicht durchgehen.
-    for line in text.splitlines():
-        if OPT_IN_MARKER in line:
-            tail = line.split(OPT_IN_MARKER, 1)[1].strip()
-            # Kommentar-Close tolerieren (Vue/HTML: -->, TS/JS: \n)
-            tail = tail.rstrip("/>").rstrip("-").strip()
-            if tail:
-                return True
-    return False
+    try:
+        return DEPRECATED_TAG in target.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return False
 
 
-def _scan_file(path: Path) -> list[tuple[int, int, str]]:
+def _scan_file(path: Path, root: Path) -> list[tuple[int, int, str]]:
     """Liest ``path`` und gibt alle verbotenen Treffer als (line, col, msg)."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -176,14 +219,14 @@ def _scan_file(path: Path) -> list[tuple[int, int, str]]:
         print(f"::warning file={path}::skip: {exc}", file=sys.stderr)
         return []
 
-    if _has_opt_in(text):
-        return []
-
     violations: list[tuple[int, int, str]] = []
     for m in IMPORT_RE.finditer(text):
         spec = m.group("spec")
         msg = _is_forbidden(spec)
         if msg is None:
+            continue
+        # Read-Adapter-Freigabe: importiertes Ziel ist selbst @deprecated.
+        if _target_is_deprecated(spec, path, root):
             continue
         offset = m.start("spec")
         line, col = _offset_to_linecol(text, offset)
@@ -206,7 +249,7 @@ def scan(root: Path) -> list[tuple[Path, int, int, str]]:
             continue
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        for line, col, msg in _scan_file(path):
+        for line, col, msg in _scan_file(path, root):
             results.append((path, line, col, msg))
     return results
 
@@ -259,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
 
     github_mode = args.github
     if github_mode is None:
-        github_mode = bool(__import__("os").environ.get("GITHUB_ACTIONS"))
+        github_mode = bool(os.environ.get("GITHUB_ACTIONS"))
 
     if not results:
         print(
@@ -278,8 +321,8 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     print(
-        "  Hint: Use the magic comment `legacy-model-picker-allow: <reason>` "
-        "to opt in a file for 5.5 wrappers.",
+        "  Hint: A v3 read-adapter is only allowed if its target file carries "
+        "an `@deprecated` JSDoc tag; new v3 imports are blocked.",
         file=sys.stderr,
     )
     return 1

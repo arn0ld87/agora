@@ -18,8 +18,7 @@
  *
  * Master-Prompt §6.1 (eine Komponente, eine Semantik) + §6.3 (Audit-Trail).
  */
-// legacy-model-picker-allow: 5.4 Bridge-Adapter StageLLMRoute <-> AiModelRef; obsolet nach 5.5 (useActiveModelStore) — siehe slice-5-subplan.md §5.5
-import { useLlmProvidersStore } from '@/store/llmProviders'
+import { useLlmProvidersStore } from '@/store/aiModels'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 import type { ProviderConnection } from '@/contracts/aiProviderContract'

@@ -1,16 +1,18 @@
-<!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
 /**
  * ModelPicker — wählt eine LLM-Route (Provider + Modell) per Dropdown.
  *
- * - Zeigt OptGroups je Provider an, sortiert alphabetisch nach Provider-Label.
+ * @deprecated Slice 5.5 — v4-Vorläufer-Picker (StageLLMRoute-basiert), abgelöst
+ * durch `AiModelPicker.vue` (AiModelRef/connection-basiert). Bleibt als
+ * Read-Adapter für ReportModelControls / Home / LlmProfileManager bis zu deren
+ * Migration. Keine neuen Importeure.
  * - Versteckt Provider ohne hinterlegten API-Key (Ausnahme: Ollama + Copilot,
  *   die auch ohne expliziten Key benutzbar sein können).
  * - Emit `update:modelValue` mit der gewählten ``StageLLMRoute`` oder ``null``
  *   für „nichts gewählt / nutze Default des Eltern-Kontextes".
  */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useLlmProvidersStore } from '@/store/llmProviders'
+import { useLlmProvidersStore } from '@/store/aiModels'
 import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
 
 const props = withDefaults(defineProps<{

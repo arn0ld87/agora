@@ -193,6 +193,82 @@ Lokaler Aufruf: `python3 .github/scripts/check_legacy_model_picker.py`
 „Legacy-Picker-Check").
 ---
 
+# Handover — Onboarding/Provider-Unification Slice 5.5 (final)
+
+## Stand
+
+- Datum: 2026-07-13
+- Worktree: `/private/tmp/agora-onboarding-slice-5-5`
+- Branch: `codex/onboarding-model-picker-slice-5-5`
+- Basis: `origin/main` @ `a31fe4f1` (Slice 5.4, PR #703, gemergt)
+- Slice: 5.5 — Alte Komponenten und Stores deprecaten
+
+## Entscheidung (Scope, mit Sign-off)
+
+Zwei Spec-Widersprüche vor Umsetzung geklärt und bestätigt:
+
+1. **`useRuntimeLlmOptions` ist kein Model-Picker**, sondern ein
+   Per-Run-Credential-Override (Provider + API-Key + Base-URL). Bleibt als
+   `@deprecated` Read-Adapter erhalten statt „auf AiModelPicker migriert"
+   (das hätte die Ad-hoc-Key-Eingabe entfernt).
+2. **v3-Picker als Read-Adapter deprecaten, nicht datenmodell-migrieren.**
+   `LlmProfilePicker` ist profilbasiert, `AiModelPicker` connection-basiert —
+   eine Voll-Migration der Consumer (EnvSetupModelPanel, Step4Report,
+   ReportBranchControls) ist ein eigener Slice mit Gemini-Review, nicht
+   Teil der Deprecation.
+
+## Store-Konsolidierung
+
+Neu: `frontend/src/store/aiModels.ts` — führt die drei Stores zusammen,
+Pinia-IDs (`llmProviders`/`llmProfiles`/`llmRoutingDefaults`) unverändert,
+plus Facade `useAiModelsStore()`. Alle 17 Importer auf `@/store/aiModels`
+umgestellt.
+
+### Gelöschte Dateien
+
+- `frontend/src/store/llmProviders.ts`
+- `frontend/src/store/llmProfiles.ts`
+- `frontend/src/store/llmRoutingDefaults.ts`
+
+### `@deprecated` markierte Dateien (Read-Adapter, bleiben funktional)
+
+- `frontend/src/components/ui/ModelPicker.vue` (verwaist, kein Importeur)
+- `frontend/src/components/llm/LlmProfilePicker.vue`
+- `frontend/src/components/ActiveModelBadge.vue`
+- `frontend/src/components/v4/forms/ModelPicker.vue`
+- `frontend/src/components/v4/forms/LlmProfileManager.vue`
+- `frontend/src/composables/useRuntimeLlmOptions.ts`
+
+`useAiModelRefAdapter.ts` und `useAvailableModels.ts` bleiben **aktiv** (nicht
+deprecatet): der Adapter ist Glue für die 5.4-migrierten v4-Views,
+`useAvailableModels` ist die Datenquelle des neuen `AiModelPicker`. Beide nur
+auf `@/store/aiModels` umgebogen, Marker entfernt.
+
+## Grep-CI-Check
+
+Umgestellt auf `@deprecated`-Ziel-Erkennung (ersetzt den Opt-in-Marker).
+Ein verbotener Import ist erlaubt, wenn das importierte Ziel `@deprecated`
+trägt. **Alle** `legacy-model-picker-allow`-Marker aus dem Frontend entfernt
+(vorher 20 Marker-Zeilen, jetzt 0). Check lokal grün.
+
+## Verifikation
+
+- `python3 .github/scripts/check_legacy_model_picker.py frontend/src` — clean.
+- `python3 .github/scripts/test_check_legacy_model_picker.py` — 8/8.
+- `vue-tsc --noEmit` — clean.
+- `store/__tests__/aiModels.spec.ts` — 19/19; betroffene View-/Component-Specs
+  (StepModelOverrideChip, LlmProvidersView, StepWrapperViews, HeroNewRun,
+  LlmRouting, SettingsGeneral, useAvailableModels.connection, LlmProfilePicker)
+  — 112/112 grün. Backend `test_ai_route_*` unverändert (kein Backend-Touch).
+
+## Bewusst offen (Folge-Slices)
+
+- Voll-Migration der v3-Consumer (Step2/3-Runtime-Creds, LlmProfilePicker-
+  Consumer) auf connection-basierten Picker — eigener Slice + Gemini-Review.
+- Löschen der `@deprecated` Read-Adapter, sobald alle Consumer migriert sind.
+- 5.6 final: Playwright-E2E (`.skip` entfernen).
+---
+
 # Handover — Onboarding/Provider-Unification Slice 5.6-Prep
 
 ## Stand

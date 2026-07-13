@@ -1,4 +1,3 @@
-// legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes)
 /**
  * LlmProfilePicker — Vitest-Spec (LPP-01).
  *
@@ -14,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { createI18n } from 'vue-i18n'
-import { useLlmProfilesStore } from '../../store/llmProfiles'
+import { useLlmProfilesStore } from '../../store/aiModels'
 
 // Mock fetchLlmProfiles so onMounted fetch() never hits the network.
 vi.mock('../../api/llmProfiles', () => ({

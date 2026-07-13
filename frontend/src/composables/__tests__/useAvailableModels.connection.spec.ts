@@ -8,7 +8,7 @@ const store = vi.hoisted(() => ({
   fetchConnectionModels: vi.fn(),
 }))
 
-vi.mock('@/store/llmProviders', () => ({
+vi.mock('@/store/aiModels', () => ({
   useLlmProvidersStore: () => store,
 }))
 

@@ -69,12 +69,12 @@ MUSS `scripts/pre-push-gate.sh` in derselben PR erweitert werden —
 sonst driftet die Pipeline. Reihenfolge: Gate zuerst in CI einführen
 (sofort wirksam), dann im selben Release-Cycle lokal spiegeln.
 
-## Legacy-Picker-Check (Sub-Slice 5.5 Grep-Prep)
+## Legacy-Picker-Check (Sub-Slice 5.5)
 
 CI-Gate, das verhindert, dass v3-Picker-Stellen
 (`ModelPicker.vue`, `LlmProfilePicker.vue`, `ActiveModelBadge.vue`,
 `@/store/llmProviders|llmProfiles|llmRoutingDefaults`,
-`@/composables/useRuntimeLlmOptions`) nach 5.5 zurück in den Code
+`@/composables/useRuntimeLlmOptions`) nach 5.5 in **neuen** Code
 kommen. Spiegel-Workflow: `.github/workflows/check-legacy-model-picker.yml`.
 
 Lokal ausführen:
@@ -87,16 +87,20 @@ python3 .github/scripts/check_legacy_model_picker.py frontend/src
 
 Exit-Codes: `0` clean · `1` Treffer · `2` Usage-Fehler.
 
-**Opt-in für 5.5-Wrapper-Dateien:** Wenn eine Datei den v3-Pfad
-weiterhin braucht (z. B. ein Read-Adapter-Shim), trägt sie genau
-einen Magic-Comment in der **ersten Zeile**:
+**Read-Adapter-Freigabe via `@deprecated` (seit 5.5):** Der
+Opt-in-Marker `legacy-model-picker-allow` ist entfallen. Ein verbotener
+Import ist jetzt genau dann erlaubt, wenn das **importierte Ziel** selbst
+ein `@deprecated`-JSDoc-Tag trägt — also ein sanktionierter Read-Adapter
+im Deprecation-/Read-only-Fenster ist. So dürfen die verbleibenden
+v3-Consumer (Step-Views, `WorkspaceHeader`) die deprecateten
+Picker/Composables weiter lesen, ohne pro-Datei-Marker. Jeder *neu*
+eingeführte, nicht-deprecatete v3-Pfad wird hart blockiert.
 
-- `.ts` / `.spec.ts`: `// legacy-model-picker-allow: <reason>`
-- `.vue`: `<!-- legacy-model-picker-allow: <reason -->`
-
-Reason ist Pflicht (Audit-Spur). Leere Marker werden zurückgewiesen.
-Subpfade wie `@/store/llmProviders/index` sind auch ohne Marker
-erlaubt — der Check matcht nur den **genauen** Bare-Specifier.
+Die Alt-Stores (`llmProviders`/`llmProfiles`/`llmRoutingDefaults`)
+existieren nach 5.5 nicht mehr (konsolidiert in `@/store/aiModels`); ihr
+Import resolved auf kein Ziel → keine `@deprecated`-Freigabe möglich →
+Verstoß. Subpfade wie `@/store/llmProviders/index` matcht der Check ohnehin
+nicht (nur der **genaue** Bare-Specifier ist verboten).
 
 Unit-Tests für den Check selbst:
 

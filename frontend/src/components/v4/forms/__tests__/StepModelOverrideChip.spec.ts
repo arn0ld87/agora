@@ -90,11 +90,8 @@ const adapterMock = {
   })),
 }
 
-vi.mock('@/store/llmProviders', () => ({
+vi.mock('@/store/aiModels', () => ({
   useLlmProvidersStore: () => llmProvidersMock,
-}))
-
-vi.mock('@/store/llmRoutingDefaults', () => ({
   useLlmRoutingDefaultsStore: () => llmRoutingDefaultsMock,
 }))
 
