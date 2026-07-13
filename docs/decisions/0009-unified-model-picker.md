@@ -1,8 +1,8 @@
 # ADR-0009: Einheitlicher Model-Picker und Routing-Hierarchie
 
-- Status: Proposed
-- Datum: 2026-07-13
-- Vorgeschlagener Branch: `codex/onboarding-model-picker`
+- Status: **Accepted**
+- Datum: 2026-07-13 (Proposed + Accepted via User-Sign-off)
+- Branch: `codex/onboarding-model-picker`
 - Bezug: Master-Prompt §5.3, §5.4, §6.1-6.3
 - Sub-Plan: `docs/epics/onboarding-provider-unification/slice-5-subplan.md`
 
@@ -46,7 +46,7 @@ tatsächlich genutzten Auswahl, kein einheitlicher Audit-Trail.
 Siehe `docs/epics/onboarding-provider-unification/slice-5-subplan.md` für
 verbindliche Sub-Slice-Reihenfolge und Akzeptanzkriterien.
 
-- **5.0 Discovery + Spec-Doc** (dieser PR): Sub-Plan + ADR Proposed.
+- **5.0 Discovery + Spec-Doc**: Sub-Plan + ADR Accepted (PR #696).
 - **5.1 `AiModelPicker.vue` isoliert:** Mock-Daten, Combobox-Pattern,
   ARIA, Tastatur, keine Live-API.
 - **5.2 Discovery-getriebene Daten:** Anbindung an `ProviderConnectionStore`
