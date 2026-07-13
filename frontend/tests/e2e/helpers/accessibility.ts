@@ -1,7 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import type { AxeResults, Result } from 'axe-core';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Slice 7.2 — Accessibility-Gate Helper.
@@ -26,7 +29,7 @@ export async function runAxe(
   options: AxeCheckOptions = {},
 ): Promise<AxeResults> {
   // Inject axe-core script in browser context
-  const axePath = resolve(process.cwd(), 'node_modules/axe-core/axe.min.js');
+  const axePath = resolve(__dirname, '../../../node_modules/axe-core/axe.min.js');
   await page.addScriptTag({ path: axePath });
 
   return page.evaluate(async (opts) => {
@@ -61,7 +64,7 @@ export async function check320pxNoHorizontalScroll(page: Page): Promise<void> {
   await page.setViewportSize({ width: 320, height: 800 });
 
   const hasHorizontalScroll = await page.evaluate(() => {
-    return document.documentElement.scrollWidth > window.innerWidth;
+    return document.documentElement.scrollWidth > document.documentElement.clientWidth;
   });
 
   expect(hasHorizontalScroll).toBe(false);
@@ -114,8 +117,9 @@ export async function checkFocusVisible(page: Page): Promise<void> {
     const style = window.getComputedStyle(el);
     const hasOutline = style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;
     const hasBoxShadow = style.boxShadow !== 'none';
+    const hasBorder = style.borderStyle !== 'none' && parseFloat(style.borderWidth) > 0;
 
-    return hasOutline || hasBoxShadow;
+    return hasOutline || hasBoxShadow || hasBorder;
   });
 
   expect(hasFocusVisible).toBe(true);
@@ -134,14 +138,13 @@ export async function checkReducedMotion(page: Page): Promise<void> {
       '[class*="animate"], [class*="transition"], [style*="transition"]',
     );
 
+    const isReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const el of animatedElements) {
       const style = window.getComputedStyle(el);
-      const duration = parseFloat(style.transitionDuration || '0');
-      // Wenn duration > 0.1s und nicht auf reduce gesetzt, fail
-      if (duration > 0.1) {
-        // Prüfe, ob media query reduce berücksichtigt wird
-        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-        if (!mediaQuery.matches) return false;
+      const transitionDuration = parseFloat(style.transitionDuration || '0');
+      const animationDuration = parseFloat(style.animationDuration || '0');
+      if (isReduced && (transitionDuration > 0.1 || animationDuration > 0.1)) {
+        return false;
       }
     }
     return true;

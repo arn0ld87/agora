@@ -78,7 +78,7 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await page.getByTestId('run-id-input').fill('run_e2e_accessibility');
 
       // Warte bis Picker gerendert ist
-      await page.waitForSelector('[data-testid="ai-model-picker"]', { timeout: 5000 });
+      await page.getByTestId('ai-model-picker').waitFor({ timeout: 5000 });
 
       // axe-core
       const axeResults = await runAxe(page);
