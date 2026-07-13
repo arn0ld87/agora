@@ -48,7 +48,7 @@ Ohne erfüllte Bedingungen gilt: sofort fixen, kein Register-Eintrag.
 
 | CVE | Paket | Schweregrad | Fix verfügbar? | Owner | Frist | Status | Issue | Upstream-Release-Watch |
 |---|---|---|---|---|---|---|---|---|
-| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-09-28 | open | [#661](https://github.com/arn0ld87/agora/issues/661) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
+| PYSEC-2026-597 | `nltk` | unbekannt | Nein (kein Upstream-Fix released) | NLTK | 2026-09-28 | open (konsolidiert in #672) | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 | GHSA-p4gq-832x-fm9v | `nltk` | High | Nein (kein Upstream-Fix in 3.9.x) | NLTK | 2026-09-28 | open | [#672](https://github.com/arn0ld87/agora/issues/672) | [nltk/nltk/releases](https://github.com/nltk/nltk/releases) |
 
 ## Trivy Container Scan Baseline (Hardstop 2026-08-30)
