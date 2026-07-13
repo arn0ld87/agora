@@ -177,6 +177,88 @@ def test_run_with_failed_re_embedder_result_keeps_old_index_active(
     assert config.status == "probed", "alter Index bleibt aktiv"
 
 
+def test_run_passes_configuration_and_persists_checkpoints(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    _seed_probed_configuration(store)
+    seen: dict[str, object] = {}
+
+    class _Checkpointing:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            progress = args[3]
+            seen["configuration_id"] = kwargs["configuration"].id
+            kwargs["checkpoint"](
+                progress.model_copy(
+                    update={
+                        "total": 4,
+                        "processed": 2,
+                        "last_processed_id": "uuid-001",
+                    }
+                )
+            )
+            return "completed"
+
+    service = EmbeddingMigrationService(
+        store=store, re_embedder=_Checkpointing(), now=lambda: fixed_now
+    )
+    job = service.start("emb-1")
+    final = service.run(job.id)
+
+    assert seen["configuration_id"] == "emb-1"
+    assert final.status == "completed"
+    # Der Checkpoint wurde persistiert und ueberlebt bis in den Endzustand.
+    assert final.progress.total == 4
+    assert final.progress.processed == 2
+    assert final.progress.last_processed_id == "uuid-001"
+
+
+def test_run_resumes_job_stuck_in_running(
+    store: EmbeddingConfigurationStore, fixed_now: datetime
+) -> None:
+    """Crash-Recovery: ein Job in 'running' darf erneut ausgefuehrt werden.
+
+    Der Re-Embedder bekommt dabei den zuletzt persistierten Progress
+    inklusive ``last_processed_id`` und setzt dort fort.
+    """
+    _seed_probed_configuration(store)
+    received: dict[str, object] = {}
+
+    class _Recorder:
+        def run(self, *args, **kwargs) -> EmbeddingMigrationStatus:
+            received["last_processed_id"] = args[3].last_processed_id
+            return "completed"
+
+    service = EmbeddingMigrationService(
+        store=store, re_embedder=_Recorder(), now=lambda: fixed_now
+    )
+    job = service.start("emb-1")
+
+    # Simulierter Crash: Job haengt in 'running' mit Checkpoint-Progress.
+    running = service.get_job(job.id)
+    assert running is not None
+    stuck = running.model_copy(
+        update={
+            "status": "running",
+            "progress": running.progress.model_copy(
+                update={
+                    "total": 10,
+                    "processed": 6,
+                    "last_processed_id": "uuid-005",
+                    "started_at": fixed_now,
+                }
+            ),
+        }
+    )
+    service._save_job(stuck)  # noqa: SLF001 — Testaufbau fuer Crash-Zustand
+
+    final = service.run(job.id)
+
+    assert final.status == "completed"
+    assert received["last_processed_id"] == "uuid-005"
+    # started_at bleibt der urspruengliche Wert, kein Neustart der Uhr.
+    assert final.progress.started_at == fixed_now
+
+
 # ----------------------------------------------------------------------
 # cancel
 # ----------------------------------------------------------------------

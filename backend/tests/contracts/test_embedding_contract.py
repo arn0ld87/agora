@@ -458,6 +458,29 @@ def test_embedding_migration_progress_accepts_running_state_with_no_finish() -> 
     assert progress.finished_at is None
 
 
+def test_embedding_migration_progress_last_processed_id_defaults_to_none() -> None:
+    """Slice 4.3.4: ``last_processed_id`` ist der Resume-Cursor der
+    Re-Embedding-Engine. Default None (frischer Job); persistierte
+    Alt-Jobs ohne das Feld bleiben ladbar.
+    """
+    progress = EmbeddingMigrationProgress(total=0, processed=0, failed=0)
+    assert progress.last_processed_id is None
+
+    legacy_payload = '{"total": 5, "processed": 5, "failed": 0, "started_at": null, "finished_at": null}'
+    parsed = EmbeddingMigrationProgress.model_validate_json(legacy_payload)
+    assert parsed.last_processed_id is None
+
+
+def test_embedding_migration_progress_last_processed_id_roundtrip() -> None:
+    progress = EmbeddingMigrationProgress(
+        total=10, processed=4, failed=1, last_processed_id="uuid-003"
+    )
+    restored = EmbeddingMigrationProgress.model_validate_json(
+        progress.model_dump_json()
+    )
+    assert restored.last_processed_id == "uuid-003"
+
+
 def test_embedding_provider_kinds_helper_is_derived_from_literal() -> None:
     """Gemini-Finding (MEDIUM): das ``_EMBEDDING_PROVIDER_KINDS``-Set muss
     dynamisch aus dem ``EmbeddingProviderKind``-Literal abgeleitet sein,

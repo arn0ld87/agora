@@ -1,214 +1,155 @@
-# Handover — Onboarding/Provider-Unification Slice 4.3.1
+# Handover — Onboarding/Provider-Unification Slice 4.3.4
 
 ## Stand
 
-- Datum: 2026-07-12
-- Worktree: `/private/tmp/agora-onboarding-slice-4-3`
-- Branch: `codex/onboarding-embedding-migration` (Basis: `main` @
-  `bcc50ba`, PR #688 mit Slice 4.2 in main gemergt)
-- Slice: 4.3.1 — Migrations-Service + Ollama-Download (Backend)
-  (Frontend-Store + View + Onboarding-Anbindung kommt als
-  Sub-Slice 4.3.2 in einer Folge-Session)
-- Arbeitsstand: implementiert, alle Gates grün, Commit/PR in Arbeit
-- Teststatus: Backend **3222 passed / 9 skipped / 7 deselected** (Exit 0);
-  Contracts 363 passed (unverändert); Frontend 154 Testdateien / 1228
-  Tests grün; ruff grün; mypy 0 Fehler; Schema-Dump `--check` grün für
-  46 Schemas (kein struktureller Vertrags-Drift; nur ein neuer
-  Sentinel-Wert in `EmbeddingMigrationJob`).
-- context-mode: nicht in dieser Session aktiv.
-- code-review-graph: CLI 2.3.6 via `uvx`; Worktree-Graph frisch
-  gebaut.
+- Datum: 2026-07-13
+- Worktree: `/private/tmp/agora-onboarding-slice-4-3-4`
+- Branch: `codex/embedding-neo4j-reembedder` (Basis: `main` @ `dcfba4a`,
+  PR #693 gemergt)
+- Slice: 4.3.4 — Echte Neo4j-Re-Embedding-Engine (`Neo4jReEmbedder`
+  ersetzt `_NoopReEmbedder`; Read-Loop + Checkpoint + Resume)
+- Arbeitsstand: implementiert, `bash scripts/pre-push-gate.sh` komplett
+  grün (Backend + Frontend + Schemas + STATUS-Sync)
+- Teststatus: Slice-Tests 90 passed (7 neue Engine-Tests, 2 neue
+  Service-Tests, 2 neue Contract-Tests, 2 neue Frontend-Spec-Tests);
+  Zahlen-SSoT in `docs/STATUS.md` (via `scripts/sync-status.sh`
+  regeneriert, 3250 collected)
+- context-mode: aktiv in dieser Session (ctx_batch_execute für Reads)
+- code-review-graph: CLI in dieser Session nicht installiert;
+  Discovery lief über context-mode-Batches
 
 ## Dokumentations-Sync
 
-- README.md: **geprüft, nicht betroffen** — Backend-only.
-- AGENTS.md: **geprüft, nicht betroffen** — keine neuen allgemeinen
-  Regeln.
-- CLAUDE.md: **geprüft, nicht betroffen**.
-- PLAN.md: **aktualisiert** — Slice 4.1/4.2 als gemergt markiert,
-  Slice 4.3 in 4.3.1 (Backend, implementiert) + 4.3.2 (Frontend,
-  offen) aufgeteilt.
-- docs/STATUS.md: **aktualisiert via `scripts/sync-status.sh`**
-  (Backend-Test-Count 3187 → 3222, +35).
-- CHANGELOG.md: **aktualisiert** — neuer Abschnitt
-  `### Added (embedding-migration — 2026-07-12)`.
-- docs/decisions/0007: **keine Aenderung** — ADR-Status bleibt
-  Accepted (Slice 4.3 setzt die in der ADR geforderten Garantien
-  strukturell um; der Re-Embedding-Loop selbst kommt mit Neo4j-
-  Anbindung in einem Folge-Slice).
-- Epic-HANDOVER.md: **aktualisiert** — dieser Stand.
-- docs/tooling/agent-tools.md: **geprüft, nicht betroffen**.
+- README.md: geprüft, nicht betroffen (Operator-Doku der Migration
+  bleibt gültig; Engine ist Implementierungsdetail hinter derselben API)
+- AGENTS.md: geprüft, nicht betroffen
+- CLAUDE.md: geprüft, nicht betroffen
+- PLAN.md: aktualisiert (Abschnitt 12, Slice-4-Status)
+- docs/STATUS.md: aktualisiert (sync-status.sh)
+- CHANGELOG.md: aktualisiert (Added embedding-reembedder 2026-07-13)
+- docs/tooling/agent-tools.md: geprüft, nicht betroffen
 
-## Fertig (Sub-Slice 4.3.1, Backend)
+## Fertig (Sub-Slice 4.3.4)
 
-- **`EmbeddingMigrationService`**
-  (`backend/app/services/embedding_migration.py`):
-  vollstaendiger Lifecycle mit Statusuebergaengen
-  `pending → running → validating → completed | rolled_back | failed`,
-  atomarer Switch nach erfolgreicher Validierung, idempotenter
-  `start()` (doppelter Job fuer dieselbe Konfiguration wirft
-  `ValueError`), explizites `cancel()` setzt auf `rolled_back` statt
-  `failed` (Operator-Entscheidung), `ReEmbedder`-Protocol fuer
-  injizierbaren Re-Embedding-Loop (Tests ohne Neo4j), No-Op-Default-
-  Re-Embedder, Job-Persistenz als flache JSON-Dateien unter
-  `AGORA_DATA_DIR/embedding_migration_<job_id>.json`.
-- **`OllamaPullService`**
-  (`backend/app/services/embedding_ollama_pull.py`): laedt ein
-  Embedding-Modell von `POST {base_url}/api/pull` (NDJSON-Stream)
-  und liefert einen strukturierten `OllamaPullReport`. Sicherheit:
-  strikte Model-Name-Validierung (ASCII a-z, A-Z, 0-9, '-', '_',
-  '.', ':', 1-100 Zeichen — schliesst Shell-Injection aus), keine
-  Shell-Aufrufe (immer strukturierte JSON-Requests via
-  `requests.post`), Loopback/Ollama-Cloud-Einschraenkung, 10-Minuten-
-  Default-Timeout, 60-Sekunden-Stream-Read-Timeout,
-  `resolve_ollama_base_url()`-Helper mit Loopback/Ollama-Cloud-
-  Filterung.
-- **Migrations-API** unter `/api/llm/embedding/migrations`:
-  - `POST /` startet eine neue Migration
-  - `GET /` listet alle Jobs (optional `?configuration_id=...`)
-  - `GET /<job_id>` liefert einen einzelnen Job
-  - `POST /<job_id>/run` zieht den Lifecycle durch
-  - `POST /<job_id>/cancel` bricht ab
-- **Ollama-Download-API** unter `/api/llm/embedding/ollama/pull`:
-  synchroner Endpoint mit strukturiertem JSON-Report, kein
-  Server-Sent-Event-Stream (UI-Setup-Wizard braucht das Ergebnis
-  atomar). 502 `upstream_error` bei Ollama-Fehlern, 404 bei
-  unbekannter Connection, 400 bei ungueltigem Model.
-- **`EmbeddingMigrationJob`-Vertrag erweitert**:
-  `source_index_version=0` ist jetzt der Cold-Start-Sentinel fuer
-  Migrationen ohne Quell-Index. Vertrag stellt sicher, dass
-  `source=0` nur mit `target=1` kombiniert wird und `source < target`
-  immer gilt (sonst `ValueError`).
-- **35 neue Tests**:
-  - 12 × Migrations-Service (Start, Run, Cancel, Validation,
-    Lifecycle, Idempotenz)
-  - 23 × Ollama-Download (Model-Name-Validierung 6+10 parametrisiert,
-    Base-URL-Validierung, Stream-Parsing, Auth-Fehler, Bearer-Header,
-    Empty-Stream-Handling, Default-Timeout-Konfiguration)
+- `backend/app/services/embedding_reembedder.py` (neu):
+  `Neo4jReEmbedder` mit
+  - `CREATE VECTOR INDEX <entity_embedding_vN> IF NOT EXISTS` auf der
+    versionierten Property (niemals DROP — ADR-0007), Identifier-Guard
+    gegen Cypher-Injection in der DDL,
+  - Count + batchweisem Read-Loop über `(n:Entity)` sortiert nach
+    `uuid` mit Cursor `uuid > $cursor`,
+  - Embedding-Text = `coalesce(n.summary, name + ' (' + entity_type + ')')`
+    (identisch zum Ingest-Pfad `ingestion_pipeline`),
+  - Dimensionsprüfung pro Vektor; Mismatch → Knoten wird nicht
+    geschrieben, zählt als `failed`, Endstatus `failed` (kein Switch),
+  - Schreiben via `db.create.setNodeVectorProperty` (UNWIND-Batch),
+  - Checkpoint-Aufruf nach jedem Batch.
+- `backend/app/contracts/embedding_contract.py`:
+  `EmbeddingMigrationProgress.last_processed_id: str | None = None`
+  (Resume-Cursor; Alt-Payloads ohne Feld bleiben ladbar).
+- `backend/app/services/embedding_migration.py`:
+  - `ReEmbedder`-Protocol erweitert um `configuration` +
+    `checkpoint`-Callback; der Service persistiert jeden Checkpoint
+    (`_persist_checkpoint` → `_save_job`),
+  - `run()` akzeptiert jetzt auch Status `running` = Crash-Resume
+    (`started_at` bleibt erhalten),
+  - `failed`-Pfade laden den Job vor dem Endzustand neu, damit
+    Checkpoint-Progress nicht verloren geht.
+- `backend/app/api/embedding_migrations.py`: `_service()` verdrahtet
+  die echte Engine — Driver lazy via `GraphDatabase.driver(Config.NEO4J_*)`
+  (eigener Driver, nicht der App-Pool), Embedder aus Konfiguration +
+  `ProviderConnectionStore` + Secret-Store (analog Probe-Pfad).
+  Gemini (`provider_kind="google"`) wird mit klarer Fehlermeldung
+  abgelehnt (anderes URL-Schema als `EmbeddingService`).
+- Frontend: `EmbeddingMigrationProgressSchema` um
+  `last_processed_id: z.string().nullable().default(null)` ergänzt
+  + 2 Spec-Tests.
+- Schemas: `embedding-migration-job(.response)` regeneriert.
+- Tests: `backend/tests/services/test_embedding_reembedder.py` (neu, 7),
+  `test_embedding_migration.py` (+2: Checkpoint-Persistenz, Resume),
+  `test_embedding_contract.py` (+2: Default/Roundtrip).
 
-## Noch offen (Sub-Slice 4.3.2, Frontend)
+## Noch offen (bewusst, mit Begründung)
 
-- **Frontend-Store** fuer Embedding-Konfigurationen (Pinia, analog
-  zu `LlmProvidersView` / `providerConnections.ts`)
-- **Frontend-View** mit Status-Badges, Probe-Button, Activate-Button,
-  Migrations-Progress-Anzeige, Ollama-Download-Wizard
-- **Zod-Spiegel** der Embedding-Verträge (analog zu
-  `aiProviderContract.ts`)
-- **Onboarding-Schritt `embeddings` an die echte Konfiguration
-  anbinden** (analog zur Slice-3-Anbindung der Provider-Connections
-  im `LlmProvidersView`)
-- **Echte Neo4j-Re-Embedding-Engine**: konkrete `ReEmbedder`-
-  Implementierung, die betroffene Knoten liest, neue Embeddings mit
-  dem konfigurierten Provider erzeugt und in die neue Property
-  schreibt. Aktuell ist die Re-Embedding-Schleife ein No-Op-Stub;
-  der Slice-4.3-Service garantiert das Lifecycle, der Slice-4.3.2
-  Service liefert die echte Daten-Mutation.
+- **`RELATION.fact_embedding`-Re-Embed**: Der versionierte
+  Index-Vertrag (`EmbeddingIndexVersion`) verwaltet nur
+  `entity_embedding_vN`. Facts brauchen eine eigene Index-Versionierung
+  → eigener Slice.
+- **Search-Pfad nutzt weiter den unversionierten `entity_embedding`-Index**
+  (`search_service.py` hardcodet `entity_embedding`/`fact_embedding`).
+  Der Umschwenk der Query-Seite auf `entity_embedding_vN` ist der
+  logische Folge-Sub-Slice nach dem ersten echten Re-Embed.
+- **Gemini-Batch-Embedding**: `EmbeddingService` spricht nur
+  Ollama-/OpenAI-kompatible Endpunkte. Gemini-Embed-Batch wäre ein
+  eigener Adapter — bis dahin ehrliche Ablehnung.
+- **`scope="project"`-Filter**: Zuordnung Projekt → Graph ist nicht
+  Teil des Embedding-Vertrags; Engine läuft global.
+- **Migration läuft synchron im Request** (`POST /migrations/<id>/run`):
+  bei großen Graphen lange Requests. Resume macht das erträglich;
+  Job-Queue/SSE-Streaming bleibt der bekannte offene Punkt aus 4.3.1.
+- **i18n-Keys** für die Embedding-View (`embedding.title` etc.) —
+  Mini-Folge-Aufgabe, nicht Teil dieses Slices.
 
 ## Entscheidungen
 
-- **Re-Embedder als Protocol injizierbar**: Tests laufen ohne Neo4j
-  und ohne echte Embedding-Backends. Die echte Implementierung
-  kommt mit Neo4j-Anbindung in einer Folge-Session; der Service
-  bleibt davon unberuehrt.
-- **`source_index_version=0` als Cold-Start-Sentinel**: die
-  ursprueglich strengere Validierung (``source != target``) wurde
-  gelockert, weil eine Erst-Migration logischerweise keinen
-  Quell-Index hat. Sentinel 0 ist sprechend und kann ohne
-  zusaetzliche Flags genutzt werden.
-- **Kein SSE fuer den Ollama-Download**: der UI-Setup-Wizard braucht
-  das Ergebnis atomar, nicht als Stream. Wenn eine Frontend-Streaming-
-  UX noetig wird, kommt sie in Sub-Slice 4.3.2 mit Server-Sent-
-  Events ueber einen separaten Endpoint.
-- **Strikte Model-Name-Validierung**: ASCII-Zeichen + Bindestrich +
-  Unterstrich + Doppelpunkt + Punkt, 1-100 Zeichen. Schliesst
-  Shell-Injection auf der Modell-Bezeichnungs-Ebene aus, ohne
-  die gaengigen Ollama-Naming-Conventions
-  (``name:tag``, ``name.variant``) zu beschraenken.
-- **Job-Persistenz als flache JSON-Dateien**: ein Job pro Datei
-  unter `AGORA_DATA_DIR/embedding_migration_<id>.json`. Einfacher
-  als eine zweite Collection im Embedding-Configuration-Store;
-  unkompliziert fuer Folge-Slices, die z. B. nach ``completed``
-  aufraeumen koennen.
-- **Migrations-Service fuehrt KEIN `DROP INDEX` aus**: ADR-0007
-  verbietet das bis zur expliziten Operator-Bestaetigung. Der
-  `completed`-Pfad macht nur den Konfigurations-Switch und setzt
-  den alten Index auf `superseded` (lesbar, nicht aktiv).
-  Neo4j-Index-Switch (``CALL db.index.setProperty`` o. ae.)
-  ist ein eigener Schritt, der in einem Folge-Slice nach
-  Live-Tests abgesichert wird.
+- Resume über `uuid`-Cursor (`last_processed_id`) statt Offset:
+  stabil gegen parallel wachsende Graphen, kein Skip/Doppel-Embed.
+- Job-Status `running` gilt bei `run()` als Resume (Crash-Recovery);
+  ein Operator-Abbruch bleibt `rolled_back` und ist nicht resumebar.
+- `failed > 0` ⇒ Endstatus `failed`, kein Index-Switch: ein
+  unvollständig befüllter Index darf nie aktiv werden (ADR-0007
+  Dimensionssicherheit).
+- Eigener lazy Neo4j-Driver pro Migrationslauf statt App-Pool:
+  langlaufender Operator-Vorgang soll den Flask-Pool nicht blockieren.
+- Checkpoint-Persistenz macht der Service (nicht die Engine), damit
+  die Engine ohne Kenntnis des Job-Speicherformats testbar bleibt.
 
 ## Bekannte Risiken
 
-- **Re-Embedder ist ein No-Op-Stub**: Migrationen laufen
-  "durch" (Lifecycle completed), aber es werden null Knoten
-  re-embedded. Solange die echte Neo4j-Implementierung fehlt,
-  ist der Migrations-Service ehrlich gesagt ein
-  "Switch-Operator": er macht nur den Konfigurations-Switch
-  und Index-Status-Wechsel, nicht den eigentlichen Re-Embed.
-  Bis der echte Loop steht, ist ein Operator-Aufruf von
-  `POST /migrations/<id>/run` ein No-Op-Switch. Mitigation:
-  Handover dokumentiert das prominent; Frontend sollte im
-  Migrations-Wizard eine sichtbare Warnung zeigen, bis der
-  echte Loop steht.
-- **Ollama-Download-Endpoint ist synchron**: bei grossen
-  Modellen kann der HTTP-Request 10 Minuten dauern und blockiert
-  einen Worker. Mitigation: in Produktion hinter einem
-  Job-Queue-Endpoint (geplant fuer 4.3.2), oder mit
-  Async-Worker-Pattern.
-- **`request.get_json(silent=True)`**: schluckt JSON-Parse-Fehler
-  still; das ist Absicht (der Body-Validator fängt das mit
-  `ValueError` ab und liefert 400). Aber Endpunkt-Aufrufer mit
-  kaputten JSON-Body bekommen 400, nicht 415 — falls das
-  jemals relevant wird, muss der Endpunkt auf
-  `silent=False` umgestellt und `BadRequest` gefangen werden.
+- Der neue versionierte Index wird von der Suche noch nicht abgefragt
+  (siehe „Noch offen"). Nach einem Modellwechsel mit anderer Dimension
+  liefert die Suche weiterhin Ergebnisse aus dem alten Index — der
+  Operator sieht den Fortschritt nur im Migrations-Job.
+- `EmbeddingService.embed_batch` cached in-memory pro Instanz
+  (`_cache_max_size` 2000) — bei sehr großen Graphen unkritisch,
+  aber erwähnt.
+- Entities ohne `uuid`-Property (sehr alte Bestandsgraphen) werden
+  bewusst übersprungen (`WHERE n.uuid IS NOT NULL`) und tauchen nicht
+  in `total` auf.
 
 ## Geänderte Verträge und Migrationen
 
-- **`EmbeddingMigrationJob.source_index_version`** darf jetzt
-  `0` sein (Sentinel fuer Cold-Start). Vertrag: `Field(ge=0)`
-  statt `Field(ge=1)`. Service: `start()` setzt
-  `source_index_version=0` wenn `next_version == 1`.
-- **Keine JSON-Schema-Drift**: das OpenAPI-Schema aendert sich
-  nur in der Minimum-Constraint, was die generierten Schemas
-  nicht beruehrt (Schema-Drift-Check ist 46/46 gruen).
-- **Keine Datenmigration** noetig — die Job-Dateien werden
-  lazy angelegt, wenn der erste Job gestartet wird.
+- `EmbeddingMigrationProgress` + `last_processed_id` (additiv,
+  Default `None`; Schema-Dump + Zod-Spiegel synchron; Alt-Job-Dateien
+  bleiben ladbar).
+- Keine Datenbank-Migration; die Engine legt nur additiv
+  `entity_embedding_vN`-Indizes und `embedding_vN`-Properties an.
 
 ## Nächste exakt ausführbare Schritte
 
-1. Atomarer Commit auf `codex/onboarding-embedding-migration`,
-   Branch pushen, PR gegen `main` eroeffnen; Gemini-Findings
-   sichten, erst danach mergen.
-2. Nach Merge: `uvx --from 'code-review-graph==2.3.6'
-   code-review-graph build` auf `main` + Delta pruefen.
-3. Sub-Slice 4.3.2: Frontend-Store, View, Zod-Spiegel,
-   Onboarding-Anbindung in einer Folge-Session.
-4. Folge-Slice: echte Neo4j-Re-Embedding-Engine
-   (`ReEmbedder`-Implementierung mit Neo4j-Read-Loop + Embedding-
-   Service-Cache).
+1. PR gegen `main` eröffnen, 90 s warten, Gemini-Findings sichten,
+   erst dann mergen.
+2. Nach Merge: Codegraph auf `main` neu bauen (`uvx --from
+   'code-review-graph==2.3.6' code-review-graph build`).
+3. Slice 5 (gemeinsamer Model-Picker, Discovery-getrieben) beginnen;
+   Search-Pfad-Umschwenk auf versionierte Indizes bleibt als
+   dokumentierter Folge-Sub-Slice.
 
 ## Relevante Dateien
 
+- `backend/app/services/embedding_reembedder.py`
 - `backend/app/services/embedding_migration.py`
-- `backend/app/services/embedding_ollama_pull.py`
+- `backend/app/contracts/embedding_contract.py`
 - `backend/app/api/embedding_migrations.py`
-- `backend/app/api/__init__.py` (Import-Update)
-- `backend/app/contracts/embedding_contract.py` (Sentinel-Erweiterung)
-- `backend/tests/services/test_embedding_migration.py`
-- `backend/tests/services/test_embedding_ollama_pull.py`
-- `docs/epics/onboarding-provider-unification/04-implementation-plan.md`
-- `docs/decisions/0007-embedding-configuration-and-index-migration.md`
+- `frontend/src/contracts/embeddingContract.ts`
+- `backend/tests/services/test_embedding_reembedder.py`
 
 ## Befehle zur Verifikation
 
 ```bash
-cd backend && uv run pytest tests/services/test_embedding_migration.py \
-  tests/services/test_embedding_ollama_pull.py -q
-cd backend && uv run python -m app.contracts.dump_schemas --check
-cd backend && uv run ruff check app/ tests/
-cd backend && uv run mypy app
-cd backend && uv run pytest -q
-cd frontend && bun run test
-bash scripts/sync-status.sh --check
-uvx --from 'code-review-graph==2.3.6' code-review-graph status --repo .
+cd /private/tmp/agora-onboarding-slice-4-3-4
+bash scripts/pre-push-gate.sh
+cd backend && uv run pytest tests/services/test_embedding_reembedder.py \
+  tests/services/test_embedding_migration.py \
+  tests/contracts/test_embedding_contract.py -q
 ```

@@ -5,11 +5,12 @@ Orchestriert den Re-Embedding-Lifecycle gemaess
 ``docs/epics/onboarding-provider-unification/06-migration-plan.md``.
 
 Der eigentliche Re-Embedding-Loop (Neo4j-Query, Embedding-Service-Aufruf,
-Schreiben der neuen Property) ist bewusst NICHT hier implementiert. Statt
-dessen erwartet der Service einen injizierten ``ReEmbedder``-Callable,
-damit Tests ohne Neo4j und ohne echte Embedding-Backends laufen koennen.
-Die echte Re-Embedding-Engine wird in einem Folge-Slice ergaenzt, sobald
-Neo4j-Read-Loop + Embedding-Service-Cache aufeinander abgestimmt sind.
+Schreiben der neuen Property) lebt in
+``app.services.embedding_reembedder.Neo4jReEmbedder`` (Slice 4.3.4) und
+wird als ``ReEmbedder`` injiziert, damit Tests ohne Neo4j und ohne echte
+Embedding-Backends laufen koennen. Der Default bleibt der No-Op-Stub —
+die API-Schicht (``app.api.embedding_migrations``) verdrahtet die echte
+Engine.
 
 Was der Service garantiert (Slice 4.3):
 
@@ -57,12 +58,15 @@ from app.services.embedding_configuration_store import EmbeddingConfigurationSto
 class ReEmbedder(Protocol):
     """Schnittstelle fuer den eigentlichen Re-Embedding-Loop.
 
-    Eine konkrete Implementierung liest die betroffenen Neo4j-Knoten,
-    erzeugt neue Embeddings mit dem konfigurierten Provider und
-    schreibt sie in die neue Property. Der Service ruft
-    ``run(target_index_name)`` auf; die Implementierung aktualisiert
-    den uebergebenen ``EmbeddingMigrationProgress`` nach jedem Batch
-    und gibt den Endstatus zurueck (``completed`` / ``failed``).
+    Eine konkrete Implementierung (``Neo4jReEmbedder``) liest die
+    betroffenen Neo4j-Knoten, erzeugt neue Embeddings mit dem in
+    ``configuration`` beschriebenen Provider und schreibt sie in die
+    neue Property. Nach jedem Batch ruft sie ``checkpoint(progress)``
+    mit einem aktualisierten ``EmbeddingMigrationProgress`` auf (inkl.
+    ``last_processed_id`` als Resume-Cursor); der Service persistiert
+    den Job-Zustand. Der uebergebene ``progress`` ist der Startzustand
+    — bei Resume traegt er den letzten Checkpoint. Rueckgabe ist der
+    Endstatus (``completed`` / ``failed``).
     """
 
     def run(
@@ -71,6 +75,9 @@ class ReEmbedder(Protocol):
         target_property_key: str,
         expected_dimensions: int,
         progress: EmbeddingMigrationProgress,
+        *,
+        configuration: EmbeddingConfiguration,
+        checkpoint: Callable[[EmbeddingMigrationProgress], None],
     ) -> EmbeddingMigrationStatus: ...
 
 
@@ -78,9 +85,9 @@ class _NoopReEmbedder:
     """Default-Re-Embedder, der den Lifecycle treibt ohne Daten zu mutieren.
 
     Praktisch fuer Tests und fuer Erst-Migrationen ohne vorhandene
-    Embeddings. Eine echte Re-Embedding-Engine wird in einem Folge-Slice
-    ergaenzt, der eine Neo4j-Read-Loop + Embedding-Service-Cache
-    orchestriert.
+    Embeddings. Die echte Engine ist ``Neo4jReEmbedder``
+    (``app.services.embedding_reembedder``); die API-Schicht injiziert
+    sie explizit.
     """
 
     def run(
@@ -89,6 +96,9 @@ class _NoopReEmbedder:
         target_property_key: str,
         expected_dimensions: int,
         progress: EmbeddingMigrationProgress,
+        *,
+        configuration: EmbeddingConfiguration,
+        checkpoint: Callable[[EmbeddingMigrationProgress], None],
     ) -> EmbeddingMigrationStatus:
         return "completed"
 
@@ -189,12 +199,17 @@ class EmbeddingMigrationService:
         Der eigentliche Re-Embedding-Loop wird durch den injizierten
         ``re_embedder`` ausgefuehrt. Bei ``failed`` bleibt der alte
         Index aktiv und der neue wird auf ``rolled_back`` gesetzt.
+
+        Ein Job im Status ``running`` darf erneut ausgefuehrt werden
+        (Crash-Recovery): der Re-Embedder erhaelt den zuletzt
+        persistierten Progress inklusive ``last_processed_id`` und
+        setzt dort fort. ``started_at`` bleibt dabei erhalten.
         """
         job = self._load_job(job_id)
-        if job.status != "pending":
+        if job.status not in ("pending", "running"):
             raise ValueError(
-                f"Job {job_id} ist nicht im 'pending'-Status, "
-                f"sondern '{job.status}'."
+                f"Job {job_id} ist weder 'pending' noch 'running' "
+                f"(Resume), sondern '{job.status}'."
             )
         config = self._store.get_configuration(job.configuration_id)
         if config is None:
@@ -208,14 +223,23 @@ class EmbeddingMigrationService:
                 f"Ziel-Index-Version {job.target_index_version} fehlt im Store"
             )
 
-        # pending -> running
+        # pending -> running; bei Resume bleibt started_at erhalten.
+        started_at = job.progress.started_at or self._now()
         job = self._update_job_status(
             job,
             status="running",
             progress=job.progress.model_copy(
-                update={"started_at": self._now()}
+                update={"started_at": started_at}
             ),
         )
+
+        def _persist_checkpoint(progress: EmbeddingMigrationProgress) -> None:
+            latest = self._load_job(job_id)
+            self._save_job(
+                latest.model_copy(
+                    update={"progress": progress, "updated_at": self._now()}
+                )
+            )
 
         try:
             final_status = self._re_embedder.run(
@@ -223,8 +247,11 @@ class EmbeddingMigrationService:
                 target_index.property_key,
                 config.dimensions,
                 job.progress,
+                configuration=config,
+                checkpoint=_persist_checkpoint,
             )
         except Exception as exc:  # noqa: BLE001 — wir wollen alle Re-Embedder-Fehler fangen
+            job = self._load_job(job_id)
             return self._update_job_status(
                 job,
                 status="failed",
@@ -232,6 +259,7 @@ class EmbeddingMigrationService:
             )
 
         if final_status == "failed":
+            job = self._load_job(job_id)
             return self._update_job_status(
                 job, status="failed", error_message="Re-Embedder meldete failed"
             )

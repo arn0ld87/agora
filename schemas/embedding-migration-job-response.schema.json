@@ -97,6 +97,18 @@
           "default": null,
           "title": "Finished At"
         },
+        "last_processed_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Processed Id"
+        },
         "processed": {
           "minimum": 0,
           "title": "Processed",

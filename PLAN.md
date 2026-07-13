@@ -375,8 +375,13 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 **Status:** Phase 0, Slice 1, Slice 2 und Slice 3 gemergt (PR #682, #683,
 #684, #685). Slice 4 (Embedding-Setup und sichere Re-Embedding-Migration)
-ist in Bearbeitung; Sub-Slice 4.1 (kanonische Embedding-Provider- und
-Konfigurationsverträge) ist implementiert und verifiziert. Bestehende
+ist in Bearbeitung; Sub-Slices 4.1–4.3.3 plus Maintenance sind gemergt
+(PR #686–#691, #693). Sub-Slice 4.3.4 ersetzt den `_NoopReEmbedder` durch
+die echte Neo4j-Re-Embedding-Engine (`Neo4jReEmbedder`: Read-Loop über
+`(n:Entity)` per `uuid`-Cursor, Checkpoint nach jedem Batch, Resume über
+`EmbeddingMigrationProgress.last_processed_id` nach Crash). Offen im
+Slice-4-Umfeld: Fact-Embedding-Re-Embed (`RELATION.fact_embedding`),
+Gemini-Batch-Embedding, `scope="project"`-Filter. Bestehende
 Profile bleiben unverändert lesbar; Benutzerprofil und KI-Presets sind
 getrennte Schlüsselräume (ADR-0008). Embedding-Provider und Chat-Provider
 teilen nur die `provider_connection_id` als Referenz; die strukturelle

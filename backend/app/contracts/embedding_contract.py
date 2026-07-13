@@ -230,6 +230,10 @@ class EmbeddingMigrationProgress(BaseModel):
     total: int = Field(ge=0)
     processed: int = Field(ge=0)
     failed: int = Field(ge=0)
+    # Resume-Cursor der Re-Embedding-Engine (Slice 4.3.4): die zuletzt
+    # vollstaendig verarbeitete Entity-UUID. Nach einem Crash setzt ein
+    # erneuter ``run()`` beim ersten Knoten mit ``uuid > cursor`` fort.
+    last_processed_id: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
 

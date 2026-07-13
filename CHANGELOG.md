@@ -5,6 +5,26 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (embedding-reembedder — 2026-07-13)
+
+- **Echte Neo4j-Re-Embedding-Engine (Onboarding Slice 4.3.4)**:
+  ``backend/app/services/embedding_reembedder.py`` ersetzt den
+  ``_NoopReEmbedder``-Stub. ``Neo4jReEmbedder`` liest alle
+  ``(n:Entity)``-Knoten batchweise per ``uuid``-Cursor, erzeugt
+  Embeddings über den konfigurierten Provider, prüft jede
+  Vektor-Dimension gegen die verifizierte Konfiguration und schreibt
+  in die versionierte Property (``db.create.setNodeVectorProperty``,
+  Index via ``CREATE VECTOR INDEX ... IF NOT EXISTS`` — niemals DROP,
+  ADR-0007). Nach jedem Batch wird ein Checkpoint persistiert;
+  ``EmbeddingMigrationProgress.last_processed_id`` (neues
+  Vertragsfeld inkl. Zod-Spiegel) macht den Lauf nach einem Crash
+  über ``POST /migrations/<id>/run`` wiederaufnehmbar (Job-Status
+  ``running`` gilt als Resume). Dimension-Mismatch führt zu
+  ``failed`` ohne Index-Switch. Gemini-Re-Embedding wird explizit
+  als „noch nicht unterstützt" abgelehnt statt vorgetäuscht.
+  Bewusst offen: ``RELATION.fact_embedding``-Re-Embed und
+  ``scope="project"``-Filter.
+
 ### Added (embedding-migration — 2026-07-12)
 
 - **Embedding-Migrations-Service (Onboarding Slice 4.3)**:

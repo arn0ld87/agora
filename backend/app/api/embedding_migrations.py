@@ -27,9 +27,12 @@ from flask import request
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import llm_bp
+from ..config import Config
+from ..contracts.embedding_contract import EmbeddingConfiguration
 from ..services.embedding_configuration_store import EmbeddingConfigurationStore
 from ..services.embedding_migration import EmbeddingMigrationService
 from ..services.embedding_ollama_pull import OllamaPullError, pull_model_via_configuration
+from ..services.embedding_reembedder import EmbedTexts, Neo4jReEmbedder
 from ..services.llm_provider_secrets_store import get_llm_provider_secrets_store
 from ..services.provider_connection_store import ProviderConnectionStore
 from ..utils.api_responses import handle_api_errors, json_error, json_success
@@ -53,9 +56,69 @@ class _OllamaPullRequest(BaseModel):
     configuration_id: str | None = None
 
 
+def _neo4j_driver():
+    """Eigener, lazy erzeugter Driver — die Engine schliesst ihn nach dem Lauf.
+
+    Bewusst kein Zugriff auf den ``Neo4jStorage``-Pool: der Migrationslauf
+    ist ein langlaufender Operator-Vorgang und soll den App-Pool nicht
+    blockieren.
+    """
+    from neo4j import GraphDatabase
+
+    return GraphDatabase.driver(
+        Config.NEO4J_URI, auth=(Config.NEO4J_USER, Config.NEO4J_PASSWORD)
+    )
+
+
+def _embedder_for_configuration(config: EmbeddingConfiguration) -> EmbedTexts:
+    """Baut die Batch-Embedding-Funktion fuer die Ziel-Konfiguration.
+
+    Aufloesung analog zum Probe-Pfad (``EmbeddingConfigurationService``):
+    ProviderConnection liefert die ``base_url``, der Secret-Store den
+    API-Key. Gemini nutzt ein anderes URL-Schema als der bestehende
+    ``EmbeddingService`` und wird ehrlich abgelehnt statt vorgetaeuscht.
+    """
+    if config.provider_kind == "google":
+        raise RuntimeError(
+            "Re-Embedding ueber Gemini wird noch nicht unterstuetzt — "
+            "bitte einen Ollama- oder OpenAI-kompatiblen Embedding-"
+            "Provider verwenden."
+        )
+    connection = next(
+        (
+            c
+            for c in ProviderConnectionStore().list_connections()
+            if c.id == config.provider_connection_id
+        ),
+        None,
+    )
+    if connection is None:
+        raise KeyError(
+            f"ProviderConnection fehlt: {config.provider_connection_id}"
+        )
+    api_key = (
+        get_llm_provider_secrets_store().get_plaintext(connection.secret_ref)
+        if connection.secret_ref
+        else None
+    )
+    from ..storage.embedding_service import EmbeddingService
+
+    service = EmbeddingService(
+        model=config.model_id,
+        base_url=connection.base_url,
+        api_key=api_key,
+        timeout=60,
+    )
+    return service.embed_batch
+
+
 def _service() -> EmbeddingMigrationService:
     return EmbeddingMigrationService(
         store=EmbeddingConfigurationStore(),
+        re_embedder=Neo4jReEmbedder(
+            driver_factory=_neo4j_driver,
+            embedder_factory=_embedder_for_configuration,
+        ),
     )
 
 
