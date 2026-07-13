@@ -78,6 +78,39 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     assert resolved_other.routing_version == 2
 
 
+def test_resolve_from_canonical_snapshot_yields_iso8601_started_at(temp_run_dir):
+    """Regression für PR-#700-Review-Finding #2: Wird nur ein kanonischer
+    ``AiRoute``-Snapshot gespeichert (kein Legacy-Stage-Snapshot), muss
+    ``StageModelRouter.resolve()`` über den Canonical-Adapter laufen und ein
+    ``started_at`` als ISO-8601-String liefern — nicht als ``datetime``.
+    ``ResolvedRoute.started_at`` ist ``str | None``; der Adapter muss
+    ``resolved_at.isoformat()`` aufrufen."""
+    from datetime import datetime, timezone
+    from app.contracts.ai_provider_contract import AiRoute
+
+    service = RuntimeRunConfig(temp_run_dir)
+    resolved_at = datetime(2026, 7, 13, 11, 12, 41, tzinfo=timezone.utc)
+    service.save_ai_route_snapshot(
+        "graph_build",
+        AiRoute(
+            stage="graph_build",
+            provider_connection_id="openai",
+            model_id="gpt-4o",
+            source="stage_override",
+            resolved_at=resolved_at,
+        ),
+    )
+
+    resolved = StageModelRouter(temp_run_dir).resolve("graph_build")
+
+    assert resolved.provider_id == "openai"
+    assert resolved.model == "gpt-4o"
+    assert isinstance(resolved.started_at, str)
+    assert resolved.started_at == resolved_at.isoformat()
+    # ISO-8601 rundum-parsbar zum selben Instant.
+    assert datetime.fromisoformat(resolved.started_at) == resolved_at
+
+
 def test_detect_default_provider_id_matches_mainstream_hosts():
     """Mainstream hosts still resolve to the expected provider IDs now that
     detection is delegated to the SSoT (``app.llm.providers.registry.detect_provider``,
