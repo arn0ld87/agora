@@ -73,7 +73,8 @@ defineEmits<{
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    box-shadow var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   box-sizing: border-box;
 }
 

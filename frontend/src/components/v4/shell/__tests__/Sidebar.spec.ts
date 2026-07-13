@@ -126,6 +126,41 @@ describe('Sidebar', () => {
     expect(wrapper.emitted('collapse-toggle')).toBeTruthy()
   })
 
+  it('Collapse-Footer ist ein echtes <button> mit zugaenglichem Namen (Slice 7.3.2 a11y)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      props: { collapsed: false },
+      global: { plugins: [router, i18n] },
+    })
+    const footer = wrapper.find('.sidebar__footer')
+    expect(footer.element.tagName).toBe('BUTTON')
+    expect(footer.attributes('type')).toBe('button')
+    expect(footer.attributes('aria-label')).toBe('Einklappen')
+  })
+
+  it('Collapse-Footer traegt aria-label "Ausklappen" im eingeklappten Zustand (Slice 7.3.2 a11y)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      props: { collapsed: true },
+      global: { plugins: [router, i18n] },
+    })
+    const footer = wrapper.find('.sidebar__footer')
+    expect(footer.attributes('aria-label')).toBe('Ausklappen')
+  })
+
+  it('Collapse-Footer per Enter/Leertaste bedienbar (Slice 7.3.2 a11y)', async () => {
+    await router.push('/')
+    const wrapper = mount(Sidebar, {
+      global: { plugins: [router, i18n] },
+    })
+    const footer = wrapper.find('.sidebar__footer')
+    // Native <button>-Semantik: Enter/Space loesen 'click' aus (Browser-Default,
+    // kein manueller Handler noetig) — hier wird das Click-Event simuliert,
+    // das der Browser bei Enter/Space fuer <button> nativ ausloest.
+    await footer.trigger('click')
+    expect(wrapper.emitted('collapse-toggle')).toBeTruthy()
+  })
+
   it('Settings-Sub-Items sichtbar wenn Settings-Group via localStorage offen', async () => {
     // Hydrate localStorage: settings-Group ist offen
     lsMock.setItem('agora.sidebar.v1', JSON.stringify({ settings: true }))
@@ -145,49 +180,65 @@ describe('Sidebar', () => {
     expect(text).not.toContain('LLM-Routing')
   })
 
-  it('handleNavClick schliesst Mobile-Nav bei genau 768px (matchMedia inklusiv, Off-by-one-Fix)', async () => {
-    await router.push('/')
-    const pinia = createPinia()
-    setActivePinia(pinia)
+  // Slice 7.3.2: Breakpoint-Vereinheitlichung — Mobile = "< 768px" (SSoT:
+  // src/constants/breakpoints.ts). Bei genau 768px gilt bereits Desktop, konsistent
+  // mit AppShell.vue's Resize-Handler (window.innerWidth >= 768).
+  it.each([
+    { width: 767, expectMobile: true },
+    { width: 768, expectMobile: false },
+    { width: 769, expectMobile: false },
+  ])(
+    'handleNavClick bei $width px: expectMobile=$expectMobile (matchMedia < 768, Slice 7.3.2)',
+    async ({ width, expectMobile }) => {
+      await router.push('/')
+      const pinia = createPinia()
+      setActivePinia(pinia)
 
-    // matchMedia-Mock via Object.defineProperty: jsdom unterstuetzt matchMedia nicht nativ.
-    // Simuliert Breakpoint (max-width: 768px) → matches=true, d.h. Drawer-Modus aktiv bei exakt 768px.
-    const matchMediaMock = vi.fn((query: string) => ({
-      matches: query === '(max-width: 768px)',
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }))
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      configurable: true,
-      value: matchMediaMock,
-    })
+      // matchMedia-Mock via Object.defineProperty: jsdom unterstuetzt matchMedia nicht nativ.
+      // Simuliert den realen Browser-Vergleich fuer die Query "(max-width: 767px)".
+      const matchMediaMock = vi.fn((query: string) => {
+        const m = /max-width:\s*(\d+)px/.exec(query)
+        const maxWidth = m ? Number(m[1]) : Infinity
+        return {
+          matches: width <= maxWidth,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }
+      })
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: matchMediaMock,
+      })
 
-    const { useShellStore } = await import('@/stores/shell')
-    const store = useShellStore()
-    store.openMobileNav()
+      const { useShellStore } = await import('@/stores/shell')
+      const store = useShellStore()
+      store.openMobileNav()
 
-    const wrapper = mount(Sidebar, {
-      global: { plugins: [router, pinia, i18n] },
-    })
-    await wrapper.vm.$nextTick()
+      const wrapper = mount(Sidebar, {
+        global: { plugins: [router, pinia, i18n] },
+      })
+      await wrapper.vm.$nextTick()
 
-    // handleNavClick direkt aufrufen (entspricht Nav-Item-Click im Drawer).
-    // SidebarItem mit `to`-Prop emittiert kein 'click'-Event in Vue 3 (RouterLink handelt),
-    // daher vm-direkter Aufruf — testet die matchMedia-Logik isoliert.
-    const vm = wrapper.vm as unknown as { handleNavClick: () => void }
-    vm.handleNavClick()
-    await wrapper.vm.$nextTick()
+      // handleNavClick direkt aufrufen (entspricht Nav-Item-Click im Drawer).
+      // SidebarItem mit `to`-Prop emittiert kein 'click'-Event in Vue 3 (RouterLink handelt),
+      // daher vm-direkter Aufruf — testet die matchMedia-Logik isoliert.
+      const vm = wrapper.vm as unknown as { handleNavClick: () => void }
+      vm.handleNavClick()
+      await wrapper.vm.$nextTick()
 
-    expect(store.mobileNavOpen).toBe(false)
-    // Sicherstellen dass matchMedia mit dem korrekten Breakpoint-Query aufgerufen wurde
-    expect(matchMediaMock).toHaveBeenCalledWith('(max-width: 768px)')
-  })
+      // Mobile (< 768px): handleNavClick schliesst den Drawer → mobileNavOpen=false.
+      // Desktop (>= 768px): handleNavClick ist ein No-Op → mobileNavOpen bleibt true.
+      expect(store.mobileNavOpen).toBe(!expectMobile)
+      // Sicherstellen dass matchMedia mit dem korrekten (SSoT-)Breakpoint-Query aufgerufen wurde
+      expect(matchMediaMock).toHaveBeenCalledWith('(max-width: 767px)')
+    },
+  )
 
   it('Settings-Sub-Items ausgeblendet wenn Settings-Group geschlossen (kein localStorage-State)', async () => {
     await router.push('/')

@@ -290,6 +290,7 @@ class AiRoute(BaseModel):
     source: RouteSource
     validated_capabilities: dict[str, CapabilityState] = Field(default_factory=dict)
     provider_options: AiProviderOptions = Field(default_factory=_empty_provider_options)
+    routing_version: int = Field(default=1, ge=1)
     resolved_at: datetime | None = None
     fallback_reason: str | None = None
 

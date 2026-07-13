@@ -96,7 +96,8 @@ withDefaults(
   display: flex;
   align-items: center;
   gap: 12px;
-  transition: height 150ms ease, padding 150ms ease;
+  transition: height var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    padding var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
 }
 
 .topbar__crumbs {
@@ -124,7 +125,8 @@ withDefaults(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   padding: 0;
 }
 
@@ -172,7 +174,8 @@ withDefaults(
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition: background var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   padding: 0;
   flex-shrink: 0;
 }
@@ -182,7 +185,9 @@ withDefaults(
   color: var(--text-primary);
 }
 
-@media (max-width: 768px) {
+/* SSoT: src/constants/breakpoints.ts (MOBILE_BREAKPOINT_PX = 768) —
+   max-width: 767px bildet "< 768" ab (Slice 7.3.2, Breakpoint-Vereinheitlichung). */
+@media (max-width: 767px) {
   .topbar {
     padding: 0 12px;
     height: 56px;

@@ -41,7 +41,8 @@ defineEmits<{
   font-size: var(--fs-callout, 14px);
   color: var(--text-primary);
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
+    box-shadow var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);
   box-sizing: border-box;
 }
 

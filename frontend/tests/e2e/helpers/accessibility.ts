@@ -259,13 +259,17 @@ export async function checkReducedMotion(page: Page): Promise<void> {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   try {
     const reducedMotion = await page.evaluate(() => {
-      const animatedElements = document.querySelectorAll(
-        '[class*="animate"], [class*="transition"], [style*="transition"]',
-      );
+      // Slice 7.3.1: Klassen-/Inline-Style-Substring-Matching ("animate"/
+      // "transition") übersieht echte CSS-Transitionen aus Stylesheet-Regeln
+      // (z.B. `.app-shell__sidebar { transition: transform 200ms ease; }`).
+      // getComputedStyle() ist die einzig verlässliche Quelle — sie
+      // reflektiert die tatsächlich angewendete Transition/Animation
+      // unabhängig davon, wie/wo sie deklariert wurde.
+      const allElements = document.querySelectorAll('*');
 
       return {
         isReduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        durations: Array.from(animatedElements, (element) => {
+        durations: Array.from(allElements, (element) => {
           const style = window.getComputedStyle(element);
           return [style.transitionDuration, style.animationDuration];
         }).flat(),
