@@ -1,0 +1,49 @@
+name: check-legacy-model-picker
+
+# Blockt PRs, die v3-Picker-Importe (ModelPicker.vue, LlmProfilePicker.vue,
+# ActiveModelBadge.vue, llmProviders/llmProfiles/llmRoutingDefaults-Stores
+# oder useRuntimeLlmOptions-Composable) zurück in den Code bringen — Sub-Slice
+# 5.5 der Epic ``onboarding-provider-unification`` deprecated diese Pfade.
+# Opt-in via Magic-Comment (siehe Script-Docstring).
+#
+# Bewusst nur pull_request: Push auf main ist hier okay, weil 5.5 selbst
+# (oder Reverts) durchlaufen müssen, ohne dass jeder Push den Check triggert.
+# ``paths`` beschränkt die Auslösung auf frontend/src-Änderungen.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/src/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  grep:
+    name: Keine v3-Picker-Importe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: v3-Picker-Grep-Check
+        env:
+          GITHUB_ACTIONS: "true"
+        run: python3 -u .github/scripts/check_legacy_model_picker.py
