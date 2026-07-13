@@ -80,9 +80,33 @@
   color: var(--v4-state-active-fg);
 }
 
+/* ============================================================
+   Slice 7.1 — Golden-Gate additive Motion- & Focus-Verträge
+   Rein additiv unter dem bestehenden --v4-state-Präfix (kein neuer
+   Namespace). Bestehende State-Tokens bleiben unverändert.
+   ============================================================ */
+:root {
+  /* Kontrollierte Motion-Dauern */
+  --v4-state-motion-duration-fast: 120ms;
+  --v4-state-motion-duration-base: 200ms;
+  --v4-state-motion-duration-slow: 320ms;
+  --v4-state-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Focus-Kontrast: mindestens 2px sichtbarer Indikator */
+  --v4-state-focus-ring-strong-width: 2px;
+  --v4-state-focus-ring-strong: var(--focus-ring-strong, rgba(0, 102, 204, 0.6));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .v4-state-interactive,
   .v4-state-selectable {
     transition: none;
+  }
+
+  /* Reduce-Entsprechung der additiven Motion-Dauern */
+  :root {
+    --v4-state-motion-duration-fast: 0.01ms;
+    --v4-state-motion-duration-base: 0.01ms;
+    --v4-state-motion-duration-slow: 0.01ms;
   }
 }
