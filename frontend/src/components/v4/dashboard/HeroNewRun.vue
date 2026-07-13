@@ -12,13 +12,15 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
-import ModelPicker from '../forms/ModelPicker.vue'
+import AiModelPicker from '../forms/AiModelPicker.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
 import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
-import { StageLLMRouteSchema, type StageLLMRoute } from '../../../contracts/llmRoutingContract'
+import type { AiModelRef } from '@/contracts/aiModelRef'
+import { AiModelRefSchema } from '@/contracts/aiModelRef'
 import { getSystemStatus } from '../../../api/status'
 
 const { t } = useI18n()
@@ -63,37 +65,43 @@ function removeLocal(key: string): void {
 }
 
 /**
- * Slice A2 (2026-05-17): Modell-Auswahl auf den projektweiten ModelPicker
- * konsolidiert. Hybrid-Mode:
+ * Slice A2 (2026-05-17) + Slice 5.4 (2026-07-13): Modell-Auswahl auf den
+ * projektweiten AiModelPicker konsolidiert. Hybrid-Mode:
  *   - Profile-Dropdown (links): LLM-Profile aus fetchLlmProfiles. Wenn gewählt,
  *     gewinnt das Profile — Provider/Modell/Temperatur kommen aus dem Profile.
- *   - ModelPicker (rechts, sichtbar wenn kein Profile aktiv): Direkt-Auswahl
- *     aus den unter /settings/llm-providers hinterlegten Providern.
+ *   - AiModelPicker (rechts, sichtbar wenn kein Profile aktiv): Direkt-Auswahl
+ *     aus den unter /settings/llm-providers hinterlegten Provider-Connections.
  *
- * Persistenz: `agora.hero.profileId`, `agora.hero.route` (Zod-validiert).
+ * Persistenz: `agora.hero.profileId`, `agora.hero.aiModelRef` (Slice 5.4
+ * Zod-validiert). Legacy-Key `agora.hero.route` wird zur Migration gelesen,
+ * via useAiModelRefAdapter.migrateStoredRoute in eine AiModelRef konvertiert
+ * und als gleichwertige Quelle akzeptiert.
+ *
  * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
- * via `storedEffectiveModel()` — wir spiegeln `route.model` dorthin, damit der
- * bestehende Sim-Start-Flow (Backend resolved Provider via SecretResolver,
- * vgl. PR #499) ohne Touch in MainView durchgeht.
+ * via `storedEffectiveModel()` — wir spiegeln `aiModelRef.model_id` dorthin,
+ * damit der bestehende Sim-Start-Flow (Backend resolved Provider via
+ * SecretResolver, vgl. PR #499) ohne Touch in MainView durchgeht.
  */
 const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
-const STORAGE_HERO_ROUTE = 'agora.hero.route'
+const STORAGE_HERO_AI_REF = 'agora.hero.aiModelRef'
+const STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'
 
-function loadStoredRoute(): StageLLMRoute | null {
-  const raw = readLocal(STORAGE_HERO_ROUTE)
-  if (!raw) return null
-  try {
-    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) return null
-    if (!parsed.data.provider_id || !parsed.data.model) return null
-    return parsed.data
-  } catch {
-    return null
+const adapter = useAiModelRefAdapter()
+
+function loadStoredModel(): AiModelRef | null {
+  // Bevorzugt neuen Key, fällt auf Legacy zurück.
+  const rawAiRef = readLocal(STORAGE_HERO_AI_REF)
+  const rawLegacy = readLocal(STORAGE_HERO_ROUTE_LEGACY)
+  const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
+  if (migrated) {
+    const parsed = AiModelRefSchema.safeParse(migrated)
+    if (parsed.success) return parsed.data
   }
+  return null
 }
 
 const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
-const selectedRoute = ref<StageLLMRoute | null>(loadStoredRoute())
+const selectedModel = ref<AiModelRef | null>(loadStoredModel())
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
@@ -194,12 +202,19 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function onPickRoute(route: StageLLMRoute | null) {
-  selectedRoute.value = route
-  if (route?.provider_id && route?.model) {
-    writeLocal(STORAGE_HERO_ROUTE, JSON.stringify(route))
+function onPickModel(aiRef: AiModelRef | null) {
+  selectedModel.value = aiRef
+  if (aiRef) {
+    writeLocal(STORAGE_HERO_AI_REF, JSON.stringify(aiRef))
+    // STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default' bei leerer model_id).
+    writeLocal(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
+    // Legacy-Key loeschen, damit spaeter loadStoredModel nicht aus Versehen
+    // einen veralteten StageLLMRoute-Eintrag bevorzugt.
+    removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   } else {
-    removeLocal(STORAGE_HERO_ROUTE)
+    removeLocal(STORAGE_HERO_AI_REF)
+    removeLocal(STORAGE_HERO_ROUTE_LEGACY)
+    writeLocal(STORAGE_MODEL, 'default')
   }
 }
 
@@ -218,15 +233,16 @@ async function startSimulation() {
   try {
     writeLocal(STORAGE_LANG, language.value)
     const profileId = selectedProfileId.value || null
-    // Wenn ein Profile aktiv ist, gewinnt es — direct-route ignorieren und
-    // den STORAGE_MODEL-Key auf "default" zurücksetzen, damit MainView nicht
-    // versehentlich einen stale Override mitsendet.
+    // Wenn ein Profile aktiv ist, gewinnt es — direct-AiModelRef ignorieren
+    // und den STORAGE_MODEL-Key auf "default" zurücksetzen, damit MainView
+    // nicht versehentlich einen stale Override mitsendet.
     if (profileId) {
       writeLocal(STORAGE_MODEL, 'default')
-    } else if (selectedRoute.value?.model) {
-      writeLocal(STORAGE_MODEL, selectedRoute.value.model)
     } else {
-      writeLocal(STORAGE_MODEL, 'default')
+      // Slice 5.4: STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default'
+      // wenn kein Model gewählt — verhindert stale Route).
+      const stored = adapter.toStoredModelString(selectedModel.value)
+      writeLocal(STORAGE_MODEL, stored)
     }
     setPendingUpload(
       files.value,
@@ -332,10 +348,11 @@ onMounted(() => {
         </div>
         <div v-if="!selectedProfileId" class="hero-field">
           <label class="hero-label">{{ $t('dashboard.hero.modelLabel') }}</label>
-          <ModelPicker
-            :model-value="selectedRoute"
+          <AiModelPicker
+            :model-value="selectedModel"
             :placeholder="$t('dashboard.hero.modelPlaceholder')"
-            @update:model-value="onPickRoute"
+            mode="chat"
+            @update:model-value="onPickModel"
           />
         </div>
         <div class="hero-field">

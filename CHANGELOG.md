@@ -5,6 +5,42 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (onboarding-model-picker-slice-5-4 — 2026-07-13)
+
+- **AiModelPicker an allen v4-Auswahlstellen** (Onboarding
+  Slice 5.4): `StepModelOverrideChip.vue` (Run-Stages),
+  `views/Settings/LlmProvidersView.vue` (Workspace-Default-Card),
+  `v4/dashboard/HeroNewRun.vue` (Dashboard), v3
+  `components/LlmRouting/LlmRoutingView.vue` (Global-Default +
+  Stage-Overrides) und `views/Settings/SettingsGeneralView.vue`
+  (Pilot-Abschluss mit Persistenz an
+  `useLlmRoutingDefaultsStore`) nutzen den kanonischen
+  `AiModelPicker.vue` aus Slice 5.1. Vertrags-Wechsel
+  `StageLLMRoute` (v3, `provider_id`) → `AiModelRef` (v4,
+  `provider_connection_id`) wird durch den neuen
+  `useAiModelRefAdapter`-Composable (pure + Vue-Factory)
+  gekapselt; v3-Stores und -Endpoints bleiben unveraendert.
+  HeroNewRun liest bestehende `agora.hero.route`-Eintraege
+  (StageLLMRoute-JSON) automatisch via
+  `adapter.migrateStoredRoute` und schreibt sie als neue
+  `agora.hero.aiModelRef`-Eintraege. 5.5 deprecated die alten
+  Picker und Stores; bis dahin ist der Adapter Glue-Layer
+  zwingend noetig. 95 neue Spec-Tests
+  (Adapter 16, StepChip 16, LlmProviders 16, Hero 19,
+  LlmRouting 14, SettingsGeneral 14).
+
+- **Zod-Spiegel fuer `AiModelRef`**: `AiModelRefSchema`,
+  `AiModelSourceSchema`, `AiModelRefInputSchema`,
+  `AiModelProviderKindSchema`, `AiModelCapabilitySchema`,
+  `AiModelStatusSchema`, `AiModelPickerModeSchema` in
+  `frontend/src/contracts/aiModelRef.ts`. ermoeglicht
+  localStorage-Validierung in HeroNewRun und Adapter-Tests.
+
+- **i18n-Keys fuer neue Stellen**:
+  `stepModelOverrideChip.{label,modelPlaceholder,overrideBadge,clearOverride,close,lockedBadge}`
+  und `settings.v4.general.workspaceDefaultModel` in `de.json`
+  + `en.json`.
+
 ### Added (embedding-reembedder — 2026-07-13)
 
 - **Echte Neo4j-Re-Embedding-Engine (Onboarding Slice 4.3.4)**:

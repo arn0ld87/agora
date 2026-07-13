@@ -13,7 +13,77 @@
  * Master-Prompt §6.3: jede effektive Auswahl muss im Run-Snapshot und
  * Audit-Trail mit Provider, Modell, Quelle der Auswahl und Faehigkeiten
  * gespeichert werden. Diese Struktur deckt das ab.
+ *
+ * Slice 5.4: Zod-Spiegel (AiModelRefSchema, AiModelSourceSchema,
+ * AiModelRefInputSchema) fuer localStorage-Validierung in HeroNewRun
+ * und Adapter-Tests. Spiegel bewusst eng am TS-Interface — Capability-
+ * Filter und Fallback-Reason bleiben optional.
  */
+import { z } from 'zod'
+
+export const AiModelSourceSchema = z.enum([
+  'stage-override',
+  'run-override',
+  'project-default',
+  'workspace-default',
+  'explicit',
+  'fallback',
+])
+export type AiModelSourceType = z.infer<typeof AiModelSourceSchema>
+
+export const AiModelRefSchema = z.object({
+  provider_connection_id: z.string().min(1),
+  model_id: z.string().min(1),
+  source: AiModelSourceSchema,
+  capability_filter: z.string().optional(),
+  fallback_reason: z.string().optional(),
+}).strict()
+export type AiModelRefValidated = z.infer<typeof AiModelRefSchema>
+
+export const AiProviderKindSchema = z.enum([
+  'ollama',
+  'ollama_cloud',
+  'openai',
+  'anthropic',
+  'gemini',
+  'openai_compatible',
+  'mock',
+])
+
+export const AiCapabilitySchema = z.enum([
+  'chat',
+  'embeddings',
+  'streaming',
+  'tool_calling',
+  'json_object',
+  'json_schema',
+  'vision',
+  'reasoning',
+])
+
+export const AiModelStatusSchema = z.enum([
+  'available',
+  'unavailable',
+  'degraded',
+  'unsupported',
+  'invalid_credentials',
+])
+
+export const AiModelPickerModeSchema = z.enum(['chat', 'embedding'])
+
+export const AiModelRefInputSchema = z.object({
+  provider_connection_id: z.string().min(1),
+  provider_kind: AiProviderKindSchema,
+  display_name: z.string().min(1),
+  model_id: z.string().min(1),
+  context_window: z.number().int().positive().optional(),
+  capabilities: z.array(AiCapabilitySchema),
+  status: AiModelStatusSchema,
+  is_workspace_default: z.boolean().optional(),
+  local_or_cloud: z.enum(['local', 'cloud']),
+}).strict()
+export type AiModelRefInputValidated = z.infer<typeof AiModelRefInputSchema>
+
 export interface AiModelRef {
   /** Provider-Connection-ID (Slice 3). */
   readonly provider_connection_id: string
