@@ -19,7 +19,7 @@ Stand: 2026-07-13 (Onboarding/Provider-Unification Slice 5.3 verifiziert, v1.0.0
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3285 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3297 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 161 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
