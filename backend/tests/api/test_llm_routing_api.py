@@ -157,6 +157,35 @@ def test_get_workspace_defaults_is_additive(client):
     assert {key: value for key, value in data.items() if key != "ai_route"} == defaults.model_dump(mode="json")
 
 
+def test_patch_routing_default_stage_clear_falls_back_to_global(client):
+    """Regression für PR-#700-Review-Finding #1: Ein Workspace-Stage-Override
+    muss sich per ``{"clear": true}`` löschen lassen und danach auf den globalen
+    Workspace-Default zurückfallen — HTTP 200, ``ai_route`` entspricht
+    ``global_default``. ``set_stage_override(stage_id, None)`` poppt den Key;
+    ``active_route = defaults.stage_overrides.get(stage_id) or defaults.global_default``
+    muss den Default liefern und darf nicht None werden."""
+    from app.contracts.llm_routing_contract import StageLLMRoute
+    from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
+
+    global_route = StageLLMRoute(provider_id="workspace-provider", model="workspace-model")
+    cleared = WorkspaceLlmRoutingDefaults(global_default=global_route, stage_overrides={})
+    with patch("app.api.llm_routing.get_workspace_routing_store") as get_store:
+        get_store.return_value.set_stage_override.return_value = cleared
+        resp = client.patch(
+            "/api/llm/routing/defaults/stages/graph_build",
+            json={"clear": True},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json["data"]
+    assert data["ai_route"]["source"] == "workspace"
+    assert data["ai_route"]["provider_connection_id"] == "workspace-provider"
+    assert data["ai_route"]["model_id"] == "workspace-model"
+    assert "graph_build" not in data["stage_overrides"]
+    # Store wurde zum Löschen mit None aufgerufen.
+    get_store.return_value.set_stage_override.assert_called_once_with("graph_build", None)
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
