@@ -50,7 +50,7 @@ backend/                        Python 3.14, uv, Flask, Pydantic v2, pytest
       report_agent/             Layer 7: Report-Pipeline
       evidence_binder/          Evidence-Gating (ADR-0002)
       embedding_migration.py    Lifecycle pending→running→validating→completed (ADR-0007)
-      embedding_reembedder.py   Echte Neo4j-Re-Embedding-Engine (Onboarding 4.3.4)
+      embedding_reembedder.py   Echte Neo4j-Re-Embedding-Engine (Onboarding 4.3.4 + 4.4 Fact-Phase)
       embedding_service.py      Konfigurations-Service (Onboarding 4.2)
       embedding_ollama_pull.py  Ollama-Modell-Download (Onboarding 4.3.1)
     llm/

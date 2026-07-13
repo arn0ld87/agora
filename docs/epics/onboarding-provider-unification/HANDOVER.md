@@ -1,3 +1,145 @@
+# Handover — Onboarding/Provider-Unification Slice 4.4
+
+## Stand
+
+- Datum: 2026-07-13
+- Worktree: `/private/tmp/agora-slice-4-4-fact-embedding`
+- Branch: `codex/onboarding-fact-embedding-reembed`
+- Basis: `origin/main` @ `499d1bd0` (Slice 5.5, PR #705, gemergt)
+- Slice: 4.4 — Fact-Embedding-Re-Embed (`RELATION.fact_embedding`)
+
+## Aufgabe
+
+Die in Slice 4.3.4 (PR #694) eingeführte `Neo4jReEmbedder`-Engine
+re-embedded bisher **nur** `(n:Entity).entity_embedding`.
+`RELATION.fact_embedding` war ein dokumentiertes „Bewusstes Nicht-Ziel"
+und blieb beim Embedding-Modellwechsel stale → Search-Correctness-Lücke
+für die Relations-Suche. Slice 4.4 zieht `fact_embedding` gleich: ein
+zweiter, Resume-fähiger Re-Embed-Loop über die `:RELATION`-Kanten,
+sequenziell nach der Entity-Phase, über denselben provider-neutralen
+Embedding-Pfad.
+
+## Storage-Modell-Befund (Verifikation vor Implementierung)
+
+`fact_embedding` ist eine echte **`RELATIONSHIP`-Property** auf
+`:RELATION`-Kanten — kein reifizierter Fakt-Knoten. Damit ist der
+Entity-Loop (Node-Property via `db.create.setNodeVectorProperty`) **nicht**
+1:1 übertragbar. Konsequenzen:
+
+- Vector-Index-Ddl für Relationships: `FOR ()-[r:RELATION]-() ON (r.<prop>)`
+  (Neo4j 5.13+, Stack ist 5.18 CE — supported).
+- Schreibfunktion: `db.create.setRelationshipVectorProperty(r, ...)`
+  statt `setNodeVectorProperty`.
+- `:RELATION` trägt eine eigene `uuid` (siehe `neo4j_write`) → stabiler
+  Cursor analog `n.uuid`, kein neues Sortierkriterium nötig.
+- Fact-Text: `coalesce(r.fact, r.name, '')` (`r.fact` ist der beim Ingest
+  embeddede Text; Fallback für Bestandsrelations ohne `fact`-Property).
+
+## Entscheidung: Cursor-Strategie (mit Sign-off)
+
+**Gewählt:** ein einzelnes Phasen-Feld `phase: Literal["entity","fact"]`
+in `EmbeddingMigrationProgress` (statt zwei getrennter Cursor-Spalten
+`entity_last_processed_id` / `fact_last_processed_id`).
+
+- `last_processed_id` bleibt der einzige Cursor; `phase` disambiguiert,
+  ob er eine Entity-UUID oder eine RELATION-UUID referenziert.
+- Default `"entity"` hält persistierte Alt-Jobs (Slice 4.3.4) ohne
+  Migration ladbar — backward-kompatibel, `extra="forbid"` gewahrt.
+- Layer-0-Touch ist additiv/regenerierbar: Pydantic-Feld + `dump_schemas`
+  + Zod-Spiegel `.strict()`/`superRefine`.
+
+**Phasenwechsel ohne separaten Checkpoint:** Beim Übergang
+`entity -> fact` setzt die Engine `phase` und `last_processed_id=None`
+nur im Speicher (`model_copy`), ohne `checkpoint()` aufzurufen. Erst
+`_drain(fact)` schreibt den ersten Fact-Checkpoint mit dem frisch
+gezählten Fact-Bestand. Begründung: ein separater Checkpoint am
+Phasenübergang hätte den Entity-Endstand (`total=3`) als irreführenden
+„Fact-Start" persistiert. Crash-Sicherheit bleibt erhalten — beim
+Resume läuft die (leere) Entity-Phase idempotent durch (kein Träger mit
+`uuid > cursor` → kein Write, kein Doppel-Write) und wechselt dann zur
+Fact-Phase.
+
+## Implementierung
+
+`backend/app/services/embedding_reembedder.py` (erweitert, kein Rewrite
+der Entity-Phase):
+
+- Zwei Query-Sätze: `_ENTITY_*` (unverändert, `setNodeVectorProperty`)
+  und `_FACT_*` (`count(r)`, Cursor `r.uuid > $cursor`,
+  `setRelationshipVectorProperty`).
+- `run()` bekommt keyword-only `fact_target_index_name` /
+  `fact_target_property_key` (beide `None` → backward-kompatibel, nur
+  Entity-Phase wie 4.3.4).
+- Phasen-Ablauf: Entity-Phase (übersprungen wenn `progress.phase=="fact"`)
+  → bei `failed>0` sofort `return "failed"` (kein Switch auf
+  unvollständigen Index-Satz) → Phasenwechsel im Speicher → Fact-Phase.
+- `_drain(...)` als gemeinsamer Helper für beide Phasen: DDL anlegen
+  (additiv, `IF NOT EXISTS`, niemals DROP — ADR-0007), count, fresh-Reset
+  bei `last_processed_id is None` (sonst nur `total`-Update), Batch-Loop
+  mit Alignment-Drift-Guard (Vektoranzahl ≠ Textanzahl ⇒ RuntimeError)
+  und Dimensions-Guard pro Vektor, Checkpoint pro Batch.
+- `_fact_index_ddl` / `_entity_index_ddl` als Modulfunktionen;
+  `_require_identifier` bewacht alle vier Identifier (Entity- + Fact-
+  Index-/Property-Namen) gegen Cypher-Injection.
+
+`backend/app/services/embedding_migration.py`: `ReEmbedder`-Protocol und
+`_NoopReEmbedder` um die beiden Fact-Parameter erweitert;
+`EmbeddingMigrationService.run()` leitet die Fact-Namen **konventionell**
+aus der Ziel-Version ab (`fact_embedding_v{N}`) und gibt sie an die Engine.
+
+`EmbeddingIndexVersion` bleibt bewusst **entity-only** — der versionierte
+Index-Vertrag verwaltet weiterhin nur `entity_embedding_vN`. Fact-Namen
+werden konventionell abgeleitet und der Engine explizit übergeben. Ein
+Folge-Slice kann fact-spezifische `EmbeddingIndexVersion`-Datensätze
+einführen; das ist hier nicht vorgetäuscht.
+
+## Verifikation
+
+- `backend/tests/contracts/test_embedding_contract.py`: 3 neue Tests
+  (phase default 'entity'/Legacy-Roundtrip, entity+fact Roundtrip,
+  unbekannte phase abgelehnt).
+- `backend/tests/services/test_embedding_reembedder.py`: 9 neue Fact-
+  Tests (Happy Path, versionierter Relationship-Index, Fact-Resume,
+  Fact-Dimension-Mismatch, leerer Graph beide Phasen, Entity-Skip bei
+  `phase=="fact"`, Entity-Failure skippt Fact, backward-kompatibel ohne
+  Fact-Targets, Fact-Identifier-Guard) + alle Entity-Regressionstests
+  gegen `fact_target=None` laufen grün.
+- `frontend/src/contracts/__tests__/embeddingContract.spec.ts`: 3 neue
+  Zod-Tests (phase default, roundtrip, unbekannte phase abgelehnt).
+- `schemas/embedding-migration-job*.schema.json`: regeneriert via
+  `dump_schemas --check` (`phase` mit `default:"entity"`,
+  `enum:["entity","fact"]`).
+- Gates: 377 Contract-Tests, 46 Schemas driftfrei, ruff + mypy clean,
+  32 ReEmbedder-/Migration-Service-Tests, 17 Frontend-Zod-Spec grün.
+
+## Bewusst offen (Folge-Slices)
+
+- Gemini-Re-Embedding / Batch-Embedding bleibt explizit **nicht
+  unterstützt** — die Engine ist provider-neutral über den konfigurierten
+  Embedding-Pfad und täuscht keine Gemini-Batch-API vor.
+- `scope="project"`-Filter: die Zuordnung Projekt → Graph ist nicht Teil
+  des Embedding-Vertrags; die Engine läuft global.
+- fact-spezifische `EmbeddingIndexVersion`-Datensätze (Fact-Namen heute
+  konventionell abgeleitet, nicht versioniert verwaltet).
+- Search-Pfad-Umstellung: der Lesepfad muss für den Switch auf die neue
+  `fact_embedding_v{N}`-Property/Suchindex angefasst werden (adjazent,
+  bewusst nicht Teil dieses Slices — fact-Re-Embed ist ohne
+  Index-Version verifizierbar, der Switch selbst ist Operator-Entscheidung).
+
+## Doc-Impact-Matrix
+
+| Dokument | Status | Anmerkung |
+|---|---|---|
+| README.md | geprüft-nicht-betroffen | keine User-Facing-Feature-Doku; Zahlen via STATUS zentralisiert |
+| AGENTS.md | aktualisiert | Stack-Map-Zeile `embedding_reembedder.py` um Fact-Phase ergänzt; Aktive-Epics-Liste („Slices 1–4.3.4 gemerged") wird nach Merge via sync-status auf 4.4 gehoben |
+| CLAUDE.md | geprüft-nicht-betroffen | keine Fact-spezifische Claude-Regel; ADR-0007-Referenz unverändert gültig |
+| PLAN.md | aktualisiert | „Offen im Slice-4-Umfeld"-Liste: Fact-Embedding-Re-Embed entfernt (umgesetzt), Slice-4.4-Fact-Phase im Fließtext ergänzt |
+| docs/STATUS.md | aktualisiert | Aktualisierungs-Protokoll-Eintrag für Slice 4.4; Test-Counts via `sync-status.sh` |
+| CHANGELOG.md | aktualisiert | neuer `Added (embedding-reembedder-fact)`-Eintrag; „Bewusst offen: fact_embedding"-Vermerk im 4.3.4-Eintrag aufgelöst |
+| HANDOVER.md | aktualisiert | dieser Abschnitt |
+
+---
+
 # Handover — Onboarding/Provider-Unification Slice 5.4
 
 ## Stand
