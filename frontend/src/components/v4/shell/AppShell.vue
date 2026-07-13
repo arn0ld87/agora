@@ -8,10 +8,16 @@
       @click="shellStore.closeMobileNav()"
     />
 
-    <!-- Sidebar (spans both rows on Desktop; Off-Canvas on Mobile) -->
+    <!-- Sidebar (spans both rows on Desktop; Off-Canvas-Drawer auf Mobile) -->
     <div
+      ref="sidebarEl"
       class="app-shell__sidebar"
       :class="{ 'app-shell__sidebar--mobile-open': shellStore.mobileNavOpen }"
+      :data-app-shell-drawer="shellStore.mobileNavOpen ? 'true' : undefined"
+      :role="shellStore.mobileNavOpen ? 'dialog' : undefined"
+      :aria-modal="shellStore.mobileNavOpen ? 'true' : undefined"
+      :aria-label="shellStore.mobileNavOpen ? t('sidebar.title') : undefined"
+      :tabindex="shellStore.mobileNavOpen ? -1 : undefined"
     >
       <slot name="sidebar">
         <Sidebar
@@ -48,7 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, ref } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, ref, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useShellStore } from '@/stores/shell'
 import { useCommandPalette } from '@/composables/useCommandPalette'
@@ -71,12 +78,18 @@ const props = withDefaults(
   },
 )
 
+const { t } = useI18n()
 const shellStore = useShellStore()
 const route = useRoute()
 const router = useRouter()
 const { isOpen: isPaletteOpen, toggle: togglePalette } = useCommandPalette()
 const wasPaletteOpened = ref(false)
 const commandsStore = useCommandsStore()
+
+// Drawer-Focus-Management (Slice 7.3 a11y gate):
+// Beim Öffnen Fokus in den Drawer, beim Schließen zurück zum Trigger.
+const sidebarEl = ref<HTMLDivElement | null>(null)
+let lastFocusedBeforeDrawer: HTMLElement | null = null
 
 watch(
   isPaletteOpen,
@@ -104,12 +117,33 @@ function onResize(): void {
   }
 }
 
-// Body-Scroll-Lock wenn Mobile-Nav offen
+// Body-Scroll-Lock wenn Mobile-Nav offen + Drawer-Focus-Management (Slice 7.3 a11y gate).
+// Synchroner Body-Lock + asynchroner Focus-Shift (erst nach Render des Drawers).
 watch(
   () => shellStore.mobileNavOpen,
-  (open) => {
-    if (typeof document !== 'undefined') {
-      document.body.style.overflow = open ? 'hidden' : ''
+  (open, prev) => {
+    if (typeof document === 'undefined') return
+    document.body.style.overflow = open ? 'hidden' : ''
+    if (open) {
+      // Trigger-Element merken (Hamburger-Button oder anderes Opener-Element)
+      lastFocusedBeforeDrawer = document.activeElement as HTMLElement | null
+      // Focus-Shift nach Render: erst dann ist Drawer-DOM verfuegbar
+      void nextTick(() => {
+        const el = sidebarEl.value
+        if (!el) return
+        // Gemini Review (Slice 7.3): disabled-Elemente ausschliessen,
+        // sonst schlaegt der Fokus-Shift fehl, wenn das erste gefundene
+        // Element disabled ist.
+        const focusable = el.querySelector<HTMLElement>(
+          'button:not([disabled]), [href]:not([aria-disabled="true"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        if (focusable) focusable.focus()
+        else el.focus()
+      })
+    } else if (prev && lastFocusedBeforeDrawer && typeof lastFocusedBeforeDrawer.focus === 'function') {
+      // Fokus zurueck zum Trigger
+      lastFocusedBeforeDrawer.focus()
+      lastFocusedBeforeDrawer = null
     }
   },
 )

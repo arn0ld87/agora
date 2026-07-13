@@ -719,13 +719,10 @@
     }
   },
   "sidebar": {
+    "title": "Main navigation",
     "nav": {
       "dashboard": "Dashboard",
-      "runs": "Runs",
-      "projects": "Projects",
-      "datasets": "Datasets",
-      "templates": "Templates",
-      "monitoring": "Monitoring"
+      "runs": "Runs"
     },
     "settings": {
       "label": "Settings",
@@ -734,15 +731,12 @@
       "usersTeams": "Users & Teams",
       "apiKeys": "API Keys",
       "llmProviders": "LLM Providers",
-      "llmRouting": "LLM Routing",
       "embedding": "Embedding configuration",
-      "auditLogs": "Audit Logs",
       "profile": "Profile"
     },
     "footer": {
       "collapse": "Collapse"
-    },
-    "disabledTooltip": "Coming soon"
+    }
   },
   "cmd": {
     "title": "Command Palette",
