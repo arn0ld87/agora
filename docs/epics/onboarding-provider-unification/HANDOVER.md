@@ -695,7 +695,7 @@ zusätzlich statisch nachgewiesen.
    voreilig gelöscht.
 3. Der Mock-Routing-Unterbaum ist verwaist und erhält einen eigenen Cleanup-PR.
 4. `/settings-classic` wird erst nach Feature-Parität per Redirect deprecatet.
-5. 7.5b und 7.9c warten auf Slice 6, weil `HeroNewRun`/Step 2/i18n gemeinsame
+5. 7.6b und 7.6c warten auf Slice 6, weil `HeroNewRun`/Step 2/i18n gemeinsame
    Hotspots sind.
 
 ## Konfliktgrenze zu Slice 6
@@ -728,4 +728,4 @@ und einen neuen Contract-Test.
 - echter Browser-/axe-Run für die späteren sichtbaren UI-PRs;
 - Auflösung der veralteten Design-v4-Referenz auf die nicht vorhandene Datei
   `docs/2026-05-11-design-v4-app-shell-epic.md` in einem separaten Doku-Cleanup;
-- Slice-6-Merge vor 7.5b und 7.9c.
+- Slice-6-Merge vor 7.6b und 7.6c.
