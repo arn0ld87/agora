@@ -130,7 +130,7 @@ describe('SettingsIntegrationsView (Slice G1, real)', () => {
     // Locale-agnostisch: deutscher "Integrationen"-String und englischer
     // "Integrations"-String sind beide gueltige Lokalisierungen.
     const labels = crumbs.map((c) => c.label)
-    expect(labels.some((l) => /^Integration(en)?$/.test(l))).toBe(true)
+    expect(labels.some((l) => /^Integration(en|s)?$/.test(l))).toBe(true)
   })
 
   it('reicht Integrations-Sektionen an SettingsSectionPanel', async () => {

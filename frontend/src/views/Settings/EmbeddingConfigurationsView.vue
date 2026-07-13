@@ -28,10 +28,10 @@ const { t } = useI18n()
 
 const store = useEmbeddingConfigurationsStore()
 
-const BREADCRUMBS = [
+const BREADCRUMBS = computed(() => [
   { label: t('common.settings'), to: { name: 'SettingsGeneral' } },
   { label: t('settings.v4.embedding.title', 'Embedding-Konfiguration') },
-]
+])
 
 const STATUS_TONE: Record<string, 'gray' | 'green' | 'orange' | 'red' | 'blue' | 'teal'> = {
   proposed: 'gray',
