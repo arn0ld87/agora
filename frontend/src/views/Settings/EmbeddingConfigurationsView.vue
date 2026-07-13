@@ -28,10 +28,10 @@ const { t } = useI18n()
 
 const store = useEmbeddingConfigurationsStore()
 
-const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
+const BREADCRUMBS = computed(() => [
+  { label: t('common.settings'), to: { name: 'SettingsGeneral' } },
   { label: t('settings.v4.embedding.title', 'Embedding-Konfiguration') },
-]
+])
 
 const STATUS_TONE: Record<string, 'gray' | 'green' | 'orange' | 'red' | 'blue' | 'teal'> = {
   proposed: 'gray',
@@ -90,7 +90,7 @@ function openOllamaModal(): void {
 
 async function submitOllamaPull(): Promise<void> {
   if (!ollamaDraft.model) {
-    ollamaDraft.lastError = 'Model-Name ist erforderlich';
+    ollamaDraft.lastError = t('embedding.ollama.modelRequired');
     return;
   }
   ollamaDraft.isPulling = true;

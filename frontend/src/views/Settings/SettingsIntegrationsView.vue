@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
@@ -6,10 +7,10 @@ import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue
 
 const { t } = useI18n()
 
-const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
-  { label: 'Integrations' },
-]
+const BREADCRUMBS = computed(() => [
+  { label: t('common.settings'), to: { name: 'SettingsGeneral' } },
+  { label: t('sidebar.settings.integrations') },
+])
 
 // Externe Systeme — Neo4j, Embedding-Provider, Ontology-LLM, Hybrid-Search,
 // Agent-Tools, WebTools und OASIS-Runner.
