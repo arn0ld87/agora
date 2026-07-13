@@ -1,44 +1,33 @@
 /**
- * AiModelPicker — Playwright-E2E (Sub-Slice 5.6-Prep).
+ * AiModelPicker — Playwright-E2E (Sub-Slice 5.6 final).
  *
- * Stand: 2026-07-13 — SKELETON. Der gesamte describe-Block ist mit
- * `test.describe.skip()` markiert, weil die Komponente noch in KEINER
- * produktiven View gemountet ist. Sub-Slice 5.4 (Migration der
- * Auswahlstellen) liefert die Views; 5.6 final muss dann nur die
- * `.skip`-Annotation entfernen und ggf. Selektor-Pfade an die
- * konkret migrierten Routen anpassen.
+ * Stand: 2026-07-13 — echte Browser-Runs (Skip-Annotationen entfernt).
  *
- * Aktivierung pro Test:
+ * Stack (siehe global-setup.ts + scripts/e2e-up.sh):
+ *   - Compose-Override haengt einen `mock-models` nginx-Service ein, der
+ *     `GET /models` mit `{"data":[{"id":"qwen2.5:14b"},{"id":"gpt-oss-20b"}]}`
+ *     bedient (OpenAI-kompatibel).
+ *   - global-setup seeded zwei Provider-Connections:
+ *       openai_compatible (online)  → http://mock-models         (2 Modelle)
+ *       openai            (offline) → nicht aufloesbarer DNS-Name (0 Modelle)
+ *   - Backend-Capability-Inference existiert nicht (adapters._ai_model
+ *     setzt keine Capabilities → alle 'unknown'). Der chat-mode behandelt
+ *     'unknown' als geeignet und filtert nur explizit 'unsupported' aus
+ *     (siehe AiModelPicker.vue filteredOptions, Slice 5.6).
  *
- *   1) Tastatur-Navigation ↓↓↑Enter
- *      Voraussetzung: 5.4 hat AiModelPicker in mindestens einer
- *      Settings/Dashboard-View gemountet (Empfehlung slice-5:
- *      SettingsGeneralView). 5.6 final: `await page.goto('/settings/general')`
- *      o. ae. statt des hier dokumentierten `goto`/Stub.
+ * Ziel-View: /settings/llm-routing (RunLlmRoutingPanel mountet pro Stage
+ * einen AiModelPicker). Run-ID wird ins Run-ID-Feld eingetragen; das
+ * Backend synthetisiert fuer unbekannte run_ids einen Default-Config
+ * (RuntimeRunConfig.load_config braucht keinen RunRegistry-Eintrag),
+ * sodass PATCH mit einer festen Test-run_id funktioniert.
  *
- *   2) Provider offline
- *      Voraussetzung: Backend liefert im Test-Fixture mindestens
- *      einen Provider mit status='unavailable' (siehe useAvailableModels
- *      Composable + ProviderConnectionStore). 5.6 final: Seed im
- *      global-setup oder ein dedizierter Test-Helper-Endpoint.
- *
- *   3) Run-Snapshot
- *      Voraussetzung: 5.4 hat die Stage-Override-UI auf AiModelPicker
- *      umgestellt (z. B. in LlmRoutingView.vue) UND 5.3 (PR #700) ist
- *      gemergt — AiRoute ist im Endpoint
- *      GET /api/runs/<run_id>/llm-routing verfuegbar.
- *
- * Helper: siehe frontend/tests/e2e/helpers/aiModelPicker.ts.
- * testId-SSoT: frontend/src/contracts/testIds.ts.
- *
- * Out of Scope hier: 5.4 (Migration), 5.5 (Deprecation). Die Spec
- * ist absichtlich eng am 5.6-Sub-Plan-Scope gehalten, damit sie
- * nicht versehentlich Migrations-Logik mitverifiziert.
+ * Selektor-Pfad: ausschliesslich data-testid (keine Klassen-/ARIA-/
+ * i18n-Selektoren). Siehe helpers/aiModelPicker.ts + contracts/testIds.ts.
  */
-import { test, expect, request, type APIRequestContext } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import {
   login,
-  getPicker,
+  getStagePicker,
   getPickerInput,
   getPickerSearch,
   getOption,
@@ -48,165 +37,150 @@ import {
   drillKeyboard,
   readSelectedLabel,
 } from './helpers/aiModelPicker'
-import { authHeader } from './helpers/auth'
+import { LlmRoutingTestId } from './helpers/testIds'
 
-// 5.4: aktivieren sobald die Komponente in mindestens einer View gemountet ist.
-test.describe.skip('Slice 5.6 · AiModelPicker E2E', () => {
+const E2E_RUN_ID = 'run_e2e_model_picker'
+const STAGE = 'document_ingest'
+const ONLINE_CONN = 'openai_compatible'
+const OFFLINE_CONN = 'openai'
+const ONLINE_MODEL = 'qwen2.5:14b'
+const OTHER_MODEL = 'gpt-oss-20b'
+
+test.describe('Slice 5.6 · AiModelPicker E2E', () => {
   test.beforeEach(async ({ page, context }) => {
-    // Single-User-Token-Mode (siehe health.spec.ts Test 4): kein
-    // klassisches Login, sondern Token-Inject in localStorage.
+    // Single-User-Token-Mode: Token-Inject in localStorage.
     await login(context)
-    // 5.4 muss diese Route in App.vue (oder dem Hash-Router) registrieren.
-    // Solange 5.4 offen ist, fuehrt goto() in einen 404 — daher der skip.
-    await page.goto('/settings/general', { waitUntil: 'domcontentloaded' })
+    await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' })
+    // Run-ID eintragen → RunLlmRoutingPanel mountet (v-if selectedRunIdTrimmed).
+    await page.getByTestId('llm-routing-run-id').fill(E2E_RUN_ID)
+    // Warten bis der Stage-Picker fuer document_ingest gerendert ist.
+    await expect(getStagePicker(page, STAGE)).toBeVisible()
   })
 
   // -------------------------------------------------------------------------
   // 1) Tastatur-Navigation ↓↓↑Enter
   // -------------------------------------------------------------------------
-  test.describe('Tastatur-Navigation', () => {
-    test('↓↓↑Enter oeffnet Combobox, wandert Auswahl und committed', async ({ page }) => {
-      const picker = getPicker(page)
-      await expect(picker).toBeVisible()
+  test('↓↓↑Enter navigiert die Combobox und committet die Auswahl', async ({ page }) => {
+    const picker = getStagePicker(page, STAGE)
+    await openPicker(page, picker)
 
-      // 1. Trigger-Input ist fokussierbar.
-      const input = getPickerInput(page, picker)
-      await expect(input).toBeVisible()
-      await expect(input).toBeEnabled()
+    // Warten bis die Discovery-Modelle geladen sind (Option sichtbar),
+    // sonst hat ↓↓↑Enter keine Liste zum Navigieren.
+    await expect(
+      getOption(page, { providerConnectionId: ONLINE_CONN, modelId: OTHER_MODEL }),
+    ).toBeVisible()
 
-      // 2. ↓↓↑Enter: reka-ui Combobox-Logik navigiert ueber die
-      //    sichtbaren Items. Nach ↓↓↑ ist das 2. Item aktiv
-      //    (initial ↓ markiert 1., ↓ markiert 2., ↑ geht zurueck auf 1.).
-      //    Enter committed den Eintrag.
-      await drillKeyboard(page, picker)
+    const input = getPickerInput(page, picker)
+    await expect(input).toBeEnabled()
 
-      // 3. Nach Enter: Trigger-Input zeigt das gewaehlte Modell.
-      //    (Konkrete Erwartung wird in 5.6 final gesetzt, sobald die
-      //    Seed-Daten aus useAvailableModels feststehen.)
-      const label = await readSelectedLabel(page, picker)
-      expect(label.length).toBeGreaterThan(0)
-      // 5.4: aktiveren, sobald SettingsGeneralView den Picker nutzt.
-    })
+    // ↓↓↑Enter: ↓ markiert 1. (gpt-oss-20b, alphabetisch zuerst), ↓ 2.
+    // (qwen2.5:14b), ↑ zurueck auf 1., Enter committed.
+    await drillKeyboard(page, picker)
 
-    test('Suche filtert Optionen, Pfeile wandern ueber Treffer', async ({ page }) => {
-      const picker = getPicker(page)
-      await openPicker(page, picker)
-      // reka-ui ComboboxInput im Content ist die Such-Leiste.
-      const search = getPickerSearch(page, picker)
-      await expect(search).toBeVisible()
-      await search.fill('qwen')
-
-      // Treffer-Liste: die als `qwen` matchenden Optionen.
-      // 5.6 final: konkrete provider_connection_id aus Seed ableiten.
-      const firstMatch = picker.locator('[data-testid^="ai-model-picker-option"]').first()
-      await expect(firstMatch).toBeVisible()
-
-      // 5.4: aktiveren, sobald Seed verfuegbar ist.
-    })
+    const label = await readSelectedLabel(page, picker)
+    expect(label.length).toBeGreaterThan(0)
   })
 
   // -------------------------------------------------------------------------
-  // 2) Provider offline: Status-Badge + disabled Modell
+  // 2) Suche filtert Optionen
   // -------------------------------------------------------------------------
-  test.describe('Provider offline', () => {
-    test('Modell mit status=unavailable hat disabled-Attribut und Status-Badge', async ({ page }) => {
-      const picker = getPicker(page)
-      await openPicker(page, picker)
+  test('Suche filtert die Optionen auf Treffer', async ({ page }) => {
+    const picker = getStagePicker(page, STAGE)
+    await openPicker(page, picker)
 
-      // 5.6 final: provider_connection_id + model_id aus dem
-      // Test-Seed ableiten (Empfehlung: dedizierter
-      // 'unavailable'-Provider im Test-Fixture).
-      const offlineOption = getOption(
-        page,
-        { providerConnectionId: 'conn-offline', modelId: 'gpt-offline' },
-        picker,
-      )
+    const search = getPickerSearch(page)
+    await expect(search).toBeVisible()
+    await search.fill('qwen')
 
-      // a) data-status reflektiert 'unavailable' (Quelle: AiModelPicker.vue,
-      //    :data-status="item.status" — schon vor diesem PR gesetzt).
-      await expect(offlineOption).toHaveAttribute('data-status', 'unavailable')
-
-      // b) ComboboxItem rendert das disabled-Attribut. reka-ui setzt
-      //    zusaetzlich aria-disabled; beide sind akzeptabel.
-      const ariaDisabled = await offlineOption.getAttribute('aria-disabled')
-      const nativeDisabled = await offlineOption.getAttribute('data-disabled')
-      expect(ariaDisabled === 'true' || nativeDisabled !== null).toBe(true)
-
-      // c) Status-Badge ist sichtbar (reka-ui ComboboxItem ist der
-      //    Traeger; Badge liegt innerhalb des Items). Text ist i18n,
-      //    daher Pruefung auf Klasse ai-model-picker__badge--err.
-      await expect(
-        offlineOption.locator('.ai-model-picker__badge--err'),
-      ).toBeVisible()
-
-      // 5.4: aktiveren, sobald Seed einen 'unavailable'-Provider enthaelt.
-    })
-
-    test('Provider-Group rendert Status-Label im Group-Header', async ({ page }) => {
-      const picker = getPicker(page)
-      await openPicker(page, picker)
-
-      const offlineGroup = getGroupByConnectionId(page, 'conn-offline', picker)
-      // Group-Header enthaelt den lokalisierten Status.
-      // Textuelle Assertion ist i18n-fest, daher Pruefung auf die
-      // Group-Label-Klasse.
-      await expect(offlineGroup.locator('.ai-model-picker__group-label')).toBeVisible()
-      // 5.4: aktiveren, sobald Seed verfuegbar ist.
-    })
+    // 'qwen' matcht model_id 'qwen2.5:14b', nicht 'gpt-oss-20b'.
+    await expect(
+      getOption(page, { providerConnectionId: ONLINE_CONN, modelId: ONLINE_MODEL }),
+    ).toBeVisible()
+    await expect(
+      getOption(page, { providerConnectionId: ONLINE_CONN, modelId: OTHER_MODEL }),
+    ).toHaveCount(0)
   })
 
   // -------------------------------------------------------------------------
-  // 3) Run-Snapshot: Auswahl landet im canonical ai_route
+  // 3) Online-Modell ist verfuegbar (data-status=available, nicht disabled)
   // -------------------------------------------------------------------------
-  test.describe('Run-Snapshot', () => {
-    // 5.3 (PR #700) liefert das `ai_route`-Feld im Endpoint
-    // GET /api/runs/<run_id>/llm-routing. 5.4 muss die Stage-Override-UI
-    // auf AiModelPicker umgestellt haben.
-    test('gewaehltes Modell landet im Run-Snapshot (ai_route)', async ({ page, baseURL }) => {
-      // Bestehender Run mit laufender Stage-Override-Konfiguration.
-      // 5.6 final: run_id aus einem frischen Test-Run ableiten
-      // (z. B. ueber helpers/upload.ts + minimal-report.spec.ts-Pattern).
-      const runId = 'run_e2e_placeholder'
+  test('Online-Modell ist verfuegbar und auswaehlbar', async ({ page }) => {
+    const picker = getStagePicker(page, STAGE)
+    await openPicker(page, picker)
 
-      const picker = getPicker(page)
-      // 5.4: Annahme — die Stage-Override-View (z. B. LlmRoutingView)
-      // enthaelt den Picker pro Stage. Der Pfad muss in 5.6 final an
-      // die echte Route angepasst werden.
-      await page.goto(`/runs/${runId}/routing`, { waitUntil: 'domcontentloaded' })
+    const onlineOption = getOption(page, { providerConnectionId: ONLINE_CONN, modelId: ONLINE_MODEL })
+    await expect(onlineOption).toBeVisible()
+    // data-status="available" (Quelle: AiModelPicker.vue :data-status="item.status").
+    await expect(onlineOption).toHaveAttribute('data-status', 'available')
+    // Nicht disabled → auswaehlbar (isDisabled filtert unavailable/unsupported).
+    await expect(onlineOption).toBeEnabled()
+  })
 
-      // 1) Auswahl via Picker treffen.
-      const target = {
-        providerConnectionId: 'conn-ollama-local',
-        modelId: 'qwen2.5:14b',
-      }
-      await selectOptionByClick(page, target, picker)
+  // -------------------------------------------------------------------------
+  // 4) Provider offline: keine Gruppe / keine Option (Discovery schlägt fehl)
+  // -------------------------------------------------------------------------
+  test('Offline-Connection liefert keine Modelle (keine Gruppe, keine Option)', async ({ page }) => {
+    const picker = getStagePicker(page, STAGE)
+    await openPicker(page, picker)
 
-      // 2) Speichern (Button-Text ist i18n; 5.6 final nutzt ein
-      //    dediziertes data-testid am Save-Button, sobald 5.4 ihn
-      //    umgestellt hat).
-      // await page.getByTestId('stage-override-save').click()
+    // Warten bis die Online-Gruppe da ist (stellt sicher, dass die
+    // Discovery ueberhaupt zurueckgekehrt ist), bevor auf Abwesenheit
+    // der Offline-Gruppe assertiert wird.
+    await expect(
+      getGroupByConnectionId(page, ONLINE_CONN),
+    ).toBeVisible()
 
-      // 3) Run-Snapshot-Endpoint pruefen.
-      //    GET /api/runs/<run_id>/llm-routing liefert seit PR #700
-      //    das canonical `ai_route`-Feld (AiRoute-Schema, siehe
-      //    backend/app/contracts/ai_provider_contract.py).
-      const ctx: APIRequestContext = await request.newContext({
-        extraHTTPHeaders: authHeader(),
-      })
-      const res = await ctx.get(`${baseURL}/api/runs/${runId}/llm-routing`)
-      expect(res.ok()).toBe(true)
+    // Offline-Connection: Probe schlägt fehl → 0 Modelle → keine Gruppe.
+    await expect(
+      getGroupByConnectionId(page, OFFLINE_CONN),
+    ).toHaveCount(0)
+    // Keine Option aus der Offline-Connection.
+    await expect(
+      getOption(page, { providerConnectionId: OFFLINE_CONN, modelId: 'any' }),
+    ).toHaveCount(0)
+  })
 
-      const body = (await res.json()) as { data?: { ai_route?: { provider_connection_id?: string; model_id?: string; source?: string } } }
-      const route = body.data?.ai_route
-      expect(route).toBeDefined()
-      expect(route?.provider_connection_id).toBe(target.providerConnectionId)
-      expect(route?.model_id).toBe(target.modelId)
-      // Source ist seit 5.3 'stage-override' (siehe slice-5-subplan §5.3).
-      expect(route?.source).toBe('stage-override')
+  // -------------------------------------------------------------------------
+  // 5) Run-Snapshot: Auswahl landet im canonical ai_route (PATCH-Response)
+  // -------------------------------------------------------------------------
+  test('Stage-Override landet im ai_route (source=stage_override)', async ({ page }) => {
+    const picker = getStagePicker(page, STAGE)
+    await openPicker(page, picker)
 
-      await ctx.dispose()
-      // 5.4: aktiveren, sobald Stage-Override-View den Picker nutzt
-      //       UND 5.3 in main gemergt ist (PR #700).
-    })
+    // Warten bis die Option verfuegbar ist, dann per Klick auswaehlen.
+    await selectOptionByClick(
+      page,
+      { providerConnectionId: ONLINE_CONN, modelId: ONLINE_MODEL },
+      picker,
+    )
+
+    // Auswahl setzt routing.stage_overrides[document_ingest] → der
+    // Apply-Button (v-if) rendert. PATCH
+    // /api/runs/<run_id>/llm-routing/stages/<stage_id> liefert im
+    // Response-Body das canonical ai_route-Feld (PR #700, source=stage_override).
+    const applyButton = page.locator(
+      `[data-testid="${LlmRoutingTestId.stageSave}"][data-stage="${STAGE}"]`,
+    )
+
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (resp) =>
+          resp.url().includes(`/llm-routing/stages/${STAGE}`) &&
+          resp.request().method() === 'PATCH',
+      ),
+      applyButton.click(),
+    ])
+
+    expect(response.ok()).toBe(true)
+    const body = (await response.json()) as {
+      data?: { ai_route?: { provider_connection_id?: string; model_id?: string; source?: string } }
+      ai_route?: { provider_connection_id?: string; model_id?: string; source?: string }
+    }
+    // Tolerante Huelle (json_success schachtelt unter 'data').
+    const aiRoute = body.data?.ai_route ?? body.ai_route
+    expect(aiRoute).toBeDefined()
+    expect(aiRoute?.provider_connection_id).toBe(ONLINE_CONN)
+    expect(aiRoute?.model_id).toBe(ONLINE_MODEL)
+    expect(aiRoute?.source).toBe('stage_override')
   })
 })

@@ -29,3 +29,22 @@ services:
       # und Job-Level-env ohne .env-Append den Container nicht erreicht.
       # e2e-up.sh appended den Wert zusätzlich in .env (doppelte Absicherung).
       - AGORA_E2E_LLM_MODE=${AGORA_E2E_LLM_MODE:-}
+
+  # Slice 5.6: Mock-Model-Server fuer die AiModelPicker-Discovery-Probe.
+  #
+  # Der agora-Container erreicht ihn im Compose-Default-Netzwerk (siehe
+  # docker-compose.yml `networks: default:`) unter dem DNS-Namen
+  # `mock-models`. Das ist absichtlich kein localhost/IP, weil
+  # `_validate_public_base_url` (ai_provider_contract) lokale Adressen
+  # ablehnt, DNS-Namen aber erlaubt. Der Mock liefert eine statische
+  # OpenAI-kompatible /models-Antwort (`data[].id`), siehe
+  # adapters._HttpModelsAdapter (protocol openai_compatible).
+  mock-models:
+    image: nginx:alpine
+    init: true
+    volumes:
+      # Pfade relativ zur Compose-Projekt-Wurzel (Repo-Root, dir der ersten
+      # `-f`-Datei) — nicht zum Override-File. Siehe docker-compose.yml
+      # `./backend/...`-Konvention.
+      - ./deploy/e2e/mock-models/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/e2e/mock-models/models.json:/usr/share/nginx/html/models.json:ro

@@ -26,6 +26,7 @@ import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue';
 import { useLlmProvidersStore } from '@/store/aiModels';
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter';
 import type { AiModelRef } from '@/contracts/aiModelRef';
+import { LlmRoutingTestId } from '@/contracts/testIds';
 
 const props = defineProps<{
   runId: string;
@@ -175,7 +176,7 @@ defineExpose({
         </div>
 
         <h3>{{ t('llm.routing.stage_overrides') }}</h3>
-        <div v-for="stage in STAGES" :key="stage" class="stage-row card" :class="{ locked: isStageLocked(stage) }">
+        <div v-for="stage in STAGES" :key="stage" class="stage-row card" :class="{ locked: isStageLocked(stage) }" :data-testid="LlmRoutingTestId.stageRow" :data-stage="stage">
           <h4>{{ t(`llm.stages.${stage}`) }}</h4>
           <div v-if="isStageLocked(stage)" class="locked-badge">
              <span class="icon">🔒</span> {{ t('llm.routing.locked') }}
@@ -194,6 +195,8 @@ defineExpose({
               v-if="routing.stage_overrides[stage]"
               @click="saveStage(stage, routing.stage_overrides[stage])"
               :disabled="loading || isStageLocked(stage)"
+              :data-testid="LlmRoutingTestId.stageSave"
+              :data-stage="stage"
             >
               {{ t('common.apply') }}
             </button>

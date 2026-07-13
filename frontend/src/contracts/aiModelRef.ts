@@ -81,6 +81,7 @@ export const AiModelRefInputSchema = z.object({
   status: AiModelStatusSchema,
   is_workspace_default: z.boolean().optional(),
   local_or_cloud: z.enum(['local', 'cloud']),
+  unsupported_capabilities: z.array(AiCapabilitySchema).optional(),
 }).strict()
 export type AiModelRefInputValidated = z.infer<typeof AiModelRefInputSchema>
 
@@ -124,6 +125,7 @@ export interface AiModelRefInput {
   readonly status: AiModelStatus
   readonly is_workspace_default?: boolean
   readonly local_or_cloud: 'local' | 'cloud'
+  readonly unsupported_capabilities?: readonly AiCapability[]
 }
 
 export type AiProviderKind =

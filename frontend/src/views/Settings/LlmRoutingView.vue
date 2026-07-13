@@ -97,6 +97,7 @@ onMounted(() => {
           <Input
             v-model="selectedRunId"
             mono
+            data-testid="llm-routing-run-id"
             placeholder="run_..."
           />
         </Field>
