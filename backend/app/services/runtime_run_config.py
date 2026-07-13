@@ -181,11 +181,19 @@ class RuntimeRunConfig:
             )
 
     def save_ai_route_snapshot(self, stage_id: StageId, route: AiRoute) -> AiRoute:
-        """Publish a canonical route and return the stored first-writer winner."""
+        """Publish a canonical route and return the stored first-writer winner.
+
+        The full field set is persisted (incl. ``fallback_reason: null`` and
+        ``resolved_at``) so the snapshot is self-describing and stays aligned
+        with the routing audit. Secrets stay out via ``_sanitize_deep``
+        (secret keys dropped, URLs credential-stripped); only public
+        provider options such as ``base_url``/``num_ctx`` survive. The
+        first-writer-wins publish stays atomic.
+        """
         path = os.path.join(self.stages_dir, f"{stage_id}_ai_route_snapshot.json")
         winner = _publish_json_once_atomic(
             path,
-            self._sanitize_deep(route.model_dump(mode="json", exclude_none=True)),
+            self._sanitize_deep(route.model_dump(mode="json")),
         )
         return AiRoute.model_validate(winner)
 

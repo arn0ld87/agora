@@ -233,6 +233,7 @@ export const AiRouteSchema = z.object({
   source: RouteSourceSchema,
   validated_capabilities: z.record(z.string(), CapabilityStateSchema).default({}),
   provider_options: AiProviderOptionsSchema.default({}),
+  routing_version: z.number().int().min(1).default(1),
   resolved_at: NullableDateTimeSchema,
   fallback_reason: z.string().nullable().default(null),
 }).strict().superRefine((route, context) => {

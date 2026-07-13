@@ -1,7 +1,11 @@
+import json
+
 import pytest
 from unittest.mock import patch
 from app.services.runtime_run_config import RuntimeRunConfig, _detect_default_provider_id
 from app.services.stage_model_router import StageModelRouter
+from app.services.ai_route_resolver import AiRouteCapabilityMismatchError
+from app.contracts.ai_provider_contract import AiRoute
 from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 
 @pytest.fixture
@@ -12,6 +16,15 @@ def temp_run_dir(tmp_path):
 
     with patch("app.utils.artifact_locator.ArtifactLocator.run_dir", return_value=str(run_dir)):
         yield run_id
+
+
+def _injected(source, name, *, capabilities=None):
+    return AiRoute(
+        provider_connection_id=f"conn-{name}",
+        model_id=f"model-{name}",
+        source=source,
+        validated_capabilities=capabilities or {"chat": "supported"},
+    )
 
 def test_runtime_run_config_persistence(temp_run_dir):
     service = RuntimeRunConfig(temp_run_dir)
@@ -59,7 +72,10 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     assert canonical is not None
     assert canonical.provider_connection_id == "openai"
     assert canonical.model_id == "gpt-4o"
-    assert canonical.source == "legacy"
+    # Slice 7.3.3 (Teil 11): der Snapshot trägt jetzt die *echte* Quelle aus
+    # dem kanonischen Resolver (Run-Level-Default) statt der alten Heuristik
+    # "legacy".
+    assert canonical.source == "run_override"
     assert canonical.resolved_at is not None
 
     # 2. Update runtime config
@@ -184,3 +200,125 @@ def test_detect_default_provider_id_recognizes_sized_cloud_tags_ssot_weakness_fi
     assert _detect_default_provider_id(
         "https://custom-gateway.example/v1", "qwen3-coder-next:cloud"
     ) == "ollama_cloud"
+
+
+# --- Slice 7.3.3 (Teil 11): kanonischer Resolver im produktiven Router -------
+
+
+def test_router_stage_override_level_wins(temp_run_dir):
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(
+        global_default=StageLLMRoute(provider_id="conn-run", model="model-run"),
+        stage_overrides={"graph_build": StageLLMRoute(provider_id="conn-stage", model="model-stage")},
+        routing_version=1,
+    ))
+    resolved = StageModelRouter(temp_run_dir).resolve("graph_build")
+    assert resolved.provider_id == "conn-stage"
+    assert resolved.model == "model-stage"
+
+
+def test_router_run_override_level_wins(temp_run_dir):
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(
+        global_default=StageLLMRoute(provider_id="conn-run", model="model-run"),
+        routing_version=1,
+    ))
+    resolved = StageModelRouter(temp_run_dir).resolve("graph_build")
+    assert resolved.provider_id == "conn-run"
+    assert resolved.model == "model-run"
+
+
+def test_router_project_level_beats_workspace(temp_run_dir):
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(global_default=StageLLMRoute(), routing_version=1))
+    resolved = StageModelRouter(temp_run_dir).resolve(
+        "graph_build",
+        project_route=_injected("project", "project"),
+        workspace_route=_injected("workspace", "workspace"),
+    )
+    assert resolved.provider_id == "conn-project"
+    assert resolved.model == "model-project"
+
+
+def test_router_workspace_level_wins(temp_run_dir):
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(global_default=StageLLMRoute(), routing_version=1))
+    resolved = StageModelRouter(temp_run_dir).resolve(
+        "graph_build",
+        workspace_route=_injected("workspace", "workspace"),
+    )
+    assert resolved.provider_id == "conn-workspace"
+    assert resolved.model == "model-workspace"
+
+
+def test_router_provider_fallback_level_wins(temp_run_dir, monkeypatch):
+    import app.config as config_module
+
+    monkeypatch.setattr(config_module.Config, "LLM_MODEL_NAME", "fallback-model")
+    monkeypatch.setattr(config_module.Config, "LLM_BASE_URL", "http://localhost:11434/v1")
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(global_default=StageLLMRoute(), routing_version=1))
+
+    resolved = StageModelRouter(temp_run_dir).resolve("graph_build")
+    assert resolved.model == "fallback-model"
+
+
+def test_router_capability_mismatch_is_hard(temp_run_dir):
+    """Capability-Mismatch bleibt hart — kein stiller Fallback."""
+    service = RuntimeRunConfig(temp_run_dir)
+    service.save_config(RuntimeLlmRouting(
+        global_default=StageLLMRoute(provider_id="conn-run", model="model-run"),
+        routing_version=1,
+    ))
+    with pytest.raises(AiRouteCapabilityMismatchError):
+        StageModelRouter(temp_run_dir).resolve("graph_build", required_capabilities={"vision"})
+
+
+def test_router_snapshot_is_complete_and_secret_free(temp_run_dir):
+    """Teil 12: Snapshot trägt echte Quelle, Capabilities, öffentliche
+    provider_options (base_url/num_ctx), routing_version und fallback_reason:null
+    — und keine Secrets."""
+    from pathlib import Path
+
+    service = RuntimeRunConfig(temp_run_dir)
+    stage_route = StageLLMRoute(
+        provider_id="conn-b",
+        model="qwen3",
+        provider_options={"base_url": "http://localhost:1234/v1", "num_ctx": 32768},
+    )
+    service.save_config(RuntimeLlmRouting(
+        global_default=stage_route,
+        stage_overrides={"graph_build": stage_route},
+        routing_version=2,
+    ))
+    router = StageModelRouter(temp_run_dir)
+    resolved = router.resolve("graph_build")
+    router.lock_stage("graph_build", resolved)
+
+    snapshot_path = Path(service.stages_dir) / "graph_build_ai_route_snapshot.json"
+    raw = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+    assert raw["stage"] == "graph_build"
+    assert raw["provider_connection_id"] == "conn-b"
+    assert raw["model_id"] == "qwen3"
+    assert raw["source"] == "stage_override"
+    assert raw["routing_version"] == 2
+    assert raw["fallback_reason"] is None
+    assert "resolved_at" in raw
+    assert raw["provider_options"]["base_url"] == "http://localhost:1234/v1"
+    assert raw["provider_options"]["num_ctx"] == 32768
+
+    # Secret-KEYS dürfen nicht als Felder auftauchen. Quoted-Key-Match, damit
+    # legitime öffentliche Felder wie "max_tokens" nicht fälschlich auf "token"
+    # anschlagen.
+    serialized = json.dumps(raw).lower()
+    for secret in ("api_key", "authorization", "password", "token", "secret"):
+        assert f'"{secret}"' not in serialized
+
+    # Snapshot und Audit stimmen auf den geteilten Feldern überein.
+    audit_path = Path(service.stages_dir) / "graph_build_routing_resolved.json"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit["source"] == raw["source"]
+    assert audit["provider_connection_id"] == raw["provider_connection_id"]
+    assert audit["model_id"] == raw["model_id"]
+    assert audit["fallback_reason"] == raw["fallback_reason"]

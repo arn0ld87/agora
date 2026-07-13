@@ -173,6 +173,12 @@
       "default": null,
       "title": "Resolved At"
     },
+    "routing_version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Routing Version",
+      "type": "integer"
+    },
     "source": {
       "enum": [
         "default",
