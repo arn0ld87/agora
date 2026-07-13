@@ -199,6 +199,11 @@ export const EmbeddingMigrationProgressSchema = z
     failed: z.number().int().min(0),
     // Resume-Cursor der Re-Embedding-Engine (Slice 4.3.4)
     last_processed_id: z.string().nullable().default(null),
+    // Slice 4.4: Disambiguiert den Resume-Cursor — derselbe Cursor-Wert
+    // gehoert immer zur aktiven Phase ('entity' = (n:Entity).entity_embedding,
+    // 'fact' = ()-[r:RELATION]-().fact_embedding). Default 'entity' haelt
+    // Alt-Jobs ladbar.
+    phase: z.enum(['entity', 'fact']).default('entity'),
     started_at: NullableDateTimeSchema,
     finished_at: NullableDateTimeSchema,
   })

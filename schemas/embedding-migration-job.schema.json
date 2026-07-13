@@ -34,6 +34,15 @@
           "default": null,
           "title": "Last Processed Id"
         },
+        "phase": {
+          "default": "entity",
+          "enum": [
+            "entity",
+            "fact"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
         "processed": {
           "minimum": 0,
           "title": "Processed",
