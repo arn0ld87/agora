@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ...utils.logger import get_logger
+from ...utils.path_safety import safe_join_within_root, validate_path_id
 
 logger = get_logger("agora.run_state_store")
 
@@ -298,7 +299,7 @@ def save_run_state(
     """
     from ...services.artifact_store import resolve_default_store
 
-    sim_dir = os.path.join(str(base_dir), state.simulation_id)
+    sim_dir = safe_join_within_root(str(base_dir), validate_path_id(state.simulation_id, field_name="simulation_id"))
     os.makedirs(sim_dir, exist_ok=True)  # keep dir for log-pipe / shutil consumers
 
     data = state.to_detail_dict()
@@ -341,7 +342,7 @@ def read_console_log(
         Lines with trailing newlines stripped.  Empty list on missing file or
         read error.
     """
-    log_path = os.path.join(str(base_dir), run_id, "simulation.log")
+    log_path = safe_join_within_root(str(base_dir), validate_path_id(run_id, field_name="run_id"), "simulation.log")
 
     if not os.path.exists(log_path):
         return []
@@ -386,7 +387,7 @@ def cleanup_run_logs(
     dict
         ``{"success": bool, "cleaned_files": list[str], "errors": list[str] | None}``
     """
-    sim_dir = os.path.join(str(base_dir), run_id)
+    sim_dir = safe_join_within_root(str(base_dir), validate_path_id(run_id, field_name="run_id"))
 
     if not os.path.exists(sim_dir):
         return {"success": True, "message": "Simulation directory does not exist, no cleanup needed"}
