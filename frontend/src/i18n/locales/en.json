@@ -735,6 +735,7 @@
       "apiKeys": "API Keys",
       "llmProviders": "LLM Providers",
       "llmRouting": "LLM Routing",
+      "embedding": "Embedding configuration",
       "auditLogs": "Audit Logs",
       "profile": "Profile"
     },
@@ -1369,7 +1370,8 @@
       "title": "Embeddings",
       "description": "Status of the configured embedding connection.",
       "futureNotice": "Guided setup follows in a later update.",
-      "settingsLink": "Go to provider settings"
+      "settingsLink": "Go to provider settings",
+      "legacyHint": "Currently using the legacy configuration from AGORA_EMBEDDING_*. The embedding settings let you create a canonical configuration and start an index migration run."
     },
     "privacy": {
       "title": "Privacy",

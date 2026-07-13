@@ -113,6 +113,7 @@ function makeOnboardingStatus(
       profile_valid: false,
       chat_model_configured: false,
       embedding_configured: false,
+      embedding_source: 'none',
     },
     onboarding_required: true,
     ...overrides,

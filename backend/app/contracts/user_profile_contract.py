@@ -206,6 +206,14 @@ class OnboardingRequirements(BaseModel):
     # erst mit der Provider-Discovery in Slice 3.
     chat_model_configured: bool
     embedding_configured: bool
+    # Quelle der aktiven Embedding-Konfiguration (Slice 4.2 + 4.3.3):
+    # - "store": kanonische Konfiguration im EmbeddingConfigurationStore
+    # - "legacy": aus Config.EMBEDDING_* abgeleitet (kein Probe, ungeprueft)
+    # - "none": keine Konfiguration vorhanden
+    # Das Frontend nutzt das, um Legacy-Migrations-Hinweise und
+    # Ollama-Download-Aktionen anzuzeigen, statt nur ein boolean zu
+    # rendern.
+    embedding_source: str = "none"
 
 
 class OnboardingStatusResponse(BaseModel):

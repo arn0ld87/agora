@@ -101,6 +101,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Settings/LlmProvidersView.vue'),
     meta: { requiresAuth: true },
   },
+  // Onboarding Slice 4.3.3: eigene Route für die kanonische
+  // Embedding-Konfiguration (Store, View, Migrations, Ollama-Download).
+  {
+    path: '/settings/embedding',
+    name: 'SettingsEmbedding',
+    component: () => import('../views/Settings/EmbeddingConfigurationsView.vue'),
+    meta: { requiresAuth: true },
+  },
   // Klassische SettingsView bleibt erreichbar fuer Slice-G-Migration
   {
     path: '/settings-classic',

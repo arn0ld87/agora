@@ -232,14 +232,49 @@ def compute_onboarding_requirements() -> OnboardingRequirements:
     chat_model_configured = bool(
         settings.llm_model_name and settings.llm_model_name.strip()
     )
-    embedding_configured = (
-        bool(settings.embedding_model and settings.embedding_model.strip())
-        and (settings.vector_dim or 0) > 0
-    )
+    # Slice 4.2/4.3.3: Embedding-Completion jetzt aus dem kanonischen
+    # EmbeddingConfigurationStore, nicht mehr aus Config.EMBEDDING_*.
+    # Legacy-Werte zaehlen weiterhin als "configured" (siehe
+    # EmbeddingConfigurationService.get_active_global_configuration),
+    # aber die Quelle wird separat exponiert, damit das Frontend einen
+    # Legacy-Migrations-Hinweis zeigen kann.
+    try:
+        from app.services.embedding_configuration_store import (
+            EmbeddingConfigurationStore,
+        )
+
+        embedding_store = EmbeddingConfigurationStore()
+        active_embedding = embedding_store.get_active_global_configuration()
+        if active_embedding is not None:
+            embedding_configured = True
+            embedding_source = "store"
+        else:
+            # Kein kanonischer Eintrag. Pruefe Legacy (Config.EMBEDDING_*).
+            legacy_configured = bool(
+                settings.embedding_model and settings.embedding_model.strip()
+            ) and (settings.vector_dim or 0) > 0
+            embedding_configured = legacy_configured
+            embedding_source = "legacy" if legacy_configured else "none"
+    except (ImportError, OSError, ValueError, TypeError) as exc:
+        # Wenn der Embedding-Store nicht initialisiert werden kann
+        # (z. B. AGORA_DATA_DIR fehlt, oder das JSON ist korrupt),
+        # fallen wir auf die Legacy-Pruefung zurueck. Hartaer Fail
+        # wuerde das Onboarding in Produktion brechen, falls der
+        # Data-Dir temporaer wegfaellt — gewollt defensiv.
+        logger.warning(
+            "EmbeddingConfigurationStore nicht verfuegbar, fallback auf Legacy: %s",
+            exc,
+        )
+        legacy_configured = bool(
+            settings.embedding_model and settings.embedding_model.strip()
+        ) and (settings.vector_dim or 0) > 0
+        embedding_configured = legacy_configured
+        embedding_source = "legacy" if legacy_configured else "none"
     return OnboardingRequirements(
         profile_valid=profile_valid,
         chat_model_configured=chat_model_configured,
         embedding_configured=embedding_configured,
+        embedding_source=embedding_source,
     )
 
 
