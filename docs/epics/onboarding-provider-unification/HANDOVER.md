@@ -1,55 +1,48 @@
-# Handover — Onboarding/Provider-Unification Slice 5.2
+# Handover — Onboarding/Provider-Unification Slice 5.3
 
 ## Stand
 
 - Datum: 2026-07-13
-- Worktree: `/private/tmp/agora-onboarding-slice-5-2`
-- Branch: `codex/onboarding-model-picker-slice-5-2` (Basis: `origin/main` @
-  `2ce211a2`, PR #697 gemergt)
-- Slice: 5.2 — Discovery-getriebene Daten für den einheitlichen Model-Picker
-- Arbeitsstand: implementiert; Frontend-Check und zielgerichtete Picker-/
-  Discovery-Specs grün. Pre-Push-Gate sowie PR/CI/Merge stehen noch aus.
+- Worktree: `/private/tmp/agora-onboarding-slice-5-3`
+- Branch: `codex/onboarding-model-picker-slice-5-3`
+- Basis: `origin/main` @ `331193d7` (Slice 5.2, PR #699, gemergt)
+- Slice: 5.3 — Backend-Routing-Hierarchie (`AiRoute`)
 
-## Fertig (Sub-Slice 5.2)
+## Fertig (Sub-Slice 5.3)
 
-- `useAvailableModels()` bezieht Modelle ausschließlich über den kanonischen
-  `llmProviders`-Connection-State (`loadConnections()` +
-  `fetchConnectionModels()`). Der bisherige v3-kompatible `PickerModel`-Shape
-  bleibt als Read-Adapter erhalten.
-- Die Discovery normalisiert `provider_connection_id`, bestätigte
-  Capabilities, Connection-/Model-Status und `local_or_cloud`. Nicht
-  erreichbare Provider bleiben sichtbar und sind `unavailable`; explizit
-  nicht unterstützte Connections bleiben getrennt `unsupported`.
-- `AiModelPicker.vue` hat keine produktiven Mock-Daten mehr. `options` ist
-  ausschließlich ein expliziter Test-Override; `mode` und
-  `capabilityFilter` arbeiten auf demselben Discovery-Datenpfad.
-- Der Picker zeigt Provider-Status je Gruppe und unterscheidet die Labels für
-  `unavailable` und `unsupported`. Deutsche und englische i18n-Keys liegen
-  unter `aiModelPicker.status` und `aiModelPicker.badge`.
-- `SettingsGeneralView.vue` verwendet den Picker als v4-Pilot.
-- Neue Specs decken Discovery-Normalisierung, Capability-Filter, Offline- und
-  Unsupported-Zustand sowie erzwungenen Refresh ab.
-
-## Dokumentations-Sync
-
-- `docs/STATUS.md`: mit `bash scripts/sync-status.sh` aktualisiert.
-- `docs/epics/onboarding-provider-unification/slice-5-subplan.md`: Scope
-  bleibt Referenz; Status erst nach PR-Merge auf abgeschlossen setzen.
-- `PLAN.md`, `README.md`, `CHANGELOG.md`, `AGENTS.md`, `CLAUDE.md`: geprüft,
-  für diesen isolierten Frontend-Datenpfad nicht betroffen.
+- Die bestehende Contract-SSoT `AiRoute` in
+  `backend/app/contracts/ai_provider_contract.py` wurde additiv um die
+  Quellen `run_override`, `project`, `workspace`, `provider_fallback` sowie
+  `resolved_at` und `fallback_reason` erweitert. Es gibt bewusst keinen
+  zweiten `ai_route_contract.py`.
+- `ai_route_resolver.py` löst deterministisch
+  `Stage-Override > Run-Override > Project > Workspace > Provider-Fallback`
+  auf und lehnt fehlende bzw. capability-inkompatible Kandidaten typisiert ab.
+- Stage-Snapshots werden crash- und race-sicher per atomarem First-writer-wins
+  publiziert. Der bestehende `ResolvedRoute`-Snapshot bleibt als v3-Read-
+  Adapter erhalten; zusätzlich wird pro Stage ein kanonischer, secret-freier
+  `AiRoute`-Snapshot geschrieben.
+- `ai_route_audit.py` persistiert pro Stage genau ein secret-freies
+  `routing_resolved`-Event mit UTC-Zeit, Quelle und Fallback-Begründung.
+- Die bestehenden `llm-routing`-Endpunkte liefern `ai_route` additiv. Alte
+  Felder und Request-Shapes bleiben unverändert; die Frontend-Response-Typen
+  markieren sie mit `@deprecated`. Der öffentliche Serializer entfernt den
+  internen Legacy-Marker sowie nicht kanonische bzw. geheime Optionen.
+- Backend-, Zod- und JSON-Schema-Spiegel sind synchron; lokale Ollama-
+  Loopback-URLs bleiben im kanonischen Route-Vertrag zulässig.
 
 ## Verifikation
 
-- `cd frontend && bun run check` — grün.
-- Picker-/Discovery-Specs: 20 passed.
-- `graphify update .` — Graph aktualisiert; anschließende Query enthielt
-  `AiModelPicker.vue`, `useAvailableModels.ts`, `llmProviders.ts` und
-  `SettingsGeneralView.vue` im selben Kontext.
-- Vor Push zwingend: `bash scripts/pre-push-gate.sh`.
+- Fokussierter Backend-Lauf: 96 passed.
+- `ruff` und fokussiertes `mypy`: grün.
+- Contract-/Frontend-Gates und voller Pre-Push-Gate: siehe PR-Checks.
+- `graphify update .`: Graph auf 19.488 Nodes / 31.044 Edges aktualisiert.
 
 ## Bewusst offen
 
-- 5.3 — Backend-Routing-Hierarchie (`AiRoute`).
-- 5.4 — übrige Auswahlstellen migrieren.
-- 5.5 — alte Picker und Stores deprecaten.
-- 5.6 — Playwright-E2E.
+- 5.4 migriert die produktiven Auswahlstellen auf den neuen Resolver. Die
+  bestehende, bereits verflachte `RuntimeLlmRouting` bleibt bis dahin ein
+  Legacy-Read-Adapter und erfindet keine Project-/Workspace-Provenienz.
+- 5.5 deprecatet alte Picker/Stores vollständig.
+- 5.6 ergänzt Playwright-E2E einschließlich Run-Snapshot.
+- Danach folgen Slice 6 (Persona-Count) und Slice 7 (Golden-Gate-Designsystem).

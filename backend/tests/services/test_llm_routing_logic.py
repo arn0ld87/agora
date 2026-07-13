@@ -55,6 +55,12 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     # 1. Resolve and lock stage
     resolved = router.resolve("document_ingest")
     router.lock_stage("document_ingest", resolved)
+    canonical = service.load_ai_route_snapshot("document_ingest")
+    assert canonical is not None
+    assert canonical.provider_connection_id == "openai"
+    assert canonical.model_id == "gpt-4o"
+    assert canonical.source == "legacy"
+    assert canonical.resolved_at is not None
 
     # 2. Update runtime config
     new_global_default = StageLLMRoute(provider_id="ollama", model="qwen")

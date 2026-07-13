@@ -94,7 +94,45 @@
   "$id": "https://alexle135.de/schemas/ai-route.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "provider_fallback"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "fallback_reason": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fallback_reason"
+        ]
+      }
+    }
+  ],
   "properties": {
+    "fallback_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fallback Reason"
+    },
     "model_id": {
       "anyOf": [
         {
@@ -122,11 +160,28 @@
     "provider_options": {
       "$ref": "#/$defs/AiProviderOptions"
     },
+    "resolved_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resolved At"
+    },
     "source": {
       "enum": [
         "default",
         "profile",
         "stage_override",
+        "run_override",
+        "project",
+        "workspace",
+        "provider_fallback",
         "runtime",
         "legacy"
       ],

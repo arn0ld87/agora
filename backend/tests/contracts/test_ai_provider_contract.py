@@ -192,6 +192,80 @@ def test_canonical_contracts_are_strict_and_secret_free() -> None:
             contract.model_validate({**instance.model_dump(), "unexpected": True})
 
 
+@pytest.mark.parametrize(
+    "source",
+    ["run_override", "project", "workspace", "provider_fallback"],
+)
+def test_ai_route_accepts_additive_resolution_sources(source: str) -> None:
+    data = {
+        "provider_connection_id": "provider-1",
+        "model_id": "model-1",
+        "source": source,
+    }
+    if source == "provider_fallback":
+        data["fallback_reason"] = "No configured route was available"
+
+    assert AiRoute.model_validate(data).source == source
+
+
+@pytest.mark.parametrize("fallback_reason", [None, "", "   "])
+def test_provider_fallback_requires_a_non_blank_reason(
+    fallback_reason: str | None,
+) -> None:
+    with pytest.raises(ValidationError, match="fallback_reason"):
+        AiRoute(
+            provider_connection_id="provider-fallback",
+            model_id="fallback-model",
+            source="provider_fallback",
+            fallback_reason=fallback_reason,
+        )
+
+
+def test_ai_route_records_resolution_metadata() -> None:
+    route = AiRoute(
+        provider_connection_id="provider-fallback",
+        model_id="fallback-model",
+        source="provider_fallback",
+        resolved_at=NOW,
+        fallback_reason="Workspace route is not configured",
+    )
+
+    assert route.resolved_at == NOW
+    assert route.fallback_reason == "Workspace route is not configured"
+
+
+def test_ai_route_json_schema_requires_provider_fallback_reason() -> None:
+    validator = Draft202012Validator(AiRoute.model_json_schema())
+
+    validator.validate(
+        {
+            "source": "provider_fallback",
+            "fallback_reason": "No configured route was available",
+        }
+    )
+    with pytest.raises(JsonSchemaValidationError):
+        validator.validate({"source": "provider_fallback"})
+    with pytest.raises(JsonSchemaValidationError):
+        validator.validate(
+            {"source": "provider_fallback", "fallback_reason": "   "}
+        )
+
+
+def test_legacy_stage_route_adapter_keeps_new_resolution_metadata_optional() -> None:
+    legacy = StageLLMRoute(
+        stage="report_generation",
+        provider_id="ollama-local",
+        model="qwen3:8b",
+    )
+
+    canonical = ai_route_from_stage_route(legacy)
+
+    assert canonical.source == "legacy"
+    assert canonical.resolved_at is None
+    assert canonical.fallback_reason is None
+    assert stage_route_from_ai_route(canonical) == legacy
+
+
 @pytest.mark.parametrize("contract_name", CONTRACT_CASES)
 def test_shared_fixtures_match_pydantic_and_generated_json_schema(
     contract_name: str,

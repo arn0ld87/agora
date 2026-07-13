@@ -1,6 +1,6 @@
 # Sub-Plan: Slice 5 — Einheitlicher Model-Picker und Routing
 
-Stand: 2026-07-13 · Status: In Umsetzung (5.0/5.1 gemergt, 5.2 PR ausstehend) · Vorgeschlagener Branch: `codex/onboarding-model-picker`
+Stand: 2026-07-13 · Status: In Umsetzung (5.0–5.3 implementiert; 5.4–5.6 offen) · Vorgeschlagener Branch: `codex/onboarding-model-picker`
 
 ## Ziel
 
@@ -121,23 +121,25 @@ Reihenfolge ist verbindlich; jeder Sub-Slice endet mit grünem
 
 ### 5.3 — Backend-Routing-Hierarchie
 
+- **Status:** implementiert (dedizierter Slice-5.3-Branch).
 - **Ziel:** Server-seitige `AiRoute`-Resolution mit Snapshot + Audit.
 - **Scope:**
   - `backend/app/services/ai_route_resolver.py` (neu): Hierarchie
     `Stage-Override > Run-Override > Project > Workspace > Provider-Fallback`
-  - `backend/app/contracts/ai_route_contract.py` (neu): `AiRoute
-    { source, provider_id, model_id, capabilities, resolved_at,
-    fallback_reason }`
-  - `backend/app/services/run_snapshot.py` (erweitert): speichert `AiRoute`
-    pro Stage
-  - `backend/app/services/audit_trail.py` (erweitert): `routing_resolved`
-    Event mit allen Quellen + Begründung
+  - bestehende Contract-SSoT
+    `backend/app/contracts/ai_provider_contract.py`: `AiRoute
+    { source, provider_connection_id, model_id, validated_capabilities,
+    resolved_at, fallback_reason }`
+  - `backend/app/services/runtime_run_config.py` (erweitert): atomarer
+    Legacy-Snapshot plus kanonischer `AiRoute`-Snapshot pro Stage
+  - `backend/app/services/ai_route_audit.py` (neu): idempotentes,
+    secret-freies `routing_resolved`-Event mit Quelle + Begründung
   - Bestehende `llm_routing_seed.py` / `stage_model_router.py` als
     Read-Adapter
 - **Tests:** 10+ Contract- und Service-Tests (Hierarchie, Fallback,
   Snapshot, Audit)
-- **Migration:** bestehende `llm_routing_*`-Endpoints geben jetzt `ai_route`
-  zurück; Alt-Felder `@deprecated`.
+- **Migration:** bestehende `llm_routing_*`-Endpoints geben `ai_route`
+  additiv zurück; Alt-Felder sind in den Frontend-Response-Typen `@deprecated`.
 - **Risiko:** hoch — Kernlogik.
 
 ### 5.4 — Auswahlstellen migrieren

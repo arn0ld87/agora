@@ -213,12 +213,35 @@ export const AiProviderOptionsSchema = z.object({
 }).strict()
 export type AiProviderOptions = z.infer<typeof AiProviderOptionsSchema>
 
+export const RouteSourceSchema = z.enum([
+  'default',
+  'profile',
+  'stage_override',
+  'run_override',
+  'project',
+  'workspace',
+  'provider_fallback',
+  'runtime',
+  'legacy',
+])
+export type RouteSource = z.infer<typeof RouteSourceSchema>
+
 export const AiRouteSchema = z.object({
   stage: StageIdSchema.nullable().default(null),
   provider_connection_id: z.string().nullable().default(null),
   model_id: z.string().nullable().default(null),
-  source: z.enum(['default', 'profile', 'stage_override', 'runtime', 'legacy']),
+  source: RouteSourceSchema,
   validated_capabilities: z.record(z.string(), CapabilityStateSchema).default({}),
   provider_options: AiProviderOptionsSchema.default({}),
-}).strict()
+  resolved_at: NullableDateTimeSchema,
+  fallback_reason: z.string().nullable().default(null),
+}).strict().superRefine((route, context) => {
+  if (route.source === 'provider_fallback' && !route.fallback_reason?.trim()) {
+    context.addIssue({
+      code: 'custom',
+      message: 'provider_fallback requires a non-blank fallback_reason',
+      path: ['fallback_reason'],
+    })
+  }
+})
 export type AiRoute = z.infer<typeof AiRouteSchema>

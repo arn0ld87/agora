@@ -404,7 +404,7 @@ Source of Truth:
 | 4.2 | Embedding-Configuration-Service + API + Legacy-Adapter | ✅ gemergt (PR #688) |
 | 4.3.1 | Migrations-Service + Ollama-Download (Backend) | ✅ implementiert, PR offen |
 | 4.3.2 | Frontend-Store + View + Onboarding-Anbindung | offen |
-| 5 | Gemeinsamer Model-Picker und Routing | offen |
+| 5 | Gemeinsamer Model-Picker und Routing | 🟡 5.1–5.3 implementiert; 5.4–5.6 offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
 | 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |
 | 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |

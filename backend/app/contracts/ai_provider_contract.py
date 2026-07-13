@@ -60,7 +60,17 @@ ProviderTransport = Literal["http", "local"]
 ProviderAuthMode = Literal["none", "api_key", "oauth", "session"]
 ProviderStatus = Literal["unknown", "connected", "degraded", "disconnected", "error"]
 ModelStatus = Literal["unknown", "available", "unavailable", "deprecated"]
-RouteSource = Literal["default", "profile", "stage_override", "runtime", "legacy"]
+RouteSource = Literal[
+    "default",
+    "profile",
+    "stage_override",
+    "run_override",
+    "project",
+    "workspace",
+    "provider_fallback",
+    "runtime",
+    "legacy",
+]
 
 
 def _validate_public_base_url(value: str) -> str:
@@ -141,7 +151,7 @@ class LegacyStageRouteOptions(TypedDict, closed=True):  # type: ignore[call-arg]
 class AiProviderOptions(TypedDict, total=False, closed=True):  # type: ignore[call-arg]  # mypy lacks PEP 728
     """Secret-free options currently consumed by Agora routing."""
 
-    base_url: PublicBaseUrl | None
+    base_url: PublicBaseUrl | LocalOllamaBaseUrl | None
     num_ctx: Annotated[int, Field(gt=0)]
     __legacy_stage_route__: LegacyStageRouteOptions
 
@@ -250,7 +260,29 @@ class AiModel(BaseModel):
 
 
 class AiRoute(BaseModel):
-    model_config = _STRICT
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"source": {"const": "provider_fallback"}},
+                        "required": ["source"],
+                    },
+                    "then": {
+                        "properties": {
+                            "fallback_reason": {
+                                "minLength": 1,
+                                "pattern": r"\S",
+                                "type": "string",
+                            }
+                        },
+                        "required": ["fallback_reason"],
+                    },
+                }
+            ]
+        },
+    )
 
     stage: StageId | None = None
     provider_connection_id: str | None = None
@@ -258,6 +290,16 @@ class AiRoute(BaseModel):
     source: RouteSource
     validated_capabilities: dict[str, CapabilityState] = Field(default_factory=dict)
     provider_options: AiProviderOptions = Field(default_factory=_empty_provider_options)
+    resolved_at: datetime | None = None
+    fallback_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_provider_fallback_reason(self) -> AiRoute:
+        if self.source == "provider_fallback" and not (
+            self.fallback_reason and self.fallback_reason.strip()
+        ):
+            raise ValueError("provider_fallback requires a non-blank fallback_reason")
+        return self
 
 
 def provider_connection_from_descriptor(

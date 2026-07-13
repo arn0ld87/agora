@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-07-11 (Onboarding/Provider-Unification Slice 1 verifiziert, PR #683 offen, v1.0.0)
+Stand: 2026-07-13 (Onboarding/Provider-Unification Slice 5.3 verifiziert, v1.0.0)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
@@ -19,7 +19,7 @@ Stand: 2026-07-11 (Onboarding/Provider-Unification Slice 1 verifiziert, PR #683 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3252 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3283 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 156 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
