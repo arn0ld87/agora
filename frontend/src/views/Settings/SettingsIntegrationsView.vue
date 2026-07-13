@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import AppShell from '@/components/v4/shell/AppShell.vue'
 import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue'
+import { INTEGRATION_SETTINGS_SECTIONS } from './settingsSections'
 
 const { t } = useI18n()
 
@@ -12,17 +13,6 @@ const BREADCRUMBS = computed(() => [
   { label: t('sidebar.settings.integrations') },
 ])
 
-// Externe Systeme — Neo4j, Embedding-Provider, Ontology-LLM, Hybrid-Search,
-// Agent-Tools, WebTools und OASIS-Runner.
-const ALLOWED_SECTIONS = [
-  'neo4j',
-  'embedding',
-  'ontology',
-  'hybrid_search',
-  'agent_tools',
-  'webtools',
-  'oasis',
-] as const
 </script>
 
 <template>
@@ -32,6 +22,6 @@ const ALLOWED_SECTIONS = [
       :subtitle="t('settings.v4.integrations.subtitle')"
     />
 
-    <SettingsSectionPanel :allowed-sections="ALLOWED_SECTIONS" />
+    <SettingsSectionPanel :allowed-sections="INTEGRATION_SETTINGS_SECTIONS" />
   </AppShell>
 </template>

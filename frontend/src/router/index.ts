@@ -49,7 +49,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/onboarding/OnboardingView.vue'),
   },
 
-  // Settings — klassische View bleibt aktiv; /settings redirect auf /settings/general
+  // Settings — /settings und der klassische Deep-Link konvergieren auf General.
   {
     path: '/settings',
     name: 'Settings',
@@ -109,11 +109,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/Settings/EmbeddingConfigurationsView.vue'),
     meta: { requiresAuth: true },
   },
-  // Klassische SettingsView bleibt erreichbar fuer Slice-G-Migration
+  // Legacy-Deep-Link bleibt fuer einen Release-Zyklus als Redirect erhalten.
   {
     path: '/settings-classic',
-    name: 'SettingsClassic',
-    component: () => import('../views/SettingsView.vue'),
+    redirect: { name: 'SettingsGeneral' },
   },
 
   // Legacy-Prozess-Routen

@@ -29,6 +29,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, reactive } from 'vue'
+import { listLlmProviders } from '@/api/llmRouting'
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
 
 // AiModelPicker mocken
@@ -89,6 +90,17 @@ vi.mock('@/composables/useAiModelRefAdapter', () => ({
   useAiModelRefAdapter: () => adapterMock,
 }))
 
+vi.mock('@/api/llmRouting', () => ({
+  listLlmProviders: vi.fn().mockResolvedValue([
+    { id: 'ollama', label: 'Ollama' },
+  ]),
+  listProviderModels: vi.fn().mockResolvedValue([
+    { id: 'qwen3', label: 'Qwen 3' },
+  ]),
+  getActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'ollama', model: 'qwen3' }),
+  setActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'ollama', model: 'qwen3' }),
+}))
+
 function makeI18n() {
   return createI18n({
     legacy: false,
@@ -97,6 +109,25 @@ function makeI18n() {
     messages: {
       de: {
         settings: {
+          llmActive: {
+            title: 'Aktiver LLM-Anbieter und Modell',
+            subtitle: 'Backend-Fallback fuer LLM-Aufrufe',
+            providerLabel: 'Provider',
+            modelLabel: 'Modell',
+            providerPlaceholder: 'Provider waehlen',
+            providerLoading: 'Provider werden geladen',
+            modelPlaceholder: 'Modell waehlen',
+            modelLoading: 'Modelle werden geladen',
+            modelEmpty: 'Keine Modelle gefunden',
+            modelNeedsProvider: 'Erst Provider waehlen',
+            save: 'Speichern',
+            flashSaved: 'Auswahl gespeichert',
+            errorSelectionMissing: 'Provider und Modell waehlen',
+            errorLoadProviders: 'Provider konnten nicht geladen werden',
+            errorLoadModels: 'Modelle konnten nicht geladen werden',
+            errorLoadActive: 'Aktive Auswahl konnte nicht geladen werden',
+            errorSaveFailed: 'Speichern fehlgeschlagen',
+          },
           v4: {
             general: {
               title: 'Allgemein',
@@ -147,6 +178,14 @@ describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () =
   it('mountet ohne Crash', async () => {
     const w = await mountSettingsGeneral()
     expect(w.exists()).toBe(true)
+  })
+
+  it('behält den Provider-Discovery-Fehler, wenn active-config und Modelle laden', async () => {
+    vi.mocked(listLlmProviders).mockRejectedValueOnce(new Error('Provider-Discovery fehlgeschlagen'))
+
+    const w = await mountSettingsGeneral()
+
+    expect(w.get('[role="alert"]').text()).toContain('Provider-Discovery fehlgeschlagen')
   })
 
   it('zeigt BREADCRUMBS via AppShell', async () => {
