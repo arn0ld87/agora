@@ -12,7 +12,7 @@
 # `docker-compose.prod.yml`.
 
 # ---------- shared base ----------
-FROM python:3.14 AS base
+FROM python:3.14@sha256:09b29c360b84742bf98eba40b214f7f6b4b53286bb2c8a8b5b1afa188a8d9c0e AS base
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl unzip \
@@ -115,7 +115,7 @@ RUN cd backend && uv sync --frozen --no-dev \
   && chown -R agora:agora /app
 
 # ---------- prod ----------
-FROM python:3.14-slim AS prod
+FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS prod
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -177,7 +177,7 @@ CMD ["/app/backend/.venv/bin/gunicorn", \
      "wsgi:app"]
 
 # ---------- proxy (nginx-Sidecar mit eingebackenem Frontend-Bundle) ----------
-FROM nginx:alpine AS proxy
+FROM nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa AS proxy
 # Alpine-Pakete auf Repo-Stand heben, solange das Base-Image hinterherhinkt:
 # CVE-2026-33630 (c-ares < 1.34.8-r0), CVE-2026-56407/-56408/-56131
 # (libexpat < 2.8.2-r0) — Trivy-Gate scannt HIGH/CRITICAL mit exit-code 1.

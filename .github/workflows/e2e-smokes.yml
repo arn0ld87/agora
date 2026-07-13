@@ -62,8 +62,8 @@ jobs:
             storage.googleapis.com:443
             *.blob.core.windows.net:443
 
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -95,7 +95,7 @@ jobs:
         run: npx playwright test health.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace
           path: frontend/test-results/
@@ -151,8 +151,8 @@ jobs:
             storage.googleapis.com:443
             *.blob.core.windows.net:443
 
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -178,7 +178,7 @@ jobs:
         run: npx playwright test upload-graph.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace-upload-graph
           path: frontend/test-results/
@@ -238,8 +238,8 @@ jobs:
             storage.googleapis.com:443
             *.blob.core.windows.net:443
 
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -264,7 +264,7 @@ jobs:
         run: npx playwright test minimal-report.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace-minimal-report
           path: frontend/test-results/
@@ -317,8 +317,8 @@ jobs:
             storage.googleapis.com:443
             *.blob.core.windows.net:443
 
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
       - name: Generate ephemeral E2E credentials
@@ -342,7 +342,7 @@ jobs:
         run: npx playwright test report-modes.spec.ts --reporter=list,github
       - name: Upload trace on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-trace-report-modes
           path: frontend/test-results/
