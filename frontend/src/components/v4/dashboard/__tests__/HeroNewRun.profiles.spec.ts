@@ -1,8 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { makeI18n, makeRouter } from './dashTestHelpers'
 
-// Slice A2: ModelPicker stubben, damit die Hero-Tests ohne Pinia laufen.
+// Slice 5.4: AiModelPicker stubben (statt ModelPicker, der in 5.4 ersetzt wurde).
+vi.mock('../../forms/AiModelPicker.vue', () => ({
+  default: {
+    name: 'AiModelPicker',
+    template: '<div class="ai-model-picker-stub" data-testid="ai-model-picker" />',
+    props: ['modelValue', 'placeholder', 'mode', 'allowWorkspaceDefault', 'capabilityFilter'],
+    emits: ['update:modelValue'],
+  },
+}))
+
+// ModelPicker (alt) wird in HeroNewRun seit 5.4 nicht mehr referenziert,
+// aber defensive Stub-Definition falls ein indirekter Import uebrig bleibt.
 vi.mock('../../forms/ModelPicker.vue', () => ({
   default: {
     name: 'ModelPicker',
@@ -63,6 +75,7 @@ import HeroNewRun from '../HeroNewRun.vue'
 
 describe('HeroNewRun — LLM-Profile (P5.5)', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.mocked(setPendingUpload).mockReset()
   })
 

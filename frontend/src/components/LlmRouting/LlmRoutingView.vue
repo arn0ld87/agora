@@ -1,6 +1,15 @@
 <!-- legacy-model-picker-allow: pre-5.5 v3 picker importer — see docs/epics/onboarding-provider-unification/slice-5-subplan.md (5.4 migrates, 5.5 removes) -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+/**
+ * LlmRoutingView (v3) — Slice 5.4: Migration auf AiModelPicker (SSoT).
+ *
+ * - ModelPicker (alt) -> AiModelPicker an Global-Default + Stage-Overrides.
+ * - v3-Backend-Vertrag (StageLLMRoute) bleibt stabil; AiModelPicker
+ *   konvertiert via useAiModelRefAdapter.toStageLlmRoute fuer Patches.
+ * - Reasoning-Effort-Select bleibt unveraendert (StageLLMRoute-only).
+ * - v3-Wrapper wird in 5.5 deprecatet; bis dahin nur Picker-Swap.
+ */
+import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   getRunLlmRouting,
@@ -14,8 +23,10 @@ import {
   ReasoningEffort,
   LlmInvocationEvent,
 } from '../../contracts/llmRoutingContract';
-import ModelPicker from '@/components/v4/forms/ModelPicker.vue';
+import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue';
 import { useLlmProvidersStore } from '@/store/llmProviders';
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter';
+import type { AiModelRef } from '@/contracts/aiModelRef';
 
 const props = defineProps<{
   runId: string;
@@ -24,6 +35,7 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const providersStore = useLlmProvidersStore();
+const adapter = useAiModelRefAdapter();
 const routing = ref<RuntimeLlmRouting | null>(null);
 const snapshots = ref<Record<string, any>>({});
 const invocationEvents = ref<LlmInvocationEvent[]>([]);
@@ -41,6 +53,21 @@ const STAGES: StageId[] = [
 ];
 
 const REASONING_EFFORTS: ReasoningEffort[] = ["none", "minimal", "low", "medium", "high"];
+
+// AiModelRef-Aequivalent der aktuellen StageLLMRoute (fuer AiModelPicker).
+// v3: AiModelPicker zeigt Connection-ID, der v3-Store serialisiert
+// provider_id+model via Adapter.
+const globalDefaultAiRef = computed<AiModelRef | null>(() => {
+  if (!routing.value?.global_default?.model) return null
+  return adapter.toAiModelRef(routing.value.global_default)
+})
+
+function stageOverrideAiRef(stageId: StageId): AiModelRef | null {
+  if (!routing.value) return null
+  const route = routing.value.stage_overrides[stageId] ?? routing.value.global_default
+  if (!route?.model) return null
+  return adapter.toAiModelRef(route)
+}
 
 async function load() {
   loading.value = true;
@@ -88,22 +115,38 @@ const isStageLocked = (stageId: string) => !!snapshots.value[stageId];
 const formatLatency = (latencyMs: number) => `${Math.round(latencyMs)} ms`;
 const formatTimestamp = (timestamp: number) => new Date(timestamp * 1000).toLocaleString();
 
-function onGlobalDefaultPicked(route: StageLLMRoute | null) {
-  if (!routing.value || !route) return;
+function onGlobalDefaultPicked(aiRef: AiModelRef | null) {
+  if (!routing.value || !aiRef) return;
+  // AiModelRef -> StageLLMRoute via Adapter (v3-Store bleibt im alten Format).
+  const route = adapter.toStageLlmRoute(aiRef);
   routing.value.global_default.provider_id = route.provider_id;
   routing.value.global_default.model = route.model;
 }
 
-function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
-  if (!routing.value || !route) return;
+function onStageOverridePicked(stageId: StageId, aiRef: AiModelRef | null) {
+  if (!routing.value || !aiRef) return;
   const current = routing.value.stage_overrides[stageId];
   const base = current ? { ...current } : { ...routing.value.global_default };
+  const route = adapter.toStageLlmRoute(aiRef);
   routing.value.stage_overrides[stageId] = {
     ...base,
     provider_id: route.provider_id,
     model: route.model,
   };
 }
+
+defineExpose({
+  routing,
+  snapshots,
+  invocationEvents,
+  loading,
+  error,
+  isStageLocked,
+  saveGlobal,
+  saveStage,
+  onGlobalDefaultPicked,
+  onStageOverridePicked,
+})
 
 </script>
 
@@ -118,8 +161,8 @@ function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
         <h3>{{ t('llm.routing.global_default') }}</h3>
         <div class="card">
           <label>{{ t('llm.model') }}</label>
-          <ModelPicker
-            :model-value="routing.global_default"
+          <AiModelPicker
+            :model-value="globalDefaultAiRef"
             :placeholder="t('llm.routing.model_placeholder')"
             @update:model-value="onGlobalDefaultPicked"
           />
@@ -141,11 +184,11 @@ function onStageOverridePicked(stageId: StageId, route: StageLLMRoute | null) {
 
           <div class="stage-controls">
             <label>{{ t('llm.model') }}</label>
-            <ModelPicker
-              :model-value="routing.stage_overrides[stage] || routing.global_default"
+            <AiModelPicker
+              :model-value="stageOverrideAiRef(stage)"
               :disabled="isStageLocked(stage)"
               :placeholder="t('llm.routing.model_placeholder')"
-              @update:model-value="(route) => onStageOverridePicked(stage, route)"
+              @update:model-value="(aiRef) => onStageOverridePicked(stage, aiRef)"
             />
 
             <button

@@ -876,7 +876,8 @@
       "noSections": "No settings in this category.",
       "general": {
         "title": "General",
-        "subtitle": "Workspace runtime behaviour: LLM, logging, locale, UI, event bus, secrets."
+        "subtitle": "Workspace runtime behaviour: LLM, logging, locale, UI, event bus, secrets.",
+        "workspaceDefaultModel": "Default model for this workspace"
       },
       "integrations": {
         "title": "Integrations",
@@ -1067,6 +1068,14 @@
       "unknown": "status unknown",
       "invalid_credentials": "invalid credentials"
     }
+  },
+  "stepModelOverrideChip": {
+    "label": "Model",
+    "modelPlaceholder": "Select model …",
+    "overrideBadge": "override",
+    "clearOverride": "Clear override → use default",
+    "close": "Close",
+    "lockedBadge": "locked"
   },
   "activeModel": {
     "label": "Active model",

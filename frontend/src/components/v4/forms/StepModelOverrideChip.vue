@@ -3,19 +3,27 @@
 /**
  * StepModelOverrideChip — Per-Step-Modellauswahl-Chip.
  *
+ * Slice 5.4: Migration auf AiModelPicker (SSoT). Der AiModelPicker emittiert
+ * `update:modelValue` mit einer AiModelRef, die via useAiModelRefAdapter
+ * in eine StageLLMRoute konvertiert wird, damit der bestehende v3-Store
+ * (useLlmRoutingDefaultsStore) ohne Touch weiter funktioniert.
+ *
  * Zeigt das aktuell effektive Modell (Workspace-Default oder Stage-Override)
- * für genau eine Stage und erlaubt per Popover den Wechsel. Der Wechsel
+ * fuer genau eine Stage und ermoeglicht per Popover den Wechsel. Der Wechsel
  * patcht den Workspace-Default. Der Backend-Seed-Hook mergt das beim
  * Run-Start in die ``RuntimeLlmRouting``.
  *
  * Wenn ``locked`` gesetzt ist, wird der Chip read-only dargestellt (Run
- * läuft bereits und die Stage ist versiegelt).
+ * laeuft bereits und die Stage ist versiegelt).
  */
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useLlmProvidersStore } from '@/store/llmProviders'
 import { useLlmRoutingDefaultsStore } from '@/store/llmRoutingDefaults'
-import ModelPicker from './ModelPicker.vue'
-import type { StageId, StageLLMRoute } from '@/contracts/llmRoutingContract'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import AiModelPicker from './AiModelPicker.vue'
+import type { StageId } from '@/contracts/llmRoutingContract'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const props = withDefaults(defineProps<{
   stageId: StageId
@@ -26,31 +34,41 @@ const props = withDefaults(defineProps<{
   locked: false,
 })
 
+const { t } = useI18n()
+
 const providersStore = useLlmProvidersStore()
 const defaultsStore = useLlmRoutingDefaultsStore()
+const adapter = useAiModelRefAdapter()
 
 const open = ref(false)
 
-const effectiveRoute = computed<StageLLMRoute>(() => defaultsStore.effectiveRouteForStage(props.stageId))
+const effectiveRoute = computed(() => defaultsStore.effectiveRouteForStage(props.stageId))
 const hasOverride = computed(() => props.stageId in defaultsStore.stageOverrides)
 
 const displayLabel = computed(() => {
   const route = effectiveRoute.value
-  if (!route?.model) return 'Modell wählen …'
+  if (!route?.model) return t('stepModelOverrideChip.modelPlaceholder', 'Modell wählen …')
   return `${route.provider_id ?? '?'} · ${route.model}`
+})
+
+// Slice 5.4: AiModelRef-Aequivalent der effektiven StageLLMRoute.
+// Wir konvertieren via Adapter, damit der Picker den korrekten Wert
+// anzeigt und der Picker bei Auswahl zurueck in eine StageLLMRoute
+// konvertiert werden kann (bidirektionaler Glue).
+const pickerModelValue = computed<AiModelRef | null>(() => {
+  if (!effectiveRoute.value?.model) return null
+  return adapter.toAiModelRef(effectiveRoute.value)
 })
 
 async function ensureLoaded(): Promise<void> {
   if (providersStore.providers.length === 0) {
     await providersStore.loadProviders()
   }
-  // hasLoadedOnce ist robuster als updated_at-Proxy: updated_at ist legitimerweise
-  // null bei einer frischen Workspace ohne gespeicherte Defaults (Gemini MEDIUM #5).
   if (!defaultsStore.hasLoadedOnce) {
     try {
       await defaultsStore.load()
     } catch {
-      /* defaults bleiben leer — Chip zeigt "Modell wählen …" */
+      /* defaults bleiben leer — Chip zeigt "Modell waehlen …" */
     }
   }
 }
@@ -64,11 +82,12 @@ function toggle(): void {
   open.value = !open.value
 }
 
-async function selectRoute(route: StageLLMRoute | null): Promise<void> {
-  if (route === null) {
+async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
+  if (aiRef === null) {
     await defaultsStore.clearStageOverride(props.stageId)
   } else {
-    await defaultsStore.setStageOverride(props.stageId, route)
+    const stageLlmRoute = adapter.toStageLlmRoute(aiRef)
+    await defaultsStore.setStageOverride(props.stageId, stageLlmRoute)
   }
   open.value = false
 }
@@ -86,14 +105,14 @@ async function selectRoute(route: StageLLMRoute | null): Promise<void> {
     >
       <span class="step-model-chip__label">{{ label }}:</span>
       <span class="step-model-chip__value">{{ displayLabel }}</span>
-      <span v-if="hasOverride && !locked" class="step-model-chip__badge">override</span>
+      <span v-if="hasOverride && !locked" class="step-model-chip__badge">{{ t('stepModelOverrideChip.overrideBadge', 'override') }}</span>
       <span v-if="locked" class="step-model-chip__lock" aria-hidden="true">🔒</span>
     </button>
 
     <div v-if="open && !locked" class="step-model-chip__popover">
-      <ModelPicker
-        :model-value="effectiveRoute.model ? effectiveRoute : null"
-        placeholder="Modell wählen …"
+      <AiModelPicker
+        :model-value="pickerModelValue"
+        :placeholder="t('stepModelOverrideChip.modelPlaceholder', 'Modell wählen …')"
         @update:model-value="selectRoute"
       />
       <div class="step-model-chip__actions">
@@ -103,10 +122,10 @@ async function selectRoute(route: StageLLMRoute | null): Promise<void> {
           class="step-model-chip__clear"
           @click="selectRoute(null)"
         >
-          Override entfernen → Default nutzen
+          {{ t('stepModelOverrideChip.clearOverride', 'Override entfernen → Default nutzen') }}
         </button>
         <button type="button" class="step-model-chip__close" @click="open = false">
-          Schließen
+          {{ t('stepModelOverrideChip.close', 'Schließen') }}
         </button>
       </div>
     </div>

@@ -28,16 +28,19 @@ import PageHeader from '@/components/v4/shell/PageHeader.vue'
 import Card from '@/components/v4/forms/Card.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Input from '@/components/v4/forms/Input.vue'
-import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
+import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { useLlmProvidersStore } from '@/store/llmProviders'
 import { useLlmRoutingDefaultsStore } from '@/store/llmRoutingDefaults'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import type { ProviderDescriptor, StageLLMRoute } from '@/contracts/llmRoutingContract'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const { t } = useI18n()
 
 const providersStore = useLlmProvidersStore()
 const defaultsStore = useLlmRoutingDefaultsStore()
+const adapter = useAiModelRefAdapter()
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
@@ -171,9 +174,19 @@ const defaultRoute = computed<StageLLMRoute | null>(() => {
   return r
 })
 
-async function setDefault(route: StageLLMRoute | null): Promise<void> {
-  if (!route) return
-  await defaultsStore.setGlobalDefault(route)
+// Slice 5.4: AiModelRef-Aequivalent der aktuellen Default-Route.
+// Statt StageLLMRoute → AiModelRef-Konvertierung in der View, nutzen wir
+// den Adapter bidirektional: setDefault empfängt AiModelRef, konvertiert
+// nach StageLLMRoute für den v3-Store. Picker zeigt die AiModelRef-Form.
+const defaultAiRef = computed<AiModelRef | null>(() => {
+  if (!defaultRoute.value) return null
+  return adapter.toAiModelRef(defaultRoute.value)
+})
+
+async function setDefault(aiRef: AiModelRef | null): Promise<void> {
+  if (!aiRef) return
+  const stageLlmRoute = adapter.toStageLlmRoute(aiRef)
+  await defaultsStore.setGlobalDefault(stageLlmRoute)
 }
 
 onMounted(async () => {
@@ -204,8 +217,8 @@ onBeforeUnmount(() => {
         :subtitle="t('settings.v4.llmProviders.defaults.subtitle', 'Wird automatisch beim Start eines neuen Runs für alle Schritte übernommen.')"
       >
         <div class="llm-default-row">
-          <ModelPicker
-            :model-value="defaultRoute"
+          <AiModelPicker
+            :model-value="defaultAiRef"
             :placeholder="t('settings.v4.llmProviders.defaults.placeholder', 'Standardmodell wählen …')"
             @update:model-value="setDefault"
           />

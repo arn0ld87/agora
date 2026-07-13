@@ -876,7 +876,8 @@
       "noSections": "Keine Einstellungen in dieser Kategorie.",
       "general": {
         "title": "Allgemein",
-        "subtitle": "Laufzeit-Verhalten des Workspaces: LLM, Logging, Locale, UI, Event-Bus, Secrets."
+        "subtitle": "Laufzeit-Verhalten des Workspaces: LLM, Logging, Locale, UI, Event-Bus, Secrets.",
+        "workspaceDefaultModel": "Standardmodell für diesen Workspace"
       },
       "integrations": {
         "title": "Integrationen",
@@ -1067,6 +1068,14 @@
       "unknown": "Status unbekannt",
       "invalid_credentials": "Anmeldung ungültig"
     }
+  },
+  "stepModelOverrideChip": {
+    "label": "Modell",
+    "modelPlaceholder": "Modell wählen …",
+    "overrideBadge": "override",
+    "clearOverride": "Override entfernen → Default nutzen",
+    "close": "Schließen",
+    "lockedBadge": "gesperrt"
   },
   "activeModel": {
     "label": "Aktives Modell",
