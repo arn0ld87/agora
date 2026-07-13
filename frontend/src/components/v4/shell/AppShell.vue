@@ -131,8 +131,11 @@ watch(
       void nextTick(() => {
         const el = sidebarEl.value
         if (!el) return
+        // Gemini Review (Slice 7.3): disabled-Elemente ausschliessen,
+        // sonst schlaegt der Fokus-Shift fehl, wenn das erste gefundene
+        // Element disabled ist.
         const focusable = el.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          'button:not([disabled]), [href]:not([aria-disabled="true"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         )
         if (focusable) focusable.focus()
         else el.focus()
