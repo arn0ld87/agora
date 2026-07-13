@@ -90,7 +90,10 @@ def test_safe_join_within_root_rejects_symlink_escape(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     link = root / "sim_link"
-    link.symlink_to(outside, target_is_directory=True)
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlinks not supported on this platform (requires admin on Windows)")
     with pytest.raises(PathTraversalError):
         safe_join_within_root(str(root), "sim_link", "state.json")
 

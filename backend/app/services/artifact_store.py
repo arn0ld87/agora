@@ -143,12 +143,6 @@ class LocalFilesystemArtifactStore:
         rel = _resolve_relative_path(artifact)
         return safe_join_within_root(self._root, simulation_id, rel)
 
-    def _ensure_simulation_dir(self, simulation_id: str) -> str:
-        validate_path_id(simulation_id, field_name="simulation_id")
-        sim_dir = safe_join_within_root(self._root, simulation_id)
-        os.makedirs(sim_dir, exist_ok=True)
-        return sim_dir
-
     def read_json(
         self, simulation_id: str, artifact: str, default: Any = None
     ) -> Any:
@@ -158,7 +152,6 @@ class LocalFilesystemArtifactStore:
         )
 
     def write_json(self, simulation_id: str, artifact: str, payload: Any) -> None:
-        self._ensure_simulation_dir(simulation_id)
         path = self._abs_path(simulation_id, artifact)
         # ``write_json_atomic`` already creates parent dirs (e.g. ipc_commands/).
         write_json_atomic(path, payload)
