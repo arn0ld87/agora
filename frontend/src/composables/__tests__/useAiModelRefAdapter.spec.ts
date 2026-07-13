@@ -68,7 +68,7 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
     warnSpy.mockRestore()
   })
 
-  it('toStageLlmRoute: nimmt provider_kind aus Connection-Lookup (Happy Path)', () => {
+  it('toStageLlmRoute: übernimmt die Connection-ID verlustfrei (Teil 9)', () => {
     const lookup: ConnectionLookup = new Map([
       ['conn-ollama-1', makeConnection({ id: 'conn-ollama-1', provider_kind: 'ollama' })],
     ])
@@ -78,14 +78,16 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
       source: 'workspace-default',
     }
     const route = toStageLlmRoutePure(ref, lookup)
-    expect(route.provider_id).toBe('ollama')
+    // Teil 9: KEIN Kollaps mehr auf provider_kind ('ollama') — die konkrete
+    // Connection-ID bleibt erhalten.
+    expect(route.provider_id).toBe('conn-ollama-1')
     expect(route.model).toBe('qwen3')
     expect(route.stage).toBeNull()
     expect(route.reasoning_effort).toBe('none')
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
-  it('toStageLlmRoute: ohne Lookup faellt auf provider_connection_id zurück und warnt', () => {
+  it('toStageLlmRoute: übernimmt provider_connection_id auch ohne Lookup', () => {
     const ref: AiModelRef = {
       provider_connection_id: 'conn-unknown',
       model_id: 'm',
@@ -93,12 +95,10 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
     }
     const route = toStageLlmRoutePure(ref)
     expect(route.provider_id).toBe('conn-unknown')
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('no connection found for "conn-unknown"'),
-    )
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 
-  it('toAiModelRef: nimmt connection_id aus Provider-Kind-Lookup (Happy Path)', () => {
+  it('toAiModelRef: mappt Legacy-provider_kind via Lookup auf connection_id', () => {
     const kindToConn = new Map([['ollama', 'conn-ollama-1']])
     const route: StageLLMRoute = {
       stage: null,
@@ -110,13 +110,13 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
       provider_options: {},
     }
     const ref = toAiModelRefPure(route, kindToConn)
-    expect(ref.provider_connection_id).toBe('conn-ollama-1')
-    expect(ref.model_id).toBe('qwen3')
-    expect(ref.source).toBe('explicit')
-    expect(warnSpy).not.toHaveBeenCalled()
+    expect(ref).not.toBeNull()
+    expect(ref?.provider_connection_id).toBe('conn-ollama-1')
+    expect(ref?.model_id).toBe('qwen3')
+    expect(ref?.source).toBe('explicit')
   })
 
-  it('toAiModelRef: ohne Lookup faellt auf provider_id zurück und warnt', () => {
+  it('toAiModelRef: übernimmt provider_id als connection_id ohne Lookup', () => {
     const route: StageLLMRoute = {
       stage: null,
       provider_id: 'openai',
@@ -127,10 +127,64 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
       provider_options: {},
     }
     const ref = toAiModelRefPure(route)
-    expect(ref.provider_connection_id).toBe('openai')
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('no connection found for provider "openai"'),
-    )
+    expect(ref?.provider_connection_id).toBe('openai')
+  })
+
+  it('Teil 10: toAiModelRefPure gibt null bei fehlender provider_id', () => {
+    const route: StageLLMRoute = {
+      stage: null,
+      provider_id: null,
+      model: 'qwen3',
+      temperature: null,
+      max_tokens: null,
+      reasoning_effort: 'none',
+      provider_options: {},
+    }
+    expect(toAiModelRefPure(route)).toBeNull()
+  })
+
+  it('Teil 10: toAiModelRefPure gibt null bei fehlendem Modell', () => {
+    const route: StageLLMRoute = {
+      stage: null,
+      provider_id: 'conn-a',
+      model: null,
+      temperature: null,
+      max_tokens: null,
+      reasoning_effort: 'none',
+      provider_options: {},
+    }
+    expect(toAiModelRefPure(route)).toBeNull()
+  })
+
+  it('Teil 10: toAiModelRefPure-Ergebnis besteht den Zod-Spiegel', () => {
+    const route: StageLLMRoute = {
+      stage: null,
+      provider_id: 'conn-a',
+      model: 'qwen3',
+      temperature: null,
+      max_tokens: null,
+      reasoning_effort: 'none',
+      provider_options: {},
+    }
+    const ref = toAiModelRefPure(route)
+    expect(ref).not.toBeNull()
+    expect(AiModelRefSchema.safeParse(ref).success).toBe(true)
+  })
+
+  it('Teil 9: zwei openai_compatible-Connections bleiben im Roundtrip unterscheidbar', () => {
+    const connLookup: ConnectionLookup = new Map([
+      ['conn-a', makeConnection({ id: 'conn-a', provider_kind: 'openai_compatible', base_url: 'https://a.example/v1', transport: 'http' })],
+      ['conn-b', makeConnection({ id: 'conn-b', provider_kind: 'openai_compatible', base_url: 'https://b.example/v1', transport: 'http' })],
+    ])
+    const refA: AiModelRef = { provider_connection_id: 'conn-a', model_id: 'qwen3', source: 'explicit' }
+    const refB: AiModelRef = { provider_connection_id: 'conn-b', model_id: 'qwen3', source: 'explicit' }
+    const roundA = toAiModelRefPure(toStageLlmRoutePure(refA, connLookup))
+    const roundB = toAiModelRefPure(toStageLlmRoutePure(refB, connLookup))
+    // Beide Connections teilen provider_kind, bleiben aber via ID unterscheidbar
+    // — kein "erste passende Connection"-Fallback.
+    expect(roundA?.provider_connection_id).toBe('conn-a')
+    expect(roundB?.provider_connection_id).toBe('conn-b')
+    expect(roundA?.provider_connection_id).not.toBe(roundB?.provider_connection_id)
   })
 
   it('toStoredModelString: null → "default", sonst model_id', () => {
@@ -245,7 +299,7 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
     expect(AiModelSourceSchema.safeParse('magic').success).toBe(false)
   })
 
-  it('Round-Trip: toStageLlmRoute(toAiModelRef(r)) verliert model + provider_id', () => {
+  it('Round-Trip: Legacy-kind wird via Lookup zur connection_id und bleibt danach stabil', () => {
     const kindToConn = new Map([['ollama', 'conn-ollama-1']])
     const connLookup: ConnectionLookup = new Map([
       ['conn-ollama-1', makeConnection({ id: 'conn-ollama-1', provider_kind: 'ollama' })],
@@ -260,9 +314,14 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
       provider_options: {},
     }
     const ref = toAiModelRefPure(original, kindToConn)
-    const back = toStageLlmRoutePure(ref, connLookup)
-    expect(back.provider_id).toBe('ollama')
+    expect(ref).not.toBeNull()
+    const back = toStageLlmRoutePure(ref as AiModelRef, connLookup)
+    // Teil 9: provider_id trägt jetzt die konkrete Connection-ID.
+    expect(back.provider_id).toBe('conn-ollama-1')
     expect(back.model).toBe('qwen3')
+    // Zweiter Roundtrip ist idempotent.
+    const refAgain = toAiModelRefPure(back)
+    expect(refAgain?.provider_connection_id).toBe('conn-ollama-1')
   })
 
   it('AiModelRefInput-Spiegel: akzeptiert vollständigen Mock-Datensatz', () => {
