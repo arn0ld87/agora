@@ -1341,6 +1341,7 @@
   "onboarding": {
     "wizard": {
       "title": "Setup",
+      "progressLabel": "Setup progress",
       "stepIndicator": "Step {current} of {total}",
       "laterBtn": "Set up later",
       "backBtn": "Back",

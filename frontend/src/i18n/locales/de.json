@@ -1341,6 +1341,7 @@
   "onboarding": {
     "wizard": {
       "title": "Einrichtung",
+      "progressLabel": "Fortschritt der Einrichtung",
       "stepIndicator": "Schritt {current} von {total}",
       "laterBtn": "Später einrichten",
       "backBtn": "Zurück",

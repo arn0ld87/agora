@@ -7,7 +7,7 @@
  * bestehenden Settings-Routen. Die geführte Einrichtung folgt in einem
  * späteren Update — hier gibt es keine Attrappen.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/v4/shell/AppShell.vue'
@@ -56,6 +56,7 @@ const busy = ref(false)
 const profileSaving = ref(false)
 const stepError = ref<string | null>(null)
 const completeMissing = ref<string[]>([])
+const stepTitle = ref<HTMLElement | null>(null)
 
 const stepIndex = computed(() => ONBOARDING_STEP_ORDER.indexOf(viewStep.value))
 const completedSteps = computed(() => store.onboarding.state?.completed_steps ?? [])
@@ -144,6 +145,11 @@ function advanceAfterCompletion(): void {
   const fallbackIndex = Math.min(stepIndex.value + 1, ONBOARDING_STEP_ORDER.length - 1)
   viewStep.value = next ?? ONBOARDING_STEP_ORDER[fallbackIndex]
 }
+
+watch(viewStep, async () => {
+  await nextTick()
+  stepTitle.value?.focus()
+})
 
 async function confirmWelcome(): Promise<void> {
   if (!selectedOperatingMode.value) return
@@ -251,12 +257,13 @@ onMounted(async () => {
   <AppShell :breadcrumbs="[{ label: t('onboarding.wizard.title') }]">
     <PageHeader :title="t('onboarding.wizard.title')" />
 
-    <ol class="onboarding-steps" aria-label="onboarding-steps">
+    <ol class="onboarding-steps" :aria-label="t('onboarding.wizard.progressLabel')">
       <li
         v-for="step in ONBOARDING_STEP_ORDER"
         :key="step"
         class="onboarding-steps__item"
         :class="`onboarding-steps__item--${stepStatus(step)}`"
+        :aria-current="step === viewStep ? 'step' : undefined"
       >
         <span class="onboarding-steps__dot" aria-hidden="true" />
         <span class="onboarding-steps__label">{{ t(`onboarding.steps.${step}`) }}</span>
@@ -267,11 +274,14 @@ onMounted(async () => {
     </ol>
 
     <Card>
+      <section class="onboarding-surface" aria-labelledby="onboarding-step-title">
       <p v-if="stepError" class="onboarding-error" role="alert">{{ stepError }}</p>
 
       <!-- welcome -->
       <div v-if="viewStep === 'welcome'" class="onboarding-step">
-        <h2 class="onboarding-step__title">{{ t('onboarding.welcome.title') }}</h2>
+        <h2 id="onboarding-step-title" ref="stepTitle" class="onboarding-step__title" tabindex="-1">
+          {{ t('onboarding.welcome.title') }}
+        </h2>
         <p class="onboarding-step__description">{{ t('onboarding.welcome.description') }}</p>
 
         <p class="onboarding-step__field-label">{{ t('onboarding.welcome.operatingModeLabel') }}</p>
@@ -282,6 +292,7 @@ onMounted(async () => {
             type="button"
             class="onboarding-mode-card v4-state-interactive"
             :class="{ 'onboarding-mode-card--active': selectedOperatingMode === mode }"
+            :aria-pressed="selectedOperatingMode === mode"
             @click="selectedOperatingMode = mode"
           >
             <span class="onboarding-mode-card__label">
@@ -296,7 +307,9 @@ onMounted(async () => {
 
       <!-- profile -->
       <div v-else-if="viewStep === 'profile'" class="onboarding-step">
-        <h2 class="onboarding-step__title">{{ t('onboarding.profile.title') }}</h2>
+        <h2 id="onboarding-step-title" ref="stepTitle" class="onboarding-step__title" tabindex="-1">
+          {{ t('onboarding.profile.title') }}
+        </h2>
         <p class="onboarding-step__description">{{ t('onboarding.profile.description') }}</p>
         <ProfileForm
           :profile="store.profile"
@@ -310,7 +323,9 @@ onMounted(async () => {
 
       <!-- providers / chat_model / embeddings — ehrliche Statusschritte -->
       <div v-else-if="activeStatusStep" class="onboarding-step">
-        <h2 class="onboarding-step__title">{{ t(activeStatusStep.titleKey) }}</h2>
+        <h2 id="onboarding-step-title" ref="stepTitle" class="onboarding-step__title" tabindex="-1">
+          {{ t(activeStatusStep.titleKey) }}
+        </h2>
         <p class="onboarding-step__description">{{ t(activeStatusStep.descriptionKey) }}</p>
         <p
           class="onboarding-status"
@@ -337,13 +352,17 @@ onMounted(async () => {
 
       <!-- privacy -->
       <div v-else-if="viewStep === 'privacy'" class="onboarding-step">
-        <h2 class="onboarding-step__title">{{ t('onboarding.privacy.title') }}</h2>
+        <h2 id="onboarding-step-title" ref="stepTitle" class="onboarding-step__title" tabindex="-1">
+          {{ t('onboarding.privacy.title') }}
+        </h2>
         <p class="onboarding-step__description">{{ t('onboarding.privacy.text') }}</p>
       </div>
 
       <!-- summary -->
       <div v-else-if="viewStep === 'summary'" class="onboarding-step">
-        <h2 class="onboarding-step__title">{{ t('onboarding.summary.title') }}</h2>
+        <h2 id="onboarding-step-title" ref="stepTitle" class="onboarding-step__title" tabindex="-1">
+          {{ t('onboarding.summary.title') }}
+        </h2>
 
         <div class="onboarding-summary-block">
           <h3>{{ t('onboarding.summary.profileHeading') }}</h3>
@@ -445,170 +464,224 @@ onMounted(async () => {
           </Button>
         </div>
       </div>
+      </section>
     </Card>
   </AppShell>
 </template>
 
 <style scoped>
 .onboarding-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--sp-2);
   list-style: none;
-  margin: 0 0 20px;
+  margin: 0 0 var(--sp-6);
   padding: 0;
 }
 
 .onboarding-steps__item {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--r-pill, 999px);
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-4);
   border: 1px solid var(--hairline);
+  background: var(--surface-glass);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-caption-1);
+  line-height: var(--lh-caption-1);
   color: var(--text-secondary);
 }
 
 .onboarding-steps__item--current {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--accent-warm);
+  background: var(--surface-glass-strong);
+  box-shadow: var(--shadow-glass);
+  color: var(--accent-ink);
 }
 
 .onboarding-steps__item--done {
-  color: var(--status-green, #2e7d32);
+  color: var(--status-success);
 }
 
 .onboarding-steps__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  flex: 0 0 var(--sp-2);
+  width: var(--sp-2);
+  height: var(--sp-2);
+  border-radius: var(--r-pill);
   background: currentColor;
 }
 
+.onboarding-steps__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .onboarding-steps__status {
+  margin-left: auto;
   color: var(--text-tertiary);
 }
 
+.onboarding-surface {
+  min-width: 0;
+}
+
 .onboarding-step__title {
-  margin: 0 0 6px;
+  width: fit-content;
+  margin: 0 0 var(--sp-2);
+  border-radius: var(--r-2);
   font-family: var(--font-sans);
-  font-size: 17px;
+  font-size: var(--fs-title-2);
+  line-height: var(--lh-title-2);
   font-weight: 600;
   color: var(--text-primary);
+  transition: box-shadow var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
+}
+
+.onboarding-step__title:focus {
+  outline: none;
+  box-shadow: var(--focus-ring-strong);
 }
 
 .onboarding-step__description {
-  margin: 0 0 16px;
+  max-width: 68ch;
+  margin: 0 0 var(--sp-5);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   color: var(--text-secondary);
 }
 
 .onboarding-step__field-label {
+  margin: 0 0 var(--sp-3);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
   font-weight: 500;
   color: var(--text-secondary);
-  margin: 0 0 8px;
 }
 
 .onboarding-mode-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-@media (max-width: 720px) {
-  .onboarding-mode-grid {
-    grid-template-columns: 1fr;
-  }
+  gap: var(--sp-3);
 }
 
 .onboarding-mode-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-2);
   align-items: flex-start;
   text-align: left;
-  padding: 12px 14px;
-  border-radius: var(--r-4, 8px);
-  --v4-state-rest-bg: var(--surface-elevated, #fff);
-  --v4-state-hover-bg: var(--surface-elevated, #fff);
+  min-width: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-5);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-hairline);
+  --v4-state-rest-bg: var(--surface-glass);
+  --v4-state-hover-bg: var(--surface-glass-strong);
+  transition:
+    border-color var(--v4-state-motion-duration-base) var(--v4-state-motion-ease),
+    box-shadow var(--v4-state-motion-duration-base) var(--v4-state-motion-ease),
+    transform var(--v4-state-motion-duration-base) var(--v4-state-motion-ease);
+}
+
+.onboarding-mode-card:hover {
+  transform: translateY(calc(var(--sp-1) * -1));
+  box-shadow: var(--shadow-glass);
 }
 
 .onboarding-mode-card--active {
-  border-color: var(--accent);
-  background: var(--accent-subtle, #f0f5ff);
+  border-color: var(--accent-warm);
+  box-shadow: var(--shadow-glass), inset var(--sp-1) 0 0 var(--accent-warm);
+  --v4-state-rest-bg: var(--accent-tint-bg);
 }
 
 .onboarding-mode-card__label {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-headline);
+  line-height: var(--lh-headline);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .onboarding-mode-card__description {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
   color: var(--text-secondary);
 }
 
 .onboarding-status {
   display: inline-flex;
   width: fit-content;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-pill);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
   font-weight: 500;
-  padding: 3px 10px;
-  border-radius: var(--r-pill, 999px);
-  margin: 0 0 10px;
 }
 
 .onboarding-status--ok {
-  background: var(--status-green-bg);
-  color: var(--status-green);
+  background: var(--status-success-soft);
+  color: var(--status-success);
 }
 
 .onboarding-status--pending {
-  background: var(--status-orange-bg);
-  color: var(--status-orange);
+  background: var(--status-coral-bg);
+  color: var(--status-coral);
 }
 
 .onboarding-step__notice {
+  max-width: 68ch;
+  margin: 0 0 var(--sp-3);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
   color: var(--text-secondary);
-  margin: 0 0 10px;
 }
 
 .onboarding-step__link {
+  display: inline-flex;
+  border-radius: var(--r-2);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
   color: var(--accent);
+  text-underline-offset: var(--sp-1);
 }
 
 .onboarding-step__legacy-hint {
+  max-width: 68ch;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--status-coral);
+  border-radius: var(--r-4);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-footnote);
+  line-height: var(--lh-footnote);
   color: var(--text-secondary);
-  background: var(--status-orange-bg, #fff4e5);
-  border: 1px solid var(--status-orange, #c47b1c);
-  border-radius: var(--r-4, 8px);
-  padding: 8px 10px;
-  margin: 0 0 10px;
+  background: var(--status-coral-bg);
 }
 
 .onboarding-summary-block {
-  margin-bottom: 14px;
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-4);
+  background: var(--surface-glass);
 }
 
 .onboarding-summary-block h3 {
-  margin: 0 0 4px;
+  margin: 0 0 var(--sp-1);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -616,39 +689,77 @@ onMounted(async () => {
 .onboarding-summary-block p {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   color: var(--text-primary);
 }
 
 .onboarding-requirements-list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--sp-5);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   color: var(--text-primary);
 }
 
 .onboarding-error {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--status-error);
+  border-radius: var(--r-4);
   font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--status-red, #c0392b);
-  padding: 8px 12px;
-  border: 1px solid var(--status-red, #c0392b);
-  border-radius: var(--r-4, 8px);
-  margin: 0 0 14px;
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  color: var(--status-error);
+  background: var(--status-error-soft);
 }
 
 .onboarding-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--separator, var(--hairline));
+  gap: var(--sp-3);
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--separator);
 }
 
 .onboarding-footer__nav {
   display: flex;
-  gap: 10px;
+  gap: var(--sp-3);
+}
+
+@media (max-width: 48rem) {
+  .onboarding-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .onboarding-mode-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 30rem) {
+  .onboarding-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-footer,
+  .onboarding-footer__nav {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-step__title,
+  .onboarding-mode-card {
+    transition: none;
+  }
+
+  .onboarding-mode-card:hover {
+    transform: none;
+  }
 }
 </style>
