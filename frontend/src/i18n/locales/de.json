@@ -956,6 +956,10 @@
           "description": "Ein revisionssicherer Append-Only-Log für sicherheitsrelevante Aktionen wird mit dem Identity-Modul ausgeliefert."
         }
       },
+      "embedding": {
+        "title": "Embedding-Konfiguration",
+        "subtitle": "Embedding-Provider, Modell und Migrations-Jobs verwalten."
+      },
       "llmProfiles": {
         "title": "LLM-Profile",
         "subtitle": "Verwalte mehrere benannte LLM-Konfigurationen. Pro Schritt eines Runs wählbar.",
@@ -1436,6 +1440,47 @@
         "de": "Deutsch",
         "en": "Englisch"
       }
+    }
+  },
+  "embedding": {
+    "status": {
+      "proposed": "Vorgeschlagen",
+      "probed": "Getestet",
+      "reembedding": "Re-Embedding läuft",
+      "validated": "Validiert",
+      "active": "Aktiv",
+      "rolled_back": "Zurückgerollt",
+      "failed": "Fehlgeschlagen",
+      "unknown": "Unbekannt"
+    },
+    "list": {
+      "error": "Konfigurationen konnten nicht geladen werden",
+      "empty": "Noch keine Embedding-Konfigurationen vorhanden."
+    },
+    "active": {
+      "title": "Aktive Konfiguration",
+      "legacyHint": "Quelle: Legacy Config.EMBEDDING_* — bitte übernehmen."
+    },
+    "action": {
+      "test": "Probe",
+      "activate": "Aktivieren"
+    },
+    "migration": {
+      "title": "Re-Embedding-Migration",
+      "intro": "Migration starten, um die Embedding-Dimension oder das Modell zu wechseln.",
+      "start": "Migration starten",
+      "cancel": "Abbrechen"
+    },
+    "ollama": {
+      "download": "Ollama-Modell herunterladen",
+      "downloadInline": "Ollama-Modell hier herunterladen",
+      "title": "Ollama-Modell herunterladen",
+      "hint": "Modell-Name muss ASCII a-z, A-Z, 0-9, -, _, :, . enthalten (max 100 Zeichen).",
+      "model": "Modell-Name",
+      "configurationId": "Provider-Connection (optional)",
+      "autoSelect": "Auto (erste Ollama-Connection)",
+      "submit": "Download starten",
+      "modelRequired": "Modell-Name ist erforderlich"
     }
   }
 }

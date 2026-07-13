@@ -956,6 +956,10 @@
           "description": "A tamper-evident append-only log for security-relevant actions ships with the identity module."
         }
       },
+      "embedding": {
+        "title": "Embedding Configuration",
+        "subtitle": "Manage embedding providers, models, and migration jobs."
+      },
       "llmProfiles": {
         "title": "LLM Profiles",
         "subtitle": "Manage multiple named LLM configurations. Selectable per run step.",
@@ -1436,6 +1440,47 @@
         "de": "German",
         "en": "English"
       }
+    }
+  },
+  "embedding": {
+    "status": {
+      "proposed": "Proposed",
+      "probed": "Probed",
+      "reembedding": "Re-embedding in progress",
+      "validated": "Validated",
+      "active": "Active",
+      "rolled_back": "Rolled back",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "list": {
+      "error": "Configurations could not be loaded",
+      "empty": "No embedding configurations yet."
+    },
+    "active": {
+      "title": "Active configuration",
+      "legacyHint": "Source: legacy Config.EMBEDDING_* — please migrate."
+    },
+    "action": {
+      "test": "Probe",
+      "activate": "Activate"
+    },
+    "migration": {
+      "title": "Re-embedding migration",
+      "intro": "Start a migration to switch embedding dimension or model.",
+      "start": "Start migration",
+      "cancel": "Cancel"
+    },
+    "ollama": {
+      "download": "Download Ollama model",
+      "downloadInline": "Download Ollama model here",
+      "title": "Download Ollama model",
+      "hint": "Model name must contain ASCII a-z, A-Z, 0-9, -, _, :, . (max 100 chars).",
+      "model": "Model name",
+      "configurationId": "Provider connection (optional)",
+      "autoSelect": "Auto (first Ollama connection)",
+      "submit": "Start download",
+      "modelRequired": "Model name is required"
     }
   }
 }

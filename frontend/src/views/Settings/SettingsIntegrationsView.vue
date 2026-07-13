@@ -7,8 +7,8 @@ import SettingsSectionPanel from '@/components/v4/forms/SettingsSectionPanel.vue
 const { t } = useI18n()
 
 const BREADCRUMBS = [
-  { label: 'Settings', to: { name: 'SettingsGeneral' } },
-  { label: 'Integrations' },
+  { label: t('common.settings'), to: { name: 'SettingsGeneral' } },
+  { label: t('sidebar.settings.integrations') },
 ]
 
 // Externe Systeme — Neo4j, Embedding-Provider, Ontology-LLM, Hybrid-Search,
