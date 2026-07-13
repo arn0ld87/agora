@@ -103,6 +103,20 @@ EmbeddingIndexStatus = Literal[
     "retired",        # explizit aus dem Verkehr gezogen
 ]
 
+# Phase der Re-Embedding-Engine innerhalb eines Jobs (Slice 4.4). Die
+# Engine durchlaeuft zunaechst die Entity-Phase (re-embed von
+# ``(n:Entity).entity_embedding``) und danach die Fact-Phase
+# (re-embed von ``()-[r:RELATION]-().fact_embedding``). ``phase`` ist
+# der Disambiguator zum Resume-Cursor ``last_processed_id``: derselbe
+# Cursor-Wert gehoert immer zur gerade aktiven Phase. Beim Phasenwechsel
+# entity -> fact resettet die Engine ``total``/``processed``/``failed``/
+# ``last_processed_id`` auf die Fact-Menge. Default ``"entity"`` haelt
+# Alt-Jobs (ohne das Feld) ladbar.
+EmbeddingMigrationPhase = Literal[
+    "entity",   # (n:Entity).entity_embedding wird re-embedded
+    "fact",     # ()-[r:RELATION]-().fact_embedding wird re-embedded
+]
+
 
 def embedding_provider_kinds() -> frozenset[str]:
     """Gibt die erlaubten ``ProviderConnectionKind``-Werte fuer Embedding-Configs zurueck.
@@ -231,9 +245,13 @@ class EmbeddingMigrationProgress(BaseModel):
     processed: int = Field(ge=0)
     failed: int = Field(ge=0)
     # Resume-Cursor der Re-Embedding-Engine (Slice 4.3.4): die zuletzt
-    # vollstaendig verarbeitete Entity-UUID. Nach einem Crash setzt ein
-    # erneuter ``run()`` beim ersten Knoten mit ``uuid > cursor`` fort.
+    # vollstaendig verarbeitete UUID der Traeger der aktuellen Phase
+    # (Entity-UUID in der Entity-Phase, RELATION-UUID in der Fact-Phase).
+    # Nach einem Crash setzt ein erneuter ``run()`` beim ersten TrAEger
+    # mit ``uuid > cursor`` fort. ``phase`` (Slice 4.4) disambiguiert,
+    # zu welcher Phase der Cursor gehoert.
     last_processed_id: str | None = None
+    phase: EmbeddingMigrationPhase = "entity"
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -354,6 +372,7 @@ __all__ = [
     "EmbeddingConfigurationStatus",
     "EmbeddingConfigurationScope",
     "EmbeddingMigrationStatus",
+    "EmbeddingMigrationPhase",
     "EmbeddingIndexStatus",
     "EmbeddingModelMetadata",
     "EmbeddingConfiguration",

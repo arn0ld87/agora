@@ -5,6 +5,40 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (embedding-reembedder-fact — 2026-07-13)
+
+- **Fact-Embedding-Re-Embed (Onboarding Slice 4.4)**:
+  ``Neo4jReEmbedder`` re-embedded neben ``(n:Entity).entity_embedding``
+  jetzt auch ``RELATION.fact_embedding`` in einer zweiten, sequenziellen
+  Phase. Da ``fact_embedding`` eine echte ``RELATIONSHIP``-Property auf
+  ``:RELATION``-Kanten ist (kein reifizierter Fakt-Knoten), nutzt die
+  Fact-Phase ``db.create.setRelationshipVectorProperty`` (Neo4j 5.13+,
+  Stack ist 5.18 CE) und einen versionierten Relationship-Vector-Index
+  ``FOR ()-[r:RELATION]-() ON (r.fact_embedding_vN)`` (``CREATE ...
+  IF NOT EXISTS``, niemals DROP, ADR-0007). Cursor ist ``r.uuid``
+  (``:RELATION`` hat eine eigene UUID). Ein neues Vertragsfeld
+  ``EmbeddingMigrationProgress.phase: Literal["entity","fact"]``
+  (default ``"entity"``, backward-kompatibel für persistierte Alt-Jobs;
+  inkl. Zod-Spiegel und regenerierter JSON-Schemas) disambiguiert den
+  einzigen Cursor ``last_processed_id`` (Entity-UUID vs. RELATION-UUID)
+  statt zwei getrennter Cursor-Spalten einzuführen. Der Phasenwechsel
+  ``entity -> fact`` wird ohne separaten Checkpoint im Speicher
+  vollzogen; ``_drain(fact)`` schreibt den ersten sauberen Fact-
+  Checkpoint. Resume nach Crash: ein in der Fact-Phase gecrashter Job
+  überspringt beim Wiederaufnehmen die Entity-Phase (``phase=="fact"``)
+  und setzt die Fact-Phase am ``last_processed_id`` fort; ein Crash am
+  Phasenübergang läuft die (leere) Entity-Phase idempotent durch.
+  Schlägt die Entity-Phase fehl (Dimension-Mismatch/None-Vektor), wird
+  die Fact-Phase nicht gestartet — kein Switch auf einen
+  unvollständigen Index-Satz. Alignment-Drift-Guard (Vektoranzahl ≠
+  Textanzahl) bricht hart ab. ``EmbeddingIndexVersion`` bleibt
+  bewusst entity-only; Fact-Index-/Property-Namen werden konventionell
+  aus der Ziel-Version abgeleitet (``fact_embedding_v{N}``) und der
+  Engine explizit übergeben. 9 neue ReEmbedder-Tests, 3 neue Contract-
+  Tests, 3 neue Zod-Tests. Bewusst offen: Gemini-Batch-Embedding,
+  ``scope="project"``-Filter, fact-spezifische ``EmbeddingIndexVersion``,
+  Search-Pfad-Umstellung auf die neue Fact-Property.
+
 ### Changed (onboarding-model-picker-slice-5-5 — 2026-07-13)
 
 - **Store-Konsolidierung `aiModels.ts`** (Onboarding Slice 5.5):
@@ -89,8 +123,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   ``running`` gilt als Resume). Dimension-Mismatch führt zu
   ``failed`` ohne Index-Switch. Gemini-Re-Embedding wird explizit
   als „noch nicht unterstützt" abgelehnt statt vorgetäuscht.
-  Bewusst offen: ``RELATION.fact_embedding``-Re-Embed und
-  ``scope="project"``-Filter.
+  Bewusst offen: ``scope="project"``-Filter (``RELATION.fact_embedding``-
+  Re-Embed folgt in Slice 4.4, siehe oben).
 
 ### Added (embedding-migration — 2026-07-12)
 

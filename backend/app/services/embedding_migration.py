@@ -78,6 +78,8 @@ class ReEmbedder(Protocol):
         *,
         configuration: EmbeddingConfiguration,
         checkpoint: Callable[[EmbeddingMigrationProgress], None],
+        fact_target_index_name: str | None = None,
+        fact_target_property_key: str | None = None,
     ) -> EmbeddingMigrationStatus: ...
 
 
@@ -99,6 +101,8 @@ class _NoopReEmbedder:
         *,
         configuration: EmbeddingConfiguration,
         checkpoint: Callable[[EmbeddingMigrationProgress], None],
+        fact_target_index_name: str | None = None,
+        fact_target_property_key: str | None = None,
     ) -> EmbeddingMigrationStatus:
         return "completed"
 
@@ -242,6 +246,13 @@ class EmbeddingMigrationService:
             )
 
         try:
+            # Fact-Index/Property werden konventionell aus der Ziel-
+            # Version abgeleitet (``fact_embedding_v{N}``). Sie werden
+            # *nicht* als eigener ``EmbeddingIndexVersion``-Datensatz
+            # verwaltet (dokumentierte Asymmetrie, Slice 4.4) — ein
+            # Folge-Slice kann fact-spezifische IndexVersionen einfuehren.
+            fact_index_name = f"fact_embedding_v{job.target_index_version}"
+            fact_property_key = f"fact_embedding_v{job.target_index_version}"
             final_status = self._re_embedder.run(
                 target_index.index_name,
                 target_index.property_key,
@@ -249,6 +260,8 @@ class EmbeddingMigrationService:
                 job.progress,
                 configuration=config,
                 checkpoint=_persist_checkpoint,
+                fact_target_index_name=fact_index_name,
+                fact_target_property_key=fact_property_key,
             )
         except Exception as exc:  # noqa: BLE001 — wir wollen alle Re-Embedder-Fehler fangen
             job = self._load_job(job_id)

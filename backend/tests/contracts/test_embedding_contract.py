@@ -481,6 +481,44 @@ def test_embedding_migration_progress_last_processed_id_roundtrip() -> None:
     assert restored.last_processed_id == "uuid-003"
 
 
+def test_embedding_migration_progress_phase_defaults_to_entity() -> None:
+    """Slice 4.4: ``phase`` ist der Disambiguator zum Resume-Cursor.
+    Default ``"entity"`` — frische Jobs beginnen in der Entity-Phase.
+    """
+    progress = EmbeddingMigrationProgress(total=0, processed=0, failed=0)
+    assert progress.phase == "entity"
+    # Alt-Jobs ohne das Feld bleiben ladbar (backward-kompatibel).
+    legacy_payload = (
+        '{"total": 5, "processed": 5, "failed": 0, "last_processed_id": null,'
+        ' "started_at": null, "finished_at": null}'
+    )
+    parsed = EmbeddingMigrationProgress.model_validate_json(legacy_payload)
+    assert parsed.phase == "entity"
+
+
+def test_embedding_migration_progress_phase_roundtrip_and_values() -> None:
+    """Slice 4.4: ``phase`` wird als Resume-Cursor-Disambiguator
+    durchgereicht und akzeptiert beide Phasen-Werte.
+    """
+    for phase in ("entity", "fact"):
+        progress = EmbeddingMigrationProgress(
+            total=10, processed=4, failed=0, last_processed_id="uuid-003",
+            phase=phase,
+        )
+        restored = EmbeddingMigrationProgress.model_validate_json(
+            progress.model_dump_json()
+        )
+        assert restored.phase == phase
+
+
+def test_embedding_migration_progress_rejects_unknown_phase() -> None:
+    """``extra="forbid"`` + Literal schuetzt vor Phasen-Drift."""
+    with pytest.raises(ValueError):
+        EmbeddingMigrationProgress(
+            total=0, processed=0, failed=0, phase="relationship"  # type: ignore[arg-type]
+        )
+
+
 def test_embedding_provider_kinds_helper_is_derived_from_literal() -> None:
     """Gemini-Finding (MEDIUM): das ``_EMBEDDING_PROVIDER_KINDS``-Set muss
     dynamisch aus dem ``EmbeddingProviderKind``-Literal abgeleitet sein,

@@ -375,12 +375,15 @@ eigene PRs, TDD, Verhaltens-Regression vermeiden (bestehende Tests bleiben grün
 
 **Status:** Phase 0, Slice 1, Slice 2 und Slice 3 gemergt (PR #682, #683,
 #684, #685). Slice 4 (Embedding-Setup und sichere Re-Embedding-Migration)
-ist in Bearbeitung; Sub-Slices 4.1–4.3.3 plus Maintenance sind gemergt
-(PR #686–#691, #693). Sub-Slice 4.3.4 ersetzt den `_NoopReEmbedder` durch
-die echte Neo4j-Re-Embedding-Engine (`Neo4jReEmbedder`: Read-Loop über
-`(n:Entity)` per `uuid`-Cursor, Checkpoint nach jedem Batch, Resume über
-`EmbeddingMigrationProgress.last_processed_id` nach Crash). Offen im
-Slice-4-Umfeld: Fact-Embedding-Re-Embed (`RELATION.fact_embedding`),
+ist in Bearbeitung; Sub-Slices 4.1–4.3.4 plus Maintenance sind gemergt
+(PR #686–#691, #693, #694). Sub-Slice 4.3.4 ersetzt den `_NoopReEmbedder`
+durch die echte Neo4j-Re-Embedding-Engine (`Neo4jReEmbedder`: Read-Loop
+über `(n:Entity)` per `uuid`-Cursor, Checkpoint nach jedem Batch, Resume
+über `EmbeddingMigrationProgress.last_processed_id` nach Crash). Slice 4.4
+erweitert die Engine um die Fact-Phase (`RELATION.fact_embedding` via
+`db.create.setRelationshipVectorProperty`, versionierter
+Relationship-Vector-Index; Cursor-Disambiguierung über das neue
+`phase`-Feld in `EmbeddingMigrationProgress`). Offen im Slice-4-Umfeld:
 Gemini-Batch-Embedding, `scope="project"`-Filter. Bestehende
 Profile bleiben unverändert lesbar; Benutzerprofil und KI-Presets sind
 getrennte Schlüsselräume (ADR-0008). Embedding-Provider und Chat-Provider

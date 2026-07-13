@@ -198,6 +198,45 @@ describe('embeddingContract — Zod-Spiegel der Backend-Contracts', () => {
     expect(parsed.last_processed_id).toBe('uuid-003')
   })
 
+  it('EmbeddingMigrationProgress: phase defaultet auf entity (Slice 4.4, Legacy-Payloads)', () => {
+    const parsed = EmbeddingMigrationProgressSchema.parse({
+      total: 5,
+      processed: 5,
+      failed: 0,
+      started_at: null,
+      finished_at: null,
+    })
+    expect(parsed.phase).toBe('entity')
+  })
+
+  it('EmbeddingMigrationProgress: phase wird als Cursor-Disambiguator durchgereicht', () => {
+    for (const phase of ['entity', 'fact'] as const) {
+      const parsed = EmbeddingMigrationProgressSchema.parse({
+        total: 10,
+        processed: 4,
+        failed: 0,
+        last_processed_id: 'rel-003',
+        phase,
+        started_at: '2026-07-13T08:00:00+00:00',
+        finished_at: null,
+      })
+      expect(parsed.phase).toBe(phase)
+    }
+  })
+
+  it('EmbeddingMigrationProgress: unbekannte phase wird abgelehnt', () => {
+    expect(() =>
+      EmbeddingMigrationProgressSchema.parse({
+        total: 0,
+        processed: 0,
+        failed: 0,
+        phase: 'relationship',
+        started_at: null,
+        finished_at: null,
+      }),
+    ).toThrow()
+  })
+
   it('EmbeddingConfigurationScope akzeptiert nur global oder project', () => {
     expect(() => EmbeddingConfigurationScopeSchema.parse('team')).toThrow()
   })
