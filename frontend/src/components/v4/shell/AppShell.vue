@@ -9,37 +9,43 @@
     />
 
     <!-- Sidebar (spans both rows on Desktop; Off-Canvas-Drawer auf Mobile) -->
-    <div
-      ref="sidebarEl"
-      class="app-shell__sidebar"
-      :class="{ 'app-shell__sidebar--mobile-open': shellStore.mobileNavOpen }"
-      :data-app-shell-drawer="shellStore.mobileNavOpen ? 'true' : undefined"
-      :role="shellStore.mobileNavOpen ? 'dialog' : undefined"
-      :aria-modal="shellStore.mobileNavOpen ? 'true' : undefined"
-      :aria-label="shellStore.mobileNavOpen ? t('sidebar.title') : undefined"
-      :tabindex="shellStore.mobileNavOpen ? -1 : undefined"
-    >
-      <slot name="sidebar">
-        <Sidebar
-          :active="activeRoute"
-          :sub-active="activeSubRoute"
-          :settings-open="shellStore.settingsGroupOpen"
-          :collapsed="shellStore.sidebarCollapsed"
-          @update:settings-open="shellStore.settingsGroupOpen = $event"
-          @collapse-toggle="shellStore.toggleSidebar"
-        />
-      </slot>
-    </div>
+    <!-- FocusScope (reka-ui, Slice 7.3.2): trapped+loop nur reaktiv waehrend Drawer offen —
+         haelt Tab/Shift+Tab zyklisch im Drawer, unabhaengig vom Desktop-Layout (kein v-if,
+         sonst wuerde die Sidebar auf Desktop nie gerendert). Initialer Fokus-Shift + Rueckgabe
+         an den Trigger bleiben im bestehenden watch(mobileNavOpen)-Handler (siehe unten). -->
+    <FocusScope as-child :trapped="shellStore.mobileNavOpen" :loop="shellStore.mobileNavOpen">
+      <div
+        ref="sidebarEl"
+        class="app-shell__sidebar"
+        :class="{ 'app-shell__sidebar--mobile-open': shellStore.mobileNavOpen }"
+        :data-app-shell-drawer="shellStore.mobileNavOpen ? 'true' : undefined"
+        :role="shellStore.mobileNavOpen ? 'dialog' : undefined"
+        :aria-modal="shellStore.mobileNavOpen ? 'true' : undefined"
+        :aria-label="shellStore.mobileNavOpen ? t('sidebar.title') : undefined"
+        :tabindex="shellStore.mobileNavOpen ? -1 : undefined"
+      >
+        <slot name="sidebar">
+          <Sidebar
+            :active="activeRoute"
+            :sub-active="activeSubRoute"
+            :settings-open="shellStore.settingsGroupOpen"
+            :collapsed="shellStore.sidebarCollapsed"
+            @update:settings-open="shellStore.settingsGroupOpen = $event"
+            @collapse-toggle="shellStore.toggleSidebar"
+          />
+        </slot>
+      </div>
+    </FocusScope>
 
-    <!-- Topbar -->
-    <div class="app-shell__topbar">
+    <!-- Topbar — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
+    <div class="app-shell__topbar" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot name="topbar">
         <Topbar :breadcrumbs="breadcrumbs" :notification-badge="notificationBadge" />
       </slot>
     </div>
 
-    <!-- Main content -->
-    <main class="app-shell__main">
+    <!-- Main content — inert waehrend Drawer offen: sperrt Fokus + Klicks (Slice 7.3.2 a11y) -->
+    <main class="app-shell__main" :inert="shellStore.mobileNavOpen ? true : undefined">
       <slot />
     </main>
 
@@ -57,9 +63,11 @@
 import { computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent, ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { FocusScope } from 'reka-ui'
 import { useShellStore } from '@/stores/shell'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { useCommandsStore } from '@/stores/commandsStore'
+import { MOBILE_BREAKPOINT_PX } from '@/constants/breakpoints'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import type { BreadcrumbItem } from './Breadcrumbs.vue'
@@ -112,7 +120,8 @@ function onKeyDown(e: KeyboardEvent): void {
 // Resize-Listener: Wenn auf Desktop-Breite gewechselt wird während Drawer offen ist,
 // Nav schliessen damit der Scroll-Lock (via Watcher unten) aufgehoben wird.
 function onResize(): void {
-  if (window.innerWidth >= 768 && shellStore.mobileNavOpen) {
+  // MOBILE_BREAKPOINT_PX (SSoT, Slice 7.3.2): Desktop beginnt bei exakt diesem Wert.
+  if (window.innerWidth >= MOBILE_BREAKPOINT_PX && shellStore.mobileNavOpen) {
     shellStore.closeMobileNav()
   }
 }
@@ -141,9 +150,16 @@ watch(
         else el.focus()
       })
     } else if (prev && lastFocusedBeforeDrawer && typeof lastFocusedBeforeDrawer.focus === 'function') {
-      // Fokus zurueck zum Trigger
-      lastFocusedBeforeDrawer.focus()
+      const trigger = lastFocusedBeforeDrawer
       lastFocusedBeforeDrawer = null
+      // nextTick (Slice 7.3.2): FocusScope (reka-ui) haengt an `trapped` einen
+      // focusout-Listener, der Fokus-Verlassen des Containers abfaengt und
+      // zurueckholt. `trapped` wird reaktiv erst nach diesem Watcher auf false
+      // gesetzt — ohne nextTick wuerde unser Fokus-Wechsel zum Trigger vom noch
+      // aktiven FocusScope-Listener sofort wieder in den Drawer zurueckgeholt.
+      void nextTick(() => {
+        trigger.focus()
+      })
     }
   },
 )
@@ -252,7 +268,9 @@ const activeSubRoute = computed<string>(() => {
 }
 
 /* ── Mobile (< 768 px) ──────────────────────────────────────── */
-@media (max-width: 768px) {
+/* SSoT: src/constants/breakpoints.ts (MOBILE_BREAKPOINT_PX = 768) —
+   max-width: 767px bildet "< 768" ab (Slice 7.3.2, Breakpoint-Vereinheitlichung). */
+@media (max-width: 767px) {
   .app-shell {
     grid-template-columns: 1fr;
     grid-template-rows: 56px 1fr;

@@ -735,7 +735,8 @@
       "profile": "Profile"
     },
     "footer": {
-      "collapse": "Collapse"
+      "collapse": "Collapse",
+      "expand": "Expand"
     }
   },
   "cmd": {
