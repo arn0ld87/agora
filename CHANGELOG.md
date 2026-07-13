@@ -5,6 +5,29 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (onboarding-model-picker-slice-5-6-final — 2026-07-13)
+
+- **Echte Playwright-E2E für `AiModelPicker`** (Onboarding Slice 5.6):
+  Die fünf Skeleton-Tests laufen ohne `test.describe.skip()` und decken
+  Tastatur-Navigation, Suche, eine verfügbare und aktivierte Online-Option,
+  die Abwesenheit des Offline-Modells sowie den persistierten Run-Snapshot
+  ab. Der Snapshot-Test prüft die `PATCH`-Response auf
+  `provider_connection_id`, `model_id` und
+  `source === 'stage_override'`.
+
+- **Deterministische E2E-Provider-Discovery**: Der Compose-Override startet
+  `mock-models-nginx` als OpenAI-kompatiblen `/models`-Dienst. Das globale
+  Setup legt dedizierte Online- und Offline-Test-Provider-Connections an;
+  `scripts/e2e-up.sh` ergänzt `AGORA_SECRET_KEY` für den Secrets-Store.
+
+- **Stabile Routing-Selektoren und Capability-Auswertung**:
+  `LlmRoutingTestId` liefert `stageRow` und `stageSave` als SSoT, ergänzt um
+  `llm-routing-run-id`. Im Chat-Mode werden Modelle nur bei explizitem
+  Eintrag in `unsupported_capabilities` ausgeschlossen; unbekannte
+  Capability-Daten bleiben auswählbar. PR
+  [#707](https://github.com/arn0ld87/agora/pull/707). Playwright und das
+  Pre-Push-Gate auf dem armserver bleiben bewusst als Verifikation offen.
+
 ### Added (embedding-reembedder-fact — 2026-07-13)
 
 - **Fact-Embedding-Re-Embed (Onboarding Slice 4.4)**:

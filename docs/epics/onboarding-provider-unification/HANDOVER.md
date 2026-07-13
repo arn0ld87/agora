@@ -532,6 +532,93 @@ CSS-Refactors und i18n-Aenderungen.
   ggf. Save-Button-`data-testid` in der Stage-Override-View ergaenzen,
   grun laufen lassen.
 
+---
+
+# Handover — Onboarding/Provider-Unification Slice 5.6 (final)
+
+## Stand
+
+- Datum: 2026-07-13
+- Worktree: `/private/tmp/agora-onboarding-slice-5-6`
+- Branch: `codex/onboarding-model-picker-slice-5-6`
+- Basis: `origin/main` @ `499d1bd0` (Slice 5.5, PR #705, gemergt)
+- PR: [#707](https://github.com/arn0ld87/agora/pull/707), Merge-Commit
+  `eab4a67e`
+- Slice: **5.6 final** — echte Playwright-E2E für den `AiModelPicker`
+
+## Fertig (Slice 5.6 final)
+
+`frontend/tests/e2e/ai-model-picker.spec.ts` enthält fünf aktive Tests:
+
+1. Tastatur-Navigation durch die Modelloptionen und Auswahl per `Enter`.
+2. Suche mit gefilterter Trefferliste und Tastaturauswahl.
+3. Die Online-Option besitzt `data-status="available"` und ist aktiviert.
+4. Das Modell der Offline-Connection fehlt vollständig in der Optionsliste.
+5. Der Run-Snapshot wird über die `PATCH`-Response geprüft:
+   `provider_connection_id` und `model_id` entsprechen der Stage-Auswahl,
+   `source === 'stage_override'`.
+
+Die Skeleton-Annotation `test.describe.skip()` ist entfernt. Die Tests
+verwenden ausschließlich die zentralen `data-testid`-Verträge und stabile
+Connection-/Modell-IDs.
+
+## Mock-Models-Service und Provider-Seed
+
+Der E2E-Compose-Override startet `mock-models-nginx` als deterministischen,
+OpenAI-kompatiblen `/models`-Dienst. Damit hängt die Discovery nicht von
+externen Providern oder wechselnden Modellkatalogen ab.
+
+`global-setup` erzeugt zwei dedizierte Provider-Connections:
+
+- eine erreichbare `openai_compatible`-Connection für das verfügbare Modell;
+- eine nicht erreichbare `openai`-Connection für den Offline-Fall.
+
+Der Test prüft den Offline-Zustand als Abwesenheit der Option. Ein
+deaktivierter Eintrag wird nicht vorgetäuscht, wenn Discovery das Modell gar
+nicht liefert.
+
+## TestId-SSoT und Capability-Relaxation
+
+`frontend/src/contracts/testIds.ts` enthält zusätzlich
+`LlmRoutingTestId.stageRow` und `LlmRoutingTestId.stageSave`. Die Run-ID wird
+über `llm-routing-run-id` adressiert. Komponente, Routing-View und E2E-Helper
+teilen damit dieselben Selektoren.
+
+Im `chat`-Mode gilt ein Modell bei unbekannter Capability-Lage als geeignet.
+Ausgefiltert wird nur, wenn `unsupported_capabilities` die benötigte
+Capability explizit nennt. Das verhindert False Negatives bei Providern ohne
+vollständige Capability-Metadaten.
+
+## Secrets-Store im E2E-Setup
+
+`scripts/e2e-up.sh` ergänzt `AGORA_SECRET_KEY` in der erzeugten E2E-Umgebung.
+Der Provider-Seed kann dadurch Credentials über den regulären Secrets-Store
+persistieren, statt einen Test-Sonderpfad einzuführen.
+
+## Verifikation
+
+Die lokale Docker-Installation war defekt. Echte Playwright-Läufe und das
+vollständige `scripts/pre-push-gate.sh` wurden deshalb für PR #707 bewusst
+suspendiert. Der armserver läuft auf Merge-Commit `eab4a67e`; die beiden
+Verifikationsläufe dort stehen weiterhin aus.
+
+## Bewusst offen
+
+- echte Playwright-Ausführung auf dem armserver;
+- vollständiges Pre-Push-Gate auf dem armserver.
+
+## Doc-Impact-Matrix
+
+| Datei | Status | Begründung |
+| --- | --- | --- |
+| `README.md` | geprüft, nicht betroffen | keine neue User-Facing-Funktion; E2E-Infrastruktur bleibt intern |
+| `AGENTS.md` | geprüft, nicht betroffen | Stack-Map und verbindliche Projektregeln bleiben unverändert |
+| `CLAUDE.md` | geprüft, nicht betroffen | keine neue Claude-spezifische Arbeitsregel |
+| `PLAN.md` | geprüft, nicht betroffen | Slice-Reihenfolge und operativer Stand werden durch den Merge nicht neu geschnitten |
+| `docs/STATUS.md` | aktualisiert | Slice 5.6 final und bewusst offene armserver-Verifikation dokumentiert |
+| `CHANGELOG.md` | aktualisiert | neuer `Added`-Block für E2E, Mock-Discovery und Capability-Relaxation |
+| `HANDOVER.md` | aktualisiert | dieser Abschnitt |
+
 ## Naechste Schritte (5.6 final)
 
 1. PR mergen (Prep-Skeleton ist grun, 5.4 unabhaengig).
@@ -551,4 +638,3 @@ CSS-Refactors und i18n-Aenderungen.
 - `frontend/tests/e2e/helpers/aiModelPicker.ts` (neu)
 - `frontend/tests/e2e/ai-model-picker.spec.ts` (neu)
 - `docs/epics/onboarding-provider-unification/HANDOVER.md` (dieser Abschnitt)
-
