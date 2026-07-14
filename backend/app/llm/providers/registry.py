@@ -51,7 +51,9 @@ if TYPE_CHECKING:
     from app.llm.providers.base import ProviderAdapter
 
 # Teilmengen von app.contracts.provider_types.ProviderType
-HttpDetectedProvider = Literal["ollama", "cloud", "openai", "google", "unknown"]
+HttpDetectedProvider = Literal[
+    "ollama", "cloud", "minimax", "openai", "google", "unknown"
+]
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
 
@@ -95,11 +97,16 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
     2. Ollama-Cloud-Tag ``:cloud`` / ``:<size>-cloud`` → ``"cloud"`` (Cloud-
        Modelle laufen auch über den lokalen ollama-Proxy — deshalb VOR der
        Port-Heuristik). Siehe ``_is_ollama_cloud_tag`` (Issue #670).
-    3. Base URL enthält ``11434`` → ``"ollama"`` (lokales Ollama).
-    4. Base URL enthält ``openai.com`` oder ``api.openai`` → ``"openai"``.
-    5. Base URL enthält ``googleapis.com`` oder ``generativelanguage`` →
+    3. Base URL enthält ``api.minimax.io`` → ``"minimax"`` (MiniMax-Modelle
+       wie ``MiniMax-M3``, OpenAI- und Anthropic-kompatibel). Eigener
+       Branch vor der Port-Heuristik und vor ``openai.com``, weil
+       Subdomain-Matchings nichts mit Ollama-Ports zu tun haben und
+       ``api.openai.com`` sonst fälschlich gewinnen würde.
+    4. Base URL enthält ``11434`` → ``"ollama"`` (lokales Ollama).
+    5. Base URL enthält ``openai.com`` oder ``api.openai`` → ``"openai"``.
+    6. Base URL enthält ``googleapis.com`` oder ``generativelanguage`` →
        ``"google"`` (Gemini-OpenAI-Compat-Layer mit nativem ``tools=``).
-    6. Fallback → ``"unknown"``.
+    7. Fallback → ``"unknown"``.
     """
     model_name = model or ""
     base = (base_url or "").lower()
@@ -107,6 +114,8 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
+    if "api.minimax.io" in base:
+        return "minimax"
     if "11434" in base:
         return "ollama"
     if "openai.com" in base or "api.openai" in base:

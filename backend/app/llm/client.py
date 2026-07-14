@@ -267,7 +267,7 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
+    def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
         """Infer the LLM provider from base_url and model name.
 
         Siehe ``app.llm.providers.base.detect_provider`` für die Heuristik.

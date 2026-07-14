@@ -233,7 +233,7 @@ def is_ollama(base_url: Optional[str]) -> bool:
 
 def detect_provider(
     base_url: Optional[str], model: Optional[str]
-) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
+) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
     """Infer the LLM provider from base_url and model name.
 
     Delegiert an ``app.llm.providers.registry.detect_provider(mode="http")``
