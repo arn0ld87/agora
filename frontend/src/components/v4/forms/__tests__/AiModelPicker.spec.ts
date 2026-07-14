@@ -29,6 +29,7 @@ vi.mock('@/composables/useAvailableModels', () => ({
 }))
 
 import AiModelPicker from '../AiModelPicker.vue'
+import aiModelPickerSource from '../AiModelPicker.vue?raw'
 import type { AiModelRefInput } from '@/contracts/aiModelRef'
 
 const MOCK_OPTIONS: AiModelRefInput[] = [
@@ -265,5 +266,39 @@ describe('AiModelPicker (Slice 5.1, isolated)', () => {
     expect(root.attributes('data-disabled')).toBeDefined()
     const input = w.find('.ai-model-picker__input')
     expect(input.attributes('disabled')).toBeDefined()
+  })
+
+  it('trennt Provider-Name und Verbindungsstatus semantisch', () => {
+    expect(aiModelPickerSource).toMatch(/class="ai-model-picker__provider-name"/)
+    expect(aiModelPickerSource).toMatch(
+      /class="ai-model-picker__provider-status"[\s\S]*?:data-status="group\.status"[\s\S]*?role="status"/,
+    )
+  })
+
+  it('nutzt den starken v4-Fokusvertrag für Eingabe und Tastatur-Highlight', () => {
+    expect(aiModelPickerSource).toMatch(
+      /\.ai-model-picker__anchor:focus-within[\s\S]*?--v4-state-focus-ring-strong-width[\s\S]*?--v4-state-focus-ring-strong/,
+    )
+    expect(aiModelPickerSource).toMatch(
+      /\.ai-model-picker__item\[data-highlighted\][\s\S]*?--v4-state-focus-ring-strong-width[\s\S]*?--v4-state-focus-ring-strong/,
+    )
+  })
+
+  it('begrenzt die Portal-Surface für 320 px und 200 Prozent Zoom', () => {
+    expect(aiModelPickerSource).toMatch(
+      /\.ai-model-picker__content[\s\S]*?inline-size:\s*var\(--reka-combobox-trigger-width[\s\S]*?max-inline-size:\s*calc\(100vw - 16px\)/,
+    )
+    expect(aiModelPickerSource).toMatch(/@media\s*\(max-width:\s*320px\)/)
+    expect(aiModelPickerSource).toMatch(
+      /\.ai-model-picker__model-name[\s\S]*?overflow-wrap:\s*anywhere/,
+    )
+  })
+
+  it('verwendet Golden-Gate-Tokens und schaltet Motion bei Reduced Motion ab', () => {
+    expect(aiModelPickerSource).toContain('var(--shadow-popover')
+    expect(aiModelPickerSource).toContain('var(--status-green')
+    expect(aiModelPickerSource).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?transition:\s*none/,
+    )
   })
 })
