@@ -1,8 +1,12 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-07-14 (Onboarding/Provider-Unification Slice 5 final + Slice-7-Serie: 7.6b Consumer-Migration gemergt, 7.6c StageLLMRoute-Entfernung + Legacy-Route-Storage-Cut in PR #728; v1.0.0)
+Stand: **2026-07-14**, `main` @ `771fbe10`, Version **v1.0.0**.
 
-**Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
+Diese Datei beschreibt den verifizierten Istzustand. Versions- und Testzahlen
+werden ausschließlich über `scripts/sync-status.sh` zwischen den markierten
+Blöcken gepflegt. Zukunftspläne gehören in `PLAN.md`, ausgelieferte Änderungen
+in `CHANGELOG.md` und die unmittelbar nächste Fortsetzung in das jeweilige
+Epic-`HANDOVER.md`.
 
 ## Versionen
 
@@ -23,165 +27,178 @@ Stand: 2026-07-14 (Onboarding/Provider-Unification Slice 5 final + Slice-7-Serie
 | Frontend Test-Files | 163 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
-_Hinweise: 2 Redis-Integrationstests skippen sauber ohne `TEST_REDIS_URL` und sind in der Backend-Summe enthalten (sie zählen als collected, werden aber zur Laufzeit übersprungen)._
-_Die Frontend-Zeile zählt Dateien, nicht einzelne Test-Cases. Gezählt werden Vitest-Pattern `*.spec.{js,ts}` und `*.test.{js,ts}`; pro Test-File laufen mehrere `it`-Blöcke. Die exakte Test-Case-Anzahl liefert `cd frontend && npx vitest list`._
+Hinweise:
 
-## Backend-Coverage (M11.2)
+- Zwei Redis-Integrationstests skippen ohne `TEST_REDIS_URL` kontrolliert und
+  sind in der Backend-Summe als collected enthalten.
+- Die Frontend-Zahl zählt Testdateien, nicht einzelne Testfälle.
+- `scripts/pre-push-gate.sh` unterstützt die Scopes `backend`, `frontend` und
+  `schemas`. Der zuvor fehlende `run_schemas`-Pfad wurde in PR #734 repariert;
+  der Scope prüft 46 Schemas und den STATUS-Sync.
+- Zwei unter Parallelbetrieb flaky Router-/Accessibility-Specs wurden in PR
+  #733 ohne Skip oder abgeschwächte Assertions stabilisiert. Das vollständige
+  Frontend-Pre-Push-Gate lief danach grün.
 
-Gemessen 2026-05-04 mit `uv run pytest --cov=app --cov-report=term -q` (1425 passed, 9 skipped, Marker `-m 'not llm'` aktiv).
+## Aktive Entwicklungswelle: Onboarding und Provider-Unification
 
-| Scope | Coverage | Basis |
+Source of Truth für Scope und Reihenfolge:
+[`docs/epics/onboarding-provider-unification/04-implementation-plan.md`](epics/onboarding-provider-unification/04-implementation-plan.md).
+
+| Slice | Inhalt | Verifizierter Status |
 |---|---|---|
-| `app/` gesamt | 55 % | 12 842 Statements, 5 733 missed |
-| `app/services/` | 51 % | 6 964 Statements, 3 427 missed |
+| 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | abgeschlossen |
+| 1 | Kanonische Provider-, Modell- und Route-Verträge | gemergt, Pydantic-v2-SSoT + Zod-/Schema-Spiegel |
+| 2 | Benutzerprofil und resumierbares Onboarding | gemergt |
+| 3 | Provider-Verbindungen, Discovery und Secret-Store-Anbindung | gemergt |
+| 4 | Getrenntes Embedding-Setup und sichere Re-Embedding-Migration | 4.1–4.4 auf `main`; Entity- und Fact-Phase resume-fähig |
+| 5 | Gemeinsamer `AiModelPicker` und Routing | Kern abgeschlossen; kanonische Route, Snapshot und Audit verdrahtet |
+| 6 | Persona-Count-End-to-End-Invariante | Codepfad vorhanden; vollständige E2E-Matrix 1/5/10/30/50/100 noch nicht zentral nachgewiesen |
+| 7 | Golden-Gate-System und Informationsarchitektur | weitgehend auf `main`; Restarbeiten unten |
+| 8+ | Projekte, Datensätze, Vorlagen und Monitoring | als getrennte MVP-Slices offen |
 
-**Aktive CI-Schwelle: 60 %** (`--cov-fail-under=60` in `.github/workflows/ci.yml`).
+Bewusst offene Embedding-Folgen:
 
-Begründung der Schwellenwahl: Ist-Wert (66.00 %, gemessen 2026-06-10) liegt deutlich über der neuen Schwelle. Die PLAN-Default-Schwelle von 70 % ist vorerst nicht erreichbar, weil `app/services/simulation_runner.py` (809 Statements, 22 % Coverage) und `app/services/graph_tools.py` (667 Statements, 19 % Coverage) als OASIS-Integrationsschicht nur über vollständige Subprozess-Tests abdeckbar sind, die externe Ollama-Instanz und Neo4j voraussetzen. Diese Pfade sind mit `@pytest.mark.llm` markiert und laufen nicht in CI. Roadmap: monatlich +2 Punkte bis Ziel 85 %.
+- Gemini-Batch-Embedding,
+- echter `scope="project"`-Filter,
+- vollständige Umstellung des Fact-Search-Lesepfads auf den neuen Index.
 
-**Roadmap:**
+## Slice 7 — aktueller Stand
 
-| Datum | Schwelle | Notizen |
+Bereits auf `main`:
+
+- 7.1 Token-/State-Fundament,
+- 7.3 Golden-Gate-Gates, Drawer-/Sidebar-Accessibility und Routing-Correctness
+  (PR #723),
+- 7.4a Settings-Parität und Redirect von `/settings-classic` (PR #721),
+- 7.5 Onboarding-Surface (PR #725),
+- 7.6a–7.6c kanonischer `AiModelPicker`, Consumer-Migration,
+  `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728),
+- 7.7 Entfernung des verwaisten v3-Pickers und der Mock-Routing-Karten
+  (PR #720),
+- Verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
+- Golden-Gate-Workbench-Zielspezifikation unter
+  [`docs/ui/golden-gate-workbench.md`](ui/golden-gate-workbench.md) (PR #735).
+
+Noch offen:
+
+1. **7.6d:** `LlmProfileManager.vue` vom letzten Legacy-`ModelPicker.vue` auf
+   `AiModelPicker` migrieren und den Legacy-Picker anschließend löschen.
+2. Responsive-/visuelle Regressionen vollständig schließen.
+3. Den geplanten `--agora-*`-Tokenwechsel als eigenes migrationspflichtiges
+   Slice umsetzen; keine parallele Komponentenbibliothek erzeugen.
+
+## E2E-Smokes
+
+Der Stack bootet seit PR #731 erstmals zuverlässig im GitHub-Runner. Der
+Health-Smoke ist grün; fünf bereits zuvor vorhandene Specs erreichen jetzt den
+eigentlichen Test und sind rot. Die Defekte sind unter
+[`docs/epics/e2e-smoke-specs/README.md`](epics/e2e-smoke-specs/README.md)
+aufgeschlüsselt.
+
+| Smoke | Status | Hauptbefund |
 |---|---|---|
-| 2026-05-04 | 53 % | Startwert (M11.2) |
-| 2026-05-10 | 55 % | vorgezogen, Ist deckt (Followup-5 stabil) |
-| 2026-06-10 | 60 % | Step 2: Coverage durch `file_parser`-Tests erhöht |
-| 2026-07-10 | 59 % | +2 Punkte |
-| … | … | monatlich +2 |
-| Ziel | 85 % | Langfristziel |
+| Health | grün | Stack, Auth und Provider-Seeding funktionieren |
+| Upload + Graph | rot | API erfolgreich, UI-/Store-Verdrahtung rendert `graphData` nicht |
+| Minimalreport | rot | Report completed, Outline fehlt oder scheitert am Zod-Spiegel |
+| Report-Modi | rot | `force_regenerate`/Mode-Pfad erreicht nicht stabil `completed` |
+| Golden-Gate Accessibility | rot | mindestens eine Route verletzt ein striktes A11y-Gate |
+| AiModelPicker | rot | Route-/UI-Drift nach der Picker-Migration |
 
-Coverage-Report wird als CI-Artifact `backend-coverage` (14 Tage Retention) hochgeladen und kann von Codecov/Sonar konsumiert werden.
+`.github/workflows/e2e-smokes.yml` läuft derzeit auf `push` nach `main`,
+`workflow_dispatch` und täglich um 03:00 UTC. Der `pull_request`-Trigger bleibt
+bewusst aus, bis alle fünf roten Specs stabil grün sind; danach muss er als
+eigener CI-PR wieder aktiviert und als Required Check konfiguriert werden.
 
-## Frontend-Coverage (M11.3)
+## Quality Gates
 
-Gemessen 2026-05-07 mit `npm run test:coverage` (`vite.config.js` include `src/**/*.{js,ts,vue}`, 43 Spec-Files, 449 Tests passed). Der vollständige `include`-Glob erfasst auch untestete Views (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) — daher fallen die Zahlen niedriger aus als eine rein transitive Messung.
-
-| Metrik | Coverage | Basis |
+| Gate | Befehl | Status |
 |---|---|---|
-| Statements | 49.29 % | 2 446 / 4 962 |
-| Branches | **38.01 %** | 1 304 / 3 430 |
-| Functions | 38.23 % | 445 / 1 164 |
-| Lines | 51.29 % | 2 296 / 4 476 |
+| Backend | `bash scripts/pre-push-gate.sh backend` | grün auf den jüngsten Doku-/Fix-PRs |
+| Frontend | `bash scripts/pre-push-gate.sh frontend` | nach PR #733 vollständig grün |
+| Schemas | `bash scripts/pre-push-gate.sh schemas` | grün, 46 Schemas + STATUS-Sync |
+| Backend Types | `cd backend && uv run mypy app` | blockierend in CI |
+| Backend Lint | `cd backend && uv run ruff check .` | blockierend |
+| Frontend Types | `cd frontend && npm run typecheck` | blockierend in CI |
+| Frontend Lint | `cd frontend && npm run lint` | blockierend |
+| E2E-Smokes | `.github/workflows/e2e-smokes.yml` | 1/6 grün; noch kein PR-Gate |
 
-**Aktive CI-Schwelle: 28 %** (alle vier Metriken, `thresholds` in `vite.config.js`). Angehoben 2026-06-10 (Step 2). Ist-Werte 2026-05-10: statements=50.46 %, branches=39.56 %, functions=38.59 %, lines=52.50 % — alle vier deutlich über 28 %.
+## Coverage
 
-Historische Begründung der Schwellenwahl: Der M11.3-Startwert war `branches` mit 26.70 %. Dieser lag weit unter dem PLAN-Default von 60 %. Die Fallback-Formel `floor(Ist - 2) = floor(26.70 - 2) = 24` griff. Die 60 %-Marke ist vorerst nicht erreichbar, weil:
+Die Messwerte sind älter als der aktuelle Codebestand und müssen vor dem
+nächsten Release neu erzeugt werden. Sie bleiben bis dahin als letzte belegte
+Baseline erhalten.
 
-1. Fünf vollständig untestete Views-Dateien (`Home.vue`, `MainView.vue`, `ReportView.vue`, `RunsView.vue`, `SimulationView.vue`, `InstructionView.vue`) werden durch den `include`-Glob erfasst, aber haben 0 % Coverage — sie erfordern Playwright-E2E-Tests (M11.4).
-2. `GraphCanvas.vue` und `GraphPanel.vue` haben 0 % Branches: Canvas-/WebGL-APIs sind in jsdom nicht verfügbar.
-3. `Step2EnvSetup.vue` hat 9.52 % Branches (~200 Conditional-Zweige im Wizard-Flow).
+| Bereich | letzte Messung | Ergebnis | aktive CI-Schwelle |
+|---|---|---:|---:|
+| Backend gesamt | 2026-06-10 | 66,00 % | 60 % |
+| Frontend Statements | 2026-05-10 | 50,46 % | 28 % |
+| Frontend Branches | 2026-05-10 | 39,56 % | 28 % |
+| Frontend Functions | 2026-05-10 | 38,59 % | 28 % |
+| Frontend Lines | 2026-05-10 | 52,50 % | 28 % |
 
-Diese Lücken sind strukturell. Roadmap: monatlich +2 Punkte ab 2026-06-04 bis Ziel 80 %.
+Strukturelle Lücken bleiben vor allem in OASIS-/Neo4j-Integrationspfaden,
+Canvas-/WebGL-Komponenten und großen Wizard-/View-Komponenten. Coverage-Ziele
+dürfen nicht durch engere Include-Globs oder globale Skips künstlich erfüllt
+werden.
 
-**Roadmap:**
-
-| Datum | Schwelle | Notizen |
-|---|---|---|
-| 2026-05-04 | 24 % | Startwert (M11.3) |
-| 2026-05-10 | 26 % | vorgezogen, Ist deckt (Followup-5 stabil) |
-| 2026-06-10 | 28 % | Step 2: +2 Punkte gemäß Roadmap |
-| 2026-07-10 | 30 % | +2 Punkte |
-| … | … | monatlich +2 |
-| Ziel | 80 % | Langfristziel (inkl. Playwright E2E, M11.4+) |
-
-Coverage-Report wird als CI-Artifact `frontend-coverage` (14 Tage Retention) hochgeladen.
-
-## Static-Analysis-Gates (Phase 2)
-
-Stand 2026-05-07:
-
-| Gate | Command | Status |
-|---|---|---|
-| Backend Types | `cd backend && uv run mypy app` | Pflicht in `ci.yml::backend` |
-| Backend Lint | `cd backend && uv run ruff check .` | Ruff-Zielmenge `E/F/B/I/UP/SIM`, Phase-2-Baseline fuer bestehende Import-/pyupgrade-/simplify-Funde |
-| Frontend Types | `cd frontend && npm run typecheck` (`vue-tsc --noEmit`) | Pflicht in `ci.yml::frontend` |
-| Frontend Lint | `cd frontend && npm run lint` | Vue-SFC-`<script>`-Parsing via `@typescript-eslint/parser` |
-
-TypeScript-Optionen: `allowJs=false`, weil unter `frontend/src/` kein JS-Restbestand vorhanden ist. `noUncheckedIndexedAccess` und `exactOptionalPropertyTypes` bleiben vorerst deaktiviert; ein Probelauf am 2026-05-07 erzeugte breite Folgefehler in API-Envelope, Step2-/Graph-Tests und Persona-Library-Composables.
-
-## Layer-Status (Übersicht)
-
-Verbindliche Detailtabelle und Layer-Semantik: [`CLAUDE.md` § Architektur-Layer](../CLAUDE.md#architektur-layer-status).
+## Architektur-Layer
 
 | Layer | Inhalt | Status |
 |---|---|---|
-| 0 | Pydantic-Contracts + Zod-Spiegel | grün |
+| 0 | Pydantic-Verträge und Zod-/JSON-Schema-Spiegel | grün |
 | 1 | Backend-Hardening | grün |
-| 2 | DACH-Voice + Glossar v1 | grün |
+| 2 | DACH-Voice und Glossar | grün |
 | 3 | Reader-Honesty | grün |
 | 4 | Frontend strict-Zod | grün |
-| 5 | Eval/Baseline-Suite | grün |
+| 5 | Eval-/Baseline-Suite | grün |
 | 6 | Frontend-TypeScript-Migration | grün |
-| 7–8 | Graph/Runs/Persona-Review | teilweise |
-| 9 | Prod-Deployment | grün mit gehärtetem Release-Gate und Runtime-Image-Hardening — Reverse-Proxy ✅, gevent ✅, Bundle-Token-Gate ✅, `?token=`-Block ✅, signed-tickets-Frontend ✅, Prod-Stack-Smoke in CI ✅ (`docker-image.yml::prod-proxy-smoke` auf `main`, Tags `v*`, Branches `release/**` oder `rc/**`, PRs von `release/**` oder `rc/**` nach `main` und `workflow_dispatch`; normale Feature-PRs bleiben wegen ~30 min Laufzeit ausgenommen), finaler `prod`-Stage ohne Node/npm/curl ✅, `read_only: true` im Prod-Compose ✅, Auth-ADR ✅ (M10.4 Single-User-only-v1 Accepted). |
-| 10 | Security Watchlist | grün — CVE-Monitor wöchentlich aktiv (`.github/workflows/cve-monitor.yml`), Hardstop 2026-07-30 verdrahtet, Dependency Review ✅, CodeQL ✅, GHCR Build-Provenance-Attestation ✅, SBOM-Artefakt ✅, Risk-Register mit Eskalationspfad. Issues #121–#126 weiter open bis Upstream patcht. |
+| 7–8 | Graph, Runs, Persona- und Report-Review | teilweise |
+| 9 | Produktion, Proxy, Auth und Runtime-Image | grün mit dokumentierten Release-Gates |
+| 10 | Supply Chain und Security-Watchlist | grün mit offenen Hardstops |
 
-## Aktuelles Milestone
+## Sicherheit und Hardstops
 
-**M9 abgeschlossen, M10 abgeschlossen.** Übergang zu M11. **M3-Port — Unified Provider Abstraction abgeschlossen (PR #666, 2026-07-05):** Provider-Detection-SSoT in [`backend/app/llm/providers/registry.py`](../backend/app/llm/providers/registry.py) (`detect_provider(base_url, model, *, mode="http"|"oasis")`), HTTP-Vokabular `ollama|cloud|openai|google|unknown`, OASIS-Vokabular `google|ollama|openai`. Schließt #590, #591, #582, #636. Begleitet von PR #667 (transformers v5.13.0 via `tool.uv.override-dependencies`, löst CVE-2026-4372, CVE-2026-1839, PYSEC-2025-217; schließt #124, #624, #662) und PR #668 (nltk 3.9.4 risk exception, PYSEC-2026-597 / GHSA-p4gq-832x-fm9v, Tracking #672).
+- Auth-Zielbild: experimentelles Single-User-System gemäß ADR-0001; nicht
+  ungeschützt ins öffentliche Internet stellen.
+- Provider-Detection-SSoT:
+  `backend/app/llm/providers/registry.py::detect_provider`.
+- Phase-F-Restpunkt: Issue #671 zur bewussten Vereinheitlichung oder
+  Dokumentation der Embedding-Provider-Erkennung.
+- `nltk` PYSEC-2026-597 / GHSA-p4gq-832x-fm9v: Hardstop **2026-07-30**,
+  Tracking #672.
+- Trivy OS-Layer CVE-2026-24049 / CVE-2026-23949: Hardstop **2026-08-30**.
 
-**Offen als Folge des M3-Ports (Phase F — Rest-Detection-Delegation an die SSoT):** #669, #670, #671 (jeweils eigener PR, TDD).
+## Nächste drei Prioritäten
 
-**Offene Dependency-Hardstops** (Source of Truth: [`docs/dependency-risk-register.md`](dependency-risk-register.md)):
-- `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → Hardstop 2026-07-30 (Tracking #672, nur transitive Nutzung, kein direkter `nltk.data.load()`-Aufruf).
-- Trivy OS-Layer CVE-2026-24049 / CVE-2026-23949 → Hardstop 2026-08-30.
+1. Die fünf roten E2E-Smokes einzeln reparieren und anschließend den
+   `pull_request`-Trigger wieder aktivieren.
+2. Slice 7.6d abschließen und den letzten produktiven Legacy-Picker entfernen.
+3. Dokumentationsdrift in `AGENTS.md`, Epic-`HANDOVER.md` und
+   `docs/tooling/agent-tools.md` gegen diesen Stand synchronisieren.
 
-Detail: [`PLAN.md § Status-Sync 2026-05-04`](../PLAN.md#status-sync-2026-05-04). Subagent-Mapping pro Slice: `docs/archive/plans/plan.heuristic.md`.
+## Bekannte Dokumentationsschuld
 
-**Erledigt (Code-verifiziert 2026-05-04):**
-- F1 Reverse-Proxy (`deploy/nginx/`, `deploy/compose/docker-compose.prod-with-proxy.yml`)
-- F2.1 Bundle-Token-Gate (`Dockerfile` `ALLOW_BUILD_TIME_TOKEN=false` Default)
-- F2.2 `?token=` in Prod blockt (`backend/app/utils/auth.py`)
-- F3 Gunicorn `-k gevent`
-- SSE-Auth-Frontend auf signed tickets (`frontend/src/api/stream.ts`)
-- M9.6 Prod-Stack-Smoke vorhanden und Release-Gate gehärtet (`docker-image.yml::prod-proxy-smoke` mit `AGORA_SKIP_EMBEDDING_PROBE=true`; läuft auf `main`, Tags `v*`, Branches `release/**` oder `rc/**`, PRs von `release/**` oder `rc/**` nach `main` und `workflow_dispatch`; normale Feature-PRs bewusst ausgenommen, Issue #276)
-- M10.1/M10.2/M10.3 CVE-Monitor + Hardstop 2026-07-30 + Risk-Register-Eskalationspfad (`.github/workflows/cve-monitor.yml`, `docs/dependency-risk-register.md`)
-- M10.4 Auth-Zielbild-ADR Single-User-only-v1 (`docs/decisions/0001-auth-model.md` Accepted) + Code-Update `_get_auth_mode()` returnt `"single_user_token"` + README/security-hardening Single-User-Block + Token-Rotation-Prozedur
-- M10.5 Rate-Limits für `/api/auth/ticket`, Uploads (`/api/graph/ontology/generate`), Simulation-LLM-Trigger (`/api/simulation/generate-profiles`, `/api/simulation/prepare`) und Report-Trigger (`/api/report/generate`, `/api/report/chat`) (#302)
-- M11.1 Evidence-Quality-Gate hard (`--soft` raus aus `contract-gates.yml`, Hard-Gate gegen `tests/eval/fixtures/good/`, Bad-Cases gepinnt durch Snapshot-Test)
-- M11 Phase 1 Release-Gating gehärtet (`docker-image.yml` SHA-gepinnt, strikter Tag-Smoke, latest nur Default-Branch)
-- M11 Phase 2 Static-Analysis-Gates (`mypy app` + `npm run typecheck` blockierend)
-- M11 Phase 3 Runtime-Image-Hardening (Multi-Stage, slim ohne Node/npm/curl, `read_only: true`, 747 MB → 320 MB)
-- M11 Phase 4 Supply Chain (`dependency-review.yml`, `codeql.yml`, Build-Provenance-Attestation, SPDX-JSON-SBOM)
-- M11 Phase 5 (`simulation_runner.py`-Refactor, 5 PRs)
-- M11 Phase 5b (`graph_tools.py`-Refactor, 3 PRs)
-- M11.2 Backend-Coverage-Gate (`--cov-fail-under=55`, vorgezogen 2026-05-10 von 53 %)
-- M11.3 Frontend-Coverage-Gate (Threshold 26 %, vorgezogen 2026-05-10 von 24 %)
-- ADR-0001 Single-User-only-v1 Accepted (M10.4)
-- M10.5 Rate-Limits (PRs #303–#306, Issue #302)
-
-**Aktiv offen (nächste 3 Slices in Reihenfolge):**
-1. P1-A Dependabot-Aufräumen — PR #323 (`mistune`) + PR #326 (`pygments`).
-2. Phase 6 Contract-Generation + Status-Sync (Contract-Dump reproduzierbar, Zod-Spiegel CI-geprüft, `scripts/sync-status.sh` Pflicht).
-3. Phase 7 / M11.4 Playwright-Smokes (Health/Login, Upload+Graph, Minimalreport).
-
-Mittelfristig: M11.2/M11.3 Coverage-Schwellen-Anhebung (Backend 55 → 70 %, Frontend 26 → 60 %, monatlich +2), M11.5 Komplexitäts-Gate, M11.6 API-Envelope, F8 Hotspot-Split Frontend (#203). Phase 5/5b abgeschlossen 2026-05-08, #202 geschlossen 2026-05-05.
+- `AGENTS.md` bezeichnete 7.6c zuletzt noch als laufenden PR.
+- `docs/tooling/agent-tools.md` wurde zuletzt am 2026-07-10 geprüft und enthält
+  ältere Graph-/Doctor-Werte.
+- Ältere konzeptionelle Abschnitte in `PLAN.md` beschreiben nicht mehr die
+  produktive Provider-/Routing-Architektur und sollten in `docs/archive/`
+  verschoben werden.
+- Historische Implementierungsdetails gehören in `CHANGELOG.md`, ADRs,
+  Worklogs und Git-Historie, nicht als unendliches Protokoll in dieser Datei.
 
 ## Aktualisierungs-Protokoll
 
-- 2026-05-08: M11 Phase 5 + Phase 5b — Hotspot-Refactors abgeschlossen. Phase 5 (`simulation_runner.py`): 5 PRs, Helfer `run_state_store`/`action_log_reader`/`monitor_thread`/`interview_client`/`process_manager` extrahiert (Commits ff52643, 2142e0a, b177cd9, ef9f5b6, db2c0f8). Phase 5b (`graph_tools.py`): 3 PRs, Helfer `graph_dtos`/`graph_reader`/`insight_forge_tool` extrahiert (Commits 8ce5ecb, 7abd3df, b8493b8). Verhalten unverändert, Tests grün. Arbeitsprotokolle unter `docs/archive/worklogs/2026-05-08-m11-phase5*-arbeitsprotokoll.md`.
-- 2026-05-08: Doku-Sync — `AGENTS.md` Status-Zeile (Layer 9–10 grün, M11 Phase 1–5b durch), `CLAUDE.md` „Aktive Hot-Spots" auf realen M11-Stand, `PLAN.md` Status-Sync 2026-05-08 mit aktualisierter Erledigt-/Offen-Tabelle und neuer PR-Reihenfolge, aktuelles Milestone auf Phase 6/7/CVE-Aufräumen.
-- 2026-05-03: Sub-Slice 44 — STATUS.md inaugural, Test-Counts und Versionsstände zentralisiert, Inline-Zahlen aus README/CLAUDE.md entfernt, ROADMAP auf v0.9.0+ / 2026-05-03 geheben.
-- 2026-05-04: F5 Doku-Sync (1) — Test-Counts auf 1370 (1330 → 1370 nach Layer-9-Slices), README inline-Zahl entfernt.
-- 2026-05-04: Doku-Sync 2026-05-04 — `AGENTS.md` v0.6.0 → v0.9.0+, `CLAUDE.md` Layer-9-Hot-Spots auf realen Code-Stand, `PLAN.md` Status-Sync-Block, `docs/archive/plans/plan.heuristic.md` als Subagent-Routing-SSoT vorhanden, User-Drop-Audit-Snapshots nach `docs/archive/history/`.
-- 2026-05-04: M9.6 Prod-Stack-Smoke — `docker-image.yml::prod-proxy-smoke` lief ab diesem Stand auch auf `pull_request: [main]` (Doku-PRs ausgeschlossen via `paths-ignore`). `scripts/verify-deploy.sh` smoket zusätzlich `/api/auth/ticket` via Proxy.
-- 2026-05-04: M10.1/M10.2/M10.3 CVE-Monitor + Hardstop — Neuer Workflow `.github/workflows/cve-monitor.yml` läuft Mo 06:00 UTC `pip-audit --strict` ohne `--ignore-vuln` und schreibt das Ergebnis in `$GITHUB_STEP_SUMMARY`. Hardstop am 2026-07-30 verdrahtet: ab dann fail bei pip-audit-Findings. `docs/dependency-risk-register.md` um Eskalationspfad-Sektion (Vendoring / Soft-Fork / Replacement / Risikoakzeptanz-PR) und Upstream-Release-Watch-Spalte erweitert (die Owner-Spalte war bereits vorhanden). Layer 10 von „dokumentiert" auf „grün".
-- 2026-05-04: M10.4 Auth-Zielbild-ADR — `docs/decisions/0001-auth-model.md` als **Proposed** angelegt mit drei Optionen (Single-User-only-v1 / HttpOnly-Session / Bearer+Refresh). Empfehlung: Option A (Single-User-only-v1 explizit machen). Begründung: Local-first ist Kernprinzip, Hauptangriffsvektoren sind bereits geschlossen (F2.1/F2.2/P0.2/S2/S3), v1.0-Termin erreichbar. Wartet auf User-Sign-off. Folge-Slices nach Accept: README/security-hardening-Update, `auth_mode`-Feld in `/api/status`, Token-Rotation-Prozedur. ADR-Index unter `docs/decisions/README.md` mit Konvention.
-- 2026-05-04: M10.4-Followup — ADR-0001 von **Proposed** auf **Accepted** gehoben (User-Sign-off via Merge PR #277). `backend/app/api/status.py::_get_auth_mode()` returnt jetzt `"single_user_token"` statt `"token"` — der Prefix `single_user_` macht für Operatoren in `/api/status` sichtbar, dass Agora kein Multi-User-Modell hat. Tests in `tests/test_anonymous_in_healthcheck.py` angepasst.
-- 2026-05-04: M11.2 Backend-Coverage-Gate — `pytest-cov>=5.0.0` in beide Dev-Dep-Listen (`[project.optional-dependencies] dev` + `[dependency-groups] dev`). `addopts` um `--cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=53` erweitert. Startschwelle 53 % (Ist 55 %, Formel `floor(Ist - 2)`; 70 %-PLAN-Default nicht erreichbar wegen OASIS-Integrationspfad ohne Ollama/Neo4j in CI). Coverage-Report als Artifact `backend-coverage` (14 Tage) in `ci.yml`. Coverage-Sektion in `docs/STATUS.md` mit Roadmap.
-- 2026-05-04: M11.3 Frontend-Coverage-Gate — `@vitest/coverage-v8@4.1.5` in `devDependencies`. `package.json` `test:coverage`-Script neu; `check` auf `test:coverage` umgestellt; `test` bleibt schneller Gate-freier TDD-Pfad. `vite.config.js` Coverage-Block: provider v8, reporters text/lcov/html, include `src/**/*.{js,ts,vue}`, thresholds 24 % (alle vier Metriken). Startschwelle 24 % (Ist-Wert branches 26.70 % ist Bottleneck beim vollständigen `include`-Glob; Fallback-Formel `floor(Ist - 2) = 24`; 60 %-PLAN-Default nicht erreichbar wegen 6 untesteter Views + jsdom-inkompatibler Canvas/D3-Pfade). Coverage-Report als Artifact `frontend-coverage` (14 Tage) in `ci.yml`. Coverage-Sektion in `docs/STATUS.md` mit Roadmap.
-- 2026-05-04: M10.4-Doku-Folge — README.md (DE+EN-Status-Block) auf Single-User-only mit Verweis auf ADR-0001 erweitert. `docs/security-hardening.md` neue Sektion „Auth-Modell v1.0" mit (a) Garantien-Liste (kein User-Konzept, kein Logout, kein Audit, kein Multi-User), (b) Was-schützt-was-nicht-Gegenüberstellung inkl. fehlender Rate-Limits als Hardstop bis M10.5, (c) Token-Rotation-Prozedur als 6-Schritt-Anleitung mit `curl`-Verifikation, (d) Trigger für ADR-Supersedes (Klassenraum, Public-Internet, Compliance), (e) Hardstops-Liste für v1.0. Layer-9 in STATUS damit final auf grün; v1.0-Auth-Story ist closed.
-- 2026-05-05: Issue #276 Embedding-Probe-Skip — `AGORA_SKIP_EMBEDDING_PROBE=true` in `docker-image.yml::prod-proxy-smoke` eingeführt. `validate_embedding_configuration()` bekommt `skip_probe`-Parameter; bei gesetztem Flag läuft nur die statische KNOWN_EMBEDDING_DIMS-Validation, der Live-HTTP-Probe-Call gegen Ollama entfällt. Container startet im CI-Runner ohne Ollama sauber hoch. `continue-on-error: github.event_name == 'pull_request'`-Workaround aus PR-Trigger entfernt; Tag-Pushes bleiben lenient (externe Image-Pulls instabil).
-- 2026-05-06: PR-Trigger für `docker-image.yml` bewusst pausiert. Grund: Docker-Image-Build + Reverse-Proxy-Smoke kostet pro PR-Iteration ca. 30 Minuten. Der Smoke bleibt für `main`/Tags/`workflow_dispatch` erhalten und muss vor dem finalen Release-Gate neu bewertet bzw. reaktiviert werden.
-- 2026-05-06: M10.5 Rate-Limits abgeschlossen — app-seitige Fixed-Window-Limits für /api/auth/ticket, /api/graph/ontology/generate, /api/simulation/generate-profiles, /api/simulation/prepare, /api/report/generate und /api/report/chat. PRs #303–#306, Issue #302.
-- 2026-05-06: Phase 1 Release-Gating gehärtet — `docker-image.yml` published nicht mehr via `success() || tag`-Bypass, Tag-Smokes sind strikt, `latest` wird nur auf dem Default-Branch gesetzt, der Smoke extrahiert `frontend/dist` aus dem gebauten Image, Actions sind SHA-gepinnt, globale Permissions bleiben bei `contents: read`, Publish-Rechte liegen nur am `publish`-Job. Release-/RC-Smokes laufen automatisch fuer `release/**` und `rc/**`; normale Feature-PRs bleiben aus Laufzeitgruenden ausgenommen.
-- 2026-05-07: Phase 1 Follow-up — `scripts/verify-deploy.sh` prueft Compose-Container ueber Docker-Running-State aus `docker compose ps -a` mit Container-Namen-Fallback statt Health-Status und ersetzt den DOMPurify-Minifier-Grep durch Runtime-Bundle-Praesenz plus Source-Vertrag gegen `frontend/src/utils/markdown.ts`; Ziel ist ein stabiler `docker-image.yml::prod-proxy-smoke` auf `main`.
-- 2026-05-07: Phase 1 Publish-Follow-up — `docker-image.yml::publish` trennt den harten GHCR-Publish vom optionalen Docker-Hub-Mirror. Beide bleiben smoke-gated; Docker-Hub-HTTP-400 bei grossen Layern blockiert den GHCR-Release-Pfad bis zur Phase-3-Image-Verkleinerung nicht mehr.
-- 2026-05-07: Phase 2 Static-Analysis-Gates — `ci.yml::backend` blockiert auf `uv run mypy app`, `ci.yml::frontend` blockiert auf `npm run typecheck`. Backend-mypy startet mit strengem Contract-Scope und Legacy-Baseline fuer API-/Service-Pfade; Ruff ist auf `E/F/B/I/UP/SIM` konfiguriert mit expliziter Phase-2-Baseline fuer bestehende Altlasten. Frontend `allowJs=false`; `noUncheckedIndexedAccess`/`exactOptionalPropertyTypes` nach Probelauf noch nicht aktiviert.
-- 2026-05-07: Phase 3 Runtime/Container-Hardening — `Dockerfile` trennt `frontend-build`, `backend-build` und finalen `prod`-Stage. Das finale Image basiert auf `python:3.11-slim`, enthaelt kein Node/npm/curl, installiert Runtime-Dependencies via `uv sync --frozen --no-dev` und nutzt einen Python-Healthcheck. `docker-compose.prod.yml` setzt `read_only: true` mit expliziten tmpfs-Schreibpfaden; DNS und Neo4j-Image-/Memory-Werte sind ueber `.env` parametrierbar. Lokale Image-Groesse: 747 MB -> 320 MB (-57 %).
-- 2026-05-07: Phase 4 Supply Chain — `dependency-review.yml` blockiert PRs bei neuen High-severity Dependency-Funden, `codeql.yml` scannt Python und JavaScript/TypeScript auf `main`, PRs und woechentlichem Schedule. `docker-image.yml::publish` erzeugt nach GHCR-Push eine Build-Provenance-Attestation und ein SPDX-JSON-SBOM-Artefakt.
-- 2026-05-15: Observability Slice 1 — End-to-End-Tracing der Sim-Pipeline mit SigNoz Community Edition + OpenTelemetry. Sechs atomic Sub-Slices (1a SigNoz-/OTel-Collector-Compose-Profile, 1b Flask+gevent Auto-Instrumentation + Sim-Root-Span, 1c TRACEPARENT-Propagation durch `subprocess.Popen`, 1d Custom-Redis-Propagator über `_otel_traceparent`-Feld, 1e SSE-Frame-`trace_id` + Frontend Web-Tracer + SigNoz-Deep-Link im SimDetail, 1f Worklog + Blog-Draft + STATUS-Sync). Branch `feat/observability-slice-1`, 6 Commits, Backend 2232 passed/9 skipped, Frontend-Gates clean, Bundle-Delta +34 kB. Default-Off via `OTEL_ENABLED=false`. Live-SigNoz-End-to-End-Smoke offen, läuft manuell vom User über Compose-Profile `observability`. Plan: `docs/plans/2026-05-15-observability-slice-1.md`, Worklog: `docs/2026-05-15-observability-slice-1-worklog.md`.
-- 2026-05-15: Observability Slice 2 — Metrics-Pipeline für Sim-Lifecycle, Bus-Drops und LLM-Token-Tracking. Drei atomic Sub-Slices (2a `metrics.py` Foundation mit MeterProvider + PeriodicExportingMetricReader + OTLPMetricExporter und View-basiertem Cardinality-Guard, 2b FSM-Transitionen in `process_manager.py`/`monitor.py` instrumentiert, 2c `event_bus_redis._subscribe_live`-Drop-Counter + `llm_client.chat/chat_json`-Token-Counter). Branch `feat/observability-slice-2-metrics`, 3 Commits (24fbc9f, d816e9f, ca4f1a4), Backend 2260 passed/9 skipped (+20 Tests), Frontend-Gates clean. Dashboard `deploy/observability/dashboards/sim-overview.json` (5 Panels in SigNoz v4). Audit: PASS WITH FOLLOWUPS — 0 HIGH, 3 MEDIUM (Thread-Teardown-Fix in Welle-3-Finalize-Commit). Layer-0/9/ADR-0002 nicht berührt (additive Instrumentierung). Plan-Datum überstimmt vom Lead (Momentum-Window aus Slice 1). Worklog: [`docs/2026-05-15-observability-slice-2-worklog.md`](2026-05-15-observability-slice-2-worklog.md).
-- 2026-05-15: Observability Slice 3 — Logs-Korrelation via `trace_id`/`span_id` mit OTLP-Logs-Bridge. Zwei atomic Sub-Slices (3a `logging_bridge.py` Foundation mit `init_logging()`, `JsonTraceFormatter` (ISO-8601, trace_id, span_id, service.name, exception), `LoggingInstrumentor.instrument(set_logging_format=False)`, `OTLPLogExporter` über gRPC, Module-Cache + force_flush_logs; 3b `init_logging` in App-Factory zwischen `init_tracing` und `init_metrics`, `init_runner_logging` in `_sim_common.py` plus drei Runner-Scripts, ~25 print()-Statements in `scripts/agent_tools.py` auf strukturiertes Logging migriert). Branch `feat/observability-slice-3-logs`, 2 Commits (67b01b0, 0437d20), Backend 2263 passed/9 skipped (+10 Tests). Collector-Pipeline `deploy/observability/otel-collector.yaml` um `logs` und (Followup) `metrics` erweitert. Audit: PASS WITH FOLLOWUPS — 0 HIGH, 2 MEDIUM (privater `sdk._logs`-Pfad mit Kommentar dokumentiert; LoggingInstrumentor-Roundtrip-Test pending). Layer-0/9/ADR-0002 nicht berührt (additive Instrumentierung). Worklog: [`docs/2026-05-15-observability-slice-3-worklog.md`](2026-05-15-observability-slice-3-worklog.md).
-- 2026-07-13: Onboarding Slice 4.4 — Fact-Embedding-Re-Embed. `Neo4jReEmbedder` re-embedded neben `(n:Entity).entity_embedding` jetzt auch `RELATION.fact_embedding` (echte `RELATIONSHIP`-Property) in einer zweiten, sequenziellen Phase via `db.create.setRelationshipVectorProperty` + versioniertem Relationship-Vector-Index (`FOR ()-[r:RELATION]-() ON (r.fact_embedding_vN)`, additiv, niemals DROP — ADR-0007). Neues Vertragsfeld `EmbeddingMigrationProgress.phase: Literal["entity","fact"]` (default `"entity"`, backward-kompatibel; Zod-Spiegel + JSON-Schemas regeneriert) disambiguiert den einzigen Cursor `last_processed_id`. Resume-fähig (Entity-Skip bei `phase=="fact"`); Entity-Failure skippt Fact-Phase. `EmbeddingIndexVersion` bleibt entity-only (Fact-Namen konventionell abgeleitet). Bewusst offen: Gemini-Batch-Embedding, `scope="project"`-Filter, Search-Pfad-Umstellung. Branch `codex/onboarding-fact-embedding-reembed`.
-- 2026-07-13: Onboarding Slice 5.6 final — Playwright-E2E für `AiModelPicker` mit fünf echten Tests statt Skeleton-`.skip`: Tastatur-Navigation, Suche, verfügbare Online-Option, Abwesenheit des Offline-Modells und Run-Snapshot. Der E2E-Compose-Override enthält den `mock-models`-Service; `global-setup` erzeugt dedizierte Test-Provider-Connections. `LlmRoutingTestId` ist SSoT für `stageRow`/`stageSave` und `llm-routing-run-id`; der Chat-Mode filtert nur explizite `unsupported_capabilities`. `scripts/e2e-up.sh` ergänzt `AGORA_SECRET_KEY` für den Secrets-Store. PR [#707](https://github.com/arn0ld87/agora/pull/707); echte Playwright- und Pre-Push-Gate-Läufe auf dem armserver bleiben bewusst offen.
+- **2026-07-14:** P0-Routing-Fix bewahrt die tatsächlich ausgeführte kanonische
+  `AiRoute` für Audit, Snapshot und Resume (PR #730).
+- **2026-07-14:** E2E-Stack-Boot repariert; Health-Smoke erstmals grün, fünf
+  echte Spec-Defekte sichtbar und als eigenes Epic dokumentiert (PRs #731,
+  #735).
+- **2026-07-14:** Picker-Iststand und echter 7.6d-Restumfang gegen Code
+  verifiziert (PR #732).
+- **2026-07-14:** Parallel-flaky Frontend-Specs stabilisiert, vollständiges
+  Frontend-Gate grün (PR #733).
+- **2026-07-14:** Fehlender schemas-Scope im Pre-Push-Gate repariert
+  (PR #734).
+- **2026-07-14:** Golden-Gate-Zielspezifikation ergänzt und Slice-7-Stand in
+  `PLAN.md` korrigiert (PRs #735, #736).
