@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import ReportModelControls from '../ReportModelControls.vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const aiPickerStub = {
   name: 'AiModelPicker',
@@ -34,7 +35,7 @@ const i18n = createI18n({
   messages: { de: { step4: { model: { reportLabel: 'Report-Modell', placeholder: 'waehlen', regenerate: 'Neu' } } } },
 })
 
-function mountRMC(modelValue = null) {
+function mountRMC(modelValue: AiModelRef | null = null) {
   return mount(ReportModelControls, {
     props: { modelValue, isRegenerating: false },
     global: {
@@ -55,7 +56,7 @@ describe('ReportModelControls (Slice 7.6b, minimal)', () => {
   })
 
   it('reicht modelValue als AiModelRef an AiModelPicker durch', async () => {
-    const aiRef = { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3', source: 'workspace-default' }
+    const aiRef = { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3', source: 'workspace-default' as const }
     const w = mountRMC(aiRef)
     await flushPromises()
     const picker = w.findComponent(aiPickerStub)
@@ -63,7 +64,7 @@ describe('ReportModelControls (Slice 7.6b, minimal)', () => {
   })
 
   it('emit("update:modelValue", null) wird durchgereicht (null-Pfad)', async () => {
-    const w = mountRMC({ provider_connection_id: 'c', model_id: 'm', source: 'explicit' })
+    const w = mountRMC({ provider_connection_id: 'c', model_id: 'm', source: 'explicit' as const })
     await flushPromises()
     const picker = w.findComponent(aiPickerStub)
     picker.vm.$emit('update:modelValue', null)
