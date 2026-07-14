@@ -198,7 +198,7 @@ werden.
   verifiziert (PR #732).
 - **2026-07-14:** Parallel-flaky Frontend-Specs stabilisiert, vollständiges
   Frontend-Gate grün (PR #733).
-- **2026-07-14:** fehlenden `schemas`-Scope im Pre-Push-Gate repariert
+- **2026-07-14:** Fehlender schemas-Scope im Pre-Push-Gate repariert
   (PR #734).
 - **2026-07-14:** Golden-Gate-Zielspezifikation ergänzt und Slice-7-Stand in
   `PLAN.md` korrigiert (PRs #735, #736).
