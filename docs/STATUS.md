@@ -74,7 +74,7 @@ Bereits auf `main`:
 - 7.6a–7.6d kanonischer `AiModelPicker`, Consumer-Migration,
   `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728);
   7.6d migriert `LlmProfileManager.vue` auf den connection-basierten Picker
-  und entfernt den letzten produktiven `ModelPicker.vue`,
+  und entfernt den letzten produktiven `ModelPicker.vue` (PR #742),
 - 7.7 Entfernung des verwaisten v3-Pickers und der Mock-Routing-Karten
   (PR #720),
 - Verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
