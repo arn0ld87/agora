@@ -2,29 +2,25 @@
 /**
  * ReportModelControls — Auswahl des LLM-Modells für die Report-Regenerierung.
  *
- * Slice A1 (2026-05-17): Migrationsendzustand. Nutzt projektweit denselben
- * ModelPicker wie das Workspace-Default-Dropdown unter `/settings/llm-providers`.
- * Provider+API-Key+Base-URL werden NICHT mehr inline gepflegt — Keys laufen
- * über den ``LlmProviderSecretsStore`` (Settings-Seite), das Backend zieht
- * sie via ``SecretResolver`` und ``build_route_subprocess_env`` automatisch.
- * Lokale Ollama-Modelle erscheinen, sobald ein Ollama- oder
- * OpenAI-kompatibler Provider mit passender ``base_url`` in
- * ``/settings/llm-providers`` hinterlegt ist.
+ * Slice 7.6b: Migration auf den kanonischen AiModelPicker (v4/forms/AiModelPicker).
+ * Der Vertrag ist jetzt AiModelRef (provider_connection_id + model_id). Der Parent
+ * (Step4Report) konvertiert via useAiModelRefAdapter, wenn er den llm_model-String
+ * an das Backend uebergibt (Run-Snapshot bleibt vertragsgleich).
  */
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
-import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
-import type { LlmRoute } from '@/contracts/llmRoute'
+import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const { t } = useI18n()
 
 defineProps<{
-  modelValue: LlmRoute | null
+  modelValue: AiModelRef | null
   isRegenerating: boolean
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: LlmRoute | null]
+  'update:modelValue': [value: AiModelRef | null]
   regenerate: []
 }>()
 </script>
@@ -33,8 +29,9 @@ const emit = defineEmits<{
   <div class="model-row">
     <div class="model-cell model-cell--picker">
       <label class="field-label">{{ t('step4.model.reportLabel') }}</label>
-      <ModelPicker
+      <AiModelPicker
         :model-value="modelValue"
+        mode="chat"
         :placeholder="t('step4.model.placeholder')"
         @update:model-value="(value) => emit('update:modelValue', value)"
       />

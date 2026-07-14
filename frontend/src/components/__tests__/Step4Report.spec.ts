@@ -63,6 +63,11 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
   }
 })
 
+// Slice 7.6c: Step4Report liest die Report-Modell-Auswahl direkt aus
+// `agora.report.aiModelRef` (Zod-validiert) und nutzt den useAiModelRefAdapter
+// nicht mehr; der frühere Adapter-Mock entfällt. ReportModelControls ist ohnehin
+// vollständig gestubbt (siehe oben).
+
 import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
 import Step4Report from '../Step4Report.vue'

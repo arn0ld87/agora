@@ -18,7 +18,8 @@ import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportLiveLogPane from './step4/ReportLiveLogPane.vue'
 import ReportFinalView from './step4/ReportFinalView.vue'
 import { useReportExports } from '../composables/useReportExports'
-import type { LlmRoute } from '../contracts/llmRoute'
+import type { AiModelRef } from '../contracts/aiModelRef'
+import { AiModelRefSchema } from '../contracts/aiModelRef'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor } from '../utils/sourceAnchor'
 import {
@@ -99,13 +100,24 @@ function recordSchemaError(where: string, error: unknown): void {
 
 const resolvedSimulationId = ref(props.simulationId || null)
 // Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.report.route` wird NICHT mehr
-// gelesen oder geschrieben; er wird beim Mount defensiv entfernt. Die
-// ReportModelControls-Auswahl gilt nur noch für die aktuelle Session und
-// spiegelt sich beim Regenerieren auf STORAGE_MODEL. (AiModelRef-Persistenz
-// folgt in 7.6d mit der ReportModelControls→AiModelPicker-Migration.)
+// gelesen; er wird beim Mount und beim Speichern defensiv aus localStorage
+// entfernt. Persistenz läuft nur noch über den neuen Key agora.report.aiModelRef.
+const STORAGE_REPORT_AI_REF = 'agora.report.aiModelRef'
 const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 
-const reportRoute = ref<LlmRoute | null>(null)
+function resolveInitialReportRoute(): AiModelRef | null {
+  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
+  const raw = localStorage.getItem(STORAGE_REPORT_AI_REF)
+  if (!raw) return null
+  try {
+    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+const reportRoute = ref<AiModelRef | null>(resolveInitialReportRoute())
 const isRegenerating = ref(false)
 
 const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
@@ -115,9 +127,14 @@ watch(llmProfileId, (val) => {
   else localStorage.removeItem(STORAGE_REPORT_PROFILE_ID)
 })
 
-watch(reportRoute, () => {
-  // Storage-Cut: nicht mehr persistieren; Legacy-Key defensiv säubern.
-  localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+watch(reportRoute, (val) => {
+  if (val?.provider_connection_id && val?.model_id) {
+    localStorage.setItem(STORAGE_REPORT_AI_REF, JSON.stringify(val))
+    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+  } else {
+    localStorage.removeItem(STORAGE_REPORT_AI_REF)
+    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+  }
 }, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
@@ -133,7 +150,7 @@ const reportMode = ref<ReportMode>(resolveStoredReportMode())
 watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
 
 function effectiveReportModel(): string | null {
-  const m = reportRoute.value?.model
+  const m = reportRoute.value?.model_id
   return m && m.trim() ? m.trim() : null
 }
 

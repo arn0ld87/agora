@@ -57,27 +57,42 @@ const cardStub = {
 }
 const iconPlusStub = { name: 'IconPlus', template: '<span />' }
 
-const setPendingUploadMock = vi.fn()
-const getSystemStatusMock = vi.fn().mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
-const routerPushMock = vi.fn()
+// Mocks müssen via vi.hoisted() definiert werden, weil vi.mock-Factories vor
+// den Top-Level-Statements ausgeführt werden (Hoisting). Sonst wirft Vitest
+// "Cannot access 'X' before initialization". Die geteilten Mock-Objekte
+// werden in mountHero() / beforeEach() resettet und in den Tests über
+// .mockClear()/.mockResolvedValue() gesteuert.
+const {
+  fetchLlmProfilesMock,
+  getSystemStatusMock,
+  setPendingUploadMock,
+  routerPushMock,
+} = vi.hoisted(() => ({
+  fetchLlmProfilesMock: vi.fn(),
+  getSystemStatusMock: vi.fn(),
+  setPendingUploadMock: vi.fn(),
+  routerPushMock: vi.fn(),
+}))
 
-const fetchLlmProfilesMock = vi.fn().mockResolvedValue([])
-
-vi.mock('../../../api/llmProfiles', () => ({
+vi.mock('@/api/llmProfiles', () => ({
   fetchLlmProfiles: fetchLlmProfilesMock,
 }))
 
-vi.mock('../../../store/pendingUpload', () => ({
+vi.mock('@/store/pendingUpload', () => ({
   setPendingUpload: setPendingUploadMock,
 }))
 
-vi.mock('../../../api/status', () => ({
+vi.mock('@/api/status', () => ({
   getSystemStatus: getSystemStatusMock,
 }))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock }),
 }))
+
+// Initial-Defaults (werden in mountHero() vor jedem Test neu gesetzt).
+fetchLlmProfilesMock.mockResolvedValue([])
+getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
 
 const adapterMock: {
   toLlmRoute: ReturnType<typeof vi.fn>
