@@ -18,7 +18,9 @@ import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
 import ReportLiveLogPane from './step4/ReportLiveLogPane.vue'
 import ReportFinalView from './step4/ReportFinalView.vue'
 import { useReportExports } from '../composables/useReportExports'
-import { StageLLMRouteSchema, type StageLLMRoute } from '../contracts/llmRoutingContract'
+import type { AiModelRef } from '../contracts/aiModelRef'
+import { AiModelRefSchema } from '../contracts/aiModelRef'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor } from '../utils/sourceAnchor'
 import {
@@ -98,20 +100,25 @@ function recordSchemaError(where: string, error: unknown): void {
 }
 
 const resolvedSimulationId = ref(props.simulationId || null)
-const STORAGE_REPORT_ROUTE = 'agora.report.route'
+const STORAGE_REPORT_AI_REF = 'agora.report.aiModelRef'
+const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 
-function resolveInitialReportRoute(): StageLLMRoute | null {
-  const raw = localStorage.getItem(STORAGE_REPORT_ROUTE)
-  if (!raw) return null
+const adapter = useAiModelRefAdapter()
+
+function resolveInitialReportRoute(): AiModelRef | null {
   try {
-    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) return null
-    if (!parsed.data.provider_id || !parsed.data.model) return null
-    return parsed.data
-  } catch { return null }
+    const rawAiRef = localStorage.getItem(STORAGE_REPORT_AI_REF)
+    const rawLegacy = localStorage.getItem(STORAGE_REPORT_ROUTE_LEGACY)
+    const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
+    if (!migrated) return null
+    const parsed = AiModelRefSchema.safeParse(migrated)
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
 }
 
-const reportRoute = ref<StageLLMRoute | null>(resolveInitialReportRoute())
+const reportRoute = ref<AiModelRef | null>(resolveInitialReportRoute())
 const isRegenerating = ref(false)
 
 const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
@@ -122,8 +129,13 @@ watch(llmProfileId, (val) => {
 })
 
 watch(reportRoute, (val) => {
-  if (val?.provider_id && val?.model) localStorage.setItem(STORAGE_REPORT_ROUTE, JSON.stringify(val))
-  else localStorage.removeItem(STORAGE_REPORT_ROUTE)
+  if (val?.provider_connection_id && val?.model_id) {
+    localStorage.setItem(STORAGE_REPORT_AI_REF, JSON.stringify(val))
+    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+  } else {
+    localStorage.removeItem(STORAGE_REPORT_AI_REF)
+    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+  }
 }, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
@@ -139,7 +151,7 @@ const reportMode = ref<ReportMode>(resolveStoredReportMode())
 watch(reportMode, (val) => { localStorage.setItem(STORAGE_REPORT_MODE, val) })
 
 function effectiveReportModel(): string | null {
-  const m = reportRoute.value?.model
+  const m = reportRoute.value?.model_id
   return m && m.trim() ? m.trim() : null
 }
 
