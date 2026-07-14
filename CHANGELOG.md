@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Internal (Slice 7.6d — 2026-07-14)
+
+- **Frontend**: `LlmProfileManager.vue` vom legacy `ModelPicker.vue` auf den
+  connection-basierten kanonischen `AiModelPicker` (`AiModelRef`) migriert.
+  Provider/base_url werden aus der verknüpften Connection bezogen statt aus
+  dem Runtime-Mapping; unbekannte Connections blockieren den Save mit
+  Fehler-Banner. `v4/forms/ModelPicker.vue` wurde als letzter produktiver
+  Legacy-Picker entfernt; der vi.mock-Stub in
+  `HeroNewRun.profiles.spec.ts` wurde mit gelöscht. Keine
+  Kompatibilitätsschicht, keine zweite Provider-Erkennung. Specs und
+  `vue-tsc` grün.
+
 ### Breaking Changes (Slice 7.6c — 2026-07-14)
 
 - **Frontend**: LocalStorage-Key `agora.<scope>.route` (Scope = `hero`, `home`,

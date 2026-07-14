@@ -19,8 +19,9 @@ Package-Manager: `uv` im Backend, `npm` im Frontend.
 Siehe [ADR-0001](docs/decisions/0001-auth-model.md).
 
 **Aktueller Stand:** v1.0.0. Onboarding und Provider-Unification sind weitgehend auf
-`main`. Offene Prioritäten sind Issue #739 (E2E-Smokes/PR-Gate), Issue #740
-(Slice 7.6d, letzter Legacy-Picker) sowie die dokumentierten Security-Hardstops.
+`main`; Slice 7.6d (Legacy-`ModelPicker`-Abbau, Issue #740) ist migriert.
+Offene Prioritäten sind Issue #739 (E2E-Smokes/PR-Gate) sowie die
+dokumentierten Security-Hardstops.
 
 ## Verbindliche Arbeitsweise
 
@@ -77,11 +78,11 @@ Upload + Graph, Minimalreport, Report-Modi, Golden-Gate Accessibility und
 AiModelPicker. Ursachen einzeln beheben; danach `pull_request`-Trigger reaktivieren
 und als Required Check führen.
 
-### Issue #740: Slice 7.6d
+### Issue #740: Slice 7.6d — erledigt
 
-`LlmProfileManager.vue` auf `AiModelPicker`/`AiModelRef` migrieren. Danach den letzten
-produktiven `ModelPicker.vue` inklusive verwaister Exporte, Tests und Styles löschen.
-Keine neue Kompatibilitätsschicht und keine zweite Provider-Erkennung einführen.
+`LlmProfileManager.vue` auf den connection-basierten `AiModelPicker`/`AiModelRef`
+migriert; legacy `ModelPicker.vue` inklusive vi.mock-Stub entfernt. Keine
+Kompatibilitätsschicht, keine zweite Provider-Erkennung. Specs und `vue-tsc` grün.
 
 ### Weitere offene Punkte
 

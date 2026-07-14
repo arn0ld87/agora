@@ -26,8 +26,8 @@ konstantendefinition.
 | **LlmRoutingView** (`LlmRouting/LlmRoutingView.vue`) | `AiModelPicker` | `AiModelRef` / `LlmRoute` | `LlmRoute` (`/api/llm-routing`) | server-seitig (RuntimeLlmRouting, Pydantic-SSoT) | **fertig** |
 | **SettingsGeneralView** | `AiModelPicker` | `AiModelRef` | `LlmRoute` | server-seitig | **fertig** |
 | **LlmProvidersView** | `AiModelPicker` | `AiModelRef` | `LlmRoute` | server-seitig | **fertig** |
-| **LlmProfileManager** (`v4/forms/LlmProfileManager.vue`) | **legacy `./ModelPicker.vue`** (line 13 import, line 347 `<ModelPicker>`) | `LlmProfile` (provider-basiert) | `LlmProfile` | `localStorage` (Profile-Store) | **OFFEN — 7.6d** |
-| **v4-Legacy-Picker** (`v4/forms/ModelPicker.vue`, 160 LoC) | — | `{ provider_id, model_id }` | — | — | **OFFEN — 7.6d: löschen** (einziger Importer ist `LlmProfileManager`) |
+| **LlmProfileManager** (`v4/forms/LlmProfileManager.vue`) | `AiModelPicker` (connection-basiert) | `AiModelRef` → `LlmProfile` (Connection-Lookup) | `LlmProfile` | `localStorage` (Profile-Store) | **fertig — 7.6d done** |
+| ~~`v4/forms/ModelPicker.vue`~~ | — | — | — | — | **entfernt — 7.6d done** (letzter Importer war `LlmProfileManager`, migriert) |
 
 ## Aufklärung der P1-Annahme »temporär / session-only«
 

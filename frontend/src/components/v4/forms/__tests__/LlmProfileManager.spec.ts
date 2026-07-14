@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { createTestingPinia } from '@pinia/testing'
 import LlmProfileManager from '../LlmProfileManager.vue'
@@ -43,6 +44,10 @@ const messages = {
             anthropic: 'Anthropic',
             custom: 'Eigener Endpunkt',
           },
+          errors: {
+            unknownConnection:
+              'Die gewählte Provider-Verbindung ist nicht mehr verfügbar. Bitte wähle ein Modell neu.',
+          },
         },
       },
     },
@@ -75,27 +80,77 @@ const PROFILE_B = {
   updated_at: '2026-01-02T00:00:00Z',
 }
 
-// ModelPicker-Stub: emittiert das übergebene `data-test-model` direkt, ohne
-// auf den llmProviders-Store oder Backend-Calls angewiesen zu sein.
-const ModelPickerStub = {
-  props: ['modelValue', 'placeholder', 'disabled'],
-  emits: ['update:modelValue'],
-  template: `
-    <input
-      class="model-picker-stub"
-      :value="modelValue?.model ?? ''"
-      @input="$emit('update:modelValue', $event.target.value ? {
-        stage: null,
-        provider_id: 'ollama',
-        model: $event.target.value,
-        temperature: null,
-        max_tokens: null,
-        reasoning_effort: 'none',
-        provider_options: {},
-      } : null)"
-    />
-  `,
+// Test-Connection, die im llmProviders-Store (initialState) liegt, damit das
+// Connection-Lookup im LlmProfileManager funktioniert.
+const CONN_OLLAMA = {
+  id: 'conn-ollama-1',
+  provider_kind: 'ollama' as const,
+  display_name: 'Ollama lokal',
+  transport: 'local' as const,
+  auth_mode: 'none' as const,
+  base_url: 'http://localhost:11434/v1',
+  enabled: true,
+  status: 'connected' as const,
+  status_message: null,
+  secret_ref: null,
+  capabilities: {},
+  created_at: null,
+  updated_at: null,
+  last_tested_at: null,
 }
+
+// AiModelPicker-Stub: emittiert ein AiModelRef (provider_connection_id +
+// model_id) via select-Change, ohne auf useAvailableModels oder Backend-Calls
+// angewiesen zu sein. Entspricht dem Design-Mapping (specStubCode).
+const AiModelPickerStub = defineComponent({
+  name: 'AiModelPicker',
+  props: {
+    modelValue: { type: Object, default: null },
+    mode: { type: String, default: 'chat' },
+    placeholder: { type: String, default: '' },
+    disabled: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue'],
+  methods: {
+    onChange(e: Event): void {
+      const v = (e.target as HTMLSelectElement).value
+      if (!v) {
+        this.$emit('update:modelValue', null)
+        return
+      }
+      const sep = v.indexOf('::')
+      const provider_connection_id = v.slice(0, sep)
+      const model_id = v.slice(sep + 2)
+      this.$emit('update:modelValue', {
+        provider_connection_id,
+        model_id,
+        source: 'explicit',
+      })
+    },
+  },
+  template: `
+    <select
+      class="ai-model-picker-stub"
+      data-testid="ai-model-picker-stub"
+      :value="modelValue ? modelValue.provider_connection_id + '::' + modelValue.model_id : ''"
+      @change="onChange"
+    >
+      <option value=""></option>
+      <option
+        value="conn-ollama-1::llama3:8b"
+        data-testid="ai-model-picker-option-known"
+        data-provider-connection-id="conn-ollama-1"
+        data-model-id="llama3:8b"
+      >Ollama — llama3:8b</option>
+      <option
+        value="conn-unknown::mystery-model"
+        data-testid="ai-model-picker-option-unknown"
+        data-provider-connection-id="conn-unknown"
+        data-model-id="mystery-model"
+      >Unknown — mystery-model</option>
+    </select>
+  `,
+})
 
 function wrap(storeOverrides?: object) {
   return mount(LlmProfileManager, {
@@ -112,13 +167,16 @@ function wrap(storeOverrides?: object) {
               error: null,
               ...storeOverrides,
             },
+            llmProviders: {
+              connections: { 'conn-ollama-1': CONN_OLLAMA },
+            },
           },
           stubActions: true,
         }),
       ],
       stubs: {
         Card: { template: '<div><slot /></div>' },
-        ModelPicker: ModelPickerStub,
+        AiModelPicker: AiModelPickerStub,
       },
     },
   })
@@ -136,7 +194,6 @@ describe('LlmProfileManager', () => {
     const w = wrap()
     await flushPromises()
 
-    // Store-Referenz aus dem aktiven Pinia holen (createTestingPinia hat es registriert)
     const { useLlmProfilesStore } = await import('@/store/aiModels')
     const store = useLlmProfilesStore()
 
@@ -147,13 +204,13 @@ describe('LlmProfileManager', () => {
     // Felder befüllen
     await w.find('#pm-name').setValue('Mein Testprofil')
     await w.find('#pm-base-url').setValue('http://localhost:11434/v1')
-    // ModelPicker-Stub emittiert LlmRoute; LlmProfileManager mappt
-    // provider_id='ollama' → provider='ollama' und überschreibt base_url nur,
-    // wenn das aktuelle Feld leer oder Teil der Default-Tabelle ist.
-    await w.find('.model-picker-stub').setValue('llama3:8b')
+    // AiModelPicker-Stub emittiert AiModelRef mit provider_connection_id
+    // 'conn-ollama-1' + model_id 'llama3:8b'. onPickerChange löst die Connection
+    // auf → provider='ollama', base_url aus Connection, model_name aus ref.model_id.
+    await w.find('select.ai-model-picker-stub').setValue('conn-ollama-1::llama3:8b')
 
     // Speichern klicken (stubActions: true → create ist bereits ein vi.fn spy)
-    const saveBtn = w.findAll('button.v4-btn--primary').find(b => b.text() === 'Speichern')
+    const saveBtn = w.findAll('button.v4-btn--primary').find((b) => b.text() === 'Speichern')
     await saveBtn!.trigger('click')
     await flushPromises()
 
@@ -174,15 +231,46 @@ describe('LlmProfileManager', () => {
     const { useLlmProfilesStore } = await import('@/store/aiModels')
     const store = useLlmProfilesStore()
 
-    // "Als Standard setzen" ist für PROFILE_B (p2) aktiv (p1 ist schon default)
-    const setDefaultBtns = w.findAll('button').filter(b => b.text() === 'Als Standard setzen')
-    // p1 ist deaktiviert (is_default=true), p2 ist aktiv
-    // @vue/test-utils gibt für disabled="" den leeren String, nicht undefined.
-    const activeBtn = setDefaultBtns.find(b => b.attributes('disabled') === undefined)
+    const setDefaultBtns = w.findAll('button').filter((b) => b.text() === 'Als Standard setzen')
+    const activeBtn = setDefaultBtns.find((b) => b.attributes('disabled') === undefined)
     await activeBtn!.trigger('click')
     await flushPromises()
 
-    // stubActions: true → setDefault ist bereits ein vi.fn spy
     expect(store.setDefault).toHaveBeenCalledWith('p2')
+  })
+
+  it('unknown-connection blockiert Save und zeigt Fehler', async () => {
+    const w = wrap()
+    await flushPromises()
+
+    const { useLlmProfilesStore } = await import('@/store/aiModels')
+    const store = useLlmProfilesStore()
+
+    // Neues-Profil-Formular öffnen
+    await w.find('button.v4-btn--primary').trigger('click')
+    await flushPromises()
+
+    // Felder befüllen — base_url gesetzt, damit Save-disabled ohne unknownConnection
+    // erfüllt wäre.
+    await w.find('#pm-name').setValue('Test')
+    await w.find('#pm-base-url').setValue('http://localhost:11434/v1')
+    // AiModelPicker-Stub auf unbekannte Connection setzen → onPickerChange
+    // findet keine Connection → pickerError=true.
+    await w.find('select.ai-model-picker-stub').setValue('conn-unknown::mystery-model')
+    await flushPromises()
+
+    // Fehler-Banner sichtbar
+    const errorBanner = w.find('[data-testid="pm-unknown-connection-error"]')
+    expect(errorBanner.exists()).toBe(true)
+    expect(errorBanner.attributes('role')).toBe('alert')
+
+    // Save-Button disabled
+    const saveBtn = w.findAll('button.v4-btn--primary').find((b) => b.text() === 'Speichern')
+    expect(saveBtn?.attributes('disabled')).toBeDefined()
+
+    // Save-Klick versuch (sollte durch disabled nicht passieren, aber zur
+    // Sicherheit explizit prüfen, dass create nicht aufgerufen wurde)
+    await flushPromises()
+    expect(store.create).not.toHaveBeenCalled()
   })
 })

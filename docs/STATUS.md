@@ -71,8 +71,10 @@ Bereits auf `main`:
   (PR #723),
 - 7.4a Settings-Parität und Redirect von `/settings-classic` (PR #721),
 - 7.5 Onboarding-Surface (PR #725),
-- 7.6a–7.6c kanonischer `AiModelPicker`, Consumer-Migration,
-  `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728),
+- 7.6a–7.6d kanonischer `AiModelPicker`, Consumer-Migration,
+  `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728);
+  7.6d migriert `LlmProfileManager.vue` auf den connection-basierten Picker
+  und entfernt den letzten produktiven `ModelPicker.vue` (PR #742),
 - 7.7 Entfernung des verwaisten v3-Pickers und der Mock-Routing-Karten
   (PR #720),
 - Verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
@@ -81,9 +83,7 @@ Bereits auf `main`:
 
 Noch offen:
 
-1. **7.6d:** `LlmProfileManager.vue` vom letzten Legacy-`ModelPicker.vue` auf
-   `AiModelPicker` migrieren und den Legacy-Picker anschließend löschen.
-2. Responsive-/visuelle Regressionen vollständig schließen.
+1. Responsive-/visuelle Regressionen vollständig schließen.
 3. Den geplanten `--agora-*`-Tokenwechsel als eigenes migrationspflichtiges
    Slice umsetzen; keine parallele Komponentenbibliothek erzeugen.
 
@@ -172,8 +172,7 @@ werden.
 
 1. Die fünf roten E2E-Smokes einzeln reparieren und anschließend den
    `pull_request`-Trigger wieder aktivieren.
-2. Slice 7.6d abschließen und den letzten produktiven Legacy-Picker entfernen.
-3. Dokumentationsdrift in `AGENTS.md`, Epic-`HANDOVER.md` und
+2. Dokumentationsdrift in `AGENTS.md`, Epic-`HANDOVER.md` und
    `docs/tooling/agent-tools.md` gegen diesen Stand synchronisieren.
 
 ## Bekannte Dokumentationsschuld
