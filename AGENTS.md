@@ -15,8 +15,9 @@ Dokument hochladen → Wissensgraph extrahieren → Personas spawnen → OASIS-S
 **Single-User**, lokal oder hybrid, **kein öffentliches SaaS** ([ADR-0001](./docs/decisions/0001-auth-model.md)).
 
 **Status:** v1.0.0 (Release 2026-05-11). Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
-Aktive Welle: **Onboarding & Provider-Unification** (Phase 1 Slices 1–4.3.4 gemerged, Phase 2 Slice 5 läuft —
-Sub-Slice 5.0/5.1 gemerged, 5.2 in Arbeit). Roadmap: [`PLAN.md`](PLAN.md).
+Aktive Welle: **Onboarding & Provider-Unification** (Phase 1 Slices 1–4.3.4 + Phase 2 Slice 5
+gemerged; Slice-7-Serie: 7.6b Consumer-Migration auf AiModelPicker/AiModelRef gemerged, 7.6c
+`StageLLMRoute`-Entfernung + Legacy-Route-Storage-Cut in PR). Roadmap: [`PLAN.md`](PLAN.md).
 Layer-Detail: [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md).
 
 ## Sofort wichtig
@@ -159,15 +160,19 @@ und [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.m
 - Lokale Provider-Detection-Heuristiken — `backend/app/llm/providers/registry.py::detect_provider` ist SSoT
   (Phase F, #669/#670/#671 delegieren bestehende Stellen dorthin)
 
-## Aktive Epics (Stand 2026-07-13)
+## Aktive Epics (Stand 2026-07-14)
 
 - **Onboarding & Provider-Unification** (laufende Welle):
   - **Phase 1 (gemerged):** Slices 1–4.3.4 — kanonische Provider-/Modell-/Embedding-Verträge,
     User-Profile + resumierbares Onboarding-Grundgerüst, Provider-Discovery, Embedding-Configuration-
     Service, Embedding-Migration-Lifecycle, Frontend-Store/View, **echte Neo4j-Re-Embedding-Engine
     mit Resume-Cursor**, zentrales `pre-push-gate.sh`, F401-Cleanup. PRs #683 → #694.
-  - **Phase 2 (Slice 5, läuft):** Unified Model Picker (Sub-Slice 5.0 Sub-Plan + ADR-0009 gemerged,
-    5.1 `AiModelPicker.vue` mit reka-ui gemerged, 5.2 in Arbeit). Branch: `codex/onboarding-model-picker`.
+  - **Phase 2 (Slice 5, gemerged):** Unified Model Picker (ADR-0009) — `AiModelPicker.vue` als SSoT.
+  - **Slice-7-Serie (StageLLMRoute-Abbau):** 7.6b Consumer-Migration (Home/Step4Report/ReportModelControls
+    auf AiModelPicker/AiModelRef, PR #727) gemerged. **7.6c** entfernt den Frontend-Type `StageLLMRoute` +
+    `StageLLMRouteSchema` (Nachfolger `LlmRoute`), streicht den `migrateStoredRoute`-Helper und macht den
+    **Legacy-Route-Storage-Cut** (`agora.<scope>.route` wird nicht mehr gelesen) — PR #728. Picker-
+    Spiegel-Restarbeiten laufen in 7.6d.
   - Detail: [`docs/epics/onboarding-provider-unification/`](docs/epics/onboarding-provider-unification/).
 - **Design Language v4 — App-Shell-Port:** Slices A–E durch, **F + G1 (Settings General/Integrations)
   + G2 (API Keys real) gemerged**. Branch `feat/design-v4-epic`. Vendoriert in [`design/v3-source/`](design/v3-source/).
