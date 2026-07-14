@@ -348,8 +348,10 @@ Aktive Wellen (Detail in [`PLAN.md`](./PLAN.md) und [`ROADMAP.md`](./ROADMAP.md)
   Phase 1 (Slices 1–4.3.4) abgeschlossen — kanonische Provider-/Modell-/Embedding-Verträge,
   User-Profile, Provider-Discovery mit Test, Embedding-Configuration-Service, Migrations-
   Lifecycle, Frontend-Store/View, **echte Neo4j-Re-Embedding-Engine mit Resume**. Phase 2
-  (Unified Model Picker, [ADR-0009](./docs/decisions/0009-unified-model-picker.md)) läuft —
-  AiModelPicker.vue mit reka-ui gemerged, weitere Schritte offen.
+  (Unified Model Picker, [ADR-0009](./docs/decisions/0009-unified-model-picker.md)) gemerged —
+  `AiModelPicker.vue` ist SSoT. Slice-7-Serie: 7.6b Consumer-Migration gemerged (PR #727),
+  **7.6c** entfernt `StageLLMRoute` und liest den Legacy-Key `agora.<scope>.route` nicht mehr
+  (BREAKING; Nachfolger `LlmRoute`, PR #728).
 - **Design Language v4 — App-Shell-Port:** Slices A–E sowie F, G1 (Settings General/Integrations)
   und G2 (API Keys real) gemerged. Branch `feat/design-v4-epic`.
 - **v1.0-Output-Vertrag** ([`PLAN.md`](./PLAN.md)) — offene Schritte: P3.2, P4.1, P4.3, P4.4

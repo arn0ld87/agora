@@ -1,6 +1,6 @@
 # Agora — Status (Single Source of Truth)
 
-Stand: 2026-07-13 (Onboarding/Provider-Unification Slice 5.6 final gemergt; armserver-Verifikation ausstehend, v1.0.0)
+Stand: 2026-07-14 (Onboarding/Provider-Unification Slice 5 final + Slice-7-Serie: 7.6b Consumer-Migration gemergt, 7.6c StageLLMRoute-Entfernung + Legacy-Route-Storage-Cut in PR #728; v1.0.0)
 
 **Aktualisiert via `scripts/sync-status.sh`.** README, CLAUDE.md und ROADMAP verweisen auf diese Datei — Versionsstände und Test-Counts werden nicht mehr inline kopiert.
 
