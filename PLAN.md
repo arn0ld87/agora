@@ -409,7 +409,7 @@ Source of Truth:
 | 4.3.2 | Frontend-Store + View + Onboarding-Anbindung | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | 🟡 5.1–5.3 implementiert; 5.4–5.6 offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
-| 7 | Golden-Gate-Designsystem und Informationsarchitektur | 🟡 weitgehend auf main: 7.1 Token-Fundament, 7.3 Gates/Drawer-A11y/Routing (PR #723), 7.5 Onboarding (PR #725), 7.6a–c AiModelPicker-Migration/StageLLMRoute-Cut (PR #726–#728); offen: 7.6d, responsive/Regressionen, --agora-*-Token-Wechsel |
+| 7 | Golden-Gate-Designsystem und Informationsarchitektur | 🟡 weitgehend auf main: 7.1 Token-Fundament (#713), 7.2 A11y-Gates (#714+#716), 7.3 IA-Matrix/Drawer-A11y (#715) → Gates/Drawer/Routing kombiniert (#723 via #724), 7.4a Settings-Parität (#721), 7.5 Onboarding (#725), 7.6a AiModelPicker (#726), 7.6b Consumer-Migration (#727), 7.6c StageLLMRoute-Cut (#728), 7.7 Dead-Code-Removal (#720); offen: 7.6d (LlmProfileManager→AiModelPicker + Delete ModelPicker.vue), responsive/Regressionen, --agora-*-Token-Wechsel |
 | 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |
 
 Baseline: Backend 3130 passed / 9 skipped / 7 deselected; Frontend 154
@@ -430,7 +430,7 @@ validation_error_payload`. Wirkt zentral für alle API-Routen, die
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-14 — Slice-7-Stand korrigiert: 7.1 Tokens, 7.3 Gates/Drawer/Routing (PR #723), 7.5 Onboarding (PR #725), 7.6a–c Picker-Migration (PR #726–#728) auf main; offen 7.6d + responsive + --agora-*-Token-Wechsel; Slice 3 (PR #685) gemergt.*
+*Zuletzt aktualisiert: 2026-07-14 — Slice-7-Stand vollständig: 7.1 Tokens (#713), 7.2 A11y-Gates (#714+#716), 7.3 IA/Drawer/Gates/Routing (#715+#723 via #724), 7.4a Settings-Parität (#721), 7.5 Onboarding (#725), 7.6a–c Picker-Migration/StageLLMRoute-Cut (#726–#728), 7.7 Dead-Code-Removal (#720) auf main; offen 7.6d + responsive + --agora-*-Token-Wechsel; Slice 3 (PR #685) gemergt.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Embedding-Provider-Restriktion: `backend/app/contracts/embedding_contract.py::provider_kind_supports_embeddings`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
