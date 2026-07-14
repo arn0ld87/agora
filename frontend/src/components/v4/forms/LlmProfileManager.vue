@@ -2,31 +2,79 @@
 /**
  * LlmProfileManager — CRUD-Panel für LLM-Profile (v4-Vorläufer).
  *
- * @deprecated Slice 5.5 — nutzt den deprecateten v4 `ModelPicker.vue`
- * (LlmRoute-basiert). Bleibt als Read-Adapter in SettingsGeneralView bis
- * Profile-Verwaltung auf den connection-basierten `AiModelPicker` umgestellt
- * ist. Keine neuen Importeure.
+ * Slice 7.6d — nutzt jetzt den connection-basierten `AiModelPicker` (ADR-0009)
+ * statt des deprecateden `ModelPicker.vue`. Provider/base_url werden aus der
+ * gewählten ProviderConnection abgeleitet; ein unknown-connection-Zustand
+ * blockiert Save und zeigt einen Fehler-Banner.
+ *
+ * @deprecated Bleibt als Read-Adapter in SettingsGeneralView; Profile-Verwaltung
+ * wird mittelfristig ganz in den connection-basierten Picker-Flow migriert.
+ * Keine neuen Importeure.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from './Card.vue'
-import ModelPicker from './ModelPicker.vue'
-import { useLlmProfilesStore } from '@/store/aiModels'
+import AiModelPicker from './AiModelPicker.vue'
+import { useLlmProfilesStore, useLlmProvidersStore } from '@/store/aiModels'
 import type { LlmProfile, LlmProvider } from '@/contracts/llmProfileContract'
-import type { LlmRoute } from '@/contracts/llmRoute'
+import type { ProviderConnection } from '@/contracts/aiProviderContract'
+import type { AiModelRef, AiProviderKind } from '@/contracts/aiModelRef'
 
 const { t } = useI18n()
 const store = useLlmProfilesStore()
+const providersStore = useLlmProvidersStore()
 
-// Mapping ModelPicker.provider_id (Runtime) ⇄ LlmProfile.provider (Storage).
-// Mehrere Runtime-Provider können auf denselben Profile-Provider mappen
-// (z. B. `ollama_cloud` und `ollama` → 'ollama').
-const RUNTIME_TO_PROFILE_PROVIDER: Record<string, { provider: LlmProvider; baseUrl: string }> = {
-  openai:        { provider: 'openai',    baseUrl: 'https://api.openai.com/v1' },
-  ollama:        { provider: 'ollama',    baseUrl: 'http://localhost:11434/v1' },
-  ollama_cloud:  { provider: 'ollama',    baseUrl: 'https://ollama.com/v1' },
-  gemini:        { provider: 'gemini',    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  anthropic:     { provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+// ---------------------------------------------------------------------------
+// Provider-Mappings (Design Slice 7.6d)
+// ---------------------------------------------------------------------------
+type ProviderConnectionKind = ProviderConnection['provider_kind']
+
+// LlmProvider → AiProviderKind|null. Provider ohne Connection-Äquivalent
+// (custom, github_copilot, cloud, unknown) mappen auf null → kein
+// Connection-Match möglich → unknownConnection.
+const LLM_PROVIDER_TO_AI_KIND: Record<LlmProvider, AiProviderKind | null> = {
+  ollama: 'ollama',
+  openai: 'openai',
+  google: 'gemini',
+  gemini: 'gemini',
+  anthropic: 'anthropic',
+  custom: null,
+  ollama_cloud: 'ollama_cloud',
+  openai_compatible: 'openai_compatible',
+  github_copilot: null,
+  cloud: null,
+  unknown: null,
+}
+
+// ProviderConnectionKind → AiProviderKind|null (für Connection-Suche im Picker).
+const CONNECTION_KIND_TO_AI_KIND: Record<ProviderConnectionKind, AiProviderKind | null> = {
+  ollama: 'ollama',
+  openai: 'openai',
+  google: 'gemini',
+  anthropic: 'anthropic',
+  custom: null,
+  ollama_cloud: 'ollama_cloud',
+  openai_compatible: 'openai_compatible',
+  minimax: null,
+  github_copilot: null,
+  cloud: null,
+  unknown: null,
+}
+
+// ProviderConnectionKind → LlmProvider (für formProvider-Übernahme aus
+// Connection). Kinds ohne direktes LlmProvider-Äquivalent fallen auf 'custom'.
+const CONNECTION_KIND_TO_LLM_PROVIDER: Record<ProviderConnectionKind, LlmProvider> = {
+  ollama: 'ollama',
+  openai: 'openai',
+  google: 'google',
+  anthropic: 'anthropic',
+  custom: 'custom',
+  ollama_cloud: 'ollama_cloud',
+  openai_compatible: 'openai_compatible',
+  minimax: 'custom',
+  github_copilot: 'github_copilot',
+  cloud: 'cloud',
+  unknown: 'unknown',
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +110,11 @@ const formProvider = ref<LlmProvider>('ollama')
 const formBaseUrl  = ref('')
 const formModel    = ref('')
 
+// unknown-connection-Flag: true, wenn die gewählte/gemerkte Modell-Auswahl
+// auf keine (mehr) existierende ProviderConnection auflöst. Save ist dann
+// blockiert und ein Fehler-Banner wird angezeigt.
+const pickerError = ref(false)
+
 // api_key-Edit-Semantik:
 // 'unchanged' → api_key: null senden (Server lässt Key unberührt)
 // 'clear'     → api_key: ""  senden (Server entfernt Key)
@@ -78,6 +131,7 @@ function resetForm(): void {
   formProvider.value = 'ollama'
   formBaseUrl.value  = ''
   formModel.value    = ''
+  pickerError.value  = false
   apiKeyEditMode.value = 'unchanged'
   apiKeyDraft.value    = ''
 }
@@ -93,6 +147,9 @@ function openEdit(profile: LlmProfile): void {
   formProvider.value = profile.provider
   formBaseUrl.value  = profile.base_url
   formModel.value    = profile.model_name
+  // unknown-connection für bestehendes Profil ableiten: wenn provider/base_url
+  // nicht auf eine Connection auflöst, blockiert Save und der Picker zeigt leer.
+  pickerError.value  = derivePickerError()
   // api_key bleibt initial leer ("unchanged")
   apiKeyEditMode.value = 'unchanged'
   apiKeyDraft.value    = ''
@@ -114,6 +171,7 @@ function selectPreset(preset: Preset): void {
   // Preset wechselt → bisheriges Modell ist nicht mehr garantiert verfügbar.
   // Picker zeigt daher leere Auswahl, User muss neu wählen.
   formModel.value = ''
+  pickerError.value = false
   if (!preset.needsKey) {
     apiKeyEditMode.value = 'unchanged'
     apiKeyDraft.value    = ''
@@ -121,45 +179,73 @@ function selectPreset(preset: Preset): void {
 }
 
 // ---------------------------------------------------------------------------
-// ModelPicker-Integration
+// AiModelPicker-Integration (connection-basiert, Slice 7.6d)
 // ---------------------------------------------------------------------------
-// Provider-Mapping rückwärts: Wir bauen aus den gespeicherten Formularfeldern
-// eine Pseudo-LlmRoute, damit der Picker den Eintrag highlighten kann.
-const pickerValue = computed<LlmRoute | null>(() => {
+
+/**
+ * Leitet aus den aktuellen Formularfeldern ab, ob ein unknown-connection-
+ * Zustand vorliegt (kein Model gesetzt → false; Model gesetzt aber Provider
+ * mappen nicht auf eine existierende Connection → true).
+ */
+function derivePickerError(): boolean {
+  if (!formModel.value) return false
+  const targetAiKind = LLM_PROVIDER_TO_AI_KIND[formProvider.value]
+  // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/
+  // unknown) nutzen Preset + Freitext-URL + manuelle Modellauswahl — kein
+  // unknown-connection-Fehler.
+  if (!targetAiKind) return false
+  const candidates = Object.values(providersStore.connections).filter(
+    (conn) => CONNECTION_KIND_TO_AI_KIND[conn.provider_kind] === targetAiKind,
+  )
+  return candidates.length === 0
+}
+
+// Hat der aktuelle Form-Provider ein Connection-Äquivalent? Steuert, ob der
+// AiModelPicker (connection-basiert) oder ein Freitext-Modell-Input (custom)
+// gerendert wird (Hybrid-Strategie, ADR-0009).
+const hasAiKind = computed<boolean>(() => LLM_PROVIDER_TO_AI_KIND[formProvider.value] !== null)
+
+// Picker-Wert als AiModelRef. Baut aus formProvider/formBaseUrl/formModel die
+// Connection-Auswahl: 1. exakter base_url-Match, 2. erste Connection der
+// Kind-Gruppe. null, wenn kein Model gesetzt oder kein Connection-Match
+// möglich (unknownConnection).
+const pickerAiRef = computed<AiModelRef | null>(() => {
   if (!formModel.value) return null
-  // Best-Effort: profile.provider → erste passende Runtime-ID (Cloud
-  // gegenüber Local bevorzugen, wenn base_url darauf hinweist).
-  const providerId =
-    formProvider.value === 'ollama'
-      ? formBaseUrl.value.includes('ollama.com') ? 'ollama_cloud' : 'ollama'
-      : formProvider.value
+  const targetAiKind = LLM_PROVIDER_TO_AI_KIND[formProvider.value]
+  if (!targetAiKind) return null
+  const candidates = Object.values(providersStore.connections).filter(
+    (conn) => CONNECTION_KIND_TO_AI_KIND[conn.provider_kind] === targetAiKind,
+  )
+  if (candidates.length === 0) return null
+  const exact = candidates.find((c) => c.base_url === formBaseUrl.value) ?? candidates[0]
   return {
-    stage: null,
-    provider_id: providerId,
-    model: formModel.value,
-    temperature: null,
-    max_tokens: null,
-    reasoning_effort: 'none',
-    provider_options: {},
+    provider_connection_id: exact.id,
+    model_id: formModel.value,
+    source: 'explicit',
   }
 })
 
-function onPickerChange(route: LlmRoute | null): void {
-  if (route === null) {
+function onPickerChange(aiRef: AiModelRef | null): void {
+  if (aiRef === null) {
     formModel.value = ''
+    pickerError.value = false
     return
   }
-  formModel.value = route.model ?? ''
-  const mapped = route.provider_id != null ? RUNTIME_TO_PROFILE_PROVIDER[route.provider_id] : undefined
-  if (mapped) {
-    formProvider.value = mapped.provider
-    // base_url nur überschreiben, wenn das aktuelle Feld leer ist oder zur
-    // alten Mapping-Tabelle gehört — sonst zerstören wir handgepflegte URLs.
-    const knownUrls = Object.values(RUNTIME_TO_PROFILE_PROVIDER).map((m) => m.baseUrl)
-    if (!formBaseUrl.value || knownUrls.includes(formBaseUrl.value)) {
-      formBaseUrl.value = mapped.baseUrl
-    }
+  formModel.value = aiRef.model_id
+  // Connection-Lookup direkt über store.connections (ID-Auflösung).
+  const conn = providersStore.connections[aiRef.provider_connection_id]
+  if (!conn) {
+    // Unknown-Connection: ref zeigt auf nicht (mehr) existierende Connection.
+    // formProvider/formBaseUrl NICHT überschreiben — Save durch pickerError blockiert.
+    pickerError.value = true
+    return
   }
+  pickerError.value = false
+  const mappedProvider = CONNECTION_KIND_TO_LLM_PROVIDER[conn.provider_kind]
+  if (mappedProvider) formProvider.value = mappedProvider
+  // Lokale Ollama-Connections tragen oft base_url=null → Default-URL, sonst
+  // bliebe das Feld leer und blockierte Save (!formBaseUrl.trim()).
+  formBaseUrl.value = conn.base_url ?? (conn.provider_kind === 'ollama' ? 'http://localhost:11434/v1' : '')
 }
 
 function onApiKeyInput(e: Event): void {
@@ -233,6 +319,9 @@ async function handleSetDefault(profile: LlmProfile): Promise<void> {
 // ---------------------------------------------------------------------------
 onMounted(() => {
   void store.fetch()
+  // Connections laden, damit das Connection-Lookup in pickerAiRef/onPickerChange
+  // bereitsteht.
+  void providersStore.loadConnections()
 })
 </script>
 
@@ -344,11 +433,31 @@ onMounted(() => {
         <!-- Modell -->
         <div class="llm-field">
           <label class="llm-label" for="pm-model">{{ t('settings.v4.llmProfiles.modelLabel') }}</label>
-          <ModelPicker
-            :model-value="pickerValue"
+          <!-- Connection-basierte Provider: kanonischer AiModelPicker -->
+          <AiModelPicker
+            v-if="hasAiKind"
+            :model-value="pickerAiRef"
+            mode="chat"
             :placeholder="t('settings.v4.llmProfiles.modelLabel')"
             @update:model-value="onPickerChange"
           />
+          <!-- custom / Provider ohne Connection-Äquivalent: Freitext-Modell -->
+          <input
+            v-else
+            id="pm-model"
+            v-model="formModel"
+            type="text"
+            class="llm-input"
+            :placeholder="t('settings.v4.llmProfiles.modelLabel')"
+          />
+          <div
+            v-if="pickerError"
+            class="pm-error pm-unknown-connection-error"
+            data-testid="pm-unknown-connection-error"
+            role="alert"
+          >
+            {{ t('settings.v4.llmProfiles.errors.unknownConnection') }}
+          </div>
         </div>
 
         <!-- API Key -->
@@ -404,7 +513,7 @@ onMounted(() => {
         <button
           type="button"
           class="v4-btn v4-btn--primary"
-          :disabled="store.saving || !formName.trim() || !formBaseUrl.trim() || !formModel.trim()"
+          :disabled="store.saving || !formName.trim() || !formBaseUrl.trim() || !formModel.trim() || pickerError"
           @click="submit"
         >
           {{ t('settings.v4.llmProfiles.saveBtn') }}

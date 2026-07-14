@@ -1,5 +1,9 @@
 # Slice 7.6d — Migrationsplan: LlmProfileManager → AiModelPicker
 
+**Status: done** (2026-07-14). `LlmProfileManager.vue` auf den
+connection-basierten `AiModelPicker` migriert; legacy `ModelPicker.vue`
+gelöscht; Specs grün; `vue-tsc` clean.
+
 Stand: 2026-07-14. Konkreter Umsetzungsplan für den letzten offenen
 7.6d-Scope (siehe `slice-7.6-picker-migration-matrix.md`). Wurde gegen den
 aktuellen Code auf `origin/main` verifiziert, nicht gegen die Sub-Plan-Prosa.

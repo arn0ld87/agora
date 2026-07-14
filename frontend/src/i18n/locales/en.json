@@ -981,6 +981,9 @@
           "gemini": "Gemini",
           "anthropic": "Anthropic",
           "custom": "Custom endpoint"
+        },
+        "errors": {
+          "unknownConnection": "The selected provider connection is no longer available. Please choose a model again."
         }
       },
       "llmProvider": {

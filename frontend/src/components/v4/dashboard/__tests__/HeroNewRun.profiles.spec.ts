@@ -13,17 +13,6 @@ vi.mock('../../forms/AiModelPicker.vue', () => ({
   },
 }))
 
-// ModelPicker (alt) wird in HeroNewRun seit 5.4 nicht mehr referenziert,
-// aber defensive Stub-Definition falls ein indirekter Import uebrig bleibt.
-vi.mock('../../forms/ModelPicker.vue', () => ({
-  default: {
-    name: 'ModelPicker',
-    template: '<div class="model-picker-stub" data-testid="model-picker" />',
-    props: ['modelValue', 'placeholder', 'disabled'],
-    emits: ['update:modelValue'],
-  },
-}))
-
 // Slice "small-sim-floor-frontend-sync": HeroNewRun fragt beim Mount /api/status
 // ab. In den Profile-Tests interessiert uns nur das Profil-Verhalten — minimaler
 // Status-Mock mit allow_small_sim=false (Default-Pfad).
