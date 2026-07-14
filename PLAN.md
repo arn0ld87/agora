@@ -409,7 +409,7 @@ Source of Truth:
 | 4.3.2 | Frontend-Store + View + Onboarding-Anbindung | offen |
 | 5 | Gemeinsamer Model-Picker und Routing | 🟡 5.1–5.3 implementiert; 5.4–5.6 offen |
 | 6 | Persona-Count-End-to-End-Invariante | offen |
-| 7 | Golden-Gate-Designsystem und Informationsarchitektur | offen |
+| 7 | Golden-Gate-Designsystem und Informationsarchitektur | 🟡 7.1 (Token-Fundament + Focus/Motion/Dark-Readiness-Vertrag, `tokens-v3.css` + `designTokens.spec.ts`) auf main; 7.2+ offen |
 | 8+ | Projekte, Datensätze, Vorlagen, Monitoring als einzelne MVPs | offen |
 
 Baseline: Backend 3130 passed / 9 skipped / 7 deselected; Frontend 154
@@ -430,7 +430,7 @@ validation_error_payload`. Wirkt zentral für alle API-Routen, die
 
 ---
 
-*Zuletzt aktualisiert: 2026-07-12 — Slice 4.1 (Embedding-Verträge) implementiert und verifiziert; Slice 3 in main gemergt (PR #685).*
+*Zuletzt aktualisiert: 2026-07-14 — Slice 7.1 (Golden-Gate-Token-Fundament + Focus/Motion/Dark-Readiness-Vertrag) auf main nachgetragen; Slice 4.1 verifiziert; Slice 3 (PR #685) gemergt.*
 *Provider-Detection-SSoT: `backend/app/llm/providers/registry.py`.*
 *Embedding-Provider-Restriktion: `backend/app/contracts/embedding_contract.py::provider_kind_supports_embeddings`.*
 *Heuristik-SSoT: `docs/plans/plan.heuristic-2026-05-17.md`.*
