@@ -113,7 +113,11 @@ const formModel    = ref('')
 // unknown-connection-Flag: true, wenn die gewählte/gemerkte Modell-Auswahl
 // auf keine (mehr) existierende ProviderConnection auflöst. Save ist dann
 // blockiert und ein Fehler-Banner wird angezeigt.
-const pickerError = ref(false)
+// Manuell gesetzt, wenn onPickerChange eine AiModelRef mit nicht (mehr)
+// existierender Connection-ID empfängt. Reaktiv zurückgesetzt bei neuen
+// Form-Aktionen (reset/openEdit/selectPreset/onPickerChange). Der eigentliche,
+// reaktiv abgeleitete Fehlerzustand lebt im computed `pickerError` weiter unten.
+const explicitPickerError = ref(false)
 
 // api_key-Edit-Semantik:
 // 'unchanged' → api_key: null senden (Server lässt Key unberührt)
@@ -131,7 +135,7 @@ function resetForm(): void {
   formProvider.value = 'ollama'
   formBaseUrl.value  = ''
   formModel.value    = ''
-  pickerError.value  = false
+  explicitPickerError.value = false
   apiKeyEditMode.value = 'unchanged'
   apiKeyDraft.value    = ''
 }
@@ -147,9 +151,10 @@ function openEdit(profile: LlmProfile): void {
   formProvider.value = profile.provider
   formBaseUrl.value  = profile.base_url
   formModel.value    = profile.model_name
-  // unknown-connection für bestehendes Profil ableiten: wenn provider/base_url
-  // nicht auf eine Connection auflöst, blockiert Save und der Picker zeigt leer.
-  pickerError.value  = derivePickerError()
+  // unknown-connection für bestehendes Profil wird reaktiv via computed
+  // `pickerError` abgeleitet (auflösen gegen die ggf. noch ladenden
+  // Connections). expliziter Reset des manuellen unknown-conn-Flags.
+  explicitPickerError.value = false
   // api_key bleibt initial leer ("unchanged")
   apiKeyEditMode.value = 'unchanged'
   apiKeyDraft.value    = ''
@@ -171,7 +176,7 @@ function selectPreset(preset: Preset): void {
   // Preset wechselt → bisheriges Modell ist nicht mehr garantiert verfügbar.
   // Picker zeigt daher leere Auswahl, User muss neu wählen.
   formModel.value = ''
-  pickerError.value = false
+  explicitPickerError.value = false
   if (!preset.needsKey) {
     apiKeyEditMode.value = 'unchanged'
     apiKeyDraft.value    = ''
@@ -183,11 +188,15 @@ function selectPreset(preset: Preset): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Leitet aus den aktuellen Formularfeldern ab, ob ein unknown-connection-
- * Zustand vorliegt (kein Model gesetzt → false; Model gesetzt aber Provider
- * mappen nicht auf eine existierende Connection → true).
+ * Reaktiv abgeleiteter unknown-connection-Fehlerzustand. Re-evaluiert
+ * automatisch, sobald `providersStore.connections` (async via `loadConnections`
+ * geladen), `formProvider` oder `formModel` sich ändern — und schließt damit
+ * die Race zwischen `onMounted.loadConnections()` und frühem `openEdit()`.
+ * `explicitPickerError` deckt den Fall ab, dass onPickerChange eine ref mit
+ * nicht (mehr) existierender Connection-ID empfängt (manuell, bis neu gewählt).
  */
-function derivePickerError(): boolean {
+const pickerError = computed<boolean>(() => {
+  if (explicitPickerError.value) return true
   if (!formModel.value) return false
   const targetAiKind = LLM_PROVIDER_TO_AI_KIND[formProvider.value]
   // Hybrid: Provider ohne Connection-Äquivalent (custom/cloud/github_copilot/
@@ -198,7 +207,7 @@ function derivePickerError(): boolean {
     (conn) => CONNECTION_KIND_TO_AI_KIND[conn.provider_kind] === targetAiKind,
   )
   return candidates.length === 0
-}
+})
 
 // Hat der aktuelle Form-Provider ein Connection-Äquivalent? Steuert, ob der
 // AiModelPicker (connection-basiert) oder ein Freitext-Modell-Input (custom)
@@ -228,7 +237,7 @@ const pickerAiRef = computed<AiModelRef | null>(() => {
 function onPickerChange(aiRef: AiModelRef | null): void {
   if (aiRef === null) {
     formModel.value = ''
-    pickerError.value = false
+    explicitPickerError.value = false
     return
   }
   formModel.value = aiRef.model_id
@@ -237,10 +246,10 @@ function onPickerChange(aiRef: AiModelRef | null): void {
   if (!conn) {
     // Unknown-Connection: ref zeigt auf nicht (mehr) existierende Connection.
     // formProvider/formBaseUrl NICHT überschreiben — Save durch pickerError blockiert.
-    pickerError.value = true
+    explicitPickerError.value = true
     return
   }
-  pickerError.value = false
+  explicitPickerError.value = false
   const mappedProvider = CONNECTION_KIND_TO_LLM_PROVIDER[conn.provider_kind]
   if (mappedProvider) formProvider.value = mappedProvider
   // Lokale Ollama-Connections tragen oft base_url=null → Default-URL, sonst
