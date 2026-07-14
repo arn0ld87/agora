@@ -63,22 +63,10 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
   }
 })
 
-// Slice 7.6b: useAiModelRefAdapter mocken, weil Step4Report den Adapter
-// im setup() fuer resolveInitialReportRoute() braucht und der Adapter selbst
-// useLlmProvidersStore() aufruft. Pinia-Setup ist hier nicht noetig, weil
-// der eigentliche Routing-Workflow im Fokus steht — die Adapter-Migration
-// ist separat in ReportModelControls.spec.ts und useAiModelRefAdapter.spec.ts
-// getestet.
-const adapterMock = {
-  toStageLlmRoute: vi.fn(),
-  toAiModelRef: vi.fn(),
-  toStoredModelString: vi.fn((aiRef: { model_id: string } | null) => aiRef?.model_id ?? 'default'),
-  migrateStoredRoute: vi.fn(() => null),
-  buildLookup: vi.fn(() => new Map()),
-}
-vi.mock('@/composables/useAiModelRefAdapter', () => ({
-  useAiModelRefAdapter: () => adapterMock,
-}))
+// Slice 7.6c: Step4Report liest die Report-Modell-Auswahl direkt aus
+// `agora.report.aiModelRef` (Zod-validiert) und nutzt den useAiModelRefAdapter
+// nicht mehr; der frühere Adapter-Mock entfällt. ReportModelControls ist ohnehin
+// vollständig gestubbt (siehe oben).
 
 import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'

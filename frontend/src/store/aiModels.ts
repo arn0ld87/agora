@@ -57,7 +57,8 @@ import type { ApiSuccessEnvelope } from "../api/envelope";
 import { isApiError } from "../api/envelope";
 import { unwrapResponse } from "../api/parse";
 
-import type { ProviderDescriptor, StageId, StageLLMRoute } from "../contracts/llmRoutingContract";
+import type { ProviderDescriptor, StageId } from "../contracts/llmRoutingContract";
+import type { LlmRoute } from "../contracts/llmRoute";
 import type { LlmProviderKeyEntry } from "../contracts/llmProviderKeysContract";
 import type { LlmProfile, LlmProfileCreateRequest } from "../contracts/llmProfileContract";
 import type { WorkspaceLlmRoutingDefaults } from "../contracts/workspaceRoutingContract";
@@ -499,7 +500,7 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
   const globalDefault = computed(() => defaults.value.global_default);
   const stageOverrides = computed(() => defaults.value.stage_overrides);
 
-  function effectiveRouteForStage(stageId: StageId): StageLLMRoute {
+  function effectiveRouteForStage(stageId: StageId): LlmRoute {
     return defaults.value.stage_overrides[stageId] ?? defaults.value.global_default;
   }
 
@@ -517,7 +518,7 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
     }
   }
 
-  async function setGlobalDefault(route: StageLLMRoute): Promise<void> {
+  async function setGlobalDefault(route: LlmRoute): Promise<void> {
     lastError.value = null;
     try {
       defaults.value = await replaceGlobalDefault(route);
@@ -529,7 +530,7 @@ export const useLlmRoutingDefaultsStore = defineStore("llmRoutingDefaults", () =
 
   async function setStageOverride(
     stageId: StageId,
-    route: StageLLMRoute | null,
+    route: LlmRoute | null,
   ): Promise<void> {
     lastError.value = null;
     try {

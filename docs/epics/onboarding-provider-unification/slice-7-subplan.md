@@ -340,16 +340,121 @@ Run-Payloads oder Slice-6-Testwerte nicht verändern.
 - **Akzeptanz/PR-Schnitt:** keine direkte `ModelPicker.vue`-Referenz in den zwei
   Consumern; Run-Snapshot bleibt vertragsgleich; ein Adapter-Migrations-PR.
 
-#### 7.6c — `LlmProfileManager` migrieren und v4-Legacy-Picker löschen
+#### 7.6c — `StageLLMRoute`-Typ + LocalStorage-Legacy aus Frontend entfernen
+
+**Hinweis zur Umwidmung:** Der Verbesserungsplan (Stand 2026-07-14,
+`/Volumes/T7/Offload/Downloads/agora-verbesserungsplan-aktueller-stand.md`,
+PR 9) und der vorherige Sub-Plan-Eintrag haben 7.6c als
+„`LlmProfileManager` migrieren und v4-Legacy-Picker löschen" geführt.
+Dieser Eintrag ersetzt ihn — der LlmProfileManager-Scope wandert nach 7.6d.
+Der harte Schnitt für die v3-Route-Brücke ist die Voraussetzung, dass 7.7
+und 7.8 sauber ziehen können.
+
+- **Ziel:** Frontend gibt den v3-`StageLLMRoute`-Vertragstyp und das
+  zugehörige Zod-Schema vollständig auf. Der Adapter behält nur die für
+  den Backend-Boundary-Call nötige Konvertierungsfunktion. LocalStorage-
+  Legacy-Keys `agora.<scope>.route` werden nicht mehr gelesen — User mit
+  gespeicherten Legacy-Werten fallen auf den Default zurück
+  (Breaking Change, im CHANGELOG zu dokumentieren).
+- **Nicht-Ziele:** Backend-Refactor (`backend/app/contracts/llm_routing_contract.py`
+  bleibt Pydantic-SSoT für `/api/llm-routing`); `AiModelPicker`-Surface;
+  `LlmProfileManager` (das ist 7.6d).
+- **Dateien (Soll-Stand nach diesem Slice):**
+  - `frontend/src/contracts/llmRoutingContract.ts` — `StageLLMRoute`,
+    `StageLLMRouteSchema` raus. `StageId`, `ReasoningEffort`,
+    `RuntimeLlmRouting`, `ProviderDescriptor`, `ResolvedRoute`,
+    `LlmInvocationEvent` bleiben (Backend-Spiegel).
+  - `frontend/src/contracts/workspaceRoutingContract.ts` —
+    `WorkspaceLlmRoutingDefaults` war nirgends produktiv verdrahtet;
+    Datei wird im selben Commit entfernt.
+  - `frontend/src/contracts/llmRoute.ts` *(neu)* — Type-Alias `LlmRoute`
+    (Backend-Boundary-Body, strukturell identisch zu `StageLLMRoute`,
+    aber ohne den `StageLLMRoute`-Namen, damit die
+    Acceptance-Greps leer bleiben).
+  - `frontend/src/composables/useAiModelRefAdapter.ts` —
+    `toStageLlmRoutePure`, `migrateStoredRoutePure` und das
+    `migrateStoredRoute`-Member raus. Methode `toStageLlmRoute` wird zu
+    `toLlmRoute` (Member); Rückgabetyp `LlmRoute` (aus `llmRoute.ts`).
+    Re-Export des `LlmRoute`-Typs nach außen für die Consumer.
+  - `frontend/src/components/v4/dashboard/HeroNewRun.vue` —
+    `STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'` raus,
+    `adapter.migrateStoredRoute`-Aufruf weg, nur noch
+    `agora.hero.aiModelRef` lesen.
+  - `frontend/src/components/Step4Report.vue` — Storage-Key
+    `agora.report.route` wird durch `agora.report.aiModelRef` ersetzt;
+    Type-Import `StageLLMRoute`/`StageLLMRouteSchema` raus, dafür
+    `LlmRoute` aus dem Adapter.
+  - `frontend/src/views/Home.vue` — Storage-Key `agora.home.route`
+    wird durch `agora.home.aiModelRef` ersetzt; `StageLLMRouteSchema`-
+    Import raus.
+  - `frontend/src/components/step4/ReportModelControls.vue`,
+    `frontend/src/components/v4/forms/StepModelOverrideChip.vue`,
+    `frontend/src/components/v4/forms/ModelPicker.vue`,
+    `frontend/src/components/v4/forms/LlmProfileManager.vue`,
+    `frontend/src/components/LlmRouting/LlmRoutingView.vue`,
+    `frontend/src/api/llmRouting.ts`,
+    `frontend/src/api/llmRoutingDefaults.ts`,
+    `frontend/src/views/Settings/SettingsGeneralView.vue`,
+    `frontend/src/views/Settings/LlmProvidersView.vue`,
+    `frontend/src/store/aiModels.ts` — `StageLLMRoute`-Imports raus,
+    durch `LlmRoute` (Adapter-Re-Export) ersetzt. Spec-Mocks
+    (`LlmRoutingView.spec.ts`, `StepModelOverrideChip.spec.ts`,
+    `LlmProfileManager.spec.ts`, `useAiModelRefAdapter.spec.ts`,
+    `aiModels.spec.ts`) werden mitgezogen.
+- **Abhängigkeiten:** 7.6b (AiModelRef-Pfad in `Home.vue` und
+  `ReportModelControls.vue` etabliert); Backend
+  `app/contracts/llm_routing_contract.py::StageLLMRoute` (Pydantic)
+  bleibt unangetastet.
+- **Ownership/Konflikt:** Slice 7; kein Eingriff in Slice 6 oder
+  Slice 5.
+- **TDD/Accessibility:** Targeted Vitest-Specs (`useAiModelRefAdapter`,
+  `HeroNewRun`, `StepModelOverrideChip`, `LlmRoutingView`,
+  `LlmProfileManager`, `SettingsGeneralView`, `LlmProvidersView`,
+  `aiModels`) werden vor jedem Commit-Schritt grün gehalten. Kein
+  A11y-Surface-Touch.
+- **Migration/Rollback:** zwei Commits — (1) Refactor: neuer `LlmRoute`-
+  Type + Importer umgestellt; (2) Hard-Cut: `StageLLPRoute`-Export raus,
+  `toStageLlmRoutePure`/`migrateStoredRoutePure` raus,
+  `agora.<scope>.route`-Reads raus. Revert pro Commit stellt den
+  vorherigen Stand wieder her.
+- **Sub-Sub-Slices:**
+  1. **Spec-Update (RED→GREEN)** — `useAiModelRefAdapter.spec.ts`,
+    `aiModels.spec.ts`, `StepModelOverrideChip.spec.ts`,
+    `LlmRoutingView.spec.ts` und `LlmProfileManager.spec.ts` werden
+    auf den neuen Adapter-Methodennamen `toLlmRoute` und auf den
+    `LlmRoute`-Typ umgestellt. Vorbedingung: neuer Typ wird im
+    selben Commit angelegt.
+  2. **Type-Delete** — `StageLLMRoute`, `StageLLMRouteSchema` aus
+    `llmRoutingContract.ts` raus; `workspaceRoutingContract.ts` weg;
+    `StageLLMRoute`-Importe in allen Consumern auf `LlmRoute` um.
+  3. **Adapter-Cleanup + Storage-Cut** — `toStageLlmRoutePure`,
+    `migrateStoredRoutePure`, `migrateStoredRoute`-Member raus;
+    `agora.hero.route`, `agora.home.route`, `agora.report.route`-
+    Reads raus; `agora.home.aiModelRef` und `agora.report.aiModelRef`
+    werden neu geschrieben (AiModelRef-JSON statt StageLLMRoute-JSON).
+  4. **Doku-Sync** — `slice-7-subplan.md` (dieser Eintrag),
+    `AGENTS.md`, `docs/STATUS.md`, `CHANGELOG.md`.
+- **Akzeptanz/PR-Schnitt:**
+  - `grep -r "StageLLMRoute" frontend/src/` liefert 0 Treffer.
+  - `grep -r "stage_llm_route|stageLlmRoute" frontend/src/contracts
+    frontend/src/composables` liefert 0 Treffer.
+  - `bash scripts/pre-push-gate.sh frontend` grün.
+  - Targeted Vitest-Specs grün (siehe TDD-Block).
+  - `npm run typecheck` grün.
+  - PR-Body deklariert explizit:
+    `BREAKING: LocalStorage-Key agora.<scope>.route wird nicht mehr gelesen`.
+
+#### 7.6d — `LlmProfileManager` migrieren und v4-Legacy-Picker löschen (verschoben aus 7.6c)
 
 - **Ziel:** letzten Produktionsimporter migrieren und
   `components/v4/forms/ModelPicker.vue` samt Specs entfernen.
 - **Nicht-Ziele:** `LlmProfile` neu erfinden oder Connection-Secrets in die UI
-  spiegeln.
+  spiegeln; `StageLLMRoute`-Storage-Cut (der ist 7.6c).
 - **Dateien:** `LlmProfileManager.vue`, `useAiModelRefAdapter.ts` nur falls die
   bestehende Abbildung genügt, Store-/Component-Specs, Legacy-Picker und Spec.
-- **Abhängigkeiten:** 7.6b und geklärte Abbildung
-  `ProviderConnection -> bestehender LlmProfile`.
+- **Abhängigkeiten:** 7.6b, 7.6c (kein `StageLLMRoute`-Bruch mehr im
+  Spec/Store), geklärte Abbildung `ProviderConnection -> bestehender
+  LlmProfile`.
 - **Ownership/Konflikt:** Slice 7; kein Slice-6-Pfad.
 - **TDD/Accessibility:** Profil erstellen/bearbeiten/default setzen, unbekannte
   Connection als validierten Fehler behandeln, Picker komplett per Tastatur.

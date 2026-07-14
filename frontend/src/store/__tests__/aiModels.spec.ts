@@ -66,7 +66,7 @@ import {
 
 import type { ProviderConnection, ProviderConnectionTestResult } from '../../contracts/aiProviderContract'
 import type { LlmProfile } from '../../contracts/llmProfileContract'
-import type { StageLLMRoute } from '../../contracts/llmRoutingContract'
+import type { LlmRoute } from '../../contracts/llmRoute'
 import type { WorkspaceLlmRoutingDefaults } from '../../contracts/workspaceRoutingContract'
 
 type MockFn = ReturnType<typeof vi.fn>
@@ -93,7 +93,7 @@ function makeProfile(overrides: Partial<LlmProfile> = {}): LlmProfile {
   } as LlmProfile
 }
 
-function makeRoute(overrides: Partial<StageLLMRoute> = {}): StageLLMRoute {
+function makeRoute(overrides: Partial<LlmRoute> = {}): LlmRoute {
   return {
     stage: null,
     provider_id: 'ollama',
@@ -103,7 +103,7 @@ function makeRoute(overrides: Partial<StageLLMRoute> = {}): StageLLMRoute {
     reasoning_effort: 'none',
     provider_options: {},
     ...overrides,
-  } as StageLLMRoute
+  } as LlmRoute
 }
 
 function makeDefaults(overrides: Partial<WorkspaceLlmRoutingDefaults> = {}): WorkspaceLlmRoutingDefaults {

@@ -13,7 +13,7 @@
  *  4. Workspace-Default-Card sichtbar
  *  5. AiModelPicker in der Default-Card
  *  6. defaultRoute computed zeigt aktuelle Route (Provider-ID + Model)
- *  7. AiModelPicker-Update mit AiModelRef → adapter.toStageLlmRoute → setGlobalDefault
+ *  7. AiModelPicker-Update mit AiModelRef → adapter.toLlmRoute → setGlobalDefault
  *  8. AiModelPicker-Update mit null → kein setGlobalDefault-Aufruf
  *  9. onMounted: loadProviders + loadConnections + defaultsStore.load
  * 10. onBeforeUnmount: loescht alle drafts
@@ -105,7 +105,7 @@ const defaultsStoreMock = {
 }
 
 const adapterMock = {
-  toStageLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
+  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
     stage: null,
     provider_id: 'openai',
     model: aiRef.model_id,
@@ -200,7 +200,7 @@ async function mountView(initial: {
   providersStoreMock.removeConnection.mockClear()
   defaultsStoreMock.setGlobalDefault.mockClear()
   defaultsStoreMock.load.mockClear()
-  adapterMock.toStageLlmRoute.mockClear()
+  adapterMock.toLlmRoute.mockClear()
   adapterMock.toAiModelRef.mockClear()
 
   const i18n = makeI18n()
@@ -272,12 +272,12 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(defaultSpan.text()).toContain('gpt-4o-mini')
   })
 
-  it('AiModelPicker-Update mit AiModelRef → adapter.toStageLlmRoute → setGlobalDefault', async () => {
+  it('AiModelPicker-Update mit AiModelRef → adapter.toLlmRoute → setGlobalDefault', async () => {
     const w = await mountView()
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
     await picker.trigger('click')
-    expect(adapterMock.toStageLlmRoute).toHaveBeenCalledWith({
+    expect(adapterMock.toLlmRoute).toHaveBeenCalledWith({
       provider_connection_id: 'conn-openai-1',
       model_id: 'gpt-4o-mini',
       source: 'explicit',

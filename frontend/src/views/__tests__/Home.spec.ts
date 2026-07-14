@@ -56,10 +56,9 @@ vi.mock('../composables/useEnvForm', () => ({ STORAGE_LANG: 'agora.lang', STORAG
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPushMock }) }))
 
 const adapterMock = {
-  toStageLlmRoute: vi.fn(),
+  toLlmRoute: vi.fn(),
   toAiModelRef: vi.fn(),
   toStoredModelString: vi.fn((aiRef: { model_id: string } | null) => aiRef?.model_id ?? 'default'),
-  migrateStoredRoute: vi.fn(() => null),
 }
 vi.mock('@/composables/useAiModelRefAdapter', () => ({ useAiModelRefAdapter: () => adapterMock }))
 
@@ -105,8 +104,7 @@ const makeI18n = () => createI18n({
 
 async function mountHome() {
   localStorageMock.clear()
-  for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, adapterMock.toStoredModelString, adapterMock.migrateStoredRoute]) m.mockClear()
-  adapterMock.migrateStoredRoute.mockReturnValue(null)
+  for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, adapterMock.toStoredModelString]) m.mockClear()
   vi.stubGlobal('localStorage', localStorageMock)
   const pinia = createPinia(); setActivePinia(pinia)
   return mount(Home, { global: { plugins: [makeI18n()], stubs } })

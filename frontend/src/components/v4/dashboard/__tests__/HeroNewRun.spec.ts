@@ -4,8 +4,8 @@
  * Die Komponente ist der primaere Aktions-Block des Dashboards:
  * File-Picker, Profile-Dropdown, Modell-Wahl, Sprache, Persona-Count,
  * Rounds, Requirement, Start-CTA. Migration-Fokus ist der Modell-Picker:
- * ModelPicker (alt) -> AiModelPicker (SSoT) mit Adapter-Glue fuer
- * localStorage-Migration und STORAGE_MODEL-Spiegel.
+ * ModelPicker (alt) -> AiModelPicker (SSoT) mit Adapter-Glue fuer den
+ * STORAGE_MODEL-Spiegel. Slice 7.6c: Legacy-Route-Storage wird nicht mehr gelesen.
  *
  * Coverage:
  *  1. mountet ohne Crash
@@ -14,7 +14,7 @@
  *  4. Profile-Dropdown sichtbar (Hybrid bleibt)
  *  5. AiModelPicker in Config-Zone sichtbar
  *  6. liest bestehende Auswahl aus `agora.hero.aiModelRef` (neuer Key)
- *  7. faellt auf `agora.hero.route` (Legacy) zurueck, konvertiert via Adapter
+ *  7. Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen
  *  8. onPickRoute: persistiert als `agora.hero.aiModelRef` (neues Format)
  *  9. onPickRoute: setzt STORAGE_MODEL-Spiegel auf model_id
  * 10. onPickRoute: bei null werden beide Keys + STORAGE_MODEL auf 'default'
@@ -95,12 +95,11 @@ fetchLlmProfilesMock.mockResolvedValue([])
 getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
 
 const adapterMock: {
-  toStageLlmRoute: ReturnType<typeof vi.fn>
+  toLlmRoute: ReturnType<typeof vi.fn>
   toAiModelRef: ReturnType<typeof vi.fn>
   toStoredModelString: ReturnType<typeof vi.fn>
-  migrateStoredRoute: ReturnType<typeof vi.fn>
 } = {
-  toStageLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
+  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
     stage: null,
     provider_id: 'openai',
     model: aiRef.model_id,
@@ -115,7 +114,6 @@ const adapterMock: {
     source: 'workspace-default' as const,
   })),
   toStoredModelString: vi.fn((aiRef: { model_id: string } | null) => aiRef?.model_id ?? 'default'),
-  migrateStoredRoute: vi.fn((_rawAiRef: string | null, _rawLegacy?: string | null) => null),
 }
 
 vi.mock('@/composables/useAiModelRefAdapter', () => ({
@@ -181,21 +179,23 @@ function makeI18n() {
   })
 }
 
-async function mountHero() {
+async function mountHero(seed: Record<string, string> = {}) {
   localStorageMock.clear()
   vi.mocked(localStorageMock.getItem).mockClear()
   vi.mocked(localStorageMock.setItem).mockClear()
   vi.mocked(localStorageMock.removeItem).mockClear()
   installLocalStorageMock()
+  // Optionale localStorage-Vorbelegung (nach dem Mock-Reset, damit die
+  // Seed-setItem-Calls die Assertions nicht verfaelschen).
+  for (const [k, v] of Object.entries(seed)) localStorageMock.setItem(k, v)
+  vi.mocked(localStorageMock.setItem).mockClear()
 
   setPendingUploadMock.mockClear()
   routerPushMock.mockClear()
   getSystemStatusMock.mockClear()
   getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
-  adapterMock.toStageLlmRoute.mockClear()
+  adapterMock.toLlmRoute.mockClear()
   adapterMock.toStoredModelString.mockClear()
-  adapterMock.migrateStoredRoute.mockClear()
-  adapterMock.migrateStoredRoute.mockReturnValue(null)
 
   const i18n = makeI18n()
   const pinia = createPinia()
@@ -219,7 +219,7 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
   beforeEach(() => {
     // clearAllMocks wuerde auch mockResolvedValue/Mock-Implementierungen loeschen.
     // Wir resetten nur die Call-History, nicht die Mocks selbst.
-    for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, setPendingUploadMock, routerPushMock, getSystemStatusMock, adapterMock.toStageLlmRoute, adapterMock.toStoredModelString, adapterMock.migrateStoredRoute, adapterMock.toAiModelRef]) {
+    for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, setPendingUploadMock, routerPushMock, getSystemStatusMock, adapterMock.toLlmRoute, adapterMock.toStoredModelString, adapterMock.toAiModelRef]) {
       m.mockClear()
     }
     installLocalStorageMock()
@@ -260,25 +260,28 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
 
   it('liest bestehende Auswahl aus `agora.hero.aiModelRef` (neuer Key)', async () => {
     const aiRef = { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3', source: 'workspace-default' }
-    adapterMock.migrateStoredRoute.mockReturnValueOnce(aiRef)
-    const w = await mountHero()
+    const w = await mountHero({ 'agora.hero.aiModelRef': JSON.stringify(aiRef) })
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
-    // modelValue wurde ueber Adapter-Mock an den Picker durchgereicht
-    expect(adapterMock.migrateStoredRoute).toHaveBeenCalled()
+    // Der neue Key wird direkt Zod-validiert an den Picker durchgereicht.
+    expect(picker.props('modelValue')).toMatchObject({
+      provider_connection_id: 'conn-ollama-1',
+      model_id: 'qwen3',
+    })
   })
 
-  it('faellt auf `agora.hero.route` (Legacy) zurueck, konvertiert via Adapter', async () => {
-    // Adapter-Mock liefert eine AiModelRef, als ob er Legacy-Route gelesen haette
-    adapterMock.migrateStoredRoute.mockReturnValueOnce({
-      provider_connection_id: 'conn-openai-1',
-      model_id: 'gpt-4o-mini',
-      source: 'workspace-default',
-    })
-    const w = await mountHero()
+  it('Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen', async () => {
+    // Nur der Legacy-Key ist gesetzt — er darf nach dem Storage-Cut keinen
+    // Wert mehr vorbelegen und wird beim Mount defensiv entfernt.
+    const legacyRoute = {
+      stage: null, provider_id: 'ollama', model: 'gpt-legacy',
+      temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
+    }
+    const w = await mountHero({ 'agora.hero.route': JSON.stringify(legacyRoute) })
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
-    expect(adapterMock.migrateStoredRoute).toHaveBeenCalled()
+    expect(picker.props('modelValue')).toBeNull()
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
   })
 
   it('onPickRoute: persistiert als `agora.hero.aiModelRef` (neues Format)', async () => {

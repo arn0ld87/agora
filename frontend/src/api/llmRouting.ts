@@ -3,9 +3,9 @@ import {
   ProviderDescriptor,
   RuntimeLlmRouting,
   ResolvedRoute,
-  StageLLMRoute,
   LlmInvocationEvent,
 } from "../contracts/llmRoutingContract";
+import type { LlmRoute } from "../contracts/llmRoute";
 import type { AiRoute } from "../contracts/aiProviderContract";
 import { ApiSuccessEnvelope } from "./envelope";
 
@@ -70,7 +70,7 @@ export async function updateRunLlmRouting(
 export async function patchStageLlmRouting(
   runId: string,
   stageId: string,
-  route: StageLLMRoute,
+  route: LlmRoute,
 ): Promise<RuntimeLlmRoutingResponse> {
   const resp = await service.patch<
     ApiSuccessEnvelope<RuntimeLlmRoutingResponse>

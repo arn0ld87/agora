@@ -2,21 +2,21 @@
 /**
  * ModelPicker — wählt eine LLM-Route (Provider + Modell) per Dropdown.
  *
- * @deprecated Slice 5.5 — v4-Vorläufer-Picker (StageLLMRoute-basiert), abgelöst
+ * @deprecated Slice 5.5 — v4-Vorläufer-Picker (LlmRoute-basiert), abgelöst
  * durch `AiModelPicker.vue` (AiModelRef/connection-basiert). Bleibt als
  * Read-Adapter für ReportModelControls / Home / LlmProfileManager bis zu deren
  * Migration. Keine neuen Importeure.
  * - Versteckt Provider ohne hinterlegten API-Key (Ausnahme: Ollama + Copilot,
  *   die auch ohne expliziten Key benutzbar sein können).
- * - Emit `update:modelValue` mit der gewählten ``StageLLMRoute`` oder ``null``
+ * - Emit `update:modelValue` mit der gewählten ``LlmRoute`` oder ``null``
  *   für „nichts gewählt / nutze Default des Eltern-Kontextes".
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useLlmProvidersStore } from '@/store/aiModels'
-import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
+import type { LlmRoute } from '@/contracts/llmRoute'
 
 const props = withDefaults(defineProps<{
-  modelValue?: StageLLMRoute | null
+  modelValue?: LlmRoute | null
   placeholder?: string
   disabled?: boolean
 }>(), {
@@ -26,7 +26,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: StageLLMRoute | null]
+  'update:modelValue': [value: LlmRoute | null]
 }>()
 
 const store = useLlmProvidersStore()

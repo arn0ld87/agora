@@ -11,7 +11,8 @@ import {
   WorkspaceLlmRoutingDefaults,
   WorkspaceLlmRoutingDefaultsSchema,
 } from "../contracts/workspaceRoutingContract";
-import { StageId, StageLLMRoute } from "../contracts/llmRoutingContract";
+import { StageId } from "../contracts/llmRoutingContract";
+import type { LlmRoute } from "../contracts/llmRoute";
 import { ApiSuccessEnvelope } from "./envelope";
 import { unwrapAndParse } from "./parse";
 
@@ -32,7 +33,7 @@ export async function replaceRoutingDefaults(
 
 export async function patchRoutingDefaultStage(
   stageId: StageId,
-  route: StageLLMRoute | null,
+  route: LlmRoute | null,
 ): Promise<WorkspaceLlmRoutingDefaults> {
   const body = route === null ? { clear: true } : route;
   const resp = await service.patch<ApiSuccessEnvelope<unknown>>(
@@ -43,7 +44,7 @@ export async function patchRoutingDefaultStage(
 }
 
 export async function replaceGlobalDefault(
-  route: StageLLMRoute,
+  route: LlmRoute,
 ): Promise<WorkspaceLlmRoutingDefaults> {
   const resp = await service.put<ApiSuccessEnvelope<unknown>>(
     "/api/llm/routing/defaults/global",

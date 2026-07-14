@@ -73,9 +73,9 @@ function removeLocal(key: string): void {
  *     aus den unter /settings/llm-providers hinterlegten Provider-Connections.
  *
  * Persistenz: `agora.hero.profileId`, `agora.hero.aiModelRef` (Slice 5.4
- * Zod-validiert). Legacy-Key `agora.hero.route` wird zur Migration gelesen,
- * via useAiModelRefAdapter.migrateStoredRoute in eine AiModelRef konvertiert
- * und als gleichwertige Quelle akzeptiert.
+ * Zod-validiert). Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route`
+ * wird NICHT mehr gelesen; er wird beim Mount und beim Speichern defensiv aus
+ * localStorage entfernt. User mit Legacy-Wert bekommen den Picker-Default.
  *
  * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
  * via `storedEffectiveModel()` — wir spiegeln `aiModelRef.model_id` dorthin,
@@ -84,20 +84,21 @@ function removeLocal(key: string): void {
  */
 const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
 const STORAGE_HERO_AI_REF = 'agora.hero.aiModelRef'
+// Slice 7.6c (Storage-Cut): nur noch als Ziel für defensives removeLocal.
 const STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'
 
 const adapter = useAiModelRefAdapter()
 
 function loadStoredModel(): AiModelRef | null {
-  // Bevorzugt neuen Key, fällt auf Legacy zurück.
-  const rawAiRef = readLocal(STORAGE_HERO_AI_REF)
-  const rawLegacy = readLocal(STORAGE_HERO_ROUTE_LEGACY)
-  const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
-  if (migrated) {
-    const parsed = AiModelRefSchema.safeParse(migrated)
-    if (parsed.success) return parsed.data
+  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
+  const raw = readLocal(STORAGE_HERO_AI_REF)
+  if (!raw) return null
+  try {
+    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
   }
-  return null
 }
 
 const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
@@ -208,8 +209,8 @@ function onPickModel(aiRef: AiModelRef | null) {
     writeLocal(STORAGE_HERO_AI_REF, JSON.stringify(aiRef))
     // STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default' bei leerer model_id).
     writeLocal(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
-    // Legacy-Key loeschen, damit spaeter loadStoredModel nicht aus Versehen
-    // einen veralteten StageLLMRoute-Eintrag bevorzugt.
+    // Legacy-Key loeschen (Storage-Cut): verhindert, dass ein veralteter
+    // Routen-Eintrag beim naechsten Mount ueberhaupt herumliegt.
     removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   } else {
     removeLocal(STORAGE_HERO_AI_REF)
@@ -258,6 +259,8 @@ async function startSimulation() {
 }
 
 onMounted(() => {
+  // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
+  removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   fetchLlmProfiles()
     .then(profiles => { llmProfiles.value = profiles })
     .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })

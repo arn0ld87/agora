@@ -19,7 +19,7 @@
  *  8. allowWorkspaceDefault=true
  *  9. onMount: defaultsStore.load()
  * 10. initialer Picker-Wert aus defaultsStore.globalDefault (via Adapter)
- * 11. AiModelPicker-Update mit AiModelRef -> adapter.toStageLlmRoute -> setGlobalDefault
+ * 11. AiModelPicker-Update mit AiModelRef -> adapter.toLlmRoute -> setGlobalDefault
  * 12. AiModelPicker-Update mit null: keine setGlobalDefault-Aktion
  * 13. AiModelPicker hat eindeutige ID ('settings-general-model-picker')
  * 14. SettingsSectionPanel sichtbar
@@ -70,7 +70,7 @@ vi.mock('@/store/aiModels', () => ({
 }))
 
 const adapterMock = {
-  toStageLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
+  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
     stage: null,
     provider_id: 'openai',
     model: aiRef.model_id,
@@ -148,7 +148,7 @@ async function mountSettingsGeneral(initial: { globalDefault?: unknown } = {}) {
   loadMock.mockResolvedValue(undefined)
   setGlobalDefaultMock.mockClear()
   setGlobalDefaultMock.mockResolvedValue(undefined)
-  adapterMock.toStageLlmRoute.mockClear()
+  adapterMock.toLlmRoute.mockClear()
   adapterMock.toAiModelRef.mockClear()
 
   const i18n = makeI18n()
@@ -245,7 +245,7 @@ describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () =
     expect(adapterMock.toAiModelRef).toHaveBeenCalled()
   })
 
-  it('AiModelPicker-Update mit AiModelRef -> adapter.toStageLlmRoute -> setGlobalDefault', async () => {
+  it('AiModelPicker-Update mit AiModelRef -> adapter.toLlmRoute -> setGlobalDefault', async () => {
     const w = await mountSettingsGeneral()
     const picker = w.findComponent(aiPickerStub)
     ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', {
@@ -254,7 +254,7 @@ describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () =
       source: 'workspace-default',
     })
     await flushPromises()
-    expect(adapterMock.toStageLlmRoute).toHaveBeenCalled()
+    expect(adapterMock.toLlmRoute).toHaveBeenCalled()
     expect(setGlobalDefaultMock).toHaveBeenCalledWith({
       stage: null,
       provider_id: 'openai',

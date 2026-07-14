@@ -1,63 +1,44 @@
 /**
- * useAiModelRefAdapter — Brücke zwischen AiModelRef (v4) und StageLLMRoute (v3).
+ * useAiModelRefAdapter — Brücke zwischen AiModelRef (v4) und LlmRoute (Backend-Body).
  *
  * Slice 5.4: Solange 5.5 die alten v3-Stores und Contracts noch nicht
  * abgeschafft hat, müssen wir die zwei Vertrags-Welten verbinden:
  *
  * - AiModelRef.provider_connection_id (Connection-ID, z. B. "conn-uuid-xyz")
- * - StageLLMRoute.provider_id       (Provider-Typ, z. B. "ollama")
+ * - LlmRoute.provider_id            (Provider-Connection-ID, identisch seit 7.3.3)
  *
- * Der Adapter nimmt optional einen Connection-Lookup (`Map<connection_id,
- * ProviderConnection>`), um die IDs aufzulösen. Ohne Lookup wird ein
- * defensiver Fallback verwendet (Connection-ID == Provider-ID), der
- * laut macht, wenn er greift (console.warn) — damit Migrationen nicht
- * stillschweigend kaputt gehen.
+ * Tests: Die pure-Helper (`toLlmRoutePure`, `toAiModelRefPure`,
+ * `toStoredModelStringPure`) sind ohne Store testbar.
  *
- * Tests: Die pure-Helper (`toStageLlmRoute`, `toAiModelRef`,
- * `toStoredModelString`, `migrateStoredRoute`) sind ohne Store testbar.
- *
- * Master-Prompt §6.1 (eine Komponente, eine Semantik) + §6.3 (Audit-Trail).
+ * Slice 7.6c: Body-Type heißt `LlmRoute` (siehe `frontend/src/contracts/llmRoute.ts`).
+ * Das Backend bleibt Pydantic-SSoT, der Frontend-Type ist nur die
+ * Boundary-Repräsentation an `/api/llm-routing`-Endpoints. Der Legacy-Storage-
+ * Migrations-Helper wurde mit dem Storage-Cut entfernt.
  */
 import { useLlmProvidersStore } from '@/store/aiModels'
 import { AiModelRefSchema, type AiModelRef } from '@/contracts/aiModelRef'
-import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
+import type { LlmRoute } from '@/contracts/llmRoute'
 import type { ProviderConnection } from '@/contracts/aiProviderContract'
 
-/** Lookup-Tabelle Connection-ID → ProviderConnection. */
 export type ConnectionLookup = ReadonlyMap<string, ProviderConnection>
-
-/** Inverse Lookup: Provider-Typ → Liste möglicher Connection-IDs. */
 export type ProviderKindLookup = ReadonlyMap<string, readonly ProviderConnection[]>
 
 export interface AiModelRefAdapter {
-  /** Konvertiert AiModelRef → StageLLMRoute (v3-Store, v3-Backend-Endpoint). */
-  toStageLlmRoute: (ref: AiModelRef) => StageLLMRoute
-  /** Konvertiert StageLLMRoute → AiModelRef (Picker-Anzeige). `null`, wenn
+  /** Konvertiert AiModelRef → LlmRoute (Backend-Body). */
+  toLlmRoute: (ref: AiModelRef) => LlmRoute
+  /** Konvertiert LlmRoute → AiModelRef (Picker-Anzeige). `null`, wenn
    *  die Route keine gültige Provider-Connection-ID + Modell trägt. */
-  toAiModelRef: (route: StageLLMRoute) => AiModelRef | null
+  toAiModelRef: (route: LlmRoute) => AiModelRef | null
   /** STORAGE_MODEL-Spiegel: nur model_id (MainView liest das klassisch). */
   toStoredModelString: (ref: AiModelRef | null) => string
-  /** Liest + migriert HeroNewRun-localStorage. Bevorzugt neuen Key,
-   *  faellt auf Legacy StageLLMRoute zurueck (Adapter-Konvertierung). */
-  migrateStoredRoute: (rawAiRef: string | null, rawLegacyRoute?: string | null) => AiModelRef | null
   /** Lookup-Builder für externe Aufrufer (z. B. Tests). */
   buildLookup: () => ConnectionLookup
 }
 
-/**
- * Pure Konvertierung AiModelRef → StageLLMRoute ohne Store-Zugriff.
- *
- * Slice 7.3.3 (Teil 9): Die konkrete Provider-Connection-ID wird
- * verlustfrei in `provider_id` übernommen — KEIN Kollaps auf einen
- * allgemeinen `provider_kind` mehr. Dadurch bleiben mehrere Connections
- * desselben Typs (z. B. zwei `openai_compatible`) unterscheidbar und der
- * Roundtrip erhält exakt dieselbe ID. Der optionale `_lookup`-Parameter
- * bleibt aus Signaturgründen erhalten, wird aber nicht mehr benötigt.
- */
-export function toStageLlmRoutePure(
+export function toLlmRoutePure(
   ref: AiModelRef,
   _lookup?: ConnectionLookup,
-): StageLLMRoute {
+): LlmRoute {
   return {
     stage: null,
     provider_id: ref.provider_connection_id,
@@ -69,20 +50,8 @@ export function toStageLlmRoutePure(
   }
 }
 
-/**
- * Pure Konvertierung StageLLMRoute → AiModelRef.
- *
- * Slice 7.3.3 (Teil 10): Gibt `null` zurück, wenn die Route keine gültige
- * `provider_id` oder kein Modell trägt — es entstehen KEINE leeren IDs
- * mehr. Das Ergebnis wird zusätzlich gegen den Zod-Spiegel validiert.
- *
- * `lookup` mappt eine gespeicherte `provider_id` auf eine
- * Provider-Connection-ID (Legacy-Migration von `provider_kind`-Strings).
- * Trägt `provider_id` bereits eine Connection-ID (Normalfall seit Teil 9),
- * greift die Identität `?? route.provider_id`.
- */
 export function toAiModelRefPure(
-  route: StageLLMRoute,
+  route: LlmRoute,
   lookup?: ReadonlyMap<string, string>,
 ): AiModelRef | null {
   if (!route.provider_id || !route.model) return null
@@ -94,7 +63,6 @@ export function toAiModelRefPure(
   return AiModelRefSchema.safeParse(candidate).success ? candidate : null
 }
 
-/** Map-Builder: provider_kind → erste passende Connection-ID. */
 export function buildProviderKindLookup(
   connections: ReadonlyMap<string, ProviderConnection>,
 ): ProviderKindLookup {
@@ -107,7 +75,6 @@ export function buildProviderKindLookup(
   return out
 }
 
-/** Erste Connection-ID für einen Provider-Typ oder undefined. */
 export function firstConnectionId(
   lookup: ProviderKindLookup | undefined,
   providerKind: string,
@@ -115,52 +82,10 @@ export function firstConnectionId(
   return lookup?.get(providerKind)?.[0]?.id
 }
 
-/** STORAGE_MODEL-Spiegel — nur model_id. */
 export function toStoredModelStringPure(ref: AiModelRef | null): string {
   return ref?.model_id ?? 'default'
 }
 
-/**
- * Liest HeroNewRun-localStorage und gibt ein AiModelRef | null zurück.
- * Versucht zuerst den neuen Key `agora.hero.aiModelRef` (AiModelRef-JSON),
- * fällt dann zurück auf `agora.hero.route` (StageLLMRoute-JSON, alt)
- * und konvertiert via `toAiModelRefPure` mit dem mitgegebenen Lookup.
- * Kein Storage-Schreiben — das macht der Aufrufer (HeroNewRun) explizit.
- */
-export function migrateStoredRoutePure(
-  rawAiRef: string | null,
-  rawLegacyRoute: string | null,
-  providerKindToConnectionId?: ReadonlyMap<string, string>,
-): AiModelRef | null {
-  if (rawAiRef) {
-    try {
-      const parsed = JSON.parse(rawAiRef) as unknown
-      if (
-        parsed && typeof parsed === 'object'
-        && 'provider_connection_id' in parsed
-        && 'model_id' in parsed
-        && typeof (parsed as { provider_connection_id: unknown }).provider_connection_id === 'string'
-        && typeof (parsed as { model_id: unknown }).model_id === 'string'
-      ) {
-        return parsed as AiModelRef
-      }
-    } catch {
-      /* fall through to legacy */
-    }
-  }
-  if (rawLegacyRoute) {
-    try {
-      const parsed = JSON.parse(rawLegacyRoute) as StageLLMRoute
-      const migrated = toAiModelRefPure(parsed, providerKindToConnectionId)
-      if (migrated) return migrated
-    } catch {
-      /* noop */
-    }
-  }
-  return null
-}
-
-/** Composable-Factory, die den LlmProvidersStore nutzt (Vue-Composition-API). */
 export function useAiModelRefAdapter(): AiModelRefAdapter {
   const store = useLlmProvidersStore()
   const buildLookup = (): ConnectionLookup => {
@@ -170,26 +95,17 @@ export function useAiModelRefAdapter(): AiModelRefAdapter {
     }
     return map
   }
-  const toStageLlmRoute = (ref: AiModelRef): StageLLMRoute =>
-    toStageLlmRoutePure(ref, buildLookup())
-  const toAiModelRef = (route: StageLLMRoute): AiModelRef | null => {
+  const toLlmRoute = (ref: AiModelRef): LlmRoute =>
+    toLlmRoutePure(ref, buildLookup())
+  const toAiModelRef = (route: LlmRoute): AiModelRef | null => {
     const kindLookup = buildProviderKindLookup(buildLookup())
     return toAiModelRefPure(route, firstConnectionIdByKind(kindLookup))
   }
   const toStoredModelString = (ref: AiModelRef | null): string =>
     toStoredModelStringPure(ref)
-  const migrateStoredRoute = (rawAiRef: string | null, rawLegacyRoute: string | null = null): AiModelRef | null => {
-    const kindLookup = buildProviderKindLookup(buildLookup())
-    return migrateStoredRoutePure(
-      rawAiRef,
-      rawLegacyRoute,
-      firstConnectionIdByKind(kindLookup),
-    )
-  }
-  return { toStageLlmRoute, toAiModelRef, toStoredModelString, migrateStoredRoute, buildLookup }
+  return { toLlmRoute, toAiModelRef, toStoredModelString, buildLookup }
 }
 
-/** Convenience: provider_kind → erste connection_id Map. */
 function firstConnectionIdByKind(
   kindLookup: ProviderKindLookup,
 ): ReadonlyMap<string, string> {

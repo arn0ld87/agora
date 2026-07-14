@@ -3,10 +3,12 @@
  * LlmRoutingView (v3) — Slice 5.4: Migration auf AiModelPicker (SSoT).
  *
  * - ModelPicker (alt) -> AiModelPicker an Global-Default + Stage-Overrides.
- * - v3-Backend-Vertrag (StageLLMRoute) bleibt stabil; AiModelPicker
- *   konvertiert via useAiModelRefAdapter.toStageLlmRoute fuer Patches.
- * - Reasoning-Effort-Select bleibt unveraendert (StageLLMRoute-only).
+ * - v3-Backend-Vertrag (LlmRoute) bleibt stabil; AiModelPicker
+ *   konvertiert via useAiModelRefAdapter.toLlmRoute fuer Patches.
+ * - Reasoning-Effort-Select bleibt unveraendert (LlmRoute-only).
  * - v3-Wrapper wird in 5.5 deprecatet; bis dahin nur Picker-Swap.
+ *
+ * Slice 7.6c: Body-Type ist `LlmRoute` (früherer Stage-Route-Type + Storage entfernt).
  */
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -17,11 +19,11 @@ import {
 } from '../../api/llmRouting';
 import {
   RuntimeLlmRouting,
-  StageLLMRoute,
   StageId,
   ReasoningEffort,
   LlmInvocationEvent,
 } from '../../contracts/llmRoutingContract';
+import type { LlmRoute } from '../../contracts/llmRoute';
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue';
 import { useLlmProvidersStore } from '@/store/aiModels';
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter';
@@ -54,7 +56,7 @@ const STAGES: StageId[] = [
 
 const REASONING_EFFORTS: ReasoningEffort[] = ["none", "minimal", "low", "medium", "high"];
 
-// AiModelRef-Aequivalent der aktuellen StageLLMRoute (fuer AiModelPicker).
+// AiModelRef-Aequivalent der aktuellen LlmRoute (fuer AiModelPicker).
 // v3: AiModelPicker zeigt Connection-ID, der v3-Store serialisiert
 // provider_id+model via Adapter.
 const globalDefaultAiRef = computed<AiModelRef | null>(() => {
@@ -100,7 +102,7 @@ async function saveGlobal() {
   }
 }
 
-async function saveStage(stageId: StageId, route: StageLLMRoute) {
+async function saveStage(stageId: StageId, route: LlmRoute) {
   try {
     loading.value = true;
     routing.value = await patchStageLlmRouting(props.runId, stageId, route);
@@ -117,8 +119,8 @@ const formatTimestamp = (timestamp: number) => new Date(timestamp * 1000).toLoca
 
 function onGlobalDefaultPicked(aiRef: AiModelRef | null) {
   if (!routing.value || !aiRef) return;
-  // AiModelRef -> StageLLMRoute via Adapter (v3-Store bleibt im alten Format).
-  const route = adapter.toStageLlmRoute(aiRef);
+  // AiModelRef -> LlmRoute via Adapter (v3-Store bleibt im alten Format).
+  const route = adapter.toLlmRoute(aiRef);
   routing.value.global_default.provider_id = route.provider_id;
   routing.value.global_default.model = route.model;
 }
@@ -127,7 +129,7 @@ function onStageOverridePicked(stageId: StageId, aiRef: AiModelRef | null) {
   if (!routing.value || !aiRef) return;
   const current = routing.value.stage_overrides[stageId];
   const base = current ? { ...current } : { ...routing.value.global_default };
-  const route = adapter.toStageLlmRoute(aiRef);
+  const route = adapter.toLlmRoute(aiRef);
   routing.value.stage_overrides[stageId] = {
     ...base,
     provider_id: route.provider_id,

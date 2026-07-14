@@ -40,22 +40,21 @@ const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
 
 // ---- LLM-Auswahl (Slice 7.6b: AiModelPicker + useAiModelRefAdapter). ----
 //   Persistenz: agora.home.aiModelRef (AiModelRef-JSON, Zod-validiert).
-//   Legacy-Key agora.home.route wird via adapter.migrateStoredRoute gelesen
-//   und in eine AiModelRef konvertiert (verlustfreier Roundtrip).
-//   Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-Pipeline
-//   (Provider+Key resolved das Backend serverseitig via SecretResolver).
+//   Slice 7.6c (Storage-Cut): Der Legacy-Key agora.home.route wird NICHT mehr
+//   gelesen; er wird beim Mount und beim Speichern defensiv aus localStorage
+//   entfernt. Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-
+//   Pipeline (Provider+Key resolved das Backend serverseitig via SecretResolver).
 const STORAGE_HOME_AI_REF = 'agora.home.aiModelRef'
 const STORAGE_HOME_ROUTE_LEGACY = 'agora.home.route'
 
 const adapter = useAiModelRefAdapter()
 
 function loadStoredModel() {
+  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
+  const raw = localStorage.getItem(STORAGE_HOME_AI_REF)
+  if (!raw) return null
   try {
-    const rawAiRef = localStorage.getItem(STORAGE_HOME_AI_REF)
-    const rawLegacy = localStorage.getItem(STORAGE_HOME_ROUTE_LEGACY)
-    const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
-    if (!migrated) return null
-    const parsed = AiModelRefSchema.safeParse(migrated)
+    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
     return parsed.success ? parsed.data : null
   } catch (err) {
     console.warn('[Home] lokal gespeicherte Modell-Auswahl nicht parsbar — Auswahl zurückgesetzt:', err)
@@ -169,6 +168,8 @@ async function startSimulation() {
 }
 
 onMounted(() => {
+  // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
+  localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
   loadStatus()
 })
 

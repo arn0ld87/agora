@@ -20,7 +20,6 @@ import ReportFinalView from './step4/ReportFinalView.vue'
 import { useReportExports } from '../composables/useReportExports'
 import type { AiModelRef } from '../contracts/aiModelRef'
 import { AiModelRefSchema } from '../contracts/aiModelRef'
-import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor } from '../utils/sourceAnchor'
 import {
@@ -100,18 +99,18 @@ function recordSchemaError(where: string, error: unknown): void {
 }
 
 const resolvedSimulationId = ref(props.simulationId || null)
+// Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.report.route` wird NICHT mehr
+// gelesen; er wird beim Mount und beim Speichern defensiv aus localStorage
+// entfernt. Persistenz läuft nur noch über den neuen Key agora.report.aiModelRef.
 const STORAGE_REPORT_AI_REF = 'agora.report.aiModelRef'
 const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 
-const adapter = useAiModelRefAdapter()
-
 function resolveInitialReportRoute(): AiModelRef | null {
+  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
+  const raw = localStorage.getItem(STORAGE_REPORT_AI_REF)
+  if (!raw) return null
   try {
-    const rawAiRef = localStorage.getItem(STORAGE_REPORT_AI_REF)
-    const rawLegacy = localStorage.getItem(STORAGE_REPORT_ROUTE_LEGACY)
-    const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
-    if (!migrated) return null
-    const parsed = AiModelRefSchema.safeParse(migrated)
+    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
     return parsed.success ? parsed.data : null
   } catch {
     return null
@@ -360,6 +359,8 @@ function goConversation() {
 }
 
 onMounted(async () => {
+  // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
+  localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
   await pollStatus()
   if (!isComplete.value) {
     if (props.reportId) { phase.value = 1; startPolling() }

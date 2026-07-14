@@ -4,7 +4,7 @@
  *
  * Slice 5.4: Pilot-Abschluss der AiModelPicker-Migration.
  *  - AiModelPicker-Update wird an useLlmRoutingDefaultsStore.setGlobalDefault
- *    durchgereicht (Adapter Uebersetzung AiModelRef -> StageLLMRoute).
+ *    durchgereicht (Adapter Uebersetzung AiModelRef -> LlmRoute).
  *  - Initialer Wert kommt aus defaultsStore.globalDefault (via Adapter).
  *  - i18n-Key 'settings.v4.general.workspaceDefaultModel' ersetzt das
  *    generische aiModelPicker.label und macht die Funktion klar.
@@ -42,7 +42,7 @@ const BREADCRUMBS = [
 const defaultsStore = useLlmRoutingDefaultsStore()
 const adapter = useAiModelRefAdapter()
 
-// Initialer Wert aus dem Store (via Adapter: StageLLMRoute -> AiModelRef).
+// Initialer Wert aus dem Store (via Adapter: LlmRoute -> AiModelRef).
 const selectedModel = ref<AiModelRef | null>(
   defaultsStore.globalDefault ? adapter.toAiModelRef(defaultsStore.globalDefault) : null,
 )
@@ -151,8 +151,8 @@ onMounted(async () => {
 
 async function setWorkspaceDefault(aiRef: AiModelRef | null): Promise<void> {
   if (!aiRef) return
-  const stageLlmRoute = adapter.toStageLlmRoute(aiRef)
-  await defaultsStore.setGlobalDefault(stageLlmRoute)
+  const llmRoute = adapter.toLlmRoute(aiRef)
+  await defaultsStore.setGlobalDefault(llmRoute)
 }
 </script>
 
