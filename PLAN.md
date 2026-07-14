@@ -26,7 +26,7 @@ irgendwann einmal technisch plausibel klang.
 | P0 | fünf rote E2E-Smokes reparieren | [#739](https://github.com/arn0ld87/agora/issues/739) | 6/6 Smokes stabil grün |
 | P0 | PR-Trigger und Required Check reaktivieren | Teil von #739 | Defekte werden vor dem Merge blockiert |
 | P1 | Slice 7.6d abschließen | [#740](https://github.com/arn0ld87/agora/issues/740) | letzter Legacy-`ModelPicker` entfernt |
-| P1 | Security-Hardstop `nltk` | #672 | Entscheidung/Fix bis 2026-07-30 |
+| P1 | Security-Hardstop nltk | [#672](https://github.com/arn0ld87/agora/issues/672) | Entscheidung/Fix bis 2026-07-30 |
 | P1 | Trivy-OS-Layer-Hardstop | Risk Register | Base-Image-Fix bis 2026-08-30 |
 | P2 | Persona-Count-E2E-Matrix | neuer atomarer Slice | 1/5/10/30/50/100 nachgewiesen |
 | P2 | Golden-Gate Responsive/Visual QA | einzelne Regression-Slices | keine bekannten Zielbild-Abweichungen |
