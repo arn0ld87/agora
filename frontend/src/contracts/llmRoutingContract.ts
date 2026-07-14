@@ -1,37 +1,25 @@
 /**
  * LLM Routing Contracts — Zod-Spiegel.
- * Spiegelt backend/app/contracts/llm_routing_contract.py.
+ *
+ * Spiegelt `backend/app/contracts/llm_routing_contract.py` für die Felder,
+ * die das Frontend direkt liest/schreibt. Slice 7.6c: Der frühere Stage-Route-
+ * Type und sein Schema sind aus dem Frontend entfernt; die
+ * Body-Struktur lebt jetzt unter `frontend/src/contracts/llmRoute.ts` als
+ * `LlmRoute`/`LlmRouteSchema`. Components/Views konvertieren AiModelRef via
+ * `useAiModelRefAdapter.toLlmRoute` an der Backend-Boundary.
  */
 import { z } from "zod";
+import { LlmRouteSchema, StageIdSchema, ReasoningEffortSchema } from "./llmRoute";
 
-export const StageIdSchema = z.enum([
-  "document_ingest",
-  "ontology_generation",
-  "graph_build",
-  "persona_generation",
-  "simulation_rounds",
-  "report_generation",
-  "evaluation",
-]);
-export type StageId = z.infer<typeof StageIdSchema>;
-
-export const ReasoningEffortSchema = z.enum(["none", "minimal", "low", "medium", "high"]);
-export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
-
-export const StageLLMRouteSchema = z.object({
-  stage: StageIdSchema.optional().nullable(),
-  provider_id: z.string().optional().nullable(),
-  model: z.string().optional().nullable(),
-  temperature: z.number().optional().nullable(),
-  max_tokens: z.number().int().optional().nullable(),
-  reasoning_effort: ReasoningEffortSchema.default("none"),
-  provider_options: z.record(z.string(), z.any()).default({}),
-}).strict();
-export type StageLLMRoute = z.infer<typeof StageLLMRouteSchema>;
+// Re-Export der Basis-Enums (Definition in ./llmRoute, um Import-Zyklen zu
+// vermeiden), damit bestehende Importeure `StageId`/`ReasoningEffort` weiterhin
+// aus diesem Modul beziehen können.
+export { StageIdSchema, ReasoningEffortSchema } from "./llmRoute";
+export type { StageId, ReasoningEffort } from "./llmRoute";
 
 export const RuntimeLlmRoutingSchema = z.object({
-  global_default: StageLLMRouteSchema,
-  stage_overrides: z.partialRecord(StageIdSchema, StageLLMRouteSchema).default({}),
+  global_default: LlmRouteSchema,
+  stage_overrides: z.partialRecord(StageIdSchema, LlmRouteSchema).default({}),
   routing_version: z.number().int().min(1).default(1),
 }).strict();
 export type RuntimeLlmRouting = z.infer<typeof RuntimeLlmRoutingSchema>;

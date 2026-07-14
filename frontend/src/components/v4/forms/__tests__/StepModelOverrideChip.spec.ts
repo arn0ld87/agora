@@ -4,8 +4,8 @@
  * Die Komponente zeigt die effektive Modell-Route fuer eine Stage und
  * ermoeglicht per Popover den Wechsel. Migration auf AiModelPicker:
  *  - ModelPicker (alt) → AiModelPicker (SSoT aus Slice 5.1)
- *  - StageLLMRoute-Update → AiModelRef-Update, konvertiert via
- *    useAiModelRefAdapter.toStageLlmRoute fuer setStageOverride.
+ *  - LlmRoute-Update → AiModelRef-Update, konvertiert via
+ *    useAiModelRefAdapter.toLlmRoute fuer setStageOverride.
  *
  * Coverage:
  *  1. mountet ohne Crash
@@ -17,7 +17,7 @@
  *  7. locked=true: Lock-Icon sichtbar
  *  8. hasOverride: Override-Badge sichtbar
  *  9. no Override: kein Badge
- * 10. AiModelPicker-Update mit AiModelRef → setStageOverride mit StageLLMRoute (via Adapter)
+ * 10. AiModelPicker-Update mit AiModelRef → setStageOverride mit LlmRoute (via Adapter)
  * 11. AiModelPicker-Update mit null → clearStageOverride
  * 12. "Override entfernen" Button ruft clearStageOverride
  * 13. "Schliessen" Button schliesst Popover
@@ -74,7 +74,7 @@ const llmRoutingDefaultsMock = {
 }
 
 const adapterMock = {
-  toStageLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
+  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
     stage: null,
     provider_id: 'ollama',
     model: aiRef.model_id,
@@ -247,7 +247,7 @@ describe('StepModelOverrideChip (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(w.find('.step-model-chip__badge').exists()).toBe(false)
   })
 
-  it('AiModelPicker-Update mit AiModelRef → setStageOverride mit StageLLMRoute (via Adapter)', async () => {
+  it('AiModelPicker-Update mit AiModelRef → setStageOverride mit LlmRoute (via Adapter)', async () => {
     llmRoutingDefaultsMock.effectiveRouteForStage.mockReturnValue({
       stage: null, provider_id: 'ollama', model: 'qwen3', temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
     })
@@ -256,7 +256,7 @@ describe('StepModelOverrideChip (Slice 5.4, AiModelPicker-Migration)', () => {
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
     await picker.trigger('click') // Stub emittiert hardcoded AiModelRef
-    expect(adapterMock.toStageLlmRoute).toHaveBeenCalledWith({
+    expect(adapterMock.toLlmRoute).toHaveBeenCalledWith({
       provider_connection_id: 'conn-ollama-1',
       model_id: 'qwen3',
       source: 'explicit',

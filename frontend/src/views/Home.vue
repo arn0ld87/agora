@@ -14,7 +14,6 @@ import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
 import { getAvailableModels } from '../api/simulation'
 import { STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
 import { setPendingUpload } from '../store/pendingUpload'
-import { StageLLMRouteSchema } from '../contracts/llmRoutingContract'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -38,33 +37,19 @@ const loadingModels = ref(true)
 const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
 
 // ---- LLM-Route (Slice A3: projektweiter ModelPicker, Slice A1/A2-Pattern). ----
-//   Persistenz: agora.home.route (JSON-serialized, Zod-validiert).
-//   Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-Pipeline.
-const STORAGE_HOME_ROUTE = 'agora.home.route'
+//   Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.home.route` wird NICHT
+//   mehr gelesen oder geschrieben; er wird beim Mount defensiv entfernt. Die
+//   ModelPicker-Auswahl gilt nur noch für die aktuelle Session und spiegelt
+//   sich beim Start auf STORAGE_MODEL. (Persistenz via AiModelRef folgt in
+//   7.6d mit der ModelPicker→AiModelPicker-Migration.)
+const STORAGE_HOME_ROUTE_LEGACY = 'agora.home.route'
 
-function loadStoredRoute() {
-  try {
-    const raw = localStorage.getItem(STORAGE_HOME_ROUTE)
-    if (!raw) return null
-    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) return null
-    if (!parsed.data.provider_id || !parsed.data.model) return null
-    return parsed.data
-  } catch (err) {
-    console.warn('[Home] agora.home.route lokal nicht parsbar — Auswahl zurückgesetzt:', err)
-    return null
-  }
-}
-
-const selectedRoute = ref(loadStoredRoute())
+const selectedRoute = ref(null)
 
 function onPickRoute(route) {
   selectedRoute.value = route
-  if (route?.provider_id && route?.model) {
-    localStorage.setItem(STORAGE_HOME_ROUTE, JSON.stringify(route))
-  } else {
-    localStorage.removeItem(STORAGE_HOME_ROUTE)
-  }
+  // Storage-Cut: kein Persistieren mehr unter dem Legacy-Key; defensiv säubern.
+  localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
 }
 
 async function loadStatus() {
@@ -159,6 +144,8 @@ async function startSimulation() {
 }
 
 onMounted(() => {
+  // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
+  localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
   loadStatus()
 })
 

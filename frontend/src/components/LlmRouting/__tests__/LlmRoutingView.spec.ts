@@ -5,8 +5,8 @@
  * (alt) und macht die persistierten Routen via updateRunLlmRouting /
  * patchStageLlmRouting sichtbar. Migration-Fokus:
  *  - ModelPicker (alt) -> AiModelPicker (SSoT) an 2 Stellen
- *  - StageLLMRoute bleibt der v3-Backend-Vertrag; AiModelPicker konvertiert
- *    via useAiModelRefAdapter.toStageLlmRoute fuer Patches.
+ *  - LlmRoute bleibt der v3-Backend-Vertrag; AiModelPicker konvertiert
+ *    via useAiModelRefAdapter.toLlmRoute fuer Patches.
  *  - Reasoning-Effort-Select bleibt unveraendert.
  *
  * Coverage:
@@ -14,7 +14,7 @@
  *  2. onMount: load() ruft getRunLlmRouting + loadProviders
  *  3. AiModelPicker in Global-Default-Section
  *  4. AiModelPicker in Stage-Overrides-Section (pro Stage)
- *  5. onGlobalDefaultPicked: AiModelRef -> adapter.toStageLlmRoute ->
+ *  5. onGlobalDefaultPicked: AiModelRef -> adapter.toLlmRoute ->
  *     routing.global_default.provider_id + model
  *  6. onGlobalDefaultPicked mit null: keine Aenderung
  *  7. saveGlobal: ruft updateRunLlmRouting mit dem aktualisierten routing
@@ -62,7 +62,7 @@ const {
   loadProvidersMock: vi.fn(),
   providersArr: [{ id: 'ollama' }],
   adapterMock: {
-    toStageLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
+    toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
       stage: null,
       provider_id: 'openai',
       model: aiRef.model_id,
@@ -162,7 +162,7 @@ async function mountLlmRouting() {
     stage_overrides: { [_stageId]: route },
     routing_version: 2,
   }))
-  adapterMock.toStageLlmRoute.mockClear()
+  adapterMock.toLlmRoute.mockClear()
   adapterMock.toAiModelRef.mockClear()
 
   const i18n = makeI18n()
@@ -209,7 +209,7 @@ describe('LlmRoutingView v3 (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(pickers.length).toBe(8)
   })
 
-  it('onGlobalDefaultPicked: AiModelRef -> adapter.toStageLlmRoute -> routing.global_default', async () => {
+  it('onGlobalDefaultPicked: AiModelRef -> adapter.toLlmRoute -> routing.global_default', async () => {
     const w = await mountLlmRouting()
     const globalPicker = w.findAllComponents(aiPickerStub)[0]
     expect(globalPicker.exists()).toBe(true)
@@ -218,7 +218,7 @@ describe('LlmRoutingView v3 (Slice 5.4, AiModelPicker-Migration)', () => {
       model_id: 'gpt-4o-mini',
       source: 'explicit',
     })
-    expect(adapterMock.toStageLlmRoute).toHaveBeenCalledWith({
+    expect(adapterMock.toLlmRoute).toHaveBeenCalledWith({
       provider_connection_id: 'conn-openai-1',
       model_id: 'gpt-4o-mini',
       source: 'explicit',

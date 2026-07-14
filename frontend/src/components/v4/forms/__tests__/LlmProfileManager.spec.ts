@@ -147,7 +147,7 @@ describe('LlmProfileManager', () => {
     // Felder befüllen
     await w.find('#pm-name').setValue('Mein Testprofil')
     await w.find('#pm-base-url').setValue('http://localhost:11434/v1')
-    // ModelPicker-Stub emittiert StageLLMRoute; LlmProfileManager mappt
+    // ModelPicker-Stub emittiert LlmRoute; LlmProfileManager mappt
     // provider_id='ollama' → provider='ollama' und überschreibt base_url nur,
     // wenn das aktuelle Feld leer oder Teil der Default-Tabelle ist.
     await w.find('.model-picker-stub').setValue('llama3:8b')

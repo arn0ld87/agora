@@ -5,6 +5,28 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Breaking Changes (Slice 7.6c — 2026-07-14)
+
+- **Frontend**: LocalStorage-Key `agora.<scope>.route` (Scope = `hero`, `home`,
+  `report`) wird nicht mehr gelesen. User mit persistierten Legacy-Werten
+  erhalten ab diesem Release den Standard des Eltern-Kontextes (Workspace-
+  bzw. Stage-Default). Beim ersten Mount wird der alte Key defensiv aus
+  `localStorage` entfernt. Der neue AiModelRef-Persistenz-Pfad
+  (`agora.<scope>.aiModelRef`) bleibt für den v4-`AiModelPicker` erhalten;
+  die Migration der Legacy-Picker (`ModelPicker`/`ReportModelControls` in
+  Home/Step4Report) auf AiModelRef-Persistenz folgt in Slice 7.6d.
+
+### Internal (Slice 7.6c — 2026-07-14)
+
+- **Frontend**: Type `StageLLMRoute` und Zod-Spiegel `StageLLMRouteSchema`
+  wurden aus dem Frontend entfernt. Nachfolgetyp ist `LlmRoute`
+  (`frontend/src/contracts/llmRoute.ts`), das jetzt auch `StageIdSchema` und
+  `ReasoningEffortSchema` definiert (Import-Zyklus mit `llmRoutingContract.ts`
+  aufgelöst; beide Enums werden von dort re-exportiert). Das Backend bleibt
+  Pydantic-SSoT.
+- **Frontend**: `useAiModelRefAdapter.toStageLlmRoute` → `toLlmRoute`.
+- **Frontend**: Storage-Migrations-Helper (`migrateStoredRoute*`) entfernt.
+
 ### Added (onboarding-model-picker-slice-5-6-final — 2026-07-13)
 
 - **Echte Playwright-E2E für `AiModelPicker`** (Onboarding Slice 5.6):

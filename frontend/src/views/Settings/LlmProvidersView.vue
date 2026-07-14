@@ -30,7 +30,8 @@ import Input from '@/components/v4/forms/Input.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
-import type { ProviderDescriptor, StageLLMRoute } from '@/contracts/llmRoutingContract'
+import type { ProviderDescriptor } from '@/contracts/llmRoutingContract'
+import type { LlmRoute } from '@/contracts/llmRoute'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 
@@ -166,16 +167,16 @@ async function disconnect(p: ProviderDescriptor): Promise<void> {
   delete drafts[p.id]
 }
 
-const defaultRoute = computed<StageLLMRoute | null>(() => {
+const defaultRoute = computed<LlmRoute | null>(() => {
   const r = defaultsStore.globalDefault
   if (!r?.provider_id || !r?.model) return null
   return r
 })
 
 // Slice 5.4: AiModelRef-Aequivalent der aktuellen Default-Route.
-// Statt StageLLMRoute → AiModelRef-Konvertierung in der View, nutzen wir
+// Statt LlmRoute → AiModelRef-Konvertierung in der View, nutzen wir
 // den Adapter bidirektional: setDefault empfängt AiModelRef, konvertiert
-// nach StageLLMRoute für den v3-Store. Picker zeigt die AiModelRef-Form.
+// nach LlmRoute für den v3-Store. Picker zeigt die AiModelRef-Form.
 const defaultAiRef = computed<AiModelRef | null>(() => {
   if (!defaultRoute.value) return null
   return adapter.toAiModelRef(defaultRoute.value)
@@ -183,8 +184,8 @@ const defaultAiRef = computed<AiModelRef | null>(() => {
 
 async function setDefault(aiRef: AiModelRef | null): Promise<void> {
   if (!aiRef) return
-  const stageLlmRoute = adapter.toStageLlmRoute(aiRef)
-  await defaultsStore.setGlobalDefault(stageLlmRoute)
+  const llmRoute = adapter.toLlmRoute(aiRef)
+  await defaultsStore.setGlobalDefault(llmRoute)
 }
 
 onMounted(async () => {

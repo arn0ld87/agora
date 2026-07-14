@@ -3,7 +3,7 @@
  * LlmProfileManager — CRUD-Panel für LLM-Profile (v4-Vorläufer).
  *
  * @deprecated Slice 5.5 — nutzt den deprecateten v4 `ModelPicker.vue`
- * (StageLLMRoute-basiert). Bleibt als Read-Adapter in SettingsGeneralView bis
+ * (LlmRoute-basiert). Bleibt als Read-Adapter in SettingsGeneralView bis
  * Profile-Verwaltung auf den connection-basierten `AiModelPicker` umgestellt
  * ist. Keine neuen Importeure.
  */
@@ -13,7 +13,7 @@ import Card from './Card.vue'
 import ModelPicker from './ModelPicker.vue'
 import { useLlmProfilesStore } from '@/store/aiModels'
 import type { LlmProfile, LlmProvider } from '@/contracts/llmProfileContract'
-import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
+import type { LlmRoute } from '@/contracts/llmRoute'
 
 const { t } = useI18n()
 const store = useLlmProfilesStore()
@@ -124,8 +124,8 @@ function selectPreset(preset: Preset): void {
 // ModelPicker-Integration
 // ---------------------------------------------------------------------------
 // Provider-Mapping rückwärts: Wir bauen aus den gespeicherten Formularfeldern
-// einen Pseudo-StageLLMRoute, damit der Picker den Eintrag highlighten kann.
-const pickerValue = computed<StageLLMRoute | null>(() => {
+// eine Pseudo-LlmRoute, damit der Picker den Eintrag highlighten kann.
+const pickerValue = computed<LlmRoute | null>(() => {
   if (!formModel.value) return null
   // Best-Effort: profile.provider → erste passende Runtime-ID (Cloud
   // gegenüber Local bevorzugen, wenn base_url darauf hinweist).
@@ -144,7 +144,7 @@ const pickerValue = computed<StageLLMRoute | null>(() => {
   }
 })
 
-function onPickerChange(route: StageLLMRoute | null): void {
+function onPickerChange(route: LlmRoute | null): void {
   if (route === null) {
     formModel.value = ''
     return

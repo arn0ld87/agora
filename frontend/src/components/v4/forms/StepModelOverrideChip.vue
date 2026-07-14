@@ -4,7 +4,7 @@
  *
  * Slice 5.4: Migration auf AiModelPicker (SSoT). Der AiModelPicker emittiert
  * `update:modelValue` mit einer AiModelRef, die via useAiModelRefAdapter
- * in eine StageLLMRoute konvertiert wird, damit der bestehende v3-Store
+ * in eine LlmRoute konvertiert wird, damit der bestehende v3-Store
  * (useLlmRoutingDefaultsStore) ohne Touch weiter funktioniert.
  *
  * Zeigt das aktuell effektive Modell (Workspace-Default oder Stage-Override)
@@ -49,9 +49,9 @@ const displayLabel = computed(() => {
   return `${route.provider_id ?? '?'} · ${route.model}`
 })
 
-// Slice 5.4: AiModelRef-Aequivalent der effektiven StageLLMRoute.
+// Slice 5.4: AiModelRef-Aequivalent der effektiven LlmRoute.
 // Wir konvertieren via Adapter, damit der Picker den korrekten Wert
-// anzeigt und der Picker bei Auswahl zurueck in eine StageLLMRoute
+// anzeigt und der Picker bei Auswahl zurueck in eine LlmRoute
 // konvertiert werden kann (bidirektionaler Glue).
 const pickerModelValue = computed<AiModelRef | null>(() => {
   if (!effectiveRoute.value?.model) return null
@@ -84,8 +84,8 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
   if (aiRef === null) {
     await defaultsStore.clearStageOverride(props.stageId)
   } else {
-    const stageLlmRoute = adapter.toStageLlmRoute(aiRef)
-    await defaultsStore.setStageOverride(props.stageId, stageLlmRoute)
+    const llmRoute = adapter.toLlmRoute(aiRef)
+    await defaultsStore.setStageOverride(props.stageId, llmRoute)
   }
   open.value = false
 }

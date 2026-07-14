@@ -14,17 +14,17 @@
 import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
 import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
-import type { StageLLMRoute } from '@/contracts/llmRoutingContract'
+import type { LlmRoute } from '@/contracts/llmRoute'
 
 const { t } = useI18n()
 
 defineProps<{
-  modelValue: StageLLMRoute | null
+  modelValue: LlmRoute | null
   isRegenerating: boolean
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: StageLLMRoute | null]
+  'update:modelValue': [value: LlmRoute | null]
   regenerate: []
 }>()
 </script>
