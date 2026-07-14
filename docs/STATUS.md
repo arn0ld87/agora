@@ -201,3 +201,7 @@ werden.
   (PR #734).
 - **2026-07-14:** Golden-Gate-Zielspezifikation ergänzt und Slice-7-Stand in
   `PLAN.md` korrigiert (PRs #735, #736).
+- **2026-07-14:** Agentenregeln, Roadmap und Tooling synchronisiert (PR #741).
+- **2026-07-14:** Slice 7.6d abgeschlossen — `LlmProfileManager.vue` auf den
+  connection-basierten `AiModelPicker` migriert, letzter produktiver legacy
+  `ModelPicker.vue` entfernt (PR #742, Issue #740).
