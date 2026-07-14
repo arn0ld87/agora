@@ -35,6 +35,30 @@ vi.mock('../../i18n/index', () => ({
   setLocale: vi.fn(),
 }))
 
+// Die Produktion-Routen referenzieren ihre Views als lazy `() => import(...)`.
+// vue-router löst diese Async-Components bei jedem `router.push()` auf (nicht
+// erst beim Render). Isoliert kostet das ~0,5 s pro erstem Routen-Besuch
+// (View-Transform); im parallelen Full-Suite-Lauf ballt sich die Transform-
+// Last auf >10 s pro Navigation → der beforeAll-Hook überschreitet das
+// Default-hookTimeout (10 s) und der ganze File flakt. Dieser Spec testet
+// ausschließlich Routen-Resolution/Redirects/Guards/meta-Flags — es wird keine
+// Komponente gerendert. Also stubben wir die besuchten Views auf einen Noop,
+// damit `push()` deterministisch ~1 ms bleibt. Assertions bleiben unberührt.
+const VIEW_STUB = vi.hoisted(() => ({
+  default: { name: 'ViewStub', render: () => null },
+}))
+vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/RunsAppShellView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
+vi.mock('../../views/Home.vue', () => VIEW_STUB)
+vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsIntegrationsView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsApiKeysView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsAuditLogsView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/LlmRoutingView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/LlmProvidersView.vue', () => VIEW_STUB)
+
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
 

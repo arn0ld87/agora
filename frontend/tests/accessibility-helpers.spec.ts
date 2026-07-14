@@ -1,6 +1,26 @@
 import type { Page } from '@playwright/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// @axe-core/playwright ist ein E2E-only-Dep (nur in `runAxe` + Type-Positionen
+// des Helpers genutzt, nicht in den hier getesteten Pure-Functions). Unter
+// paralleler Full-Suite-Last rast Vites Lazy-Resolver beim Auflösen dieses
+// CJS-Pakets gelegentlich und der File flakt mit "Failed to resolve import
+// @axe-core/playwright". Stub auf einen Noop-Default — die getesteten
+// Funktionen (diffFocusStyle/parseMaxDuration/checkFocusVisible/
+// checkReducedMotion) rufen `runAxe` nicht auf, `@playwright/test`'s `expect`
+// bleibt echt (in checkFocusVisible genutzt).
+vi.mock('@axe-core/playwright', () => ({
+  default: class AxeBuilder {
+    constructor() {}
+    options() {
+      return this;
+    }
+    analyze() {
+      return Promise.resolve({});
+    }
+  },
+}));
+
 import {
   checkFocusVisible,
   checkReducedMotion,
