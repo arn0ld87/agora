@@ -37,6 +37,14 @@ class StageModelRouter:
     def __init__(self, run_id: str):
         self.run_id = run_id
         self.config_service = RuntimeRunConfig(run_id)
+        # Kanonischer AiRoute, den ``resolve()`` beim frischen Auflösen
+        # berechnet hat — bewahrt die echten Auswahl-Inputs (project_route,
+        # workspace_route, required_capabilities, resolved_at) für
+        # ``lock_stage()``. Ohne diesen Cache müsste ``lock_stage()`` die
+        # kanonische Route neu auflösen und würde dabei die Original-Inputs
+        # verlieren (P0: Audit-Snapshot konnte von der ausgeführten Route
+        # abweichen). Lebensdauer: genau ein resolve→lock-Fenster pro Stage.
+        self._pending_canonical: dict[StageId, AiRoute] = {}
 
     def resolve(
         self,
@@ -74,6 +82,11 @@ class StageModelRouter:
             project_route=project_route,
             workspace_route=workspace_route,
         )
+        # Bewahre den kanonischen AiRoute für das unmittelbar folgende
+        # ``lock_stage()`` — die Legacy-``ResolvedRoute`` trägt keine
+        # ``source``/``fallback_reason``/``validated_capabilities``, ein
+        # späterer Re-Resolve mit leeren Inputs würde diese verlieren.
+        self._pending_canonical[stage_id] = canonical
         return self._resolved_route_from_ai_route(stage_id, canonical, cfg.routing_version)
 
     def _resolve_canonical(
@@ -186,22 +199,38 @@ class StageModelRouter:
     def lock_stage(self, stage_id: StageId, resolved_route: ResolvedRoute) -> ResolvedRoute:
         """Lock the route for a stage by persisting the snapshot.
 
-        The canonical snapshot is rebuilt through the same resolver so its
-        ``source`` reflects the real winning level (stage/run/workspace/
-        provider-fallback) rather than a heuristic, and it carries the
-        validated capabilities and fallback reason recorded in the audit.
+        The canonical snapshot for the audit is the AiRoute that ``resolve()``
+        actually computed for this stage — never a re-resolved copy. A
+        re-resolve would lose the original selection inputs
+        (``required_capabilities``, ``project_route``, ``workspace_route``,
+        the real ``resolved_at``) and could record a route whose
+        ``source``/``model_id`` differ from what is executed and persisted
+        in the stage snapshot (P0: Audit-Log / Snapshot-Wiederaufnahme
+        divergence). If no fresh canonical is pending (snapshot-hit path,
+        resume, or external caller without prior ``resolve()``), fall back
+        to the already-persisted canonical snapshot; only as a last resort
+        re-resolve with the same empty inputs the caller would have used.
         """
         winner = self.config_service.save_stage_snapshot(
             stage_id, resolved_route.model_dump(mode="json")
         )
         stored = ResolvedRoute.model_validate(winner)
-        config = self.config_service.load_config()
-        canonical_route = self._resolve_canonical(
-            stage_id,
-            config,
-            required_capabilities=(),
-            resolved_at=self._parse_started_at(stored.started_at),
-        )
+        canonical_route = self._pending_canonical.pop(stage_id, None)
+        if canonical_route is None:
+            # Kein frischer Resolve vorausgegangen: die bereits persistierte
+            # kanonische Route wiederverwenden (stimmt garantiert mit der
+            # ausgeführten überein), statt mit leeren Inputs neu aufzulösen.
+            existing = self.config_service.load_ai_route_snapshot(stage_id)
+            if existing is not None:
+                canonical_route = existing
+            else:
+                config = self.config_service.load_config()
+                canonical_route = self._resolve_canonical(
+                    stage_id,
+                    config,
+                    required_capabilities=(),
+                    resolved_at=self._parse_started_at(stored.started_at),
+                )
         canonical = self.config_service.save_ai_route_snapshot(stage_id, canonical_route)
         AiRouteAudit(self.run_id).record_routing_resolved(stage_id, canonical)
         return self._resolved_from_snapshot(stage_id, winner)

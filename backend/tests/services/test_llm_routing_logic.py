@@ -94,6 +94,62 @@ def test_stage_model_router_snapshot_isolation(temp_run_dir):
     assert resolved_other.routing_version == 2
 
 
+def test_lock_stage_audit_reflects_resolved_project_route_not_lossy_reresolve(temp_run_dir):
+    """P0 (lock_stage-Re-Resolve-Verlust): ``lock_stage()`` darf den
+    kanonischen ``AiRoute`` fürs Audit NICHT neu auflösen. Ein Re-Resolve mit
+    leeren Inputs (``required_capabilities=()``, ``project_route=None``,
+    ``workspace_route=None``) verliert die beim ursprünglichen Resolve
+    verwendete Auswahlquelle.
+
+    Setup: Run-Level-Default ohne Modell → Run-Kandidat ist ``None`` → der
+    kanonische Resolver wählt die ``project_route`` (source="project_route").
+    Vor dem Fix re-resolvierte ``lock_stage()`` mit ``project_route=None`` und
+    fiel bis auf den Provider-Fallback zurück → Audit-Snapshot beschrieb ein
+    *anderes* Modell/eine *andere* Quelle als die tatsächlich ausgeführte und
+    im Stage-Snapshot persistierte Route. Audit-Log, Snapshot und
+    Wiederaufnahme konnten widersprüchlich werden.
+
+    Nach dem Fix nutzt ``lock_stage()`` den kanonischen ``AiRoute``, den
+    ``resolve()`` berechnet und zwischengespeichert hat — Audit und ausgeführte
+    Route stimmen überein.
+    """
+    service = RuntimeRunConfig(temp_run_dir)
+    # Run-Level-Default bewusst OHNE Modell → Run-Kandidat ist None, damit die
+    # project_route gewinnt (Priorität Stage > Run > Projekt > … > Fallback).
+    service.save_config(RuntimeLlmRouting(
+        global_default=StageLLMRoute(provider_id="conn-run", model=""),
+        routing_version=1,
+    ))
+    router = StageModelRouter(temp_run_dir)
+
+    project_route = AiRoute(
+        provider_connection_id="conn-proj",
+        model_id="model-proj",
+        source="project",
+        routing_version=1,
+    )
+    resolved = router.resolve("graph_build", project_route=project_route)
+    # Die ausgeführte Route IST die project_route.
+    assert resolved.provider_id == "conn-proj"
+    assert resolved.model == "model-proj"
+
+    # Provider-Fallback deterministisch machen, damit der alte (verlustbehaftete)
+    # Pfad ein bekanntes Ergebnis liefert statt env-abhängig zu sein oder zu
+    # raisen — der Test soll die Divergenz assertionsbasiert nachweisen.
+    with patch("app.config.Config.LLM_MODEL_NAME", "env-fallback-model"), \
+         patch("app.config.Config.LLM_BASE_URL", ""):
+        router.lock_stage("graph_build", resolved)
+
+    canonical = service.load_ai_route_snapshot("graph_build")
+    assert canonical is not None
+    # Audit-Snapshot beschreibt DIESELBE Route wie ausgeführt — kein Verlust
+    # durch Re-Resolve mit project_route=None (sonst source="provider_fallback"
+    # und model_id="env-fallback-model").
+    assert canonical.provider_connection_id == "conn-proj"
+    assert canonical.model_id == "model-proj"
+    assert canonical.source == "project"
+
+
 def test_resolve_from_canonical_snapshot_yields_iso8601_started_at(temp_run_dir):
     """Regression für PR-#700-Review-Finding #2: Wird nur ein kanonischer
     ``AiRoute``-Snapshot gespeichert (kein Legacy-Stage-Snapshot), muss
