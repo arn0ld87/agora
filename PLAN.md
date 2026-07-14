@@ -25,7 +25,6 @@ irgendwann einmal technisch plausibel klang.
 |---|---|---|---|
 | P0 | fünf rote E2E-Smokes reparieren | [#739](https://github.com/arn0ld87/agora/issues/739) | 6/6 Smokes stabil grün |
 | P0 | PR-Trigger und Required Check reaktivieren | Teil von #739 | Defekte werden vor dem Merge blockiert |
-| P1 | Slice 7.6d abschließen | [#740](https://github.com/arn0ld87/agora/issues/740) | letzter Legacy-`ModelPicker` entfernt |
 | P1 | Security-Hardstop nltk | [#672](https://github.com/arn0ld87/agora/issues/672) | Entscheidung/Fix bis 2026-07-30 |
 | P1 | Trivy-OS-Layer-Hardstop | Risk Register | Base-Image-Fix bis 2026-08-30 |
 | P2 | Persona-Count-E2E-Matrix | neuer atomarer Slice | 1/5/10/30/50/100 nachgewiesen |
@@ -61,24 +60,6 @@ Defekte werden als eigenständige Fix-Slices bearbeitet:
 
 Akzeptanz: keine Skips, keine abgeschwächten Assertions und keine pauschalen Retries
 als Ersatz für Ursachenbehebung.
-
-## P1: Slice 7.6d, Legacy-Picker entfernen
-
-Tracking: [Issue #740](https://github.com/arn0ld87/agora/issues/740)
-
-Reihenfolge:
-
-1. Tests für das erwartete Verhalten von `LlmProfileManager.vue` ergänzen bzw.
-   präzisieren.
-2. Consumer auf `AiModelPicker` und `AiModelRef` migrieren.
-3. Persistenz, Validierung, Fehlermeldungen und Profilsemantik verifizieren.
-4. alle direkten und indirekten Referenzen auf `ModelPicker.vue` entfernen.
-5. Legacy-Komponente, verwaiste Exporte, Styles und Tests löschen.
-6. Frontend-Gate und relevante E2E-Smokes ausführen.
-7. `STATUS.md` und Epic-Handover aktualisieren.
-
-Nicht Teil dieses Slices: Tokenmigration, neue Provider, neue Routing-Verträge oder
-eine weitere Komponentenbibliothek.
 
 ## P1: Security-Hardstops
 
