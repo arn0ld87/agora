@@ -30,7 +30,7 @@ irgendwann einmal technisch plausibel klang.
 | P1 | Trivy-OS-Layer-Hardstop | Risk Register | Base-Image-Fix bis 2026-08-30 |
 | P2 | Persona-Count-E2E-Matrix | neuer atomarer Slice | 1/5/10/30/50/100 nachgewiesen |
 | P2 | Golden-Gate Responsive/Visual QA | einzelne Regression-Slices | keine bekannten Zielbild-Abweichungen |
-| P2 | Phase-F-Restpunkt Provider-Detection | #671 | vereinheitlicht oder bewusst dokumentiert |
+| P2 | Phase-F-Restpunkt Provider-Detection | [#671](https://github.com/arn0ld87/agora/issues/671) | vereinheitlicht oder bewusst dokumentiert |
 | P3 | `--agora-*`-Tokenmigration | eigener Migrations-Slice | konsistente Tokens ohne Parallelbibliothek |
 | P3 | Embedding-Folgen | getrennte Slices | Batch, Project-Scope und Fact-Search vervollständigt |
 | P3 | Observability Slice 4 | bestehender Plan | SLOs und Alerts produktionsnah definiert |
