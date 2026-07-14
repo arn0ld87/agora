@@ -28,6 +28,26 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   fi
 fi
 
+# Slice 5.6: Fernet-Master-Key für den LLM-Provider-Secrets-Store
+# (llm_provider_secrets_store.py, env AGORA_SECRET_KEY). Wird beim Seeden
+# von Provider-Connections MIT api_key benötigt (frontend/tests/e2e/
+# global-setup.ts seed). Ohne diesen Key schlägt _secrets_store.upsert mit
+# RuntimeError fehl → API 503 store_unavailable beim e2e-globalSetup, jeder
+# Smoke-Job reißt. Wert muss ein gültiger Fernet-Key sein (urlsafe base64,
+# 32 Bytes).
+#
+# Pre-existing Gap (sichtbar geworden, seit e2e-smokes auch auf pull_request
+# läuft): das e2e-smokes-Workflow generiert AGORA_SECRET_KEY in keinem der 6
+# Jobs (nur AGORA_AUTH_TOKEN/SECRET_KEY/NEO4J_PASSWORD). Früher lief e2e nur
+# auf push:main, dort war das gleiche 503 also unsichtbar. Fallback hier
+# statt im Workflow: self-contained für alle 6 Jobs + lokale Dev-Runs.
+# E2E-seeded Provider-Connections werden nicht zwischen Runs persistiert,
+# ein pro-Run-ephemeraler Key ist semantisch korrekt.
+if [[ -z "${AGORA_SECRET_KEY:-}" ]]; then
+  AGORA_SECRET_KEY="$(python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
+  echo "[e2e-up] AGORA_SECRET_KEY not set in env — generated ephemeral Fernet key for this run" >&2
+fi
+
 # Kritische Werte aus dem Runner-Env in die .env appenden — docker compose
 # variable substitution liest .env mit Vorrang vor Process-Env, daher reicht
 # Export auf Runner-Ebene NICHT. Letzte Definition gewinnt; das überschreibt
@@ -36,14 +56,7 @@ fi
 {
   [[ -n "${AGORA_AUTH_TOKEN:-}" ]] && echo "AGORA_AUTH_TOKEN=${AGORA_AUTH_TOKEN}"
   [[ -n "${SECRET_KEY:-}" ]] && echo "SECRET_KEY=${SECRET_KEY}"
-  # Slice 5.6: Fernet-Master-Key für den LLM-Provider-Secrets-Store
-  # (llm_provider_secrets_store.py, env AGORA_SECRET_KEY). Wird beim Seeden
-  # von Provider-Connections MIT api_key benötigt (frontend/tests/e2e/
-  # global-setup.ts seed). Ohne diesen Key schlägt _secrets_store.upsert mit
-  # RuntimeError fehl → API 503 store_unavailable. Wert muss ein gültiger
-  # Fernet-Key sein (urlsafe base64, 32 Bytes); im Runner generieren via
-  #   python3 -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
-  [[ -n "${AGORA_SECRET_KEY:-}" ]] && echo "AGORA_SECRET_KEY=${AGORA_SECRET_KEY}"
+  echo "AGORA_SECRET_KEY=${AGORA_SECRET_KEY}"
   [[ -n "${NEO4J_PASSWORD:-}" ]] && echo "NEO4J_PASSWORD=${NEO4J_PASSWORD}"
   [[ -n "${AGORA_PROXY_PORT:-}" ]] && echo "AGORA_PROXY_PORT=${AGORA_PROXY_PORT}"
   # Ollama gibt es im CI-Stack nicht — Backend-Boot würde sonst an der
