@@ -181,6 +181,17 @@ FROM nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e
 # Alpine-Pakete auf Repo-Stand heben, solange das Base-Image hinterherhinkt:
 # CVE-2026-33630 (c-ares < 1.34.8-r0), CVE-2026-56407/-56408/-56131
 # (libexpat < 2.8.2-r0) — Trivy-Gate scannt HIGH/CRITICAL mit exit-code 1.
-RUN apk upgrade --no-cache
+#
+# Resilienz: GitHub-Runner-Netzwerk liefert zu dl-cdn.alpinelinux.org gelegentlich
+# persistente I/O-Errors (APKINDEX fetch exit 99 "stale/unavailable repositories"),
+# die jeden E2E-Smoke-Job reißen. Erst retry-basiert (3× mit Backoff), bei
+# anhaltendem Ausfall Fallback auf den sekundären dl-4-Mirror — ein CDN-Edge-Ausfall
+# darf den Build (und damit pull_request-getriggerte E2E-Smokes) nicht blockieren.
+RUN for i in 1 2 3; do \
+      apk upgrade --no-cache && break; \
+      echo "apk upgrade attempt $i failed, retrying in 5s…"; sleep 5; \
+    done || \
+    (sed -i 's#dl-cdn.alpinelinux.org#dl-4.alpinelinux.org#g' /etc/apk/repositories && \
+     apk upgrade --no-cache)
 COPY deploy/nginx/agora.conf /etc/nginx/conf.d/default.conf
 COPY --from=frontend-build /app/frontend/dist /usr/share/nginx/html
