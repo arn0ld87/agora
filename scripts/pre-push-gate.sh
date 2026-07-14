@@ -63,6 +63,22 @@ run_backend() {
 }
 
 # ---------------------------------------------------------------------------
+# Schema-Gates (Drift + STATUS-Sync) — eigenes Scope fuer den schnellen
+# Schema-Check ohne Backend-Test-Suite. Spiegel genau die beiden letzten
+# run_backend-Steps (dump_schemas --check + sync-status --check).
+# ---------------------------------------------------------------------------
+run_schemas() {
+  step "Schema-Drift (dump_schemas --check)"
+  (cd backend && uv run python -m app.contracts.dump_schemas --check) \
+    || fail "schema drift — run 'cd backend && uv run python -m app.contracts.dump_schemas' locally and commit"
+
+  step "Backend: sync-status --check"
+  bash scripts/sync-status.sh --check \
+    || fail "STATUS.md drift — run 'bash scripts/sync-status.sh' locally and commit"
+  ok "schema gates green"
+}
+
+# ---------------------------------------------------------------------------
 # Frontend-Gates
 # ---------------------------------------------------------------------------
 run_frontend() {
@@ -103,7 +119,7 @@ case "$SCOPE" in
   all)      run_backend; run_frontend ;;
   backend)  run_backend ;;
   frontend) run_frontend ;;
-  schemas)  run_schemas && ok "schema gates green" ;;
+  schemas)  run_schemas ;;
   *)        echo "usage: $0 [all|backend|frontend|schemas]" >&2; exit 2 ;;
 esac
 
