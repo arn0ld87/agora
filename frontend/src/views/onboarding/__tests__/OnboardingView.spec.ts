@@ -116,13 +116,14 @@ function makeI18n() {
   return createI18n({ legacy: false, locale: 'de', fallbackLocale: 'en', messages: { de, en } })
 }
 
-async function mountView() {
+async function mountView(attachTo?: Element) {
   const router = makeTestRouter()
   const pinia = createPinia()
   setActivePinia(pinia)
   await router.push('/onboarding')
   await router.isReady()
   const wrapper = mount(OnboardingView, {
+    attachTo,
     global: { plugins: [router, pinia, makeI18n()] },
   })
   await flushPromises()
@@ -291,5 +292,47 @@ describe('OnboardingView', () => {
     expect(finishBtn?.attributes('disabled')).toBeUndefined()
     // Keine Navigation weg von /onboarding.
     expect(router.currentRoute.value.name).toBe('Onboarding')
+  })
+
+  it('Test 9: Fortschritt und Schrittinhalt besitzen eindeutige Landmarken und Status-Semantik', async () => {
+    _getProfile.mockResolvedValue(null)
+    _getOnboardingStatus.mockResolvedValue(makeOnboardingStatus())
+
+    const { wrapper } = await mountView()
+    expect(wrapper.get('.onboarding-steps').attributes('aria-label')).toBe(
+      de.onboarding.wizard.progressLabel,
+    )
+    expect(wrapper.get('.onboarding-steps__item--current').attributes('aria-current')).toBe(
+      'step',
+    )
+    wrapper.get('section[aria-labelledby="onboarding-step-title"]')
+  })
+
+  it('Test 10: fokussiert nach einem Schrittwechsel die neue Überschrift', async () => {
+    _getProfile.mockResolvedValue(null)
+    _getOnboardingStatus.mockResolvedValue(makeOnboardingStatus())
+    _completeOnboardingStep.mockResolvedValue(
+      makeOnboardingState({
+        current_step: 'profile',
+        completed_steps: ['welcome'],
+        operating_mode: 'hybrid',
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.append(host)
+    const { wrapper } = await mountView(host)
+
+    await wrapper.findAll('.onboarding-mode-card')[1].trigger('click')
+    const nextBtn = wrapper.findAll('button').find((button) =>
+      button.text().includes(de.onboarding.wizard.nextBtn),
+    )
+    await nextBtn?.trigger('click')
+    await flushPromises()
+
+    const heading = wrapper.get('#onboarding-step-title')
+    expect(heading.text()).toBe(de.onboarding.profile.title)
+    expect(document.activeElement).toBe(heading.element)
+    wrapper.unmount()
+    host.remove()
   })
 })
