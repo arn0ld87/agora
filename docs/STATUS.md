@@ -75,7 +75,7 @@ Bereits auf `main`:
   `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728),
 - 7.7 Entfernung des verwaisten v3-Pickers und der Mock-Routing-Karten
   (PR #720),
-- verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
+- Verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
 - Golden-Gate-Workbench-Zielspezifikation unter
   [`docs/ui/golden-gate-workbench.md`](ui/golden-gate-workbench.md) (PR #735).
 
