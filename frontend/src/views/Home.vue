@@ -10,11 +10,12 @@ import Kicker from '@/components/v4/data/Kicker.vue'
 import Select from '../components/ui/Select.vue'
 import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AgoraBrand from '../components/brand/AgoraBrand.vue'
-import ModelPicker from '@/components/v4/forms/ModelPicker.vue'
+import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { getAvailableModels } from '../api/simulation'
 import { STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
 import { setPendingUpload } from '../store/pendingUpload'
-import { StageLLMRouteSchema } from '../contracts/llmRoutingContract'
+import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import { AiModelRefSchema } from '@/contracts/aiModelRef'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -37,33 +38,43 @@ const neo4jError = ref(null)
 const loadingModels = ref(true)
 const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
 
-// ---- LLM-Route (Slice A3: projektweiter ModelPicker, Slice A1/A2-Pattern). ----
-//   Persistenz: agora.home.route (JSON-serialized, Zod-validiert).
-//   Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-Pipeline.
-const STORAGE_HOME_ROUTE = 'agora.home.route'
+// ---- LLM-Auswahl (Slice 7.6b: AiModelPicker + useAiModelRefAdapter). ----
+//   Persistenz: agora.home.aiModelRef (AiModelRef-JSON, Zod-validiert).
+//   Legacy-Key agora.home.route wird via adapter.migrateStoredRoute gelesen
+//   und in eine AiModelRef konvertiert (verlustfreier Roundtrip).
+//   Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-Pipeline
+//   (Provider+Key resolved das Backend serverseitig via SecretResolver).
+const STORAGE_HOME_AI_REF = 'agora.home.aiModelRef'
+const STORAGE_HOME_ROUTE_LEGACY = 'agora.home.route'
 
-function loadStoredRoute() {
+const adapter = useAiModelRefAdapter()
+
+function loadStoredModel() {
   try {
-    const raw = localStorage.getItem(STORAGE_HOME_ROUTE)
-    if (!raw) return null
-    const parsed = StageLLMRouteSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) return null
-    if (!parsed.data.provider_id || !parsed.data.model) return null
-    return parsed.data
+    const rawAiRef = localStorage.getItem(STORAGE_HOME_AI_REF)
+    const rawLegacy = localStorage.getItem(STORAGE_HOME_ROUTE_LEGACY)
+    const migrated = adapter.migrateStoredRoute(rawAiRef, rawLegacy)
+    if (!migrated) return null
+    const parsed = AiModelRefSchema.safeParse(migrated)
+    return parsed.success ? parsed.data : null
   } catch (err) {
-    console.warn('[Home] agora.home.route lokal nicht parsbar — Auswahl zurückgesetzt:', err)
+    console.warn('[Home] lokal gespeicherte Modell-Auswahl nicht parsbar — Auswahl zurückgesetzt:', err)
     return null
   }
 }
 
-const selectedRoute = ref(loadStoredRoute())
+const selectedModel = ref(loadStoredModel())
 
-function onPickRoute(route) {
-  selectedRoute.value = route
-  if (route?.provider_id && route?.model) {
-    localStorage.setItem(STORAGE_HOME_ROUTE, JSON.stringify(route))
+function onPickModel(aiRef) {
+  selectedModel.value = aiRef
+  if (aiRef) {
+    localStorage.setItem(STORAGE_HOME_AI_REF, JSON.stringify(aiRef))
+    localStorage.setItem(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
+    localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
   } else {
-    localStorage.removeItem(STORAGE_HOME_ROUTE)
+    localStorage.removeItem(STORAGE_HOME_AI_REF)
+    localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
+    localStorage.setItem(STORAGE_MODEL, 'default')
   }
 }
 
@@ -99,11 +110,11 @@ const llmStatusLabel = computed(() => {
 })
 
 // Wenn der User unter /settings/llm-providers einen anderen Provider als Default
-// gewählt hat (selectedRoute !== null), gilt der Ollama-Reachability-Check nicht
+// gewählt hat (selectedModel !== null), gilt der Ollama-Reachability-Check nicht
 // mehr — der gewählte Provider übernimmt.
 const servicesReady = computed(() => (
   neo4jReachable.value &&
-  (!serverDefaultRequiresOllama.value || ollamaReachable.value || selectedRoute.value !== null)
+  (!serverDefaultRequiresOllama.value || ollamaReachable.value || selectedModel.value !== null)
 ))
 
 const canSubmit = computed(() => {
@@ -142,11 +153,10 @@ async function startSimulation() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // Spiegele die ModelPicker-Auswahl auf STORAGE_MODEL, damit der bestehende
+    // Spiegele die AiModelPicker-Auswahl auf STORAGE_MODEL, damit der bestehende
     // MainView/Step2-Pfad (storedEffectiveModel → llm_model) sie aufgreift.
     // Provider+Key resolved das Backend serverseitig via SecretResolver (PR #499).
-    const routeModel = selectedRoute.value?.model
-    localStorage.setItem(STORAGE_MODEL, routeModel || 'default')
+    localStorage.setItem(STORAGE_MODEL, adapter.toStoredModelString(selectedModel.value))
     localStorage.setItem(STORAGE_LANG, language.value)
 
     setPendingUpload(files.value, simulationPrompt.value)
@@ -344,15 +354,16 @@ const differentiators = computed(() => tm('home.differentiators'))
         <div class="model-grid">
           <div>
             <label class="home-field-label">{{ t('step2.model.label') }}</label>
-            <ModelPicker
-              :model-value="selectedRoute"
+            <AiModelPicker
+              :model-value="selectedModel"
+              mode="chat"
               :placeholder="t('step2.model.placeholder')"
-              @update:model-value="onPickRoute"
+              @update:model-value="onPickModel"
             />
-            <p v-if="!selectedRoute && !loadingModels" class="console-meta" style="margin-top: 4px;">
+            <p v-if="!selectedModel && !loadingModels" class="console-meta" style="margin-top: 4px;">
               {{ t('step2.model.workspaceDefaultHint') }}
             </p>
-            <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !selectedRoute" class="console-warning" style="margin-top: 4px;">
+            <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !selectedModel" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
           </div>
