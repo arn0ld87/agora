@@ -48,6 +48,21 @@ def cloud_client():
     return obj
 
 
+@pytest.fixture()
+def minimax_client():
+    """LLMClient pointed at the MiniMax base URL."""
+    obj = LLMClient.__new__(LLMClient)
+    obj._max_retries = 3
+    obj._retry_initial_delay = 1.0
+    obj._retry_max_delay = 30.0
+    obj._num_ctx = 8192
+    obj._think = False
+    obj.model = "MiniMax-M3"
+    obj.base_url = "https://api.minimax.io/v1"
+    obj.api_key = "test-key"
+    return obj
+
+
 # ---------------------------------------------------------------------------
 # _detect_provider
 # ---------------------------------------------------------------------------
@@ -63,6 +78,11 @@ class TestDetectProvider:
         client.base_url = "https://api.openai.com/v1"
         client.model = "gpt-4"
         assert client._detect_provider() == "openai"
+
+    def test_minimax_by_url(self, client):
+        client.base_url = "https://api.minimax.io/v1"
+        client.model = "MiniMax-M3"
+        assert client._detect_provider() == "minimax"
 
     def test_unknown_fallback(self, client):
         client.base_url = "http://some-other-host:8080/v1"
@@ -106,6 +126,23 @@ class TestChatPublishesModelActiveEvent:
         assert ev.context == "chat"
         assert ev.provider == "ollama"
         assert ev.ts > 0
+
+    def test_chat_publishes_minimax_provider(self, minimax_client, monkeypatch):
+        """ModelActiveEvent.provider must reflect the new 'minimax' detection
+        branch when the client is configured against api.minimax.io."""
+        published: list[ModelActiveEvent] = []
+
+        monkeypatch.setattr(
+            "app.services.model_event_bus.model_event_bus.publish",
+            lambda ev: published.append(ev),
+        )
+
+        minimax_client._publish_model_active("chat", max_tokens=4096, temperature=0.7)
+
+        assert len(published) == 1
+        ev = published[0]
+        assert ev.model == "MiniMax-M3"
+        assert ev.provider == "minimax"
 
     def test_chat_publishes_with_correct_context_default(self, client, monkeypatch):
         published: list[ModelActiveEvent] = []

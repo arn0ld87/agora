@@ -43,6 +43,25 @@ HTTP_CASES = [
     ("https://api.openai.com/v1", "mistral-large-cloud", "openai"),
     # Kein False Positive: `:`-Tag mit `-cloud` OHNE Groessenpraefix (Dritt-Gateway).
     ("https://api.example.com/v1", "custom:experimental-cloud", "unknown"),
+    # MiniMax (MiniMax-M3, ...) — eigener Provider-Branch unter api.minimax.io.
+    # Subdomain-Match vor "11434"-Port und vor "openai.com"-Substring, sonst
+    # landet MiniMax-M3 fälschlich auf api.openai.com (Smoke 2026-07-14).
+    ("https://api.minimax.io/v1", "MiniMax-M3", "minimax"),
+    ("https://api.minimax.io/anthropic", "MiniMax-M3", "minimax"),
+    ("HTTPS://API.MINIMAX.IO/v1", "MiniMax-M3", "minimax"),  # case-insensitive
+    # Kein False Positive: Modellname enthaelt "minimax", Base-URL aber nicht.
+    ("https://api.openai.com/v1", "minimax-mock", "openai"),
+    # Prioritaets-Regression: "11434" als Substring in der minimax-Base-URL
+    # (z. B. hinter einem Port-Proxy) darf den minimax-Branch NICHT
+    # verdraengen — Branch 3 (minimax) steht bewusst vor Branch 4 (Port).
+    ("https://api.minimax.io:11434/v1", "MiniMax-M3", "minimax"),
+    # Prioritaets-Regression: ein Ollama-Cloud-Tag (Branch 2) gewinnt weiterhin
+    # gegen eine minimax-Base-URL (Branch 3) — Reihenfolge aus der Docstring-
+    # Prioritaetsliste bleibt verbindlich, auch wenn beide Signale vorliegen.
+    ("https://api.minimax.io/v1", "qwen3-coder-next:cloud", "cloud"),
+    # Kein False Positive: aehnlich klingende Fremd-Domain ohne exakten
+    # "api.minimax.io"-Substring bleibt unknown statt minimax.
+    ("https://api.minimax.example.com/v1", "MiniMax-M3", "unknown"),
 ]
 
 
@@ -110,6 +129,10 @@ DIVERGENT_CASES = [
     ("https://example.com/v1", "some-model", "unknown", "openai"),
     ("", "llama3:latest", "unknown", "ollama"),  # :latest nur im OASIS-Modus ein Signal
     ("http://host:114340/v1", "foo", "ollama", "openai"),  # Substring vs. Port-Regex
+    # MiniMax: HTTP erkennt explizit ("minimax"); OASIS faellt auf
+    # OpenAI-Compat-Fallback zurueck (CAMEL-Dispatcher kennt kein
+    # "minimax"-PlatformType, OpenAI-Compat-Endpoint funktioniert).
+    ("https://api.minimax.io/v1", "MiniMax-M3", "minimax", "openai"),
 ]
 
 

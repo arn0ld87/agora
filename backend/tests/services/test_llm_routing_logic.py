@@ -258,6 +258,35 @@ def test_detect_default_provider_id_recognizes_sized_cloud_tags_ssot_weakness_fi
     ) == "ollama_cloud"
 
 
+def test_detect_default_provider_id_recognizes_minimax():
+    """MiniMax (``api.minimax.io``) resolves to ``PROVIDER_MINIMAX`` via the
+    SSoT's dedicated ``"minimax"`` branch, mirroring the new entry in
+    ``_HTTP_DETECTION_TO_PROVIDER_ID``. A base URL without the minimax host
+    still falls back to the generic OpenAI-compatible route, even when the
+    model name itself mentions "minimax" (no bare substring match on the
+    model)."""
+    assert _detect_default_provider_id("https://api.minimax.io/v1", "MiniMax-M3") == "minimax"
+    assert _detect_default_provider_id(
+        "https://api.openai.com/v1", "minimax-mock"
+    ) == "openai"
+
+
+def test_load_config_legacy_fallback_resolves_minimax_provider(temp_run_dir, monkeypatch):
+    """Regression for the mapping addition: a fresh run with no persisted
+    ``runtime_llm_routing.json`` synthesizes its ``global_default`` from
+    ``Config.LLM_BASE_URL``/``Config.LLM_MODEL_NAME`` — this must now resolve
+    to ``PROVIDER_MINIMAX`` when those legacy globals point at MiniMax."""
+    import app.config as config_module
+
+    monkeypatch.setattr(config_module.Config, "LLM_MODEL_NAME", "MiniMax-M3")
+    monkeypatch.setattr(config_module.Config, "LLM_BASE_URL", "https://api.minimax.io/v1")
+
+    loaded = RuntimeRunConfig(temp_run_dir).load_config()
+
+    assert loaded.global_default.provider_id == "minimax"
+    assert loaded.global_default.model == "MiniMax-M3"
+
+
 # --- Slice 7.3.3 (Teil 11): kanonischer Resolver im produktiven Router -------
 
 
