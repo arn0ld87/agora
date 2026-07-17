@@ -13,8 +13,8 @@
  *  4. Workspace-Default-Card sichtbar
  *  5. AiModelPicker in der Default-Card
  *  6. defaultRoute computed zeigt aktuelle Route (Provider-ID + Model)
- *  7. AiModelPicker-Update mit AiModelRef → adapter.toLlmRoute → setGlobalDefault
- *  8. AiModelPicker-Update mit null → kein setGlobalDefault-Aufruf
+ *  7. AiModelPicker-Update mit AiModelRef → effectiveModel.setGlobalSelection (setGlobalDefault + setActiveLlmConfig-Gleichschritt)
+ *  8. AiModelPicker-Update mit null → kein setGlobalSelection (kein Schreibpfad)
  *  9. onMounted: loadProviders + loadConnections + defaultsStore.load
  * 10. onBeforeUnmount: loescht alle drafts
  * 11. statusTone: connected → 'green', error → 'red', unsupported → 'gray'
@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
-import { reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import LlmProvidersView from '../Settings/LlmProvidersView.vue'
 
 // AiModelPicker mocken — Glue-Code, nicht Picker-Logik
@@ -121,6 +121,21 @@ const adapterMock = {
   })),
 }
 
+// Kanon-First-Composable mocken (Option A). Die View ruft beim Picker-Pick
+// ausschliesslich effectiveModel.setGlobalSelection(aiRef); die Internas
+// (adapter.toLlmRoute, defaultsStore.setGlobalDefault, setActiveLlmConfig)
+// werden in useEffectiveModelSelection.spec.ts geprueft, nicht hier.
+// Ohne diesen Mock wuerde setActiveLlmConfig einen echten Network-Call feuern
+// (AxiosError "Backend offline", siehe Scout-Finding F1).
+const effectiveModelMock = {
+  effectiveRef: computed(() => adapterMock.toAiModelRef(defaultsStoreMock.globalDefault ?? { provider_id: null, model: null })),
+  effectiveRoute: computed(() => defaultsStoreMock.globalDefault),
+  loading: ref(false),
+  error: ref<string | null>(null),
+  ensureLoaded: vi.fn().mockResolvedValue(undefined),
+  setGlobalSelection: vi.fn().mockResolvedValue(undefined),
+}
+
 vi.mock('@/store/aiModels', () => ({
   useLlmProvidersStore: () => providersStoreMock,
   useLlmRoutingDefaultsStore: () => defaultsStoreMock,
@@ -128,6 +143,10 @@ vi.mock('@/store/aiModels', () => ({
 
 vi.mock('@/composables/useAiModelRefAdapter', () => ({
   useAiModelRefAdapter: () => adapterMock,
+}))
+
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => effectiveModelMock,
 }))
 
 function makeI18n() {
@@ -202,6 +221,8 @@ async function mountView(initial: {
   defaultsStoreMock.load.mockClear()
   adapterMock.toLlmRoute.mockClear()
   adapterMock.toAiModelRef.mockClear()
+  effectiveModelMock.setGlobalSelection.mockClear()
+  effectiveModelMock.ensureLoaded.mockClear()
 
   const i18n = makeI18n()
   const pinia = createPinia()
@@ -272,32 +293,30 @@ describe('LlmProvidersView (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(defaultSpan.text()).toContain('gpt-4o-mini')
   })
 
-  it('AiModelPicker-Update mit AiModelRef → adapter.toLlmRoute → setGlobalDefault', async () => {
+  it('AiModelPicker-Update -> effectiveModel.setGlobalSelection (Kanon + active-config-Gleichschritt)', async () => {
     const w = await mountView()
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
     await picker.trigger('click')
-    expect(adapterMock.toLlmRoute).toHaveBeenCalledWith({
+    // Kanon-First: die View delegiert an effectiveModel.setGlobalSelection,
+    // welche intern setGlobalDefault + setActiveLlmConfig im Gleichschritt
+    // ausfuehrt. Composable-Internas werden hier nicht mehr assertiert.
+    expect(effectiveModelMock.setGlobalSelection).toHaveBeenCalledWith({
       provider_connection_id: 'conn-openai-1',
       model_id: 'gpt-4o-mini',
       source: 'explicit',
     })
-    expect(defaultsStoreMock.setGlobalDefault).toHaveBeenCalledWith({
-      stage: null,
-      provider_id: 'openai',
-      model: 'gpt-4o-mini',
-      temperature: null,
-      max_tokens: null,
-      reasoning_effort: 'none',
-      provider_options: {},
-    })
+    // Schreibpfad ausschliesslich ueber den Composable — kein direktes
+    // Store-Geschreibe aus der View heraus.
+    expect(defaultsStoreMock.setGlobalDefault).not.toHaveBeenCalled()
   })
 
-  it('AiModelPicker-Update mit null → kein setGlobalDefault', async () => {
+  it('AiModelPicker-Update mit null -> kein setGlobalSelection (kein Schreibpfad)', async () => {
     const w = await mountView()
     const picker = w.findComponent(aiPickerStub)
     // Emit null direkt (Stub emittiert hardcoded, daher manuell)
     await picker.vm.$emit('update:modelValue', null)
+    expect(effectiveModelMock.setGlobalSelection).not.toHaveBeenCalled()
     expect(defaultsStoreMock.setGlobalDefault).not.toHaveBeenCalled()
   })
 

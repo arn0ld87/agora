@@ -15,7 +15,7 @@ import { getAvailableModels } from '../api/simulation'
 import { STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
 import { setPendingUpload } from '../store/pendingUpload'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
-import { AiModelRefSchema } from '@/contracts/aiModelRef'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -38,40 +38,31 @@ const neo4jError = ref(null)
 const loadingModels = ref(true)
 const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
 
-// ---- LLM-Auswahl (Slice 7.6b: AiModelPicker + useAiModelRefAdapter). ----
-//   Persistenz: agora.home.aiModelRef (AiModelRef-JSON, Zod-validiert).
-//   Slice 7.6c (Storage-Cut): Der Legacy-Key agora.home.route wird NICHT mehr
-//   gelesen; er wird beim Mount und beim Speichern defensiv aus localStorage
-//   entfernt. Spiegelung auf STORAGE_MODEL für die bestehende Step2/MainView-
-//   Pipeline (Provider+Key resolved das Backend serverseitig via SecretResolver).
-const STORAGE_HOME_AI_REF = 'agora.home.aiModelRef'
+// ---- LLM-Auswahl (Phase-1 Konsolidierung: Kanon-First). ----
+//   Das Default-Modell kommt aus dem Kanon (routing/defaults.global via
+//   useEffectiveModelSelection), NICHT mehr aus einem eigenen
+//   agora.home.aiModelRef-Key — damit Home dieselbe Auswahl wie Settings zeigt.
+//   Ein Picker-Pick ist ein transienter Override nur für diesen Start; er wird
+//   auf STORAGE_MODEL gespiegelt (Step2/MainView-Pipeline, Backend resolved
+//   Provider+Key serverseitig via SecretResolver). Slice 7.6c (Storage-Cut):
+//   Legacy-Key agora.home.route wird defensiv entfernt.
 const STORAGE_HOME_ROUTE_LEGACY = 'agora.home.route'
 
 const adapter = useAiModelRefAdapter()
+const effectiveModel = useEffectiveModelSelection()
 
-function loadStoredModel() {
-  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
-  const raw = localStorage.getItem(STORAGE_HOME_AI_REF)
-  if (!raw) return null
-  try {
-    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch (err) {
-    console.warn('[Home] lokal gespeicherte Modell-Auswahl nicht parsbar — Auswahl zurückgesetzt:', err)
-    return null
-  }
-}
-
-const selectedModel = ref(loadStoredModel())
+const selectedModel = ref(null)
+// true, sobald der User im Picker explizit ein Modell wählt (überschreibt den
+// Kanon-Default). Steuert das Ollama-Reachability-Gate und die UI-Hinweise.
+const modelOverridden = ref(false)
 
 function onPickModel(aiRef) {
   selectedModel.value = aiRef
+  modelOverridden.value = aiRef !== null
   if (aiRef) {
-    localStorage.setItem(STORAGE_HOME_AI_REF, JSON.stringify(aiRef))
     localStorage.setItem(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
     localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
   } else {
-    localStorage.removeItem(STORAGE_HOME_AI_REF)
     localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
     localStorage.setItem(STORAGE_MODEL, 'default')
   }
@@ -108,12 +99,11 @@ const llmStatusLabel = computed(() => {
   return 'LLM'
 })
 
-// Wenn der User unter /settings/llm-providers einen anderen Provider als Default
-// gewählt hat (selectedModel !== null), gilt der Ollama-Reachability-Check nicht
-// mehr — der gewählte Provider übernimmt.
+// Wenn der User im Picker explizit ein anderes Modell wählt (modelOverridden),
+// gilt der Ollama-Reachability-Check nicht mehr — der gewählte Provider übernimmt.
 const servicesReady = computed(() => (
   neo4jReachable.value &&
-  (!serverDefaultRequiresOllama.value || ollamaReachable.value || selectedModel.value !== null)
+  (!serverDefaultRequiresOllama.value || ollamaReachable.value || modelOverridden.value)
 ))
 
 const canSubmit = computed(() => {
@@ -170,6 +160,13 @@ async function startSimulation() {
 onMounted(() => {
   // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
   localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
+  // Phase-1 Konsolidierung: Default-Modell aus dem Kanon initialisieren.
+  effectiveModel
+    .ensureLoaded()
+    .then(() => {
+      if (!modelOverridden.value) selectedModel.value = effectiveModel.effectiveRef.value
+    })
+    .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
   loadStatus()
 })
 
@@ -361,10 +358,10 @@ const differentiators = computed(() => tm('home.differentiators'))
               :placeholder="t('step2.model.placeholder')"
               @update:model-value="onPickModel"
             />
-            <p v-if="!selectedModel && !loadingModels" class="console-meta" style="margin-top: 4px;">
+            <p v-if="!modelOverridden && !loadingModels" class="console-meta" style="margin-top: 4px;">
               {{ t('step2.model.workspaceDefaultHint') }}
             </p>
-            <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !selectedModel" class="console-warning" style="margin-top: 4px;">
+            <p v-if="serverDefaultRequiresOllama && !ollamaReachable && !loadingModels && !modelOverridden" class="console-warning" style="margin-top: 4px;">
               {{ t('step2.model.noOllama') }}
             </p>
           </div>

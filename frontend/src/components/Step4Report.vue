@@ -19,7 +19,7 @@ import ReportLiveLogPane from './step4/ReportLiveLogPane.vue'
 import ReportFinalView from './step4/ReportFinalView.vue'
 import { useReportExports } from '../composables/useReportExports'
 import type { AiModelRef } from '../contracts/aiModelRef'
-import { AiModelRefSchema } from '../contracts/aiModelRef'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { parseAgentEntry } from '../utils/reportAgentLog'
 import { parseSourceAnchor } from '../utils/sourceAnchor'
 import {
@@ -99,25 +99,16 @@ function recordSchemaError(where: string, error: unknown): void {
 }
 
 const resolvedSimulationId = ref(props.simulationId || null)
-// Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.report.route` wird NICHT mehr
-// gelesen; er wird beim Mount und beim Speichern defensiv aus localStorage
-// entfernt. Persistenz läuft nur noch über den neuen Key agora.report.aiModelRef.
-const STORAGE_REPORT_AI_REF = 'agora.report.aiModelRef'
+// Phase-1 Konsolidierung: Das Report-Modell wird aus dem Kanon
+// (routing/defaults.global via useEffectiveModelSelection) initialisiert, nicht
+// mehr aus einem eigenen agora.report.aiModelRef-Key. Ein Picker-Pick ist ein
+// transienter Report-Override (nur diese Regenerierung), nicht persistiert.
+// Slice 7.6c (Storage-Cut): Legacy-Key agora.report.route wird defensiv entfernt.
 const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 
-function resolveInitialReportRoute(): AiModelRef | null {
-  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
-  const raw = localStorage.getItem(STORAGE_REPORT_AI_REF)
-  if (!raw) return null
-  try {
-    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
-}
+const effectiveModel = useEffectiveModelSelection()
 
-const reportRoute = ref<AiModelRef | null>(resolveInitialReportRoute())
+const reportRoute = ref<AiModelRef | null>(null)
 const isRegenerating = ref(false)
 
 const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
@@ -126,16 +117,6 @@ watch(llmProfileId, (val) => {
   if (val) localStorage.setItem(STORAGE_REPORT_PROFILE_ID, val)
   else localStorage.removeItem(STORAGE_REPORT_PROFILE_ID)
 })
-
-watch(reportRoute, (val) => {
-  if (val?.provider_connection_id && val?.model_id) {
-    localStorage.setItem(STORAGE_REPORT_AI_REF, JSON.stringify(val))
-    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
-  } else {
-    localStorage.removeItem(STORAGE_REPORT_AI_REF)
-    localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
-  }
-}, { deep: true })
 
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
@@ -361,6 +342,11 @@ function goConversation() {
 onMounted(async () => {
   // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
   localStorage.removeItem(STORAGE_REPORT_ROUTE_LEGACY)
+  // Phase-1 Konsolidierung: Report-Modell aus dem Kanon initialisieren.
+  effectiveModel
+    .ensureLoaded()
+    .then(() => { if (!reportRoute.value) reportRoute.value = effectiveModel.effectiveRef.value })
+    .catch(() => { /* Kanon nicht ladbar: Backend nutzt active-config */ })
   await pollStatus()
   if (!isComplete.value) {
     if (props.reportId) { phase.value = 1; startPolling() }

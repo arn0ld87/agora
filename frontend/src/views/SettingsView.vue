@@ -25,14 +25,17 @@ import {
   listLlmProviders,
   listProviderModels,
   getActiveLlmConfig,
-  setActiveLlmConfig,
 } from '../api/llmRouting'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 
 const LLM_ACTIVE_SECTION = '__llm_active__'
 
 const { t } = useI18n()
 const router = useRouter()
 const settingsStore = useSettingsStore()
+// Kanonischer Schreibpfad: schreibt routing/defaults.global + active-config
+// im Gleichschritt (Phase-1 Konsolidierung, PHASE-1-DIVERGENZ.md).
+const effectiveModel = useEffectiveModelSelection()
 const { sections, schema, fields, dirtyKeys, dirtySectionFlags } = storeToRefs(settingsStore)
 
 const activeSection = ref(LLM_ACTIVE_SECTION)
@@ -108,9 +111,12 @@ async function saveLlmActive() {
   llmError.value = ''
   llmFlash.value = ''
   try {
-    await setActiveLlmConfig({
-      provider_id: selectedProviderId.value,
-      model: selectedModel.value,
+    // provider_id == provider_connection_id (seit 7.3.3). Über den Composable
+    // wird routing/defaults.global UND active-config konsistent geschrieben.
+    await effectiveModel.setGlobalSelection({
+      provider_connection_id: selectedProviderId.value,
+      model_id: selectedModel.value,
+      source: 'explicit',
     })
     llmFlash.value = t('settings.llmActive.flashSaved')
   } catch (err) {
