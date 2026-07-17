@@ -5,12 +5,12 @@ defineProps<{
 </script>
 
 <template>
-  <div class="v4-field">
-    <label class="v4-field__label">{{ label }}</label>
-    <div class="v4-field__control">
+  <label class="v4-field">
+    <span class="v4-field__label">{{ label }}</span>
+    <span class="v4-field__control">
       <slot />
-    </div>
-  </div>
+    </span>
+  </label>
 </template>
 
 <style scoped>

@@ -291,6 +291,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
           autocomplete="off"
           spellcheck="false"
           :data-testid="testIds.input"
+          :aria-label="placeholderText"
         />
         <ComboboxTrigger class="ai-model-picker__trigger" :aria-label="placeholderText" tabindex="-1">
           <span aria-hidden="true">▾</span>
