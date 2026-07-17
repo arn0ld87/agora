@@ -90,23 +90,19 @@ def _is_ollama_cloud_tag(model: str) -> bool:
 
 
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
-    """Heuristik des Backend-HTTP-Clients (vormals ``LLMClient._detect_provider``).
-
-    Prioritäten:
-    1. Base URL enthält ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-    2. Ollama-Cloud-Tag ``:cloud`` / ``:<size>-cloud`` → ``"cloud"`` (Cloud-
-       Modelle laufen auch über den lokalen ollama-Proxy — deshalb VOR der
-       Port-Heuristik). Siehe ``_is_ollama_cloud_tag`` (Issue #670).
-    3. Base URL enthält ``api.minimax.io`` → ``"minimax"`` (MiniMax-Modelle
-       wie ``MiniMax-M3``, OpenAI- und Anthropic-kompatibel). Eigener
-       Branch vor der Port-Heuristik und vor ``openai.com``, weil
-       Subdomain-Matchings nichts mit Ollama-Ports zu tun haben und
-       ``api.openai.com`` sonst fälschlich gewinnen würde.
-    4. Base URL enthält ``11434`` → ``"ollama"`` (lokales Ollama).
-    5. Base URL enthält ``openai.com`` oder ``api.openai`` → ``"openai"``.
-    6. Base URL enthält ``googleapis.com`` oder ``generativelanguage`` →
-       ``"google"`` (Gemini-OpenAI-Compat-Layer mit nativem ``tools=``).
-    7. Fallback → ``"unknown"``.
+    """
+    Detects the provider used by the backend HTTP client.
+    
+    Provider detection prioritizes Ollama Cloud URLs and cloud model tags, followed
+    by MiniMax, local Ollama, OpenAI, and Google endpoints. Unrecognized endpoints
+    are classified as ``"unknown"``.
+    
+    Parameters:
+        base_url (Optional[str]): Provider endpoint URL to inspect.
+        model (Optional[str]): Model name whose cloud tag may identify Ollama Cloud.
+    
+    Returns:
+        HttpDetectedProvider: The detected provider identifier.
     """
     model_name = model or ""
     base = (base_url or "").lower()

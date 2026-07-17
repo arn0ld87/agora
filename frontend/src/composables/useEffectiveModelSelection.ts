@@ -39,6 +39,11 @@ export interface EffectiveModelSelection {
   setGlobalSelection: (ref: AiModelRef) => Promise<void>
 }
 
+/**
+ * Provides the effective global model selection and synchronizes updates across model configuration stores.
+ *
+ * @returns The effective model reference and route, loading and error state, and actions for loading and updating the global selection
+ */
 export function useEffectiveModelSelection(): EffectiveModelSelection {
   const defaultsStore = useLlmRoutingDefaultsStore()
   const providersStore = useLlmProvidersStore()

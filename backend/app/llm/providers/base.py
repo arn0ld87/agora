@@ -234,15 +234,14 @@ def is_ollama(base_url: Optional[str]) -> bool:
 def detect_provider(
     base_url: Optional[str], model: Optional[str]
 ) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
-    """Infer the LLM provider from base_url and model name.
-
-    Delegiert an ``app.llm.providers.registry.detect_provider(mode="http")``
-    (Single Source of Truth seit #591). Diese Wrapper-Funktion haelt die
-    alte Signatur fuer bestehende Aufrufer (z. B. ``LLMClient._detect_provider``)
-    aufrecht — die Heuristik-Logik lebt jetzt in der Registry, damit
-    HTTP-Client und OASIS-Subprozess dieselbe Quelle nutzen.
-
-    Siehe ``registry.py`` fuer die dokumentierten Divergenzen zwischen
-    ``mode="http"`` und ``mode="oasis"``.
+    """
+    Identify the LLM provider associated with a base URL and model name.
+    
+    Parameters:
+        base_url (Optional[str]): The provider's base URL.
+        model (Optional[str]): The model name.
+    
+    Returns:
+        Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]: The inferred provider label.
     """
     return _detect_provider_registry(base_url, model, mode="http")
