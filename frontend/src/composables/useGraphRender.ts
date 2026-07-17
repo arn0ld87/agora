@@ -63,6 +63,78 @@ export interface UseGraphRenderReturn {
   pauseSimulation: () => void
   resumeSimulation: () => void
   togglePause: () => void
+  /**
+   * Issue #744 Phase 4a — clears the persisted node-pinch layout for the
+   * current graph_id and re-renders without fixed positions (fx/fy = null).
+   */
+  resetLayout: () => void
+  /**
+   * Issue #744 Phase 4b — reactive mirror of node positions for the Mini-Map.
+   * Updated (throttled via rAF) on every Force-Simulation tick.
+   */
+  minimapNodes: Ref<Array<{ id: string; x: number; y: number }>>
+  /**
+   * Issue #744 Phase 4b — reactive mirror of the main viewport's d3.zoom
+   * transform plus container dimensions, so the Mini-Map can draw the
+   * viewport rectangle and convert Mini-Map clicks back to graph coords.
+   */
+  minimapViewport: Ref<{ x: number; y: number; k: number; width: number; height: number }>
+  /**
+   * Issue #744 Phase 4b — pans the main viewport so that the given graph-space
+   * point is centered. Used by the Mini-Map click/drag handler.
+   */
+  panToGraphPoint: (gx: number, gy: number) => void
+}
+
+// ---------------------------------------------------------------------------
+// Issue #744 Phase 4a — localStorage persistence for per-graph node pinch.
+// Layouts are keyed by graph_id so different graphs keep independent layouts.
+// ---------------------------------------------------------------------------
+
+const GRAPH_LAYOUT_STORAGE_PREFIX = 'agora:graph-layout:'
+
+function layoutStorageKey(graphId: string): string {
+  return GRAPH_LAYOUT_STORAGE_PREFIX + graphId
+}
+
+function loadSavedLayout(graphId: string): Record<string, { x: number; y: number }> | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(layoutStorageKey(graphId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed as Record<string, { x: number; y: number }>
+  } catch {
+    return null
+  }
+}
+
+function saveNodeLayout(
+  graphId: string,
+  nodes: ReadonlyArray<{ id: string; x: number; y: number }>,
+): void {
+  if (typeof localStorage === 'undefined') return
+  const map: Record<string, { x: number; y: number }> = {}
+  for (const n of nodes) {
+    if (n && typeof n.id === 'string' && Number.isFinite(n.x) && Number.isFinite(n.y)) {
+      map[n.id] = { x: n.x, y: n.y }
+    }
+  }
+  try {
+    localStorage.setItem(layoutStorageKey(graphId), JSON.stringify(map))
+  } catch {
+    // ignore quota / serialization errors — pin persistence is best-effort
+  }
+}
+
+function clearNodeLayout(graphId: string): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.removeItem(layoutStorageKey(graphId))
+  } catch {
+    // ignore
+  }
 }
 
 // reason: d3 v7 ships types via @types/d3; its internal Selection/Simulation generics require
@@ -107,6 +179,28 @@ export function useGraphRender({
   let _autoFreezeActive = false
   let _autoFreezeTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Issue #744 Phase 4a — graph_id of the currently rendered graph, tracked
+  // so resetLayout() can clear the matching localStorage key without re-reading
+  // the raw data shape, and so the drag-end handler can persist positions.
+  let currentGraphId: string | null = null
+
+  // Issue #744 Phase 4b — refs/state consumed by the Mini-Map.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let _zoomBehavior: any = null
+  let _svgSelection: D3Selection | null = null
+  let _currentTransform: { x: number; y: number; k: number } = { x: 0, y: 0, k: 1 }
+  let _containerWidth = 0
+  let _containerHeight = 0
+  let _minimapRafHandle: number | null = null
+  const minimapNodes = ref<Array<{ id: string; x: number; y: number }>>([])
+  const minimapViewport = ref<{ x: number; y: number; k: number; width: number; height: number }>({
+    x: 0,
+    y: 0,
+    k: 1,
+    width: 0,
+    height: 0,
+  })
+
   const render = () => {
     const svgEl = svgRef.value
     const data = toValue(graphData)
@@ -134,6 +228,27 @@ export function useGraphRender({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { nodes, edges, getColor } = buildGraphRenderData(data, types) as { nodes: any[]; edges: any[]; getColor: (type: string) => string }
     if (nodes.length === 0) return
+
+    // Issue #744 Phase 4a — track graph_id for localStorage pin persistence.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawGraphId = (data as any)?.graph_id
+    currentGraphId = typeof rawGraphId === 'string' && rawGraphId.length > 0 ? rawGraphId : null
+
+    // Issue #744 Phase 4a — restore persisted pinch layout BEFORE the simulation
+    // starts. Nodes with a saved position get x/y + fx/fy so the Force layout
+    // leaves them in place instead of recomputing them.
+    const savedLayout = currentGraphId ? loadSavedLayout(currentGraphId) : null
+    if (savedLayout) {
+      for (const n of nodes) {
+        const pos = savedLayout[n.id]
+        if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+          n.x = pos.x
+          n.y = pos.y
+          n.fx = pos.x
+          n.fy = pos.y
+        }
+      }
+    }
 
     // reason: nodes/edges come from a JS module; cast to any[] is required to satisfy d3 overloads
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,16 +281,41 @@ export function useGraphRender({
     // reason: d3.zoom() requires Selection<Element,...> but d3.select(svgEl) returns
     // Selection<SVGSVGElement,...>; cast is safe because SVGSVGElement extends Element.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ;(svg as any).call(d3.zoom().extent([[0, 0], [width, height]]).scaleExtent([0.1, 4]).on('zoom', (event: any) => {
-      g.attr('transform', event.transform)
-      const wantsHide = event.transform.k < EDGE_LABEL_AUTO_HIDE_ZOOM
-      if (wantsHide !== _zoomedOut) {
-        _zoomedOut = wantsHide
-        const visible = showEdgeLabels.value && !_zoomedOut
-        if (linkLabelsRef) linkLabelsRef.style('display', visible ? 'block' : 'none')
-        if (linkLabelBgRef) linkLabelBgRef.style('display', visible ? 'block' : 'none')
-      }
-    }))
+    const zoomBehavior = (d3.zoom() as any)
+      .extent([[0, 0], [width, height]])
+      .scaleExtent([0.1, 4])
+      .on('zoom', (event: any) => {
+        _currentTransform = event.transform
+        g.attr('transform', event.transform)
+        const wantsHide = event.transform.k < EDGE_LABEL_AUTO_HIDE_ZOOM
+        if (wantsHide !== _zoomedOut) {
+          _zoomedOut = wantsHide
+          const visible = showEdgeLabels.value && !_zoomedOut
+          if (linkLabelsRef) linkLabelsRef.style('display', visible ? 'block' : 'none')
+          if (linkLabelBgRef) linkLabelBgRef.style('display', visible ? 'block' : 'none')
+        }
+        // Issue #744 Phase 4b — mirror viewport transform for the Mini-Map.
+        minimapViewport.value = {
+          x: event.transform.x,
+          y: event.transform.y,
+          k: event.transform.k,
+          width,
+          height,
+        }
+      })
+
+    // Issue #744 Phase 4b — keep refs so panToGraphPoint() can drive the zoom
+    // programmatically (Mini-Map click/drag → center main viewport).
+    _zoomBehavior = zoomBehavior
+    _svgSelection = svg
+    _containerWidth = width
+    _containerHeight = height
+    // The initial viewport matches an untransformed view.
+    _currentTransform = { x: 0, y: 0, k: 1 }
+    minimapViewport.value = { x: 0, y: 0, k: 1, width, height }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(svg as any).call(zoomBehavior)
 
     const linkGroup = g.append('g').attr('class', 'links')
 
@@ -292,9 +432,17 @@ export function useGraphRender({
         .on('end', (event: any, d: any) => {
           if (d._isDragging) {
             simulation.alphaTarget(0)
+            // Issue #744 Phase 4a — keep the node pinned at the dropped
+            // position (fx/fy) and persist the full layout to localStorage
+            // so it survives re-renders and is restored on next render().
+            d.fx = d.x
+            d.fy = d.y
+            if (currentGraphId) saveNodeLayout(currentGraphId, nodes)
+          } else {
+            // Click without drag → release the temporary pin set in 'start'.
+            d.fx = null
+            d.fy = null
           }
-          d.fx = null
-          d.fy = null
           d._isDragging = false
         }),
       )
@@ -378,6 +526,11 @@ export function useGraphRender({
       nodeLabels
         .attr('x', d => d.x)
         .attr('y', d => d.y)
+
+      // Issue #744 Phase 4b — throttled rAF mirror of node positions for the
+      // Mini-Map. Coalescing per animation frame avoids Vue-reactivity overhead
+      // on every Force-Simulation tick (which fires far more often than 60 Hz).
+      scheduleMinimapNodesUpdate(nodes)
     })
 
     svg.on('click', () => {
@@ -452,6 +605,47 @@ export function useGraphRender({
   }
 
   /**
+   * Issue #744 Phase 4a — clear the persisted pinch layout for the current
+   * graph and re-render so all nodes float freely again (fx/fy = null because
+   * no saved layout is applied). Auto-Freeze / manual-pause state is left
+   * untouched; render() re-creates the simulation regardless.
+   */
+  function resetLayout() {
+    if (currentGraphId) clearNodeLayout(currentGraphId)
+    render()
+  }
+
+  /**
+   * Issue #744 Phase 4b — throttle Mini-Map node updates to one per animation
+   * frame. Forces a fresh array so Vue reactivity actually triggers.
+   */
+  function scheduleMinimapNodesUpdate(
+    nodes: ReadonlyArray<{ id: string; x: number; y: number }>,
+  ) {
+    if (_minimapRafHandle !== null) return
+    _minimapRafHandle = requestAnimationFrame(() => {
+      _minimapRafHandle = null
+      minimapNodes.value = nodes.map(n => ({ id: n.id, x: n.x, y: n.y }))
+    })
+  }
+
+  /**
+   * Issue #744 Phase 4b — pan the main viewport so the given graph-space point
+   * is centered. Drives the stored d3.zoom behavior programmatically, which
+   * fires the zoom handler and thereby re-renders the Mini-Map viewport rect.
+   */
+  function panToGraphPoint(gx: number, gy: number) {
+    if (!_svgSelection || !_zoomBehavior) return
+    const k = _currentTransform.k || 1
+    const tx = _containerWidth / 2 - gx * k
+    const ty = _containerHeight / 2 - gy * k
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newTransform = (d3.zoomIdentity as any).translate(tx, ty).scale(k)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(_svgSelection as any).call(_zoomBehavior.transform, newTransform)
+  }
+
+  /**
    * Internal-only auto-freeze: pauses the simulation without setting the
    * manual-pause flag. After `autoFreezeMs` the simulation auto-resumes
    * unless the user has manually paused in the meantime.
@@ -502,6 +696,10 @@ export function useGraphRender({
       clearTimeout(_autoFreezeTimer)
       _autoFreezeTimer = null
     }
+    if (_minimapRafHandle !== null) {
+      cancelAnimationFrame(_minimapRafHandle)
+      _minimapRafHandle = null
+    }
   })
 
   return {
@@ -511,5 +709,9 @@ export function useGraphRender({
     pauseSimulation,
     resumeSimulation,
     togglePause,
+    resetLayout,
+    minimapNodes,
+    minimapViewport,
+    panToGraphPoint,
   }
 }

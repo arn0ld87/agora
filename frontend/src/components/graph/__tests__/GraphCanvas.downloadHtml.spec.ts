@@ -18,6 +18,10 @@ vi.mock('../../../composables/useGraphRender', () => ({
     render: vi.fn(),
     isPaused: ref(false),
     togglePause: vi.fn(),
+    resetLayout: vi.fn(),
+    minimapNodes: ref([]),
+    minimapViewport: ref({ x: 0, y: 0, k: 1, width: 0, height: 0 }),
+    panToGraphPoint: vi.fn(),
   }),
 }))
 
