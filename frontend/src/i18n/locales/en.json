@@ -632,7 +632,9 @@
       "pauseLayout": "Pause layout",
       "resumeLayout": "Resume layout",
       "closePanel": "Close graph panel",
-      "exportHtml": "Export as standalone HTML"
+      "exportHtml": "Export as standalone HTML",
+      "resetLayout": "Reset layout",
+      "minimapTitle": "Minimap"
     },
     "edgeLabels": {
       "RELATES_TO": "relates to",
@@ -1248,6 +1250,9 @@
       "emptyTitle": "No active runs",
       "emptyHint": "Start a new run from a source above.",
       "errorLabel": "Error",
+      "stopLabel": "Stop run",
+      "stopConfirm": "Really stop this run? Existing data is preserved.",
+      "stopError": "Stop failed: {message}",
       "columns": {
         "runId": "Run ID",
         "project": "Project",

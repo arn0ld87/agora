@@ -22,6 +22,15 @@
         <span class="btn-text">{{ isPaused ? $t('graph.ui.resumeLayout') : $t('graph.ui.pauseLayout') }}</span>
       </button>
       <button
+        v-if="hasGraphData"
+        class="tool-btn"
+        :title="$t('graph.ui.resetLayout')"
+        @click="$emit('reset-layout')"
+      >
+        <span class="icon-reset">⟲</span>
+        <span class="btn-text">{{ $t('graph.ui.resetLayout') }}</span>
+      </button>
+      <button
         v-if="hasGraphId"
         class="tool-btn"
         title="Export as GraphML"
@@ -88,6 +97,7 @@ defineEmits([
   'download-html',
   'toggle-maximize',
   'toggle-pause',
+  'reset-layout',
   'close-graph',
 ])
 </script>

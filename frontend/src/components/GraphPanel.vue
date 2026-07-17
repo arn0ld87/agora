@@ -8,6 +8,7 @@
       @refresh="$emit('refresh')"
       @toggle-maximize="$emit('toggle-maximize')"
       @toggle-pause="canvasRef?.togglePause()"
+      @reset-layout="canvasRef?.resetLayout()"
       @download-graphml="canvasRef?.downloadGraphml()"
       @download-svg="canvasRef?.downloadSvg()"
       @download-png="canvasRef?.downloadPng()"

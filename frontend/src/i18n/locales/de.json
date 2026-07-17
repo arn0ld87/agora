@@ -632,7 +632,9 @@
       "pauseLayout": "Layout pausieren",
       "resumeLayout": "Layout fortsetzen",
       "closePanel": "Graph-Panel schließen",
-      "exportHtml": "Als standalone HTML exportieren"
+      "exportHtml": "Als standalone HTML exportieren",
+      "resetLayout": "Layout zurücksetzen",
+      "minimapTitle": "Minimap"
     },
     "edgeLabels": {
       "RELATES_TO": "verbunden mit",
@@ -1248,6 +1250,9 @@
       "emptyTitle": "Keine aktiven Runs",
       "emptyHint": "Starte oben einen neuen Run aus einer Quelle.",
       "errorLabel": "Fehler",
+      "stopLabel": "Lauf stoppen",
+      "stopConfirm": "Lauf wirklich stoppen? Bisherige Daten bleiben erhalten.",
+      "stopError": "Stoppen fehlgeschlagen: {message}",
       "columns": {
         "runId": "Run-ID",
         "project": "Projekt",

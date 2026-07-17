@@ -18,6 +18,15 @@
         @close="closeDetailPanel"
         @toggle-self-loop="toggleSelfLoop"
       />
+
+      <!-- Issue #744 Phase 4b — Mini-Map overlay. -->
+      <GraphMiniMap
+        v-if="minimapNodes.length > 0"
+        :nodes="minimapNodes"
+        :viewport="minimapViewport"
+        :title="t('graph.ui.minimapTitle')"
+        @seek="onMinimapSeek"
+      />
     </div>
 
     <!-- Loading State -->
@@ -49,6 +58,7 @@ import { useI18n } from 'vue-i18n'
 
 import GraphDetailPanel from './GraphDetailPanel.vue'
 import GraphHints from './GraphHints.vue'
+import GraphMiniMap from './GraphMiniMap.vue'
 import { useGraphRender } from '../../composables/useGraphRender'
 import { exportGraphMl } from '../../api/graph'
 
@@ -82,7 +92,16 @@ const expandedSelfLoops = ref(new Set())
 // The prop is typed as Object (plain JS script), but useGraphRender accepts
 // MaybeRefOrGetter<BuildProgressDetail | null> — the shape is compatible.
 const batchSignalRef = computed(() => props.batchSignal ?? null)
-const { selectedItem, render, isPaused, togglePause } = useGraphRender({
+const {
+  selectedItem,
+  render,
+  isPaused,
+  togglePause,
+  resetLayout,
+  minimapNodes,
+  minimapViewport,
+  panToGraphPoint,
+} = useGraphRender({
   svgRef: graphSvg,
   containerRef: graphContainer,
   graphData: toRef(props, 'graphData'),
@@ -91,6 +110,11 @@ const { selectedItem, render, isPaused, togglePause } = useGraphRender({
   translateLabel: t,
   batchSignal: batchSignalRef,
 })
+
+// Issue #744 Phase 4b — Mini-Map click/drag centers the main viewport.
+function onMinimapSeek(g) {
+  panToGraphPoint(g.gx, g.gy)
+}
 
 // Locale-Wechsel: Edge-Labels frisch durch i18n laufen lassen.
 watch(locale, () => {
@@ -290,6 +314,7 @@ defineExpose({
   downloadHtml,
   isPaused,
   togglePause,
+  resetLayout,
 })
 </script>
 

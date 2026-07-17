@@ -252,14 +252,14 @@ class LLMClient:
         self, max_tokens: int, model: Optional[str] = None
     ) -> Dict[str, int]:
         """
-        Select the token-limit parameter name supported by the target model.
+        Build the token-limit parameter for the selected model.
         
         Parameters:
-            model (Optional[str]): Model to inspect; defaults to the client's model.
+            max_tokens (int): Maximum number of completion tokens.
+            model (Optional[str]): Model used to select the token-limit parameter; defaults to the client's model.
         
         Returns:
-            Dict[str, int]: A mapping containing either ``max_completion_tokens`` or
-            ``max_tokens`` with the requested limit.
+            Dict[str, int]: A mapping containing either ``max_completion_tokens`` or ``max_tokens`` with the requested limit.
         """
         target_model = model if model is not None else (self.model or "")
         key = (
@@ -271,10 +271,11 @@ class LLMClient:
 
     def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
         """
-        Infer the provider associated with the configured base URL and model name.
+        Identify the LLM provider associated with the configured endpoint and model.
         
         Returns:
-            str: The inferred provider identifier.
+            str: The provider name: ``"ollama"``, ``"cloud"``, ``"minimax"``,
+                ``"openai"``, ``"google"``, or ``"unknown"``.
         """
         return _provider_base.detect_provider(self.base_url, self.model)
 
