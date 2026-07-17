@@ -59,6 +59,32 @@ vi.mock('../../../../store/pendingUpload', () => ({
   setPendingUpload: vi.fn(),
 }))
 
+// Phase-1 Kanon-Composable stubben: HeroNewRun initialisiert selectedModel
+// onMounted aus effectiveRef. In den Profile-Tests interessiert nur das
+// Profil-Verhalten — Kanon-Stub mit null/einem Stativ-Route, ensureLoaded
+// resolvt, setGlobalSelection ist hier nicht aktiv (Profile gewinnt).
+vi.mock('@/composables/useEffectiveModelSelection', () => {
+  const stubRoute = {
+    stage: null,
+    provider_id: 'openai',
+    model: 'gpt-4o',
+    temperature: null,
+    max_tokens: null,
+    reasoning_effort: 'none',
+    provider_options: {},
+  }
+  return {
+    useEffectiveModelSelection: () => ({
+      effectiveRef: { value: null },
+      effectiveRoute: { value: stubRoute },
+      loading: { value: false },
+      error: { value: null },
+      ensureLoaded: vi.fn().mockResolvedValue(undefined),
+      setGlobalSelection: vi.fn().mockResolvedValue(undefined),
+    }),
+  }
+})
+
 import { setPendingUpload } from '../../../../store/pendingUpload'
 import HeroNewRun from '../HeroNewRun.vue'
 

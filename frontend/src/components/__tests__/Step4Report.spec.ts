@@ -63,10 +63,46 @@ vi.mock('../../composables/useIncrementalLogPolling', async () => {
   }
 })
 
-// Slice 7.6c: Step4Report liest die Report-Modell-Auswahl direkt aus
-// `agora.report.aiModelRef` (Zod-validiert) und nutzt den useAiModelRefAdapter
-// nicht mehr; der frühere Adapter-Mock entfällt. ReportModelControls ist ohnehin
-// vollständig gestubbt (siehe oben).
+// Phase-1 Kanon-First: Step4Report initialisiert reportRoute in onMounted aus
+// dem Kanon (routing/defaults.global_default via useEffectiveModelSelection.
+// effectiveRef); Picker-Picks sind transient (KEIN setGlobalSelection, nicht
+// persistiert). STORAGE_REPORT_AI_REF (agora.report.aiModelRef) ist entfernt,
+// STORAGE_REPORT_ROUTE_LEGACY (agora.report.route) wird nur noch defensiv
+// gelöscht. ReportModelControls bleibt gestubbt. Der Mock ersetzt das Composable
+// (das Pinia-Stores instanziiert) mit steuerbaren Refs, damit die Specs ohne
+// Pinia-Setup mounten.
+import { ref as mockRef, type Ref as MockRef } from 'vue'
+import type { AiModelRef } from '../../contracts/aiModelRef'
+
+// Steuerbarer Kanon-Stub. Defaults: leerer Kanon (effectiveRef=null), wie er
+// von useEffectiveModelSelection vor ensureLoaded/Routing-Load geliefert wird.
+const mockEffectiveRef: MockRef<AiModelRef | null> = mockRef<AiModelRef | null>(null)
+const mockEffectiveRoute: MockRef<unknown> = mockRef<unknown>(null)
+const mockLoading: MockRef<boolean> = mockRef<boolean>(false)
+const mockError: MockRef<string | null> = mockRef<string | null>(null)
+const mockEnsureLoaded = vi.fn().mockResolvedValue(undefined)
+const mockSetGlobalSelection = vi.fn().mockResolvedValue(undefined)
+
+function resetMockSelection(): void {
+  mockEffectiveRef.value = null
+  mockEffectiveRoute.value = null
+  mockLoading.value = false
+  mockError.value = null
+  mockEnsureLoaded.mockResolvedValue(undefined)
+  mockSetGlobalSelection.mockReset()
+  mockSetGlobalSelection.mockResolvedValue(undefined)
+}
+
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef: mockEffectiveRef,
+    effectiveRoute: mockEffectiveRoute,
+    loading: mockLoading,
+    error: mockError,
+    ensureLoaded: mockEnsureLoaded,
+    setGlobalSelection: mockSetGlobalSelection,
+  }),
+}))
 
 import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
@@ -163,6 +199,7 @@ function mountComponent(props = {}) {
 describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetMockSelection()
     // Standard-Status: completed + vollstaendiger Payload
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
@@ -309,6 +346,7 @@ describe('Quote + Anchor (Sub-Slice 16b)', () => {
 
   function mountWithEvidence(evidenceData: object) {
     vi.clearAllMocks()
+    resetMockSelection()
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
       data: { status: 'completed', report_id: 'report_test01', simulation_id: 'sim_test01' },
@@ -468,6 +506,10 @@ describe('aggregateSectionConfidence (Sub-Slice 16a)', () => {
 
 // Sub-Slice J.3 (#221): agentLog-Polling-Intervall auf 2500 ms angeglichen
 describe('Step4Report — agentLog-Polling-Intervall (Sub-Slice J.3)', () => {
+  beforeEach(() => {
+    resetMockSelection()
+  })
+
   it('ruft useIncrementalLogPolling für agentLog mit intervalMs=2500 auf', async () => {
     vi.mocked(getReportStatus).mockResolvedValue({
       success: true,
@@ -594,6 +636,7 @@ describe('Step4Report — ConfidenceBadge-Integration (Sub-Slice 16a)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    resetMockSelection()
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
       data: {
@@ -629,6 +672,7 @@ describe('Step4Report — Report-Modus-Persistenz und API-Übergabe (P4.1)', () 
   beforeEach(() => {
     vi.clearAllMocks()
     localStorageMock.clear()
+    resetMockSelection()
     ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
       data: { status: 'idle' },
@@ -690,6 +734,7 @@ describe('Step4Report — Confirm-Dialog + Stop-Button', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorageMock.clear()
+    resetMockSelection()
   })
 
   it('zeigt Confirm-Dialog wenn kein reportId und Status idle (reportPending=true)', async () => {
@@ -810,3 +855,80 @@ describe('Step4Report — Confirm-Dialog + Stop-Button', () => {
 // `/settings/llm-providers` → `LlmProviderSecretsStore` → SecretResolver.
 // Step4Report sendet nur noch `llm_model`; der Provider wird serverseitig
 // aufgelöst. Siehe PR-Beschreibung Slice A1.
+
+// Phase-1 Kanon-First (frontend-next): reportRoute wird in onMounted aus dem
+// Kanon (useEffectiveModelSelection.effectiveRef) initialisiert. Picker-Picks
+// sind transient und persistieren NICHT (kein setGlobalSelection-Aufruf, keine
+// agora.report.aiModelRef-Senke mehr). Legacy-STORAGE_REPORT_ROUTE_LEGACY wird
+// nur defensiv gelöscht.
+describe('Step4Report — Kanon-First Initialisierung (Phase 1)', () => {
+  const KANON_REF: AiModelRef = {
+    provider_connection_id: 'conn_kanon',
+    model_id: 'kanon-model-1',
+    source: 'workspace-default',
+  } as AiModelRef
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+  })
+
+  it('initialisiert reportRoute aus dem Kanon (effectiveRef) in onMounted', async () => {
+    mockEffectiveRef.value = KANON_REF
+
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(mockEnsureLoaded).toHaveBeenCalled()
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toEqual(KANON_REF)
+  })
+
+  it('lässt reportRoute null wenn der Kanon leer ist (effectiveRef=null)', async () => {
+    // mockEffectiveRef bleibt null nach resetMockSelection
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const vm = wrapper.vm as unknown as { reportRoute: AiModelRef | null }
+    expect(vm.reportRoute).toBeNull()
+  })
+
+  it('ruft setGlobalSelection NICHT beim Picker-Pick auf (Picker ist transient)', async () => {
+    mockEffectiveRef.value = KANON_REF
+
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // Simuliere einen transienten Picker-Pick via ReportModelControls-Stub-emit.
+    const controls = wrapper.findComponent({ name: 'ReportModelControls' })
+    expect(controls.exists()).toBe(true)
+    await controls.vm.$emit('update:modelValue', {
+      provider_connection_id: 'conn_other',
+      model_id: 'picked-model',
+      source: 'explicit',
+    } as AiModelRef)
+    await wrapper.vm.$nextTick()
+
+    // Picker-Pick ändert reportRoute transient, persistiert aber NICHT den Kanon.
+    expect(mockSetGlobalSelection).not.toHaveBeenCalled()
+  })
+
+  it('löscht STORAGE_REPORT_ROUTE_LEGACY (agora.report.route) defensiv in onMounted', async () => {
+    localStorageMock.setItem('agora.report.route', 'some-legacy-route')
+
+    mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+
+    expect(localStorageMock.getItem('agora.report.route')).toBeNull()
+  })
+})

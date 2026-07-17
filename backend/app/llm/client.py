@@ -251,13 +251,15 @@ class LLMClient:
     def _completion_token_kwargs(
         self, max_tokens: int, model: Optional[str] = None
     ) -> Dict[str, int]:
-        """Wire-Key für das Token-Limit pro Modell.
-
-        Liefert ``{"max_completion_tokens": N}`` für GPT-5/o1/o3/o4 und
-        ``{"max_tokens": N}`` für alle anderen Modelle. ``model`` überschreibt
-        ``self.model`` — nötig im Vision-Pfad, der ein anderes Modell als das
-        Default-Chat-Modell nutzen kann (z. B. ``gemini-3-flash-preview:cloud``
-        bei einer GPT-5-Chat-Session).
+        """
+        Select the token-limit parameter name supported by the target model.
+        
+        Parameters:
+            model (Optional[str]): Model to inspect; defaults to the client's model.
+        
+        Returns:
+            Dict[str, int]: A mapping containing either ``max_completion_tokens`` or
+            ``max_tokens`` with the requested limit.
         """
         target_model = model if model is not None else (self.model or "")
         key = (
@@ -267,10 +269,12 @@ class LLMClient:
         )
         return {key: max_tokens}
 
-    def _detect_provider(self) -> Literal["ollama", "cloud", "openai", "google", "unknown"]:
-        """Infer the LLM provider from base_url and model name.
-
-        Siehe ``app.llm.providers.base.detect_provider`` für die Heuristik.
+    def _detect_provider(self) -> Literal["ollama", "cloud", "minimax", "openai", "google", "unknown"]:
+        """
+        Infer the provider associated with the configured base URL and model name.
+        
+        Returns:
+            str: The inferred provider identifier.
         """
         return _provider_base.detect_provider(self.base_url, self.model)
 

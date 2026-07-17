@@ -30,6 +30,7 @@ import Input from '@/components/v4/forms/Input.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { useLlmProvidersStore, useLlmRoutingDefaultsStore } from '@/store/aiModels'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import type { ProviderDescriptor } from '@/contracts/llmRoutingContract'
 import type { LlmRoute } from '@/contracts/llmRoute'
 import type { ProviderProbeStatus } from '@/contracts/aiProviderContract'
@@ -40,6 +41,7 @@ const { t } = useI18n()
 const providersStore = useLlmProvidersStore()
 const defaultsStore = useLlmRoutingDefaultsStore()
 const adapter = useAiModelRefAdapter()
+const effectiveModel = useEffectiveModelSelection()
 
 const BREADCRUMBS = [
   { label: 'Settings', to: { name: 'SettingsGeneral' } },
@@ -184,8 +186,9 @@ const defaultAiRef = computed<AiModelRef | null>(() => {
 
 async function setDefault(aiRef: AiModelRef | null): Promise<void> {
   if (!aiRef) return
-  const llmRoute = adapter.toLlmRoute(aiRef)
-  await defaultsStore.setGlobalDefault(llmRoute)
+  // Kanon: routing/defaults.global + active-config im Gleichschritt
+  // (Phase-1 Konsolidierung, PHASE-1-DIVERGENZ.md).
+  await effectiveModel.setGlobalSelection(aiRef)
 }
 
 onMounted(async () => {

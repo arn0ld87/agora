@@ -51,7 +51,9 @@ if TYPE_CHECKING:
     from app.llm.providers.base import ProviderAdapter
 
 # Teilmengen von app.contracts.provider_types.ProviderType
-HttpDetectedProvider = Literal["ollama", "cloud", "openai", "google", "unknown"]
+HttpDetectedProvider = Literal[
+    "ollama", "cloud", "minimax", "openai", "google", "unknown"
+]
 OasisDetectedProvider = Literal["google", "ollama", "openai"]
 DetectionMode = Literal["http", "oasis"]
 
@@ -88,18 +90,19 @@ def _is_ollama_cloud_tag(model: str) -> bool:
 
 
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
-    """Heuristik des Backend-HTTP-Clients (vormals ``LLMClient._detect_provider``).
-
-    Prioritäten:
-    1. Base URL enthält ``ollama.com`` → ``"cloud"`` (Ollama Cloud proxy).
-    2. Ollama-Cloud-Tag ``:cloud`` / ``:<size>-cloud`` → ``"cloud"`` (Cloud-
-       Modelle laufen auch über den lokalen ollama-Proxy — deshalb VOR der
-       Port-Heuristik). Siehe ``_is_ollama_cloud_tag`` (Issue #670).
-    3. Base URL enthält ``11434`` → ``"ollama"`` (lokales Ollama).
-    4. Base URL enthält ``openai.com`` oder ``api.openai`` → ``"openai"``.
-    5. Base URL enthält ``googleapis.com`` oder ``generativelanguage`` →
-       ``"google"`` (Gemini-OpenAI-Compat-Layer mit nativem ``tools=``).
-    6. Fallback → ``"unknown"``.
+    """
+    Detects the provider used by the backend HTTP client.
+    
+    Provider detection prioritizes Ollama Cloud URLs and cloud model tags, followed
+    by MiniMax, local Ollama, OpenAI, and Google endpoints. Unrecognized endpoints
+    are classified as ``"unknown"``.
+    
+    Parameters:
+        base_url (Optional[str]): Provider endpoint URL to inspect.
+        model (Optional[str]): Model name whose cloud tag may identify Ollama Cloud.
+    
+    Returns:
+        HttpDetectedProvider: The detected provider identifier.
     """
     model_name = model or ""
     base = (base_url or "").lower()
@@ -107,6 +110,8 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
+    if "api.minimax.io" in base:
+        return "minimax"
     if "11434" in base:
         return "ollama"
     if "openai.com" in base or "api.openai" in base:

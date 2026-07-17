@@ -1,36 +1,71 @@
 /**
- * SettingsGeneralView — Spec-Tests fuer Slice 5.4 Pilot-Abschluss.
+ * SettingsGeneralView — Spec-Tests fuer Phase-1 Kanon-First-Konsolidierung.
  *
- * Die View wurde in Slice 5.2 als Pilot auf AiModelPicker migriert, hatte
- * aber keinen Persistenz-Anschluss an den Workspace-Default-Store. Slice
- * 5.4 schliesst das:
- *  - AiModelPicker-Update -> useAiModelRefAdapter -> setGlobalDefault
- *  - Initial-Wert aus defaultsStore.globalDefault (via Adapter)
- *  - i18n-Keys veredelt (settings.v4.general.workspaceDefaultModel)
+ * Phase-1 Root-Cause-Fix (frontend-next): Die View nutzt AUSSCHLIESSLICH
+ * {@link useEffectiveModelSelection} als einzigen Selektions- und Persistenzpfad.
+ * Kanon = `routing/defaults.global_default`, repraesentiert als `AiModelRef`.
+ * `setGlobalSelection` schreibt Kanon zuerst UND `active-config` im Gleichschritt.
+ *
+ * Entfernte Senken, die hier NICHT mehr assertet werden duerfen:
+ *  - `STORAGE_HOME_AI_REF` / `STORAGE_HERO_AI_REF` / `STORAGE_REPORT_AI_REF`
+ *  - `saveLlmActive` / direktes `setDefault`-Store-Geschreibe
+ *  - separate `active-config`-Dropdowns in der View
  *
  * Coverage:
  *  1. mountet ohne Crash
- *  2. zeigt BREADCRUMBS
- *  3. zeigt PageHeader mit title + subtitle
- *  4. LlmProfileManager sichtbar
- *  5. AiModelPicker sichtbar
- *  6. i18n-Key: settings.v4.general.workspaceDefaultModel
- *  7. Capability-Filter: Picker bekommt mode='chat'
- *  8. allowWorkspaceDefault=true
- *  9. onMount: defaultsStore.load()
- * 10. initialer Picker-Wert aus defaultsStore.globalDefault (via Adapter)
- * 11. AiModelPicker-Update mit AiModelRef -> adapter.toLlmRoute -> setGlobalDefault
- * 12. AiModelPicker-Update mit null: keine setGlobalDefault-Aktion
- * 13. AiModelPicker hat eindeutige ID ('settings-general-model-picker')
- * 14. SettingsSectionPanel sichtbar
+ *  2. ensureLoaded wird onMount aufgerufen; View mountet auch bei
+ *     ensureLoaded-reject ohne Crash (selectedModel bleibt null)
+ *  3. zeigt BREADCRUMBS
+ *  4. zeigt PageHeader mit title + subtitle
+ *  5. LlmProfileManager sichtbar
+ *  6. AiModelPicker sichtbar
+ *  7. i18n-Key: settings.v4.general.workspaceDefaultModel
+ *  8. Capability-Filter: Picker bekommt mode='chat'
+ *  9. allowWorkspaceDefault=true
+ * 10. onMount: effectiveModel.ensureLoaded()
+ * 11. initialer Picker-Wert aus effectiveModel.effectiveRef (Kanon)
+ * 12. AiModelPicker-Update -> effectiveModel.setGlobalSelection
+ *     (Kanon + active-config-Gleichschritt)
+ * 13. AiModelPicker-Update mit null: keine setGlobalSelection-Aktion
+ * 14. AiModelPicker hat eindeutige ID ('settings-general-model-picker')
+ * 15. SettingsSectionPanel sichtbar
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
-import { ref, reactive } from 'vue'
-import { listLlmProviders } from '@/api/llmRouting'
+import { ref } from 'vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
+
+// --- Composable-Mock (Kanon-First). Die View beruehrt Store/Adapter/llmRouting
+//     NICHT direkt — alles geht durch useEffectiveModelSelection. Daher mocken
+//     wir ausschliesslich das Composable mit steuerbarem State.
+const ensureLoadedMock = vi.fn()
+const setGlobalSelectionMock = vi.fn()
+const effectiveRef = ref<AiModelRef | null>(null)
+const effectiveRoute = ref({
+  stage: null,
+  provider_id: 'openai',
+  model: 'gpt-4o-mini',
+  temperature: null,
+  max_tokens: null,
+  reasoning_effort: 'none',
+  provider_options: {},
+})
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef,
+    effectiveRoute,
+    loading,
+    error,
+    ensureLoaded: ensureLoadedMock,
+    setGlobalSelection: setGlobalSelectionMock,
+  }),
+}))
 
 // AiModelPicker mocken
 const aiPickerStub = {
@@ -56,50 +91,6 @@ const settingsSectionPanelStub = {
   props: ['allowedSections'],
   template: '<div data-testid="settings-section-panel" />',
 }
-
-const loadMock = vi.fn()
-const setGlobalDefaultMock = vi.fn()
-let globalDefaultRef: unknown = null
-
-vi.mock('@/store/aiModels', () => ({
-  useLlmRoutingDefaultsStore: () => ({
-    get globalDefault() { return globalDefaultRef },
-    load: loadMock,
-    setGlobalDefault: setGlobalDefaultMock,
-  }),
-}))
-
-const adapterMock = {
-  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
-    stage: null,
-    provider_id: 'openai',
-    model: aiRef.model_id,
-    temperature: null,
-    max_tokens: null,
-    reasoning_effort: 'none',
-    provider_options: {},
-  })),
-  toAiModelRef: vi.fn((route: { provider_id?: string | null; model?: string | null }) => ({
-    provider_connection_id: route.provider_id ?? 'conn-fallback',
-    model_id: route.model ?? '',
-    source: 'workspace-default' as const,
-  })),
-}
-
-vi.mock('@/composables/useAiModelRefAdapter', () => ({
-  useAiModelRefAdapter: () => adapterMock,
-}))
-
-vi.mock('@/api/llmRouting', () => ({
-  listLlmProviders: vi.fn().mockResolvedValue([
-    { id: 'ollama', label: 'Ollama' },
-  ]),
-  listProviderModels: vi.fn().mockResolvedValue([
-    { id: 'qwen3', label: 'Qwen 3' },
-  ]),
-  getActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'ollama', model: 'qwen3' }),
-  setActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'ollama', model: 'qwen3' }),
-}))
 
 function makeI18n() {
   return createI18n({
@@ -142,14 +133,12 @@ function makeI18n() {
   })
 }
 
-async function mountSettingsGeneral(initial: { globalDefault?: unknown } = {}) {
-  globalDefaultRef = initial.globalDefault ?? null
-  loadMock.mockClear()
-  loadMock.mockResolvedValue(undefined)
-  setGlobalDefaultMock.mockClear()
-  setGlobalDefaultMock.mockResolvedValue(undefined)
-  adapterMock.toLlmRoute.mockClear()
-  adapterMock.toAiModelRef.mockClear()
+async function mountSettingsGeneral(initial: { effectiveRef?: AiModelRef | null } = {}) {
+  effectiveRef.value = initial.effectiveRef ?? null
+  ensureLoadedMock.mockClear()
+  ensureLoadedMock.mockResolvedValue(undefined)
+  setGlobalSelectionMock.mockClear()
+  setGlobalSelectionMock.mockResolvedValue(undefined)
 
   const i18n = makeI18n()
   const pinia = createPinia()
@@ -170,9 +159,10 @@ async function mountSettingsGeneral(initial: { globalDefault?: unknown } = {}) {
   return wrapper
 }
 
-describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () => {
+describe('SettingsGeneralView (Phase-1, Kanon-First via useEffectiveModelSelection)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    effectiveRef.value = null
   })
 
   it('mountet ohne Crash', async () => {
@@ -180,12 +170,14 @@ describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () =
     expect(w.exists()).toBe(true)
   })
 
-  it('behält den Provider-Discovery-Fehler, wenn active-config und Modelle laden', async () => {
-    vi.mocked(listLlmProviders).mockRejectedValueOnce(new Error('Provider-Discovery fehlgeschlagen'))
-
+  it('ensureLoaded wird onMount aufgerufen; View mountet auch bei ensureLoaded-reject ohne Crash', async () => {
+    ensureLoadedMock.mockRejectedValueOnce(new Error('ensureLoaded fehlgeschlagen'))
     const w = await mountSettingsGeneral()
-
-    expect(w.get('[role="alert"]').text()).toContain('Provider-Discovery fehlgeschlagen')
+    expect(w.exists()).toBe(true)
+    expect(ensureLoadedMock).toHaveBeenCalled()
+    // Bei Reject bleibt selectedModel null (Picker zeigt nichts gewaehltes).
+    const picker = w.findComponent(aiPickerStub)
+    expect(picker.props('modelValue')).toBeNull()
   })
 
   it('zeigt BREADCRUMBS via AppShell', async () => {
@@ -230,48 +222,42 @@ describe('SettingsGeneralView (Slice 5.4, Pilot-Abschluss mit Persistenz)', () =
     expect(picker.props('allowWorkspaceDefault')).toBe(true)
   })
 
-  it('onMount: defaultsStore.load()', async () => {
+  it('onMount: effectiveModel.ensureLoaded()', async () => {
     await mountSettingsGeneral()
-    expect(loadMock).toHaveBeenCalled()
+    expect(ensureLoadedMock).toHaveBeenCalled()
   })
 
-  it('initialer Picker-Wert aus defaultsStore.globalDefault (via Adapter)', async () => {
-    const w = await mountSettingsGeneral({
-      globalDefault: { provider_id: 'ollama', model: 'qwen3', temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {} },
-    })
-    const picker = w.findComponent(aiPickerStub)
-    expect(picker.exists()).toBe(true)
-    // adapter.toAiModelRef wurde fuer die Initial-Konvertierung aufgerufen
-    expect(adapterMock.toAiModelRef).toHaveBeenCalled()
-  })
-
-  it('AiModelPicker-Update mit AiModelRef -> adapter.toLlmRoute -> setGlobalDefault', async () => {
-    const w = await mountSettingsGeneral()
-    const picker = w.findComponent(aiPickerStub)
-    ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', {
+  it('initialer Picker-Wert aus effectiveModel.effectiveRef (Kanon)', async () => {
+    const initial: AiModelRef = {
       provider_connection_id: 'conn-openai-1',
       model_id: 'gpt-4o-mini',
       source: 'workspace-default',
-    })
-    await flushPromises()
-    expect(adapterMock.toLlmRoute).toHaveBeenCalled()
-    expect(setGlobalDefaultMock).toHaveBeenCalledWith({
-      stage: null,
-      provider_id: 'openai',
-      model: 'gpt-4o-mini',
-      temperature: null,
-      max_tokens: null,
-      reasoning_effort: 'none',
-      provider_options: {},
-    })
+    }
+    const w = await mountSettingsGeneral({ effectiveRef: initial })
+    const picker = w.findComponent(aiPickerStub)
+    expect(picker.exists()).toBe(true)
+    expect(picker.props('modelValue')).toEqual(initial)
   })
 
-  it('AiModelPicker-Update mit null: keine setGlobalDefault-Aktion', async () => {
+  it('AiModelPicker-Update -> effectiveModel.setGlobalSelection (Kanon + active-config-Gleichschritt)', async () => {
+    const w = await mountSettingsGeneral()
+    const picker = w.findComponent(aiPickerStub)
+    const emitted: AiModelRef = {
+      provider_connection_id: 'conn-openai-1',
+      model_id: 'gpt-4o-mini',
+      source: 'workspace-default',
+    }
+    ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', emitted)
+    await flushPromises()
+    expect(setGlobalSelectionMock).toHaveBeenCalledWith(emitted)
+  })
+
+  it('AiModelPicker-Update mit null: keine setGlobalSelection-Aktion', async () => {
     const w = await mountSettingsGeneral()
     const picker = w.findComponent(aiPickerStub)
     ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', null)
     await flushPromises()
-    expect(setGlobalDefaultMock).not.toHaveBeenCalled()
+    expect(setGlobalSelectionMock).not.toHaveBeenCalled()
   })
 
   it('AiModelPicker hat eindeutige ID', async () => {

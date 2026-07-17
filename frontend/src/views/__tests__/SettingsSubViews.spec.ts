@@ -14,10 +14,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { makeTestRouter } from '@/components/v4/shell/__tests__/testRouter'
 import { SettingsSectionSchema } from '@/contracts/settingsContract'
-import {
-  getActiveLlmConfig,
-  setActiveLlmConfig,
-} from '@/api/llmRouting'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
@@ -81,6 +78,22 @@ vi.mock('@/api/llmRouting', () => ({
   setActiveLlmConfig: vi.fn().mockResolvedValue({ provider_id: 'openai', model: 'gpt-4o-mini' }),
 }))
 
+const ensureLoadedMock = vi.fn().mockResolvedValue(undefined)
+const setGlobalSelectionMock = vi.fn().mockResolvedValue(undefined)
+const effectiveGeneralRef: { value: AiModelRef | null } = {
+  value: { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3', source: 'workspace-default' },
+}
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef: effectiveGeneralRef,
+    effectiveRoute: { value: { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3' } },
+    loading: { value: false },
+    error: { value: null },
+    ensureLoaded: ensureLoadedMock,
+    setGlobalSelection: setGlobalSelectionMock,
+  }),
+}))
+
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
 import SettingsIntegrationsView from '../Settings/SettingsIntegrationsView.vue'
 import SettingsUsersTeamsView from '../Settings/SettingsUsersTeamsView.vue'
@@ -129,23 +142,17 @@ describe('Settings-Section-Parität (Slice 7.4a)', () => {
     expect([...new Set(mappedSections)].sort()).toEqual([...SettingsSectionSchema.options].sort())
   })
 
-  it('erhält den separaten active-config-Lade- und Speicherpfad im General-Surface', async () => {
+  it('erhält den Kanon-First-Initialisierungs- und Speicherpfad im General-Surface', async () => {
     const w = await mountView(SettingsGeneralView, '/settings/general')
 
-    expect(getActiveLlmConfig).toHaveBeenCalled()
-    expect((w.get('#settings-active-provider').element as HTMLSelectElement).value).toBe('ollama')
-    expect((w.get('#settings-active-model').element as HTMLSelectElement).value).toBe('qwen3')
-
-    await w.get('#settings-active-provider').setValue('openai')
-    await flushPromises()
-    await w.get('#settings-active-model').setValue('gpt-4o-mini')
-    await w.get('.settings-general__active-save').trigger('click')
-    await flushPromises()
-
-    expect(setActiveLlmConfig).toHaveBeenCalledWith({
-      provider_id: 'openai',
-      model: 'gpt-4o-mini',
-    })
+    // Kanon-First-Init: effectiveModel.ensureLoaded() wird beim Mount aufgerufen
+    expect(ensureLoadedMock).toHaveBeenCalled()
+    // Entfernte separate Active-LLM-Config-Sektion existiert nicht mehr
+    expect(w.find('#settings-active-provider').exists()).toBe(false)
+    expect(w.find('#settings-active-model').exists()).toBe(false)
+    expect(w.find('.settings-general__active-save').exists()).toBe(false)
+    // Stattdessen: kanonischer AiModelPicker ist sichtbar
+    expect(w.find('.ai-model-picker-stub').exists()).toBe(true)
   })
 })
 

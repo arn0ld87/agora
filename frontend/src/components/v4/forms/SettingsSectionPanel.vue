@@ -218,6 +218,7 @@ function setDraftValue(key: string, value: unknown) {
                 <template v-if="field.secret">
                   <input
                     type="password"
+                    :aria-label="field.key"
                     class="v4-input v4-input--secret"
                     :placeholder="
                       field.is_set
@@ -249,6 +250,7 @@ function setDraftValue(key: string, value: unknown) {
                 </template>
                 <template v-else-if="field.type === 'enum'">
                   <select
+                    :aria-label="field.key"
                     class="v4-input"
                     :value="settingsStore.draft[field.key]"
                     @change="
@@ -266,6 +268,7 @@ function setDraftValue(key: string, value: unknown) {
                 </template>
                 <template v-else-if="field.type === 'int' || field.type === 'float'">
                   <input
+                    :aria-label="field.key"
                     class="v4-input"
                     type="number"
                     :step="field.type === 'float' ? '0.01' : '1'"
@@ -277,6 +280,7 @@ function setDraftValue(key: string, value: unknown) {
                 </template>
                 <template v-else>
                   <input
+                    :aria-label="field.key"
                     class="v4-input"
                     type="text"
                     :value="settingsStore.draft[field.key]"

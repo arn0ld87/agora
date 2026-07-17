@@ -1,11 +1,18 @@
 /**
- * HeroNewRun — Spec-Tests fuer Slice 5.4 Migration auf AiModelPicker.
+ * HeroNewRun — Spec-Tests fuer Phase-1 Kanon-First Migration.
  *
  * Die Komponente ist der primaere Aktions-Block des Dashboards:
  * File-Picker, Profile-Dropdown, Modell-Wahl, Sprache, Persona-Count,
- * Rounds, Requirement, Start-CTA. Migration-Fokus ist der Modell-Picker:
- * ModelPicker (alt) -> AiModelPicker (SSoT) mit Adapter-Glue fuer den
- * STORAGE_MODEL-Spiegel. Slice 7.6c: Legacy-Route-Storage wird nicht mehr gelesen.
+ * Rounds, Requirement, Start-CTA.
+ *
+ * Kanon-First (Phase-1): Das Default-Modell kommt aus dem Kanon
+ * (routing/defaults.global via useEffectiveModelSelection), NICHT mehr aus
+ * einem eigenen `agora.hero.aiModelRef`-localStorage-Key. Beim Mount wird
+ * `effectiveModel.ensureLoaded()` gerufen und `selectedModel` aus
+ * `effectiveModel.effectiveRef` initialisiert. Ein Dashboard-Pick ist ein
+ * TRANSIENTER Run-Override: nur STORAGE_MODEL-Spiegel fuer MainView + defensive
+ * Entfernung des Legacy-Keys `agora.hero.route`. KEINE eigene persistente
+ * Modell-Senke mehr.
  *
  * Coverage:
  *  1. mountet ohne Crash
@@ -13,25 +20,26 @@
  *  3. File-Picker-Zone sichtbar
  *  4. Profile-Dropdown sichtbar (Hybrid bleibt)
  *  5. AiModelPicker in Config-Zone sichtbar
- *  6. liest bestehende Auswahl aus `agora.hero.aiModelRef` (neuer Key)
- *  7. Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen
- *  8. onPickRoute: persistiert als `agora.hero.aiModelRef` (neues Format)
- *  9. onPickRoute: setzt STORAGE_MODEL-Spiegel auf model_id
- * 10. onPickRoute: bei null werden beide Keys + STORAGE_MODEL auf 'default'
- * 11. onPickProfile: persistiert Profile-ID, loescht Model-Auswahl
- * 12. canSubmit: false ohne Files, false ohne Requirement
- * 13. startSimulation: bei Profile aktiv wird STORAGE_MODEL='default'
- * 14. startSimulation: ohne Profile wird STORAGE_MODEL=model_id
- * 15. startSimulation: ruft setPendingUpload + router.push
- * 16. i18n-Key: dashboard.hero.modelPlaceholder
- * 17. Capability-Filter: Picker bekommt mode='chat' (Default)
- * 18. Profile-Dropdown aktiv -> AiModelPicker versteckt (Hybrid)
+ *  6. Kanon-First-Init: selectedModel wird onMounted aus effectiveRef initialisiert
+ *  7. Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen, beim Mount entfernt
+ *  8. onPickModel: spiegelt model_id transient nach STORAGE_MODEL (agora.lastModel)
+ *  9. onPickModel(null): STORAGE_MODEL auf 'default', Legacy-Route entfernt
+ * 10. onPickProfile: persistiert Profile-ID (kein Model-Clear mehr)
+ * 11. canSubmit: false ohne Files, false ohne Requirement
+ * 12. startSimulation: bei Profile aktiv wird STORAGE_MODEL='default'
+ * 13. startSimulation: ohne Profile wird Picker-Wahl als STORAGE_MODEL gespiegelt
+ * 14. startSimulation: ruft setPendingUpload + router.push
+ * 15. i18n-Key: dashboard.hero.modelPlaceholder
+ * 16. Capability-Filter: Picker bekommt mode='chat' (Default)
+ * 17. Profile-Dropdown aktiv -> AiModelPicker versteckt (Hybrid)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { createPinia, setActivePinia } from 'pinia'
 import HeroNewRun from '../HeroNewRun.vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
+import type { LlmRoute } from '@/contracts/llmRoute'
 
 // AiModelPicker mocken
 const aiPickerStub = {
@@ -62,16 +70,27 @@ const iconPlusStub = { name: 'IconPlus', template: '<span />' }
 // "Cannot access 'X' before initialization". Die geteilten Mock-Objekte
 // werden in mountHero() / beforeEach() resettet und in den Tests über
 // .mockClear()/.mockResolvedValue() gesteuert.
+//
+// effectiveRefHolder ist der steuerbare Kanon-Stub: Tests setzen
+// `.current` auf den gewünschten AiModelRef (oder null) VOR dem Mount. Der
+// Composable-Mock exponiert effectiveRef als Ref-Shape (Getter/Setter auf
+// .value), die Komponente liest `effectiveModel.effectiveRef.value`.
 const {
   fetchLlmProfilesMock,
   getSystemStatusMock,
   setPendingUploadMock,
   routerPushMock,
+  ensureLoadedMock,
+  setGlobalSelectionMock,
+  effectiveRefHolder,
 } = vi.hoisted(() => ({
   fetchLlmProfilesMock: vi.fn(),
   getSystemStatusMock: vi.fn(),
   setPendingUploadMock: vi.fn(),
   routerPushMock: vi.fn(),
+  ensureLoadedMock: vi.fn(),
+  setGlobalSelectionMock: vi.fn(),
+  effectiveRefHolder: { current: null as AiModelRef | null },
 }))
 
 vi.mock('@/api/llmProfiles', () => ({
@@ -89,6 +108,61 @@ vi.mock('@/api/status', () => ({
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock }),
 }))
+
+// Kanon-Composable stubben: effectiveRef wird über den hoisted Holder
+// pro Test steuerbar. effectiveRoute/loading/error sind statisch (HeroNewRun
+// konsumiert nur effectiveRef + ensureLoaded). setGlobalSelection wird hier
+// nur exponiert, damit die Komponente ihn importieren kann — HeroNewRun ruft
+// ihn NICHT auf (Picker-Pick ist transient, kein setGlobalSelection).
+vi.mock('@/composables/useEffectiveModelSelection', () => {
+  const stubRoute: LlmRoute = {
+    stage: null,
+    provider_id: 'openai',
+    model: 'gpt-4o',
+    temperature: null,
+    max_tokens: null,
+    reasoning_effort: 'none',
+    provider_options: {},
+  }
+  return {
+    useEffectiveModelSelection: () => ({
+      effectiveRef: {
+        get value(): AiModelRef | null {
+          return effectiveRefHolder.current
+        },
+        set value(v: AiModelRef | null) {
+          effectiveRefHolder.current = v
+        },
+      },
+      effectiveRoute: {
+        get value(): LlmRoute {
+          return stubRoute
+        },
+        set value(_v: LlmRoute) {
+          /* noop — HeroNewRun schreibt effectiveRoute nicht */
+        },
+      },
+      loading: {
+        get value(): boolean {
+          return false
+        },
+        set value(_v: boolean) {
+          /* noop */
+        },
+      },
+      error: {
+        get value(): string | null {
+          return null
+        },
+        set value(_v: string | null) {
+          /* noop */
+        },
+      },
+      ensureLoaded: ensureLoadedMock,
+      setGlobalSelection: setGlobalSelectionMock,
+    }),
+  }
+})
 
 // Initial-Defaults (werden in mountHero() vor jedem Test neu gesetzt).
 fetchLlmProfilesMock.mockResolvedValue([])
@@ -133,10 +207,14 @@ const localStorageMock = (() => {
 })()
 
 // jsdom hat ein eigenes localStorage; wir ersetzen es pro Test via
-// vi.stubGlobal, damit die Vue-Komponente (die window.local liest)
+// vi.stubGlobal, damit die Vue-Komponente (die window.localStorage liest)
 // unseren Mock sieht. vi.unstubAllGlobals nach jedem Test.
 function installLocalStorageMock(): void {
   vi.stubGlobal('localStorage', localStorageMock)
+}
+
+function setEffectiveRef(aiRef: AiModelRef | null): void {
+  effectiveRefHolder.current = aiRef
 }
 
 function makeI18n() {
@@ -196,6 +274,11 @@ async function mountHero(seed: Record<string, string> = {}) {
   getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
   adapterMock.toLlmRoute.mockClear()
   adapterMock.toStoredModelString.mockClear()
+  // Kanon-Stub: ensureLoaded muss resolven, damit die Komponente beim Mount
+  // selectedModel aus effectiveRef initialisiert.
+  ensureLoadedMock.mockReset()
+  ensureLoadedMock.mockResolvedValue(undefined)
+  setGlobalSelectionMock.mockReset()
 
   const i18n = makeI18n()
   const pinia = createPinia()
@@ -215,7 +298,7 @@ async function mountHero(seed: Record<string, string> = {}) {
   return wrapper
 }
 
-describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
+describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
   beforeEach(() => {
     // clearAllMocks wuerde auch mockResolvedValue/Mock-Implementierungen loeschen.
     // Wir resetten nur die Call-History, nicht die Mocks selbst.
@@ -223,6 +306,11 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
       m.mockClear()
     }
     installLocalStorageMock()
+    // Kanon-Stub pro Test auf Null zurücksetzen; Tests setzen vor mountHero
+    // via setEffectiveRef den gewuenschten Kanon-Wert.
+    setEffectiveRef(null)
+    fetchLlmProfilesMock.mockReset()
+    fetchLlmProfilesMock.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -258,21 +346,31 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(picker.exists()).toBe(true)
   })
 
-  it('liest bestehende Auswahl aus `agora.hero.aiModelRef` (neuer Key)', async () => {
-    const aiRef = { provider_connection_id: 'conn-ollama-1', model_id: 'qwen3', source: 'workspace-default' }
-    const w = await mountHero({ 'agora.hero.aiModelRef': JSON.stringify(aiRef) })
+  it('Kanon-First-Init: selectedModel wird onMounted aus effectiveRef initialisiert', async () => {
+    const aiRef: AiModelRef = {
+      provider_connection_id: 'conn-ollama-1',
+      model_id: 'qwen3',
+      source: 'workspace-default',
+    }
+    setEffectiveRef(aiRef)
+    const w = await mountHero()
+    // ensureLoaded wird beim Mount gerufen und resolvt (Kanon-First-Init).
+    expect(ensureLoadedMock).toHaveBeenCalled()
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
-    // Der neue Key wird direkt Zod-validiert an den Picker durchgereicht.
+    // selectedModel wurde aus effectiveRef (Kanon) initialisiert — nicht aus
+    // einem localStorage-Key. Komponente liest agora.hero.aiModelRef NICHT mehr.
     expect(picker.props('modelValue')).toMatchObject({
       provider_connection_id: 'conn-ollama-1',
       model_id: 'qwen3',
     })
   })
 
-  it('Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen', async () => {
+  it('Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen, beim Mount entfernt', async () => {
     // Nur der Legacy-Key ist gesetzt — er darf nach dem Storage-Cut keinen
-    // Wert mehr vorbelegen und wird beim Mount defensiv entfernt.
+    // Wert mehr vorbelegen und wird beim Mount defensiv entfernt. effectiveRef
+    // ist null (kein Kanon-Wert), also bleibt der Picker leer.
+    setEffectiveRef(null)
     const legacyRoute = {
       stage: null, provider_id: 'ollama', model: 'gpt-legacy',
       temperature: null, max_tokens: null, reasoning_effort: 'none', provider_options: {},
@@ -281,58 +379,48 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
     const picker = w.findComponent(aiPickerStub)
     expect(picker.exists()).toBe(true)
     expect(picker.props('modelValue')).toBeNull()
+    // Legacy-Route wird beim Mount defensiv entfernt.
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
+    // Legacy-Route wird NICHT mehr gelesen (kein readLocal auf diesen Key).
+    expect(localStorageMock.getItem).not.toHaveBeenCalledWith('agora.hero.route')
   })
 
-  it('onPickRoute: persistiert als `agora.hero.aiModelRef` (neues Format)', async () => {
+  it('onPickModel: spiegelt model_id transient nach STORAGE_MODEL (agora.lastModel)', async () => {
     const w = await mountHero()
     const picker = w.findComponent(aiPickerStub)
     await picker.trigger('click')
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'agora.hero.aiModelRef',
-      expect.stringContaining('gpt-4o-mini'),
-    )
-  })
-
-  it('onPickRoute: setzt STORAGE_MODEL-Spiegel auf model_id', async () => {
-    const w = await mountHero()
-    const picker = w.findComponent(aiPickerStub)
-    expect(picker.exists()).toBe(true)
-    picker.vm.$emit('update:modelValue', {
-      provider_connection_id: 'conn-openai-1',
-      model_id: 'gpt-4o-mini',
-      source: 'explicit',
-    })
     await flushPromises()
-    expect(adapterMock.toStoredModelString).toHaveBeenCalled()
-    const calls = localStorageMock.setItem.mock.calls
-    const modelCall = calls.find((c) => c[0] === 'agora.lastModel')
-    expect(modelCall).toBeDefined()
-    expect(modelCall?.[1]).toBe('gpt-4o-mini')
+    // Transienter Run-Override: nur STORAGE_MODEL-Spiegel, keine eigene Senke.
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'gpt-4o-mini')
+    // Legacy-Route wird bei jedem Pick defensiv entfernt.
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
+    // Kein Schreiben in die entfernte Senke agora.hero.aiModelRef.
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.hero.aiModelRef', expect.anything())
   })
 
-  it('onPickRoute: bei null werden beide Keys + STORAGE_MODEL entfernt/zurueckgesetzt', async () => {
+  it('onPickModel(null): STORAGE_MODEL auf default, Legacy-Route entfernt', async () => {
     const w = await mountHero()
     const picker = w.findComponent(aiPickerStub)
     // Manuell null emittieren (AiModelRef | null).
     ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', null)
     await flushPromises()
-    expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.aiModelRef')
+    // STORAGE_MODEL wird auf 'default' zurueckgesetzt (kein stale Override).
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'default')
+    // Legacy-Route wird entfernt.
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
+    // Kein Schreiben in / kein Entfernen der entfernten Senke agora.hero.aiModelRef.
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.hero.aiModelRef')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.hero.aiModelRef', expect.anything())
   })
 
-  it('onPickProfile: persistiert Profile-ID via store, loscht Model-Auswahl', async () => {
+  it('onPickProfile: persistiert Profile-ID via store', async () => {
     // Smoke: wir setzen selectedProfileId via Pinia und pruefen, dass
     // setItem mit Profile-ID aufgerufen wird. Profil-Options aus dem
-    // async API-Call sind hier zweitrangig.
+    // async API-Call sind hier zweitrangig. onPickProfile cleared selectedModel
+    // nicht mehr (Kanon-First-Init bleibt erhalten).
     const w = await mountHero()
-    // Profil-Dropdown @change direkt: das native change-Event wird vom
-    // heroNewRun onPickProfile-Handler konsumiert, der auf selectedProfileId
-    // ref hoert. Ohne Profile-Options bleibt selectedProfileId null, was
-    // wir hier dokumentieren.
     const select = w.find('#hero-profile')
     expect(select.exists()).toBe(true)
-    // Im nativen DOM dispatch wir das change-Event, der Handler liest
-    // event.target.value. Mit leerer Options-Liste ist value immer ''.
     const sel = select.element as HTMLSelectElement
     sel.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -365,16 +453,85 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
     // Vollstaendige Profil-Selektion wird in onPickProfile-Test dokumentiert.
   })
 
-  it('startSimulation: ohne Profile bleibt Picker aktiv und Picker-Wahl persistent', async () => {
+  it('startSimulation: bei Profile aktiv wird STORAGE_MODEL auf default gesetzt', async () => {
+    fetchLlmProfilesMock.mockResolvedValue([
+      {
+        id: 'abc',
+        name: 'Mein GPT-4o',
+        provider: 'openai',
+        base_url: 'https://api.openai.com/v1',
+        model_name: 'gpt-4o',
+        api_key: 'sk-test',
+        is_default: true,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ])
     const w = await mountHero()
-    // Picker klicken
+
+    // Datei setzen
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    // Fragestellung setzen
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    // Profil 'abc' auswählen
+    const select = w.find<HTMLSelectElement>('select#hero-profile')
+    await select.setValue('abc')
+    await flushPromises()
+
+    // Starten
+    const cta = w.find('.hero-cta')
+    expect((cta.element as HTMLButtonElement).disabled).toBe(false)
+    await cta.trigger('click')
+    await flushPromises()
+
+    // Bei aktivem Profile gewinnt das Profile — STORAGE_MODEL wird auf
+    // 'default' zurueckgesetzt, damit MainView keinen stale Override mitsendet.
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'default')
+    expect(setPendingUploadMock).toHaveBeenCalledWith(
+      [file],
+      'Wie reagiert die DACH-Region?',
+      'abc',
+      30,
+      10,
+    )
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+  })
+
+  it('startSimulation: ohne Profile wird Picker-Wahl als STORAGE_MODEL gespiegelt', async () => {
+    const w = await mountHero()
+    // Picker emit aiRef (transienter Run-Override → STORAGE_MODEL-Spiegel)
     const picker = w.findComponent(aiPickerStub)
     await picker.trigger('click')
     await flushPromises()
-    const calls = localStorageMock.setItem.mock.calls
-    const aiCall = calls.find((c) => c[0] === 'agora.hero.aiModelRef')
-    expect(aiCall).toBeDefined()
-    expect((aiCall?.[1] as string)).toContain('gpt-4o-mini')
+
+    // Datei setzen
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    // Fragestellung setzen
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    // Starten (ohne Profil → Picker-Wahl gewinnt, STORAGE_MODEL=model_id)
+    const cta = w.find('.hero-cta')
+    await cta.trigger('click')
+    await flushPromises()
+
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'gpt-4o-mini')
+    expect(setPendingUploadMock).toHaveBeenCalled()
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })
 
   it('startSimulation: setPendingUpload wird ueber Pinia exportiert (Smoke)', async () => {
@@ -399,7 +556,7 @@ describe('HeroNewRun (Slice 5.4, AiModelPicker-Migration)', () => {
     expect(mode === 'chat' || mode === undefined).toBe(true)
   })
 
-  it('Profile-Dropdown aktiv -> AiModelPicker versteckt (Hybrid: i zeigt Picker nur wenn kein Profil)', async () => {
+  it('Profile-Dropdown aktiv -> AiModelPicker versteckt (Hybrid: Picker nur wenn kein Profil)', async () => {
     // Der Hybrid-Mechanismus (v-if="!selectedProfileId") ist Template-Logik
     // und nicht direkt Migration-relevant. Smoke: ohne Profil sichtbar.
     const w = await mountHero()

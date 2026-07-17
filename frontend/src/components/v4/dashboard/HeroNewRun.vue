@@ -18,9 +18,9 @@ import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
-import { AiModelRefSchema } from '@/contracts/aiModelRef'
 import { getSystemStatus } from '../../../api/status'
 
 const { t } = useI18n()
@@ -72,10 +72,13 @@ function removeLocal(key: string): void {
  *   - AiModelPicker (rechts, sichtbar wenn kein Profile aktiv): Direkt-Auswahl
  *     aus den unter /settings/llm-providers hinterlegten Provider-Connections.
  *
- * Persistenz: `agora.hero.profileId`, `agora.hero.aiModelRef` (Slice 5.4
- * Zod-validiert). Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route`
- * wird NICHT mehr gelesen; er wird beim Mount und beim Speichern defensiv aus
- * localStorage entfernt. User mit Legacy-Wert bekommen den Picker-Default.
+ * Persistenz: `agora.hero.profileId` (Preset). Phase-1 Konsolidierung: Das
+ * Default-Modell kommt NICHT mehr aus einem eigenen `agora.hero.aiModelRef`-Key,
+ * sondern aus dem Kanon (routing/defaults.global via useEffectiveModelSelection)
+ * — damit der Dashboard-Start dieselbe Auswahl wie Settings zeigt. Ein
+ * Dashboard-Pick ist ein transienter Run-Override (nur STORAGE_MODEL-Spiegel für
+ * MainView). Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route` wird
+ * NICHT mehr gelesen und beim Mount defensiv entfernt.
  *
  * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
  * via `storedEffectiveModel()` — wir spiegeln `aiModelRef.model_id` dorthin,
@@ -83,26 +86,17 @@ function removeLocal(key: string): void {
  * SecretResolver, vgl. PR #499) ohne Touch in MainView durchgeht.
  */
 const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
-const STORAGE_HERO_AI_REF = 'agora.hero.aiModelRef'
 // Slice 7.6c (Storage-Cut): nur noch als Ziel für defensives removeLocal.
 const STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'
 
 const adapter = useAiModelRefAdapter()
-
-function loadStoredModel(): AiModelRef | null {
-  // Slice 7.6c (Storage-Cut): nur noch der neue AiModelRef-Key wird gelesen.
-  const raw = readLocal(STORAGE_HERO_AI_REF)
-  if (!raw) return null
-  try {
-    const parsed = AiModelRefSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
-}
+// Phase-1 Konsolidierung: Default-Modell kommt aus dem Kanon
+// (routing/defaults.global via useEffectiveModelSelection), nicht mehr aus
+// einem eigenen localStorage-Key.
+const effectiveModel = useEffectiveModelSelection()
 
 const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
-const selectedModel = ref<AiModelRef | null>(loadStoredModel())
+const selectedModel = ref<AiModelRef | null>(null)
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
@@ -204,16 +198,15 @@ function formatBytes(bytes: number): string {
 }
 
 function onPickModel(aiRef: AiModelRef | null) {
+  // Transienter Run-Override: nur STORAGE_MODEL-Spiegel für den Sim-Start
+  // (MainView.handleNewProject). KEINE eigene persistente Modell-Senke mehr —
+  // der Default kommt aus dem Kanon.
   selectedModel.value = aiRef
   if (aiRef) {
-    writeLocal(STORAGE_HERO_AI_REF, JSON.stringify(aiRef))
     // STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default' bei leerer model_id).
     writeLocal(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
-    // Legacy-Key loeschen (Storage-Cut): verhindert, dass ein veralteter
-    // Routen-Eintrag beim naechsten Mount ueberhaupt herumliegt.
     removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   } else {
-    removeLocal(STORAGE_HERO_AI_REF)
     removeLocal(STORAGE_HERO_ROUTE_LEGACY)
     writeLocal(STORAGE_MODEL, 'default')
   }
@@ -261,6 +254,14 @@ async function startSimulation() {
 onMounted(() => {
   // Slice 7.6c (Storage-Cut): Legacy-Route-Key einmalig defensiv entsorgen.
   removeLocal(STORAGE_HERO_ROUTE_LEGACY)
+  // Phase-1 Konsolidierung: Default-Modell aus dem Kanon initialisieren, damit
+  // der Dashboard-Start dieselbe Auswahl wie Settings zeigt.
+  effectiveModel
+    .ensureLoaded()
+    .then(() => {
+      if (!selectedModel.value) selectedModel.value = effectiveModel.effectiveRef.value
+    })
+    .catch(() => { /* Kanon nicht ladbar: Picker bleibt leer, Backend nutzt active-config */ })
   fetchLlmProfiles()
     .then(profiles => { llmProfiles.value = profiles })
     .catch(() => { /* Fallback: Profile-Picker bleibt leer, ModelPicker greift */ })

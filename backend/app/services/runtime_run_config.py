@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 from typing import Optional, Dict, Any
 from ..contracts import (
     PROVIDER_GOOGLE,
+    PROVIDER_MINIMAX,
     PROVIDER_OLLAMA_CLOUD,
     PROVIDER_OPENAI,
     PROVIDER_OPENAI_COMPATIBLE,
@@ -78,6 +79,7 @@ def _sanitize_url(value: str) -> str:
 _HTTP_DETECTION_TO_PROVIDER_ID = {
     "cloud": PROVIDER_OLLAMA_CLOUD,
     "google": PROVIDER_GOOGLE,
+    "minimax": PROVIDER_MINIMAX,
     "openai": PROVIDER_OPENAI,
     # "ollama" (local, e.g. port 11434) and "unknown" both fall back to the
     # generic OpenAI-compatible route, matching this function's previous
