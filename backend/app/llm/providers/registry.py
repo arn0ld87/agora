@@ -91,15 +91,15 @@ def _is_ollama_cloud_tag(model: str) -> bool:
 
 def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedProvider:
     """
-    Detects the provider used by the backend HTTP client.
+    Detect the provider used by the backend HTTP client.
     
-    Provider detection prioritizes Ollama Cloud URLs and cloud model tags, followed
-    by MiniMax, local Ollama, OpenAI, and Google endpoints. Unrecognized endpoints
-    are classified as ``"unknown"``.
+    Provider detection follows a fixed priority order: Ollama Cloud URLs and
+    cloud model tags, MiniMax URLs, local Ollama ports, OpenAI URLs, and Google
+    URLs. Inputs that match none of these patterns are classified as unknown.
     
     Parameters:
-        base_url (Optional[str]): Provider endpoint URL to inspect.
-        model (Optional[str]): Model name whose cloud tag may identify Ollama Cloud.
+        base_url (Optional[str]): The provider endpoint URL.
+        model (Optional[str]): The model identifier, including any provider tag.
     
     Returns:
         HttpDetectedProvider: The detected provider identifier.

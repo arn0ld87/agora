@@ -93,10 +93,22 @@ export interface UseGraphRenderReturn {
 
 const GRAPH_LAYOUT_STORAGE_PREFIX = 'agora:graph-layout:'
 
+/**
+ * Creates the local storage key for a graph's saved layout.
+ *
+ * @param graphId - The graph identifier
+ * @returns The local storage key associated with the graph
+ */
 function layoutStorageKey(graphId: string): string {
   return GRAPH_LAYOUT_STORAGE_PREFIX + graphId
 }
 
+/**
+ * Loads persisted node positions for a graph.
+ *
+ * @param graphId - Identifier of the graph whose layout should be loaded
+ * @returns The saved node positions, or `null` when no valid layout is available
+ */
 function loadSavedLayout(graphId: string): Record<string, { x: number; y: number }> | null {
   if (typeof localStorage === 'undefined') return null
   try {
@@ -110,6 +122,12 @@ function loadSavedLayout(graphId: string): Record<string, { x: number; y: number
   }
 }
 
+/**
+ * Persists valid node positions for a graph in local storage.
+ *
+ * @param graphId - Identifier of the graph whose node layout is being saved
+ * @param nodes - Nodes and their current positions
+ */
 function saveNodeLayout(
   graphId: string,
   nodes: ReadonlyArray<{ id: string; x: number; y: number }>,
@@ -128,6 +146,11 @@ function saveNodeLayout(
   }
 }
 
+/**
+ * Removes the persisted node layout for a graph.
+ *
+ * @param graphId - The identifier of the graph whose saved layout should be removed
+ */
 function clearNodeLayout(graphId: string): void {
   if (typeof localStorage === 'undefined') return
   try {
@@ -145,6 +168,19 @@ type D3Selection = d3.Selection<any, any, any, any>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type D3Simulation = d3.Simulation<any, any>
 
+/**
+ * Manages force-directed graph rendering and exposes graph interaction controls.
+ *
+ * @param svgRef - Reference to the SVG element used for rendering
+ * @param containerRef - Reference to the element that determines the graph dimensions
+ * @param graphData - Reactive graph data to render
+ * @param entityTypes - Reactive entity type definitions used for node colors
+ * @param showEdgeLabels - Controls edge label visibility
+ * @param translateLabel - Optional function for translating edge labels
+ * @param batchSignal - Optional reactive signal used to trigger temporary auto-freezing
+ * @param autoFreezeMs - Duration of automatic freezing after a new batch, in milliseconds
+ * @returns Reactive selection, pause, layout, and Mini-Map state with graph control functions
+ */
 export function useGraphRender({
   svgRef,
   containerRef,
