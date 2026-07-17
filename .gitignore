@@ -144,3 +144,6 @@ backend/instance/*.db
 # Screenshot-Drops, persönliche Test-Seed-Dokumente).
 .tmp-*
 test-seed-*.md
+
+# graphify Knowledge-Graph-Output (lokaler Build-Artefakt-Cache)
+graphify-out/
