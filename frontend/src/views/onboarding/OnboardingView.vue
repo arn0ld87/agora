@@ -1,11 +1,24 @@
 <script setup lang="ts">
 /**
- * OnboardingView — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2).
+ * OnboardingView — resumierbarer Erst-Einrichtungs-Wizard (Onboarding Slice 2
+ * + Phase-2-Verfeinerung frontend-next).
  *
  * `providers`/`chat_model`/`embeddings` sind bewusst ehrliche Statusschritte:
- * sie zeigen den realen `requirements`-Status und verlinken auf die
+ * sie zeigen den realen Konfigurations-Status und verlinken auf die
  * bestehenden Settings-Routen. Die geführte Einrichtung folgt in einem
  * späteren Update — hier gibt es keine Attrappen.
+ *
+ * Phase 2 Granularität (§3.2.1): `providers` wertet den Connection-Store
+ * aus (mindestens eine ProviderConnection existiert), nicht das
+ * `chat_model_configured`-Flag. `chat_model` und `embeddings` bleiben am
+ * Backend-Requirements-Flag. Damit sind `providers` und `chat_model`
+ * nicht mehr redundant und der Status entspricht der echten Konfiguration.
+ *
+ * Phase 2 Skip-Button (§3.2.4): Auf Statusschritten wird der "Weiter"-
+ * Button ausgeblendet, solange der jeweilige Step nicht `configured()` ist.
+ * Sonst markiert ein voreilig geklickter "Weiter"-Button den Step als
+ * completed, obwohl keine Einrichtung stattgefunden hat. Der "Später
+ * einrichten"-Footer bleibt sichtbar als ehrlicher Ausweg.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -17,6 +30,7 @@ import Button from '@/components/v4/forms/Button.vue'
 import ProfileForm from '@/components/v4/forms/ProfileForm.vue'
 import { isApiError } from '@/api/envelope'
 import { useUserProfileStore } from '@/store/userProfile'
+import { useLlmProvidersStore } from '@/store/aiModels'
 import { ONBOARDING_STEP_ORDER } from '@/contracts/userProfileContract'
 import type {
   OnboardingStepId,
@@ -27,6 +41,7 @@ import type {
 const { t } = useI18n()
 const router = useRouter()
 const store = useUserProfileStore()
+const providersStore = useLlmProvidersStore()
 
 const OPERATING_MODES: readonly OperatingMode[] = ['local', 'hybrid', 'server']
 
@@ -73,7 +88,11 @@ const statusSteps = computed<StatusStepConfig[]>(() => [
     futureNoticeKey: 'onboarding.providers.futureNotice',
     settingsLinkKey: 'onboarding.providers.settingsLink',
     settingsRouteName: 'SettingsLlmProviders',
-    configured: () => store.onboarding.requirements?.chat_model_configured ?? false,
+    // Phase 2 §3.2.1: providers zeigt Connection-Store-Status (mindestens
+    // eine ProviderConnection existiert), nicht das redundante
+    // `chat_model_configured`-Flag. Voraussetzung: onMounted ruft
+    // `providersStore.loadConnections()` (fail-open per .catch).
+    configured: () => Object.keys(providersStore.connections).length > 0,
   },
   {
     step: 'chat_model',
@@ -247,7 +266,15 @@ async function handleDismiss(): Promise<void> {
 }
 
 onMounted(async () => {
-  await store.ensureLoaded()
+  // Phase 2 §3.2.1: `providers.configured()` braucht den Connection-Store.
+  // Parallel zu `ensureLoaded()` laden, fail-open per `.catch` (bei
+  // Provider-Endpoint-Fehler bleibt `connections = {}` und der providers-
+  // Step zeigt ehrlich "pending" — der User klickt sich dann zu den
+  // Settings und sieht dort den realen Stand).
+  await Promise.all([
+    store.ensureLoaded(),
+    providersStore.loadConnections().catch(() => undefined),
+  ])
   viewStep.value = store.onboarding.state?.current_step ?? 'welcome'
   selectedOperatingMode.value = store.onboarding.state?.operating_mode ?? null
 })
@@ -431,7 +458,7 @@ onMounted(async () => {
           </Button>
 
           <Button
-            v-else-if="activeStatusStep"
+            v-else-if="activeStatusStep && activeStatusStep.configured()"
             variant="primary"
             type="button"
             :disabled="busy"
