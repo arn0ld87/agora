@@ -27,9 +27,9 @@ Diese Entscheidung widerspricht dem React-Original (das einen Inline-Wizard hatt
 
 **Kurz: nichts direkt — aber alles indirekt.**
 
-- Die 3 Onboarding-Statusschritte (`providers`, `chat_model`, `embeddings`) verlinken auf `SettingsLlmProviders` und `SettingsEmbedding`. **Diese Flächen wurden in Phase 1 auf den kanonischen Composable umgestellt.** → Der Status, den Onboarding anzeigt, ist nach Phase 1 *zuverlässig* (vorher konnte er divergieren).
-- Wenn der User im Onboarding auf "Provider konfigurieren" klickt, in SettingsLlmProviders einen Provider setzt, zurück ins Onboarding kommt und auf "Weiter" klickt: `store.onboarding.requirements.chat_model_configured` ist jetzt wahr (weil routing/defaults + active-config im Gleichschritt sind, und der Backend-Status-Check beide lesen kann).
-- Phase 1 hat das Onboarding also nicht direkt berührt, aber seine Funktionalität stillschweigend repariert.
+- Die 3 Onboarding-Statusschritte (`providers`, `chat_model`, `embeddings`) verlinken auf `SettingsLlmProviders` und `SettingsEmbedding`. **Diese Flächen wurden in Phase 1 auf den kanonischen Composable umgestellt.** → Der User sieht und schreibt nun konsistent `routing/defaults.global_default` + `active-config` (die beiden Frontend-facing-Senken).
+- `store.onboarding.requirements.chat_model_configured` wird jedoch **weiterhin** in `compute_onboarding_requirements()` aus `settings.llm_model_name` berechnet (Zeile 232–234 in `onboarding_state_store.py`). Phase-1-Schreibpfade (`PUT /api/llm/routing/defaults/global`, `PUT /api/llm/active-config`) ändern `settings.llm_model_name` nicht — dieser Pydantic-Settings-Wert stammt aus Env-Variablen und ist zur Laufzeit effektiv immutabel.
+- **Integration-Gap:** `chat_model_configured` reflektiert die Phase-1-Modellwahl nur, wenn `settings.llm_model_name` unabhängig gesetzt wurde (z. B. via `.env`), oder beim nächsten `/api/onboarding`-Reload nachdem `settings.llm_model_name` extern geändert wurde. Ein Phase-1-Write allein führt nicht zu einem synchronen `chat_model_configured = true`. Phase 2 (oder ein Folge-Slice) muss klären, ob `compute_onboarding_requirements()` stattdessen `routing/defaults.global_default` oder `active-config` prüfen soll.
 
 ---
 
