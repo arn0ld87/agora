@@ -165,15 +165,25 @@ async function doStop(row: Row) {
 // Stale stopping-Flags abräumen, sobald die betroffene Run die aktive Menge
 // verlässt (status → stopped/completed/failed). Wird durch den Parent-Re-Poll
 // nach emit('refresh') gespeist. CodeRabbit Minor (F3).
-watch(activeRuns, (now) => {
+//
+// Wichtig: auf `props.runs` (ungefiltert) schauen, NICHT auf `activeRuns` —
+// letzteres ist für die Tabelle auf 8 Rows gecappt, sonst würden bei >8
+// aktiven Runs die stoppingIds der Rows 9+ vorzeitig gecleart (CodeRabbit
+// 21:53Z Re-Review). Die aktive Menge wird hier ohne Cap aus ACTIVE_STATUSES
+// bestimmt.
+watch(() => props.runs, (runs) => {
   if (stoppingIds.value.size === 0) return
-  const activeIds = new Set(now.map(r => r.run_id))
+  const activeIds = new Set(
+    runs
+      .filter(r => (ACTIVE_STATUSES as readonly string[]).includes(r.status))
+      .map(r => r.run_id),
+  )
   const next = new Set(stoppingIds.value)
   for (const id of stoppingIds.value) {
     if (!activeIds.has(id)) next.delete(id)
   }
   if (next.size !== stoppingIds.value.size) stoppingIds.value = next
-})
+}, { deep: true })
 </script>
 
 <template>

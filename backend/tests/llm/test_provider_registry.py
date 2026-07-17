@@ -49,6 +49,14 @@ HTTP_CASES = [
     ("https://api.minimax.io/v1", "MiniMax-M3", "minimax"),
     ("https://api.minimax.io/anthropic", "MiniMax-M3", "minimax"),
     ("HTTPS://API.MINIMAX.IO/v1", "MiniMax-M3", "minimax"),  # case-insensitive
+    # Issue #750 — Subdomain unter api.minimax.io erkannt (Suffix-Match).
+    ("https://foo.api.minimax.io/v1", "MiniMax-M3", "minimax"),
+    # CodeQL #750 — kein Substring-False-Positive: Host `api.minimax.io.attacker.test`
+    # enthaelt den Text, ist aber nicht der MiniMax-Host → unknown (vorher: minimax).
+    ("https://api.minimax.io.attacker.test/v1", "MiniMax-M3", "unknown"),
+    # CodeQL #750 — kein Path-False-Positive: `api.minimax.io` im Path eines
+    # anderen Hosts → openai (vorher: minimax via Substring).
+    ("https://api.openai.com/proxy/api.minimax.io", "MiniMax-M3", "openai"),
     # Kein False Positive: Modellname enthaelt "minimax", Base-URL aber nicht.
     ("https://api.openai.com/v1", "minimax-mock", "openai"),
 ]

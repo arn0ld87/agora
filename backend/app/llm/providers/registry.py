@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING, Literal, Optional, Union, overload
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from app.llm.providers.base import ProviderAdapter
@@ -110,7 +111,17 @@ def _detect_http(base_url: Optional[str], model: Optional[str]) -> HttpDetectedP
         return "cloud"
     if _is_ollama_cloud_tag(model_name):
         return "cloud"
-    if "api.minimax.io" in base:
+    # CodeQL #750 — match the URL hostname exactly (suffix) instead of a raw
+    # substring, which would also match `api.minimax.io.attacker.test` or
+    # paths/query containing the text and misroute requests through
+    # PROVIDER_MINIMAX. Consistent hostname-based detection for all providers
+    # (ollama.com, openai.com, googleapis.com) is tracked in Phase F (#671)
+    # / #750 — this PR only fixes the NEW minimax branch.
+    _minimax_host = urlparse(base).hostname
+    if _minimax_host and (
+        _minimax_host == "api.minimax.io"
+        or _minimax_host.endswith(".api.minimax.io")
+    ):
         return "minimax"
     if "11434" in base:
         return "ollama"
