@@ -12,7 +12,7 @@
  * keine simulation_id tragen. Bestätigungsdialog via vue-i18n, optimistisches
  * Loading-State, danach emit('refresh') für sofortigen Re-Poll der Liste.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Card from '../forms/Card.vue'
@@ -146,16 +146,34 @@ async function doStop(row: Row) {
     // aktualisiert die Liste; der nächste 5s-Tick und ein ggf. offener
     // Step3-Wizard (eigenes Polling) ziehen den neuen Status nach.
     emit('refresh')
+    // stoppingIds bewusst NICHT hier clearen: der Button bleibt disabled,
+    // bis der Parent refreshed props liefert und die Row aus activeRuns
+    // verschwindet (status → stopped). Verhindert doppelte Stop-Requests
+    // im Gap zwischen stopRun-Resolve und dem nächsten Polling-Tick.
+    // CodeRabbit Minor (F3).
   } catch (err) {
     stopError.value = t('dashboard.active.stopError', {
       message: err instanceof Error ? err.message : String(err),
     })
-  } finally {
+    // Bei Fehler freigeben, damit der User retryen kann.
     const next = new Set(stoppingIds.value)
     next.delete(row.run_id)
     stoppingIds.value = next
   }
 }
+
+// Stale stopping-Flags abräumen, sobald die betroffene Run die aktive Menge
+// verlässt (status → stopped/completed/failed). Wird durch den Parent-Re-Poll
+// nach emit('refresh') gespeist. CodeRabbit Minor (F3).
+watch(activeRuns, (now) => {
+  if (stoppingIds.value.size === 0) return
+  const activeIds = new Set(now.map(r => r.run_id))
+  const next = new Set(stoppingIds.value)
+  for (const id of stoppingIds.value) {
+    if (!activeIds.has(id)) next.delete(id)
+  }
+  if (next.size !== stoppingIds.value.size) stoppingIds.value = next
+})
 </script>
 
 <template>

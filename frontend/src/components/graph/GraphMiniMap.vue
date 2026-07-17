@@ -10,11 +10,15 @@
       class="minimap-svg"
       :viewBox="`0 0 ${MINIMAP_W} ${MINIMAP_H}`"
       preserveAspectRatio="xMidYMid meet"
+      tabindex="0"
+      :aria-label="title"
+      role="application"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
       @pointerleave="onPointerLeave"
+      @keydown="onKeydown"
     >
       <!-- Graph bounds frame -->
       <rect
@@ -199,6 +203,50 @@ function onPointerUp(event) {
 
 function onPointerLeave() {
   // Do NOT cancel on leave — pointer capture keeps the drag alive.
+}
+
+// Issue #744 Phase 4b — keyboard-operable minimap. Arrow keys pan the main
+// viewport in 20 % steps of the currently visible region, Home/End jump to
+// the horizontal bounds. CodeRabbit Major (F2): same seek functionality
+// without a mouse.
+const ARROW_MAP = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+}
+
+function stepSeek(dx, dy) {
+  const vp = props.viewport
+  if (!vp || !vp.k || vp.k <= 0) return
+  // Visible region in graph space: left = -tx/k, top = -ty/k,
+  // w = width/k, h = height/k.
+  const cx = (-vp.x + vp.width / 2) / vp.k
+  const cy = (-vp.y + vp.height / 2) / vp.k
+  const stepX = (vp.width / vp.k) * 0.2
+  const stepY = (vp.height / vp.k) * 0.2
+  emit('seek', { gx: cx + dx * stepX, gy: cy + dy * stepY })
+}
+
+function onKeydown(event) {
+  const m = ARROW_MAP[event.key]
+  if (m) {
+    event.preventDefault()
+    stepSeek(m[0], m[1])
+    return
+  }
+  if (event.key === 'Home') {
+    event.preventDefault()
+    const b = graphBounds.value
+    emit('seek', { gx: b.minX, gy: (b.minY + b.maxY) / 2 })
+    return
+  }
+  if (event.key === 'End') {
+    event.preventDefault()
+    const b = graphBounds.value
+    emit('seek', { gx: b.maxX, gy: (b.minY + b.maxY) / 2 })
+    return
+  }
 }
 </script>
 

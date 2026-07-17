@@ -112,6 +112,12 @@ vi.mock('d3', () => {
       scale: vi.fn().mockReturnThis(),
     },
     __captured: captured,
+    // CodeRabbit Minor (F5): captured handlers + last-node array survive
+    // across cases otherwise — a failed render could reuse a previous
+    // handler and pass. Reset between tests.
+    __resetCaptured: () => {
+      for (const k of Object.keys(captured)) delete captured[k]
+    },
   }
 })
 
@@ -210,6 +216,10 @@ function mountHarness(graphDataValue: unknown): Harness {
   })
 
   const wrapper = mount(Comp)
+  // CodeRabbit Minor (F5): track every mounted harness so afterEach can unmount
+  // — otherwise resize listeners + composable scope work stay active across
+  // cases and captured handlers leak between tests.
+  mountedWrappers.push(wrapper)
   return {
     minimapNodes: exposed!.minimapNodes,
     minimapViewport: exposed!.minimapViewport,
@@ -218,6 +228,17 @@ function mountHarness(graphDataValue: unknown): Harness {
     unmount: () => wrapper.unmount(),
   }
 }
+
+// CodeRabbit Minor (F5): shared cleanup — unmount every harness and reset
+// captured d3 handlers between cases so a failed render can't reuse a prior
+// case's handlers and pass.
+const mountedWrappers: Array<ReturnType<typeof mount>> = []
+afterEach(() => {
+  mountedWrappers.splice(0).forEach((w) => {
+    try { w.unmount() } catch { /* already unmounted */ }
+  })
+  d3Mock.__resetCaptured()
+})
 
 // ---------------------------------------------------------------------------
 // Tests

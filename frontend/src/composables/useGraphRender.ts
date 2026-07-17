@@ -258,12 +258,30 @@ export function useGraphRender({
 
     svg.selectAll('*').remove()
 
+    // Issue #744 Phase 4b — reset the minimap mirror on every render. A
+    // render while paused (or a render of a graph whose simulation never
+    // ticks) produces no tick, so without a reset the prior graph's nodes
+    // would linger in the minimap. Cancelling a pending rAF also prevents a
+    // stale callback from publishing nodes captured before this render.
+    // CodeRabbit Major (F8).
+    if (_minimapRafHandle !== null) {
+      cancelAnimationFrame(_minimapRafHandle)
+      _minimapRafHandle = null
+    }
+    minimapNodes.value = []
+
     const types = toValue(entityTypes) || []
     // reason: buildGraphRenderData is a JS function; the result types are inferred
     // as JSDoc-only and are not compatible with d3 SimulationNodeDatum generics.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { nodes, edges, getColor } = buildGraphRenderData(data, types) as { nodes: any[]; edges: any[]; getColor: (type: string) => string }
-    if (nodes.length === 0) return
+    if (nodes.length === 0) {
+      // Issue #744 Phase 4 — empty graph: drop the graph identity so the
+      // still-visible reset action can't delete a *previous* graph's
+      // persisted layout. CodeRabbit Major (F6).
+      currentGraphId = null
+      return
+    }
 
     // Issue #744 Phase 4a — track graph_id for localStorage pin persistence.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
