@@ -96,6 +96,15 @@ function isStopping(runId: string): boolean {
   return stoppingIds.value.has(runId)
 }
 
+// Nur Simulation-Runs unterstützen den generischen Stop (Backend returnt 409
+// für andere run_types — s. backend test_runs_resume_stop.py:
+// test_resume_unsupported_run_type_returns_409). graph_build/report_generate
+// haben keinen killbaren Hintergrund-Task; ein Stop-Call würde immer failen.
+const STOPPABLE_RUN_TYPE = 'simulation_run'
+function canStopRun(runType: string): boolean {
+  return runType === STOPPABLE_RUN_TYPE
+}
+
 interface Row extends Record<string, unknown> {
   id: string
   run_id: string
@@ -194,6 +203,7 @@ async function doStop(row: Row) {
       </template>
       <template #actions="{ row }">
         <Button
+          v-if="canStopRun((row as Row).raw.run_type)"
           class="ar-stop"
           variant="danger"
           size="sm"

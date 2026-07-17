@@ -261,6 +261,40 @@ describe('useGraphRender — Pin-Persistenz (Phase 4a)', () => {
     expect(parsed.n1).toEqual({ x: 100, y: 120 })
   })
 
+  it('Drag-End persistiert die Drop-Position (d.fx/fy) auch wenn d.x/d.y stale sind', async () => {
+    // CodeRabbit/codex P2: läst der User zwischen Simulation-Ticks los, sind
+    // d.x/d.y noch die vorige Tick-Position (stale), während d.fx/d.fy bereits
+    // die Drop-Position halten. Persistiert werden muss die Drop-Position
+    // (sonst snap-back beim Restore). d.x/d.y müssen auf d.fx/d.fy gesynced
+    // werden, damit saveNodeLayout (liest n.x/n.y) den echten Drop-Punkt schreibt.
+    const graphData = { graph_id: 'g-stale', nodes: [{ id: 'n1' }], edges: [] }
+    mountHarness(graphData)
+    await flushPromises()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodes = (graphDataMock as any).__getLastNodes() as Array<Record<string, unknown>>
+    const n1 = nodes.find((n) => n.id === 'n1') as Record<string, unknown>
+
+    const captured = d3Mock.__captured
+    captured.dragStart?.({ x: 5, y: 5 }, n1)
+    // drag handler setzt d.fx/d.fy = event.x/event.y (Drop-Position 100/120).
+    captured.dragDrag?.({ x: 100, y: 120 }, n1)
+    // d.x/d.y bleiben auf der vorigen Tick-Position (stale) — User lässt
+    // zwischen Ticks los, der letzte Tick hat d.x/d.y noch nicht auf fx/fy gezogen.
+    n1.x = 50
+    n1.y = 60
+    captured.dragEnd?.({}, n1)
+
+    const raw = localStorage.getItem('agora:graph-layout:g-stale')
+    expect(raw).not.toBeNull()
+    const parsed = JSON.parse(raw as string)
+    // Drop-Position (100/120 via fx/fy), NICHT stale d.x/d.y (50/60).
+    expect(parsed.n1).toEqual({ x: 100, y: 120 })
+    // Node-Position wurde auf Drop-Punkt gesynced (verhindert snap-back).
+    expect(n1.x).toBe(100)
+    expect(n1.y).toBe(120)
+  })
+
   it('render() wendet gespeichertes Layout als fx/fy an (vor Simulation)', async () => {
     // Seed a saved layout for graph_id 'g-layout'.
     localStorage.setItem(

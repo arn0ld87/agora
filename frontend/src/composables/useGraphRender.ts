@@ -471,8 +471,16 @@ export function useGraphRender({
             // Issue #744 Phase 4a — keep the node pinned at the dropped
             // position (fx/fy) and persist the full layout to localStorage
             // so it survives re-renders and is restored on next render().
-            d.fx = d.x
-            d.fy = d.y
+            // d.fx/d.fy hold the final pointer position from the last drag
+            // event; d.x/d.y are only updated to fx/fy on force-simulation
+            // ticks, so on a release between ticks they still hold the prior
+            // tick's coordinates. Sync d.x/d.y to d.fx/d.fy so the rendered
+            // position matches the drop point and saveNodeLayout (which reads
+            // n.x/n.y) persists the actual released position instead of a
+            // stale tick coordinate (which would snap the node back on
+            // restore). CodeRabbit/codex P2 finding.
+            d.x = d.fx
+            d.y = d.fy
             if (currentGraphId) saveNodeLayout(currentGraphId, nodes)
           } else {
             // Click without drag → release the temporary pin set in 'start'.
