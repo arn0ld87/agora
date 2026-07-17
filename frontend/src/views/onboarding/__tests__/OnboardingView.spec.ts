@@ -20,6 +20,7 @@ import { ApiError } from '@/api/envelope'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import type { OnboardingState, OnboardingStatusResponse, UserProfile } from '@/contracts/userProfileContract'
+import type { ProviderConnection } from '@/contracts/aiProviderContract'
 
 vi.mock('@/api/profile', () => ({
   getProfile: vi.fn(),
@@ -70,7 +71,7 @@ const _getOnboardingStatus = getOnboardingStatus as unknown as MockFn
 const _completeOnboardingStep = completeOnboardingStep as unknown as MockFn
 const _completeOnboarding = completeOnboarding as unknown as MockFn
 const _dismissOnboarding = dismissOnboarding as unknown as MockFn
-const _listProviderConnections = listProviderConnections as unknown as MockFn
+const _listProviderConnections = vi.mocked(listProviderConnections)
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
@@ -114,6 +115,26 @@ function makeOnboardingStatus(
       embedding_source: 'none',
     },
     onboarding_required: true,
+    ...overrides,
+  }
+}
+
+function makeProviderConnection(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
+  return {
+    id: 'test-connection-1',
+    provider_kind: 'ollama',
+    display_name: 'Test Ollama',
+    transport: 'local',
+    auth_mode: 'none',
+    base_url: null,
+    enabled: true,
+    status: 'connected',
+    status_message: null,
+    secret_ref: null,
+    capabilities: {},
+    created_at: null,
+    updated_at: null,
+    last_tested_at: null,
     ...overrides,
   }
 }
@@ -367,7 +388,7 @@ describe('OnboardingView', () => {
       }),
     )
     // … aber es existiert (noch) keine konfigurierte Provider-Connection.
-    _listProviderConnections.mockResolvedValue({ items: [] })
+    _listProviderConnections.mockResolvedValue({ items: [], total: 0 })
 
     const { wrapper } = await mountView()
     // providers.configured() wertet connections aus, nicht chat_model_configured.
@@ -389,7 +410,7 @@ describe('OnboardingView', () => {
         }),
       }),
     )
-    _listProviderConnections.mockResolvedValue({ items: [] })
+    _listProviderConnections.mockResolvedValue({ items: [], total: 0 })
 
     const { wrapper } = await mountView()
     const nextBtn = wrapper
@@ -409,7 +430,7 @@ describe('OnboardingView', () => {
         }),
       }),
     )
-    _listProviderConnections.mockResolvedValue({ items: [{ id: 'p1' }] })
+    _listProviderConnections.mockResolvedValue({ items: [makeProviderConnection({ id: 'p1' })], total: 1 })
 
     const { wrapper } = await mountView()
     const nextBtn = wrapper
