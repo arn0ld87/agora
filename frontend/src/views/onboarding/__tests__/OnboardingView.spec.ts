@@ -20,6 +20,7 @@ import { ApiError } from '@/api/envelope'
 import de from '@/i18n/locales/de.json'
 import en from '@/i18n/locales/en.json'
 import type { OnboardingState, OnboardingStatusResponse, UserProfile } from '@/contracts/userProfileContract'
+import type { ProviderConnection } from '@/contracts/aiProviderContract'
 
 vi.mock('@/api/profile', () => ({
   getProfile: vi.fn(),
@@ -33,6 +34,10 @@ vi.mock('@/api/profile', () => ({
   dismissOnboarding: vi.fn(),
   reopenOnboarding: vi.fn(),
   avatarUrl: vi.fn(() => null),
+}))
+
+vi.mock('@/api/providerConnections', () => ({
+  listProviderConnections: vi.fn(),
 }))
 
 vi.mock('@/components/v4/shell/AppShell.vue', () => ({
@@ -57,6 +62,7 @@ import {
   getOnboardingStatus,
   getProfile,
 } from '@/api/profile'
+import { listProviderConnections } from '@/api/providerConnections'
 import OnboardingView from '../OnboardingView.vue'
 
 type MockFn = ReturnType<typeof vi.fn>
@@ -65,6 +71,7 @@ const _getOnboardingStatus = getOnboardingStatus as unknown as MockFn
 const _completeOnboardingStep = completeOnboardingStep as unknown as MockFn
 const _completeOnboarding = completeOnboarding as unknown as MockFn
 const _dismissOnboarding = dismissOnboarding as unknown as MockFn
+const _listProviderConnections = vi.mocked(listProviderConnections)
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
@@ -108,6 +115,26 @@ function makeOnboardingStatus(
       embedding_source: 'none',
     },
     onboarding_required: true,
+    ...overrides,
+  }
+}
+
+function makeProviderConnection(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
+  return {
+    id: 'test-connection-1',
+    provider_kind: 'ollama',
+    display_name: 'Test Ollama',
+    transport: 'local',
+    auth_mode: 'none',
+    base_url: null,
+    enabled: true,
+    status: 'connected',
+    status_message: null,
+    secret_ref: null,
+    capabilities: {},
+    created_at: null,
+    updated_at: null,
+    last_tested_at: null,
     ...overrides,
   }
 }
@@ -334,5 +361,81 @@ describe('OnboardingView', () => {
     expect(document.activeElement).toBe(heading.element)
     wrapper.unmount()
     host.remove()
+  })
+
+  // Phase 2 Onboarding-Verfeinerung: Granularität + Skip-Button.
+  //
+  // Granularität: providers zeigt den Connection-Store-Status (nicht
+  // chat_model_configured). chat_model und embeddings bleiben am
+  // Backend-Requirements-Flag. providers und chat_model sind damit
+  // nicht mehr redundant.
+  it('Test 11: providers-Step zeigt pending, wenn keine Connections geladen — auch wenn chat_model_configured=true', async () => {
+    _getProfile.mockResolvedValue(null)
+    _getOnboardingStatus.mockResolvedValue(
+      makeOnboardingStatus({
+        state: makeOnboardingState({
+          current_step: 'providers',
+          completed_steps: ['welcome'],
+          operating_mode: 'local',
+        }),
+        requirements: {
+          profile_valid: false,
+          // Model ist bereits global gesetzt …
+          chat_model_configured: true,
+          embedding_configured: false,
+          embedding_source: 'none',
+        },
+      }),
+    )
+    // … aber es existiert (noch) keine konfigurierte Provider-Connection.
+    _listProviderConnections.mockResolvedValue({ items: [], total: 0 })
+
+    const { wrapper } = await mountView()
+    // providers.configured() wertet connections aus, nicht chat_model_configured.
+    expect(wrapper.text()).toContain(de.onboarding.providers.notConfigured)
+    expect(wrapper.text()).not.toContain(de.onboarding.providers.configured)
+  })
+
+  // Skip-Button: auf Statusschritten nur sichtbar, wenn der Step
+  // tatsächlich configured ist. Sonst markiert ein voreilig geklickter
+  // "Weiter"-Button den Step als completed, obwohl nichts eingerichtet ist.
+  it('Test 12: providers-Step blendet Weiter-Button aus, solange providers.configured() === false', async () => {
+    _getProfile.mockResolvedValue(null)
+    _getOnboardingStatus.mockResolvedValue(
+      makeOnboardingStatus({
+        state: makeOnboardingState({
+          current_step: 'providers',
+          completed_steps: ['welcome'],
+          operating_mode: 'local',
+        }),
+      }),
+    )
+    _listProviderConnections.mockResolvedValue({ items: [], total: 0 })
+
+    const { wrapper } = await mountView()
+    const nextBtn = wrapper
+      .findAll('button')
+      .find((b) => b.text() === de.onboarding.wizard.nextBtn)
+    expect(nextBtn).toBeFalsy()
+  })
+
+  it('Test 13: providers-Step zeigt Weiter-Button, sobald Connections geladen sind', async () => {
+    _getProfile.mockResolvedValue(null)
+    _getOnboardingStatus.mockResolvedValue(
+      makeOnboardingStatus({
+        state: makeOnboardingState({
+          current_step: 'providers',
+          completed_steps: ['welcome'],
+          operating_mode: 'local',
+        }),
+      }),
+    )
+    _listProviderConnections.mockResolvedValue({ items: [makeProviderConnection({ id: 'p1' })], total: 1 })
+
+    const { wrapper } = await mountView()
+    const nextBtn = wrapper
+      .findAll('button')
+      .find((b) => b.text() === de.onboarding.wizard.nextBtn)
+    expect(nextBtn).toBeTruthy()
   })
 })
