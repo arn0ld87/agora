@@ -182,6 +182,54 @@ class TestCreateModelOpenAIBranch:
             "OPENAI branch must not emit extra_body (think/num_ctx are Ollama-only)"
 
 
+class TestCreateModelMiniMaxBranch:
+    """create_model() mit einem MiniMax-Modell (api.minimax.io) routet ueber den
+    OpenAI-Compat-Pfad und muss den MiniMax-`thinking`-Block in
+    model_config_dict.extra_body setzen (Spec: thinking.type ∈ disabled/adaptive).
+    """
+
+    def test_minimax_think_off_sets_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_MODEL_NAME", "MiniMax-M3")
+        monkeypatch.setenv("LLM_API_KEY", "mm-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.delenv("OLLAMA_THINKING", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        assert len(calls) == 1
+        platform_arg = calls[0]["args"][0] if calls[0]["args"] else calls[0]["kwargs"].get("model_platform")
+        assert platform_arg == ModelPlatformType.OPENAI
+        model_cfg = calls[0]["kwargs"].get("model_config_dict", {})
+        assert model_cfg.get("extra_body") == {"thinking": {"type": "disabled"}}
+
+    def test_minimax_think_on_sets_adaptive(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LLM_MODEL_NAME", "MiniMax-M3")
+        monkeypatch.setenv("LLM_API_KEY", "mm-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.setenv("OLLAMA_THINKING", "true")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        model_cfg = calls[0]["kwargs"].get("model_config_dict", {})
+        assert model_cfg.get("extra_body") == {"thinking": {"type": "adaptive"}}
+
+
 class TestCreateModelOllamaBranch:
     """create_model() with an Ollama model must route via OllamaModel with url/api_key
     and emit think/num_ctx in extra_body — even for ``:latest`` suffixes and

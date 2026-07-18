@@ -79,6 +79,30 @@ run_schemas() {
 }
 
 # ---------------------------------------------------------------------------
+# Routing-Gate: Localhost-Falle im LLM-/Embedding-Routing.
+# Hintergrund: docker-compose.yml warnt explizit vor LLM_BASE_URL=localhost
+# in der .env, weil das in den Container leakt und Connection-Refused erzeugt.
+# Symptom: Agenten machen nichts, ~99 Connection-Errors pro Sim-Start.
+# Eigenes Scope fuer den schnellen Re-Run ohne Backend-Suite.
+# ---------------------------------------------------------------------------
+run_routing() {
+  step "Routing: Localhost-Falle im LLM-Routing (.env)"
+  # Exit 2 = Skip (.env fehlt/nicht lesbar in CI ohne Repo-Vollzugriff) — als Warnung,
+  # nicht als Fail, weil das Gate in CI ohnehin kein Container-Env hat.
+  set +e
+  bash scripts/check_llm_endpoint_localhost.sh
+  rc=$?
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    ok "routing gate green"
+  elif [[ $rc -eq 2 ]]; then
+    warn "routing gate skipped (.env nicht verfuegbar — CI-Build ohne Repo-Vollzugriff)"
+  else
+    fail "localhost-falle in .env erkannt — run 'bash scripts/fix-llm-localhost-falle.sh' locally"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Frontend-Gates
 # ---------------------------------------------------------------------------
 run_frontend() {
@@ -116,11 +140,12 @@ run_frontend() {
 # Routing
 # ---------------------------------------------------------------------------
 case "$SCOPE" in
-  all)      run_backend; run_frontend ;;
+  all)      run_routing; run_backend; run_frontend ;;
   backend)  run_backend ;;
   frontend) run_frontend ;;
   schemas)  run_schemas ;;
-  *)        echo "usage: $0 [all|backend|frontend|schemas]" >&2; exit 2 ;;
+  routing)  run_routing ;;
+  *)        echo "usage: $0 [all|backend|frontend|schemas|routing]" >&2; exit 2 ;;
 esac
 
 ok "pre-push-gate: ALL GREEN — safe to push 🚀"

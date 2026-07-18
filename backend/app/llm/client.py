@@ -233,6 +233,24 @@ class LLMClient:
         """
         return _provider_base.is_ollama(self.base_url)
 
+    def _is_minimax(self) -> bool:
+        """True wenn der Endpoint die MiniMax-eigene Plattform (api.minimax.io) ist."""
+        return self._detect_provider() == "minimax"
+
+    def _minimax_thinking_extra_body(
+        self, *, force_no_thinking: bool = False
+    ) -> Dict[str, Any]:
+        """MiniMax-``thinking``-Block (Spec: ``thinking.type`` ∈ disabled/adaptive).
+
+        ``disabled`` schaltet Reasoning bei MiniMax-M3 ab (direkte Antwort, keine
+        ``<think>``-Tokens); M2.x ignorieren es. Gekoppelt an denselben
+        think-Toggle wie Ollama (``reasoning_effort`` / ``OLLAMA_THINKING``). NUR
+        fuer MiniMax senden — andere OpenAI-Compat-Provider antworten 400 auf ein
+        unbekanntes ``thinking``-Feld.
+        """
+        think_on = self._think and not force_no_thinking
+        return {"thinking": {"type": "adaptive" if think_on else "disabled"}}
+
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
         """Siehe ``app.llm.providers.openai.uses_max_completion_tokens``."""
@@ -406,6 +424,11 @@ class LLMClient:
                 extra_body["options"] = {"num_ctx": self._num_ctx}
             extra_body["think"] = False if force_no_thinking else self._think
             kwargs["extra_body"] = extra_body
+        elif self._is_minimax():
+            # MiniMax-eigenes ``thinking``-Feld (Spec) statt Ollama-``think``.
+            kwargs["extra_body"] = self._minimax_thinking_extra_body(
+                force_no_thinking=force_no_thinking
+            )
 
         # Force streaming for Ollama: the OpenAI-compatible endpoint in Ollama
         # 0.21.0 stalls on non-streaming completions for cloud models (e.g.

@@ -207,6 +207,8 @@ def _chat_with_tools(
             extra_body["options"] = {"num_ctx": self._num_ctx}
         extra_body["think"] = self._think
         kwargs["extra_body"] = extra_body
+    elif self._is_minimax():
+        kwargs["extra_body"] = self._minimax_thinking_extra_body()
 
     force_stream = (
         self._is_ollama()

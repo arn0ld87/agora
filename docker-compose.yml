@@ -87,6 +87,16 @@ services:
       # Together, vLLM) sind unproblematisch, weil sie absolute URLs nutzen.
       - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      # Gemini-API-Key für OASIS-Subprozess (CAMEL ModelPlatformType.GEMINI).
+      # Der Subprozess liest GEMINI_API_KEY aus env, nicht aus dem Backend-
+      # Secret-Store — ohne diese Var crashed der Subprozess mit
+      # ValueError("Missing or empty required API keys: GEMINI_API_KEY").
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # HF-Token für authentifizierte huggingface_hub-Downloads (z. B.
+      # Twitter/twhin-bert-base im OASIS-Subprozess). Ohne Token laufen die
+      # Downloads unauthenticated und werden rate-limited → erster Sim-Round
+      # blockiert minutenlang beim Cold-Cache-Download. Wert liegt in .env.
+      - HF_TOKEN=${HF_TOKEN:-}
       # Read-only rootfs: don't try to write __pycache__ next to source.
       - PYTHONDONTWRITEBYTECODE=1
       # .venv wurde beim Image-Build via `uv sync --frozen` vollständig

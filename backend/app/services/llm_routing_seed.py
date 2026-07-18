@@ -11,6 +11,7 @@ import os
 from typing import Optional
 
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
+from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_runtime import RuntimeLlmConfig
 from .runtime_run_config import RuntimeRunConfig
@@ -143,6 +144,13 @@ def build_route_subprocess_env(
         )
         if provider and provider.api_key_ref:
             env[provider.api_key_ref] = api_key
+        # CAMELs GeminiModel (OASIS-Subprozess) liest ``GEMINI_API_KEY``; der
+        # Google-Provider fuehrt aber ``api_key_ref="GOOGLE_API_KEY"``. Ohne
+        # diesen Alias crasht der Subprozess trotz Store-Key mit
+        # ``Missing required API keys: GEMINI_API_KEY``. Der Alias haelt den
+        # UI-Secrets-Store als Single Source — kein ``.env`` fuer Gemini-Sims.
+        if detect_provider(route.base_url_sanitized, route.model, mode="oasis") == "google":
+            env["GEMINI_API_KEY"] = api_key
     if route.base_url_sanitized:
         env["LLM_BASE_URL"] = route.base_url_sanitized
         env["OPENAI_BASE_URL"] = route.base_url_sanitized

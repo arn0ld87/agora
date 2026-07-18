@@ -13,7 +13,7 @@ Historische Pläne sind keine aktiven Steuerungsquellen: [`docs/archive/planning
 Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION) geführt.
 
 <!-- BEGIN_AUTOGEN_VERSIONS -->
-| Komponente | Pfad | aktuelle Manifest-Version |
+| Komponente | Pfad | Version |
 |---|---|---|
 | Backend | `backend/pyproject.toml` | 1.0.0 |
 | Frontend | `frontend/package.json` | 1.0.0 |
@@ -26,8 +26,8 @@ Die Manifest-Versionen bilden noch den früheren, zu optimistischen Release-Stan
 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
-|---|---:|---|
-| Backend Tests (collected) | 3350 | `cd backend && uv run pytest --collect-only -q` |
+|---|---|---|
+| Backend Tests (collected) | 3365 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 

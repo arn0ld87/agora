@@ -134,6 +134,41 @@ def build_camel_extra_body(
     return body
 
 
+def _is_minimax_route(model: str, base_url: str) -> bool:
+    """True fuer die MiniMax-eigene Plattform (``api.minimax.io``).
+
+    Detection ueber die Provider-SSoT im ``http``-Modus — der ``oasis``-Modus
+    kennt kein ``"minimax"`` und faellt bewusst auf ``"openai"`` zurueck (CAMEL
+    spricht MiniMax ueber den OpenAI-Compat-Endpoint). Grenzt bewusst das ueber
+    Ollama Cloud bereitgestellte ``minimax-m3`` @ ``ollama.com`` ab, das KEIN
+    MiniMax-Plattform-Signal ist.
+    """
+    from app.llm.providers.registry import detect_provider
+
+    return detect_provider(base_url, model, mode="http") == "minimax"
+
+
+def build_minimax_extra_body(*, model: str, base_url: str, think: bool) -> dict[str, Any]:
+    """Baut den MiniMax-``thinking``-Block fuer ``ModelFactory.create()``.
+
+    Laut MiniMax-OpenAI-Compat-Spec ist ``thinking.type`` eines von
+    ``{"disabled", "adaptive"}``:
+
+    - ``disabled`` — MiniMax-M3 antwortet direkt ohne Reasoning (keine
+      ``<think>``-Tokens). Bei M2.x bleibt Thinking an, der Parameter ist aber
+      gueltig.
+    - ``adaptive`` — Default; adaptives Reasoning fuer M3.
+
+    NUR fuer MiniMax-Routen gesetzt — andere OpenAI-Compat-Provider kennen das
+    ``thinking``-Feld nicht und antworten 400. Der ``think``-Toggle stammt aus
+    demselben Gate wie bei Ollama (``OLLAMA_THINKING`` / ``reasoning_effort``).
+    """
+    if not _is_minimax_route(model, base_url):
+        return {}
+
+    return {"thinking": {"type": "adaptive" if think else "disabled"}}
+
+
 @dataclass(frozen=True)
 class RuntimePaths:
     scripts_dir: Path
