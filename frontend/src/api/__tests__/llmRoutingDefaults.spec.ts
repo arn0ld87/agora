@@ -75,36 +75,22 @@ describe('llmRoutingDefaults api client — ai_route-Anreicherung (Regression)',
       patchRoutingDefaultStage('ontology_generation', globalDefault),
     ).resolves.toMatchObject({ version: 1 })
   })
+})
 
-  it('calls the expected backend routes with the expected payloads', async () => {
+describe('llmRoutingDefaults api client — Pfade und Payloads', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('ruft GET /api/llm/routing/defaults ohne Body auf', async () => {
     serviceMock.get.mockResolvedValueOnce(enrichedEnvelope)
-    serviceMock.put.mockResolvedValueOnce(enrichedEnvelope)
-    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
 
     await getRoutingDefaults()
-    await replaceGlobalDefault(globalDefault)
-    await patchRoutingDefaultStage('ontology_generation', globalDefault)
 
     expect(serviceMock.get).toHaveBeenCalledWith('/api/llm/routing/defaults')
-    expect(serviceMock.put).toHaveBeenCalledWith('/api/llm/routing/defaults/global', globalDefault)
-    expect(serviceMock.patch).toHaveBeenCalledWith(
-      '/api/llm/routing/defaults/stages/ontology_generation',
-      globalDefault,
-    )
   })
 
-  it('sends { clear: true } when patching a stage default to null', async () => {
-    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
-
-    await patchRoutingDefaultStage('ontology_generation', null)
-
-    expect(serviceMock.patch).toHaveBeenCalledWith(
-      '/api/llm/routing/defaults/stages/ontology_generation',
-      { clear: true },
-    )
-  })
-
-  it('calls PUT /api/llm/routing/defaults with the full payload for replaceRoutingDefaults', async () => {
+  it('ruft PUT /api/llm/routing/defaults mit dem vollstaendigen Payload auf', async () => {
     serviceMock.put.mockResolvedValueOnce(enrichedEnvelope)
     const payload = { global_default: globalDefault, stage_overrides: {}, version: 1 }
 
@@ -113,51 +99,93 @@ describe('llmRoutingDefaults api client — ai_route-Anreicherung (Regression)',
     expect(serviceMock.put).toHaveBeenCalledWith('/api/llm/routing/defaults', payload)
   })
 
-  it('still parses a response without the ai_route enrichment (backward compatible)', async () => {
-    const plainEnvelope = {
-      data: {
-        global_default: globalDefault,
-        stage_overrides: {},
-        updated_at: '2026-07-18T01:08:56.061467Z',
-        version: 1,
-      },
-    }
+  it('ruft PUT /api/llm/routing/defaults/global mit der Route auf', async () => {
+    serviceMock.put.mockResolvedValueOnce(enrichedEnvelope)
+
+    await replaceGlobalDefault(globalDefault)
+
+    expect(serviceMock.put).toHaveBeenCalledWith('/api/llm/routing/defaults/global', globalDefault)
+  })
+
+  it('ruft PATCH /api/llm/routing/defaults/stages/:stageId mit der Route auf', async () => {
+    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
+
+    await patchRoutingDefaultStage('graph_build', globalDefault)
+
+    expect(serviceMock.patch).toHaveBeenCalledWith(
+      '/api/llm/routing/defaults/stages/graph_build',
+      globalDefault,
+    )
+  })
+
+  it('sendet { clear: true } statt eines Route-Body, wenn die Stage-Route null ist', async () => {
+    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
+
+    await patchRoutingDefaultStage('graph_build', null)
+
+    expect(serviceMock.patch).toHaveBeenCalledWith('/api/llm/routing/defaults/stages/graph_build', {
+      clear: true,
+    })
+  })
+})
+
+describe('llmRoutingDefaults api client — unangereicherte Antworten (Backward-Compat)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const plainEnvelope = {
+    data: {
+      global_default: globalDefault,
+      stage_overrides: {},
+      updated_at: '2026-07-18T01:08:56.061467Z',
+      version: 1,
+    },
+  }
+
+  it('parst eine Antwort ohne ai_route weiterhin korrekt', async () => {
     serviceMock.get.mockResolvedValueOnce(plainEnvelope)
 
     const result = await getRoutingDefaults()
+
+    expect(result).toMatchObject({ version: 1 })
     expect(result.ai_route).toBeUndefined()
-    expect(result).toMatchObject({ version: 1, global_default: { model: 'gpt-5.4-nano' } })
+  })
+})
+
+describe('llmRoutingDefaults api client — Schema-Drift (negativ)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
-  it('rejects with a schema-mismatch error when a non-ai_route key is unrecognized', async () => {
-    serviceMock.get.mockResolvedValueOnce({
-      data: {
-        global_default: globalDefault,
-        stage_overrides: {},
-        version: 1,
-        ai_route: aiRoute,
-        unexpected_field: 'boom',
-      },
-    })
-
-    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
-  })
-
-  it('rejects with a schema-mismatch error when ai_route itself is malformed', async () => {
-    serviceMock.get.mockResolvedValueOnce({
-      data: {
-        global_default: globalDefault,
-        stage_overrides: {},
-        version: 1,
-        ai_route: { ...aiRoute, source: 'not_a_valid_source' },
-      },
-    })
-
-    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
-  })
-
-  it('rejects with a schema-mismatch error when global_default is missing', async () => {
+  it('wirft einen typisierten Fehler, wenn das Backend global_default weglaesst', async () => {
     serviceMock.get.mockResolvedValueOnce({ data: { stage_overrides: {}, version: 1 } })
+
+    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
+  })
+
+  it('wirft einen typisierten Fehler, wenn ai_route dem AiRoute-Vertrag widerspricht', async () => {
+    serviceMock.get.mockResolvedValueOnce({
+      data: {
+        global_default: globalDefault,
+        stage_overrides: {},
+        version: 1,
+        ai_route: { ...aiRoute, source: 'not-a-real-source' },
+      },
+    })
+
+    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
+  })
+
+  it('wirft einen typisierten Fehler bei unbekannten Top-Level-Keys jenseits von ai_route', async () => {
+    serviceMock.get.mockResolvedValueOnce({
+      data: {
+        global_default: globalDefault,
+        stage_overrides: {},
+        version: 1,
+        unexpected_field: 'nope',
+      },
+    })
 
     await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
   })
