@@ -55,14 +55,14 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Von den fünf Kern-Smokes sind AiModelPicker, Minimalreport und Upload + Graph lokal grün (Sub-Slices 1–3/5); die übrigen zwei (Report-Modi, Golden-Gate Accessibility) erreichen den eigentlichen Test und sind noch rot.
+Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Von den fünf Kern-Smokes sind AiModelPicker, Minimalreport, Upload + Graph und Report-Modi lokal grün (Sub-Slices 1–4/5); nur Golden-Gate Accessibility ist noch rot.
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
 | Health | grün | Stack, Auth und Provider-Seeding funktionieren |
 | Upload + Graph | grün (lokal, Sub-Slice 3/5) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
 | Minimalreport | grün (lokal, Sub-Slice 2/5) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
-| Report-Modi | rot | `force_regenerate` und Mode-Transition erreichen nicht stabil `completed` |
+| Report-Modi | grün (lokal, Sub-Slice 4/5) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
 | Golden-Gate Accessibility | rot | mindestens eine Route verletzt das strikte A11y-Gate |
 | AiModelPicker | grün (lokal, Sub-Slice 1/5) | mock-models-Seed-URL via `AGORA_E2E_MOCK_MODELS_BASE` lokal überschreibbar; CI-Verhalten unverändert (PR #769) |
 
