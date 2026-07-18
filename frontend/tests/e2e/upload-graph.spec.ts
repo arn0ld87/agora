@@ -154,6 +154,21 @@ test.describe('M11.4b · Upload + Graph-Smoke', () => {
       // ruft loadGraph(graph_id) auf, sobald project.graph_id vorhanden ist.
       // 'domcontentloaded' als waitUntil — networkidle wäre Anti-Pattern für SPAs mit Polling.
       // =================================================================
+      // Sub-Slice 3/5 (Issue #739): Onboarding-Wizard wegräumen.
+      // backend/app/api/onboarding.py::dismiss_onboarding setzt state.status='dismissed',
+      // onboardingGuard (router/onboardingGuard.ts:32) lässt dann jede Route durch.
+      // Notwendig, weil der Smoke-Spec aus M11.4b (Mai 2026) vor dem Onboarding-Feature
+      // (PR #684, Juni 2026) entstand und keine Onboarding-Bypass-Logik enthält — sonst
+      // redirected page.goto('/process/<projectId>') zu '/onboarding', .graph-view mountet nie.
+      // Dismiss ist idempotent — sicher bei mehrfachem Run.
+      const dismissRes = await apiCtx.post(`${baseURL}/api/onboarding/dismiss`, {
+        headers,
+      });
+      expect(
+        dismissRes.ok(),
+        `POST /api/onboarding/dismiss fehlgeschlagen (${dismissRes.status()}): ${await dismissRes.text()}`,
+      ).toBe(true);
+
       // M11.4b-Followup-3: waitUntil: 'domcontentloaded' statt 'networkidle'.
       // SPAs mit Polling/SSE erreichen niemals den networkidle-State (>=500 ms ohne Request).
       // 'domcontentloaded' ist deterministisch: HTML-Parser durch, Inline-Scripts ausgeführt.
