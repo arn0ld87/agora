@@ -14,6 +14,7 @@
  */
 import { test } from '@playwright/test';
 import { injectAuthToken } from './helpers/auth';
+import { ensureOnboardingDismissed } from './helpers/onboarding';
 import {
   checkAccessibilityGate,
   runAxe,
@@ -26,8 +27,12 @@ import {
 import { LlmRoutingTestId } from './helpers/testIds';
 
 test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
-  test.beforeEach(async ({ context }) => {
+  test.beforeEach(async ({ context, page }) => {
     await injectAuthToken(context);
+    // Cross-Cutting-Fund Issue #739 Sub-Slice 5/5: onboardingGuard redirected
+    // sonst jede Route auf /onboarding — axe-core würde nur die
+    // Onboarding-Seite prüfen statt der Zielroute.
+    await ensureOnboardingDismissed(page);
   });
 
   test.describe('Shell', () => {
