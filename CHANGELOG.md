@@ -52,9 +52,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Embedding-Erkennung bleibt gemäß ADR-0007 eigenständig und ist über den
   öffentlichen `EmbeddingService.embed()`-Pfad testfixiert.
 - **Legacy-HTTP-Pfade terminiert**: `/api/settings/llm-profiles/*` und
-  `/api/llm/providers/*` liefern `Deprecation: true`, den kanonischen
-  Nachfolger und `X-Agora-Removal-Version: 1.0.0`. Ein RFC-`Sunset`-Datum folgt
-  erst, sobald ein belastbares Release-Datum feststeht.
+  `/api/llm/providers/*` liefern RFC 9745-konforme `Deprecation`-Header
+  (Structured Field Date), den kanonischen Nachfolger und
+  `X-Agora-Removal-Version: 1.0.0`. Ein RFC-`Sunset`-Datum folgt erst, sobald
+  ein belastbares Release-Datum feststeht.
 
 ### Fixed (Issue #750 — 2026-07-18)
 

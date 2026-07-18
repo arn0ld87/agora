@@ -248,7 +248,9 @@ def test_legacy_models_route_delegates_to_connection_service(api_client, lifecyc
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["data"] == []
     assert service.probed == ["openai"]
-    assert response.headers["Deprecation"] == "true"
+    # RFC 9745 Structured Field Date format: @<unix-timestamp>
+    assert response.headers["Deprecation"].startswith("@")
+    assert response.headers["Deprecation"][1:].isdigit()
     assert response.headers["X-Agora-Removal-Version"] == "1.0.0"
     assert response.headers["Link"] == '</api/llm/provider-connections>; rel="successor-version"'
 
