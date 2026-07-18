@@ -2,15 +2,14 @@
 # check_complexity.sh — Cyclomatic-Complexity-Gate (radon)
 #
 # Fail-Schwelle: Class D+ (cc >= 21). Klasse C (cc <= 20) wird geduldet.
-# Begründung: PLAN.md schreibt "cc > 15" und "> C-Klasse". Da radon
-# Class C als cc 11–20 definiert und Class D ab cc 21 beginnt, ist die
-# präzise Umsetzung von "> Class C" durch die Schwelle cc >= 21 (Class D).
+# Die Schwelle ist die technische Policy des Gates. Änderungen daran benötigen
+# ein GitHub Issue mit Release-Bezug und eine nachvollziehbare Begründung.
 # Bestands-Hot-Spots sind in backend/radon-allowlist.txt eingetragen und
-# werden durchgewunken, bis individuelle Refactor-Slices sie beseitigen.
+# werden akzeptiert, bis individuelle Refactor-Issues sie beseitigen.
 #
 # Verwendung (lokal):    bash scripts/check_complexity.sh
 # CI:                    s. .github/workflows/contract-gates.yml::complexity-gate
-# Neue D+-Funktion ok?   Eintrag in backend/radon-allowlist.txt + Slice-Kommentar
+# Neue D+-Funktion ok?   Eintrag in backend/radon-allowlist.txt + Issue/PR-Begründung
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -75,7 +74,7 @@ if violations:
     for key, _ in violations:
         print(f"  {key}", file=sys.stderr)
     print(
-        "\nJeder neue Allow-List-Eintrag braucht eine Slice-Begruendung im Arbeitsprotokoll.",
+        "\nJeder neue Allow-List-Eintrag braucht ein GitHub Issue und eine PR-Begruendung.",
         file=sys.stderr,
     )
     sys.exit(1)
