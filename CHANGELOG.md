@@ -5,6 +5,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Issue #750 — 2026-07-18)
+
+- **MiniMax-Provider-Contract synchronisiert**: Der Frontend-Zod-Spiegel für
+  `ModelActiveEvent.provider` akzeptiert jetzt das vom Backend publizierte
+  `minimax`; ein Contract-Test fixiert den SSE-Pfad. Das dokumentierte
+  HTTP-Provider-Vokabular in `registry.detect_provider` enthält MiniMax nun
+  ebenfalls. Die bereits auf `main` vorhandene hostname-basierte Erkennung
+  bleibt durch die Backend-Registry-Regressionstests abgesichert.
+
 ### Internal (Slice 7.6d — 2026-07-14)
 
 - **Frontend**: `LlmProfileManager.vue` vom legacy `ModelPicker.vue` auf den
