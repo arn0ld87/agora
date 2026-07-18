@@ -10,6 +10,7 @@
  *  6. Avatar-Typvorprüfung: falscher MIME-Type → Fehlermeldung, kein Emit.
  *  7. Gültige Avatar-Datei → emittiert 'upload-avatar'.
  *  8. delete-avatar-Button emittiert 'delete-avatar'.
+ *  9. Verstecktes Avatar-Dateifeld hat einen lokalisierten Accessible Name.
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -139,5 +140,11 @@ describe('ProfileForm', () => {
     expect(deleteBtn).toBeTruthy()
     await deleteBtn?.trigger('click')
     expect(w.emitted('delete-avatar')).toBeTruthy()
+  })
+
+  it('Test 9: Avatar-Dateifeld hat lokalisierten Accessible Name', () => {
+    const w = mountForm()
+    const input = w.get('[data-testid="avatar-file-input"]')
+    expect(input.attributes('aria-label')).toBe(de.profileSettings.form.avatarUploadBtn)
   })
 })

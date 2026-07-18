@@ -55,16 +55,16 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün; fünf Kern-Smokes erreichen den eigentlichen Test und sind rot.
+Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Alle fünf Kern-Smokes sind lokal grün (Sub-Slices 1–5/5).
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
 | Health | grün | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | rot | API erfolgreich, UI-/Store-Pfad rendert `graphData` nicht zuverlässig |
-| Minimalreport | rot | Report beendet, Outline/Zod-Spiegel nicht stabil |
-| Report-Modi | rot | `force_regenerate` und Mode-Transition erreichen nicht stabil `completed` |
-| Golden-Gate Accessibility | rot | mindestens eine Route verletzt das strikte A11y-Gate |
-| AiModelPicker | rot | Route-/UI-Drift nach der Picker-Migration |
+| Upload + Graph | grün (lokal, Sub-Slice 3/5) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
+| Minimalreport | grün (lokal, Sub-Slice 2/5) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
+| Report-Modi | grün (lokal, Sub-Slice 4/5) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
+| Golden-Gate Accessibility | grün (lokal, Sub-Slice 5/5) | Tertiär- und Statusfarben auf WCAG AA gehärtet, Form-Controls beschriftet und axe erst nach dem Route-Fade ausgeführt |
+| AiModelPicker | grün (lokal, Sub-Slice 1/5) | mock-models-Seed-URL via `AGORA_E2E_MOCK_MODELS_BASE` lokal überschreibbar; CI-Verhalten unverändert (PR #769) |
 
 Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
 
@@ -79,7 +79,7 @@ Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs 
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
-| E2E-Kernpipeline | 1/6 grün, noch nicht verpflichtend |
+| E2E-Kernpipeline | 4/6 lokal grün (Health + Sub-Slices 1–3/5), noch nicht verpflichtend |
 
 Lokale Befehle:
 

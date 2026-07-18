@@ -37,7 +37,7 @@
   /* ─── Text ─────────────────────────────────────────────── */
   --text-primary:        #1d1d1f;
   --text-secondary:      #6e6e73;
-  --text-tertiary:       #86868b;
+  --text-tertiary:       #6e6e73;
   --text-quaternary:     #aeaeb2;
   --text-on-accent:      #ffffff;
 
@@ -50,8 +50,8 @@
   --accent-tint-text:    #0058b0;
 
   /* ─── Status (SF system colors) ────────────────────────── */
-  --status-green:        #248a3d;
-  --status-green-bg:     rgba(36,138,61,0.10);
+  --status-green:        #207a36;
+  --status-green-bg:     rgba(32,122,54,0.10);
   --status-orange:       #b25000;
   --status-orange-bg:    rgba(178,80,0,0.10);
   --status-red:          #c5292a;

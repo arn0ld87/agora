@@ -160,6 +160,18 @@ async function captureFocusStyle(element: ElementHandle<HTMLElement>): Promise<F
  * Führt axe-core im Browser-Kontext aus und gibt die Results zurück.
  */
 export async function runAxe(page: Page, options: AxeCheckOptions = {}): Promise<AxeResults> {
+  const appRoot = page.locator('#app > *').first();
+  await expect(appRoot).toBeVisible();
+
+  // Zwei Frames geben Vue Gelegenheit, die Enter-Klassen anzulegen. Danach
+  // warten wir bedingungsbasiert auf das tatsächliche Transition-Ende.
+  await appRoot.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
+  await expect(page.locator('.fade-enter-active')).toHaveCount(0);
+  await expect(appRoot).not.toHaveClass(/fade-enter-active/);
+  await expect(appRoot).toHaveCSS('opacity', '1');
+
   return new AxeBuilder({ page }).options(options).analyze();
 }
 
@@ -171,7 +183,10 @@ export function assertNoCriticalViolations(results: AxeResults): void {
 
   if (violations.length > 0) {
     const summary = violations
-      .map((v: Result) => `[${v.impact}] ${v.id}: ${v.description} (${v.nodes.length} nodes)`)
+      .map((v: Result) => {
+        const targets = v.nodes.map((node) => JSON.stringify(node.target)).join(', ');
+        return `[${v.impact}] ${v.id}: ${v.description} (${v.nodes.length} nodes: ${targets})`;
+      })
       .join('\n');
     throw new Error(`Accessibility violations found:\n${summary}`);
   }

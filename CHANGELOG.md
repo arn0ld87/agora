@@ -5,6 +5,41 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Issue #739 — 2026-07-18)
+
+- **Golden-Gate Accessibility E2E-Smoke lokal grün**: Tertiärtext,
+  Status-Grün und Embedding-Warntext erfüllen jetzt WCAG AA; Avatar-Dateifeld
+  und Reasoning-Auswahl besitzen zugängliche Namen. Der axe-Helper wartet
+  bedingungsbasiert auf das Ende der Vue-Route-Transition, und die globale
+  Reduced-Motion-Regel begrenzt auch hartkodierte Animationen. Alle zehn
+  Routen sind in zwei aufeinanderfolgenden Playwright-Läufen grün.
+
+- **Report-Modi E2E-Smoke lokal grün**: `report-modes.spec.ts` seedet vor der
+  Report-Generierung jetzt deterministisch die vom Report-Contract geforderten
+  50 Personas. Ohne Fixture endete `generate_report()` bereits am
+  Persona-Floor-Gate mit `ReportStatus.INCOMPLETE`; der Poll konnte deshalb
+  nie `completed` erreichen. Alle drei Modi und der Balanced-Default sind in
+  zwei aufeinanderfolgenden lokalen Playwright-Läufen grün.
+
+- **Upload + Graph E2E-Smoke lokal grün**: Der `upload-graph`-Smoke wurde durch
+  den in PR #684 eingeführten Onboarding-Guard (`router/onboardingGuard.ts`)
+  blockiert — `page.goto('/process/<projectId>')` wurde zu `/onboarding`
+  umgeleitet, `.graph-view` mountete nie. Der Spec räumt den Wizard jetzt per
+  idempotentem `POST /api/onboarding/dismiss` vor dem `page.goto` weg. Kein
+  Selektor und keine State-Verkettung geändert; die vorgelagerte
+  `GET /api/graph/data`-Assertion war stets grün. Folgearbeit (Trigger-Readd,
+  restliche Smokes) unter Issue #739.
+
+### Fixed (Issue #750 — 2026-07-18)
+
+- **MiniMax-/Google-Provider-Contract synchronisiert**: Der Frontend-Zod-Spiegel
+  für `ModelActiveEvent.provider` akzeptiert jetzt die vom Backend publizierten
+  Werte `minimax` und `google`; Contract-Tests fixieren den SSE-Pfad. Das
+  dokumentierte HTTP-Provider-Vokabular in `registry.detect_provider` und
+  `registry.get_adapter` enthält MiniMax nun ebenfalls. Die bereits auf `main`
+  vorhandene hostname-basierte Erkennung bleibt durch die
+  Backend-Registry-Regressionstests abgesichert.
+
 ### Internal (Slice 7.6d — 2026-07-14)
 
 - **Frontend**: `LlmProfileManager.vue` vom legacy `ModelPicker.vue` auf den

@@ -12,7 +12,7 @@ Dokumente, Webseiten und strategische Fragestellungen werden in einen Wissensgra
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
-[![Version](https://img.shields.io/badge/Version-0.8.0-orange?style=flat-square)](./VERSION)
+[![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=flat-square)](./VERSION)
 
 [Quick Start](#quick-start) · [Einsatz](#wofür-agora-gedacht-ist) · [Pipeline](#pipeline) · [Architektur](#architektur) · [Release-Weg](#release-weg-bis-100) · [Status](./docs/STATUS.md) · [Roadmap](./ROADMAP.md)
 

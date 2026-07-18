@@ -4,6 +4,14 @@ Status: **Draft** — 2026-07-14
 Owner: —
 Verwandt: `.github/workflows/e2e-smokes.yml`, `frontend/tests/e2e/`
 
+> **Statusquelle:** Dieses Epic ist ein **Diagnose-Dokument mit Stand
+> 2026-07-14** und keine Live-Statusquelle. Der aktuelle, verifizierte
+> Smoke-Status wird in [`docs/STATUS.md`](../../STATUS.md) und
+> [Issue #739](https://github.com/arn0ld87/agora/issues/739) geführt (per
+> `AGENTS.md`-Dokumentationshierarchie). Die Root-Cause-Analysen unten bleiben
+> gültige Referenz; die Status-Spalten spiegeln den Draft-Stand, nicht den
+> Merge-Fortschritt.
+
 ## Ziel
 
 Sechs E2E-Smoke-Specs sind in `.github/workflows/e2e-smokes.yml` verdrahtet. Davon
@@ -31,6 +39,9 @@ als parallele Jobs definiert, jeder mit eigenem Playwright-Run
 (`npx playwright test <spec>.spec.ts --reporter=list,github`).
 
 ## Spec-Übersicht
+
+_Status-Spalte = Diagnose-Stand 2026-07-14 (historisch). Live-Status:
+[`docs/STATUS.md`](../../STATUS.md) + [Issue #739](https://github.com/arn0ld87/agora/issues/739)._
 
 | # | Spec | Pfad | Status |
 |---|------|------|--------|
