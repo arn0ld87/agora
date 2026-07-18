@@ -190,7 +190,7 @@ def detect_provider(
 ) -> Union[HttpDetectedProvider, OasisDetectedProvider]:
     """Erkennt den LLM-Provider aus Base-URL + Modellname.
 
-    ``mode="http"``  — Vokabular ``ollama|cloud|openai|google|unknown``;
+    ``mode="http"``  — Vokabular ``ollama|cloud|minimax|openai|google|unknown``;
     nutzt der OpenAI-kompatible Backend-HTTP-Client (``LLMClient``).
 
     ``mode="oasis"`` — Vokabular ``google|ollama|openai``; nutzt das
@@ -209,8 +209,8 @@ def get_adapter(
 ) -> "ProviderAdapter":
     """Liefert den passenden :class:`ProviderAdapter` fuer einen Provider-String.
 
-    Mappt das Vokabular beider Detection-Modi (``http``: ollama/cloud/openai/
-    google/unknown; ``oasis``: google/ollama/openai) auf die konkreten
+    Mappt das Vokabular beider Detection-Modi (``http``: ollama/cloud/minimax/
+    openai/google/unknown; ``oasis``: google/ollama/openai) auf die konkreten
     Adapter-Klassen:
 
     - ``ollama``, ``cloud`` und ``ollama_cloud`` ->
