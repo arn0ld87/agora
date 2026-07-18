@@ -5,6 +5,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Issue #739 — 2026-07-18)
+
+- **Upload + Graph E2E-Smoke lokal grün**: Der `upload-graph`-Smoke wurde durch
+  den in PR #684 eingeführten Onboarding-Guard (`router/onboardingGuard.ts`)
+  blockiert — `page.goto('/process/<projectId>')` wurde zu `/onboarding`
+  umgeleitet, `.graph-view` mountete nie. Der Spec räumt den Wizard jetzt per
+  idempotentem `POST /api/onboarding/dismiss` vor dem `page.goto` weg. Kein
+  Selektor und keine State-Verkettung geändert; die vorgelagerte
+  `GET /api/graph/data`-Assertion war stets grün. Folgearbeit (Trigger-Readd,
+  restliche Smokes) unter Issue #739.
+
 ### Fixed (Issue #750 — 2026-07-18)
 
 - **MiniMax-/Google-Provider-Contract synchronisiert**: Der Frontend-Zod-Spiegel

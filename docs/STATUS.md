@@ -55,7 +55,7 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün; fünf Kern-Smokes erreichen den eigentlichen Test und sind rot.
+Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Von den fünf Kern-Smokes ist Upload + Graph lokal grün (Sub-Slice 3/5); die übrigen vier erreichen den eigentlichen Test und sind noch rot.
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
