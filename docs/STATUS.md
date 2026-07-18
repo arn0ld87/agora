@@ -1,207 +1,152 @@
-# Agora — Status (Single Source of Truth)
+# Agora — Status
 
-Stand: **2026-07-14**, `main` @ `771fbe10`, Version **v1.0.0**.
+**Stand:** 18.07.2026  
+**Geprüfte Main-Baseline:** `b068852`  
+**Produktversion:** `0.8.0` Technical Preview
 
-Diese Datei beschreibt den verifizierten Istzustand. Versions- und Testzahlen
-werden ausschließlich über `scripts/sync-status.sh` zwischen den markierten
-Blöcken gepflegt. Zukunftspläne gehören in `PLAN.md`, ausgelieferte Änderungen
-in `CHANGELOG.md` und die unmittelbar nächste Fortsetzung in das jeweilige
-Epic-`HANDOVER.md`.
+Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## Versionen
+Historische Pläne sind keine aktiven Steuerungsquellen: [`docs/archive/planning/`](archive/planning/)
+
+## Versionsstatus
+
+Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION) geführt.
 
 <!-- BEGIN_AUTOGEN_VERSIONS -->
-| Komponente | Pfad | Version |
+| Komponente | Pfad | aktuelle Manifest-Version |
 |---|---|---|
 | Backend | `backend/pyproject.toml` | 1.0.0 |
 | Frontend | `frontend/package.json` | 1.0.0 |
 | Root | `package.json` | 1.0.0 |
 <!-- END_AUTOGEN_VERSIONS -->
 
+Die Manifest-Versionen bilden noch den früheren, zu optimistischen Release-Stand ab. Ihre Synchronisierung mit `VERSION=0.8.0` sowie ein automatischer Drift-Check sind vor dem nächsten Tag erforderlich und werden als eigenes Issue geführt. Bis dahin ist `VERSION` die Produkt-SSoT.
+
 ## Tests
 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
-|---|---|---|
+|---|---:|---|
 | Backend Tests (collected) | 3350 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
 
-- Zwei Redis-Integrationstests skippen ohne `TEST_REDIS_URL` kontrolliert und
-  sind in der Backend-Summe als collected enthalten.
+- Zwei Redis-Integrationstests skippen ohne `TEST_REDIS_URL` kontrolliert.
 - Die Frontend-Zahl zählt Testdateien, nicht einzelne Testfälle.
-- `scripts/pre-push-gate.sh` unterstützt die Scopes `backend`, `frontend` und
-  `schemas`. Der zuvor fehlende `run_schemas`-Pfad wurde in PR #734 repariert;
-  der Scope prüft 46 Schemas und den STATUS-Sync.
-- Zwei unter Parallelbetrieb flaky Router-/Accessibility-Specs wurden in PR
-  #733 ohne Skip oder abgeschwächte Assertions stabilisiert. Das vollständige
-  Frontend-Pre-Push-Gate lief danach grün.
+- Die Zahlen stammen aus dem letzten synchronisierten Status und müssen nach größeren Merges erneut erzeugt werden.
 
-## Aktive Entwicklungswelle: Onboarding und Provider-Unification
+## Produktreife
 
-Source of Truth für Scope und Reihenfolge:
-[`docs/epics/onboarding-provider-unification/04-implementation-plan.md`](epics/onboarding-provider-unification/04-implementation-plan.md).
+Agora besitzt eine vollständige fachliche Grundpipeline:
 
-| Slice | Inhalt | Verifizierter Status |
-|---|---|---|
-| 0 | Research, ADRs, Test-/Migrationsplan, Agent-Tooling | abgeschlossen |
-| 1 | Kanonische Provider-, Modell- und Route-Verträge | gemergt, Pydantic-v2-SSoT + Zod-/Schema-Spiegel |
-| 2 | Benutzerprofil und resumierbares Onboarding | gemergt |
-| 3 | Provider-Verbindungen, Discovery und Secret-Store-Anbindung | gemergt |
-| 4 | Getrenntes Embedding-Setup und sichere Re-Embedding-Migration | 4.1–4.4 auf `main`; Entity- und Fact-Phase resume-fähig |
-| 5 | Gemeinsamer `AiModelPicker` und Routing | Kern abgeschlossen; kanonische Route, Snapshot und Audit verdrahtet |
-| 6 | Persona-Count-End-to-End-Invariante | Codepfad vorhanden; vollständige E2E-Matrix 1/5/10/30/50/100 noch nicht zentral nachgewiesen |
-| 7 | Golden-Gate-System und Informationsarchitektur | weitgehend auf `main`; Restarbeiten unten |
-| 8+ | Projekte, Datensätze, Vorlagen und Monitoring | als getrennte MVP-Slices offen |
+- resumierbares Onboarding und lokales Benutzerprofil
+- Provider-Verbindungen, Secret Store und Modell-Discovery
+- getrennte Chat- und Embedding-Konfiguration
+- Dokument-/Webseitenaufnahme und Knowledge-Graph-Build
+- Persona-Erzeugung, Review und Simulation
+- Run-Dashboard, Status, Stop/Pause/Resume und Live-Ereignisse
+- Evidence-orientierte Reports und Exporte
+- Compare-, Graph-Diff- und Observability-Grundlagen
+- fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 
-Bewusst offene Embedding-Folgen:
-
-- Gemini-Batch-Embedding,
-- echter `scope="project"`-Filter,
-- vollständige Umstellung des Fact-Search-Lesepfads auf den neuen Index.
-
-## Slice 7 — aktueller Stand
-
-Bereits auf `main`:
-
-- 7.1 Token-/State-Fundament,
-- 7.3 Golden-Gate-Gates, Drawer-/Sidebar-Accessibility und Routing-Correctness
-  (PR #723),
-- 7.4a Settings-Parität und Redirect von `/settings-classic` (PR #721),
-- 7.5 Onboarding-Surface (PR #725),
-- 7.6a–7.6d kanonischer `AiModelPicker`, Consumer-Migration,
-  `StageLLMRoute`-Entfernung und Legacy-Route-Storage-Cut (PRs #726–#728);
-  7.6d migriert `LlmProfileManager.vue` auf den connection-basierten Picker
-  und entfernt den letzten produktiven `ModelPicker.vue` (PR #742),
-- 7.7 Entfernung des verwaisten v3-Pickers und der Mock-Routing-Karten
-  (PR #720),
-- Verifizierte Picker-Migrationsmatrix und konkreter 7.6d-Plan (PR #732),
-- Golden-Gate-Workbench-Zielspezifikation unter
-  [`docs/ui/golden-gate-workbench.md`](ui/golden-gate-workbench.md) (PR #735).
-
-Noch offen:
-
-1. Responsive-/visuelle Regressionen vollständig schließen.
-3. Den geplanten `--agora-*`-Tokenwechsel als eigenes migrationspflichtiges
-   Slice umsetzen; keine parallele Komponentenbibliothek erzeugen.
+Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch nicht vollständig grün ist und Altpfade in Frontend, Provider-Profilen und Dokumentation weiter konsolidiert werden.
 
 ## E2E-Smokes
 
-Der Stack bootet seit PR #731 erstmals zuverlässig im GitHub-Runner. Der
-Health-Smoke ist grün; fünf bereits zuvor vorhandene Specs erreichen jetzt den
-eigentlichen Test und sind rot. Die Defekte sind unter
-[`docs/epics/e2e-smoke-specs/README.md`](epics/e2e-smoke-specs/README.md)
-aufgeschlüsselt.
+Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün; fünf Kern-Smokes erreichen den eigentlichen Test und sind rot.
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
 | Health | grün | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | rot | API erfolgreich, UI-/Store-Verdrahtung rendert `graphData` nicht |
-| Minimalreport | rot | Report completed, Outline fehlt oder scheitert am Zod-Spiegel |
-| Report-Modi | rot | `force_regenerate`/Mode-Pfad erreicht nicht stabil `completed` |
-| Golden-Gate Accessibility | rot | mindestens eine Route verletzt ein striktes A11y-Gate |
+| Upload + Graph | rot | API erfolgreich, UI-/Store-Pfad rendert `graphData` nicht zuverlässig |
+| Minimalreport | rot | Report beendet, Outline/Zod-Spiegel nicht stabil |
+| Report-Modi | rot | `force_regenerate` und Mode-Transition erreichen nicht stabil `completed` |
+| Golden-Gate Accessibility | rot | mindestens eine Route verletzt das strikte A11y-Gate |
 | AiModelPicker | rot | Route-/UI-Drift nach der Picker-Migration |
 
-`.github/workflows/e2e-smokes.yml` läuft derzeit auf `push` nach `main`,
-`workflow_dispatch` und täglich um 03:00 UTC. Der `pull_request`-Trigger bleibt
-bewusst aus, bis alle fünf roten Specs stabil grün sind; danach muss er als
-eigener CI-PR wieder aktiviert und als Required Check konfiguriert werden.
+Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
+
+Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs Smokes mehrfach stabil grün sind. Danach muss der Workflow als Required Check aktiviert werden.
 
 ## Quality Gates
 
-| Gate | Befehl | Status |
-|---|---|---|
-| Backend | `bash scripts/pre-push-gate.sh backend` | grün auf den jüngsten Doku-/Fix-PRs |
-| Frontend | `bash scripts/pre-push-gate.sh frontend` | nach PR #733 vollständig grün |
-| Schemas | `bash scripts/pre-push-gate.sh schemas` | grün, 46 Schemas + STATUS-Sync |
-| Backend Types | `cd backend && uv run mypy app` | blockierend in CI |
-| Backend Lint | `cd backend && uv run ruff check .` | blockierend |
-| Frontend Types | `cd frontend && npm run typecheck` | blockierend in CI |
-| Frontend Lint | `cd frontend && npm run lint` | blockierend |
-| E2E-Smokes | `.github/workflows/e2e-smokes.yml` | 1/6 grün; noch kein PR-Gate |
+| Gate | Status |
+|---|---|
+| Backend PR Smoke: Ruff + Mypy + Contract-Tests | verpflichtend |
+| Frontend PR Smoke: Lint + Typecheck + Unit-Tests + Build | verpflichtend |
+| Backend Full Tests + Coverage | `push:main` oder Label |
+| Frontend Full Tests + Coverage | `push:main` oder Label |
+| Schemas und Contract-Spiegel | vorhanden |
+| E2E-Kernpipeline | 1/6 grün, noch nicht verpflichtend |
 
-## Coverage
+Lokale Befehle:
 
-Die Messwerte sind älter als der aktuelle Codebestand und müssen vor dem
-nächsten Release neu erzeugt werden. Sie bleiben bis dahin als letzte belegte
-Baseline erhalten.
+```bash
+bash scripts/pre-push-gate.sh
+bash scripts/pre-push-gate.sh backend
+bash scripts/pre-push-gate.sh frontend
+bash scripts/pre-push-gate.sh schemas
+```
 
-| Bereich | letzte Messung | Ergebnis | aktive CI-Schwelle |
+## Coverage-Baseline
+
+Die Werte sind älter als der aktuelle Codebestand und müssen für `0.9.0` neu erzeugt werden.
+
+| Bereich | letzte Messung | Ergebnis | CI-Schwelle |
 |---|---|---:|---:|
-| Backend gesamt | 2026-06-10 | 66,00 % | 60 % |
-| Frontend Statements | 2026-05-10 | 50,46 % | 28 % |
-| Frontend Branches | 2026-05-10 | 39,56 % | 28 % |
-| Frontend Functions | 2026-05-10 | 38,59 % | 28 % |
-| Frontend Lines | 2026-05-10 | 52,50 % | 28 % |
+| Backend gesamt | 10.06.2026 | 66,00 % | 60 % |
+| Frontend Statements | 10.05.2026 | 50,46 % | 28 % |
+| Frontend Branches | 10.05.2026 | 39,56 % | 28 % |
+| Frontend Functions | 10.05.2026 | 38,59 % | 28 % |
+| Frontend Lines | 10.05.2026 | 52,50 % | 28 % |
 
-Strukturelle Lücken bleiben vor allem in OASIS-/Neo4j-Integrationspfaden,
-Canvas-/WebGL-Komponenten und großen Wizard-/View-Komponenten. Coverage-Ziele
-dürfen nicht durch engere Include-Globs oder globale Skips künstlich erfüllt
-werden.
+Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas-/WebGL-Komponenten und großen Wizard-/View-Komponenten.
 
-## Architektur-Layer
+## Kanonische technische Pfade
 
-| Layer | Inhalt | Status |
-|---|---|---|
-| 0 | Pydantic-Verträge und Zod-/JSON-Schema-Spiegel | grün |
-| 1 | Backend-Hardening | grün |
-| 2 | DACH-Voice und Glossar | grün |
-| 3 | Reader-Honesty | grün |
-| 4 | Frontend strict-Zod | grün |
-| 5 | Eval-/Baseline-Suite | grün |
-| 6 | Frontend-TypeScript-Migration | grün |
-| 7–8 | Graph, Runs, Persona- und Report-Review | teilweise |
-| 9 | Produktion, Proxy, Auth und Runtime-Image | grün mit dokumentierten Release-Gates |
-| 10 | Supply Chain und Security-Watchlist | grün mit offenen Hardstops |
+- API-Verträge: `backend/app/contracts/`
+- Frontend-Spiegel: `frontend/src/contracts/` und `schemas/`
+- Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
+- Provider-Verbindungen: `ProviderConnection`
+- kanonische Route: `AiRoute` / `LlmRoute`
+- kanonische Modellauswahl: `frontend/src/components/AiModelPicker.vue`
+- aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
+- Evidence-Gating: ADR-0002-Hartanker
 
-## Sicherheit und Hardstops
+Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
-- Auth-Zielbild: experimentelles Single-User-System gemäß ADR-0001; nicht
-  ungeschützt ins öffentliche Internet stellen.
-- Provider-Detection-SSoT:
-  `backend/app/llm/providers/registry.py::detect_provider`.
-- Phase-F-Restpunkt: Issue #671 zur bewussten Vereinheitlichung oder
-  Dokumentation der Embedding-Provider-Erkennung.
-- `nltk` PYSEC-2026-597 / GHSA-p4gq-832x-fm9v: Hardstop **2026-07-30**,
-  Tracking #672.
-- Trivy OS-Layer CVE-2026-24049 / CVE-2026-23949: Hardstop **2026-08-30**.
+## Bekannte Konsolidierungsschuld
 
-## Nächste drei Prioritäten
+- klassische Prozess-Views, v4-Views und `/agora-2026` existieren parallel
+- ein React-/Lovable-Neubau ist beschrieben, aber nicht als Zielentscheidung freigegeben
+- Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
+- einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
+- Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
+- `requirements.txt`, `pyproject.toml` und `uv.lock` sind nicht vollständig konsistent
+- Produkt- und Komponentenmanifest-Versionen sind noch nicht automatisiert synchronisiert
 
-1. Die fünf roten E2E-Smokes einzeln reparieren und anschließend den
-   `pull_request`-Trigger wieder aktivieren.
-2. Dokumentationsdrift in `AGENTS.md`, Epic-`HANDOVER.md` und
-   `docs/tooling/agent-tools.md` gegen diesen Stand synchronisieren.
+## Security und Betrieb
 
-## Bekannte Dokumentationsschuld
+- Betriebsmodell: experimentelles Single-User-System, kein öffentliches SaaS
+- Zugriff bevorzugt über Tailscale, VPN oder Reverse Proxy
+- API-Auth über `AGORA_AUTH_TOKEN`
+- SSE und Downloads über signierte Tickets
+- Secrets werden nicht in Report-/Simulation-Artefakte serialisiert
+- Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
+- Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
 
-- `AGENTS.md` bezeichnete 7.6c zuletzt noch als laufenden PR.
-- `docs/tooling/agent-tools.md` wurde zuletzt am 2026-07-10 geprüft und enthält
-  ältere Graph-/Doctor-Werte.
-- Ältere konzeptionelle Abschnitte in `PLAN.md` beschreiben nicht mehr die
-  produktive Provider-/Routing-Architektur und sollten in `docs/archive/`
-  verschoben werden.
-- Historische Implementierungsdetails gehören in `CHANGELOG.md`, ADRs,
-  Worklogs und Git-Historie, nicht als unendliches Protokoll in dieser Datei.
+Aktuelle Hardstops:
 
-## Aktualisierungs-Protokoll
+- NLTK-Advisories: 28.09.2026 gemäß ADR-0004/Risk Register
+- Trivy OS-Layer: 30.08.2026
 
-- **2026-07-14:** P0-Routing-Fix bewahrt die tatsächlich ausgeführte kanonische
-  `AiRoute` für Audit, Snapshot und Resume (PR #730).
-- **2026-07-14:** E2E-Stack-Boot repariert; Health-Smoke erstmals grün, fünf
-  echte Spec-Defekte sichtbar und als eigenes Epic dokumentiert (PRs #731,
-  #735).
-- **2026-07-14:** Picker-Iststand und echter 7.6d-Restumfang gegen Code
-  verifiziert (PR #732).
-- **2026-07-14:** Parallel-flaky Frontend-Specs stabilisiert, vollständiges
-  Frontend-Gate grün (PR #733).
-- **2026-07-14:** Fehlender schemas-Scope im Pre-Push-Gate repariert
-  (PR #734).
-- **2026-07-14:** Golden-Gate-Zielspezifikation ergänzt und Slice-7-Stand in
-  `PLAN.md` korrigiert (PRs #735, #736).
-- **2026-07-14:** Agentenregeln, Roadmap und Tooling synchronisiert (PR #741).
-- **2026-07-14:** Slice 7.6d abgeschlossen — `LlmProfileManager.vue` auf den
-  connection-basierten `AiModelPicker` migriert, letzter produktiver legacy
-  `ModelPicker.vue` entfernt (PR #742, Issue #740).
+## Nächste Prioritäten
+
+1. Sechs E2E-Smokes stabil grün machen und als PR-Gate aktivieren.
+2. Produkt- und Manifest-Versionen auf `0.8.0` synchronisieren und automatisiert prüfen.
+3. Vue-v4, Provider-/Routing-SSoT und Dependency-SSoT für `0.9.0` konsolidieren.
+4. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
+
+Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).
