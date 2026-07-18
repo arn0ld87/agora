@@ -14,6 +14,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Reduced-Motion-Regel begrenzt auch hartkodierte Animationen. Alle zehn
   Routen sind in zwei aufeinanderfolgenden Playwright-Läufen grün.
 
+- **Report-Modi E2E-Smoke lokal grün**: `report-modes.spec.ts` seedet vor der
+  Report-Generierung jetzt deterministisch die vom Report-Contract geforderten
+  50 Personas. Ohne Fixture endete `generate_report()` bereits am
+  Persona-Floor-Gate mit `ReportStatus.INCOMPLETE`; der Poll konnte deshalb
+  nie `completed` erreichen. Alle drei Modi und der Balanced-Default sind in
+  zwei aufeinanderfolgenden lokalen Playwright-Läufen grün.
+
 - **Upload + Graph E2E-Smoke lokal grün**: Der `upload-graph`-Smoke wurde durch
   den in PR #684 eingeführten Onboarding-Guard (`router/onboardingGuard.ts`)
   blockiert — `page.goto('/process/<projectId>')` wurde zu `/onboarding`
