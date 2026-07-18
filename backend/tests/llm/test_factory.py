@@ -15,6 +15,18 @@ from app.contracts.llm_profile_contract import LlmProfile
 
 
 def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = "m") -> LlmProfile:
+    """
+    Create a test LLM profile with the specified provider, endpoint, model, and API key.
+    
+    Parameters:
+    	provider (str): The provider identifier.
+    	base_url (str): The provider endpoint URL.
+    	api_key (str | None): The profile API key, if available.
+    	model (str): The model name.
+    
+    Returns:
+    	LlmProfile: The configured LLM profile.
+    """
     now = datetime.now(timezone.utc)
     return LlmProfile(
         id="prof_1",
@@ -29,6 +41,18 @@ def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = 
 
 
 def _conn(connection_id: str, provider_kind: str, base_url: str, *, enabled: bool = True):
+    """
+    Create a mock provider connection for factory tests.
+    
+    Parameters:
+        connection_id (str): Identifier and secret reference for the connection.
+        provider_kind (str): Provider type associated with the connection.
+        base_url (str): Base URL exposed by the connection.
+        enabled (bool): Whether the connection is available for use.
+    
+    Returns:
+        SimpleNamespace: A connection-like object with the supplied attributes.
+    """
     return SimpleNamespace(
         id=connection_id,
         provider_kind=provider_kind,
@@ -39,9 +63,16 @@ def _conn(connection_id: str, provider_kind: str, base_url: str, *, enabled: boo
 
 
 def _build(profile, *, connections, secrets):
-    """Ruft build_client_from_profile mit gemockten Stores + LLMClient auf.
-
-    Gibt die kwargs zurück, mit denen ``LLMClient`` konstruiert worden wäre.
+    """
+    Build a client from a profile using mocked connection and secret stores.
+    
+    Parameters:
+        profile: The LLM profile used to build the client.
+        connections: Provider connections available to the factory.
+        secrets: Mapping of secret references to plaintext API keys.
+    
+    Returns:
+        The keyword arguments passed to the mocked LLMClient constructor.
     """
     store = MagicMock()
     store.list_connections.return_value = connections
@@ -76,7 +107,9 @@ def test_prefers_connection_secret_over_stale_profile_key():
 
 
 def test_matches_connection_by_base_url_when_provider_generic():
-    """provider='custom' matcht die minimax-Connection über die base_url."""
+    """
+    Verify that a generic provider profile matches the connection with the same base URL and uses its secret.
+    """
     profile = _profile("custom", "https://api.minimax.io/v1", api_key="stale")
     kwargs = _build(
         profile,
@@ -92,7 +125,9 @@ def test_matches_connection_by_base_url_when_provider_generic():
 
 
 def test_falls_back_to_profile_key_without_matching_connection():
-    """Keine passende Connection → Profil-Key bleibt maßgeblich."""
+    """
+    Uses the profile API key when no connection matches the profile configuration.
+    """
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
     kwargs = _build(
         profile,
@@ -104,7 +139,9 @@ def test_falls_back_to_profile_key_without_matching_connection():
 
 
 def test_disabled_connection_is_ignored():
-    """Deaktivierte Connections dürfen ihren Secret nicht beisteuern."""
+    """
+    Verify that disabled connections do not override the profile API key.
+    """
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
     kwargs = _build(
         profile,
@@ -116,7 +153,9 @@ def test_disabled_connection_is_ignored():
 
 
 def test_cloud_profile_without_any_key_raises():
-    """Cloud-Provider ohne Connection- UND Profil-Key scheitert vor dem HTTP-Call."""
+    """
+    Ensure a cloud profile without an API key or matching connection raises a `ValueError`.
+    """
     profile = _profile("openai", "https://api.openai.com/v1", api_key=None)
     with pytest.raises(ValueError, match="api_key fehlt"):
         _build(profile, connections=[], secrets={})

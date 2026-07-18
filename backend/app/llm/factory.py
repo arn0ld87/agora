@@ -17,25 +17,22 @@ logger = get_logger("agora.llm.factory")
 
 
 def _normalize_base_url(url: Optional[str]) -> str:
+    """Normalize a base URL for consistent comparison."""
     return (url or "").strip().rstrip("/").lower()
 
 
 def _resolve_connection_secret(
     profile: "LlmProfile",
 ) -> tuple[Optional[str], Optional[str]]:
-    """Resolve the profile's API key from the canonical provider-connection store.
-
-    Bug #3: ``build_client_from_profile`` historically trusted the key persisted
-    inside the legacy profile and never consulted the connection secret store.
-    A stale profile key (e.g. an old ``…-dummy`` placeholder) then produced 401s
-    even though a valid key was configured via the UI provider connection.
-
-    Matches a connection by ``provider_kind`` first, then by ``base_url`` — the
-    profile's ``provider`` may be the generic ``"custom"`` while the connection
-    id is provider-specific (e.g. ``"minimax"``). Only enabled connections are
-    considered. Returns ``(key, connection_id)`` or ``(None, None)`` when no
-    matching connection secret exists. Never raises: on any failure the caller
-    falls back to the profile's own key, preserving pure-profile setups.
+    """
+    Resolve the API key associated with a profile's enabled provider connection.
+    
+    Parameters:
+        profile (LlmProfile): Profile whose provider or base URL identifies the connection.
+    
+    Returns:
+        tuple[Optional[str], Optional[str]]: The plaintext API key and connection ID, or
+        ``(None, None)`` when no matching secret is available or resolution fails.
     """
     try:
         from ..services.provider_connection_store import ProviderConnectionStore
@@ -76,17 +73,19 @@ def build_client_from_profile(
     run_id: Optional[str] = None,
     timeout: float = 300.0,
 ) -> LLMClient:
-    """P5.3: LLMClient aus persistiertem LLM-Profil bauen (überschreibt Config).
-
-    Bug #3: Der API-Key wird bevorzugt aus dem kanonischen
-    Provider-Connection-Store aufgelöst (gleiche Quelle wie der
-    connection-basierte Routing-Pfad via ``resolve_route_api_key``); der im
-    Profil gespeicherte Key ist nur noch Fallback für reine Profil-Setups ohne
-    passende Connection.
-
-    Ollama-Provider (localhost oder 'ollama' in base_url) dürfen api_key leer
-    lassen — der Dummy-Wert 'ollama' wird gesetzt. Cloud-Provider ohne Key
-    scheitern sofort mit einem ValueError, bevor ein HTTP-Request entsteht.
+    """
+    Build an LLM client from a persisted profile and its provider connection settings.
+    
+    Parameters:
+        profile (LlmProfile): Profile containing the provider, credentials, endpoint, and model.
+        run_id (Optional[str]): Optional identifier associated with the client run.
+        timeout (float): Request timeout in seconds.
+    
+    Returns:
+        LLMClient: Configured client using the connection-store key when available, or the profile key as a fallback.
+    
+    Raises:
+        ValueError: If no API key is available for a non-local provider.
     """
     connection_key, connection_id = _resolve_connection_secret(profile)
     api_key = connection_key or profile.api_key
