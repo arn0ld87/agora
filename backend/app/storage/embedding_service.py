@@ -73,7 +73,11 @@ def validate_embedding_configuration(
 
 
 class EmbeddingService:
-    """Generate embeddings using local Ollama server."""
+    """Generate embeddings through the independently configured embedding route.
+
+    Chat routing and embedding configuration are deliberately separate per
+    ADR-0007; this service therefore does not use the chat-provider registry.
+    """
 
     # Class-level flag: stub-mode log wird nur einmal ausgegeben (alle Instanzen).
     _stub_mode_logged: bool = False

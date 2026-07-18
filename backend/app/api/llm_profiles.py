@@ -11,6 +11,7 @@ from __future__ import annotations
 from flask import Blueprint, request
 from pydantic import ValidationError
 
+from .deprecation import add_legacy_deprecation_headers
 from ..contracts.llm_profile_contract import LlmProfileCreateRequest, LlmProfileListResponse
 from ..services.llm_profiles_store import get_llm_profiles_store
 from ..utils.api_responses import handle_api_errors, json_error, json_success
@@ -18,6 +19,12 @@ from ..utils.logger import get_logger
 
 llm_profiles_bp = Blueprint("llm_profiles", __name__)
 logger = get_logger("agora.api.llm_profiles")
+
+
+@llm_profiles_bp.after_request
+def add_profile_deprecation_headers(response):
+    """Mark every legacy profile response with its canonical successor."""
+    return add_legacy_deprecation_headers(response)
 
 
 @llm_profiles_bp.route("", methods=["GET"])

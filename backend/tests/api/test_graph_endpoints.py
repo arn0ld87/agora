@@ -257,6 +257,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
 
     from app.models.task import TaskManager
     from app.models.project import ProjectStatus
+    from app.contracts.llm_routing_contract import ResolvedRoute
 
     # Captured update_task calls + Event, das im Background-Thread gesetzt wird,
     # sobald der erste progress_detail-Call durchlaeuft. Ersetzt den frueheren
@@ -301,6 +302,14 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
     fake_container = MagicMock()
     fake_container.neo4j_storage = MagicMock()  # must be non-None
     fake_container.graph_builder.return_value = fake_builder
+    route_router = MagicMock()
+    route_router.resolve.return_value = ResolvedRoute(
+        stage="graph_build",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=4,
+    )
 
     # After PR #562 the build logic lives in app.services.graph_build. Patches
     # on function symbols (seed_run_stage_routing, NERExtractor) must target
@@ -317,6 +326,7 @@ def test_add_progress_callback_sets_progress_detail_on_task_manager(monkeypatch)
         patch("app.api.graph.TextProcessor.split_text", return_value=["chunk1", "chunk2"]),
         patch("app.api.graph.ArtifactLocator.existing_paths", return_value={}),
         patch("app.services.graph_build.seed_run_stage_routing"),
+        patch("app.services.graph_build.StageModelRouter", return_value=route_router),
         patch("app.services.graph_build.NERExtractor", return_value=MagicMock(name="NEROverride")),
         patch("app.services.graph_build.LLMClient.from_route", return_value=MagicMock(name="LLMClient", model="stub")),
         patch("app.services.graph_build.resolve_route_api_key", return_value="sk-stub"),

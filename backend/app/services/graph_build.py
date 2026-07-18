@@ -39,13 +39,6 @@ class GraphBuildService:
         if not project:
             raise ValueError(ApiErrorCode.NOT_FOUND)
 
-        _resolved_profile = None
-        if llm_profile_id:
-            from ..services.llm_profiles_store import get_llm_profiles_store
-            _resolved_profile = get_llm_profiles_store().get(llm_profile_id, include_api_key=True)
-            if _resolved_profile is None:
-                raise ValueError(ApiErrorCode.NOT_FOUND)
-
         run_record = run_registry.create_run(
             run_type="ontology_generate",
             entity_id=project.project_id,
@@ -67,31 +60,20 @@ class GraphBuildService:
         ontology_route = route_router.resolve("ontology_generation")
         route_router.lock_stage("ontology_generation", ontology_route)
 
-        if _resolved_profile is not None:
-            from ..utils.llm_client import build_client_from_profile as _build_from_profile
-            llm_client = _build_from_profile(_resolved_profile, run_id=run_id)
-            logger.info(
-                "Using LLM profile %r for ontology (provider=%s, model=%s) [project_id=%s, run_id=%s]",
-                llm_profile_id,
-                _resolved_profile.provider,
-                _resolved_profile.model_name,
-                project_id,
-                run_id
-            )
-        else:
-            llm_client = LLMClient.from_route(
-                ontology_route,
-                secret_resolver=SecretResolver(),
-                api_key_override=resolve_route_api_key(ontology_route, llm_runtime),
-                run_id=run_id,
-            )
-            logger.info(
-                "Calling LLM to generate ontology definition (model=%s, provider=%s) [project_id=%s, run_id=%s]",
-                llm_client.model,
-                ontology_route.provider_id,
-                project_id,
-                run_id
-            )
+        # The locked ontology route is authoritative; profile IDs are metadata only.
+        llm_client = LLMClient.from_route(
+            ontology_route,
+            secret_resolver=SecretResolver(),
+            api_key_override=resolve_route_api_key(ontology_route, llm_runtime),
+            run_id=run_id,
+        )
+        logger.info(
+            "Calling LLM to generate ontology definition (model=%s, provider=%s) [project_id=%s, run_id=%s]",
+            llm_client.model,
+            ontology_route.provider_id,
+            project_id,
+            run_id
+        )
 
         generator = OntologyGenerator(llm_client=llm_client)
         ontology = generator.generate(
@@ -150,18 +132,6 @@ class GraphBuildService:
             project.graph_build_task_id = None
             project.error = None
 
-        # LLM Profile resolution
-        effective_profile_id = llm_profile_id
-        if not effective_profile_id and (not llm_model_override or llm_model_override.lower() == 'default'):
-            effective_profile_id = getattr(project, 'llm_profile_id', None)
-
-        resolved_profile = None
-        if effective_profile_id:
-            from ..services.llm_profiles_store import get_llm_profiles_store
-            resolved_profile = get_llm_profiles_store().get(effective_profile_id, include_api_key=True)
-            if resolved_profile is None:
-                raise ValueError(ApiErrorCode.NOT_FOUND)
-
         # Inputs
         chunk_size = chunk_size or project.chunk_size or Config.DEFAULT_CHUNK_SIZE
         chunk_overlap = chunk_overlap or project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
@@ -209,31 +179,20 @@ class GraphBuildService:
         resolved_route = route_router.resolve("graph_build")
         route_router.lock_stage("graph_build", resolved_route)
 
-        # NER Extractor
-        if resolved_profile is not None:
-            from ..utils.llm_client import build_client_from_profile
-            ner_llm_client = build_client_from_profile(resolved_profile, run_id=run_record["run_id"])
-            logger.info(
-                "Build-Pfad nutzt LLM-Profil: provider=%s model=%s [project_id=%s, run_id=%s]",
-                resolved_profile.provider,
-                resolved_profile.model_name,
-                project_id,
-                run_record["run_id"]
-            )
-        else:
-            ner_llm_client = LLMClient.from_route(
-                resolved_route,
-                secret_resolver=SecretResolver(),
-                api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
-                run_id=run_record["run_id"],
-            )
-            logger.info(
-                "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s [project_id=%s, run_id=%s]",
-                ner_llm_client.model,
-                resolved_route.provider_id,
-                project_id,
-                run_record["run_id"]
-            )
+        # The locked route is authoritative; legacy profile IDs must not replace it.
+        ner_llm_client = LLMClient.from_route(
+            resolved_route,
+            secret_resolver=SecretResolver(),
+            api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
+            run_id=run_record["run_id"],
+        )
+        logger.info(
+            "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s [project_id=%s, run_id=%s]",
+            ner_llm_client.model,
+            resolved_route.provider_id,
+            project_id,
+            run_record["run_id"]
+        )
         ner_override = NERExtractor(llm_client=ner_llm_client)
 
         def build_task():

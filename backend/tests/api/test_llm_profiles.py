@@ -48,6 +48,9 @@ def test_list_returns_bootstrap_profile(client, monkeypatch):
     data = res.get_json()
     assert data["success"] is True
     assert len(data["data"]["profiles"]) >= 1
+    assert res.headers["Deprecation"] == "true"
+    assert res.headers["X-Agora-Removal-Version"] == "1.0.0"
+    assert res.headers["Link"] == '</api/llm/provider-connections>; rel="successor-version"'
 
 
 def test_list_returns_empty_when_no_model_env(client, monkeypatch):

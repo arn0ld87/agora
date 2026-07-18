@@ -118,41 +118,45 @@ def test_provider_kind_match_wins_over_base_url_and_ignores_store_order():
 def test_non_custom_profile_never_matches_by_base_url():
     """Ein spezifischer (non-custom) Provider darf keinen fremden Secret per base_url ziehen."""
     profile = _profile("openai", "https://api.minimax.io/v1", api_key="sk-own")
-    kwargs = _build(
-        profile,
-        connections=[_conn("minimax", "minimax", "https://api.minimax.io/v1")],
-        secrets={"minimax": "mm-key"},
-    )
-    assert kwargs["api_key"] == "sk-own"
-    assert kwargs["api_key_source"] == "profile"
+    with pytest.raises(ValueError, match="ProviderConnection"):
+        _build(
+            profile,
+            connections=[_conn("minimax", "minimax", "https://api.minimax.io/v1")],
+            secrets={"minimax": "mm-key"},
+        )
 
 
-def test_falls_back_to_profile_key_without_matching_connection():
-    """Keine passende Connection → Profil-Key bleibt maßgeblich."""
+def test_cloud_profile_key_is_rejected_without_matching_connection():
+    """Legacy-Profil-Keys dürfen den kanonischen Connection-Store nicht umgehen."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
-    kwargs = _build(
-        profile,
-        connections=[_conn("google", "google", "https://generativelanguage.googleapis.com/v1beta/openai")],
-        secrets={"google": "g-key"},
-    )
-    assert kwargs["api_key"] == "sk-own"
-    assert kwargs["api_key_source"] == "profile"
+    with pytest.raises(ValueError, match="ProviderConnection"):
+        _build(
+            profile,
+            connections=[_conn("google", "google", "https://generativelanguage.googleapis.com/v1beta/openai")],
+            secrets={"google": "g-key"},
+        )
 
 
 def test_disabled_connection_is_ignored():
     """Deaktivierte Connections dürfen ihren Secret nicht beisteuern."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
-    kwargs = _build(
-        profile,
-        connections=[_conn("openai", "openai", "https://api.openai.com/v1", enabled=False)],
-        secrets={"openai": "sk-proj-echt"},
-    )
-    assert kwargs["api_key"] == "sk-own"
-    assert kwargs["api_key_source"] == "profile"
+    with pytest.raises(ValueError, match="ProviderConnection"):
+        _build(
+            profile,
+            connections=[_conn("openai", "openai", "https://api.openai.com/v1", enabled=False)],
+            secrets={"openai": "sk-proj-echt"},
+        )
 
 
 def test_cloud_profile_without_any_key_raises():
     """Cloud-Provider ohne Connection- UND Profil-Key scheitert vor dem HTTP-Call."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key=None)
     with pytest.raises(ValueError, match="api_key fehlt"):
+        _build(profile, connections=[], secrets={})
+
+
+def test_hostname_containing_ollama_is_not_treated_as_local():
+    """Nur lokale Hostnamen dürfen ohne ProviderConnection-Secret arbeiten."""
+    profile = _profile("custom", "https://ollama.attacker.example/v1", api_key=None)
+    with pytest.raises(ValueError, match="ProviderConnection"):
         _build(profile, connections=[], secrets={})

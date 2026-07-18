@@ -6,6 +6,7 @@ from pydantic import SecretStr, ValidationError
 from typing import cast
 
 from . import llm_bp
+from .deprecation import add_legacy_deprecation_headers
 from ..contracts.ai_provider_contract import (
     ProviderConnection,
     ProviderConnectionProviderKind,
@@ -28,6 +29,14 @@ from ..utils.logger import get_logger
 
 logger = get_logger("agora.api.llm_providers")
 provider_registry = LlmProviderRegistry()
+
+
+@llm_bp.after_request
+def add_provider_deprecation_headers(response):
+    """Mark only legacy ``/providers`` responses, never canonical connections."""
+    if request.path.startswith("/api/llm/providers"):
+        return add_legacy_deprecation_headers(response)
+    return response
 
 
 _store_instance: ProviderConnectionStore | None = None

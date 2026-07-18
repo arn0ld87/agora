@@ -85,11 +85,11 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 ### Provider und Routing
 
-- [ ] `ProviderConnection`, `AiRoute` und `AiModelPicker` sind die kanonischen Pfade
-- [ ] Legacy-Profile greifen nicht mehr bevorzugt auf eigene Secrets oder Routingwerte zu
-- [ ] explizite Provider-Konfiguration gewinnt vor URL-/Modell-Heuristiken
-- [ ] Frontend- und Backend-Provider-Vokabular sind synchron
-- [ ] Chat-Routing und Embedding-Konfiguration bleiben getrennt
+- [x] `ProviderConnection`, `AiRoute` und `AiModelPicker` sind die kanonischen Pfade
+- [x] Legacy-Profile greifen nicht mehr bevorzugt auf eigene Secrets oder Routingwerte zu
+- [x] explizite Provider-Konfiguration gewinnt vor URL-/Modell-Heuristiken
+- [x] Frontend- und Backend-Provider-Vokabular sind synchron
+- [x] Chat-Routing und Embedding-Konfiguration bleiben getrennt
 
 ### Betrieb und Supply Chain
 

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,41 @@ def test_detect_provider_delegates_to_registry_ssot(base_url, model):
     lokal divergentes Verhalten mehr."""
     service = EmbeddingService(model=model, base_url=base_url, api_key='dummy-key')
     assert service._detect_provider() == detect_embedding_provider(base_url, model)
+
+
+def test_embed_uses_embedding_specific_openai_shape_from_hostname(monkeypatch):
+    monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+    response = MagicMock()
+    response.json.return_value = {"data": [{"embedding": [0.1, 0.2]}]}
+
+    with patch("app.storage.embedding_service.requests.post", return_value=response) as post:
+        vector = EmbeddingService(
+            model="custom-embedding-model",
+            base_url="https://api.openai.com/custom",
+            api_key="sk-test",
+            max_retries=1,
+        ).embed("document")
+
+    assert vector == [0.1, 0.2]
+    assert post.call_args.args[0] == "https://api.openai.com/custom/v1/embeddings"
+    assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-test"
+
+
+def test_embed_keeps_ollama_embedding_detection_separate(monkeypatch):
+    monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+    response = MagicMock()
+    response.json.return_value = {"embeddings": [[0.3, 0.4]]}
+
+    with patch("app.storage.embedding_service.requests.post", return_value=response) as post:
+        vector = EmbeddingService(
+            model="nomic-embed-text",
+            base_url="http://ollama.internal:11434",
+            max_retries=1,
+        ).embed("document")
+
+    assert vector == [0.3, 0.4]
+    assert post.call_args.args[0] == "http://ollama.internal:11434/api/embed"
+    assert "Authorization" not in post.call_args.kwargs["headers"]
 
 
 def test_infer_vector_dim_for_known_models():

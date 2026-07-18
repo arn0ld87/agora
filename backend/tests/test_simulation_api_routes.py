@@ -51,6 +51,26 @@ def test_available_models_route_is_registered():
     assert "default_provider" in payload["data"]
 
 
+def test_available_models_uses_registry_provider_detection(monkeypatch):
+    def offline(*_args, **_kwargs):
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr(
+        "app.api.simulation_lifecycle.Config.LLM_BASE_URL",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+    )
+    monkeypatch.setattr(
+        "app.api.simulation_lifecycle.Config.LLM_MODEL_NAME",
+        "gemini-2.5-pro",
+    )
+    monkeypatch.setattr("requests.get", offline)
+
+    response = _build_test_app().test_client().get("/api/simulation/available-models")
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["default_provider"] == "google"
+
+
 def test_detect_default_provider_openai(monkeypatch):
     monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_BASE_URL', 'https://api.openai.com/v1')
     monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_MODEL_NAME', 'gpt-5.4-mini')

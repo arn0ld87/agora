@@ -40,6 +40,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `GET /api/graph/data`-Assertion war stets grün. Folgearbeit (Trigger-Readd,
   restliche Smokes) unter Issue #739.
 
+### Changed (Issue #761 — 2026-07-18)
+
+- **Provider-, Secret- und Routing-SSoT abgeschlossen**: Explizit aufgelöste
+  `AiRoute`-Snapshots gewinnen in Ontologie- und Graph-Build-Pfaden vor
+  Legacy-Profilen. Cloud-Secrets werden ausschließlich aus einer passenden,
+  aktivierten `ProviderConnection` gelesen; eingebettete Profil-Keys sind kein
+  Fallback mehr.
+- **Provider-Erkennung konsolidiert**: `/api/simulation/available-models`
+  delegiert an `registry.detect_provider(mode="http")`. Die getrennte
+  Embedding-Erkennung bleibt gemäß ADR-0007 eigenständig und ist über den
+  öffentlichen `EmbeddingService.embed()`-Pfad testfixiert.
+- **Legacy-HTTP-Pfade terminiert**: `/api/settings/llm-profiles/*` und
+  `/api/llm/providers/*` liefern `Deprecation: true`, den kanonischen
+  Nachfolger und `X-Agora-Removal-Version: 1.0.0`. Ein RFC-`Sunset`-Datum folgt
+  erst, sobald ein belastbares Release-Datum feststeht.
+
 ### Fixed (Issue #750 — 2026-07-18)
 
 - **MiniMax-/Google-Provider-Contract synchronisiert**: Der Frontend-Zod-Spiegel
