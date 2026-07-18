@@ -23,16 +23,26 @@ function repoRootPath(): string {
 //
 // api_key ist ein offensichtlicher Platzhalter (kein Secret-Wert); der
 // openai_compatible-Adapter braucht einen non-empty Bearer-Header.
+// baseUrl ist konfigurierbar via AGORA_E2E_MOCK_MODELS_BASE —
+// Default `http://mock-models` (Compose-DNS im E2E-Stack), per Env
+// ueberschreibbar fuer lokale Dev-Stacks ohne mock-models-Service
+// (z.B. http://host.docker.internal:8081 hinter einem Host-seitigen
+// `nginx:alpine` mit der deploy/e2e/mock-models/nginx.conf).
+const E2E_MOCK_MODELS_BASE = process.env.AGORA_E2E_MOCK_MODELS_BASE ?? 'http://mock-models'
 const ONLINE_CONN = {
   connectionId: 'openai_compatible',
   displayName: 'E2E Mock (online)',
   providerKind: 'openai_compatible',
-  baseUrl: 'http://mock-models',
+  baseUrl: E2E_MOCK_MODELS_BASE,
 } as const
 const OFFLINE_CONN = {
   connectionId: 'openai',
   displayName: 'E2E Mock (offline)',
   providerKind: 'openai',
+  // Bleibt ein nicht-aufloesbarer DNS-Name, damit der Discovery-Probe
+  // der openai-Connection garantiert 0 Modelle zurueckgibt. mock-models
+  // selbst liefert /, aber nicht /v1/models mit OpenAI-Schema — daher
+  // nicht wiederverwenden.
   baseUrl: 'http://mock-models-unreachable:8080',
 } as const
 
