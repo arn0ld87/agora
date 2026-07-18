@@ -23,8 +23,8 @@ Epic-`HANDOVER.md`.
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3340 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 163 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 3348 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
