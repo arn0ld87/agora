@@ -274,6 +274,7 @@ class TestBuildMinimaxExtraBody:
         assert body == {"thinking": {"type": "disabled"}}
 
     def test_m3_think_on_sets_adaptive(self) -> None:
+        """Verify that enabling thinking for MiniMax-M3 produces adaptive thinking configuration."""
         body = build_minimax_extra_body(
             model="MiniMax-M3", base_url=self._MINIMAX, think=True
         )

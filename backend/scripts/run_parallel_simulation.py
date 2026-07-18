@@ -1204,17 +1204,20 @@ def resolve_model_runtime_settings(model_name: str) -> Dict[str, Any]:
 
 def create_model(config: Dict[str, Any], use_boost: bool = False):
     """
-    Create LLM model
+    Create an LLM model using the configured provider and runtime settings.
     
-    Support dual LLM configuration for acceleration during parallel simulation：
-    - Common configuration：LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME
-    - Acceleration configuration (optional)：LLM_BOOST_API_KEY, LLM_BOOST_BASE_URL, LLM_BOOST_MODEL_NAME
+    Parameters:
+        config (Dict[str, Any]): Simulation configuration, including an optional
+            ``llm_model`` override.
+        use_boost (bool): Whether to use the optional acceleration-provider
+            configuration when available.
     
-    If acceleration LLM is configured, different platforms can use different API providers during parallel simulation to improve concurrency.
+    Returns:
+        The configured LLM model instance.
     
-    Args:
-        config: Simulation configuration dictionary
-        use_boost: Whether to use acceleration LLM configuration (if available)
+    Raises:
+        ValueError: If an OpenAI-compatible provider is selected without an API
+            key.
     """
     # Check if acceleration configuration exists
     boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")

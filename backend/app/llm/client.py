@@ -227,33 +227,48 @@ class LLMClient:
         )
 
     def _is_ollama(self) -> bool:
-        """Check if we're talking to an Ollama server (local or cloud).
-
-        Siehe ``app.llm.providers.base.is_ollama`` für die Heuristik.
+        """Determine whether the configured endpoint is an Ollama server.
+        
+        Returns:
+            `true` if the configured base URL identifies an Ollama server, `false` otherwise.
         """
         return _provider_base.is_ollama(self.base_url)
 
     def _is_minimax(self) -> bool:
-        """True wenn der Endpoint die MiniMax-eigene Plattform (api.minimax.io) ist."""
+        """Determine whether the configured endpoint is a MiniMax service.
+        
+        Returns:
+        	bool: `true` if the endpoint uses MiniMax, `false` otherwise.
+        """
         return self._detect_provider() == "minimax"
 
     def _minimax_thinking_extra_body(
         self, *, force_no_thinking: bool = False
     ) -> Dict[str, Any]:
-        """MiniMax-``thinking``-Block (Spec: ``thinking.type`` ∈ disabled/adaptive).
-
-        ``disabled`` schaltet Reasoning bei MiniMax-M3 ab (direkte Antwort, keine
-        ``<think>``-Tokens); M2.x ignorieren es. Gekoppelt an denselben
-        think-Toggle wie Ollama (``reasoning_effort`` / ``OLLAMA_THINKING``). NUR
-        fuer MiniMax senden — andere OpenAI-Compat-Provider antworten 400 auf ein
-        unbekanntes ``thinking``-Feld.
+        """
+        Builds the MiniMax thinking configuration for a request.
+        
+        Parameters:
+            force_no_thinking (bool): Whether to disable reasoning regardless of the
+                configured thinking preference.
+        
+        Returns:
+            Dict[str, Any]: A request body containing ``thinking.type`` set to
+                ``"adaptive"`` when reasoning is enabled or ``"disabled"`` otherwise.
         """
         think_on = self._think and not force_no_thinking
         return {"thinking": {"type": "adaptive" if think_on else "disabled"}}
 
     @staticmethod
     def _uses_max_completion_tokens(model: str) -> bool:
-        """Siehe ``app.llm.providers.openai.uses_max_completion_tokens``."""
+        """Determine whether a model uses the ``max_completion_tokens`` parameter.
+        
+        Parameters:
+            model (str): Model name to inspect.
+        
+        Returns:
+            bool: ``True`` if the model uses ``max_completion_tokens``, ``False`` otherwise.
+        """
         return _provider_openai.uses_max_completion_tokens(model)
 
     @staticmethod
@@ -378,20 +393,19 @@ class LLMClient:
         force_no_thinking: bool = False,
     ) -> str:
         """
-        Send chat request
-
-        Args:
-            messages: Message list
-            temperature: Temperature parameter
-            max_tokens: Max token count
-            response_format: Response format (e.g., JSON mode)
-            context: Logical call context label for observability (published
-                to :mod:`app.services.model_event_bus` before the API call).
-            force_no_thinking: Bei True und Ollama-Provider wird ``think=False``
-                hart gesetzt, unabhaengig vom reasoning_effort-Profil.
-
+        Send a chat request and return the cleaned model response.
+        
+        Parameters:
+            messages (List[Dict[str, str]]): Chat messages to send.
+            temperature (float): Sampling temperature.
+            max_tokens (int): Maximum number of completion tokens.
+            response_format (Optional[Dict]): Optional requested response format.
+            context (Literal): Logical context label for observability.
+            force_no_thinking (bool): Whether to disable reasoning output when supported
+                by the provider.
+        
         Returns:
-            Model response text
+            str: The model response text with thinking blocks removed.
         """
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().

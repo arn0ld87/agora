@@ -163,7 +163,12 @@ def test_build_route_subprocess_env_no_gemini_alias_for_non_google():
 
 
 def test_build_route_subprocess_env_injects_ollama_api_key_for_ollama_cloud():
-    """Ollama Cloud bekommt OLLAMA_API_KEY aus der Registry — kein .env nötig."""
+    """
+    Ensure Ollama Cloud routes receive their API key in the subprocess environment.
+    
+    Returns:
+        None
+    """
     route = ResolvedRoute(
         stage="simulation_rounds",
         provider_id="ollama_cloud",

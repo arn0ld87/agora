@@ -118,12 +118,17 @@ def build_camel_extra_body(
     num_ctx: int | None,
     think: bool,
 ) -> dict[str, Any]:
-    """Baut den ``extra_body``-Block für ``ModelFactory.create()``.
-
-    Ollama-spezifische Parameter (``think``, ``options.num_ctx``) werden
-    NUR für Ollama-Routen gesetzt. OpenAI/Anthropic/Mistral kennen den
-    ``think``-Parameter nicht und antworten 400 ``Unknown parameter``,
-    sobald er in ``extra_body`` landet.
+    """
+    Builds Ollama-specific request parameters for the model factory.
+    
+    Parameters:
+        model (str): Model name used to identify the provider route.
+        base_url (str): Base URL used to identify the provider route.
+        num_ctx (int | None): Optional Ollama context size.
+        think (bool): Whether Ollama should enable thinking.
+    
+    Returns:
+        dict[str, Any]: An Ollama parameter mapping, or an empty dictionary for other provider routes.
     """
     if not _is_ollama_route(model, base_url):
         return {}
@@ -135,13 +140,10 @@ def build_camel_extra_body(
 
 
 def _is_minimax_route(model: str, base_url: str) -> bool:
-    """True fuer die MiniMax-eigene Plattform (``api.minimax.io``).
-
-    Detection ueber die Provider-SSoT im ``http``-Modus — der ``oasis``-Modus
-    kennt kein ``"minimax"`` und faellt bewusst auf ``"openai"`` zurueck (CAMEL
-    spricht MiniMax ueber den OpenAI-Compat-Endpoint). Grenzt bewusst das ueber
-    Ollama Cloud bereitgestellte ``minimax-m3`` @ ``ollama.com`` ab, das KEIN
-    MiniMax-Plattform-Signal ist.
+    """Determine whether the request targets the MiniMax provider.
+    
+    Returns:
+        bool: `True` for MiniMax routes, `False` otherwise.
     """
     from app.llm.providers.registry import detect_provider
 
@@ -149,19 +151,16 @@ def _is_minimax_route(model: str, base_url: str) -> bool:
 
 
 def build_minimax_extra_body(*, model: str, base_url: str, think: bool) -> dict[str, Any]:
-    """Baut den MiniMax-``thinking``-Block fuer ``ModelFactory.create()``.
-
-    Laut MiniMax-OpenAI-Compat-Spec ist ``thinking.type`` eines von
-    ``{"disabled", "adaptive"}``:
-
-    - ``disabled`` — MiniMax-M3 antwortet direkt ohne Reasoning (keine
-      ``<think>``-Tokens). Bei M2.x bleibt Thinking an, der Parameter ist aber
-      gueltig.
-    - ``adaptive`` — Default; adaptives Reasoning fuer M3.
-
-    NUR fuer MiniMax-Routen gesetzt — andere OpenAI-Compat-Provider kennen das
-    ``thinking``-Feld nicht und antworten 400. Der ``think``-Toggle stammt aus
-    demselben Gate wie bei Ollama (``OLLAMA_THINKING`` / ``reasoning_effort``).
+    """
+    Builds the MiniMax-specific thinking configuration for a request.
+    
+    Parameters:
+        model (str): Model name used for provider detection.
+        base_url (str): Provider endpoint used for route detection.
+        think (bool): Whether adaptive reasoning should be enabled.
+    
+    Returns:
+        dict[str, Any]: A MiniMax thinking configuration, or an empty dictionary for other routes.
     """
     if not _is_minimax_route(model, base_url):
         return {}
