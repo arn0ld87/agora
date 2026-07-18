@@ -48,12 +48,14 @@ class GraphBuildService:
             linked_ids={"project_id": project.project_id},
         )
         run_id = run_record["run_id"]
-        seed_run_stage_routing(
-            run_id,
-            "ontology_generation",
-            llm_model_override=llm_model_override,
-            llm_runtime=llm_runtime,
-        )
+        for stage_id in ("document_ingest", "ontology_generation"):
+            seed_run_stage_routing(
+                run_id,
+                stage_id,
+                llm_model_override=llm_model_override,
+                llm_runtime=llm_runtime,
+                llm_profile_id=llm_profile_id,
+            )
         route_router = StageModelRouter(run_id)
         ingest_route = route_router.resolve("document_ingest")
         route_router.lock_stage("document_ingest", ingest_route)
@@ -132,6 +134,10 @@ class GraphBuildService:
             project.graph_build_task_id = None
             project.error = None
 
+        effective_profile_id = llm_profile_id or project.llm_profile_id
+        if llm_profile_id is not None:
+            project.llm_profile_id = llm_profile_id
+
         # Inputs
         chunk_size = chunk_size or project.chunk_size or Config.DEFAULT_CHUNK_SIZE
         chunk_overlap = chunk_overlap or project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
@@ -174,6 +180,7 @@ class GraphBuildService:
             "graph_build",
             llm_model_override=llm_model_override,
             llm_runtime=llm_runtime,
+            llm_profile_id=effective_profile_id,
         )
         route_router = StageModelRouter(run_record["run_id"])
         resolved_route = route_router.resolve("graph_build")

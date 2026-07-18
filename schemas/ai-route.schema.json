@@ -19,10 +19,19 @@
           ],
           "title": "Base Url"
         },
+        "connection_only": {
+          "title": "Connection Only",
+          "type": "boolean"
+        },
         "num_ctx": {
           "exclusiveMinimum": 0,
           "title": "Num Ctx",
           "type": "integer"
+        },
+        "secret_ref": {
+          "minLength": 1,
+          "title": "Secret Ref",
+          "type": "string"
         }
       },
       "title": "AiProviderOptions",

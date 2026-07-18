@@ -45,7 +45,7 @@ from ..contracts import (
     PROVIDER_OPENAI_COMPATIBLE,
     PROVIDER_GITHUB_COPILOT,
 )
-from .llm_provider_secrets_store import get_llm_provider_secrets_store
+from .llm_provider_secrets_store import LlmProviderSecretsStore, get_llm_provider_secrets_store
 
 logger = logging.getLogger("agora.secret_resolver")
 
@@ -107,6 +107,22 @@ def _mask_for_log(value: Optional[str]) -> str:
     return f"{v[:4]}..."
 
 
+def get_bound_store_api_key(
+    secret_ref: str,
+    *,
+    secrets_store: Optional[LlmProviderSecretsStore] = None,
+) -> Optional[str]:
+    """Read exactly one explicitly bound persistent secret without fallbacks."""
+    if not secret_ref:
+        return None
+    try:
+        store = secrets_store or get_llm_provider_secrets_store()
+        return store.get_plaintext(secret_ref)
+    except RuntimeError as exc:
+        logger.warning("Gebundener Secret-Store-Zugriff fehlgeschlagen; kein Fallback: %s", exc)
+        return None
+
+
 class SecretResolver:
     """Resolves secrets for LLM providers.
 
@@ -120,6 +136,15 @@ class SecretResolver:
     def __init__(self, session_api_keys: Optional[Dict[str, str]] = None):
         self._session_keys = session_api_keys or {}
         self.last_source: Optional[str] = None
+
+    @staticmethod
+    def get_bound_api_key(
+        secret_ref: str,
+        *,
+        secrets_store: Optional[LlmProviderSecretsStore] = None,
+    ) -> Optional[str]:
+        """Read exactly one explicitly bound store secret without fallbacks."""
+        return get_bound_store_api_key(secret_ref, secrets_store=secrets_store)
 
     def get_api_key(self, provider_id: str, provider_type: str) -> Optional[str]:
         """Resolve API key for a provider. Setzt :attr:`last_source` als Seiteneffekt."""

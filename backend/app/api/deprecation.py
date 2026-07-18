@@ -2,9 +2,8 @@
 
 from flask import Response
 
-# RFC 9745 Structured Field Date representing when this deprecation was announced.
-# Fixed timestamp (2026-07-15 12:00:00 UTC) for deterministic tests.
-_DEPRECATION_DATE = "@1752624000"
+# RFC 9745 Structured Field Date for the 2026-07-18 deprecation announcement.
+_DEPRECATION_DATE = "@1784332800"
 
 
 def add_legacy_deprecation_headers(response: Response) -> Response:

@@ -374,6 +374,8 @@ def test_route_json_schema_expresses_provider_options_allowlist() -> None:
     assert set(options_schema["properties"]) == {
         "base_url",
         "num_ctx",
+        "secret_ref",
+        "connection_only",
         "__legacy_stage_route__",
     }
 

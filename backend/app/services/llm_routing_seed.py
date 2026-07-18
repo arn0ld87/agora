@@ -13,9 +13,13 @@ from typing import Optional
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
+from .llm_provider_secrets_store import get_llm_provider_secrets_store
+from .llm_profiles_store import get_llm_profiles_store
 from .llm_runtime import RuntimeLlmConfig
+from .profile_connection_resolver import resolve_profile_connection
+from .provider_connection_store import ProviderConnectionStore
 from .runtime_run_config import RuntimeRunConfig
-from .secret_resolver import SecretResolver
+from .secret_resolver import SecretResolver, get_bound_store_api_key
 from .workspace_routing_store import get_workspace_routing_store
 
 _PROVIDER_ID_MAP = {
@@ -45,6 +49,7 @@ def seed_run_stage_routing(
     *,
     llm_model_override: Optional[str],
     llm_runtime: Optional[RuntimeLlmConfig],
+    llm_profile_id: Optional[str] = None,
 ) -> RuntimeLlmRouting:
     """Persist an initial per-run routing config for *stage_id*.
 
@@ -88,6 +93,33 @@ def seed_run_stage_routing(
         )
         if has_existing_config:
             config.routing_version += 1
+    elif llm_profile_id:
+        profile = get_llm_profiles_store().get(
+            llm_profile_id,
+            include_api_key=False,
+        )
+        if profile is None:
+            raise ValueError(f"LLM-Profil {llm_profile_id!r} nicht gefunden")
+        resolved = resolve_profile_connection(
+            profile,
+            ProviderConnectionStore().list_connections(),
+        )
+        if resolved is None:
+            raise ValueError(
+                f"LLM-Profil {llm_profile_id!r}: keine passende aktivierte "
+                "ProviderConnection"
+            )
+        config.stage_overrides[stage_id] = StageLLMRoute(
+            provider_id=resolved.connection.id,
+            model=profile.model_name,
+            provider_options={
+                "base_url": resolved.base_url,
+                "secret_ref": resolved.connection.secret_ref or resolved.connection.id,
+                "connection_only": True,
+            },
+        )
+        if has_existing_config:
+            config.routing_version += 1
 
     config_service.save_config(config)
     return config
@@ -99,6 +131,14 @@ def resolve_route_api_key(route: ResolvedRoute, llm_runtime: Optional[RuntimeLlm
     Prefers the request-scoped runtime secret when it matches the selected
     provider. Falls back to the server-side secret resolver otherwise.
     """
+    if route.provider_options.get("connection_only") is True:
+        raw_secret_ref = route.provider_options.get("secret_ref")
+        secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""
+        return get_bound_store_api_key(
+            secret_ref,
+            secrets_store=get_llm_provider_secrets_store(),
+        )
+
     runtime = llm_runtime or RuntimeLlmConfig()
     runtime_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
     if runtime.enabled and runtime.api_key and runtime_provider_id == route.provider_id:

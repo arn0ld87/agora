@@ -48,9 +48,7 @@ def test_list_returns_bootstrap_profile(client, monkeypatch):
     data = res.get_json()
     assert data["success"] is True
     assert len(data["data"]["profiles"]) >= 1
-    # RFC 9745 Structured Field Date format: @<unix-timestamp>
-    assert res.headers["Deprecation"].startswith("@")
-    assert res.headers["Deprecation"][1:].isdigit()
+    assert res.headers["Deprecation"] == "@1784332800"
     assert res.headers["X-Agora-Removal-Version"] == "1.0.0"
     assert res.headers["Link"] == '</api/llm/provider-connections>; rel="successor-version"'
 

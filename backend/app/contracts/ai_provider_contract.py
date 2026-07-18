@@ -153,6 +153,8 @@ class AiProviderOptions(TypedDict, total=False, closed=True):  # type: ignore[ca
 
     base_url: PublicBaseUrl | LocalOllamaBaseUrl | None
     num_ctx: Annotated[int, Field(gt=0)]
+    secret_ref: Annotated[str, Field(min_length=1)]
+    connection_only: bool
     __legacy_stage_route__: LegacyStageRouteOptions
 
 

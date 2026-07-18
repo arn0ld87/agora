@@ -1,10 +1,9 @@
 """Tests für die profil-basierte LLMClient-Factory (Bug #3).
 
 Der Legacy-Profil-Pfad muss den API-Key aus dem kanonischen
-Provider-Connection-Store beziehen und den (potenziell veralteten) im Profil
-gespeicherten Key nur als Fallback nutzen. Die Connection-Auswahl bevorzugt
-einen exakten provider_kind-Match (order-unabhängig); ein base_url-Fallback
-greift ausschließlich für den generischen ``custom``-Provider.
+Provider-Connection-Store beziehen. Profil-Secrets dürfen nie als Fallback
+verwendet werden. Die Connection-Auswahl bindet Provider-Kind und Endpunkt;
+ein kindübergreifender Endpoint-Match gilt ausschließlich für ``custom``.
 """
 
 from datetime import datetime, timezone
@@ -14,6 +13,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.contracts.llm_profile_contract import LlmProfile
+from app.llm.factory import _is_local_base_url
+
+
+@pytest.mark.parametrize("base_url", [None, ""])
+def test_is_local_base_url_rejects_missing_values(base_url):
+    assert _is_local_base_url(base_url) is False
 
 
 def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = "m") -> LlmProfile:
@@ -96,13 +101,12 @@ def test_matches_connection_by_base_url_when_provider_generic():
 
 
 def test_provider_kind_match_wins_over_base_url_and_ignores_store_order():
-    """provider_kind-Match gewinnt order-unabhängig; kein base_url-Leak bei non-custom.
-
-    Profil: provider=google, aber base_url zeigt (konstruiert) auf minimax. Die
-    minimax-Connection steht ZUERST in der Liste und würde per base_url matchen —
-    trotzdem muss die google-Connection (provider_kind) gewählt werden.
-    """
-    profile = _profile("google", "https://api.minimax.io/v1", api_key="stale")
+    """provider_kind- und Endpunkt-Match bleiben order-unabhängig."""
+    profile = _profile(
+        "google",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        api_key="stale",
+    )
     kwargs = _build(
         profile,
         connections=[
@@ -160,3 +164,15 @@ def test_hostname_containing_ollama_is_not_treated_as_local():
     profile = _profile("custom", "https://ollama.attacker.example/v1", api_key=None)
     with pytest.raises(ValueError, match="ProviderConnection"):
         _build(profile, connections=[], secrets={})
+
+
+def test_matching_provider_kind_rejects_mismatched_profile_endpoint():
+    """Ein Connection-Secret darf nie an eine abweichende Profil-URL gehen."""
+    profile = _profile("openai", "https://attacker.example/v1", api_key=None)
+
+    with pytest.raises(ValueError, match="Profil-Endpunkt.*ProviderConnection"):
+        _build(
+            profile,
+            connections=[_conn("openai", "openai", "https://api.openai.com/v1")],
+            secrets={"openai": "sk-proj-echt"},
+        )

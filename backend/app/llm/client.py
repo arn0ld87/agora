@@ -43,6 +43,13 @@ from .tool_calls import _chat_with_tools
 logger = get_logger("agora.llm_client")
 
 
+def get_llm_provider_secrets_store() -> Any:
+    """Load the secrets store lazily to avoid the services package import cycle."""
+    from ..services.llm_provider_secrets_store import get_llm_provider_secrets_store as get_store
+
+    return get_store()
+
+
 class LLMClient:
     """LLM Client"""
 
@@ -60,6 +67,7 @@ class LLMClient:
         route_provider_id: Optional[str] = None,
         use_active_config: bool = True,
         api_key_source: Optional[str] = None,
+        allow_api_key_fallback: bool = True,
     ):
         # When no explicit model is set, fall back to the user's active
         # provider/model selection (Settings → LLM-Auswahl). Falls back to
@@ -105,10 +113,12 @@ class LLMClient:
         if api_key:
             self.api_key = api_key
             # resolved_source bleibt erhalten (passed_in oder vom Resolver)
-        else:
+        elif allow_api_key_fallback:
             self.api_key = Config.LLM_API_KEY
             if self.api_key:
                 resolved_source = "config_fallback"
+        else:
+            self.api_key = None
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
         self.reasoning_effort = reasoning_effort or "none"
@@ -187,13 +197,25 @@ class LLMClient:
         falling back to sanitized/config defaults if no resolver is provided.
         """
         base_url = route.base_url_sanitized
-        api_key = api_key_override
-        api_key_source: Optional[str] = "passed_in" if api_key_override else None
+        connection_only = route.provider_options.get("connection_only") is True
+        if connection_only:
+            from ..services.secret_resolver import get_bound_store_api_key
+
+            raw_secret_ref = route.provider_options.get("secret_ref")
+            secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""
+            api_key = get_bound_store_api_key(
+                secret_ref,
+                secrets_store=get_llm_provider_secrets_store(),
+            )
+            api_key_source: Optional[str] = "store" if api_key else None
+        else:
+            api_key = api_key_override
+            api_key_source = "passed_in" if api_key_override else None
 
         # If a secret resolver is provided, we try to get the real secrets.
         # This prevents leaking them into ResolvedRoute but allows LLMClient
         # to use them.
-        if secret_resolver:
+        if secret_resolver and not connection_only:
             # We need to know the provider type to resolve the key correctly.
             # ResolvedRoute only has provider_id.
             # In a full implementation, we'd look up the provider descriptor.
@@ -224,6 +246,8 @@ class LLMClient:
             route_stage=route.stage,
             route_provider_id=route.provider_id,
             api_key_source=api_key_source,
+            use_active_config=not connection_only,
+            allow_api_key_fallback=not connection_only,
         )
 
     def _is_ollama(self) -> bool:
