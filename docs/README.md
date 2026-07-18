@@ -1,69 +1,68 @@
 # Agora — Dokumentation
 
-Lebende Doku für das Agora-Projekt. Historische Worklogs, Sessions und Archive
-werden lokal in `docs/.local/` geführt (gitignored, nicht im Repo-HEAD) und sind
-nicht für den Einstieg gedacht.
+Die Dokumentation ist in aktive Steuerungsquellen und technische Referenzen getrennt. Historische Pläne sind ausdrücklich keine aktuellen Taskquellen.
 
-## Einstieg
+## Aktive Steuerungsquellen
 
-- Projekt-Übersicht und Quickstart: [`../README.md`](../README.md)
+1. [`../README.md`](../README.md) — Produkt, Einstieg, Grenzen und Release-Linie
+2. [`STATUS.md`](STATUS.md) — verifizierter Istzustand
+3. [`../ROADMAP.md`](../ROADMAP.md) — strategische Release-Ziele
+4. [GitHub Issues](https://github.com/arn0ld87/agora/issues) — konkrete Arbeitspakete
+
+Weitere Einstiegspunkte:
+
 - Mitarbeit: [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
 - Sicherheitsmeldungen: [`../SECURITY.md`](../SECURITY.md)
-- Agenten-Konfiguration (Claude Code, Codex): [`../AGENTS.md`](../AGENTS.md)
-- Strategische Roadmap: [`../ROADMAP.md`](../ROADMAP.md)
-- Operativer Slice-Plan: [`../PLAN.md`](../PLAN.md)
+- Agentenregeln: [`../AGENTS.md`](../AGENTS.md)
+- Claude-spezifische Regeln: [`../CLAUDE.md`](../CLAUDE.md)
 
-## Architektur und API
+## Architektur und Verträge
 
-- [`architecture.md`](architecture.md) — Ziel-Architektur, Layer-Modell, Komponenten
-- [`agent-tools.md`](agent-tools.md) — Integration von Agent-Tools (CAMEL, OASIS)
-- [`api-contracts.md`](api-contracts.md) — Pydantic-Contracts + Zod-Spiegel
-- [`glossary.md`](glossary.md) — Wording-Glossar (Layer 2)
+- [`architecture.md`](architecture.md) — Architektur, Domänen und Komponenten
+- [`api-contracts.md`](api-contracts.md) — Pydantic-Verträge und Frontend-Spiegel
+- [`decisions/`](decisions/) — Architekturentscheidungen
+- [`glossary.md`](glossary.md) — verbindliches Produktvokabular
+- [`agent-tools.md`](agent-tools.md) — OASIS-/CAMEL- und Agent-Tool-Integration
 
-## Development
+## Entwicklung
 
-- [`deployment-dev.md`](deployment-dev.md) — Lokales Dev-Setup
-- [`provider-runtime-settings.md`](provider-runtime-settings.md) — LLM-/Embedding-Provider
+- [`deployment-dev.md`](deployment-dev.md) — lokales Entwicklungssetup
+- [`provider-runtime-settings.md`](provider-runtime-settings.md) — LLM- und Embedding-Provider
 - [`embedding-provider-switch.md`](embedding-provider-switch.md) — Wechsel des Embedding-Modells
-- [`analytics.md`](analytics.md) — Auswertungspfade
-- [`graphrag-speedup.md`](graphrag-speedup.md) — Performance-Tuning Graph
+- [`analytics.md`](analytics.md) — Analysepfade
+- [`graphrag-speedup.md`](graphrag-speedup.md) — Graph-Performance
 
-## Deployment und Operations
+## Deployment und Betrieb
 
-- [`deployment.md`](deployment.md) — Produktions-Deployment
-- [`deployment-prod-like.md`](deployment-prod-like.md) — Prod-like Stack lokal
-- [`release-process.md`](release-process.md) — Release-Cut, Tagging
+- [`deployment.md`](deployment.md) — Deployment
+- [`deployment-prod-like.md`](deployment-prod-like.md) — produktionsnaher lokaler Stack
+- [`release-process.md`](release-process.md) — Release-Cut und Tagging
 - [`operations.md`](operations.md) — Betrieb
 - [`operator-guide.md`](operator-guide.md) — Operator-Aufgaben
-- [`backup-restore.md`](backup-restore.md) — Backup-Strategie
+- [`backup-restore.md`](backup-restore.md) — Backup und Wiederherstellung
 
 ## Security
 
-- [`security-hardening.md`](security-hardening.md) — Hardening-Maßnahmen
-- [`security-threat-model.md`](security-threat-model.md) — Bedrohungsmodell
-- [`secret-key-lifecycle.md`](secret-key-lifecycle.md) — Schlüssel-Rotation
-- [`auth.md`](auth.md) — Authentifizierung
-- [`dependency-risk-register.md`](dependency-risk-register.md) — Offene CVE-Watchlist
+- [`security-hardening.md`](security-hardening.md)
+- [`security-threat-model.md`](security-threat-model.md)
+- [`secret-key-lifecycle.md`](secret-key-lifecycle.md)
+- [`auth.md`](auth.md)
+- [`dependency-risk-register.md`](dependency-risk-register.md)
 
-## Runbooks (für Mitwirkende und Agenten)
+## Runbooks
 
-- [`runbooks/`](runbooks/) — PR-Workflow, Subagent-Routing, Worktree-Strategie, Tool-Pflicht
+- [`runbooks/`](runbooks/) — PR-Workflow, Subagent-Routing, Worktrees, Tool-Pflicht und Gates
 
-## Architekturentscheidungen (ADRs)
+## UI und Design
 
-- [`decisions/`](decisions/) — Stabile Architekturentscheidungen
+- [`ui/`](ui/) — Golden-Gate-Zielbild, Komponenten und Designreferenzen
+- [`../design/v3-source/`](../design/v3-source/) — vendorierte historische Designquelle
 
-## Status und Planung
+## Audits und historische Unterlagen
 
-- [`STATUS.md`](STATUS.md) — Auto-generierter Slice-/Test-Status (CI-enforced via `scripts/sync-status.sh --check`)
-- [`plans/active/`](plans/active/) — Aktive Slice-Pläne (Observability u. a.)
-- [`plans/archive/`](plans/archive/) — Abgeschlossene oder ersetzte Pläne
-- [`worklogs/archive/`](worklogs/archive/) — Abgeschlossene Arbeitsprotokolle (Repo-Subset)
-- [`audits/`](audits/) — Audit-Reports
-- [`feature-roadmap.md`](feature-roadmap.md) — Feature-Pipeline
-- [`refactoring-backlog.md`](refactoring-backlog.md) — Refactoring-Backlog
+- [`audits/`](audits/) — Audit-Berichte
+- [`archive/planning/`](archive/planning/) — ersetzte Roadmaps und Backlogs als Git-Historienindex
+- [`plans/archive/`](plans/archive/) — abgeschlossene technische Pläne
+- [`worklogs/archive/`](worklogs/archive/) — historische Arbeitsprotokolle
 
-## Design
-
-- [`ui/`](ui/) — UI-Konzepte, Wireframes, Design-Language v4, Komponenten-Token
-- Vendoriertes Design-v3-Source: [`../design/v3-source/`](../design/v3-source/)
+Verzeichnisse wie `plans/active/`, Epic-Handovers und Superpowers-Pläne dürfen als umsetzungsnahe Referenz zu einem GitHub Issue bestehen. Sie sind nie die führende Prioritäts- oder Statusquelle.

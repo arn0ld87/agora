@@ -1,67 +1,206 @@
 # Agora Roadmap
 
-> Stand: 2026-07-05 (post M3-Port, v1.0.0). Strategische Prioritäten — ausführbare Tasks liegen als GitHub-Issues, ausgelieferte Änderungen im [`CHANGELOG.md`](CHANGELOG.md), operative Slice-Planung in [`PLAN.md`](PLAN.md), Test-Counts/Layer-Status in [`docs/STATUS.md`](docs/STATUS.md). Layer-Detailtabelle: [`CLAUDE.md`](CLAUDE.md#architektur-layer-status). Subagent-Mapping pro Slice: lokal in `docs/.local/archive/plans/plan.heuristic.md` (gitignored). Versions-Historie: [`docs/refactoring-backlog.md`](docs/refactoring-backlog.md), [`CHANGELOG.md`](CHANGELOG.md).
+**Stand:** 18.07.2026  
+**Aktuelle Produktversion:** `0.8.0` Technical Preview
 
-## Verbindliche Trennung
+Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
 
-| Dokument | Rolle |
+## Verbindliche Dokumentationshierarchie
+
+| Ebene | Aufgabe |
 |---|---|
-| `ROADMAP.md` (diese Datei) | Strategische Prioritäten (Now / Next / Later) |
-| GitHub Issues | Ausführbare Tasks, mit Acceptance + Owner |
-| [`CHANGELOG.md`](CHANGELOG.md) | Bereits ausgelieferte Änderungen |
-| [`docs/STATUS.md`](docs/STATUS.md) | Auto-generiert (Versions-/Test-Counts), CI-enforced via `scripts/sync-status.sh --check` |
-| [`PLAN.md`](PLAN.md) | Operativer Slice-Plan (laufende Wellen, Phasen) |
+| [`README.md`](README.md) | Produkt, Einstieg, Grenzen und Release-Linie |
+| [`docs/STATUS.md`](docs/STATUS.md) | verifizierter Istzustand |
+| `ROADMAP.md` | Release-Ziele und Reihenfolge |
+| [GitHub Issues](https://github.com/arn0ld87/agora/issues) | ausführbare Tasks |
 
-## Current State (v1.0.0, 2026-05-11; Layer 0–6 + 9–10 grün, 7–8 teilweise)
+ADRs, Architektur-, Security- und Runbook-Dokumente bleiben verbindliche Referenzen. Sie ersetzen weder Roadmap noch Issues.
 
-Lokal-first Multi-Agent-Simulator für DACH-Zielgruppenreaktionen auf Neo4j CE + Ollama. Pipeline end-to-end: Upload → Wissensgraph → Personas → OASIS-Simulation → DACH-Report. **M3-Port — Unified Provider Abstraction** abgeschlossen (PR #666, 2026-07-05); Provider-Detection-SSoT: `backend/app/llm/providers/registry.py::detect_provider(mode="http"|"oasis")`.
-
----
-
-## Now / Next / Later
-
-### Now — M3-Port Follow-ups + Hardstop-Fristen (Juli 2026)
-
-- **Phase F — Rest-Detection-Delegation** (je eigener PR, TDD): #669 (`simulation_lifecycle._detect_default_provider` → `registry.detect_provider(mode="http")`), #670 (`_sim_common._is_ollama_route` think/num_ctx-Gate für `ollama.com`), #671 (`embedding_service._detect_provider` vereinheitlichen ODER bewusst separat dokumentieren).
-- **Dependency-Hardstops** ([`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)): `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → **2026-07-30**; Trivy OS-Layer CVE-2026-24049/23949 → **2026-08-30**. Tracking-Issues #661, #672.
-- **v1.0-Output-Vertrag** ([`PLAN.md`](PLAN.md)) — offen: P3.2, P4.1, P4.3, P4.4.
-- **Design Language v4 — App-Shell-Port:** Integration-Branch `feat/design-v4-epic`, Slices A–E durch, F läuft. Vendoriert in [`design/v3-source/`](design/v3-source/).
-- **Observability Slice 1 — End-to-End-Tracing** (Plan abgenommen, Implementation offen): [`docs/plans/active/`](docs/plans/active/).
-
-### Next — Stabilisierung & Coverage härten (August 2026)
-
-- Evidence-Gate hard (ADR-0002-Anker unangetastet), Backend-/Frontend-Coverage-Gates, Playwright-Smokes für die Kern-Pipeline (Upload → Graph → Persona → Simulation → Report).
-- v1.0-Output-Vertrag-Arbeitspakete P3.2/P4.1/P4.3/P4.4 ausliefern.
-- Design Language v4 Slice F abschließen und auf `main` mergen.
-
-### Later — v1.x Skalierung (Q3/Q4 2026)
-
-- Helm-Chart, Performance-Benchmarks (Throughput/Latenz pro Hardware-Tier), Federation-Groundwork (mehrere Agora-Instanzen teilen Entitätswissen).
-- Plugin-System für Custom-NER, Search-Strategien, Report-Templates.
-- Graph-Versioning (Snapshots), Branch-Compare-UI, Replay/Reproduce-Run.
+Historische Planungsstände: [`docs/archive/planning/`](docs/archive/planning/)
 
 ---
 
-## Hardware Tiers
+## Produktziel
 
-| Tier | RAM | GPU VRAM | Empfohlenes Modell | Performance |
-|---|---|---|---|---|
-| Minimal | 8 GB | — (CPU) | `qwen2.5:3b` | Langsam, basics NER |
-| Light | 16 GB | 6–8 GB | `qwen2.5:7b` | Kleine Graphen nutzbar |
-| Standard | 32 GB | 12–16 GB | `qwen2.5:14b` | Gut für die meisten Fälle |
-| Power | 64 GB | 24+ GB | `qwen3-coder:cloud` (Ollama Cloud) oder `qwen2.5:32b` lokal | Vollqualität, schnell |
+Agora wird eine stabile, lokal oder kontrolliert hybrid betreibbare Single-User-Plattform für evidenzorientierte Stakeholder-, Zielgruppen- und Marktreaktionssimulationen.
 
----
+Der Weg zu `1.0.0` folgt vier Regeln:
 
-## Historie
-
-- **v1.0.0 (2026-05-11):** Layer 0–6 grün, 7–8 teilweise, 9–10 grün. M11 Phase 1–5b durch.
-- **M3-Port (2026-07-05, PR #666):** Unified Provider Abstraction + Detection. Schließt #590, #591, #582, #636.
-- **Security-Wellen (2026-07):** `transformers>=5.3.0` (CVE-2026-4372/1839, PYSEC-2025-217), `nltk==3.9.4` risk exception (PYSEC-2026-597, GHSA-p4gq-832x-fm9v), `torch==2.12.1` (PYSEC-2026-139), `pillow==12.2.0`, `pytest==9.0.3`, `unstructured>=0.18.18`. Siehe [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md).
-- **0.5 / 0.6 / 0.7 / 0.8 Linien:** Reader-Honesty-Refactor, Frontend-TS-Migration, M9 Prod-Hardening (Reverse-Proxy-Sidecar, Gunicorn gevent, Bundle-Token-Gate, signed tickets). Detail-Historie im [`CHANGELOG.md`](CHANGELOG.md).
+1. Stabilität vor weiteren großen Features.
+2. Eine kanonische Oberfläche und eine kanonische Provider-/Routing-Wahrheit.
+3. Reproduzierbarkeit und messbarer Erkenntnisgewinn vor Plattformausbau.
+4. Keine öffentliche SaaS- oder Multi-User-Erweiterung vor `1.0.0`.
 
 ---
 
-## Contributing
+# 0.8.0 — Technical Preview
 
-AGPL-3.0. Siehe [`CONTRIBUTING.md`](CONTRIBUTING.md) und [GitHub Issues](https://github.com/arn0ld87/agora/issues) für aktive Arbeit.
+## Bedeutung
+
+Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
+
+- Onboarding und Provider-Verbindungen
+- Dokument- und Webseitenaufnahme
+- Wissensgraph und Embeddings
+- Persona-Erzeugung und Review
+- Multi-Agenten-Simulation
+- Run-Steuerung und Live-Ereignisse
+- Evidence-orientierte Reports
+- Compare-, Export- und Observability-Grundlagen
+
+Der Stand ist trotzdem keine stabile `1.0`, weil zentrale E2E-Pfade noch rot sind, Legacy- und v4-Oberflächen parallel existieren und mehrere Provider-/Profilpfade weiter konsolidiert werden.
+
+## Jetzt
+
+- fünf rote E2E-Smokes einzeln reparieren
+- Dokumentation auf vier aktive Ebenen reduzieren
+- Versionslinie auf realistische Vorabversion zurücksetzen
+- bekannte Provider-, Secret- und Contract-Drifts schließen
+- Dependency-Quellen und Security-Ausnahmen synchronisieren
+
+---
+
+# 0.9.0 — Stability Beta
+
+## Ziel
+
+Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar und testbar sein. Neue große Produktbereiche sind in dieser Phase nachrangig.
+
+## Freigabekriterien
+
+### Kernpipeline
+
+- [ ] Health, Upload + Graph, Minimalreport, Report-Modi, Accessibility und AiModelPicker sind stabil grün
+- [ ] E2E-Smokes laufen mehrfach ohne Flakes
+- [ ] E2E ist als verpflichtender Pull-Request-Check aktiviert
+- [ ] keine Skips, abgeschwächten Assertions oder pauschalen Retries als Ersatz für Fehlerbehebung
+
+### Frontend
+
+- [ ] Vue-v4 ist die einzige produktive Oberfläche
+- [ ] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen
+- [ ] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf
+- [ ] kein paralleler React-/Lovable-Rewrite
+- [ ] Responsive- und Accessibility-Gates sind grün
+
+### Provider und Routing
+
+- [ ] `ProviderConnection`, `AiRoute` und `AiModelPicker` sind die kanonischen Pfade
+- [ ] Legacy-Profile greifen nicht mehr bevorzugt auf eigene Secrets oder Routingwerte zu
+- [ ] explizite Provider-Konfiguration gewinnt vor URL-/Modell-Heuristiken
+- [ ] Frontend- und Backend-Provider-Vokabular sind synchron
+- [ ] Chat-Routing und Embedding-Konfiguration bleiben getrennt
+
+### Betrieb und Supply Chain
+
+- [ ] `pyproject.toml` und `uv.lock` sind einzige Backend-Dependency-SSoT
+- [ ] `requirements.txt` ist entfernt oder automatisch generiert
+- [ ] Produktversion und Komponentenmanifest-Versionen werden automatisch synchronisiert
+- [ ] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg
+- [ ] Readiness, Auth, Tickets und Secret Stores sind durch produktnahe Smokes abgedeckt
+
+### Dokumentation
+
+- [ ] README, STATUS, ROADMAP und Issues widersprechen sich nicht
+- [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft
+- [ ] historische Pläne liegen ausschließlich im Archiv
+- [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
+
+## Nicht Bestandteil von 0.9.0
+
+- Multi-User- oder Teamverwaltung
+- öffentliches SaaS-Hosting
+- Helm-Chart
+- Federation mehrerer Agora-Instanzen
+- allgemeines Plugin-System
+- vollständiger Frontend-Rewrite
+
+---
+
+# 0.10.0 — Release Candidate
+
+## Ziel
+
+Agora soll nicht nur technisch laufen, sondern Ergebnisse reproduzierbar, budgetierbar und überprüfbar erzeugen.
+
+## Freigabekriterien
+
+### Reproduzierbarkeit
+
+- [ ] jeder Run speichert Eingangsdaten-Hash, Graph-Version, Modelle, Provider, Routing-Snapshot, Prompt-Versionen und Seeds
+- [ ] ein vorhandener Run kann mit gleicher oder bewusst geänderter Konfiguration reproduziert werden
+- [ ] Exporte enthalten ein maschinenlesbares Run-Manifest
+- [ ] Datenmigrationen besitzen Resume-, Rollback- und Fehlerpfade
+
+### Kosten und Ressourcen
+
+- [ ] erwartete Modelle, Token, Kosten und Laufzeit werden vor dem Start angezeigt
+- [ ] Token-, Kosten- und Zeitlimits können pro Run gesetzt werden
+- [ ] Abbrüche und Budgetüberschreitungen erzeugen nachvollziehbare Zustände
+- [ ] Hardware-Tiers werden durch reproduzierbare Benchmarks statt Schätzwerte beschrieben
+
+### Produktnachweis
+
+- [ ] mindestens drei reale Referenzfälle sind dokumentiert
+- [ ] Agora wird gegen eine Single-Prompt-Baseline verglichen
+- [ ] wiederholte Runs zeigen Varianz und Stabilität
+- [ ] Confidence-Werte werden gegen Evidence-Abdeckung kalibriert
+- [ ] bekannte Fehlannahmen und Grenzen werden veröffentlicht, nicht versteckt
+
+### Betrieb
+
+- [ ] Backup und Restore für Projekte, Graph, Secrets und Konfiguration sind dokumentiert und getestet
+- [ ] Upgrade- und Rollback-Pfad zwischen unterstützten Versionen ist dokumentiert
+- [ ] ein frischer Docker- und ein Host-Installationspfad sind reproduzierbar
+- [ ] keine offenen kritischen Security- oder Datenintegritätsblocker
+- [ ] Release-Artefakte, SBOM und Checksummen sind verfügbar
+
+## Feature-Freeze
+
+Mit dem ersten `0.10.0`-Release-Candidate beginnt der Feature-Freeze. Danach werden bis `1.0.0` nur Fehler, Dokumentation, Migrationen, Security und nachgewiesene Release-Blocker bearbeitet.
+
+---
+
+# 1.0.0 — Stable Single-User Release
+
+## Definition
+
+`1.0.0` bedeutet nicht „alle denkbaren Features vorhanden“. Es bedeutet, dass der definierte Single-User-Anwendungsbereich stabil und nachvollziehbar unterstützt wird.
+
+## Freigabekriterien
+
+- [ ] stabile und versionierte API-, Report- und Persistenzverträge
+- [ ] dokumentierte Kompatibilitäts- und Deprecation-Regeln
+- [ ] eine unterstützte produktive Oberfläche
+- [ ] eine kanonische Provider-, Secret- und Routing-Architektur
+- [ ] vollständig grüne verpflichtende CI- und E2E-Gates
+- [ ] reproduzierbare Installation, Upgrade, Backup und Restore
+- [ ] mindestens ein öffentlich nachvollziehbarer Referenzlauf
+- [ ] messbarer Mehrwert gegenüber einer einfachen LLM-Baseline
+- [ ] keine bekannten P0-/P1-Release-Blocker
+- [ ] Release Notes, Migrationshinweise, SBOM und signierte Artefakte
+
+---
+
+## Nach 1.0.0
+
+Erst nach einer stabilen Single-User-Version werden größere Ausbaupfade bewertet:
+
+- Team- und Rollenmodell
+- Plugin-System
+- Kubernetes/Helm
+- Federation
+- weitere Analysepakete und Branchenvorlagen
+- optionale gehostete Betriebsmodelle
+
+Diese Punkte sind keine Zusagen für `1.0.0` und erhalten erst nach dem stabilen Release eigene Problemstatements und Entscheidungen.
+
+---
+
+## Pflege dieser Roadmap
+
+- Die Roadmap enthält keine ausführbaren Kleintasks.
+- GitHub Issues enthalten Scope, Akzeptanzkriterien, Owner und Abhängigkeiten.
+- Ausgelieferte Änderungen gehören in `CHANGELOG.md`.
+- Der tatsächliche Stand gehört in `docs/STATUS.md`.
+- Erledigte historische Planung wird nicht an diese Datei angehängt.

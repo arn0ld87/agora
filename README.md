@@ -4,21 +4,27 @@
 
 # Agora
 
-**Hybride Multi-Agent-Analyseplattform für simulierte Zielgruppen-, Stakeholder- und Marktreaktionen.**
+**Evidenzorientierte Multi-Agent-Analyseplattform für simulierte Zielgruppen-, Stakeholder- und Marktreaktionen.**
 
-Dokumente, Webseiteninhalte oder strategische Fragestellungen hochladen, Wissensgraph extrahieren, Personas ableiten, Reaktionen simulieren und evidenzorientierte Reports erzeugen.
+Dokumente, Webseiten und strategische Fragestellungen werden in einen Wissensgraphen überführt, daraus entstehen Personas, Simulationen und nachvollziehbare Reports mit Evidence-, Confidence- und Datenlücken-Bezug.
 
 [![Repository](https://img.shields.io/badge/GitHub-arn0ld87%2Fagora-111?style=flat-square&logo=github)](https://github.com/arn0ld87/agora)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](./LICENSE)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.18%2B-4581C3?style=flat-square&logo=neo4j&logoColor=white)](https://neo4j.com/)
 [![Ollama](https://img.shields.io/badge/Ollama-local%20or%20cloud-000?style=flat-square)](https://ollama.com/)
-[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-0.8.0-orange?style=flat-square)](./VERSION)
 
-[Quick Start](#quick-start) · [Betriebsmodi](#betriebsmodi) · [Architektur](#architektur) · [Konfiguration](#konfiguration) · [Sicherheit](#sicherheit) · [Doku](./docs/) · [Status](./docs/STATUS.md)
+[Quick Start](#quick-start) · [Einsatz](#wofür-agora-gedacht-ist) · [Pipeline](#pipeline) · [Architektur](#architektur) · [Release-Weg](#release-weg-bis-100) · [Status](./docs/STATUS.md) · [Roadmap](./ROADMAP.md)
 
 </div>
 
 ---
+
+> **Aktueller Reifegrad: `0.8.0` Technical Preview.**
+>
+> Agora ist deutlich über einen einfachen Prototyp hinaus, aber noch nicht stabil genug für `1.0.0`: Fünf Kern-E2E-Smokes sind offen, Altpfade werden noch konsolidiert und die Produktwirkung ist noch nicht systematisch kalibriert.
+>
+> Agora ist ein experimentelles **Single-User-System**. Nicht ungeschützt ins öffentliche Internet stellen. Nutze VPN, Tailscale oder einen abgesicherten Reverse Proxy.
 
 ## Quick Start
 
@@ -28,13 +34,13 @@ cd agora
 ./install.sh
 ```
 
-Danach: `.env` anpassen (SECRET_KEY, NEO4J_PASSWORD, LLM-Endpunkt setzen), dann:
+Danach `.env` anpassen und starten:
 
 ```bash
 bun run dev
 ```
 
-**Kein lokales Neo4j/Redis?** Docker-Variante startet den gesamten Stack inklusive Datenbanken:
+Docker startet den vollständigen Stack inklusive Neo4j und Redis:
 
 ```bash
 ./install.sh --docker
@@ -44,345 +50,221 @@ bun run dev
 |---|---|
 | Frontend | <http://localhost:5173> |
 | Backend | <http://localhost:5001> |
-| Neo4j Browser (nur Docker) | <http://localhost:7474> |
+| Backend Readiness | <http://localhost:5001/readyz> |
+| Neo4j Browser | <http://localhost:7474> |
 
-> `./install.sh --help` zeigt alle Optionen. `./install.sh --check` führt Lint + Tests aus.
-
-Details: siehe [Detaillierte Installation](#detaillierte-installation)
-
----
-
-> **Status:** v1.0.0 auf `main`.
-> Agora ist ein **experimentelles Single-User-System**
-> ([ADR-0001](./docs/decisions/0001-auth-model.md)).
-> **Nicht ungeschützt ins öffentliche Internet stellen.** Nutze VPN, Tailscale, Reverse Proxy und Auth-Token.
+`./install.sh --help` zeigt alle Optionen. `./install.sh --check` führt die lokalen Qualitätsprüfungen aus.
 
 ## Was ist Agora?
 
-Agora ist ein Analyse- und Simulationssystem für Texte, Pläne, Webseiten, Kampagnen, Produkte und strategische Fragen.
+Agora ist ein lokal oder hybrid betreibbares Analyse- und Simulationssystem. Es soll keine Zukunft vorhersagen und keine echte Marktforschung ersetzen. Es strukturiert mögliche Reaktionen, Einwände, Risiken und Datenlücken auf Grundlage der bereitgestellten Informationen, Modelle und Prompts.
 
-Die Plattform baut aus Eingangsdaten einen Knowledge Graph, erzeugt daraus differenzierte Personas und simuliert deren Reaktionen in einer Multi-Agent-Umgebung. Das Ergebnis ist ein Report mit Segmentanalyse, simulierten O-Tönen, Confidence-Scores, Evidence-Bezügen, Hypothesen und Datenlücken.
+Ein typischer Lauf erzeugt unter anderem:
 
-Agora ist **lokal betreibbar**, aber nicht darauf beschränkt. In realistischen Setups läuft Agora häufig hybrid: Infrastruktur lokal oder auf einem eigenen Server, LLMs und Embeddings je nach Bedarf lokal, über Ollama Cloud oder über OpenAI-kompatible Provider.
+- einen Wissensgraphen aus Dokumenten, Texten oder Webseiten
+- differenzierte Persona- und Stakeholder-Profile
+- simulierte Reaktionen und Diskussionsverläufe
+- Segment- und Polarisierungsanalysen
+- Claims mit Evidence- und Provenance-Bezügen
+- Confidence-Werte für interne Evidenzbindung
+- Hypothesen ohne ausreichende Belege
+- Datenlücken und nächste Forschungsfragen
+- Reports, Exporte und Audit-Trails
 
 ## Wofür Agora gedacht ist
 
-Typische Einsätze:
+Agora eignet sich vor allem als **strategisches Pre-Mortem- und Variantenwerkzeug**:
 
-- Kommunikations- und Kampagnenentwürfe gegen Zielgruppenreaktionen prüfen
-- Stakeholder-Cluster, Einwände und Polarisierung früh erkennen
-- Produktideen, Webseiten, Pitches oder Positionierungen vorab simulieren
-- Varianten von Narrativen, Angeboten oder Policies vergleichen
-- DACH-spezifische Sprache, Tonalität und Einwände sichtbar machen
-- Hypothesen, Risiken und Datenlücken vor echten Interviews strukturieren
+- Kommunikations- und Kampagnenentwürfe auf mögliche Einwände prüfen
+- Stakeholder-Cluster und Polarisierung früh sichtbar machen
+- Produktideen, Webseiten, Pitches oder Positionierungen vergleichen
+- Narrative, Angebote oder Policies gegeneinander testen
+- DACH-spezifische Sprache, Tonalität und Einwände untersuchen
+- Hypothesen vor echten Interviews oder Nutzertests strukturieren
 
-Agora ersetzt keine echte Marktforschung. Es erzeugt simulierte Reaktionen auf Basis der Eingabedaten, Personas, Modelle und Prompts.
-
-## Was Agora erzeugt
-
-Ein Run kann unter anderem folgende Artefakte erzeugen:
-
-- Executive Summary
-- Segmentanalyse
-- Persona-Reaktionen
-- simulierte O-Töne
-- Claims mit Confidence-Scores
-- Evidence- und Provenance-Bezüge
-- Hypothesen ohne ausreichende Evidence
-- Datenlücken und suggested fixes
-- Graphmetriken wie Cluster, Echo-Chamber-Index und Bridge Agents
-- Audit-Trail für Reportaussagen
-- PDF-/Report-Export
-
-## Betriebsmodi
-
-Agora ist providerneutral und kann lokal, hybrid oder serverbasiert betrieben werden.
-
-| Modus | Beschreibung | Geeignet für |
-|---|---|---|
-| Lokal | Backend, Frontend, Neo4j, Redis, LLMs und Embeddings laufen auf eigener Maschine | Datenschutz, Tests, Offline-Workflows |
-| Hybrid | Agora läuft lokal oder auf VPS, Modelle kommen über lokale und externe Provider | bessere Modellqualität, flexible Kostenkontrolle |
-| Server/VPS | Agora läuft dauerhaft auf einem Server und wird über Tailscale, VPN oder Reverse Proxy genutzt | längere Simulationen, Zugriff von mehreren eigenen Geräten |
-
-Empfehlung: Für Entwicklung lokal starten, für längere Runs einen VPS oder Server nutzen und den Zugriff über Tailscale oder VPN absichern.
+Agora ist am stärksten, wenn das Ergebnis anschließend durch echte Interviews, Fachreviews, Nutzertests oder vorhandene Vergleichsdaten geprüft wird.
 
 ## Pipeline
 
-0. **Onboarding** — Provider, Modelle, Embedding-Konfiguration und
-   API-Keys werden im UI zusammengeklickt (resumierbar). Die Einstellungen
-   landen kanonisch in Neo4j (siehe [ADR-0007](./docs/decisions/0007-embedding-configuration-and-index-migration.md),
-   [ADR-0008](./docs/decisions/0008-single-user-profile-and-onboarding.md),
-   [ADR-0009](./docs/decisions/0009-unified-model-picker.md)).
-1. **Input** — PDF, Markdown, Text, Webseite oder Fragestellung
-2. **Graph Build** — Entitäten, Aussagen und Beziehungen nach Neo4j
-3. **Persona Spawn** — Rollen, Haltungen, Interessen und Aktivitätsmuster
-4. **Simulation** — Multi-Agent-Simulation mit OASIS/CAMEL
-5. **Aggregation** — Graphdaten, Agentenreaktionen und Metriken zusammenführen
-6. **Report** — Claims, Evidence, Confidence, Hypothesen und Datenlücken erzeugen
-7. **Compare** — Runs, Varianten, Graph-Diffs und Reportversionen vergleichen
-8. **Embedding-Migration** — beim Wechsel des Embedding-Modells wird die
-   bestehende Wissensbasis versioniert neu indexiert (Resume-fähig,
-   `pending → running → validating → completed`).
+1. **Onboarding** — Profil, Provider, Modelle, Embeddings und Datenschutz konfigurieren
+2. **Input** — PDF, Markdown, Text, Webseite oder Fragestellung einlesen
+3. **Graph Build** — Entitäten, Aussagen und Beziehungen nach Neo4j extrahieren
+4. **Persona Spawn** — Rollen, Haltungen, Interessen und Aktivitätsmuster ableiten
+5. **Review** — Personas prüfen, ablehnen oder regenerieren
+6. **Simulation** — Multi-Agenten-Lauf mit OASIS/CAMEL ausführen
+7. **Aggregation** — Graphdaten, Agentenreaktionen und Metriken zusammenführen
+8. **Report** — Claims, Evidence, Confidence, Hypothesen und Datenlücken erzeugen
+9. **Compare** — Runs, Varianten und Graph-Diffs vergleichen
+10. **Migration** — Embedding-Modelle versioniert und fortsetzbar neu indexieren
 
 ## Architektur
 
 ```text
-Vue 3 + Pinia + Zod + Vite
-  ├─ Wizard (Onboarding, Run-Anlage)
-  ├─ AiModelPicker.vue          Unified Model Picker (reka-ui, ADR-0009)
-  ├─ Embedding-Konfigurations-View  Neo4j-Embedding-Migration-UI
-  └─ Runs Dashboard, Graph-, Simulation- und Report-UI
+Vue 3 + TypeScript + Pinia + Zod + Vite
+  ├─ Onboarding und Run-Anlage
+  ├─ AiModelPicker als kanonische Modellauswahl
+  ├─ Runs-, Graph-, Simulation-, Compare- und Report-Oberflächen
+  └─ Settings für Provider, Routing, Embeddings, Profil und Audit
 
-Flask API + Pydantic v2 (Python 3.14)
-  ├─ contracts/                 Single Source of Truth für API- und Frontend-Schemas
-  ├─ api/                       Auth, Upload, Graph, Simulation, Report, Runs, Migrations
-  ├─ services/
-  │    ├─ report_agent/         Layer 7: Report-Pipeline
-  │    ├─ evidence_binder/      Evidence-Gating (ADR-0002)
-  │    ├─ embedding_service.py  Aktive Embedding-Konfiguration (ADR-0007)
-  │    ├─ embedding_migration.py Re-Embedding-Lifecycle
-  │    └─ embedding_reembedder.py Echte Neo4j-Re-Embedding-Engine
-  ├─ llm/providers/registry.py  Provider-Detection-SSoT
-  ├─ storage/                   Neo4j, Embeddings, NER, Search
-  └─ scripts/                   OASIS-/CAMEL-Subprozess-Runner
+Flask + Pydantic v2 + Python 3.14
+  ├─ contracts/                 API- und Schema-Single-Source-of-Truth
+  ├─ api/                       Auth, Graph, Simulation, Report, Runs, Settings
+  ├─ services/                  Fachlogik, Evidence, Migrationen, Provider
+  ├─ llm/providers/registry.py  zentrale Provider-Erkennung
+  ├─ storage/                   Neo4j, Embeddings, Suche
+  └─ scripts/                   OASIS-/CAMEL-Runner
 
 Runtime
-  ├─ Neo4j 5.18+                Knowledge Graph + Embedding-Vektor-Index
-  ├─ Redis                      Pub/Sub, IPC, Status-Events
-  ├─ Ollama lokal/cloud         lokale oder Cloud-Modelle
-  ├─ OpenAI-kompatible APIs     externe LLM- und Embedding-Endpunkte
-  ├─ SigNoz + OTel              optionale Observability (Slices 1–3)
-  └─ OASIS / CAMEL              Multi-Agent-Simulation
+  ├─ Neo4j                     Knowledge Graph und Vector-Indizes
+  ├─ Redis                     Events, IPC und Status
+  ├─ Ollama lokal oder Cloud
+  ├─ OpenAI-kompatible Provider
+  ├─ OpenTelemetry / SigNoz optional
+  └─ OASIS / CAMEL
 ```
 
-Details in [`docs/architecture.md`](./docs/architecture.md).
+Details: [`docs/architecture.md`](./docs/architecture.md)
 
-## Detaillierte Installation
+## Betriebsmodi
 
-Voraussetzungen:
+| Modus | Beschreibung | Geeignet für |
+|---|---|---|
+| Lokal | gesamter Stack und Modelle auf einer Maschine | Datenschutz, Tests, Offline-Workflows |
+| Hybrid | Infrastruktur selbst betrieben, ausgewählte Cloud-Modelle | Qualität, Kostenkontrolle, flexible Hardware |
+| Server/VPS | dauerhafter Betrieb über VPN oder Reverse Proxy | längere Runs und Zugriff von mehreren eigenen Geräten |
 
-- Node.js >=20
-- Bun >=1.3
+## Voraussetzungen
+
+- Node.js 20 oder neuer
+- Bun 1.3 oder neuer
 - Python 3.14
 - `uv`
 - Docker oder Docker Compose
-- Neo4j 5.18+
+- Neo4j 5.18 oder neuer
 - Redis
 - lokaler oder OpenAI-kompatibler LLM-Endpunkt
 
-Es gibt zwei dokumentierte Pfade. Die Wahl bestimmt, welche Vorlage du
-nach `.env` kopierst — die Defaults für `LLM_BASE_URL` /
-`EMBEDDING_BASE_URL` / `NEO4J_URI` unterscheiden sich pro Pfad.
-
-### Pfad A — Docker Compose (empfohlen für Reviews und Demos)
+### Docker Compose
 
 ```bash
-git clone https://github.com/arn0ld87/agora.git
-cd agora
-
-# Docker-Vorlage: host.docker.internal-Routing für Ollama,
-# Compose-Service `neo4j` für Bolt, Qwen3-Embedding-Defaults.
 cp .env.docker.example .env
 
-# Geheimnisse erzeugen und in .env eintragen (SECRET_KEY, AGORA_AUTH_TOKEN, NEO4J_PASSWORD)
 python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))"
 python -c "import secrets; print('AGORA_AUTH_TOKEN=' + secrets.token_urlsafe(32))"
 
-# Modelle ziehen (falls Ollama genutzt wird)
-ollama pull qwen3-coder-next:cloud
-ollama pull qwen3-embedding:4b
-
-# Stack starten
 docker compose up -d --build
 ```
 
-| Dienst | URL |
-|---|---|
-| Frontend | <http://localhost:5173> |
-| Backend Liveness | <http://localhost:5001/health> |
-| Backend Readiness | <http://localhost:5001/readyz> |
-| Neo4j Browser | <http://localhost:7474> |
-
-`/readyz` ist der seit Code-Review 2026-05-17 verdrahtete Readiness-
-Endpoint: er liefert nur dann 200, wenn Neo4j-Bolt, Redis-Ping, Upload-
-Verzeichnis und Embedding-Konfig kohärent sind. Docker-Healthcheck und
-Reverse-Proxies (Traefik, nginx) sollten ab jetzt gegen `/readyz` testen.
-
-### Pfad B — Host-Dev ohne Container
+### Host-Entwicklung
 
 ```bash
-git clone https://github.com/arn0ld87/agora.git
-cd agora
-
-# Vorlage hat localhost-Defaults bewusst auskommentiert — die Werte
-# unten setzen oder eigene .env-Datei bauen.
 cp .env.example .env
-
-# Ollama-Modelle wie bei Pfad A
-ollama pull qwen3-coder-next:cloud
-ollama pull qwen3-embedding:4b
-
 bun run setup:all
 bun run dev
 ```
 
-Volle Setup-Guides:
+Weitere Guides:
 
 - [`docs/deployment-dev.md`](./docs/deployment-dev.md)
 - [`docs/deployment.md`](./docs/deployment.md)
 - [`docs/provider-runtime-settings.md`](./docs/provider-runtime-settings.md)
 
-## Konfiguration
+## Provider und Modelle
 
-Minimalbeispiel für Ollama lokal oder Ollama Cloud:
-
-```env
-LLM_API_KEY=ollama
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_MODEL_NAME=qwen3-coder-next:cloud
-
-EMBEDDING_MODEL=qwen3-embedding:4b
-EMBEDDING_BASE_URL=http://localhost:11434
-VECTOR_DIM=2560
-
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=<setzen>
-
-AGENT_LANGUAGE=de
-REPORT_LANGUAGE=German
-TIME_PROFILE=dach_default
-```
-
-Beispiel für einen OpenAI-kompatiblen externen Provider:
-
-```env
-LLM_API_KEY=<api-key>
-LLM_BASE_URL=https://api.example.com/v1
-LLM_MODEL_NAME=<provider-model>
-
-EMBEDDING_BASE_URL=https://api.example.com/v1
-EMBEDDING_MODEL=<embedding-model>
-VECTOR_DIM=<passende-dimension>
-```
-
-Wichtig: `EMBEDDING_MODEL` und `VECTOR_DIM` müssen zusammenpassen. Falsche Dimensionen führen zu kaputten oder unbrauchbaren Embedding-Indizes.
-
-## LLM- und Embedding-Provider
-
-Agora ist nicht auf einen einzelnen Provider festgelegt.
-
-Unterstützte Zielarchitektur:
+Agora trennt Chat-/Generierungsmodelle und Embedding-Konfigurationen. Unterstützt beziehungsweise vorgesehen sind:
 
 - Ollama lokal
 - Ollama Cloud
-- OpenAI API
-- Gemini über kompatible Adapter
-- andere OpenAI-kompatible Gateways
-- getrennte Provider für Chat-Modelle und Embeddings
+- OpenAI
+- Gemini
+- MiniMax
+- weitere OpenAI-kompatible Gateways
 
-Empfehlung für produktive Runs: Ein stärkeres Cloud- oder API-Modell für Report-Synthese, ein günstiges oder lokales Modell für Vorverarbeitung und ein stabiles Embedding-Modell mit dokumentierter Dimension.
+Explizit konfigurierte Provider-Verbindungen und Routen sollen stets Vorrang vor automatischer URL- oder Modellnamen-Erkennung haben.
 
 ## Sicherheit
 
-Agora reduziert die Angriffsfläche bewusst, ersetzt aber keinen Multi-User-Sicherheitsstack.
-
-Aktuelle Grundannahmen:
+Grundannahmen:
 
 - Single-User-Betrieb
 - keine öffentliche SaaS-Plattform
-- keine ungeprüfte Mehrbenutzerverwaltung
-- keine Speicherung von Secrets in Report-Artefakten
+- kein ungeprüfter Mehrbenutzerbetrieb
+- keine Speicherung von Secrets in Reports oder Simulation-Artefakten
 
-Empfohlene Schutzmaßnahmen:
+Schutzmaßnahmen:
 
 - `AGORA_AUTH_TOKEN` setzen
-- keine ungeschützte Veröffentlichung ins öffentliche Internet
-- Zugriff bevorzugt über Tailscale, VPN oder Reverse Proxy
 - TLS am Reverse Proxy terminieren
-- Upload-Größen begrenzen
-- Rate-Limits aktivieren
-- Logs regelmäßig prüfen
-- Secrets nicht in Prompts, Reports oder Simulationen schreiben
-- Cloud-Provider-Nutzung im UI und in der Dokumentation sichtbar machen
+- Zugriff über Tailscale oder VPN bevorzugen
+- Upload- und Rate-Limits aktiv lassen
+- Cloud-Datenflüsse bewusst prüfen
+- Secrets niemals in Prompts oder Dokumentationen einfügen
 
-Bereits vorgesehene Sicherheitsmechanismen:
-
-- `AGORA_AUTH_TOKEN` schützt `/api/*`
-- `?token=` ist im Non-Debug-Modus blockiert
-- SSE und Downloads nutzen signed Tickets
-- Rate-Limits auf Ticket-, Upload-, Simulation- und Report-Endpunkten
-- Secrets werden nicht in Simulation-Artefakte serialisiert
+Bereits vorhanden sind signierte SSE-/Download-Tickets, timing-sichere Tokenprüfung, Secret Stores, Rate-Limits, Readiness-Prüfungen und Security-Scans.
 
 Details:
 
+- [`SECURITY.md`](./SECURITY.md)
 - [`docs/security-hardening.md`](./docs/security-hardening.md)
 - [`docs/auth.md`](./docs/auth.md)
-- [`SECURITY.md`](./SECURITY.md)
+- [`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md)
 
 ## Grenzen
 
-Agora erzeugt Simulationen, keine objektive Wahrheit.
-
-Wichtig:
-
 - simulierte Persona-Aussagen sind keine echten Kundenmeinungen
-- Confidence-Scores bewerten interne Evidenzbindung, nicht reale Wahrheit
-- Reports hängen stark von Seed-Daten, Modellqualität und Prompts ab
+- Confidence bewertet interne Evidenzbindung, nicht reale Wahrheit
+- Ergebnisse hängen von Eingangsdaten, Modellen, Prompts und Seeds ab
 - kleine Modelle erzeugen schneller generische oder schlecht belegte Aussagen
-- Cloud-Provider können Datenschutz-, Compliance- und Kostenfragen auslösen
-- starke Ergebnisse sollten mit echten Interviews, Nutzertests oder Fachreviews validiert werden
+- Cloud-Provider bringen Datenschutz-, Compliance- und Kostenfragen mit
+- ein einzelner Run zeigt keine statistisch belastbare Verteilung
 
-Agora ist am stärksten, wenn es als Entscheidungsunterstützung genutzt wird: für Risiken, Gegenargumente, Segmentmuster, Hypothesen und nächste Fragen.
+## Release-Weg bis 1.0.0
 
-## Entwicklungsstatus
+| Version | Bedeutung | Zentrale Freigabekriterien |
+|---|---|---|
+| **0.8.0** | Technical Preview, aktueller Stand | Kernfunktionen vorhanden; offene E2E-, Altpfad- und Dokumentationsschuld ist sichtbar |
+| **0.9.0** | Stability Beta | 6/6 Kern-Smokes grün, E2E als Required Check, eine Provider-/Routing-Wahrheit, Vue-v4 als einziges Produktfrontend, Dependency- und Dokumentations-SSoTs bereinigt |
+| **0.10.0** | Release Candidate | reproduzierbare Runs, Kosten-/Zeitbudgets, Backup/Restore und Upgrade/Rollback dokumentiert, Kalibrierungsbaseline vorhanden, keine kritischen Release-Blocker |
+| **1.0.0** | stabile Single-User-Version | stabile Verträge und Datenmigrationen, reproduzierbare Installation, belastbarer Referenzlauf, dokumentierte Kompatibilitätsregeln und nachgewiesener Produktnutzen |
 
-Agora ist experimentell, aber bereits deutlich über einen einfachen Prototyp hinaus. Die
-Release-Linie ist **v1.0.0**; die Versionsstände und Test-Counts liegen in
-[`docs/STATUS.md`](./docs/STATUS.md), die ausgelieferten Änderungen im
-[`CHANGELOG.md`](./CHANGELOG.md).
+Zwischen `0.10.0` und `1.0.0` werden keine großen neuen Produktbereiche begonnen. Die Phase dient ausschließlich Release-Härtung, Fehlerkorrektur und Dokumentation.
 
-Aktive Wellen (Detail in [`PLAN.md`](./PLAN.md) und [`ROADMAP.md`](./ROADMAP.md)):
+Die ausführbaren Schritte werden ausschließlich als [GitHub Issues](https://github.com/arn0ld87/agora/issues) gepflegt. Die strategische Reihenfolge steht in [`ROADMAP.md`](./ROADMAP.md).
 
-- **Onboarding & Provider-Unification** ([Epic](./docs/epics/onboarding-provider-unification/)):
-  Phase 1 (Slices 1–4.3.4) abgeschlossen — kanonische Provider-/Modell-/Embedding-Verträge,
-  User-Profile, Provider-Discovery mit Test, Embedding-Configuration-Service, Migrations-
-  Lifecycle, Frontend-Store/View, **echte Neo4j-Re-Embedding-Engine mit Resume**. Phase 2
-  (Unified Model Picker, [ADR-0009](./docs/decisions/0009-unified-model-picker.md)) gemerged —
-  `AiModelPicker.vue` ist SSoT. Slice-7-Serie: 7.6b Consumer-Migration gemerged (PR #727),
-  **7.6c** entfernt `StageLLMRoute` und liest den Legacy-Key `agora.<scope>.route` nicht mehr
-  (BREAKING; Nachfolger `LlmRoute`, PR #728).
-- **Design Language v4 — App-Shell-Port:** Slices A–E sowie F, G1 (Settings General/Integrations)
-  und G2 (API Keys real) gemerged. Branch `feat/design-v4-epic`.
-- **v1.0-Output-Vertrag** ([`PLAN.md`](./PLAN.md)) — offene Schritte: P3.2, P4.1, P4.3, P4.4
-  (Markdown/CSV/ZIP-Export, Bundle).
-- **Observability** ([`docs/plans/active/`](./docs/plans/active/)):
-  Slices 1 (End-to-End-Tracing), 2 (Metrics) und 3 (Logs-Correlation) gemerged;
-  Slice 4 (SLOs/Alerts) in Planung.
-- **Phase F — Provider-Detection-Delegation** an die
-  [`backend/app/llm/providers/registry.py`](./backend/app/llm/providers/registry.py)-SSoT
-  (#669, #670, #671 — TDD, je eigener PR).
-- **Dependency-Hardstops** ([`docs/dependency-risk-register.md`](./docs/dependency-risk-register.md)):
-  `nltk` PYSEC-2026-597 + GHSA-p4gq-832x-fm9v → **2026-07-30**; Trivy OS-Layer
-  CVE-2026-24049/23949 → **2026-08-30**.
+## Dokumentationshierarchie
 
-## Mitarbeiten
+Es gibt vier aktive Ebenen:
 
-Kurzeinstieg in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+1. **[`README.md`](./README.md)** — Produkt, Einstieg, Grenzen und Release-Linie
+2. **[`docs/STATUS.md`](./docs/STATUS.md)** — verifizierter Istzustand
+3. **[`ROADMAP.md`](./ROADMAP.md)** — Releases und strategische Reihenfolge
+4. **[GitHub Issues](https://github.com/arn0ld87/agora/issues)** — konkrete, ausführbare Arbeit
 
-Agenten-Setup für Claude Code, Codex und ähnliche Tools: [`AGENTS.md`](./AGENTS.md),
-Claude-spezifische Eigenheiten: [`CLAUDE.md`](./CLAUDE.md).
+ADRs, Architektur-, Security- und Runbook-Dokumente bleiben verbindliche Referenzen. Historische Planungsdokumente liegen im [`docs/archive/planning/`](./docs/archive/planning/)-Index und sind keine aktiven Taskquellen.
 
-Runbooks: [`docs/runbooks/`](./docs/runbooks/) — Tool-Pflicht, PR-Workflow,
-Worktree-Strategie, **Pre-Push-Gate** (zentral seit PR #693), Subagent-Routing,
-Architektur-Layer.
+## Qualität prüfen
+
+```bash
+# vollständiges lokales Gate
+bash scripts/pre-push-gate.sh
+
+# gezielte Gates
+bash scripts/pre-push-gate.sh backend
+bash scripts/pre-push-gate.sh frontend
+bash scripts/pre-push-gate.sh schemas
+```
+
+Der aktuelle Test-, Coverage- und E2E-Stand steht in [`docs/STATUS.md`](./docs/STATUS.md).
+
+## Mitwirken
+
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- [`AGENTS.md`](./AGENTS.md)
+- [`CLAUDE.md`](./CLAUDE.md)
+- [`docs/runbooks/`](./docs/runbooks/)
 
 ## Herkunft und Lizenz
 
-Agora entstand ursprünglich als Fork von [nikmcfly/MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline), welches wiederum auf [666ghj/MiroFish](https://github.com/666ghj/MiroFish) basiert.
+Agora entstand aus `MiroFish-Offline`, wurde aber bei Architektur, Verträgen, Betrieb und Produktziel grundlegend weiterentwickelt. OASIS-Komponenten stammen aus dem CAMEL-AI-Ökosystem.
 
-Die aktuelle Codebasis, Architektur und Zielsetzung wurden seitdem grundlegend weiterentwickelt. Agora ist heute ein eigenständiges hybrides Multi-Agent-Analyse- und Simulationssystem für Zielgruppen-, Stakeholder- und Marktreaktionen.
-
-Simulationskomponenten nutzen bzw. integrieren [OASIS](https://github.com/camel-ai/oasis) von CAMEL-AI.
-
-Lizenz: **AGPL-3.0**, siehe [LICENSE](./LICENSE).
+Lizenz: **AGPL-3.0**, siehe [`LICENSE`](./LICENSE).
