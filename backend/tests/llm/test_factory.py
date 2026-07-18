@@ -2,7 +2,9 @@
 
 Der Legacy-Profil-Pfad muss den API-Key aus dem kanonischen
 Provider-Connection-Store beziehen und den (potenziell veralteten) im Profil
-gespeicherten Key nur als Fallback nutzen.
+gespeicherten Key nur als Fallback nutzen. Die Connection-Auswahl bevorzugt
+einen exakten provider_kind-Match (order-unabhängig); ein base_url-Fallback
+greift ausschließlich für den generischen ``custom``-Provider.
 """
 
 from datetime import datetime, timezone
@@ -15,18 +17,7 @@ from app.contracts.llm_profile_contract import LlmProfile
 
 
 def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = "m") -> LlmProfile:
-    """
-    Create a test LLM profile with the specified provider, endpoint, model, and API key.
-    
-    Parameters:
-    	provider (str): The provider identifier.
-    	base_url (str): The provider endpoint URL.
-    	api_key (str | None): The profile API key, if available.
-    	model (str): The model name.
-    
-    Returns:
-    	LlmProfile: The configured LLM profile.
-    """
+    """Baut ein Test-LlmProfile mit den angegebenen Feldern."""
     now = datetime.now(timezone.utc)
     return LlmProfile(
         id="prof_1",
@@ -41,18 +32,7 @@ def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = 
 
 
 def _conn(connection_id: str, provider_kind: str, base_url: str, *, enabled: bool = True):
-    """
-    Create a mock provider connection for factory tests.
-    
-    Parameters:
-        connection_id (str): Identifier and secret reference for the connection.
-        provider_kind (str): Provider type associated with the connection.
-        base_url (str): Base URL exposed by the connection.
-        enabled (bool): Whether the connection is available for use.
-    
-    Returns:
-        SimpleNamespace: A connection-like object with the supplied attributes.
-    """
+    """Baut ein connection-artiges Objekt (nur die von der Factory gelesenen Felder)."""
     return SimpleNamespace(
         id=connection_id,
         provider_kind=provider_kind,
@@ -63,16 +43,9 @@ def _conn(connection_id: str, provider_kind: str, base_url: str, *, enabled: boo
 
 
 def _build(profile, *, connections, secrets):
-    """
-    Build a client from a profile using mocked connection and secret stores.
-    
-    Parameters:
-        profile: The LLM profile used to build the client.
-        connections: Provider connections available to the factory.
-        secrets: Mapping of secret references to plaintext API keys.
-    
-    Returns:
-        The keyword arguments passed to the mocked LLMClient constructor.
+    """Ruft build_client_from_profile mit gemockten Stores + LLMClient auf.
+
+    Gibt die kwargs zurück, mit denen ``LLMClient`` konstruiert worden wäre.
     """
     store = MagicMock()
     store.list_connections.return_value = connections
@@ -107,9 +80,7 @@ def test_prefers_connection_secret_over_stale_profile_key():
 
 
 def test_matches_connection_by_base_url_when_provider_generic():
-    """
-    Verify that a generic provider profile matches the connection with the same base URL and uses its secret.
-    """
+    """provider='custom' matcht die minimax-Connection über die base_url."""
     profile = _profile("custom", "https://api.minimax.io/v1", api_key="stale")
     kwargs = _build(
         profile,
@@ -124,10 +95,40 @@ def test_matches_connection_by_base_url_when_provider_generic():
     assert kwargs["route_provider_id"] == "minimax"
 
 
+def test_provider_kind_match_wins_over_base_url_and_ignores_store_order():
+    """provider_kind-Match gewinnt order-unabhängig; kein base_url-Leak bei non-custom.
+
+    Profil: provider=google, aber base_url zeigt (konstruiert) auf minimax. Die
+    minimax-Connection steht ZUERST in der Liste und würde per base_url matchen —
+    trotzdem muss die google-Connection (provider_kind) gewählt werden.
+    """
+    profile = _profile("google", "https://api.minimax.io/v1", api_key="stale")
+    kwargs = _build(
+        profile,
+        connections=[
+            _conn("minimax", "minimax", "https://api.minimax.io/v1"),
+            _conn("google", "google", "https://generativelanguage.googleapis.com/v1beta/openai"),
+        ],
+        secrets={"minimax": "mm-key", "google": "g-real"},
+    )
+    assert kwargs["api_key"] == "g-real"
+    assert kwargs["route_provider_id"] == "google"
+
+
+def test_non_custom_profile_never_matches_by_base_url():
+    """Ein spezifischer (non-custom) Provider darf keinen fremden Secret per base_url ziehen."""
+    profile = _profile("openai", "https://api.minimax.io/v1", api_key="sk-own")
+    kwargs = _build(
+        profile,
+        connections=[_conn("minimax", "minimax", "https://api.minimax.io/v1")],
+        secrets={"minimax": "mm-key"},
+    )
+    assert kwargs["api_key"] == "sk-own"
+    assert kwargs["api_key_source"] == "profile"
+
+
 def test_falls_back_to_profile_key_without_matching_connection():
-    """
-    Uses the profile API key when no connection matches the profile configuration.
-    """
+    """Keine passende Connection → Profil-Key bleibt maßgeblich."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
     kwargs = _build(
         profile,
@@ -139,9 +140,7 @@ def test_falls_back_to_profile_key_without_matching_connection():
 
 
 def test_disabled_connection_is_ignored():
-    """
-    Verify that disabled connections do not override the profile API key.
-    """
+    """Deaktivierte Connections dürfen ihren Secret nicht beisteuern."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key="sk-own")
     kwargs = _build(
         profile,
@@ -153,9 +152,7 @@ def test_disabled_connection_is_ignored():
 
 
 def test_cloud_profile_without_any_key_raises():
-    """
-    Ensure a cloud profile without an API key or matching connection raises a `ValueError`.
-    """
+    """Cloud-Provider ohne Connection- UND Profil-Key scheitert vor dem HTTP-Call."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key=None)
     with pytest.raises(ValueError, match="api_key fehlt"):
         _build(profile, connections=[], secrets={})

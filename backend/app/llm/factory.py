@@ -39,21 +39,26 @@ def _resolve_connection_secret(
         from ..services.llm_provider_secrets_store import (
             get_llm_provider_secrets_store,
         )
+        from ..contracts.provider_types import PROVIDER_CUSTOM
 
-        connections = ProviderConnectionStore().list_connections()
-        target = _normalize_base_url(profile.base_url)
+        connections = [
+            c for c in ProviderConnectionStore().list_connections() if c.enabled
+        ]
+        # 1. Exact provider_kind match always wins, independent of store order.
         match = next(
-            (
-                c
-                for c in connections
-                if c.enabled
-                and (
-                    c.provider_kind == profile.provider
-                    or (target and _normalize_base_url(c.base_url) == target)
-                )
-            ),
+            (c for c in connections if c.provider_kind == profile.provider),
             None,
         )
+        # 2. base_url fallback ONLY for the generic ``custom`` profile provider —
+        #    a specific (non-custom) profile must never receive another
+        #    provider's secret via a coincidental base_url match.
+        if match is None and profile.provider == PROVIDER_CUSTOM:
+            target = _normalize_base_url(profile.base_url)
+            if target:
+                match = next(
+                    (c for c in connections if _normalize_base_url(c.base_url) == target),
+                    None,
+                )
         if match is None:
             return None, None
         key = get_llm_provider_secrets_store().get_plaintext(match.secret_ref or match.id)
