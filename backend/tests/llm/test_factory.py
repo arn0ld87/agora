@@ -22,7 +22,18 @@ def test_is_local_base_url_rejects_missing_values(base_url):
 
 
 def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = "m") -> LlmProfile:
-    """Baut ein Test-LlmProfile mit den angegebenen Feldern."""
+    """
+    Construct a test LLM profile with the specified provider, endpoint, API key, and model.
+    
+    Parameters:
+        provider (str): The provider identifier.
+        base_url (str): The provider endpoint.
+        api_key (str | None): The profile API key, if available.
+        model (str): The model name.
+    
+    Returns:
+        LlmProfile: A test profile with fixed identity fields and current UTC timestamps.
+    """
     now = datetime.now(timezone.utc)
     return LlmProfile(
         id="prof_1",
@@ -153,7 +164,7 @@ def test_disabled_connection_is_ignored():
 
 
 def test_cloud_profile_without_any_key_raises():
-    """Cloud-Provider ohne Connection- UND Profil-Key scheitert vor dem HTTP-Call."""
+    """Ensure a cloud provider profile without a connection or profile API key raises a validation error."""
     profile = _profile("openai", "https://api.openai.com/v1", api_key=None)
     with pytest.raises(ValueError, match="api_key fehlt"):
         _build(profile, connections=[], secrets={})

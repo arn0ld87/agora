@@ -51,11 +51,21 @@ def seed_run_stage_routing(
     llm_runtime: Optional[RuntimeLlmConfig],
     llm_profile_id: Optional[str] = None,
 ) -> RuntimeLlmRouting:
-    """Persist an initial per-run routing config for *stage_id*.
-
-    New runs inherit the server default route. A request-local model/provider
-    override is stored as a stage override so later stage locks and the UI can
-    inspect the effective runtime decision.
+    """
+    Persist per-run routing for a stage, applying workspace defaults and request-specific overrides.
+    
+    Parameters:
+    	run_id (str): Identifier of the run whose routing configuration is updated.
+    	stage_id (StageId): Identifier of the stage receiving the routing configuration.
+    	llm_model_override (Optional[str]): Model name to use for the stage.
+    	llm_runtime (Optional[RuntimeLlmConfig]): Runtime provider settings to apply.
+    	llm_profile_id (Optional[str]): Identifier of an LLM profile to use for the stage.
+    
+    Returns:
+    	RuntimeLlmRouting: The saved per-run routing configuration.
+    
+    Raises:
+    	ValueError: If the specified LLM profile or a compatible activated provider connection is unavailable.
     """
     config_service = RuntimeRunConfig(run_id)
     has_existing_config = os.path.exists(config_service.config_path)
@@ -126,10 +136,19 @@ def seed_run_stage_routing(
 
 
 def resolve_route_api_key(route: ResolvedRoute, llm_runtime: Optional[RuntimeLlmConfig] = None) -> Optional[str]:
-    """Resolve the secret API key for a resolved route.
-
-    Prefers the request-scoped runtime secret when it matches the selected
-    provider. Falls back to the server-side secret resolver otherwise.
+    """Resolve the API key for a resolved route.
+    
+    Connection-only routes use their bound secret reference. Other routes use a
+    matching request-scoped runtime key when available, then fall back to the
+    server-side provider secret.
+    
+    Parameters:
+        route (ResolvedRoute): The resolved route whose API key is needed.
+        llm_runtime (Optional[RuntimeLlmConfig]): Request-scoped runtime
+            configuration that may provide a matching API key.
+    
+    Returns:
+        Optional[str]: The resolved API key, or None when no key is available.
     """
     if route.provider_options.get("connection_only") is True:
         raw_secret_ref = route.provider_options.get("secret_ref")

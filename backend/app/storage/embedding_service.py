@@ -228,9 +228,17 @@ class EmbeddingService:
 
     def _request_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Make HTTP request to the configured embedding provider.
-
-        Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings`.
+        Send texts to the configured embedding provider and parse the returned vectors.
+        
+        Parameters:
+            texts: Texts to embed.
+        
+        Returns:
+            The embedding vector for each input text, in the same order.
+        
+        Raises:
+            EmbeddingError: If the request fails, the response is invalid, or the
+                provider returns a different number of vectors than requested.
         """
         payload = {
             "model": self.model,

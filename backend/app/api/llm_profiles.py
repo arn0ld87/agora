@@ -23,7 +23,12 @@ logger = get_logger("agora.api.llm_profiles")
 
 @llm_profiles_bp.after_request
 def add_profile_deprecation_headers(response):
-    """Mark every legacy profile response with its canonical successor."""
+    """
+    Add deprecation headers identifying the canonical successor for profile responses.
+    
+    Returns:
+        The response with deprecation headers added.
+    """
     return add_legacy_deprecation_headers(response)
 
 

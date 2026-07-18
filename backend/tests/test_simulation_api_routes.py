@@ -53,6 +53,11 @@ def test_available_models_route_is_registered():
 
 def test_available_models_uses_registry_provider_detection(monkeypatch):
     def offline(*_args, **_kwargs):
+        """Simulate an offline request failure.
+        
+        Raises:
+            RuntimeError: Always raised with the message ``"offline"``.
+        """
         raise RuntimeError("offline")
 
     monkeypatch.setattr(

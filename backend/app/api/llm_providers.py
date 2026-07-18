@@ -46,7 +46,15 @@ _LEGACY_PROVIDER_VIEW_NAMES = frozenset(
 
 @llm_bp.after_request
 def add_provider_deprecation_headers(response):
-    """Mark only legacy ``/providers`` responses, never canonical connections."""
+    """
+    Add deprecation headers to legacy provider responses.
+    
+    Parameters:
+    	response: The Flask response to process.
+    
+    Returns:
+    	The response with legacy deprecation headers when applicable.
+    """
     view_name = (request.endpoint or "").rsplit(".", maxsplit=1)[-1]
     if view_name in _LEGACY_PROVIDER_VIEW_NAMES:
         return add_legacy_deprecation_headers(response)

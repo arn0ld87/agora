@@ -24,6 +24,15 @@ def test_generate_ontology_profile_routes_document_ingest_and_ontology_stage(mon
             pass
 
         def resolve(self, stage_id):
+            """
+            Resolve a stage identifier to its configured OpenAI model route.
+            
+            Parameters:
+            	stage_id: Identifier of the stage to resolve.
+            
+            Returns:
+            	ResolvedRoute: The OpenAI route for the specified stage.
+            """
             return ResolvedRoute(
                 stage=stage_id,
                 provider_id="openai",
@@ -122,6 +131,15 @@ def test_build_graph_forwards_route_precedence_and_persists_submitted_profile(
             pass
 
         def resolve(self, stage_id):
+            """
+            Resolve a stage to its configured OpenAI model route.
+            
+            Parameters:
+                stage_id: Identifier of the stage to resolve.
+            
+            Returns:
+                ResolvedRoute: The resolved OpenAI route for the stage.
+            """
             return ResolvedRoute(
                 stage=stage_id,
                 provider_id="openai",

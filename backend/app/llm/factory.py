@@ -101,16 +101,15 @@ def build_client_from_profile(
     Build an LLM client from a persisted profile and its provider connection settings.
     
     Parameters:
-        profile (LlmProfile): Profile containing the provider, credentials, endpoint, and model.
+        profile (LlmProfile): Profile specifying the provider, endpoint, and model.
         run_id (Optional[str]): Optional identifier associated with the client run.
         timeout (float): Request timeout in seconds.
     
     Returns:
-        LLMClient: Configured client using the matching connection-store key,
-        or local no-auth credentials for local providers.
+        LLMClient: Configured client using the resolved connection credentials and endpoint.
     
     Raises:
-        ValueError: If no API key is available for a non-local provider.
+        ValueError: If no API key is available for a non-local endpoint.
     """
     connection_key, connection_id, connection_base_url = _resolve_connection_secret(profile)
     api_key = connection_key

@@ -46,7 +46,9 @@ def test_build_client_from_ollama_profile():
 
 
 def test_build_client_from_openai_profile():
-    """Ein Legacy-Profil-Key ersetzt keine kanonische ProviderConnection."""
+    """
+    Verify that a legacy profile API key does not replace the canonical provider connection.
+    """
     profile = _make_profile(
         provider="openai",
         base_url="https://api.openai.com/v1",

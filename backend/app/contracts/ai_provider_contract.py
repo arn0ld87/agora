@@ -314,6 +314,12 @@ class AiRoute(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_fallback_reason(self) -> AiRoute:
+        """
+        Validate fallback and connection-only route requirements.
+        
+        Returns:
+        	AiRoute: The validated route.
+        """
         if self.source == "provider_fallback" and not (
             self.fallback_reason and self.fallback_reason.strip()
         ):

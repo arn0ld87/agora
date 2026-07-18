@@ -35,6 +35,24 @@ class GraphBuildService:
         llm_profile_id=None,
         additional_context=None
     ):
+        """
+        Generate an ontology for a project from its documents and simulation requirements.
+        
+        Parameters:
+            project_id: Identifier of the project to update.
+            simulation_requirement: Requirements that guide ontology generation.
+            document_texts: Source documents used to generate the ontology.
+            llm_model_override: Optional model override for the generation run.
+            llm_runtime: Optional runtime configuration for the language model.
+            llm_profile_id: Optional language model profile identifier recorded on the project.
+            additional_context: Optional context supplied to the ontology generator.
+        
+        Returns:
+            The project updated with the generated ontology and analysis summary.
+        
+        Raises:
+            ValueError: If the project does not exist.
+        """
         project = ProjectManager.get_project(project_id)
         if not project:
             raise ValueError(ApiErrorCode.NOT_FOUND)
@@ -117,6 +135,28 @@ class GraphBuildService:
         chunk_overlap=None,
         container=None
     ):
+        """
+        Queue a graph build for a project using its extracted text and ontology.
+        
+        Parameters:
+            project_id: Identifier of the project to build.
+            graph_name: Name assigned to the new graph.
+            llm_model_override: Optional model override for graph processing.
+            llm_runtime: Optional runtime configuration for the language model.
+            llm_profile_id: Optional language model profile identifier.
+            force: Whether to restart a graph build already in progress.
+            chunk_size: Optional text chunk size.
+            chunk_overlap: Optional overlap between consecutive text chunks.
+            container: Service container used to create the graph builder.
+        
+        Returns:
+            A tuple containing the task identifier and run identifier.
+        
+        Raises:
+            ValueError: If the project, extracted text, or ontology is missing, or if
+                the project has not completed ontology generation.
+            RuntimeError: If a graph build is already in progress and `force` is false.
+        """
         project = ProjectManager.get_project(project_id)
         if not project:
             raise ValueError(ApiErrorCode.NOT_FOUND)
@@ -203,6 +243,12 @@ class GraphBuildService:
         ner_override = NERExtractor(llm_client=ner_llm_client)
 
         def build_task():
+            """
+            Builds the project's graph and records its completion or failure state.
+            
+            On failure, marks the project, task, and run as failed and attempts to clean up any
+            partially created graph.
+            """
             build_logger = get_logger('agora.build')
             graph_id = None
             try:

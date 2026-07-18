@@ -254,6 +254,9 @@ def test_legacy_models_route_delegates_to_connection_service(api_client, lifecyc
 
 
 def test_legacy_opencode_route_is_unsupported_without_probe(api_client, lifecycle):
+    """
+    Verify that the legacy OpenCode model route rejects unsupported providers without probing the service.
+    """
     _, service = lifecycle
 
     response = api_client.get("/api/llm/providers/opencode_go/models")

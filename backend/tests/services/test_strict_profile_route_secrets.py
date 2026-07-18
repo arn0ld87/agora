@@ -9,6 +9,9 @@ from app.services.llm_runtime import RuntimeLlmConfig
 
 
 def _strict_route() -> ResolvedRoute:
+    """
+    Create a strict route bound to the connection secret.
+    """
     return ResolvedRoute(
         stage="graph_build",
         provider_id="connection-openai",
@@ -77,6 +80,9 @@ def test_llm_client_strict_route_ignores_passed_or_resolver_keys(monkeypatch):
     captured = {}
 
     def capture_init(self, **kwargs):
+        """
+        Capture initialization keyword arguments for test assertions.
+        """
         captured.update(kwargs)
 
     monkeypatch.setattr(
@@ -107,6 +113,9 @@ def test_llm_client_missing_strict_secret_never_uses_passed_or_resolver_key(monk
     captured = {}
 
     def capture_init(self, **kwargs):
+        """
+        Capture initialization keyword arguments for test assertions.
+        """
         captured.update(kwargs)
 
     monkeypatch.setattr(

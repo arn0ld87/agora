@@ -21,6 +21,14 @@ from app.container import AgoraContainer
 
 @pytest.fixture
 def app(monkeypatch):
+    """Create a Flask test application configured with mocked storage and the graph API blueprint.
+    
+    Parameters:
+        monkeypatch: Pytest fixture used to set the default LLM model for the test application.
+    
+    Returns:
+        Flask: A configured Flask application instance.
+    """
     monkeypatch.setattr("app.config.Config.LLM_MODEL_NAME", "gpt-4o")
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)

@@ -26,7 +26,15 @@ _LEGACY_PROVIDER_KIND_ALIASES: dict[str, frozenset[str]] = {
 
 
 def normalize_endpoint_url(url: str | None) -> str:
-    """Normalisiere einen Endpunkt fuer einen stabilen Identitaetsvergleich."""
+    """
+    Normalize an endpoint URL for stable identity comparisons.
+    
+    Parameters:
+    	url (str | None): The endpoint URL to normalize.
+    
+    Returns:
+    	str: The normalized URL, or the trimmed input when it cannot be parsed as a URL.
+    """
 
     raw = (url or "").strip().rstrip("/")
     if not raw:
@@ -57,7 +65,15 @@ def normalize_endpoint_url(url: str | None) -> str:
 
 
 def canonical_connection_base_url(connection: ProviderConnection) -> str | None:
-    """Liefere den Connection-Endpunkt oder den Registry-Default."""
+    """
+    Determine the base URL used for a provider connection.
+    
+    Args:
+        connection: The provider connection whose configured or default endpoint is used.
+    
+    Returns:
+        The configured base URL, the provider registry's default base URL, or `None` if no endpoint is available.
+    """
 
     if connection.base_url:
         return str(connection.base_url)
@@ -69,10 +85,18 @@ def resolve_profile_connection(
     profile: LlmProfile,
     connections: Iterable[ProviderConnection],
 ) -> ResolvedProfileConnection | None:
-    """Binde ein Legacy-Profil nur an Kind- und Endpunkt-kompatible Connections.
-
-    ``custom`` bleibt der einzige Legacy-Provider, der bei exakt gleichem
-    Endpunkt ueber Provider-Kinds hinweg gebunden werden darf.
+    """
+    Bind a legacy profile to an enabled provider connection with a compatible provider kind and endpoint.
+    
+    Parameters:
+        profile (LlmProfile): Legacy profile whose provider kind and base URL determine compatibility.
+        connections (Iterable[ProviderConnection]): Provider connections to consider.
+    
+    Returns:
+        ResolvedProfileConnection: The matching provider connection and its canonical base URL, or `None` if no match exists.
+    
+    Raises:
+        ValueError: If compatible connections exist for a non-custom provider but none has a matching endpoint.
     """
 
     enabled = [connection for connection in connections if connection.enabled]

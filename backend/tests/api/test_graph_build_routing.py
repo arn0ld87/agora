@@ -100,7 +100,9 @@ def test_build_graph_uses_resolved_route_for_ner_override(client, monkeypatch):
 
 
 def test_build_graph_explicit_route_wins_over_legacy_project_profile(client, monkeypatch):
-    """Eine explizit aufgelöste Route bleibt trotz Legacy-Profil maßgeblich."""
+    """
+    Verify that the explicitly resolved stage route takes precedence over the legacy project LLM profile during graph building.
+    """
     fake_project = MagicMock()
     fake_project.status = ProjectStatus.ONTOLOGY_GENERATED
     fake_project.ontology = {"entity_types": [], "edge_types": []}
@@ -203,6 +205,15 @@ def test_generate_ontology_explicit_route_wins_over_legacy_profile(monkeypatch):
             pass
 
         def resolve(self, stage_id: str):
+            """
+            Resolve a stage to its configured model route.
+            
+            Parameters:
+                stage_id (str): Identifier of the stage to resolve.
+            
+            Returns:
+                ResolvedRoute: The model route assigned to the stage.
+            """
             return ResolvedRoute(
                 stage=stage_id,
                 provider_id="openai",
