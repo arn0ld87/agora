@@ -2,107 +2,112 @@
 
 Guidance für Codex, Claude Code und andere Agent-Runtimes in diesem Repository.
 
-Diese Datei bleibt bewusst operativ und knapp. Verifizierter Istzustand:
-[`docs/STATUS.md`](docs/STATUS.md). Zukunft und Slice-Reihenfolge: [`PLAN.md`](PLAN.md).
-Detail-Runbooks: [`docs/runbooks/`](docs/runbooks/).
+## Dokumentationsquellen
+
+Agenten verwenden genau diese Reihenfolge:
+
+1. [`README.md`](README.md) — Produkt, Grenzen, Setup und Release-Linie
+2. [`docs/STATUS.md`](docs/STATUS.md) — verifizierter Istzustand
+3. [`ROADMAP.md`](ROADMAP.md) — strategische Release-Reihenfolge
+4. [GitHub Issues](https://github.com/arn0ld87/agora/issues) — ausführbare Tasks und Akzeptanzkriterien
+
+ADRs, Architektur-, Security- und Runbook-Dateien sind verbindliche Referenzen, aber keine konkurrierenden Roadmaps. Historische Planung liegt unter [`docs/archive/planning/`](docs/archive/planning/).
 
 ## Projekt
 
-Agora ist ein **lokal-first Multi-Agent-Simulator** für DACH-Zielgruppenreaktionen:
-Dokument hochladen → Wissensgraph extrahieren → Personas erzeugen → OASIS-Simulation → DACH-Report.
+Agora ist eine lokal oder kontrolliert hybrid betreibbare Multi-Agent-Analyseplattform für simulierte DACH-Zielgruppen-, Stakeholder- und Marktreaktionen.
 
-**Stack:** Flask/Python 3.14, Pydantic v2, Vue 3, Vite, Pinia, Neo4j 5.18 CE,
-Redis, OASIS (`camel-oasis`) und Ollama bzw. OpenAI-kompatible Provider.
-Package-Manager: `uv` im Backend, `npm` im Frontend.
+**Aktueller Reifegrad:** `0.8.0` Technical Preview.  
+**Ziel:** stabile Single-User-Version `1.0.0` gemäß [`ROADMAP.md`](ROADMAP.md).
 
-**Betriebsmodell:** Single-User, lokal oder kontrolliert hybrid. Kein öffentliches SaaS.
-Siehe [ADR-0001](docs/decisions/0001-auth-model.md).
+**Stack:** Flask/Python 3.14, Pydantic v2, Vue 3, TypeScript, Vite, Pinia, Neo4j, Redis, OASIS/CAMEL und lokale oder OpenAI-kompatible Provider.
 
-**Aktueller Stand:** v1.0.0. Onboarding und Provider-Unification sind weitgehend auf
-`main`; Slice 7.6d (Legacy-`ModelPicker`-Abbau, Issue #740) ist migriert.
-Offene Prioritäten sind Issue #739 (E2E-Smokes/PR-Gate) sowie die
-dokumentierten Security-Hardstops.
+**Betriebsmodell:** Single User, lokal oder kontrolliert hybrid. Kein öffentliches SaaS.
 
 ## Verbindliche Arbeitsweise
 
-1. **Nie direkt auf `main` arbeiten.** Eigener Branch und atomarer PR.
-2. **Tests sind die Spezifikation.** Bei Verhaltensänderungen RED → GREEN → Refactor.
-3. **Vor jedem Push das passende Gate ausführen:**
+1. Nie direkt auf `main` arbeiten. Eigener Branch und atomarer Pull Request.
+2. Tests sind die Spezifikation. Verhaltensänderungen folgen RED → GREEN → Refactor.
+3. Vor jedem Push das passende Gate ausführen:
    - `bash scripts/pre-push-gate.sh backend`
    - `bash scripts/pre-push-gate.sh frontend`
    - `bash scripts/pre-push-gate.sh schemas`
    - ohne Scope: vollständiges Gate
-4. **Kein `--no-verify`** ohne ausdrückliche Freigabe.
-5. **Dokumentation im selben Slice synchronisieren.** `STATUS.md` beschreibt nur den
-   Istzustand; `PLAN.md` nur Zukunft und Reihenfolge; historische Details gehören in
-   `CHANGELOG.md`, ADRs, Worklogs oder Git-Historie.
-6. **Keine abgeschwächten Assertions, globalen Skips oder pauschalen Retries**, um rote
-   Tests kosmetisch grün zu machen.
-7. **Layer-Reihenfolge respektieren.** Verträge zuerst, Consumer danach.
+4. Kein `--no-verify` ohne ausdrückliche Freigabe.
+5. Dokumentation im selben Slice synchronisieren:
+   - Istzustand → `docs/STATUS.md`
+   - strategische Release-Auswirkung → `ROADMAP.md`
+   - konkrete Folgearbeit → GitHub Issue
+   - ausgelieferte Änderung → `CHANGELOG.md`
+6. Keine abgeschwächten Assertions, globalen Skips oder pauschalen Retries, um rote Tests kosmetisch grün zu machen.
+7. Verträge zuerst, Consumer danach.
+8. Kein neuer großer Produktbereich, wenn er nicht in der aktuellen Release-Stufe der Roadmap vorgesehen ist.
 
-PR-Workflow: [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md)
-Pre-Push-Gate: [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md)
-Worktrees: [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md)
+Runbooks:
+
+- [`docs/runbooks/pr-workflow.md`](docs/runbooks/pr-workflow.md)
+- [`docs/runbooks/pre-push-gate.md`](docs/runbooks/pre-push-gate.md)
+- [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md)
+- [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md)
 
 ## Tool-Pipeline
 
-Für Architektur-, Delta- und Codebase-Analysen gilt:
+Für Architektur-, Delta- und Codebase-Analysen:
 
 1. `code-review-graph`
-2. `context7`, wenn Bibliotheks- oder Frameworkverhalten betroffen ist
-3. `ctx_batch_execute` für mehrere große Read-only-Abfragen
-4. `ctx_execute` bzw. `ctx_execute_file`
+2. `context7` bei Bibliotheks- oder Frameworkfragen
+3. `ctx_batch_execute` für große Read-only-Abfragen
+4. `ctx_execute` beziehungsweise `ctx_execute_file`
 5. direkte Dateiwerkzeuge nur für gezielte Bearbeitung und Verifikation
 
-`context-mode` ist die Execution-Layer für große Ausgaben. Globale Konfiguration,
-Auth-Dateien, Tokens, Browserprofile und Keychain-Inhalte werden niemals ins Repository
-kopiert oder untersucht. Tool-Stand: [`docs/tooling/agent-tools.md`](docs/tooling/agent-tools.md).
+Globale Konfiguration, Tokens, Browserprofile, Keychain-Inhalte und private Host-Dateien werden niemals ins Repository kopiert.
 
 ## Architektur-Single-Sources-of-Truth
 
-- API-Verträge: `backend/app/contracts/` mit Pydantic v2 und `extra="forbid"`
+- API-Verträge: `backend/app/contracts/` mit Pydantic v2
 - Frontend-Spiegel: `frontend/src/contracts/` und generierte `schemas/`
 - Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
-- Kanonischer Modell-Picker: `frontend/src/components/AiModelPicker.vue`
-- Kanonische Modellreferenz: `AiModelRef`
-- Kanonische Route: `AiRoute`/`LlmRoute` gemäß aktuellem Vertrag
-- Embedding-Konfiguration und Chat-Routing bleiben strukturell getrennt
-- Evidence-Gating-Hartanker aus ADR-0002 dürfen nicht geschwächt werden
+- Provider-Verbindung: `ProviderConnection`
+- kanonische Modellauswahl: `frontend/src/components/AiModelPicker.vue`
+- kanonische Modellreferenz: `AiModelRef`
+- kanonische Route: `AiRoute` / `LlmRoute`
+- Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
+- Evidence-Gating: ADR-0002-Hartanker
 
-## Aktuelle Restarbeiten
+Chat-Routing und Embedding-Konfiguration bleiben strukturell getrennt.
 
-### Issue #739: E2E-Smokes und PR-Gate
+## Aktuelle Release-Priorität
 
-Der Stack bootet im Runner, der Health-Smoke ist grün. Fünf Specs sind rot:
-Upload + Graph, Minimalreport, Report-Modi, Golden-Gate Accessibility und
-AiModelPicker. Ursachen einzeln beheben; danach `pull_request`-Trigger reaktivieren
-und als Required Check führen.
+### 0.8.0 → 0.9.0
 
-### Issue #740: Slice 7.6d — erledigt
+- Issue #739: fünf rote E2E-Smokes reparieren
+- E2E anschließend als Required Check aktivieren
+- Vue-v4 als einziges Produktfrontend festlegen
+- Provider-, Secret- und Routing-Altpfade konsolidieren
+- Dependency- und Versions-SSoTs bereinigen
+- Produkt- und Manifest-Version automatisiert synchronisieren
 
-`LlmProfileManager.vue` auf den connection-basierten `AiModelPicker`/`AiModelRef`
-migriert; legacy `ModelPicker.vue` inklusive vi.mock-Stub entfernt. Keine
-Kompatibilitätsschicht, keine zweite Provider-Erkennung. Specs und `vue-tsc` grün.
+### 0.9.0 → 0.10.0
 
-### Weitere offene Punkte
+- reproduzierbare Run-Manifeste und Replay
+- Kosten-, Token- und Zeitbudgets
+- Backup, Restore, Upgrade und Rollback
+- Kalibrierungs- und Baseline-Vergleich
+- Feature-Freeze vor `1.0.0`
 
-- Persona-Count-E2E-Matrix 1/5/10/30/50/100 zentral nachweisen
-- Responsive und visuelle Golden-Gate-Regressionen schließen
-- `--agora-*`-Tokenwechsel als eigenes migrationspflichtiges Slice
-- Phase-F-Restpunkt #671 entscheiden
-- Security-Hardstops aus `docs/dependency-risk-register.md` einhalten
+Details und Freigabekriterien: [`ROADMAP.md`](ROADMAP.md)
 
 ## Commands
 
 ```bash
 # Setup und Entwicklung
-npm run setup:all
-npm run dev
-npm run backend
-npm run frontend
+bun run setup:all
+bun run dev
+bun run backend
+bun run frontend
 
 # Gesamtprüfung
-npm run check
+bun run check
 bash scripts/pre-push-gate.sh
 
 # Backend
@@ -112,8 +117,8 @@ cd backend && uv run mypy app
 cd backend && uv run python -m app.contracts.dump_schemas
 
 # Frontend
-cd frontend && npm run check
-cd frontend && npm test -- --run
+cd frontend && bun run check
+cd frontend && bun run test
 
 # Produktionsnaher lokaler Stack
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
@@ -123,29 +128,28 @@ curl -fsS http://localhost/healthz
 
 ## Verboten
 
+- direkte Änderungen auf `main`
 - Dataclasses oder handgeschriebene Inline-Schemas für API-Verträge
 - lokale Provider-Detection-Heuristiken neben der Registry
-- produktive Verwendung des Legacy-`ModelPicker.vue` nach Slice 7.6d
+- neue produktive Legacy-Picker oder neue parallele Frontends
+- React-/Lovable-Rewrite ohne eigene Architekturentscheidung und Release-Scope
 - API-Keys oder Secrets in Code, Logs, Fixtures oder Dokumentation
-- neue Query-Tokens `?token=`; URL-gebundene Auth nur über signierte Tickets
+- neue Query-Tokens `?token=`; URL-Auth nur über signierte Tickets
 - `print()` in Produktivcode statt strukturiertem Logging
 - hartkodierte UI-Texte statt `vue-i18n`
-- hartkodierte CAMEL/OASIS-Kontextlimits statt zentraler Resolver
 - neue CVE-Ausnahmen ohne Issue, Owner, Deadline und Hardstop
+- neue Planungsdateien neben README, STATUS, ROADMAP und Issues
 - `apt`; auf Debian/Ubuntu `nala` verwenden
 
 ## Wichtige Referenzen
 
-- [`docs/STATUS.md`](docs/STATUS.md) – verifizierter Istzustand, Testzahlen, Gates
-- [`PLAN.md`](PLAN.md) – priorisierte Zukunft und Slice-Reihenfolge
-- [`docs/epics/onboarding-provider-unification/`](docs/epics/onboarding-provider-unification/) – aktive Epic-Unterlagen
-- [`docs/epics/e2e-smoke-specs/`](docs/epics/e2e-smoke-specs/) – E2E-Defektanalyse
-- [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md) – Security-Hardstops
-- [`CHANGELOG.md`](CHANGELOG.md) – ausgelieferte Änderungen
-- [`CLAUDE.md`](CLAUDE.md) – Claude-spezifische Hinweise
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/decisions/`](docs/decisions/)
+- [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)
+- [`docs/runbooks/`](docs/runbooks/)
+- [`CHANGELOG.md`](CHANGELOG.md)
+- [`CLAUDE.md`](CLAUDE.md)
 
 ## Knowledge Graph
 
-Wenn `graphify-out/graph.json` vorhanden ist, bei Codebase-Fragen zuerst eine gezielte
-Graph-Abfrage verwenden. Nach strukturellen Codeänderungen `graphify update .` ausführen.
-Graphresultate ersetzen weder direkte Codeprüfung noch Tests.
+Wenn `graphify-out/graph.json` vorhanden ist, bei Codebase-Fragen zuerst eine gezielte Graph-Abfrage verwenden. Nach strukturellen Codeänderungen `graphify update .` ausführen. Graphresultate ersetzen weder direkte Codeprüfung noch Tests.
