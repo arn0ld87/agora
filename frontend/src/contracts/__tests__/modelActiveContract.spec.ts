@@ -14,4 +14,16 @@ describe('parseModelActiveEvent', () => {
 
     expect(parseModelActiveEvent(event)).toEqual({ ok: true, data: event })
   })
+
+  it('akzeptiert ein vom Backend publiziertes Google-Event', () => {
+    const event = {
+      model: 'gemini-3-flash-preview',
+      context: 'chat_json',
+      provider: 'google',
+      ts: 1_752_800_001,
+      extra: null,
+    }
+
+    expect(parseModelActiveEvent(event)).toEqual({ ok: true, data: event })
+  })
 })
