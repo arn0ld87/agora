@@ -64,16 +64,24 @@ describe('llmRoutingDefaults api client — ai_route-Anreicherung (Regression)',
 
     await expect(getRoutingDefaults()).resolves.toMatchObject({
       global_default: { model: 'gpt-5.4-nano' },
+      ai_route: { model_id: 'gpt-5.4-nano', source: 'workspace' },
     })
     await expect(replaceGlobalDefault(globalDefault)).resolves.toMatchObject({
       version: 1,
+      ai_route: { model_id: 'gpt-5.4-nano', source: 'workspace' },
     })
     await expect(
       replaceRoutingDefaults({ global_default: globalDefault, stage_overrides: {}, version: 1 }),
-    ).resolves.toMatchObject({ version: 1 })
+    ).resolves.toMatchObject({
+      version: 1,
+      ai_route: { model_id: 'gpt-5.4-nano', source: 'workspace' },
+    })
     await expect(
       patchRoutingDefaultStage('ontology_generation', globalDefault),
-    ).resolves.toMatchObject({ version: 1 })
+    ).resolves.toMatchObject({
+      version: 1,
+      ai_route: { model_id: 'gpt-5.4-nano', source: 'workspace' },
+    })
   })
 })
 
