@@ -60,7 +60,7 @@ Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün; fünf Kern-Smokes
 | Smoke | Status | Hauptbefund |
 |---|---|---|
 | Health | grün | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | rot | API erfolgreich, UI-/Store-Pfad rendert `graphData` nicht zuverlässig |
+| Upload + Graph | grün (lokal, Sub-Slice 3/5) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
 | Minimalreport | rot | Report beendet, Outline/Zod-Spiegel nicht stabil |
 | Report-Modi | rot | `force_regenerate` und Mode-Transition erreichen nicht stabil `completed` |
 | Golden-Gate Accessibility | rot | mindestens eine Route verletzt das strikte A11y-Gate |
