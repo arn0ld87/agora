@@ -1,97 +1,104 @@
 # Subagent-Routing
 
-Datei: `docs/runbooks/subagent-routing.md` · Stand: 2026-05-17
+**Stand:** 18.07.2026
 
 ## Prinzip
 
-Komplexe Aufgaben werden an spezialisierte Subagents delegiert. Der Haupt-Claude
-(Lead) plant, dispatched, verifiziert und committed — aber implementiert nicht
-alles selbst.
+Komplexe Aufgaben werden an spezialisierte Subagenten delegiert. Das Lead-Modell wählt das release-relevante GitHub Issue, definiert den atomaren Scope, verifiziert die Umsetzung und verantwortet Commit und Pull Request.
 
----
+Task-Quelle ist immer ein GitHub Issue. `README.md`, `docs/STATUS.md` und `ROADMAP.md` liefern Produkt-, Ist- und Release-Kontext. Archivierte Pläne sind keine Taskquelle.
 
 ## Routing-Matrix
 
-Ziel-Mix über die Zeit: ~35 % Opus, ~55 % Sonnet, ~10 % Haiku.
+| Aufgabe | Lead/Subagent | Trigger |
+|---|---|---|
+| Architekturentscheidung | Lead | ADR, Cross-Layer, neue Systemgrenze |
+| Ambige Spezifikation | Lead | Issue unklar, Akzeptanz nicht prüfbar |
+| Security oder Datenmigration | Lead | Secrets, Auth, Persistenz, Rollback |
+| Kritisches Code-Review | Lead oder Reviewer | Contracts, Evidence, Routing, Migration |
+| Backend-Refactor | `agora-refactor-worker` | Services, Provider, Persistenz |
+| Pydantic-/Schema-Arbeit | `agora-refactor-worker` | Contract plus Spiegel |
+| Tests, FSM und E2E | `agora-test-worker` | Regressionen, Gates, Quoten |
+| Vue, Pinia, Zod, A11y | `agora-frontend-worker` | Frontend-Slice |
+| Evidence-/Wording-Audit | `agora-evidence-auditor` | Read-only Review |
+| Dokumentation | `agora-doc-worker` | README, STATUS, ROADMAP, CHANGELOG |
 
-| Aufgabe | Modell | Subagent | Trigger |
-|---|---|---|---|
-| Architektur-Entscheidung | **Opus** | Lead (kein Subagent) | Neue ADR, Layer-übergreifend |
-| Ambige Spec klären | **Opus** | Lead | PLAN.md-Lücke, unklare Requirements |
-| Code-Review kritischer Pfad | **Opus** | `feature-dev:code-reviewer` | contracts/, evidence_binder/, report_agent/ |
-| Cross-Layer Refactor | **Opus** | Lead + `agora-refactor-worker` | 3+ Dateien in 2+ Layern |
-| Pydantic-Migration | **Sonnet** | `agora-refactor-worker` | Layer 0 Contracts |
-| Test-Suite schreiben | **Sonnet** | `agora-test-worker` | Neue Contracts, Coverage-Lücken |
-| FSM-Übergänge | **Sonnet** | `agora-test-worker` | Simulation-State-Machine |
-| Vue-Komponente | **Sonnet** | `agora-frontend-worker` | Step*.vue, neue Components |
-| Zod-Spiegel | **Sonnet** | `agora-frontend-worker` | Pydantic → Zod Sync |
-| Evidence-Audit | **Sonnet** | `agora-evidence-auditor` | Read-only Review von Outputs |
-| Wording-Glossar-Check | **Sonnet** | `agora-evidence-auditor` | Read-only Textanalyse |
-| CHANGELOG-Update | **Haiku** | `agora-doc-worker` | Release-Vorbereitung |
-| Worklog schreiben | **Haiku** | `agora-doc-worker` | Slice-Abschluss |
-| Feature-Bundle PRD | **Haiku** | `agora-doc-worker` | Neue Feature-Ideen |
+## Lead-Trigger
 
----
+Diese Situationen werden nicht blind delegiert:
 
-## Opus-Trigger (überschreiben Default-Routing)
-
-Diese Situationen verlangen Opus statt Sonnet/Haiku — unabhängig vom Default:
-
-1. **Layer 0** (Pydantic-Contracts) wird angefasst
-2. **Mehrere Layer gleichzeitig** betroffen
-3. **Wording oder Prompt-Semantik** (Layer 2, Glossar v1)
-4. **Spec ambig, Tests fehlen** — Erkundung nötig vor Implementation
-5. **Pre-PR-Self-Review** vor `gh pr create`
-
----
+1. Pydantic-Verträge oder persistierte Daten ändern sich.
+2. Mehrere Architektur-Layer sind betroffen.
+3. Security, Auth, Secrets oder Provider-Routing sind beteiligt.
+4. Evidence-Gating oder Prompt-Semantik ändern sich.
+5. Das Issue ist widersprüchlich oder besitzt keine prüfbaren Akzeptanzkriterien.
+6. Ein neuer Produktbereich soll vorgezogen werden, obwohl er nicht zur aktuellen Release-Stufe gehört.
 
 ## Dispatch-Workflow
 
-### 1. Task identifizieren
+### 1. Release und Issue prüfen
 
-Aus `PLAN.md` den nächsten offenen Sub-Slice auswählen.
+- `VERSION` lesen
+- `docs/STATUS.md` und `ROADMAP.md` prüfen
+- offenes Issue vollständig einschließlich Kommentare lesen
+- Scope, Out-of-Scope, Abhängigkeiten und Release-Gate bestätigen
 
-### 2. Subagent wählen
+### 2. Atomaren Slice definieren
 
-Routing-Matrix konsultieren. Bei Unsicherheit: Opus (sicherer).
+Das Briefing enthält:
 
-### 3. Briefing schreiben
+- Issue-Nummer und Release-Ziel
+- Problem in einem Satz
+- genaue Dateien und Interfaces
+- Scope und Out-of-Scope
+- zuerst zu schreibende Tests
+- Migration und Rollback, falls Daten betroffen sind
+- exakte Verifikationsbefehle
+- zuständige Dokumentationsquelle
+- Stop-Bedingungen
 
-Jedes Briefing MUSS enthalten:
-- **Kontext:** 1 Satz was Agora ist + was der Slice tut
-- **Constitution:** Relevante Verbote aus AGENTS.md/CLAUDE.md
-- **Relevante Files:** Liste (nicht erraten — via code-review-graph ermitteln)
-- **Expected Output:** Konkrete Dateien, die entstehen/geändert werden
-- **Stop Conditions:** Wann der Subagent aufhören soll
-- **Verification Gate:** Was nach dem Run geprüft wird
+### 3. Worktree verwenden
 
-### 4. Dispatchen
+Jeder Implementer arbeitet in einem isolierten Worktree vom aktuellen `origin/main`. Keine Änderungen im Hauptcheckout und keine direkten Pushes auf `main`.
 
-```bash
-# Subagent ausführen (der Subagent läuft im Worktree)
-```
+### 4. Implementieren
+
+Der Subagent implementiert nur den definierten Slice. Er committet und pusht nicht selbst, sofern das Lead-Modell nichts anderes ausdrücklich festlegt.
 
 ### 5. Verifizieren
 
-Nach JEDEM Subagent-Run Sequential Verification Gate:
+Mindestens das passende Gate ausführen:
 
 ```bash
-cd backend && uv run pytest tests/contracts/ -x -q
-cd backend && uv run python -m app.contracts.dump_schemas --check
-cd backend && uv run ruff check . && uv run mypy app
+bash scripts/pre-push-gate.sh backend
+bash scripts/pre-push-gate.sh frontend
+bash scripts/pre-push-gate.sh schemas
 ```
 
-### 6. Commit + Push
+Cross-Layer:
 
-Erst wenn Verification Gate grün. Commit durch Haupt-Claude, nicht Subagent.
+```bash
+bash scripts/pre-push-gate.sh
+```
 
----
+Zusätzlich laufen die gezielten Tests aus dem Issue. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop.
 
-## Anti-Pattern
+### 6. Pull Request
 
-- **"Sonnet ist billiger, ich nehm den für alles"** → Kosten sparen auf Kosten
-  von Qualität. Opus für kritische Pfade ist Pflicht.
-- **"Ich schreib das Briefing später"** → Ohne Briefing kein Dispatch. Briefing
-  IST der Contract.
-- **"Verification Gate kann ich mir sparen, der Subagent war gut"** →
-  Sequential Gate ist PFLICHT. Kein Vertrauen ohne Verifikation.
+Der Pull Request enthält:
+
+- Summary
+- Release-Ziel
+- Scope und Out-of-Scope
+- Tests mit Ergebnis
+- Migration/Rollback, falls relevant
+- `Closes #<Issue>` oder `Refs #<Issue>`
+
+## Anti-Patterns
+
+- Aufgaben aus archivierten Plänen auswählen
+- Subagenten ohne vollständiges Briefing dispatchen
+- mehrere unabhängige Issues in einen Slice mischen
+- neue Features außerhalb des aktuellen Release-Gates vorziehen
+- Tests oder Reviews aus Kostengründen auslassen
+- Subagent-Output ungeprüft committen
