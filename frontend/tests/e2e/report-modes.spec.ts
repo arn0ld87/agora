@@ -24,14 +24,77 @@
  * Stub-Modus-Begründung: AGORA_E2E_LLM_MODE=stub deterministisch — keine
  * echten LLM-Calls, kein Netz. Pro Modus Build-Zeit ca. 30–90 s im Stub
  * (analog minimal-report.spec.ts).
+ *
+ * Root-Cause-Korrektur (verifiziert 2026-07-18, Issue #739 Sub-Slice 4):
+ * `beforeAll` legte bislang KEINE Personas an. `generate_report()`
+ * (backend/app/services/report_agent/workflow.py::_load_persona_count vs.
+ * _load_persona_floor) bricht dann vor jeder Section-Generierung mit
+ * `ReportStatus.INCOMPLETE` ab — `ReportGenerationService.run_generate()`
+ * meldet das an den Run-Registry als "failed" (nicht "processing"/"hängend").
+ * pollReportReady erreicht "completed" folglich NIE, unabhängig vom
+ * Test-Timeout. Fix: exakt dieselbe Persona-Floor-Seed-Strategie wie
+ * minimal-report.spec.ts (Commit a2935b02, "seed personas for minimal
+ * report smoke") — 50 Stub-Profile via POST /api/simulation/<id>/profiles
+ * vor dem ersten triggerReport-Aufruf.
  */
 
-import { test, expect, request } from '@playwright/test';
+import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { authHeader } from './helpers/auth';
 import { assertStubModeActive } from './helpers/diagnostics';
 import { uploadMarkdown } from './helpers/upload';
 import { triggerGraphBuild, pollGraphReady } from './helpers/graph';
 import { triggerReport, pollReportReady } from './helpers/report';
+
+// ---------------------------------------------------------------------------
+// Backend-Persona-Floor für die Report-Generierung
+// ---------------------------------------------------------------------------
+// Gespiegelt aus backend/app/services/report_agent/contract_constants.py.
+// Der E2E-Stub ersetzt LLM-Antworten, aber nicht den Report-Contract-Gate
+// (workflow.py::_load_persona_count / _load_persona_floor).
+const MIN_PERSONA_TABLE_ROWS = 50;
+
+async function seedPersonaFloor(
+  apiCtx: APIRequestContext,
+  simulationId: string,
+  baseURL: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  for (let i = 1; i <= MIN_PERSONA_TABLE_ROWS; i += 1) {
+    const username = `e2e_persona_${String(i).padStart(2, '0')}`;
+    const res = await apiCtx.post(`${baseURL}/api/simulation/${simulationId}/profiles`, {
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      data: {
+        platform: 'reddit',
+        username,
+        name: `E2E Persona ${i}`,
+        bio: `Deterministische E2E-Persona ${i}`,
+        persona: `E2E Persona ${i} bewertet das Testprodukt im DACH-Kontext.`,
+        age: 25 + (i % 30),
+        gender: i % 2 === 0 ? 'female' : 'male',
+        country: ['DE', 'AT', 'CH'][i % 3],
+        profession: 'E2E Testrolle',
+        interested_topics: ['Software', 'Vertrauen', 'DACH'],
+      },
+    });
+    expect(
+      res.ok(),
+      `POST /api/simulation/${simulationId}/profiles fehlgeschlagen (${res.status()}): ${await res.text()}`,
+    ).toBe(true);
+  }
+
+  const profilesRes = await apiCtx.get(`${baseURL}/api/simulation/${simulationId}/profiles`, {
+    headers,
+  });
+  expect(
+    profilesRes.ok(),
+    `GET /api/simulation/${simulationId}/profiles fehlgeschlagen (${profilesRes.status()}): ${await profilesRes.text()}`,
+  ).toBe(true);
+  const profilesJson = await profilesRes.json();
+  expect(
+    profilesJson?.data?.count,
+    `Report-Modes-Smoke braucht mindestens ${MIN_PERSONA_TABLE_ROWS} Personas`,
+  ).toBeGreaterThanOrEqual(MIN_PERSONA_TABLE_ROWS);
+}
 
 // ---------------------------------------------------------------------------
 // Mode-Banner-Erwartungen
@@ -75,6 +138,12 @@ Testprodukt für die Mode-Banner-Verdrahtung (PLAN.md §5.1/§5.4).
 const SMOKE_FILENAME = 'e2e-smoke-p4-4.md';
 
 test.beforeAll(async () => {
+  // Graph-Build-Vorlauf + 50 sequenzielle Persona-Seed-Requests (Root-Cause-
+  // Fix, s. Dateikopf) überschreiten den Playwright-Default von 30_000ms.
+  // test.setTimeout() wirkt hier auf den aktuell laufenden Hook (beforeAll),
+  // analog zur Test-Body-Nutzung in minimal-report.spec.ts:177.
+  test.setTimeout(180_000);
+
   const baseURL = process.env.AGORA_E2E_BASE_URL ?? 'http://127.0.0.1:80';
   const ctx = await request.newContext({ baseURL });
   const headers = authHeader();
@@ -123,6 +192,11 @@ test.beforeAll(async () => {
     throw new Error(`simulation_id fehlt in Response: ${JSON.stringify(simJson)}`);
   }
 
+  // Persona-Floor seeden — sonst bricht generate_report() vor jeder
+  // Section-Generierung mit ReportStatus.INCOMPLETE ab (s. Root-Cause-
+  // Kommentar am Dateikopf).
+  await seedPersonaFloor(ctx, simulationId, baseURL, headers);
+
   shared = { baseURL, authHeaders: headers, simulationId };
   await ctx.dispose();
 });
@@ -139,6 +213,15 @@ test.beforeAll(async () => {
 test.describe.serial('report modes', () => {
   for (const mode of MODES) {
     test(`mode=${mode} liefert passenden Mode-Banner im Markdown`, async () => {
+      // Root-Cause (verifiziert via CI-Logs 2026-07-18, Issue #739 Sub-Slice 4):
+      // Playwright-Test-Default-Timeout ist 30_000ms — pollReportReady's
+      // eigener pollTimeout (300_000ms) greift NIE, weil der äußere
+      // Test-Timeout die Ausführung längst abbricht. Stub-Report-Build
+      // (11 Sections × ReACT-Runden, ggf. + Quote-Repair-Retry) dauert
+      // 30–90s+ (s. Datei-Header). Analog M11.4b-Followup-3
+      // (minimal-report.spec.ts:177) und upload-graph.spec.ts:67.
+      test.setTimeout(420_000);
+
       // shared ist nach beforeAll gesetzt; bei beforeAll-Fehler startet
       // Playwright diesen Test gar nicht erst.
       const { baseURL, authHeaders, simulationId } = shared!;
@@ -180,6 +263,9 @@ test.describe.serial('report modes', () => {
   // ein Default-Drift (z. B. von "balanced" auf "strict") nicht in den
   // mode=balanced-Lauf einsickert und unbemerkt bleibt.
   test('ohne mode-Param Default = balanced', async () => {
+    // Gleiche Root-Cause wie oben — siehe Kommentar bei den Mode-Tests.
+    test.setTimeout(420_000);
+
     const { baseURL, authHeaders, simulationId } = shared!;
     const ctx = await request.newContext({ baseURL });
     try {
