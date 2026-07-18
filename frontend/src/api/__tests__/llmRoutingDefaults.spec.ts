@@ -75,4 +75,90 @@ describe('llmRoutingDefaults api client — ai_route-Anreicherung (Regression)',
       patchRoutingDefaultStage('ontology_generation', globalDefault),
     ).resolves.toMatchObject({ version: 1 })
   })
+
+  it('calls the expected backend routes with the expected payloads', async () => {
+    serviceMock.get.mockResolvedValueOnce(enrichedEnvelope)
+    serviceMock.put.mockResolvedValueOnce(enrichedEnvelope)
+    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
+
+    await getRoutingDefaults()
+    await replaceGlobalDefault(globalDefault)
+    await patchRoutingDefaultStage('ontology_generation', globalDefault)
+
+    expect(serviceMock.get).toHaveBeenCalledWith('/api/llm/routing/defaults')
+    expect(serviceMock.put).toHaveBeenCalledWith('/api/llm/routing/defaults/global', globalDefault)
+    expect(serviceMock.patch).toHaveBeenCalledWith(
+      '/api/llm/routing/defaults/stages/ontology_generation',
+      globalDefault,
+    )
+  })
+
+  it('sends { clear: true } when patching a stage default to null', async () => {
+    serviceMock.patch.mockResolvedValueOnce(enrichedEnvelope)
+
+    await patchRoutingDefaultStage('ontology_generation', null)
+
+    expect(serviceMock.patch).toHaveBeenCalledWith(
+      '/api/llm/routing/defaults/stages/ontology_generation',
+      { clear: true },
+    )
+  })
+
+  it('calls PUT /api/llm/routing/defaults with the full payload for replaceRoutingDefaults', async () => {
+    serviceMock.put.mockResolvedValueOnce(enrichedEnvelope)
+    const payload = { global_default: globalDefault, stage_overrides: {}, version: 1 }
+
+    await replaceRoutingDefaults(payload)
+
+    expect(serviceMock.put).toHaveBeenCalledWith('/api/llm/routing/defaults', payload)
+  })
+
+  it('still parses a response without the ai_route enrichment (backward compatible)', async () => {
+    const plainEnvelope = {
+      data: {
+        global_default: globalDefault,
+        stage_overrides: {},
+        updated_at: '2026-07-18T01:08:56.061467Z',
+        version: 1,
+      },
+    }
+    serviceMock.get.mockResolvedValueOnce(plainEnvelope)
+
+    const result = await getRoutingDefaults()
+    expect(result.ai_route).toBeUndefined()
+    expect(result).toMatchObject({ version: 1, global_default: { model: 'gpt-5.4-nano' } })
+  })
+
+  it('rejects with a schema-mismatch error when a non-ai_route key is unrecognized', async () => {
+    serviceMock.get.mockResolvedValueOnce({
+      data: {
+        global_default: globalDefault,
+        stage_overrides: {},
+        version: 1,
+        ai_route: aiRoute,
+        unexpected_field: 'boom',
+      },
+    })
+
+    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
+  })
+
+  it('rejects with a schema-mismatch error when ai_route itself is malformed', async () => {
+    serviceMock.get.mockResolvedValueOnce({
+      data: {
+        global_default: globalDefault,
+        stage_overrides: {},
+        version: 1,
+        ai_route: { ...aiRoute, source: 'not_a_valid_source' },
+      },
+    })
+
+    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
+  })
+
+  it('rejects with a schema-mismatch error when global_default is missing', async () => {
+    serviceMock.get.mockResolvedValueOnce({ data: { stage_overrides: {}, version: 1 } })
+
+    await expect(getRoutingDefaults()).rejects.toThrow(/schema mismatch/i)
+  })
 })
