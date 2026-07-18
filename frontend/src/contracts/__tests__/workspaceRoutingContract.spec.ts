@@ -1,13 +1,5 @@
-/**
- * Tests fuer `WorkspaceLlmRoutingDefaultsResponseSchema`.
- *
- * Regression: Das Backend reichert JEDE `/api/llm/routing/defaults*`-Antwort
- * via `_with_ai_route()` (backend/app/api/llm_routing.py) um einen
- * aufgelösten Top-Level-`ai_route`-Block an. Das Response-Schema muss diese
- * additive Anreicherung akzeptieren, ohne den restlichen `.strict()`-Vertrag
- * (unbekannte Top-Level-Keys weiterhin ablehnen) aufzuweichen.
- */
 import { describe, expect, it } from 'vitest'
+
 import {
   WorkspaceLlmRoutingDefaultsResponseSchema,
   WorkspaceLlmRoutingDefaultsSchema,
@@ -20,14 +12,10 @@ const globalDefault = {
   provider_options: {},
 }
 
-const validBase = {
-  global_default: globalDefault,
-  stage_overrides: {},
-  updated_at: '2026-07-18T01:08:56.061467Z',
-  version: 1,
-}
-
-const validAiRoute = {
+// Minimal fixture for the ai_route enrichment, cf. `_with_ai_route()` in
+// backend/app/api/llm_routing.py. `source` is the only field on AiRouteSchema
+// without a default.
+const aiRoute = {
   stage: null,
   provider_connection_id: 'openai',
   model_id: 'gpt-5.4-nano',
@@ -39,65 +27,139 @@ const validAiRoute = {
   fallback_reason: null,
 }
 
-describe('WorkspaceLlmRoutingDefaultsResponseSchema', () => {
-  it('parses a bare payload without the ai_route enrichment', () => {
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse(validBase)
-    expect(result.success).toBe(true)
-  })
+const validPayload = {
+  global_default: globalDefault,
+  stage_overrides: {},
+  updated_at: '2026-07-18T01:08:56.061467Z',
+  version: 1,
+}
 
-  it('parses the ai_route-enriched payload emitted by _with_ai_route()', () => {
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      ...validBase,
-      ai_route: validAiRoute,
-    })
+describe('WorkspaceLlmRoutingDefaultsSchema (store contract)', () => {
+  it('accepts a minimal payload and applies defaults', () => {
+    const result = WorkspaceLlmRoutingDefaultsSchema.safeParse({ global_default: {} })
+
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data.ai_route?.source).toBe('workspace')
+      expect(result.data.stage_overrides).toEqual({})
+      expect(result.data.version).toBe(1)
     }
   })
 
-  it('accepts a minimal ai_route that only carries the required source field', () => {
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      ...validBase,
-      ai_route: { source: 'default' },
-    })
+  it('accepts stage overrides keyed by a known stage id', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsSchema.safeParse({
+        global_default: globalDefault,
+        stage_overrides: { ontology_generation: globalDefault },
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects an unknown stage id in stage_overrides', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsSchema.safeParse({
+        global_default: globalDefault,
+        stage_overrides: { not_a_real_stage: globalDefault },
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects the ai_route enrichment on the strict store contract', () => {
+    // The store contract stays strict on purpose: `ai_route` is a response-
+    // only enrichment and must never round-trip back into persisted state.
+    expect(
+      WorkspaceLlmRoutingDefaultsSchema.safeParse({
+        ...validPayload,
+        ai_route: aiRoute,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an unrelated unrecognized top-level key', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsSchema.safeParse({
+        ...validPayload,
+        unexpected_field: true,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('requires global_default', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsSchema.safeParse({
+        stage_overrides: {},
+        version: 1,
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('WorkspaceLlmRoutingDefaultsResponseSchema (API response contract)', () => {
+  it('accepts a payload without the ai_route enrichment (optional field)', () => {
+    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse(validPayload)
+
     expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.ai_route).toBeUndefined()
+    }
   })
 
-  it('rejects a payload whose ai_route block violates the AiRoute contract', () => {
+  it('accepts the ai_route-enriched payload emitted by _with_ai_route()', () => {
     const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      ...validBase,
-      ai_route: { source: 'not-a-real-source' },
+      ...validPayload,
+      ai_route: aiRoute,
     })
-    expect(result.success).toBe(false)
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.ai_route?.source).toBe('workspace')
+      expect(result.data.ai_route?.model_id).toBe('gpt-5.4-nano')
+    }
   })
 
-  it('rejects provider_fallback ai_route enrichment without a fallback_reason', () => {
+  it('rejects a malformed ai_route block (missing required source)', () => {
+    const { source: _source, ...aiRouteWithoutSource } = aiRoute
+
+    expect(
+      WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
+        ...validPayload,
+        ai_route: aiRouteWithoutSource,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an ai_route block with an unrecognized field', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
+        ...validPayload,
+        ai_route: { ...aiRoute, unexpected_ai_route_field: true },
+      }).success,
+    ).toBe(false)
+  })
+
+  it('still rejects unrelated unrecognized top-level keys', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
+        ...validPayload,
+        unexpected_field: true,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('still requires global_default', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
+        stage_overrides: {},
+        version: 1,
+        ai_route: aiRoute,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('applies the same defaults as the store schema', () => {
     const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      ...validBase,
-      ai_route: { ...validAiRoute, source: 'provider_fallback', fallback_reason: null },
+      global_default: {},
     })
-    expect(result.success).toBe(false)
-  })
 
-  it('still rejects unrecognized top-level keys other than ai_route (stays strict)', () => {
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      ...validBase,
-      unexpected_field: 'should not be accepted',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('still enforces the inherited base-contract validations (missing global_default)', () => {
-    const { global_default, ...withoutGlobalDefault } = validBase
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse(withoutGlobalDefault)
-    expect(result.success).toBe(false)
-  })
-
-  it('applies the same defaults as the base schema when optional fields are omitted', () => {
-    const result = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
-      global_default: globalDefault,
-    })
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.data.stage_overrides).toEqual({})
@@ -106,10 +168,12 @@ describe('WorkspaceLlmRoutingDefaultsResponseSchema', () => {
     }
   })
 
-  it('remains a superset of the store contract: anything valid for the base schema is valid here', () => {
-    const baseResult = WorkspaceLlmRoutingDefaultsSchema.safeParse(validBase)
-    expect(baseResult.success).toBe(true)
-    const responseResult = WorkspaceLlmRoutingDefaultsResponseSchema.safeParse(validBase)
-    expect(responseResult.success).toBe(true)
+  it('rejects an unknown stage id in stage_overrides (inherited from the store schema)', () => {
+    expect(
+      WorkspaceLlmRoutingDefaultsResponseSchema.safeParse({
+        global_default: globalDefault,
+        stage_overrides: { not_a_real_stage: globalDefault },
+      }).success,
+    ).toBe(false)
   })
 })
