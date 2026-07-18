@@ -7,6 +7,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ### Fixed (Issue #739 — 2026-07-18)
 
+- **Golden-Gate Accessibility E2E-Smoke lokal grün**: Tertiärtext,
+  Status-Grün und Embedding-Warntext erfüllen jetzt WCAG AA; Avatar-Dateifeld
+  und Reasoning-Auswahl besitzen zugängliche Namen. Der axe-Helper wartet
+  bedingungsbasiert auf das Ende der Vue-Route-Transition, und die globale
+  Reduced-Motion-Regel begrenzt auch hartkodierte Animationen. Alle zehn
+  Routen sind in zwei aufeinanderfolgenden Playwright-Läufen grün.
+
 - **Report-Modi E2E-Smoke lokal grün**: `report-modes.spec.ts` seedet vor der
   Report-Generierung jetzt deterministisch die vom Report-Contract geforderten
   50 Personas. Ohne Fixture endete `generate_report()` bereits am

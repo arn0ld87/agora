@@ -405,7 +405,7 @@ function errorMessage(err: unknown): string {
   margin-top: 0.5rem;
 }
 .text-warn {
-  color: var(--text-warn, #d97706);
+  color: var(--status-orange, #b25000);
 }
 .text-muted {
   color: var(--text-muted, #6b7280);
