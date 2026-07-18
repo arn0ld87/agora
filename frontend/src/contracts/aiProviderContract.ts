@@ -209,6 +209,8 @@ const LegacyStageRouteOptionsSchema = z.object({
 export const AiProviderOptionsSchema = z.object({
   base_url: PublicBaseUrlSchema.nullable().optional(),
   num_ctx: z.number().int().positive().optional(),
+  secret_ref: z.string().min(1).optional(),
+  connection_only: z.boolean().optional(),
   __legacy_stage_route__: LegacyStageRouteOptionsSchema.optional(),
 }).strict()
 export type AiProviderOptions = z.infer<typeof AiProviderOptionsSchema>

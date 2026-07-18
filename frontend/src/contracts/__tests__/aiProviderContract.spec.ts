@@ -7,6 +7,7 @@ import sharedFixtures from '../../../../schemas/fixtures/ai-provider-contract-fi
 
 import {
   AiModelSchema,
+  AiProviderOptionsSchema,
   AiRouteSchema,
   ModelCapabilitiesSchema,
   ProviderConnectionBaseSchema,
@@ -82,10 +83,15 @@ describe('canonical AI provider contracts', () => {
     const optionsName = optionsRef.split('/').at(-1) as keyof typeof aiRouteJsonSchema.$defs
     const optionsSchema = aiRouteJsonSchema.$defs[optionsName]
     expect(optionsSchema.additionalProperties).toBe(false)
+    expect(Object.keys(AiProviderOptionsSchema.shape).sort()).toEqual(
+      Object.keys(optionsSchema.properties).sort(),
+    )
     expect(Object.keys(optionsSchema.properties).sort()).toEqual([
       '__legacy_stage_route__',
       'base_url',
+      'connection_only',
       'num_ctx',
+      'secret_ref',
     ])
     expect(
       aiRouteJsonSchema.$defs.LegacyStageRouteOptions.properties.reasoning_effort.anyOf,
@@ -208,6 +214,8 @@ describe('canonical AI provider contracts', () => {
   })
 
   it.each([
+    { timeout: 30 },
+    { api_key: 'fixture-token' },
     { 'x-api-key': 'fixture-token' },
     { client_secret: 'fixture-token' },
     { refresh_token: 'fixture-token' },
@@ -216,14 +224,23 @@ describe('canonical AI provider contracts', () => {
     expect(AiRouteSchema.safeParse({ source: 'runtime', provider_options }).success).toBe(false)
   })
 
-  it('accepts only provider options used by routing', () => {
+  it('accepts strict secret-free provider metadata used by routing', () => {
     expect(AiRouteSchema.safeParse({
       source: 'runtime',
       provider_options: {
         base_url: 'https://gateway.example/v1',
+        connection_only: true,
         num_ctx: 32768,
+        secret_ref: 'provider-secret-reference',
       },
     }).success).toBe(true)
+  })
+
+  it('rejects an empty provider secret reference', () => {
+    expect(AiRouteSchema.safeParse({
+      source: 'runtime',
+      provider_options: { secret_ref: '' },
+    }).success).toBe(false)
   })
 
   it.each(sharedFixtures.base_urls.invalid)(
