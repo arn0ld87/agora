@@ -244,7 +244,11 @@ async function pollStatus() {
         try {
           const full = (await getReport(resolvedId)) as ApiResult
           if (full?.success) {
-            try { fullReport.value = ReportSchema.parse(full.data) } catch (err) { recordSchemaError('report', err); fullReport.value = null }
+            try {
+              const parsed = ReportSchema.parse(full.data)
+              fullReport.value = parsed
+              syncOutlineFromReport(parsed)
+            } catch (err) { recordSchemaError('report', err); fullReport.value = null }
             await loadEvidence()
           }
         } catch { /* report not yet flushed */ }
@@ -301,6 +305,19 @@ async function loadEvidence() {
   } catch (err) { recordSchemaError('evidence', err) }
 }
 
+// Sub-Slice 2 von 5 (Issue #739): synchronisiere reportOutline aus
+// fullReport.outline. Wenn /report/<id> nach completed-Status betreten wird
+// (Direct-Page-Goto, Refresh oder Regenerate-Stream), liefert der
+// Status-Endpoint oft kein `outline`-Feld — das Outline hängt aber am
+// Report-Contract. Setzt reportOutline idempotent, damit ReportOutlinePanel
+// auch ohne vorherige Status-Poll-Outline-Daten rendert.
+function syncOutlineFromReport(report: Report | null) {
+  if (!report?.outline || reportOutline.value) return
+  try {
+    reportOutline.value = ReportOutlineSchema.parse(report.outline)
+  } catch (err) { recordSchemaError('outline', err) }
+}
+
 const {
   copyMarkdown,
   downloadCombinedJson,
@@ -355,7 +372,11 @@ onMounted(async () => {
     try {
       const full = (await getReport(props.reportId!)) as ApiResult
       if (full?.success) {
-        try { fullReport.value = ReportSchema.parse(full.data) } catch (err) { recordSchemaError('report', err); fullReport.value = null }
+        try {
+          const parsed = ReportSchema.parse(full.data)
+          fullReport.value = parsed
+          syncOutlineFromReport(parsed)
+        } catch (err) { recordSchemaError('report', err); fullReport.value = null }
         await loadEvidence()
       }
     } catch { /* swallow */ }

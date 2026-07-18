@@ -5,6 +5,27 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Issue #739 — 2026-07-18)
+
+- **Upload + Graph E2E-Smoke lokal grün**: Der `upload-graph`-Smoke wurde durch
+  den in PR #684 eingeführten Onboarding-Guard (`router/onboardingGuard.ts`)
+  blockiert — `page.goto('/process/<projectId>')` wurde zu `/onboarding`
+  umgeleitet, `.graph-view` mountete nie. Der Spec räumt den Wizard jetzt per
+  idempotentem `POST /api/onboarding/dismiss` vor dem `page.goto` weg. Kein
+  Selektor und keine State-Verkettung geändert; die vorgelagerte
+  `GET /api/graph/data`-Assertion war stets grün. Folgearbeit (Trigger-Readd,
+  restliche Smokes) unter Issue #739.
+
+### Fixed (Issue #750 — 2026-07-18)
+
+- **MiniMax-/Google-Provider-Contract synchronisiert**: Der Frontend-Zod-Spiegel
+  für `ModelActiveEvent.provider` akzeptiert jetzt die vom Backend publizierten
+  Werte `minimax` und `google`; Contract-Tests fixieren den SSE-Pfad. Das
+  dokumentierte HTTP-Provider-Vokabular in `registry.detect_provider` und
+  `registry.get_adapter` enthält MiniMax nun ebenfalls. Die bereits auf `main`
+  vorhandene hostname-basierte Erkennung bleibt durch die
+  Backend-Registry-Regressionstests abgesichert.
+
 ### Internal (Slice 7.6d — 2026-07-14)
 
 - **Frontend**: `LlmProfileManager.vue` vom legacy `ModelPicker.vue` auf den

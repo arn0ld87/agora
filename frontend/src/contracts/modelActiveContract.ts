@@ -17,7 +17,14 @@ export const ModelContextSchema = z.enum([
 ])
 export type ModelContext = z.infer<typeof ModelContextSchema>
 
-export const ModelProviderSchema = z.enum(['ollama', 'cloud', 'openai', 'unknown'])
+export const ModelProviderSchema = z.enum([
+  'ollama',
+  'cloud',
+  'minimax',
+  'openai',
+  'google',
+  'unknown',
+])
 export type ModelProvider = z.infer<typeof ModelProviderSchema>
 
 export const ModelActiveEventSchema = z
