@@ -127,6 +127,34 @@
           "fallback_reason"
         ]
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "provider_options": {
+            "properties": {
+              "connection_only": {
+                "const": true
+              }
+            },
+            "required": [
+              "connection_only"
+            ]
+          }
+        },
+        "required": [
+          "provider_options"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provider_options": {
+            "required": [
+              "secret_ref"
+            ]
+          }
+        }
+      }
     }
   ],
   "properties": {

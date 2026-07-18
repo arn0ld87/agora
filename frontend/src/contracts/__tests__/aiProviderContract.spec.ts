@@ -215,7 +215,7 @@ describe('canonical AI provider contracts', () => {
 
   it.each([
     { timeout: 30 },
-    { api_key: 'fixture-token' },
+    { api_key: 'forbidden-placeholder' },
     { 'x-api-key': 'fixture-token' },
     { client_secret: 'fixture-token' },
     { refresh_token: 'fixture-token' },
@@ -241,6 +241,20 @@ describe('canonical AI provider contracts', () => {
       source: 'runtime',
       provider_options: { secret_ref: '' },
     }).success).toBe(false)
+  })
+
+  it('requires a provider secret reference for connection-only routing', () => {
+    expect(AiRouteSchema.safeParse({
+      source: 'runtime',
+      provider_options: { connection_only: true },
+    }).success).toBe(false)
+  })
+
+  it.each([
+    { connection_only: false },
+    { secret_ref: 'provider-secret-reference' },
+  ])('keeps independent provider metadata valid: %o', (provider_options) => {
+    expect(AiRouteSchema.safeParse({ source: 'runtime', provider_options }).success).toBe(true)
   })
 
   it.each(sharedFixtures.base_urls.invalid)(

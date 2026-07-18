@@ -93,6 +93,8 @@ def test_llm_client_strict_route_ignores_passed_or_resolver_keys(monkeypatch):
     )
 
     assert captured["api_key"] == "connection-key"
+    assert captured["use_active_config"] is False
+    assert captured["allow_api_key_fallback"] is False
     secret_store.get_plaintext.assert_called_once_with("connection-secret")
     fallback_resolver.get_api_key.assert_not_called()
 
@@ -121,6 +123,8 @@ def test_llm_client_missing_strict_secret_never_uses_passed_or_resolver_key(monk
     )
 
     assert captured["api_key"] is None
+    assert captured["use_active_config"] is False
+    assert captured["allow_api_key_fallback"] is False
     secret_store.get_plaintext.assert_called_once_with("connection-secret")
     fallback_resolver.get_api_key.assert_not_called()
 

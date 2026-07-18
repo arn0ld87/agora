@@ -281,7 +281,23 @@ class AiRoute(BaseModel):
                         },
                         "required": ["fallback_reason"],
                     },
-                }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "provider_options": {
+                                "properties": {"connection_only": {"const": True}},
+                                "required": ["connection_only"],
+                            }
+                        },
+                        "required": ["provider_options"],
+                    },
+                    "then": {
+                        "properties": {
+                            "provider_options": {"required": ["secret_ref"]}
+                        }
+                    },
+                },
             ]
         },
     )
@@ -302,6 +318,10 @@ class AiRoute(BaseModel):
             self.fallback_reason and self.fallback_reason.strip()
         ):
             raise ValueError("provider_fallback requires a non-blank fallback_reason")
+        if self.provider_options.get("connection_only") is True and not self.provider_options.get(
+            "secret_ref"
+        ):
+            raise ValueError("connection_only requires secret_ref")
         return self
 
 
