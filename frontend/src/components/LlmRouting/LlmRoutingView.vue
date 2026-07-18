@@ -169,8 +169,11 @@ defineExpose({
             @update:model-value="onGlobalDefaultPicked"
           />
 
-          <label>{{ t('llm.reasoning_effort') }}</label>
-          <select v-model="routing.global_default.reasoning_effort">
+          <label for="llm-routing-global-reasoning-effort">{{ t('llm.reasoning_effort') }}</label>
+          <select
+            id="llm-routing-global-reasoning-effort"
+            v-model="routing.global_default.reasoning_effort"
+          >
             <option v-for="e in REASONING_EFFORTS" :key="e" :value="e">{{ e }}</option>
           </select>
 

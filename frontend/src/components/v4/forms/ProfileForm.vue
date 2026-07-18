@@ -190,6 +190,7 @@ defineExpose({ canSave, handleSubmit })
           ref="fileInputRef"
           type="file"
           accept="image/png,image/jpeg,image/webp"
+          :aria-label="t('profileSettings.form.avatarUploadBtn')"
           class="profile-form__avatar-input"
           data-testid="avatar-file-input"
           @change="onAvatarFileChange"
