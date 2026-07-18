@@ -279,6 +279,20 @@ test.describe('M11.4c · Minimalreport-Smoke', () => {
         // aufruft und ReportSchema.parse() ausführt.
         // Bei status="completed" wird fullReport gesetzt und reportHtml gerendert.
         // ===================================================================
+        // Sub-Slice 2/5 (Issue #739): Onboarding-Wizard wegräumen.
+        // backend/app/api/onboarding.py::dismiss_onboarding setzt state.status='dismissed',
+        // onboardingGuard (router/onboardingGuard.ts:32) lässt dann jede Route durch.
+        // Notwendig, weil der Smoke-Spec aus M11.4c (Mai 2026) vor dem Onboarding-Feature
+        // (PR #684, Juni 2026) entstand und keine Onboarding-Bypass-Logik enthält.
+        // Dismiss ist idempotent — sicher bei mehrfachem Run.
+        const dismissRes = await apiCtx.post(`${baseURL}/api/onboarding/dismiss`, {
+          headers,
+        });
+        expect(
+          dismissRes.ok(),
+          `POST /api/onboarding/dismiss fehlgeschlagen (${dismissRes.status()}): ${await dismissRes.text()}`,
+        ).toBe(true);
+
         // M11.4b-Followup-3: waitUntil: 'domcontentloaded' statt 'networkidle'.
         // SPAs mit Pinia-State-Polling erreichen niemals networkidle (>=500 ms ohne Request).
         // 'domcontentloaded': HTML-Parser durch, Inline-Scripts ausgeführt — deterministisch.
