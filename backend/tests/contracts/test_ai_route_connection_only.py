@@ -31,6 +31,24 @@ def test_connection_only_route_requires_a_non_empty_secret_ref(
         )
 
 
+def test_connection_only_route_with_secret_ref_is_valid() -> None:
+    """
+    Verify that a connection_only route with secret_ref is valid.
+    """
+    route = AiRoute(
+        provider_connection_id="connection-openai",
+        model_id="gpt-4.1-mini",
+        source="project",
+        provider_options={
+            "connection_only": True,
+            "secret_ref": "connection-secret",
+        },
+    )
+
+    assert route.provider_options["connection_only"] is True
+    assert route.provider_options["secret_ref"] == "connection-secret"
+
+
 def test_ai_route_json_schema_requires_secret_ref_for_connection_only_route() -> None:
     """
     Verify that the generated JSON Schema requires a non-empty `secret_ref` for connection-only routes.

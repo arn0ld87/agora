@@ -8,7 +8,16 @@ from app.api.llm_providers import add_provider_deprecation_headers
 
 def test_provider_prefix_collision_is_not_marked_as_legacy():
     app = Flask(__name__)
+    app.register_blueprint(llm_bp, url_prefix="/api/llm")
+
+    # Create a dummy route for the providers-preview endpoint
+    @app.route("/api/llm/providers-preview")
+    def providers_preview():
+        return Response()
+
     with app.test_request_context("/api/llm/providers-preview"):
+        # Populate request.endpoint by matching the route
+        app.preprocess_request()
         response = add_provider_deprecation_headers(Response())
 
     assert "Deprecation" not in response.headers

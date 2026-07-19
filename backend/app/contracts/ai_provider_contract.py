@@ -315,8 +315,8 @@ class AiRoute(BaseModel):
     @model_validator(mode="after")
     def validate_provider_fallback_reason(self) -> AiRoute:
         """
-        Validate fallback and connection-only route requirements.
-        
+        Validate that provider_fallback routes have a non-blank fallback_reason.
+
         Returns:
             AiRoute: The validated route.
         """
@@ -324,6 +324,16 @@ class AiRoute(BaseModel):
             self.fallback_reason and self.fallback_reason.strip()
         ):
             raise ValueError("provider_fallback requires a non-blank fallback_reason")
+        return self
+
+    @model_validator(mode="after")
+    def validate_connection_only_requirements(self) -> AiRoute:
+        """
+        Validate that connection_only routes have a secret_ref.
+
+        Returns:
+            AiRoute: The validated route.
+        """
         if self.provider_options.get("connection_only") is True and not self.provider_options.get(
             "secret_ref"
         ):

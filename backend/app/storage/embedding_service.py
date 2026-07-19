@@ -258,12 +258,34 @@ class EmbeddingService:
                 )
                 response.raise_for_status()
                 data = response.json()
+
+                # Validate response structure
+                if not isinstance(data, dict):
+                    raise EmbeddingError(f"Invalid {provider_label} response: expected dict, got {type(data).__name__}")
+
                 embeddings = self._extract_embeddings(data)
 
+                # Validate response is a list
+                if not isinstance(embeddings, list):
+                    raise EmbeddingError(f"Invalid {provider_label} response: embeddings must be a list")
+
+                # Validate count
                 if len(embeddings) != len(texts):
                     raise EmbeddingError(
                         f"Expected {len(texts)} embeddings, got {len(embeddings)}"
                     )
+
+                # Validate each embedding vector
+                for i, embedding in enumerate(embeddings):
+                    if not isinstance(embedding, list):
+                        raise EmbeddingError(
+                            f"Invalid {provider_label} response: embedding {i} must be a list, got {type(embedding).__name__}"
+                        )
+                    for j, value in enumerate(embedding):
+                        if not isinstance(value, (int, float)):
+                            raise EmbeddingError(
+                                f"Invalid {provider_label} response: embedding {i}[{j}] must be numeric, got {type(value).__name__}"
+                            )
 
                 return embeddings
 
