@@ -3,6 +3,10 @@ name: e2e-smokes
 on:
   push:
     branches: [main]
+  # Reaktiviert nach Issue #739: alle sechs Smokes sind stabil grün.
+  # Als Required Check konfigurierbar — siehe docs/runbooks/e2e-required-check.md.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
@@ -27,7 +31,7 @@ jobs:
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -35,6 +39,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -116,7 +122,7 @@ jobs:
       AGORA_E2E_LLM_MODE: 'stub'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -124,6 +130,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -203,7 +211,7 @@ jobs:
       AGORA_E2E_LLM_MODE: 'stub'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -211,6 +219,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -282,7 +292,7 @@ jobs:
       AGORA_E2E_LLM_MODE: 'stub'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -290,6 +300,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -359,7 +371,7 @@ jobs:
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -367,6 +379,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -437,7 +451,7 @@ jobs:
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # v2.19.3
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -445,6 +459,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
