@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3405 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3407 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 

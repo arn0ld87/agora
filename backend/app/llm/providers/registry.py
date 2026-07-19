@@ -232,12 +232,12 @@ def detect_embedding_provider(
        Server mit nativer ``/api/embed``-Route).
     """
     normalized_base = (base_url or "").lower()
-    host = urlparse(normalized_base).netloc
+    host = urlparse(normalized_base).hostname or ""
     model_name = model or ""
     if (
         normalized_base.endswith("/v1")
         or normalized_base.endswith("/v1/")
-        or "api.openai.com" in host
+        or host == "api.openai.com"
         or model_name.startswith("text-embedding-")
     ):
         return "openai"

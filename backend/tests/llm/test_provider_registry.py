@@ -157,6 +157,10 @@ EMBEDDING_CASES = [
     ("http://localhost:11434", "text-embedding-3-small", "openai"),  # Modell-Prefix
     ("http://localhost:11434", "nomic-embed-text", "ollama"),  # Default-Fallback
     ("https://ollama.com", "qwen3-embedding:4b", "ollama"),
+    # Lookalike-Hosts duerfen NICHT auf die OpenAI-Shape (Bearer + /v1/embeddings)
+    # fallen — exakter Host-Match statt Substring (CodeQL #370, PR #783).
+    ("https://api.openai.com.evil.com", "some-model", "ollama"),
+    ("https://notapi.openai.com", "some-model", "ollama"),
 ]
 
 
