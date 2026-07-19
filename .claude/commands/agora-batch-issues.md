@@ -119,12 +119,14 @@ Erstelle pro Issue ein vollständiges, selbständiges Briefing:
   - <betroffen oder keine>
 - Tests zuerst:
   - <exakte Testpfade und erwartetes RED>
+- Issue-Test-Befehl:
+  - `<exakter, erneut ausführbarer Befehl>`
 - Akzeptanz:
   - <Befehle und erwartete Ergebnisse>
-- Gate:
-  - <backend|frontend|schemas|vollständig>
+- Gate-Scope:
+  - <backend | frontend | schemas | vollständig>
 - Dokumentation:
-  - <STATUS, ROADMAP, CHANGELOG oder keine mit Begründung>
+  - <STATUS, ROADMAP, CHANGELOG, Folge-Issue oder keine mit Begründung>
 - Stop-Bedingungen:
   - Scope-Drift, rote Gates, unklare Spec, Dateiüberschneidung
 - Implementer: <Agentenname>
@@ -151,32 +153,84 @@ Jeder Worker muss:
 - im durch `isolation: worktree` bereitgestellten Worktree arbeiten,
 - genau ein Issue bearbeiten,
 - Tests zuerst schreiben oder anpassen,
-- das passende Gate ausführen,
+- den Issue-Test aus dem Briefing mit GREEN abschließen,
+- vor dem lokalen Commit Contract-Tests, Schema-Check, Ruff und mypy exakt in dieser Reihenfolge mit Exit 0 ausführen:
+
+  ```bash
+  cd backend
+  uv run pytest tests/contracts/ -x -q
+  uv run python -m app.contracts.dump_schemas --check
+  uv run ruff check app/ tests/
+  uv run mypy app
+  ```
+
+- anschließend genau das im Briefing benannte Scope-Gate ausführen,
+- sachlich betroffene Dokumentationsartefakte im selben Slice aktualisieren,
 - nur Scope-Dateien stagen,
-- genau einen lokalen Commit erzeugen,
-- Commit-SHA, Diff-Statistik und vollständige Testergebnisse zurückgeben,
+- erst nach erfolgreichem Abschluss aller Prüfungen genau einen lokalen Commit erzeugen,
+- Commit-SHA, Diff-Statistik sowie vollständige Issue-Test-, Pflichtprüfungs- und Gate-Ausgaben zurückgeben,
+- für `docs/STATUS.md`, `ROADMAP.md`, `CHANGELOG.md` und Folge-Issue jeweils `aktualisiert` oder `NICHT BETROFFEN` mit Begründung melden,
 - nicht pushen, mergen oder einen PR erstellen.
 
 ## Schritt 7: Worker-Ergebnisse verifizieren
 
-Vertraue keiner Zusammenfassung. Prüfe für jeden Worker selbst:
+Vertraue keiner Zusammenfassung. Prüfe für jedes Issue in dessen eigenem Worktree zunächst den Commit:
 
 ```bash
+cd <WORKTREE_PATH>
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
 git status --short
 ```
 
-Prüfe:
+Führe danach den issue-spezifischen Test frisch aus und bewahre die vollständige Ausgabe auf:
+
+```bash
+cd <WORKTREE_PATH>
+<ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
+test_rc=${PIPESTATUS[0]}
+test "$test_rc" -eq 0
+```
+
+Führe anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad frisch aus und bewahre auch diese Ausgabe auf:
+
+```bash
+cd <WORKTREE_PATH>
+{
+  case "<GATE_SCOPE>" in
+    backend)
+      bash scripts/pre-push-gate.sh backend
+      ;;
+    frontend)
+      bash scripts/pre-push-gate.sh frontend
+      ;;
+    schemas)
+      bash scripts/pre-push-gate.sh schemas
+      ;;
+    vollständig)
+      bash scripts/pre-push-gate.sh
+      ;;
+    *)
+      echo "Unbekannter Gate-Scope: <GATE_SCOPE>" >&2
+      exit 2
+      ;;
+  esac
+} 2>&1 | tee <GATE_LOG>
+gate_rc=${PIPESTATUS[0]}
+test "$gate_rc" -eq 0
+```
+
+Prüfe außerdem:
 
 - nur erlaubte Dateien geändert,
 - genau ein Issue im Commit,
 - keine Secrets oder generierten Fremdartefakte,
-- gezielte Tests und passendes Gate mit Exit 0,
+- Issue-Test und ausgewähltes Gate jeweils Exit 0,
+- vollständige Test- und Gate-Ausgaben liegen für Schritt 8 vor,
 - kein Konflikt mit dem anderen Issue-Commit.
 
-Bei einem Fehler stoppt nur das betroffene Issue. Das andere darf weiter geprüft werden, wenn es wirklich unabhängig ist.
+Bei einem Fehler stoppt ausschließlich das betroffene Issue. Das andere darf nur weiter geprüft werden, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt. Ein Fehler darf weder das andere Issue automatisch stoppen noch durch dessen Erfolg verdeckt werden.
 
 ## Schritt 8: Opus-Review pro Commit
 
@@ -186,8 +240,8 @@ Starte für jeden verifizierten Commit genau einen `agora-opus-reviewer`. Überg
 - Release-Ziel,
 - Basis-SHA und Commit-SHA,
 - vollständigen Diff,
-- gezielte Testausgaben,
-- Gate-Ausgabe,
+- die in Schritt 7 frisch erzeugte Issue-Test-Ausgabe,
+- die in Schritt 7 frisch erzeugte Gate-Ausgabe,
 - betroffene ADRs, Contracts, Security-Grenzen und Evidence-Hartanker.
 
 Der Reviewer ist read-only und antwortet mit `APPROVE` oder `REQUEST_CHANGES`.
@@ -197,14 +251,27 @@ Bei `REQUEST_CHANGES`:
 1. keinen Push und keinen PR erstellen,
 2. Blocker an denselben Implementer mit engem Korrekturbriefing zurückgeben,
 3. höchstens einen Korrekturlauf erlauben,
-4. Tests und Gate erneut frisch ausführen,
+4. Tests und genau das passende Gate erneut frisch ausführen,
 5. Opus erneut reviewen lassen.
 
-Bleibt das Urteil negativ, stoppe das Issue mit einem konkreten Bericht.
+Bleibt das Urteil negativ, stoppe nur das betroffene Issue mit einem konkreten Bericht.
 
-## Schritt 9: Push und Draft-PR
+## Schritt 9: Dokumentationssynchronisation abschließen
 
-Nur bei `APPROVE`:
+Prüfe für jedes erfolgreiche Issue vor Push und PR, ob im selben Slice sachlich korrekt abgebildet sind:
+
+- `docs/STATUS.md` bei geändertem verifiziertem Istzustand,
+- `ROADMAP.md` bei geändertem Release-Gate oder strategischer Reihenfolge,
+- `CHANGELOG.md` bei ausgeliefertem Nutzer- oder Betriebsverhalten,
+- ein Folge-Issue für notwendige, aber nicht erledigte Folgearbeit.
+
+Dokumentiere für jedes Artefakt `aktualisiert` oder `NICHT BETROFFEN` mit Begründung. Ist ein erforderliches Datei-Artefakt im Commit nicht enthalten, darf nicht gepusht werden. Gib das betroffene Issue einmalig an denselben Worker zurück, lasse den bestehenden lokalen Commit amendieren und wiederhole für den neuen Commit-SHA Schritt 7 und Schritt 8 vollständig. Dadurch bleibt es bei genau einem Issue-Commit.
+
+Erzeuge notwendige Folge-Issues vor dem Draft-PR und verlinke sie im PR-Body. Der Dokumentationssync eines Issues darf keine Dateien oder Planungen des anderen Issues übernehmen.
+
+## Schritt 10: Push und Draft-PR
+
+Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 
 ```bash
 git push -u origin <branch>
@@ -231,7 +298,15 @@ PR-Body:
 - <bewusst ausgelagert>
 
 ## Tests
-- `<Befehl>` — PASS
+- `<Issue-Test-Befehl>` — PASS
+- Contract-Tests → Schema-Check → Ruff → mypy — PASS
+- `scripts/pre-push-gate.sh <Scope>` — PASS
+
+## Dokumentationssync
+- `docs/STATUS.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- `ROADMAP.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- `CHANGELOG.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- Folge-Issue: <URL | NICHT BETROFFEN + Begründung>
 
 ## Review
 - `agora-opus-reviewer` — APPROVE
@@ -239,16 +314,19 @@ PR-Body:
 
 Keine beiden Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es muss nicht jeden schlechten Gedanken konservieren.
 
-## Schritt 10: Abschlussausgabe
+## Schritt 11: Abschlussausgabe
 
 ```markdown
 ## Batch-Ergebnis
 
-| Issue | Worker | Commit | Gate | Opus | Draft-PR |
-|---|---|---|---|---|---|
-| #123 | agora-refactor-worker | `<sha>` | PASS | APPROVE | <URL> |
+| Issue | Worker | Commit | Issue-Test | Gate | Opus | Doku-Sync | Draft-PR |
+|---|---|---|---|---|---|---|---|
+| #123 | agora-refactor-worker | `<sha>` | PASS | PASS | APPROVE | vollständig | <URL> |
 
 ### Gestoppt
+- keine
+
+### Nicht erledigte Folgearbeit
 - keine
 
 ### Verbleibende Risiken
