@@ -238,7 +238,7 @@ class LLMClient:
         """Determine whether the configured endpoint is a MiniMax service.
         
         Returns:
-        	bool: `true` if the endpoint uses MiniMax, `false` otherwise.
+            bool: `true` if the endpoint uses MiniMax, `false` otherwise.
         """
         return self._detect_provider() == "minimax"
 
