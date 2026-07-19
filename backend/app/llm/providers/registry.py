@@ -204,6 +204,46 @@ def detect_provider(
     return _detect_oasis(base_url, model)
 
 
+EmbeddingDetectedProvider = Literal["openai", "ollama"]
+
+
+def detect_embedding_provider(
+    base_url: Optional[str], model: Optional[str]
+) -> EmbeddingDetectedProvider:
+    """Erkennt die Embeddings-API-Shape (Issue #671), vormals
+    ``EmbeddingService._detect_provider`` in ``app/storage/embedding_service.py``.
+
+    Bewusst KEINE Delegation an :func:`detect_provider` (``mode="http"``):
+    beide Funktionen loesen unterschiedliche Probleme mit unterschiedlichem
+    Vokabular. ``detect_provider`` entscheidet, welcher Chat-``ProviderAdapter``
+    (Dispatch) genutzt wird; ``detect_embedding_provider`` entscheidet nur,
+    welche Request-/Response-Shape die Embeddings-API hat
+    (``POST /v1/embeddings`` + Bearer-Header vs. ``POST /api/embed``). Die
+    Signale divergieren entsprechend — z. B. reicht hier ein blosses
+    ``/v1``-Suffix der Base-URL fuer ``"openai"``, waehrend ``mode="http"``
+    dafuer ``"unknown"`` liefert (dort ist ``/v1`` allein kein Signal).
+    Eine Zusammenfuehrung waere eine Verhaltensaenderung an einer
+    testfixierten Heuristik.
+
+    Prioritaet (first match wins):
+    1. ``"openai"`` — Base-URL endet auf ``/v1``/``/v1/``, Host ist
+       ``api.openai.com``, oder Modellname beginnt mit ``text-embedding-``.
+    2. ``"ollama"`` — Fallback fuer alles andere (z. B. lokaler/Cloud-Ollama-
+       Server mit nativer ``/api/embed``-Route).
+    """
+    normalized_base = (base_url or "").lower()
+    host = urlparse(normalized_base).netloc
+    model_name = model or ""
+    if (
+        normalized_base.endswith("/v1")
+        or normalized_base.endswith("/v1/")
+        or "api.openai.com" in host
+        or model_name.startswith("text-embedding-")
+    ):
+        return "openai"
+    return "ollama"
+
+
 def get_adapter(
     provider: str, *, num_ctx: Optional[int] = None, think: bool = False
 ) -> "ProviderAdapter":

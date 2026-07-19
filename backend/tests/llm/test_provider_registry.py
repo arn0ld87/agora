@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.llm.providers.registry import detect_provider
+from app.llm.providers.registry import detect_embedding_provider, detect_provider
 
 # ---------------------------------------------------------------------------
 # mode="http" — Verhalten von LLMClient._detect_provider (testfixiert in
@@ -137,3 +137,29 @@ DIVERGENT_CASES = [
 def test_documented_divergences(base_url, model, expected_http, expected_oasis):
     assert detect_provider(base_url, model, mode="http") == expected_http
     assert detect_provider(base_url, model, mode="oasis") == expected_oasis
+
+
+# ---------------------------------------------------------------------------
+# detect_embedding_provider — Embeddings-API-Shape (Issue #671), vormals
+# ``EmbeddingService._detect_provider`` (app/storage/embedding_service.py).
+# Bewusst eigenes Vokabular/eigene Logik statt Delegation an detect_provider
+# (mode="http"): unterschiedlicher Zweck (Request/Response-Shape der
+# Embeddings-API vs. Chat-Adapter-Dispatch) und unterschiedliche Signale
+# (z. B. reicht ein blosses "/v1"-Suffix hier fuer "openai", waehrend
+# mode="http" dafuer "unknown" liefert).
+# ---------------------------------------------------------------------------
+
+EMBEDDING_CASES = [
+    # (base_url, model, expected)
+    ("http://localhost:11434/v1", "nomic-embed-text", "openai"),  # /v1-Suffix
+    ("http://localhost:11434/v1/", "nomic-embed-text", "openai"),  # /v1/-Suffix
+    ("https://api.openai.com", "some-model", "openai"),  # Host api.openai.com
+    ("http://localhost:11434", "text-embedding-3-small", "openai"),  # Modell-Prefix
+    ("http://localhost:11434", "nomic-embed-text", "ollama"),  # Default-Fallback
+    ("https://ollama.com", "qwen3-embedding:4b", "ollama"),
+]
+
+
+@pytest.mark.parametrize(("base_url", "model", "expected"), EMBEDDING_CASES)
+def test_detect_embedding_provider(base_url, model, expected):
+    assert detect_embedding_provider(base_url, model) == expected
