@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3383 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3393 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -55,7 +55,7 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Alle fünf Kern-Smokes sind lokal grün (Sub-Slices 1–5/5).
+Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Alle sechs Kern-Smokes sind stabil grün (Sub-Slices 1–5/5). Der `pull_request`-Trigger ist reaktiviert (#739).
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
@@ -68,7 +68,7 @@ Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Alle fünf Kern-S
 
 Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
 
-Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs Smokes mehrfach stabil grün sind. Danach muss der Workflow als Required Check aktiviert werden.
+Der `pull_request`-Trigger ist reaktiviert (#739). Die sechs Smokes können via [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md) als erforderliche Branch-Protection-Checks konfiguriert werden. Die Erzwingung durch den Owner ist ausstehend.
 
 ## Quality Gates
 
@@ -79,7 +79,7 @@ Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs 
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
-| E2E-Kernpipeline | 4/6 lokal grün (Health + Sub-Slices 1–3/5), noch nicht verpflichtend |
+| E2E-Kernpipeline | 6/6 grün (Health + Sub-Slices 1–5/5), `pull_request`-Trigger aktiv, Required-Erzwingung ausstehend |
 
 Lokale Befehle:
 

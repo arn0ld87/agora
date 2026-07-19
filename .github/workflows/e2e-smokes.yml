@@ -35,6 +35,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -124,6 +126,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -211,6 +215,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -290,6 +296,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -367,6 +375,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
@@ -445,6 +455,8 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             cdn.playwright.dev:443
+            dl-cdn.alpinelinux.org:443
+            dl-4.alpinelinux.org:443
             deb.debian.org:80
             deb.debian.org:443
             dl.google.com:443
