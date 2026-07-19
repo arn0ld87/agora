@@ -27,7 +27,7 @@ uv run python scripts/check_version_drift.py --write
 ```
 
 Das schreibt den `VERSION`-Wert in:
-- `backend/pyproject.toml` (tool.poetry.version)
+- `backend/pyproject.toml` (`[project].version`, PEP 621)
 - `package.json` (version, root)
 - `frontend/package.json` (version)
 - `README.md` (Version-Badge)
@@ -80,7 +80,7 @@ Alles in einem Commit, das entspricht dem atomaren Scope des Release-PRs.
 
 ## Backend-Paket-Version
 
-`backend/app/__init__.__version__` wird **nicht** manuell geschrieben. Es wird stattdessen aus den Poetry-Metadaten in `backend/pyproject.toml` abgeleitet. Das Tool notiert dies in der `--write`-Ausgabe.
+`backend/app/__init__.__version__` wird **nicht** manuell geschrieben. Es wird stattdessen aus den Paket-Metadaten (PEP 621 `[project].version` in `backend/pyproject.toml`, via `uv`) abgeleitet. Das Tool notiert dies in der `--write`-Ausgabe.
 
 ## Out-of-Scope
 

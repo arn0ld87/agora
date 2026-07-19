@@ -43,11 +43,20 @@ def _repo_root() -> Path:
     return here.parent.parent.parent
 
 
+# MAJOR.MINOR.PATCH mit optionalem SemVer-Pre-Release/Build-Suffix.
+_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+
+
 def read_version_file(repo_root: Path) -> str:
     version_file = repo_root / "VERSION"
     text = version_file.read_text(encoding="utf-8").strip()
     if not text:
         raise ValueError(f"VERSION file is empty at {version_file}")
+    if not _SEMVER_RE.match(text):
+        raise ValueError(
+            f"VERSION={text!r} is not a valid SemVer string "
+            f"(MAJOR.MINOR.PATCH[-prerelease][+build]) at {version_file}"
+        )
     return text
 
 
@@ -113,8 +122,10 @@ def write_frontend_package_json_version(repo_root: Path, version: str) -> None:
 def read_readme_badge_version(repo_root: Path) -> str | None:
     readme = repo_root / "README.md"
     text = readme.read_text(encoding="utf-8")
-    # Matches: [![Version](https://img.shields.io/badge/Version-1.0.0-...)](...)
-    m = re.search(r"img\.shields\.io/badge/Version-([^-]+)-", text)
+    # Matches: [![Version](https://img.shields.io/badge/Version-1.0.0-blue?...)](...)
+    # (.+?) fasst auch Bindestrich-Versionen (Pre-Releases wie 0.8.0-rc.1),
+    # da bis zum abschliessenden Farb-Suffix vor '?'/')' nicht-gierig gematcht wird.
+    m = re.search(r"img\.shields\.io/badge/Version-(.+?)-\w+(?=[?)])", text)
     return m.group(1) if m else None
 
 
@@ -122,8 +133,8 @@ def write_readme_badge_version(repo_root: Path, version: str) -> None:
     readme = repo_root / "README.md"
     text = readme.read_text(encoding="utf-8")
     new_text, count = re.subn(
-        r"img\.shields\.io/badge/Version-([^-]+)-",
-        f"img.shields.io/badge/Version-{version}-",
+        r"(img\.shields\.io/badge/Version-).+?(-\w+(?=[?)]))",
+        rf"\g<1>{version}\g<2>",
         text,
         count=1,
     )

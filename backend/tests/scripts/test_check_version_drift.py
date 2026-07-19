@@ -79,6 +79,19 @@ class TestReadVersionFile:
         with pytest.raises(ValueError, match="VERSION file is empty"):
             mod.read_version_file(tmp_path)
 
+    @pytest.mark.parametrize("bad", ["1.0", "v1.0.0", "0.8", "abc", "1.0.0.0"])
+    def test_raises_on_invalid_semver(self, tmp_path, bad):
+        mod = _load_script()
+        (tmp_path / "VERSION").write_text(f"{bad}\n")
+        with pytest.raises(ValueError, match="not a valid SemVer"):
+            mod.read_version_file(tmp_path)
+
+    @pytest.mark.parametrize("good", ["0.8.0", "1.2.3", "0.8.0-rc.1", "1.0.0+build.5"])
+    def test_accepts_valid_semver(self, tmp_path, good):
+        mod = _load_script()
+        (tmp_path / "VERSION").write_text(f"{good}\n")
+        assert mod.read_version_file(tmp_path) == good
+
 
 class TestReadPyprojectVersion:
     def test_reads_current_version(self, tmp_path):
