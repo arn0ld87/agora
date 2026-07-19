@@ -1,6 +1,6 @@
 # E2E-Smokes als Required Check
 
-Datei: `docs/runbooks/e2e-required-check.md` · Stand: 2026-07-19 · Eingeführt mit: Issue #739
+Datei: `docs/runbooks/e2e-required-check.md` · Stand: 2026-07-19 (Status: 3 grüne Läufe in Folge auf `32bad751`; Required-Erzwingung noch nicht freigegeben) · Eingeführt mit: Issue #739
 
 ## Zweck
 
@@ -10,8 +10,8 @@ Der `pull_request`-Trigger des E2E-Workflows (`.github/workflows/e2e-smokes.yml`
 
 | Datum | Ereignis |
 |---|---|
-| 2026-07-19 | Trigger `on: pull_request` reaktiviert (#739), alle sechs Smokes stabil grün |
-| offen | Branch-Protection-Erzwingung durch Owner manuell konfigurieren |
+| 2026-07-19 | Trigger `on: pull_request` reaktiviert (#739); drei aufeinanderfolgende grüne Läufe auf `32bad751` (`29691168025`, `29691166308`, `29691165639`) — *nicht* repräsentativ für dauerhafte Stabilität |
+| offen | Branch-Protection-Erzwingung durch Owner manuell konfigurieren, sobald weitere Läufe die Stabilität bestätigen |
 
 ## Die sechs Required Checks
 
@@ -35,8 +35,13 @@ Diese Job-Namen müssen als erforderlich konfiguriert werden:
 ## Konfiguration via `gh api` (Beispiel)
 
 ```bash
-# Voraussetzung: gh CLI installiert, Auth konfiguriert
-gh api repos/arn0ld87/agora/branches/main/protection \
+# Voraussetzung: gh CLI installiert, Auth konfiguriert.
+# Wichtig: --method PUT, sonst liefert gh api nur ein GET.
+# Review-Flags MÜSSEN in "required_pull_request_reviews" stehen —
+# außerhalb dieses Blocks werden sie von der GitHub-API verworfen
+# bzw. überschreiben vorhandene Einstellungen.
+gh api --method PUT \
+  repos/arn0ld87/agora/branches/main/protection \
   --input - <<'EOF'
 {
   "required_status_checks": {
@@ -50,10 +55,12 @@ gh api repos/arn0ld87/agora/branches/main/protection \
       "Playwright AiModelPicker-Smoke (Slice 5.6 / 7.3.1)"
     ]
   },
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": false,
+    "require_code_owner_reviews": false,
+    "require_last_push_approval": false
+  },
   "enforce_admins": true,
-  "dismiss_stale_reviews": false,
-  "require_code_owner_reviews": false,
-  "require_last_push_approval": false,
   "allow_force_pushes": false,
   "allow_deletions": false
 }
@@ -70,18 +77,25 @@ Beachte: `strict: true` bedeutet, dass Checks auch bei neueren Commits erneut er
 
 Trigger wieder deaktivieren oder Required-Check-Häkchen entfernen:
 
-### Option A: Trigger deaktivieren (`.github/workflows/e2e-smokes.yml`)
+### Option A: PR-Trigger entfernen (`workflow_dispatch` bleibt erhalten)
+
+In `.github/workflows/e2e-smokes.yml` unter `on:` ausschließlich den `pull_request`-Block entfernen. Der `workflow_dispatch`-Trigger bleibt aktiv, damit das Team weiterhin manuell aus dem GitHub-UI oder per `gh workflow run` Läufe anstoßen kann.
+
 ```yaml
-# on:
-#   pull_request:
-#     branches: [main]
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "..."
 ```
 
+Kein Komplett-Reset des Workflows — nur der `pull_request`-Zweig fällt weg.
+
 ### Option B: Required-Check entfernen (GitHub UI)
+
 Settings → Branches → Rule → `Require status checks` **unchecken** oder Jobs aus der Liste entfernen.
 
 ## Siehe auch
 
 - [Issue #739](https://github.com/arn0ld87/agora/issues/739)
 - [docs/STATUS.md — E2E-Smokes](../STATUS.md#e2e-smokes)
-- [.github/workflows/e2e-smokes.yml](.github/workflows/e2e-smokes.yml)
+- [`.github/workflows/e2e-smokes.yml`](../../.github/workflows/e2e-smokes.yml)
