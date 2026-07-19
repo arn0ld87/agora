@@ -86,6 +86,28 @@ class TestReadVersionFile:
         with pytest.raises(ValueError, match="not a valid SemVer"):
             mod.read_version_file(tmp_path)
 
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "01.2.3",  # leading zero in MAJOR
+            "1.02.3",  # leading zero in MINOR
+            "1.2.03",  # leading zero in PATCH
+            "1.2.3-01",  # leading zero in numeric prerelease identifier
+            "1.2.3-..",  # empty prerelease identifier segments
+            "1.2.3-alpha..1",  # empty prerelease identifier segment in middle
+            "1.2.3+..",  # empty build identifier segments
+            "1.2.3-",  # trailing dash with nothing after
+            "1.2.3+",  # trailing plus with nothing after
+            "١.2.3",  # Unicode digit (Arabic-indic) in MAJOR
+        ],
+    )
+    def test_rejects_non_canonical_semver(self, tmp_path, bad):
+        """Canonical SemVer regex rejects leading zeroes, empty identifiers, Unicode digits."""
+        mod = _load_script()
+        (tmp_path / "VERSION").write_text(f"{bad}\n")
+        with pytest.raises(ValueError, match="not a valid SemVer"):
+            mod.read_version_file(tmp_path)
+
     @pytest.mark.parametrize("good", ["0.8.0", "1.2.3", "0.8.0-rc.1", "1.0.0+build.5"])
     def test_accepts_valid_semver(self, tmp_path, good):
         mod = _load_script()

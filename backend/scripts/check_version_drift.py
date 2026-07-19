@@ -44,7 +44,15 @@ def _repo_root() -> Path:
 
 
 # MAJOR.MINOR.PATCH mit optionalem SemVer-Pre-Release/Build-Suffix.
-_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+# Kanonische SemVer-Regex (semver.org), ASCII-only: keine führenden Nullen in
+# numerischen Komponenten/Identifiern, keine leeren Prerelease-/Build-Identifier,
+# kein Unicode-\d.
+_SEMVER_RE = re.compile(
+    r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 def read_version_file(repo_root: Path) -> str:

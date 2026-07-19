@@ -80,7 +80,7 @@ Alles in einem Commit, das entspricht dem atomaren Scope des Release-PRs.
 
 ## Backend-Paket-Version
 
-`backend/app/__init__.__version__` wird **nicht** manuell geschrieben. Es wird stattdessen aus den Paket-Metadaten (PEP 621 `[project].version` in `backend/pyproject.toml`, via `uv`) abgeleitet. Das Tool notiert dies in der `--write`-Ausgabe.
+`backend/app/__init__.__version__` wird **nicht** manuell geschrieben. Es wird stattdessen aus den Paket-Metadaten (PEP 621 `[project].version` in `backend/pyproject.toml`, via `uv`) abgeleitet.
 
 ## Out-of-Scope
 
