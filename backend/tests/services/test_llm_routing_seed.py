@@ -127,8 +127,48 @@ def test_build_route_subprocess_env_injects_google_api_key_for_gemini():
     assert env["LLM_MODEL_NAME"] == "models/gemini-2.5-flash"
 
 
+def test_build_route_subprocess_env_aliases_gemini_api_key_for_camel():
+    """CAMELs GeminiModel im OASIS-Subprozess liest ``GEMINI_API_KEY``, nicht
+    ``GOOGLE_API_KEY`` (die ``api_key_ref`` des Google-Providers). Ohne diesen
+    Alias crasht der Subprozess trotz gesetztem Store-Key mit
+    ``ValueError: Missing required API keys: GEMINI_API_KEY`` (Arbeitsprotokoll
+    2026-07-18, Symptom 4). Damit bleibt der UI-Secrets-Store Single Source und
+    ``.env`` wird fuer Gemini-Sims nicht mehr gebraucht."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="google",
+        model="models/gemini-2.5-flash",
+        base_url_sanitized="https://generativelanguage.googleapis.com/v1beta/openai/",
+        routing_version=3,
+    )
+
+    env = build_route_subprocess_env(route, api_key="goog-server-key", run_id="run_gemini")
+
+    assert env["GEMINI_API_KEY"] == "goog-server-key"
+
+
+def test_build_route_subprocess_env_no_gemini_alias_for_non_google():
+    """Nicht-Google-Routen bekommen KEINEN GEMINI_API_KEY-Alias untergeschoben."""
+    route = ResolvedRoute(
+        stage="simulation_rounds",
+        provider_id="openai",
+        model="gpt-4o-mini",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=2,
+    )
+
+    env = build_route_subprocess_env(route, api_key="server-key")
+
+    assert "GEMINI_API_KEY" not in env
+
+
 def test_build_route_subprocess_env_injects_ollama_api_key_for_ollama_cloud():
-    """Ollama Cloud bekommt OLLAMA_API_KEY aus der Registry — kein .env nötig."""
+    """
+    Ensure Ollama Cloud routes receive their API key in the subprocess environment.
+    
+    Returns:
+        None
+    """
     route = ResolvedRoute(
         stage="simulation_rounds",
         provider_id="ollama_cloud",

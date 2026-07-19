@@ -20,7 +20,12 @@ _SCRIPTS_DIR = _BACKEND_DIR / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from _sim_common import build_camel_extra_body, _is_ollama_route  # noqa: E402
+from _sim_common import (  # noqa: E402
+    build_camel_extra_body,
+    build_minimax_extra_body,
+    _is_minimax_route,
+    _is_ollama_route,
+)
 
 
 class TestBuildCamelExtraBodyOllamaLocal:
@@ -246,3 +251,59 @@ class TestBuildCamelExtraBodyOllamaCloudModelAgnostic:
             model=model, base_url=self._OLLAMA_COM, num_ctx=262144, think=True
         )
         assert body == {"think": True, "options": {"num_ctx": 262144}}
+
+
+class TestBuildMinimaxExtraBody:
+    """MiniMax-eigene API (`api.minimax.io`) — Thinking-Steuerung per OpenAI-
+    Compat-Spec (`thinking.type` ∈ {"disabled","adaptive"}). `disabled` schaltet
+    Reasoning bei MiniMax-M3 ab; M2.x ignorieren es (Thinking bleibt an, aber der
+    Parameter ist gueltig → kein 400). NUR fuer MiniMax-Routen — andere
+    OpenAI-Compat-Provider kennen `thinking` nicht.
+
+    Abgrenzung: `minimax-m3` (lowercase) @ `ollama.com` ist ein via Ollama Cloud
+    bereitgestelltes Modell (siehe TestBuildCamelExtraBodyMinimaxM3) — NICHT die
+    hier adressierte MiniMax-Plattform `api.minimax.io`.
+    """
+
+    _MINIMAX = "https://api.minimax.io/v1"
+
+    def test_m3_think_off_sets_disabled(self) -> None:
+        body = build_minimax_extra_body(
+            model="MiniMax-M3", base_url=self._MINIMAX, think=False
+        )
+        assert body == {"thinking": {"type": "disabled"}}
+
+    def test_m3_think_on_sets_adaptive(self) -> None:
+        """Verify that enabling thinking for MiniMax-M3 produces adaptive thinking configuration."""
+        body = build_minimax_extra_body(
+            model="MiniMax-M3", base_url=self._MINIMAX, think=True
+        )
+        assert body == {"thinking": {"type": "adaptive"}}
+
+    def test_highspeed_m2x_still_sends_disabled_param(self) -> None:
+        # M2.x ignorieren `disabled` (Thinking bleibt an), aber der Parameter ist
+        # laut Spec gueltig — wir senden ihn konsistent fuer alle MiniMax-Modelle.
+        body = build_minimax_extra_body(
+            model="MiniMax-M2.5-highspeed", base_url=self._MINIMAX, think=False
+        )
+        assert body == {"thinking": {"type": "disabled"}}
+
+    def test_non_minimax_openai_returns_empty(self) -> None:
+        # OpenAI-Direct kennt `thinking` nicht → 400. Builder muss leer liefern.
+        body = build_minimax_extra_body(
+            model="gpt-5.4-mini", base_url="https://api.openai.com/v1", think=False
+        )
+        assert body == {}
+
+    def test_ollama_route_returns_empty(self) -> None:
+        body = build_minimax_extra_body(
+            model="qwen3-coder", base_url="http://localhost:11434/v1", think=False
+        )
+        assert body == {}
+
+    def test_is_minimax_route_matches_hostname(self) -> None:
+        assert _is_minimax_route("MiniMax-M3", self._MINIMAX) is True
+        assert _is_minimax_route("MiniMax-M2.5-highspeed", "https://api.minimax.io/anthropic") is True
+        assert _is_minimax_route("gpt-5.4-mini", "https://api.openai.com/v1") is False
+        # `minimax-m3` @ ollama.com ist Ollama-Cloud, NICHT die MiniMax-Plattform.
+        assert _is_minimax_route("minimax-m3", "https://ollama.com/v1") is False

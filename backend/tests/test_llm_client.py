@@ -39,6 +39,71 @@ def client(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# MiniMax-eigene Plattform (api.minimax.io): `thinking`-Steuerung per Spec.
+# `disabled` schaltet Reasoning bei MiniMax-M3 ab; gekoppelt an denselben
+# think-Toggle wie Ollama (reasoning_effort / OLLAMA_THINKING).
+# ---------------------------------------------------------------------------
+
+_MINIMAX_URL = "https://api.minimax.io/v1"
+
+
+def test_is_minimax_detects_platform():
+    client = LLMClient(
+        api_key="k", base_url=_MINIMAX_URL, model="MiniMax-M3", use_active_config=False
+    )
+    assert client._is_minimax() is True
+
+
+def test_is_minimax_false_for_openai():
+    client = LLMClient(
+        api_key="k",
+        base_url="https://api.openai.com/v1",
+        model="gpt-4o",
+        use_active_config=False,
+    )
+    assert client._is_minimax() is False
+
+
+def test_minimax_thinking_disabled_when_think_off(monkeypatch):
+    monkeypatch.delenv("OLLAMA_THINKING", raising=False)
+    client = LLMClient(
+        api_key="k",
+        base_url=_MINIMAX_URL,
+        model="MiniMax-M3",
+        use_active_config=False,
+        reasoning_effort="none",
+    )
+    assert client._minimax_thinking_extra_body() == {"thinking": {"type": "disabled"}}
+
+
+def test_minimax_thinking_adaptive_when_think_on(monkeypatch):
+    monkeypatch.setenv("OLLAMA_THINKING", "true")
+    client = LLMClient(
+        api_key="k",
+        base_url=_MINIMAX_URL,
+        model="MiniMax-M3",
+        use_active_config=False,
+        reasoning_effort="high",
+    )
+    assert client._think is True
+    assert client._minimax_thinking_extra_body() == {"thinking": {"type": "adaptive"}}
+
+
+def test_minimax_force_no_thinking_overrides_think_on(monkeypatch):
+    monkeypatch.setenv("OLLAMA_THINKING", "true")
+    client = LLMClient(
+        api_key="k",
+        base_url=_MINIMAX_URL,
+        model="MiniMax-M3",
+        use_active_config=False,
+        reasoning_effort="high",
+    )
+    assert client._minimax_thinking_extra_body(force_no_thinking=True) == {
+        "thinking": {"type": "disabled"}
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 

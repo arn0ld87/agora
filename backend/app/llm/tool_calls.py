@@ -140,16 +140,24 @@ def _chat_with_tools(
         "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
     ] = "report",
 ) -> ToolCallResponse:
-    """Native OpenAI function-calling: sendet ``tools=`` + ``tool_choice=`` an die API.
-
-    Streaming-Pfad (Ollama): Tool-Call-Deltas werden akkumuliert.
-    Nicht-Streaming-Pfad: ``message.tool_calls`` direkt normalisiert.
-
-    Bei Provider ``unknown`` oder wenn die API keine ``tool_calls`` zurückgibt,
-    bleibt ``tool_calls=[]`` und ``content`` enthält den Freitext — der Caller
-    kann dann auf den XML-Fallback-Parser zurückgreifen.
-
-    E2E-Stub-Pfad: analog zu ``chat()`` via ``AGORA_E2E_LLM_MODE=stub``.
+    """
+    Send a chat request with native tool-calling support.
+    
+    Falls back to a regular chat response when the provider cannot be identified.
+    The returned response includes generated content, normalized tool calls, the
+    completion finish reason, and the raw provider response when available.
+    
+    Parameters:
+        messages (List[Dict[str, Any]]): Messages to send to the model.
+        tools (List[Dict[str, Any]]): Tool definitions available to the model.
+        tool_choice (str): Tool selection strategy.
+        temperature (float): Sampling temperature.
+        max_tokens (int): Maximum number of completion tokens.
+        context (Literal[...]): Invocation context used for activity tracking.
+    
+    Returns:
+        ToolCallResponse: The generated content, tool calls, finish reason, and
+        raw response.
     """
     self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
 
@@ -207,6 +215,8 @@ def _chat_with_tools(
             extra_body["options"] = {"num_ctx": self._num_ctx}
         extra_body["think"] = self._think
         kwargs["extra_body"] = extra_body
+    elif self._is_minimax():
+        kwargs["extra_body"] = self._minimax_thinking_extra_body()
 
     force_stream = (
         self._is_ollama()

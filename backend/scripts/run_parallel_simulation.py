@@ -85,6 +85,7 @@ try:
     from ._sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
+        build_minimax_extra_body,
         build_parallel_parser,
         compute_start_hour_offset,
         detect_oasis_platform,
@@ -99,6 +100,7 @@ except ImportError:  # direct script execution
     from _sim_common import (
         apply_camel_context_floor,
         build_camel_completion_params,
+        build_minimax_extra_body,
         build_parallel_parser,
         compute_start_hour_offset,
         detect_oasis_platform,
@@ -1202,17 +1204,20 @@ def resolve_model_runtime_settings(model_name: str) -> Dict[str, Any]:
 
 def create_model(config: Dict[str, Any], use_boost: bool = False):
     """
-    Create LLM model
+    Create an LLM model using the configured provider and runtime settings.
     
-    Support dual LLM configuration for acceleration during parallel simulation：
-    - Common configuration：LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME
-    - Acceleration configuration (optional)：LLM_BOOST_API_KEY, LLM_BOOST_BASE_URL, LLM_BOOST_MODEL_NAME
+    Parameters:
+        config (Dict[str, Any]): Simulation configuration, including an optional
+            ``llm_model`` override.
+        use_boost (bool): Whether to use the optional acceleration-provider
+            configuration when available.
     
-    If acceleration LLM is configured, different platforms can use different API providers during parallel simulation to improve concurrency.
+    Returns:
+        The configured LLM model instance.
     
-    Args:
-        config: Simulation configuration dictionary
-        use_boost: Whether to use acceleration LLM configuration (if available)
+    Raises:
+        ValueError: If an OpenAI-compatible provider is selected without an API
+            key.
     """
     # Check if acceleration configuration exists
     boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
@@ -1267,7 +1272,20 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         # tool turn.  Route directly via CAMEL's GeminiModel instead.
         # Auth: GOOGLE_API_KEY (not OPENAI_API_KEY).
         # Do NOT set OPENAI_BASE_URL — it would break CAMEL's Gemini backend.
-        os.environ["GOOGLE_API_KEY"] = llm_api_key or os.environ.get("GOOGLE_API_KEY", "")
+        # Praezedenz wie beim urspruenglichen GOOGLE_API_KEY: der aufgeloeste
+        # llm_api_key (aus Store/Route via LLM_API_KEY injiziert) ist massgeblich;
+        # ambientes GEMINI_/GOOGLE_API_KEY nur als Fallback.
+        _gemini_key = (
+            llm_api_key
+            or os.environ.get("GEMINI_API_KEY", "")
+            or os.environ.get("GOOGLE_API_KEY", "")
+        )
+        os.environ["GOOGLE_API_KEY"] = _gemini_key
+        # CAMELs GeminiModel liest GEMINI_API_KEY (nicht GOOGLE_API_KEY).
+        # Der Backend-Spawner injiziert den Store-Key bereits als GEMINI_API_KEY
+        # (build_route_subprocess_env); dieser Fallback deckt den Standalone-/
+        # Dev-Pfad ab, in dem nur LLM_API_KEY/GOOGLE_API_KEY gesetzt ist.
+        os.environ["GEMINI_API_KEY"] = _gemini_key
         return ModelFactory.create(
             model_platform=ModelPlatformType.GEMINI,
             model_type=llm_model,
@@ -1297,8 +1315,10 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         )
 
     else:
-        # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, etc.
-        # No extra_body: think/num_ctx are Ollama-only and would 400 here.
+        # OPENAI — real OpenAI, Anthropic compat gateways, Qwen Cloud, MiniMax, etc.
+        # Ollama-only think/num_ctx bleiben aus (400 sonst). Einzige Ausnahme:
+        # MiniMax (api.minimax.io) akzeptiert ein eigenes `thinking`-Feld (Spec),
+        # das build_minimax_extra_body ausschliesslich fuer MiniMax-Routen setzt.
         if llm_api_key:
             os.environ["OPENAI_API_KEY"] = llm_api_key
 
@@ -1311,6 +1331,12 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
             os.environ["OPENAI_BASE_URL"] = llm_base_url
             os.environ["OPENAI_API_BASE"] = llm_base_url
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
+
+        minimax_extra = build_minimax_extra_body(
+            model=llm_model, base_url=llm_base_url, think=think_on
+        )
+        if minimax_extra:
+            model_cfg["extra_body"] = minimax_extra
 
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
