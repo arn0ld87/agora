@@ -55,16 +55,16 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Nach Issue #739 wurden zwei maskierte Bugs repariert (Alpine-CDN-Egress-Block + Onboarding-Guard-Redirect im AiModelPicker-Smoke); alle sechs Kern-Smokes liefen am 19.07.2026 auf Commit `32bad751` in drei aufeinanderfolgenden `pull_request`/`workflow_dispatch`-Runs grün (IDs `29691168025`, `29691166308`, `29691165639`). Der `pull_request`-Trigger ist reaktiviert. Weitere Läufe sind nötig, bevor die Required-Erzwingung freigegeben wird.
+Der Stack bootet im GitHub-Runner. Nach Issue #739 wurden zwei maskierte Bugs repariert (Alpine-CDN-Egress-Block + Onboarding-Guard-Redirect im AiModelPicker-Smoke); die sechs Kern-Smokes laufen auf Commit `e6f86112` in `workflow_dispatch` grün (`29691904520`, `29692157673`). Ein `pull_request`-Lauf (`29691887993`) zeigte Golden-Gate-axe-Asserts rot, ohne Codebezug — das ist PR-Runner-Last, nicht Reproducer. Wir warten auf einen weiteren `pull_request`-Lauf vor der Squash-Merge-Entscheidung. Der `pull_request`-Trigger bleibt aktiviert.
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
-| Health | grün (3/3 Läufe, 19.07.2026) | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | grün (3/3 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
-| Minimalreport | grün (3/3 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
-| Report-Modi | grün (3/3 Läufe, 19.07.2026) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
-| Golden-Gate Accessibility | grün (3/3 Läufe, 19.07.2026) | Tertiär- und Statusfarben auf WCAG AA gehärtet, Form-Controls beschriftet und axe erst nach dem Route-Fade ausgeführt |
-| AiModelPicker | grün (3/3 Läufe, 19.07.2026) | Root Cause war harden-runner-Egress-Block auf `dl-cdn.alpinelinux.org`/`dl-4.alpinelinux.org` plus Onboarding-Guard-Redirect in CI; beides gefixt (PR #781) |
+| Health | grün (4 Läufe auf `32bad751`/`e6f86112`, 19.07.2026) | Stack, Auth und Provider-Seeding funktionieren |
+| Upload + Graph | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
+| Minimalreport | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
+| Report-Modi | grün (4 Läufe, 19.07.2026) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
+| Golden-Gate Accessibility | grün in 3 `workflow_dispatch`-Läufen, **rot in 1 `pull_request`-Lauf** (`29691887993`) | Axe-A11y-Asserts (color-contrast auf Dashboard + LLM-Providers-Settings). Nach Cross-Check kein Code-Bezug — vermutlich PR-Runner-Last; Folge-PR-Lauf offen |
+| AiModelPicker | grün (4 Läufe, 19.07.2026) | Root Cause war harden-runner-Egress-Block auf `dl-cdn.alpinelinux.org`/`dl-4.alpinelinux.org` plus Onboarding-Guard-Redirect in CI; beides gefixt (PR #781) |
 
 Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
 
