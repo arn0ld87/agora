@@ -104,12 +104,14 @@ Fehlen wesentliche Angaben, ergänze zuerst das Issue oder stoppe mit einem konk
   - <betroffen oder keine>
 - Tests zuerst:
   - <exakte Testpfade und erwartetes RED>
+- Issue-Test-Befehl:
+  - `<exakter, erneut ausführbarer Befehl>`
 - Akzeptanz:
   - <exakte Befehle und erwartete Ergebnisse>
-- Gate:
+- Gate-Scope:
   - <backend | frontend | schemas | vollständig>
 - Dokumentation:
-  - <STATUS, ROADMAP, CHANGELOG oder keine mit Begründung>
+  - <STATUS, ROADMAP, CHANGELOG, Folge-Issue oder keine mit Begründung>
 - Stop-Bedingungen:
   - Scope-Drift, unklare Spec, rote Tests oder Gate-Fehler
 - Implementer: <passender Subagent>
@@ -138,10 +140,21 @@ Der Implementer muss:
 - im automatisch isolierten Worktree arbeiten,
 - nur den definierten Slice implementieren,
 - Tests zuerst schreiben oder anpassen,
-- das passende Gate ausführen,
+- den Issue-Test aus dem Briefing mit GREEN abschließen,
+- vor dem lokalen Commit Contract-Tests, Schema-Check, Ruff und mypy exakt in dieser Reihenfolge mit Exit 0 ausführen:
+
+  ```bash
+  cd backend
+  uv run pytest tests/contracts/ -x -q
+  uv run python -m app.contracts.dump_schemas --check
+  uv run ruff check app/ tests/
+  uv run mypy app
+  ```
+
+- anschließend genau das im Briefing benannte Scope-Gate ausführen,
 - nur Scope-Dateien explizit stagen,
-- genau einen lokalen Commit erzeugen,
-- Commit-SHA, Diff-Statistik und vollständige Testergebnisse zurückgeben,
+- erst nach erfolgreichem Abschluss aller Prüfungen genau einen lokalen Commit erzeugen,
+- Commit-SHA, Diff-Statistik sowie vollständige Issue-Test-, Pflichtprüfungs- und Gate-Ausgaben zurückgeben,
 - nicht pushen, mergen oder einen PR erstellen.
 
 ## Schritt 7: Ergebnis selbst verifizieren
@@ -152,18 +165,39 @@ Vertraue der Worker-Zusammenfassung nicht. Prüfe frisch:
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
+git status --short
 ```
 
-Führe zusätzlich die Issue-Tests und das passende Gate frisch aus:
+Führe danach den im Briefing festgelegten Issue-Test frisch aus:
 
 ```bash
-bash scripts/pre-push-gate.sh backend
-bash scripts/pre-push-gate.sh frontend
-bash scripts/pre-push-gate.sh schemas
-bash scripts/pre-push-gate.sh
+<ISSUE_TEST_COMMAND>
 ```
 
-Nutze nur das passende Scope-Gate; bei Cross-Layer-Änderungen das vollständige Gate. Bei Fehlern stoppen. Kein kosmetisches Grünmachen.
+Wähle anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad:
+
+```bash
+case "<GATE_SCOPE>" in
+  backend)
+    bash scripts/pre-push-gate.sh backend
+    ;;
+  frontend)
+    bash scripts/pre-push-gate.sh frontend
+    ;;
+  schemas)
+    bash scripts/pre-push-gate.sh schemas
+    ;;
+  vollständig)
+    bash scripts/pre-push-gate.sh
+    ;;
+  *)
+    echo "Unbekannter Gate-Scope: <GATE_SCOPE>" >&2
+    exit 2
+    ;;
+esac
+```
+
+Der Issue-Test und das ausgewählte Gate müssen jeweils Exit 0 liefern. Bewahre beide vollständigen Ausgaben für Schritt 8 auf. Bei einem Fehler stoppen. Kein kosmetisches Grünmachen und keine unbedingte Ausführung aller Scope-Gates.
 
 ## Schritt 8: Opus-Review
 
@@ -184,7 +218,7 @@ Bei `REQUEST_CHANGES`:
 1. keinen Push und keinen PR erstellen,
 2. Blocker an denselben Implementer mit engem Korrekturbriefing zurückgeben,
 3. höchstens einen Korrekturlauf erlauben,
-4. Tests und Gate erneut frisch ausführen,
+4. Tests und genau das passende Gate erneut frisch ausführen,
 5. Opus erneut reviewen lassen.
 
 Bleibt das Urteil negativ, stoppe mit einem konkreten Bericht.
@@ -216,7 +250,9 @@ git push -u origin <branch>
 - <bewusst ausgelagert>
 
 ## Tests
-- `<Befehl>` — PASS
+- `<Issue-Test-Befehl>` — PASS
+- Contract-Tests → Schema-Check → Ruff → mypy — PASS
+- `scripts/pre-push-gate.sh <Scope>` — PASS
 
 ## Review
 - `agora-opus-reviewer` — APPROVE
@@ -229,7 +265,10 @@ Nach erfolgreicher Umsetzung:
 - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
 - `ROADMAP.md` nur bei Änderung eines Release-Gates oder der strategischen Reihenfolge,
 - `CHANGELOG.md` bei ausgeliefertem Nutzer- oder Betriebsverhalten,
+- ein Folge-Issue für notwendige, aber im Slice nicht erledigte Arbeit,
 - Issue durch den PR mit `Closes #<NR>` verknüpfen.
+
+Dokumentiere für `docs/STATUS.md`, `ROADMAP.md`, `CHANGELOG.md` und Folge-Issue jeweils: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
 
 ## Abschlussausgabe
 
@@ -239,9 +278,11 @@ Nach erfolgreicher Umsetzung:
 - Issue: #<NR>
 - Worker: <Agent>
 - Commit: `<SHA>`
-- Tests: PASS
+- Issue-Test: PASS
+- Pflichtprüfungen: PASS
 - Gate: PASS
 - Opus: APPROVE
 - Draft-PR: <URL>
+- Dokumentationssync: <Nachweis>
 - Verbleibende Risiken: keine
 ```
