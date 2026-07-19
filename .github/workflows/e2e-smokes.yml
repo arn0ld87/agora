@@ -3,6 +3,10 @@ name: e2e-smokes
 on:
   push:
     branches: [main]
+  # Reaktiviert nach Issue #739: alle sechs Smokes sind stabil grün.
+  # Als Required Check konfigurierbar — siehe docs/runbooks/e2e-required-check.md.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '0 3 * * *'
