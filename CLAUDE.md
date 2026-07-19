@@ -49,20 +49,32 @@ Zwei Issues dürfen nur parallel laufen, wenn:
 
 Bei Unsicherheit nur ein Issue ausführen. Maximal zwei schreibende Worker gleichzeitig.
 
-## Pre-Commit-Gate (Pflicht, sequentiell)
+## Pre-Commit-Gate (Pflicht, sequentiell, scope-abhängig)
+
+Backend-, Schemas- und Cross-Layer-Scope, sequentiell mit Exit 0:
 
 ```bash
 cd backend && uv run pytest tests/contracts/ -x -q
 cd backend && uv run python -m app.contracts.dump_schemas --check
-cd backend && uv run ruff check . && uv run mypy app
+cd backend && uv run ruff check app/ tests/ && uv run mypy app
 ```
+
+Reiner Frontend-Scope führt diese Backend-Prüfungen nicht aus, sondern:
+
+```bash
+cd frontend && bun run test && bun run check
+```
+
+Maßgeblich ist die Scope-Matrix in [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md).
 
 Bei Schema-Drift: `dump_schemas` ohne `--check` neu rendern, in denselben Issue-Commit aufnehmen.
 
 ## Pre-Push-Gate (CI-Mirror, vor jedem Push Pflicht)
 
+Genau ein zum Scope passender Pfad — nicht alle:
+
 ```bash
-bash scripts/pre-push-gate.sh              # alles (Default)
+bash scripts/pre-push-gate.sh              # Cross-Layer / vollständig
 bash scripts/pre-push-gate.sh backend      # nur Backend-Smoke
 bash scripts/pre-push-gate.sh frontend     # nur Frontend-Smoke
 bash scripts/pre-push-gate.sh schemas      # nur Schema-Drift + STATUS-Sync

@@ -166,10 +166,17 @@ git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
 worktree_status="$(git status --short)"
-test -z "$worktree_status"
+
+if [ -n "$worktree_status" ]; then
+  printf '%s\n' "$worktree_status"
+  echo "Worktree enthält uncommittete Änderungen." >&2
+  exit 1
+fi
 ```
 
-Führe danach den im Briefing festgelegten Issue-Test frisch aus und bewahre die vollständige Ausgabe auf:
+Ein nicht-leerer Status blockiert den Ablauf sofort. Tests, Gate und Opus-Review laufen ausschließlich bei sauberem Worktree weiter — nur so ist garantiert, dass exakt der Inhalt von `<COMMIT_SHA>` geprüft und später gepusht wird.
+
+Führe danach den im Briefing festgelegten Issue-Test frisch aus, speichere die vollständige Ausgabe und prüfe den echten Exit-Code über `PIPESTATUS`:
 
 ```bash
 <ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
@@ -177,30 +184,36 @@ test_rc=${PIPESTATUS[0]}
 test "$test_rc" -eq 0
 ```
 
-Wähle anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad:
+Ein fehlgeschlagener Issue-Test stoppt den Ablauf sofort. `PASS` darf nur bei Exit-Code 0 gemeldet werden, und `<ISSUE_TEST_LOG>` wird in Schritt 8 an den Opus-Reviewer übergeben.
+
+Wähle anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad und speichere dessen Ausgabe nach demselben Muster:
 
 ```bash
-case "<GATE_SCOPE>" in
-  backend)
-    bash scripts/pre-push-gate.sh backend
-    ;;
-  frontend)
-    bash scripts/pre-push-gate.sh frontend
-    ;;
-  schemas)
-    bash scripts/pre-push-gate.sh schemas
-    ;;
-  vollständig)
-    bash scripts/pre-push-gate.sh
-    ;;
-  *)
-    echo "Unbekannter Gate-Scope: <GATE_SCOPE>" >&2
-    exit 2
-    ;;
-esac
+{
+  case "<GATE_SCOPE>" in
+    backend)
+      bash scripts/pre-push-gate.sh backend
+      ;;
+    frontend)
+      bash scripts/pre-push-gate.sh frontend
+      ;;
+    schemas)
+      bash scripts/pre-push-gate.sh schemas
+      ;;
+    vollständig)
+      bash scripts/pre-push-gate.sh
+      ;;
+    *)
+      echo "Unbekannter Gate-Scope: <GATE_SCOPE>" >&2
+      exit 2
+      ;;
+  esac
+} 2>&1 | tee <GATE_LOG>
+gate_rc=${PIPESTATUS[0]}
+test "$gate_rc" -eq 0
 ```
 
-Der Issue-Test und das ausgewählte Gate müssen jeweils Exit 0 liefern. Bewahre beide vollständigen Ausgaben für Schritt 8 auf. Bei einem Fehler stoppen. Kein kosmetisches Grünmachen und keine unbedingte Ausführung aller Scope-Gates.
+Der Issue-Test und das ausgewählte Gate müssen jeweils Exit 0 liefern. Beide vollständigen Ausgaben (`<ISSUE_TEST_LOG>` und `<GATE_LOG>`) werden für Schritt 8 aufbewahrt und dort übergeben. Bei einem Fehler stoppen. Kein kosmetisches Grünmachen und keine unbedingte Ausführung aller Scope-Gates.
 
 ## Schritt 8: Opus-Review
 
@@ -228,7 +241,18 @@ Bleibt das Urteil negativ, stoppe mit einem konkreten Bericht.
 
 ## Schritt 9: Dokumentationssynchronisation abschließen
 
-Prüfe vor Push und PR, ob im selben Slice sachlich korrekt abgebildet sind:
+Der Dokumentationssync findet zwingend **vor** Push und Draft-PR statt. Verbindliche Reihenfolge des gesamten Ablaufs:
+
+1. Worker-Commit prüfen (Schritt 7),
+2. frische Issue-Tests ausführen (Schritt 7),
+3. passendes Gate ausführen (Schritt 7),
+4. Opus-Review (Schritt 8),
+5. Dokumentationssync prüfen (dieser Schritt),
+6. bei fehlender Dokumentation: Korrekturlauf mit Amend und vollständiger Wiederholung von Schritt 7 und 8,
+7. erst danach pushen (Schritt 10),
+8. Draft-PR erstellen (Schritt 10).
+
+Prüfe, ob im selben Slice sachlich korrekt abgebildet sind:
 
 - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
 - `ROADMAP.md` nur bei Änderung eines Release-Gates oder der strategischen Reihenfolge,
@@ -238,7 +262,14 @@ Prüfe vor Push und PR, ob im selben Slice sachlich korrekt abgebildet sind:
 
 Dokumentiere für jedes Artefakt `aktualisiert` oder `NICHT BETROFFEN` mit Begründung.
 
-Ist ein erforderliches Dokumentationsartefakt sachlich betroffen, aber nicht im Commit enthalten, darf nicht gepusht werden. Gib das Issue einmalig an denselben Implementer zurück, lasse den bestehenden lokalen Commit amendieren und wiederhole für den neuen Commit-SHA Schritt 7 (Ergebnis selbst verifizieren) und Schritt 8 (Opus-Review) vollständig. Erst nach erneutem `APPROVE` darf das Issue weiter zu Schritt 10.
+Ist ein erforderliches Dokumentationsartefakt sachlich betroffen, aber nicht im Commit enthalten, darf nicht gepusht werden. Dann gilt:
+
+1. das Issue einmalig an denselben Implementer zurückgeben,
+2. den bestehenden Issue-Commit amendieren statt einen zweiten Commit zu erzeugen,
+3. den neuen Commit-SHA erfassen,
+4. Schritt 7 (Verifikation, frische Tests, Gate) und Schritt 8 (Opus-Review) für diesen neuen SHA vollständig erneut ausführen.
+
+Erst nach erneutem `APPROVE` darf das Issue weiter zu Schritt 10.
 
 Erzeuge notwendige Folge-Issues vor dem Draft-PR und verlinke sie im PR-Body.
 

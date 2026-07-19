@@ -48,43 +48,74 @@ def test_plan_total_must_match_sum():
 2. Gezielten Test schreiben und RED nachweisen.
 3. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
 4. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
-5. Vor jedem Commit die passenden Pflichtprüfungen abhängig vom im Briefing benannten Gate-Scope exakt in dieser Reihenfolge und mit Exit 0 ausführen:
-
-   - **Backend-Scope** (Backend-Code, FSM, Backend-E2E-Tests):
-
-     ```bash
-     cd backend
-     uv run pytest tests/contracts/ -x -q
-     uv run python -m app.contracts.dump_schemas --check
-     uv run ruff check app/ tests/
-     uv run mypy app
-     ```
-
-   - **Frontend-Scope**:
-
-     ```bash
-     cd frontend
-     bun run check
-     bun run test
-     ```
-
-   - **Cross-Layer oder vollständig**:
-
-     ```bash
-     cd backend
-     uv run pytest tests/contracts/ -x -q
-     uv run python -m app.contracts.dump_schemas --check
-     uv run ruff check app/ tests/
-     uv run mypy app
-     cd ../frontend
-     bun run check
-     bun run test
-     ```
-
-6. Danach genau das im Briefing benannte zentrale Scope-Gate ausführen: `backend`, `frontend`, `schemas` oder bei Cross-Layer-Änderungen vollständig.
+5. Vor dem Commit **ausschließlich** die Prüfungen des im Briefing benannten Gate-Scopes ausführen, exakt in der angegebenen Reihenfolge und jeweils mit Exit 0. Der Briefing-Scope ist verbindlich; Prüfungen fremder Layer werden nicht ausgeführt.
+6. Genau **einen** dazu passenden Gate-Pfad ausführen — niemals mehrere.
 7. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
 
-Ein fehlender Befehl, ein nicht nachvollziehbarer Exit-Code oder ein Fehler in einer der Prüfungen blockiert den Commit. Kein `--no-verify` und kein kosmetisches Grünmachen.
+### Scope-Matrix
+
+| Gate-Scope | Pflichtprüfungen vor dem Commit | Gate (genau einer) |
+|---|---|---|
+| `backend` | gezielte Backend-Tests → Contract-Tests → Schema-Check → Ruff → mypy | `bash scripts/pre-push-gate.sh backend` |
+| `frontend` | gezielte Frontend-Tests → `bun run check` | `bash scripts/pre-push-gate.sh frontend` |
+| `schemas` | Contract-Tests → Schema-Check | `bash scripts/pre-push-gate.sh schemas` |
+| `fsm-e2e` | die im Briefing benannten FSM-/E2E-Tests | das im Briefing benannte sachlich passende Gate: `backend`, `frontend` oder vollständig |
+| `vollständig` | gezielte Tests **aller** betroffenen Layer, danach die Backend- und Frontend-Prüfungen | `bash scripts/pre-push-gate.sh` |
+
+**Backend-Scope**
+
+```bash
+cd backend
+uv run pytest <ISSUE_TEST_PFADE> -x -q
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
+uv run ruff check app/ tests/
+uv run mypy app
+bash ../scripts/pre-push-gate.sh backend
+```
+
+**Frontend-Scope** — keine Backend-Prüfungen, kein `cd backend`:
+
+```bash
+cd frontend
+bun run test <ISSUE_TEST_PFADE>
+bun run check
+bash ../scripts/pre-push-gate.sh frontend
+```
+
+**Schemas-/Contracts-Scope**
+
+```bash
+cd backend
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
+bash ../scripts/pre-push-gate.sh schemas
+```
+
+**FSM-/E2E-Scope** — die im Briefing benannten Tests, danach genau das dort benannte Gate:
+
+```bash
+<FSM_E2E_TEST_COMMAND>
+bash scripts/pre-push-gate.sh <backend|frontend>   # oder ohne Argument bei Cross-Layer
+```
+
+**Cross-Layer / vollständig**
+
+```bash
+cd backend
+uv run pytest <BETROFFENE_BACKEND_TESTS> -x -q
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
+uv run ruff check app/ tests/
+uv run mypy app
+cd ../frontend
+bun run test <BETROFFENE_FRONTEND_TESTS>
+bun run check
+cd ..
+bash scripts/pre-push-gate.sh
+```
+
+Ein fehlender Befehl, ein nicht nachvollziehbarer Exit-Code oder ein Fehler in einer der Prüfungen blockiert den Commit. Der Commit entsteht erst, wenn **alle** für den Scope erforderlichen Prüfungen und das eine Gate Exit 0 geliefert haben. Ist der Gate-Scope im Briefing nicht benannt oder unklar: stoppen und nachfragen, nicht raten. Kein `--no-verify` und kein kosmetisches Grünmachen.
 
 ## Acceptance pro Test-Commit
 
@@ -106,11 +137,11 @@ Ein fehlender Befehl, ein nicht nachvollziehbarer Exit-Code oder ein Fehler in e
 
 Liefere immer:
 
-1. Issue und Test-Scope,
+1. Issue, Test-Scope und den verwendeten Gate-Scope,
 2. RED-Nachweis,
 3. Commit-SHA,
 4. geänderte Dateien,
 5. GREEN-Ausgabe des Issue-Tests,
-6. Ausgaben und Exit-Codes der vier sequenziellen Pflichtprüfungen,
-7. Ausgabe und Exit-Code des zentralen Scope-Gates,
+6. Ausgaben und Exit-Codes **aller** für den Gate-Scope erforderlichen Pflichtprüfungen,
+7. Ausgabe und Exit-Code des einen ausgeführten Gates,
 8. verbleibende Risiken oder `keine`.

@@ -93,7 +93,17 @@ Der Worker:
 2. schreibt oder ändert Tests zuerst,
 3. implementiert nur den definierten Slice,
 4. führt den gezielten Issue-Test bis GREEN aus,
-5. führt vor dem lokalen Commit die vier Pflichtprüfungen exakt in dieser Reihenfolge aus:
+5. führt vor dem lokalen Commit **ausschließlich** die Pflichtprüfungen des im Briefing benannten Gate-Scopes aus, exakt in dieser Reihenfolge:
+
+   | Gate-Scope | Pflichtprüfungen | Gate (genau einer) |
+   |---|---|---|
+   | `backend` | gezielte Backend-Tests → Contract-Tests → Schema-Check → Ruff → mypy | `pre-push-gate.sh backend` |
+   | `frontend` | gezielte Frontend-Tests → `bun run check` | `pre-push-gate.sh frontend` |
+   | `schemas` | Contract-Tests → Schema-Check | `pre-push-gate.sh schemas` |
+   | `fsm-e2e` | die im Briefing benannten FSM-/E2E-Tests | das im Briefing benannte passende Gate |
+   | `vollständig` | gezielte Tests aller betroffenen Layer, danach Backend- und Frontend-Prüfungen | `pre-push-gate.sh` |
+
+   Backend-Pflichtprüfungen im Wortlaut:
 
    ```bash
    cd backend
@@ -103,7 +113,9 @@ Der Worker:
    uv run mypy app
    ```
 
-6. führt anschließend genau das passende Scope-Gate aus,
+   Für reine Frontend-Aufgaben werden keine Backend-Prüfungen ausgeführt.
+
+6. führt anschließend genau **ein** dazu passendes Scope-Gate aus,
 7. synchronisiert sachlich betroffene Dokumentationsartefakte im selben Slice,
 8. staged nur Scope-Dateien,
 9. erzeugt erst nach Exit 0 aller Prüfungen genau einen lokalen Commit,
@@ -120,12 +132,30 @@ Der Lead prüft frisch:
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
-git status --short
+
+worktree_status="$(git status --short)"
+
+if [ -n "$worktree_status" ]; then
+  printf '%s\n' "$worktree_status"
+  echo "Worktree enthält uncommittete Änderungen." >&2
+  exit 1
+fi
 ```
 
-Danach läuft der im Briefing festgelegte Issue-Test erneut. Anschließend wird abhängig vom Scope genau ein Gate ausgeführt:
+Ein nicht-leerer Worktree blockiert den Ablauf sofort. Tests, Gate und Opus-Review laufen nur bei sauberem Worktree, damit exakt der Inhalt von `<COMMIT_SHA>` geprüft und später gepusht wird.
+
+Danach läuft der im Briefing festgelegte Issue-Test erneut, mit `tee` gesichert und über `PIPESTATUS` geprüft:
 
 ```bash
+<ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
+test_rc=${PIPESTATUS[0]}
+test "$test_rc" -eq 0
+```
+
+Anschließend wird abhängig vom Scope genau ein Gate ausgeführt und ebenso gesichert:
+
+```bash
+{
 case "<GATE_SCOPE>" in
   backend)
     bash scripts/pre-push-gate.sh backend
@@ -143,6 +173,9 @@ case "<GATE_SCOPE>" in
     exit 2
     ;;
 esac
+} 2>&1 | tee <GATE_LOG>
+gate_rc=${PIPESTATUS[0]}
+test "$gate_rc" -eq 0
 ```
 
 Issue-Test und Gate müssen Exit 0 liefern. Der Lead übergibt ihre vollständigen, frisch erzeugten Ausgaben an den Reviewer. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop und keine unbedingte Ausführung aller Scope-Gates.
