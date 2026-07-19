@@ -47,14 +47,26 @@ def _profile(provider: str, base_url: str, *, api_key: str | None, model: str = 
     )
 
 
-def _conn(connection_id: str, provider_kind: str, base_url: str, *, enabled: bool = True):
+_UNSET = object()
+
+
+def _conn(
+    connection_id: str,
+    provider_kind: str,
+    base_url: str,
+    *,
+    enabled: bool = True,
+    auth_mode: str = "api_key",
+    secret_ref=_UNSET,
+):
     """Baut ein connection-artiges Objekt (nur die von der Factory gelesenen Felder)."""
     return SimpleNamespace(
         id=connection_id,
         provider_kind=provider_kind,
         base_url=base_url,
         enabled=enabled,
-        secret_ref=connection_id,
+        auth_mode=auth_mode,
+        secret_ref=connection_id if secret_ref is _UNSET else secret_ref,
     )
 
 
@@ -186,4 +198,48 @@ def test_matching_provider_kind_rejects_mismatched_profile_endpoint():
             profile,
             connections=[_conn("openai", "openai", "https://api.openai.com/v1")],
             secrets={"openai": "sk-proj-echt"},
+        )
+
+
+def test_local_no_auth_connection_keeps_route_without_secret():
+    """Eine aufgelöste No-Auth-Connection (auth_mode='none') liefert die autoritative
+    Route (connection_id + base_url) ohne Secret — kein ValueError, kein Dummy-Key-Zwang,
+    und die connection_id geht NICHT verloren."""
+    profile = _profile("custom", "http://localhost:11434", api_key=None)
+    kwargs = _build(
+        profile,
+        connections=[
+            _conn(
+                "ollama-local",
+                "ollama",
+                "http://localhost:11434",
+                auth_mode="none",
+                secret_ref=None,
+            )
+        ],
+        secrets={},
+    )
+    assert kwargs["route_provider_id"] == "ollama-local"
+    assert kwargs["api_key_source"] == "local_no_auth"
+    assert kwargs["base_url"] == "http://localhost:11434"
+
+
+def test_api_key_connection_without_secret_raises_instead_of_dummy_key():
+    """Eine api_key-Connection ohne hinterlegtes Secret darf NICHT auf den Dummy-Key
+    'ollama' zurückfallen — auch nicht bei lokalem Endpunkt. Der Hostname ist kein
+    Authentifizierungsmodell; maßgeblich ist der explizite auth_mode."""
+    profile = _profile("custom", "http://localhost:11434", api_key=None)
+    with pytest.raises(ValueError, match="api_key fehlt"):
+        _build(
+            profile,
+            connections=[
+                _conn(
+                    "local-secured",
+                    "ollama",
+                    "http://localhost:11434",
+                    auth_mode="api_key",
+                    secret_ref="local-secured",
+                )
+            ],
+            secrets={},  # secret_ref zeigt ins Leere
         )

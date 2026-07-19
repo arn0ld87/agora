@@ -115,10 +115,25 @@ def resolve_profile_connection(
             if connection.provider_kind in compatible_kinds
         ]
 
-    for connection in candidates:
-        base_url = canonical_connection_base_url(connection)
-        if base_url and normalize_endpoint_url(base_url) == profile_endpoint:
-            return ResolvedProfileConnection(connection, base_url)
+    # Alle Endpunkt-Treffer sammeln und genau einen verlangen. Bei mehreren
+    # aktivierten Connections mit demselben normalisierten Endpunkt darf nicht
+    # still der erste Store-Eintrag gewinnen (Secret-Roulette) — das ist
+    # mehrdeutig und muss mit einer eindeutigen Fehlermeldung abbrechen.
+    matches = [
+        ResolvedProfileConnection(connection, base_url)
+        for connection in candidates
+        if (base_url := canonical_connection_base_url(connection))
+        and normalize_endpoint_url(base_url) == profile_endpoint
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"LLM-Profil {profile.id!r}: mehrdeutiger Profil-Endpunkt "
+            f"{profile.base_url!r} — {len(matches)} aktivierte ProviderConnections "
+            f"teilen denselben Endpunkt ({', '.join(m.connection.id for m in matches)}); "
+            "genau eine erwartet"
+        )
 
     if candidates and profile.provider != PROVIDER_CUSTOM:
         raise ValueError(

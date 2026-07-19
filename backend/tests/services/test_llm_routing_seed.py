@@ -145,6 +145,69 @@ def test_profile_id_expands_to_a_secret_free_stage_route(mock_run_dir, monkeypat
 
 
 @patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_local_no_auth_profile_route_omits_secret_binding(mock_run_dir, monkeypatch, tmp_path):
+    """No-Auth-Connections (auth_mode='none') dürfen NICHT per connection_only an ein
+    nicht existentes Secret gebunden werden. Sonst liefert die strikte Auflösung
+    ``None`` und der Run bricht mit 'LLM_API_KEY not configured' — lokales Ollama
+    (Agoras Kern-Betriebsmodell) bliebe gebrochen. Die Auth-Semantik der
+    ProviderConnection ist maßgeblich, nicht ein pauschales connection_only."""
+    run_id = "run_local_noauth"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    now = datetime.now(UTC)
+    profile = LlmProfile(
+        id="profile-ollama",
+        name="Local Ollama",
+        provider="custom",
+        base_url="http://localhost:11434",
+        model_name="qwen3:8b",
+        api_key=None,
+        created_at=now,
+        updated_at=now,
+    )
+    profile_store = MagicMock()
+    profile_store.get.return_value = profile
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [
+        ProviderConnection(
+            id="ollama-local",
+            provider_kind="ollama",
+            display_name="Local Ollama",
+            transport="http",
+            auth_mode="none",
+            base_url="http://localhost:11434",
+            secret_ref=None,
+        )
+    ]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_profiles_store",
+        lambda: profile_store,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    config = seed_run_stage_routing(
+        run_id,
+        "graph_build",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        llm_profile_id="profile-ollama",
+    )
+
+    route = config.stage_overrides["graph_build"]
+    assert route.provider_id == "ollama-local"
+    assert route.model == "qwen3:8b"
+    assert route.provider_options == {"base_url": "http://localhost:11434"}
+    assert "connection_only" not in route.provider_options
+    assert "secret_ref" not in route.provider_options
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
 def test_explicit_runtime_route_wins_without_reading_the_profile(mock_run_dir, monkeypatch, tmp_path):
     run_id = "run_explicit_over_profile"
     run_dir = tmp_path / "runs" / run_id

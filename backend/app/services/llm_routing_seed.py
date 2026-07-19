@@ -119,14 +119,21 @@ def seed_run_stage_routing(
                 f"LLM-Profil {llm_profile_id!r}: keine passende aktivierte "
                 "ProviderConnection"
             )
+        connection = resolved.connection
+        provider_options: dict[str, object] = {"base_url": resolved.base_url}
+        # Nur echte api_key-Connections an ihr gebundenes Secret koppeln. Lokale
+        # No-Auth-Connections (auth_mode="none") würden über connection_only sonst
+        # auf ein nicht existentes Secret zeigen; die strikte Auflösung liefert dann
+        # None und der Run bricht mit "LLM_API_KEY not configured" — das lokale
+        # Ollama-Betriebsmodell bliebe gebrochen. Die Auth-Semantik der
+        # ProviderConnection ist maßgeblich (SSoT), kein pauschales connection_only.
+        if connection.auth_mode == "api_key" and connection.secret_ref:
+            provider_options["secret_ref"] = connection.secret_ref
+            provider_options["connection_only"] = True
         config.stage_overrides[stage_id] = StageLLMRoute(
-            provider_id=resolved.connection.id,
+            provider_id=connection.id,
             model=profile.model_name,
-            provider_options={
-                "base_url": resolved.base_url,
-                "secret_ref": resolved.connection.secret_ref or resolved.connection.id,
-                "connection_only": True,
-            },
+            provider_options=provider_options,
         )
         if has_existing_config:
             config.routing_version += 1
