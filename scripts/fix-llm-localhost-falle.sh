@@ -47,14 +47,13 @@ fi
 
 echo "${BLUE}==> Localhost-Falle in $ENV_FILE fixen${RESET}"
 
-# Backup
-BACKUP="$ENV_FILE.bak"
-cp "$ENV_FILE" "$BACKUP"
-echo "${GREEN}  ✓ Backup unter $BACKUP${RESET}"
-
 # DEBUG_FIX=1 scannt die .env und gibt fuer jede LLM_-Zeile Key/Value/Match-Status aus,
 # OHNE die Datei zu aendern. Dient der Diagnose, warum der Helper NOOP sagt, obwohl
 # der Lint die Localhost-Falle findet.
+#
+# Reihenfolge bewusst VOR dem Backup: ein Diagnose-Lauf fasst die .env nicht an,
+# ein Backup waere ein toter Artefakt und wuerde ein bestehendes .env.bak
+# ueberschreiben, ohne dass es je einen echten Edit gegeben hat.
 if [[ "${DEBUG_FIX:-}" == "1" ]]; then
   DEBUG_PY=$(mktemp -t llm_debug.XXXXXX).py
   trap 'rm -f "$DEBUG_PY"' EXIT
@@ -86,8 +85,20 @@ for i, raw in enumerate(content.splitlines(), 1):
 print("=== END DEBUG-FIX ===", file=sys.stderr)
 PYEOF
   python3 "$DEBUG_PY" "$ENV_FILE" >&2
-  echo "${YELLOW}  (DEBUG_FIX=1: keine Aenderungen an .env)${RESET}"
+  echo "${YELLOW}  (DEBUG_FIX=1: keine Aenderungen an .env, kein Backup)${RESET}"
   exit 0
+fi
+
+# Backup idempotent — nur anlegen, wenn .env.bak noch nicht existiert.
+# Sonst wuerde jeder weitere Lauf das vorherige Backup ueberschreiben
+# und die cp-Recovery-Schnittstelle weiter unten verliert den
+# Pre-Fix-Zustand.
+BACKUP="$ENV_FILE.bak"
+if [[ ! -f "$BACKUP" ]]; then
+  cp "$ENV_FILE" "$BACKUP"
+  echo "${GREEN}  ✓ Backup unter $BACKUP${RESET}"
+else
+  echo "${YELLOW}  ✓ Backup existiert bereits unter $BACKUP (nicht ueberschrieben)${RESET}"
 fi
 
 FILTER_PY=$(mktemp -t llm_localhost_fix.XXXXXX).py
