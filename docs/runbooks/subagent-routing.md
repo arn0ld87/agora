@@ -76,8 +76,10 @@ Das Briefing enthält:
 - genaue Dateien, Symbole und Interfaces,
 - Scope und Out-of-Scope,
 - zuerst zu schreibende Tests,
+- einen exakt erneut ausführbaren Issue-Test-Befehl,
 - Migration und Rollback, falls Daten betroffen sind,
 - exakte Verifikationsbefehle,
+- genau einen Gate-Scope: `backend`, `frontend`, `schemas` oder `vollständig`,
 - zuständige Dokumentationsquelle,
 - Stop-Bedingungen.
 
@@ -90,11 +92,25 @@ Der Worker:
 1. bearbeitet genau ein Issue,
 2. schreibt oder ändert Tests zuerst,
 3. implementiert nur den definierten Slice,
-4. führt gezielte Tests und das passende Gate aus,
-5. staged nur Scope-Dateien,
-6. erzeugt genau einen lokalen Commit,
-7. liefert Commit-SHA, Diff-Statistik und Testausgaben zurück,
-8. pusht, mergt und erstellt keinen PR.
+4. führt den gezielten Issue-Test bis GREEN aus,
+5. führt vor dem lokalen Commit die vier Pflichtprüfungen exakt in dieser Reihenfolge aus:
+
+   ```bash
+   cd backend
+   uv run pytest tests/contracts/ -x -q
+   uv run python -m app.contracts.dump_schemas --check
+   uv run ruff check app/ tests/
+   uv run mypy app
+   ```
+
+6. führt anschließend genau das passende Scope-Gate aus,
+7. synchronisiert sachlich betroffene Dokumentationsartefakte im selben Slice,
+8. staged nur Scope-Dateien,
+9. erzeugt erst nach Exit 0 aller Prüfungen genau einen lokalen Commit,
+10. liefert Commit-SHA, Diff-Statistik sowie vollständige Issue-Test-, Pflichtprüfungs- und Gate-Ausgaben zurück,
+11. pusht, mergt und erstellt keinen PR.
+
+Ein fehlender Prüfbefehl, ein unklarer Exit-Code oder ein Fehler blockiert den Commit. Ruff-Autofixes dürfen niemals pauschal mit `uv run ruff check --fix .` über das Repository laufen.
 
 ### 4. Lead-Verifikation
 
@@ -104,23 +120,34 @@ Der Lead prüft frisch:
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
+git status --short
 ```
 
-Mindestens das passende Gate ausführen:
+Danach läuft der im Briefing festgelegte Issue-Test erneut. Anschließend wird abhängig vom Scope genau ein Gate ausgeführt:
 
 ```bash
-bash scripts/pre-push-gate.sh backend
-bash scripts/pre-push-gate.sh frontend
-bash scripts/pre-push-gate.sh schemas
+case "<GATE_SCOPE>" in
+  backend)
+    bash scripts/pre-push-gate.sh backend
+    ;;
+  frontend)
+    bash scripts/pre-push-gate.sh frontend
+    ;;
+  schemas)
+    bash scripts/pre-push-gate.sh schemas
+    ;;
+  vollständig)
+    bash scripts/pre-push-gate.sh
+    ;;
+  *)
+    exit 2
+    ;;
+esac
 ```
 
-Cross-Layer:
+Issue-Test und Gate müssen Exit 0 liefern. Der Lead übergibt ihre vollständigen, frisch erzeugten Ausgaben an den Reviewer. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop und keine unbedingte Ausführung aller Scope-Gates.
 
-```bash
-bash scripts/pre-push-gate.sh
-```
-
-Zusätzlich laufen die gezielten Tests aus dem Issue. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop.
+Bei zwei parallelen Issues werden Test und Gate in den jeweiligen Worktrees ausgeführt. Ein Fehler stoppt nur das betroffene Issue, sofern die nachgewiesene Unabhängigkeit des anderen Issues weiterhin gilt.
 
 ### 5. Opus-Review
 
@@ -137,16 +164,30 @@ Der Reviewer antwortet mit `APPROVE` oder `REQUEST_CHANGES`.
 
 Bei `REQUEST_CHANGES` ist höchstens ein enger Korrekturlauf erlaubt. Danach werden Tests, Gate und Review vollständig wiederholt. Ohne `APPROVE` gibt es keinen Push und keinen PR.
 
-### 6. Pull Request
+### 6. Dokumentationssync
 
-Nur nach `APPROVE` pusht der Lead den Issue-Branch und öffnet einen separaten Draft-PR.
+Vor Push und PR wird für jedes Issue nachgewiesen:
+
+- `docs/STATUS.md`: aktualisiert, wenn sich der verifizierte Istzustand geändert hat, sonst `NICHT BETROFFEN` mit Begründung,
+- `ROADMAP.md`: aktualisiert bei geändertem Release-Gate oder strategischer Reihenfolge, sonst `NICHT BETROFFEN` mit Begründung,
+- `CHANGELOG.md`: aktualisiert bei ausgeliefertem Nutzer- oder Betriebsverhalten, sonst `NICHT BETROFFEN` mit Begründung,
+- Folge-Issue: erstellt für notwendige, aber nicht erledigte Folgearbeit, sonst `NICHT BETROFFEN` mit Begründung.
+
+Fehlt ein sachlich erforderliches Datei-Artefakt, wird nicht gepusht. Der bestehende lokale Issue-Commit wird einmalig korrigiert und amendiert; danach laufen Lead-Verifikation und Opus-Review für den neuen SHA vollständig erneut.
+
+### 7. Pull Request
+
+Nur nach `APPROVE` und vollständigem Dokumentationssync pusht der Lead den Issue-Branch und öffnet einen separaten Draft-PR.
 
 Der Pull Request enthält:
 
 - Summary,
 - Release-Ziel,
 - Scope und Out-of-Scope,
-- Tests mit Ergebnis,
+- Issue-Test mit Ergebnis,
+- sequenzielle Pflichtprüfungen mit Ergebnis,
+- genau das ausgeführte Scope-Gate mit Ergebnis,
+- Dokumentationssync und Folge-Issues,
 - Opus-Review-Ergebnis,
 - Migration/Rollback, falls relevant,
 - `Closes #<Issue>` oder `Refs #<Issue>`.
@@ -161,5 +202,6 @@ Der Pull Request enthält:
 - Opus als Implementer verwenden,
 - Tests oder Reviews aus Kostengründen auslassen,
 - Worker-Output ungeprüft pushen,
+- alle Scope-Gates unabhängig vom Issue ausführen,
 - mehr als einen automatischen Korrekturlauf starten,
 - direkte Änderungen oder Fast-Forward-Pushes auf `main`.
