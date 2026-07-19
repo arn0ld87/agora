@@ -258,7 +258,16 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"ERROR reading canonical VERSION file: {exc}", file=sys.stderr)
             return 1
-        write_all(repo_root, write_target_version)
+        try:
+            write_all(repo_root, write_target_version)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR writing version {write_target_version!r}: {exc}", file=sys.stderr)
+            print(
+                "Some sources may already have been updated — inspect `git diff` "
+                "before committing.",
+                file=sys.stderr,
+            )
+            return 1
         print(f"OK: wrote version {write_target_version!r} to all non-canonical sources")
         return 0
 

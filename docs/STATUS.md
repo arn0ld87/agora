@@ -20,14 +20,14 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 | Root | `package.json` | 0.8.0 |
 <!-- END_AUTOGEN_VERSIONS -->
 
-Die Manifest-Versionen bilden noch den früheren, zu optimistischen Release-Stand ab. Ihre Synchronisierung mit `VERSION=0.8.0` sowie ein automatischer Drift-Check sind vor dem nächsten Tag erforderlich und werden als eigenes Issue geführt. Bis dahin ist `VERSION` die Produkt-SSoT.
+`VERSION` ist die Produkt-SSoT. Alle Komponentenmanifeste (`backend/pyproject.toml`, `package.json`, `frontend/package.json`) und der README-Badge sind auf `VERSION=0.8.0` synchronisiert; ein Drift-Check läuft in CI (`version-drift.yml`) und lokal (`pre-push-gate.sh schemas`). Der Version-Cut-Ablauf ist in [`docs/runbooks/release-versioning.md`](runbooks/release-versioning.md) beschrieben.
 
 ## Tests
 
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3374 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3383 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -125,7 +125,6 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
 - Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
 - `requirements.txt`, `pyproject.toml` und `uv.lock` sind nicht vollständig konsistent
-- Produkt- und Komponentenmanifest-Versionen sind noch nicht automatisiert synchronisiert
 
 ## Security und Betrieb
 
@@ -145,8 +144,7 @@ Aktuelle Hardstops:
 ## Nächste Prioritäten
 
 1. Sechs E2E-Smokes stabil grün machen und als PR-Gate aktivieren.
-2. Produkt- und Manifest-Versionen auf `0.8.0` synchronisieren und automatisiert prüfen.
-3. Vue-v4, Provider-/Routing-SSoT und Dependency-SSoT für `0.9.0` konsolidieren.
-4. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
+2. Vue-v4, Provider-/Routing-SSoT und Dependency-SSoT für `0.9.0` konsolidieren.
+3. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).
