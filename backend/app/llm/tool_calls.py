@@ -148,16 +148,16 @@ def _chat_with_tools(
     completion finish reason, and the raw provider response when available.
     
     Parameters:
-    	messages (List[Dict[str, Any]]): Messages to send to the model.
-    	tools (List[Dict[str, Any]]): Tool definitions available to the model.
-    	tool_choice (str): Tool selection strategy.
-    	temperature (float): Sampling temperature.
-    	max_tokens (int): Maximum number of completion tokens.
-    	context (Literal[...]): Invocation context used for activity tracking.
+        messages (List[Dict[str, Any]]): Messages to send to the model.
+        tools (List[Dict[str, Any]]): Tool definitions available to the model.
+        tool_choice (str): Tool selection strategy.
+        temperature (float): Sampling temperature.
+        max_tokens (int): Maximum number of completion tokens.
+        context (Literal[...]): Invocation context used for activity tracking.
     
     Returns:
-    	ToolCallResponse: The generated content, tool calls, finish reason, and
-    	raw response.
+        ToolCallResponse: The generated content, tool calls, finish reason, and
+        raw response.
     """
     self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
 
