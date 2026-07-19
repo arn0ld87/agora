@@ -47,9 +47,21 @@ def test_plan_total_must_match_sum():
 1. Vollständiges Issue und relevante Verträge lesen.
 2. Gezielten Test schreiben und RED nachweisen.
 3. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
-4. Gezielten Test erneut ausführen.
-5. Passendes zentrales Gate ausführen.
-6. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
+4. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
+5. Vor jedem Commit diese vier Pflichtprüfungen exakt in dieser Reihenfolge und mit Exit 0 ausführen:
+
+   ```bash
+   cd backend
+   uv run pytest tests/contracts/ -x -q
+   uv run python -m app.contracts.dump_schemas --check
+   uv run ruff check app/ tests/
+   uv run mypy app
+   ```
+
+6. Danach genau das im Briefing benannte zentrale Scope-Gate ausführen: `backend`, `frontend`, `schemas` oder bei Cross-Layer-Änderungen vollständig.
+7. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
+
+Ein fehlender Befehl, ein nicht nachvollziehbarer Exit-Code oder ein Fehler in einer der Prüfungen blockiert den Commit. Kein `--no-verify` und kein kosmetisches Grünmachen.
 
 ## Acceptance pro Test-Commit
 
@@ -75,5 +87,7 @@ Liefere immer:
 2. RED-Nachweis,
 3. Commit-SHA,
 4. geänderte Dateien,
-5. GREEN- und Gate-Ausgaben,
-6. verbleibende Risiken oder `keine`.
+5. GREEN-Ausgabe des Issue-Tests,
+6. Ausgaben und Exit-Codes der vier sequenziellen Pflichtprüfungen,
+7. Ausgabe und Exit-Code des zentralen Scope-Gates,
+8. verbleibende Risiken oder `keine`.
