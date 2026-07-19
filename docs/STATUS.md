@@ -15,9 +15,9 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_VERSIONS -->
 | Komponente | Pfad | Version |
 |---|---|---|
-| Backend | `backend/pyproject.toml` | 1.0.0 |
-| Frontend | `frontend/package.json` | 1.0.0 |
-| Root | `package.json` | 1.0.0 |
+| Backend | `backend/pyproject.toml` | 0.8.0 |
+| Frontend | `frontend/package.json` | 0.8.0 |
+| Root | `package.json` | 0.8.0 |
 <!-- END_AUTOGEN_VERSIONS -->
 
 Die Manifest-Versionen bilden noch den früheren, zu optimistischen Release-Stand ab. Ihre Synchronisierung mit `VERSION=0.8.0` sowie ein automatischer Drift-Check sind vor dem nächsten Tag erforderlich und werden als eigenes Issue geführt. Bis dahin ist `VERSION` die Produkt-SSoT.
@@ -27,8 +27,8 @@ Die Manifest-Versionen bilden noch den früheren, zu optimistischen Release-Stan
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3365 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 3374 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
