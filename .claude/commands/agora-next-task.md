@@ -180,9 +180,12 @@ Führe danach den im Briefing festgelegten Issue-Test frisch aus, speichere die 
 
 ```bash
 <ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
-test_rc=${PIPESTATUS[0]}
-test "$test_rc" -eq 0
+pipeline_rcs=("${PIPESTATUS[@]}")
+test "${pipeline_rcs[0]}" -eq 0
+test "${pipeline_rcs[1]}" -eq 0
 ```
+
+Beide Statuswerte zählen: `tee` wird mitgeprüft, damit ein Schreibfehler am Protokoll nicht als grüner Test durchgeht.
 
 Ein fehlgeschlagener Issue-Test stoppt den Ablauf sofort. `PASS` darf nur bei Exit-Code 0 gemeldet werden, und `<ISSUE_TEST_LOG>` wird in Schritt 8 an den Opus-Reviewer übergeben.
 
@@ -209,8 +212,9 @@ Wähle anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad und spe
       ;;
   esac
 } 2>&1 | tee <GATE_LOG>
-gate_rc=${PIPESTATUS[0]}
-test "$gate_rc" -eq 0
+gate_rcs=("${PIPESTATUS[@]}")
+test "${gate_rcs[0]}" -eq 0
+test "${gate_rcs[1]}" -eq 0
 ```
 
 Der Issue-Test und das ausgewählte Gate müssen jeweils Exit 0 liefern. Beide vollständigen Ausgaben (`<ISSUE_TEST_LOG>` und `<GATE_LOG>`) werden für Schritt 8 aufbewahrt und dort übergeben. Bei einem Fehler stoppen. Kein kosmetisches Grünmachen und keine unbedingte Ausführung aller Scope-Gates.

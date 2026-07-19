@@ -149,8 +149,9 @@ Danach läuft der im Briefing festgelegte Issue-Test erneut, mit `tee` gesichert
 
 ```bash
 <ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
-test_rc=${PIPESTATUS[0]}
-test "$test_rc" -eq 0
+pipeline_rcs=("${PIPESTATUS[@]}")
+test "${pipeline_rcs[0]}" -eq 0
+test "${pipeline_rcs[1]}" -eq 0
 ```
 
 Anschließend wird abhängig vom Scope genau ein Gate ausgeführt und ebenso gesichert:
@@ -175,11 +176,12 @@ case "<GATE_SCOPE>" in
     ;;
 esac
 } 2>&1 | tee <GATE_LOG>
-gate_rc=${PIPESTATUS[0]}
-test "$gate_rc" -eq 0
+gate_rcs=("${PIPESTATUS[@]}")
+test "${gate_rcs[0]}" -eq 0
+test "${gate_rcs[1]}" -eq 0
 ```
 
-Issue-Test und Gate müssen Exit 0 liefern. Der Lead übergibt ihre vollständigen, frisch erzeugten Ausgaben an den Reviewer. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop und keine unbedingte Ausführung aller Scope-Gates.
+Issue-Test, Gate und das Schreiben beider Protokolle müssen Exit 0 liefern. Der Lead übergibt ihre vollständigen, frisch erzeugten Ausgaben an den Reviewer. Bei Fehlern stoppen; kein automatischer Endlos-Fix-Loop und keine unbedingte Ausführung aller Scope-Gates.
 
 Bei zwei parallelen Issues werden Test und Gate in den jeweiligen Worktrees ausgeführt. Ein Fehler stoppt nur das betroffene Issue, sofern die nachgewiesene Unabhängigkeit des anderen Issues weiterhin gilt.
 

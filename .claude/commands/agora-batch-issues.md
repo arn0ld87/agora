@@ -204,10 +204,16 @@ Führe danach den issue-spezifischen Test frisch aus und bewahre die vollständi
 cd <WORKTREE_PATH>
 if [ "$issue_blocked" -eq 0 ]; then
   <ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
-  test_rc=${PIPESTATUS[0]}
-  [ "$test_rc" -eq 0 ] || issue_blocked=1
+  pipeline_rcs=("${PIPESTATUS[@]}")
+  test_rc=${pipeline_rcs[0]}
+  log_rc=${pipeline_rcs[1]}
+  if [ "$test_rc" -ne 0 ] || [ "$log_rc" -ne 0 ]; then
+    issue_blocked=1
+  fi
 fi
 ```
+
+`tee` wird mitgeprüft: Schlägt das Schreiben des Protokolls fehl, fehlt die für Schritt 8 vorgeschriebene vollständige Ausgabe — das Issue gilt dann als gestoppt, auch wenn der Test selbst grün war.
 
 Führe anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad frisch aus und bewahre auch diese Ausgabe auf:
 
@@ -234,8 +240,12 @@ if [ "$issue_blocked" -eq 0 ]; then
       ;;
   esac
 } 2>&1 | tee <GATE_LOG>
-  gate_rc=${PIPESTATUS[0]}
-  [ "$gate_rc" -eq 0 ] || issue_blocked=1
+  gate_rcs=("${PIPESTATUS[@]}")
+  gate_rc=${gate_rcs[0]}
+  gate_log_rc=${gate_rcs[1]}
+  if [ "$gate_rc" -ne 0 ] || [ "$gate_log_rc" -ne 0 ]; then
+    issue_blocked=1
+  fi
 fi
 ```
 
