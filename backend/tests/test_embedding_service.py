@@ -3,7 +3,25 @@ from unittest.mock import patch
 import pytest
 
 from app.config import Config, infer_vector_dim_for_model
+from app.llm.providers.registry import detect_embedding_provider
 from app.storage.embedding_service import EmbeddingError, EmbeddingService, validate_embedding_configuration
+
+
+@pytest.mark.parametrize(
+    ("base_url", "model"),
+    [
+        ("http://localhost:11434/v1", "nomic-embed-text"),
+        ("http://localhost:11434", "nomic-embed-text"),
+        ("https://api.openai.com", "text-embedding-3-small"),
+        ("http://localhost:11434", "text-embedding-3-small"),
+    ],
+)
+def test_detect_provider_delegates_to_registry_ssot(base_url, model):
+    """Issue #671 — EmbeddingService._detect_provider MUSS byte-genau das
+    liefern, was detect_embedding_provider() (SSoT-Registry) liefert. Kein
+    lokal divergentes Verhalten mehr."""
+    service = EmbeddingService(model=model, base_url=base_url, api_key='dummy-key')
+    assert service._detect_provider() == detect_embedding_provider(base_url, model)
 
 
 def test_infer_vector_dim_for_known_models():

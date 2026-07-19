@@ -17,11 +17,11 @@ import os
 import time
 import logging
 from typing import List, Optional
-from urllib.parse import urlparse
 
 import requests
 
 from ..config import Config, infer_vector_dim_for_model
+from ..llm.providers.registry import detect_embedding_provider
 
 logger = logging.getLogger('agora.embedding')
 
@@ -291,17 +291,12 @@ class EmbeddingService:
         )
 
     def _detect_provider(self) -> str:
-        """Infer which embeddings API shape to use from the configured base URL/model."""
-        normalized_base = self.base_url.lower()
-        host = urlparse(normalized_base).netloc
-        if (
-            normalized_base.endswith('/v1')
-            or normalized_base.endswith('/v1/')
-            or 'api.openai.com' in host
-            or self.model.startswith('text-embedding-')
-        ):
-            return 'openai'
-        return 'ollama'
+        """Infer which embeddings API shape to use from the configured base URL/model.
+
+        Delegiert an ``detect_embedding_provider`` (SSoT-Registry,
+        ``app/llm/providers/registry.py``, Issue #671). Verhalten unveraendert.
+        """
+        return detect_embedding_provider(self.base_url, self.model)
 
     def _build_embed_url(self) -> str:
         if self._provider == 'openai':
