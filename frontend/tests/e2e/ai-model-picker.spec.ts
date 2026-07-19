@@ -38,6 +38,7 @@ import {
   readSelectedLabel,
 } from './helpers/aiModelPicker'
 import { LlmRoutingTestId } from './helpers/testIds'
+import { ensureOnboardingDismissed } from './helpers/onboarding'
 
 const E2E_RUN_ID = 'run_e2e_model_picker'
 const STAGE = 'document_ingest'
@@ -50,6 +51,10 @@ test.describe('Slice 5.6 · AiModelPicker E2E', () => {
   test.beforeEach(async ({ page, context }) => {
     // Single-User-Token-Mode: Token-Inject in localStorage.
     await login(context)
+    // Onboarding-Guard wegräumen (router/onboardingGuard.ts:32 redirected sonst
+    // jede Route auf /onboarding, sodass /settings/llm-routing nie rendert).
+    // Gleicher Bypass wie upload-graph/minimal-report/golden-gate (Issue #739).
+    await ensureOnboardingDismissed(page)
     await page.goto('/settings/llm-routing', { waitUntil: 'domcontentloaded' })
     // Run-ID eintragen → RunLlmRoutingPanel mountet (v-if selectedRunIdTrimmed).
     await page.getByTestId(LlmRoutingTestId.runId).fill(E2E_RUN_ID)
