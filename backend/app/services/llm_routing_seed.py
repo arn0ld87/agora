@@ -13,9 +13,13 @@ from typing import Optional
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
+from .llm_provider_secrets_store import get_llm_provider_secrets_store
+from .llm_profiles_store import get_llm_profiles_store
 from .llm_runtime import RuntimeLlmConfig
+from .profile_connection_resolver import resolve_profile_connection
+from .provider_connection_store import ProviderConnectionStore
 from .runtime_run_config import RuntimeRunConfig
-from .secret_resolver import SecretResolver
+from .secret_resolver import SecretResolver, get_bound_store_api_key
 from .workspace_routing_store import get_workspace_routing_store
 
 _PROVIDER_ID_MAP = {
@@ -45,12 +49,23 @@ def seed_run_stage_routing(
     *,
     llm_model_override: Optional[str],
     llm_runtime: Optional[RuntimeLlmConfig],
+    llm_profile_id: Optional[str] = None,
 ) -> RuntimeLlmRouting:
-    """Persist an initial per-run routing config for *stage_id*.
-
-    New runs inherit the server default route. A request-local model/provider
-    override is stored as a stage override so later stage locks and the UI can
-    inspect the effective runtime decision.
+    """
+    Persist per-run routing for a stage, applying workspace defaults and request-specific overrides.
+    
+    Parameters:
+        run_id (str): Identifier of the run whose routing configuration is updated.
+        stage_id (StageId): Identifier of the stage receiving the routing configuration.
+        llm_model_override (Optional[str]): Model name to use for the stage.
+        llm_runtime (Optional[RuntimeLlmConfig]): Runtime provider settings to apply.
+        llm_profile_id (Optional[str]): Identifier of an LLM profile to use for the stage.
+    
+    Returns:
+        RuntimeLlmRouting: The saved per-run routing configuration.
+    
+    Raises:
+        ValueError: If the specified LLM profile or a compatible activated provider connection is unavailable.
     """
     config_service = RuntimeRunConfig(run_id)
     has_existing_config = os.path.exists(config_service.config_path)
@@ -88,17 +103,68 @@ def seed_run_stage_routing(
         )
         if has_existing_config:
             config.routing_version += 1
+    elif llm_profile_id:
+        profile = get_llm_profiles_store().get(
+            llm_profile_id,
+            include_api_key=False,
+        )
+        if profile is None:
+            raise ValueError(f"LLM-Profil {llm_profile_id!r} nicht gefunden")
+        resolved = resolve_profile_connection(
+            profile,
+            ProviderConnectionStore().list_connections(),
+        )
+        if resolved is None:
+            raise ValueError(
+                f"LLM-Profil {llm_profile_id!r}: keine passende aktivierte "
+                "ProviderConnection"
+            )
+        connection = resolved.connection
+        provider_options: dict[str, object] = {"base_url": resolved.base_url}
+        # Nur echte api_key-Connections an ihr gebundenes Secret koppeln. Lokale
+        # No-Auth-Connections (auth_mode="none") würden über connection_only sonst
+        # auf ein nicht existentes Secret zeigen; die strikte Auflösung liefert dann
+        # None und der Run bricht mit "LLM_API_KEY not configured" — das lokale
+        # Ollama-Betriebsmodell bliebe gebrochen. Die Auth-Semantik der
+        # ProviderConnection ist maßgeblich (SSoT), kein pauschales connection_only.
+        if connection.auth_mode == "api_key" and connection.secret_ref:
+            provider_options["secret_ref"] = connection.secret_ref
+            provider_options["connection_only"] = True
+        config.stage_overrides[stage_id] = StageLLMRoute(
+            provider_id=connection.id,
+            model=profile.model_name,
+            provider_options=provider_options,
+        )
+        if has_existing_config:
+            config.routing_version += 1
 
     config_service.save_config(config)
     return config
 
 
 def resolve_route_api_key(route: ResolvedRoute, llm_runtime: Optional[RuntimeLlmConfig] = None) -> Optional[str]:
-    """Resolve the secret API key for a resolved route.
-
-    Prefers the request-scoped runtime secret when it matches the selected
-    provider. Falls back to the server-side secret resolver otherwise.
+    """Resolve the API key for a resolved route.
+    
+    Connection-only routes use their bound secret reference. Other routes use a
+    matching request-scoped runtime key when available, then fall back to the
+    server-side provider secret.
+    
+    Parameters:
+        route (ResolvedRoute): The resolved route whose API key is needed.
+        llm_runtime (Optional[RuntimeLlmConfig]): Request-scoped runtime
+            configuration that may provide a matching API key.
+    
+    Returns:
+        Optional[str]: The resolved API key, or None when no key is available.
     """
+    if route.provider_options.get("connection_only") is True:
+        raw_secret_ref = route.provider_options.get("secret_ref")
+        secret_ref = raw_secret_ref if isinstance(raw_secret_ref, str) else ""
+        return get_bound_store_api_key(
+            secret_ref,
+            secrets_store=get_llm_provider_secrets_store(),
+        )
+
     runtime = llm_runtime or RuntimeLlmConfig()
     runtime_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
     if runtime.enabled and runtime.api_key and runtime_provider_id == route.provider_id:

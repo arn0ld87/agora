@@ -73,7 +73,11 @@ def validate_embedding_configuration(
 
 
 class EmbeddingService:
-    """Generate embeddings using local Ollama server."""
+    """Generate embeddings through the independently configured embedding route.
+
+    Chat routing and embedding configuration are deliberately separate per
+    ADR-0007; this service therefore does not use the chat-provider registry.
+    """
 
     # Class-level flag: stub-mode log wird nur einmal ausgegeben (alle Instanzen).
     _stub_mode_logged: bool = False
@@ -224,9 +228,17 @@ class EmbeddingService:
 
     def _request_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Make HTTP request to the configured embedding provider.
-
-        Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings`.
+        Send texts to the configured embedding provider and parse the returned vectors.
+        
+        Parameters:
+            texts: Texts to embed.
+        
+        Returns:
+            The embedding vector for each input text, in the same order.
+        
+        Raises:
+            EmbeddingError: If the request fails, the response is invalid, or the
+                provider returns a different number of vectors than requested.
         """
         payload = {
             "model": self.model,
@@ -246,12 +258,34 @@ class EmbeddingService:
                 )
                 response.raise_for_status()
                 data = response.json()
+
+                # Validate response structure
+                if not isinstance(data, dict):
+                    raise EmbeddingError(f"Invalid {provider_label} response: expected dict, got {type(data).__name__}")
+
                 embeddings = self._extract_embeddings(data)
 
+                # Validate response is a list
+                if not isinstance(embeddings, list):
+                    raise EmbeddingError(f"Invalid {provider_label} response: embeddings must be a list")
+
+                # Validate count
                 if len(embeddings) != len(texts):
                     raise EmbeddingError(
                         f"Expected {len(texts)} embeddings, got {len(embeddings)}"
                     )
+
+                # Validate each embedding vector
+                for i, embedding in enumerate(embeddings):
+                    if not isinstance(embedding, list):
+                        raise EmbeddingError(
+                            f"Invalid {provider_label} response: embedding {i} must be a list, got {type(embedding).__name__}"
+                        )
+                    for j, value in enumerate(embedding):
+                        if not isinstance(value, (int, float)):
+                            raise EmbeddingError(
+                                f"Invalid {provider_label} response: embedding {i}[{j}] must be numeric, got {type(value).__name__}"
+                            )
 
                 return embeddings
 

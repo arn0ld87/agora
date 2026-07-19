@@ -8,6 +8,7 @@ from flask import Flask
 from app.api import graph_bp
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.models.project import ProjectStatus
+from app.services.graph_build import GraphBuildService
 
 
 VALID_PROJECT_ID = "proj_0123456789ab"
@@ -98,9 +99,10 @@ def test_build_graph_uses_resolved_route_for_ner_override(client, monkeypatch):
     assert captured_ner["llm_client"] is fake_llm_client
 
 
-def test_build_graph_uses_profile_when_set_on_project(client, monkeypatch):
-    """Wenn project.llm_profile_id gesetzt ist, baut build_graph den NER-Client
-    aus dem Profil — nicht aus dem Stage-Router-Default."""
+def test_build_graph_explicit_route_wins_over_legacy_project_profile(client, monkeypatch):
+    """
+    Verify that the explicitly resolved stage route takes precedence over the legacy project LLM profile during graph building.
+    """
     fake_project = MagicMock()
     fake_project.status = ProjectStatus.ONTOLOGY_GENERATED
     fake_project.ontology = {"entity_types": [], "edge_types": []}
@@ -186,6 +188,74 @@ def test_build_graph_uses_profile_when_set_on_project(client, monkeypatch):
     response = client.post("/api/graph/build", json={"project_id": VALID_PROJECT_ID})
 
     assert response.status_code == 200, response.get_json()
-    # Kernzusicherung: NER-Client kommt aus dem Profil-Pfad, nicht aus from_route.
-    assert captured_ner["llm_client"] is fake_profile_client
-    assert captured_ner["llm_client"] is not fake_route_client
+    # Kernzusicherung: Der gelockte Stage-Route-Snapshot gewinnt vor dem Profil.
+    assert captured_ner["llm_client"] is fake_route_client
+    assert captured_ner["llm_client"] is not fake_profile_client
+
+
+def test_generate_ontology_explicit_route_wins_over_legacy_profile(monkeypatch):
+    project = MagicMock(project_id=VALID_PROJECT_ID)
+    legacy_profile = MagicMock(provider="openai", model_name="legacy-model")
+    legacy_client = MagicMock(name="LegacyProfileClient")
+    route_client = MagicMock(name="RouteClient", model="gpt-5-mini")
+    captured = {}
+
+    class FakeRouter:
+        def __init__(self, _run_id: str):
+            pass
+
+        def resolve(self, stage_id: str):
+            """
+            Resolve a stage to its configured model route.
+            
+            Parameters:
+                stage_id (str): Identifier of the stage to resolve.
+            
+            Returns:
+                ResolvedRoute: The model route assigned to the stage.
+            """
+            return ResolvedRoute(
+                stage=stage_id,
+                provider_id="openai",
+                model="gpt-5-mini",
+                base_url_sanitized="https://api.openai.com/v1",
+                routing_version=4,
+            )
+
+        def lock_stage(self, *_args, **_kwargs):
+            return None
+
+    def generator(*, llm_client):
+        captured["llm_client"] = llm_client
+        instance = MagicMock()
+        instance.generate.return_value = {
+            "entity_types": [],
+            "edge_types": [],
+            "analysis_summary": "ok",
+        }
+        return instance
+
+    store = MagicMock()
+    store.get.return_value = legacy_profile
+    monkeypatch.setattr("app.services.graph_build.ProjectManager.get_project", lambda _pid: project)
+    monkeypatch.setattr("app.services.graph_build.ProjectManager.save_project", lambda _project: None)
+    monkeypatch.setattr("app.services.graph_build.run_registry.create_run", lambda **_kwargs: {"run_id": "run_ontology"})
+    monkeypatch.setattr("app.services.graph_build.run_registry.update_run", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.services.graph_build.seed_run_stage_routing", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.services.graph_build.StageModelRouter", FakeRouter)
+    monkeypatch.setattr("app.services.graph_build.resolve_route_api_key", lambda *_args, **_kwargs: "sk-route")
+    monkeypatch.setattr("app.services.graph_build.LLMClient.from_route", lambda *_args, **_kwargs: route_client)
+    monkeypatch.setattr("app.services.graph_build.OntologyGenerator", generator)
+    monkeypatch.setattr("app.services.llm_profiles_store.get_llm_profiles_store", lambda: store)
+    monkeypatch.setattr("app.utils.llm_client.build_client_from_profile", lambda *_args, **_kwargs: legacy_client)
+
+    GraphBuildService.generate_ontology(
+        project_id=VALID_PROJECT_ID,
+        simulation_requirement="Discuss climate policy.",
+        document_texts=["document"],
+        llm_model_override="gpt-5-mini",
+        llm_profile_id="prof_legacy",
+    )
+
+    assert captured["llm_client"] is route_client
+    assert captured["llm_client"] is not legacy_client

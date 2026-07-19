@@ -6,6 +6,7 @@ from pydantic import SecretStr, ValidationError
 from typing import cast
 
 from . import llm_bp
+from .deprecation import add_legacy_deprecation_headers
 from ..contracts.ai_provider_contract import (
     ProviderConnection,
     ProviderConnectionProviderKind,
@@ -28,6 +29,36 @@ from ..utils.logger import get_logger
 
 logger = get_logger("agora.api.llm_providers")
 provider_registry = LlmProviderRegistry()
+
+_LEGACY_PROVIDER_VIEW_NAMES = frozenset(
+    {
+        "list_providers",
+        "list_provider_models",
+        "test_provider",
+        "list_provider_api_keys",
+        "get_provider_api_key",
+        "upsert_provider_api_key",
+        "provider_has_key",
+        "delete_provider_api_key",
+    }
+)
+
+
+@llm_bp.after_request
+def add_provider_deprecation_headers(response):
+    """
+    Add deprecation headers to legacy provider responses.
+    
+    Parameters:
+        response: The Flask response to process.
+    
+    Returns:
+        The response with legacy deprecation headers when applicable.
+    """
+    view_name = (request.endpoint or "").rsplit(".", maxsplit=1)[-1]
+    if view_name in _LEGACY_PROVIDER_VIEW_NAMES:
+        return add_legacy_deprecation_headers(response)
+    return response
 
 
 _store_instance: ProviderConnectionStore | None = None

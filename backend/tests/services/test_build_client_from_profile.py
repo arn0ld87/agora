@@ -1,8 +1,8 @@
 """Tests für build_client_from_profile() — P5.3 Factory-Funktion.
 
-Drei Fälle gemäß Briefing:
+Drei Fälle gemäß kanonischem Secret-Store:
 1. Ollama-Profil ohne api_key → LLMClient baut erfolgreich.
-2. OpenAI-Profil mit api_key → LLMClient baut, api_key und model korrekt.
+2. Legacy-Cloud-Profil-Key → ValueError ohne passende ProviderConnection.
 3. Cloud-Profil ohne api_key → ValueError sofort, kein HTTP-Request.
 """
 from __future__ import annotations
@@ -46,7 +46,9 @@ def test_build_client_from_ollama_profile():
 
 
 def test_build_client_from_openai_profile():
-    """OpenAI-Profil mit api_key baut LLMClient mit korrekten Werten."""
+    """
+    Verify that a legacy profile API key does not replace the canonical provider connection.
+    """
     profile = _make_profile(
         provider="openai",
         base_url="https://api.openai.com/v1",
@@ -54,12 +56,8 @@ def test_build_client_from_openai_profile():
         api_key="sk-xyz",
     )
 
-    with patch("app.llm.client.OpenAI"):
-        client = build_client_from_profile(profile, run_id="run-42")
-
-    assert client.api_key == "sk-xyz"
-    assert client.model == "gpt-4o"
-    assert client.run_id == "run-42"
+    with pytest.raises(ValueError, match="ProviderConnection"):
+        build_client_from_profile(profile, run_id="run-42")
 
 
 def test_build_client_rejects_cloud_without_key():

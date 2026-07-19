@@ -153,6 +153,8 @@ class AiProviderOptions(TypedDict, total=False, closed=True):  # type: ignore[ca
 
     base_url: PublicBaseUrl | LocalOllamaBaseUrl | None
     num_ctx: Annotated[int, Field(gt=0)]
+    secret_ref: Annotated[str, Field(min_length=1)]
+    connection_only: bool
     __legacy_stage_route__: LegacyStageRouteOptions
 
 
@@ -279,7 +281,23 @@ class AiRoute(BaseModel):
                         },
                         "required": ["fallback_reason"],
                     },
-                }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "provider_options": {
+                                "properties": {"connection_only": {"const": True}},
+                                "required": ["connection_only"],
+                            }
+                        },
+                        "required": ["provider_options"],
+                    },
+                    "then": {
+                        "properties": {
+                            "provider_options": {"required": ["secret_ref"]}
+                        }
+                    },
+                },
             ]
         },
     )
@@ -296,10 +314,30 @@ class AiRoute(BaseModel):
 
     @model_validator(mode="after")
     def validate_provider_fallback_reason(self) -> AiRoute:
+        """
+        Validate that provider_fallback routes have a non-blank fallback_reason.
+
+        Returns:
+            AiRoute: The validated route.
+        """
         if self.source == "provider_fallback" and not (
             self.fallback_reason and self.fallback_reason.strip()
         ):
             raise ValueError("provider_fallback requires a non-blank fallback_reason")
+        return self
+
+    @model_validator(mode="after")
+    def validate_connection_only_requirements(self) -> AiRoute:
+        """
+        Validate that connection_only routes have a secret_ref.
+
+        Returns:
+            AiRoute: The validated route.
+        """
+        if self.provider_options.get("connection_only") is True and not self.provider_options.get(
+            "secret_ref"
+        ):
+            raise ValueError("connection_only requires secret_ref")
         return self
 
 

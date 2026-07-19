@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
 
+from app.contracts.ai_provider_contract import ProviderConnection
+from app.contracts.llm_profile_contract import LlmProfile
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.services.llm_routing_seed import (
     build_route_subprocess_env,
@@ -11,6 +14,30 @@ from app.services.llm_routing_seed import (
 )
 from app.services.llm_runtime import RuntimeLlmConfig
 from app.services.runtime_run_config import RuntimeRunConfig
+
+
+def _profile(profile_id: str, *, model: str = "gpt-4.1-mini") -> LlmProfile:
+    """
+    Create a test profile with fixed OpenAI connection details and timestamps.
+    
+    Parameters:
+        profile_id (str): Identifier assigned to the profile.
+        model (str): Model name assigned to the profile.
+    
+    Returns:
+        LlmProfile: A profile populated with the specified identifier and model.
+    """
+    now = datetime.now(UTC)
+    return LlmProfile(
+        id=profile_id,
+        name="Contract profile",
+        provider="openai",
+        base_url="https://api.openai.com/v1",
+        model_name=model,
+        api_key="must-not-enter-route",
+        created_at=now,
+        updated_at=now,
+    )
 
 
 @patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
@@ -65,6 +92,151 @@ def test_seed_run_stage_routing_keeps_server_default_without_override(mock_run_d
     assert loaded.global_default.provider_id == "openai"
     assert loaded.global_default.model == "gpt-4o"
     assert loaded.stage_overrides == {}
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_profile_id_expands_to_a_secret_free_stage_route(mock_run_dir, monkeypatch, tmp_path):
+    run_id = "run_profile_only"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+    profile_store = MagicMock()
+    profile_store.get.return_value = _profile("profile-openai")
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [
+        ProviderConnection(
+            id="openai",
+            provider_kind="openai",
+            display_name="OpenAI",
+            transport="http",
+            auth_mode="api_key",
+            base_url="https://api.openai.com/v1",
+            secret_ref="openai",
+        )
+    ]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_profiles_store",
+        lambda: profile_store,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    config = seed_run_stage_routing(
+        run_id,
+        "graph_build",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        llm_profile_id="profile-openai",
+    )
+
+    route = config.stage_overrides["graph_build"]
+    assert route.provider_id == "openai"
+    assert route.model == "gpt-4.1-mini"
+    assert route.provider_options == {
+        "base_url": "https://api.openai.com/v1",
+        "secret_ref": "openai",
+        "connection_only": True,
+    }
+    assert "api_key" not in route.model_dump(mode="json")
+    profile_store.get.assert_called_once_with("profile-openai", include_api_key=False)
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_local_no_auth_profile_route_omits_secret_binding(mock_run_dir, monkeypatch, tmp_path):
+    """No-Auth-Connections (auth_mode='none') dürfen NICHT per connection_only an ein
+    nicht existentes Secret gebunden werden. Sonst liefert die strikte Auflösung
+    ``None`` und der Run bricht mit 'LLM_API_KEY not configured' — lokales Ollama
+    (Agoras Kern-Betriebsmodell) bliebe gebrochen. Die Auth-Semantik der
+    ProviderConnection ist maßgeblich, nicht ein pauschales connection_only."""
+    run_id = "run_local_noauth"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    now = datetime.now(UTC)
+    profile = LlmProfile(
+        id="profile-ollama",
+        name="Local Ollama",
+        provider="custom",
+        base_url="http://localhost:11434",
+        model_name="qwen3:8b",
+        api_key=None,
+        created_at=now,
+        updated_at=now,
+    )
+    profile_store = MagicMock()
+    profile_store.get.return_value = profile
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [
+        ProviderConnection(
+            id="ollama-local",
+            provider_kind="ollama",
+            display_name="Local Ollama",
+            transport="http",
+            auth_mode="none",
+            base_url="http://localhost:11434",
+            secret_ref=None,
+        )
+    ]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_profiles_store",
+        lambda: profile_store,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    config = seed_run_stage_routing(
+        run_id,
+        "graph_build",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        llm_profile_id="profile-ollama",
+    )
+
+    route = config.stage_overrides["graph_build"]
+    assert route.provider_id == "ollama-local"
+    assert route.model == "qwen3:8b"
+    assert route.provider_options == {"base_url": "http://localhost:11434"}
+    assert "connection_only" not in route.provider_options
+    assert "secret_ref" not in route.provider_options
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_explicit_runtime_route_wins_without_reading_the_profile(mock_run_dir, monkeypatch, tmp_path):
+    run_id = "run_explicit_over_profile"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+    profile_store = MagicMock()
+    profile_store.get.side_effect = AssertionError("profile path must not be read")
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_profiles_store",
+        lambda: profile_store,
+        raising=False,
+    )
+
+    config = seed_run_stage_routing(
+        run_id,
+        "graph_build",
+        llm_model_override="gpt-5-mini",
+        llm_runtime=RuntimeLlmConfig(
+            provider="openai",
+            api_key="request-secret",
+            base_url="https://api.openai.com/v1",
+        ),
+        llm_profile_id="profile-openai",
+    )
+
+    route = config.stage_overrides["graph_build"]
+    assert route.provider_id == "openai"
+    assert route.model == "gpt-5-mini"
+    profile_store.get.assert_not_called()
 
 
 @patch("app.services.secret_resolver.SecretResolver.get_api_key")

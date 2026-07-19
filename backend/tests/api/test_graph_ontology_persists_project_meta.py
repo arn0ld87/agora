@@ -33,7 +33,14 @@ REQUIREMENT = "Persistenz-Smoke: Requirement muss den Service-Reload überleben.
 
 
 @pytest.fixture
-def app():
+def app(monkeypatch):
+    """
+    Create a Flask application configured for graph API integration tests.
+    
+    Returns:
+        Flask: A test application with the graph blueprint and mocked storage configured.
+    """
+    monkeypatch.setattr("app.config.Config.LLM_MODEL_NAME", "gpt-4o")
     storage = MagicMock(name="Neo4jStorage")
     container = AgoraContainer(neo4j_storage=storage)
     flask_app = Flask(__name__)

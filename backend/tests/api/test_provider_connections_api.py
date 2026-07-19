@@ -248,9 +248,15 @@ def test_legacy_models_route_delegates_to_connection_service(api_client, lifecyc
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["data"] == []
     assert service.probed == ["openai"]
+    assert response.headers["Deprecation"] == "@1784332800"
+    assert response.headers["X-Agora-Removal-Version"] == "1.0.0"
+    assert response.headers["Link"] == '</api/llm/provider-connections>; rel="successor-version"'
 
 
 def test_legacy_opencode_route_is_unsupported_without_probe(api_client, lifecycle):
+    """
+    Verify that the legacy OpenCode model route rejects unsupported providers without probing the service.
+    """
     _, service = lifecycle
 
     response = api_client.get("/api/llm/providers/opencode_go/models")

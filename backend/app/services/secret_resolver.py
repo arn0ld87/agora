@@ -45,7 +45,7 @@ from ..contracts import (
     PROVIDER_OPENAI_COMPATIBLE,
     PROVIDER_GITHUB_COPILOT,
 )
-from .llm_provider_secrets_store import get_llm_provider_secrets_store
+from .llm_provider_secrets_store import LlmProviderSecretsStore, get_llm_provider_secrets_store
 
 logger = logging.getLogger("agora.secret_resolver")
 
@@ -96,7 +96,15 @@ def _format_valid(value: Optional[str], provider_type: str) -> bool:
 
 
 def _mask_for_log(value: Optional[str]) -> str:
-    """Erster Block für Logs. Niemals den ganzen Wert ausgeben."""
+    """
+    Create a safe abbreviated representation of a value for log messages.
+    
+    Parameters:
+        value (Optional[str]): The value to mask.
+    
+    Returns:
+        str: "<empty>" for missing or whitespace-only values, "<short>" for values up to four characters, or the first four characters followed by "...".
+    """
     if not value:
         return "<empty>"
     v = value.strip()
@@ -105,6 +113,31 @@ def _mask_for_log(value: Optional[str]) -> str:
     if len(v) <= 4:
         return "<short>"
     return f"{v[:4]}..."
+
+
+def get_bound_store_api_key(
+    secret_ref: str,
+    *,
+    secrets_store: Optional[LlmProviderSecretsStore] = None,
+) -> Optional[str]:
+    """
+    Read one explicitly bound persistent secret without applying fallbacks.
+    
+    Parameters:
+        secret_ref (str): Reference identifying the stored secret.
+    
+    Returns:
+        Optional[str]: The decrypted secret, or `None` if the reference is empty,
+            the secret is unavailable, or store access fails.
+    """
+    if not secret_ref:
+        return None
+    try:
+        store = secrets_store or get_llm_provider_secrets_store()
+        return store.get_plaintext(secret_ref)
+    except RuntimeError as exc:
+        logger.warning("Gebundener Secret-Store-Zugriff fehlgeschlagen; kein Fallback: %s", exc)
+        return None
 
 
 class SecretResolver:
@@ -118,11 +151,37 @@ class SecretResolver:
     """
 
     def __init__(self, session_api_keys: Optional[Dict[str, str]] = None):
+        """Initialize the resolver with optional session-only API key overrides.
+        
+        Parameters:
+            session_api_keys: Mapping of provider IDs to session-only API keys.
+        """
         self._session_keys = session_api_keys or {}
         self.last_source: Optional[str] = None
 
+    @staticmethod
+    def get_bound_api_key(
+        secret_ref: str,
+        *,
+        secrets_store: Optional[LlmProviderSecretsStore] = None,
+    ) -> Optional[str]:
+        """Read exactly one explicitly bound store secret without fallbacks."""
+        return get_bound_store_api_key(secret_ref, secrets_store=secrets_store)
+
     def get_api_key(self, provider_id: str, provider_type: str) -> Optional[str]:
-        """Resolve API key for a provider. Setzt :attr:`last_source` als Seiteneffekt."""
+        """
+        Resolve an API key using session overrides, persistent storage, provider-specific environment variables, and configuration fallback.
+        
+        Parameters:
+            provider_id (str): Identifier used to look up the provider's session or stored key.
+            provider_type (str): Provider type used to select environment variables and validate key formats.
+        
+        Returns:
+            Optional[str]: The first valid API key found, or `None` if no usable key is available.
+        
+        Side Effects:
+            Updates `last_source` with the source of the resolved key, or `None` when resolution fails.
+        """
         self.last_source = None
 
         # 1. Session-only override

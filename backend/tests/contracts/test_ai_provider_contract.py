@@ -366,6 +366,21 @@ def test_route_provider_options_accept_runtime_allowlist() -> None:
     }
 
 
+def test_connection_only_route_preserves_secret_ref() -> None:
+    route = AiRoute(
+        provider_connection_id="connection-openai",
+        model_id="gpt-4.1-mini",
+        source="project",
+        provider_options={
+            "connection_only": True,
+            "secret_ref": "connection-secret",
+        },
+    )
+
+    assert route.provider_options["connection_only"] is True
+    assert route.provider_options["secret_ref"] == "connection-secret"
+
+
 def test_route_json_schema_expresses_provider_options_allowlist() -> None:
     schema = AiRoute.model_json_schema()
     options_schema = schema["$defs"]["AiProviderOptions"]
@@ -374,6 +389,8 @@ def test_route_json_schema_expresses_provider_options_allowlist() -> None:
     assert set(options_schema["properties"]) == {
         "base_url",
         "num_ctx",
+        "secret_ref",
+        "connection_only",
         "__legacy_stage_route__",
     }
 
