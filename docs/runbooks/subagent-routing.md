@@ -97,8 +97,8 @@ Der Worker:
 
    | Gate-Scope | Pflichtprüfungen | Gate (genau einer) |
    |---|---|---|
-   | `backend` | gezielte Backend-Tests → Contract-Tests → Schema-Check → Ruff → mypy | `pre-push-gate.sh backend` |
-   | `frontend` | gezielte Frontend-Tests → `bun run check` | `pre-push-gate.sh frontend` |
+   | `backend` | gezielte Backend-Tests (`uv run pytest <PFADE> -x -q`) → Contract-Tests → Schema-Check → Ruff → mypy | `pre-push-gate.sh backend` |
+   | `frontend` | gezielte Frontend-Tests (`bun run test <PFADE>`) → `bun run check` | `pre-push-gate.sh frontend` |
    | `schemas` | Contract-Tests → Schema-Check | `pre-push-gate.sh schemas` |
    | `vollständig` | gezielte Tests aller betroffenen Layer, danach Backend- und Frontend-Prüfungen | `pre-push-gate.sh` |
 

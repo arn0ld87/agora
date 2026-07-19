@@ -51,7 +51,7 @@ Bei Unsicherheit nur ein Issue ausführen. Maximal zwei schreibende Worker gleic
 
 ## Pre-Commit-Gate (Pflicht, sequentiell, scope-abhängig)
 
-Backend- und Schemas-Scope, sequentiell mit Exit 0 (ein einziger Wechsel nach `backend`):
+Backend-Scope, sequentiell mit Exit 0 (ein einziger Wechsel nach `backend`):
 
 ```bash
 cd backend
@@ -59,6 +59,14 @@ uv run pytest tests/contracts/ -x -q
 uv run python -m app.contracts.dump_schemas --check
 uv run ruff check app/ tests/
 uv run mypy app
+```
+
+Schemas-/Contracts-Scope — nur Contract-Tests und Schema-Check, kein Ruff, kein mypy:
+
+```bash
+cd backend
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
 ```
 
 Reiner Frontend-Scope führt diese Backend-Prüfungen nicht aus, sondern:

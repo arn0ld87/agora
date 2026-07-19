@@ -178,6 +178,8 @@ Vertraue keiner Zusammenfassung. Prüfe für jedes Issue in dessen eigenem Workt
 
 ```bash
 cd <WORKTREE_PATH>
+issue_blocked=0
+
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
@@ -194,19 +196,24 @@ Ein nicht-leerer Status blockiert **dieses** Issue sofort: Tests, Gate und Opus-
 
 Da jedes Issue in seinem eigenen Worktree verifiziert wird, beendet der Blocker den Batch nicht. Das andere Issue läuft nur weiter, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt; andernfalls stoppt auch dieses. Verwende hier kein `exit`, das die gemeinsame Orchestrierungs-Shell beenden würde. Das andere Issue muss danach erneut gemäß Schritt 3 auf Unabhängigkeit geprüft werden, bevor es weiterlaufen darf.
 
+Alle weiteren Verifikationsschritte dieses Issues laufen **nur** bei `issue_blocked -eq 0`. Ist das Flag gesetzt, werden Test, Gate und Opus-Review dieses Issues übersprungen und es geht als gestoppt in die Abschlussausgabe.
+
 Führe danach den issue-spezifischen Test frisch aus und bewahre die vollständige Ausgabe auf:
 
 ```bash
 cd <WORKTREE_PATH>
-<ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
-test_rc=${PIPESTATUS[0]}
-test "$test_rc" -eq 0
+if [ "$issue_blocked" -eq 0 ]; then
+  <ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
+  test_rc=${PIPESTATUS[0]}
+  [ "$test_rc" -eq 0 ] || issue_blocked=1
+fi
 ```
 
 Führe anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad frisch aus und bewahre auch diese Ausgabe auf:
 
 ```bash
 cd <WORKTREE_PATH>
+if [ "$issue_blocked" -eq 0 ]; then
 {
   case "<GATE_SCOPE>" in
     backend)
@@ -227,9 +234,12 @@ cd <WORKTREE_PATH>
       ;;
   esac
 } 2>&1 | tee <GATE_LOG>
-gate_rc=${PIPESTATUS[0]}
-test "$gate_rc" -eq 0
+  gate_rc=${PIPESTATUS[0]}
+  [ "$gate_rc" -eq 0 ] || issue_blocked=1
+fi
 ```
+
+`issue_blocked=1` bedeutet: dieses Issue ist gestoppt. Es geht nicht in Schritt 8 (Opus-Review), wird nicht gepusht und bekommt keinen PR. Der Batch selbst läuft weiter; das andere Issue wird nur fortgesetzt, wenn seine in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt.
 
 Prüfe außerdem:
 
