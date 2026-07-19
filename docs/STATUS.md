@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 18.07.2026  
+**Stand:** 19.07.2026  
 **Geprüfte Main-Baseline:** `b068852`  
 **Produktversion:** `0.8.0` Technical Preview
 
@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3383 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3393 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -55,20 +55,20 @@ Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch 
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Der Health-Smoke ist grün. Alle fünf Kern-Smokes sind lokal grün (Sub-Slices 1–5/5).
+Der Stack bootet im GitHub-Runner. Nach Issue #739 wurden zwei maskierte Bugs repariert (Alpine-CDN-Egress-Block + Onboarding-Guard-Redirect im AiModelPicker-Smoke); die sechs Kern-Smokes laufen auf Commit `e6f86112` in `workflow_dispatch` grün (`29691904520`, `29692157673`). Ein `pull_request`-Lauf (`29691887993`) zeigte Golden-Gate-axe-Asserts rot, ohne Codebezug — das ist PR-Runner-Last, nicht Reproducer. Wir warten auf einen weiteren `pull_request`-Lauf vor der Squash-Merge-Entscheidung. Der `pull_request`-Trigger bleibt aktiviert.
 
 | Smoke | Status | Hauptbefund |
 |---|---|---|
-| Health | grün | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | grün (lokal, Sub-Slice 3/5) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
-| Minimalreport | grün (lokal, Sub-Slice 2/5) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
-| Report-Modi | grün (lokal, Sub-Slice 4/5) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
-| Golden-Gate Accessibility | grün (lokal, Sub-Slice 5/5) | Tertiär- und Statusfarben auf WCAG AA gehärtet, Form-Controls beschriftet und axe erst nach dem Route-Fade ausgeführt |
-| AiModelPicker | grün (lokal, Sub-Slice 1/5) | mock-models-Seed-URL via `AGORA_E2E_MOCK_MODELS_BASE` lokal überschreibbar; CI-Verhalten unverändert (PR #769) |
+| Health | grün (4 Läufe auf `32bad751`/`e6f86112`, 19.07.2026) | Stack, Auth und Provider-Seeding funktionieren |
+| Upload + Graph | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
+| Minimalreport | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
+| Report-Modi | grün (4 Läufe, 19.07.2026) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
+| Golden-Gate Accessibility | grün in 3 `workflow_dispatch`-Läufen, **rot in 1 `pull_request`-Lauf** (`29691887993`) | Axe-A11y-Asserts (color-contrast auf Dashboard + LLM-Providers-Settings). Nach Cross-Check kein Code-Bezug — vermutlich PR-Runner-Last; Folge-PR-Lauf offen |
+| AiModelPicker | grün (4 Läufe, 19.07.2026) | Root Cause war harden-runner-Egress-Block auf `dl-cdn.alpinelinux.org`/`dl-4.alpinelinux.org` plus Onboarding-Guard-Redirect in CI; beides gefixt (PR #781) |
 
 Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
 
-Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs Smokes mehrfach stabil grün sind. Danach muss der Workflow als Required Check aktiviert werden.
+Der `pull_request`-Trigger ist reaktiviert. Die sechs Smokes können via [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md) als erforderliche Branch-Protection-Checks konfiguriert werden — erst nach weiteren stabilen Läufen und Owner-Freigabe.
 
 ## Quality Gates
 
@@ -79,7 +79,7 @@ Der `pull_request`-Trigger des E2E-Workflows bleibt deaktiviert, bis alle sechs 
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
-| E2E-Kernpipeline | 4/6 lokal grün (Health + Sub-Slices 1–3/5), noch nicht verpflichtend |
+| E2E-Kernpipeline | 3 grüne Läufe in Folge (19.07.2026, Commit `32bad751`): `29691168025`, `29691166308`, `29691165639`; `pull_request`-Trigger aktiv; Required-Erzwingung ausstehend |
 
 Lokale Befehle:
 
