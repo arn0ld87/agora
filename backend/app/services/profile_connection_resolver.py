@@ -30,10 +30,10 @@ def normalize_endpoint_url(url: str | None) -> str:
     Normalize an endpoint URL for stable identity comparisons.
     
     Parameters:
-    	url (str | None): The endpoint URL to normalize.
+        url (str | None): The endpoint URL to normalize.
     
     Returns:
-    	str: The normalized URL, or the trimmed input when it cannot be parsed as a URL.
+        str: The normalized URL, or the trimmed input when it cannot be parsed as a URL.
     """
 
     raw = (url or "").strip().rstrip("/")

@@ -55,17 +55,17 @@ def seed_run_stage_routing(
     Persist per-run routing for a stage, applying workspace defaults and request-specific overrides.
     
     Parameters:
-    	run_id (str): Identifier of the run whose routing configuration is updated.
-    	stage_id (StageId): Identifier of the stage receiving the routing configuration.
-    	llm_model_override (Optional[str]): Model name to use for the stage.
-    	llm_runtime (Optional[RuntimeLlmConfig]): Runtime provider settings to apply.
-    	llm_profile_id (Optional[str]): Identifier of an LLM profile to use for the stage.
+        run_id (str): Identifier of the run whose routing configuration is updated.
+        stage_id (StageId): Identifier of the stage receiving the routing configuration.
+        llm_model_override (Optional[str]): Model name to use for the stage.
+        llm_runtime (Optional[RuntimeLlmConfig]): Runtime provider settings to apply.
+        llm_profile_id (Optional[str]): Identifier of an LLM profile to use for the stage.
     
     Returns:
-    	RuntimeLlmRouting: The saved per-run routing configuration.
+        RuntimeLlmRouting: The saved per-run routing configuration.
     
     Raises:
-    	ValueError: If the specified LLM profile or a compatible activated provider connection is unavailable.
+        ValueError: If the specified LLM profile or a compatible activated provider connection is unavailable.
     """
     config_service = RuntimeRunConfig(run_id)
     has_existing_config = os.path.exists(config_service.config_path)

@@ -318,7 +318,7 @@ class AiRoute(BaseModel):
         Validate fallback and connection-only route requirements.
         
         Returns:
-        	AiRoute: The validated route.
+            AiRoute: The validated route.
         """
         if self.source == "provider_fallback" and not (
             self.fallback_reason and self.fallback_reason.strip()

@@ -38,7 +38,7 @@ def app(monkeypatch):
     Create a Flask application configured for graph API integration tests.
     
     Returns:
-    	Flask: A test application with the graph blueprint and mocked storage configured.
+        Flask: A test application with the graph blueprint and mocked storage configured.
     """
     monkeypatch.setattr("app.config.Config.LLM_MODEL_NAME", "gpt-4o")
     storage = MagicMock(name="Neo4jStorage")

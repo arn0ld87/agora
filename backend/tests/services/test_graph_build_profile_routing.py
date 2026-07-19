@@ -28,10 +28,10 @@ def test_generate_ontology_profile_routes_document_ingest_and_ontology_stage(mon
             Resolve a stage identifier to its configured OpenAI model route.
             
             Parameters:
-            	stage_id: Identifier of the stage to resolve.
+                stage_id: Identifier of the stage to resolve.
             
             Returns:
-            	ResolvedRoute: The OpenAI route for the specified stage.
+                ResolvedRoute: The OpenAI route for the specified stage.
             """
             return ResolvedRoute(
                 stage=stage_id,

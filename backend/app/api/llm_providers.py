@@ -50,10 +50,10 @@ def add_provider_deprecation_headers(response):
     Add deprecation headers to legacy provider responses.
     
     Parameters:
-    	response: The Flask response to process.
+        response: The Flask response to process.
     
     Returns:
-    	The response with legacy deprecation headers when applicable.
+        The response with legacy deprecation headers when applicable.
     """
     view_name = (request.endpoint or "").rsplit(".", maxsplit=1)[-1]
     if view_name in _LEGACY_PROVIDER_VIEW_NAMES:

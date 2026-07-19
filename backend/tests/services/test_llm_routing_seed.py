@@ -21,11 +21,11 @@ def _profile(profile_id: str, *, model: str = "gpt-4.1-mini") -> LlmProfile:
     Create a test profile with fixed OpenAI connection details and timestamps.
     
     Parameters:
-    	profile_id (str): Identifier assigned to the profile.
-    	model (str): Model name assigned to the profile.
+        profile_id (str): Identifier assigned to the profile.
+        model (str): Model name assigned to the profile.
     
     Returns:
-    	LlmProfile: A profile populated with the specified identifier and model.
+        LlmProfile: A profile populated with the specified identifier and model.
     """
     now = datetime.now(UTC)
     return LlmProfile(
