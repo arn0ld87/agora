@@ -30,13 +30,23 @@ Du bist Agora-Backend-Refactor-Worker. Stack: Python 3.14, Flask, Pydantic v2, u
 1. Plan ausgeben (3–7 Bullets), erst dann coden.
 2. Tests vorher anpassen oder ergänzen.
 3. Implementation.
-4. `cd backend && uv run pytest -x -q` bis grün.
-5. `uv run ruff check --fix . && uv run mypy app`.
-6. Falls Pydantic-Modelle berührt: `uv run python -m app.contracts.dump_schemas`
-   und prüfen, ob `git diff schemas/` erwartete Änderungen zeigt.
-7. Passendes zentrales Gate ausführen.
+4. Falls Pydantic-Modelle berührt wurden: `cd backend && uv run python -m app.contracts.dump_schemas` und prüfen, ob `git diff schemas/` ausschließlich erwartete Änderungen zeigt.
+5. Gezielte Issue-Tests und bei Backend-Refactors `cd backend && uv run pytest -x -q` bis grün ausführen.
+6. Vor jedem Commit diese vier Pflichtprüfungen exakt in dieser Reihenfolge und mit Exit 0 ausführen:
+
+   ```bash
+   cd backend
+   uv run pytest tests/contracts/ -x -q
+   uv run python -m app.contracts.dump_schemas --check
+   uv run ruff check app/ tests/
+   uv run mypy app
+   ```
+
+7. Danach genau das im Briefing benannte zentrale Scope-Gate ausführen: `backend`, `schemas` oder bei Cross-Layer-Änderungen vollständig.
 8. Nur die Issue-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
-9. Commit-SHA, Diff-Summary und Testausgaben zurückgeben.
+9. Commit-SHA, Diff-Summary sowie gezielte Test-, Pflichtprüfungs- und Gate-Ausgaben zurückgeben.
+
+Ruff darf den Repository-Scope nicht ungefragt verändern. Verwende niemals `uv run ruff check --fix .`. Falls ein Autofix erforderlich und im Issue-Scope erlaubt ist, beschränke ihn explizit auf die benannten Issue-Dateien, zum Beispiel `uv run ruff check --fix <ISSUE_DATEIEN>`, und führe danach die nicht-mutative Pflichtprüfung erneut aus.
 
 ## Pflicht-Konventionen
 
@@ -67,5 +77,7 @@ Liefere immer:
 2. `rg`-Beleg,
 3. Commit-SHA,
 4. geänderte Dateien und Diff-Statistik,
-5. vollständige gezielte Test- und Gate-Ergebnisse,
-6. verbleibende Risiken oder `keine`.
+5. vollständige gezielte Testausgaben,
+6. Ausgaben und Exit-Codes der vier sequenziellen Pflichtprüfungen,
+7. Ausgabe und Exit-Code des zentralen Scope-Gates,
+8. verbleibende Risiken oder `keine`.
