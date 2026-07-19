@@ -5,6 +5,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Build (Issue #759 — 2026-07-19)
+
+- **VERSION als Single Source of Truth**: Datei `VERSION` ist die kanonische
+  Versionssource; `backend/pyproject.toml`, `package.json`, `frontend/package.json`
+  und README-Badge werden automatisch synchronisiert. Tool
+  `backend/scripts/check_version_drift.py` um `--write`-Modus erweitert, prüft
+  nun auch `frontend/package.json`. CI-Job `version-drift.yml` und lokal
+  `pre-push-gate.sh schemas` erzwingen Einhaltung. Abwicklung:
+  [`docs/runbooks/release-versioning.md`](../runbooks/release-versioning.md).
+
 ### Fixed (Issue #739 — 2026-07-18)
 
 - **Golden-Gate Accessibility E2E-Smoke lokal grün**: Tertiärtext,

@@ -72,6 +72,10 @@ run_schemas() {
   (cd backend && uv run python -m app.contracts.dump_schemas --check) \
     || fail "schema drift — run 'cd backend && uv run python -m app.contracts.dump_schemas' locally and commit"
 
+  step "Version-Drift (check_version_drift.py)"
+  (cd backend && uv run python scripts/check_version_drift.py) \
+    || fail "version drift — run 'cd backend && uv run python scripts/check_version_drift.py --write' locally and commit"
+
   step "Backend: sync-status --check"
   bash scripts/sync-status.sh --check \
     || fail "STATUS.md drift — run 'bash scripts/sync-status.sh' locally and commit"

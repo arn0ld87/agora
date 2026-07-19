@@ -22,7 +22,7 @@ overrides = [
 
 [[package]]
 name = "agora-backend"
-version = "1.0.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "camel-ai" },
