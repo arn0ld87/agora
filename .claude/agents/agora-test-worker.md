@@ -54,13 +54,16 @@ def test_plan_total_must_match_sum():
 
 ### Scope-Matrix
 
+Der Gate-Scope ist immer genau einer von vier Werten: `backend`, `frontend`, `schemas` oder `vollständig`. FSM- und E2E-Aufgaben sind ein Aufgabentyp, kein eigener Gate-Scope — der Lead benennt im Briefing, auf welchen der vier Werte sie abgebildet werden.
+
 | Gate-Scope | Pflichtprüfungen vor dem Commit | Gate (genau einer) |
 |---|---|---|
 | `backend` | gezielte Backend-Tests → Contract-Tests → Schema-Check → Ruff → mypy | `bash scripts/pre-push-gate.sh backend` |
 | `frontend` | gezielte Frontend-Tests → `bun run check` | `bash scripts/pre-push-gate.sh frontend` |
 | `schemas` | Contract-Tests → Schema-Check | `bash scripts/pre-push-gate.sh schemas` |
-| `fsm-e2e` | die im Briefing benannten FSM-/E2E-Tests | das im Briefing benannte sachlich passende Gate: `backend`, `frontend` oder vollständig |
 | `vollständig` | gezielte Tests **aller** betroffenen Layer, danach die Backend- und Frontend-Prüfungen | `bash scripts/pre-push-gate.sh` |
+
+FSM-/E2E-Aufgaben: zuerst die im Briefing benannten FSM-/E2E-Tests ausführen, danach die Pflichtprüfungen und das Gate des im Briefing zugewiesenen Gate-Scopes (`backend`, `frontend` oder `vollständig`).
 
 **Backend-Scope**
 
@@ -92,11 +95,11 @@ uv run python -m app.contracts.dump_schemas --check
 bash ../scripts/pre-push-gate.sh schemas
 ```
 
-**FSM-/E2E-Scope** — die im Briefing benannten Tests, danach genau das dort benannte Gate:
+**FSM-/E2E-Aufgaben** — die im Briefing benannten Tests, danach Pflichtprüfungen und Gate des zugewiesenen Gate-Scopes:
 
 ```bash
 <FSM_E2E_TEST_COMMAND>
-bash scripts/pre-push-gate.sh <backend|frontend>   # oder ohne Argument bei Cross-Layer
+# danach der oben passende Block zu <GATE_SCOPE> ∈ {backend, frontend, vollständig}
 ```
 
 **Cross-Layer / vollständig**

@@ -186,11 +186,13 @@ worktree_status="$(git status --short)"
 if [ -n "$worktree_status" ]; then
   printf '%s\n' "$worktree_status"
   echo "Worktree enthält uncommittete Änderungen." >&2
-  exit 1
+  issue_blocked=1
 fi
 ```
 
-Ein nicht-leerer Status blockiert diesen Ablauf sofort. Tests, Gate und Opus-Review laufen ausschließlich bei sauberem Worktree weiter — nur so ist garantiert, dass exakt der Inhalt von `<COMMIT_SHA>` geprüft und später gepusht wird. Der Blocker-Bericht nennt die ausgegebenen uncommitteten Pfade (uncommitted changes nach dem Worker-Commit). Das andere Issue muss danach erneut gemäß Schritt 3 auf Unabhängigkeit geprüft werden, bevor es weiterlaufen darf.
+Ein nicht-leerer Status blockiert **dieses** Issue sofort: Tests, Gate und Opus-Review dürfen dafür nicht mehr laufen, und es wird weder gepusht noch ein PR geöffnet. Nur so ist garantiert, dass exakt der Inhalt von `<COMMIT_SHA>` geprüft und später gepusht wird. Der Blocker-Bericht nennt die ausgegebenen uncommitteten Pfade (uncommitted changes nach dem Worker-Commit).
+
+Da jedes Issue in seinem eigenen Worktree verifiziert wird, beendet der Blocker den Batch nicht. Das andere Issue läuft nur weiter, wenn die in Schritt 3 nachgewiesene Unabhängigkeit weiterhin gilt; andernfalls stoppt auch dieses. Verwende hier kein `exit`, das die gemeinsame Orchestrierungs-Shell beenden würde. Das andere Issue muss danach erneut gemäß Schritt 3 auf Unabhängigkeit geprüft werden, bevor es weiterlaufen darf.
 
 Führe danach den issue-spezifischen Test frisch aus und bewahre die vollständige Ausgabe auf:
 

@@ -51,18 +51,35 @@ Bei Unsicherheit nur ein Issue ausführen. Maximal zwei schreibende Worker gleic
 
 ## Pre-Commit-Gate (Pflicht, sequentiell, scope-abhängig)
 
-Backend-, Schemas- und Cross-Layer-Scope, sequentiell mit Exit 0:
+Backend- und Schemas-Scope, sequentiell mit Exit 0 (ein einziger Wechsel nach `backend`):
 
 ```bash
-cd backend && uv run pytest tests/contracts/ -x -q
-cd backend && uv run python -m app.contracts.dump_schemas --check
-cd backend && uv run ruff check app/ tests/ && uv run mypy app
+cd backend
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
+uv run ruff check app/ tests/
+uv run mypy app
 ```
 
 Reiner Frontend-Scope führt diese Backend-Prüfungen nicht aus, sondern:
 
 ```bash
-cd frontend && bun run test && bun run check
+cd frontend
+bun run test
+bun run check
+```
+
+Cross-Layer-Scope führt beide Blöcke nacheinander aus:
+
+```bash
+cd backend
+uv run pytest tests/contracts/ -x -q
+uv run python -m app.contracts.dump_schemas --check
+uv run ruff check app/ tests/
+uv run mypy app
+cd ../frontend
+bun run test
+bun run check
 ```
 
 Maßgeblich ist die Scope-Matrix in [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md).

@@ -100,8 +100,9 @@ Der Worker:
    | `backend` | gezielte Backend-Tests → Contract-Tests → Schema-Check → Ruff → mypy | `pre-push-gate.sh backend` |
    | `frontend` | gezielte Frontend-Tests → `bun run check` | `pre-push-gate.sh frontend` |
    | `schemas` | Contract-Tests → Schema-Check | `pre-push-gate.sh schemas` |
-   | `fsm-e2e` | die im Briefing benannten FSM-/E2E-Tests | das im Briefing benannte passende Gate |
    | `vollständig` | gezielte Tests aller betroffenen Layer, danach Backend- und Frontend-Prüfungen | `pre-push-gate.sh` |
+
+   FSM- und E2E-Aufgaben sind ein Aufgabentyp, kein eigener Gate-Scope: Der Lead bildet sie im Briefing auf `backend`, `frontend` oder `vollständig` ab; die dort benannten FSM-/E2E-Tests laufen zusätzlich zu den Pflichtprüfungen dieses Scopes.
 
    Backend-Pflichtprüfungen im Wortlaut:
 
