@@ -66,6 +66,26 @@ def test_detect_default_provider_ollama_cloud(monkeypatch):
     assert _detect_default_provider() == 'cloud'
 
 
+def test_detect_default_provider_ollama_com_base_url_without_cloud_tag(monkeypatch):
+    # Issue #669: Delegation an die Registry-SSoT erkennt ollama.com auch ohne
+    # ":cloud"-Modell-Tag — die alte lokale Heuristik lieferte hier "unknown".
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_BASE_URL', 'https://ollama.com/v1')
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_MODEL_NAME', 'gpt-oss:20b')
+
+    assert _detect_default_provider() == 'cloud'
+
+
+def test_detect_default_provider_google(monkeypatch):
+    # Issue #669: Google/Gemini-Base-URLs waren der alten lokalen Heuristik
+    # unbekannt und fielen auf "unknown" zurueck.
+    monkeypatch.setattr(
+        'app.api.simulation_lifecycle.Config.LLM_BASE_URL',
+        'https://generativelanguage.googleapis.com/v1beta',
+    )
+    monkeypatch.setattr('app.api.simulation_lifecycle.Config.LLM_MODEL_NAME', 'gemini-2.5-pro')
+
+    assert _detect_default_provider() == 'google'
+
 
 def test_available_models_surfaces_startup_neo4j_error():
     app = _build_test_app()

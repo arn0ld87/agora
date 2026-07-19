@@ -9,6 +9,7 @@ from opentelemetry import trace
 
 from . import simulation_bp
 from ..config import Config
+from ..llm.providers.registry import detect_provider
 from ..models.project import ProjectManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.api_errors import ApiErrorCode
@@ -22,21 +23,14 @@ _tracer = trace.get_tracer(__name__)
 def _detect_default_provider() -> str:
     """Infer the configured server-side LLM provider for UI gating.
 
-    Matches the heuristics used by ``LLMClient._detect_provider``:
-    - model suffix ``:cloud`` => Ollama Cloud
-    - base URL contains ``11434`` => local Ollama
-    - base URL contains ``openai.com`` or ``api.openai`` => OpenAI
-    - otherwise => unknown
+    Delegiert an die Provider-Detection-SSoT
+    ``app.llm.providers.registry.detect_provider`` im ``mode="http"``
+    (Issue #669) statt eine lokale Heuristik zu pflegen. Vokabular:
+    ``ollama|cloud|minimax|openai|google|unknown``.
     """
     model_name = (Config.LLM_MODEL_NAME or '').strip()
     base_url = (Config.LLM_BASE_URL or '').strip()
-    if model_name.endswith(':cloud'):
-        return 'cloud'
-    if '11434' in base_url:
-        return 'ollama'
-    if 'openai.com' in base_url or 'api.openai' in base_url:
-        return 'openai'
-    return 'unknown'
+    return detect_provider(base_url, model_name, mode="http")
 
 
 @simulation_bp.route('/available-models', methods=['GET'])
