@@ -48,15 +48,38 @@ def test_plan_total_must_match_sum():
 2. Gezielten Test schreiben und RED nachweisen.
 3. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
 4. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
-5. Vor jedem Commit diese vier Pflichtprüfungen exakt in dieser Reihenfolge und mit Exit 0 ausführen:
+5. Vor jedem Commit die passenden Pflichtprüfungen abhängig vom im Briefing benannten Gate-Scope exakt in dieser Reihenfolge und mit Exit 0 ausführen:
 
-   ```bash
-   cd backend
-   uv run pytest tests/contracts/ -x -q
-   uv run python -m app.contracts.dump_schemas --check
-   uv run ruff check app/ tests/
-   uv run mypy app
-   ```
+   - **Backend-Scope** (Backend-Code, FSM, Backend-E2E-Tests):
+
+     ```bash
+     cd backend
+     uv run pytest tests/contracts/ -x -q
+     uv run python -m app.contracts.dump_schemas --check
+     uv run ruff check app/ tests/
+     uv run mypy app
+     ```
+
+   - **Frontend-Scope**:
+
+     ```bash
+     cd frontend
+     bun run check
+     bun run test
+     ```
+
+   - **Cross-Layer oder vollständig**:
+
+     ```bash
+     cd backend
+     uv run pytest tests/contracts/ -x -q
+     uv run python -m app.contracts.dump_schemas --check
+     uv run ruff check app/ tests/
+     uv run mypy app
+     cd ../frontend
+     bun run check
+     bun run test
+     ```
 
 6. Danach genau das im Briefing benannte zentrale Scope-Gate ausführen: `backend`, `frontend`, `schemas` oder bei Cross-Layer-Änderungen vollständig.
 7. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.

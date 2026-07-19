@@ -165,13 +165,16 @@ Vertraue der Worker-Zusammenfassung nicht. Prüfe frisch:
 git show --stat --oneline <COMMIT_SHA>
 git diff --check <BASE_SHA>...<COMMIT_SHA>
 git diff --name-only <BASE_SHA>...<COMMIT_SHA>
-git status --short
+worktree_status="$(git status --short)"
+test -z "$worktree_status"
 ```
 
-Führe danach den im Briefing festgelegten Issue-Test frisch aus:
+Führe danach den im Briefing festgelegten Issue-Test frisch aus und bewahre die vollständige Ausgabe auf:
 
 ```bash
-<ISSUE_TEST_COMMAND>
+<ISSUE_TEST_COMMAND> 2>&1 | tee <ISSUE_TEST_LOG>
+test_rc=${PIPESTATUS[0]}
+test "$test_rc" -eq 0
 ```
 
 Wähle anschließend abhängig vom Issue-Scope **genau einen** Gate-Pfad:
@@ -223,9 +226,25 @@ Bei `REQUEST_CHANGES`:
 
 Bleibt das Urteil negativ, stoppe mit einem konkreten Bericht.
 
-## Schritt 9: Push und Draft-PR
+## Schritt 9: Dokumentationssynchronisation abschließen
 
-Nur bei `APPROVE`:
+Prüfe vor Push und PR, ob im selben Slice sachlich korrekt abgebildet sind:
+
+- `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
+- `ROADMAP.md` nur bei Änderung eines Release-Gates oder der strategischen Reihenfolge,
+- `CHANGELOG.md` bei ausgeliefertem Nutzer- oder Betriebsverhalten,
+- ein Folge-Issue für notwendige, aber im Slice nicht erledigte Arbeit,
+- Issue-Verknüpfung im PR-Body mit `Closes #<NR>`.
+
+Dokumentiere für jedes Artefakt `aktualisiert` oder `NICHT BETROFFEN` mit Begründung.
+
+Ist ein erforderliches Dokumentationsartefakt sachlich betroffen, aber nicht im Commit enthalten, darf nicht gepusht werden. Gib das Issue einmalig an denselben Implementer zurück, lasse den bestehenden lokalen Commit amendieren und wiederhole für den neuen Commit-SHA Schritt 7 (Ergebnis selbst verifizieren) und Schritt 8 (Opus-Review) vollständig. Erst nach erneutem `APPROVE` darf das Issue weiter zu Schritt 10.
+
+Erzeuge notwendige Folge-Issues vor dem Draft-PR und verlinke sie im PR-Body.
+
+## Schritt 10: Push und Draft-PR
+
+Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 
 ```bash
 git push -u origin <branch>
@@ -254,21 +273,15 @@ git push -u origin <branch>
 - Contract-Tests → Schema-Check → Ruff → mypy — PASS
 - `scripts/pre-push-gate.sh <Scope>` — PASS
 
+## Dokumentationssync
+- `docs/STATUS.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- `ROADMAP.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- `CHANGELOG.md`: <aktualisiert | NICHT BETROFFEN + Begründung>
+- Folge-Issue: <URL | NICHT BETROFFEN + Begründung>
+
 ## Review
 - `agora-opus-reviewer` — APPROVE
 ```
-
-## Schritt 10: Quellen synchronisieren
-
-Nach erfolgreicher Umsetzung:
-
-- `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
-- `ROADMAP.md` nur bei Änderung eines Release-Gates oder der strategischen Reihenfolge,
-- `CHANGELOG.md` bei ausgeliefertem Nutzer- oder Betriebsverhalten,
-- ein Folge-Issue für notwendige, aber im Slice nicht erledigte Arbeit,
-- Issue durch den PR mit `Closes #<NR>` verknüpfen.
-
-Dokumentiere für `docs/STATUS.md`, `ROADMAP.md`, `CHANGELOG.md` und Folge-Issue jeweils: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
 
 ## Abschlussausgabe
 
