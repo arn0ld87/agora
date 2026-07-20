@@ -5,6 +5,43 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Report-Rescue: positionsblinder `title`-Drop im Strict-Schema-Sanitizer — 2026-07-20, Branch `fix/report-rescue-real-provider`)
+
+- **`_enforce_openai_strict_schema` strippte `title` positionsblind** in
+  `backend/app/llm/json_mode.py`. Der rekursive `_walk` filterte den
+  JSON-Schema-Metadaten-Key `title` über jeden Dict-Knoten — auch dort,
+  wo `title` der **Name einer Property** ist (`properties: {"title": {...}}`,
+  genutzt von `PlanSection` und `PlanResponse`). Die an
+  OpenAI/Google geschickten Schemas verloren die Pflicht-Property
+  `title`, die LLM-Antworten scheiterten danach an der Pydantic-
+  Validierung mit „12 validation errors for PlanResponse — alle
+  `…title: Field required`", und der gesamte Report-Lauf fiel auf
+  `failed`. Fix: Sonderbehandlung des `properties`-Keys in `_walk` —
+  die Keys darunter sind Property-Namen, keine Schema-Metadaten; nur
+  die Feld-Schemata (values) werden rekursiv gewalkt, dort greift das
+  Metadaten-Stripping normal.
+- **Regressionstest neu** in
+  `backend/tests/llm/test_json_mode_strict_schema.py`: drei Tests
+  pinnen die positionsbewusste Unterscheidung — `title` als
+  Property-Name überlebt in `properties + required`, `title` als
+  Metadatum auf Objekt-Ebene wird weiter gestrippt,
+  `PlanResponse`-Schema behält `title` top-level und je Section.
+  RED → GREEN mit der Code-Änderung verifiziert.
+- **End-to-End-Beweis** auf der `minimax`/`MiniMax-M3`-Route mit
+  `llm_model="MiniMax-M3"` (umgeht die alte
+  `llm_profile_id`-Präzedenz auf das zu schwache `google`-
+  `gemini-2.5-flash-lite`-Profil): Run B
+  (`report_47705048af01`, task `526d06c6…`) lief auf
+  `status: completed`, `progress: 100`, alle 11 Pflichtabschnitte im
+  Outline (`missing_sections: []`, Reihenfolge Executive Summary →
+  Datenlücken eingehalten), Markdown-Export HTTP 200 mit
+  131 067 Bytes (`format=md`), keine Fallback-Marker
+  (`Scenario Evaluation Report` etc.). Out of scope dieses Slices:
+  ReACT-Thinking-Leak, hängende Reports ohne Progress, fehlendes
+  `provider_connection_id`-Param am Generate-Endpunkt und der
+  `/api/report/export?format=markdown` 400 — diese werden in
+  Folgeslices adressiert.
+
 ### Fixed (pinia 4 + @pinia/testing 2 Migration — 2026-07-20, Branch `fix/811-pinia4-vitest-teardown-race`)
 
 - **`pinia` `^3.0.4` → `^4.0.2`, `@pinia/testing` `^1.0.3` → `^2.0.1`** in
