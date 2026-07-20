@@ -261,6 +261,34 @@ class AiModel(BaseModel):
     metadata_updated_at: datetime | None = None
 
 
+AiModelRefSource = Literal[
+    "stage-override",
+    "run-override",
+    "project-default",
+    "workspace-default",
+    "explicit",
+    "fallback",
+]
+
+
+class AiModelRef(BaseModel):
+    """Kanonische (Provider-Connection, Modell)-Referenz — Backend-Spiegel des
+    Frontend-``AiModelRefSchema`` (``frontend/src/contracts/aiModelRef.ts``).
+
+    Bewusst klein: identifiziert genau die vom UI gewählte Route. Größere
+    Metadaten (Capabilities, Status) bleiben in der ``ProviderConnection`` bzw.
+    im Model-Katalog. Trägt keine Secrets.
+    """
+
+    model_config = _STRICT
+
+    provider_connection_id: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    source: AiModelRefSource = "explicit"
+    capability_filter: str | None = None
+    fallback_reason: str | None = None
+
+
 class AiRoute(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

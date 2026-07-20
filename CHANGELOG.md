@@ -5,6 +5,35 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Report-Route-SSoT: UI-Auswahl ist die autoritative Report-Route — 2026-07-21, Branch `fix/report-provider-route-ssot`, Issue #817)
+
+- **Route-Snapshot ↔ Client-Divergenz in `ReportGenerationService.start_generation`** behoben
+  (`backend/app/services/report_generation.py`). Bei gesetztem LLM-Profil beschrieb der
+  gelockte `report_generation`-Route-Snapshot den Workspace-/Global-Default (z. B. Google),
+  während der ausgeführte `LLMClient` über den Parallelpfad `build_client_from_profile` ein
+  anderes Profil (z. B. MiniMax) nutzte. Ursache: `seed_run_stage_routing` wurde ohne
+  `llm_profile_id` aufgerufen, und der Client entstand außerhalb der gelockten Route. Fix: ein
+  einziger autoritativer Pfad — seed (mit Profil/AiModelRef) → resolve → lock → `LLMClient.from_route`
+  ausschließlich aus der gelockten Route. Der Parallelpfad `build_client_from_profile` entfällt in
+  `start_generation`; ein Profil ist nur noch Eingang zur Routenerzeugung.
+- **Explizite `ai_model_ref` am Generate-Endpunkt** (`POST /api/report/generate`): Der Request
+  überträgt jetzt die vollständige kanonische Auswahl (`provider_connection_id`, `model_id`,
+  `source`) als autoritative Report-Route. Neuer Backend-Contract `AiModelRef`
+  (`backend/app/contracts/ai_provider_contract.py`) spiegelt das Frontend-`AiModelRefSchema`.
+  Prioritätsreihenfolge: explizite `ai_model_ref` > Legacy-`llm_profile_id` > Projektprofil >
+  Stage-Override > Workspace-Default. Widersprüchliche explizite Eingaben (`ai_model_ref` plus
+  Legacy-Feld) werden mit HTTP 400 abgelehnt; unbekannte/deaktivierte ProviderConnection ebenso.
+- **Run-Metadaten/Model-Attribution** stammen aus der gelockten Route statt aus den rohen
+  Request-Feldern.
+- **Frontend** (`frontend/src/components/Step4Report.vue`, `frontend/src/api/report.ts`): Ein
+  expliziter Picker-Pick sendet `ai_model_ref` und kein konkurrierendes `llm_profile_id`/`llm_model`;
+  ohne Pick wird kein erfundener Override gesendet. `GenerateReportData` ist um `ai_model_ref`
+  typisiert.
+- **Tests neu**: `backend/tests/services/test_report_provider_route_ssot.py` (RED→GREEN:
+  Snapshot ≡ Client, AiModelRef→Route, unbekannte/deaktivierte Connection, Run-Metadaten,
+  kein Secret-Leak), `backend/tests/api/test_report_provider_route_api.py` (Contract + Konflikt-400)
+  und drei Payload-Tests in `frontend/src/components/__tests__/Step4Report.spec.ts`.
+
 ### Fixed (Report-Rescue: positionsblinder `title`-Drop im Strict-Schema-Sanitizer — 2026-07-20, Branch `fix/report-rescue-real-provider`)
 
 - **`_enforce_openai_strict_schema` strippte `title` positionsblind** in

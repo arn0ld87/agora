@@ -7,11 +7,24 @@ import type { ReportMode } from '../contracts/reportV3Contract'
 // --- Local payload/data types -------------------------------------------
 // These describe the `data` field inside the API envelope, not the envelope itself.
 
+/** Explizite (Connection, Modell)-Auswahl aus dem Report-Picker (Issue #817).
+ * Spiegelt `AiModelRef` — die autoritative Report-Route. */
+export interface AiModelRefPayload {
+  provider_connection_id: string
+  model_id: string
+  source: string
+}
+
 export interface GenerateReportData {
   simulation_id: string
   force_regenerate?: boolean
+  /** Legacy-Kompatibilität; bei gesetztem `ai_model_ref` nicht mitsenden. */
   llm_model?: string
   llm_provider?: LlmRuntimePayload
+  /** Legacy-Kompatibilität; bei gesetztem `ai_model_ref` nicht mitsenden. */
+  llm_profile_id?: string
+  /** Autoritative UI-Auswahl. Darf nicht mit den Legacy-Feldern kombiniert werden. */
+  ai_model_ref?: AiModelRefPayload
   /** Report-Modus — wird als ?mode=<value> Query-Parameter übergeben (Backend: request.args.get("mode")). */
   mode?: ReportMode
   [key: string]: unknown

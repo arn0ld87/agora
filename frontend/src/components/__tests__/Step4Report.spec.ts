@@ -932,3 +932,73 @@ describe('Step4Report — Kanon-First Initialisierung (Phase 1)', () => {
     expect(localStorageMock.getItem('agora.report.route')).toBeNull()
   })
 })
+
+// Issue #817: der Report-Start überträgt die vollständige kanonische Auswahl
+// (ai_model_ref) und kombiniert sie nicht mit dem Legacy-Profil.
+describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
+  const PICK: AiModelRef = {
+    provider_connection_id: 'conn_minimax',
+    model_id: 'MiniMax-M3',
+    source: 'explicit',
+  } as AiModelRef
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    resetMockSelection()
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { status: 'idle' },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_REPORT })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: VALID_EVIDENCE })
+    ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { report_id: 'report_new01' },
+    })
+  })
+
+  async function callRegenerate(): Promise<Record<string, unknown>> {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
+    await wrapper.vm.$nextTick()
+    return vi.mocked(generateReport).mock.calls.at(-1)![0] as Record<string, unknown>
+  }
+
+  it('sendet ai_model_ref und kein konkurrierendes llm_profile_id bei explizitem Pick', async () => {
+    mockEffectiveRef.value = PICK
+    // Veraltetes Legacy-Profil im localStorage darf den Pick NICHT begleiten.
+    localStorageMock.setItem('agora.report.llmProfileId', 'prof-stale')
+
+    const payload = await callRegenerate()
+
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn_minimax',
+      model_id: 'MiniMax-M3',
+      source: 'explicit',
+    })
+    expect(payload.llm_profile_id).toBeUndefined()
+    expect(payload.llm_model).toBeUndefined()
+  })
+
+  it('sendet ohne expliziten Pick keinen erfundenen Override', async () => {
+    // effectiveRef bleibt null, kein Profil im Storage.
+    const payload = await callRegenerate()
+
+    expect(payload.ai_model_ref).toBeUndefined()
+    expect(payload.llm_profile_id).toBeUndefined()
+    expect(payload.llm_model).toBeUndefined()
+    expect(payload.simulation_id).toBe('sim_test01')
+  })
+
+  it('fällt ohne Pick auf das Legacy-llm_profile_id zurück', async () => {
+    localStorageMock.setItem('agora.report.llmProfileId', 'prof-legacy')
+
+    const payload = await callRegenerate()
+
+    expect(payload.llm_profile_id).toBe('prof-legacy')
+    expect(payload.ai_model_ref).toBeUndefined()
+  })
+})

@@ -10,13 +10,14 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from ..contracts.ai_provider_contract import AiModelRef, ProviderConnection
 from ..contracts.llm_routing_contract import ResolvedRoute, RuntimeLlmRouting, StageId, StageLLMRoute
 from ..llm.providers.registry import detect_provider
 from .llm_provider_registry import LlmProviderRegistry
 from .llm_provider_secrets_store import get_llm_provider_secrets_store
 from .llm_profiles_store import get_llm_profiles_store
 from .llm_runtime import RuntimeLlmConfig
-from .profile_connection_resolver import resolve_profile_connection
+from .profile_connection_resolver import canonical_connection_base_url, resolve_profile_connection
 from .provider_connection_store import ProviderConnectionStore
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver, get_bound_store_api_key
@@ -43,6 +44,24 @@ def map_runtime_provider_to_route_provider(provider: str) -> Optional[str]:
     return _PROVIDER_ID_MAP.get((provider or "default").strip().lower())
 
 
+def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
+    """Resolve an explicitly selected ProviderConnection by id.
+
+    Raises ``ValueError`` when the connection is unknown or disabled, so the
+    caller can surface an HTTP 400/422 instead of silently falling back to a
+    different route.
+    """
+    match = next(
+        (c for c in ProviderConnectionStore().list_connections() if c.id == connection_id),
+        None,
+    )
+    if match is None:
+        raise ValueError(f"ProviderConnection {connection_id!r} nicht gefunden")
+    if not match.enabled:
+        raise ValueError(f"ProviderConnection {connection_id!r} ist deaktiviert")
+    return match
+
+
 def seed_run_stage_routing(
     run_id: str,
     stage_id: StageId,
@@ -50,6 +69,7 @@ def seed_run_stage_routing(
     llm_model_override: Optional[str],
     llm_runtime: Optional[RuntimeLlmConfig],
     llm_profile_id: Optional[str] = None,
+    ai_model_ref: Optional[AiModelRef] = None,
 ) -> RuntimeLlmRouting:
     """
     Persist per-run routing for a stage, applying workspace defaults and request-specific overrides.
@@ -87,7 +107,26 @@ def seed_run_stage_routing(
     runtime = llm_runtime or RuntimeLlmConfig()
     route_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
 
-    if llm_model_override or runtime.enabled:
+    if ai_model_ref is not None:
+        # Höchste Priorität: die vom UI explizit gewählte (Connection, Modell)-Route.
+        # Die Connection ist die SSoT für Base-URL und Secret-Bindung — kein
+        # ``.env``-Fallback, keine lokale Detection-Heuristik.
+        connection = _resolve_selected_connection(ai_model_ref.provider_connection_id)
+        ref_options: dict[str, object] = {}
+        connection_base_url = canonical_connection_base_url(connection)
+        if connection_base_url:
+            ref_options["base_url"] = connection_base_url
+        if connection.auth_mode == "api_key" and connection.secret_ref:
+            ref_options["secret_ref"] = connection.secret_ref
+            ref_options["connection_only"] = True
+        config.stage_overrides[stage_id] = StageLLMRoute(
+            provider_id=connection.id,
+            model=ai_model_ref.model_id,
+            provider_options=ref_options,
+        )
+        if has_existing_config:
+            config.routing_version += 1
+    elif llm_model_override or runtime.enabled:
         provider_options = {}
         if runtime.base_url:
             provider_options["base_url"] = runtime.base_url
