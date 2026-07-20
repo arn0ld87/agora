@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Frontend-Dependency-Batch — 2026-07-20, Branch `chore/frontend-deps-batch`)
+
+- **`@types/node` `^25.8.0` → `^26.1.1`** in `frontend/package.json` (Types-only,
+  kein Laufzeit-Verhalten-Change). Konsolidiert vier kollidierende
+  Dependabot-PRs auf derselben `package.json`-Zeile: #789 (pinia 4) und #791
+  (@pinia/testing 2) wegen eines Vitest-`EnvironmentTeardownError`-Race in
+  `AppShell.spec.ts` vertagt auf [#811](https://github.com/arn0ld87/agora/issues/811),
+  #792 (typescript 7) wegen einer vue-tsc/@typescript-eslint-Toolchain-Blockade
+  vertagt auf [#812](https://github.com/arn0ld87/agora/issues/812), #790
+  (identischer @types/node-Bump) direkt durch diesen Slice ersetzt. Alle vier
+  PRs geschlossen.
+
 ### Added (Subagent-Modellmigration — 2026-07-20)
 
 - **Subagenten auf `MiniMax-M3` migriert**: Sechs operative
