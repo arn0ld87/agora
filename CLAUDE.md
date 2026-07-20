@@ -135,3 +135,17 @@ Aktive Konfiguration lebt in Neo4j (`EmbeddingConfiguration`-Knoten, eindeutig p
 - Skip confirmations like "I'll continue...".
 - If a task needs one tool call, don't use three.
 - Do not summarize implementation details beyond Commit, Diff, Tests, Gate, Review and Risiken.
+
+## Agent Skills
+
+Konfiguration für externe Skill-Sammlungen, die dieses Repository als Kontext lesen. Diese Dateien beschreiben nur, wie das Repo funktioniert — sie ersetzen keine Regel aus `AGENTS.md` oder diesem Dokument.
+
+| Thema | Datei | Inhalt |
+|---|---|---|
+| Issue-Tracker | [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) | Issues und PRDs liegen in GitHub Issues; `gh`-Konventionen für Lesen, Anlegen, Labeln und Schließen |
+| Triage-Labels | [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md) | die fünf kanonischen Labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` — unverändert übernommen |
+| Domänen-Doku | [`docs/agents/domain.md`](docs/agents/domain.md) | Single-Context-Layout: ADRs unter `docs/decisions/`, optionales `CONTEXT.md` |
+
+`CONTEXT.md` existiert derzeit nicht und wird erst angelegt, wenn tatsächlich Begriffe oder Entscheidungen festzuhalten sind. Sein Fehlen ist kein Defekt und wird nicht gemeldet.
+
+Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENTS.md): `README.md` → `docs/STATUS.md` → `ROADMAP.md` → GitHub Issues.

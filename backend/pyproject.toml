@@ -90,6 +90,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
     "mypy>=1.10",
+    "pyright>=1.1.350",
     "types-requests>=2.32.0",
     "jsonschema>=4.0.0",
     "fakeredis[lua]>=2.30.0",
