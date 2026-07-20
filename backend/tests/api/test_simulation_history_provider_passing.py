@@ -104,6 +104,30 @@ def test_generate_profiles_without_provider_falls_back_to_none(client, patched_g
     assert captured_generator_kwargs["base_url"] is None
 
 
+def test_generate_profiles_local_endpoint_without_key_uses_no_auth_placeholder(
+    client, patched_generator, captured_generator_kwargs
+):
+    """Issue #778 Blocker 1 (Preview-Pfad) — lokaler Endpoint ohne Key darf
+    weder 500 noch ``ValueError`` produzieren; der Generator bekommt den
+    dokumentierten No-Auth-Platzhalter statt eines rohen ``None``.
+    """
+    from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+
+    payload = {
+        "graph_id": "graph_abc",
+        "llm_model": "qwen2.5:14b",
+        "llm_provider": {
+            "provider": "custom_openai",
+            "base_url": "http://host.docker.internal:11434/v1",
+        },
+        "use_llm": True,
+    }
+    resp = client.post("/api/simulation/generate-profiles", json=payload)
+    assert resp.status_code == 200, resp.get_json()
+    assert captured_generator_kwargs["api_key"] == LOCAL_NO_AUTH_API_KEY
+    assert captured_generator_kwargs["base_url"] == "http://host.docker.internal:11434/v1"
+
+
 def test_generate_profiles_rejects_invalid_provider_payload(client, patched_generator, captured_generator_kwargs):
     """``parse_runtime_llm_config`` muss bei kaputtem Payload 400 werfen,
     nicht stillschweigend leiten."""

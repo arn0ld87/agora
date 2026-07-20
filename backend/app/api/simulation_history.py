@@ -10,6 +10,7 @@ from typing import Optional
 from flask import current_app, request
 
 from . import simulation_bp
+from ..api.simulation_prepare import LOCAL_NO_AUTH_API_KEY, _is_local_endpoint
 from ..models.project import ProjectManager
 from ..services.entity_reader import EntityReader
 from ..services.llm_runtime import parse_runtime_llm_config
@@ -195,6 +196,11 @@ def generate_profiles():
     # Track 3c: api_key + base_url aus dem aktiven LLM-Profil mitgeben,
     # gleiche Helper-Funktion wie prepare_service._phase_generate_profiles.
     api_key, base_url = _resolve_llm_connection(llm_runtime)
+    if api_key is None and _is_local_endpoint(base_url):
+        # Lokaler Endpoint ohne Key ist zulaessig (#778) — Platzhalter statt
+        # `None`, damit der Generator-Vertrag "Key + Base-URL aus derselben
+        # Quelle" hier nicht faelschlich einen ValueError wirft.
+        api_key = LOCAL_NO_AUTH_API_KEY
     generator = OasisProfileGenerator(
         model_name=llm_model_override,
         storage=storage,
