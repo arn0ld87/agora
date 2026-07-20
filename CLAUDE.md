@@ -16,8 +16,8 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 
 ## Issue-Orchestrierung
 
-- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, M3-Review, anschließend Draft-PR.
-- `/agora-batch-issues`: maximal zwei nachweislich unabhängige Issues parallel; jedes Issue bleibt in eigenem Worktree, Commit und Draft-PR.
+- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, M3-Review, anschließend PR.
+- `/agora-batch-issues`: maximal zwei nachweislich unabhängige Issues parallel; jedes Issue bleibt in eigenem Worktree, Commit und PR.
 - Schreibende Worker verwenden `isolation: worktree`, pushen nicht und erzeugen genau einen lokalen Commit.
 - Der Lead verifiziert Diff, Tests und Gate selbst. Worker-Zusammenfassungen gelten nicht als Nachweis.
 - Vor Push und PR prüft `agora-reviewer-m3` read-only den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung.
