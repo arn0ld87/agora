@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (pinia 4 + @pinia/testing 2 Migration — 2026-07-20, Branch `fix/811-pinia4-vitest-teardown-race`)
+
+- **`pinia` `^3.0.4` → `^4.0.2`, `@pinia/testing` `^1.0.3` → `^2.0.1`** in
+  `frontend/package.json`. Der zuvor auf [#811](https://github.com/arn0ld87/agora/issues/811)
+  vertagte Bump war blockiert durch einen `EnvironmentTeardownError`
+  (`[vitest-pool]: Failed to start forks worker` / `Timeout waiting for
+  worker to respond`) beim vollen Testlauf. Ursache ist keine pinia-API-
+  Änderung, sondern eine Vitest-interne Worker-Teardown-Race im
+  Standard-`forks`-Pool unter paralleler Prozesslast — pinia 4 ändert nur
+  die Cleanup-Reihenfolge in `setActivePinia`/`createPinia` und erhöht
+  damit die Trefferwahrscheinlichkeit. Fix: `test.pool: 'threads'` in
+  `frontend/vite.config.js` (Worker-Threads statt Child-Prozesse vermeiden
+  die Fork-Spawn/Teardown-Race). `bun run test` läuft wieder grün
+  (170 Files / 1496 Tests). Closes #811.
+
 ### Changed (Frontend-Dependency-Batch — 2026-07-20, Branch `chore/frontend-deps-batch`)
 
 - **`@types/node` `^25.8.0` → `^26.1.1`** in `frontend/package.json` (Types-only,
