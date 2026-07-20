@@ -42,6 +42,17 @@ export default defineConfig({
     }
   },
   test: {
+    // Issue #811: pinia 4 + @pinia/testing 2 (Dependabot) haben unter dem
+    // Standard-"forks"-Pool eine Vitest-interne Worker-Teardown-Race
+    // sichtbar gemacht (EnvironmentTeardownError bzw. "Failed to start
+    // forks worker" / "Timeout waiting for worker to respond" beim
+    // Prozess-Cleanup). Ursache ist keine pinia-API-Aenderung, sondern
+    // Vitest-Forks-Pool-Verhalten unter paralleler Prozess-Last; pinia 4
+    // aendert nur die Cleanup-Reihenfolge in setActivePinia/createPinia
+    // und erhoeht damit die Trefferwahrscheinlichkeit. Threads-Pool haelt
+    // Worker als Worker-Threads im selben Prozess statt als Child-Prozesse
+    // und vermeidet damit die Fork-Spawn/Teardown-Race.
+    pool: 'threads',
     // jsdom-Environment seit EPIC-10-ST-07 (Issue #84) — Composable-Tests
     // brauchen DOM-APIs (mount/unmount, EventSource-Mock, document.body).
     environment: 'jsdom',
