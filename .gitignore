@@ -156,3 +156,6 @@ graphify-out/
 # Zeitgestempelte Backup-Kopien, die Tools beim Umschreiben von Configs anlegen
 # (z. B. opencode.jsonc.bak.20260720-080351).
 *.bak.[0-9]*
+
+# Lokale Opencode-Konfiguration (persoenliches Setup, nicht repo-weit gueltig)
+opencode.jsonc
