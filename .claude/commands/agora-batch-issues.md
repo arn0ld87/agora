@@ -9,7 +9,7 @@ Du bist der Lead und Orchestrator. Du implementierst nicht selbst. Die aktive Ta
 
 ## Ziel
 
-Bearbeite maximal zwei voneinander unabhängige Issues parallel. Jedes Issue erhält genau einen Implementer, einen isolierten Worktree, genau einen lokalen Commit, ein eigenes Opus-Review und einen eigenen Draft-PR.
+Bearbeite maximal zwei voneinander unabhängige Issues parallel. Jedes Issue erhält genau einen Implementer, einen isolierten Worktree, genau einen lokalen Commit, ein eigenes Opus-Review und einen eigenen PR.
 
 ## Globale Regeln
 
@@ -19,7 +19,7 @@ Bearbeite maximal zwei voneinander unabhängige Issues parallel. Jedes Issue erh
 - Maximal zwei Implementer gleichzeitig.
 - Subagenten können keine weiteren Agenten starten. Die gesamte Orchestrierung bleibt beim Lead.
 - Worker pushen, mergen und erstellen keine PRs.
-- Nur der Lead darf nach `APPROVE` pushen und einen Draft-PR öffnen.
+- Nur der Lead darf nach `APPROVE` pushen und einen PR öffnen.
 - Kein `--no-verify`, Force-Push oder automatischer Endlos-Fix-Loop.
 - Keine neue Planungsdatei anlegen.
 
@@ -297,9 +297,9 @@ Prüfe für jedes erfolgreiche Issue vor Push und PR, ob im selben Slice sachlic
 
 Dokumentiere für jedes Artefakt `aktualisiert` oder `NICHT BETROFFEN` mit Begründung. Ist ein erforderliches Datei-Artefakt im Commit nicht enthalten, darf nicht gepusht werden. Gib das betroffene Issue einmalig an denselben Worker zurück, lasse den bestehenden lokalen Commit amendieren und wiederhole für den neuen Commit-SHA Schritt 7 und Schritt 8 vollständig. Dadurch bleibt es bei genau einem Issue-Commit.
 
-Erzeuge notwendige Folge-Issues vor dem Draft-PR und verlinke sie im PR-Body. Der Dokumentationssync eines Issues darf keine Dateien oder Planungen des anderen Issues übernehmen.
+Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body. Der Dokumentationssync eines Issues darf keine Dateien oder Planungen des anderen Issues übernehmen.
 
-## Schritt 10: Push und Draft-PR
+## Schritt 10: Push und PR
 
 Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 
@@ -307,7 +307,7 @@ Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 git push -u origin <branch>
 ```
 
-Öffne für jedes Issue einen separaten Draft-PR gegen `main`.
+Öffne für jedes Issue einen separaten PR gegen `main`.
 
 PR-Body:
 
@@ -349,7 +349,7 @@ Keine beiden Issues in einen gemeinsamen PR quetschen. Git kann viel, aber es mu
 ```markdown
 ## Batch-Ergebnis
 
-| Issue | Worker | Commit | Issue-Test | Gate | Opus | Doku-Sync | Draft-PR |
+| Issue | Worker | Commit | Issue-Test | Gate | Opus | Doku-Sync | PR |
 |---|---|---|---|---|---|---|---|
 | #123 | agora-refactor-worker | `<sha>` | PASS | PASS | APPROVE | vollständig | <URL> |
 

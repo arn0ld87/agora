@@ -215,7 +215,7 @@ Fehlt ein sachlich erforderliches Datei-Artefakt, wird nicht gepusht. Der besteh
 
 ### 7. Pull Request
 
-Nur nach `APPROVE` und vollständigem Dokumentationssync pusht der Lead den Issue-Branch und öffnet einen separaten Draft-PR.
+Nur nach `APPROVE` und vollständigem Dokumentationssync pusht der Lead den Issue-Branch und öffnet einen separaten PR.
 
 Der Pull Request enthält:
 

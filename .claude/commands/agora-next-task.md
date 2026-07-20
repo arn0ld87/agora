@@ -1,5 +1,5 @@
 ---
-description: Master-Orchestrator — wählt das nächste release-relevante GitHub Issue, dispatcht einen isolierten Worker, verifiziert den Commit und lässt Opus vor dem Draft-PR reviewen.
+description: Master-Orchestrator — wählt das nächste release-relevante GitHub Issue, dispatcht einen isolierten Worker, verifiziert den Commit und lässt Opus vor dem PR reviewen.
 allowed-tools: Read, Bash, Grep, Glob, TodoWrite, Agent, AskUserQuestion
 ---
 
@@ -14,7 +14,7 @@ Du bist der Orchestrator, nicht der Implementer. Die aktive Aufgabenquelle sind 
 - Nie direkt auf `main` arbeiten.
 - Der Implementer arbeitet mit `isolation: worktree` und erzeugt genau einen lokalen Commit.
 - Der Implementer pusht, mergt und erstellt keinen PR.
-- Nur der Lead darf nach einem `APPROVE` des `agora-opus-reviewer` pushen und einen Draft-PR öffnen.
+- Nur der Lead darf nach einem `APPROVE` des `agora-opus-reviewer` pushen und einen PR öffnen.
 - Kein `--no-verify`, Force-Push oder automatischer Endlos-Fix-Loop.
 - Keine neue Planungsdatei anlegen.
 
@@ -245,7 +245,7 @@ Bleibt das Urteil negativ, stoppe mit einem konkreten Bericht.
 
 ## Schritt 9: Dokumentationssynchronisation abschließen
 
-Der Dokumentationssync findet zwingend **vor** Push und Draft-PR statt. Verbindliche Reihenfolge des gesamten Ablaufs:
+Der Dokumentationssync findet zwingend **vor** Push und PR statt. Verbindliche Reihenfolge des gesamten Ablaufs:
 
 1. Worker-Commit prüfen (Schritt 7),
 2. frische Issue-Tests ausführen (Schritt 7),
@@ -254,7 +254,7 @@ Der Dokumentationssync findet zwingend **vor** Push und Draft-PR statt. Verbindl
 5. Dokumentationssync prüfen (dieser Schritt),
 6. bei fehlender Dokumentation: Korrekturlauf mit Amend und vollständiger Wiederholung von Schritt 7 und 8,
 7. erst danach pushen (Schritt 10),
-8. Draft-PR erstellen (Schritt 10).
+8. PR erstellen (Schritt 10).
 
 Prüfe, ob im selben Slice sachlich korrekt abgebildet sind:
 
@@ -275,9 +275,9 @@ Ist ein erforderliches Dokumentationsartefakt sachlich betroffen, aber nicht im 
 
 Erst nach erneutem `APPROVE` darf das Issue weiter zu Schritt 10.
 
-Erzeuge notwendige Folge-Issues vor dem Draft-PR und verlinke sie im PR-Body.
+Erzeuge notwendige Folge-Issues vor dem PR und verlinke sie im PR-Body.
 
-## Schritt 10: Push und Draft-PR
+## Schritt 10: Push und PR
 
 Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 
@@ -285,7 +285,7 @@ Nur bei `APPROVE` und abgeschlossenem Dokumentationssync:
 git push -u origin <branch>
 ```
 
-Öffne einen Draft-PR gegen `main` mit:
+Öffne einen PR gegen `main` mit:
 
 ```markdown
 ## Summary
@@ -330,7 +330,7 @@ git push -u origin <branch>
 - Pflichtprüfungen: PASS
 - Gate: PASS
 - Opus: APPROVE
-- Draft-PR: <URL>
+- PR: <URL>
 - Dokumentationssync: <Nachweis>
 - Verbleibende Risiken: keine
 ```
