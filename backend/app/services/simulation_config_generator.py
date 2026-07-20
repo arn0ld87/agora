@@ -243,8 +243,13 @@ class SimulationConfigGenerator:
         model_name: Optional[str] = None,
         language: Optional[str] = None,
     ):
-        self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
+        # Key und Base-URL muessen aus derselben Quelle stammen (#778). Loest der
+        # Aufrufer einen Provider-Endpoint auf, darf der .env-Key NICHT einspringen —
+        # sonst geht der lokale Ollama-Key an einen Fremd-Provider (404/401).
+        self.api_key = api_key or (
+            Config.LLM_API_KEY if self.base_url == Config.LLM_BASE_URL else None
+        )
         self.model_name = model_name or Config.LLM_MODEL_NAME
         # Normalize language to two-letter code; defaults from Config.AGENT_LANGUAGE.
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()

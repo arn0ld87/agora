@@ -35,6 +35,42 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `disallowedTools`) auf demselben Niveau wie die M3-Varianten;
   siehe [#803](https://github.com/arn0ld87/agora/issues/803).
 
+### Fixed (Issue #778 — 2026-07-20)
+
+- **Key-Routing-Divergenz in Sim-Prep-Generatoren behoben**:
+  `SimulationConfigGenerator` und `OasisProfileGenerator` fielen bei fehlendem
+  Store-Key still auf `Config.LLM_API_KEY` zurück, auch wenn der Aufrufer
+  bereits eine fremde Provider-Base-URL aufgelöst hatte — das lokale
+  Ollama-`.env`-Passwort ging dadurch an Fremd-Provider und brach jeden
+  Provider-Wechsel über die UI mit `404`/`401`. Beide Generatoren nutzen den
+  `.env`-Fallback jetzt ausschließlich, wenn auch die Base-URL aus derselben
+  `.env`-Quelle stammt; andernfalls muss der Key vom Aufrufer kommen.
+- **Verhaltensänderung für Betreiber**: `LLM_API_KEY` aus der `.env` greift
+  nicht mehr automatisch, sobald eine Base-URL explizit über die
+  Provider-Route aufgelöst wurde. Setups, die sich bisher auf diesen
+  impliziten Fallback verlassen haben, erhalten künftig bereits zur
+  Prepare-Zeit `ValueError: LLM_API_KEY not configured`. Abhilfe: Key an der
+  Provider-Connection unter Einstellungen → LLM-Anbieter hinterlegen.
+- Lokale No-Auth-Endpoints (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`,
+  `host.docker.internal`) laufen weiterhin ohne Key — `simulation_prepare.py`
+  und `simulation_history.py` setzen dafür einen dokumentierten
+  No-Auth-Platzhalter (`LOCAL_NO_AUTH_API_KEY`), bevor der Wert an die
+  Generatoren geht.
+- **MiniMax-Fall im Provider-Wechsel-Test parametrisert**: Die
+  Akzeptanzkriterien aus #778 verlangen einen Provider-Wechsel
+  `Gemini ↔ MiniMax ↔ Ollama` mit umgeschaltetem Sim-Key. Der neue
+  Service-Test parametrisert dafür `test_prepare_foreign_provider_with_store_key_passes_store_key_through`
+  über `provider_id="google" | "minimax" | "openai"` mit den jeweiligen
+  fremden Base-URLs.
+- **Kein Eingriff in [#799](https://github.com/arn0ld87/agora/issues/799)**:
+  Der No-Auth-Platzhalter-Nachzug in `simulation_history.py::generate_profiles`
+  ist **kein** Store-Key-Pfad und **kein** 500→422-Mapping für fehlende
+  Provider-Resolution; er zieht nur die bereits in `simulation_prepare.py`
+  etablierte No-Auth-Freigabe nach, weil `generate_profiles` denselben
+  Generator-Vertrag nutzt und sonst regressionsweise einen `ValueError`
+  für lokale Setups werfen würde. [#799](https://github.com/arn0ld87/agora/issues/799)
+  bleibt bewusst offen.
+
 ### Build (Issue #759 — 2026-07-19)
 
 - **VERSION als Single Source of Truth**: Datei `VERSION` ist die kanonische

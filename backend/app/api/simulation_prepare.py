@@ -36,6 +36,15 @@ from .simulation_common import (
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
 
+# Lokale OpenAI-kompatible Server (z. B. Ollama) ignorieren den API-Key
+# vollstaendig, das OpenAI-SDK verlangt aber einen nicht-leeren String (#778).
+# Dieser Platzhalter macht die No-Auth-Freigabe fuer lokale Endpoints explizit
+# sichtbar, statt still `None` an die Generatoren durchzureichen — deren
+# Vertrag "Key und Base-URL aus derselben Quelle" (#778) wuerde sonst bei
+# String-Mismatch (z. B. host.docker.internal vs. localhost) faelschlich
+# einen ValueError werfen, obwohl die API-Schicht den Lauf bereits freigegeben hat.
+LOCAL_NO_AUTH_API_KEY = "local-no-auth"
+
 
 def _is_local_endpoint(base_url: Optional[str]) -> bool:
     """Prüft, ob eine Base-URL auf einen lokalen Endpunkt zeigt.
@@ -411,6 +420,13 @@ def prepare_simulation():
                 "oder im Sitzungsfeld eingeben."
             ),
         )
+
+    if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):
+        # Lokaler Endpoint ohne Key ist explizit freigegeben (siehe Guard oben) —
+        # der Platzhalter ersetzt `None`, damit der Generator-Vertrag aus #778
+        # (Key und Base-URL aus derselben Quelle) nicht faelschlich einen
+        # ValueError wirft.
+        resolved_api_key = LOCAL_NO_AUTH_API_KEY
 
     effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
 
