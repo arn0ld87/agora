@@ -16,24 +16,24 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 
 ## Issue-Orchestrierung
 
-- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, Opus-Review, anschließend Draft-PR.
+- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, M3-Review, anschließend Draft-PR.
 - `/agora-batch-issues`: maximal zwei nachweislich unabhängige Issues parallel; jedes Issue bleibt in eigenem Worktree, Commit und Draft-PR.
 - Schreibende Worker verwenden `isolation: worktree`, pushen nicht und erzeugen genau einen lokalen Commit.
 - Der Lead verifiziert Diff, Tests und Gate selbst. Worker-Zusammenfassungen gelten nicht als Nachweis.
-- Vor Push und PR prüft `agora-opus-reviewer` read-only den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung.
+- Vor Push und PR prüft `agora-reviewer-m3` read-only den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung.
 - Keine Agent Teams für normale Issue-Arbeit. Subagenten reichen aus und halten die Kontexte getrennt.
 
 ## Subagent-Routing
 
 | Aufgabe | Modell | Subagent |
 |---|---|---|
-| Architektur, Cross-Layer, ambige Specs | Opus oder Lead | kein Implementer-Subagent |
-| Abschlussreview eines Issue-Commits | Opus high | `agora-opus-reviewer` |
-| Backend-Refactor, Pydantic, Provider, Persistenz | Sonnet high | `agora-refactor-worker` |
-| Tests, FSM, E2E, Persona-Quoten | Sonnet medium | `agora-test-worker` |
-| Vue, Pinia, Zod, A11y | Sonnet medium | `agora-frontend-worker` |
-| Evidence/Wording-Audit | Sonnet medium | `agora-evidence-auditor` |
-| Doku, CHANGELOG, Worklogs, ADR-Drafts | Haiku low | `agora-doc-worker` |
+| Architektur, Cross-Layer, ambige Specs | Lead (MiniMax-M3) | kein Implementer-Subagent |
+| Abschlussreview eines Issue-Commits | MiniMax-M3 | `agora-reviewer-m3` |
+| Backend-Refactor, Pydantic, Provider, Persistenz | MiniMax-M3 | `agora-refactor-worker-m3` |
+| Tests, FSM, E2E, Persona-Quoten | MiniMax-M3 | `agora-test-worker-m3` |
+| Vue, Pinia, Zod, A11y | MiniMax-M3 | `agora-frontend-worker-m3` |
+| Evidence/Wording-Audit | MiniMax-M3 | `agora-evidence-auditor-m3` |
+| Doku, CHANGELOG, Worklogs, ADR-Drafts | MiniMax-M3 | `agora-doc-worker-m3` |
 
 Lead-Trigger: Layer 0, Cross-Layer, Wording/Prompt-Semantik, Security, Auth, Secrets, Datenmigration, Provider-Routing, ambige Specs oder fehlende Tests.
 

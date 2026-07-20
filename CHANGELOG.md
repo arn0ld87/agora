@@ -5,6 +5,36 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (Subagent-Modellmigration — 2026-07-20)
+
+- **Subagenten auf `MiniMax-M3` migriert**: Sechs operative
+  Subagenten existieren jetzt als `-m3`-Variante
+  (`agora-doc-worker-m3`, `agora-evidence-auditor-m3`,
+  `agora-frontend-worker-m3`, `agora-reviewer-m3`,
+  `agora-refactor-worker-m3`, `agora-test-worker-m3`). Das
+  Lead-Modell dieser Session ist ebenfalls `MiniMax-M3`. Die
+  historischen Subagenten ohne `-m3`-Suffix bleiben im Repo
+  als Referenz, werden aber nicht mehr dispatcht.
+- **Reviewer-Subagent umbenannt**: `agora-opus-reviewer-m3`
+  → `agora-reviewer-m3`, weil das Modell nicht mehr Opus ist.
+  Routing-Tabellen in [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md)
+  und [`CLAUDE.md`](CLAUDE.md) sind nachgezogen.
+- **M3-Varianten härter als die Originale**: Branch-Check im
+  Standard-Loop der schreibenden Worker, Doku-Sync-Schritt
+  (`docs/STATUS.md`, `ROADMAP.md`, `CHANGELOG.md`, Folge-Issue),
+  H1 nach Frontmatter, korrekte deutsche Anführungszeichen,
+  vollständige Audit-Tabelle mit acht Checks und
+  `disallowedTools`-Härtung beim Evidence-Auditor. Die
+  Original-Subagenten behalten ihre Schwächen bis zu einem
+  eigenen Härtungs-Slice (siehe Folge-Issue unten).
+- **`ROADMAP.md`**: Stand-Datum von `18.07.2026` auf `20.07.2026`
+  nachgezogen. Strategische Inhalte, Release-Gates und
+  Release-Reihenfolge unverändert.
+- **Folge-Issue**: Härtung der historischen Subagenten ohne
+  `-m3`-Suffix (Branch-Check, Doku-Sync, H1, Audit-Tabelle,
+  `disallowedTools`) auf demselben Niveau wie die M3-Varianten;
+  siehe [#803](https://github.com/arn0ld87/agora/issues/803).
+
 ### Build (Issue #759 — 2026-07-19)
 
 - **VERSION als Single Source of Truth**: Datei `VERSION` ist die kanonische

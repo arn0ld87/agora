@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 18.07.2026  
+**Stand:** 20.07.2026  
 **Aktuelle Produktversion:** `0.8.0` Technical Preview
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
