@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 19.07.2026  
+**Stand:** 20.07.2026  
 **Geprüfte Main-Baseline:** `b068852`  
 **Produktversion:** `0.8.0` Technical Preview
 
@@ -113,6 +113,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - kanonische Route: `AiRoute` / `LlmRoute`
 - kanonische Modellauswahl: `frontend/src/components/AiModelPicker.vue`
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
+- Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026)
 - Evidence-Gating: ADR-0002-Hartanker
 
 Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.

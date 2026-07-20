@@ -1,6 +1,6 @@
 # Subagent-Routing
 
-**Stand:** 19.07.2026
+**Stand:** 20.07.2026
 
 ## Prinzip
 
@@ -21,16 +21,18 @@ Schreibende Worker laufen in isolierten Worktrees, bearbeiten genau ein Issue un
 
 | Aufgabe | Lead/Subagent | Modell |
 |---|---|---|
-| Architekturentscheidung | Lead | Opus oder Sonnet mit Opus-Review |
-| Ambige Spezifikation | Lead | Opus oder Sonnet |
-| Security, Auth, Secrets oder Datenmigration | Lead plant, Worker implementiert eng | Opus-Review high |
-| Abschlussreview eines Issue-Commits | `agora-opus-reviewer` | Opus high, read-only |
-| Backend-Refactor | `agora-refactor-worker` | Sonnet high |
-| Pydantic-/Schema-Arbeit | `agora-refactor-worker` | Sonnet high |
-| Tests, FSM und E2E | `agora-test-worker` | Sonnet medium |
-| Vue, Pinia, Zod, A11y | `agora-frontend-worker` | Sonnet medium |
-| Evidence-/Wording-Audit | `agora-evidence-auditor` | Sonnet medium, read-only |
-| Dokumentation | `agora-doc-worker` | Haiku low |
+| Architekturentscheidung | Lead | Lead-Modell mit M3-Reviewer |
+| Ambige Spezifikation | Lead | Lead-Modell |
+| Security, Auth, Secrets oder Datenmigration | Lead plant, Worker implementiert eng | M3-Reviewer |
+| Abschlussreview eines Issue-Commits | `agora-reviewer-m3` | MiniMax-M3, read-only |
+| Backend-Refactor | `agora-refactor-worker-m3` | MiniMax-M3 |
+| Pydantic-/Schema-Arbeit | `agora-refactor-worker-m3` | MiniMax-M3 |
+| Tests, FSM und E2E | `agora-test-worker-m3` | MiniMax-M3 |
+| Vue, Pinia, Zod, A11y | `agora-frontend-worker-m3` | MiniMax-M3 |
+| Evidence-/Wording-Audit | `agora-evidence-auditor-m3` | MiniMax-M3, read-only |
+| Dokumentation | `agora-doc-worker-m3` | MiniMax-M3 |
+
+> **Modell-Migration 20.07.2026:** Die historischen Subagenten ohne `-m3`-Suffix bleiben im Repo, werden aber operativ nicht mehr verwendet. Sie existieren nur noch als Referenz für alte Commits. Das Lead-Modell dieser Session ist MiniMax-M3; alle Subagenten werden über die `-m3`-Variante dispatcht. Der Reviewer-Subagent wurde zusätzlich von `agora-opus-reviewer-m3` auf `agora-reviewer-m3` umbenannt, weil das Modell nicht mehr Opus ist.
 
 ## Lead-Trigger
 
@@ -185,9 +187,9 @@ Issue-Test, Gate und das Schreiben beider Protokolle müssen Exit 0 liefern. Der
 
 Bei zwei parallelen Issues werden Test und Gate in den jeweiligen Worktrees ausgeführt. Ein Fehler stoppt nur das betroffene Issue, sofern die nachgewiesene Unabhängigkeit des anderen Issues weiterhin gilt.
 
-### 5. Opus-Review
+### 5. M3-Review
 
-Der Lead startet `agora-opus-reviewer` mit:
+Der Lead startet `agora-reviewer-m3` mit:
 
 - vollständigem Issue und Akzeptanzkriterien,
 - Release-Ziel,
@@ -224,7 +226,7 @@ Der Pull Request enthält:
 - sequenzielle Pflichtprüfungen mit Ergebnis,
 - genau das ausgeführte Scope-Gate mit Ergebnis,
 - Dokumentationssync und Folge-Issues,
-- Opus-Review-Ergebnis,
+- M3-Review-Ergebnis,
 - Migration/Rollback, falls relevant,
 - `Closes #<Issue>` oder `Refs #<Issue>`.
 
