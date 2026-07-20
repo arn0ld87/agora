@@ -27,15 +27,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Metadatum auf Objekt-Ebene wird weiter gestrippt,
   `PlanResponse`-Schema behält `title` top-level und je Section.
   RED → GREEN mit der Code-Änderung verifiziert.
-- **End-to-End-Beweis** auf der `minimax`/`MiniMax-M3`-Route mit
-  `llm_model="MiniMax-M3"` (umgeht die alte
-  `llm_profile_id`-Präzedenz auf das zu schwache `google`-
-  `gemini-2.5-flash-lite`-Profil): Run B
-  (`report_47705048af01`, task `526d06c6…`) lief auf
+- **End-to-End-Beweis (zwei aufeinanderfolgende Läufe)** auf der
+  `minimax`/`MiniMax-M3`-Route mit `llm_model="MiniMax-M3"`
+  (umgeht die alte `llm_profile_id`-Präzedenz auf das zu schwache
+  `google`/`gemini-2.5-flash-lite`-Profil): Run B
+  (`report_47705048af01`, task `526d06c6…`) und Run C
+  (`report_715e4a552ce0`, task `5d39cfc1…`) liefen beide auf
   `status: completed`, `progress: 100`, alle 11 Pflichtabschnitte im
   Outline (`missing_sections: []`, Reihenfolge Executive Summary →
   Datenlücken eingehalten), Markdown-Export HTTP 200 mit
-  131 067 Bytes (`format=md`), keine Fallback-Marker
+  ≥ 131 067 Bytes (`format=md`), keine Fallback-Marker
   (`Scenario Evaluation Report` etc.). Out of scope dieses Slices:
   ReACT-Thinking-Leak, hängende Reports ohne Progress, fehlendes
   `provider_connection_id`-Param am Generate-Endpunkt und der
