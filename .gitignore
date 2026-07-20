@@ -149,3 +149,10 @@ test-seed-*.md
 
 # graphify Knowledge-Graph-Output (lokaler Build-Artefakt-Cache)
 graphify-out/
+
+# open-mem lokaler Memory-Store (SQLite inkl. WAL/SHM, nur maschinenlokal)
+.open-mem/
+
+# Zeitgestempelte Backup-Kopien, die Tools beim Umschreiben von Configs anlegen
+# (z. B. opencode.jsonc.bak.20260720-080351).
+*.bak.[0-9]*
