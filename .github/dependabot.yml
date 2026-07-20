@@ -22,6 +22,15 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+    # camel-ai wird durch camel-oasis==0.2.5 exakt auf 0.2.78 festgepinnt
+    # (alle camel-oasis-Releases pinnen 0.2.78; kein Release erlaubt >=0.2.90).
+    # Solange diese Upstream-Blockade besteht, sind camel-ai-Dependabot-Bumps
+    # nicht mergbar (Backend-Gate bricht mit `No solution found`). Tracking:
+    # Issue #806 (camel-oasis-Upstream-Release mit camel-ai>=0.2.90) und
+    # #762 (Master-Thema Backend-Dependency-SSoT). Re-Aktivieren, sobald
+    # camel-oasis>=0.2.6 verfügbar ist, das camel-ai>=0.2.90 akzeptiert.
+    ignore:
+      - dependency-name: "camel-ai"
     groups:
       python-minor-patch:
         update-types:

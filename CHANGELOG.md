@@ -35,6 +35,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `disallowedTools`) auf demselben Niveau wie die M3-Varianten;
   siehe [#803](https://github.com/arn0ld87/agora/issues/803).
 
+### Changed (CI/Dependabot — 2026-07-20, Branch `chore/dependabot-ignore-camel-ai`)
+
+- **Dependabot: `camel-ai` im pip-Backend-Block temporär ignoriert**.
+  `camel-oasis==0.2.5` pinnt exakt `camel-ai==0.2.78` (alle
+  `camel-oasis`-Releases auf PyPI pinnen 0.2.78 fest; kein Release
+  akzeptiert `>=0.2.90`). Der offene Dependabot-Bump PR #793 wurde
+  deshalb geschlossen. Der `ignore`-Eintrag verhindert weitere
+  No-Op-Retry-PRs, bis `camel-oasis` ein Release mit
+  `camel-ai>=0.2.90` veröffentlicht (Tracking: [#806](https://github.com/arn0ld87/agora/issues/806))
+  oder Issue #762 (`build(0.9): Backend-Dependency-SSoT und
+  Security-Drift bereinigen`) das Pin-Set löst. Kein
+  Laufzeit-Verhalten-Change.
+
 ### Fixed (Issue #778 — 2026-07-20)
 
 - **Key-Routing-Divergenz in Sim-Prep-Generatoren behoben**:
