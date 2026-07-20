@@ -1,0 +1,159 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit-Konfiguration für Agora.
+#
+# Zweck dieser Datei ist nicht, mehr Review zu bekommen, sondern gezielteres.
+# CodeRabbit kennt weder ADR-0002 noch die SSoT-Regeln aus AGENTS.md und schlägt
+# ohne diese Hinweise regelmäßig Änderungen vor, die genau die Anker aufweichen,
+# die das Projekt bewusst hart hält.
+#
+# Referenz: https://docs.coderabbit.ai/reference/configuration
+# Wirksame Konfiguration prüfen: `@coderabbitai configuration` im PR posten.
+
+language: "de-DE"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  assess_linked_issues: true
+  abort_on_close: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    # Draft-PRs entstehen hier vor dem Opus-Review-Gate. Ein Bot-Review zu
+    # diesem Zeitpunkt kommentiert einen Stand, der sich noch ändert.
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+
+  # Generierte und gesperrte Artefakte erzeugen nur Rauschen. schemas/ ist
+  # bewusst NICHT ausgeschlossen: Schema-Drift ist hier ein inhaltliches Signal.
+  path_filters:
+    - "!backend/uv.lock"
+    - "!frontend/bun.lock"
+    - "!**/*.lock"
+    - "!docs/archive/**"
+    - "!**/__snapshots__/**"
+
+  path_instructions:
+    - path: "backend/app/contracts/**"
+      instructions: |
+        Layer-0-Verträge (ADR: Verträge zuerst, Consumer danach).
+        Pydantic v2 ist verbindlich. Dataclasses und handgeschriebene
+        Inline-Schemas für API-Verträge sind im Projekt verboten.
+        Schlage keine Lockerung oder Entfernung von Validatoren vor.
+        Die Enums EvidenceSourceKind sowie die Validatoren
+        cross_stakeholder_for_high und reject_inferred_in_high_confidence sind
+        Hartanker aus ADR-0002 und dürfen nicht abgeschwächt werden.
+
+    - path: "backend/app/services/report_prompts/**"
+      instructions: |
+        Enthält die Evidence-Gating-Hartanker aus ADR-0002, insbesondere den
+        Block <evidence_gating priority="hard">.
+        Schlage keine Abschwächung, Umformulierung, Kürzung oder Entfernung
+        dieses Blocks vor, auch nicht als Lesbarkeits- oder Stilverbesserung.
+        Wording-Semantik in Prompts ist hier funktionales Verhalten, kein Stil.
+
+    - path: "backend/tests/eval/snapshots/**"
+      instructions: |
+        Eingefrorene Evaluations-Snapshots, unter anderem der Hedge-Wortschatz
+        aus ADR-0002. Änderungen an diesen Dateien sind Verhaltensänderungen und
+        brauchen eine eigene Begründung. Schlage keine Aktualisierung vor, nur
+        weil ein Test dagegen fehlschlägt.
+
+    - path: "backend/app/llm/providers/registry.py"
+      instructions: |
+        Single Source of Truth für Provider-Detection (detect_provider).
+        Schlage keine lokalen Detection-Heuristiken in Aufrufern vor und keine
+        Duplikate dieser Logik an anderer Stelle.
+
+    - path: "backend/app/services/embedding_service.py"
+      instructions: |
+        Zusammen mit embedding_migration.py der einzige Lese- und Schreibpfad
+        für die Embedding-Konfiguration (ADR-0007, aktive Konfiguration lebt in
+        Neo4j). Chat-Routing und Embedding-Konfiguration bleiben strukturell
+        getrennt; schlage keine Zusammenführung vor.
+
+    - path: "backend/tests/**"
+      instructions: |
+        Tests sind die Spezifikation. Schlage niemals abgeschwächte Assertions,
+        globale Skips, pauschale Retries oder gelockerte Toleranzen vor, um rote
+        Tests grün zu machen. Verhaltensänderungen folgen RED -> GREEN -> Refactor.
+
+    - path: "backend/app/**"
+      instructions: |
+        Python 3.14, Pydantic v2. print() in Produktivcode ist verboten,
+        strukturiertes Logging ist Pflicht. Keine API-Keys oder Secrets in Code,
+        Logs, Fixtures oder Beispielen. Keine neuen Query-Token-Parameter
+        (?token=); URL-Auth ausschließlich über signierte Tickets.
+
+    - path: "frontend/src/**/*.vue"
+      instructions: |
+        Vue 3 mit TypeScript und Pinia. Hartkodierte UI-Texte sind verboten,
+        vue-i18n ist Pflicht. Accessibility prüfen (Fokus, Rollen, Labels).
+        AiModelPicker.vue ist die kanonische Modellauswahl; schlage keine neuen
+        parallelen Picker vor.
+
+    - path: "frontend/src/contracts/**"
+      instructions: |
+        Zod-Spiegel der Pydantic-Verträge aus backend/app/contracts.
+        Abweichungen vom Backend-Vertrag sind Fehler, keine Vereinfachungen.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Kein Aufweichen von Gates. Required Checks, Schema-Drift-Prüfung und
+        Secret-Scanning dürfen nicht übersprungen oder auf continue-on-error
+        gesetzt werden.
+
+    - path: "docs/decisions/**"
+      instructions: |
+        Architecture Decision Records. Inhaltliche Änderungen an einer
+        akzeptierten ADR erfolgen über eine neue superseding ADR, nicht durch
+        Bearbeitung der bestehenden.
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+    # Autofix-Commits würden das verbindliche Opus-Review-Gate vor Push und PR
+    # umgehen. Fixes gehören in den Issue-Commit, nicht in einen Bot-Nachzügler.
+    autofix:
+      enabled: false
+
+  tools:
+    # Läuft bereits im Pre-Commit- und Pre-Push-Gate; doppelte Meldungen
+    # kosten nur Lesezeit.
+    ruff:
+      enabled: false
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    hadolint:
+      enabled: true
+    markdownlint:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: "auto"
+  issues:
+    scope: "auto"
+
+code_generation:
+  docstrings:
+    language: "de-DE"
