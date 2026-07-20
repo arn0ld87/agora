@@ -122,6 +122,15 @@ def _enforce_openai_strict_schema(model_or_schema: Any) -> Dict[str, Any]:
             for k, v in node.items():
                 if k in _STRICT_DROP_KEYS:
                     continue
+                if k == "properties" and isinstance(v, dict):
+                    # Keys unter ``properties`` sind Property-NAMEN, keine
+                    # Schema-Metadaten-Keywords. Sie dürfen nie gegen
+                    # _STRICT_DROP_KEYS gefiltert werden — sonst verschwindet
+                    # eine Property, die zufällig ``title`` (oder ``default``,
+                    # ``format`` …) heißt. Die Feld-Schemata (values) werden
+                    # weiter gewalkt, dort greift das Metadaten-Stripping normal.
+                    out[k] = {pk: _walk(pv, seen) for pk, pv in v.items()}
+                    continue
                 out[k] = _walk(v, seen)
             if out.get("type") == "object":
                 out["additionalProperties"] = False
