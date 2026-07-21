@@ -20,6 +20,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   10 aufeinanderfolgende `bun run test`-Läufe (170 Files / 1501 Tests) durchgehend
   Exit 0.
 
+### Fixed (Backend-Dependency-SSoT: verwaiste `requirements.txt` entfernt — 2026-07-21, Issue #762)
+
+- **`backend/requirements.txt` divergierte von `backend/pyproject.toml`/`backend/uv.lock`**
+  (`nltk==3.10.0` statt der dokumentierten Risikoausnahme `nltk==3.9.4`, PYSEC-2026-597,
+  Issue #661) — vermutlich ein isolierter Dependabot-Merge ohne `uv.lock`-Sync. Inventarisierung
+  ergab: kein produktiver Pfad (Dockerfile, `install.sh`, `package.json`, `ci.yml`,
+  `cve-monitor.yml`) installiert tatsächlich aus der eingecheckten Datei — CI erzeugt bei Bedarf
+  bereits einen frischen, deterministischen Snapshot per `uv export` nach `/tmp`. Die verwaiste
+  Datei wurde entfernt; `backend/pyproject.toml` + `backend/uv.lock` (via `uv sync --frozen`)
+  bleiben die einzige handgepflegte Backend-Dependency-Quelle.
+- **Neuer Drift-Guard**: `backend/tests/dependencies/test_dependency_ssot.py` schlägt fehl,
+  falls `backend/requirements.txt` wieder manuell eincheckt wird, deren `nltk`-Pin vom
+  `pyproject.toml`-Pin abweicht, oder ein produktiver Pfad wieder eine eingecheckte
+  `requirements.txt` referenziert.
+
 ### Fixed (Report-Route-SSoT: UI-Auswahl ist die autoritative Report-Route — 2026-07-21, Branch `fix/report-provider-route-ssot`, Issue #817)
 
 - **Route-Snapshot ↔ Client-Divergenz in `ReportGenerationService.start_generation`** behoben
