@@ -34,13 +34,17 @@ class ReportGenerationService:
         return not force_regenerate and not llm_model_override and not runtime_provider_override
 
     @classmethod
-    def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None):
+    def start_generation(cls, simulation_id, report_mode, force_regenerate, llm_model_override, llm_runtime, llm_profile_id=None, ai_model_ref=None):
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
         if not state:
             raise ValueError(ApiErrorCode.NOT_FOUND)
 
-        if cls.can_reuse_existing_report(force_regenerate, llm_model_override, llm_runtime.enabled):
+        if cls.can_reuse_existing_report(
+            force_regenerate,
+            llm_model_override,
+            llm_runtime.enabled or ai_model_ref is not None,
+        ):
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
             if existing_report and existing_report.status == ReportStatus.COMPLETED:
                 return {
@@ -65,6 +69,7 @@ class ReportGenerationService:
         if (
             _resolved_profile is None
             and not llm_profile_id
+            and ai_model_ref is None
             and (not llm_model_override or llm_model_override.lower() == 'default')
             and getattr(project, 'llm_profile_id', None)
         ):
@@ -120,40 +125,58 @@ class ReportGenerationService:
             task_type="report_generate",
             metadata={"simulation_id": simulation_id, "graph_id": graph_id, "report_id": report_id, "run_id": run_record["run_id"]}
         )
+        # Single Source of Truth: das (ggf. aus dem Projekt geerbte) Profil ist nur
+        # ein Eingang zur Routenerzeugung — es darf keinen zweiten Client-Pfad neben
+        # der gelockten Route öffnen. seed → resolve → lock bestimmen die Route; der
+        # Client wird ausschließlich aus dieser Route gebaut (Issue #817).
         seed_run_stage_routing(
             run_record["run_id"],
             "report_generation",
             llm_model_override=llm_model_override,
             llm_runtime=llm_runtime,
+            llm_profile_id=llm_profile_id,
+            ai_model_ref=ai_model_ref,
         )
         route_router = StageModelRouter(run_record["run_id"])
         resolved_route = route_router.resolve("report_generation")
         route_router.lock_stage("report_generation", resolved_route)
 
+        # Model-Attribution und Run-Metadaten stammen aus der gelockten Route (SSoT),
+        # nicht aus den rohen Request-Feldern — sonst zeigte llm_model bei Profil-/
+        # AiModelRef-Auswahl None an, während die Route ein anderes Modell trägt
+        # (Issue #817). Nur Secret-freie Metadaten.
+        run_registry.update_run(
+            run_record["run_id"],
+            metadata={
+                "llm_model": resolved_route.model,
+                "llm_provider": {
+                    "provider_id": resolved_route.provider_id,
+                    "base_url": resolved_route.base_url_sanitized,
+                },
+            },
+        )
+
         storage = current_app.extensions.get('neo4j_storage')
         if not storage:
             raise RuntimeError("GraphStorage not initialized — check Neo4j connection")
 
-        if _resolved_profile is not None:
-            from ..utils.llm_client import build_client_from_profile as _build_from_profile
-            shared_llm_client = _build_from_profile(_resolved_profile, run_id=run_record["run_id"])
-            logger.info(
-                "Using LLM profile %r for report (provider=%s, model=%s) [simulation_id=%s, report_id=%s, project_id=%s, run_id=%s]",
-                llm_profile_id,
-                _resolved_profile.provider,
-                _resolved_profile.model_name,
-                simulation_id,
-                report_id,
-                state.project_id,
-                run_record["run_id"]
-            )
-        else:
-            shared_llm_client = LLMClient.from_route(
-                resolved_route,
-                secret_resolver=SecretResolver(),
-                api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
-                run_id=run_record["run_id"],
-            )
+        shared_llm_client = LLMClient.from_route(
+            resolved_route,
+            secret_resolver=SecretResolver(),
+            api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
+            run_id=run_record["run_id"],
+        )
+        logger.info(
+            "Report LLM route locked provider_id=%s model=%s "
+            "[simulation_id=%s, report_id=%s, project_id=%s, run_id=%s, llm_profile_id=%s]",
+            resolved_route.provider_id,
+            resolved_route.model,
+            simulation_id,
+            report_id,
+            state.project_id,
+            run_record["run_id"],
+            llm_profile_id,
+        )
         graph_tools = GraphToolsService(storage=storage, llm_client=shared_llm_client)
 
         def run_generate():

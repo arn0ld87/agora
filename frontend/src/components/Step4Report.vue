@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown } from '../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
+import type { GenerateReportData } from '../api/report'
 import { createSimulationBranch } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
@@ -135,15 +136,44 @@ function effectiveReportModel(): string | null {
   return m && m.trim() ? m.trim() : null
 }
 
+/**
+ * Baut die Modellauswahl für den Report-Request (Issue #817).
+ *
+ * Ein expliziter Picker-Pick (`reportRoute`) ist ein Request-Override für genau
+ * diese Regenerierung und gewinnt vor dem Legacy-Profil. Beides gleichzeitig zu
+ * senden würde das Backend mit HTTP 400 ablehnen — deshalb wird bei gesetztem
+ * `reportRoute` weder `llm_profile_id` noch `llm_model` mitgeschickt. Ohne
+ * expliziten Pick wird kein erfundener Override gesendet; Stage-/Workspace-
+ * Defaults greifen dann serverseitig.
+ */
+function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref' | 'llm_profile_id'> {
+  if (reportRoute.value) {
+    return {
+      ai_model_ref: {
+        provider_connection_id: reportRoute.value.provider_connection_id,
+        model_id: reportRoute.value.model_id,
+        source: reportRoute.value.source ?? 'explicit',
+      },
+    }
+  }
+  if (llmProfileId.value) {
+    return { llm_profile_id: llmProfileId.value }
+  }
+  return {}
+}
+
 async function regenerateWithModel() {
   const simId = resolvedSimulationId.value || props.simulationId
   if (!simId) { addLog('simulationId fehlt — Regenerieren nicht möglich.'); return }
   isRegenerating.value = true
   try {
-    const payload: Record<string, unknown> = { simulation_id: simId, force_regenerate: true, mode: reportMode.value }
-    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
+    const payload: GenerateReportData = {
+      simulation_id: simId,
+      force_regenerate: true,
+      mode: reportMode.value,
+      ...buildModelSelection(),
+    }
     const m = effectiveReportModel()
-    if (m) payload.llm_model = m
     addLog(`Report neu generieren${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {
@@ -164,10 +194,12 @@ async function startReportConfirmed() {
   reportPending.value = false
   isRegenerating.value = true
   try {
-    const payload: Record<string, unknown> = { simulation_id: simId, mode: reportMode.value }
-    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
+    const payload: GenerateReportData = {
+      simulation_id: simId,
+      mode: reportMode.value,
+      ...buildModelSelection(),
+    }
     const m = effectiveReportModel()
-    if (m) payload.llm_model = m
     addLog(`Report starten${m ? ` mit ${m}` : ''} (Modus: ${reportMode.value})…`)
     const res = (await generateReport(payload)) as ApiResult
     if (res?.success && res.data?.report_id) {

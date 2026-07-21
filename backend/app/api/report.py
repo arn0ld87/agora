@@ -120,15 +120,39 @@ def generate_report():
         return json_error(str(mode_exc), status=400)
 
     force_regenerate = data.get('force_regenerate', False)
-    from ..utils.llm_profile_resolver import expand_profile_in_data
-    expand_profile_in_data(data)
-    llm_model_override = (data.get('llm_model') or '').strip() or None
-    try:
-        llm_runtime = parse_runtime_llm_config(data)
-    except ValueError as exc:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
 
-    llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
+    # Explizite UI-Auswahl (AiModelRef) ist die autoritative Report-Route und
+    # darf nicht still mit Legacy-Feldern kombiniert werden (Issue #817).
+    ai_model_ref = None
+    raw_ref = data.get('ai_model_ref')
+    if raw_ref is not None:
+        from pydantic import ValidationError
+        from ..contracts.ai_provider_contract import AiModelRef
+        try:
+            ai_model_ref = AiModelRef.model_validate(raw_ref)
+        except ValidationError:
+            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="ai_model_ref ist ungültig")
+        conflicting = [key for key in ('llm_profile_id', 'llm_model', 'llm_provider') if data.get(key)]
+        if conflicting:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=f"ai_model_ref darf nicht mit {', '.join(conflicting)} kombiniert werden",
+            )
+
+    if ai_model_ref is None:
+        from ..utils.llm_profile_resolver import expand_profile_in_data
+        expand_profile_in_data(data)
+        llm_model_override = (data.get('llm_model') or '').strip() or None
+        try:
+            llm_runtime = parse_runtime_llm_config(data)
+        except ValueError as exc:
+            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+        llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
+    else:
+        llm_model_override = None
+        llm_runtime = parse_runtime_llm_config({})
+        llm_profile_id = None
 
     try:
         result = ReportGenerationService.start_generation(
@@ -137,7 +161,8 @@ def generate_report():
             force_regenerate=force_regenerate,
             llm_model_override=llm_model_override,
             llm_runtime=llm_runtime,
-            llm_profile_id=llm_profile_id
+            llm_profile_id=llm_profile_id,
+            ai_model_ref=ai_model_ref,
         )
         return json_success(result)
     except ValueError as exc:
