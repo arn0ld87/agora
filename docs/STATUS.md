@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3467 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3470 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 168 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -125,7 +125,6 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
 - Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
-- `requirements.txt`, `pyproject.toml` und `uv.lock` sind nicht vollständig konsistent
 
 ## Security und Betrieb
 
