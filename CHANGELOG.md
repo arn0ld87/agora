@@ -63,6 +63,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Snapshot ≡ Client, AiModelRef→Route, unbekannte/deaktivierte Connection, Run-Metadaten,
   kein Secret-Leak), `backend/tests/api/test_report_provider_route_api.py` (Contract + Konflikt-400)
   und drei Payload-Tests in `frontend/src/components/__tests__/Step4Report.spec.ts`.
+- **Strikte Connection/Model-Katalog-Validierung** (Issue #819, Folge von #817/#818):
+  `seed_run_stage_routing` (`backend/app/services/llm_routing_seed.py`) prüft im
+  `ai_model_ref`-Zweig jetzt zusätzlich per Live-Discovery (`ProviderConnectionService.probe`
+  — derselbe Pfad wie `GET /provider-connections/<id>/models`, kein neuer Katalog, keine lokale
+  Provider-Detection-Heuristik), dass `model_id` tatsächlich zum Modell-Katalog der gewählten
+  `provider_connection_id` gehört. Gehört das Modell nicht zur Connection, wird die Route mit
+  `ValueError` abgelehnt (→ HTTP 400 über das bestehende `except ValueError`-Handling in
+  `report.py`). Schlägt die Discovery selbst fehl (Provider nicht erreichbar, ungültige
+  Credentials), wird das mit einer eigenen, klar unterscheidbaren Meldung ("Modell-Katalog …
+  derzeit nicht abrufbar") signalisiert statt fälschlich einen Model-Mismatch zu behaupten.
+  Tests: `backend/tests/services/test_llm_routing_seed.py` (Model-Mismatch, Discovery-Fehlschlag,
+  valide Kombination), `backend/tests/api/test_report_provider_route_api.py`
+  (400-Mapping für Mismatch und Discovery-Fehlschlag), sowie die Fixture in
+  `backend/tests/services/test_report_provider_route_ssot.py` um einen deterministischen
+  Probe-Stub erweitert (Regressionsschutz für #817/#818).
 
 ### Fixed (Report-Rescue: positionsblinder `title`-Drop im Strict-Schema-Sanitizer — 2026-07-20, Branch `fix/report-rescue-real-provider`)
 

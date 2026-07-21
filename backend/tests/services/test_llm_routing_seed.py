@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-from app.contracts.ai_provider_contract import ProviderConnection
+import pytest
+
+from app.contracts.ai_provider_contract import AiModel, AiModelRef, ProviderConnection
 from app.contracts.llm_profile_contract import LlmProfile
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.services.llm_routing_seed import (
@@ -13,6 +15,7 @@ from app.services.llm_routing_seed import (
     seed_run_stage_routing,
 )
 from app.services.llm_runtime import RuntimeLlmConfig
+from app.services.provider_connections.adapters import ProviderProbeResult
 from app.services.runtime_run_config import RuntimeRunConfig
 
 
@@ -371,6 +374,169 @@ def test_build_route_subprocess_env_does_not_set_provider_key_without_api_key():
     assert "GOOGLE_API_KEY" not in env
     assert "LLM_API_KEY" not in env
     assert "OPENAI_API_KEY" not in env
+
+
+def _mismatch_connection() -> ProviderConnection:
+    return ProviderConnection(
+        id="conn-mismatch",
+        provider_kind="openai_compatible",
+        display_name="Custom Gateway",
+        transport="http",
+        auth_mode="api_key",
+        base_url="https://gateway.example/v1",
+        secret_ref="conn-mismatch",
+        enabled=True,
+    )
+
+
+def _stub_probe(monkeypatch, connection_store, result: ProviderProbeResult) -> MagicMock:
+    """Patcht den einzigen Model-Discovery-Pfad (ProviderConnectionService.probe)
+    im ``ai_model_ref``-Zweig von ``llm_routing_seed`` — kein neuer Katalog, keine
+    lokale Heuristik, nur der bestehende Probe-Pfad wird auf ein deterministisches
+    Ergebnis gestellt."""
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_provider_secrets_store",
+        lambda: MagicMock(),
+        raising=False,
+    )
+    probe_service = MagicMock()
+    probe_service.probe.return_value = result
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionService",
+        lambda **kwargs: probe_service,
+    )
+    return probe_service
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_model_mismatch_is_rejected(mock_run_dir, monkeypatch, tmp_path):
+    """Issue #819: model_id gehört zu einem anderen Provider als die gewählte
+    provider_connection_id → ValueError (→ HTTP 400 in report.py), klar
+    unterscheidbar von einem Discovery-Fehlschlag."""
+    run_id = "run_model_mismatch"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _mismatch_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_probe(
+        monkeypatch,
+        connection_store,
+        ProviderProbeResult(
+            status="available",
+            status_message=None,
+            models=(
+                AiModel(
+                    provider_connection_id=connection.id,
+                    model_id="some-other-model",
+                    display_name="some-other-model",
+                    source="live",
+                    status="available",
+                    local_or_cloud="cloud",
+                ),
+            ),
+        ),
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch", model_id="gpt-4o-mini", source="explicit"
+    )
+    with pytest.raises(ValueError, match="gehört nicht zur"):
+        seed_run_stage_routing(
+            run_id,
+            "report_generation",
+            llm_model_override=None,
+            llm_runtime=RuntimeLlmConfig(),
+            ai_model_ref=ref,
+        )
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_discovery_failure_is_rejected_distinctly(mock_run_dir, monkeypatch, tmp_path):
+    """Issue #819: schlägt die Live-Discovery fehl (Provider nicht erreichbar/
+    ungültige Credentials), muss die Fehlermeldung das klarstellen — nicht
+    fälschlich behaupten, das Modell gehöre nicht zur Connection."""
+    run_id = "run_discovery_failure"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _mismatch_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_probe(
+        monkeypatch,
+        connection_store,
+        ProviderProbeResult(
+            status="invalid_credentials", status_message="Anmeldung abgelehnt"
+        ),
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch", model_id="gpt-4o-mini", source="explicit"
+    )
+    with pytest.raises(ValueError, match="nicht abrufbar") as exc_info:
+        seed_run_stage_routing(
+            run_id,
+            "report_generation",
+            llm_model_override=None,
+            llm_runtime=RuntimeLlmConfig(),
+            ai_model_ref=ref,
+        )
+    assert "gehört nicht zur" not in str(exc_info.value)
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_valid_model_passes_discovery_check(mock_run_dir, monkeypatch, tmp_path):
+    """Regressionsschutz für #817/#818: eine gültige (Connection, Modell)-
+    Kombination bleibt weiterhin erlaubt und wird 1:1 zur gelockten Route."""
+    run_id = "run_model_valid"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _mismatch_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_probe(
+        monkeypatch,
+        connection_store,
+        ProviderProbeResult(
+            status="available",
+            status_message=None,
+            models=(
+                AiModel(
+                    provider_connection_id=connection.id,
+                    model_id="gpt-4o-mini",
+                    display_name="gpt-4o-mini",
+                    source="live",
+                    status="available",
+                    local_or_cloud="cloud",
+                ),
+            ),
+        ),
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-mismatch", model_id="gpt-4o-mini", source="explicit"
+    )
+    config = seed_run_stage_routing(
+        run_id,
+        "report_generation",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        ai_model_ref=ref,
+    )
+
+    route = config.stage_overrides["report_generation"]
+    assert route.provider_id == "conn-mismatch"
+    assert route.model == "gpt-4o-mini"
 
 
 def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():

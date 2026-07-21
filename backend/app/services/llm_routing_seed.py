@@ -19,6 +19,7 @@ from .llm_profiles_store import get_llm_profiles_store
 from .llm_runtime import RuntimeLlmConfig
 from .profile_connection_resolver import canonical_connection_base_url, resolve_profile_connection
 from .provider_connection_store import ProviderConnectionStore
+from .provider_connections.service import ProviderConnectionService
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver, get_bound_store_api_key
 from .workspace_routing_store import get_workspace_routing_store
@@ -60,6 +61,38 @@ def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
     if not match.enabled:
         raise ValueError(f"ProviderConnection {connection_id!r} ist deaktiviert")
     return match
+
+
+def _verify_selected_model(connection: ProviderConnection, model_id: str) -> None:
+    """Prüft per Live-Discovery, dass ``model_id`` tatsächlich zum Modell-Katalog
+    von ``connection`` gehört (Issue #819).
+
+    Nutzt ausschließlich den bestehenden Model-Discovery-Pfad
+    (``ProviderConnectionService.probe``, denselben, den
+    ``GET /provider-connections/<id>/models`` produktiv verwendet) — kein neuer
+    Katalog, keine lokale Provider-Detection-Heuristik neben der Registry.
+
+    Unterscheidet zwei Fehlerfälle bewusst mit unterschiedlicher Meldung:
+    schlägt die Discovery selbst fehl (Provider nicht erreichbar, ungültige
+    Credentials, Rate-Limit), ist das kein Beleg für einen Model-Mismatch —
+    eine Meldung "Modell gehört nicht zur Connection" wäre hier irreführend.
+    """
+    service = ProviderConnectionService(
+        store=ProviderConnectionStore(),
+        secrets_store=get_llm_provider_secrets_store(),
+    )
+    result = service.probe(connection)
+    if result.status != "available":
+        raise ValueError(
+            f"Modell-Katalog für ProviderConnection {connection.id!r} derzeit "
+            f"nicht abrufbar ({result.status}): "
+            f"{result.status_message or 'keine Detailmeldung'}"
+        )
+    known_model_ids = {model.model_id for model in result.models}
+    if model_id not in known_model_ids:
+        raise ValueError(
+            f"Modell {model_id!r} gehört nicht zur ProviderConnection {connection.id!r}"
+        )
 
 
 def _bind_connection_secret(
@@ -135,6 +168,7 @@ def seed_run_stage_routing(
         # Die Connection ist die SSoT für Base-URL und Secret-Bindung — kein
         # ``.env``-Fallback, keine lokale Detection-Heuristik.
         connection = _resolve_selected_connection(ai_model_ref.provider_connection_id)
+        _verify_selected_model(connection, ai_model_ref.model_id)
         ref_options: dict[str, object] = {}
         connection_base_url = canonical_connection_base_url(connection)
         if connection_base_url:

@@ -74,3 +74,41 @@ def test_valid_ai_model_ref_is_forwarded_to_start_generation(client):
     # Legacy-Felder werden bei expliziter AiModelRef nicht mitgeschickt.
     assert fake.call_args.kwargs["llm_profile_id"] is None
     assert fake.call_args.kwargs["llm_model_override"] is None
+
+
+def test_connection_model_mismatch_returns_400(client):
+    """Issue #819: das strikte Katalog-ValueError aus dem Service-Layer
+    (Connection/Model-Mismatch) wird am Endpunkt zu HTTP 400 mit verständlicher
+    Meldung — bestehendes ``except ValueError``-Handling in report.py, kein
+    neuer Error-Pfad."""
+    fake = MagicMock(
+        side_effect=ValueError(
+            "Modell 'MiniMax-M3' gehört nicht zur ProviderConnection 'conn-minimax'"
+        )
+    )
+    with patch("app.api.report.ReportGenerationService.start_generation", fake):
+        resp = client.post("/api/report/generate", json=_ref_body())
+    assert resp.status_code == 400
+    error_message = resp.get_json()["error"]
+    assert "conn-minimax" in error_message
+    assert "MiniMax-M3" in error_message
+    assert "gehört nicht zur" in error_message
+
+
+def test_connection_model_discovery_failure_returns_400_distinct_message(client):
+    """Ein Discovery-Fehlschlag (Provider nicht erreichbar/ungültige
+    Credentials) wird ebenfalls zu HTTP 400, aber mit einer von einem echten
+    Model-Mismatch unterscheidbaren Meldung."""
+    fake = MagicMock(
+        side_effect=ValueError(
+            "Modell-Katalog für ProviderConnection 'conn-minimax' derzeit "
+            "nicht abrufbar (invalid_credentials): Anmeldung abgelehnt"
+        )
+    )
+    with patch("app.api.report.ReportGenerationService.start_generation", fake):
+        resp = client.post("/api/report/generate", json=_ref_body())
+    assert resp.status_code == 400
+    error_message = resp.get_json()["error"]
+    assert "nicht abrufbar" in error_message
+    assert "invalid_credentials" in error_message
+    assert "gehört nicht zur" not in error_message
