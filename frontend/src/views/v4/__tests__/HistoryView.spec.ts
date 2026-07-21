@@ -6,7 +6,7 @@
  * 2. PageHeader rendert title="Verlauf" + subtitle.
  * 3. HistoryDatabase wird eingebunden.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
@@ -42,24 +42,9 @@ const router = makeTestRouter([
 const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: {}, en: {} } })
 
 describe('HistoryView (v4)', () => {
-  // Still async console-output (Vue/jdom warnings) during jsdom environment
-  // teardown. Without this, a pending console callback at worker-rpc close can
-  // trigger a flaky "EnvironmentTeardownError: Closing rpc while onUserConsoleLog
-  // was pending" race in the full suite. Test assertions are unaffected.
-  let consoleSpies: Array<ReturnType<typeof vi.spyOn>> = []
-
   beforeEach(() => {
     lsMock.clear()
     setActivePinia(createPinia())
-    consoleSpies = [
-      vi.spyOn(console, 'warn').mockImplementation(() => {}),
-      vi.spyOn(console, 'error').mockImplementation(() => {}),
-    ]
-  })
-
-  afterEach(() => {
-    consoleSpies.forEach((s) => s.mockRestore())
-    consoleSpies = []
   })
 
   it('mountet ohne Crash', async () => {

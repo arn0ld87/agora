@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Frontend-Testlauf: verbleibende Vitest-Teardown-Race nach #811 — 2026-07-21, Issue #797)
+
+- **`EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`** trat
+  sporadisch weiter auf, obwohl `test.pool: 'threads'` bereits unter
+  [#811](https://github.com/arn0ld87/agora/issues/811) die pinia-4-Race entschärft hatte —
+  Restproblem war Vitests eigener console-Intercept-Mechanismus, der jede
+  `console.*`-Ausgabe per RPC an den Hauptprozess weiterreicht; beim Worker-Teardown
+  konnte dieser RPC-Call noch offen sein. Fix: `test.disableConsoleIntercept: true`
+  global in `frontend/vite.config.js` — entfernt den racenden Mechanismus für die
+  gesamte Suite statt ihn pro Spec zu umgehen. Der spec-lokale
+  `console.warn`/`console.error`-Spy-Workaround in
+  `frontend/src/views/v4/__tests__/HistoryView.spec.ts` (unzuverlässig) entfällt.
+  10 aufeinanderfolgende `bun run test`-Läufe (170 Files / 1501 Tests) durchgehend
+  Exit 0.
+
 ### Fixed (Backend-Dependency-SSoT: verwaiste `requirements.txt` entfernt — 2026-07-21, Issue #762)
 
 - **`backend/requirements.txt` divergierte von `backend/pyproject.toml`/`backend/uv.lock`**

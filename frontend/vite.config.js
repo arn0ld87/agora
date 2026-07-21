@@ -53,6 +53,15 @@ export default defineConfig({
     // Worker als Worker-Threads im selben Prozess statt als Child-Prozesse
     // und vermeidet damit die Fork-Spawn/Teardown-Race.
     pool: 'threads',
+    // Issue #797 (Restproblem nach #811): auch mit dem threads-Pool trat
+    // sporadisch "EnvironmentTeardownError: Closing rpc while
+    // onUserConsoleLog was pending" auf — Ursache ist Vitests eigener
+    // console-Intercept-Mechanismus, der jede console.*-Ausgabe per RPC an
+    // den Hauptprozess weiterreicht. Beim Worker-Teardown kann dieser RPC-
+    // Call noch offen sein, wenn der Worker geschlossen wird. Globale
+    // Deaktivierung des Intercepts entfernt den racenden Mechanismus fuer
+    // die gesamte Suite, statt ihn pro Spec mit console-Spies zu umgehen.
+    disableConsoleIntercept: true,
     // jsdom-Environment seit EPIC-10-ST-07 (Issue #84) — Composable-Tests
     // brauchen DOM-APIs (mount/unmount, EventSource-Mock, document.body).
     environment: 'jsdom',
