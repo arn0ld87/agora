@@ -46,6 +46,7 @@ PRODUCTIVE_PATH_CANDIDATES = [
     REPO_ROOT / "install.sh",
     REPO_ROOT / "package.json",
     *sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml")),
+    *sorted((REPO_ROOT / ".github" / "workflows").glob("*.yaml")),
 ]
 
 # Matched z. B. "backend/requirements.txt", "-r requirements.txt" (wenn
@@ -149,16 +150,22 @@ def test_no_productive_path_references_committed_requirements_txt() -> None:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue  # Prosa-Kommentare sind kein produktiver Installationspfad.
-            # Pro Kommando-Segment prüfen, nicht pro Zeile: eine verkettete Shell-Zeile
-            # kann einen erlaubten `uv export`-Snapshot UND einen verbotenen
-            # `pip install -r backend/requirements.txt`-Aufruf gemeinsam enthalten
-            # (z. B. per `&&`) — dann darf nur das Snapshot-Segment ausgenommen werden.
+            # Pro Kommando-Segment UND pro Token prüfen, nicht pro Zeile/Segment als
+            # Ganzes: eine verkettete Shell-Zeile kann einen erlaubten `uv export`-
+            # Snapshot UND einen verbotenen `pip install -r backend/requirements.txt`
+            # -Aufruf gemeinsam enthalten (z. B. per `&&`) — und selbst innerhalb eines
+            # Segments darf ein "/tmp/" an anderer Stelle (z. B. `cp backend/
+            # requirements.txt /tmp/x`) den eigentlichen Verstoß nicht verdecken. Die
+            # Ausnahme gilt daher nur für das konkrete Token, das den Treffer trägt.
             for segment in COMMAND_SEPARATOR_PATTERN.split(line):
-                if "/tmp/" in segment or "agora-backend-requirements.txt" in segment:
-                    continue
-                if "--format" in segment:
-                    continue  # `--format requirements-txt` ist ein uv-Formatname, kein Dateipfad.
-                if COMMITTED_REQUIREMENTS_PATTERN.search(segment):
+                tokens = segment.split()
+                for idx, token in enumerate(tokens):
+                    if not COMMITTED_REQUIREMENTS_PATTERN.search(token):
+                        continue
+                    if "/tmp/" in token or "agora-backend-requirements.txt" in token:
+                        continue  # Laufzeit-Snapshot-Pfad selbst trägt /tmp/.
+                    if idx > 0 and tokens[idx - 1] == "--format":
+                        continue  # `--format requirements.txt` ist ein uv-Formatname, kein Dateipfad.
                     violations.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {stripped}")
                     break
 
