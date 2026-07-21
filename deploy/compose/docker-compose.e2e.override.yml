@@ -24,9 +24,10 @@ services:
   # sporadisch mit "Invalid memory configuration - exceeds physical memory"
   # (Exit 3) abbrechen — der Check vergleicht die konfigurierte Summe gegen
   # das zum JVM-Start tatsächlich freie RAM, das auf geteilten Runnern
-  # schwankt (reproduziert lokal via `docker run --memory=<7-9g>`: gleiche
-  # Werte kippen inkonsistent zwischen running/exit=3). E2E-Fixtures sind
-  # klein, 512m/512m reichen mit deutlichem Sicherheitsabstand.
+  # schwankt (reproduziert lokal via `docker run --memory=7g` bzw.
+  # `--memory=9g` mit den Prod-Werten: dieselben Werte kippen inkonsistent
+  # zwischen running/exit=3 je nach Limit). E2E-Fixtures sind klein,
+  # 512m/512m reichen mit deutlichem Sicherheitsabstand.
   neo4j:
     environment:
       - NEO4J_server_memory_heap_initial__size=256m
