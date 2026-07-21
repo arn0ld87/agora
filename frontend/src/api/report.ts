@@ -3,17 +3,15 @@ import type { ApiEnvelope } from './envelope'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { Report, EvidenceMap, ReportSection, EvidenceItem } from '../contracts/reportContract'
 import type { ReportMode } from '../contracts/reportV3Contract'
+import type { AiModelRef } from '../contracts/aiModelRef'
 
 // --- Local payload/data types -------------------------------------------
 // These describe the `data` field inside the API envelope, not the envelope itself.
 
 /** Explizite (Connection, Modell)-Auswahl aus dem Report-Picker (Issue #817).
- * Spiegelt `AiModelRef` — die autoritative Report-Route. */
-export interface AiModelRefPayload {
-  provider_connection_id: string
-  model_id: string
-  source: string
-}
+ * Direkt vom kanonischen `AiModelRef` abgeleitet, damit die Enum-Constraint auf
+ * `source` erhalten bleibt und kein Parallel-Contract entsteht. */
+export type AiModelRefPayload = Pick<AiModelRef, 'provider_connection_id' | 'model_id' | 'source'>
 
 export interface GenerateReportData {
   simulation_id: string

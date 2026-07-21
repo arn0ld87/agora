@@ -116,7 +116,16 @@ def seed_run_stage_routing(
         connection_base_url = canonical_connection_base_url(connection)
         if connection_base_url:
             ref_options["base_url"] = connection_base_url
-        if connection.auth_mode == "api_key" and connection.secret_ref:
+        if connection.auth_mode == "api_key":
+            # Cloud-Connection muss ihr Secret an die Route binden. Ohne gebundenes
+            # Secret KEIN .env-/Server-Key-Fallback — sonst wiche die Secret-Quelle
+            # von der gewählten Route ab (Issue #817). Lokale No-Auth-Connections
+            # (auth_mode="none") brauchen keinen Key und laufen hier nicht durch.
+            if not connection.secret_ref:
+                raise ValueError(
+                    f"ProviderConnection {connection.id!r}: Cloud-Connection ohne "
+                    "gebundenes Secret — kein .env-Fallback für Report-Routen"
+                )
             ref_options["secret_ref"] = connection.secret_ref
             ref_options["connection_only"] = True
         config.stage_overrides[stage_id] = StageLLMRoute(
