@@ -92,11 +92,7 @@
       "Bash(git switch*)",
       "Bash(git merge*)",
       "Bash(git rebase*)",
-      "Bash(docker compose up*)",
-      "Bash(docker compose down*)",
-      "Bash(gh issue close*)",
-      "Bash(gh issue edit*)",
-      "Bash(gh pr create*)"
+      "Bash(docker compose down*)"
     ],
     "defaultMode": "default"
   },
