@@ -62,6 +62,29 @@ def _resolve_selected_connection(connection_id: str) -> ProviderConnection:
     return match
 
 
+def _bind_connection_secret(
+    connection: ProviderConnection, options: dict[str, object]
+) -> None:
+    """Bindet das Secret einer api_key-Connection strikt an die Route-Options.
+
+    Cloud-Connections (``auth_mode="api_key"``) ohne gebundenes ``secret_ref``
+    werden hart abgelehnt — kein ``.env``-/Server-Key-Fallback, sonst wiche die
+    Secret-Quelle von der gewählten Route ab (Issue #817). Lokale No-Auth-
+    Connections (``auth_mode="none"``) laufen hier nicht durch und bleiben
+    unberührt. Gemeinsame SSoT für den ``ai_model_ref``- und den
+    ``llm_profile_id``-Routing-Pfad, damit keiner der beiden die Bindung umgeht.
+    """
+    if connection.auth_mode != "api_key":
+        return
+    if not connection.secret_ref:
+        raise ValueError(
+            f"ProviderConnection {connection.id!r}: Cloud-Connection ohne "
+            "gebundenes Secret — kein .env-Fallback für Report-Routen"
+        )
+    options["secret_ref"] = connection.secret_ref
+    options["connection_only"] = True
+
+
 def seed_run_stage_routing(
     run_id: str,
     stage_id: StageId,
@@ -116,9 +139,7 @@ def seed_run_stage_routing(
         connection_base_url = canonical_connection_base_url(connection)
         if connection_base_url:
             ref_options["base_url"] = connection_base_url
-        if connection.auth_mode == "api_key" and connection.secret_ref:
-            ref_options["secret_ref"] = connection.secret_ref
-            ref_options["connection_only"] = True
+        _bind_connection_secret(connection, ref_options)
         config.stage_overrides[stage_id] = StageLLMRoute(
             provider_id=connection.id,
             model=ai_model_ref.model_id,
@@ -160,15 +181,12 @@ def seed_run_stage_routing(
             )
         connection = resolved.connection
         provider_options: dict[str, object] = {"base_url": resolved.base_url}
-        # Nur echte api_key-Connections an ihr gebundenes Secret koppeln. Lokale
-        # No-Auth-Connections (auth_mode="none") würden über connection_only sonst
-        # auf ein nicht existentes Secret zeigen; die strikte Auflösung liefert dann
-        # None und der Run bricht mit "LLM_API_KEY not configured" — das lokale
-        # Ollama-Betriebsmodell bliebe gebrochen. Die Auth-Semantik der
-        # ProviderConnection ist maßgeblich (SSoT), kein pauschales connection_only.
-        if connection.auth_mode == "api_key" and connection.secret_ref:
-            provider_options["secret_ref"] = connection.secret_ref
-            provider_options["connection_only"] = True
+        # Auth-Semantik der ProviderConnection ist maßgeblich (SSoT): api_key-
+        # Connections werden an ihr gebundenes Secret gekoppelt und ohne Secret
+        # hart abgelehnt (Issue #817) — identisch zum ai_model_ref-Pfad, damit der
+        # Profilpfad die Bindung nicht umgeht. Lokale No-Auth-Connections
+        # (auth_mode="none") laufen nicht durch und bleiben auf base_url beschränkt.
+        _bind_connection_secret(connection, provider_options)
         config.stage_overrides[stage_id] = StageLLMRoute(
             provider_id=connection.id,
             model=profile.model_name,

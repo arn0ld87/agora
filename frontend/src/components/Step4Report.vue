@@ -110,6 +110,15 @@ const STORAGE_REPORT_ROUTE_LEGACY = 'agora.report.route'
 const effectiveModel = useEffectiveModelSelection()
 
 const reportRoute = ref<AiModelRef | null>(null)
+// Expliziter Nutzer-Pick — strikt getrennt vom Anzeige-Default. Der beim Mount
+// aus dem Kanon (routing/defaults.global_default) übernommene Wert befüllt nur
+// reportRoute (Anzeige) und darf keinen Request-Override erzeugen.
+const reportRouteOverride = ref<AiModelRef | null>(null)
+
+function onReportRoutePicked(val: AiModelRef | null) {
+  reportRoute.value = val
+  reportRouteOverride.value = val
+}
 const isRegenerating = ref(false)
 
 const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
@@ -139,20 +148,22 @@ function effectiveReportModel(): string | null {
 /**
  * Baut die Modellauswahl für den Report-Request (Issue #817).
  *
- * Ein expliziter Picker-Pick (`reportRoute`) ist ein Request-Override für genau
- * diese Regenerierung und gewinnt vor dem Legacy-Profil. Beides gleichzeitig zu
- * senden würde das Backend mit HTTP 400 ablehnen — deshalb wird bei gesetztem
- * `reportRoute` weder `llm_profile_id` noch `llm_model` mitgeschickt. Ohne
- * expliziten Pick wird kein erfundener Override gesendet; Stage-/Workspace-
- * Defaults greifen dann serverseitig.
+ * Nur ein expliziter Picker-Pick (`reportRouteOverride`) wird als Request-
+ * Override für genau diese Regenerierung gesendet und gewinnt vor dem Legacy-
+ * Profil. Beides gleichzeitig zu senden würde das Backend mit HTTP 400
+ * ablehnen — deshalb wird bei gesetztem Override weder `llm_profile_id` noch
+ * `llm_model` mitgeschickt. Ein beim Mount aus dem Kanon übernommener
+ * Anzeige-Default (`reportRoute`) erzeugt KEINEN Override: ohne echte
+ * Nutzerwahl bleiben `llm_profile_id` beziehungsweise die serverseitigen
+ * Stage-/Workspace-Defaults unverändert wirksam.
  */
 function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref' | 'llm_profile_id'> {
-  if (reportRoute.value) {
+  if (reportRouteOverride.value) {
     return {
       ai_model_ref: {
-        provider_connection_id: reportRoute.value.provider_connection_id,
-        model_id: reportRoute.value.model_id,
-        source: reportRoute.value.source ?? 'explicit',
+        provider_connection_id: reportRouteOverride.value.provider_connection_id,
+        model_id: reportRouteOverride.value.model_id,
+        source: reportRouteOverride.value.source ?? 'explicit',
       },
     }
   }
@@ -459,9 +470,10 @@ onUnmounted(stopPolling)
         </div>
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
-          v-model="reportRoute"
+          :model-value="reportRoute"
           :is-regenerating="isRegenerating"
           :class="{ 'is-overridden-by-profile': llmProfileId }"
+          @update:model-value="onReportRoutePicked"
           @regenerate="regenerateWithModel"
         />
         <ReportModeControls

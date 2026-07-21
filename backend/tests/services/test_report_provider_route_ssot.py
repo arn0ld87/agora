@@ -268,6 +268,28 @@ def test_run_metadata_reflects_locked_route(report_env):
     assert "api_key" not in route_meta["llm_provider"]
 
 
+def test_cloud_connection_without_bound_secret_is_rejected(report_env):
+    """Slice A: api_key-Connection ohne gebundenes secret_ref → klarer Fehler,
+    kein stiller .env-/Server-Key-Fallback."""
+    no_secret = _minimax_connection().model_copy(update={"secret_ref": None})
+    report_env.connection_store.list_connections.return_value = [no_secret]
+    ref = AiModelRef(
+        provider_connection_id="conn-minimax", model_id="MiniMax-M3", source="explicit"
+    )
+    with pytest.raises(ValueError, match="gebundenes Secret"):
+        _start(report_env, ai_model_ref=ref)
+
+
+def test_profile_path_cloud_connection_without_bound_secret_is_rejected(report_env):
+    """Derselbe Reject wie über ``ai_model_ref`` muss auch über den
+    ``llm_profile_id``-Pfad greifen — sonst umginge das Profil-Routing die
+    Secret-Bindung (#817, CodeRabbit-Finding PR #820)."""
+    no_secret = _minimax_connection().model_copy(update={"secret_ref": None})
+    report_env.connection_store.list_connections.return_value = [no_secret]
+    with pytest.raises(ValueError, match="gebundenes Secret"):
+        _start(report_env, llm_profile_id="prof-minimax")
+
+
 def test_no_secret_value_leaks_into_locked_snapshot(report_env):
     """Der gelockte Snapshot trägt nur die Secret-Referenz, nie den Klartext-Key."""
     ref = AiModelRef(

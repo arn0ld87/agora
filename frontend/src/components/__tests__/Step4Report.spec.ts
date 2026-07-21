@@ -958,21 +958,26 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     })
   })
 
-  async function callRegenerate(): Promise<Record<string, unknown>> {
+  async function callRegenerate(pick?: AiModelRef): Promise<Record<string, unknown>> {
     const wrapper = mountComponent({ simulationId: 'sim_test01' })
     await flushPromises()
     await wrapper.vm.$nextTick()
+    if (pick) {
+      // Expliziter Nutzer-Pick über den Picker — kein Mount-Default.
+      const controls = wrapper.findComponent({ name: 'ReportModelControls' })
+      await controls.vm.$emit('update:modelValue', pick)
+      await wrapper.vm.$nextTick()
+    }
     await (wrapper.vm as unknown as { regenerateWithModel: () => Promise<void> }).regenerateWithModel()
     await wrapper.vm.$nextTick()
     return vi.mocked(generateReport).mock.calls.at(-1)![0] as Record<string, unknown>
   }
 
   it('sendet ai_model_ref und kein konkurrierendes llm_profile_id bei explizitem Pick', async () => {
-    mockEffectiveRef.value = PICK
     // Veraltetes Legacy-Profil im localStorage darf den Pick NICHT begleiten.
     localStorageMock.setItem('agora.report.llmProfileId', 'prof-stale')
 
-    const payload = await callRegenerate()
+    const payload = await callRegenerate(PICK)
 
     expect(payload.ai_model_ref).toEqual({
       provider_connection_id: 'conn_minimax',
@@ -981,6 +986,27 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     })
     expect(payload.llm_profile_id).toBeUndefined()
     expect(payload.llm_model).toBeUndefined()
+  })
+
+  it('erzeugt aus dem beim Mount übernommenen Kanon-Default KEINEN Override', async () => {
+    // Kanon trägt einen Wert, aber der Nutzer hat den Picker nie angefasst.
+    mockEffectiveRef.value = PICK
+
+    const payload = await callRegenerate()
+
+    expect(payload.ai_model_ref).toBeUndefined()
+    expect(payload.llm_profile_id).toBeUndefined()
+    expect(payload.llm_model).toBeUndefined()
+  })
+
+  it('behält llm_profile_id bei, wenn nur der Kanon-Default angezeigt wird (kein Pick)', async () => {
+    mockEffectiveRef.value = PICK
+    localStorageMock.setItem('agora.report.llmProfileId', 'prof-stale')
+
+    const payload = await callRegenerate()
+
+    expect(payload.ai_model_ref).toBeUndefined()
+    expect(payload.llm_profile_id).toBe('prof-stale')
   })
 
   it('sendet ohne expliziten Pick keinen erfundenen Override', async () => {
