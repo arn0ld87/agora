@@ -17,11 +17,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.contracts.ai_provider_contract import AiModelRef, ProviderConnection
+from app.contracts.ai_provider_contract import AiModel, AiModelRef, ProviderConnection
 from app.contracts.llm_profile_contract import LlmProfile
 from app.contracts.llm_routing_contract import RuntimeLlmRouting, StageLLMRoute
 from app.services import report_generation as rg
 from app.services.llm_runtime import RuntimeLlmConfig
+from app.services.provider_connections.adapters import ProviderProbeResult
 from app.services.runtime_run_config import RuntimeRunConfig
 from app.utils.artifact_locator import ArtifactLocator
 
@@ -59,6 +60,27 @@ def _minimax_connection() -> ProviderConnection:
         base_url=_MINIMAX_BASE,
         secret_ref="conn-minimax",
         enabled=True,
+    )
+
+
+def _minimax_probe_result() -> ProviderProbeResult:
+    """Deterministisches Ergebnis für den in Issue #819 eingeführten
+    Model-Discovery-Check (``ProviderConnectionService.probe``) — die MiniMax-
+    Connection der Fixture bietet exakt das in den Tests referenzierte Modell
+    ``MiniMax-M3`` an."""
+    return ProviderProbeResult(
+        status="available",
+        status_message=None,
+        models=(
+            AiModel(
+                provider_connection_id="conn-minimax",
+                model_id="MiniMax-M3",
+                display_name="MiniMax-M3",
+                source="live",
+                status="available",
+                local_or_cloud="cloud",
+            ),
+        ),
     )
 
 
@@ -114,6 +136,13 @@ def report_env(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "app.services.llm_routing_seed.get_workspace_routing_store", lambda: workspace_store
+    )
+    # Issue #819: der Model-Discovery-Check ruft ProviderConnectionService.probe
+    # auf — hier deterministisch gestellt statt eines echten Netzwerk-Calls.
+    probe_service = MagicMock()
+    probe_service.probe.return_value = _minimax_probe_result()
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionService", lambda **kwargs: probe_service
     )
     for target in (
         "app.services.llm_provider_secrets_store.get_llm_provider_secrets_store",
