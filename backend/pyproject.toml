@@ -232,7 +232,7 @@ packages = ["app"]
 # Overriding them to newer versions that provide native cp314 wheels.
 override-dependencies = [
     "tiktoken>=0.12.0",
-    "pillow>=12.1.1",
+    "pillow>=12.3.0",
     "pandas>=3.0.3",
     "numpy>=2.4.4",
     # GHSA-Override: unstructured < 0.18.18 hat Path Traversal via MSG-
