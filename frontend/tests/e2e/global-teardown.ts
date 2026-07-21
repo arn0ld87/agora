@@ -27,10 +27,13 @@ function dumpContainerLogs(repoRoot: string): void {
     '-f deploy/compose/docker-compose.e2e.override.yml',
   ].join(' ');
 
+  // Compose-SERVICE-Namen (docker-compose.yml), nicht Container-Namen: `docker
+  // compose logs <name>` erwartet den Service-Key. Mit den Container-Namen
+  // (agora-neo4j/agora-redis) lieferte der Aufruf im CI-Fehlerfall leere Logs.
   const services: Array<{ name: string; tail: number }> = [
     { name: 'agora', tail: 500 },
-    { name: 'agora-neo4j', tail: 200 },
-    { name: 'agora-redis', tail: 100 },
+    { name: 'neo4j', tail: 200 },
+    { name: 'redis', tail: 100 },
   ];
 
   console.log('\n========== [e2e-globalTeardown] CONTAINER LOGS ==========');
