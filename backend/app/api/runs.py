@@ -26,10 +26,16 @@ from ..models.task import TaskManager, TaskStatus
 from ..container import get_container
 from ..services.graph_builder import GraphBuilderService  # noqa: F401
 from ..services.graph_tools import GraphToolsService
+from ..services.llm_routing_seed import (
+    build_runtime_llm_config,
+    resolve_route_api_key,
+    seed_run_stage_routing,
+)
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.run_registry import RunRegistry
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
+from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.llm_client import LLMClient
@@ -527,6 +533,40 @@ def _restart_simulation_prepare(run: dict):
         branch_label=state.branch_name,
         metadata={"graph_id": state.graph_id, "branch_name": state.branch_name},
     )
+    run_id = new_run["run_id"]
+
+    # Restart hat keinen Request-Payload — llm_runtime=None, damit das
+    # Resolving ausschließlich über die persistierte Route bzw. den in der
+    # Settings-DB hinterlegten Store-Key läuft und nicht still auf
+    # Config.LLM_API_KEY/LLM_BASE_URL aus der lokalen .env zurückfällt (#798,
+    # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
+    # simulation_prepare.py::prepare_simulation (Zeilen 401-431).
+    from ..api.simulation_prepare import LOCAL_NO_AUTH_API_KEY, _is_local_endpoint
+
+    seed_run_stage_routing(
+        run_id,
+        "persona_generation",
+        llm_model_override=config.get("llm_model"),
+        llm_runtime=None,
+    )
+    route_router = StageModelRouter(run_id)
+    resolved_route = route_router.resolve("persona_generation")
+    route_router.lock_stage("persona_generation", resolved_route)
+    resolved_api_key = resolve_route_api_key(resolved_route, None)
+
+    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+        raise ValueError(
+            f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+            f"für Provider '{resolved_route.provider_id}'. "
+            "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+            "oder im Sitzungsfeld eingeben."
+        )
+
+    if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):
+        resolved_api_key = LOCAL_NO_AUTH_API_KEY
+
+    effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)
+
     task_manager = TaskManager()
     task_id = task_manager.create_task(
         "simulation_prepare",
@@ -569,6 +609,7 @@ def _restart_simulation_prepare(run: dict):
                 parallel_profile_count=None,
                 storage=storage,
                 llm_model=config.get("llm_model"),
+                llm_runtime=effective_llm_runtime,
                 language=config.get("language"),
                 max_agents=config.get("max_agents"),
                 quota_plan=quota_plan,
