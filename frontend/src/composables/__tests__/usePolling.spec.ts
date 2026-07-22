@@ -63,6 +63,18 @@ describe('usePolling', () => {
     polling.stop()
   })
 
+  it('legt keinen Timer an, wenn der Immediate-Tick das Polling selbst stoppt', async () => {
+    let polling: UsePollingReturn
+    const task = vi.fn(() => polling.stop())
+    ;({ polling } = mountPolling(task, 1000, { immediate: true }))
+
+    await polling.start({ immediate: true })
+    expect(polling.isRunning.value).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(task).toHaveBeenCalledOnce()
+  })
+
   it('stoppt nach `stop()` und ruft `task` nicht mehr', async () => {
     const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 500)

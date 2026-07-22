@@ -109,7 +109,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Bekannte Konsolidierungsschuld
 
-- klassische Prozess-Views, v4-Views und `/agora-2026` existieren parallel
+- die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. Die übrigen v4-Views und `/agora-2026` existieren weiterhin parallel
 - ein React-/Lovable-Neubau ist beschrieben, aber nicht als Zielentscheidung freigegeben
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken

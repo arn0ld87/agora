@@ -1207,6 +1207,8 @@
     "fileTooLarge": "Datei zu groß. Maximum: 50 MB.",
     "fileTypeNotAllowed": "Dateityp nicht erlaubt. Erlaubt: PDF, MD, TXT.",
     "graphBuildFailed": "Graph-Aufbau fehlgeschlagen.",
+    "projectFailed": "Projektverarbeitung fehlgeschlagen.",
+    "pendingUploadMissing": "Keine vorbereiteten Dateien zum Erstellen des Projekts gefunden.",
     "personaGenFailed": "Persona-Generierung fehlgeschlagen.",
     "simulationFailed": "Simulation fehlgeschlagen.",
     "reportFailed": "Bericht fehlgeschlagen.",

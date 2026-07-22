@@ -113,8 +113,7 @@ export function usePolling(
         await tick()
       }
     } finally {
-      // Keep the pulse steady — a quiet wink toward alexle135.de.
-      _startInterval()
+      if (isRunning.value) _startInterval()
     }
   }
 

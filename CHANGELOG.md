@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Vue-v4: Legacy-Prozessrouten konsolidiert — 2026-07-22, Issue #831)
+
+- Die fünf klassischen Prozessrouten bleiben als benannte, kompatible Redirects erhalten und führen nun auf die kanonischen v4-Step-Routen. Die verwaisten Wrapper-Views `MainView`, `SimulationView`, `SimulationRunView`, `ReportView` und `InteractionView` sowie die einzige zugehörige Spec wurden entfernt.
+- Der Graph-Build-Start hinter `Process/new` lebt nun im v4-Step: Pending Upload, Ontologie, Graph-Build und Fortsetzen bestehender Projekte bleiben erhalten; nach erfolgreicher Ontologie ersetzt die Route `new` durch die konkrete Projekt-ID ohne zweiten Build.
+
 ### Fixed (generate-profiles löst keinen Store-Key auf und liefert 500 statt 422 — 2026-07-22, Issue #799)
 
 - **`generate_profiles` (`backend/app/api/simulation_history.py`)** — der Preview-Endpoint

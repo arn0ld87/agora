@@ -1207,6 +1207,8 @@
     "fileTooLarge": "File too large. Max 50 MB.",
     "fileTypeNotAllowed": "File type not allowed. Allowed: PDF, MD, TXT.",
     "graphBuildFailed": "Graph build failed.",
+    "projectFailed": "Project processing failed.",
+    "pendingUploadMissing": "No pending files were found to create the project.",
     "personaGenFailed": "Persona generation failed.",
     "simulationFailed": "Simulation failed.",
     "reportFailed": "Report failed.",
