@@ -5,6 +5,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (generate-profiles löst keinen Store-Key auf und liefert 500 statt 422 — 2026-07-22, Issue #799)
+
+- **`generate_profiles` (`backend/app/api/simulation_history.py`)** — der Preview-Endpoint
+  `POST /api/simulation/generate-profiles` (erzeugt bewusst keinen Simulation-Run) las API-Keys
+  bisher ausschließlich aus dem Request-Payload. Anders als `simulation_prepare` wurde der in den
+  Settings hinterlegte Store-Key nie konsultiert; fehlte der Key bei einem Fremd-Provider, warf der
+  Generator `ValueError("LLM_API_KEY not configured")`, was auf HTTP 500 statt eines sauberen 422
+  mit Handlungsanweisung durchschlug.
+- Fix führt Store-Key-Auflösung über denselben Resolver (`resolve_route_api_key`) ein, ohne dabei
+  einen persistierten Run zu erzeugen: zwei reine Helper (`_apply_workspace_defaults`,
+  `_apply_override`) wurden aus `seed_run_stage_routing` extrahiert (`backend/app/services/llm_routing_seed.py`,
+  verhaltensidentisch für bestehende Aufrufer) und in einer neuen zustandslosen Funktion
+  `build_preview_stage_route` wiederverwendet — sie schreibt nie auf Platte und versiegelt keine
+  Stage, um keine neue Klasse von Orphan-Artefakten einzuführen (vgl. Issue #841). Fehlt der Key bei
+  einem nicht-lokalen Endpoint, liefert der Endpoint jetzt HTTP 422 mit derselben Handlungsanweisung
+  wie `simulation_prepare`; lokale Endpoints ohne Key erhalten weiterhin den No-Auth-Platzhalter (#778).
+
 ### Fixed (Persistenzfehler von update_run im Provider-Key-Guard maskiert bisher als reguläre Ablehnung — 2026-07-22, Issue #844)
 
 - **`prepare_simulation` (`backend/app/api/simulation_prepare.py`)** und

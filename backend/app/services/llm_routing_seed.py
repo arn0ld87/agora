@@ -118,6 +118,67 @@ def _bind_connection_secret(
     options["connection_only"] = True
 
 
+def _apply_workspace_defaults(config: RuntimeLlmRouting) -> None:
+    """Übernimmt Workspace-Routing-Defaults in config (mutiert config in-place)."""
+    try:
+        workspace_defaults = get_workspace_routing_store().load()
+    except Exception:  # noqa: BLE001 — Defaults sind "best effort", kein Stopper
+        workspace_defaults = None
+    if workspace_defaults is not None:
+        if workspace_defaults.global_default.model:
+            config.global_default = workspace_defaults.global_default
+        for ws_stage_id, ws_route in workspace_defaults.stage_overrides.items():
+            config.stage_overrides[ws_stage_id] = ws_route
+
+
+def _apply_override(
+    config: RuntimeLlmRouting,
+    stage_id: StageId,
+    *,
+    llm_model_override: Optional[str],
+    llm_runtime: Optional[RuntimeLlmConfig],
+) -> None:
+    """Überlagert config.stage_overrides[stage_id] mit einem expliziten Override,
+    falls llm_model_override gesetzt ist oder llm_runtime.enabled ist."""
+    runtime = llm_runtime or RuntimeLlmConfig()
+    route_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
+    if llm_model_override or runtime.enabled:
+        provider_options: dict[str, object] = {}
+        if runtime.base_url:
+            provider_options["base_url"] = runtime.base_url
+        # Wenn der Request "default" als Provider schickt, mappt das Provider-ID-Dict
+        # auf None. ResolvedRoute.provider_id ist Pflichtfeld; deshalb auf den
+        # global_default des Runs zurückfallen statt None zu persistieren.
+        effective_provider_id = route_provider_id or config.global_default.provider_id
+        effective_model = llm_model_override or config.global_default.model
+        config.stage_overrides[stage_id] = StageLLMRoute(
+            provider_id=effective_provider_id,
+            model=effective_model,
+            provider_options=provider_options,
+        )
+
+
+def build_preview_stage_route(
+    stage_id: StageId,
+    *,
+    llm_model_override: Optional[str],
+    llm_runtime: Optional[RuntimeLlmConfig],
+) -> ResolvedRoute:
+    """Zustandslose Variante für Preview-Endpoints ohne persistierten Run
+    (z. B. /simulation/generate-profiles). Nutzt denselben Workspace-Default-
+    und Override-Resolver wie seed_run_stage_routing, schreibt aber nie auf
+    Platte und versiegelt keine Stage — sicher für jeden Request."""
+    from uuid import uuid4
+
+    from .stage_model_router import StageModelRouter
+
+    config = RuntimeLlmRouting(global_default=StageLLMRoute())
+    _apply_workspace_defaults(config)
+    _apply_override(config, stage_id, llm_model_override=llm_model_override, llm_runtime=llm_runtime)
+    router = StageModelRouter(f"preview-{uuid4().hex}")
+    return router.resolve(stage_id, runtime_cfg=config)
+
+
 def seed_run_stage_routing(
     run_id: str,
     stage_id: StageId,
@@ -150,18 +211,9 @@ def seed_run_stage_routing(
     # Bei frischen Runs: Workspace-Defaults als Seed übernehmen. Versiegelte Stages
     # (= bereits in den Per-Run-Snapshots vorhanden) werden NICHT überschrieben.
     if not has_existing_config:
-        try:
-            workspace_defaults = get_workspace_routing_store().load()
-        except Exception:  # noqa: BLE001 — Defaults sind „best effort", kein Run-Stopper
-            workspace_defaults = None
-        if workspace_defaults is not None:
-            if workspace_defaults.global_default.model:
-                config.global_default = workspace_defaults.global_default
-            for ws_stage_id, ws_route in workspace_defaults.stage_overrides.items():
-                config.stage_overrides[ws_stage_id] = ws_route
+        _apply_workspace_defaults(config)
 
     runtime = llm_runtime or RuntimeLlmConfig()
-    route_provider_id = map_runtime_provider_to_route_provider(runtime.provider)
 
     if ai_model_ref is not None:
         # Höchste Priorität: die vom UI explizit gewählte (Connection, Modell)-Route.
@@ -182,18 +234,11 @@ def seed_run_stage_routing(
         if has_existing_config:
             config.routing_version += 1
     elif llm_model_override or runtime.enabled:
-        provider_options = {}
-        if runtime.base_url:
-            provider_options["base_url"] = runtime.base_url
-        # Wenn der Request "default" als Provider schickt, mappt das Provider-ID-Dict
-        # auf None. ResolvedRoute.provider_id ist Pflichtfeld; deshalb auf den
-        # global_default des Runs zurückfallen statt None zu persistieren.
-        effective_provider_id = route_provider_id or config.global_default.provider_id
-        effective_model = llm_model_override or config.global_default.model
-        config.stage_overrides[stage_id] = StageLLMRoute(
-            provider_id=effective_provider_id,
-            model=effective_model,
-            provider_options=provider_options,
+        _apply_override(
+            config,
+            stage_id,
+            llm_model_override=llm_model_override,
+            llm_runtime=llm_runtime,
         )
         if has_existing_config:
             config.routing_version += 1

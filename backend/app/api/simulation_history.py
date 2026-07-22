@@ -12,10 +12,11 @@ from flask import current_app, request
 from . import simulation_bp
 from ..api.simulation_prepare import LOCAL_NO_AUTH_API_KEY, _is_local_endpoint
 from ..models.project import ProjectManager
+from ..services.ai_route_resolver import AiRouteResolutionError
 from ..services.entity_reader import EntityReader
+from ..services.llm_routing_seed import build_preview_stage_route, resolve_route_api_key
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.oasis_profile_generator import OasisProfileGenerator
-from ..services.prepare_service import _resolve_llm_connection
 from ..services.simulation_manager import SimulationManager
 from ..services.simulation_runner import SimulationRunner
 from ..utils.api_errors import ApiErrorCode
@@ -193,9 +194,35 @@ def generate_profiles():
     # storage + graph_id durchreichen, damit OasisProfileGenerator die
     # Knowledge-Graph-Hybrid-Suche nutzen kann (Gemini-Code-Assist Finding,
     # PR #231).
-    # Track 3c: api_key + base_url aus dem aktiven LLM-Profil mitgeben,
-    # gleiche Helper-Funktion wie prepare_service._phase_generate_profiles.
-    api_key, base_url = _resolve_llm_connection(llm_runtime)
+    # Issue #799: api_key + base_url über denselben Store-Key-fähigen Resolver
+    # wie simulation_prepare auflösen (statt nur Payload-Overrides zu lesen),
+    # damit ein Fremd-Provider ohne Payload-Key sauber 422 statt 500 liefert.
+    try:
+        resolved_route = build_preview_stage_route(
+            "persona_generation",
+            llm_model_override=llm_model_override,
+            llm_runtime=llm_runtime,
+        )
+    except AiRouteResolutionError as exc:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=422,
+            message=str(exc),
+        )
+
+    api_key = resolve_route_api_key(resolved_route, llm_runtime)
+    base_url = resolved_route.base_url_sanitized
+    if api_key is None and not _is_local_endpoint(base_url):
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=422,
+            message=(
+                "kein api_key im Payload und kein Key in der Settings-DB "
+                f"für Provider '{resolved_route.provider_id}'. "
+                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+                "oder im Sitzungsfeld eingeben."
+            ),
+        )
     if api_key is None and _is_local_endpoint(base_url):
         # Lokaler Endpoint ohne Key ist zulaessig (#778) — Platzhalter statt
         # `None`, damit der Generator-Vertrag "Key + Base-URL aus derselben
