@@ -98,7 +98,7 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 ### Dokumentation
 
 - [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (Stand 22.07.2026 — laufend bei jeder größeren Änderung neu zu verifizieren)
-- [x] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft (`scripts/sync-status.sh`, `pre-push-gate.sh schemas`)
+- [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft — `scripts/sync-status.sh` regeneriert nur die markierten Versions-/Test-Blöcke, nicht die Fließtext-Abschnitte; die STATUS-Sync-Prüfung läuft ausschließlich lokal über `pre-push-gate.sh schemas`. Der CI-Job dafür wurde am 17.05.2026 entfernt (`.github/workflows/ci.yml`, Kommentar „2026-05-17 entfernt: status-sync (MAI-16)"), `docs/STATUS.md` bleibt laut diesem Kommentar bewusst manuell pflegbar
 - [ ] historische Pläne liegen ausschließlich im Archiv
 - [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
 

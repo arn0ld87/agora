@@ -57,7 +57,7 @@ Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht al
 
 [Issue #739](https://github.com/arn0ld87/agora/issues/739) (sechs rote E2E-Smokes reparieren) ist **geschlossen** (19.07.2026). Seither laufen die sechs Kern-Smokes (Health, Upload + Graph, Minimalreport, Report-Modi, Golden-Gate Accessibility, AiModelPicker) im `e2e-smokes`-Workflow durchgehend grün: **20 von 20 aufeinanderfolgenden Läufen** über `push` und `pull_request` zwischen 21.07.2026 und 22.07.2026 (letzter Lauf auf Commit `37320dbf`) sind erfolgreich, kein einzelner Flake in dieser Serie.
 
-Offen ist ausschließlich die Erzwingung: `main` besitzt aktuell **keine Branch-Protection** (`gh api repos/arn0ld87/agora/branches/main/protection` → 404 „Branch not protected"). Der `pull_request`-Trigger läuft mit, ist aber kein verpflichtender Merge-Check. Der Weg dahin steht in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
+Offen ist ausschließlich die Erzwingung: `main` besitzt aktuell **keine Branch-Protection** (`gh api repos/arn0ld87/agora/branches/main/protection` → 404 „Branch not protected“). Der `pull_request`-Trigger läuft mit, ist aber kein verpflichtender Merge-Check. Der Weg dahin steht in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
 
 ## Quality Gates
 
