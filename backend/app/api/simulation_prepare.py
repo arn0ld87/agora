@@ -424,9 +424,35 @@ def prepare_simulation():
         # der detaillierte update_run()-Aufruf muss deshalb zuletzt laufen,
         # sonst überschreibt sync_task() die provider_override-Meldung.
         task_manager.fail_task(task_id, guard_message)
-        run_registry.update_run(
-            run_record["run_id"], status="failed", message=guard_message, error=guard_message
-        )
+        # Issue #844: update_run() liefert None, wenn das Run-Manifest
+        # zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception
+        # werfen (write_json_atomic ist ungeschützt). Beide Fälle dürfen
+        # NICHT wie eine erfolgreich persistierte Ablehnung behandelt werden
+        # — sonst bleibt der Run unbemerkt "pending" (siehe #841), obwohl der
+        # Client bereits eine scheinbar abschließende 422-Antwort erhalten
+        # hat. fail_task() selbst hat keine prüfbare Fehlersemantik (siehe
+        # TaskManager.update_task) und bleibt daher best-effort.
+        persistence_error: Optional[Exception] = None
+        try:
+            updated_run = run_registry.update_run(
+                run_record["run_id"], status="failed", message=guard_message, error=guard_message
+            )
+        except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
+            updated_run = None
+            persistence_error = exc
+
+        if updated_run is None:
+            logger.error(
+                "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
+                "failed im Provider-Key-Guard: %s",
+                run_record["run_id"], task_id,
+                persistence_error or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
+            )
+            return json_error(
+                ApiErrorCode.INTERNAL_ERROR,
+                status=500,
+                message="Interner Fehler beim Markieren des Runs als fehlgeschlagen. Bitte erneut versuchen.",
+            )
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=422,
