@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const pipeline = vi.hoisted(() => ({ initialize: vi.fn() }))
+const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('@/composables/useGraphBuildPipeline', async () => {
   const { ref } = await import('vue')
@@ -19,7 +20,10 @@ vi.mock('@/composables/useGraphBuildPipeline', async () => {
     }),
   }
 })
-vi.mock('vue-router', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: routerPush }),
+  useRoute: () => ({ name: 'StepGraphBuild', params: {} }),
+}))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 import StepGraphBuildView from '../StepGraphBuildView.vue'
@@ -99,5 +103,35 @@ describe('StepGraphBuildView', () => {
 
     expect(pipeline.initialize).toHaveBeenCalledTimes(2)
     expect(pipeline.initialize).toHaveBeenLastCalledWith('project_b')
+  })
+
+  it('leitet ein next-step vom Child auf StepEnvSetup weiter', async () => {
+    routerPush.mockClear()
+    const wrapper = mount(StepGraphBuildView, {
+      props: { projectId: 'project_42' },
+      global: {
+        stubs: {
+          AppShell: { template: '<main><slot /></main>' },
+          PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
+          PipelineStepper: true,
+          StepModelOverrideChip: true,
+          GraphPanel: true,
+          Step1GraphBuild: {
+            name: 'Step1GraphBuild',
+            props: ['projectData', 'currentPhase', 'ontologyProgress', 'buildProgress', 'graphData', 'systemLogs'],
+            emits: ['next-step'],
+            template: '<section />',
+          },
+        },
+      },
+    })
+
+    await wrapper.getComponent({ name: 'Step1GraphBuild' }).vm.$emit('next-step')
+
+    expect(routerPush).toHaveBeenCalledTimes(1)
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'StepEnvSetup',
+      params: { projectId: 'project_42' },
+    })
   })
 })
