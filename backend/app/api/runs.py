@@ -555,12 +555,20 @@ def _restart_simulation_prepare(run: dict):
     resolved_api_key = resolve_route_api_key(resolved_route, None)
 
     if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
-        raise ValueError(
+        guard_message = (
             f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
             f"für Provider '{resolved_route.provider_id}'. "
             "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
             "oder im Sitzungsfeld eingeben."
         )
+        # Issue #841: new_run existiert an dieser Stelle bereits (Zeile 523) —
+        # ein Task wird erst danach erzeugt (Zeile 570), daher hier kein
+        # task_manager.fail_task. Ohne dieses Markieren bleibt der Run-Datensatz
+        # dauerhaft als "pending" in der Registry verwaist.
+        run_registry.update_run(
+            new_run["run_id"], status="failed", message=guard_message, error=guard_message
+        )
+        raise ValueError(guard_message)
 
     if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):
         resolved_api_key = LOCAL_NO_AUTH_API_KEY
