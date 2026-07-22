@@ -5,6 +5,25 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Persistenzfehler von update_run im Provider-Key-Guard maskiert bisher als reguläre Ablehnung — 2026-07-22, Issue #844)
+
+- **`prepare_simulation` (`backend/app/api/simulation_prepare.py`)** und
+  **`_restart_simulation_prepare` (`backend/app/api/runs.py`)** markierten Run/Task beim
+  Provider-Key-Guard (Issue #841) zwar als `failed`, ignorierten dabei aber Rückgabewert und
+  Exceptions von `run_registry.update_run(...)`. Lieferte `update_run` `None` (Run-Manifest
+  zwischenzeitlich verschwunden) oder warf es eine I/O-Exception, gab der Endpunkt trotzdem die
+  reguläre 422-Antwort bzw. den `ValueError` zurück — als sei die Ablehnung sauber persistiert
+  worden, obwohl der Run unbemerkt `pending` blieb (CodeRabbit-Major-Befund auf PR #843).
+- Fix prüft den Rückgabewert von `update_run` explizit und fängt Exceptions ab: bei bestätigter
+  Persistenz bleibt das Verhalten aus #841 unverändert (422 bzw. `ValueError` mit der detaillierten
+  Provider-Key-Meldung); bei Persistenzfehler wird stattdessen das bestehende Projektmuster
+  `ApiErrorCode.INTERNAL_ERROR` verwendet (Prepare-Pfad: `json_error(..., status=500)`;
+  Restart-Pfad: `RuntimeError(ApiErrorCode.INTERNAL_ERROR)`, von `handle_api_errors` auf 500
+  gemappt). Run-/Task-Bezug wird serverseitig geloggt, ohne Details an den Client zu leaken.
+  `TaskManager.fail_task` bleibt bewusst best-effort (keine prüfbare Fehlersemantik ohne
+  Änderung an `task.py`, außerhalb des Slice-Scopes) — dokumentiertes Restrisiko für den
+  seltenen Fall, dass die Task-Markierung fehlschlägt, während die Run-Aktualisierung gelingt.
+
 ### Fixed (Verwaiste pending-Run-/Task-Records bei fehlendem Store-Key — 2026-07-22, Issue #841)
 
 - **`prepare_simulation` (`backend/app/api/simulation_prepare.py`)** und

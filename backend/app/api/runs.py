@@ -37,6 +37,7 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import RunnerStatus, SimulationRunner
 from ..services.stage_model_router import StageModelRouter
 from ..services.sim.cancel_flag import request_cancel as _request_cancel
+from ..utils.api_errors import ApiErrorCode
 from ..utils.api_responses import handle_api_errors, json_error, json_success
 from ..utils.llm_client import LLMClient
 from ..utils.artifact_locator import ArtifactLocator
@@ -565,9 +566,30 @@ def _restart_simulation_prepare(run: dict):
         # ein Task wird erst danach erzeugt (Zeile 570), daher hier kein
         # task_manager.fail_task. Ohne dieses Markieren bleibt der Run-Datensatz
         # dauerhaft als "pending" in der Registry verwaist.
-        run_registry.update_run(
-            new_run["run_id"], status="failed", message=guard_message, error=guard_message
-        )
+        #
+        # Issue #844: update_run() liefert None, wenn das Run-Manifest
+        # zwischenzeitlich verschwunden ist, oder es kann eine I/O-Exception
+        # werfen. Beide Fälle dürfen NICHT als erfolgreich persistierte
+        # Ablehnung durchgehen — sonst wirft der Code weiterhin den regulären
+        # ValueError("provider_override...") und täuscht damit eine sauber
+        # gespeicherte Statusänderung vor, die tatsächlich nicht stattfand.
+        persistence_error: Optional[Exception] = None
+        try:
+            updated_run = run_registry.update_run(
+                new_run["run_id"], status="failed", message=guard_message, error=guard_message
+            )
+        except Exception as exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
+            updated_run = None
+            persistence_error = exc
+
+        if updated_run is None:
+            logger.error(
+                "Persistenzfehler beim Markieren von run_id=%s als failed im "
+                "Restart-Provider-Key-Guard: %s",
+                new_run["run_id"],
+                persistence_error or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
+            )
+            raise RuntimeError(ApiErrorCode.INTERNAL_ERROR) from persistence_error
         raise ValueError(guard_message)
 
     if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):

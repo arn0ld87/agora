@@ -466,7 +466,11 @@ def test_resume_simulation_prepare_raises_without_key_for_non_local_endpoint(env
         MockProjMgr.get_project.return_value = fake_project
         MockTaskMgr.return_value.create_task.return_value = "task_001"
         mock_registry.create_run.return_value = {"run_id": "run_new_003"}
-        mock_registry.update_run.return_value = None
+        # Persistenz erfolgreich (truthy Dict) — dies ist der Erfolgsfall aus
+        # #841. Der Persistenzfehler-Fall (None/Exception) wird separat in
+        # test_resume_simulation_prepare_raises_internal_error_when_run_update_returns_none
+        # und ..._raises (Issue #844) abgedeckt.
+        mock_registry.update_run.return_value = {"run_id": "run_new_003", "status": "failed"}
 
         router_instance = MockRouter.return_value
         router_instance.resolve.return_value = resolved_route
@@ -489,3 +493,145 @@ def test_resume_simulation_prepare_raises_without_key_for_non_local_endpoint(env
     assert "provider_override" in update_call.kwargs["message"]
     assert "provider_override" in update_call.kwargs["error"]
     assert not MockTaskMgr.return_value.create_task.called
+
+
+# ---------------------------------------------------------------------------
+# Test 11-12: Issue #844 — Persistenzfehler von update_run im Restart-Guard
+#
+# Der Restart-Pfad hat an dieser Stelle noch keinen Task (der wird erst nach
+# dem Guard erzeugt, Zeile ~579 in runs.py). Liefert update_run() None oder
+# wirft es eine Exception, darf der Guard NICHT den regulären
+# ValueError("provider_override...") werfen — das würde vortäuschen, der Run
+# sei sauber als "failed" persistiert worden. Stattdessen muss ein interner
+# Persistenzfehler propagiert werden, und es darf weiterhin kein Task
+# erzeugt und kein prepare_simulation gestartet werden.
+# ---------------------------------------------------------------------------
+
+
+def test_resume_simulation_prepare_raises_internal_error_when_run_update_returns_none(env):
+    """update_run() liefert None (Run-Manifest zwischenzeitlich verschwunden) im
+    Restart-Guard → interner Persistenzfehler statt irreführendem
+    ValueError("provider_override..."). Kein Task wird erzeugt,
+    prepare_simulation wird nicht gestartet.
+    """
+    from app.utils.api_errors import ApiErrorCode
+
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value=None),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_004"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            with pytest.raises(RuntimeError) as exc_info:
+                _run_restart_prepare_sync(run)
+
+        assert exc_info.value.args and exc_info.value.args[0] == ApiErrorCode.INTERNAL_ERROR
+        # Die irreführende 422-Provider-Key-Meldung darf nicht auftauchen.
+        assert "provider_override" not in str(exc_info.value)
+        assert not MockMgr.return_value.prepare_simulation.called
+        assert not MockTaskMgr.return_value.create_task.called
+
+
+def test_resume_simulation_prepare_raises_internal_error_when_run_update_raises(env):
+    """update_run() wirft einen I/O-/Persistenzfehler im Restart-Guard →
+    interner Persistenzfehler statt Maskierung als normaler Guard-Fall.
+    Kein Task wird erzeugt, prepare_simulation wird nicht gestartet.
+    """
+    from app.utils.api_errors import ApiErrorCode
+
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value=None),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_005"}
+        mock_registry.update_run.side_effect = OSError("disk full: /uploads/run_registry/run_new_005.json")
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            with pytest.raises(RuntimeError) as exc_info:
+                _run_restart_prepare_sync(run)
+
+        assert exc_info.value.args and exc_info.value.args[0] == ApiErrorCode.INTERNAL_ERROR
+        assert "provider_override" not in str(exc_info.value)
+        assert "disk full" not in str(exc_info.value)
+        assert not MockMgr.return_value.prepare_simulation.called
+        assert not MockTaskMgr.return_value.create_task.called

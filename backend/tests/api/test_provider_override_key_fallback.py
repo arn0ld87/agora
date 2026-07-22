@@ -4,6 +4,7 @@ Smoke-Fix Welle 2, Slice 04 — P1 #3 + #17.
 """
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,12 +47,17 @@ def llm_client(monkeypatch):
     return app.test_client()
 
 
+_UNSET = object()
+
+
 def _base_prepare_mocks(
     monkeypatch,
     *,
     resolved_api_key: str | None,
     task_fail_calls: list | None = None,
     run_update_calls: list | None = None,
+    run_update_return: Any = _UNSET,
+    run_update_side_effect: BaseException | None = None,
 ):
     """Setzt alle Mocks für /api/simulation/prepare außer resolve_route_api_key.
 
@@ -59,6 +65,12 @@ def _base_prepare_mocks(
     Aufrufe von ``TaskManager.fail_task`` bzw. ``run_registry.update_run``
     aufgezeichnet werden (Issue #841 — Guard-Pfad muss verwaiste
     pending-Records als ``failed`` markieren).
+
+    ``run_update_return``/``run_update_side_effect`` steuern, was der
+    gemockte ``run_registry.update_run`` zurückgibt bzw. wirft (Issue #844 —
+    Persistenzfehler des Guard-Pfads). Per Default wird ein truthy Dict
+    zurückgegeben (erfolgreiche Persistenz), damit bestehende Tests nicht
+    fälschlich den None-Persistenzfehler-Pfad treffen.
     """
     fake_state = MagicMock()
     fake_state.project_id = "proj_001"
@@ -106,9 +118,17 @@ def _base_prepare_mocks(
         lambda *a, **k: {"run_id": "run_test_1"},
     )
     if run_update_calls is not None:
+        def _fake_update_run(*a, **k):
+            run_update_calls.append((a, k))
+            if run_update_side_effect is not None:
+                raise run_update_side_effect
+            if run_update_return is not _UNSET:
+                return run_update_return
+            return {"run_id": a[0], "status": k.get("status"), "message": k.get("message"), "error": k.get("error")}
+
         monkeypatch.setattr(
             "app.api.simulation_prepare.run_registry.update_run",
-            lambda *a, **k: run_update_calls.append((a, k)),
+            _fake_update_run,
         )
     monkeypatch.setattr("app.models.task.TaskManager", FakeTaskManager)
     monkeypatch.setattr(
@@ -294,6 +314,139 @@ def test_override_422_when_no_payload_no_db_and_cloud_provider(prepare_client, m
     fail_args, _fail_kwargs = task_fail_calls[0]
     assert fail_args[0] == "task_1"
     assert "provider_override" in fail_args[1].lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 3b/3c: Issue #844 — Persistenzfehler von update_run im Guard-Pfad
+#
+# PR #843 (Issue #841) markiert Run/Task beim Provider-Key-Guard als
+# "failed", ignoriert dabei aber Rückgabewert/Exceptions von
+# run_registry.update_run(...). Liefert update_run None (Manifest existiert
+# nicht mehr) oder wirft es einen I/O-Fehler, darf der Endpunkt NICHT mehr
+# die reguläre 422-Ablehnung liefern — das würde eine erfolgreiche
+# Persistenz vortäuschen, die tatsächlich nicht stattgefunden hat.
+# ---------------------------------------------------------------------------
+
+
+def test_override_500_when_run_update_returns_none_after_provider_key_guard(prepare_client, monkeypatch):
+    """update_run() liefert None (Run-Manifest zwischenzeitlich verschwunden) →
+    500 mit internal_error statt der irreführenden 422-Provider-Key-Antwort.
+    """
+
+    class FakeRouter:
+        def __init__(self, _run_id: str):
+            pass
+        def resolve(self, _stage: str):
+            return ResolvedRoute(
+                stage="persona_generation",
+                provider_id="openai",
+                model="gpt-4o-mini",
+                base_url_sanitized="https://api.openai.com/v1",
+                routing_version=1,
+            )
+        def lock_stage(self, *_a, **_k):
+            return None
+
+    task_fail_calls: list = []
+    run_update_calls: list = []
+    _base_prepare_mocks(
+        monkeypatch,
+        resolved_api_key=None,
+        task_fail_calls=task_fail_calls,
+        run_update_calls=run_update_calls,
+        run_update_return=None,
+    )
+    fake_manager = MagicMock()
+    fake_manager.get_simulation.return_value = MagicMock(
+        project_id="proj_001", graph_id="g1",
+        source_simulation_id=None, root_simulation_id=None,
+        branch_name=None, branch_depth=0,
+        entities_count=1, entity_types=["Person"],
+    )
+    monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
+    monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
+
+    resp = prepare_client.post(
+        "/api/simulation/prepare",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "llm_provider": {"provider": "openai"},
+        },
+    )
+
+    body = resp.get_json()
+    assert resp.status_code == 500, body
+    assert body.get("code") == "internal_error", body
+    # Die detaillierte Provider-Key-Meldung darf nicht als vermeintlich
+    # erfolgreiche 422-Ablehnung nach außen dringen.
+    assert "provider_override" not in str(body).lower()
+
+    # update_run wurde versucht (Rückgabe None), fail_task lief davor wie gehabt.
+    assert len(run_update_calls) == 1
+    assert len(task_fail_calls) == 1
+
+
+def test_override_500_when_run_update_raises_after_provider_key_guard(prepare_client, monkeypatch):
+    """update_run() wirft einen I/O-/Persistenzfehler → 500 mit internal_error,
+    keine Maskierung als normaler Guard-Fall, keine Exception-Details im Body.
+    """
+
+    class FakeRouter:
+        def __init__(self, _run_id: str):
+            pass
+        def resolve(self, _stage: str):
+            return ResolvedRoute(
+                stage="persona_generation",
+                provider_id="openai",
+                model="gpt-4o-mini",
+                base_url_sanitized="https://api.openai.com/v1",
+                routing_version=1,
+            )
+        def lock_stage(self, *_a, **_k):
+            return None
+
+    task_fail_calls: list = []
+    run_update_calls: list = []
+    _base_prepare_mocks(
+        monkeypatch,
+        resolved_api_key=None,
+        task_fail_calls=task_fail_calls,
+        run_update_calls=run_update_calls,
+        run_update_side_effect=OSError("disk full: /uploads/run_registry/run_test_1.json"),
+    )
+    fake_manager = MagicMock()
+    fake_manager.get_simulation.return_value = MagicMock(
+        project_id="proj_001", graph_id="g1",
+        source_simulation_id=None, root_simulation_id=None,
+        branch_name=None, branch_depth=0,
+        entities_count=1, entity_types=["Person"],
+    )
+    monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
+    monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
+
+    resp = prepare_client.post(
+        "/api/simulation/prepare",
+        json={
+            "simulation_id": VALID_SIM_ID,
+            "llm_provider": {"provider": "openai"},
+        },
+    )
+
+    body = resp.get_json()
+    assert resp.status_code == 500, body
+    assert body.get("code") == "internal_error", body
+    assert "provider_override" not in str(body).lower()
+    assert "disk full" not in str(body).lower()
+    assert "run_test_1.json" not in str(body)
+    # Kuratierte, run-bezogene Meldung statt der generischen
+    # handle_api_errors-Fallback-Meldung ("internal server error") — stellt
+    # sicher, dass der Guard den Persistenzfehler bewusst behandelt statt
+    # sich zufällig auf den generischen Exception-Handler zu verlassen.
+    assert body.get("error") != "internal server error", body
+    assert "fehlgeschlagen" in body.get("error", "").lower(), body
+
+    assert len(run_update_calls) == 1
+    assert len(task_fail_calls) == 1
 
 
 # ---------------------------------------------------------------------------
