@@ -1,7 +1,7 @@
 # Agora — Status
 
-**Stand:** 20.07.2026  
-**Geprüfte Main-Baseline:** `b068852`  
+**Stand:** 22.07.2026  
+**Geprüfte Main-Baseline:** `37320dbf`  
 **Produktversion:** `0.8.0` Technical Preview
 
 Diese Datei beschreibt ausschließlich den verifizierten Istzustand. Strategische Release-Ziele stehen in [`ROADMAP.md`](../ROADMAP.md), konkrete Arbeitspakete in [GitHub Issues](https://github.com/arn0ld87/agora/issues), ausgelieferte Änderungen in [`CHANGELOG.md`](../CHANGELOG.md).
@@ -51,24 +51,13 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 
-Der Stand ist dennoch Technical Preview, weil die Kernpipeline im E2E-Gate noch nicht vollständig grün ist und Altpfade in Frontend, Provider-Profilen und Dokumentation weiter konsolidiert werden.
+Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird und Altpfade im Frontend (klassische Prozess-Views, v4-Views, `/agora-2026`) weiter konsolidiert werden.
 
 ## E2E-Smokes
 
-Der Stack bootet im GitHub-Runner. Nach Issue #739 wurden zwei maskierte Bugs repariert (Alpine-CDN-Egress-Block + Onboarding-Guard-Redirect im AiModelPicker-Smoke); die sechs Kern-Smokes laufen auf Commit `e6f86112` in `workflow_dispatch` grün (`29691904520`, `29692157673`). Ein `pull_request`-Lauf (`29691887993`) zeigte Golden-Gate-axe-Asserts rot, ohne Codebezug — das ist PR-Runner-Last, nicht Reproducer. Wir warten auf einen weiteren `pull_request`-Lauf vor der Squash-Merge-Entscheidung. Der `pull_request`-Trigger bleibt aktiviert.
+[Issue #739](https://github.com/arn0ld87/agora/issues/739) (sechs rote E2E-Smokes reparieren) ist **geschlossen** (19.07.2026). Seither laufen die sechs Kern-Smokes (Health, Upload + Graph, Minimalreport, Report-Modi, Golden-Gate Accessibility, AiModelPicker) im `e2e-smokes`-Workflow durchgehend grün: **20 von 20 aufeinanderfolgenden Läufen** über `push` und `pull_request` zwischen 21.07.2026 und 22.07.2026 (letzter Lauf auf Commit `37320dbf`) sind erfolgreich, kein einzelner Flake in dieser Serie.
 
-| Smoke | Status | Hauptbefund |
-|---|---|---|
-| Health | grün (4 Läufe auf `32bad751`/`e6f86112`, 19.07.2026) | Stack, Auth und Provider-Seeding funktionieren |
-| Upload + Graph | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/process/<id>`, nicht die State-Verkettung; Fix per Onboarding-Dismiss vor `page.goto` |
-| Minimalreport | grün (4 Läufe, 19.07.2026) | Onboarding-Guard blockierte `/report/<id>`; Fix per Onboarding-Dismiss + Outline-Sync aus dem Report-Contract (PR #771) |
-| Report-Modi | grün (4 Läufe, 19.07.2026) | Fehlende Persona-Fixture ließ den Report-Contract vor der Generierung mit `INCOMPLETE` abbrechen; der Spec seedet jetzt deterministisch den Persona-Floor |
-| Golden-Gate Accessibility | grün in 3 `workflow_dispatch`-Läufen, **rot in 1 `pull_request`-Lauf** (`29691887993`) | Axe-A11y-Asserts (color-contrast auf Dashboard + LLM-Providers-Settings). Nach Cross-Check kein Code-Bezug — vermutlich PR-Runner-Last; Folge-PR-Lauf offen |
-| AiModelPicker | grün (4 Läufe, 19.07.2026) | Root Cause war harden-runner-Egress-Block auf `dl-cdn.alpinelinux.org`/`dl-4.alpinelinux.org` plus Onboarding-Guard-Redirect in CI; beides gefixt (PR #781) |
-
-Tracking: [Issue #739](https://github.com/arn0ld87/agora/issues/739)
-
-Der `pull_request`-Trigger ist reaktiviert. Die sechs Smokes können via [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md) als erforderliche Branch-Protection-Checks konfiguriert werden — erst nach weiteren stabilen Läufen und Owner-Freigabe.
+Offen ist ausschließlich die Erzwingung: `main` besitzt aktuell **keine Branch-Protection** (`gh api repos/arn0ld87/agora/branches/main/protection` → 404 „Branch not protected“). Der `pull_request`-Trigger läuft mit, ist aber kein verpflichtender Merge-Check. Der Weg dahin steht in [`docs/runbooks/e2e-required-check.md`](runbooks/e2e-required-check.md).
 
 ## Quality Gates
 
@@ -79,7 +68,7 @@ Der `pull_request`-Trigger ist reaktiviert. Die sechs Smokes können via [`docs/
 | Backend Full Tests + Coverage | `push:main` oder Label |
 | Frontend Full Tests + Coverage | `push:main` oder Label |
 | Schemas und Contract-Spiegel | vorhanden |
-| E2E-Kernpipeline | 3 grüne Läufe in Folge (19.07.2026, Commit `32bad751`): `29691168025`, `29691166308`, `29691165639`; `pull_request`-Trigger aktiv; Required-Erzwingung ausstehend |
+| E2E-Kernpipeline | 20 grüne Läufe in Folge (21.–22.07.2026, zuletzt Commit `37320dbf`); `pull_request`-Trigger aktiv; Required-Erzwingung ausstehend (`main` ohne Branch-Protection) |
 
 Lokale Befehle:
 
@@ -111,7 +100,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
 - Provider-Verbindungen: `ProviderConnection`
 - kanonische Route: `AiRoute` / `LlmRoute`
-- kanonische Modellauswahl: `frontend/src/components/AiModelPicker.vue`
+- kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
 - Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026)
 - Evidence-Gating: ADR-0002-Hartanker
@@ -143,8 +132,8 @@ Aktuelle Hardstops:
 
 ## Nächste Prioritäten
 
-1. Sechs E2E-Smokes stabil grün machen und als PR-Gate aktivieren.
-2. Vue-v4, Provider-/Routing-SSoT und Dependency-SSoT für `0.9.0` konsolidieren.
+1. E2E als verpflichtenden Pull-Request-Check aktivieren (Läufe sind stabil grün, Branch-Protection auf `main` fehlt noch).
+2. Vue-v4 als einziges Produktfrontend konsolidieren (Issue #760; Umsetzungskarte [#829](https://github.com/arn0ld87/agora/issues/829)).
 3. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

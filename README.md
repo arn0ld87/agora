@@ -22,7 +22,7 @@ Dokumente, Webseiten und strategische Fragestellungen werden in einen Wissensgra
 
 > **Aktueller Reifegrad: `0.8.0` Technical Preview.**
 >
-> Agora ist deutlich über einen einfachen Prototyp hinaus, aber noch nicht stabil genug für `1.0.0`: Fünf Kern-E2E-Smokes sind offen, Altpfade werden noch konsolidiert und die Produktwirkung ist noch nicht systematisch kalibriert.
+> Agora ist deutlich über einen einfachen Prototyp hinaus, aber noch nicht stabil genug für `1.0.0`: die sechs Kern-E2E-Smokes laufen stabil grün, sind aber noch nicht als verpflichtender Pull-Request-Check erzwungen, Frontend-Altpfade werden noch konsolidiert und die Produktwirkung ist noch nicht systematisch kalibriert.
 >
 > Agora ist ein experimentelles **Single-User-System**. Nicht ungeschützt ins öffentliche Internet stellen. Nutze VPN, Tailscale oder einen abgesicherten Reverse Proxy.
 

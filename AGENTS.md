@@ -68,7 +68,7 @@ Globale Konfiguration, Tokens, Browserprofile, Keychain-Inhalte und private Host
 - Frontend-Spiegel: `frontend/src/contracts/` und generierte `schemas/`
 - Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
 - Provider-Verbindung: `ProviderConnection`
-- kanonische Modellauswahl: `frontend/src/components/AiModelPicker.vue`
+- kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
 - kanonische Modellreferenz: `AiModelRef`
 - kanonische Route: `AiRoute` / `LlmRoute`
 - Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
@@ -80,12 +80,12 @@ Chat-Routing und Embedding-Konfiguration bleiben strukturell getrennt.
 
 ### 0.8.0 → 0.9.0
 
-- Issue #739: fünf rote E2E-Smokes reparieren
-- E2E anschließend als Required Check aktivieren
-- Vue-v4 als einziges Produktfrontend festlegen
-- Provider-, Secret- und Routing-Altpfade konsolidieren
-- Dependency- und Versions-SSoTs bereinigen
-- Produkt- und Manifest-Version automatisiert synchronisieren
+Erledigt: E2E-Smokes repariert (#739), Provider-/Secret-/Routing-SSoT abgeschlossen (#761), Dependency-SSoT bereinigt (#762), Produkt-/Manifest-Version automatisiert synchronisiert (#759).
+
+Offen:
+
+- E2E als Required Check aktivieren (Läufe sind stabil grün, `main` besitzt aber noch keine Branch-Protection)
+- Vue-v4 als einziges Produktfrontend festlegen (Issue #760; Umsetzungskarte [#829](https://github.com/arn0ld87/agora/issues/829))
 
 ### 0.9.0 → 0.10.0
 
