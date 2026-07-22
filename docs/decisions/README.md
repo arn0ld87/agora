@@ -13,6 +13,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0006](0006-ai-provider-connections.md) | Kanonische KI-Provider-Verbindungen | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |
+| [0010](0010-vue-v4-route-consolidation.md) | Vue-v4-Referenzrouten und Deep-Link-Lebenszyklus | Proposed | #830 |
 
 ## Geplante ADRs
 
