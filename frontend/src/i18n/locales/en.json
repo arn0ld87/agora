@@ -236,7 +236,9 @@
       "noResults": "No matches.",
       "openInBrowser": "Open in Neo4j Browser"
     },
-    "next": "Next: environment →"
+    "next": "Next: environment →",
+    "breadcrumbRuns": "Runs",
+    "breadcrumbTitle": "Graph Build"
   },
   "step2": {
     "kicker": "№ 02 — ENVIRONMENT",

@@ -57,9 +57,9 @@ const {
 } = useGraphBuildPipeline({ projectId: props.projectId, router, t })
 
 const crumbs = computed<BreadcrumbItem[]>(() => [
-  { label: 'Runs', path: '/runs' },
+  { label: t('step1.breadcrumbRuns'), path: '/runs' },
   { label: props.projectId },
-  { label: 'Graph Build' },
+  { label: t('step1.breadcrumbTitle') },
 ])
 
 onMounted(() => {

@@ -218,6 +218,48 @@ describe('usePolling — pauseWhenHidden', () => {
     polling.stop()
   })
 
+  it('Catch-up-Tick der synchron stop() ruft startet kein neues Interval', async () => {
+    // Regression: _handleVisibilityChange darf nach dem Catch-up-Tick nur dann
+    // ein Interval starten, wenn isRunning noch true ist. Ruft der Tick synchron
+    // stop(), würde ein ungeschütztes _startInterval() ein Leak-Interval erzeugen.
+    let polling: UsePollingReturn | undefined
+    let stopOnNextTick = false
+    const task = vi.fn(() => {
+      if (stopOnNextTick) {
+        stopOnNextTick = false
+        polling?.stop() // Catch-up-Tick stoppt das Polling synchron.
+      }
+      return Promise.resolve()
+    })
+    const mounted = mountPolling(task, 1000)
+    polling = mounted.polling
+
+    // Normaler Start (kein Stop) — immediate Tick.
+    await polling.start()
+    expect(polling.isRunning.value).toBe(true)
+
+    // In den Hintergrund: Interval pausiert.
+    Object.defineProperty(document, 'hidden', { value: true, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    // Der nächste (Catch-up-)Tick soll synchron stop() auslösen.
+    task.mockClear()
+    stopOnNextTick = true
+    Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+
+    // Catch-up-Tick lief genau einmal und hat gestoppt.
+    expect(task).toHaveBeenCalledTimes(1)
+    expect(polling.isRunning.value).toBe(false)
+
+    // Kein Leak-Interval: nach dem synchronen stop() darf kein weiterer Tick folgen.
+    task.mockClear()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(task).not.toHaveBeenCalled()
+  })
+
   it('pauseWhenHidden=false → läuft auch im Hintergrund weiter', async () => {
     const task = vi.fn().mockResolvedValue(undefined)
     const { polling } = mountPolling(task, 1000, { pauseWhenHidden: false })

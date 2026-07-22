@@ -83,9 +83,13 @@ export function usePolling(
       // Tab in den Hintergrund: Interval stoppen, isRunning bleibt true
       _stopInterval()
     } else {
-      // Tab wieder sichtbar: sofortiger Catch-up-Tick + Interval wieder starten
+      // Tab wieder sichtbar: sofortiger Catch-up-Tick + Interval wieder starten.
+      // Der Catch-up-Tick kann synchron stop() auslösen; danach darf kein neues
+      // Interval mehr entstehen — daher isRunning erneut prüfen.
       void tick()
-      _startInterval()
+      if (isRunning.value) {
+        _startInterval()
+      }
     }
   }
 
