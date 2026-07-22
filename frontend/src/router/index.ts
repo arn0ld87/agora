@@ -119,32 +119,27 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/process/:projectId',
     name: 'Process',
-    component: () => import('../views/MainView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'StepGraphBuild', params: { projectId: String(to.params.projectId) } }),
   },
   {
     path: '/simulation/:simulationId',
     name: 'Simulation',
-    component: () => import('../views/SimulationView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'StepEnvSetup', params: { projectId: String(to.params.simulationId) } }),
   },
   {
     path: '/simulation/:simulationId/start',
     name: 'SimulationRun',
-    component: () => import('../views/SimulationRunView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'StepSimulation', params: { simulationId: String(to.params.simulationId) } }),
   },
   {
     path: '/report/:reportId',
     name: 'Report',
-    component: () => import('../views/ReportView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'StepReport', params: { reportId: String(to.params.reportId) } }),
   },
   {
     path: '/interaction/:reportId',
     name: 'Interaction',
-    component: () => import('../views/InteractionView.vue'),
-    props: true,
+    redirect: (to) => ({ name: 'StepInteraction', params: { reportId: String(to.params.reportId) } }),
   },
 
   // v4 step shell wrappers (Slice H) — /v4/* prefix

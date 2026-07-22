@@ -50,6 +50,11 @@ const VIEW_STUB = vi.hoisted(() => ({
 vi.mock('../../views/v4/DashboardView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/RunsAppShellView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/CompareView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepGraphBuildView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepSimulationView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepReportView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
 vi.mock('../../views/Home.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
@@ -116,6 +121,19 @@ describe('Router – Redirects', () => {
 
     expect(classicRoute?.redirect).toEqual({ name: 'SettingsGeneral' })
     expect(classicRoute?.components).toBeUndefined()
+  })
+
+  it.each([
+    ['/process/project_42', 'StepGraphBuild', { projectId: 'project_42' }],
+    ['/simulation/simulation_42', 'StepEnvSetup', { projectId: 'simulation_42' }],
+    ['/simulation/simulation_42/start', 'StepSimulation', { simulationId: 'simulation_42' }],
+    ['/report/report_42', 'StepReport', { reportId: 'report_42' }],
+    ['/interaction/report_42', 'StepInteraction', { reportId: 'report_42' }],
+  ])('leitet %s auf %s mit dokumentiertem Parameter-Mapping weiter', async (from, to, params) => {
+    await pushAndSettle(from)
+
+    expect(router.currentRoute.value.name).toBe(to)
+    expect(router.currentRoute.value.params).toMatchObject(params)
   })
 })
 

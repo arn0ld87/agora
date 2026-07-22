@@ -1,4 +1,5 @@
 import service, { requestWithRetry } from './index'
+import type { ApiResponse } from '../types/run'
 
 // --- Local types --------------------------------------------------------
 
@@ -12,6 +13,10 @@ export interface BuildProgressDetail {
   batch_count: number
   total_batches: number
   batch_at: number
+}
+
+export interface BuildGraphResponse {
+  task_id: string
 }
 
 export interface TaskStatusResponse {
@@ -34,6 +39,9 @@ export interface GraphDataResponse {
 export interface ProjectResponse {
   project_id: string
   project_name?: string
+  status?: string
+  graph_id?: string
+  graph_build_task_id?: string
   [key: string]: unknown
 }
 
@@ -59,7 +67,7 @@ export interface GraphDiffResponse {
  * Generate ontology (upload documents and simulation requirements)
  * @param formData - Contains files, simulation_requirement, project_name, etc.
  */
-export function generateOntology(formData: FormData): Promise<unknown> {
+export function generateOntology(formData: FormData): Promise<ApiResponse<ProjectResponse>> {
   return requestWithRetry(() =>
     service({
       url: '/api/graph/ontology/generate',
@@ -76,7 +84,7 @@ export function generateOntology(formData: FormData): Promise<unknown> {
  * Build graph
  * @param data - Contains project_id, graph_name, etc.
  */
-export function buildGraph(data: BuildGraphData): Promise<unknown> {
+export function buildGraph(data: BuildGraphData): Promise<ApiResponse<BuildGraphResponse>> {
   return requestWithRetry(() =>
     service({
       url: '/api/graph/build',
@@ -90,7 +98,7 @@ export function buildGraph(data: BuildGraphData): Promise<unknown> {
  * Query task status
  * @param taskId - Task ID
  */
-export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+export function getTaskStatus(taskId: string): Promise<ApiResponse<TaskStatusResponse>> {
   return service({
     url: `/api/graph/task/${taskId}`,
     method: 'get'
@@ -101,7 +109,7 @@ export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
  * Get graph data
  * @param graphId - Graph ID
  */
-export function getGraphData(graphId: string): Promise<GraphDataResponse> {
+export function getGraphData(graphId: string): Promise<ApiResponse<GraphDataResponse>> {
   return service({
     url: `/api/graph/data/${graphId}`,
     method: 'get'
@@ -112,7 +120,7 @@ export function getGraphData(graphId: string): Promise<GraphDataResponse> {
  * Get project information
  * @param projectId - Project ID
  */
-export function getProject(projectId: string): Promise<ProjectResponse> {
+export function getProject(projectId: string): Promise<ApiResponse<ProjectResponse>> {
   return service({
     url: `/api/graph/project/${projectId}`,
     method: 'get'
