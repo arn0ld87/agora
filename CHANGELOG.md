@@ -5,6 +5,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Restart eines Prepare-Runs nutzt Store-Key statt .env-Fallback — 2026-07-22, Issue #798)
+
+- **`_restart_simulation_prepare` (`backend/app/api/runs.py`)** übergab `manager.prepare_simulation(...)`
+  bisher ohne `llm_runtime` — der Restart eines Runs, der ursprünglich gegen einen Fremd-Provider
+  lief, fiel dadurch still auf `Config.LLM_API_KEY`/`Config.LLM_BASE_URL` aus der lokalen `.env`
+  zurück statt den in der Settings-DB hinterlegten Store-Key des aktiven Providers zu nutzen
+  (Opus-Review-Folgebefund zu Issue #778, dessen Fix nur den Erst-Prepare-Pfad abdeckte).
+- Fix nutzt denselben Resolver-Pfad wie `simulation_prepare.py::prepare_simulation`:
+  `StageModelRouter.resolve` → `resolve_route_api_key` → `build_runtime_llm_config`. Lokale
+  No-Auth-Endpoints bleiben ohne Key funktionsfähig; Fremd-Provider ohne Store-Key lehnen den
+  Restart jetzt hart ab statt still auf den falschen Key auszuweichen.
+
 ### Fixed (Frontend-Testlauf: verbleibende Vitest-Teardown-Race nach #811 — 2026-07-21, Issue #797)
 
 - **`EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`** trat

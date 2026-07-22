@@ -252,3 +252,230 @@ def test_resume_report_generate_returns_422_when_llm_client_unavailable(env):
     payload = resp.get_json()
     assert payload["success"] is False
     assert payload.get("error")
+
+
+# ---------------------------------------------------------------------------
+# Test 8-10: Restart eines simulation_prepare-Runs nutzt den Store-Key statt
+# dem .env-Fallback (#798 — Opus-Review-Folgebefund zu #778).
+#
+# _restart_simulation_prepare übergab manager.prepare_simulation(...) bisher
+# ohne llm_runtime; _resolve_llm_connection(None) fiel dadurch beim Restart
+# eines Fremd-Provider-Runs still auf Config.LLM_API_KEY/LLM_BASE_URL zurück.
+# ---------------------------------------------------------------------------
+
+import threading as _threading  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
+
+from app.contracts.llm_routing_contract import ResolvedRoute  # noqa: E402
+from app.services.llm_runtime import RuntimeLlmConfig  # noqa: E402
+
+
+def _run_restart_prepare_sync(run, **prepare_mock_kwargs):
+    """Helper: ruft _restart_simulation_prepare(run) mit synchronem Thread auf.
+
+    Gibt (MockMgr, call_kwargs) zurück, wobei call_kwargs die kwargs des
+    manager.prepare_simulation(...)-Aufrufs sind.
+    """
+    from app.api.runs import _restart_simulation_prepare
+
+    def capture_start(self):
+        self.run()  # inline statt background
+
+    with patch.object(_threading.Thread, "start", capture_start):
+        _restart_simulation_prepare(run)
+
+
+def test_resume_simulation_prepare_uses_store_key_for_foreign_provider(env):
+    """Restart gegen einen Fremd-Provider mit hinterlegtem Store-Key muss
+    ``manager.prepare_simulation`` mit einem ``llm_runtime`` aufrufen, der den
+    Store-Key trägt — nicht ``llm_runtime=None`` (führt zum .env-Fallback).
+    """
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch(
+            "app.api.runs.resolve_route_api_key",
+            return_value="store-resolved-key-value",
+        ),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_001"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            _run_restart_prepare_sync(run)
+
+        assert MockMgr.return_value.prepare_simulation.called
+        call_kwargs = MockMgr.return_value.prepare_simulation.call_args.kwargs
+
+    assert "llm_runtime" in call_kwargs
+    llm_runtime = call_kwargs["llm_runtime"]
+    assert llm_runtime is not None, (
+        "Restart darf llm_runtime nicht None lassen — das fällt in "
+        "_resolve_llm_connection(None) still auf Config.LLM_API_KEY zurück (#798)"
+    )
+    assert llm_runtime.api_key == "store-resolved-key-value", (
+        f"Erwartet Store-Key aus der Settings-DB, erhalten: {llm_runtime.api_key!r}"
+    )
+    assert llm_runtime.provider == "openai"
+    assert llm_runtime != RuntimeLlmConfig(), (
+        "llm_runtime darf nicht der leere Default sein — das wäre äquivalent "
+        "zum alten .env-Fallback-Verhalten"
+    )
+
+
+def test_resume_simulation_prepare_falls_back_to_local_no_auth_key(env):
+    """Restart gegen einen lokalen No-Auth-Endpoint ohne Store-Key darf keinen
+    ValueError werfen und muss den lokalen Platzhalter-Key setzen.
+    """
+    from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai_compatible",
+        model="qwen3:14b",
+        base_url_sanitized="http://localhost:11434/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value=None),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "qwen3:14b"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_002"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            _run_restart_prepare_sync(run)
+
+        assert MockMgr.return_value.prepare_simulation.called
+        call_kwargs = MockMgr.return_value.prepare_simulation.call_args.kwargs
+
+    llm_runtime = call_kwargs["llm_runtime"]
+    assert llm_runtime is not None
+    assert llm_runtime.api_key == LOCAL_NO_AUTH_API_KEY
+
+
+def test_resume_simulation_prepare_raises_without_key_for_non_local_endpoint(env):
+    """Fremd-Provider ohne Store-Key und ohne lokalen Endpoint muss hart
+    ablehnen — kein stiller .env-Fallback (#798, analog #778).
+    """
+    run = _create_run(
+        env["registry"],
+        run_type="simulation_prepare",
+        entity_id="sim_test",
+        simulation_id="sim_test",
+        status="failed",
+    )
+
+    fake_state = MagicMock()
+    fake_state.project_id = "proj_test"
+    fake_state.graph_id = "graph_test"
+    fake_state.branch_name = "main"
+
+    fake_project = MagicMock()
+    fake_project.simulation_requirement = "Test requirement"
+
+    resolved_route = ResolvedRoute(
+        stage="persona_generation",
+        provider_id="openai",
+        model="gpt-4o",
+        base_url_sanitized="https://api.openai.com/v1",
+        routing_version=1,
+    )
+
+    with (
+        patch("app.api.runs.SimulationManager") as MockMgr,
+        patch("app.api.runs.ProjectManager") as MockProjMgr,
+        patch("app.api.runs.TaskManager") as MockTaskMgr,
+        patch("app.api.runs.run_registry") as mock_registry,
+        patch("app.api.runs.seed_run_stage_routing"),
+        patch("app.api.runs.StageModelRouter") as MockRouter,
+        patch("app.api.runs.resolve_route_api_key", return_value=None),
+    ):
+        MockMgr.return_value.get_simulation.return_value = fake_state
+        MockMgr.return_value.get_simulation_config.return_value = {"llm_model": "gpt-4o"}
+        MockProjMgr.get_project.return_value = fake_project
+        MockTaskMgr.return_value.create_task.return_value = "task_001"
+        mock_registry.create_run.return_value = {"run_id": "run_new_003"}
+        mock_registry.update_run.return_value = None
+
+        router_instance = MockRouter.return_value
+        router_instance.resolve.return_value = resolved_route
+        router_instance.lock_stage.return_value = resolved_route
+
+        env["app"].extensions["neo4j_storage"] = MagicMock(name="Neo4jStorage")
+
+        with env["app"].app_context():
+            with pytest.raises(ValueError, match="provider_override"):
+                _run_restart_prepare_sync(run)
+
+        assert not MockMgr.return_value.prepare_simulation.called
