@@ -38,6 +38,7 @@ describe('StepGraphBuildView', () => {
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
+          GraphPanel: true,
           Step1GraphBuild: {
             name: 'Step1GraphBuild',
             props: ['projectData', 'currentPhase', 'ontologyProgress', 'buildProgress', 'graphData', 'systemLogs'],
@@ -68,6 +69,7 @@ describe('StepGraphBuildView', () => {
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
+          GraphPanel: true,
           Step1GraphBuild: true,
         },
       },
@@ -87,6 +89,7 @@ describe('StepGraphBuildView', () => {
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
           PipelineStepper: true,
           StepModelOverrideChip: true,
+          GraphPanel: true,
           Step1GraphBuild: true,
         },
       },
