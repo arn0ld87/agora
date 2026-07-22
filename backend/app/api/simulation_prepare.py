@@ -410,15 +410,23 @@ def prepare_simulation():
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
     if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+        guard_message = (
+            f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
+            f"für Provider '{resolved_route.provider_id}'. "
+            "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
+            "oder im Sitzungsfeld eingeben."
+        )
+        # Issue #841: run_record und task_id existieren an dieser Stelle
+        # bereits (Zeilen 369/393) — ohne dieses Markieren bleibt der
+        # Datensatz dauerhaft als "pending" in der Registry verwaist.
+        run_registry.update_run(
+            run_record["run_id"], status="failed", message=guard_message, error=guard_message
+        )
+        task_manager.fail_task(task_id, guard_message)
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=422,
-            message=(
-                f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
-                f"für Provider '{resolved_route.provider_id}'. "
-                "Bitte in Einstellungen → LLM-Anbieter einen Schlüssel speichern "
-                "oder im Sitzungsfeld eingeben."
-            ),
+            message=guard_message,
         )
 
     if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):

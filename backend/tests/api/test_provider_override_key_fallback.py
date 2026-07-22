@@ -46,8 +46,20 @@ def llm_client(monkeypatch):
     return app.test_client()
 
 
-def _base_prepare_mocks(monkeypatch, *, resolved_api_key: str | None):
-    """Setzt alle Mocks für /api/simulation/prepare außer resolve_route_api_key."""
+def _base_prepare_mocks(
+    monkeypatch,
+    *,
+    resolved_api_key: str | None,
+    task_fail_calls: list | None = None,
+    run_update_calls: list | None = None,
+):
+    """Setzt alle Mocks für /api/simulation/prepare außer resolve_route_api_key.
+
+    ``task_fail_calls``/``run_update_calls`` sind optionale Listen, in die
+    Aufrufe von ``TaskManager.fail_task`` bzw. ``run_registry.update_run``
+    aufgezeichnet werden (Issue #841 — Guard-Pfad muss verwaiste
+    pending-Records als ``failed`` markieren).
+    """
     fake_state = MagicMock()
     fake_state.project_id = "proj_001"
     fake_state.graph_id = "graph_001"
@@ -76,6 +88,8 @@ def _base_prepare_mocks(monkeypatch, *, resolved_api_key: str | None):
         def complete_task(self, *a, **k):
             return None
         def fail_task(self, *a, **k):
+            if task_fail_calls is not None:
+                task_fail_calls.append((a, k))
             return None
 
     monkeypatch.setattr("app.api.simulation_prepare.SimulationManager", lambda: fake_manager)
@@ -91,6 +105,11 @@ def _base_prepare_mocks(monkeypatch, *, resolved_api_key: str | None):
         "app.api.simulation_prepare.run_registry.create_run",
         lambda *a, **k: {"run_id": "run_test_1"},
     )
+    if run_update_calls is not None:
+        monkeypatch.setattr(
+            "app.api.simulation_prepare.run_registry.update_run",
+            lambda *a, **k: run_update_calls.append((a, k)),
+        )
     monkeypatch.setattr("app.models.task.TaskManager", FakeTaskManager)
     monkeypatch.setattr(
         "app.api.simulation_prepare.resolve_route_api_key",
@@ -231,7 +250,14 @@ def test_override_422_when_no_payload_no_db_and_cloud_provider(prepare_client, m
         def lock_stage(self, *_a, **_k):
             return None
 
-    _base_prepare_mocks(monkeypatch, resolved_api_key=None)
+    task_fail_calls: list = []
+    run_update_calls: list = []
+    _base_prepare_mocks(
+        monkeypatch,
+        resolved_api_key=None,
+        task_fail_calls=task_fail_calls,
+        run_update_calls=run_update_calls,
+    )
     fake_manager = MagicMock()
     fake_manager.get_simulation.return_value = MagicMock(
         project_id="proj_001", graph_id="g1",
@@ -253,6 +279,21 @@ def test_override_422_when_no_payload_no_db_and_cloud_provider(prepare_client, m
     assert resp.status_code == 422, resp.get_json()
     body = resp.get_json()
     assert "provider_override" in body.get("message", "").lower() or "provider_override" in str(body).lower()
+
+    # Issue #841 — verwaister pending-Run-/Task-Record muss auf dem
+    # Guard-Pfad als "failed" markiert werden (run_record und task_id
+    # existieren an dieser Stelle bereits, siehe simulation_prepare.py).
+    assert len(run_update_calls) == 1
+    update_args, update_kwargs = run_update_calls[0]
+    assert update_args[0] == "run_test_1"
+    assert update_kwargs["status"] == "failed"
+    assert "provider_override" in update_kwargs["message"].lower()
+    assert "provider_override" in update_kwargs["error"].lower()
+
+    assert len(task_fail_calls) == 1
+    fail_args, _fail_kwargs = task_fail_calls[0]
+    assert fail_args[0] == "task_1"
+    assert "provider_override" in fail_args[1].lower()
 
 
 # ---------------------------------------------------------------------------

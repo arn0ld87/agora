@@ -479,3 +479,12 @@ def test_resume_simulation_prepare_raises_without_key_for_non_local_endpoint(env
                 _run_restart_prepare_sync(run)
 
         assert not MockMgr.return_value.prepare_simulation.called
+
+    # Issue #841 — verwaister pending-Run-Datensatz muss auf dem Guard-Pfad
+    # als "failed" markiert werden (new_run existiert bereits, Task noch nicht).
+    assert mock_registry.update_run.call_count == 1
+    update_call = mock_registry.update_run.call_args
+    assert update_call.args[0] == "run_new_003"
+    assert update_call.kwargs["status"] == "failed"
+    assert "provider_override" in update_call.kwargs["message"]
+    assert "provider_override" in update_call.kwargs["error"]

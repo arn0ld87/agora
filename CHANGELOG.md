@@ -5,6 +5,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Verwaiste pending-Run-/Task-Records bei fehlendem Store-Key — 2026-07-22, Issue #841)
+
+- **`prepare_simulation` (`backend/app/api/simulation_prepare.py`)** und
+  **`_restart_simulation_prepare` (`backend/app/api/runs.py`)** legten `Run`- (und teils
+  `Task`-)Datensätze bereits an, bevor der Store-Key-Guard einen Lauf mangels API-Key ablehnte —
+  der Datensatz blieb danach dauerhaft `pending` in der Registry, ohne Fehlermeldung. Fix markiert
+  den Run (und, wo bereits vorhanden, den Task) auf dem Guard-Pfad jetzt explizit als `failed` mit
+  der Guard-Fehlermeldung, bevor die 422-Antwort bzw. der `ValueError` zurückgegeben wird
+  (gefunden vom Opus-Reviewer als Nebenbefund bei Issue #798, kein Regress, eigenständiges
+  Datenhygiene-/UX-Problem).
+
 ### Fixed (Restart eines Prepare-Runs nutzt Store-Key statt .env-Fallback — 2026-07-22, Issue #798)
 
 - **`_restart_simulation_prepare` (`backend/app/api/runs.py`)** übergab `manager.prepare_simulation(...)`
