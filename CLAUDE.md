@@ -151,3 +151,10 @@ Konfiguration für externe Skill-Sammlungen, die dieses Repository als Kontext l
 `CONTEXT.md` existiert derzeit nicht und wird erst angelegt, wenn tatsächlich Begriffe oder Entscheidungen festzuhalten sind. Sein Fehlen ist kein Defekt und wird nicht gemeldet.
 
 Verbindliche Quelle für Aufgaben bleibt die Reihenfolge aus [`AGENTS.md`](AGENTS.md): `README.md` → `docs/STATUS.md` → `ROADMAP.md` → GitHub Issues.
+
+## Claude-Code-Konfiguration
+
+- `.claude/settings.json` ist eine bewusst gepflegte und versionierte Projektdatei.
+- Die vereinfachten Wildcard-Regeln sind beabsichtigt und dürfen nicht automatisch wieder in alte Einzelregeln zerlegt oder zurückgesetzt werden.
+- Änderungen an `.claude/settings.json` nur auf ausdrückliche Anweisung des Nutzers.
+- `.claude/settings.local.json` ist maschinenspezifisch, geheimnisfrei und nicht zu committen.

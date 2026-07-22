@@ -159,3 +159,11 @@ graphify-out/
 
 # Lokale Opencode-Konfiguration (persoenliches Setup, nicht repo-weit gueltig)
 opencode.jsonc
+
+# Claude Code: lokale, maschinenspezifische Freigaben
+.claude/settings.local.json
+.claude/settings.local.json.bak
+.claude/settings.local.json.bak.*
+
+.claude/*.bak
+.claude/*.bak.*
