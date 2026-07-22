@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 20.07.2026  
+**Stand:** 22.07.2026  
 **Aktuelle Produktversion:** `0.8.0` Technical Preview
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
@@ -48,15 +48,11 @@ Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports
 - Compare-, Export- und Observability-Grundlagen
 
-Der Stand ist trotzdem keine stabile `1.0`, weil zentrale E2E-Pfade noch rot sind, Legacy- und v4-Oberflächen parallel existieren und mehrere Provider-/Profilpfade weiter konsolidiert werden.
+Der Stand ist trotzdem keine stabile `1.0`, weil Legacy- und v4-Oberflächen parallel existieren und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
 
-## Jetzt
+## Erreicht
 
-- fünf rote E2E-Smokes einzeln reparieren
-- Dokumentation auf vier aktive Ebenen reduzieren
-- Versionslinie auf realistische Vorabversion zurücksetzen
-- bekannte Provider-, Secret- und Contract-Drifts schließen
-- Dependency-Quellen und Security-Ausnahmen synchronisieren
+Die ursprünglichen Voraussetzungen für den `0.8.0`-Stand sind abgeschlossen: die sechs Kern-E2E-Smokes sind repariert (Issue #739) und laufen seit mehreren Tagen durchgehend grün, die Dokumentation ist auf vier aktive Ebenen reduziert, die Versionslinie ist auf `0.8.0` zurückgesetzt, und Provider-/Secret-/Dependency-Drifts aus dieser Phase sind geschlossen (Issues #759, #761, #762). Offene Arbeit für den nächsten Schritt steht unter `0.9.0` unten.
 
 ---
 
@@ -70,9 +66,9 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 ### Kernpipeline
 
-- [ ] Health, Upload + Graph, Minimalreport, Report-Modi, Accessibility und AiModelPicker sind stabil grün
-- [ ] E2E-Smokes laufen mehrfach ohne Flakes
-- [ ] E2E ist als verpflichtender Pull-Request-Check aktiviert
+- [x] Health, Upload + Graph, Minimalreport, Report-Modi, Accessibility und AiModelPicker sind stabil grün (20/20 aufeinanderfolgende `e2e-smokes`-Läufe auf `push` und `pull_request`, 21.–22.07.2026)
+- [x] E2E-Smokes laufen mehrfach ohne Flakes (siehe oben)
+- [ ] E2E ist als verpflichtender Pull-Request-Check aktiviert (Branch-Protection auf `main` aktuell nicht gesetzt — Läufe sind grün, aber nicht erzwungen)
 - [ ] keine Skips, abgeschwächten Assertions oder pauschalen Retries als Ersatz für Fehlerbehebung
 
 ### Frontend
@@ -93,16 +89,16 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 ### Betrieb und Supply Chain
 
-- [ ] `pyproject.toml` und `uv.lock` sind einzige Backend-Dependency-SSoT
-- [ ] `requirements.txt` ist entfernt oder automatisch generiert
-- [ ] Produktversion und Komponentenmanifest-Versionen werden automatisch synchronisiert
-- [ ] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg
+- [x] `pyproject.toml` und `uv.lock` sind einzige Backend-Dependency-SSoT (Issue #762)
+- [x] `requirements.txt` ist entfernt oder automatisch generiert (`backend/requirements.txt` existiert nicht mehr)
+- [x] Produktversion und Komponentenmanifest-Versionen werden automatisch synchronisiert (Issue #759, `.github/workflows/version-drift.yml`, `pre-push-gate.sh schemas`)
+- [x] offene CVE-Ausnahmen besitzen aktuelle Owner, Fristen und Auflösungsweg (siehe `docs/dependency-risk-register.md`; Hardstops NLTK 28.09.2026, Trivy 30.08.2026)
 - [ ] Readiness, Auth, Tickets und Secret Stores sind durch produktnahe Smokes abgedeckt
 
 ### Dokumentation
 
-- [ ] README, STATUS, ROADMAP und Issues widersprechen sich nicht
-- [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft
+- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (Stand 22.07.2026 — laufend bei jeder größeren Änderung neu zu verifizieren)
+- [x] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft (`scripts/sync-status.sh`, `pre-push-gate.sh schemas`)
 - [ ] historische Pläne liegen ausschließlich im Archiv
 - [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
 

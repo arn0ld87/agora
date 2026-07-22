@@ -16,16 +16,18 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 
 ## Issue-Orchestrierung
 
-- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, M3-Review, anschließend PR.
+- `/agora-next-task`: genau ein release-relevantes Issue, ein isolierter Worker, ein lokaler Commit, Review, anschließend PR.
 - `/agora-batch-issues`: maximal zwei nachweislich unabhängige Issues parallel; jedes Issue bleibt in eigenem Worktree, Commit und PR.
 - Schreibende Worker verwenden `isolation: worktree`, pushen nicht und erzeugen genau einen lokalen Commit.
 - Der Lead verifiziert Diff, Tests und Gate selbst. Worker-Zusammenfassungen gelten nicht als Nachweis.
-- Vor Push und PR prüft `agora-reviewer-m3` read-only den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung.
+- Vor Push und PR prüft ein read-only Reviewer den Issue-Commit. Nur `APPROVE` erlaubt die Veröffentlichung. **Aktueller Ist-Zustand:** der `/agora-next-task`-Skripttext ruft `agora-opus-reviewer` auf (Agent-Frontmatter: `model: opus`, echtes Claude-Opus) — nicht `agora-reviewer-m3`. Beide Reviewer-Definitionen existieren parallel (`.claude/agents/agora-opus-reviewer.md` und `.claude/agents/agora-reviewer-m3.md`); welche final bleibt, ist noch nicht entschieden.
 - Keine Agent Teams für normale Issue-Arbeit. Subagenten reichen aus und halten die Kontexte getrennt.
 
 ## Subagent-Routing
 
-| Aufgabe | Modell | Subagent |
+Für jede Rolle existieren aktuell zwei parallele Agent-Definitionen unter `.claude/agents/`: eine mit `-m3`-Suffix (`model: MiniMax-M3`) und eine ohne Suffix (echte Anthropic-Modelle, z. B. `agora-refactor-worker` mit `model: sonnet`, `agora-opus-reviewer` mit `model: opus`). Issue [#803](https://github.com/arn0ld87/agora/issues/803) trackt die Konsolidierung dieser Dopplung — bis dahin sind beide Varianten gültige, registrierte Subagent-Typen. Diese Tabelle nennt die laut Routing-Absicht **bevorzugte** (`-m3`) Variante; welche ein konkreter Skript-/Slash-Command-Text tatsächlich aufruft, kann davon abweichen (siehe Hinweis oben zu `agora-opus-reviewer`) — im Zweifel gilt, was der jeweilige Skripttext wörtlich benennt.
+
+| Aufgabe | Bevorzugtes Modell | Bevorzugter Subagent |
 |---|---|---|
 | Architektur, Cross-Layer, ambige Specs | Lead (MiniMax-M3) | kein Implementer-Subagent |
 | Abschlussreview eines Issue-Commits | MiniMax-M3 | `agora-reviewer-m3` |
