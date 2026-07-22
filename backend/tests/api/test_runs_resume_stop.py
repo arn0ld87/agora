@@ -488,3 +488,4 @@ def test_resume_simulation_prepare_raises_without_key_for_non_local_endpoint(env
     assert update_call.kwargs["status"] == "failed"
     assert "provider_override" in update_call.kwargs["message"]
     assert "provider_override" in update_call.kwargs["error"]
+    assert not MockTaskMgr.return_value.create_task.called

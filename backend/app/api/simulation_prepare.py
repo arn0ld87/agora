@@ -419,10 +419,14 @@ def prepare_simulation():
         # Issue #841: run_record und task_id existieren an dieser Stelle
         # bereits (Zeilen 369/393) — ohne dieses Markieren bleibt der
         # Datensatz dauerhaft als "pending" in der Registry verwaist.
+        # Reihenfolge ist bewusst: fail_task() setzt intern per sync_task()
+        # eine generische Task-Message ("Task failed") auf den Run zurück —
+        # der detaillierte update_run()-Aufruf muss deshalb zuletzt laufen,
+        # sonst überschreibt sync_task() die provider_override-Meldung.
+        task_manager.fail_task(task_id, guard_message)
         run_registry.update_run(
             run_record["run_id"], status="failed", message=guard_message, error=guard_message
         )
-        task_manager.fail_task(task_id, guard_message)
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=422,
