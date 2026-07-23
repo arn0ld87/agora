@@ -638,7 +638,10 @@ class OasisProfileGenerator:
                     logger.warning(f"LLM output truncated (attempt {attempt+1}), attempting to fix...")
                     content = self._fix_truncated_json(content)
 
-                if not content.strip():
+                from ..llm.json_mode import _strip_llm_json_envelope
+                clean_content = _strip_llm_json_envelope(content)
+
+                if not clean_content.strip():
                     logger.warning(
                         f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
                     )
@@ -647,7 +650,7 @@ class OasisProfileGenerator:
 
                 # Try to parse JSON
                 try:
-                    result = json.loads(content)
+                    result = json.loads(clean_content)
 
                     # Validate required fields
                     if "bio" not in result or not result["bio"]:
@@ -680,7 +683,7 @@ class OasisProfileGenerator:
                     logger.warning(f"JSON parsing failed (attempt {attempt+1}): {str(je)[:80]}")
 
                     # Try to fix JSON
-                    result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
+                    result = self._try_fix_json(clean_content, entity_name, entity_type, entity_summary)
                     if result.get("_fixed"):
                         del result["_fixed"]
                         if "bio" not in result or not result["bio"]:
