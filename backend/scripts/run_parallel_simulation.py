@@ -94,6 +94,7 @@ try:
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
+        preflight_model_probe,
         resolve_runtime_paths,
     )
 except ImportError:  # direct script execution
@@ -109,6 +110,7 @@ except ImportError:  # direct script execution
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
+        preflight_model_probe,
         resolve_runtime_paths,
     )
 
@@ -1338,10 +1340,19 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
         if minimax_extra:
             model_cfg["extra_body"] = minimax_extra
 
+        # Explizite Übergabe von url/api_key an ModelFactory.create statt
+        # blindes Verlassen auf os.environ: CAMELs OpenAIModel.__init__ gibt
+        # expliziten Parametern Vorrang vor OPENAI_API_KEY/OPENAI_API_BASE_URL.
+        # Ein Stale-Parent-Env (z. B. OpenAI-Default aus .env) konnte sonst die
+        # aufgelöste Route überschatten → 404 ``model MiniMax-M3 not found``
+        # (Root Cause). url/api_key leer → None → CAMEL fällt wie bisher auf
+        # Env zurück (Standalone-/Dev-Pfad unbeschädigt).
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,
             model_config_dict=model_cfg,
+            url=llm_base_url or None,
+            api_key=llm_api_key or None,
         )
 
 
@@ -1437,6 +1448,10 @@ async def run_twitter_simulation(
 
     # Twitter use common LLM configuration
     model = create_model(config, use_boost=False)
+    # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
+    # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
+    # N-facher identischer Fehler während der Simulation.
+    preflight_model_probe(model)
 
     # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
     # Tools are attached to each SocialAgent after generation below; OASIS's
@@ -1716,6 +1731,10 @@ async def run_reddit_simulation(
     
     # Reddit use acceleration LLM configuration(if available，otherwise fallback toCommon configuration）
     model = create_model(config, use_boost=True)
+    # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
+    # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab — kein
+    # N-facher identischer Fehler während der Simulation.
+    preflight_model_probe(model)
 
     # Native CAMEL function-calling replaces the old ReACT-style tool_loop.
     tool_loop = None

@@ -553,3 +553,170 @@ def test_build_runtime_llm_config_maps_resolved_route_for_legacy_callers():
     assert cfg.provider == "custom_openai"
     assert cfg.api_key == "local-key"
     assert cfg.base_url == "http://localhost:11434/v1"
+
+
+# ---------------------------------------------------------------------------
+# OASIS-Sim-Start: eine ausgewählte MiniMax-ProviderConnection muss Modell,
+# Base-URL und gebundenen Key als zusammengehörige Einheit bis in den
+# Subprozess-Env durchreichen (Root Cause „404 model MiniMax-M3 not found").
+# ---------------------------------------------------------------------------
+
+
+def _minimax_connection() -> ProviderConnection:
+    return ProviderConnection(
+        id="conn-minimax",
+        provider_kind="openai_compatible",
+        display_name="MiniMax",
+        transport="http",
+        auth_mode="api_key",
+        base_url="https://api.minimax.io/v1",
+        secret_ref="minimax-conn",
+        enabled=True,
+    )
+
+
+def _stub_minimax_probe(monkeypatch, connection_store) -> MagicMock:
+    """Stellt den Model-Discovery-Pfad für die MiniMax-Connection auf ein
+    deterministisches ``available``-Ergebnis mit ``MiniMax-M3`` im Katalog."""
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_llm_provider_secrets_store",
+        lambda: MagicMock(),
+        raising=False,
+    )
+    probe_service = MagicMock()
+    probe_service.probe.return_value = ProviderProbeResult(
+        status="available",
+        status_message=None,
+        models=(
+            AiModel(
+                provider_connection_id="conn-minimax",
+                model_id="MiniMax-M3",
+                display_name="MiniMax-M3",
+                source="live",
+                status="available",
+                local_or_cloud="cloud",
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionService",
+        lambda **kwargs: probe_service,
+    )
+    return probe_service
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_minimax_route_reaches_subprocess_as_unit(
+    mock_run_dir, monkeypatch, tmp_path
+):
+    """Regression für den OASIS-404: Eine ausgewählte MiniMax-ProviderConnection
+    mit ``MiniMax-M3`` muss Modell, Base-URL und den gebundenen Key derselben
+    Connection gemeinsam bis in den OASIS-Subprozess-Env gelangen lassen — als
+    eine Route, nicht als isolierte Env-Variablen.
+
+    Vor dem Fix reichte ``start_simulation`` das ``ai_model_ref`` nicht an
+    ``seed_run_stage_routing`` weiter; der Legacy-``llm_model``-Override
+    produzierte eine Route ohne Base-URL und mit dem Default-Provider-Key →
+    CAMEL traf den OpenAI-Default-Endpoint → 404 ``model MiniMax-M3 not found``.
+    """
+    from app.services.stage_model_router import StageModelRouter
+    from app.services.workspace_routing_store import get_workspace_routing_store
+
+    get_workspace_routing_store().reset_for_tests()
+
+    run_id = "run_minimax_unit"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _minimax_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_minimax_probe(monkeypatch, connection_store)
+
+    # Gebundener MiniMax-Key aus dem Secrets-Store (kein .env-Fallback).
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_bound_store_api_key",
+        lambda secret_ref, *, secrets_store=None: (
+            "mm-bound-secret" if secret_ref == "minimax-conn" else None
+        ),
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-minimax", model_id="MiniMax-M3", source="explicit"
+    )
+    seed_run_stage_routing(
+        run_id,
+        "simulation_rounds",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        ai_model_ref=ref,
+    )
+
+    router = StageModelRouter(run_id)
+    resolved_route = router.resolve("simulation_rounds")
+    api_key = resolve_route_api_key(resolved_route, RuntimeLlmConfig())
+    env = build_route_subprocess_env(resolved_route, api_key, run_id)
+
+    # Modell, Base-URL und Key stammen atomar aus derselben MiniMax-Connection.
+    assert env["LLM_MODEL_NAME"] == "MiniMax-M3"
+    assert env["LLM_BASE_URL"] == "https://api.minimax.io/v1"
+    assert env["LLM_API_KEY"] == "mm-bound-secret"
+    assert env["OPENAI_API_KEY"] == "mm-bound-secret"
+    # connection_only ist versiegelt — kein fremder Default-Provider-Key.
+    assert resolved_route.provider_options.get("connection_only") is True
+    assert resolved_route.provider_options.get("secret_ref") == "minimax-conn"
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_ai_model_ref_minimax_route_no_env_or_foreign_key_fallback(
+    mock_run_dir, monkeypatch, tmp_path
+):
+    """Bei einer expliziten Cloud-ProviderConnection darf der Key-NICht aus
+    ``Config.LLM_API_KEY`` oder dem Settings-DB-Key eines anderen Providers
+    stammen. ``SecretResolver.get_api_key`` (der .env-/Store-Fallback-Pfad) darf
+    für eine ``connection_only``-Route gar nicht erst angerufen werden."""
+    from app.services.stage_model_router import StageModelRouter
+    from app.services.workspace_routing_store import get_workspace_routing_store
+
+    get_workspace_routing_store().reset_for_tests()
+
+    run_id = "run_minimax_no_fallback"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    connection = _minimax_connection()
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [connection]
+    _stub_minimax_probe(monkeypatch, connection_store)
+
+    get_api_key_mock = MagicMock(return_value="foreign-default-key")
+    monkeypatch.setattr(
+        "app.services.secret_resolver.SecretResolver.get_api_key", get_api_key_mock
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_bound_store_api_key",
+        lambda secret_ref, *, secrets_store=None: "mm-bound-secret",
+    )
+
+    ref = AiModelRef(
+        provider_connection_id="conn-minimax", model_id="MiniMax-M3", source="explicit"
+    )
+    seed_run_stage_routing(
+        run_id,
+        "simulation_rounds",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+        ai_model_ref=ref,
+    )
+
+    resolved_route = StageModelRouter(run_id).resolve("simulation_rounds")
+    api_key = resolve_route_api_key(resolved_route, RuntimeLlmConfig())
+
+    assert api_key == "mm-bound-secret"
+    get_api_key_mock.assert_not_called()

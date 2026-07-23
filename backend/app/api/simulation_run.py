@@ -93,6 +93,50 @@ def start_simulation():
             status=400,
             message=str(exc),
         )
+    # Explizite UI-Auswahl (AiModelRef) ist die autoritative Sim-Route und darf
+    # nicht still mit Legacy-Feldern kombiniert werden (Issue #817, analog
+    # /api/report/generate). Wenn gesetzt, wird die ProviderConnection zur
+    # Single Source of Truth für Modell, Base-URL und gebundenen Key — kein
+    # .env-Fallback. Root Cause des OASIS-404 ``model MiniMax-M3 not found``:
+    # der Legacy-Pfad reichte nur den nackten Modellnamen weiter und produzierte
+    # eine Route ohne Base-URL + Default-Provider-Key → CAMEL traf den
+    # OpenAI-Default-Endpoint. Der ai_model_ref-Pfad bindet Connection-URL und
+    # -Secret atomar (connection_only=True).
+    ai_model_ref = None
+    raw_ref = data.get('ai_model_ref')
+    if raw_ref is not None:
+        from pydantic import ValidationError as _ValidationError
+
+        from ..contracts.ai_provider_contract import AiModelRef as _AiModelRef
+        try:
+            ai_model_ref = _AiModelRef.model_validate(raw_ref)
+        except _ValidationError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="ai_model_ref ist ungültig",
+            )
+        # Nur die Legacy-Felder prüfen, die dieser Handler auch ausliest und
+        # weiterreicht (llm_model → llm_model_override, llm_provider →
+        # llm_runtime). llm_profile_id wird im Sim-Start nicht unterstützt und
+        # daher nicht als Konfliktgrund geführt — ein Profilpfad ist hier nicht
+        # implementiert (CodeRabbit PR #852).
+        conflicting = [
+            key for key in ('llm_model', 'llm_provider')
+            if data.get(key)
+        ]
+        if conflicting:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=(
+                    f"ai_model_ref darf nicht mit {', '.join(conflicting)} "
+                    "kombiniert werden"
+                ),
+            )
+        # Legacy-Override stummschalten: die Connection ist maßgeblich.
+        llm_model_override = None
+        llm_runtime = parse_runtime_llm_config({})
     enable_graph_memory_update = data.get('enable_graph_memory_update', False)
     force = data.get('force', False)
 
@@ -234,6 +278,23 @@ def start_simulation():
                     ),
                 )
 
+    # ai_model_ref-Pre-Check VOR der Run-Record-Creation: die Connection muss
+    # existieren, aktiviert sein und (für api_key-Connections) ein gebundenes
+    # Secret tragen — sonst kein .env-Fallback, sondern 422 (analog dem
+    # Legacy-Pre-Check, kein orphaned Run). Die volle Model-Discovery
+    # (Connection/Model-Mismatch, Issue #819) läuft später in
+    # ``seed_run_stage_routing``; deren ValueError wird am Endpunkt zu 4xx.
+    if ai_model_ref is not None:
+        from ..services.llm_routing_seed import prevalidate_ai_model_ref
+        try:
+            prevalidate_ai_model_ref(ai_model_ref)
+        except ValueError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=422,
+                message=str(exc),
+            )
+
     run_record = run_registry.create_run(
         run_type="simulation_run",
         entity_id=simulation_id,
@@ -260,6 +321,7 @@ def start_simulation():
         "simulation_rounds",
         llm_model_override=llm_model_override,
         llm_runtime=llm_runtime,
+        ai_model_ref=ai_model_ref,
     )
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("simulation_rounds")
@@ -289,7 +351,7 @@ def start_simulation():
             ),
         )
 
-    if simulation_days is not None or llm_model_override or llm_runtime.enabled:
+    if simulation_days is not None or llm_model_override or llm_runtime.enabled or ai_model_ref is not None:
         store = get_artifact_store()
         config = store.read_json(simulation_id, "simulation_config", default=None)
         if not config:
@@ -302,9 +364,9 @@ def start_simulation():
             time_config = dict(config.get("time_config") or {})
             time_config["total_simulation_hours"] = simulation_days * 24
             config["time_config"] = time_config
-        if llm_model_override:
+        if llm_model_override or ai_model_ref is not None:
             config["llm_model"] = resolved_route.model
-        if llm_runtime.enabled and resolved_route.base_url_sanitized:
+        if (llm_runtime.enabled or ai_model_ref is not None) and resolved_route.base_url_sanitized:
             config["llm_base_url"] = resolved_route.base_url_sanitized
         store.write_json(simulation_id, "simulation_config", config)
 

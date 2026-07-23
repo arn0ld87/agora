@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
@@ -423,3 +424,71 @@ def compute_start_hour_offset(
     if not hour_counts:
         return 9
     return int(hour_counts.most_common(1)[0][0])
+
+
+# ---------------------------------------------------------------------------
+# Preflight-Probe: ein einzelner Chat-Completion-Call vor dem Agenten-Fan-out
+# ---------------------------------------------------------------------------
+
+# Status-Codes, die auf einen permanenten Konfigurationsfehler hinweisen —
+# Auth (401/403) oder Routing/Modell (404). Ein Retry wäre hier verschwendete
+# Zeit; der Run muss mit einer klaren Root-Cause-Meldung abgelehnt werden,
+# bevor N Agenten denselben Fehler produzieren (Akzeptanzkriterium #6).
+_PERMANENT_STATUS = {401, 403, 404}
+# Transiente/Server-Fehler, die ein Backoff-Retry rechtfertigen. 408/599
+# ergänzen die typische openai-Retry-Menge; 429 ist Rate-Limit.
+_TRANSIENT_STATUS = {408, 429, 500, 502, 503, 599}
+
+
+def preflight_model_probe(
+    model: Any,
+    *,
+    max_retries: int = 3,
+    backoff_base: float = 0.2,
+) -> None:
+    """Einmaliger kleiner Chat-Completion-Probe vor dem Agenten-Fan-out.
+
+    Sendet einen winzigen ``"ping"``-User-Call an das aufgebaute Modell und
+    fängt permanente Auth-/Routing-Fehler (401/403/404) früh mit einer klaren
+    ``ValueError``-Root-Cause ab — ein einzelner Fehler statt N identischer
+    während der Simulation (Root Cause des ``404 model MiniMax-M3 not found``).
+    Transiente Fehler (429/500/502/503) werden mit exponentiellem Backoff
+    retried; erst nach Erschöpfung der Retries schlägt der Probe fehl.
+
+    Der Probe läuft genau einmal pro Aufruf (bzw. einmal pro Retry-Versuch) —
+    er führt keine eigene Fan-out-Logik. Aufrufer (``run_*_simulation``) rufen
+    ihn direkt nach ``create_model`` auf, bevor Agenten erzeugt werden.
+
+    Nur der OpenAI-kompatible Pfad (MiniMax, OpenAI, Qwen Cloud, …) wirft
+    ``openai.APIStatusError`` mit brauchbarem ``status_code``; andere
+    Plattformen (Gemini/Ollama) lassen ihre nativen Exceptions ungefiltert
+    durch — die noch vor dem Fan-out auftreten und damit denselben
+    Ein-Fehler-vor-Fan-out-Effekt erfüllen.
+    """
+    import openai
+
+    probe_messages = [{"role": "user", "content": "ping"}]
+    for attempt in range(max_retries + 1):
+        try:
+            model.run(probe_messages)
+            return
+        except openai.APIStatusError as exc:
+            status = getattr(exc, "status_code", None)
+            if status in _PERMANENT_STATUS:
+                raise ValueError(
+                    f"OASIS-Preflight: permanenter Provider-Fehler "
+                    f"(HTTP {status}) für die aufgelöste Route — Simulation "
+                    f"vor dem Fan-out abgelehnt. Ursache: {exc}"
+                ) from exc
+            if status in _TRANSIENT_STATUS and attempt < max_retries:
+                time.sleep(backoff_base * (2 ** attempt))
+                continue
+            # Unbekannter Status oder Retries erschöpft → als permanent gelten.
+            raise ValueError(
+                f"OASIS-Preflight: Provider-Fehler (HTTP {status}) ließ sich "
+                f"nach {attempt + 1} Versuch(en) nicht beheben — Simulation "
+                f"vor dem Fan-out abgelehnt. Ursache: {exc}"
+            ) from exc
+        # Nicht-openai-Plattformen (Gemini/Ollama) werfen ihre nativen
+        # Exceptions — ungefiltert weiterreichen, damit der Run sauber
+        # scheitert, statt hier eine lückenhafte Heuristik zu pflegen.

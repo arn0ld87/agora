@@ -1,6 +1,7 @@
 import service from './index'
 import type { LlmRuntimePayload } from './llmRuntime'
 import type { PersonaQuotaPlan } from '../contracts/personaQuotaContract'
+import type { AiModelRefPayload } from './report'
 
 // --- Local types --------------------------------------------------------
 
@@ -41,8 +42,14 @@ export interface StartSimulationData {
   max_rounds?: number
   simulation_days?: number
   enable_graph_memory_update?: boolean
+  /** Legacy-Kompatibilität; bei gesetztem `ai_model_ref` nicht mitsenden. */
   llm_model?: string
+  /** Legacy-Kompatibilität; bei gesetztem `ai_model_ref` nicht mitsenden. */
   llm_provider?: LlmRuntimePayload
+  /** Autoritative UI-Auswahl (Connection+Modell). Bindet Base-URL und Secret
+   * derselben ProviderConnection an die OASIS-Route — kein .env-Fallback.
+   * Darf nicht mit `llm_model`/`llm_provider` kombiniert werden. */
+  ai_model_ref?: AiModelRefPayload
   force?: boolean
 }
 

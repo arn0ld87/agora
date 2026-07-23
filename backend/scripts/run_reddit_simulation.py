@@ -42,6 +42,7 @@ try:
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
+        preflight_model_probe,
         resolve_runtime_paths,
         setup_oasis_logging,
     )
@@ -57,6 +58,7 @@ except ImportError:  # direct script execution
         install_max_tokens_warning_filter,
         install_script_paths,
         load_project_env,
+        preflight_model_probe,
         resolve_runtime_paths,
         setup_oasis_logging,
     )
@@ -548,6 +550,8 @@ class RedditSimulationRunner:
                 model_platform=ModelPlatformType.OPENAI,
                 model_type=llm_model,
                 model_config_dict=model_cfg,
+                url=llm_base_url or None,
+                api_key=llm_api_key or None,
             )
     
     def _get_active_agents_for_round(
@@ -643,7 +647,10 @@ class RedditSimulationRunner:
         
         print("\nInitialize LLM model...")
         model = self._create_model()
-        
+        # Preflight: ein einzelner Probe-Call vor dem Fan-out fängt permanente
+        # Auth-/Routing-Fehler (401/403/404) mit klarer Root-Cause ab.
+        preflight_model_probe(model)
+
         print("Load Agent Profile...")
         profile_path = self._get_profile_path()
         if not os.path.exists(profile_path):

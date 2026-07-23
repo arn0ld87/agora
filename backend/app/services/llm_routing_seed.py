@@ -118,6 +118,24 @@ def _bind_connection_secret(
     options["connection_only"] = True
 
 
+def prevalidate_ai_model_ref(ai_model_ref: AiModelRef) -> ProviderConnection:
+    """Günstige Vorab-Prüfung einer ``ai_model_ref``: löst die Connection auf
+    und verifiziert die Secret-Bindung — ohne teure Live-Model-Discovery.
+
+    Wirft ``ValueError``, wenn die Connection fehlt oder deaktiviert ist oder
+    eine ``api_key``-Connection ohne gebundenes ``secret_ref`` daherkommt.
+    Aufrufer (z. B. ``/api/simulation/start``) nutzen das, um vor der
+    Run-Record-Creation mit 4xx abzubrechen — kein orphaned Run. Die volle
+    Model-Discovery (Issue #819, Connection/Model-Mismatch) läuft später in
+    ``seed_run_stage_routing``; deren ``ValueError`` wird am Endpunkt ebenfalls
+    zu 4xx. Gemeinsame SSoT mit dem Profil-Pfad, kein .env-Fallback.
+    """
+    connection = _resolve_selected_connection(ai_model_ref.provider_connection_id)
+    options: dict[str, object] = {}
+    _bind_connection_secret(connection, options)
+    return connection
+
+
 def _apply_workspace_defaults(config: RuntimeLlmRouting) -> None:
     """Übernimmt Workspace-Routing-Defaults in config (mutiert config in-place)."""
     try:
