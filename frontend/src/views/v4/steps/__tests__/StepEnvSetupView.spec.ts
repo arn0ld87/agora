@@ -47,6 +47,7 @@ describe('StepEnvSetupView — Navigation', () => {
     expect(routerPush).toHaveBeenCalledWith({
       name: 'StepSimulation',
       params: { simulationId: 'sim_x' },
+      query: { projectId: 'project_42' },
     })
   })
 

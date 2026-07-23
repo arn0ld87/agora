@@ -51,6 +51,7 @@ function handleNextStep(payload: { simulationId?: unknown }): void {
   void router.push({
     name: 'StepSimulation',
     params: { simulationId: payload.simulationId },
+    query: { projectId: props.projectId },
   })
 }
 

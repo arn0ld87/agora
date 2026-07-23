@@ -30,7 +30,11 @@
     />
 
     <div class="sim-view-content">
-      <Step3Simulation v-if="activeTab === 'pipeline'" :simulation-id="simulationId" />
+      <Step3Simulation
+        v-if="activeTab === 'pipeline'"
+        :simulation-id="simulationId"
+        @go-back="handleGoBack"
+      />
     </div>
   </AppShell>
 </template>
@@ -67,6 +71,17 @@ function onTabChange(tab: string): void {
   } else {
     router.push({ name: 'StepSimulation', params: { simulationId: props.simulationId } })
   }
+}
+
+function handleGoBack(): void {
+  const projectId = route.query.projectId
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    return
+  }
+  void router.push({
+    name: 'StepEnvSetup',
+    params: { projectId },
+  })
 }
 
 const tabItems = computed<TabItem[]>(() => [
