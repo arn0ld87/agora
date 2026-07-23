@@ -137,7 +137,7 @@ Neue fokussierte Spec mit drei Fällen:
 
 Neue fokussierte Spec:
 
-- `go-back` navigiert zu `StepEnvSetup` und mappt `props.simulationId` auf den Route-Parameter `projectId`.
+- `go-back` navigiert zu `StepEnvSetup` mit `projectId` aus `route.query.projectId` (von `StepEnvSetupView.handleNextStep` als `query`-Parameter gesetzt). Fehlt die Query oder ist sie leer, findet keine Navigation statt.
 
 Die fokussierten Specs stubben die eingebetteten Step-Komponenten und `useRouter()`. Sie prüfen den exakten Router-Aufruf. `StepWrapperViews.spec.ts` bleibt als breite Mount- und Shell-Smoke-Suite unverändert.
 

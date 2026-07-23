@@ -639,9 +639,13 @@ Inside `<script setup lang="ts">`, immediately after the existing `function onTa
 
 ```ts
 function handleGoBack(): void {
+  const projectId = route.query.projectId
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    return
+  }
   void router.push({
     name: 'StepEnvSetup',
-    params: { projectId: props.simulationId },
+    params: { projectId },
   })
 }
 ```
