@@ -227,7 +227,9 @@ def detect_embedding_provider(
 
     Prioritaet (first match wins):
     1. ``"openai"`` — Base-URL endet auf ``/v1``/``/v1/``, Host ist
-       ``api.openai.com``, oder Modellname beginnt mit ``text-embedding-``.
+       ``api.openai.com`` oder ``generativelanguage.googleapis.com``
+       (Gemini-OpenAI-Compat-Endpoint, ``/v1beta/openai``), oder Modellname
+       beginnt mit ``text-embedding-``.
     2. ``"ollama"`` — Fallback fuer alles andere (z. B. lokaler/Cloud-Ollama-
        Server mit nativer ``/api/embed``-Route).
     """
@@ -238,6 +240,7 @@ def detect_embedding_provider(
         normalized_base.endswith("/v1")
         or normalized_base.endswith("/v1/")
         or host == "api.openai.com"
+        or host == "generativelanguage.googleapis.com"
         or model_name.startswith("text-embedding-")
     ):
         return "openai"

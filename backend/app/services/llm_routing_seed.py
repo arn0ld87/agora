@@ -152,6 +152,59 @@ def _apply_workspace_defaults(config: RuntimeLlmRouting) -> None:
             config.stage_overrides[ws_stage_id] = ws_route
 
 
+def _prune_stage_overrides(config: RuntimeLlmRouting) -> int:
+    """Verwirft persistierte ``stage_overrides``, deren Provider-ID in der
+    aktuellen ``LlmProviderRegistry`` unbekannt ist oder deren ``base_url``
+    zu keiner aktivierten ``ProviderConnection`` mehr passt.
+
+    Stale-Override = Symptom eines Env-Wechsels (``LLM_BASE_URL``,
+    ``LLM_MODEL_NAME`` oder die ProviderConnection-Landschaft hat sich seit
+    dem letzten ``save_config`` geändert). Ohne Pruning würde der
+    Stage-Router den alten Endpoint aufrufen und dort z. B. HTML
+    (``<title>Ollama</title>``) statt JSON erhalten — NER loggt
+    ``NER done: 0 entities, 0 relations`` ohne Fehler, Graph-Build läuft
+    mit leerem Modell. Mutiert ``config.stage_overrides`` in-place und
+    liefert die Anzahl der verworfenen Einträge.
+    """
+    if not config.stage_overrides:
+        return 0
+    known_provider_ids = {p.id for p in LlmProviderRegistry().get_providers()}
+    try:
+        connections = ProviderConnectionStore().list_connections()
+    except Exception:  # noqa: BLE001 — defensiv, Heuristik darf nicht hart fehlschlagen
+        connections = []
+    enabled_base_urls = {
+        c.base_url.rstrip("/").removesuffix("/v1")
+        for c in connections
+        if c.enabled and c.base_url
+    }
+    stale: list[StageId] = []
+    for stage_id, override in config.stage_overrides.items():
+        if not override.provider_id:
+            continue
+        if override.provider_id not in known_provider_ids:
+            stale.append(stage_id)
+            continue
+        persisted_base_url = override.provider_options.get("base_url")
+        if not persisted_base_url or not enabled_base_urls:
+            continue
+        normalized = persisted_base_url.rstrip("/").removesuffix("/v1")
+        if normalized not in enabled_base_urls:
+            stale.append(stage_id)
+    for stage_id in stale:
+        dropped = config.stage_overrides.pop(stage_id)
+        logger.warning(
+            "seed_run_stage_routing: stale stage_override verworfen "
+            "(stage=%s, provider_id=%s, base_url=%s) — Provider-Landschaft "
+            "hat sich seit der letzten Persistierung geändert; "
+            "Workspace-Default wird übernommen",
+            stage_id,
+            dropped.provider_id,
+            dropped.provider_options.get("base_url"),
+        )
+    return len(stale)
+
+
 def _apply_override(
     config: RuntimeLlmRouting,
     stage_id: StageId,
@@ -233,6 +286,13 @@ def seed_run_stage_routing(
     # (= bereits in den Per-Run-Snapshots vorhanden) werden NICHT überschrieben.
     if not has_existing_config:
         _apply_workspace_defaults(config)
+    elif _prune_stage_overrides(config) > 0:
+        # Stale Overrides aus früheren Umgebungen verworfen — Workspace-Default
+        # für die betroffenen Stages übernehmen, sonst fällt die Stage auf den
+        # (potentiell ebenso stalen) global_default zurück und NER/Graph-Build
+        # treffen den falschen Endpoint.
+        _apply_workspace_defaults(config)
+        config.routing_version += 1
 
     runtime = llm_runtime or RuntimeLlmConfig()
 

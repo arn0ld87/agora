@@ -18,6 +18,8 @@ KNOWN_EMBEDDING_DIMS = {
     'text-embedding-3-large': 3072,
     'qwen3-embedding:4b': 2560,
     'qwen3-embedding:8b': 4096,
+    'gemini-embedding-2': 3072,
+    'gemini-embedding-001': 768,
 }
 
 # Bekannte Platzhalter-Werte aus `.env.example` und altem Default-Code.
