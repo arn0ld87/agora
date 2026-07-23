@@ -92,7 +92,7 @@ class EmbeddingService:
     ):
         self.model = model or Config.EMBEDDING_MODEL
         self.base_url = (base_url or Config.EMBEDDING_BASE_URL).rstrip('/')
-        self.api_key = api_key or Config.EMBEDDING_API_KEY or ''
+        self.api_key = api_key if api_key is not None else (Config.EMBEDDING_API_KEY or '')
         self.max_retries = max_retries
         self.timeout = timeout
         self._provider = self._detect_provider()
@@ -342,9 +342,10 @@ class EmbeddingService:
     def _request_headers(self) -> dict[str, str]:
         headers = {'Content-Type': 'application/json'}
         if self._provider == 'openai':
-            if not self.api_key:
-                raise EmbeddingError('EMBEDDING_API_KEY/LLM_API_KEY is required for OpenAI embeddings')
-            headers['Authorization'] = f'Bearer {self.api_key}'
+            api_key = self.api_key or Config.EMBEDDING_API_KEY or os.environ.get('LLM_API_KEY') or ''
+            if not api_key:
+                raise EmbeddingError('EMBEDDING_API_KEY or LLM_API_KEY is required for OpenAI embeddings')
+            headers['Authorization'] = f'Bearer {api_key}'
         return headers
 
     def _extract_embeddings(self, data: dict) -> List[List[float]]:

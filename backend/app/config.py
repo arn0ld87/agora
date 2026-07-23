@@ -127,7 +127,7 @@ class Config:
     # qwen3-embedding:8b: 4096). Falsche Dim → Neo4j-Index stream rejected.
     EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'nomic-embed-text')
     EMBEDDING_BASE_URL = os.environ.get('EMBEDDING_BASE_URL', 'http://localhost:11434')
-    EMBEDDING_API_KEY = os.environ.get('EMBEDDING_API_KEY') or os.environ.get('LLM_API_KEY')
+    EMBEDDING_API_KEY = os.environ.get('EMBEDDING_API_KEY')
     VECTOR_DIM = int(
         os.environ.get(
             'VECTOR_DIM',
