@@ -82,6 +82,8 @@ const {
   routerPushMock,
   ensureLoadedMock,
   setGlobalSelectionMock,
+  setRunModelOverrideMock,
+  clearRunModelOverrideMock,
   effectiveRefHolder,
 } = vi.hoisted(() => ({
   fetchLlmProfilesMock: vi.fn(),
@@ -90,6 +92,8 @@ const {
   routerPushMock: vi.fn(),
   ensureLoadedMock: vi.fn(),
   setGlobalSelectionMock: vi.fn(),
+  setRunModelOverrideMock: vi.fn(),
+  clearRunModelOverrideMock: vi.fn(),
   effectiveRefHolder: { current: null as AiModelRef | null },
 }))
 
@@ -99,6 +103,14 @@ vi.mock('@/api/llmProfiles', () => ({
 
 vi.mock('@/store/pendingUpload', () => ({
   setPendingUpload: setPendingUploadMock,
+}))
+
+// Transiente Run-Override-Senke: HeroNewRun schreibt beim Start den vollen
+// AiModelRef (Pick) bzw. cleart (Profile/kein Pick) — Step3Simulation liest
+// sie vorrangig vor dem Kanon.
+vi.mock('@/store/runModelOverride', () => ({
+  setRunModelOverride: setRunModelOverrideMock,
+  clearRunModelOverride: clearRunModelOverrideMock,
 }))
 
 vi.mock('@/api/status', () => ({
@@ -270,6 +282,8 @@ async function mountHero(seed: Record<string, string> = {}) {
 
   setPendingUploadMock.mockClear()
   routerPushMock.mockClear()
+  setRunModelOverrideMock.mockClear()
+  clearRunModelOverrideMock.mockClear()
   getSystemStatusMock.mockClear()
   getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
   adapterMock.toLlmRoute.mockClear()
@@ -532,6 +546,120 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'gpt-4o-mini')
     expect(setPendingUploadMock).toHaveBeenCalled()
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
+  })
+
+  it('startSimulation: ohne Profile setzt die Picker-Wahl den Run-Override (voller AiModelRef)', async () => {
+    const w = await mountHero()
+    // Picker emit aiRef → transienter Run-Override inkl. provider_connection_id.
+    const picker = w.findComponent(aiPickerStub)
+    await picker.trigger('click')
+    await flushPromises()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    // Der volle AiModelRef wandert in die Run-Override-Senke — Step3Simulation
+    // sendet ihn beim Sim-Start vorrangig vor dem Kanon als ai_model_ref.
+    expect(setRunModelOverrideMock).toHaveBeenCalledWith({
+      provider_connection_id: 'conn-openai-1',
+      model_id: 'gpt-4o-mini',
+      source: 'explicit',
+    })
+    expect(clearRunModelOverrideMock).not.toHaveBeenCalled()
+  })
+
+  it('startSimulation: bei aktivem Profile wird der Run-Override gecleart (Profile gewinnt)', async () => {
+    fetchLlmProfilesMock.mockResolvedValue([
+      {
+        id: 'abc',
+        name: 'Mein GPT-4o',
+        provider: 'openai',
+        base_url: 'https://api.openai.com/v1',
+        model_name: 'gpt-4o',
+        is_default: true,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ])
+    const w = await mountHero()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    const select = w.find<HTMLSelectElement>('select#hero-profile')
+    await select.setValue('abc')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(clearRunModelOverrideMock).toHaveBeenCalledTimes(1)
+    expect(setRunModelOverrideMock).not.toHaveBeenCalled()
+  })
+
+  it('startSimulation: Kanon-Initialisierung ohne Picker-Interaktion setzt KEINEN Run-Override', async () => {
+    // selectedModel wird beim Mount aus dem Kanon initialisiert — ohne
+    // expliziten Picker-Pick darf der Kanon NICHT als Override eingefroren
+    // werden (spätere Kanon-Änderungen sollen bis zum Sim-Start durchschlagen).
+    effectiveRefHolder.current = {
+      provider_connection_id: 'conn-kanon',
+      model_id: 'kanon-model',
+      source: 'explicit',
+    }
+    const w = await mountHero()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(setRunModelOverrideMock).not.toHaveBeenCalled()
+    expect(clearRunModelOverrideMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('startSimulation: ohne Pick und ohne Profile wird der Run-Override gecleart', async () => {
+    const w = await mountHero()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(clearRunModelOverrideMock).toHaveBeenCalledTimes(1)
+    expect(setRunModelOverrideMock).not.toHaveBeenCalled()
   })
 
   it('startSimulation: setPendingUpload wird ueber Pinia exportiert (Smoke)', async () => {

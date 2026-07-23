@@ -24,6 +24,7 @@ import {
   runtimeProviderMissingKeyEverywhere,
 } from '../composables/useRuntimeLlmOptions'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
+import { getRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -239,15 +240,20 @@ async function doStart() {
     }
     if (props.maxRounds) params.max_rounds = props.maxRounds
     if (props.simulationDays) params.simulation_days = props.simulationDays
-    // Autoritative (Connection, Modell)-Auswahl aus dem Kanon vorziehen; ist
-    // eine konkrete ProviderConnection+Modell gewählt, wird sie als
-    // ``ai_model_ref`` gesendet. Das bindet Base-URL + Secret derselben
-    // Connection an die OASIS-Route — und schließt das .env-Fallback aus.
+    // Autoritative (Connection, Modell)-Auswahl: Der transiente Dashboard-
+    // Run-Override (HeroNewRun-Pick, store/runModelOverride) gewinnt vor dem
+    // Kanon (routing/defaults.global_default). Die Auswahl wird als
+    // ``ai_model_ref`` gesendet — das bindet Base-URL + Secret derselben
+    // Connection an die OASIS-Route und schließt das .env-Fallback aus.
     // ``ai_model_ref`` darf nicht mit den Legacy-Feldern ``llm_model``/
     // ``llm_provider`` kombiniert werden (Backend: 400), deshalb nur im
     // Else-Zweig.
-    try { await effectiveModel.ensureLoaded() } catch { /* best effort; Legacy-Pfad greift unten */ }
-    const selection = effectiveModel.effectiveRef.value
+    let selection = getRunModelOverride()
+    const usedRunOverride = selection !== null
+    if (!selection) {
+      try { await effectiveModel.ensureLoaded() } catch { /* best effort; Legacy-Pfad greift unten */ }
+      selection = effectiveModel.effectiveRef.value
+    }
     if (selection && selection.provider_connection_id && selection.model_id) {
       params.ai_model_ref = {
         provider_connection_id: selection.provider_connection_id,
@@ -268,6 +274,10 @@ async function doStart() {
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {
+      // Consume-on-success: Der Dashboard-Override gilt genau für diesen
+      // Start. Verhindert, dass ein späterer Start einer ANDEREN Simulation
+      // im selben Tab den alten Override stillschweigend erbt.
+      if (usedRunOverride) clearRunModelOverride()
       phase.value = 1
       addLog(t('step3.status.running', { current: 0, total: props.maxRounds || '?' }))
       startPolling()

@@ -5,6 +5,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (v4-Dashboard: Hero-Modellwahl wird als autoritatives ai_model_ref zum Sim-Start durchgereicht — 2026-07-23)
+
+- Die Modellwahl im Dashboard (`HeroNewRun`, AiModelPicker) wurde bislang nur als `model_id`-String
+  nach `STORAGE_MODEL` gespiegelt; beim späteren Simulationsstart gewann der Kanon
+  (`routing/defaults.global_default`) — ein abweichender Dashboard-Pick wurde stillschweigend
+  ignoriert bzw. verlor ohne Kanon-Default seine Connection-Bindung (Legacy-`llm_model`-Pfad).
+- Neu: `frontend/src/store/runModelOverride.ts` — transiente, Zod-validierte sessionStorage-Senke
+  (`agora.run.aiModelRefOverride`). `HeroNewRun` schreibt beim Start den vollen `AiModelRef`
+  (Profile-Start bzw. kein Pick cleart die Senke); `Step3Simulation.doStart` liest sie vorrangig
+  vor dem Kanon und sendet sie als `ai_model_ref` mit `source: "run-override"` (Backend-Literal
+  in `AiModelRefSource` vorhanden). Der persistente Kanon bleibt unberührt — die
+  Phase-1-Konsolidierung („eine persistente Modell-Senke") bleibt intakt.
+- Tests: `store/__tests__/runModelOverride.spec.ts` (Roundtrip, Source-Normalisierung, defensives
+  Entsorgen korrupter Einträge), `Step3Simulation.spec.ts` (Override gewinnt vor Kanon; Override
+  ohne Kanon → kein Legacy-Fallback), `HeroNewRun.spec.ts` (Set bei Pick, Clear bei Profile und
+  ohne Pick).
+
 ### Fixed (Vue-v4: Legacy-Prozessrouten konsolidiert — 2026-07-22, Issue #831)
 
 - Die fünf klassischen Prozessrouten bleiben als benannte, kompatible Redirects erhalten und führen nun auf die kanonischen v4-Step-Routen. Die verwaisten Wrapper-Views `MainView`, `SimulationView`, `SimulationRunView`, `ReportView` und `InteractionView` sowie die einzige zugehörige Spec wurden entfernt.
