@@ -116,8 +116,13 @@ def start_simulation():
                 status=400,
                 message="ai_model_ref ist ungültig",
             )
+        # Nur die Legacy-Felder prüfen, die dieser Handler auch ausliest und
+        # weiterreicht (llm_model → llm_model_override, llm_provider →
+        # llm_runtime). llm_profile_id wird im Sim-Start nicht unterstützt und
+        # daher nicht als Konfliktgrund geführt — ein Profilpfad ist hier nicht
+        # implementiert (CodeRabbit PR #852).
         conflicting = [
-            key for key in ('llm_model', 'llm_provider', 'llm_profile_id')
+            key for key in ('llm_model', 'llm_provider')
             if data.get(key)
         ]
         if conflicting:
