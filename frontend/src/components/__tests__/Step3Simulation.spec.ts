@@ -76,6 +76,14 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
   }),
 }))
 
+// Transienter Dashboard-Run-Override (HeroNewRun → store/runModelOverride):
+// Default null (bestehende Tests unverändert); die Override-Tests setzen
+// _runOverrideValue vor dem Mount.
+let _runOverrideValue: { provider_connection_id: string; model_id: string; source: string } | null = null
+vi.mock('@/store/runModelOverride', () => ({
+  getRunModelOverride: () => _runOverrideValue,
+}))
+
 // Captured SSE state-callback — re-assigned per test in describe('phase-promotion').
 // The factory uses a shared slot so tests can fire the callback after mount.
 let _capturedStateCallback: ((msg: unknown) => void) | null = null
@@ -192,6 +200,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     localStorage.clear()
     _capturedStateCallback = null
     _effectiveRefValue = null
+    _runOverrideValue = null
     // Reset useEventStream mock zurück auf Standardimplementation.
     ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
       (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
@@ -394,6 +403,7 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     localStorage.clear()
     _capturedStateCallback = null
     _effectiveRefValue = null
+    _runOverrideValue = null
     ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
       (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
         if (handlers?.state) _capturedStateCallback = handlers.state
@@ -434,6 +444,72 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
       source: 'explicit',
     })
     // Keine Legacy-Felder gemeinsam mit ai_model_ref (Backend: 400 sonst).
+    expect(payload.llm_model).toBeUndefined()
+    expect(payload.llm_provider).toBeUndefined()
+  })
+
+  it('Dashboard-Run-Override gewinnt vor dem Kanon und wird als ai_model_ref gesendet', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    // Kanon zeigt ein ANDERES Modell — der transiente Dashboard-Pick muss gewinnen.
+    _effectiveRefValue = {
+      provider_connection_id: 'conn-kanon',
+      model_id: 'kanon-model',
+      source: 'explicit',
+    }
+    _runOverrideValue = {
+      provider_connection_id: 'conn-hero',
+      model_id: 'hero-model',
+      source: 'run-override',
+    }
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    expect(startBtn).toBeTruthy()
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-hero',
+      model_id: 'hero-model',
+      source: 'run-override',
+    })
+    expect(payload.llm_model).toBeUndefined()
+    expect(payload.llm_provider).toBeUndefined()
+  })
+
+  it('Dashboard-Run-Override greift auch ohne Kanon-Auswahl (kein Legacy-Fallback)', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    _effectiveRefValue = null
+    _runOverrideValue = {
+      provider_connection_id: 'conn-hero',
+      model_id: 'hero-model',
+      source: 'run-override',
+    }
+    // Legacy-Storage vorhanden — darf trotzdem NICHT greifen.
+    localStorage.setItem('agora.lastModel', 'custom')
+    localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    expect(startBtn).toBeTruthy()
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-hero',
+      model_id: 'hero-model',
+      source: 'run-override',
+    })
     expect(payload.llm_model).toBeUndefined()
     expect(payload.llm_provider).toBeUndefined()
   })

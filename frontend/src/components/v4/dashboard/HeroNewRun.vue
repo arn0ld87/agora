@@ -19,6 +19,7 @@ import { setPendingUpload } from '../../../store/pendingUpload'
 import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
 import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
+import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 import { getSystemStatus } from '../../../api/status'
@@ -76,8 +77,11 @@ function removeLocal(key: string): void {
  * Default-Modell kommt NICHT mehr aus einem eigenen `agora.hero.aiModelRef`-Key,
  * sondern aus dem Kanon (routing/defaults.global via useEffectiveModelSelection)
  * — damit der Dashboard-Start dieselbe Auswahl wie Settings zeigt. Ein
- * Dashboard-Pick ist ein transienter Run-Override (nur STORAGE_MODEL-Spiegel für
- * MainView). Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route` wird
+ * Dashboard-Pick ist ein transienter Run-Override: STORAGE_MODEL-Spiegel für
+ * MainView plus voller AiModelRef in der sessionStorage-Senke
+ * `agora.run.aiModelRefOverride` (store/runModelOverride), die Step3Simulation
+ * beim Sim-Start vorrangig vor dem Kanon als `ai_model_ref` sendet.
+ * Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route` wird
  * NICHT mehr gelesen und beim Mount defensiv entfernt.
  *
  * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
@@ -232,11 +236,22 @@ async function startSimulation() {
     // nicht versehentlich einen stale Override mitsendet.
     if (profileId) {
       writeLocal(STORAGE_MODEL, 'default')
+      // Profile gewinnt — Run-Override defensiv räumen, damit Step3 nicht
+      // einen stale Direkt-Pick vorzieht.
+      clearRunModelOverride()
     } else {
       // Slice 5.4: STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default'
       // wenn kein Model gewählt — verhindert stale Route).
       const stored = adapter.toStoredModelString(selectedModel.value)
       writeLocal(STORAGE_MODEL, stored)
+      // Voller AiModelRef (inkl. provider_connection_id) als transienter
+      // Run-Override: Step3Simulation sendet ihn beim Sim-Start vorrangig
+      // vor dem Kanon als autoritatives ai_model_ref.
+      if (selectedModel.value) {
+        setRunModelOverride(selectedModel.value)
+      } else {
+        clearRunModelOverride()
+      }
     }
     setPendingUpload(
       files.value,
