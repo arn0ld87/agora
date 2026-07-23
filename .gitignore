@@ -167,3 +167,4 @@ opencode.jsonc
 
 .claude/*.bak
 .claude/*.bak.*
+compose.local.yml
