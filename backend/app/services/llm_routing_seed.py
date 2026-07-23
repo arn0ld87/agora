@@ -23,6 +23,9 @@ from .provider_connections.service import ProviderConnectionService
 from .runtime_run_config import RuntimeRunConfig
 from .secret_resolver import SecretResolver, get_bound_store_api_key
 from .workspace_routing_store import get_workspace_routing_store
+from ..utils.logger import get_logger
+
+logger = get_logger("agora.llm_routing_seed")
 
 _PROVIDER_ID_MAP = {
     "default": None,
@@ -359,13 +362,33 @@ def build_route_subprocess_env(
     env: dict[str, str] = {"LLM_MODEL_NAME": route.model}
     if run_id:
         env["AGORA_RUN_ID"] = run_id
+    provider = next(
+        (p for p in LlmProviderRegistry().get_providers() if p.id == route.provider_id),
+        None,
+    )
+    # Base-URL-Auflösung symmetrisch zur Key-Auflösung in
+    # ``resolve_route_api_key``: trägt die Route keine base_url — der
+    # Legacy-/Workspace-Default-Pfad ohne ``ai_model_ref`` erzeugt Routen mit
+    # nackter Registry-``provider_id`` —, gilt der Registry-Endpoint DERSELBEN
+    # provider_id. Ohne diese Auflösung bleibt ``LLM_BASE_URL`` hier ungesetzt,
+    # der OASIS-Subprozess erbt das stale ``LLM_BASE_URL`` des Backend-Prozesses
+    # (``SAFE_ENV_KEYS``-Whitelist in ``process_manager``) und schickt Modell und
+    # Provider-Key an einen fremden Endpoint — Root Cause des
+    # ``404 model 'MiniMax-M3' not found`` trotz #852. Kein Provider-Fallback:
+    # Key und URL stammen aus derselben provider_id.
+    base_url = route.base_url_sanitized or (provider.base_url if provider else None)
+    if not base_url and route.provider_id:
+        # Weder Route noch Registry kennen einen Endpoint: der Subprozess wird
+        # das Parent-``LLM_BASE_URL`` erben (Alt-Verhalten, Standalone-/
+        # Dev-Pfad). Sichtbar machen statt still driften.
+        logger.warning(
+            "build_route_subprocess_env: keine base_url für provider_id=%s "
+            "auflösbar — Subprozess erbt LLM_BASE_URL aus dem Backend-Env",
+            route.provider_id,
+        )
     if api_key:
         env["LLM_API_KEY"] = api_key
         env["OPENAI_API_KEY"] = api_key
-        provider = next(
-            (p for p in LlmProviderRegistry().get_providers() if p.id == route.provider_id),
-            None,
-        )
         if provider and provider.api_key_ref:
             env[provider.api_key_ref] = api_key
         # CAMELs GeminiModel (OASIS-Subprozess) liest ``GEMINI_API_KEY``; der
@@ -373,11 +396,11 @@ def build_route_subprocess_env(
         # diesen Alias crasht der Subprozess trotz Store-Key mit
         # ``Missing required API keys: GEMINI_API_KEY``. Der Alias haelt den
         # UI-Secrets-Store als Single Source — kein ``.env`` fuer Gemini-Sims.
-        if detect_provider(route.base_url_sanitized, route.model, mode="oasis") == "google":
+        if detect_provider(base_url, route.model, mode="oasis") == "google":
             env["GEMINI_API_KEY"] = api_key
-    if route.base_url_sanitized:
-        env["LLM_BASE_URL"] = route.base_url_sanitized
-        env["OPENAI_BASE_URL"] = route.base_url_sanitized
-        env["OPENAI_API_BASE"] = route.base_url_sanitized
-        env["OPENAI_API_BASE_URL"] = route.base_url_sanitized
+    if base_url:
+        env["LLM_BASE_URL"] = base_url
+        env["OPENAI_BASE_URL"] = base_url
+        env["OPENAI_API_BASE"] = base_url
+        env["OPENAI_API_BASE_URL"] = base_url
     return env
