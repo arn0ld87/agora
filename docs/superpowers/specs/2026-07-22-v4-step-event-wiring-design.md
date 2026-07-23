@@ -75,10 +75,11 @@ Das echte `next-step`-Payload ist direkt aufgebaut:
 {
   name: 'StepSimulation',
   params: { simulationId },
+  query: { projectId: props.projectId },
 }
 ```
 
-Fehlt eine nichtleere `simulationId`, findet keine Navigation statt. Weitere Payload-Felder bleiben Eigentum der eingebetteten Simulation-Komponente und werden vom Wrapper nicht persistiert oder transformiert.
+Die `projectId` wird zusätzlich als `query`-Parameter mitgegeben, damit die Simulation-View sie beim Rückwärtsübergang aus `route.query.projectId` auflösen kann — die `StepSimulation`-Route selbst führt nur `simulationId`, nicht `projectId`. Fehlt eine nichtleere `simulationId`, findet keine Navigation statt. Weitere Payload-Felder bleiben Eigentum der eingebetteten Simulation-Komponente und werden vom Wrapper nicht persistiert oder transformiert.
 
 `handleGoBack` navigiert zu:
 
@@ -98,11 +99,11 @@ Fehlt eine nichtleere `simulationId`, findet keine Navigation statt. Weitere Pay
 ```ts
 {
   name: 'StepEnvSetup',
-  params: { projectId: props.simulationId },
+  params: { projectId: <aus route.query.projectId>,
 }
 ```
 
-Die asymmetrische Bezeichnung ist beabsichtigt: `StepEnvSetup` erwartet den Route-Parameter `projectId`, während die Simulation-View dieselbe fachliche ID als `simulationId` erhält.
+Dabei liest der Handler `projectId` aus `route.query.projectId` (von `StepEnvSetupView.handleNextStep` als `query`-Parameter gesetzt). Die `StepSimulation`-Route führt selbst kein `projectId`; die Auflösung über die Query ist Voraussetzung für die Rückwärtsnavigation. Fehlt die Query oder ist sie leer, findet keine Navigation statt.
 
 Die vorhandene Tab-Navigation und die interne Report-Navigation von `Step3Simulation` bleiben unverändert.
 

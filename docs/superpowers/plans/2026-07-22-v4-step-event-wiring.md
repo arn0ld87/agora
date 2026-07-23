@@ -307,6 +307,7 @@ describe('StepEnvSetupView — Navigation', () => {
     expect(routerPush).toHaveBeenCalledWith({
       name: 'StepSimulation',
       params: { simulationId: 'sim_x' },
+      query: { projectId: 'project_42' },
     })
   })
 
@@ -448,6 +449,7 @@ function handleNextStep(payload: { simulationId?: unknown }): void {
   void router.push({
     name: 'StepSimulation',
     params: { simulationId: payload.simulationId },
+    query: { projectId: props.projectId },
   })
 }
 
@@ -615,7 +617,7 @@ Expected: one commit, spec only.
 
 **Interfaces:**
 - Consumes: `StepSimulationView` props `{ simulationId: string }`, existing `useRoute`/`useRouter` usage.
-- Produces: handler `handleGoBack()` that calls `router.push({ name: 'StepEnvSetup', params: { projectId: props.simulationId } })`.
+- Produces: handler `handleGoBack()` that reads `projectId` from `route.query.projectId` (set by `StepEnvSetupView.handleNextStep`) and calls `router.push({ name: 'StepEnvSetup', params: { projectId } })`; missing/empty query → no-op.
 
 - [ ] **Step 1: Wire the template**
 
