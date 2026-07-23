@@ -23,6 +23,7 @@ import {
   runtimeLlmPayloadFromStorage,
   runtimeProviderMissingKeyEverywhere,
 } from '../composables/useRuntimeLlmOptions'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -191,6 +192,12 @@ const _simClock = computed(() => useSimClock(props.simulationId || '__unset__'))
 const currentSimTime = computed(() => _simClock.value.currentSimTime.value)
 const simElapsedSec = computed(() => _simClock.value.elapsed.value)
 
+// Kanonische (Connection, Modell)-Auswahl aus routing/defaults.global_default.
+// Wird beim Sim-Start als autoritatives ``ai_model_ref`` gesendet und bindet
+// Base-URL + Secret derselben ProviderConnection an die OASIS-Route — kein
+// .env-Fallback (Root Cause ``404 model MiniMax-M3 not found``).
+const effectiveModel = useEffectiveModelSelection()
+
 const statusStream = useEventStream(() => props.simulationId, {
   state: (msg) => applyRunStateEvent(msg?.payload),
   control: (msg) => applyControlEvent(msg?.payload),
@@ -232,15 +239,32 @@ async function doStart() {
     }
     if (props.maxRounds) params.max_rounds = props.maxRounds
     if (props.simulationDays) params.simulation_days = props.simulationDays
-    const model = storedEffectiveModel()
-    if (model) params.llm_model = model
-    if (await runtimeProviderMissingKeyEverywhere()) {
-      addLog(t('step2.runtimeProvider.missingKey'))
-      emit('update-status', 'error')
-      return
+    // Autoritative (Connection, Modell)-Auswahl aus dem Kanon vorziehen; ist
+    // eine konkrete ProviderConnection+Modell gewählt, wird sie als
+    // ``ai_model_ref`` gesendet. Das bindet Base-URL + Secret derselben
+    // Connection an die OASIS-Route — und schließt das .env-Fallback aus.
+    // ``ai_model_ref`` darf nicht mit den Legacy-Feldern ``llm_model``/
+    // ``llm_provider`` kombiniert werden (Backend: 400), deshalb nur im
+    // Else-Zweig.
+    try { await effectiveModel.ensureLoaded() } catch { /* best effort; Legacy-Pfad greift unten */ }
+    const selection = effectiveModel.effectiveRef.value
+    if (selection && selection.provider_connection_id && selection.model_id) {
+      params.ai_model_ref = {
+        provider_connection_id: selection.provider_connection_id,
+        model_id: selection.model_id,
+        source: selection.source ?? 'explicit',
+      }
+    } else {
+      const model = storedEffectiveModel()
+      if (model) params.llm_model = model
+      if (await runtimeProviderMissingKeyEverywhere()) {
+        addLog(t('step2.runtimeProvider.missingKey'))
+        emit('update-status', 'error')
+        return
+      }
+      const runtimeProvider = runtimeLlmPayloadFromStorage()
+      if (runtimeProvider) params.llm_provider = runtimeProvider
     }
-    const runtimeProvider = runtimeLlmPayloadFromStorage()
-    if (runtimeProvider) params.llm_provider = runtimeProvider
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {

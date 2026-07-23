@@ -94,6 +94,20 @@ vi.mock('../../composables/useRuntimeLlmOptions', () => ({
   runtimeProviderMissingKeyEverywhere: () => false,
 }))
 
+// Kanonische Modell-Auswahl stubben: Step3 ruft useEffectiveModelSelection
+// im Setup auf; ohne Mock läge kein Pinia-/Store-Kontext vor. Default: keine
+// Auswahl → Legacy-Pfad bleibt unberührt (Feed-Test ruft doStart nicht auf).
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef: { value: null },
+    effectiveRoute: { value: null },
+    loading: { value: false },
+    error: { value: null },
+    ensureLoaded: vi.fn().mockResolvedValue(undefined),
+    setGlobalSelection: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 // useSimFeed: echtes Modul behalten — wir wollen die Routing- und
 // Dedupe-Logik mittesten.
 import { clearSimFeed } from '../../composables/useSimFeed'

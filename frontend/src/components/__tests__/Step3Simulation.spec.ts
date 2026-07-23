@@ -62,6 +62,20 @@ vi.mock('../../api/runs', () => ({
   cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'sim_test_smoke', status: 'cancel_requested' } }),
 }))
 
+// Kanonische Modell-Auswahl: Default ist kein ai_model_ref (Legacy-Pfad bleibt
+// für bestehende Tests intakt). Der ai_model_ref-Test überschreibt effectiveRef.
+let _effectiveRefValue: { provider_connection_id: string; model_id: string; source: string } | null = null
+vi.mock('@/composables/useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef: { get value() { return _effectiveRefValue }, set value(_v: unknown) { /* noop */ } },
+    effectiveRoute: { value: null },
+    loading: { value: false },
+    error: { value: null },
+    ensureLoaded: vi.fn().mockResolvedValue(undefined),
+    setGlobalSelection: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
 // Captured SSE state-callback — re-assigned per test in describe('phase-promotion').
 // The factory uses a shared slot so tests can fire the callback after mount.
 let _capturedStateCallback: ((msg: unknown) => void) | null = null
@@ -177,6 +191,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     vi.clearAllMocks()
     localStorage.clear()
     _capturedStateCallback = null
+    _effectiveRefValue = null
     // Reset useEventStream mock zurück auf Standardimplementation.
     ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
       (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
@@ -362,5 +377,85 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
       simulation_id: 'sim_test_smoke',
       llm_model: 'deepseek-v3.2:cloud',
     })
+  })
+})
+
+/**
+ * ai_model_ref beim Simulationsstart (Root Cause ``404 model MiniMax-M3 not found``).
+ *
+ * Sichert ab, dass Step3 die kanonische (Connection, Modell)-Auswahl aus
+ * routing/defaults.global_default als ``ai_model_ref`` an ``startSimulation``
+ * sendet — und NICHT gleichzeitig die Legacy-Felder ``llm_model``/``llm_provider``
+ * mitschickt (Backend lehnt die Kombination mit 400 ab).
+ */
+describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    _capturedStateCallback = null
+    _effectiveRefValue = null
+    ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
+      (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
+        if (handlers?.state) _capturedStateCallback = handlers.state
+        return {
+          isStreaming: { value: false },
+          error: { value: null },
+          lastEventAt: { value: null },
+          start: vi.fn().mockResolvedValue(undefined),
+          stop: vi.fn(),
+        }
+      }
+    )
+  })
+
+  it('sendet ai_model_ref aus dem Kanon und lässt llm_model/llm_provider weg', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    _effectiveRefValue = {
+      provider_connection_id: 'conn-minimax',
+      model_id: 'MiniMax-M3',
+      source: 'explicit',
+    }
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    expect(startBtn).toBeTruthy()
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    expect(simulationApi.startSimulation).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-minimax',
+      model_id: 'MiniMax-M3',
+      source: 'explicit',
+    })
+    // Keine Legacy-Felder gemeinsam mit ai_model_ref (Backend: 400 sonst).
+    expect(payload.llm_model).toBeUndefined()
+    expect(payload.llm_provider).toBeUndefined()
+  })
+
+  it('fällt ohne Kanon-Auswahl auf Legacy llm_model/llm_provider zurück', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+    // Kein ai_model_ref aus dem Kanon → Legacy-Pfad.
+    _effectiveRefValue = null
+    localStorage.setItem('agora.lastModel', 'custom')
+    localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    expect(startBtn).toBeTruthy()
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.ai_model_ref).toBeUndefined()
+    expect(payload.llm_model).toBe('deepseek-v3.2:cloud')
   })
 })

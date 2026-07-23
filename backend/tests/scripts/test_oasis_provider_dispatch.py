@@ -229,6 +229,47 @@ class TestCreateModelMiniMaxBranch:
         model_cfg = calls[0]["kwargs"].get("model_config_dict", {})
         assert model_cfg.get("extra_body") == {"thinking": {"type": "adaptive"}}
 
+    def test_minimax_openai_branch_passes_resolved_url_and_api_key_explicitly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Root Cause 404 ``model MiniMax-M3 not found``: Der OPENAI-Branch von
+        ``create_model`` relied ausschließlich auf ``os.environ["OPENAI_BASE_URL"]``
+        und ``OPENAI_API_KEY``. Ein Stale-Parent-Env (z. B. OpenAI-Default aus
+        ``.env``) konnte die aufgelöste MiniMax-Route überschatten. CAMELs
+        ``OpenAIModel.__init__`` gibt expliziten ``url``/``api_key``-Parametern
+        Vorrang vor dem Env — deshalb muss der Branch sie explizit übergeben.
+
+        Vor dem Fix wurden ``url``/``api_key`` im OPENAI-Branch NICHT an
+        ``ModelFactory.create`` übergeben → dieser Test schlägt fehl (RED)."""
+        monkeypatch.setenv("LLM_MODEL_NAME", "MiniMax-M3")
+        monkeypatch.setenv("LLM_API_KEY", "mm-bound-key")
+        monkeypatch.setenv("LLM_BASE_URL", "https://api.minimax.io/v1")
+        monkeypatch.delenv("OLLAMA_THINKING", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        # Stale-Parent-Env, das die Route überschatten dürfte, wenn sie nicht
+        # explizit übergeben wird:
+        monkeypatch.setenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "stale-openai-key")
+
+        mock_factory, calls = _make_model_factory_mock()
+
+        import run_parallel_simulation as rps  # type: ignore[import]
+        monkeypatch.setattr(rps, "ModelFactory", mock_factory)
+
+        rps.create_model({}, use_boost=False)
+
+        assert len(calls) == 1
+        kwargs = calls[0]["kwargs"]
+        assert kwargs.get("model_platform") == ModelPlatformType.OPENAI
+        assert kwargs.get("url") == "https://api.minimax.io/v1", (
+            "OPENAI-Branch muss die aufgelöste MiniMax-URL explizit an "
+            "ModelFactory.create übergeben, sonst gewinnt ein Stale-Env."
+        )
+        assert kwargs.get("api_key") == "mm-bound-key", (
+            "OPENAI-Branch muss den gebundenen MiniMax-Key explizit übergeben, "
+            "sonst gewinnt ein Stale-OPENAI_API_KEY aus dem Parent-Env."
+        )
+
 
 class TestCreateModelOllamaBranch:
     """create_model() with an Ollama model must route via OllamaModel with url/api_key
