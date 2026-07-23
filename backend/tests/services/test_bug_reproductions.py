@@ -14,39 +14,37 @@ from app.services.oasis_profile_generator import OasisProfileGenerator
 
 def test_repro_bug_a_embedding_key_fallback_sends_chat_key_to_openai(monkeypatch):
     """BUG A Repro:
-    When EMBEDDING_BASE_URL is an OpenAI-compatible endpoint (e.g. https://api.openai.com),
-    and EMBEDDING_API_KEY is not set in env, Config.EMBEDDING_API_KEY falls back to
-    LLM_API_KEY (which might be an Ollama dummy key or chat-specific key 'ollama-secret').
-    EmbeddingService sends this invalid/mismatched chat key to OpenAI embeddings, resulting in 401 HTTP error.
+    When EMBEDDING_BASE_URL is an OpenAI-compatible endpoint, but EMBEDDING_API_KEY is empty,
+    EmbeddingService._request_headers() should raise EmbeddingError rather than sending an unrelated
+    LLM_API_KEY to OpenAI embeddings.
     """
-    # Simulate env where EMBEDDING_API_KEY is unset, LLM_API_KEY is 'ollama-chat-key'
+    # Simulate env where EMBEDDING_API_KEY is unset/empty, LLM_API_KEY is 'ollama-chat-key'
     monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
     monkeypatch.setenv("LLM_API_KEY", "ollama-chat-key")
-    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "ollama-chat-key")
+    monkeypatch.setattr(Config, "EMBEDDING_API_KEY", "")
     monkeypatch.setattr(Config, "EMBEDDING_BASE_URL", "https://api.openai.com")
 
     service = EmbeddingService(
         model="text-embedding-3-small",
         base_url="https://api.openai.com",
     )
-    # The api_key picked up by default should NOT blindly inherit a local/unrelated LLM_API_KEY
-    # when embedding endpoint and LLM endpoint differ or when LLM_API_KEY is not valid for embeddings.
     assert service._provider == "openai"
-    assert service.api_key == "ollama-chat-key"  # Currently inherits LLM_API_KEY, causing 401 in prod!
+    assert service.api_key == ""
+    with pytest.raises(EmbeddingError, match="EMBEDDING_API_KEY is required for OpenAI embeddings"):
+        service._request_headers()
 
 
 def test_repro_bug_a_neo4j_storage_uses_raw_config_defaults_without_provider_connection():
     """BUG A Repro:
-    Neo4jStorage initializes EmbeddingService() with no arguments, using Config.EMBEDDING_*
-    globals rather than resolving active provider connections or dedicated embedding keys.
+    Neo4jStorage initializes EmbeddingService() during real __init__ when no embedding_service is passed.
     """
-    with patch("app.storage.neo4j_storage.EmbeddingService") as mock_emb_cls:
+    with patch("neo4j.GraphDatabase.driver"), \
+         patch("app.storage.neo4j_storage.EmbeddingService") as mock_emb_cls, \
+         patch("app.storage.neo4j_storage.NERExtractor"):
         from app.storage.neo4j_storage import Neo4jStorage
-        # Instantiate Neo4jStorage without embedding_service argument
-        storage = Neo4jStorage.__new__(Neo4jStorage)
-        storage._embedding = None
-        # Verify default instantiation behavior
-        mock_emb_cls.assert_not_called()
+        storage = Neo4jStorage(uri="bolt://localhost:7687", user="neo4j", password="password")
+        mock_emb_cls.assert_called_once_with()
+        assert storage._embedding == mock_emb_cls.return_value
 
 
 # ---------------------------------------------------------------------------

@@ -342,10 +342,9 @@ class EmbeddingService:
     def _request_headers(self) -> dict[str, str]:
         headers = {'Content-Type': 'application/json'}
         if self._provider == 'openai':
-            api_key = self.api_key or Config.EMBEDDING_API_KEY or os.environ.get('LLM_API_KEY') or ''
-            if not api_key:
-                raise EmbeddingError('EMBEDDING_API_KEY or LLM_API_KEY is required for OpenAI embeddings')
-            headers['Authorization'] = f'Bearer {api_key}'
+            if not self.api_key:
+                raise EmbeddingError('EMBEDDING_API_KEY is required for OpenAI embeddings')
+            headers['Authorization'] = f'Bearer {self.api_key}'
         return headers
 
     def _extract_embeddings(self, data: dict) -> List[List[float]]:
