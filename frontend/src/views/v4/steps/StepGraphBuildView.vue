@@ -31,6 +31,7 @@
         :buildProgress="buildProgress"
         :graphData="graphData"
         :systemLogs="systemLogs"
+        @next-step="handleNextStep"
       />
     </div>
   </AppShell>
@@ -55,6 +56,13 @@ const props = defineProps<{
 
 const router = useRouter()
 const { t } = useI18n()
+
+function handleNextStep(): void {
+  void router.push({
+    name: 'StepEnvSetup',
+    params: { projectId: props.projectId },
+  })
+}
 const {
   projectData,
   currentProjectId,
