@@ -80,8 +80,10 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
 // Default null (bestehende Tests unverändert); die Override-Tests setzen
 // _runOverrideValue vor dem Mount.
 let _runOverrideValue: { provider_connection_id: string; model_id: string; source: string } | null = null
+const _clearRunOverrideSpy = vi.fn()
 vi.mock('@/store/runModelOverride', () => ({
   getRunModelOverride: () => _runOverrideValue,
+  clearRunModelOverride: () => _clearRunOverrideSpy(),
 }))
 
 // Captured SSE state-callback — re-assigned per test in describe('phase-promotion').
@@ -446,6 +448,8 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     // Keine Legacy-Felder gemeinsam mit ai_model_ref (Backend: 400 sonst).
     expect(payload.llm_model).toBeUndefined()
     expect(payload.llm_provider).toBeUndefined()
+    // Kein Override benutzt → kein Consume-Clear.
+    expect(_clearRunOverrideSpy).not.toHaveBeenCalled()
   })
 
   it('Dashboard-Run-Override gewinnt vor dem Kanon und wird als ai_model_ref gesendet', async () => {
@@ -480,6 +484,8 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     })
     expect(payload.llm_model).toBeUndefined()
     expect(payload.llm_provider).toBeUndefined()
+    // Consume-on-success: Override gilt genau für diesen Start.
+    expect(_clearRunOverrideSpy).toHaveBeenCalledTimes(1)
   })
 
   it('Dashboard-Run-Override greift auch ohne Kanon-Auswahl (kein Legacy-Fallback)', async () => {
@@ -512,6 +518,8 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     })
     expect(payload.llm_model).toBeUndefined()
     expect(payload.llm_provider).toBeUndefined()
+    // Consume-on-success: Override gilt genau für diesen Start.
+    expect(_clearRunOverrideSpy).toHaveBeenCalledTimes(1)
   })
 
   it('fällt ohne Kanon-Auswahl auf Legacy llm_model/llm_provider zurück', async () => {

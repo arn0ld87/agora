@@ -24,7 +24,7 @@ import {
   runtimeProviderMissingKeyEverywhere,
 } from '../composables/useRuntimeLlmOptions'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
-import { getRunModelOverride } from '@/store/runModelOverride'
+import { getRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -249,6 +249,7 @@ async function doStart() {
     // ``llm_provider`` kombiniert werden (Backend: 400), deshalb nur im
     // Else-Zweig.
     let selection = getRunModelOverride()
+    const usedRunOverride = selection !== null
     if (!selection) {
       try { await effectiveModel.ensureLoaded() } catch { /* best effort; Legacy-Pfad greift unten */ }
       selection = effectiveModel.effectiveRef.value
@@ -273,6 +274,10 @@ async function doStart() {
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {
+      // Consume-on-success: Der Dashboard-Override gilt genau für diesen
+      // Start. Verhindert, dass ein späterer Start einer ANDEREN Simulation
+      // im selben Tab den alten Override stillschweigend erbt.
+      if (usedRunOverride) clearRunModelOverride()
       phase.value = 1
       addLog(t('step3.status.running', { current: 0, total: props.maxRounds || '?' }))
       startPolling()

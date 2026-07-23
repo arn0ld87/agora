@@ -12,7 +12,10 @@
  * Bewusst sessionStorage: tab-scoped, überlebt den mehrstufigen Flow
  * (Dashboard → Graph-Build → Env-Setup → Simulation) inklusive Reload und
  * stirbt mit dem Tab. Lebensdauer: bis zum nächsten Dashboard-Start, der die
- * Senke neu schreibt oder cleart (Profile-Start / kein Pick).
+ * Senke neu schreibt oder cleart (Profile-Start / kein expliziter Pick) —
+ * oder bis zum ersten erfolgreichen Sim-Start (consume-on-success in
+ * Step3Simulation), damit kein späterer Start einer anderen Simulation im
+ * selben Tab den alten Override erbt.
  */
 import { AiModelRefSchema, type AiModelRef } from '@/contracts/aiModelRef'
 

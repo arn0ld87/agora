@@ -614,6 +614,34 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     expect(setRunModelOverrideMock).not.toHaveBeenCalled()
   })
 
+  it('startSimulation: Kanon-Initialisierung ohne Picker-Interaktion setzt KEINEN Run-Override', async () => {
+    // selectedModel wird beim Mount aus dem Kanon initialisiert — ohne
+    // expliziten Picker-Pick darf der Kanon NICHT als Override eingefroren
+    // werden (spätere Kanon-Änderungen sollen bis zum Sim-Start durchschlagen).
+    effectiveRefHolder.current = {
+      provider_connection_id: 'conn-kanon',
+      model_id: 'kanon-model',
+      source: 'explicit',
+    }
+    const w = await mountHero()
+
+    const file = new File(['x'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    const textarea = w.find<HTMLTextAreaElement>('textarea#hero-requirement')
+    await textarea.setValue('Wie reagiert die DACH-Region?')
+    await flushPromises()
+
+    await w.find('.hero-cta').trigger('click')
+    await flushPromises()
+
+    expect(setRunModelOverrideMock).not.toHaveBeenCalled()
+    expect(clearRunModelOverrideMock).toHaveBeenCalledTimes(1)
+  })
+
   it('startSimulation: ohne Pick und ohne Profile wird der Run-Override gecleart', async () => {
     const w = await mountHero()
 

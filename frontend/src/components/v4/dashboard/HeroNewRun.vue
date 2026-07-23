@@ -101,6 +101,11 @@ const effectiveModel = useEffectiveModelSelection()
 
 const selectedProfileId = ref<string | null>(readLocal(STORAGE_HERO_PROFILE_ID))
 const selectedModel = ref<AiModelRef | null>(null)
+// Run-Override nur bei explizitem Picker-Pick schreiben: selectedModel wird
+// beim Mount aus dem Kanon initialisiert und darf den Kanon nicht als
+// Override festschreiben — spätere Kanon-Änderungen sollen bis zum Sim-Start
+// durchschlagen (Review-Finding PR #853).
+const hasExplicitPick = ref(false)
 const language = ref<string>(readLocal(STORAGE_LANG) || 'de')
 const simulationRequirement = ref('')
 
@@ -205,6 +210,7 @@ function onPickModel(aiRef: AiModelRef | null) {
   // Transienter Run-Override: nur STORAGE_MODEL-Spiegel für den Sim-Start
   // (MainView.handleNewProject). KEINE eigene persistente Modell-Senke mehr —
   // der Default kommt aus dem Kanon.
+  hasExplicitPick.value = true
   selectedModel.value = aiRef
   if (aiRef) {
     // STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default' bei leerer model_id).
@@ -246,8 +252,9 @@ async function startSimulation() {
       writeLocal(STORAGE_MODEL, stored)
       // Voller AiModelRef (inkl. provider_connection_id) als transienter
       // Run-Override: Step3Simulation sendet ihn beim Sim-Start vorrangig
-      // vor dem Kanon als autoritatives ai_model_ref.
-      if (selectedModel.value) {
+      // vor dem Kanon als autoritatives ai_model_ref. Nur bei explizitem
+      // Picker-Pick — der Kanon-Initialwert vom Mount wird nicht eingefroren.
+      if (hasExplicitPick.value && selectedModel.value) {
         setRunModelOverride(selectedModel.value)
       } else {
         clearRunModelOverride()
