@@ -130,7 +130,7 @@ Aktive Konfiguration lebt in Neo4j (`EmbeddingConfiguration`-Knoten, eindeutig p
 
 ## Structured-JSON-LLM-Calls (chat_json-SSoT)
 
-**IMPORTANT:** Strukturierte LLM-Calls mit JSON-Output MÜSSEN über [`backend/app/llm/client.py::LLMClient.chat_json`](backend/app/llm/client.py) mit einem Pydantic-Schema laufen. Der rohe `OpenAI`-Client (`client.chat.completions.create`) darf nicht direkt für strukturierte JSON-Outputs verwendet werden — er umgeht Provider-Detection (MiniMax `thinking.type: disabled`), den strict-json_schema-Modus und die zentrale JSON-Repair-Logik. Legacy-Flags wie `LLM_DISABLE_JSON_MODE` werden nicht mehr gepflegt; das Pydantic-Schema macht sie obsolet.
+**IMPORTANT:** Strukturierte LLM-Calls mit JSON-Output MÜSSEN über [`backend/app/llm/client.py::LLMClient.chat_json`](backend/app/llm/client.py) mit einem Pydantic-Schema laufen. Der rohe `OpenAI`-Client (`client.chat.completions.create`) darf nicht direkt für strukturierte JSON-Outputs verwendet werden — er umgeht Provider-Detection (MiniMax `thinking.type: disabled`), den strict-json_schema-Modus und die zentrale JSON-Repair-Logik. Legacy-Flags wie `LLM_DISABLE_JSON_MODE` nicht neu verwenden (werden vorübergehend noch aus Kompatibilitätsgründen unterstützt); das Pydantic-Schema macht sie obsolet.
 
 ## Token Efficiency
 

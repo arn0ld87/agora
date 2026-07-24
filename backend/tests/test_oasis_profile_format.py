@@ -81,26 +81,6 @@ def _fake_llm_response(payload):
     )
 
 
-def test_generate_profile_with_llm_retries_when_required_metadata_missing():
-    """SKIPPED: This test exercised the raw-OpenAI-client retry path.
-
-    With PR #858/#859, ``_generate_profile_with_llm`` routes through
-    ``LLMClient.chat_json`` with strict ``PersonaProfileSchema``. The schema
-    enforces required fields and age 18-75 at the provider level, so the
-    "missing required metadata → retry" scenario no longer occurs in the
-    LLM path. The equivalent regression coverage (schema, force_no_thinking,
-    max_tokens) lives in ``test_oasis_profile_generator.py``.
-    """
-    import pytest
-    pytest.skip("obsolete after LLMClient.chat_json + PersonaProfileSchema migration (PR #858/#859)")
-
-
-def test_generate_profile_with_llm_falls_back_with_complete_metadata():
-    """SKIPPED: see test_generate_profile_with_llm_retries_when_required_metadata_missing."""
-    import pytest
-    pytest.skip("obsolete after LLMClient.chat_json + PersonaProfileSchema migration (PR #858/#859)")
-
-
 def test_generate_profiles_replaces_duplicate_last_names(monkeypatch):
     gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
     gen.graph_id = None

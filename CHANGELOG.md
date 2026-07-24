@@ -41,8 +41,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Verifikation: Post-Fix 2/2 Personas in 43.2 s, `finish=stop`, 1470–1796 Tokens, 0 Truncation,
   0 Parse-Fehler. Regression-Tests in `backend/tests/test_oasis_profile_generator.py` (4 passed,
   neu: schema, force_no_thinking, max_tokens≥16384, age-range-validation); 2 obsolete Tests in
-  `test_oasis_profile_format.py` als `pytest.skip` markiert (raw-Client-Retry-Pfad obsolet).
-  Targeted Suite: 740 passed, 2 skipped, 0 fail. Zusätzlich Test-Isolation für
+  `test_oasis_profile_format.py` entfernt (raw-Client-Retry-Pfad obsolet).
+  Targeted Suite: 742 passed, 0 skipped, 0 fail. Zusätzlich Test-Isolation für
   `test_llm_max_output_tokens_default` repariert (`_min_env`-Autouse-Fixture in
   `backend/tests/test_settings.py` löscht nun `LLM_MAX_OUTPUT_TOKENS` aus der ENV, damit der
   echte Code-Default `8192` getestet wird — zuvor las Pydantic-Settings die Live-ENV auch
