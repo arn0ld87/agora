@@ -566,12 +566,12 @@ def get_run_status(simulation_id: str):
 def get_run_status_detail(simulation_id: str):
     """
     Liefert den detaillierten Laufstatus mit aggregierten Aktionszahlen und paginierten Aktionen.
-    
-    Parameter:
-    	simulation_id (str): ID der Simulation.
-    
+
+    Parameters:
+        simulation_id (str): ID der Simulation.
+
     Returns:
-    	Response: JSON-Antwort mit Laufstatus, Aktionszahlen, paginierten Aktionen und aktuellen Rundenaktionen.
+        Response: JSON-Antwort mit Laufstatus, Aktionszahlen, paginierten Aktionen und aktuellen Rundenaktionen.
     """
     if not validate_simulation_id(simulation_id):
         return json_error(
