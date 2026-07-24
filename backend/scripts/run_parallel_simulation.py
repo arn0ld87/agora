@@ -91,7 +91,9 @@ try:
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
+        install_bert_memory_profile,
         install_max_tokens_warning_filter,
+        install_memory_sampler,
         install_script_paths,
         load_project_env,
         preflight_model_probe,
@@ -107,7 +109,9 @@ except ImportError:  # direct script execution
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
+        install_bert_memory_profile,
         install_max_tokens_warning_filter,
+        install_memory_sampler,
         install_script_paths,
         load_project_env,
         preflight_model_probe,
@@ -120,6 +124,9 @@ init_runner_tracing("agora-oasis-runner")
 init_runner_logging("agora-oasis-runner")
 load_project_env(__file__, verbose=True)
 install_max_tokens_warning_filter()
+_bert_profile = install_bert_memory_profile()
+_memory_stop = install_memory_sampler(_runtime_paths.project_root / ".runtime" / "mem_profile.ndjson")
+print(f"[bert-memory] profile = {_bert_profile}", flush=True)
 _camel_context_floor = apply_camel_context_floor()
 print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
 
@@ -2181,6 +2188,7 @@ if __name__ == "__main__":
     except SystemExit:
         pass
     finally:
+        _memory_stop()
         # Clean up multiprocessing resource tracker (prevent warning on exit)
         try:
             from multiprocessing import resource_tracker

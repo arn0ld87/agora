@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 if TYPE_CHECKING:
     from camel.types import ModelPlatformType  # type: ignore[import]
@@ -492,3 +494,202 @@ def preflight_model_probe(
         # Nicht-openai-Plattformen (Gemini/Ollama) werfen ihre nativen
         # Exceptions — ungefiltert weiterreichen, damit der Run sauber
         # scheitert, statt hier eine lückenhafte Heuristik zu pflegen.
+
+
+# ---------------------------------------------------------------------------
+# Slice fix/oom-bert-lowmem-fp16: BERT-Memory-Profile + RSS-Sampler
+# ---------------------------------------------------------------------------
+# Hintergrund: Auf 2.8-GiB-Container-Hosts kippt der OASIS-Subprozess mit
+# ``Process exit code: -9`` (Linux-OOM-Killer, ``cgroup memory.events: oom_kill=1``),
+# sobald ``Twitter/twhin-bert-base`` (1.06 GB safetensors, fp32) im ersten
+# ``update_rec_table()``-Tick lazy geladen wird — plus den 250-350 MB
+# ``torch``/``transformers``/``sentence_transformers``-Import-Overhead aus
+# ``oasis.social_platform.recsys`` und ``process_recsys_posts``.
+#
+# Diese Helper werden in ``run_parallel_simulation.py`` UND
+# ``run_reddit_simulation.py`` VOR dem ersten ``oasis``-Import aufgerufen.
+# Da Python Modul-Level-Caching nutzt, sieht der spaetere
+# ``from transformers import AutoModel``-Aufruf in
+# ``oasis.social_platform.process_recsys_posts`` die gepatchte Methode
+# auf demselben Klassen-Objekt.
+
+_TWHIN_BERT_MODEL_NAMES: frozenset[str] = frozenset(
+    {
+        "Twitter/twhin-bert-base",
+    }
+)
+
+_BERT_PROFILE_DEFAULT = "low"
+
+
+def install_bert_memory_profile(profile: str | None = None) -> str:
+    """Patches ``transformers.AutoModel.from_pretrained`` für TWHIN-BERT-Lazy-Loads.
+
+    ENV-getrieben: ``AGORA_BERT_MEMORY_PROFILE=off|low|lowest``.
+
+    - ``off`` (Default wenn Variable fehlt) — No-Op.
+    - ``low`` (Default) — injiziert ``low_cpu_mem_usage=True`` und
+      ``torch_dtype=torch.float16`` für ``Twitter/twhin-bert-base``. Laedt
+      das Modell in fp16 statt fp32 und vermeidet den transienten
+      Materialisierungs-Peak.
+    - Andere Modellnamen bleiben unveraendert.
+
+    Idempotent: ein zweiter Aufruf ersetzt fruehere Patches ohne Doppel-
+    Wrapping (Detection via ``_agora_bert_memory_profile_applied``).
+
+    Returns:
+        Der effektive Profilname (für Diagnose-Logs).
+    """
+    effective = (profile or os.environ.get("AGORA_BERT_MEMORY_PROFILE") or _BERT_PROFILE_DEFAULT).lower()
+    if effective == "off":
+        return "off"
+
+    try:
+        import transformers  # type: ignore[import-not-found]
+    except ImportError:
+        # Wenn transformers gar nicht da ist, ist der Patch sinnlos — kein
+        # BERT wird geladen. Kein Hard-Fail, der Subprozess kann ohne
+        # Recsys trotzdem weiterlaufen.
+        return effective
+
+    auto_model = getattr(transformers, "AutoModel", None)
+    if auto_model is None:
+        return effective
+
+    original = auto_model.from_pretrained
+    if getattr(original, "_agora_bert_memory_profile_applied", False):
+        return effective
+
+    # Lazy-Resolve torch dtype; fallback wenn torch fehlt.
+    torch_float16: Any = None
+    try:
+        import torch  # type: ignore[import-not-found]
+        torch_float16 = torch.float16
+    except ImportError:
+        pass
+
+    def _patched_from_pretrained(*args: Any, **kwargs: Any):
+        # Modellname ist typischerweise das erste positional arg oder
+        # ``pretrained_model_name_or_path`` als kwarg.
+        model_name = args[0] if args else kwargs.get("pretrained_model_name_or_path")
+        if isinstance(model_name, str) and model_name in _TWHIN_BERT_MODEL_NAMES:
+            # User-Override hat Vorrang.
+            if "low_cpu_mem_usage" not in kwargs:
+                kwargs["low_cpu_mem_usage"] = True
+            if torch_float16 is not None and "torch_dtype" not in kwargs:
+                kwargs["torch_dtype"] = torch_float16
+        return original(*args, **kwargs)
+
+    _patched_from_pretrained._agora_bert_memory_profile_applied = True  # type: ignore[attr-defined]
+    auto_model.from_pretrained = _patched_from_pretrained
+    return effective
+
+
+def _read_rss_mb_linux() -> float | None:
+    """Liest ``VmRSS`` aus ``/proc/self/status`` (Linux-Container).
+
+    Liefert ``None``, wenn die Datei nicht vorhanden ist (z.B. macOS-Dev).
+    """
+    status_path = Path(f"/proc/{os.getpid()}/status")
+    try:
+        with status_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def install_memory_sampler(
+    sink: Path,
+    *,
+    interval_s: float = 0.5,
+    rss_reader: Callable[[], float | None] | None = None,
+) -> Callable[[], None]:
+    """Startet einen RSS-Sampler-Thread, schreibt NDJSON-Snapshots nach ``sink``.
+
+    ENV-getrieben: ``AGORA_DEBUG_MEMORY=1`` (oder ``true``) — alle anderen
+    Werte oder fehlende Variable deaktivieren den Sampler (No-Op).
+
+    Jeder Snapshot ist eine Zeile JSON mit ``label``, ``rss_mb`` und
+    ``time_s`` (Sekunden seit Thread-Start). Hauptzweck: beim naechsten
+    OOM-Run eine echte Boot-Kurve zu sehen, statt auf Vermutungen
+    angewiesen zu sein.
+
+    Args:
+        sink: NDJSON-Zieldatei (typischerweise ``sim_dir/mem_profile.ndjson``).
+        interval_s: Polling-Intervall in Sekunden (Default 0.5 s).
+        rss_reader: Optionale Override für den RSS-Reader. Default laedt
+            ``_read_rss_mb_linux`` beim Sample (late binding via Modul-
+            Lookup); ein test-spezifischer Callable erlaubt deterministische
+            Werte unabhängig von der echten /proc-Implementierung.
+
+    Returns:
+        ``stop()``-Callable zum sauberen Beenden; idempotent.
+    """
+    enabled = os.environ.get("AGORA_DEBUG_MEMORY", "").lower() in {"1", "true", "yes"}
+    if not enabled:
+        return _noop_stop
+
+    if rss_reader is None:
+        # Late-binding Lookup: ``_read_rss_mb_linux`` muss zur *Laufzeit* im
+        # Modul-Namespace nachgeschlagen werden, sonst greifen Monkey-Patches
+        # im Test (oder alternative Reader-Funktionen) nicht.
+        module = sys.modules[__name__]
+        default_reader = module.__dict__.get("_read_rss_mb_linux")
+
+        def rss_reader() -> float | None:  # type: ignore[no-redef]
+            reader = module.__dict__.get("_read_rss_mb_linux", default_reader)
+            if reader is None:
+                return None
+            return reader()
+
+    if rss_reader() is None and not Path(f"/proc/{os.getpid()}/status").exists():
+        # macOS / kein /proc → Sampler einschalten, aber jede Samplezeile
+        # bekommt ``rss_mb=None`` und einen WARNING-Hinweis.
+        def rss_reader() -> float | None:  # type: ignore[no-redef]
+            return None
+
+    stop_event = threading.Event()
+    start = time.monotonic()
+    sink.parent.mkdir(parents=True, exist_ok=True)
+    sink_handle = sink.open("a", encoding="utf-8")
+
+    def _sampler_loop() -> None:
+        while not stop_event.is_set():
+            snap = {
+                "label": "tick",
+                "rss_mb": rss_reader(),
+                "time_s": time.monotonic() - start,
+            }
+            try:
+                sink_handle.write(json.dumps(snap) + "\n")
+                sink_handle.flush()
+            except OSError:
+                # Disk voll, etc. — silently drop, Sampler darf den
+                # Subprozess nicht zum Absturz bringen.
+                pass
+            stop_event.wait(interval_s)
+
+    thread = threading.Thread(
+        target=_sampler_loop,
+        name="agora-memory-sampler",
+        daemon=True,
+    )
+    thread.start()
+
+    def _stop() -> None:
+        stop_event.set()
+        thread.join(timeout=interval_s * 2)
+        try:
+            sink_handle.close()
+        except OSError:
+            pass
+
+    return _stop
+
+
+def _noop_stop() -> None:
+    """No-Op-Stop fuer den inaktiven Pfad — immer idempotent."""
+    return None
