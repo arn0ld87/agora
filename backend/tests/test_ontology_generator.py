@@ -107,7 +107,20 @@ class _CapturingLLMClient:
     def chat_json(self, messages, temperature=0.3, max_tokens=4096,
                   schema=None, schema_name="structured_response",
                   context="chat_json", force_no_thinking=False, **kwargs):
-        self.captured_kwargs = {
+        """
+                  Erfasst die übergebenen Chat-Parameter und liefert eine feste Ontologie-Struktur zurück.
+                  
+                  Parameters:
+                      messages: Chat-Nachrichten.
+                      schema: Optionales Schema für die strukturierte Antwort.
+                      schema_name: Name des Antwortschemas.
+                      context: Kontext der Anfrage.
+                      force_no_thinking: Steuert, ob interne Denkprozesse deaktiviert werden.
+                  
+                  Returns:
+                      Eine Ontologie-Struktur mit den Entitätstypen „Person“ und „Organization“.
+                  """
+                  self.captured_kwargs = {
             "temperature": temperature,
             "max_tokens": max_tokens,
             "schema": schema,

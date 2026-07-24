@@ -236,15 +236,15 @@ class OntologyGenerator:
         additional_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generate ontology definition
-
+        Erzeugt eine strukturierte Ontologie aus Dokumenten und Simulationsanforderungen.
+        
         Args:
-            document_texts: List of document texts
-            simulation_requirement: Description of simulation requirements
-            additional_context: Additional context
-
+            document_texts: Zu analysierende Dokumenttexte.
+            simulation_requirement: Beschreibung der Anforderungen an die Simulation.
+            additional_context: Optionaler zusätzlicher Kontext.
+        
         Returns:
-            Ontology definition (entity_types, edge_types, etc.)
+            Verarbeitete Ontologiedefinition mit Entitäts- und Beziehungstypen.
         """
         # Build user message
         user_message = self._build_user_message(
