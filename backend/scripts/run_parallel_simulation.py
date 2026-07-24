@@ -149,9 +149,9 @@ def _install_runtime_profile() -> None:
     global _memory_stop
     _bert_profile = install_bert_memory_profile()
     _memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
-    print(f"[bert-memory] profile = {_bert_profile}", flush=True)
+    logging.getLogger("agora.run_parallel_simulation").info("bert-memory profile = %s", _bert_profile)
     _camel_context_floor = apply_camel_context_floor()
-    print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
+    logging.getLogger("agora.run_parallel_simulation").info("context-patch token_limit floor = %s", _camel_context_floor)
 
 if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     build_parallel_parser().parse_args()

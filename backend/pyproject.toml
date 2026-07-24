@@ -113,7 +113,6 @@ markers = [
     "eval: baseline/eval suite (fixture-driven)",
     "llm: Echter LLM-Aufruf (Ollama-Instanz erforderlich). Ausführen mit: pytest -m llm",
     "perf: Performance-Budget-Tests (Stufe 1 deterministisch via Mock; Stufe 2 mit -m 'perf and llm' gegen echtes Ollama).",
-    "crash_py314_aarch64: Test triggert nicht-deterministischen nativen Segfault unter CPython 3.14 auf linux-aarch64 (torch-Init via oasis.social_platform.recsys bzw. pydantic/mcp-GC via camel.toolkits). Isoliert per sysconfig-Check, damit die Tests auf x86/CI aktiv bleiben. Siehe HANDOVER-2026-07-25-crash-diag-followup.md.",
 ]
 
 [tool.coverage.run]

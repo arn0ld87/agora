@@ -22,7 +22,8 @@ import pytest
 
 _PY314_AARCH64 = (
     sysconfig.get_platform().startswith("linux-aarch64")
-    and sys.version_info >= (3, 14)
+    and platform.python_implementation() == "CPython"
+    and sys.version_info[:2] == (3, 14)
     and platform.machine() == "aarch64"
 )
 
