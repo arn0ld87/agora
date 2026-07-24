@@ -4,9 +4,73 @@ Interface 1: Analyze text content and generate entity and relationship type defi
 """
 
 from typing import Dict, Any, List, Optional
+
+from pydantic import BaseModel, Field
+
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from .settings_layer import get_default_service as _get_settings
+
+
+class OntologyAttribute(BaseModel):
+    """Attribut eines Entity- oder Edge-Typs in der Ontology-Definition."""
+
+    name: str = Field(..., description="Attribute name (English, snake_case)")
+    type: str = Field("text", description="Attribute type, typically 'text'")
+    description: str = Field("", description="Attribute description")
+
+
+class OntologyEntityType(BaseModel):
+    """Entity-Typ in der Ontology-Definition."""
+
+    name: str = Field(..., description="Entity type name (English, PascalCase)")
+    description: str = Field(..., description="Brief description (English, <=100 chars)")
+    attributes: List[OntologyAttribute] = Field(
+        default_factory=list, description="1-3 key attributes"
+    )
+    examples: List[str] = Field(
+        default_factory=list, description="Example entities of this type"
+    )
+
+
+class OntologySourceTarget(BaseModel):
+    """Source/Target-Paar eines Edge-Typs."""
+
+    source: str = Field(..., description="Source entity type name")
+    target: str = Field(..., description="Target entity type name")
+
+
+class OntologyEdgeType(BaseModel):
+    """Edge-/Relationship-Typ in der Ontology-Definition."""
+
+    name: str = Field(..., description="Relationship type name (English, UPPER_SNAKE_CASE)")
+    description: str = Field(..., description="Brief description (English, <=100 chars)")
+    source_targets: List[OntologySourceTarget] = Field(
+        default_factory=list, description="Valid source/target entity-type pairs"
+    )
+    attributes: List[OntologyAttribute] = Field(
+        default_factory=list, description="Optional edge attributes"
+    )
+
+
+class OntologyDefinition(BaseModel):
+    """Striktes Pydantic-Schema für die LLM-generierte Ontology-Definition.
+
+    Wird an ``chat_json(schema=...)`` übergeben, damit der Provider im
+    strict-``json_schema``-Mode antwortet und kein Prosa-Envelope emittiert
+    (MiniMax-M3-Quirk: ohne ``response_format`` mischt M3 erklärenden Text
+    ins JSON → Parse-Fehler in ~20 % der Läufe).
+    """
+
+    entity_types: List[OntologyEntityType] = Field(
+        ..., description="8-16 entity types (last 2 must be Person, Organization)"
+    )
+    edge_types: List[OntologyEdgeType] = Field(
+        ..., description="6-10 relationship types"
+    )
+    analysis_summary: str = Field(
+        "", description="Brief analysis and explanation of text content"
+    )
 
 
 # System prompt for ontology generation
@@ -201,11 +265,22 @@ class OntologyGenerator:
         # and the chat_json layer surfaced "Invalid JSON format from LLM" in
         # the UI. chat_json still best-effort-repairs trailing truncation as a
         # safety net for outliers.
+        #
+        # schema=OntologyDefinition erzwingt strict json_schema-Mode beim
+        # Provider. MiniMax-M3 misst ohne response_format in ~20 % der Läufe
+        # erklärenden Prosa-Text ins JSON ein (finish=stop, Budget nicht
+        # voll) → Parse-Fehler. Strict-Schema zwingt M3, gültiges JSON nach
+        # Schema zu liefern. force_no_thinking=True deaktiviert zusätzlich den
+        # Reasoning-Output, damit das Token-Budget voll für den Content zur
+        # Verfügung steht (analog report_agent/planning.py).
         max_tokens = int(_get_settings().effective_value('ONTOLOGY_MAX_TOKENS'))
         result = self.llm_client.chat_json(
             messages=messages,
             temperature=0.3,
             max_tokens=max_tokens,
+            schema=OntologyDefinition,
+            schema_name="ontology_definition",
+            force_no_thinking=True,
         )
 
         # Validate and post-process
