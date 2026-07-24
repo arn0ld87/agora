@@ -122,9 +122,15 @@ def test_default_profile_does_not_patch(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_low_profile_patches_twhin_only(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, fake_torch: mock.Mock
 ) -> None:
-    """``AGORA_BERT_MEMORY_PROFILE=low`` patcht nur ``Twitter/twhin-bert-base``."""
+    """``AGORA_BERT_MEMORY_PROFILE=low`` patcht nur ``Twitter/twhin-bert-base``.
+
+    Nutzt ``fake_torch`` (Fixture) statt des echten torch-Moduls — sonst
+    haengt der Test an der Test-Umgebung (passiert nur, weil im Dev-venv
+    ``torch`` installiert ist). Fix fuer CodeRabbit-Finding #859: ohne
+    Isolation schleppte der Test reale torch-Imports in andere Tests.
+    """
     monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "low")
 
     captured_calls: list[dict] = []
@@ -135,7 +141,7 @@ def test_low_profile_patches_twhin_only(
 
     fake_module = mock.Mock()
     fake_module.AutoModel.from_pretrained = _fake_from_pretrained
-    with mock.patch.dict(sys.modules, {"transformers": fake_module}):
+    with _patch_transformers_and_torch(fake_module, fake_torch):
         install_bert_memory_profile()
 
     patched = fake_module.AutoModel.from_pretrained
@@ -146,7 +152,7 @@ def test_low_profile_patches_twhin_only(
     assert len(captured_calls) == 1
     kwargs = captured_calls[0]["kwargs"]
     assert kwargs.get("low_cpu_mem_usage") is True
-    assert "torch_dtype" in kwargs  # Wert hängt von torch ab, muss aber gesetzt sein
+    assert "torch_dtype" in kwargs  # fake_torch.float16 = "fp16" sentinel
 
     # anderes Modell: low_cpu_mem_usage darf NICHT injiziert werden.
     patched("sentence-transformers/all-MiniLM-L6-v2")
@@ -279,3 +285,125 @@ def test_low_profile_does_not_break_if_transformers_missing(
     with mock.patch.dict(sys.modules, {"transformers": None}):
         # Sollte keine Exception werfen.
         install_bert_memory_profile()
+
+
+# ---------------------------------------------------------------------------
+# CodeRabbit Review #859 — Regressionstests fuer Findings 1, 3-5, 7
+# ---------------------------------------------------------------------------
+
+
+def test_memory_sampler_preserves_user_reader_when_returning_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finding 1: macOS-Fallback darf einen vom Caller uebergebenen
+    ``rss_reader`` NICHT durch ein No-Op ersetzen, nur weil der Reader
+    (transient) ``None`` liefert.
+
+    Vor dem Fix: ``rss_reader() is None`` + ``/proc/self/status`` fehlt →
+    die Funktion definierte ``rss_reader`` lokal neu als
+    ``return None`` und schluckte damit den Caller-Reader. Tests, die
+    einen Reader liefern, der periodisch ``None`` zurueckgibt, schreiben
+    danach unsichtbare Samples.
+    """
+    monkeypatch.setenv("AGORA_DEBUG_MEMORY", "1")
+    sink = tmp_path / "mem.ndjson"
+
+    call_count = {"n": 0}
+
+    def user_reader() -> float | None:
+        call_count["n"] += 1
+        return None  # simuliert macOS / kein RSS zugaenglich
+
+    # macOS simulieren: ``/proc/self/status`` darf nicht "existieren".
+    real_exists = Path.exists
+
+    def fake_exists(self: Path) -> bool:
+        if str(self).startswith("/proc/") and "status" in str(self):
+            return False
+        return real_exists(self)
+
+    monkeypatch.setattr(Path, "exists", fake_exists)
+
+    stop = install_memory_sampler(
+        sink=sink, interval_s=0.05, rss_reader=user_reader
+    )
+    try:
+        time.sleep(0.2)  # mindestens 2–3 Sample-Ticks
+    finally:
+        stop()
+
+    # Initialer Probe-Aufruf (1) + Thread-Loop-Calls (>=2) — beweist, dass
+    # der Caller-Reader NICHT durch den macOS-Fallback ersetzt wurde.
+    assert call_count["n"] >= 2, (
+        f"User-rss_reader wurde nur {call_count['n']}x aufgerufen — "
+        "macOS-Fallback hat den Caller-Reader ueberschrieben."
+    )
+
+
+def test_make_default_memory_sink_includes_pid(tmp_path: Path) -> None:
+    """Findings 3-5: Default-Sink-Pfad muss die PID enthalten, damit
+    parallele Sim-Runs nicht denselben NDJSON-Sink ueberschreiben.
+
+    Vor dem Fix: alle 3 ``run_*_simulation.py``-Caller schrieben auf
+    ``<project_root>/.runtime/mem_profile.ndjson`` ohne PID —
+    POSIX-Append-Concurrency fuehrte zu zerschossenem NDJSON.
+    """
+    from _sim_common import make_default_memory_sink
+
+    sink = make_default_memory_sink(tmp_path)
+
+    assert sink.parent == tmp_path / ".runtime", (
+        f"Default-Sink muss unter <project_root>/.runtime liegen, "
+        f"bekam parent: {sink.parent}"
+    )
+    assert sink.name.startswith("mem_profile."), (
+        f"Erwarteter Prefix 'mem_profile.', bekam: {sink.name}"
+    )
+    assert sink.name.endswith(".ndjson"), (
+        f"Erwartetes Suffix '.ndjson', bekam: {sink.name}"
+    )
+    assert f".{os.getpid()}." in sink.name, (
+        f"Sink-Dateiname muss die PID enthalten (für Concurrent-Runs), "
+        f"bekam: {sink.name}"
+    )
+
+
+def test_low_profile_no_torch_does_not_inject_torch_dtype(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 7: Auch ohne ``torch`` (oder mit unavailable torch) darf
+    der Patch ``low_cpu_mem_usage=True`` setzen — ``torch_dtype`` wird
+    dann gar nicht injiziert, weil die Quelle fehlt.
+
+    Sperrt das Verhalten fest, sodass der bestehende Test
+    ``test_low_profile_patches_twhin_only`` (der das aktuell nur per
+    Glueck durchlaeuft, weil das Test-venv echtes torch hat) auf eine
+    deterministische fake_torch-Fixture umgestellt werden kann.
+    """
+    monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "low")
+
+    # Torch komplett aus sys.modules entfernen → ImportError.
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    monkeypatch.setitem(sys.modules, "torch", None)
+
+    captured_calls: list[dict] = []
+
+    def _fake_from_pretrained(*args: object, **kwargs: object) -> mock.Mock:
+        captured_calls.append({"args": args, "kwargs": kwargs})
+        return mock.Mock(name="model")
+
+    fake_module = mock.Mock()
+    fake_module.AutoModel.from_pretrained = _fake_from_pretrained
+    with mock.patch.dict(sys.modules, {"transformers": fake_module}):
+        install_bert_memory_profile()
+
+    patched = fake_module.AutoModel.from_pretrained
+    assert patched is not _fake_from_pretrained
+
+    patched("Twitter/twhin-bert-base")
+    assert len(captured_calls) == 1
+    kwargs = captured_calls[0]["kwargs"]
+    assert kwargs.get("low_cpu_mem_usage") is True
+    # Kein torch → kein torch_dtype-Key (sonst wuerde der echte
+    # AutoModel.from_pretrained mit einem ungueltigen dtype fehlschlagen).
+    assert "torch_dtype" not in kwargs

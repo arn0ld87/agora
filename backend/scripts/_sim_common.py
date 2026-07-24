@@ -603,6 +603,25 @@ def _read_rss_mb_linux() -> float | None:
     return None
 
 
+def make_default_memory_sink(project_root: Path) -> Path:
+    """Baut den Default-NDJSON-Sink-Pfad fuer den Memory-Sampler.
+
+    Die PID wird in den Dateinamen eingebettet, damit parallele Sim-Runs
+    (z.B. ``run_parallel_simulation.py`` startet Twitter+Reddit in einem
+    Prozess, mehrere ``run_reddit_simulation.py``-Prozesse koennen
+    gleichzeitig auf demselben Host laufen) sich nicht gegenseitig die
+    NDJSON-Datei zerschreiben.
+
+    Vor dem Fix fuehrten alle 3 Run-Scripts auf
+    ``<project_root>/.runtime/mem_profile.ndjson`` ohne PID — POSIX
+    "append"-Mode ist zwischen Prozessen NICHT byteweise atomar
+    (Schreibbuffer > ``PIPE_BUF`` wird verschachtelt), was bei
+    parallelen Runs zerhacktes NDJSON erzeugte (CodeRabbit-Finding
+    #859, 3x).
+    """
+    return project_root / ".runtime" / f"mem_profile.{os.getpid()}.ndjson"
+
+
 def install_memory_sampler(
     sink: Path,
     *,
@@ -647,9 +666,21 @@ def install_memory_sampler(
                 return None
             return reader()
 
-    if rss_reader() is None and not Path(f"/proc/{os.getpid()}/status").exists():
+        user_supplied_reader = False
+    else:
+        user_supplied_reader = True
+
+    if (
+        not user_supplied_reader
+        and rss_reader() is None
+        and not Path(f"/proc/{os.getpid()}/status").exists()
+    ):
         # macOS / kein /proc → Sampler einschalten, aber jede Samplezeile
-        # bekommt ``rss_mb=None`` und einen WARNING-Hinweis.
+        # bekommt ``rss_mb=None`` und einen WARNING-Hinweis. Wird NUR
+        # aktiv, wenn der Caller keinen eigenen Reader geliefert hat —
+        # sonst wuerde der macOS-Fallback den expliziten Reader (z.B.
+        # einen Test-Reader, der bewusst ``None`` zurueckgibt) ueber-
+        # schreiben. Fix fuer CodeRabbit-Finding #859.
         def rss_reader() -> float | None:  # type: ignore[no-redef]
             """
             Liefert keinen RSS-Messwert.
