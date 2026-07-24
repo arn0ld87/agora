@@ -59,6 +59,42 @@ def test_embed_keeps_ollama_embedding_detection_separate(monkeypatch):
     assert "Authorization" not in post.call_args.kwargs["headers"]
 
 
+@pytest.mark.parametrize(
+    ("base_url", "expected_url"),
+    [
+        # Gemini OpenAI-Compat-Endpoint enthaelt bereits ``/v1beta/openai`` —
+        # ein zusaetzliches ``/v1``-Segment wuerde ``/v1beta/openai/v1/embeddings``
+        # ergeben und 404 antworten. Direkt ``/embeddings`` anhängen.
+        ("https://generativelanguage.googleapis.com/v1beta/openai", "https://generativelanguage.googleapis.com/v1beta/openai/embeddings"),
+        ("https://generativelanguage.googleapis.com/v1beta/openai/", "https://generativelanguage.googleapis.com/v1beta/openai/embeddings"),
+    ],
+)
+def test_embed_uses_gemini_openai_compat_url_without_extra_v1_segment(
+    monkeypatch, base_url: str, expected_url: str
+) -> None:
+    """Issue: Gemini OpenAI-Compat-Endpoint darf NICHT zu ``/v1beta/openai/v1/embeddings`` werden.
+
+    Der Endpunkt akzeptiert nur ``/v1beta/openai/embeddings`` direkt — ein
+    weiteres ``/v1``-Segment wuerde 404 auslösen. Regressionstest fuer den
+    Whitelist-Suffix in ``EmbeddingService._build_embed_url``.
+    """
+    monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+    response = MagicMock()
+    response.json.return_value = {"data": [{"embedding": [0.5, 0.6]}]}
+
+    with patch("app.storage.embedding_service.requests.post", return_value=response) as post:
+        vector = EmbeddingService(
+            model="text-embedding-3-small",
+            base_url=base_url,
+            api_key="sk-test",
+            max_retries=1,
+        ).embed("document")
+
+    assert vector == [0.5, 0.6]
+    assert post.call_args.args[0] == expected_url
+    assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-test"
+
+
 def test_infer_vector_dim_for_known_models():
     assert infer_vector_dim_for_model('nomic-embed-text') == 768
     assert infer_vector_dim_for_model('nomic-embed-text:latest') == 768

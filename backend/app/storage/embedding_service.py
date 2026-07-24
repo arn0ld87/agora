@@ -334,7 +334,16 @@ class EmbeddingService:
 
     def _build_embed_url(self) -> str:
         if self._provider == 'openai':
-            if self.base_url.endswith('/v1') or self.base_url.endswith('/v1/'):
+            # Gemini OpenAI-Compat-Endpoint endet bereits auf ``/v1beta/openai``
+            # (oder ``/v1beta/openai/``) — ein weiteres ``/v1``-Segment ergibt
+            # ``…/v1beta/openai/v1/embeddings`` und antwortet 404. Direkt
+            # ``/embeddings`` anhängen statt nochmal ``/v1`` zu injizieren.
+            if (
+                self.base_url.endswith('/v1')
+                or self.base_url.endswith('/v1/')
+                or self.base_url.endswith('/v1beta/openai')
+                or self.base_url.endswith('/v1beta/openai/')
+            ):
                 return f"{self.base_url.rstrip('/')}/embeddings"
             return f"{self.base_url.rstrip('/')}/v1/embeddings"
         return f"{self.base_url}/api/embed"
