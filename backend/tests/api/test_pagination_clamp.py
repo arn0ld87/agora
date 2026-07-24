@@ -190,3 +190,41 @@ class TestRunStatusDetailPagination:
         data = body.get("data", body)
         assert data.get("actions_total") == 0
         assert data.get("actions") == []
+
+    def test_run_status_detail_drops_legacy_all_actions_count(self, client):
+        """`all_actions_count` ist ein redundantes Duplikat von `actions_total`.
+
+        Vor dem Fix lieferte der Endpoint beide Felder mit demselben Wert, was
+        die Paginierungs-Architektur verschleiert (Aggregat vs. Detail-Seite).
+        Per `grep -rn all_actions_count frontend/src` wird das Feld im Frontend
+        nicht gelesen — also wird es hier hart entfernt.
+        """
+        fake_all_actions = _make_fake_actions(7)
+        fake_page_actions = _make_fake_actions(4)
+        run_state = _make_run_state()
+
+        with (
+            patch("app.api.simulation_run.validate_simulation_id", return_value=True),
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_run_state",
+                return_value=run_state,
+            ),
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_all_actions",
+                return_value=fake_all_actions,
+            ),
+            patch(
+                "app.api.simulation_run.SimulationRunner.get_actions",
+                return_value=fake_page_actions,
+            ),
+        ):
+            resp = client.get(f"/api/simulation/{VALID_SIM_ID}/run-status/detail")
+
+        assert resp.status_code == 200
+        body = resp.get_json()
+        data = body.get("data", body)
+        assert "actions_total" in data, f"actions_total fehlt: {list(data.keys())}"
+        assert data["actions_total"] == 7
+        assert "all_actions_count" not in data, (
+            f"all_actions_count ist redundant und soll weg: {list(data.keys())}"
+        )

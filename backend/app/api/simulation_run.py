@@ -621,7 +621,6 @@ def get_run_status_detail(simulation_id: str):
     # bzw. /actions?platform=... — das Pagination-Ziel wäre sonst untergraben.
     result["actions_total"] = len(all_actions)
     result["actions"] = [action.to_dict() for action in paginated_actions]
-    result["all_actions_count"] = len(all_actions)
     result["twitter_actions_count"] = len(twitter_actions)
     result["reddit_actions_count"] = len(reddit_actions)
     result["rounds_count"] = len(run_state.rounds)
