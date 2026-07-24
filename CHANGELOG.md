@@ -5,6 +5,26 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (TWHIN-BERT fp16-Memory-Profile: OOM-Killer beim ersten update_rec_table-Tick — 2026-07-24, PR #859)
+
+- **`backend/scripts/_sim_common.py`** plus **`run_parallel_simulation.py` / `run_twitter_simulation.py` / `run_reddit_simulation.py`** — der OASIS-Subprozess starb reproduzierbar mit Exit-Code -9 (Linux-OOM-Killer) gegen das Container-Limit von 2.8 GiB, sobald `Twitter/twhin-bert-base` (1.06 GB safetensors, fp32) im ersten `update_rec_table()`-Tick lazy aus `oasis.social_platform.recsys` / `process_recsys_posts` geladen wurde — plus 250–350 MB Torch-/Transformers-/Sentence-Transformers-Import-Overhead. Kein Modell-Replacement nötig; Library-Code wird monkey-patcht.
+- Fix-Strategie: `install_bert_memory_profile()` patcht `transformers.AutoModel.from_pretrained` für `Twitter/twhin-bert-base` und injiziert `low_cpu_mem_usage=True` + `torch_dtype=torch.float16` (≈ 530 MB statt 1.06 GB). ENV-getrieben via `AGORA_BERT_MEMORY_PROFILE` (default `low`, `off` deaktiviert den Patch). `install_memory_sampler()` startet einen Background-Thread, der alle 0.5 s RSS-Snapshots als NDJSON nach `.runtime/mem_profile.ndjson` schreibt; ENV-getrieben via `AGORA_DEBUG_MEMORY=1`. Beide Helper laufen in allen drei Run-Scripts **vor** dem ersten `import oasis` — Python-Modul-Level-Caching sorgt dafür, dass der spätere `from transformers import AutoModel` in `process_recsys_posts` die gepatchte Klassenmethode sieht.
+- Verifikation: 8 RED-Tests in `backend/tests/scripts/test_bert_memory_profile.py` (RED → GREEN: `profile=off`, `profile=low`, `low preserves user overrides`, `sampler writes ndjson`, `sampler no-op`, `sampler idempotent stop`, `transformers-missing fallback`); torch-Segfault auf macOS ARM + Python 3.14 durch `fake_torch`-Fixture mit `sys.modules['torch']`-Mock abgefangen, plattformunabhängiger `rss_reader`-Parameter ersetzt `/proc/self/status` (kein macOS-Pfad). 113 Tests in `tests/scripts/` grün, `--help`-Smoke auf allen drei Scripts sauber, Profile-Printout `[bert-memory] profile = low` erscheint. Container-Smoke-Run mit `AGORA_DEBUG_MEMORY=1` steht aus (Handoff im Folgeschritt).
+
+### Fixed (Gemini-Embedding-URL: doppeltes `/v1`-Segment im OpenAI-Compat-Pfad — 2026-07-24, PR #860)
+
+- **`backend/app/storage/embedding_service.py`** — der Gemini-OpenAI-Compat-Endpoint endet bereits auf `/v1beta/openai` (oder `/v1beta/openai/`); ein weiteres `/v1`-Segment in `EmbeddingService._build_embed_url` ergab `…/v1beta/openai/v1/embeddings` und antwortete 404. Embedding-Discovery schlug für Gemini still fehl, obwohl Provider-Connection, API-Key und Modellkatalog korrekt konfiguriert waren.
+- Fix erweitert die Whitelist in `_build_embed_url` um die Suffixe `/v1beta/openai` und `/v1beta/openai/` (mit und ohne trailing slash).
+- Verifikation: zwei parametrisierte Regressionstests in `test_embed_uses_gemini_openai_compat_url_without_extra_v1_segment` decken beide Slash-Varianten ab; 22/22 Tests in `test_embedding_service.py` grün.
+
+### Fixed (Subprozess-Env-Whitelist: REDIS_URL und HF_TOKEN für OASIS-Bridge und private HF-Mirrors — 2026-07-24, PR #861)
+
+- **`backend/app/services/sim/process_manager.py`** — die Subprozess-Whitelist `SAFE_ENV_KEYS` ließ bisher nur technische LLM-Connection-Keys passieren; zwei produktive Use-Cases hingen dadurch in der Luft:
+  1. `REDIS_URL`: `scripts/subprocess_redis_bridge.py` aktiviert sich nur, wenn die Variable gesetzt ist. Ohne Whitelist-Eintrag blieb die Real-Time-IPC zwischen FastAPI-Parent und OASIS-Subprozess stumm, obwohl `REDIS_URL` im Backend-Env lag.
+  2. `HF_TOKEN`: Hugging-Face-Authentifizierung für private/Gated-Modelle. Public Models wie `Twitter/twhin-bert-base` funktionieren zwar ohne Token, aber Custom-Mirrors (z. B. ein privater HF-Org-Endpoint hinter Traefik-Auth) brechen ohne `HF_TOKEN`.
+- Fix ergänzt `SAFE_ENV_KEYS` um `REDIS_URL` und `HF_TOKEN`. `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`, `LLM_API_KEY` und `AGORA_FERNET_KEY` bleiben explizit **draußen** — die bestehenden `TestSubprocessEnvExcludesSecrets` sichern das regressionsfest.
+- Verifikation: 4 RED-Tests in `TestSubprocessEnvIncludesOptionalConnectionKeys` (`SAFE_ENV_KEYS`-Konstanten-Check plus `os.environ`-Merge-Check für beide neuen Keys). 11/11 Tests grün in `test_process_manager_env_whitelist.py`, `test_oasis_route_env_binding` und `test_process_manager_runtime_env`.
+
 ### Fixed (Ontology-Generation: Truncation bei MiniMax-M3 ohne JSON-Schema — 2026-07-24, PR #858)
 
 - **`backend/app/services/ontology_generator.py`** — die Ontology-Generation lief mit MiniMax-M3 in
