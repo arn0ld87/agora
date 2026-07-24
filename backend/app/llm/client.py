@@ -24,6 +24,10 @@ from ..utils.logger import get_logger
 from ..utils.retry import llm_call_with_retry
 
 from .context import _resolve_num_ctx
+# Re-Export: ``from app.llm.client import LLMOutputTruncatedError`` bleibt der
+# gewohnte Importpfad, auch wenn der Typ jetzt in ``errors`` lebt (Provider-
+# Adapter brauchen ihn und werden von diesem Modul importiert).
+from .errors import LLMOutputTruncatedError  # noqa: F401  (re-exported)
 from .json_mode import (
     JsonSchemaLike,
     _STRICT_UNSUPPORTED_HINTS,
@@ -41,15 +45,6 @@ from .providers import openai as _provider_openai
 from .tool_calls import _chat_with_tools
 
 logger = get_logger("agora.llm_client")
-
-
-class LLMOutputTruncatedError(ValueError):
-    """Eine strukturierte LLM-Antwort wurde am Token-Limit abgeschnitten.
-
-    Erbt von ``ValueError``, damit bestehende Caller, die den alten
-    ``JSONDecodeError``-Pfad breit abfangen, weiterhin greifen. Wer gezielt
-    kompakter retryen will, faengt diesen Typ ab.
-    """
 
 
 def get_llm_provider_secrets_store() -> Any:
@@ -869,6 +864,11 @@ class LLMClient:
                     cleaned_response = _strip_llm_json_envelope(response)
                     parsed: Dict[str, Any] = json.loads(cleaned_response)
                     return self._maybe_validate(parsed, schema)
+                except LLMOutputTruncatedError:
+                    # Kein Transportfehler: derselbe Request ueber den
+                    # OpenAI-Wrapper wird am selben Limit wieder gekappt und
+                    # kostet nur einen zweiten vollen Call. Durchreichen.
+                    raise
                 except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
                     logger.warning(
                         "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "

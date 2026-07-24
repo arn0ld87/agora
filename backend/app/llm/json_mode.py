@@ -306,14 +306,20 @@ def _try_repair_truncated_json(payload: str) -> Optional[str]:
     # Strukturzeichen zurueckgeschnitten, wodurch ``{"a": 1,`` zu ``{}``
     # kollabierte: valides JSON, aber der Inhalt war weg und der Caller
     # hielt das Ergebnis fuer einen Erfolg.
-    truncated = payload.rstrip()
     if in_string:
+        # Innerhalb eines offenen Strings NICHT rstrip()en: Whitespace am Ende
+        # gehoert zum uebertragenen Wert. ``"Maya arbeitet als `` wuerde sonst
+        # sein abschliessendes Leerzeichen verlieren — eine stille Aenderung
+        # am Inhalt, die der Repair gerade nicht machen darf.
+        truncated = payload
         # Haengender Backslash: der Cap fiel in eine Escape-Sequenz hinein.
         # Bleibt er stehen, escaped er das Anfuehrungszeichen, das wir gerade
         # anhaengen wollen, und der String bleibt offen.
         if escape and truncated.endswith("\\"):
             truncated = truncated[:-1]
         truncated += '"'
+    else:
+        truncated = payload.rstrip()
     # Drop dangling ``,`` so the closer doesn't produce another parse error.
     truncated = truncated.rstrip().rstrip(",")
     truncated += "".join(reversed(stack))

@@ -42,6 +42,23 @@ class TestRepairNeverReturnsBrokenJson:
 
         assert _try_repair_truncated_json(payload) is None
 
+    def test_open_string_content_is_not_trimmed(self):
+        """Whitespace am Ende eines offenen Strings gehoert zum Wert.
+
+        Der Repair schliesst den String — er darf dessen Inhalt dabei nicht
+        veraendern. Ein ``rstrip()`` vor dem Anfuegen des Anfuehrungszeichens
+        wuerde Leerzeichen und Zeilenumbrueche verschlucken, die Teil des
+        uebertragenen Textes sind.
+        """
+        # Echtes Leerzeichen am Ende des offenen Strings — im uebertragenen
+        # Text vorhanden, weil der Cap zwischen zwei Woerter fiel.
+        payload = '{"persona": "Maya arbeitet als '
+
+        repaired = _try_repair_truncated_json(payload)
+
+        assert repaired is not None
+        assert json.loads(repaired)["persona"] == "Maya arbeitet als "
+
     def test_truncation_inside_escape_sequence_recovers_prefix(self):
         # Der Cap faellt zwischen Backslash und escaptem Zeichen. Der Backslash
         # gehoert zu einer Sequenz, die es nicht mehr gibt — er muss weg,

@@ -79,6 +79,81 @@ class TestChatJsonRejectsTruncatedOutput:
 
         assert call.call_count == 1, "Truncation darf keinen Fallback-Call ausloesen"
 
+    def test_native_ollama_schema_call_rejects_truncated_output(self):
+        """Der native Ollama-Pfad umgeht ``chat()`` — und damit dessen Guard.
+
+        ``/api/chat`` meldet einen am ``num_predict``-Limit gekappten Lauf mit
+        ``done_reason: "length"``. Ohne eigene Pruefung landet das Fragment in
+        derselben Repair-Kette, die fuer den OpenAI-Pfad bereits geschlossen
+        ist.
+        """
+        from app.llm.providers.ollama import chat_with_schema
+
+        class PersonaSchema(BaseModel):
+            display_name: str
+
+        http_response = MagicMock()
+        http_response.raise_for_status.return_value = None
+        http_response.json.return_value = {
+            "message": {"content": TRUNCATED},
+            "done_reason": "length",
+        }
+        http_client = MagicMock()
+        http_client.__enter__.return_value = http_client
+        http_client.post.return_value = http_response
+
+        with patch("httpx.Client", return_value=http_client):
+            with pytest.raises(LLMOutputTruncatedError):
+                chat_with_schema(
+                    base_url="http://localhost:11434/v1",
+                    model="llama3",
+                    api_key="ollama",
+                    think=False,
+                    num_ctx=8192,
+                    messages=[{"role": "user", "content": "persona bitte"}],
+                    schema=PersonaSchema,
+                    temperature=0.3,
+                    max_tokens=4096,
+                )
+
+    def test_ollama_truncation_does_not_fall_back_to_openai_wrapper(self):
+        """Der native Ollama-Pfad faellt bei Fehlern breit auf den
+        OpenAI-Wrapper zurueck — gedacht fuer Netz- und 4xx-Fehler.
+
+        Eine Truncation ist kein Transportfehler: derselbe Request ueber einen
+        anderen Transport wird wieder gekappt, nur kostet er einen zweiten
+        vollen Call. Der Abbruch muss deshalb durchschlagen.
+        """
+
+        class PersonaSchema(BaseModel):
+            display_name: str
+
+        client = _make_client()
+        client.base_url = "http://localhost:11434/v1"
+
+        http_response = MagicMock()
+        http_response.raise_for_status.return_value = None
+        http_response.json.return_value = {
+            "message": {"content": TRUNCATED},
+            "done_reason": "length",
+        }
+        http_client = MagicMock()
+        http_client.__enter__.return_value = http_client
+        http_client.post.return_value = http_response
+
+        with patch.object(client, "_publish_model_active"):
+            with patch("httpx.Client", return_value=http_client):
+                with patch("app.llm.client.llm_call_with_retry") as openai_call:
+                    with pytest.raises(LLMOutputTruncatedError):
+                        client.chat_json(
+                            [{"role": "user", "content": "persona bitte"}],
+                            schema=PersonaSchema,
+                        )
+
+        assert openai_call.call_count == 0, (
+            "Truncation darf keinen Fallback auf den OpenAI-Wrapper ausloesen"
+        )
+
     def test_complete_response_still_parses(self):
         """Gegenprobe: ``finish_reason="stop"`` bleibt der normale Erfolgspfad."""
         client = _make_client()
