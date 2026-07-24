@@ -110,3 +110,37 @@ class TestSubprocessEnvExcludesSecrets:
         forbidden = {"SECRET_KEY", "AGORA_AUTH_TOKEN", "NEO4J_PASSWORD", "AGORA_FERNET_KEY"}
         overlap = SAFE_ENV_KEYS & forbidden
         assert not overlap, f"SAFE_ENV_KEYS enthält verbotene Keys: {overlap}"
+
+
+class TestSubprocessEnvIncludesOptionalConnectionKeys:
+    """RED-Tests: Optionale Connection-Keys (REDIS_URL, HF_TOKEN) müssen
+    vererbbar sein, damit die Redis-IPC-Bridge und Hugging-Face-Downloads
+    im OASIS-Subprozess funktionieren.
+
+    Hintergrund: Ohne REDIS_URL war die Redis-Bridge im Subprozess
+    inaktiv; ohne HF_TOKEN schlugen private HF-Modelle fehl.
+    """
+
+    def test_safe_env_keys_includes_redis_url(self) -> None:
+        """REDIS_URL muss in SAFE_ENV_KEYS sein, sonst bleibt die Redis-Bridge im Subprozess stumm."""
+        assert "REDIS_URL" in SAFE_ENV_KEYS, (
+            "REDIS_URL fehlt in SAFE_ENV_KEYS — Redis-Bridge im OASIS-Subprozess funktioniert nicht"
+        )
+
+    def test_safe_env_keys_includes_hf_token(self) -> None:
+        """HF_TOKEN muss in SAFE_ENV_KEYS sein, sonst scheitern private HF-Modell-Loads."""
+        assert "HF_TOKEN" in SAFE_ENV_KEYS, (
+            "HF_TOKEN fehlt in SAFE_ENV_KEYS — private Hugging-Face-Modelle laden nicht"
+        )
+
+    def test_subprocess_env_includes_redis_url(self, tmp_path, monkeypatch) -> None:
+        """REDIS_URL aus os.environ landet via Whitelist im Subprozess-Env."""
+        monkeypatch.setenv("REDIS_URL", "redis://redis:6379/0")
+        captured = _run_start_simulation(tmp_path, monkeypatch)
+        assert captured.get("REDIS_URL") == "redis://redis:6379/0"
+
+    def test_subprocess_env_includes_hf_token(self, tmp_path, monkeypatch) -> None:
+        """HF_TOKEN aus os.environ landet via Whitelist im Subprozess-Env."""
+        monkeypatch.setenv("HF_TOKEN", "hf_testtoken123")
+        captured = _run_start_simulation(tmp_path, monkeypatch)
+        assert captured.get("HF_TOKEN") == "hf_testtoken123"
