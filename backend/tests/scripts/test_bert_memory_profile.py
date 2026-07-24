@@ -107,18 +107,37 @@ class _DummyKwargs(dict):
         return self.get(name)
 
 
-def test_default_profile_does_not_patch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ohne ``AGORA_BERT_MEMORY_PROFILE`` bleibt ``from_pretrained`` unangetastet."""
+def test_default_profile_patches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default-Profil IST ``low`` (per ``_BERT_PROFILE_DEFAULT``) — patching
+    MUSS stattfinden. Verifiziert, dass die Idempotenz-Pruefung im Helper
+    nicht fälschlich frueh zurueckkehrt.
+
+    Wichtig: ``original`` ist eine echte Funktion (kein ``mock.Mock``).
+    ``install_bert_memory_profile`` prueft per
+    ``getattr(original, "_agora_bert_memory_profile_applied", False)``
+    auf Idempotenz; ein ``Mock``-Sentinel wuerde das Attribut truthy
+    auto-magieren und der Patch wuerde stillschweigend ueberspringen
+    (CodeRabbit-Finding #859).
+    """
     monkeypatch.delenv("AGORA_BERT_MEMORY_PROFILE", raising=False)
 
-    sentinel = mock.Mock(name="original_from_pretrained")
+    def sentinel(*_args: object, **_kwargs: object) -> mock.Mock:
+        return mock.Mock(name="model")
+
     fake_module = mock.Mock()
     fake_module.AutoModel.from_pretrained = sentinel
     with mock.patch.dict(sys.modules, {"transformers": fake_module}):
         install_bert_memory_profile()
 
-    # ``from_pretrained`` darf weder gelesen noch ersetzt worden sein.
-    assert fake_module.AutoModel.from_pretrained is sentinel
+    # Default = "low" → Patching MUSS stattgefunden haben.
+    assert fake_module.AutoModel.from_pretrained is not sentinel
+    # Das gesetzte Flag haengt am neuen (gepatchten) Callable, nicht am
+    # Original — verhindert Doppel-Wrapping bei wiederholten Aufrufen.
+    assert getattr(
+        fake_module.AutoModel.from_pretrained,
+        "_agora_bert_memory_profile_applied",
+        False,
+    ) is True
 
 
 def test_low_profile_patches_twhin_only(
@@ -164,7 +183,9 @@ def test_off_profile_does_not_patch(monkeypatch: pytest.MonkeyPatch) -> None:
     """``AGORA_BERT_MEMORY_PROFILE=off`` schaltet den Patch explizit aus."""
     monkeypatch.setenv("AGORA_BERT_MEMORY_PROFILE", "off")
 
-    sentinel = mock.Mock(name="original_from_pretrained")
+    def sentinel(*_args: object, **_kwargs: object) -> mock.Mock:
+        return mock.Mock(name="model")
+
     fake_module = mock.Mock()
     fake_module.AutoModel.from_pretrained = sentinel
     with mock.patch.dict(sys.modules, {"transformers": fake_module}):

@@ -711,9 +711,15 @@ def install_memory_sampler(
             try:
                 sink_handle.write(json.dumps(snap) + "\n")
                 sink_handle.flush()
-            except OSError:
+            except (OSError, ValueError):
                 # Disk voll, etc. — silently drop, Sampler darf den
-                # Subprozess nicht zum Absturz bringen.
+                # Subprozess nicht zum Absturz bringen. ``ValueError``
+                # faengt ``"I/O operation on closed file"`` ab, falls
+                # ``_stop()`` das Handle schliesst, waehrend der Thread
+                # noch mitten in einer Write-Call-Sequenz haengt
+                # (Race-Window zwischen ``thread.join(timeout=...)``
+                # und close()). Defensive Härtung fuer
+                # CodeRabbit-Finding #859.
                 pass
             stop_event.wait(interval_s)
 
