@@ -5,6 +5,74 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Frontend/API: Wortgrenzen im ERROR_PATTERN + redundantes `all_actions_count` entfernt — 2026-07-24, PR #862)
+
+- **`frontend/src/utils/errorLinePattern.ts` (neu)** — das Regex
+  `(error|exception|traceback|fatal|warn|warning)` matchte ohne Wortgrenzen auch Wort-INNERE
+  Vorkommen: `forwarded`, `errorless`, `warningless`, `forewarning` und `awareness` wurden als
+  Fehlerzeilen gezählt. Das verfälschte Error-Zähler und Log-Filter in `LogDrawer`,
+  `Step3Simulation` und `SimulationToolPanel`.
+- Fix zieht das Pattern in eine gemeinsame Utility mit `\b`-Ankern
+  (`/\b(?:error|exception|traceback|fatal|warn|warning)\b/i`) plus Helper `isErrorLine()`. Alle
+  drei Konsumenten nutzen jetzt denselben Token-Satz — vorher divergierten sie, `LogDrawer`
+  kannte `warn|warning` gar nicht.
+- **`backend/app/api/simulation_run.py`** — `result["all_actions_count"]` war eine exakte
+  Duplikation von `actions_total` ohne einen einzigen Frontend-Konsumenten und wurde entfernt.
+  `actions_total` bleibt das kanonische Feld.
+- Verifikation: 12 Vitest-Fälle in `frontend/src/utils/__tests__/errorLinePattern.spec.ts`
+  (inkl. expliziter Negativfälle für die genannten Wort-Inneren Treffer), 7 pytest in
+  `backend/tests/api/test_pagination_clamp.py`.
+
+### Fixed (Subprozess-Env-Whitelist: REDIS_URL und HF_TOKEN für OASIS-Bridge und private HF-Mirrors — 2026-07-24, PR #861)
+
+- **`backend/app/services/sim/process_manager.py`** — die Subprozess-Whitelist `SAFE_ENV_KEYS`
+  ließ bisher nur technische LLM-Connection-Keys passieren; zwei produktive Use-Cases hingen
+  dadurch in der Luft:
+  1. `REDIS_URL`: `scripts/subprocess_redis_bridge.py` aktiviert sich nur, wenn die Variable
+     gesetzt ist. Ohne Whitelist-Eintrag blieb die Real-Time-IPC zwischen FastAPI-Parent und
+     OASIS-Subprozess stumm, obwohl `REDIS_URL` im Backend-Env lag.
+  2. `HF_TOKEN`: Hugging-Face-Authentifizierung für private und Gated-Modelle. Public Models wie
+     `Twitter/twhin-bert-base` laufen ohne Token, Custom-Mirrors hinter Auth aber nicht.
+- `SECRET_KEY`, `AGORA_AUTH_TOKEN`, `NEO4J_PASSWORD`, `LLM_API_KEY` und `AGORA_FERNET_KEY` bleiben
+  explizit **draußen**; `TestSubprocessEnvExcludesSecrets` sichert das regressionsfest.
+- Verifikation: 9 Tests in `backend/tests/services/test_process_manager_env_whitelist.py` grün.
+
+### Fixed (Gemini-Embedding-URL: doppeltes `/v1`-Segment im OpenAI-Compat-Pfad — 2026-07-24, PR #860)
+
+- **`backend/app/storage/embedding_service.py`** — der Gemini-OpenAI-Compat-Endpoint endet bereits
+  auf `/v1beta/openai` (oder `/v1beta/openai/`); ein weiteres `/v1`-Segment in
+  `EmbeddingService._build_embed_url` ergab `…/v1beta/openai/v1/embeddings` und antwortete 404.
+  Embedding-Discovery schlug für Gemini still fehl, obwohl Provider-Connection, API-Key und
+  Modellkatalog korrekt konfiguriert waren.
+- Fix erweitert die Whitelist in `_build_embed_url` um die Suffixe `/v1beta/openai` und
+  `/v1beta/openai/` (mit und ohne trailing slash).
+- Verifikation: 22 Tests in `backend/tests/test_embedding_service.py` grün. Zusätzlich live gegen
+  Gemini verifiziert: gebaute URL
+  `https://generativelanguage.googleapis.com/v1beta/openai/embeddings`, `health_check() == True`,
+  `gemini-embedding-2` liefert einen 3072-dimensionalen Nicht-Null-Vektor.
+
+### Added (TWHIN-BERT-Ladeprofil und RSS-Sampler für OASIS-Subprozesse — 2026-07-24, PR #859)
+
+- **`backend/scripts/_sim_common.py`** plus `run_parallel_simulation.py`,
+  `run_twitter_simulation.py` und `run_reddit_simulation.py` — der OASIS-Subprozess starb im
+  speicherbegrenzten Container mit Exit-Code -9 (Linux-OOM-Killer), sobald
+  `Twitter/twhin-bert-base` im ersten `update_rec_table()`-Tick lazy aus
+  `oasis.social_platform.recsys` geladen wurde.
+- `install_bert_memory_profile()` patcht `transformers.AutoModel.from_pretrained` für dieses
+  Modell und injiziert `low_cpu_mem_usage=True` + `torch_dtype=torch.float16`. Steuerbar über
+  `AGORA_BERT_MEMORY_PROFILE` (`low` = Default, `off` = Patch deaktiviert).
+- `install_memory_sampler()` startet einen Hintergrund-Thread, der RSS-Snapshots als NDJSON nach
+  `.runtime/mem_profile.<pid>.ndjson` schreibt (aktiv bei `AGORA_DEBUG_MEMORY=1`). Der Pfad ist
+  PID-getrennt, damit die drei Run-Scripts sich nicht denselben Sink teilen. Der RSS-Reader ist
+  über den Parameter `rss_reader` injizierbar und dadurch plattformunabhängig testbar.
+- Beide Helper laufen in allen drei Run-Scripts **vor** dem ersten `import oasis`, damit das
+  Modul-Level-Caching von Python dafür sorgt, dass der spätere `from transformers import AutoModel`
+  in `process_recsys_posts` die gepatchte Klassenmethode sieht.
+- Verifikation: 11 Tests in `backend/tests/scripts/test_bert_memory_profile.py` grün; sie decken
+  Profilwahl, Idempotenz, Respektieren von Caller-Overrides, NDJSON-Ausgabe des Samplers und den
+  Fallback bei fehlendem `transformers` ab. Die Tests prüfen die injizierten Ladeparameter, **nicht**
+  den tatsächlichen Speicherverbrauch — eine Messung des realen RSS-Effekts steht aus.
+
 ### Fixed (Ontology-Generation: Truncation bei MiniMax-M3 ohne JSON-Schema — 2026-07-24, PR #858)
 
 - **`backend/app/services/ontology_generator.py`** — die Ontology-Generation lief mit MiniMax-M3 in
