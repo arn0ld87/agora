@@ -75,11 +75,32 @@ init_runner_tracing("agora-oasis-runner")
 init_runner_logging("agora-oasis-runner")
 load_project_env(__file__)
 install_max_tokens_warning_filter()
-_bert_profile = install_bert_memory_profile()
-_memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
-print(f"[bert-memory] profile = {_bert_profile}", flush=True)
-_camel_context_floor = apply_camel_context_floor()
-print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
+
+
+def _noop_memory_stop() -> None:
+    """No-Op-Placeholder, bis ``_install_runtime_profile()`` das echte Stop setzt."""
+
+
+# Modul-Level-Default; wird in ``_install_runtime_profile()`` überschrieben.
+# Bleibt no-op, solange das Modul nur importiert wird (z.B. durch Tests).
+_memory_stop = _noop_memory_stop
+
+
+def _install_runtime_profile() -> None:
+    """BERT-Memory-Profil + Sampler + Camel-Context-Floor installieren.
+
+    Bewusst lazy statt auf Modul-Ebene: ein Modul-Import in Tests darf nicht
+    ``transformers``/``torch`` laden. Der torch-Import crasht auf
+    Python 3.14/aarch64 in Kombination mit anderen C-Extensions im
+    pytest-Sammelprozess (Segfault in ``libtorch_python.so initModule``).
+    Siehe HANDOVER-2026-07-25 Aufgabe 3.
+    """
+    global _memory_stop
+    _bert_profile = install_bert_memory_profile()
+    _memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
+    print(f"[bert-memory] profile = {_bert_profile}", flush=True)
+    _camel_context_floor = apply_camel_context_floor()
+    print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
 
 if __name__ == '__main__' and any(arg in sys.argv for arg in ('-h', '--help')):
     build_single_platform_parser('OASIS Twitter Simulation').parse_args()
@@ -899,7 +920,9 @@ async def main():
     # Create shutdown event at the start of main function
     global _shutdown_event
     _shutdown_event = asyncio.Event()
-    
+
+    _install_runtime_profile()
+
     if not os.path.exists(args.config):
         print(f"Error: Configuration file does not exist: {args.config}")
         sys.exit(1)

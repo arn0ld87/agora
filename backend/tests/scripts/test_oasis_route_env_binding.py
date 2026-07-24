@@ -30,12 +30,15 @@ import pytest
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = _BACKEND_DIR / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_TESTS_DIR = Path(__file__).resolve().parent
+for _p in (_SCRIPTS_DIR, _TESTS_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from app.contracts.llm_routing_contract import ResolvedRoute  # noqa: E402
 from app.services.llm_routing_seed import build_route_subprocess_env  # noqa: E402
 from app.services.sim.process_manager import SAFE_ENV_KEYS  # noqa: E402
+from _crash_skip import skipif_py314_aarch64  # noqa: E402
 
 MODEL_ID = "MiniMax-M3"
 
@@ -111,6 +114,7 @@ def stub_servers() -> Iterator[tuple[HTTPServer, HTTPServer]]:
         server.server_close()
 
 
+@skipif_py314_aarch64
 def test_registry_provider_route_reaches_provider_endpoint_not_stale_env(
     stub_servers: tuple[HTTPServer, HTTPServer],
     monkeypatch: pytest.MonkeyPatch,

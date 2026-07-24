@@ -2,8 +2,14 @@ import importlib.util
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Skip-Helper fuer native-Crash-Isolierung unter CPython 3.14 / linux-aarch64.
+# _load_module("run_parallel_simulation") triggert denselben nicht-deterministischen
+# Segfault-Pfad (oasis -> torch / camel.toolkits -> mcp -> pydantic-GC) wie der
+# direkte Import in tests/scripts. Siehe HANDOVER-2026-07-25-crash-diag-followup.md.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+from _crash_skip import skipif_py314_aarch64  # noqa: E402
 
 
 RUNNER_SCRIPTS = (
@@ -31,6 +37,7 @@ def _load_module(module_name: str, relative_path: str):
             sys.path.remove(parent_dir)
 
 
+@skipif_py314_aarch64
 def test_resolve_model_runtime_settings_cloud(monkeypatch):
     module = _load_module("run_parallel_simulation_test", "backend/scripts/run_parallel_simulation.py")
 
@@ -49,6 +56,7 @@ def test_resolve_model_runtime_settings_cloud(monkeypatch):
     assert settings["is_cloud_model"] is True
 
 
+@skipif_py314_aarch64
 def test_resolve_model_runtime_settings_local(monkeypatch):
     module = _load_module("run_parallel_simulation_test_local", "backend/scripts/run_parallel_simulation.py")
 

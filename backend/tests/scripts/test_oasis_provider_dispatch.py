@@ -21,13 +21,16 @@ import pytest
 # ---------------------------------------------------------------------------
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = _BACKEND_DIR / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_TESTS_DIR = Path(__file__).resolve().parent
+for _p in (_SCRIPTS_DIR, _TESTS_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 # Use the real camel.types — camel-ai is always installed in this venv.
 from camel.types import ModelPlatformType  # type: ignore[import]  # noqa: E402
 
 from _sim_common import detect_oasis_platform  # noqa: E402
+from _crash_skip import skipif_py314_aarch64  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +127,7 @@ def _make_model_factory_mock() -> tuple[MagicMock, list[dict[str, Any]]]:
     return mock_factory, calls
 
 
+@skipif_py314_aarch64
 class TestCreateModelGeminiBranch:
     """create_model() with a Gemini model must not touch OPENAI_BASE_URL."""
 
@@ -152,6 +156,7 @@ class TestCreateModelGeminiBranch:
         assert platform_arg == ModelPlatformType.GEMINI
 
 
+@skipif_py314_aarch64
 class TestCreateModelOpenAIBranch:
     """create_model() with an OpenAI model must set OPENAI_BASE_URL (unchanged behaviour)."""
 
@@ -182,6 +187,7 @@ class TestCreateModelOpenAIBranch:
             "OPENAI branch must not emit extra_body (think/num_ctx are Ollama-only)"
 
 
+@skipif_py314_aarch64
 class TestCreateModelMiniMaxBranch:
     """create_model() mit einem MiniMax-Modell (api.minimax.io) routet ueber den
     OpenAI-Compat-Pfad und muss den MiniMax-`thinking`-Block in
@@ -271,6 +277,7 @@ class TestCreateModelMiniMaxBranch:
         )
 
 
+@skipif_py314_aarch64
 class TestCreateModelOllamaBranch:
     """create_model() with an Ollama model must route via OllamaModel with url/api_key
     and emit think/num_ctx in extra_body — even for ``:latest`` suffixes and
