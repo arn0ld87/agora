@@ -152,6 +152,80 @@ def _apply_workspace_defaults(config: RuntimeLlmRouting) -> None:
             config.stage_overrides[ws_stage_id] = ws_route
 
 
+def _prune_stage_overrides(config: RuntimeLlmRouting) -> int:
+    """Verwirft persistierte ``stage_overrides``, deren Provider-ID in der
+    aktuellen ``LlmProviderRegistry`` unbekannt ist oder deren ``base_url``
+    zu keiner aktivierten ``ProviderConnection`` mehr passt.
+
+    Stale-Override = Symptom eines Env-Wechsels (``LLM_BASE_URL``,
+    ``LLM_MODEL_NAME`` oder die ProviderConnection-Landschaft hat sich seit
+    dem letzten ``save_config`` geändert). Ohne Pruning würde der
+    Stage-Router den alten Endpoint aufrufen und dort z. B. HTML
+    (``<title>Ollama</title>``) statt JSON erhalten — NER loggt
+    ``NER done: 0 entities, 0 relations`` ohne Fehler, Graph-Build läuft
+    mit leerem Modell. Mutiert ``config.stage_overrides`` in-place und
+    liefert die Anzahl der verworfenen Einträge.
+    """
+    if not config.stage_overrides:
+        return 0
+    known_provider_ids = {p.id for p in LlmProviderRegistry().get_providers()}
+    try:
+        connections = ProviderConnectionStore().list_connections()
+    except Exception:  # noqa: BLE001 — defensiv, Heuristik darf nicht hart fehlschlagen
+        connections = []
+    enabled_connections = [c for c in connections if c.enabled]
+    enabled_base_urls = {
+        c.base_url.rstrip("/").removesuffix("/v1")
+        for c in enabled_connections
+        if c.base_url
+    }
+    # ``provider_id`` → welche Connection-Typen sind erlaubt? Wenn ein Ollama-
+    # Cloud-Override persistiert wurde, aber keine aktivierte Ollama/Ollama-
+    # Cloud-Connection existiert, ist der Override mit Sicherheit stale —
+    # unabhängig davon, ob eine ``base_url`` mitgeschrieben wurde.
+    _OLLAMA_PROVIDER_IDS = {"ollama", "ollama_cloud", "cloud"}
+    has_active_ollama_connection = any(
+        getattr(c, "provider_kind", None) in _OLLAMA_PROVIDER_IDS
+        for c in enabled_connections
+    )
+    stale: list[StageId] = []
+    for stage_id, override in config.stage_overrides.items():
+        if not override.provider_id:
+            continue
+        if override.provider_id not in known_provider_ids:
+            stale.append(stage_id)
+            continue
+        persisted_base_url = override.provider_options.get("base_url")
+        if persisted_base_url and enabled_base_urls:
+            normalized = persisted_base_url.rstrip("/").removesuffix("/v1")
+            if normalized not in enabled_base_urls:
+                stale.append(stage_id)
+                continue
+        # Kein ``base_url`` (oder keine aktiven Connections zum Abgleich):
+        # Provider-Typ-spezifischer Sanity-Check. Wenn der Provider-ID-Typ zu
+        # keiner aktivierten Connection passt, ist die Persistierung garantiert
+        # aus einer früheren Umgebung (z. B. Ollama-Cloud-Proxy in der Vor-
+        # MiniMax-Ära, der später auf eine andere LLM-Backend umgestellt wurde).
+        if (
+            override.provider_id in _OLLAMA_PROVIDER_IDS
+            and not has_active_ollama_connection
+        ):
+            stale.append(stage_id)
+            continue
+    for stage_id in stale:
+        dropped = config.stage_overrides.pop(stage_id)
+        logger.warning(
+            "seed_run_stage_routing: stale stage_override verworfen "
+            "(stage=%s, provider_id=%s, base_url=%s) — Provider-Landschaft "
+            "hat sich seit der letzten Persistierung geändert; "
+            "Workspace-Default wird übernommen",
+            stage_id,
+            dropped.provider_id,
+            dropped.provider_options.get("base_url"),
+        )
+    return len(stale)
+
+
 def _apply_override(
     config: RuntimeLlmRouting,
     stage_id: StageId,
@@ -233,6 +307,16 @@ def seed_run_stage_routing(
     # (= bereits in den Per-Run-Snapshots vorhanden) werden NICHT überschrieben.
     if not has_existing_config:
         _apply_workspace_defaults(config)
+
+    # Stale-Override-Prune läuft IMMER — auch bei fresh runs kann er Workspace-
+    # Defaults betreffen (z. B. workspace_routing.json aus alter Umgebung mit
+    # ``ollama_cloud``-override, der in der neuen Umgebung zu 401/HTML-Antworten
+    # führt). Symmetrische Behandlung zu bestehender Config: geprunete Stages
+    # fallen auf den aktuellen global_default zurück.
+    pruned_count = _prune_stage_overrides(config)
+    if pruned_count > 0 and has_existing_config:
+        _apply_workspace_defaults(config)
+        config.routing_version += 1
 
     runtime = llm_runtime or RuntimeLlmConfig()
 

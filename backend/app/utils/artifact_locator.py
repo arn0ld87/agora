@@ -38,7 +38,7 @@ class ArtifactLocator:
     def runs_dir(cls) -> str:
         # AGORA_INSTANCE_DIR fallback ensures we don't break logic-first code
         base = os.environ.get("AGORA_INSTANCE_DIR") or os.path.join(
-            os.path.dirname(__file__), "../../../instance"
+            os.path.dirname(__file__), "../../instance"  # was ../../../ — off-by-one landed in /app/instance (image-baked)
         )
         return os.path.join(base, "runs")
 
