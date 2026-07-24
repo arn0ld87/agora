@@ -173,11 +173,21 @@ def _prune_stage_overrides(config: RuntimeLlmRouting) -> int:
         connections = ProviderConnectionStore().list_connections()
     except Exception:  # noqa: BLE001 — defensiv, Heuristik darf nicht hart fehlschlagen
         connections = []
+    enabled_connections = [c for c in connections if c.enabled]
     enabled_base_urls = {
         c.base_url.rstrip("/").removesuffix("/v1")
-        for c in connections
-        if c.enabled and c.base_url
+        for c in enabled_connections
+        if c.base_url
     }
+    # ``provider_id`` → welche Connection-Typen sind erlaubt? Wenn ein Ollama-
+    # Cloud-Override persistiert wurde, aber keine aktivierte Ollama/Ollama-
+    # Cloud-Connection existiert, ist der Override mit Sicherheit stale —
+    # unabhängig davon, ob eine ``base_url`` mitgeschrieben wurde.
+    _OLLAMA_PROVIDER_IDS = {"ollama", "ollama_cloud", "cloud"}
+    has_active_ollama_connection = any(
+        getattr(c, "provider_kind", None) in _OLLAMA_PROVIDER_IDS
+        for c in enabled_connections
+    )
     stale: list[StageId] = []
     for stage_id, override in config.stage_overrides.items():
         if not override.provider_id:
@@ -186,11 +196,22 @@ def _prune_stage_overrides(config: RuntimeLlmRouting) -> int:
             stale.append(stage_id)
             continue
         persisted_base_url = override.provider_options.get("base_url")
-        if not persisted_base_url or not enabled_base_urls:
-            continue
-        normalized = persisted_base_url.rstrip("/").removesuffix("/v1")
-        if normalized not in enabled_base_urls:
+        if persisted_base_url and enabled_base_urls:
+            normalized = persisted_base_url.rstrip("/").removesuffix("/v1")
+            if normalized not in enabled_base_urls:
+                stale.append(stage_id)
+                continue
+        # Kein ``base_url`` (oder keine aktiven Connections zum Abgleich):
+        # Provider-Typ-spezifischer Sanity-Check. Wenn der Provider-ID-Typ zu
+        # keiner aktivierten Connection passt, ist die Persistierung garantiert
+        # aus einer früheren Umgebung (z. B. Ollama-Cloud-Proxy in der Vor-
+        # MiniMax-Ära, der später auf eine andere LLM-Backend umgestellt wurde).
+        if (
+            override.provider_id in _OLLAMA_PROVIDER_IDS
+            and not has_active_ollama_connection
+        ):
             stale.append(stage_id)
+            continue
     for stage_id in stale:
         dropped = config.stage_overrides.pop(stage_id)
         logger.warning(
@@ -286,11 +307,14 @@ def seed_run_stage_routing(
     # (= bereits in den Per-Run-Snapshots vorhanden) werden NICHT überschrieben.
     if not has_existing_config:
         _apply_workspace_defaults(config)
-    elif _prune_stage_overrides(config) > 0:
-        # Stale Overrides aus früheren Umgebungen verworfen — Workspace-Default
-        # für die betroffenen Stages übernehmen, sonst fällt die Stage auf den
-        # (potentiell ebenso stalen) global_default zurück und NER/Graph-Build
-        # treffen den falschen Endpoint.
+
+    # Stale-Override-Prune läuft IMMER — auch bei fresh runs kann er Workspace-
+    # Defaults betreffen (z. B. workspace_routing.json aus alter Umgebung mit
+    # ``ollama_cloud``-override, der in der neuen Umgebung zu 401/HTML-Antworten
+    # führt). Symmetrische Behandlung zu bestehender Config: geprunete Stages
+    # fallen auf den aktuellen global_default zurück.
+    pruned_count = _prune_stage_overrides(config)
+    if pruned_count > 0 and has_existing_config:
         _apply_workspace_defaults(config)
         config.routing_version += 1
 

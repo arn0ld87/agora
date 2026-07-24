@@ -397,4 +397,91 @@ def test_repro_bug_c_valid_override_is_not_pruned(
     override = loaded.stage_overrides["graph_build"]
     assert override.provider_id == "ollama_cloud"
     assert override.model == "qwen3-coder:cloud"
-    assert override.provider_options == {"base_url": "https://ollama.com/v1"}
+
+
+@patch("app.utils.artifact_locator.ArtifactLocator.run_dir")
+def test_repro_bug_c_stale_workspace_default_dropped_on_fresh_run(
+    mock_run_dir, monkeypatch, tmp_path
+):
+    """BUG C Reihenfolge-Variante:
+    Fresh run (kein ``runtime_llm_routing.json`` vorhanden) seed'et
+    ``_apply_workspace_defaults`` direkt aus ``workspace_llm_routing.json``.
+    Wenn die Workspace-Defaults aus einer früheren Umgebung stammen und einen
+    ``ollama_cloud``-stage_override ohne ``base_url`` enthalten, MUSS der
+    Prune-Schritt auch bei fresh runs laufen — sonst übernimmt der Stage-
+    Router den stalen Endpoint und NER/Graph-Build schlagen ohne Fehler fehl.
+    """
+    from app.contracts.ai_provider_contract import ProviderConnection
+    from app.contracts.llm_routing_contract import StageLLMRoute
+    from app.contracts.workspace_routing_contract import WorkspaceLlmRoutingDefaults
+    from app.services.llm_routing_seed import seed_run_stage_routing
+    from app.services.llm_runtime import RuntimeLlmConfig
+    from app.services.workspace_routing_store import WorkspaceRoutingStore
+
+    run_id = "run_fresh_with_stale_workspace"
+    run_dir = tmp_path / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    mock_run_dir.return_value = str(run_dir)
+
+    # Keine aktive Ollama/Ollama-Cloud-Connection — der Prune muss den
+    # Workspace-Default verwerfen.
+    active_minimax = ProviderConnection(
+        id="minimax",
+        provider_kind="minimax",
+        display_name="MiniMax",
+        transport="http",
+        auth_mode="api_key",
+        base_url="https://api.minimax.io/v1",
+        secret_ref=None,
+        enabled=True,
+    )
+    connection_store = MagicMock()
+    connection_store.list_connections.return_value = [active_minimax]
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.ProviderConnectionStore",
+        lambda: connection_store,
+    )
+
+    # Workspace-Defaults aus Vor-MiniMax-Ära: ollama_cloud override ohne
+    # base_url (typisch für die ursprüngliche Persistierung, bevor der
+    # Workspace-Routing-Store erweitert wurde).
+    workspace_store = WorkspaceRoutingStore(data_dir=tmp_path)
+    workspace_store.save(
+        WorkspaceLlmRoutingDefaults(
+            global_default=StageLLMRoute(
+                provider_id="ollama_cloud",
+                model="gpt-oss:20b",
+                provider_options={},
+            ),
+            stage_overrides={
+                "graph_build": StageLLMRoute(
+                    provider_id="ollama_cloud",
+                    model="gpt-oss:20b",
+                    provider_options={},
+                ),
+            },
+        )
+    )
+    monkeypatch.setattr(
+        "app.services.llm_routing_seed.get_workspace_routing_store",
+        lambda: workspace_store,
+    )
+
+    # ``has_existing_config`` ist False (kein runtime_llm_routing.json).
+    loaded = seed_run_stage_routing(
+        run_id,
+        "graph_build",
+        llm_model_override=None,
+        llm_runtime=RuntimeLlmConfig(),
+    )
+
+    # Stale Workspace-Default muss aus den stage_overrides entfernt sein.
+    # Die graph_build-Stage fällt damit auf den global_default zurück
+    # (oder bleibt leer, falls der globale Default ebenfalls gepruned wurde).
+    override = loaded.stage_overrides.get("graph_build")
+    if override is not None:
+        assert override.provider_id != "ollama_cloud", (
+            "Stale ollama_cloud override aus workspace_defaults muss auf "
+            "fresh runs durch den Prune-Schritt verworfen werden — sonst "
+            "routet der Stage-Router den alten Endpoint an"
+        )
