@@ -29,6 +29,7 @@ import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
 import { tokenizeFeedText } from '../utils/feedHighlight'
+import { isErrorLine } from '@/utils/errorLinePattern'
 import { useSimFeed, clearSimFeed } from '../composables/useSimFeed'
 import { useSimClock, clearSimClock } from '../composables/useSimClock'
 import SimulationProgressPanel from './step3/SimulationProgressPanel.vue'
@@ -99,7 +100,6 @@ function setFeedDensity(value) {
 
 // Tool panel state
 const TOOL_PANEL_KEY = 'agora.ui.toolPanel.open'
-const ERROR_PATTERN = /(error|exception|traceback|fatal|warn|warning)/i
 
 function loadToolPanelOpen() {
   try { return localStorage.getItem(TOOL_PANEL_KEY) === 'true' } catch { /* ignore */ }
@@ -121,11 +121,6 @@ function setToolPanelOpen(value) {
 }
 
 function toggleToolPanel() { setToolPanelOpen(!toolPanelOpen.value) }
-
-function isErrorLine(line) {
-  if (typeof line !== 'string') return false
-  return ERROR_PATTERN.test(line)
-}
 
 const filteredConsoleLogs = computed(() => {
   if (toolPanelFilter.value !== 'errors') return consoleLogs.value

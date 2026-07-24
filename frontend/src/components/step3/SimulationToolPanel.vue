@@ -21,12 +21,7 @@ const emit = defineEmits([
   'scroll-to-bottom',
 ])
 
-const ERROR_PATTERN = /(error|exception|traceback|fatal|warn|warning)/i
-
-function isErrorLine(line: unknown): boolean {
-  if (typeof line !== 'string') return false
-  return ERROR_PATTERN.test(line)
-}
+import { isErrorLine } from '@/utils/errorLinePattern'
 
 async function copyLine(line: unknown) {
   emit('copy-line', line)
