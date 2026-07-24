@@ -72,6 +72,17 @@ def _resolve_child_path(base_dir: str, child_name: str, *, kind: str) -> Path:
 # Secrets (SECRET_KEY, AGORA_AUTH_TOKEN, NEO4J_PASSWORD, LLM_API_KEY,
 # AGORA_FERNET_KEY) werden bewusst NICHT weitergegeben. LLM-Credentials
 # kommen ausschließlich über den ``runtime_env``-Parameter.
+#
+# Optionale Connection-Keys:
+# - ``REDIS_URL``: enthaelt potenziell ein Passwort (Format
+#   ``redis://:pw@host:port/db``). Wir lassen es bewusst zu, weil die
+#   Redis-IPC-Bridge (``scripts/subprocess_redis_bridge.py``) sonst im
+#   Subprozess inaktiv bleibt. Wer das nicht will, leert REDIS_URL vor
+#   dem ``start_simulation``-Call.
+# - ``HF_TOKEN``: Hugging-Face-Authentifizierung fuer private/Gated
+#   Models (z.B. ``Twitter/twhin-bert-base`` ist zwar public, aber
+#   Custom-Mirrors koennen Auth verlangen). Public Models funktionieren
+#   ohne Token.
 SAFE_ENV_KEYS: frozenset[str] = frozenset(
     {
         "PATH",
@@ -83,6 +94,8 @@ SAFE_ENV_KEYS: frozenset[str] = frozenset(
         "LLM_MODEL_NAME",
         "LLM_MAX_OUTPUT_TOKENS",
         "OLLAMA_THINKING",
+        "REDIS_URL",
+        "HF_TOKEN",
     }
 )
 
