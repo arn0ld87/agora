@@ -39,9 +39,12 @@ try:
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
+        install_bert_memory_profile,
         install_max_tokens_warning_filter,
+        install_memory_sampler,
         install_script_paths,
         load_project_env,
+        make_default_memory_sink,
         preflight_model_probe,
         resolve_runtime_paths,
         setup_oasis_logging,
@@ -55,9 +58,12 @@ except ImportError:  # direct script execution
         detect_oasis_platform,
         init_runner_tracing,
         init_runner_logging,
+        install_bert_memory_profile,
         install_max_tokens_warning_filter,
+        install_memory_sampler,
         install_script_paths,
         load_project_env,
+        make_default_memory_sink,
         preflight_model_probe,
         resolve_runtime_paths,
         setup_oasis_logging,
@@ -69,6 +75,9 @@ init_runner_tracing("agora-oasis-runner")
 init_runner_logging("agora-oasis-runner")
 load_project_env(__file__)
 install_max_tokens_warning_filter()
+_bert_profile = install_bert_memory_profile()
+_memory_stop = install_memory_sampler(make_default_memory_sink(_runtime_paths.project_root))
+print(f"[bert-memory] profile = {_bert_profile}", flush=True)
 _camel_context_floor = apply_camel_context_floor()
 print(f"[context-patch] token_limit floor = {_camel_context_floor}", flush=True)
 
@@ -937,4 +946,5 @@ if __name__ == "__main__":
     except SystemExit:
         pass
     finally:
+        _memory_stop()
         print("Simulation process exited")

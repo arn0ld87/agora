@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 if TYPE_CHECKING:
     from camel.types import ModelPlatformType  # type: ignore[import]
@@ -446,24 +448,22 @@ def preflight_model_probe(
     max_retries: int = 3,
     backoff_base: float = 0.2,
 ) -> None:
-    """Einmaliger kleiner Chat-Completion-Probe vor dem Agenten-Fan-out.
-
-    Sendet einen winzigen ``"ping"``-User-Call an das aufgebaute Modell und
-    fängt permanente Auth-/Routing-Fehler (401/403/404) früh mit einer klaren
-    ``ValueError``-Root-Cause ab — ein einzelner Fehler statt N identischer
-    während der Simulation (Root Cause des ``404 model MiniMax-M3 not found``).
-    Transiente Fehler (429/500/502/503) werden mit exponentiellem Backoff
-    retried; erst nach Erschöpfung der Retries schlägt der Probe fehl.
-
-    Der Probe läuft genau einmal pro Aufruf (bzw. einmal pro Retry-Versuch) —
-    er führt keine eigene Fan-out-Logik. Aufrufer (``run_*_simulation``) rufen
-    ihn direkt nach ``create_model`` auf, bevor Agenten erzeugt werden.
-
-    Nur der OpenAI-kompatible Pfad (MiniMax, OpenAI, Qwen Cloud, …) wirft
-    ``openai.APIStatusError`` mit brauchbarem ``status_code``; andere
-    Plattformen (Gemini/Ollama) lassen ihre nativen Exceptions ungefiltert
-    durch — die noch vor dem Fan-out auftreten und damit denselben
-    Ein-Fehler-vor-Fan-out-Effekt erfüllen.
+    """
+    Führt vor der Simulation eine kleine Chat-Completion-Probe für das Modell aus.
+    
+    Sendet eine einzelne „ping“-Nachricht und wiederholt bestimmte vorübergehende
+    Provider-Fehler mit exponentiellem Backoff. Authentifizierungs- und Routingfehler
+    sowie nicht behebbare oder nach den Wiederholungen weiterhin bestehende Fehler
+    werden als `ValueError` gemeldet. Ausnahmen anderer Plattformen werden unverändert
+    weitergegeben.
+    
+    Parameters:
+    	model (Any): Das zu prüfende Modell.
+    	max_retries (int): Maximale Anzahl zusätzlicher Versuche bei vorübergehenden Fehlern.
+    	backoff_base (float): Anfangsverzögerung in Sekunden für den exponentiellen Backoff.
+    
+    Raises:
+    	ValueError: Wenn ein permanenter oder nicht behebbarer Provider-Fehler auftritt.
     """
     import openai
 
@@ -492,3 +492,259 @@ def preflight_model_probe(
         # Nicht-openai-Plattformen (Gemini/Ollama) werfen ihre nativen
         # Exceptions — ungefiltert weiterreichen, damit der Run sauber
         # scheitert, statt hier eine lückenhafte Heuristik zu pflegen.
+
+
+# ---------------------------------------------------------------------------
+# Slice fix/oom-bert-lowmem-fp16: BERT-Memory-Profile + RSS-Sampler
+# ---------------------------------------------------------------------------
+# Hintergrund: Auf 2.8-GiB-Container-Hosts kippt der OASIS-Subprozess mit
+# ``Process exit code: -9`` (Linux-OOM-Killer, ``cgroup memory.events: oom_kill=1``),
+# sobald ``Twitter/twhin-bert-base`` (1.06 GB safetensors, fp32) im ersten
+# ``update_rec_table()``-Tick lazy geladen wird — plus den 250-350 MB
+# ``torch``/``transformers``/``sentence_transformers``-Import-Overhead aus
+# ``oasis.social_platform.recsys`` und ``process_recsys_posts``.
+#
+# Diese Helper werden in ``run_parallel_simulation.py`` UND
+# ``run_reddit_simulation.py`` VOR dem ersten ``oasis``-Import aufgerufen.
+# Da Python Modul-Level-Caching nutzt, sieht der spaetere
+# ``from transformers import AutoModel``-Aufruf in
+# ``oasis.social_platform.process_recsys_posts`` die gepatchte Methode
+# auf demselben Klassen-Objekt.
+
+_TWHIN_BERT_MODEL_NAMES: frozenset[str] = frozenset(
+    {
+        "Twitter/twhin-bert-base",
+    }
+)
+
+_BERT_PROFILE_DEFAULT = "low"
+
+
+def install_bert_memory_profile(profile: str | None = None) -> str:
+    """
+    Aktiviert ein speicherschonendes Ladeprofil für TWHIN-BERT.
+    
+    Das Profil wird über den Parameter oder `AGORA_BERT_MEMORY_PROFILE` bestimmt
+    und standardmäßig auf `"low"` gesetzt. Für TWHIN-BERT werden geeignete
+    Speicheroptionen gesetzt; andere Modelle bleiben unverändert. Bei deaktiviertem
+    Profil oder fehlender Transformers-Bibliothek erfolgt keine Anpassung.
+    
+    Args:
+        profile: Zu verwendendes Speicherprofil, beispielsweise `"off"` oder
+            `"low"`.
+    
+    Returns:
+        Der effektive Profilname.
+    """
+    effective = (profile or os.environ.get("AGORA_BERT_MEMORY_PROFILE") or _BERT_PROFILE_DEFAULT).lower()
+    if effective == "off":
+        return "off"
+
+    try:
+        import transformers  # type: ignore[import-not-found]
+    except ImportError:
+        # Wenn transformers gar nicht da ist, ist der Patch sinnlos — kein
+        # BERT wird geladen. Kein Hard-Fail, der Subprozess kann ohne
+        # Recsys trotzdem weiterlaufen.
+        return effective
+
+    auto_model = getattr(transformers, "AutoModel", None)
+    if auto_model is None:
+        return effective
+
+    original = auto_model.from_pretrained
+    if getattr(original, "_agora_bert_memory_profile_applied", False):
+        return effective
+
+    # Lazy-Resolve torch dtype; fallback wenn torch fehlt.
+    torch_float16: Any = None
+    try:
+        import torch  # type: ignore[import-not-found]
+        torch_float16 = torch.float16
+    except ImportError:
+        pass
+
+    def _patched_from_pretrained(*args: Any, **kwargs: Any):
+        # Modellname ist typischerweise das erste positional arg oder
+        # ``pretrained_model_name_or_path`` als kwarg.
+        """
+        Lädt TWHIN-BERT-Modelle mit speichersparenden Standardeinstellungen.
+        
+        Returns:
+        	Das von der ursprünglichen Ladefunktion erzeugte Modell.
+        """
+        model_name = args[0] if args else kwargs.get("pretrained_model_name_or_path")
+        if isinstance(model_name, str) and model_name in _TWHIN_BERT_MODEL_NAMES:
+            # User-Override hat Vorrang.
+            if "low_cpu_mem_usage" not in kwargs:
+                kwargs["low_cpu_mem_usage"] = True
+            if torch_float16 is not None and "torch_dtype" not in kwargs:
+                kwargs["torch_dtype"] = torch_float16
+        return original(*args, **kwargs)
+
+    _patched_from_pretrained._agora_bert_memory_profile_applied = True  # type: ignore[attr-defined]
+    auto_model.from_pretrained = _patched_from_pretrained
+    return effective
+
+
+def _read_rss_mb_linux() -> float | None:
+    """Liest ``VmRSS`` aus ``/proc/self/status`` (Linux-Container).
+
+    Liefert ``None``, wenn die Datei nicht vorhanden ist (z.B. macOS-Dev).
+    """
+    status_path = Path(f"/proc/{os.getpid()}/status")
+    try:
+        with status_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def make_default_memory_sink(project_root: Path) -> Path:
+    """Baut den Default-NDJSON-Sink-Pfad fuer den Memory-Sampler.
+
+    Die PID wird in den Dateinamen eingebettet, damit parallele Sim-Runs
+    (z.B. ``run_parallel_simulation.py`` startet Twitter+Reddit in einem
+    Prozess, mehrere ``run_reddit_simulation.py``-Prozesse koennen
+    gleichzeitig auf demselben Host laufen) sich nicht gegenseitig die
+    NDJSON-Datei zerschreiben.
+
+    Vor dem Fix fuehrten alle 3 Run-Scripts auf
+    ``<project_root>/.runtime/mem_profile.ndjson`` ohne PID — POSIX
+    "append"-Mode ist zwischen Prozessen NICHT byteweise atomar
+    (Schreibbuffer > ``PIPE_BUF`` wird verschachtelt), was bei
+    parallelen Runs zerhacktes NDJSON erzeugte (CodeRabbit-Finding
+    #859, 3x).
+    """
+    return project_root / ".runtime" / f"mem_profile.{os.getpid()}.ndjson"
+
+
+def install_memory_sampler(
+    sink: Path,
+    *,
+    interval_s: float = 0.5,
+    rss_reader: Callable[[], float | None] | None = None,
+) -> Callable[[], None]:
+    """
+    Startet bei aktivierter Debug-Konfiguration einen Hintergrund-Thread zur RSS-Speicherüberwachung.
+    
+    Der Sampler schreibt regelmäßig NDJSON-Snapshots mit den Feldern `label`, `rss_mb` und
+    `time_s` in die Zieldatei. Bei deaktivierter Überwachung wird eine No-op-Funktion
+    zurückgegeben.
+    
+    Args:
+        sink: Zieldatei für die NDJSON-Snapshots.
+        interval_s: Zeitabstand zwischen den Messungen in Sekunden.
+        rss_reader: Optionaler RSS-Reader für die Messwerte.
+    
+    Returns:
+        Eine idempotente Funktion zum Beenden des Samplers.
+    """
+    enabled = os.environ.get("AGORA_DEBUG_MEMORY", "").lower() in {"1", "true", "yes"}
+    if not enabled:
+        return _noop_stop
+
+    if rss_reader is None:
+        # Late-binding Lookup: ``_read_rss_mb_linux`` muss zur *Laufzeit* im
+        # Modul-Namespace nachgeschlagen werden, sonst greifen Monkey-Patches
+        # im Test (oder alternative Reader-Funktionen) nicht.
+        module = sys.modules[__name__]
+        default_reader = module.__dict__.get("_read_rss_mb_linux")
+
+        def rss_reader() -> float | None:  # type: ignore[no-redef]
+            """
+            Liest den aktuellen Speicherverbrauch über den zur Laufzeit aufgelösten RSS-Reader.
+            
+            Returns:
+                float | None: RSS-Speicherverbrauch in MB oder `None`, wenn kein Messwert verfügbar ist.
+            """
+            reader = module.__dict__.get("_read_rss_mb_linux", default_reader)
+            if reader is None:
+                return None
+            return reader()
+
+        user_supplied_reader = False
+    else:
+        user_supplied_reader = True
+
+    if (
+        not user_supplied_reader
+        and rss_reader() is None
+        and not Path(f"/proc/{os.getpid()}/status").exists()
+    ):
+        # macOS / kein /proc → Sampler einschalten, aber jede Samplezeile
+        # bekommt ``rss_mb=None`` und einen WARNING-Hinweis. Wird NUR
+        # aktiv, wenn der Caller keinen eigenen Reader geliefert hat —
+        # sonst wuerde der macOS-Fallback den expliziten Reader (z.B.
+        # einen Test-Reader, der bewusst ``None`` zurueckgibt) ueber-
+        # schreiben. Fix fuer CodeRabbit-Finding #859.
+        def rss_reader() -> float | None:  # type: ignore[no-redef]
+            """
+            Liefert keinen RSS-Messwert.
+            
+            Returns:
+            	float | None: Immer `None`.
+            """
+            return None
+
+    stop_event = threading.Event()
+    start = time.monotonic()
+    sink.parent.mkdir(parents=True, exist_ok=True)
+    sink_handle = sink.open("a", encoding="utf-8")
+
+    def _sampler_loop() -> None:
+        """
+        Schreibt während der Laufzeit regelmäßig RSS-Speicherschnappschüsse als NDJSON.
+        
+        Schreibfehler auf dem Zieldatenträger werden ignoriert, damit der Sampler den
+        ausführenden Prozess nicht beendet.
+        """
+        while not stop_event.is_set():
+            snap = {
+                "label": "tick",
+                "rss_mb": rss_reader(),
+                "time_s": time.monotonic() - start,
+            }
+            try:
+                sink_handle.write(json.dumps(snap) + "\n")
+                sink_handle.flush()
+            except (OSError, ValueError):
+                # Disk voll, etc. — silently drop, Sampler darf den
+                # Subprozess nicht zum Absturz bringen. ``ValueError``
+                # faengt ``"I/O operation on closed file"`` ab, falls
+                # ``_stop()`` das Handle schliesst, waehrend der Thread
+                # noch mitten in einer Write-Call-Sequenz haengt
+                # (Race-Window zwischen ``thread.join(timeout=...)``
+                # und close()). Defensive Härtung fuer
+                # CodeRabbit-Finding #859.
+                pass
+            stop_event.wait(interval_s)
+
+    thread = threading.Thread(
+        target=_sampler_loop,
+        name="agora-memory-sampler",
+        daemon=True,
+    )
+    thread.start()
+
+    def _stop() -> None:
+        """Beendet die laufende Speicheraufzeichnung und schließt die Zieldatei.
+        
+        Die Funktion kann wiederholt aufgerufen werden.
+        """
+        stop_event.set()
+        thread.join(timeout=interval_s * 2)
+        try:
+            sink_handle.close()
+        except OSError:
+            pass
+
+    return _stop
+
+
+def _noop_stop() -> None:
+    """Führt beim Beenden des Speichersamplers keine Aktion aus."""
+    return None
