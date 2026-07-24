@@ -17,6 +17,12 @@
  */
 export const ERROR_PATTERN = /\b(?:error|exception|traceback|fatal|warn|warning)\b/i
 
+/**
+ * Erkennt, ob eine Zeile ein Fehler- oder Warnschlüsselwort enthält.
+ *
+ * @param line - Zu prüfender Wert
+ * @returns `true`, wenn `line` eine Zeichenkette mit einem Fehler- oder Warnschlüsselwort ist, andernfalls `false`
+ */
 export function isErrorLine(line: unknown): boolean {
   return typeof line === 'string' && ERROR_PATTERN.test(line)
 }

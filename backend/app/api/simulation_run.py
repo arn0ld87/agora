@@ -564,7 +564,15 @@ def get_run_status(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/run-status/detail', methods=['GET'])
 @handle_api_errors(logger=logger, log_prefix="Failed to get detailed status")
 def get_run_status_detail(simulation_id: str):
-    """Get detailed run status including aggregated actions."""
+    """
+    Liefert den detaillierten Laufstatus mit aggregierten Aktionszahlen und paginierten Aktionen.
+    
+    Parameter:
+    	simulation_id (str): ID der Simulation.
+    
+    Returns:
+    	Response: JSON-Antwort mit Laufstatus, Aktionszahlen, paginierten Aktionen und aktuellen Rundenaktionen.
+    """
     if not validate_simulation_id(simulation_id):
         return json_error(
             ApiErrorCode.INVALID_ID,
