@@ -95,10 +95,7 @@ const RING_BUFFER_MAX = 5000
 // nach ``RECONNECT_INDICATOR_DELAY_MS`` ohne erfolgreichen Frame, damit
 // kurze Hiccups (< 30 s) optisch verschluckt werden.
 const RECONNECT_INDICATOR_DELAY_MS = 30000
-const ERROR_PATTERN = /(error|exception|traceback|fatal)/i
-function isErrorLine(line) {
-  return typeof line === 'string' && ERROR_PATTERN.test(line)
-}
+import { isErrorLine } from '@/utils/errorLinePattern'
 
 const filteredLines = computed(() => {
   if (!search.value) return lines.value
