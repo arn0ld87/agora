@@ -43,6 +43,15 @@ from .tool_calls import _chat_with_tools
 logger = get_logger("agora.llm_client")
 
 
+class LLMOutputTruncatedError(ValueError):
+    """Eine strukturierte LLM-Antwort wurde am Token-Limit abgeschnitten.
+
+    Erbt von ``ValueError``, damit bestehende Caller, die den alten
+    ``JSONDecodeError``-Pfad breit abfangen, weiterhin greifen. Wer gezielt
+    kompakter retryen will, faengt diesen Typ ab.
+    """
+
+
 def get_llm_provider_secrets_store() -> Any:
     """Load the secrets store lazily to avoid the services package import cycle."""
     from ..services.llm_provider_secrets_store import get_llm_provider_secrets_store as get_store
@@ -415,6 +424,7 @@ class LLMClient:
             "chat", "chat_json", "embedding", "report", "persona", "graph", "unknown"
         ] = "chat",
         force_no_thinking: bool = False,
+        require_complete: bool = False,
     ) -> str:
         """
         Send a chat request and return the cleaned model response.
@@ -427,9 +437,17 @@ class LLMClient:
             context (Literal): Logical context label for observability.
             force_no_thinking (bool): Whether to disable reasoning output when supported
                 by the provider.
-        
+            require_complete (bool): When True, a response the provider marked as cut
+                off at the token cap (``finish_reason == "length"``) raises
+                :class:`LLMOutputTruncatedError` instead of returning partial text.
+                Callers that parse the result structurally should set this.
+
         Returns:
             str: The model response text with thinking blocks removed.
+
+        Raises:
+            LLMOutputTruncatedError: When *require_complete* is set and the provider
+                reported ``finish_reason == "length"``.
         """
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
@@ -557,6 +575,19 @@ class LLMClient:
             "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
             self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
         )
+        if require_complete and finish_reason == "length":
+            # Nicht als Erfolg verbuchen: der Caller kann mit dem Fragment nichts
+            # anfangen, und ein "success" hier verzerrt die Telemetrie.
+            self._log_invocation_event(
+                stage=context,
+                latency_ms=elapsed * 1000,
+                success=False,
+                error_type="LLMOutputTruncatedError",
+            )
+            raise LLMOutputTruncatedError(
+                f"LLM output truncated at token cap: model={self.model}, "
+                f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
+            )
         self._log_invocation_event(
             stage=context,
             latency_ms=elapsed * 1000,
@@ -854,6 +885,7 @@ class LLMClient:
                     response_format=response_format,
                     context=context,
                     force_no_thinking=force_no_thinking,
+                    require_complete=True,
                 )
             except Exception as exc:
                 exc_lower = str(exc).lower()
@@ -870,6 +902,7 @@ class LLMClient:
                         response_format={"type": "json_object"},
                         context=context,
                         force_no_thinking=force_no_thinking,
+                        require_complete=True,
                     )
                 else:
                     raise
@@ -881,6 +914,7 @@ class LLMClient:
                 response_format=response_format,
                 context=context,
                 force_no_thinking=force_no_thinking,
+                require_complete=True,
             )
         # Codefences + Prosa-Envelope entfernen (Issue #556).
         cleaned_response = _strip_llm_json_envelope(response)
