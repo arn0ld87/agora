@@ -68,6 +68,7 @@ Globale Konfiguration, Tokens, Browserprofile, Keychain-Inhalte und private Host
 - Frontend-Spiegel: `frontend/src/contracts/` und generierte `schemas/`
 - Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
 - Provider-Verbindung: `ProviderConnection`
+- strukturierte JSON-LLM-Calls: `backend/app/llm/client.py::LLMClient.chat_json` mit Pydantic-Schema — roher `OpenAI`-Client nicht für JSON-Outputs
 - kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
 - kanonische Modellreferenz: `AiModelRef`
 - kanonische Route: `AiRoute` / `LlmRoute`

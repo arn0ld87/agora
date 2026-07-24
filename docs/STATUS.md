@@ -102,6 +102,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - kanonische Route: `AiRoute` / `LlmRoute`
 - kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
+- strukturierte LLM-JSON-Outputs: `LLMClient.chat_json` mit Pydantic-Schema (strict-json_schema-Pfad); rohe OpenAI-Clients für strukturierte Outputs vermeiden
 - Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026)
 - Evidence-Gating: ADR-0002-Hartanker
 

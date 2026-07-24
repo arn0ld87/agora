@@ -5,6 +5,49 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Ontology-Generation: Truncation bei MiniMax-M3 ohne JSON-Schema — 2026-07-24, PR #858)
+
+- **`backend/app/services/ontology_generator.py`** — die Ontology-Generation lief mit MiniMax-M3 in
+  rund 20 % der Läufe in eine Truncation (`Invalid JSON format from LLM (len=12325)`): der
+  Ontology-Call übergab kein `schema` an `chat_json`, und das Legacy-Flag
+  `LLM_DISABLE_JSON_MODE=true` deaktivierte `response_format=json_object`, sodass M3 keine
+  JSON-Struktur-Anweisung erhielt und Prosa ins JSON mischte.
+- Fix definiert das Pydantic-Schema `OntologyDefinition` und übergibt es an
+  `chat_json(schema=OntologyDefinition, schema_name="ontology_definition", force_no_thinking=True)`.
+  Belt-and-braces: der verwaiste `.env`-Eintrag `LLM_DISABLE_JSON_MODE` wurde entfernt, da das
+  Legacy-Flag mit strict schema irrelevant ist.
+- Verifikation: Post-Fix 10/10 + 3/3 Läufe HTTP 200, 0 Truncation-Warnungen, im Schnitt 15.7
+  entity_types. Regression-Tests in `backend/tests/test_ontology_generator.py` (6 passed:
+  4 bestehend, neu `test_generate_passes_ontology_definition_schema` und
+  `test_generate_passes_force_no_thinking_true`).
+
+### Fixed (Persona-Generation: Hänger durch reasoning_tokens-Verschwendung — 2026-07-24, PR #858)
+
+- **`backend/app/services/oasis_profile_generator.py`** — die Persona-Erstellung hing nach der
+  ersten von 30 Personas und brauchte rund 1:30 min pro Persona statt der erwarteten 15–20 s; die
+  Logs zeigten 11 `JSON parsing failed (attempt N): Extra data / Expecting value` innerhalb von
+  5 min. Ursache: `_generate_profile_with_llm` nutzte den rohen `OpenAI`-Client
+  (`self.client.chat.completions.create`) mit nur
+  `response_format={"type":"json_object"}` — kein strict schema, kein `thinking.type: disabled`
+  (MiniMax-`extra_body`), kein `force_no_thinking`. M3 emittierte 583 reasoning_tokens (63 % des
+  Token-Budgets) als lesbaren Text im `content`, was das JSON kaputt machte ("Extra data" =
+  zweites JSON-Objekt, "Expecting value" = Prosa) und den 3-fachen Retry-Loop auslöste.
+- Fix stellt `_generate_profile_with_llm` auf `LLMClient.chat_json` um, mit dem neuen
+  `PersonaProfileSchema` (Pydantic, alle 11 Felder, `age` ge=18 le=75),
+  `schema_name="persona_profile"`, `force_no_thinking=True` und `max_tokens=16384` (vorher 8192
+  → Truncation bei 2349-Token-Personas). Das Post-Processing (bio/persona/voice_register-Fallbacks,
+  `_validate_profile_metadata`) bleibt erhalten; der rohe `OpenAI`-Client im Konstruktor bleibt
+  für Backwards-Compat.
+- Verifikation: Post-Fix 2/2 Personas in 43.2 s, `finish=stop`, 1470–1796 Tokens, 0 Truncation,
+  0 Parse-Fehler. Regression-Tests in `backend/tests/test_oasis_profile_generator.py` (4 passed,
+  neu: schema, force_no_thinking, max_tokens≥16384, age-range-validation); 2 obsolete Tests in
+  `test_oasis_profile_format.py` entfernt (raw-Client-Retry-Pfad obsolet).
+  Targeted Suite: 742 passed, 0 skipped, 0 fail. Zusätzlich Test-Isolation für
+  `test_llm_max_output_tokens_default` repariert (`_min_env`-Autouse-Fixture in
+  `backend/tests/test_settings.py` löscht nun `LLM_MAX_OUTPUT_TOKENS` aus der ENV, damit der
+  echte Code-Default `8192` getestet wird — zuvor las Pydantic-Settings die Live-ENV auch
+  mit `_env_file=None`).
+
 ### Fixed (v4-Dashboard: Hero-Modellwahl wird als autoritatives ai_model_ref zum Sim-Start durchgereicht — 2026-07-23)
 
 - Die Modellwahl im Dashboard (`HeroNewRun`, AiModelPicker) wurde bislang nur als `model_id`-String

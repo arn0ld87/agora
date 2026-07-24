@@ -128,6 +128,10 @@ Bei Provider-Detection-Fragen („welcher Provider für diese URL/Modell", `olla
 
 Aktive Konfiguration lebt in Neo4j (`EmbeddingConfiguration`-Knoten, eindeutig pro Provider/Model/Dim). Lese-/Schreibpfade ausschließlich über `backend/app/services/embedding_service.py` und `embedding_migration.py`. Bei Modell-Wechsel: Migrations-Lifecycle `pending → running → validating → completed | failed | rolled_back`. Gemini-Re-Embedding ist explizit „noch nicht unterstützt“ — nicht vortäuschen.
 
+## Structured-JSON-LLM-Calls (chat_json-SSoT)
+
+**IMPORTANT:** Strukturierte LLM-Calls mit JSON-Output MÜSSEN über [`backend/app/llm/client.py::LLMClient.chat_json`](backend/app/llm/client.py) mit einem Pydantic-Schema laufen. Der rohe `OpenAI`-Client (`client.chat.completions.create`) darf nicht direkt für strukturierte JSON-Outputs verwendet werden — er umgeht Provider-Detection (MiniMax `thinking.type: disabled`), den strict-json_schema-Modus und die zentrale JSON-Repair-Logik. Legacy-Flags wie `LLM_DISABLE_JSON_MODE` nicht neu verwenden (werden vorübergehend noch aus Kompatibilitätsgründen unterstützt); das Pydantic-Schema macht sie obsolet.
+
 ## Token Efficiency
 
 - Never re-read files you just wrote or edited. You know the contents.
