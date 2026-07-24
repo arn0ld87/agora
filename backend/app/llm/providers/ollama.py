@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from ..errors import LLMOutputTruncatedError
+
 from app.llm.providers.base import ProviderAdapter, ProviderCapabilities
 from ...utils.logger import get_logger
 
@@ -132,6 +134,16 @@ def chat_with_schema(
     if not isinstance(content, str):
         raise ValueError(
             f"Ollama /api/chat unexpected message.content type: {type(content)}"
+        )
+    # Ollama meldet einen am ``num_predict``-Limit gekappten Lauf als
+    # ``done_reason: "length"``. Ohne diese Pruefung liefe das Fragment in
+    # dieselbe JSON-Repair-Kette, die fuer den OpenAI-Pfad in ``chat()``
+    # bereits geschlossen ist — der Caller haette keine Chance, den Abbruch
+    # von einem echten Ergebnis zu unterscheiden.
+    if data.get("done_reason") == "length":
+        raise LLMOutputTruncatedError(
+            f"Ollama output truncated at num_predict: model={model}, "
+            f"max_tokens={max_tokens}"
         )
     return content
 

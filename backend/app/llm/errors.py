@@ -17,6 +17,19 @@ from app.contracts.llm_request import NormalizedLlmError
 from app.contracts.provider_types import ProviderType
 
 
+class LLMOutputTruncatedError(ValueError):
+    """Eine strukturierte LLM-Antwort wurde am Token-Limit abgeschnitten.
+
+    Liegt hier statt in ``app.llm.client``, damit auch die Provider-Adapter
+    unter ``app.llm.providers.*`` den Typ werfen koennen — sie werden von
+    ``client`` importiert, ein Rueckimport waere zirkulaer.
+
+    Erbt von ``ValueError``, damit bestehende Caller, die den alten
+    ``JSONDecodeError``-Pfad breit abfangen, weiterhin greifen. Wer gezielt
+    kompakter retryen will, faengt diesen Typ.
+    """
+
+
 class LlmProviderError(Exception):
     """Exception-Wrapper um eine normalisierte Fehler-Payload.
 

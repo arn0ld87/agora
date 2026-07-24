@@ -7,6 +7,7 @@ Extracted verbatim from ``app/utils/llm_client.py`` as part of issue #582
 schema path lives separately in ``app.llm.providers.ollama``.
 """
 
+import json
 import os
 import re
 from typing import Any, Dict, Optional, Type, Union, List
@@ -281,8 +282,7 @@ def _try_repair_truncated_json(payload: str) -> Optional[str]:
     in_string = False
     escape = False
     stack: List[str] = []
-    last_struct_pos = -1
-    for idx, ch in enumerate(payload):
+    for ch in payload:
         if escape:
             escape = False
             continue
@@ -296,18 +296,38 @@ def _try_repair_truncated_json(payload: str) -> Optional[str]:
             continue
         if ch in "{[":
             stack.append("}" if ch == "{" else "]")
-            last_struct_pos = idx
         elif ch in "}]":
             if not stack:
                 return None
             stack.pop()
-            last_struct_pos = idx
     if not stack and not in_string:
         return None  # already balanced — repair would not help
-    truncated = payload[: last_struct_pos + 1] if last_struct_pos >= 0 else payload
+    # Den Body vollstaendig behalten. Frueher wurde hier auf das letzte
+    # Strukturzeichen zurueckgeschnitten, wodurch ``{"a": 1,`` zu ``{}``
+    # kollabierte: valides JSON, aber der Inhalt war weg und der Caller
+    # hielt das Ergebnis fuer einen Erfolg.
     if in_string:
+        # Innerhalb eines offenen Strings NICHT rstrip()en: Whitespace am Ende
+        # gehoert zum uebertragenen Wert. ``"Maya arbeitet als `` wuerde sonst
+        # sein abschliessendes Leerzeichen verlieren — eine stille Aenderung
+        # am Inhalt, die der Repair gerade nicht machen darf.
+        truncated = payload
+        # Haengender Backslash: der Cap fiel in eine Escape-Sequenz hinein.
+        # Bleibt er stehen, escaped er das Anfuehrungszeichen, das wir gerade
+        # anhaengen wollen, und der String bleibt offen.
+        if escape and truncated.endswith("\\"):
+            truncated = truncated[:-1]
         truncated += '"'
+    else:
+        truncated = payload.rstrip()
     # Drop dangling ``,`` so the closer doesn't produce another parse error.
     truncated = truncated.rstrip().rstrip(",")
     truncated += "".join(reversed(stack))
+    # Nur zurueckgeben, was auch parst. Ein Abbruch hinter einem Key-Doppelpunkt
+    # oder mitten in einem Zahlen-Literal laesst sich nicht ehrlich schliessen —
+    # dann ist ``None`` die richtige Antwort, nicht ein kaputter String.
+    try:
+        json.loads(truncated)
+    except ValueError:
+        return None
     return truncated
