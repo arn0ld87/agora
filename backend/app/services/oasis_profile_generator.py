@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from openai import OpenAI
+from pydantic import BaseModel, Field
 
 from ..config import Config
 from ..contracts import PersonaQuotaPlan
@@ -38,6 +39,33 @@ logger = get_logger('agora.oasis_profile')
 
 # Erlaubte Voice-Register-Werte (gespiegelt aus VoiceRegister Literal in persona_contract.py)
 VOICE_REGISTERS = ("formal-de", "neutral-de", "technical-de", "skeptisch-de")
+
+
+class PersonaProfileSchema(BaseModel):
+    """Striktes Pydantic-Schema für die LLM-generierte Persona.
+
+    Wird an ``LLMClient.chat_json(schema=...)`` übergeben, damit der Provider im
+    strict-``json_schema``-Mode antwortet. MiniMax-M3 emittiert ohne diese
+    Strukturvorgabe (und ohne ``thinking.type: disabled``) bis zu 63 % des
+    Token-Budgets als Reasoning-Text *im content* → kaputtes JSON ("Extra data",
+    "Expecting value") → 3-facher Retry-Loop → Persona-Generation extrem
+    langsam (~1:30 pro Persona statt ~15-20 s) oder scheinbares Hängen.
+
+    Pflichtfelder sind required; optionale Felder (bio, persona) haben Fallbacks
+    in der Post-Processing-Logik. strict-Mode erzwingt gültiges JSON nach Schema.
+    """
+
+    display_name: str = Field(..., description="Real first + last name (DACH)")
+    handle: str = Field(..., description="Lowercase social handle without spaces/digits")
+    bio: str = Field("", description="Social media bio, <=200 chars")
+    persona: str = Field("", description="Detailed persona description, pure text")
+    age: int = Field(..., description="Age as integer 18-75", ge=18, le=75)
+    gender: str = Field(..., description="One of male/female/nonbinary/other")
+    mbti: str = Field(..., description="MBTI type, e.g. INTJ, ENFP")
+    country: str = Field(..., description="ISO country code, e.g. DE, AT, CH")
+    profession: str = Field("", description="Profession")
+    interested_topics: List[str] = Field(default_factory=list, description="Topic strings")
+    voice_register: str = Field(..., description="One of formal-de/neutral-de/technical-de/skeptisch-de")
 
 # Persona-Detail-Level steuert die Output-Größe pro Persona — direkter
 # Hebel auf Cloud-LLM-Inference-Zeit (Output-Tokens dominieren). Issue #217.
@@ -613,96 +641,65 @@ class OasisProfileGenerator:
         max_attempts = 3
         last_error = None
 
-        from ..utils.llm_client import should_disable_openai_json_mode
-        disable_json_mode = should_disable_openai_json_mode(self.base_url)
+        # LLMClient statt rohem OpenAI-Client: kapselt Provider-Detection
+        # (MiniMax-thinking-extra_body), strict json_schema-Mode und zentrale
+        # JSON-Repair-Logik. force_no_thinking=True deaktiviert M3-Reasoning,
+        # das ohne diese Verdrahtung bis zu 63 % des Token-Budgets als
+        # lesbaren Text in den content emittiert → kaputtes JSON → Retry-Loop.
+        from ..llm.client import LLMClient as _LLMClient
+
+        llm = _LLMClient(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            model=self.model_name,
+        )
+        messages = [
+            {"role": "system", "content": self._get_system_prompt(is_individual)},
+            {"role": "user", "content": prompt},
+        ]
 
         for attempt in range(max_attempts):
             try:
-                create_kwargs: Dict[str, Any] = {
-                    "model": self.model_name,
-                    "messages": [
-                        {"role": "system", "content": self._get_system_prompt(is_individual)},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": 0.7 - (attempt * 0.1),
-                }
-                if not disable_json_mode:
-                    create_kwargs["response_format"] = {"type": "json_object"}
-                response = self.client.chat.completions.create(**create_kwargs)
+                # Strict-json_schema-Mode + force_no_thinking: M3 liefert
+                # gültiges JSON nach Schema, ohne Reasoning-Text im content.
+                result = llm.chat_json(
+                    messages=messages,
+                    temperature=0.7 - (attempt * 0.1),
+                    max_tokens=16384,
+                    schema=PersonaProfileSchema,
+                    schema_name="persona_profile",
+                    context="persona",
+                    force_no_thinking=True,
+                )
 
-                content = response.choices[0].message.content or ""
+                # chat_json validiert bereits gegen das Pydantic-Schema; die
+                # nachfolgenden Fallbacks (bio, persona, voice_register)
+                # bleiben als Defensive-Programmierung bestehen.
+                if not result.get("bio"):
+                    result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
+                if not result.get("persona"):
+                    result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
 
-                # Check if output was truncated (finish_reason is not 'stop')
-                finish_reason = response.choices[0].finish_reason
-                if finish_reason == 'length':
-                    logger.warning(f"LLM output truncated (attempt {attempt+1}), attempting to fix...")
-                    content = self._fix_truncated_json(content)
-
-                from ..llm.json_mode import _strip_llm_json_envelope
-                clean_content = _strip_llm_json_envelope(content)
-
-                if not clean_content.strip():
+                # voice_register: Fallback vor allgemeiner Validation (kein Retry nötig)
+                vr_value = result.get("voice_register")
+                if vr_value not in VOICE_REGISTERS:
                     logger.warning(
-                        f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
+                        "voice_register fehlt oder ungültig: %r → fallback neutral-de", vr_value
                     )
-                    last_error = ValueError("empty LLM content")
+                    result["voice_register"] = "neutral-de"
+
+                missing_fields = self._validate_profile_metadata(result)
+                if missing_fields:
+                    last_error = ValueError(
+                        f"Missing required persona metadata: {', '.join(missing_fields)}"
+                    )
+                    logger.warning(
+                        f"LLM persona missing required metadata (attempt {attempt+1}): "
+                        f"{', '.join(missing_fields)}"
+                    )
                     continue
 
-                # Try to parse JSON
-                try:
-                    result = json.loads(clean_content)
-
-                    # Validate required fields
-                    if "bio" not in result or not result["bio"]:
-                        result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
-                    if "persona" not in result or not result["persona"]:
-                        result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
-
-                    # voice_register: Fallback vor allgemeiner Validation (kein Retry nötig)
-                    vr_value = result.get("voice_register")
-                    if vr_value not in VOICE_REGISTERS:
-                        logger.warning(
-                            "voice_register fehlt oder ungültig: %r → fallback neutral-de", vr_value
-                        )
-                        result["voice_register"] = "neutral-de"
-
-                    missing_fields = self._validate_profile_metadata(result)
-                    if missing_fields:
-                        last_error = ValueError(
-                            f"Missing required persona metadata: {', '.join(missing_fields)}"
-                        )
-                        logger.warning(
-                            f"LLM persona missing required metadata (attempt {attempt+1}): "
-                            f"{', '.join(missing_fields)}"
-                        )
-                        continue
-
-                    return result
-
-                except json.JSONDecodeError as je:
-                    logger.warning(f"JSON parsing failed (attempt {attempt+1}): {str(je)[:80]}")
-
-                    # Try to fix JSON
-                    result = self._try_fix_json(clean_content, entity_name, entity_type, entity_summary)
-                    if result.get("_fixed"):
-                        del result["_fixed"]
-                        if "bio" not in result or not result["bio"]:
-                            result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
-                        if "persona" not in result or not result["persona"]:
-                            result["persona"] = entity_summary or f"{entity_name} is a {entity_type}."
-                        missing_fields = self._validate_profile_metadata(result)
-                        if missing_fields:
-                            last_error = ValueError(
-                                f"Missing required persona metadata after JSON repair: {', '.join(missing_fields)}"
-                            )
-                            logger.warning(
-                                f"Fixed JSON still missing required metadata (attempt {attempt+1}): "
-                                f"{', '.join(missing_fields)}"
-                            )
-                            continue
-                        return result
-
-                    last_error = je
+                return result
 
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
                 logger.warning(f"LLM call failed (attempt {attempt+1}): {str(e)[:80]}")

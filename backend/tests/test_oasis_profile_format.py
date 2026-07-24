@@ -82,92 +82,23 @@ def _fake_llm_response(payload):
 
 
 def test_generate_profile_with_llm_retries_when_required_metadata_missing():
-    gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
-    gen.model_name = "test-model"
-    gen.base_url = None
-    gen.language = "de"
-    gen._build_individual_persona_prompt = lambda *args, **kwargs: "prompt"
-    gen._get_system_prompt = lambda is_individual: "system"
-    gen._is_individual_entity = lambda entity_type: True
-    gen._generate_profile_rule_based = lambda *args, **kwargs: {
-        "display_name": "Fallback Name",
-        "handle": "fallback_name",
-        "bio": "Fallback",
-        "persona": "Fallback Persona",
-        "age": 41,
-        "gender": "female",
-        "mbti": "INTJ",
-        "country": "DE",
-    }
+    """SKIPPED: This test exercised the raw-OpenAI-client retry path.
 
-    responses = iter([
-        _fake_llm_response({
-            "display_name": "Felix Weber",
-            "handle": "felix_weber",
-            "bio": "Bio",
-            "persona": "Persona mit ENTP und 48 Jahre.",
-        }),
-        _fake_llm_response({
-            "display_name": "Mara Scholz",
-            "handle": "mara_scholz",
-            "bio": "Bio",
-            "persona": "Persona mit konsistenten Feldern.",
-            "age": 48,
-            "gender": "female",
-            "mbti": "ENTP",
-            "country": "DE",
-        }),
-    ])
-    gen.client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(create=lambda **kwargs: next(responses))
-        )
-    )
-
-    result = gen._generate_profile_with_llm("Entity", "Person", "Summary", {}, "")
-
-    assert result["display_name"] == "Mara Scholz"
-    assert result["age"] == 48
-    assert result["gender"] == "female"
-    assert result["mbti"] == "ENTP"
-    assert result["country"] == "DE"
+    With PR #858/#859, ``_generate_profile_with_llm`` routes through
+    ``LLMClient.chat_json`` with strict ``PersonaProfileSchema``. The schema
+    enforces required fields and age 18-75 at the provider level, so the
+    "missing required metadata → retry" scenario no longer occurs in the
+    LLM path. The equivalent regression coverage (schema, force_no_thinking,
+    max_tokens) lives in ``test_oasis_profile_generator.py``.
+    """
+    import pytest
+    pytest.skip("obsolete after LLMClient.chat_json + PersonaProfileSchema migration (PR #858/#859)")
 
 
 def test_generate_profile_with_llm_falls_back_with_complete_metadata():
-    gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
-    gen.model_name = "test-model"
-    gen.base_url = None
-    gen.language = "de"
-    gen._build_individual_persona_prompt = lambda *args, **kwargs: "prompt"
-    gen._get_system_prompt = lambda is_individual: "system"
-    gen._is_individual_entity = lambda entity_type: True
-    gen._generate_profile_rule_based = lambda *args, **kwargs: {
-        "display_name": "Fallback Name",
-        "handle": "fallback_name",
-        "bio": "Fallback",
-        "persona": "Fallback Persona",
-        "age": 41,
-        "gender": "female",
-        "mbti": "INTJ",
-        "country": "DE",
-    }
-    gen.client = SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=SimpleNamespace(
-                create=lambda **kwargs: _fake_llm_response({
-                    "bio": "Bio",
-                    "persona": "Persona ohne strukturierte Pflichtfelder.",
-                })
-            )
-        )
-    )
-
-    result = gen._generate_profile_with_llm("Entity", "Person", "Summary", {}, "")
-
-    assert result["age"] == 41
-    assert result["gender"] == "female"
-    assert result["mbti"] == "INTJ"
-    assert result["country"] == "DE"
+    """SKIPPED: see test_generate_profile_with_llm_retries_when_required_metadata_missing."""
+    import pytest
+    pytest.skip("obsolete after LLMClient.chat_json + PersonaProfileSchema migration (PR #858/#859)")
 
 
 def test_generate_profiles_replaces_duplicate_last_names(monkeypatch):

@@ -59,7 +59,8 @@ class TestDefaults:
         monkeypatch.setenv("FLASK_DEBUG", "true")
         monkeypatch.setenv("LLM_API_KEY", "dummy")
         for var in (
-            "LLM_BASE_URL", "LLM_MODEL_NAME",
+            "LLM_BASE_URL", "LLM_MODEL_NAME", "LLM_MAX_OUTPUT_TOKENS",
+            "LLM_CONTEXT_LIMIT",
             "EMBEDDING_MODEL", "EMBEDDING_BASE_URL", "VECTOR_DIM",
             "REDIS_URL",
             "NEO4J_URI", "NEO4J_USER",
