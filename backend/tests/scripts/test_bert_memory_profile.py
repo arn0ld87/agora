@@ -65,15 +65,11 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def fake_torch() -> mock.Mock:
-    """Setzt ``sys.modules["torch"]`` auf ein Modul-Stub mit ``float16``.
-
-    Hintergrund: Auf macOS-ARM mit Python 3.14 crasht ``import torch`` in
-    ``libtorch_python.dylib`` zuverlässig (SIGSEGV), wenn der echte
-    Torch-Stack im Test-venv initialisiert wird. Da unsere Funktion
-    ``torch`` ausschließlich für ``torch.float16`` als ``torch_dtype``-
-    Argument benötigt, ist ein Stub mit einem ``float16``-Sentinel
-    ausreichend. Wird in jedem Test, der ``AGORA_BERT_MEMORY_PROFILE=low``
-    aktiviert, als autouse-Fixture eingehängt.
+    """
+    Erstellt einen Torch-Stub mit einem `float16`-Sentinel für Tests des Low-Memory-Profils.
+    
+    Returns:
+        mock.Mock: Ein Stub mit dem Attribut `float16`.
     """
     stub = mock.Mock(name="torch_stub")
     stub.float16 = "fp16"
@@ -83,12 +79,11 @@ def fake_torch() -> mock.Mock:
 def _patch_transformers_and_torch(
     fake_module: mock.Mock, fake_torch_module: mock.Mock | None
 ) -> mock._patch_dict:
-    """Overrides für ``sys.modules`` als ``mock.patch.dict``-Manager.
-
-    Im ``transformers``-Mock sitzt ``AutoModel.from_pretrained`` so, dass
-    die Tests den echten Monkey-Patch isoliert prüfen können. ``torch``
-    wird nur überschrieben, wenn der Test es explizit anfordert — sonst
-    könnte ein anderer Test denselben Stub teilen.
+    """
+    Erzeugt einen Patch-Manager für die vorübergehende Ersetzung von `transformers` und optional `torch` in `sys.modules`.
+    
+    Returns:
+        mock._patch_dict: Patch-Manager für das `sys.modules`-Overlay.
     """
     overrides: dict[str, object] = {"transformers": fake_module}
     if fake_torch_module is not None:
@@ -100,6 +95,15 @@ class _DummyKwargs(dict):
     """Dict-Subklasse mit Attributzugriff für ``torch.dtype``-Mock-Kompatibilität."""
 
     def __getattr__(self, name: str):
+        """
+        Liefert den Wert des angegebenen Attributnamens aus dem Wörterbuch.
+        
+        Parameter:
+        	name (str): Der abzurufende Attributname.
+        
+        Returns:
+        	Der zugehörige Wert oder `None`, wenn der Name nicht vorhanden ist.
+        """
         return self.get(name)
 
 
@@ -172,6 +176,12 @@ def test_low_profile_preserves_user_overrides(
     captured: list[dict] = []
 
     def _fake(*_args: object, **_kwargs: object) -> mock.Mock:
+        """
+        Erfasst die Schlüsselwortargumente eines Aufrufs und liefert einen Mock zurück.
+        
+        Returns:
+        	mock.Mock: Ein neuer Mock als Rückgabewert des Aufrufs.
+        """
         captured.append(_kwargs)
         return mock.Mock()
 
@@ -203,6 +213,11 @@ def test_memory_sampler_writes_ndjson_when_enabled(
     rss_values = itertools.cycle([100.0, 100.5, 101.0, 101.5])
 
     def _fake_reader() -> float:
+        """Liest den nächsten RSS-Speicherwert aus der Testsequenz.
+        
+        Returns:
+        	float: Der nächste konfigurierte RSS-Wert in Megabyte.
+        """
         return next(rss_values)
 
     stop = install_memory_sampler(sink=sink, interval_s=0.05, rss_reader=_fake_reader)

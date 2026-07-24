@@ -448,24 +448,22 @@ def preflight_model_probe(
     max_retries: int = 3,
     backoff_base: float = 0.2,
 ) -> None:
-    """Einmaliger kleiner Chat-Completion-Probe vor dem Agenten-Fan-out.
-
-    Sendet einen winzigen ``"ping"``-User-Call an das aufgebaute Modell und
-    fängt permanente Auth-/Routing-Fehler (401/403/404) früh mit einer klaren
-    ``ValueError``-Root-Cause ab — ein einzelner Fehler statt N identischer
-    während der Simulation (Root Cause des ``404 model MiniMax-M3 not found``).
-    Transiente Fehler (429/500/502/503) werden mit exponentiellem Backoff
-    retried; erst nach Erschöpfung der Retries schlägt der Probe fehl.
-
-    Der Probe läuft genau einmal pro Aufruf (bzw. einmal pro Retry-Versuch) —
-    er führt keine eigene Fan-out-Logik. Aufrufer (``run_*_simulation``) rufen
-    ihn direkt nach ``create_model`` auf, bevor Agenten erzeugt werden.
-
-    Nur der OpenAI-kompatible Pfad (MiniMax, OpenAI, Qwen Cloud, …) wirft
-    ``openai.APIStatusError`` mit brauchbarem ``status_code``; andere
-    Plattformen (Gemini/Ollama) lassen ihre nativen Exceptions ungefiltert
-    durch — die noch vor dem Fan-out auftreten und damit denselben
-    Ein-Fehler-vor-Fan-out-Effekt erfüllen.
+    """
+    Führt vor der Simulation eine kleine Chat-Completion-Probe für das Modell aus.
+    
+    Sendet eine einzelne „ping“-Nachricht und wiederholt bestimmte vorübergehende
+    Provider-Fehler mit exponentiellem Backoff. Authentifizierungs- und Routingfehler
+    sowie nicht behebbare oder nach den Wiederholungen weiterhin bestehende Fehler
+    werden als `ValueError` gemeldet. Ausnahmen anderer Plattformen werden unverändert
+    weitergegeben.
+    
+    Parameters:
+    	model (Any): Das zu prüfende Modell.
+    	max_retries (int): Maximale Anzahl zusätzlicher Versuche bei vorübergehenden Fehlern.
+    	backoff_base (float): Anfangsverzögerung in Sekunden für den exponentiellen Backoff.
+    
+    Raises:
+    	ValueError: Wenn ein permanenter oder nicht behebbarer Provider-Fehler auftritt.
     """
     import openai
 
@@ -523,22 +521,20 @@ _BERT_PROFILE_DEFAULT = "low"
 
 
 def install_bert_memory_profile(profile: str | None = None) -> str:
-    """Patches ``transformers.AutoModel.from_pretrained`` für TWHIN-BERT-Lazy-Loads.
-
-    ENV-getrieben: ``AGORA_BERT_MEMORY_PROFILE=off|low|lowest``.
-
-    - ``off`` (Default wenn Variable fehlt) — No-Op.
-    - ``low`` (Default) — injiziert ``low_cpu_mem_usage=True`` und
-      ``torch_dtype=torch.float16`` für ``Twitter/twhin-bert-base``. Laedt
-      das Modell in fp16 statt fp32 und vermeidet den transienten
-      Materialisierungs-Peak.
-    - Andere Modellnamen bleiben unveraendert.
-
-    Idempotent: ein zweiter Aufruf ersetzt fruehere Patches ohne Doppel-
-    Wrapping (Detection via ``_agora_bert_memory_profile_applied``).
-
+    """
+    Aktiviert ein speicherschonendes Ladeprofil für TWHIN-BERT.
+    
+    Das Profil wird über den Parameter oder `AGORA_BERT_MEMORY_PROFILE` bestimmt
+    und standardmäßig auf `"low"` gesetzt. Für TWHIN-BERT werden geeignete
+    Speicheroptionen gesetzt; andere Modelle bleiben unverändert. Bei deaktiviertem
+    Profil oder fehlender Transformers-Bibliothek erfolgt keine Anpassung.
+    
+    Args:
+        profile: Zu verwendendes Speicherprofil, beispielsweise `"off"` oder
+            `"low"`.
+    
     Returns:
-        Der effektive Profilname (für Diagnose-Logs).
+        Der effektive Profilname.
     """
     effective = (profile or os.environ.get("AGORA_BERT_MEMORY_PROFILE") or _BERT_PROFILE_DEFAULT).lower()
     if effective == "off":
@@ -571,6 +567,12 @@ def install_bert_memory_profile(profile: str | None = None) -> str:
     def _patched_from_pretrained(*args: Any, **kwargs: Any):
         # Modellname ist typischerweise das erste positional arg oder
         # ``pretrained_model_name_or_path`` als kwarg.
+        """
+        Lädt TWHIN-BERT-Modelle mit speichersparenden Standardeinstellungen.
+        
+        Returns:
+        	Das von der ursprünglichen Ladefunktion erzeugte Modell.
+        """
         model_name = args[0] if args else kwargs.get("pretrained_model_name_or_path")
         if isinstance(model_name, str) and model_name in _TWHIN_BERT_MODEL_NAMES:
             # User-Override hat Vorrang.
@@ -607,26 +609,20 @@ def install_memory_sampler(
     interval_s: float = 0.5,
     rss_reader: Callable[[], float | None] | None = None,
 ) -> Callable[[], None]:
-    """Startet einen RSS-Sampler-Thread, schreibt NDJSON-Snapshots nach ``sink``.
-
-    ENV-getrieben: ``AGORA_DEBUG_MEMORY=1`` (oder ``true``) — alle anderen
-    Werte oder fehlende Variable deaktivieren den Sampler (No-Op).
-
-    Jeder Snapshot ist eine Zeile JSON mit ``label``, ``rss_mb`` und
-    ``time_s`` (Sekunden seit Thread-Start). Hauptzweck: beim naechsten
-    OOM-Run eine echte Boot-Kurve zu sehen, statt auf Vermutungen
-    angewiesen zu sein.
-
+    """
+    Startet bei aktivierter Debug-Konfiguration einen Hintergrund-Thread zur RSS-Speicherüberwachung.
+    
+    Der Sampler schreibt regelmäßig NDJSON-Snapshots mit den Feldern `label`, `rss_mb` und
+    `time_s` in die Zieldatei. Bei deaktivierter Überwachung wird eine No-op-Funktion
+    zurückgegeben.
+    
     Args:
-        sink: NDJSON-Zieldatei (typischerweise ``sim_dir/mem_profile.ndjson``).
-        interval_s: Polling-Intervall in Sekunden (Default 0.5 s).
-        rss_reader: Optionale Override für den RSS-Reader. Default laedt
-            ``_read_rss_mb_linux`` beim Sample (late binding via Modul-
-            Lookup); ein test-spezifischer Callable erlaubt deterministische
-            Werte unabhängig von der echten /proc-Implementierung.
-
+        sink: Zieldatei für die NDJSON-Snapshots.
+        interval_s: Zeitabstand zwischen den Messungen in Sekunden.
+        rss_reader: Optionaler RSS-Reader für die Messwerte.
+    
     Returns:
-        ``stop()``-Callable zum sauberen Beenden; idempotent.
+        Eine idempotente Funktion zum Beenden des Samplers.
     """
     enabled = os.environ.get("AGORA_DEBUG_MEMORY", "").lower() in {"1", "true", "yes"}
     if not enabled:
@@ -640,6 +636,12 @@ def install_memory_sampler(
         default_reader = module.__dict__.get("_read_rss_mb_linux")
 
         def rss_reader() -> float | None:  # type: ignore[no-redef]
+            """
+            Liest den aktuellen Speicherverbrauch über den zur Laufzeit aufgelösten RSS-Reader.
+            
+            Returns:
+                float | None: RSS-Speicherverbrauch in MB oder `None`, wenn kein Messwert verfügbar ist.
+            """
             reader = module.__dict__.get("_read_rss_mb_linux", default_reader)
             if reader is None:
                 return None
@@ -649,6 +651,12 @@ def install_memory_sampler(
         # macOS / kein /proc → Sampler einschalten, aber jede Samplezeile
         # bekommt ``rss_mb=None`` und einen WARNING-Hinweis.
         def rss_reader() -> float | None:  # type: ignore[no-redef]
+            """
+            Liefert keinen RSS-Messwert.
+            
+            Returns:
+            	float | None: Immer `None`.
+            """
             return None
 
     stop_event = threading.Event()
@@ -657,6 +665,12 @@ def install_memory_sampler(
     sink_handle = sink.open("a", encoding="utf-8")
 
     def _sampler_loop() -> None:
+        """
+        Schreibt während der Laufzeit regelmäßig RSS-Speicherschnappschüsse als NDJSON.
+        
+        Schreibfehler auf dem Zieldatenträger werden ignoriert, damit der Sampler den
+        ausführenden Prozess nicht beendet.
+        """
         while not stop_event.is_set():
             snap = {
                 "label": "tick",
@@ -680,6 +694,10 @@ def install_memory_sampler(
     thread.start()
 
     def _stop() -> None:
+        """Beendet die laufende Speicheraufzeichnung und schließt die Zieldatei.
+        
+        Die Funktion kann wiederholt aufgerufen werden.
+        """
         stop_event.set()
         thread.join(timeout=interval_s * 2)
         try:
@@ -691,5 +709,5 @@ def install_memory_sampler(
 
 
 def _noop_stop() -> None:
-    """No-Op-Stop fuer den inaktiven Pfad — immer idempotent."""
+    """Führt beim Beenden des Speichersamplers keine Aktion aus."""
     return None
