@@ -34,6 +34,7 @@ from .persona_quota_defaults import (
     build_industry_quota_prompt_block_en,
     default_dach_industry_quota,
 )
+from ..llm.json_mode import _try_repair_truncated_json
 
 logger = get_logger('agora.oasis_profile')
 
@@ -761,35 +762,20 @@ class OasisProfileGenerator:
             missing_fields.append(f"voice_register: invalid value '{vr}'")
 
         return missing_fields
-    
-    def _fix_truncated_json(self, content: str) -> str:
-        """Fix truncated JSON (output truncated by max_tokens limit)"""
 
-        # If JSON is truncated, try to close it
-        content = content.strip()
-
-        # Count unclosed parentheses
-        open_braces = content.count('{') - content.count('}')
-        open_brackets = content.count('[') - content.count(']')
-
-        # Check for unclosed strings
-        # Simple check: if last character is not comma or closing bracket, string might be truncated
-        if content and content[-1] not in '",}]':
-            # Try to close the string
-            content += '"'
-
-        # Close parentheses
-        content += ']' * open_brackets
-        content += '}' * open_braces
-
-        return content
-    
     def _try_fix_json(self, content: str, entity_name: str, entity_type: str, entity_summary: str = "") -> Dict[str, Any]:
         """Try to fix corrupted JSON"""
         import re
 
-        # 1. First try to fix truncated case
-        content = self._fix_truncated_json(content)
+        # 1. First try to fix truncated case via the centralized repair helper
+        # (Issue #869). Returns the repaired payload or None when no
+        # structural recovery is possible — in which case we keep the
+        # original content and let the regex/json.loads fallbacks below
+        # attempt their own recovery (newline sanitization, partial-field
+        # extraction, etc.).
+        repaired = _try_repair_truncated_json(content)
+        if repaired is not None:
+            content = repaired
 
         # 2. Try to extract JSON portion
         json_match = re.search(r'\{[\s\S]*\}', content)
