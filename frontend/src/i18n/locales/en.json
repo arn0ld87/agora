@@ -293,10 +293,6 @@
       "noDbKeyBanner": "No API key is stored for {provider} in Settings → LLM Providers. Please save one there or enter it here.",
       "checkingKey": "Checking key status…"
     },
-    "llmProfile": {
-      "hint": "Used for persona generation.",
-      "modelIgnored": "Overridden by profile."
-    },
     "personas": {
       "title": "Generate personas",
       "count": "Number of agents",
@@ -556,9 +552,6 @@
       "reportLabel": "Model for report",
       "placeholder": "Select model …",
       "regenerate": "Regenerate"
-    },
-    "llmProfile": {
-      "hint": "Used for report generation."
     },
     "quote": {
       "openSource": "Open source"
@@ -1342,13 +1335,6 @@
   },
   "upload": {
     "pdfVisionDisabledHint": "PDF vision is off by default. Enable via ENABLE_PDF_VISION=true (Cloud calls + latency)."
-  },
-  "llmProfilePicker": {
-    "label": "LLM Profile (optional)",
-    "serverDefault": "Server default (active profile)",
-    "loading": "Loading profiles…",
-    "error": "Failed to load profiles.",
-    "defaultSuffix": "default"
   },
   "onboarding": {
     "wizard": {

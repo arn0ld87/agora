@@ -40,24 +40,13 @@ const customMaxRounds = ref(40)
 const useCustomDays = ref(false)
 const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
-const llmProfileId = ref(props.projectData?.llm_profile_id ?? null)
-const userPickedProfile = ref(false)
+// Issue #834: der v3-Profil-Legacy-Picker wurde aus EnvSetupModelPanel
+// entfernt — es gibt keine UI-Auswahl mehr, die llmProfileId ändern könnte.
+// Der Wert kommt nur noch aus dem Projekt-Default und ist rein lesend; der
+// triggerPrepare-Payload-Vertrag (llm_profile_id, wenn gesetzt) bleibt exakt
+// erhalten (backend-seitig live, siehe simulation_prepare.py).
+const llmProfileId = computed(() => props.projectData?.llm_profile_id ?? null)
 const showSessionKeyOverride = ref(false)
-
-// Nach async-Hydration von projectData den Default einmal nachziehen, aber
-// niemals, sobald der User selbst eine Wahl getroffen hat (auch nicht für
-// "Server-Standard" = null).
-watch(
-  () => props.projectData?.llm_profile_id,
-  (next) => {
-    if (userPickedProfile.value) return
-    if (next) llmProfileId.value = next
-  },
-)
-
-watch(llmProfileId, () => {
-  userPickedProfile.value = true
-})
 
 const {
   runtimeProvider,
@@ -299,7 +288,6 @@ onMounted(() => {
           v-model:model-option="modelOption"
           v-model:custom-model="customModel"
           v-model:language="language"
-          v-model:llm-profile-id="llmProfileId"
           v-model:runtime-provider="runtimeProvider"
           v-model:runtime-api-key="runtimeApiKey"
           v-model:runtime-base-url="runtimeBaseUrl"

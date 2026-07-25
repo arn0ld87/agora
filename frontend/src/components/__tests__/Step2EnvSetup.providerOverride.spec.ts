@@ -145,7 +145,6 @@ const globalConfig = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><label>{{ label }}</label><input :type="type || \'text\'" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" :placeholder="placeholder" /></div>', props: ['label', 'modelValue', 'type', 'placeholder'], emits: ['update:modelValue'] },
     Select: { template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option></select>', props: ['label', 'modelValue', 'options'], emits: ['update:modelValue'] },
-    LlmProfilePicker: true,
   },
 }
 

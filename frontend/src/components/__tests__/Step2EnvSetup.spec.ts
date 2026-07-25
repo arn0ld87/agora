@@ -9,6 +9,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { nextTick } from 'vue'
+import de from '@/i18n/locales/de.json'
+import en from '@/i18n/locales/en.json'
 
 // localStorage muss vor allen Modul-Imports gemockt sein,
 // da i18n/index.js bei Import-Zeit localStorage.getItem aufruft.
@@ -82,6 +84,7 @@ vi.mock('../../composables/useSystemLog', () => ({
 }))
 
 import Step2EnvSetup from '../Step2EnvSetup.vue'
+import { getAvailableModels, prepareSimulation } from '../../api/simulation'
 
 const i18n = createI18n({
   legacy: false,
@@ -99,7 +102,6 @@ const globalConfig = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><slot /></div>' },
     Select: { template: '<select><slot /></select>' },
-    LlmProfilePicker: true,
   },
 }
 
@@ -291,5 +293,186 @@ describe('Step2EnvSetup — refreshQuality-Tick-Isolation (J.1, #219)', () => {
     expect(wrapper.find('input[type="range"]').attributes('title')).toContain('minimumHint')
 
     wrapper.unmount()
+  })
+})
+
+// Issue #834: EnvSetupModelPanel — v3-Profil-Legacy-Picker entfernt.
+// Der Prepare-Payload-Vertrag (triggerPrepare liest weiterhin
+// props.projectData.llm_profile_id) bleibt unverändert — das ist der
+// Backend-live Profil-Pfad (simulation_prepare.py expandiert llm_profile_id
+// zu llm_model="profile:<id>") und explizit OUT OF SCOPE für diesen Slice.
+// Migriert wird nur die UI-Senke: kein AiModelPicker hier (siehe Issue-Body),
+// der Legacy-Picker-Block + is-overridden-by-profile-Zustand entfallen ersatzlos.
+const i18nHints = createI18n({
+  legacy: false,
+  locale: 'de',
+  fallbackLocale: 'en',
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: { de, en },
+})
+
+const globalConfigHints = {
+  plugins: [i18nHints],
+  stubs: {
+    Btn: { template: '<button><slot /></button>' },
+    Badge: { template: '<span><slot /></span>' },
+    Kicker: { template: '<span><slot /></span>' },
+    Field: { template: '<div><slot /></div>' },
+    Select: { template: '<select><slot /></select>' },
+  },
+}
+
+describe('Step2EnvSetup — EnvSetupModelPanel ohne v3-Profil-Legacy-Picker (Issue #834)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { ollama: [], presets: [], current_default: '' },
+    })
+    ;(prepareSimulation as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: {} })
+  })
+
+  it('triggerPrepare-Payload trägt llm_profile_id, wenn projectData.llm_profile_id gesetzt ist', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-profile-01',
+        projectData: { llm_profile_id: 'prof-abc' },
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    await (wrapper.vm as unknown as { triggerPrepare: () => Promise<void> }).triggerPrepare()
+    await flushPromises()
+
+    expect(prepareSimulation).toHaveBeenCalled()
+    const payload = (prepareSimulation as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(payload.llm_profile_id).toBe('prof-abc')
+
+    wrapper.unmount()
+  })
+
+  it('triggerPrepare-Payload trägt kein llm_profile_id, wenn projectData es nicht setzt', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-profile-02',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    await (wrapper.vm as unknown as { triggerPrepare: () => Promise<void> }).triggerPrepare()
+    await flushPromises()
+
+    expect(prepareSimulation).toHaveBeenCalled()
+    const payload = (prepareSimulation as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(payload).not.toHaveProperty('llm_profile_id')
+
+    wrapper.unmount()
+  })
+
+  it('zeigt "loadingModels"-Hint sofort nach dem Mount (bevor loadModels() aufgelöst ist)', () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-hint-loading',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+
+    expect(wrapper.text()).toContain(de.step2.model.loadingModels)
+
+    wrapper.unmount()
+  })
+
+  it('zeigt "noOllama"-Hint wenn Server-Default Ollama verlangt und Ollama nicht erreichbar ist', async () => {
+    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        ollama: [], presets: [], current_default: '',
+        default_provider: 'ollama', ollama_reachable: false,
+      },
+    })
+
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-hint-ollama',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(de.step2.model.noOllama)
+
+    wrapper.unmount()
+  })
+
+  it('zeigt "openAiDefault"-Hint wenn Server-Default openai ist', async () => {
+    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        ollama: [], presets: [], current_default: '',
+        default_provider: 'openai', ollama_reachable: false,
+      },
+    })
+
+    const wrapper = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-hint-openai',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(de.step2.model.openAiDefault)
+
+    wrapper.unmount()
+  })
+
+  it('regression: die Model-Hint-Kette ist unabhängig von projectData.llm_profile_id (kein Sonderzweig mehr)', async () => {
+    // Der frühere "modelIgnored"-Sonderzweig (samt i18n-Key
+    // step2.llmProfile.modelIgnored) ist mit Issue #834 vollständig entfernt —
+    // die Model-Hints hängen nur noch von loadingModels/serverDefault/ollama ab.
+    const withProfile = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-hint-with-profile',
+        projectData: { llm_profile_id: 'prof-abc' },
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    const withoutProfile = mount(Step2EnvSetup, {
+      props: {
+        simulationId: 'sim-hint-without-profile',
+        projectData: undefined,
+        graphData: undefined,
+        systemLogs: [],
+      },
+      global: globalConfigHints,
+    })
+    await flushPromises()
+
+    expect(withProfile.text()).toBe(withoutProfile.text())
+
+    withProfile.unmount()
+    withoutProfile.unmount()
   })
 })
