@@ -9,6 +9,7 @@ unverändert — nur die Konstante/der Default ändert sich.
 from __future__ import annotations
 
 import math
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -18,7 +19,32 @@ from app.services.simulation_config_generator import (
     EventConfig,
     SimulationConfigGenerator,
     TimeSimulationConfig,
+    logger as sim_logger,
 )
+
+
+def _assert_agents_per_batch_fallback(
+    monkeypatch: pytest.MonkeyPatch, env_value: str
+) -> None:
+    """ENV auf ``env_value`` setzen, Fallback-Wert + Warnung verifizieren.
+
+    Die Logger-Konfiguration setzt ``propagate=False`` mit eigenen Handlern —
+    pytest's ``caplog``-Fixture sieht die Records nur, wenn die Propagation
+    temporär eingeschaltet wird. Wir monkey-patchen stattdessen direkt
+    ``sim_logger.warning``, damit die Erwartung unabhängig von der
+    Logger-Verkabelung ist.
+    """
+    captured: list[str] = []
+    original_warning = sim_logger.warning
+
+    def _spy(msg: str, *args: Any, **kwargs: Any) -> None:
+        captured.append(msg % args if args else msg)
+        original_warning(msg, *args, **kwargs)
+
+    monkeypatch.setattr(sim_logger, "warning", _spy)
+    monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", env_value)
+    assert SimulationConfigGenerator._resolve_agents_per_batch() == 8
+    assert any("AGORA_AGENTS_PER_BATCH" in w for w in captured)
 
 
 class TestResolveAgentsPerBatch:
@@ -41,16 +67,13 @@ class TestResolveAgentsPerBatch:
         assert SimulationConfigGenerator._resolve_agents_per_batch() == 8
 
     def test_non_int_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", "abc")
-        assert SimulationConfigGenerator._resolve_agents_per_batch() == 8
+        _assert_agents_per_batch_fallback(monkeypatch, "abc")
 
     def test_zero_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", "0")
-        assert SimulationConfigGenerator._resolve_agents_per_batch() == 8
+        _assert_agents_per_batch_fallback(monkeypatch, "0")
 
     def test_negative_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AGORA_AGENTS_PER_BATCH", "-3")
-        assert SimulationConfigGenerator._resolve_agents_per_batch() == 8
+        _assert_agents_per_batch_fallback(monkeypatch, "-3")
 
 
 class TestBatchingMath:
