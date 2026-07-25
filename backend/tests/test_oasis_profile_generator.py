@@ -23,6 +23,8 @@ ontology-generator fix in PR #858.
 
 from __future__ import annotations
 
+import pytest
+
 from app.services import oasis_profile_generator as _mod
 from app.services.oasis_profile_generator import (
     OasisProfileGenerator,
@@ -165,6 +167,67 @@ def test_generate_profile_with_llm_uses_sufficient_max_tokens(monkeypatch):
     assert captured["max_tokens"] >= 16384, (
         "max_tokens must be >= 16384 — M3 produces 2349+ token personas and "
         "8192 truncated mid-JSON"
+    )
+
+
+@pytest.mark.parametrize('level,expected_max_tokens', [
+    ('compact', 8192),
+    ('standard', 16384),
+    ('rich', 32768),
+])
+def test_generate_profile_with_llm_derives_max_tokens_from_detail_level(
+    monkeypatch, level, expected_max_tokens,
+):
+    """Issue #868: max_tokens must be derived from AGORA_PERSONA_DETAIL_LEVEL.
+
+    compact/standard/rich map to 8192/16384/32768 so the output token budget
+    tracks the requested persona detail level instead of a fixed constant.
+    """
+    monkeypatch.setenv('AGORA_PERSONA_DETAIL_LEVEL', level)
+    import app.llm.client as _client_mod
+    monkeypatch.setattr(_client_mod, "LLMClient", _CapturingLLMClient)
+
+    gen = _make_generator()
+    gen._generate_profile_with_llm(
+        entity_name="ADFC Muenchen",
+        entity_type="CyclingAdvocate",
+        entity_summary="Cycling advocacy group.",
+        entity_attributes={},
+        context="Radweg-Konflikt München",
+    )
+
+    captured = _CapturingLLMClient.last_instance.captured_kwargs
+    assert captured is not None, "chat_json was not called"
+    assert captured["max_tokens"] == expected_max_tokens, (
+        f"AGORA_PERSONA_DETAIL_LEVEL={level!r} must yield max_tokens="
+        f"{expected_max_tokens}, got {captured['max_tokens']}"
+    )
+
+
+def test_generate_profile_with_llm_unknown_detail_level_uses_standard_max_tokens(
+    monkeypatch,
+):
+    """Issue #868: unknown AGORA_PERSONA_DETAIL_LEVEL falls back to 'standard'
+    budget (16384), mirroring _resolve_persona_detail_level's existing
+    fallback (with logger.warning)."""
+    monkeypatch.setenv('AGORA_PERSONA_DETAIL_LEVEL', 'bogus')
+    import app.llm.client as _client_mod
+    monkeypatch.setattr(_client_mod, "LLMClient", _CapturingLLMClient)
+
+    gen = _make_generator()
+    gen._generate_profile_with_llm(
+        entity_name="ADFC Muenchen",
+        entity_type="CyclingAdvocate",
+        entity_summary="Cycling advocacy group.",
+        entity_attributes={},
+        context="Radweg-Konflikt München",
+    )
+
+    captured = _CapturingLLMClient.last_instance.captured_kwargs
+    assert captured is not None, "chat_json was not called"
+    assert captured["max_tokens"] == 16384, (
+        "Unknown AGORA_PERSONA_DETAIL_LEVEL must fall back to 'standard' "
+        "max_tokens=16384, matching _resolve_persona_detail_level's default"
     )
 
 
