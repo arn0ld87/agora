@@ -193,14 +193,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/v4/HistoryView.vue'),
   },
 
-  // Agora 2026 — design exploration (editorial Data-Room aesthetic).
-  // Opt-in via /agora-2026; isolated from production v4 shell.
-  {
-    path: '/agora-2026',
-    name: 'Agora2026',
-    component: () => import('../views/agora2026/Agora2026View.vue'),
-  },
-
   // Catch-all: unbekannte Pfade landen auf der NotFound-View statt leerer Shell.
   {
     path: '/:pathMatch(.*)*',

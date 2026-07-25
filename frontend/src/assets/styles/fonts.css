@@ -1,7 +1,7 @@
 /* ============================================================
    Agora — Local @font-face declarations
-   v2 (default) lädt Inter Tight / Instrument Serif / JetBrains Mono
-   weiterhin via Google-Fonts-<link> in index.html.
+   Alle produktiven Schriften werden lokal geladen; es gibt keinen
+   externen Font-Request mehr.
    v3 (Apple Enterprise · Light) nutzt Geist Sans/Mono lokal —
    die woff2 liegen in assets/fonts/ und sind hier registriert.
    ============================================================ */
