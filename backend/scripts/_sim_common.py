@@ -442,6 +442,17 @@ _PERMANENT_STATUS = {401, 403, 404}
 _TRANSIENT_STATUS = {408, 429, 500, 502, 503, 599}
 
 
+def _should_skip_preflight() -> bool:
+    """True, wenn der Preflight-Probe per ``AGORA_SKIP_PREFLIGHT=1`` deaktiviert ist.
+
+    Opt-out-Schalter (Default: ``0``/unset → Probe läuft). Entkoppelt den
+    Sim-Start von der Ollama-/Provider-Verfügbarkeit — nützlich für Tests,
+    Mock-Backends und Offline-Entwicklung. Produktive Container bleiben
+    unberührt (kein Default-Verhaltenswechsel). Siehe Issue #871.
+    """
+    return os.environ.get("AGORA_SKIP_PREFLIGHT", "0") == "1"
+
+
 def preflight_model_probe(
     model: Any,
     *,
@@ -456,6 +467,10 @@ def preflight_model_probe(
     sowie nicht behebbare oder nach den Wiederholungen weiterhin bestehende Fehler
     werden als `ValueError` gemeldet. Ausnahmen anderer Plattformen werden unverändert
     weitergegeben.
+
+    Skip: Per ``AGORA_SKIP_PREFLIGHT=1`` (Opt-out, Default off) wird der Probe
+    vollständig übersprungen — die Simulation kann dann ohne erreichbares Ollama
+    starten (Tests, Mock-Backends, Offline-Entwicklung). Eine Warnung wird geloggt.
     
     Parameters:
     	model (Any): Das zu prüfende Modell.
@@ -465,6 +480,12 @@ def preflight_model_probe(
     Raises:
     	ValueError: Wenn ein permanenter oder nicht behebbarer Provider-Fehler auftritt.
     """
+    if _should_skip_preflight():
+        logging.getLogger("agora._sim_common").warning(
+            "preflight probe skipped via AGORA_SKIP_PREFLIGHT"
+        )
+        return
+
     import openai
 
     probe_messages = [{"role": "user", "content": "ping"}]
