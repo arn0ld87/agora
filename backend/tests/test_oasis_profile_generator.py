@@ -187,3 +187,82 @@ def test_persona_profile_schema_rejects_age_out_of_range():
             raise AssertionError(f"age={bad_age} should be rejected")
         except ValidationError:
             pass
+
+
+def test_fix_truncated_json_method_removed():
+    """Issue #869: _fix_truncated_json duplication must be removed."""
+    gen = _make_generator()
+    assert not hasattr(gen, "_fix_truncated_json"), (
+        "Issue #869: OasisProfileGenerator._fix_truncated_json must be removed; "
+        "truncation repair is delegated to app.llm.json_mode._try_repair_truncated_json."
+    )
+
+
+def test_try_fix_json_truncated_input_recovers_via_centralized_helper(monkeypatch):
+    """Issue #869: _try_fix_json delegates truncation repair to the centralized helper."""
+    from app.llm.json_mode import _try_repair_truncated_json
+
+    # Spy that delegates to the real helper — proves _try_fix_json actually
+    # routes through the centralized function (and not via a reintroduced
+    # local repair path). Issue #869.
+    calls = []
+
+    def spy(payload):
+        calls.append(payload)
+        return _try_repair_truncated_json(payload)
+
+    monkeypatch.setattr(
+        "app.services.oasis_profile_generator._try_repair_truncated_json",
+        spy,
+    )
+
+    gen = _make_generator()
+    # Truncated mid-string: opening brace, key, value cut before the closing quote.
+    truncated = '{"bio": "Lena lebt in Münch'
+
+    # Sanity: the centralized helper repairs this case (closes the open string
+    # and the unclosed top-level brace).
+    repaired = _try_repair_truncated_json(truncated)
+    assert repaired is not None, "centralized helper must repair this case"
+    assert repaired.endswith('"}'), (
+        f"centralized helper must close the open string + brace, got: {repaired!r}"
+    )
+
+    # Regression: _try_fix_json still recovers the payload and marks it as fixed.
+    result = gen._try_fix_json(
+        truncated, entity_name="Lena", entity_type="Person",
+        entity_summary="Lena lebt in München",
+    )
+    assert isinstance(result, dict)
+    assert result.get("_fixed") is True, (
+        f"truncated input must be marked _fixed=True, got: {result!r}"
+    )
+    assert "bio" in result
+    assert calls == [truncated], (
+        f"_try_fix_json must delegate to the centralized helper with the original "
+        f"truncated payload, got spy calls: {calls!r}"
+    )
+
+
+def test_try_fix_json_valid_input_parses_without_repair():
+    """Issue #869: valid JSON parses via the unchanged downstream path (regex/json.loads)."""
+    import json as _json
+
+    gen = _make_generator()
+    valid = _json.dumps({
+        "bio": "Mobilitätsberaterin aus München.",
+        "persona": "Ausführliche Personenbeschreibung.",
+        "age": 41,
+        "gender": "female",
+        "mbti": "INTJ",
+        "country": "DE",
+        "voice_register": "neutral-de",
+    })
+
+    result = gen._try_fix_json(
+        valid, entity_name="Lena", entity_type="Person",
+        entity_summary="Lena lebt in München",
+    )
+    assert isinstance(result, dict)
+    assert result.get("bio") == "Mobilitätsberaterin aus München."
+    assert result.get("_fixed") is True
