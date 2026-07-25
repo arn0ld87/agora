@@ -79,7 +79,9 @@ class LLMClient:
         # SecretResolver/Provider-Registry analogous to from_route().
         # ``api_key_source`` ist eine Audit-Annotation für das einmalige
         # Init-Log am Ende dieses Konstruktors. Track 1c (Pure-Gosling).
-        resolved_source: Optional[str] = api_key_source if api_key else None
+        # Ein übergebener api_key ohne explizite Annotation gilt als "passed_in"
+        # (Caller hat den Key direkt übergeben), statt auf "unknown" durchzufallen.
+        resolved_source: Optional[str] = (api_key_source or "passed_in") if api_key else None
         active_provider_id: Optional[str] = None
         if use_active_config and model is None:
             active = _read_active_config_safely()
