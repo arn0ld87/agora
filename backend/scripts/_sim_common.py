@@ -482,7 +482,8 @@ def preflight_model_probe(
     """
     if _should_skip_preflight():
         logging.getLogger("agora._sim_common").warning(
-            "preflight probe skipped via AGORA_SKIP_PREFLIGHT"
+            "preflight probe skipped via AGORA_SKIP_PREFLIGHT",
+            extra={"event": "preflight_skipped", "env": "AGORA_SKIP_PREFLIGHT"},
         )
         return
 
