@@ -96,7 +96,6 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
 
 import SettingsGeneralView from '../Settings/SettingsGeneralView.vue'
 import SettingsIntegrationsView from '../Settings/SettingsIntegrationsView.vue'
-import SettingsUsersTeamsView from '../Settings/SettingsUsersTeamsView.vue'
 import SettingsApiKeysView from '../Settings/SettingsApiKeysView.vue'
 import SettingsAuditLogsView from '../Settings/SettingsAuditLogsView.vue'
 
@@ -238,17 +237,6 @@ describe('SettingsApiKeysView (Slice G2, real)', () => {
   it('zeigt keinen "Slice G folgt"-Stub mehr', async () => {
     const w = await mountView(SettingsApiKeysView, '/settings/api-keys')
     expect(w.text()).not.toContain('Slice G')
-  })
-})
-
-describe('SettingsUsersTeamsView (Slice G1, coming soon)', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('rendert ComingSoonCard mit lokalisiertem Titel', async () => {
-    const w = await mountView(SettingsUsersTeamsView, '/settings/users-teams')
-    const card = w.findComponent({ name: 'ComingSoonCard' })
-    expect(card.exists()).toBe(true)
-    expect(card.props('title')).toBe('Multi-User-Verwaltung folgt')
   })
 })
 
