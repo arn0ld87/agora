@@ -23,7 +23,7 @@ from ..config import Config
 from ..utils.logger import get_logger
 from .entity_reader import EntityNode
 
-logger = get_logger('agora.simulation_config')
+logger = get_logger("agora.simulation_config")
 
 # Default DACH social activity timing profile (Europe/Berlin).
 DACH_TIMEZONE_CONFIG = {
@@ -39,18 +39,19 @@ DACH_TIMEZONE_CONFIG = {
     "night_hours": [23],
     # Activity multipliers
     "activity_multipliers": {
-        "dead": 0.05,      # Almost no one in early morning
-        "morning": 0.4,    # Gradually active in morning
-        "work": 0.6,       # Lower activity during German office hours
-        "peak": 1.5,       # Evening peak
-        "night": 0.5       # Activity decreases at night
-    }
+        "dead": 0.05,  # Almost no one in early morning
+        "morning": 0.4,  # Gradually active in morning
+        "work": 0.6,  # Lower activity during German office hours
+        "peak": 1.5,  # Evening peak
+        "night": 0.5,  # Activity decreases at night
+    },
 }
 
 
 @dataclass
 class AgentActivityConfig:
     """Activity configuration for a single Agent"""
+
     agent_id: int
     entity_uuid: str
     entity_name: str
@@ -83,6 +84,7 @@ class AgentActivityConfig:
 @dataclass
 class TimeSimulationConfig:
     """Time simulation configuration (default profile: DACH / Europe-Berlin)"""
+
     # Total simulation time (simulation hours)
     total_simulation_hours: int = 72  # Default 72 hours (3 days)
 
@@ -113,6 +115,7 @@ class TimeSimulationConfig:
 @dataclass
 class EventConfig:
     """Event configuration"""
+
     # Initial posts (triggering events at the start of simulation)
     initial_posts: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -129,6 +132,7 @@ class EventConfig:
 @dataclass
 class PlatformConfig:
     """Platform-specific configuration"""
+
     platform: str  # twitter or reddit
 
     # Recommendation algorithm weights
@@ -146,6 +150,7 @@ class PlatformConfig:
 @dataclass
 class SimulationParameters:
     """Complete simulation parameter configuration"""
+
     # Basic information
     simulation_id: str
     project_id: str
@@ -226,15 +231,17 @@ class SimulationConfigGenerator:
 
     # Maximum context length in characters
     MAX_CONTEXT_LENGTH = 50000
-    # Number of agents per batch
-    AGENTS_PER_BATCH = 15
+    # Number of agents per batch — Default 8 (#870); via AGORA_AGENTS_PER_BATCH
+    # überschreibbar (siehe _resolve_agents_per_batch). 15 war zu groß für die
+    # aktuellen LLM-Workloads (hohe Latenz, Memory-Peak).
+    AGENTS_PER_BATCH = 8
 
     # Context truncation length for each step (characters)
-    TIME_CONFIG_CONTEXT_LENGTH = 10000   # Time configuration
-    EVENT_CONFIG_CONTEXT_LENGTH = 8000   # Event configuration
-    ENTITY_SUMMARY_LENGTH = 300          # Entity summary
-    AGENT_SUMMARY_LENGTH = 300           # Entity summary in agent configuration
-    ENTITIES_PER_TYPE_DISPLAY = 20       # Number of entities to display per type
+    TIME_CONFIG_CONTEXT_LENGTH = 10000  # Time configuration
+    EVENT_CONFIG_CONTEXT_LENGTH = 8000  # Event configuration
+    ENTITY_SUMMARY_LENGTH = 300  # Entity summary
+    AGENT_SUMMARY_LENGTH = 300  # Entity summary in agent configuration
+    ENTITIES_PER_TYPE_DISPLAY = 20  # Number of entities to display per type
 
     def __init__(
         self,
@@ -253,14 +260,44 @@ class SimulationConfigGenerator:
         self.model_name = model_name or Config.LLM_MODEL_NAME
         # Normalize language to two-letter code; defaults from Config.AGENT_LANGUAGE.
         self.language = (language or Config.AGENT_LANGUAGE or "de").lower()
+        # Batching-Granularität (#870): ENV-konfigurierbar, Default 8.
+        self.AGENTS_PER_BATCH = self._resolve_agents_per_batch()
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+
+    @staticmethod
+    def _resolve_agents_per_batch() -> int:
+        """Löst AGENTS_PER_BATCH aus ENV ``AGORA_AGENTS_PER_BATCH`` (Default 8).
+
+        Issue #870: 15 war zu groß für die aktuellen LLM-Workloads. Der Default
+        fällt auf 8 (im Bereich 5–8). Ungültige Werte (non-int oder <1) fallen
+        mit Warnung auf den Default zurück, damit ein Tippfehler in der ENV
+        die Simulation nicht lahmlegt.
+        """
+        default = 8
+        raw = os.getenv("AGORA_AGENTS_PER_BATCH")
+        if raw is None or raw.strip() == "":
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            logger.warning(
+                "AGORA_AGENTS_PER_BATCH='%s' ist keine Ganzzahl, falle auf Default %d zurück.",
+                raw,
+                default,
+            )
+            return default
+        if value < 1:
+            logger.warning(
+                "AGORA_AGENTS_PER_BATCH=%d ist <1, falle auf Default %d zurück.",
+                value,
+                default,
+            )
+            return default
+        return value
 
     def generate_config(
         self,
@@ -291,11 +328,15 @@ class SimulationConfigGenerator:
         Returns:
             SimulationParameters: Complete simulation parameters
         """
-        logger.info(f"Starting intelligent simulation configuration generation: simulation_id={simulation_id}, entities={len(entities)}")
-        
+        logger.info(
+            f"Starting intelligent simulation configuration generation: simulation_id={simulation_id}, entities={len(entities)}"
+        )
+
         # Calculate total steps
         num_batches = math.ceil(len(entities) / self.AGENTS_PER_BATCH)
-        total_steps = 3 + num_batches  # time config + event config + N batch agents + platform config
+        total_steps = (
+            3 + num_batches
+        )  # time config + event config + N batch agents + platform config
         current_step = 0
 
         def report_progress(step: int, message: str):
@@ -309,11 +350,11 @@ class SimulationConfigGenerator:
         context = self._build_context(
             simulation_requirement=simulation_requirement,
             document_text=document_text,
-            entities=entities
+            entities=entities,
         )
-        
+
         reasoning_parts = []
-        
+
         # ========== Step 1: Generate time configuration ==========
         report_progress(1, "Generating time configuration...")
         num_entities = len(entities)
@@ -336,17 +377,17 @@ class SimulationConfigGenerator:
 
             report_progress(
                 3 + batch_idx,
-                f"Generating agent configuration ({start_idx + 1}-{end_idx}/{len(entities)})..."
+                f"Generating agent configuration ({start_idx + 1}-{end_idx}/{len(entities)})...",
             )
-            
+
             batch_configs = self._generate_agent_configs_batch(
                 context=context,
                 entities=batch_entities,
                 start_idx=start_idx,
-                simulation_requirement=simulation_requirement
+                simulation_requirement=simulation_requirement,
             )
             all_agent_configs.extend(batch_configs)
-        
+
         reasoning_parts.append(f"Agent config: Successfully generated {len(all_agent_configs)}")
 
         # ========== Simulation-Floor-Check (Slice 4, Issue #496) ==========
@@ -358,14 +399,18 @@ class SimulationConfigGenerator:
         # ========== Assign initial post agents ==========
         logger.info("Assigning appropriate publisher agents to initial posts...")
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
-        assigned_count = len([p for p in event_config.initial_posts if p.get("poster_agent_id") is not None])
-        reasoning_parts.append(f"Initial posts assigned: {assigned_count} posts assigned publishers")
+        assigned_count = len(
+            [p for p in event_config.initial_posts if p.get("poster_agent_id") is not None]
+        )
+        reasoning_parts.append(
+            f"Initial posts assigned: {assigned_count} posts assigned publishers"
+        )
 
         # ========== Final step: Generate platform configuration ==========
         report_progress(total_steps, "Generating platform configuration...")
         twitter_config = None
         reddit_config = None
-        
+
         if enable_twitter:
             twitter_config = PlatformConfig(
                 platform="twitter",
@@ -373,9 +418,9 @@ class SimulationConfigGenerator:
                 popularity_weight=0.3,
                 relevance_weight=0.3,
                 viral_threshold=10,
-                echo_chamber_strength=0.5
+                echo_chamber_strength=0.5,
             )
-        
+
         if enable_reddit:
             reddit_config = PlatformConfig(
                 platform="reddit",
@@ -383,9 +428,9 @@ class SimulationConfigGenerator:
                 popularity_weight=0.4,
                 relevance_weight=0.3,
                 viral_threshold=15,
-                echo_chamber_strength=0.6
+                echo_chamber_strength=0.6,
             )
-        
+
         # Build final parameters
         params = SimulationParameters(
             simulation_id=simulation_id,
@@ -400,22 +445,21 @@ class SimulationConfigGenerator:
             llm_model=self.model_name,
             llm_base_url=self.base_url,
             language=self.language,
-            enable_agent_tools=getattr(Config, 'ENABLE_AGENT_TOOLS', False),
-            max_tool_calls_per_action=getattr(Config, 'MAX_TOOL_CALLS_PER_ACTION', 2),
+            enable_agent_tools=getattr(Config, "ENABLE_AGENT_TOOLS", False),
+            max_tool_calls_per_action=getattr(Config, "MAX_TOOL_CALLS_PER_ACTION", 2),
             neo4j_uri=Config.NEO4J_URI,
             neo4j_user=Config.NEO4J_USER,
-            generation_reasoning=" | ".join(reasoning_parts)
+            generation_reasoning=" | ".join(reasoning_parts),
         )
-        
-        logger.info(f"Simulation configuration generation complete: {len(params.agent_configs)} agent configurations")
+
+        logger.info(
+            f"Simulation configuration generation complete: {len(params.agent_configs)} agent configurations"
+        )
 
         return params
 
     def _build_context(
-        self,
-        simulation_requirement: str,
-        document_text: str,
-        entities: List[EntityNode]
+        self, simulation_requirement: str, document_text: str, entities: List[EntityNode]
     ) -> str:
         """Build LLM context, truncate to maximum length"""
 
@@ -457,13 +501,15 @@ class SimulationConfigGenerator:
             display_count = self.ENTITIES_PER_TYPE_DISPLAY
             summary_len = self.ENTITY_SUMMARY_LENGTH
             for e in type_entities[:display_count]:
-                summary_preview = (e.summary[:summary_len] + "...") if len(e.summary) > summary_len else e.summary
+                summary_preview = (
+                    (e.summary[:summary_len] + "...") if len(e.summary) > summary_len else e.summary
+                )
                 lines.append(f"- {e.name}: {summary_preview}")
             if len(type_entities) > display_count:
                 lines.append(f"  ... and {len(type_entities) - display_count} more")
 
         return "\n".join(lines)
-    
+
     def _call_llm_with_retry(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
         """LLM call with retry, including JSON repair logic"""
 
@@ -471,6 +517,7 @@ class SimulationConfigGenerator:
         last_error = None
 
         from ..utils.llm_client import should_disable_openai_json_mode
+
         disable_json_mode = should_disable_openai_json_mode(self.base_url)
 
         for attempt in range(max_attempts):
@@ -491,13 +538,13 @@ class SimulationConfigGenerator:
                 finish_reason = response.choices[0].finish_reason
 
                 # Check if output was truncated
-                if finish_reason == 'length':
-                    logger.warning(f"LLM output truncated (attempt {attempt+1})")
+                if finish_reason == "length":
+                    logger.warning(f"LLM output truncated (attempt {attempt + 1})")
                     content = self._fix_truncated_json(content)
 
                 if not content.strip():
                     logger.warning(
-                        f"LLM returned empty content (attempt {attempt+1}, finish_reason={finish_reason})"
+                        f"LLM returned empty content (attempt {attempt + 1}, finish_reason={finish_reason})"
                     )
                     last_error = ValueError("empty LLM content")
                     continue
@@ -506,7 +553,7 @@ class SimulationConfigGenerator:
                 try:
                     return json.loads(content)
                 except json.JSONDecodeError as e:
-                    logger.warning(f"JSON parsing failed (attempt {attempt+1}): {str(e)[:80]}")
+                    logger.warning(f"JSON parsing failed (attempt {attempt + 1}): {str(e)[:80]}")
 
                     # Try to fix JSON
                     fixed = self._try_fix_config_json(content)
@@ -516,28 +563,29 @@ class SimulationConfigGenerator:
                     last_error = e
 
             except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                logger.warning(f"LLM call failed (attempt {attempt+1}): {str(e)[:80]}")
+                logger.warning(f"LLM call failed (attempt {attempt + 1}): {str(e)[:80]}")
                 last_error = e
                 import time
+
                 time.sleep(2 * (attempt + 1))
 
         raise last_error or Exception("LLM call failed")
-    
+
     def _fix_truncated_json(self, content: str) -> str:
         """Fix truncated JSON"""
         content = content.strip()
 
         # Count unclosed parentheses
-        open_braces = content.count('{') - content.count('}')
-        open_brackets = content.count('[') - content.count(']')
+        open_braces = content.count("{") - content.count("}")
+        open_brackets = content.count("[") - content.count("]")
 
         # Check for unclosed strings
         if content and content[-1] not in '",}]':
             content += '"'
 
         # Close parentheses
-        content += ']' * open_brackets
-        content += '}' * open_braces
+        content += "]" * open_brackets
+        content += "}" * open_braces
 
         return content
 
@@ -549,41 +597,41 @@ class SimulationConfigGenerator:
         content = self._fix_truncated_json(content)
 
         # Extract JSON portion
-        json_match = re.search(r'\{[\s\S]*\}', content)
+        json_match = re.search(r"\{[\s\S]*\}", content)
         if json_match:
             json_str = json_match.group()
 
             # Remove newlines in strings
             def fix_string(match):
                 s = match.group(0)
-                s = s.replace('\n', ' ').replace('\r', ' ')
-                s = re.sub(r'\s+', ' ', s)
+                s = s.replace("\n", " ").replace("\r", " ")
+                s = re.sub(r"\s+", " ", s)
                 return s
 
             json_str = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"', fix_string, json_str)
 
             try:
                 return json.loads(json_str)
-            except (json.JSONDecodeError, ValueError):
+            except json.JSONDecodeError, ValueError:
                 # Try removing all control characters
-                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', json_str)
-                json_str = re.sub(r'\s+', ' ', json_str)
+                json_str = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", json_str)
+                json_str = re.sub(r"\s+", " ", json_str)
                 try:
                     return json.loads(json_str)
-                except (json.JSONDecodeError, ValueError):
+                except json.JSONDecodeError, ValueError:
                     pass
 
         return None
-    
+
     def _generate_time_config(self, context: str, num_entities: int) -> Dict[str, Any]:
         """Generate time configuration"""
         # Use configured context truncation length
-        context_truncated = context[:self.TIME_CONFIG_CONTEXT_LENGTH]
+        context_truncated = context[: self.TIME_CONFIG_CONTEXT_LENGTH]
 
         # Calculate maximum allowed value (90% of agents)
         max_agents_allowed = max(1, int(num_entities * 0.9))
 
-        time_profile = getattr(Config, 'TIME_PROFILE', 'dach_default')
+        time_profile = getattr(Config, "TIME_PROFILE", "dach_default")
 
         prompt = f"""Based on the following simulation requirements, generate time simulation configuration.
 
@@ -637,7 +685,7 @@ Field description:
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
             logger.warning(f"Time config LLM generation failed: {e}, using default configuration")
             return self._get_default_time_config(num_entities)
-    
+
     def _get_default_time_config(self, num_entities: int) -> Dict[str, Any]:
         """Get default time configuration (DACH / Europe-Berlin profile)"""
         return {
@@ -649,7 +697,7 @@ Field description:
             "off_peak_hours": [0, 1, 2, 3, 4, 5],
             "morning_hours": [6, 7, 8],
             "work_hours": [9, 10, 11, 12, 13, 14, 15, 16],
-            "reasoning": "Using default DACH / Europe-Berlin activity profile (1 hour per round)"
+            "reasoning": "Using default DACH / Europe-Berlin activity profile (1 hour per round)",
         }
 
     @staticmethod
@@ -664,7 +712,7 @@ Field description:
                 return default
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     @staticmethod
@@ -688,23 +736,31 @@ Field description:
                         break
             try:
                 out.append(int(item))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
         return out or default
 
     def _parse_time_config(self, result: Dict[str, Any], num_entities: int) -> TimeSimulationConfig:
         """Parse time configuration result and verify agents_per_hour doesn't exceed total agents"""
         # Get original values (defensive: some models wrap scalars in {"value": N, ...})
-        agents_per_hour_min = self._coerce_int(result.get("agents_per_hour_min"), max(1, num_entities // 15))
-        agents_per_hour_max = self._coerce_int(result.get("agents_per_hour_max"), max(5, num_entities // 5))
+        agents_per_hour_min = self._coerce_int(
+            result.get("agents_per_hour_min"), max(1, num_entities // 15)
+        )
+        agents_per_hour_max = self._coerce_int(
+            result.get("agents_per_hour_max"), max(5, num_entities // 5)
+        )
 
         # Verify and correct: ensure not exceeding total agents
         if agents_per_hour_min > num_entities:
-            logger.warning(f"agents_per_hour_min ({agents_per_hour_min}) exceeds total agents ({num_entities}), corrected")
+            logger.warning(
+                f"agents_per_hour_min ({agents_per_hour_min}) exceeds total agents ({num_entities}), corrected"
+            )
             agents_per_hour_min = max(1, num_entities // 10)
 
         if agents_per_hour_max > num_entities:
-            logger.warning(f"agents_per_hour_max ({agents_per_hour_max}) exceeds total agents ({num_entities}), corrected")
+            logger.warning(
+                f"agents_per_hour_max ({agents_per_hour_max}) exceeds total agents ({num_entities}), corrected"
+            )
             agents_per_hour_max = max(agents_per_hour_min + 1, num_entities // 2)
 
         # Ensure min < max
@@ -724,14 +780,11 @@ Field description:
             morning_activity_multiplier=0.4,
             work_hours=self._coerce_int_list(result.get("work_hours"), list(range(9, 19))),
             work_activity_multiplier=0.7,
-            peak_activity_multiplier=1.5
+            peak_activity_multiplier=1.5,
         )
-    
+
     def _generate_event_config(
-        self,
-        context: str,
-        simulation_requirement: str,
-        entities: List[EntityNode]
+        self, context: str, simulation_requirement: str, entities: List[EntityNode]
     ) -> Dict[str, Any]:
         """Generate event configuration"""
 
@@ -744,13 +797,12 @@ Field description:
             if len(type_examples[etype]) < 3:
                 type_examples[etype].append(e.name)
 
-        type_info = "\n".join([
-            f"- {t}: {', '.join(examples)}"
-            for t, examples in type_examples.items()
-        ])
+        type_info = "\n".join(
+            [f"- {t}: {', '.join(examples)}" for t, examples in type_examples.items()]
+        )
 
         # Use configured context truncation length
-        context_truncated = context[:self.EVENT_CONFIG_CONTEXT_LENGTH]
+        context_truncated = context[: self.EVENT_CONFIG_CONTEXT_LENGTH]
 
         prompt = f"""Based on the following simulation requirements, generate event configuration.
 
@@ -791,7 +843,7 @@ Return JSON format (no markdown):
                 "hot_topics": [],
                 "narrative_direction": "",
                 "initial_posts": [],
-                "reasoning": "Using default configuration"
+                "reasoning": "Using default configuration",
             }
 
     def _parse_event_config(self, result: Dict[str, Any]) -> EventConfig:
@@ -800,13 +852,11 @@ Return JSON format (no markdown):
             initial_posts=result.get("initial_posts", []),
             scheduled_events=[],
             hot_topics=result.get("hot_topics", []),
-            narrative_direction=result.get("narrative_direction", "")
+            narrative_direction=result.get("narrative_direction", ""),
         )
-    
+
     def _assign_initial_post_agents(
-        self,
-        event_config: EventConfig,
-        agent_configs: List[AgentActivityConfig]
+        self, event_config: EventConfig, agent_configs: List[AgentActivityConfig]
     ) -> EventConfig:
         """
         Assign appropriate publisher agents to initial posts
@@ -869,31 +919,35 @@ Return JSON format (no markdown):
 
             # 3. If still not found, use agent with highest influence
             if matched_agent_id is None:
-                logger.warning(f"No matching agent found for type '{poster_type}', using agent with highest influence")
+                logger.warning(
+                    f"No matching agent found for type '{poster_type}', using agent with highest influence"
+                )
                 if agent_configs:
                     # Sort by influence, select highest
-                    sorted_agents = sorted(agent_configs, key=lambda a: a.influence_weight, reverse=True)
+                    sorted_agents = sorted(
+                        agent_configs, key=lambda a: a.influence_weight, reverse=True
+                    )
                     matched_agent_id = sorted_agents[0].agent_id
                 else:
                     matched_agent_id = 0
 
-            updated_posts.append({
-                "content": content,
-                "poster_type": post.get("poster_type", "Unknown"),
-                "poster_agent_id": matched_agent_id
-            })
+            updated_posts.append(
+                {
+                    "content": content,
+                    "poster_type": post.get("poster_type", "Unknown"),
+                    "poster_agent_id": matched_agent_id,
+                }
+            )
 
-            logger.info(f"Initial post assigned: poster_type='{poster_type}' -> agent_id={matched_agent_id}")
+            logger.info(
+                f"Initial post assigned: poster_type='{poster_type}' -> agent_id={matched_agent_id}"
+            )
 
         event_config.initial_posts = updated_posts
         return event_config
-    
+
     def _generate_agent_configs_batch(
-        self,
-        context: str,
-        entities: List[EntityNode],
-        start_idx: int,
-        simulation_requirement: str
+        self, context: str, entities: List[EntityNode], start_idx: int, simulation_requirement: str
     ) -> List[AgentActivityConfig]:
         """Generate agent configurations in batch"""
 
@@ -901,12 +955,14 @@ Return JSON format (no markdown):
         entity_list = []
         summary_len = self.AGENT_SUMMARY_LENGTH
         for i, e in enumerate(entities):
-            entity_list.append({
-                "agent_id": start_idx + i,
-                "entity_name": e.name,
-                "entity_type": e.get_entity_type() or "Unknown",
-                "summary": e.summary[:summary_len] if e.summary else ""
-            })
+            entity_list.append(
+                {
+                    "agent_id": start_idx + i,
+                    "entity_name": e.name,
+                    "entity_type": e.get_entity_type() or "Unknown",
+                    "summary": e.summary[:summary_len] if e.summary else "",
+                }
+            )
 
         prompt = f"""Based on the following information, generate social media activity configuration for each entity.
 
@@ -950,7 +1006,9 @@ Return JSON format (no markdown):
             result = self._call_llm_with_retry(prompt, system_prompt)
             llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
         except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-            logger.warning(f"Agent config batch LLM generation failed: {e}, using rule-based generation")
+            logger.warning(
+                f"Agent config batch LLM generation failed: {e}, using rule-based generation"
+            )
             llm_configs = {}
 
         # Build AgentActivityConfig objects
@@ -976,12 +1034,12 @@ Return JSON format (no markdown):
                 response_delay_max=cfg.get("response_delay_max", 60),
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
                 stance=cfg.get("stance", "neutral"),
-                influence_weight=cfg.get("influence_weight", 1.0)
+                influence_weight=cfg.get("influence_weight", 1.0),
             )
             configs.append(config)
 
         return configs
-    
+
     @staticmethod
     def _validate_persona_quota(personas: List[Any]) -> None:
         """Enforce Simulation-Floor: mindestens 30 Personas pro Run.
@@ -1016,9 +1074,7 @@ Return JSON format (no markdown):
             return personas
 
         total = len(personas)
-        skeptic_count = sum(
-            1 for p in personas if getattr(p, "stance", "") == "opposing"
-        )
+        skeptic_count = sum(1 for p in personas if getattr(p, "stance", "") == "opposing")
         required = math.ceil(total * min_ratio)
 
         if skeptic_count >= required:
@@ -1070,7 +1126,7 @@ Return JSON format (no markdown):
                 "response_delay_max": 240,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 3.0
+                "influence_weight": 3.0,
             }
         elif entity_type in ["mediaoutlet"]:
             # Media: all-day activity, medium frequency, high influence
@@ -1083,7 +1139,7 @@ Return JSON format (no markdown):
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "observer",
-                "influence_weight": 2.5
+                "influence_weight": 2.5,
             }
         elif entity_type in ["professor", "expert", "official"]:
             # Experts/Professors: work + evening activity, medium frequency
@@ -1096,7 +1152,7 @@ Return JSON format (no markdown):
                 "response_delay_max": 90,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 2.0
+                "influence_weight": 2.0,
             }
         elif entity_type in ["student"]:
             # Students: mainly evening, high frequency
@@ -1109,7 +1165,7 @@ Return JSON format (no markdown):
                 "response_delay_max": 15,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 0.8
+                "influence_weight": 0.8,
             }
         elif entity_type in ["alumni"]:
             # Alumni: mainly evening
@@ -1122,7 +1178,7 @@ Return JSON format (no markdown):
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
             }
         else:
             # Ordinary people: evening peak
@@ -1135,6 +1191,5 @@ Return JSON format (no markdown):
                 "response_delay_max": 20,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
             }
-    
