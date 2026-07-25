@@ -288,6 +288,14 @@ jobs:
         working-directory: backend
         run: uv run pytest tests/contracts/ -q
 
+      # 2026-07-25 wieder aktiviert (Issue #883). Der 2026-05-17 entfernte Job
+      # lief auf push:main und meldete Drift erst nach dem Merge. Hier laeuft er
+      # auf dem PR und verhindert ihn. Kein eigener Job: uv, Dependencies und
+      # Checkout stehen in diesem Gate bereits, und der Frontend-Zaehler braucht
+      # nur das Repo. Exit 2 = Messfehler, nicht Drift.
+      - name: STATUS.md drift check
+        run: bash scripts/sync-status.sh --check
+
   frontend-pr-gate:
     name: Frontend PR smoke gate (lint + typecheck + test + build)
     runs-on: ubuntu-latest
@@ -334,6 +342,8 @@ jobs:
         working-directory: frontend
         run: bun run build
 
-  # 2026-05-17 entfernt: status-sync (MAI-16). Lief nur auf push:main,
-  # doppelt sich mit dem alten contract-gates::status-sync-drift Job,
-  # der ebenfalls entfernt wurde. STATUS.md bleibt manuell pflegbar.
+  # 2026-05-17 entfernt: status-sync (MAI-16) als eigener Job — lief nur auf
+  # push:main und doppelte sich mit contract-gates::status-sync-drift.
+  # 2026-07-25 (Issue #883): Die Pruefung ist als Step im backend-pr-gate
+  # zurueck, wo sie auf dem PR laeuft statt nach dem Merge. Kein eigener Job,
+  # daher auch keine Doppelung mehr.

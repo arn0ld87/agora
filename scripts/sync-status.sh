@@ -40,6 +40,11 @@ FRONTEND_VERSION=$(get_version_from_json "$REPO_ROOT/frontend/package.json")
 ROOT_VERSION=$(get_version_from_json "$REPO_ROOT/package.json")
 
 BACKEND_TESTS="unknown"
+# Unterscheidet "Messung fehlgeschlagen" von "Wert gemessen". Ohne dieses Flag
+# meldet --check bei einem fehlgeschlagenen Collect-Lauf faelschlich Drift,
+# weil "unknown" gegen die dokumentierte Zahl diffed.
+BACKEND_TESTS_MEASURED=false
+COLLECT_FAILURE_REASON=""
 if command -v uv &>/dev/null; then
   # Optional timeout: GNU coreutils auf Linux/CI, gtimeout auf macOS, sonst kein Wrapper.
   if command -v timeout &>/dev/null; then
@@ -54,13 +59,18 @@ if command -v uv &>/dev/null; then
     MATCH=$(grep -oE '[0-9]+ tests collected' "$COLLECT_TMP" | grep -oE '[0-9]+' | head -1 || true)
     if [[ -n "$MATCH" ]]; then
       BACKEND_TESTS="$MATCH"
+      BACKEND_TESTS_MEASURED=true
     else
       echo "WARNING: pytest --collect-only ran but no count found" >&2
+      COLLECT_FAILURE_REASON="pytest --collect-only lieferte keine auswertbare Testanzahl"
     fi
   else
     echo "WARNING: pytest --collect-only timed out or failed — keeping 'unknown'" >&2
+    COLLECT_FAILURE_REASON="pytest --collect-only ist fehlgeschlagen oder ins Timeout gelaufen"
   fi
   rm -f "$COLLECT_TMP"
+else
+  COLLECT_FAILURE_REASON="uv ist nicht installiert — Backend-Testanzahl nicht messbar"
 fi
 
 FRONTEND_TEST_FILES=$(find "$REPO_ROOT/frontend/src" \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \) 2>/dev/null | wc -l | tr -d ' ')
@@ -131,6 +141,16 @@ replace_block "TESTS"    "$TESTS_BLOCK"    "$TARGET_FILE"
 # --check: compare and report
 # ---------------------------------------------------------------------------
 if [[ "$CHECK_MODE" == true ]]; then
+  # Messfehler ist kein Drift. Ohne diese Unterscheidung wuerde ein
+  # fehlgeschlagener Collect-Lauf als inhaltliche Abweichung gemeldet und das
+  # Gate mit irrefuehrender Begruendung rot faerben.
+  if [[ "$BACKEND_TESTS_MEASURED" != true ]]; then
+    echo "MESSFEHLER: Backend-Testanzahl konnte nicht ermittelt werden." >&2
+    echo "Grund: ${COLLECT_FAILURE_REASON:-unbekannt}" >&2
+    echo "Das ist KEIN STATUS.md-Drift — die Pruefung selbst ist fehlgeschlagen." >&2
+    rm -f "$TARGET_FILE"
+    exit 2
+  fi
   if diff -q "$STATUS_FILE" "$TARGET_FILE" >/dev/null 2>&1; then
     echo "OK: docs/STATUS.md in sync" >&2
     rm -f "$TARGET_FILE"
