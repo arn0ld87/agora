@@ -149,6 +149,15 @@ describe('Router – Catch-all NotFound', () => {
       expect(router.currentRoute.value.name).toBe('NotFound')
     },
   )
+
+  // Regressionstest Issue #832: /agora-2026 war eine reine Designexploration,
+  // die produktiv geroutet wurde. Nach der Archivierung nach
+  // docs/design-reference/agora-2026/ darf die Route keine eigene Komponente
+  // mehr auflösen, sondern muss auf die Catch-all-NotFound-Route zurückfallen.
+  it('/agora-2026 → NotFound (Designexploration archiviert, Issue #832)', async () => {
+    await pushAndSettle('/agora-2026')
+    expect(router.currentRoute.value.name).toBe('NotFound')
+  })
 })
 
 describe('Router – Auth-Guard', () => {

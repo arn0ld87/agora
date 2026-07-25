@@ -57,6 +57,7 @@ Weitere Einstiegspunkte:
 
 - [`ui/`](ui/) — Golden-Gate-Zielbild, Komponenten und Designreferenzen
 - [`../design/v3-source/`](../design/v3-source/) — vendorierte historische Designquelle
+- [`design-reference/agora-2026/`](design-reference/agora-2026/README.md) — eingefrorene Designexploration "Agora 2026" (nicht produktiv geroutet, Issue #832)
 
 ## Audits und historische Unterlagen
 
