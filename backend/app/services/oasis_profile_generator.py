@@ -75,16 +75,19 @@ PERSONA_DETAIL_LEVELS = {
         'word_count_de': '300–500 Wörter',
         'word_count_en': '300–500 words',
         'context_limit': 1200,
+        'max_tokens': 8192,
     },
     'standard': {
         'word_count_de': '700–900 Wörter',
         'word_count_en': '700–900 words',
         'context_limit': 2000,
+        'max_tokens': 16384,
     },
     'rich': {
         'word_count_de': '1500–2000 Wörter',
         'word_count_en': '2000 words',
         'context_limit': 3000,
+        'max_tokens': 32768,
     },
 }
 
@@ -628,6 +631,8 @@ class OasisProfileGenerator:
         """
 
         is_individual = self._is_individual_entity(entity_type)
+        detail_level = _resolve_persona_detail_level()
+        max_tokens = detail_level['max_tokens']
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -666,7 +671,7 @@ class OasisProfileGenerator:
                 result = llm.chat_json(
                     messages=messages,
                     temperature=0.7 - (attempt * 0.1),
-                    max_tokens=16384,
+                    max_tokens=max_tokens,
                     schema=PersonaProfileSchema,
                     schema_name="persona_profile",
                     context="persona",
