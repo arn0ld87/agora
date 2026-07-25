@@ -41,7 +41,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -53,7 +52,6 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from _sim_common import install_bert_memory_profile  # noqa: E402
 from _sim_common import install_memory_sampler  # noqa: E402
-from _sim_common import _read_rss_mb_linux  # noqa: E402
 
 
 @pytest.fixture
@@ -99,10 +97,10 @@ class _DummyKwargs(dict):
         Liefert den Wert des angegebenen Attributnamens aus dem Wörterbuch.
         
         Parameter:
-        	name (str): Der abzurufende Attributname.
-        
+            name (str): Der abzurufende Attributname.
+
         Returns:
-        	Der zugehörige Wert oder `None`, wenn der Name nicht vorhanden ist.
+            Der zugehörige Wert oder `None`, wenn der Name nicht vorhanden ist.
         """
         return self.get(name)
 
@@ -207,7 +205,7 @@ def test_low_profile_preserves_user_overrides(
         Erfasst die Schlüsselwortargumente eines Aufrufs und liefert einen Mock zurück.
         
         Returns:
-        	mock.Mock: Ein neuer Mock als Rückgabewert des Aufrufs.
+            mock.Mock: Ein neuer Mock als Rückgabewert des Aufrufs.
         """
         captured.append(_kwargs)
         return mock.Mock()
@@ -243,7 +241,7 @@ def test_memory_sampler_writes_ndjson_when_enabled(
         """Liest den nächsten RSS-Speicherwert aus der Testsequenz.
         
         Returns:
-        	float: Der nächste konfigurierte RSS-Wert in Megabyte.
+            float: Der nächste konfigurierte RSS-Wert in Megabyte.
         """
         return next(rss_values)
 
