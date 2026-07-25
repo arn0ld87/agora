@@ -1,9 +1,20 @@
 <script setup lang="ts">
+/**
+ * EnvSetupModelPanel — Modell-/Sprach-/Runtime-Provider-Auswahl (Step 2).
+ *
+ * Issue #834: v3-Profil-Legacy-Picker entfernt. Kein AiModelPicker
+ * hier als Ersatz — der Profil-Pfad ist backend-seitig live
+ * (backend/app/api/simulation_prepare.py expandiert llm_profile_id zu
+ * llm_model="profile:<id>"). Eine vollständige Kanon-Migration dieser Stelle
+ * (useEffectiveModelSelection, Storage-Cut agora.lastModel, Prepare-Payload-
+ * Vertrag) ist ein eigener Slice (siehe
+ * docs/epics/frontend-next/SLICE-5.2-ENVSETUP-KANON-MIGRATION.md) und hier
+ * out of scope.
+ */
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Field from '../ui/Field.vue'
 import Select from '../ui/Select.vue'
-import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 
 const { t } = useI18n()
 
@@ -13,7 +24,6 @@ const props = defineProps({
   customModel: { type: String, default: '' },
   language: { type: String, required: true },
   loadingModels: { type: Boolean, default: false },
-  llmProfileId: { type: [String, null], default: null },
   runtimeProviderEnabled: { type: Boolean, default: false },
   serverDefaultRequiresOllama: { type: Boolean, default: false },
   ollamaReachable: { type: Boolean, default: false },
@@ -35,7 +45,6 @@ const emit = defineEmits([
   'update:modelOption',
   'update:customModel',
   'update:language',
-  'update:llmProfileId',
   'update:runtimeProvider',
   'update:runtimeApiKey',
   'update:runtimeBaseUrl',
@@ -52,25 +61,15 @@ const showRuntimeOptions = ref(false)
     </p>
 
     <div class="setup-grid">
-      <!-- LLM-Profil (optional, schlägt Model/Provider-Overrides) -->
-      <div class="setup-cell setup-cell--wide">
-        <LlmProfilePicker :model-value="llmProfileId" @update:model-value="emit('update:llmProfileId', $event)">
-          <template #hint>
-            <span class="hint">{{ t('step2.llmProfile.hint') }}</span>
-          </template>
-        </LlmProfilePicker>
-      </div>
-
       <!-- Model -->
-      <div class="setup-cell" :class="{ 'is-overridden-by-profile': llmProfileId }">
+      <div class="setup-cell">
         <Select
           :model-value="modelOption"
           :label="t('step2.model.label')"
           :options="modelOptions"
           @update:model-value="emit('update:modelOption', $event)"
         />
-        <p class="hint" v-if="llmProfileId">{{ t('step2.llmProfile.modelIgnored') }}</p>
-        <p class="hint" v-else-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
+        <p class="hint" v-if="loadingModels">{{ t('step2.model.loadingModels') }}</p>
         <p class="hint" v-else-if="!runtimeProviderEnabled && serverDefaultRequiresOllama && !ollamaReachable">{{ t('step2.model.noOllama') }}</p>
         <p class="hint" v-else-if="!runtimeProviderEnabled && defaultProvider === 'openai'">{{ t('step2.model.openAiDefault') }}</p>
       </div>
@@ -171,7 +170,6 @@ const showRuntimeOptions = ref(false)
 }
 .setup-cell { display: flex; flex-direction: column; gap: var(--s-2); }
 .setup-cell--wide { grid-column: 1 / -1; }
-.setup-cell.is-overridden-by-profile { opacity: 0.6; }
 
 .runtime-toggle {
   display: flex;

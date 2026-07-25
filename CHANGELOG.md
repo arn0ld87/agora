@@ -5,6 +5,40 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Legacy-Modell-Picker konsolidiert: `LlmProfilePicker` → `AiModelPicker` — 2026-07-25, Issue #834)
+
+- **`frontend/src/components/Step4Report.vue`** — der v3-Profil-Picker-Block (`LlmProfilePicker`
+  + `agora.report.llmProfileId`-Persistenz) ist entfernt. Der kanonische `AiModelPicker`
+  (über `ReportModelControls`) war hier bereits aktiv; beide Sinken gleichzeitig hätten den
+  Report-Request mit HTTP 400 abgelehnt (`ai_model_ref` und `llm_profile_id` schließen sich
+  gegenseitig aus). `buildModelSelection()` sendet jetzt ausschließlich `ai_model_ref`.
+- **`frontend/src/components/step4/ReportBranchControls.vue`** — auf `AiModelPicker`
+  (`mode="chat"`) migriert. Der frühere `llm_profile_id`-Branch-Override war bereits
+  funktionslos, weil `backend/app/services/branching_service.py` dieses Feld nie akzeptiert hat.
+  Payload-seitig gibt es genau eine Senke (`llm_model`-String), UI-seitig aber zwei
+  Schreibpfade auf dasselbe Feld (Picker-Auswahl und das weiterhin vorhandene Freitext-Input) —
+  die zuletzt ausgeführte Bearbeitung gewinnt, jetzt in beide Richtungen testabgesichert.
+  `provider_connection_id` geht dabei verloren (nur `model_id` wird gesendet), weil der
+  Branch-Override backend-seitig keine Connection-Referenz kennt — diese Lücke trägt Issue #886.
+- **`frontend/src/components/step2/EnvSetupModelPanel.vue`** — Legacy-Picker samt
+  `is-overridden-by-profile`-Zustand entfernt. Kein Ersatz durch `AiModelPicker` an dieser
+  Stelle: der Profil-Pfad ist backend-seitig weiterhin live
+  (`backend/app/api/simulation_prepare.py` expandiert `llm_profile_id` zu
+  `llm_model="profile:<id>"`); eine vollständige Kanon-Migration ist ein eigener Slice
+  (`docs/epics/frontend-next/SLICE-5.2-ENVSETUP-KANON-MIGRATION.md`, Issue #890).
+  `Step2EnvSetup.vue`s `triggerPrepare()`-Payload bleibt unverändert erhalten.
+  **Entfallene Nutzerfähigkeit:** Ein im Projekt persistiertes LLM-Profil lässt sich in
+  Step 2 nicht mehr aktiv auf „Server-Standard" (null) zurücksetzen — `llmProfileId` kommt
+  jetzt rein lesend aus `props.projectData`. Laut `simulation_prepare.py` unterdrückte
+  dieser Reset lediglich den Fallback auf das Projektprofil, mit Nebenwirkung auf die
+  Re-Prepare-Semantik (Issue #888).
+- **`frontend/src/components/llm/LlmProfilePicker.vue`** + Spec gelöscht — keine produktiven
+  Consumer mehr. Tote i18n-Keys `llmProfilePicker.*`, `step2.llmProfile.*`, `step4.llmProfile.*`
+  aus `de.json`/`en.json` entfernt.
+- Verifikation: neue/angepasste Vitest-Specs für alle drei Consumer (u. a.
+  `frontend/src/components/step4/__tests__/ReportBranchControls.spec.ts`, neu), Regressionscheck
+  `rg "LlmProfilePicker" frontend/src frontend/tests` liefert keinen Treffer mehr.
+
 ### Fixed (Frontend/API: Wortgrenzen im ERROR_PATTERN + redundantes `all_actions_count` entfernt — 2026-07-24, PR #862)
 
 - **`frontend/src/utils/errorLinePattern.ts` (neu)** — das Regex

@@ -293,10 +293,6 @@
       "noDbKeyBanner": "Für {provider} ist in Einstellungen → LLM-Anbieter kein API-Schlüssel hinterlegt. Bitte dort speichern oder hier eingeben.",
       "checkingKey": "Key-Status wird geprüft…"
     },
-    "llmProfile": {
-      "hint": "Wird für Persona-Generierung genutzt.",
-      "modelIgnored": "Wird vom Profil überschrieben."
-    },
     "personas": {
       "title": "Personas generieren",
       "count": "Anzahl Agenten",
@@ -557,8 +553,12 @@
       "placeholder": "Modell wählen …",
       "regenerate": "Neu generieren"
     },
-    "llmProfile": {
-      "hint": "Wird für Report-Generierung genutzt."
+    "branch": {
+      "namePlaceholder": "Branch-Name",
+      "modelPlaceholder": "LLM-Modell-Override",
+      "languagePlaceholder": "Sprache",
+      "maxAgentsPlaceholder": "Max. Agenten",
+      "create": "Branch erstellen"
     },
     "quote": {
       "openSource": "Quelle öffnen"
@@ -1342,13 +1342,6 @@
   },
   "upload": {
     "pdfVisionDisabledHint": "PDF-Vision-Auswertung ist standardmäßig aus. Aktivieren über ENABLE_PDF_VISION=true (Cloud-Calls + Latenz)."
-  },
-  "llmProfilePicker": {
-    "label": "LLM-Profil (optional)",
-    "serverDefault": "Server-Standard (aktives Profil)",
-    "loading": "Profile laden…",
-    "error": "Profile konnten nicht geladen werden.",
-    "defaultSuffix": "default"
   },
   "onboarding": {
     "wizard": {

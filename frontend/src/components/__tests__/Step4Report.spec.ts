@@ -157,7 +157,6 @@ const globalStubs = {
   Badge: { template: '<span><slot /></span>' },
   Kicker: { template: '<span><slot /></span>' },
   Select: { template: '<select />' },
-  LlmProfilePicker: true,
   ReportBranchControls: true,
 }
 
@@ -999,16 +998,6 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     expect(payload.llm_model).toBeUndefined()
   })
 
-  it('behält llm_profile_id bei, wenn nur der Kanon-Default angezeigt wird (kein Pick)', async () => {
-    mockEffectiveRef.value = PICK
-    localStorageMock.setItem('agora.report.llmProfileId', 'prof-stale')
-
-    const payload = await callRegenerate()
-
-    expect(payload.ai_model_ref).toBeUndefined()
-    expect(payload.llm_profile_id).toBe('prof-stale')
-  })
-
   it('sendet ohne expliziten Pick keinen erfundenen Override', async () => {
     // effectiveRef bleibt null, kein Profil im Storage.
     const payload = await callRegenerate()
@@ -1019,12 +1008,26 @@ describe('Step4Report — Report-Route-SSoT-Payload (#817)', () => {
     expect(payload.simulation_id).toBe('sim_test01')
   })
 
-  it('fällt ohne Pick auf das Legacy-llm_profile_id zurück', async () => {
+  // Issue #834: der v3-Profil-Legacy-Picker (Legacy-Profil-Senke) wurde
+  // entfernt — es gibt keinen Fallback auf agora.report.llmProfileId mehr,
+  // unabhängig vom localStorage-Inhalt. buildModelSelection() kennt nur noch
+  // ai_model_ref.
+  it('ignoriert das Legacy-Profil in localStorage vollständig (kein Fallback mehr)', async () => {
     localStorageMock.setItem('agora.report.llmProfileId', 'prof-legacy')
 
     const payload = await callRegenerate()
 
-    expect(payload.llm_profile_id).toBe('prof-legacy')
+    expect(payload.llm_profile_id).toBeUndefined()
     expect(payload.ai_model_ref).toBeUndefined()
+    expect(payload.llm_model).toBeUndefined()
+    // Component liest/schreibt den Legacy-Key nicht mehr — Wert bleibt unangetastet.
+    expect(localStorageMock.getItem('agora.report.llmProfileId')).toBe('prof-legacy')
+  })
+
+  it('rendert keinen Legacy-Profil-Picker mehr (Report-Profil-Block entfernt)', async () => {
+    const wrapper = mountComponent({ simulationId: 'sim_test01' })
+    await flushPromises()
+
+    expect(wrapper.find('.report-profile-picker').exists()).toBe(false)
   })
 })

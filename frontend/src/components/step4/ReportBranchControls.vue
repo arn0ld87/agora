@@ -1,13 +1,45 @@
 <script setup lang="ts">
+/**
+ * ReportBranchControls — Modellauswahl für Branch-Overrides (Issue #834).
+ *
+ * backend/app/services/branching_service.py erlaubt `llm_profile_id` nicht
+ * als Branch-Override (nur llm_model, language, max_agents, time_config,
+ * enable_twitter, enable_reddit, persona_additions, persona_removals) — der
+ * frühere v3-Profil-Legacy-Picker war hier funktionslos. Migriert auf den
+ * kanonischen AiModelPicker.
+ *
+ * Genau EINE Senke im Payload (branchForm.llm_model als String), aber ZWEI
+ * Schreibpfade in der UI, die beide auf dasselbe Feld zielen:
+ *   1. `watch(modelRef, …)` schreibt bei jeder Picker-Auswahl.
+ *   2. Das Freitext-Input ist per `v-model="branchForm.llm_model"` direkt
+ *      an dasselbe Feld gebunden.
+ * Es gewinnt jeweils die zuletzt ausgeführte Bearbeitung, unkommentiert für
+ * die Nutzerin: ein Picker-Pick überschreibt zuvor getippten Freitext
+ * kommentarlos, und umgekehrt aktualisiert Freitext-Eingabe NICHT die
+ * Picker-Anzeige (`modelRef` bleibt auf der alten Auswahl stehen) — Picker
+ * und Freitext-Feld können danach auseinanderlaufen. Das ist bestehendes,
+ * jetzt getestetes Verhalten (siehe ReportBranchControls.spec.ts), keine
+ * UX-Empfehlung.
+ *
+ * Ausserdem verwirft die Auswahl `provider_connection_id` — es wird nur
+ * `model_id` als String gesendet, weil `allowed_override_keys` im
+ * Branch-Override backend-seitig keine Connection-Referenz kennt, nur den
+ * `llm_model`-String. Der Picker suggeriert optisch eine connection-
+ * gebundene Route, die im Branch-Override nicht ankommt — diese Lücke
+ * trägt Issue #886.
+ */
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
-import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
+import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   create: [form: {
     branch_name: string
     llm_model: string
-    llm_profile_id: string
     language: string
     max_agents: string
   }]
@@ -20,39 +52,57 @@ defineProps<{
 const branchForm = ref({
   branch_name: '',
   llm_model: '',
-  llm_profile_id: '',
   language: '',
   max_agents: '',
 })
 
-const profileIdModel = ref<string | null>(null)
-watch(profileIdModel, (val) => {
-  branchForm.value.llm_profile_id = val ?? ''
+const modelRef = ref<AiModelRef | null>(null)
+watch(modelRef, (val) => {
+  branchForm.value.llm_model = val?.model_id ?? ''
 })
 </script>
 
 <template>
   <div class="branch-controls">
-    <input v-model="branchForm.branch_name" class="model-input" type="text" placeholder="Branch name" />
+    <input
+      v-model="branchForm.branch_name"
+      class="model-input"
+      type="text"
+      :placeholder="t('step4.branch.namePlaceholder')"
+      :aria-label="t('step4.branch.namePlaceholder')"
+    />
     <div class="branch-profile-cell">
-      <LlmProfilePicker v-model="profileIdModel" />
+      <AiModelPicker v-model="modelRef" mode="chat" />
     </div>
     <input
       v-model="branchForm.llm_model"
       class="model-input"
-      :class="{ 'is-overridden-by-profile': profileIdModel }"
       type="text"
-      placeholder="LLM model override"
+      :placeholder="t('step4.branch.modelPlaceholder')"
+      :aria-label="t('step4.branch.modelPlaceholder')"
     />
-    <input v-model="branchForm.language" class="model-input" type="text" placeholder="language" />
-    <input v-model="branchForm.max_agents" class="model-input" type="number" min="1" placeholder="max agents" />
+    <input
+      v-model="branchForm.language"
+      class="model-input"
+      type="text"
+      :placeholder="t('step4.branch.languagePlaceholder')"
+      :aria-label="t('step4.branch.languagePlaceholder')"
+    />
+    <input
+      v-model="branchForm.max_agents"
+      class="model-input"
+      type="number"
+      min="1"
+      :placeholder="t('step4.branch.maxAgentsPlaceholder')"
+      :aria-label="t('step4.branch.maxAgentsPlaceholder')"
+    />
     <Button
       variant="ghost"
       :loading="branchBusy"
       :disabled="branchBusy"
       @click="emit('create', { ...branchForm })"
     >
-      Create Branch
+      {{ t('step4.branch.create') }}
     </Button>
   </div>
 </template>
@@ -79,9 +129,6 @@ watch(profileIdModel, (val) => {
 }
 .model-input:focus {
   border-color: var(--accent);
-}
-.model-input.is-overridden-by-profile {
-  opacity: 0.6;
 }
 @media (max-width: 720px) {
   .branch-controls {

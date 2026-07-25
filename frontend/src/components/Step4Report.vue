@@ -12,7 +12,6 @@ import { createSimulationBranch } from '../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
-import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'
 import ReportModelControls from './step4/ReportModelControls.vue'
 import ReportModeControls from './step4/ReportModeControls.vue'
 import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
@@ -121,13 +120,6 @@ function onReportRoutePicked(val: AiModelRef | null) {
 }
 const isRegenerating = ref(false)
 
-const STORAGE_REPORT_PROFILE_ID = 'agora.report.llmProfileId'
-const llmProfileId = ref<string | null>(localStorage.getItem(STORAGE_REPORT_PROFILE_ID) || null)
-watch(llmProfileId, (val) => {
-  if (val) localStorage.setItem(STORAGE_REPORT_PROFILE_ID, val)
-  else localStorage.removeItem(STORAGE_REPORT_PROFILE_ID)
-})
-
 const STORAGE_REPORT_MODE = 'agora.reportMode'
 function resolveStoredReportMode(): ReportMode {
   const raw = localStorage.getItem(STORAGE_REPORT_MODE)
@@ -146,18 +138,18 @@ function effectiveReportModel(): string | null {
 }
 
 /**
- * Baut die Modellauswahl für den Report-Request (Issue #817).
+ * Baut die Modellauswahl für den Report-Request (Issue #817, konsolidiert in
+ * Issue #834).
  *
  * Nur ein expliziter Picker-Pick (`reportRouteOverride`) wird als Request-
- * Override für genau diese Regenerierung gesendet und gewinnt vor dem Legacy-
- * Profil. Beides gleichzeitig zu senden würde das Backend mit HTTP 400
- * ablehnen — deshalb wird bei gesetztem Override weder `llm_profile_id` noch
- * `llm_model` mitgeschickt. Ein beim Mount aus dem Kanon übernommener
- * Anzeige-Default (`reportRoute`) erzeugt KEINEN Override: ohne echte
- * Nutzerwahl bleiben `llm_profile_id` beziehungsweise die serverseitigen
- * Stage-/Workspace-Defaults unverändert wirksam.
+ * Override für genau diese Regenerierung gesendet. Ein beim Mount aus dem
+ * Kanon übernommener Anzeige-Default (`reportRoute`) erzeugt KEINEN Override:
+ * ohne echte Nutzerwahl bleiben die serverseitigen Stage-/Workspace-Defaults
+ * unverändert wirksam. Der Legacy-Profil-Zweig (`llm_profile_id` über
+ * v3-Profil-Legacy-Picker) wurde mit Issue #834 entfernt — es gibt nur noch genau
+ * eine Auswahlsenke (`ai_model_ref`).
  */
-function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref' | 'llm_profile_id'> {
+function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref'> {
   if (reportRouteOverride.value) {
     return {
       ai_model_ref: {
@@ -166,9 +158,6 @@ function buildModelSelection(): Pick<GenerateReportData, 'ai_model_ref' | 'llm_p
         source: reportRouteOverride.value.source ?? 'explicit',
       },
     }
-  }
-  if (llmProfileId.value) {
-    return { llm_profile_id: llmProfileId.value }
   }
   return {}
 }
@@ -378,14 +367,13 @@ const {
 })
 
 async function createBranchFromReport(branchForm: {
-  branch_name: string; llm_model: string; llm_profile_id: string; language: string; max_agents: string
+  branch_name: string; llm_model: string; language: string; max_agents: string
 }) {
   const simulationId = resolvedSimulationId.value || props.simulationId
   if (!simulationId || !branchForm.branch_name.trim()) return
   branchBusy.value = true
   try {
     const overrides: Record<string, unknown> = {}
-    if (branchForm.llm_profile_id) overrides.llm_profile_id = branchForm.llm_profile_id
     if (branchForm.llm_model.trim()) overrides.llm_model = branchForm.llm_model.trim()
     if (branchForm.language.trim()) overrides.language = branchForm.language.trim()
     if (branchForm.max_agents !== '') overrides.max_agents = Number(branchForm.max_agents)
@@ -463,16 +451,10 @@ onUnmounted(stopPolling)
           </div>
         </div>
 
-        <div v-if="resolvedSimulationId || simulationId" class="report-profile-picker">
-          <LlmProfilePicker v-model="llmProfileId">
-            <template #hint><span class="hint">{{ t('step4.llmProfile.hint') }}</span></template>
-          </LlmProfilePicker>
-        </div>
         <ReportModelControls
           v-if="resolvedSimulationId || simulationId"
           :model-value="reportRoute"
           :is-regenerating="isRegenerating"
-          :class="{ 'is-overridden-by-profile': llmProfileId }"
           @update:model-value="onReportRoutePicked"
           @regenerate="regenerateWithModel"
         />
@@ -567,10 +549,7 @@ onUnmounted(stopPolling)
 .report-confirm-desc { color: var(--fg-body); margin: 0; }
 .report-confirm-actions { display: flex; gap: var(--s-3); align-items: center; }
 .card-head-actions { display: flex; align-items: center; gap: var(--s-3); }
-.report-profile-picker { margin-bottom: var(--s-3); }
-.is-overridden-by-profile { opacity: 0.6; }
 .stop-btn-wrap { display: inline-flex; }
 .stop-btn { color: var(--fg-muted); }
 .stop-btn--active { color: var(--status-red, var(--status-error)); }
-.hint { font-family: var(--ff-mono); font-size: 11px; color: var(--fg-muted); }
 </style>
