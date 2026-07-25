@@ -198,9 +198,23 @@ def test_fix_truncated_json_method_removed():
     )
 
 
-def test_try_fix_json_truncated_input_recovers_via_centralized_helper():
+def test_try_fix_json_truncated_input_recovers_via_centralized_helper(monkeypatch):
     """Issue #869: _try_fix_json delegates truncation repair to the centralized helper."""
     from app.llm.json_mode import _try_repair_truncated_json
+
+    # Spy that delegates to the real helper — proves _try_fix_json actually
+    # routes through the centralized function (and not via a reintroduced
+    # local repair path). Issue #869.
+    calls = []
+
+    def spy(payload):
+        calls.append(payload)
+        return _try_repair_truncated_json(payload)
+
+    monkeypatch.setattr(
+        "app.services.oasis_profile_generator._try_repair_truncated_json",
+        spy,
+    )
 
     gen = _make_generator()
     # Truncated mid-string: opening brace, key, value cut before the closing quote.
@@ -224,6 +238,10 @@ def test_try_fix_json_truncated_input_recovers_via_centralized_helper():
         f"truncated input must be marked _fixed=True, got: {result!r}"
     )
     assert "bio" in result
+    assert calls == [truncated], (
+        f"_try_fix_json must delegate to the centralized helper with the original "
+        f"truncated payload, got spy calls: {calls!r}"
+    )
 
 
 def test_try_fix_json_valid_input_parses_without_repair():
