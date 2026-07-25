@@ -553,6 +553,13 @@
       "placeholder": "Modell wählen …",
       "regenerate": "Neu generieren"
     },
+    "branch": {
+      "namePlaceholder": "Branch-Name",
+      "modelPlaceholder": "LLM-Modell-Override",
+      "languagePlaceholder": "Sprache",
+      "maxAgentsPlaceholder": "Max. Agenten",
+      "create": "Branch erstellen"
+    },
     "quote": {
       "openSource": "Quelle öffnen"
     },

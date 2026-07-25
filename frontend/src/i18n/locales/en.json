@@ -553,6 +553,13 @@
       "placeholder": "Select model …",
       "regenerate": "Regenerate"
     },
+    "branch": {
+      "namePlaceholder": "Branch name",
+      "modelPlaceholder": "LLM model override",
+      "languagePlaceholder": "Language",
+      "maxAgentsPlaceholder": "Max agents",
+      "create": "Create branch"
+    },
     "quote": {
       "openSource": "Open source"
     },

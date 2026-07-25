@@ -29,9 +29,12 @@
  * trägt Issue #886.
  */
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Button from '@/components/v4/forms/Button.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import type { AiModelRef } from '@/contracts/aiModelRef'
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   create: [form: {
@@ -61,7 +64,13 @@ watch(modelRef, (val) => {
 
 <template>
   <div class="branch-controls">
-    <input v-model="branchForm.branch_name" class="model-input" type="text" placeholder="Branch name" />
+    <input
+      v-model="branchForm.branch_name"
+      class="model-input"
+      type="text"
+      :placeholder="t('step4.branch.namePlaceholder')"
+      :aria-label="t('step4.branch.namePlaceholder')"
+    />
     <div class="branch-profile-cell">
       <AiModelPicker v-model="modelRef" mode="chat" />
     </div>
@@ -69,17 +78,31 @@ watch(modelRef, (val) => {
       v-model="branchForm.llm_model"
       class="model-input"
       type="text"
-      placeholder="LLM model override"
+      :placeholder="t('step4.branch.modelPlaceholder')"
+      :aria-label="t('step4.branch.modelPlaceholder')"
     />
-    <input v-model="branchForm.language" class="model-input" type="text" placeholder="language" />
-    <input v-model="branchForm.max_agents" class="model-input" type="number" min="1" placeholder="max agents" />
+    <input
+      v-model="branchForm.language"
+      class="model-input"
+      type="text"
+      :placeholder="t('step4.branch.languagePlaceholder')"
+      :aria-label="t('step4.branch.languagePlaceholder')"
+    />
+    <input
+      v-model="branchForm.max_agents"
+      class="model-input"
+      type="number"
+      min="1"
+      :placeholder="t('step4.branch.maxAgentsPlaceholder')"
+      :aria-label="t('step4.branch.maxAgentsPlaceholder')"
+    />
     <Button
       variant="ghost"
       :loading="branchBusy"
       :disabled="branchBusy"
       @click="emit('create', { ...branchForm })"
     >
-      Create Branch
+      {{ t('step4.branch.create') }}
     </Button>
   </div>
 </template>

@@ -39,7 +39,18 @@ const buttonStub = {
   template: '<button @click="$emit(\'click\', $event)"><slot /></button>',
 }
 
-const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: {} } })
+// Leerer Katalog: vue-i18n gibt bei fehlendem Key den Key selbst zurueck.
+// Die Selektoren unten greifen deshalb auf `aria-label="step4.branch.*"` zu —
+// stabil gegen Uebersetzungsaenderungen, im Gegensatz zu Selektoren auf dem
+// sichtbaren Text. `missingWarn`/`fallbackWarn` aus, weil das Fehlen der Keys
+// hier gewollt ist (Repo-Konvention, vgl. step2/__tests__/QuotaPlanEditor.spec.ts).
+const i18n = createI18n({
+  legacy: false,
+  locale: 'de',
+  messages: { de: {} },
+  missingWarn: false,
+  fallbackWarn: false,
+})
 
 function mountRBC(props: { branchBusy?: boolean } = {}) {
   return mount(ReportBranchControls, {
@@ -93,7 +104,7 @@ describe('ReportBranchControls (Issue #834 — AiModelPicker-Migration)', () => 
     })
     await w.vm.$nextTick()
 
-    const input = w.find('input[placeholder="LLM model override"]')
+    const input = w.find('input[aria-label="step4.branch.modelPlaceholder"]')
     expect((input.element as HTMLInputElement).value).toBe('model-b')
   })
 
@@ -107,13 +118,13 @@ describe('ReportBranchControls (Issue #834 — AiModelPicker-Migration)', () => 
     await picker.vm.$emit('update:modelValue', null)
     await w.vm.$nextTick()
 
-    const input = w.find('input[placeholder="LLM model override"]')
+    const input = w.find('input[aria-label="step4.branch.modelPlaceholder"]')
     expect((input.element as HTMLInputElement).value).toBe('')
   })
 
   it('Freitext eingeben, danach Picker-Auswahl → create-Emit trägt das Picker-Modell, nicht den Freitext', async () => {
     const w = mountRBC()
-    const input = w.find('input[placeholder="LLM model override"]')
+    const input = w.find('input[aria-label="step4.branch.modelPlaceholder"]')
 
     await input.setValue('mein-custom-modell')
     expect((input.element as HTMLInputElement).value).toBe('mein-custom-modell')
@@ -148,7 +159,7 @@ describe('ReportBranchControls (Issue #834 — AiModelPicker-Migration)', () => 
     })
     await w.vm.$nextTick()
 
-    const input = w.find('input[placeholder="LLM model override"]')
+    const input = w.find('input[aria-label="step4.branch.modelPlaceholder"]')
     expect((input.element as HTMLInputElement).value).toBe('gpt-4o-mini')
 
     // Freitext-Eingabe nach dem Pick überschreibt branchForm.llm_model direkt —
