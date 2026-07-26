@@ -80,6 +80,16 @@ const i18n = createI18n({
   messages: { de, en },
 })
 
+// Issue #890: passiver Stub — vermeidet Pinia-Abhaengigkeit von
+// useAvailableModels() beim Mount von Step2EnvSetup (diese Suite prueft die
+// AiModelPicker-Integration nicht).
+const aiModelPickerStub = {
+  name: 'AiModelPicker',
+  props: ['modelValue', 'disabled', 'placeholder', 'mode', 'allowWorkspaceDefault', 'capabilityFilter'],
+  emits: ['update:modelValue'],
+  template: '<div data-testid="ai-model-picker-passive-stub" />',
+}
+
 const globalConfig = {
   plugins: [i18n],
   stubs: {
@@ -88,6 +98,7 @@ const globalConfig = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><slot /></div>' },
     Select: { template: '<select><slot /></select>' },
+    AiModelPicker: aiModelPickerStub,
   },
 }
 

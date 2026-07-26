@@ -48,6 +48,11 @@ const selectedProfile = ref(null)
 const llmProfileId = computed(() => props.projectData?.llm_profile_id ?? null)
 const showSessionKeyOverride = ref(false)
 
+// Issue #890: kanonische AiModelRef-Selektion. Einzige Modell-Kanon-Senke —
+// initial null, keine Persistenz. Gegenseitiger Ausschluss mit dem Runtime-
+// Provider-Pfad (siehe watch(runtimeProvider) unten).
+const selectedModelRef = ref(null)
+
 const {
   runtimeProvider,
   runtimeApiKey,
@@ -93,6 +98,17 @@ watchEffect(() => {
   }
   showSessionKeyOverride.value = false
 })
+
+// Issue #890: gegenseitiger Ausschluss Runtime-Provider vs. AiModelPicker.
+// Sobald der Runtime-Provider aktiv ist, wird die kanonische Modellauswahl
+// zurückgesetzt — der Legacy-Pfad (llm_provider + llm_model) bleibt aktiv.
+watch(runtimeProvider, (provider) => {
+  if (provider !== 'default') {
+    selectedModelRef.value = null
+  }
+})
+
+const modelPickerDisabled = computed(() => runtimeProvider.value !== 'default')
 
 // ----- Model + language picker (useEnvForm) -----
 const {
@@ -229,11 +245,15 @@ async function triggerPrepare() {
     use_llm_for_profiles: true,
     language: language.value,
   }
-  if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
-  const m = effectiveModel()
-  if (m) payload.llm_model = m
-  const provider = runtimePayload()
-  if (provider) payload.llm_provider = provider
+  if (selectedModelRef.value !== null) {
+    payload.ai_model_ref = { ...selectedModelRef.value, source: 'explicit' }
+  } else {
+    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
+    const m = effectiveModel()
+    if (m) payload.llm_model = m
+    const provider = runtimePayload()
+    if (provider) payload.llm_provider = provider
+  }
   if (useAgentCap.value && maxAgents.value > 0) {
     payload.max_agents = Math.max(10, maxAgents.value)
   }
@@ -292,6 +312,8 @@ onMounted(() => {
           v-model:runtime-api-key="runtimeApiKey"
           v-model:runtime-base-url="runtimeBaseUrl"
           v-model:show-session-key-override="showSessionKeyOverride"
+          v-model:model-ref="selectedModelRef"
+          :model-picker-disabled="modelPickerDisabled"
           :model-options="modelOptions"
           :loading-models="loadingModels"
           :runtime-provider-enabled="runtimeProviderEnabled"

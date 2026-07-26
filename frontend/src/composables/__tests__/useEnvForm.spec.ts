@@ -276,7 +276,7 @@ describe('useEnvForm', () => {
       expect(f.language.value).toBe('de')
     })
 
-    it('restauriert persistierten modelOption wenn er noch in der neuen Liste ist', async () => {
+    it('#890: modelOption wird NICHT mehr aus localStorage restauriert, auch wenn der Wert in der neuen Liste existiert', async () => {
       localStorageStub.setItem(STORAGE_MODEL, 'gemma3')
       mockedGetAvailableModels.mockResolvedValue({
         success: true,
@@ -292,12 +292,11 @@ describe('useEnvForm', () => {
       } as never)
 
       const f = useEnvForm({ t })
-      // Composable initially reads stored 'gemma3'
-      expect(f.modelOption.value).toBe('gemma3')
+      expect(f.modelOption.value).toBe('default')
 
       await f.loadModels()
-      // Still 'gemma3' because it exists in presets
-      expect(f.modelOption.value).toBe('gemma3')
+      // Storage-Cut: bleibt 'default', keine Restore-Logik mehr.
+      expect(f.modelOption.value).toBe('default')
     })
   })
 
@@ -363,58 +362,47 @@ describe('useEnvForm', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Case 6 — localStorage-Persistence Modellauswahl
+  // Case 6 — Storage-Cut Modellauswahl (Issue #890)
+  //
+  // useEnvForm persistiert Modellauswahl NICHT mehr — agora.lastModel /
+  // agora.lastCustomModel sind Legacy-Keys, die weder gelesen noch aktiv
+  // geloescht werden. Die kanonische Senke ist jetzt Step2EnvSetup.selectedModelRef
+  // (AiModelRef via AiModelPicker), nicht mehr modelOption/customModel.
   // -------------------------------------------------------------------------
 
-  describe('Case 6 — localStorage-Persistence: Modellauswahl', () => {
-    it('modelOption wird beim Mount aus localStorage geladen', () => {
-      localStorageStub.setItem(STORAGE_MODEL, 'custom')
-      const f = useEnvForm({ t })
-      expect(f.modelOption.value).toBe('custom')
-    })
+  describe('Case 6 — Storage-Cut: Modellauswahl wird NICHT mehr persistiert (#890)', () => {
+    it('vorhandene Legacy-Werte in localStorage werden NICHT restauriert — modelOption bleibt "default", customModel bleibt leer', () => {
+      localStorageStub.setItem(STORAGE_MODEL, 'irgendein-modell')
+      localStorageStub.setItem(STORAGE_CUSTOM_MODEL, 'irgendein-custom-modell')
 
-    it('fällt auf "default" zurück wenn kein localStorage-Eintrag', () => {
-      // localStorageStub is empty
       const f = useEnvForm({ t })
+
       expect(f.modelOption.value).toBe('default')
+      expect(f.customModel.value).toBe('')
     })
 
-    it('Änderung von modelOption schreibt in localStorage zurück', async () => {
+    it('Aenderung von modelOption schreibt NICHT mehr nach localStorage (und loescht Altwerte nicht aktiv)', async () => {
+      localStorageStub.setItem(STORAGE_MODEL, 'irgendein-modell')
+
       const f = useEnvForm({ t })
       f.modelOption.value = 'llama3'
 
       await nextTick()
       await nextTick()
 
-      expect(localStorageStub.getItem(STORAGE_MODEL)).toBe('llama3')
+      // Weder ueberschrieben noch geloescht — der Wert bleibt exakt der Alt-Wert.
+      expect(localStorageStub.getItem(STORAGE_MODEL)).toBe('irgendein-modell')
     })
 
-    it('Modellauswahl überlebt Mount-Cycle (neues Composable liest persistierten Wert)', async () => {
-      const f1 = useEnvForm({ t })
-      f1.modelOption.value = 'gemma3'
+    it('Aenderung von customModel schreibt NICHT mehr nach localStorage', async () => {
+      const f = useEnvForm({ t })
+      f.modelOption.value = 'custom'
+      f.customModel.value = 'my-custom-model'
 
       await nextTick()
       await nextTick()
 
-      // Simulate new mount by creating a new composable instance
-      const f2 = useEnvForm({ t })
-      expect(f2.modelOption.value).toBe('gemma3')
-    })
-
-    it('customModel wird persistiert und beim nächsten Mount wieder geladen', async () => {
-      const f1 = useEnvForm({ t })
-      f1.modelOption.value = 'custom'
-      f1.customModel.value = 'deepseek-v3.2:cloud'
-
-      await nextTick()
-      await nextTick()
-
-      expect(localStorageStub.getItem(STORAGE_CUSTOM_MODEL)).toBe('deepseek-v3.2:cloud')
-
-      const f2 = useEnvForm({ t })
-      expect(f2.modelOption.value).toBe('custom')
-      expect(f2.customModel.value).toBe('deepseek-v3.2:cloud')
-      expect(f2.effectiveModel()).toBe('deepseek-v3.2:cloud')
+      expect(localStorageStub.getItem(STORAGE_CUSTOM_MODEL)).toBeNull()
     })
   })
 })

@@ -94,6 +94,16 @@ const i18n = createI18n({
   messages: { de: {}, en: {} },
 })
 
+// Minimaler AiModelPicker-Stub, gemeinsam genutzt in Test-Suites, die den
+// Picker nicht selbst pruefen (vermeidet Pinia-Abhaengigkeit von
+// useAvailableModels() beim Mount von Step2EnvSetup — Issue #890).
+const passiveAiModelPickerStub = {
+  name: 'AiModelPicker',
+  props: ['modelValue', 'disabled', 'placeholder', 'mode', 'allowWorkspaceDefault', 'capabilityFilter'],
+  emits: ['update:modelValue'],
+  template: '<div data-testid="ai-model-picker-passive-stub" />',
+}
+
 const globalConfig = {
   plugins: [i18n],
   stubs: {
@@ -102,6 +112,7 @@ const globalConfig = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><slot /></div>' },
     Select: { template: '<select><slot /></select>' },
+    AiModelPicker: passiveAiModelPickerStub,
   },
 }
 
@@ -320,8 +331,176 @@ const globalConfigHints = {
     Kicker: { template: '<span><slot /></span>' },
     Field: { template: '<div><slot /></div>' },
     Select: { template: '<select><slot /></select>' },
+    AiModelPicker: passiveAiModelPickerStub,
   },
 }
+
+// ---------------------------------------------------------------------------
+// Issue #890 — kanonische AiModelRef-Selektion (Step 2)
+// ---------------------------------------------------------------------------
+
+const aiPickerStubModelRef = {
+  name: 'AiModelPicker',
+  props: ['modelValue', 'disabled', 'placeholder', 'mode', 'allowWorkspaceDefault', 'capabilityFilter'],
+  emits: ['update:modelValue'],
+  template:
+    '<div data-testid="ai-model-picker-stub" :data-disabled="disabled">'
+    + '<button data-testid="pick-explicit" @click="$emit(\'update:modelValue\', '
+    + "{ provider_connection_id: 'conn-x', model_id: 'model-x', source: 'explicit' })\">pick</button>"
+    + '<button data-testid="deselect-explicit" @click="$emit(\'update:modelValue\', null)">deselect</button>'
+    + '</div>',
+}
+
+const selectStubModelRef = {
+  name: 'SelectStub',
+  props: ['modelValue', 'label', 'options'],
+  emits: ['update:modelValue'],
+  template: '<select :data-label="label"></select>',
+}
+
+const globalConfigModelRef = {
+  plugins: [i18nHints],
+  stubs: {
+    Btn: { template: '<button><slot /></button>' },
+    Badge: { template: '<span><slot /></span>' },
+    Kicker: { template: '<span><slot /></span>' },
+    Field: { template: '<div><slot /></div>' },
+    Select: selectStubModelRef,
+    AiModelPicker: aiPickerStubModelRef,
+  },
+}
+
+describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorageMock.clear()
+    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: { ollama: [], presets: [], current_default: '' },
+    })
+    ;(prepareSimulation as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: {} })
+  })
+
+  async function triggerPrepare(wrapper: ReturnType<typeof mount>) {
+    await (wrapper.vm as unknown as { triggerPrepare: () => Promise<void> }).triggerPrepare()
+    await flushPromises()
+  }
+
+  function lastPayload(): Record<string, unknown> {
+    return (prepareSimulation as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0] as Record<string, unknown>
+  }
+
+  it('kein Projektprofil + keine Auswahl -> Payload enthaelt weder ai_model_ref noch llm_model', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-01', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload).not.toHaveProperty('ai_model_ref')
+    expect(payload).not.toHaveProperty('llm_model')
+    wrapper.unmount()
+  })
+
+  it('Projektprofil gesetzt + keine explizite Auswahl -> KEIN ai_model_ref, llm_profile_id wie bisher', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-02', projectData: { llm_profile_id: 'prof-xyz' }, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload).not.toHaveProperty('ai_model_ref')
+    expect(payload.llm_profile_id).toBe('prof-xyz')
+    wrapper.unmount()
+  })
+
+  it('explizite Auswahl -> genau ein ai_model_ref, kein llm_model/llm_profile_id/llm_provider', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-03', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="pick-explicit"]').trigger('click')
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-x',
+      model_id: 'model-x',
+      source: 'explicit',
+    })
+    expect(payload).not.toHaveProperty('llm_model')
+    expect(payload).not.toHaveProperty('llm_profile_id')
+    expect(payload).not.toHaveProperty('llm_provider')
+    wrapper.unmount()
+  })
+
+  it('explizite Auswahl schlaegt Projektprofil: nur ai_model_ref, kein llm_profile_id', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-04', projectData: { llm_profile_id: 'prof-xyz' }, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="pick-explicit"]').trigger('click')
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload.ai_model_ref).toBeTruthy()
+    expect(payload).not.toHaveProperty('llm_profile_id')
+    wrapper.unmount()
+  })
+
+  it('Deselektion: nach expliziter Auswahl wieder null -> Payload wieder ohne ai_model_ref, mit llm_profile_id wie im Ausgangszustand', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-05', projectData: { llm_profile_id: 'prof-xyz' }, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="pick-explicit"]').trigger('click')
+    await wrapper.find('[data-testid="deselect-explicit"]').trigger('click')
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload).not.toHaveProperty('ai_model_ref')
+    expect(payload.llm_profile_id).toBe('prof-xyz')
+    wrapper.unmount()
+  })
+
+  it('Runtime-Provider aktiv -> kein ai_model_ref, stattdessen llm_provider + llm_model wie bisher', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-06', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+
+    // Runtime-Provider-Panel aufklappen, dann ueber die Select-Stub-Komponente
+    // (die v-model:runtime-provider bedient) ein Nicht-Default emittieren.
+    const toggle = wrapper.find('.runtime-toggle')
+    expect(toggle.exists()).toBe(true)
+    await toggle.trigger('click')
+    await flushPromises()
+
+    const runtimeSelectComponent = wrapper
+      .findAllComponents(selectStubModelRef)
+      .find((c) => c.props('label') === de.step2.runtimeProvider.label)
+    expect(runtimeSelectComponent).toBeTruthy()
+    await runtimeSelectComponent!.vm.$emit('update:modelValue', 'openai')
+    await flushPromises()
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    expect(payload).not.toHaveProperty('ai_model_ref')
+    expect(payload.llm_provider).toBeTruthy()
+    wrapper.unmount()
+  })
+})
 
 describe('Step2EnvSetup — EnvSetupModelPanel ohne v3-Profil-Legacy-Picker (Issue #834)', () => {
   beforeEach(() => {
