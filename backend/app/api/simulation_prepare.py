@@ -269,17 +269,44 @@ def prepare_simulation():
             message=f"Project does not exist: {state.project_id}",
         )
 
-    # P5.3-Fix: Wenn Request kein Profil mitschickt (Frontend setzt bei
-    # Profil-Auswahl `STORAGE_MODEL=default`), das im Projekt persistierte
-    # Profil aus dem Ontology-Schritt als Default injizieren — sonst landet
-    # die Sim-Vorbereitung im Server-Default-Modell. Respektiert expliziten
-    # Single-Run-Override (analog graph.py / report.py).
+    # Profil-Routing (Issue #888). `llm_profile_id` ist eine Routing-Anweisung,
+    # kein Fallback-Unterdrücker — analog graph.py / report.py, wo das Feld
+    # ebenfalls echtes Routing auslöst.
+    #
+    # Vorher kehrte das Feld seine eigene Absicht um: ein mitgeschicktes
+    # `llm_profile_id` übersprang den P5.3-Fallback, ohne selbst irgendetwas
+    # aufzulösen (`expand_profile_in_data` reagiert nur auf ein `llm_model` mit
+    # `profile:`-Präfix). Der Standardfall — Projekt hat ein Profil, User lässt
+    # die Modellauswahl auf "default" — landete damit still im
+    # Server-Default-Modell.
+    #
+    # Das Profil wird bewusst NICHT hier zu `llm_model` expandiert, sondern als
+    # `llm_profile_id` an `seed_run_stage_routing` durchgereicht. Dessen
+    # Profil-Branch löst die aktivierte ProviderConnection auf und koppelt sie an
+    # deren gebundenes Secret (SSoT, Issue #817); die lokale Expansion würde
+    # stattdessen Endpoint und Key aus dem Legacy-Profil einbrennen und damit
+    # nach einer Connection- oder Secret-Rotation auf veraltete Credentials
+    # zeigen. Ein unauflösbares Profil wirft dort `ValueError` → HTTP 400 über
+    # `@handle_api_errors`, statt mit dem literalen Modellnamen `profile:<id>`
+    # in die Queue zu laufen.
+    #
+    # `default` ist die UI-Platzhalterwahl (`useEnvForm.effectiveModel()` liefert
+    # dafür `null`) und zählt deshalb nicht als explizite Modellwahl.
     _data_profile = (data.get('llm_profile_id') or '').strip() or None
+    _project_profile = (getattr(project, 'llm_profile_id', None) or '').strip() or None
     _data_model = (data.get('llm_model') or '').strip() or None
-    if not _data_profile and (not _data_model or _data_model.lower() == 'default'):
-        if getattr(project, 'llm_profile_id', None):
-            data['llm_model'] = f"profile:{project.llm_profile_id}"
-    # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
+    explicit_model_override = bool(_data_model and _data_model.lower() != 'default')
+    # Vor der Expansion festhalten: `expand_profile_in_data` schreibt einen
+    # `llm_provider`-Block aus dem Profil (Provider/Key/Base-URL) und würde
+    # `llm_runtime.enabled` sonst ununterscheidbar von einem echten
+    # Client-Provider-Override machen.
+    explicit_runtime_request = bool(data.get('llm_provider'))
+    # Request-Profil schlägt Projekt-Profil (Single-Run-Override), beide schlagen
+    # das Server-Default-Modell. Eine explizite Modellwahl schlägt alles.
+    routed_profile_id = None if explicit_model_override else (_data_profile or _project_profile)
+    # UI-Profile-Token expandieren: schickt der Client selbst ein
+    # `llm_model="profile:<id>"` (Legacy-Pfad aus `HeroNewRun.vue`), muss es hier
+    # aufgelöst werden — `seed_run_stage_routing` kennt nur das separate Feld.
     from ..utils.llm_profile_resolver import expand_profile_in_data
     expand_profile_in_data(data)
     llm_model_override = (data.get('llm_model') or '').strip() or None
@@ -296,7 +323,24 @@ def prepare_simulation():
         extra={'simulation_id': simulation_id},
     )
 
-    if not force_regenerate and not llm_model_override and not llm_runtime.enabled:
+    # Der "bereits vorbereitet"-Kurzschluss hängt bewusst an der *expliziten*
+    # Client-Wahl, nicht an `llm_model_override`/`llm_runtime.enabled` (Issue
+    # #888). Wäre er an sie gebunden, würde er für jedes Projekt mit hinterlegtem
+    # Profil nie mehr greifen und jedes Betreten von Step 2 eine vollständige
+    # Neu-Vorbereitung samt Persona-Neugenerierung auslösen.
+    #
+    # Ein Request-Profil, das vom Projekt-Default *abweicht*, ist dagegen sehr
+    # wohl eine explizite Wahl: sonst käme der Endpoint mit `already_prepared`
+    # zurück und die Personas blieben die des vorherigen Modells — im Widerspruch
+    # zur Präzedenz "Request-Profil schlägt Projekt-Profil". Dasselbe Profil
+    # erneut zu schicken bleibt der billige Revisit.
+    explicit_profile_override = bool(_data_profile and _data_profile != _project_profile)
+    client_requested_override = (
+        explicit_model_override
+        or explicit_profile_override
+        or (llm_runtime.enabled and explicit_runtime_request)
+    )
+    if not force_regenerate and not client_requested_override:
         logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
         is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
         logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")
@@ -403,6 +447,7 @@ def prepare_simulation():
         "persona_generation",
         llm_model_override=llm_model_override,
         llm_runtime=llm_runtime,
+        llm_profile_id=routed_profile_id,
     )
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")

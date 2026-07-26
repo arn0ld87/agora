@@ -89,6 +89,14 @@ def test_prepare_endpoint_uses_resolved_route_for_legacy_service_call(client, mo
         lambda _storage: MagicMock(filter_defined_entities=MagicMock(return_value=fake_filtered)),
     )
     monkeypatch.setattr("app.api.simulation_prepare.seed_run_stage_routing", lambda *a, **k: None)
+    # Seit #888 überspringt ein profil-abgeleitetes Modell den
+    # "bereits vorbereitet"-Kurzschluss nicht mehr, d. h. der Check läuft hier
+    # jetzt tatsächlich und bräuchte einen initialisierten
+    # SimulationArtifactStore. Diese Suite prüft Key-Routing, nicht den
+    # Prepared-State — deshalb fest auf "nicht vorbereitet".
+    monkeypatch.setattr(
+        "app.api.simulation_prepare._check_simulation_prepared", lambda _sid: (False, {})
+    )
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
     monkeypatch.setattr("app.api.simulation_prepare.resolve_route_api_key", lambda *_a, **_k: "sk-route")
     monkeypatch.setattr(
@@ -172,6 +180,14 @@ def _run_prepare_with_route(client, monkeypatch, *, resolved_route, resolved_api
         lambda _storage: MagicMock(filter_defined_entities=MagicMock(return_value=fake_filtered)),
     )
     monkeypatch.setattr("app.api.simulation_prepare.seed_run_stage_routing", lambda *a, **k: None)
+    # Seit #888 überspringt ein profil-abgeleitetes Modell den
+    # "bereits vorbereitet"-Kurzschluss nicht mehr, d. h. der Check läuft hier
+    # jetzt tatsächlich und bräuchte einen initialisierten
+    # SimulationArtifactStore. Diese Suite prüft Key-Routing, nicht den
+    # Prepared-State — deshalb fest auf "nicht vorbereitet".
+    monkeypatch.setattr(
+        "app.api.simulation_prepare._check_simulation_prepared", lambda _sid: (False, {})
+    )
     monkeypatch.setattr("app.api.simulation_prepare.StageModelRouter", FakeRouter)
     monkeypatch.setattr("app.api.simulation_prepare.resolve_route_api_key", lambda *_a, **_k: resolved_api_key)
     monkeypatch.setattr(
