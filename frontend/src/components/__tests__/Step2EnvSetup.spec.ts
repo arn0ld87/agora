@@ -477,6 +477,44 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     wrapper.unmount()
   })
 
+  it('explizite Auswahl gefolgt von Runtime-Provider-Aktivierung -> selectedModelRef wird zurueckgesetzt, Payload sendet nie beide Felder', async () => {
+    const wrapper = mount(Step2EnvSetup, {
+      props: { simulationId: 'sim-890-07', projectData: undefined, graphData: undefined, systemLogs: [] },
+      global: globalConfigModelRef,
+    })
+    await flushPromises()
+
+    // Schritt 1: Nutzer waehlt ZUERST explizit ein Modell.
+    await wrapper.find('[data-testid="pick-explicit"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as unknown as { selectedModelRef: unknown }).selectedModelRef).toEqual({
+      provider_connection_id: 'conn-x',
+      model_id: 'model-x',
+      source: 'explicit',
+    })
+
+    // Schritt 2: DANACH wird der Runtime-Provider auf einen Nicht-Default-Wert
+    // gesetzt. EnvSetupModelPanel blendet den Runtime-Block aus, sobald
+    // selectedModelRef gesetzt ist (runtimeProviderBlockDisabled) — die Select-
+    // Komponente ist dann UI-seitig nicht mehr erreichbar. Der watch(runtimeProvider)
+    // in Step2EnvSetup.vue reagiert aber auf die reaktive Ref selbst, nicht auf
+    // einen UI-Klick — wir setzen sie daher direkt (Dev-Mode-Expose von
+    // script-setup-Bindings ueber wrapper.vm, siehe Home.spec.ts-Pattern), um
+    // exakt den Codepfad zu treffen, den die Lead-Review verifiziert haben will.
+    ;(wrapper.vm as unknown as { runtimeProvider: string }).runtimeProvider = 'openai'
+    await flushPromises()
+
+    await triggerPrepare(wrapper)
+
+    const payload = lastPayload()
+    // Der watch(runtimeProvider)-Reset in Step2EnvSetup.vue muss selectedModelRef
+    // zurueckgesetzt haben — ai_model_ref darf NICHT im Payload sein.
+    expect(payload).not.toHaveProperty('ai_model_ref')
+    // Stattdessen greift der Legacy-Runtime-Provider-Pfad.
+    expect(payload.llm_provider).toBeTruthy()
+    wrapper.unmount()
+  })
+
   it('Runtime-Provider aktiv -> kein ai_model_ref, stattdessen llm_provider + llm_model wie bisher', async () => {
     const wrapper = mount(Step2EnvSetup, {
       props: { simulationId: 'sim-890-06', projectData: undefined, graphData: undefined, systemLogs: [] },

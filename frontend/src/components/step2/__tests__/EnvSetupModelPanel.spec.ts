@@ -112,4 +112,32 @@ describe('EnvSetupModelPanel — AiModelPicker-Integration (#890)', () => {
     expect(w.emitted('update:modelOption')).toBeUndefined()
     expect(w.emitted('update:customModel')).toBeUndefined()
   })
+
+  // Lücke 2 (Lead-Review, Spec-Findings): runtimeProviderBlockDisabled war
+  // ungetestet. Der Runtime-Provider-Block muss erreichbar sein, solange
+  // keine kanonische Auswahl aktiv ist (modelRef === null), und ausgeblendet
+  // werden, sobald sie aktiv ist (modelRef !== null) — Backend-400-Guard.
+  describe('runtimeProviderBlockDisabled — gegenseitiger Ausschluss (Issue #890)', () => {
+    it('modelRef=null -> Runtime-Provider-Toggle ist NICHT disabled und oeffnet den Runtime-Block', async () => {
+      const w = mountPanel({ modelRef: null })
+      const toggle = w.find('.runtime-toggle')
+      expect(toggle.attributes('disabled')).toBeUndefined()
+
+      await toggle.trigger('click')
+
+      expect(w.find('.runtime-panel').exists()).toBe(true)
+    })
+
+    it('modelRef gesetzt -> Runtime-Provider-Toggle ist disabled und der Runtime-Block bleibt ausgeblendet', async () => {
+      const w = mountPanel({
+        modelRef: { provider_connection_id: 'conn-a', model_id: 'model-a', source: 'explicit' },
+      })
+      const toggle = w.find('.runtime-toggle')
+      expect(toggle.attributes('disabled')).toBeDefined()
+
+      await toggle.trigger('click')
+
+      expect(w.find('.runtime-panel').exists()).toBe(false)
+    })
+  })
 })
