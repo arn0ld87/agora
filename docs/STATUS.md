@@ -113,7 +113,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. Die übrigen v4-Views und `/agora-2026` existieren weiterhin parallel
 - ein React-/Lovable-Neubau ist beschrieben, aber nicht als Zielentscheidung freigegeben
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
-- der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`, `@deprecated` Slice 5.5) ist mit der connection-gebundenen `AiModelRef` unvereinbar und in Step 2 daher gegenseitig ausgeschlossen. Solange er existiert, hält `useEnvForm` weiterhin `modelOption`/`customModel` — allerdings ohne Persistenz. Die Ablösung ist offen
+- der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`, `@deprecated` Slice 5.5) ist mit der connection-gebundenen `AiModelRef` unvereinbar und in Step 2 daher gegenseitig ausgeschlossen. Solange er existiert, hält `useEnvForm` weiterhin `modelOption`/`customModel` — allerdings ohne Persistenz. Die Ablösung wird in [Issue #903](https://github.com/arn0ld87/agora/issues/903) geführt
 - die Browser-Keys `agora.lastModel` und `agora.lastCustomModel` haben seit Issue #890 keinen produktiven Reader oder Writer mehr; vorhandene Werte werden bewusst nicht gelöscht und bleiben wirkungslose Altlast
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
 - Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
