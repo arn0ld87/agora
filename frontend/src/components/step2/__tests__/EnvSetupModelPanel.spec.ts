@@ -4,7 +4,7 @@
  * Prueft den kanonischen Modell-Selektions-Pfad (`modelRef` / `update:modelRef`)
  * getrennt vom Legacy-Runtime-Provider-Pfad (`modelOption` / `update:modelOption`).
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import EnvSetupModelPanel from '../EnvSetupModelPanel.vue'
