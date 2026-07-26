@@ -5,6 +5,32 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
+
+- **`.github/scripts/check_legacy_model_picker.py`** — `components/llm/LlmProfilePicker.vue`
+  ist jetzt in `REMOVED_PATHS` eingetragen. Die Datei wurde in Issue #834 physisch gelöscht,
+  der Guard blockte bis dahin aber nur *Importe* des v3-Pickers über `FORBIDDEN_SUBSTRINGS` —
+  eine wieder eingecheckte Datei wäre also unbemerkt durchgelaufen. **Neues CI-Verhalten:**
+  Der Check schlägt jetzt allein bei Datei-Existenz fehl (Exit 1, kein Import nötig); ein
+  `@deprecated`-JSDoc-Tag hebt die Sperre nicht auf, weil `REMOVED_PATHS` vor der
+  Read-Adapter-Freigabe greift. Für `components/ui/ModelPicker.vue` galt das seit Slice 7.7
+  bereits.
+- Modul-Docstring korrigiert: Er beschrieb die `@deprecated`-Read-Adapter-Freigabe noch über
+  „Step-Views", die es nicht mehr gibt (Steps liegen unter `frontend/src/views/v4/steps/`).
+  Jetzt benannt sind die tatsächlichen v3-Consumer — `WorkspaceHeader` → `ActiveModelBadge`,
+  `Step2EnvSetup`/`Step3Simulation` → `useRuntimeLlmOptions`. Die Clean-Meldung sprach von
+  „removed Slice 7.7 paths" und ist durch den #834-Eintrag quellenneutral formuliert.
+- **`.github/scripts/test_check_legacy_model_picker.py`** — neuer Test
+  `test_removed_llm_profile_picker_path_is_caught` (10 statt 9 Tests). Die Fixtures der
+  `@deprecated`-Tests laufen jetzt über `ActiveModelBadge.vue` statt `LlmProfilePicker.vue`,
+  da letzterer Pfad durch `REMOVED_PATHS` schon bei Existenz blockt und die Read-Adapter-
+  Semantik sonst nicht mehr isoliert prüfbar wäre.
+- **`docs/runbooks/pre-push-gate.md`** — Abschnitt „Legacy-Picker-Check" um den Absatz
+  „Entfernte Dateien (`REMOVED_PATHS`)" ergänzt, Consumer-Aussage auf den Ist-Stand gebracht,
+  Testzahl `8` → `10` korrigiert.
+- Verifikation: `python3 .github/scripts/test_check_legacy_model_picker.py` → 10 Tests grün;
+  `python3 .github/scripts/check_legacy_model_picker.py --no-github frontend/src` → Exit 0.
+
 ### Changed (Legacy-Modell-Picker konsolidiert: `LlmProfilePicker` → `AiModelPicker` — 2026-07-25, Issue #834)
 
 - **`frontend/src/components/Step4Report.vue`** — der v3-Profil-Picker-Block (`LlmProfilePicker`
