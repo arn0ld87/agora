@@ -22,7 +22,7 @@ Zur Genauigkeit dieser Aussage: Der Connector liefert mit `is_published` einen *
 
 ## Belegt
 
-Fakten mit Primärquelle, unabhängig von den Handover-Dokumenten bestätigt.
+Fakten mit benannter Primärquelle. Die Connector- und `gh`-Zeilen stehen unabhängig von den Handover-Dokumenten; die letzte Zeile ist bewusst ein *Abgleich* zwischen beiden und daher nicht unabhängig.
 
 | Feststellung | Beleg |
 |---|---|
@@ -35,11 +35,15 @@ Fakten mit Primärquelle, unabhängig von den Handover-Dokumenten bestätigt.
 | Zweites Projekt „Agora Prototype" (`c6e02187-301e-44b5-bddb-d2471befe332`) existiert, hat aber **null Edits** | Connector `list_edits` liefert leeres Array |
 | GitHub-Sync-Repo `arn0ld87/agora-runs-dashboard` existiert, **privat** | `gh repo view`, angelegt 2026-07-16T08:32:50Z |
 | Letzter Push dorthin 2026-07-17T19:59:31Z — deckt sich sekundengenau mit dem letzten Lovable-Edit | `gh repo view` vs. Connector `list_edits` |
-| Die Projekt-ID in `HANDOVER.md` stimmt mit der Connector-Antwort überein | `HANDOVER.md` Abschnitt „Lovable-Projekt" |
+| *Abgleich:* die in `HANDOVER.md` genannte Projekt-ID stimmt mit der Connector-Antwort überein | Primärquelle ist der Connector; `HANDOVER.md` Abschnitt „Lovable-Projekt" dient nur der Gegenprobe |
 
-Die Umsetzungstiefe lässt sich aus den Commit-Messages der Edit-Historie belegen: Onboarding-Wizard, Simulation mit Persona-Review-Grid, SSE-Live-Feed, Report-Seite mit Chat und Export, Settings mit Tabs, History- und Compare-Seiten, Auth-Bootstrap, Verdrahtung gegen die echte Flask-API sowie ein vollständiger Rip-out der MSW-Mocks.
+Zur Umsetzungstiefe sind zwei Beweisgrade zu trennen:
 
-Aus denselben Commit-Messages ergeben sich unmittelbar auch die offenen Enden:
+**Durch `list_files` belegt** — diese Dateien existieren im Projekt: die Routen `onboarding`, `simulation`, `report` (inkl. `report.interaction`), `settings`, `history`, `compare`, `runs` und `runs.$runId`; die API-Module `client`, `compare`, `onboarding`, `report`, `runs`, `settings`, `simulation`; die zugehörigen Contract-Module; `auth/useApiAuth.ts` und `hooks/useSimulationStream.ts`.
+
+**Nur durch Commit-Messages behauptet** — dass diese Flächen fachlich vollständig und korrekt verdrahtet sind. Commit-Nachrichten belegen, dass Änderungen vorgenommen und wie sie gemeint waren, nicht dass das Ergebnis funktioniert. Eine Codeprüfung oder ein Testlauf gegen das Projekt war nicht Gegenstand von #836.
+
+Ebenfalls nur aus Commit-Messages, also mit demselben Vorbehalt, ergeben sich die offenen Enden:
 
 - die Settings-Tabs Routing, Embedding-Migration, API-Keys und Audit-Log zeigen laut Commit `32fdb0dc` einen „nicht angebunden"-Platzhalter,
 - es existiert laut Commit `1955fea0` kein Aufrufer, der eine echte `simulation_id` liefert — der Run-Erstellungspfad fehlt.
@@ -51,9 +55,9 @@ Aus denselben Commit-Messages ergeben sich unmittelbar auch die offenen Enden:
 | Feststellung | Beleg |
 |---|---|
 | `frontend-next/` existiert **nicht** im Agora-Repo-Root | `ls -la frontend-next` → „No such file or directory" |
-| `frontend-next/` war **nie** in Git getrackt | `git log --all -- frontend-next` → leer |
+| In keinem der 282 lokal vorhandenen Refs wurde je eine Datei unter `frontend-next/` hinzugefügt | `git log --all --diff-filter=A --name-only -- 'frontend-next/*' 'frontend-next'` → leer. Schließt Renames, gekürzte Historie und nie gefetchte Remotes nicht aus |
 | Kein Eintrag für `frontend-next` in `.gitignore` | `grep` ohne Treffer |
-| Nur zwei `package.json` im Repo: `./package.json`, `./frontend/package.json` | `find -maxdepth 3 -name package.json` |
+| Genau zwei **getrackte** `package.json`: `package.json`, `frontend/package.json` | `git ls-files '*package.json'` — ohne Tiefenbegrenzung; alle weiteren Treffer eines rohen `find` liegen in `backend/.venv/` oder `.claude/worktrees/` und sind nicht Teil des Repos |
 | Die Branches `feat/frontend-next`, `origin/feat/frontend-next-phase12`, `origin/feat/frontend-next-phase2-onboarding-granularity` enthalten **null** `.tsx`-Dateien | `git ls-tree -r --name-only <branch> \| grep -c '\.tsx$'` → 0 |
 | Ein lokaler Klon des React-Projekts liegt **außerhalb** dieses Repos unter `/Volumes/T7/Projekte/agora-runs-dashboard` | `ls`, `git log` |
 | Dieser Klon steht auf `32fdb0d` (2026-07-16) und ist damit **hinter** dem Lovable-Stand; zusätzlich uncommittete Änderungen | `git log -1`, `git status --short` |
@@ -121,7 +125,7 @@ Nicht zuverlässig verifizierbar, ohne den Rahmen von #836 zu verlassen:
 Belege:
 
 - beide Lovable-Projekte tragen zum Erhebungszeitpunkt `is_published: false` und besitzen keine öffentliche URL,
-- das GitHub-Sync-Repo `arn0ld87/agora-runs-dashboard` ist privat,
+- das GitHub-Sync-Repo `arn0ld87/agora-runs-dashboard` ist privat — für sich genommen **kein** Beweis gegen ein Deployment, denn auch aus privaten Repos lässt sich deployen; hier nur als ergänzender Umstand,
 - weder `docker-compose*.yml` noch `deploy/` noch `scripts/` noch die GitHub-Workflows referenzieren das Vorhaben; der einzige Treffer auf „react" in `.github/workflows/e2e-smokes.yml` ist der Report-Datenfeldname `generate_section_react` und hat keinen Bezug zum Frontend,
 - das Root-`package.json` definiert weder Workspaces noch einen `frontend-next`-Eintrag,
 - der React-Code liegt vollständig außerhalb dieses Repositories.
