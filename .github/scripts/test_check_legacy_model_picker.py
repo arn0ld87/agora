@@ -128,12 +128,14 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_deprecated_target_allows_import(self) -> None:
         # Ziel-Datei trägt @deprecated → sanktionierter Read-Adapter.
+        # ActiveModelBadge.vue (nicht in REMOVED_PATHS) statt LlmProfilePicker.vue,
+        # da letzterer Pfad in REMOVED_PATHS steht und schon bei Existenz blockt.
         _write(
-            self.root / "components/llm/LlmProfilePicker.vue",
+            self.root / "components/ActiveModelBadge.vue",
             (
                 "<script setup lang=\"ts\">\n"
                 "/**\n"
-                " * @deprecated Slice 5.5 — v3-Picker, Read-Adapter bis 5.6.\n"
+                " * @deprecated Slice 5.5 — v3-Badge, Read-Adapter bis 5.6.\n"
                 " */\n"
                 "</script>\n"
             ),
@@ -148,7 +150,7 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
             self.root / "consumer.vue",
             (
                 "<script setup lang=\"ts\">\n"
-                "import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'\n"
+                "import ActiveModelBadge from '@/components/ActiveModelBadge.vue'\n"
                 "import { useRuntimeLlmOptions } from '@/composables/useRuntimeLlmOptions'\n"
                 "</script>\n"
             ),
@@ -166,15 +168,17 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_non_deprecated_target_still_flags(self) -> None:
         # Ziel existiert, trägt aber KEIN @deprecated → Verstoß.
+        # ActiveModelBadge.vue statt LlmProfilePicker.vue, damit der Treffer
+        # aus der Import-Regel stammt und nicht aus REMOVED_PATHS.
         _write(
-            self.root / "components/llm/LlmProfilePicker.vue",
+            self.root / "components/ActiveModelBadge.vue",
             "<script setup lang=\"ts\">\n// kein Tag\n</script>\n",
         )
         _write(
             self.root / "consumer.vue",
             (
                 "<script setup lang=\"ts\">\n"
-                "import LlmProfilePicker from '@/components/llm/LlmProfilePicker.vue'\n"
+                "import ActiveModelBadge from '@/components/ActiveModelBadge.vue'\n"
                 "</script>\n"
             ),
         )
@@ -189,7 +193,7 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
             1,
             "nicht-deprecatetes Ziel darf nicht durchgehen",
         )
-        self.assertIn("LlmProfilePicker.vue", proc.stdout)
+        self.assertIn("ActiveModelBadge.vue", proc.stdout)
         self.assertIn("llmProviders", proc.stdout)
 
     # ------------------------------------------------------------------
@@ -263,7 +267,32 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
             self.assertIn(Path(relative_path).name, proc.stdout)
 
     # ------------------------------------------------------------------
-    # 9. GH-Actions-Format: ::error file=…,line=…,col=…
+    # 9. Entfernter LlmProfilePicker (Issue #834) darf nicht zurückkehren
+    # ------------------------------------------------------------------
+    def test_removed_llm_profile_picker_path_is_caught(self) -> None:
+        # Reine Datei-Existenz reicht — kein Import nötig. Ein @deprecated-Tag
+        # rettet die Datei nicht, weil REMOVED_PATHS vor der Import-Prüfung greift.
+        _write(
+            self.root / "components/llm/LlmProfilePicker.vue",
+            (
+                "<script setup lang=\"ts\">\n"
+                "/** @deprecated in Issue #834 entfernt. */\n"
+                "</script>\n"
+            ),
+        )
+
+        proc = _run(self.root)
+
+        self.assertEqual(
+            proc.returncode,
+            1,
+            f"zurückgekehrter LlmProfilePicker muss exit 1 ergeben\nstdout={proc.stdout}",
+        )
+        self.assertIn("LlmProfilePicker.vue", proc.stdout)
+        self.assertIn("#834", proc.stdout)
+
+    # ------------------------------------------------------------------
+    # 10. GH-Actions-Format: ::error file=…,line=…,col=…
     # ------------------------------------------------------------------
     def test_github_format_emits_annotation(self) -> None:
         _write(

@@ -14,8 +14,10 @@ folgende Importe einführen:
 * ``@/store/llmRoutingDefaults``
 * ``@/composables/useRuntimeLlmOptions``
 
-Seit Slice 7.7 blockiert der Check außerdem die Rückkehr des entfernten
-v3-Pickers und der unverdrahteten Mock-Routing-Komponenten als Dateien.
+Seit Slice 7.7 blockiert der Check außerdem die Rückkehr entfernter Dateien
+(``REMOVED_PATHS``): der v3-Picker und die unverdrahteten
+Mock-Routing-Komponenten aus 7.7 sowie ``LlmProfilePicker.vue`` aus Issue
+#834. Hier reicht die bloße Existenz der Datei — ein Import ist nicht nötig.
 
 Read-Adapter-Freigabe via ``@deprecated``
 =========================================
@@ -24,9 +26,11 @@ Nach 5.5 gibt es keinen Opt-in-Marker mehr. Stattdessen erkennt der Check das
 ``@deprecated``-JSDoc-Tag am **Ziel** des Imports: Trägt die importierte Datei
 selbst ein ``@deprecated``-Tag, gilt sie als sanktionierter Read-Adapter im
 Deprecation-/Read-only-Fenster und der Import ist erlaubt. So dürfen die
-bestehenden v3-Consumer (Step-Views, WorkspaceHeader, …) die deprecateten
-Picker/Composables weiter lesen, ohne pro-Datei-Marker zu tragen — während
-jeder *neu* eingeführte, nicht-deprecatete v3-Pfad hart blockiert wird.
+bestehenden v3-Consumer (``WorkspaceHeader`` → ``ActiveModelBadge``,
+``Step2EnvSetup``/``Step3Simulation`` → ``useRuntimeLlmOptions``) die
+deprecateten Picker/Composables weiter lesen, ohne pro-Datei-Marker zu
+tragen — während jeder *neu* eingeführte, nicht-deprecatete v3-Pfad hart
+blockiert wird.
 
 Die alten Stores (``llmProviders``/``llmProfiles``/``llmRoutingDefaults``)
 existieren nach 5.5 nicht mehr als Datei (konsolidiert in
@@ -109,6 +113,10 @@ REMOVED_PATHS: tuple[tuple[Path, str], ...] = (
     (
         Path("components/ui/ModelPicker.vue"),
         "v3 ModelPicker.vue wurde in Slice 7.7 entfernt",
+    ),
+    (
+        Path("components/llm/LlmProfilePicker.vue"),
+        "v3 LlmProfilePicker.vue wurde in Issue #834 entfernt",
     ),
     (
         Path("views/Settings/llmRouting/ActiveSnapshotsCard.vue"),
@@ -342,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     if not results:
         print(
             f"check_legacy_model_picker: clean ({target}) — "
-            f"no v3 picker imports or removed Slice 7.7 paths found.",
+            f"no v3 picker imports or returned removed paths found.",
             file=sys.stderr,
         )
         return 0
