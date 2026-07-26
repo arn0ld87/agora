@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (`/prepare` akzeptiert kanonische `AiModelRef` — Issue #896)
+
+- `/prepare` akzeptiert jetzt eine kanonische, an eine `ProviderConnection` gebundene
+  `AiModelRef` als autoritative Route. Mischfälle mit Legacy-Overrides werden abgelehnt;
+  eine explizit gesendete Ref löst ein Re-Prepare aus.
+
 ### Fixed (133 reihenfolgenabhängige Test-Failures in `tests/api` — 2026-07-26)
 
 - **`backend/tests/conftest.py`** — neues autouse-Fixture `_clean_auth_token_env`.
