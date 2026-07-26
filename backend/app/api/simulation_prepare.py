@@ -269,16 +269,33 @@ def prepare_simulation():
             message=f"Project does not exist: {state.project_id}",
         )
 
-    # P5.3-Fix: Wenn Request kein Profil mitschickt (Frontend setzt bei
-    # Profil-Auswahl `STORAGE_MODEL=default`), das im Projekt persistierte
-    # Profil aus dem Ontology-Schritt als Default injizieren — sonst landet
-    # die Sim-Vorbereitung im Server-Default-Modell. Respektiert expliziten
-    # Single-Run-Override (analog graph.py / report.py).
+    # Profil-Routing (Issue #888). `llm_profile_id` ist eine Routing-Anweisung,
+    # kein Fallback-Unterdrücker — analog graph.py / report.py, wo das Feld
+    # ebenfalls echtes Routing auslöst.
+    #
+    # Vorher kehrte das Feld seine eigene Absicht um: ein mitgeschicktes
+    # `llm_profile_id` übersprang den P5.3-Fallback, ohne selbst irgendetwas
+    # aufzulösen (`expand_profile_in_data` reagiert nur auf ein `llm_model` mit
+    # `profile:`-Präfix). Der Standardfall — Projekt hat ein Profil, User lässt
+    # die Modellauswahl auf "default" — landete damit still im
+    # Server-Default-Modell.
+    #
+    # `default` ist die UI-Platzhalterwahl (`useEnvForm.effectiveModel()` liefert
+    # dafür `null`) und zählt deshalb nicht als explizite Modellwahl.
     _data_profile = (data.get('llm_profile_id') or '').strip() or None
     _data_model = (data.get('llm_model') or '').strip() or None
-    if not _data_profile and (not _data_model or _data_model.lower() == 'default'):
-        if getattr(project, 'llm_profile_id', None):
-            data['llm_model'] = f"profile:{project.llm_profile_id}"
+    explicit_model_override = bool(_data_model and _data_model.lower() != 'default')
+    # Vor der Expansion festhalten: `expand_profile_in_data` schreibt einen
+    # `llm_provider`-Block aus dem Profil (Provider/Key/Base-URL) und würde
+    # `llm_runtime.enabled` sonst ununterscheidbar von einem echten
+    # Client-Provider-Override machen.
+    explicit_runtime_request = bool(data.get('llm_provider'))
+    if not explicit_model_override:
+        # Request-Profil schlägt Projekt-Profil (Single-Run-Override), beide
+        # schlagen das Server-Default-Modell.
+        _routed_profile = _data_profile or getattr(project, 'llm_profile_id', None)
+        if _routed_profile:
+            data['llm_model'] = f"profile:{_routed_profile}"
     # UI-Profile-Token in echtes Modell + Provider-Creds expandieren.
     from ..utils.llm_profile_resolver import expand_profile_in_data
     expand_profile_in_data(data)
@@ -296,7 +313,16 @@ def prepare_simulation():
         extra={'simulation_id': simulation_id},
     )
 
-    if not force_regenerate and not llm_model_override and not llm_runtime.enabled:
+    # Der "bereits vorbereitet"-Kurzschluss hängt bewusst an der *expliziten*
+    # Client-Wahl, nicht an `llm_model_override`/`llm_runtime.enabled` (Issue
+    # #888). Seit dem Profil-Routing oben sind beide für jedes Projekt mit
+    # hinterlegtem Profil gesetzt — an sie gebunden würde der Kurzschluss nie
+    # mehr greifen und jedes Betreten von Step 2 eine vollständige
+    # Neu-Vorbereitung samt Persona-Neugenerierung auslösen.
+    client_requested_override = explicit_model_override or (
+        llm_runtime.enabled and explicit_runtime_request
+    )
+    if not force_regenerate and not client_requested_override:
         logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
         is_prepared, prepare_info = _check_simulation_prepared(simulation_id)
         logger.debug(f"Check result: is_prepared={is_prepared}, prepare_info={prepare_info}")

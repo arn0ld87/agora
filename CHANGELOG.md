@@ -5,6 +5,41 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (`llm_profile_id` in `/prepare` wirkt jetzt aufs Routing — 2026-07-26, Issue #888)
+
+- **`backend/app/api/simulation_prepare.py`** — `llm_profile_id` war ein reiner
+  Fallback-*Unterdrücker* und kehrte damit seine eigene Absicht um: ein mitgeschicktes
+  Profil übersprang den P5.3-Projekt-Fallback, löste aber selbst nichts auf, weil
+  `expand_profile_in_data` ausschließlich auf ein `llm_model` mit `profile:`-Präfix reagiert.
+  **Konkreter Defekt:** Projekt hat ein Profil, User lässt die Modellauswahl auf „default"
+  (`useEnvForm.effectiveModel()` liefert dann `null`, also kein `llm_model` im Payload),
+  `Step2EnvSetup.vue` sendet `llm_profile_id` mit → die Vorbereitung lief still auf dem
+  Server-Default-Modell. Hätte das Frontend das Feld *weggelassen*, hätte der Fallback
+  korrekt gegriffen.
+- **Neues Verhalten:** `llm_profile_id` ist eine Routing-Anweisung wie in `graph_build.py`
+  und `report.py`. Ohne explizite Modellwahl wird das Profil zu `profile:<id>` expandiert und
+  aufgelöst. Präzedenz: explizites `llm_model` → Request-Profil → Projekt-Profil →
+  Server-Default. `llm_model="default"` zählt als UI-Platzhalter, nicht als Modellwahl.
+- **Re-Prepare-Semantik entkoppelt.** Der „bereits vorbereitet"-Kurzschluss hing an
+  `llm_model_override` bzw. `llm_runtime.enabled`. Beide sind durch das Profil-Routing für
+  jedes Projekt mit hinterlegtem Profil gesetzt — `expand_profile_in_data` schreibt zusätzlich
+  einen `llm_provider`-Block aus dem Profil. Unverändert hätte der Kurzschluss nie mehr
+  gegriffen und jedes Betreten von Step 2 eine volle Neu-Vorbereitung samt
+  Persona-Neugenerierung ausgelöst. Er hängt jetzt an `client_requested_override`: nur ein
+  vom Client *explizit* gesendetes `llm_model` oder `llm_provider` überspringt ihn. Dafür wird
+  `explicit_runtime_request` vor der Expansion festgehalten, sonst wäre der profil-abgeleitete
+  Provider-Block von einem echten Override ununterscheidbar.
+- **`backend/tests/api/test_simulation_prepare_profile_routing.py`** — neue Suite, 13 Tests:
+  Präzedenzkette (Request-Profil schlägt Projekt-Profil, explizites Modell schlägt beide,
+  `"default"` ist keine Wahl), unauflösbares Profil bricht den Request nicht, und sechs Tests
+  für die Kurzschluss-Semantik inklusive der Abgrenzung profil-abgeleiteter vs. echter
+  Provider-Override.
+- Verifikation: 7 der 13 Tests sind gegen den alten `simulation_prepare.py` rot (genau die
+  Verhaltensänderungen), 6 sichern unverändertes Verhalten ab. `bash scripts/pre-push-gate.sh
+  backend` grün; `tests/api` hat mit und ohne diese Änderung dieselben 138 vorbestehenden
+  Failures (`AGORA_AUTH_TOKEN`-Leak zwischen Suites, unabhängiges Bestandsproblem) — die neue
+  Suite ist im Gesamtlauf sauber, weil ihr Client-Fixture den Open-Mode erzwingt.
+
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 
 - **`.github/scripts/check_legacy_model_picker.py`** — `components/llm/LlmProfilePicker.vue`
