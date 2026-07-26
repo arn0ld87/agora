@@ -180,7 +180,7 @@ sie den Runtime-Provider-Pfad bedienen.
 Damit ist das Akzeptanzkriterium „`useEnvForm` enthält keine Modellwahl- oder
 Modellpersistenzlogik mehr" bewusst nur zur Hälfte erfüllt: Persistenz ja, Modellwahl nein.
 Die Restschuld hängt an der Ablösung von `useRuntimeLlmOptions` (bereits `@deprecated`,
-Slice 5.5) und ist als Folge-Issue zu führen.
+Slice 5.5) und wird in [Issue #903](https://github.com/arn0ld87/agora/issues/903) geführt.
 
 ### Auflösung Risiko B (OASIS-Runtime-Provider)
 
