@@ -106,12 +106,10 @@ def graph_route_env(monkeypatch):
     monkeypatch.setattr(
         "app.services.llm_routing_seed.prevalidate_ai_model_ref_with_discovery",
         prevalidate,
-        raising=False,
     )
     monkeypatch.setattr(
         "app.api.graph_build.prevalidate_ai_model_ref_with_discovery",
         prevalidate,
-        raising=False,
     )
     return SimpleNamespace(
         observed=observed,
@@ -263,12 +261,10 @@ def test_unknown_connection_returns_400_without_orphan_side_effects_or_secret_le
     graph_route_env.monkeypatch.setattr(
         "app.services.llm_routing_seed.prevalidate_ai_model_ref_with_discovery",
         reject_unknown_connection,
-        raising=False,
     )
     graph_route_env.monkeypatch.setattr(
         "app.api.graph_build.prevalidate_ai_model_ref_with_discovery",
         reject_unknown_connection,
-        raising=False,
     )
 
     response = (

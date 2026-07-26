@@ -7,6 +7,16 @@ export interface RunModelResolution {
   usedRunOverride: boolean
 }
 
+function toPayload(
+  ref: Pick<AiModelRefPayload, 'provider_connection_id' | 'model_id' | 'source'>,
+): AiModelRefPayload {
+  return {
+    provider_connection_id: ref.provider_connection_id,
+    model_id: ref.model_id,
+    source: ref.source,
+  }
+}
+
 export function useRunModelResolver(): {
   resolveRunModel: () => Promise<RunModelResolution>
 } {
@@ -15,30 +25,22 @@ export function useRunModelResolver(): {
   async function resolveRunModel(): Promise<RunModelResolution> {
     const override = getRunModelOverride()
     if (override) {
-      return {
-        ref: {
-          provider_connection_id: override.provider_connection_id,
-          model_id: override.model_id,
-          source: override.source,
-        },
-        usedRunOverride: true,
-      }
+      return { ref: toPayload(override), usedRunOverride: true }
     }
 
     try {
       await effectiveModel.ensureLoaded()
-    } catch {
-      // Best effort: Ohne ladbaren Kanon entscheidet das Backend-Routing.
+    } catch (err) {
+      // Best effort: Ohne ladbaren Kanon entscheidet das Backend-Routing —
+      // aber nicht stumm, sonst ist genau dieser Fall nicht diagnostizierbar.
+      console.warn(
+        '[useRunModelResolver] Kanon nicht ladbar, Backend-Routing entscheidet',
+        err,
+      )
     }
     const effectiveRef = effectiveModel.effectiveRef.value
     return {
-      ref: effectiveRef
-        ? {
-            provider_connection_id: effectiveRef.provider_connection_id,
-            model_id: effectiveRef.model_id,
-            source: effectiveRef.source,
-          }
-        : null,
+      ref: effectiveRef ? toPayload(effectiveRef) : null,
       usedRunOverride: false,
     }
   }

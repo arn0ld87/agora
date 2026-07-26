@@ -25,10 +25,6 @@ const modelSelection = vi.hoisted(() => ({
   ensureLoaded: vi.fn(),
   getRunModelOverride: vi.fn(),
 }))
-const legacyRouting = vi.hoisted(() => ({
-  storedEffectiveModel: vi.fn(),
-  runtimeLlmPayloadFromStorage: vi.fn(),
-}))
 const legacyStorageValues = new Map<string, string>()
 const localStorageMock = {
   getItem: (key: string) => legacyStorageValues.get(key) ?? null,
@@ -62,10 +58,6 @@ vi.mock('../usePolling', () => ({
 }))
 vi.mock('../useSystemLog', () => ({
   useSystemLog: () => ({ systemLogs: { value: [] }, addLog: vi.fn(), clearLog: vi.fn() }),
-}))
-vi.mock('../useEnvForm', () => ({ storedEffectiveModel: legacyRouting.storedEffectiveModel }))
-vi.mock('../useRuntimeLlmOptions', () => ({
-  runtimeLlmPayloadFromStorage: legacyRouting.runtimeLlmPayloadFromStorage,
 }))
 vi.mock('../useEffectiveModelSelection', () => ({
   useEffectiveModelSelection: () => ({
@@ -106,8 +98,6 @@ describe('useGraphBuildPipeline', () => {
     modelSelection.runOverride = null
     modelSelection.ensureLoaded.mockResolvedValue(undefined)
     modelSelection.getRunModelOverride.mockImplementation(() => modelSelection.runOverride)
-    legacyRouting.storedEffectiveModel.mockReturnValue('legacy-model')
-    legacyRouting.runtimeLlmPayloadFromStorage.mockReturnValue({ provider: 'legacy-provider' })
     pendingUpload.getPendingUpload.mockReturnValue({
       isPending: true,
       files: [new File(['source'], 'source.txt', { type: 'text/plain' })],
@@ -145,8 +135,6 @@ describe('useGraphBuildPipeline', () => {
     })
     expect(graphApi.buildGraph).toHaveBeenCalledTimes(1)
     expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
-    expect(legacyRouting.storedEffectiveModel).not.toHaveBeenCalled()
-    expect(legacyRouting.runtimeLlmPayloadFromStorage).not.toHaveBeenCalled()
     expect(pipeline.currentProjectId.value).toBe('project_42')
   })
 
@@ -197,8 +185,6 @@ describe('useGraphBuildPipeline', () => {
       ai_model_ref: modelSelection.runOverride,
     })
     expect(modelSelection.ensureLoaded).not.toHaveBeenCalled()
-    expect(legacyRouting.storedEffectiveModel).not.toHaveBeenCalled()
-    expect(legacyRouting.runtimeLlmPayloadFromStorage).not.toHaveBeenCalled()
     expect(localStorageMock.getItem('agora.lastModel')).toBe('custom')
     expect(localStorageMock.getItem('agora.lastCustomModel')).toBe('legacy-model')
   })
@@ -228,8 +214,6 @@ describe('useGraphBuildPipeline', () => {
       ai_model_ref: modelSelection.effectiveRef,
     })
     expect(modelSelection.ensureLoaded).toHaveBeenCalledTimes(1)
-    expect(legacyRouting.storedEffectiveModel).not.toHaveBeenCalled()
-    expect(legacyRouting.runtimeLlmPayloadFromStorage).not.toHaveBeenCalled()
   })
 
   it('sendet ohne Override und ohne Kanon keine Routingfelder und ignoriert liegengebliebene Legacy-Werte', async () => {
@@ -252,8 +236,6 @@ describe('useGraphBuildPipeline', () => {
     expect(formData.get('llm_model')).toBeNull()
     expect(formData.get('llm_provider')).toBeNull()
     expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
-    expect(legacyRouting.storedEffectiveModel).not.toHaveBeenCalled()
-    expect(legacyRouting.runtimeLlmPayloadFromStorage).not.toHaveBeenCalled()
     expect(localStorageMock.getItem('agora.lastModel')).toBe('custom')
     expect(localStorageMock.getItem('agora.lastCustomModel')).toBe('legacy-model')
   })

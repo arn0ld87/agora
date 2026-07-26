@@ -87,6 +87,14 @@ def _verify_selected_model(connection: ProviderConnection, model_id: str) -> Non
     try:
         result = service.probe(connection)
     except Exception as exc:  # noqa: BLE001 — Providerfehler dürfen keine Secrets propagieren
+        # Bewusst ohne str(exc): der Provider-Fehlertext kann Credentials
+        # tragen. Typ + connection.id reichen, um einen Discovery-Ausfall im
+        # Betrieb von einem echten Model-Mismatch zu unterscheiden.
+        logger.warning(
+            "Model-Discovery fehlgeschlagen [connection_id=%s, error_type=%s]",
+            connection.id,
+            type(exc).__name__,
+        )
         raise ValueError(
             f"Modell-Katalog für ProviderConnection {connection.id!r} derzeit "
             f"nicht abrufbar ({type(exc).__name__})"
@@ -101,6 +109,16 @@ def _verify_selected_model(connection: ProviderConnection, model_id: str) -> Non
         raise ValueError(
             f"Modell {model_id!r} gehört nicht zur ProviderConnection {connection.id!r}"
         )
+
+
+def _assert_connection_secret_bound(connection: ProviderConnection) -> None:
+    """Prüft die Secret-Bindung, ohne Route-Options zu konfigurieren.
+
+    Validierungspfade (Prevalidate) brauchen nur die Ablehnung ungebundener
+    Cloud-Connections — nicht die Options. Der verworfene Dict-Aufruf sah nach
+    totem Code aus; dieser Wrapper macht die Absicht explizit.
+    """
+    _bind_connection_secret(connection, {})
 
 
 def _bind_connection_secret(
@@ -134,8 +152,7 @@ def prevalidate_ai_model_ref(ai_model_ref: AiModelRef) -> ProviderConnection:
     Run-Erzeugung, ohne einen zusätzlichen Provider-Probe auszulösen.
     """
     connection = _resolve_selected_connection(ai_model_ref.provider_connection_id)
-    options: dict[str, object] = {}
-    _bind_connection_secret(connection, options)
+    _assert_connection_secret_bound(connection)
     return connection
 
 

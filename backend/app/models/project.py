@@ -64,6 +64,13 @@ class Project:
     # Spätere Stages (build_graph, simulation_prepare, report) ziehen dieses
     # Profil als Default heran, wenn der Request kein eigenes Profil mitgibt.
     llm_profile_id: Optional[str] = None
+    # Kanonische (Provider-Connection, Modell)-Referenz des Ontology-Generate-
+    # Runs (``AiModelRef.model_dump()``). Auf dem ``ai_model_ref``-Pfad bleiben
+    # ``llm_model``/``llm_provider``/``llm_profile_id`` bewusst leer — ohne
+    # dieses Feld verlöre ein wiederaufgenommener Graph-Build (neuer Tab,
+    # verlorene Session) jede Modell-/Connection-Bindung. Trägt keine Secrets:
+    # AiModelRef referenziert die Connection nur per ID.
+    ai_model_ref: Optional[Dict[str, Any]] = None
 
     # Error information
     error: Optional[str] = None
@@ -88,6 +95,7 @@ class Project:
             "llm_model": self.llm_model,
             "llm_provider": self.llm_provider,
             "llm_profile_id": self.llm_profile_id,
+            "ai_model_ref": self.ai_model_ref,
             "error": self.error
         }
     
@@ -116,6 +124,7 @@ class Project:
             llm_model=data.get('llm_model'),
             llm_provider=data.get('llm_provider'),
             llm_profile_id=data.get('llm_profile_id'),
+            ai_model_ref=data.get('ai_model_ref'),
             error=data.get('error')
         )
 

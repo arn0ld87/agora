@@ -31,6 +31,19 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   liegengebliebene `agora.lastModel`-/`agora.lastCustomModel`-Werte werden nicht gelesen,
   geschrieben oder gelöscht. `Step3Simulation` nutzt für Simulation und Report ebenfalls
   keine Legacy-Storage-Route mehr.
+- **Persistierte Ref und Resume-Build (Review-Nachtrag PR #900):** Der Ontology-Run legt die
+  kanonische `AiModelRef` am Projekt ab (`Project.ai_model_ref`, ohne Secrets). Ein
+  Graph-Build ohne eigene Route im Request übernimmt sie, statt — wie zuvor — ganz ohne
+  Modell- und Connection-Bindung zu starten, wenn Tab oder Session verloren gehen. Eine
+  explizite Legacy-Angabe im Request gewinnt weiterhin; eine defekte persistierte Ref fällt
+  protokolliert auf das Legacy-Routing zurück.
+- **Fehlerklassifikation über Typ statt Fehlertext (Review-Nachtrag PR #900):** Nur der
+  exportierte `AiModelRefRoutingInputError` wird auf die 400-Routing-Antwort abgebildet;
+  semantische `ValueError` wie `ONTOLOGY_MISSING` oder `NOT_FOUND` behalten ihren Code. In
+  `generate_ontology` deckt die Routing-Terminalisierung nur noch die Routing-Phase ab —
+  Fehler der Generierungs- und Persistenzphase tragen eine eigene, nicht-routingbezogene
+  Meldung. Die Terminalisierung persistiert den Projektstatus vor dem Registry-Update, damit
+  ein fehlschlagendes Registry-I/O den `FAILED`-Zustand nicht nur im Speicher lässt.
 - **Adapter-Grenze:** `toStoredModelString` und `toStoredModelStringPure` sind entfernt.
   `useEnvForm` mit `Step2EnvSetup` bleibt bis zur Migration in
   [Issue #890](https://github.com/arn0ld87/agora/issues/890) bewusst der letzte produktive

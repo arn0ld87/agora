@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -13,6 +14,11 @@ from flask import Flask
 from app.api import graph_bp
 from app.container import AgoraContainer
 from app.contracts.ai_provider_contract import AiModel, ProviderConnection
+from app.services.graph_build import (
+    AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+    AiModelRefRoutingInputError,
+)
+from app.models.project import ProjectStatus
 from app.services.llm_routing_seed import prevalidate_ai_model_ref_with_discovery
 from app.services.provider_connections.adapters import ProviderProbeResult
 from app.storage.graph_storage import GraphStorage
@@ -24,8 +30,25 @@ MODEL_ID = "selected-model"
 SECRET_SENTINEL = "sk-discovery-secret-must-not-leak"
 
 
+def _capture_agora_logs(monkeypatch, caplog) -> None:
+    """Macht die ``agora.*``-Logger für caplog sichtbar.
+
+    ``get_logger`` setzt ``propagate = False``; ohne diesen Schalter erreicht
+    kein Record den Root-Handler von caplog und jede
+    ``SECRET_SENTINEL not in caplog.text``-Prüfung wäre trivial wahr.
+    """
+    caplog.set_level(logging.DEBUG)
+    for name, candidate in list(logging.root.manager.loggerDict.items()):
+        if isinstance(candidate, logging.Logger) and (
+            name == "agora" or name.startswith("agora.")
+        ):
+            monkeypatch.setattr(candidate, "propagate", True)
+            monkeypatch.setattr(candidate, "level", logging.DEBUG)
+
+
 @pytest.fixture
-def discovery_env(monkeypatch):
+def discovery_env(monkeypatch, caplog):
+    _capture_agora_logs(monkeypatch, caplog)
     storage = MagicMock(spec=GraphStorage)
     app = Flask(__name__)
     app.config.update(
@@ -181,7 +204,11 @@ def test_full_model_discovery_rejects_before_any_graph_side_effect(
 def test_seed_race_secret_is_not_exposed_in_response_or_logs(
     discovery_env, caplog, endpoint
 ):
-    race_error = ValueError(f"route changed concurrently: {SECRET_SENTINEL}")
+    # Der Boundary-Typ entscheidet über die 400-Klassifizierung; ein generischer
+    # ValueError wäre ein semantischer Fehler und dürfte hier nicht landen.
+    race_error = AiModelRefRoutingInputError(
+        f"route changed concurrently: {SECRET_SENTINEL}"
+    )
     discovery_env.monkeypatch.setattr(
         "app.api.graph_build.prevalidate_ai_model_ref_with_discovery", lambda _ref: None
     )
@@ -200,14 +227,16 @@ def test_seed_race_secret_is_not_exposed_in_response_or_logs(
     assert SECRET_SENTINEL not in caplog.text
 
 
-def test_ontology_seed_race_keeps_terminal_failed_project(discovery_env):
-    race_error = ValueError("route changed concurrently")
+def test_ontology_seed_race_overwrites_divergent_terminal_error(discovery_env):
+    """Terminalisiert der Service mit abweichendem Fehlertext, korrigiert der
+    API-Layer Status und Meldung auf den kanonischen Endzustand."""
+    race_error = AiModelRefRoutingInputError("route changed concurrently")
     discovery_env.monkeypatch.setattr(
         "app.api.graph_build.prevalidate_ai_model_ref_with_discovery", lambda _ref: None
     )
 
     def fail_after_terminalizing_project(**_kwargs):
-        discovery_env.project.status = "failed"
+        discovery_env.project.status = ProjectStatus.FAILED
         discovery_env.project.error = "routing failed"
         raise race_error
 
@@ -216,5 +245,35 @@ def test_ontology_seed_race_keeps_terminal_failed_project(discovery_env):
     response = _post(discovery_env, "ontology")
 
     assert response.status_code == 400
-    assert discovery_env.project.status == "failed"
+    assert discovery_env.project.status == ProjectStatus.FAILED
+    assert discovery_env.project.error == AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+    # Ein save_project stammt aus dem Upload-Pfad vor dem Service-Aufruf, das
+    # zweite ist die Korrektur des abweichenden Endzustands.
+    assert discovery_env.project_manager.save_project.call_count == 2
+
+
+def test_ontology_seed_race_is_idempotent_when_service_already_terminalized(
+    discovery_env,
+):
+    """Hat der Service bereits exakt den kanonischen Endzustand gesetzt, darf
+    der API-Layer kein zweites Mal speichern (Idempotenz-Bedingung)."""
+    race_error = AiModelRefRoutingInputError("route changed concurrently")
+    discovery_env.monkeypatch.setattr(
+        "app.api.graph_build.prevalidate_ai_model_ref_with_discovery", lambda _ref: None
+    )
+
+    def fail_after_terminalizing_project(**_kwargs):
+        discovery_env.project.status = ProjectStatus.FAILED
+        discovery_env.project.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+        raise race_error
+
+    discovery_env.ontology_service.side_effect = fail_after_terminalizing_project
+
+    response = _post(discovery_env, "ontology")
+
+    assert response.status_code == 400
+    assert discovery_env.project.status == ProjectStatus.FAILED
+    assert discovery_env.project.error == AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+    # Nur der Upload-Pfad speichert; der API-Layer schreibt nicht erneut.
+    assert discovery_env.project_manager.save_project.call_count == 1
     discovery_env.project_manager.delete_project.assert_not_called()

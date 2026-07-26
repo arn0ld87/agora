@@ -25,14 +25,22 @@ from ..utils.api_errors import ApiErrorCode
 logger = get_logger('agora.graph_build_service')
 run_registry = RunRegistry()
 AI_MODEL_REF_ROUTING_FAILURE_MESSAGE = "ai_model_ref routing could not be finalized"
+AI_MODEL_REF_GENERATION_FAILURE_MESSAGE = "ontology generation could not be completed"
 
 
 class AiModelRefPostValidationError(RuntimeError):
     """Safe boundary error for synchronous AiModelRef operational failures."""
 
 
-class _AiModelRefRoutingInputError(ValueError):
-    """Identify ValueErrors raised directly by AiModelRef route seeding."""
+class AiModelRefRoutingInputError(ValueError):
+    """Identify ValueErrors raised directly by AiModelRef route seeding.
+
+    Public boundary type: the API layer maps *only* this subtype to the
+    ai_model_ref routing validation response (400). Every other ``ValueError``
+    keeps its semantic error code, so unrelated failures such as
+    ``ONTOLOGY_MISSING`` or ``NOT_FOUND`` are no longer mislabeled as routing
+    problems.
+    """
 
 
 @contextmanager
@@ -43,7 +51,7 @@ def _classify_ai_model_ref_seed_error(
         yield
     except ValueError:
         if ai_model_ref is not None:
-            raise _AiModelRefRoutingInputError from None
+            raise AiModelRefRoutingInputError from None
         raise
 
 
@@ -54,6 +62,7 @@ def _terminalize_ai_model_ref_sync_failure(
     project: Project,
     run_id: str,
     phase: str,
+    failure_message: str = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
     task_manager: TaskManager | None = None,
     task_id_getter: Callable[[], str | None] | None = None,
 ) -> Iterator[None]:
@@ -72,19 +81,28 @@ def _terminalize_ai_model_ref_sync_failure(
                 type(exc).__name__,
             )
             if task_id is not None and task_manager is not None:
-                task_manager.fail_task(task_id, AI_MODEL_REF_ROUTING_FAILURE_MESSAGE)
+                task_manager.fail_task(task_id, failure_message)
             project.status = ProjectStatus.FAILED
-            project.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
-            run_registry.update_run(
-                run_id,
-                status="failed",
-                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
-                error=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
-            )
+            project.error = failure_message
+            # Projektstatus zuerst persistieren: schlägt das Registry-I/O fehl,
+            # darf der FAILED-Zustand nicht nur im Speicher stehen, während auf
+            # Platte weiterhin GRAPH_BUILDING/CREATED klebt.
             ProjectManager.save_project(project)
+            try:
+                run_registry.update_run(
+                    run_id,
+                    status="failed",
+                    message=failure_message,
+                    error=failure_message,
+                )
+            except Exception:  # noqa: BLE001 — Terminalisierung darf nicht am Registry-I/O scheitern
+                logger.exception(
+                    "run_registry.update_run failed during terminalization [run_id=%s]",
+                    run_id,
+                )
             if isinstance(exc, TimeoutError):
                 raise TimeoutError from None
-            if not isinstance(exc, _AiModelRefRoutingInputError):
+            if not isinstance(exc, AiModelRefRoutingInputError):
                 raise AiModelRefPostValidationError from None
         raise
 
@@ -113,12 +131,24 @@ class GraphBuildService:
             llm_runtime: Optional runtime configuration for the language model.
             llm_profile_id: Optional language model profile identifier recorded on the project.
             additional_context: Optional context supplied to the ontology generator.
-        
+            ai_model_ref: Canonical (provider connection, model) reference chosen in
+                the UI. When set it is authoritative and suppresses every legacy
+                override (``llm_model_override``, ``llm_runtime``, ``llm_profile_id``
+                are forced to ``None``); it is persisted on the project so a resumed
+                graph build keeps the binding.
+
         Returns:
             The project updated with the generated ontology and analysis summary.
-        
+
         Raises:
             ValueError: If the project does not exist.
+            AiModelRefRoutingInputError: If route seeding rejects the ``ai_model_ref``
+                (unknown/disabled connection, model not in the catalog).
+            AiModelRefPostValidationError: If a non-routing failure occurs after the
+                route was sealed; project and run are terminalized first and the raw
+                error is not propagated.
+            TimeoutError: If a synchronous step times out; states are terminalized
+                before the timeout is re-raised.
         """
         project = ProjectManager.get_project(project_id)
         if not project:
@@ -137,14 +167,14 @@ class GraphBuildService:
             linked_ids={"project_id": project.project_id},
         )
         run_id = run_record["run_id"]
-        ai_model_ref_kwargs = (
-            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
-        )
+        # Routing-Phase: nur hier ist ein Fehler tatsächlich ein
+        # ai_model_ref-Routingproblem und darf als solches terminalisiert und
+        # nach außen als 400 klassifiziert werden.
         with _terminalize_ai_model_ref_sync_failure(
             ai_model_ref=ai_model_ref,
             project=project,
             run_id=run_id,
-            phase="ontology_generation",
+            phase="ontology_routing",
         ):
             for stage_id in ("document_ingest", "ontology_generation"):
                 with _classify_ai_model_ref_seed_error(ai_model_ref):
@@ -154,7 +184,7 @@ class GraphBuildService:
                         llm_model_override=effective_model_override,
                         llm_runtime=effective_llm_runtime,
                         llm_profile_id=effective_profile_id,
-                        **ai_model_ref_kwargs,
+                        ai_model_ref=ai_model_ref,
                     )
             route_router = StageModelRouter(run_id)
             ingest_route = route_router.resolve("document_ingest")
@@ -162,6 +192,16 @@ class GraphBuildService:
             ontology_route = route_router.resolve("ontology_generation")
             route_router.lock_stage("ontology_generation", ontology_route)
 
+        # Generierungs-/Persistenzphase: Fehler werden weiterhin terminalisiert
+        # und sanitisiert, tragen aber eine eigene, nicht-routingbezogene
+        # Meldung, damit Routingfehler unterscheidbar bleiben.
+        with _terminalize_ai_model_ref_sync_failure(
+            ai_model_ref=ai_model_ref,
+            project=project,
+            run_id=run_id,
+            phase="ontology_generation",
+            failure_message=AI_MODEL_REF_GENERATION_FAILURE_MESSAGE,
+        ):
             # The locked ontology route is authoritative; profile IDs are metadata only.
             llm_client = LLMClient.from_route(
                 ontology_route,
@@ -193,6 +233,12 @@ class GraphBuildService:
             project.llm_model = effective_model_override
             project.llm_provider = effective_llm_runtime.redacted_metadata() if effective_llm_runtime else None
             project.llm_profile_id = effective_profile_id
+            # Kanonische Referenz persistieren: auf dem ai_model_ref-Pfad sind
+            # alle Legacy-Felder None, ein wiederaufgenommener Build hätte sonst
+            # keinerlei Modell-/Connection-Bindung mehr (#900).
+            project.ai_model_ref = (
+                ai_model_ref.model_dump(mode="json") if ai_model_ref is not None else None
+            )
             ProjectManager.save_project(project)
 
             run_registry.update_run(
@@ -231,14 +277,24 @@ class GraphBuildService:
             chunk_size: Optional text chunk size.
             chunk_overlap: Optional overlap between consecutive text chunks.
             container: Service container used to create the graph builder.
-        
+            ai_model_ref: Canonical (provider connection, model) reference. When set
+                it is authoritative and suppresses every legacy override. When absent
+                and the request carries no legacy route either, a reference persisted
+                on the project by the ontology run is used instead.
+
         Returns:
             A tuple containing the task identifier and run identifier.
-        
+
         Raises:
             ValueError: If the project, extracted text, or ontology is missing, or if
                 the project has not completed ontology generation.
             RuntimeError: If a graph build is already in progress and `force` is false.
+            AiModelRefRoutingInputError: If route seeding rejects the ``ai_model_ref``.
+            AiModelRefPostValidationError: If a non-routing failure occurs after the
+                route was sealed; project, run and task are terminalized first and the
+                raw error is not propagated.
+            TimeoutError: If a synchronous step times out; states are terminalized
+                before the timeout is re-raised.
         """
         project = ProjectManager.get_project(project_id)
         if not project:
@@ -256,6 +312,25 @@ class GraphBuildService:
             project.graph_id = None
             project.graph_build_task_id = None
             project.error = None
+
+        # Resume-Pfad: hat der Request keine eigene Route und trägt das Projekt
+        # eine beim Ontology-Generate persistierte AiModelRef, ist diese die
+        # kanonische Bindung — analog zum llm_profile_id-Default darunter (#900).
+        if (
+            ai_model_ref is None
+            and project.ai_model_ref
+            and not llm_model_override
+            and (llm_runtime is None or not llm_runtime.enabled)
+            and not llm_profile_id
+        ):
+            try:
+                ai_model_ref = AiModelRef.model_validate(project.ai_model_ref)
+            except Exception:  # noqa: BLE001 — defekte Persistenz darf den Legacy-Pfad nicht blockieren
+                logger.warning(
+                    "Persistierte ai_model_ref des Projekts ist ungültig, "
+                    "Legacy-Routing wird verwendet [project_id=%s]",
+                    project_id,
+                )
 
         effective_model_override = None if ai_model_ref is not None else llm_model_override
         effective_llm_runtime = None if ai_model_ref is not None else llm_runtime
@@ -294,9 +369,6 @@ class GraphBuildService:
             metadata={"graph_name": graph_name},
         )
         task_id: str | None = None
-        ai_model_ref_kwargs = (
-            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
-        )
         with _terminalize_ai_model_ref_sync_failure(
             ai_model_ref=ai_model_ref,
             project=project,
@@ -320,7 +392,7 @@ class GraphBuildService:
                     llm_model_override=effective_model_override,
                     llm_runtime=effective_llm_runtime,
                     llm_profile_id=effective_profile_id,
-                    **ai_model_ref_kwargs,
+                    ai_model_ref=ai_model_ref,
                 )
             route_router = StageModelRouter(run_record["run_id"])
             resolved_route = route_router.resolve("graph_build")

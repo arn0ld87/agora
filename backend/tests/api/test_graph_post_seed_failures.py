@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -14,7 +15,10 @@ from app.api import graph_bp
 from app.container import AgoraContainer
 from app.contracts.llm_routing_contract import ResolvedRoute
 from app.models.project import ProjectStatus
-from app.services.graph_build import AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+from app.services.graph_build import (
+    AI_MODEL_REF_GENERATION_FAILURE_MESSAGE,
+    AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+)
 from app.storage.graph_storage import GraphStorage
 
 
@@ -38,8 +42,26 @@ class _Router:
         return None
 
 
+def _capture_agora_logs(monkeypatch, caplog) -> None:
+    """Macht die ``agora.*``-Logger für caplog sichtbar.
+
+    ``get_logger`` setzt ``propagate = False``, deshalb erreicht kein Record den
+    Root-Handler, an dem caplog hängt — ohne diesen Schalter wäre jede
+    ``SECRET_SENTINEL not in caplog.text``-Zusicherung gegen ein leeres caplog
+    trivial wahr. DEBUG-Level, damit auch INFO/DEBUG-Records erfasst werden.
+    """
+    caplog.set_level(logging.DEBUG)
+    for name, candidate in list(logging.root.manager.loggerDict.items()):
+        if isinstance(candidate, logging.Logger) and (
+            name == "agora" or name.startswith("agora.")
+        ):
+            monkeypatch.setattr(candidate, "propagate", True)
+            monkeypatch.setattr(candidate, "level", logging.DEBUG)
+
+
 @pytest.fixture
-def post_seed_env(monkeypatch):
+def post_seed_env(monkeypatch, caplog):
+    _capture_agora_logs(monkeypatch, caplog)
     storage = MagicMock(spec=GraphStorage)
     app = Flask(__name__)
     app.config.update(
@@ -144,6 +166,9 @@ def _assert_public_error_is_safe(
         "code": code,
     }
     assert SECRET_SENTINEL not in response.get_data(as_text=True)
+    # Die Terminalisierung loggt garantiert eine Warnung — ohne diese Prüfung
+    # wäre die Sentinel-Zusicherung gegen ein leeres caplog trivial wahr.
+    assert caplog.records
     assert SECRET_SENTINEL not in caplog.text
     assert SECRET_SENTINEL not in captured.out
     assert SECRET_SENTINEL not in captured.err
@@ -180,7 +205,9 @@ def test_ontology_post_seed_generation_failure_terminalizes_run_and_project(
     )
     assert post_seed_env.seed.call_count == 2
     assert post_seed_env.project.status == ProjectStatus.FAILED
-    assert post_seed_env.project.error == AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+    # Generierungsfehler tragen bewusst *nicht* die Routing-Meldung: das
+    # Routing war erfolgreich, gescheitert ist die Ontology-Generierung.
+    assert post_seed_env.project.error == AI_MODEL_REF_GENERATION_FAILURE_MESSAGE
     post_seed_env.project_manager.delete_project.assert_not_called()
     failed_run = post_seed_env.run_registry.update_run.call_args
     assert failed_run.args == ("run-ontology_generate",)

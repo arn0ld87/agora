@@ -18,6 +18,7 @@ from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.graph_build import (
     AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
     AiModelRefPostValidationError,
+    AiModelRefRoutingInputError,
     GraphBuildService,
 )
 from ..utils.file_parser import FileParser
@@ -216,9 +217,6 @@ def generate_ontology():
     ProjectManager.save_project(project)
 
     try:
-        ai_model_ref_kwargs = (
-            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
-        )
         project = GraphBuildService.generate_ontology(
             project_id=project.project_id,
             simulation_requirement=simulation_requirement,
@@ -227,22 +225,35 @@ def generate_ontology():
             llm_runtime=llm_runtime,
             llm_profile_id=llm_profile_id,
             additional_context=additional_context,
-            **ai_model_ref_kwargs,
+            ai_model_ref=ai_model_ref,
+        )
+    except AiModelRefRoutingInputError:
+        # Nur echte ai_model_ref-Routingfehler werden hier klassifiziert. Der
+        # Service hat bereits terminalisiert; die Prüfung läuft gegen den
+        # *persistierten* Stand, damit sie tatsächlich idempotent ist und nicht
+        # gegen die stale API-Instanz vergleicht.
+        persisted = ProjectManager.get_project(project.project_id) or project
+        if (
+            persisted.status != ProjectStatus.FAILED
+            or persisted.error != AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+        ):
+            persisted.status = ProjectStatus.FAILED
+            persisted.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+            ProjectManager.save_project(persisted)
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+        )
+    except AiModelRefPostValidationError:
+        # Betriebsfehler jenseits des Routings: Projekt/Run sind im Service
+        # terminalisiert, nach außen darf kein Roh-Fehlertext gelangen.
+        return json_error(
+            "internal server error",
+            status=500,
+            code=ApiErrorCode.INTERNAL_ERROR,
         )
     except ValueError as exc:
-        if ai_model_ref is not None:
-            if (
-                project.status != ProjectStatus.FAILED
-                or project.error != AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
-            ):
-                project.status = ProjectStatus.FAILED
-                project.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
-                ProjectManager.save_project(project)
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                status=400,
-                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
-            )
         ProjectManager.delete_project(project.project_id)
         return json_error_from_exception(exc)
 
@@ -308,9 +319,6 @@ def build_graph():
         return json_error(ApiErrorCode.NEO4J_UNAVAILABLE, status=503, message="GraphStorage not initialized")
 
     try:
-        ai_model_ref_kwargs = (
-            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
-        )
         task_id, run_id = GraphBuildService.build_graph(
             project_id=project_id,
             graph_name=graph_name,
@@ -321,7 +329,7 @@ def build_graph():
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             container=container,
-            **ai_model_ref_kwargs,
+            ai_model_ref=ai_model_ref,
         )
         return json_success({
             "project_id": project_id,
@@ -329,13 +337,15 @@ def build_graph():
             "run_id": run_id,
             "message": "Graph build task started. Query progress via /task/{task_id}"
         })
+    except AiModelRefRoutingInputError:
+        return json_error(
+            ApiErrorCode.VALIDATION_FAILED,
+            status=400,
+            message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+        )
     except ValueError as exc:
-        if ai_model_ref is not None:
-            return json_error(
-                ApiErrorCode.VALIDATION_FAILED,
-                status=400,
-                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
-            )
+        # Semantische Fehler (ONTOLOGY_MISSING, NOT_FOUND, fehlender Text)
+        # behalten ihren Code — sie sind keine Routingprobleme.
         return json_error_from_exception(exc)
     except AiModelRefPostValidationError:
         return json_error(

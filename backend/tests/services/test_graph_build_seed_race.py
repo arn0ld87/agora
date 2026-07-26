@@ -9,7 +9,11 @@ import pytest
 
 from app.contracts.ai_provider_contract import AiModelRef
 from app.models.project import ProjectStatus
-from app.services.graph_build import GraphBuildService
+from app.services.graph_build import (
+    AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+    AiModelRefRoutingInputError,
+    GraphBuildService,
+)
 
 
 PROJECT_ID = "proj_0123456789ab"
@@ -46,7 +50,10 @@ def test_ontology_seed_race_terminalizes_run_and_project(monkeypatch):
     monkeypatch.setattr("app.services.graph_build.run_registry", run_registry)
     monkeypatch.setattr("app.services.graph_build.seed_run_stage_routing", _seed_race)
 
-    with pytest.raises(ValueError) as exc_info:
+    # Der konkrete Typ ist Teil der Zusicherung: ein argumentloser
+    # ``_AiModelRefRoutingInputError`` hat ein leeres ``str()``, die
+    # Sentinel-Prüfung allein wäre auch bei jedem anderen ValueError grün.
+    with pytest.raises(AiModelRefRoutingInputError) as exc_info:
         GraphBuildService.generate_ontology(
             project_id=PROJECT_ID,
             simulation_requirement="Analyse the document.",
@@ -56,6 +63,7 @@ def test_ontology_seed_race_terminalizes_run_and_project(monkeypatch):
 
     assert SECRET_SENTINEL not in str(exc_info.value)
     assert project.status == ProjectStatus.FAILED
+    assert project.error == AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
     save_project.assert_called_once_with(project)
     failed_update = run_registry.update_run.call_args
     assert failed_update.args == ("run-ontology-race",)
@@ -101,7 +109,7 @@ def test_graph_seed_race_terminalizes_run_task_and_project(monkeypatch):
     )
     monkeypatch.setattr("app.jobs.enqueue", enqueue)
 
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(AiModelRefRoutingInputError) as exc_info:
         GraphBuildService.build_graph(
             project_id=PROJECT_ID,
             graph_name="Race graph",
@@ -111,6 +119,7 @@ def test_graph_seed_race_terminalizes_run_task_and_project(monkeypatch):
 
     assert SECRET_SENTINEL not in str(exc_info.value)
     assert project.status == ProjectStatus.FAILED
+    assert project.error == AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
     assert project.graph_build_task_id == "task-race"
     assert save_project.call_count == 2
     task_manager.fail_task.assert_called_once()
