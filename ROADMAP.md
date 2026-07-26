@@ -76,7 +76,7 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 - [ ] Vue-v4 ist die einzige produktive Oberfläche
 - [ ] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen
 - [ ] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf
-- [ ] kein paralleler React-/Lovable-Rewrite
+- [x] kein paralleler React-/Lovable-Rewrite — der Lovable-Prototyp liegt außerhalb dieses Repos, ist unveröffentlicht und nicht produktiv verdrahtet, siehe [`docs/epics/frontend-next/2026-STATUS.md`](docs/epics/frontend-next/2026-STATUS.md)
 - [ ] Responsive- und Accessibility-Gates sind grün
 
 ### Provider und Routing
