@@ -18,13 +18,8 @@ import {
 } from '../api/simulation'
 import { cancelRun } from '../api/runs'
 import { generateReport } from '../api/report'
-import { storedEffectiveModel, STORAGE_CUSTOM_MODEL, STORAGE_MODEL } from '../composables/useEnvForm'
-import {
-  runtimeLlmPayloadFromStorage,
-  runtimeProviderMissingKeyEverywhere,
-} from '../composables/useRuntimeLlmOptions'
-import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
-import { getRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
+import { useRunModelResolver } from '@/composables/useRunModelResolver'
+import { clearRunModelOverride } from '@/store/runModelOverride'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from './ui/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -188,11 +183,12 @@ const _simClock = computed(() => useSimClock(props.simulationId || '__unset__'))
 const currentSimTime = computed(() => _simClock.value.currentSimTime.value)
 const simElapsedSec = computed(() => _simClock.value.elapsed.value)
 
-// Kanonische (Connection, Modell)-Auswahl aus routing/defaults.global_default.
-// Wird beim Sim-Start als autoritatives ``ai_model_ref`` gesendet und bindet
+// Autoritative (Connection, Modell)-Auswahl: tab-skopierter Run-Override vor
+// routing/defaults.global_default. Wird beim Sim-Start als ``ai_model_ref``
+// gesendet und bindet
 // Base-URL + Secret derselben ProviderConnection an die OASIS-Route — kein
 // .env-Fallback (Root Cause ``404 model MiniMax-M3 not found``).
-const effectiveModel = useEffectiveModelSelection()
+const { resolveRunModel } = useRunModelResolver()
 
 const statusStream = useEventStream(() => props.simulationId, {
   state: (msg) => applyRunStateEvent(msg?.payload),
@@ -240,31 +236,15 @@ async function doStart() {
     // Kanon (routing/defaults.global_default). Die Auswahl wird als
     // ``ai_model_ref`` gesendet — das bindet Base-URL + Secret derselben
     // Connection an die OASIS-Route und schließt das .env-Fallback aus.
-    // ``ai_model_ref`` darf nicht mit den Legacy-Feldern ``llm_model``/
-    // ``llm_provider`` kombiniert werden (Backend: 400), deshalb nur im
-    // Else-Zweig.
-    let selection = getRunModelOverride()
-    const usedRunOverride = selection !== null
-    if (!selection) {
-      try { await effectiveModel.ensureLoaded() } catch { /* best effort; Legacy-Pfad greift unten */ }
-      selection = effectiveModel.effectiveRef.value
-    }
+    // Ohne Override und ohne Kanon entscheidet das Backend-Routing; lokale
+    // Legacy-Modellstrings sind keine Routingquelle mehr.
+    const { ref: selection, usedRunOverride } = await resolveRunModel()
     if (selection && selection.provider_connection_id && selection.model_id) {
       params.ai_model_ref = {
         provider_connection_id: selection.provider_connection_id,
         model_id: selection.model_id,
         source: selection.source ?? 'explicit',
       }
-    } else {
-      const model = storedEffectiveModel()
-      if (model) params.llm_model = model
-      if (await runtimeProviderMissingKeyEverywhere()) {
-        addLog(t('step2.runtimeProvider.missingKey'))
-        emit('update-status', 'error')
-        return
-      }
-      const runtimeProvider = runtimeLlmPayloadFromStorage()
-      if (runtimeProvider) params.llm_provider = runtimeProvider
     }
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
@@ -456,15 +436,6 @@ async function goReport() {
   isGeneratingReport.value = true
   try {
     const payload = { simulation_id: props.simulationId }
-    const model = storedEffectiveModel('agora.reportModel', 'agora.reportCustomModel')
-      || storedEffectiveModel(STORAGE_MODEL, STORAGE_CUSTOM_MODEL)
-    if (model) payload.llm_model = model
-    if (await runtimeProviderMissingKeyEverywhere()) {
-      addLog(t('step2.runtimeProvider.missingKey'))
-      return
-    }
-    const runtimeProvider = runtimeLlmPayloadFromStorage()
-    if (runtimeProvider) payload.llm_provider = runtimeProvider
     const res = await generateReport(payload)
     if (res?.success && res.data?.report_id) {
       router.push({ name: 'Report', params: { reportId: res.data.report_id } })

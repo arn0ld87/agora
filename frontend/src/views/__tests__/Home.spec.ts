@@ -3,11 +3,10 @@
  *
  * Drei Kanon-First-Pruefungen + zwei Init-Tests:
  *  - Picker-Anbindung: AiModelPicker gerendert, ModelPicker (v4 legacy) NICHT
- *  - Picker-Pick ist TRANSIENT (KEIN setGlobalSelection): schreibt nur
- *    STORAGE_MODEL-Spiegel (agora.lastModel) via adapter.toStoredModelString
- *    und entfernt defensiv den Legacy-Key agora.home.route.
- *  - null-Pfad: entfernt agora.home.route + STORAGE_MODEL='default',
- *    modelOverridden wird wieder false.
+ *  - Picker-Pick ist TRANSIENT (KEIN setGlobalSelection): Beim Start wird der
+ *    volle AiModelRef als Run-Override gespeichert; Legacy-Modell-Keys bleiben
+ *    unangetastet.
+ *  - null-Pfad: entfernt agora.home.route, modelOverridden wird wieder false.
  *  - Kanon-First-Init: selectedModel wird aus effectiveRef vorbelegt, wenn
  *    der User nichts waehlt (ensureLoaded in onMounted aufgerufen).
  *  - Nach explizitem Pick (modelOverridden=true) ueberschreibt die
@@ -54,6 +53,10 @@ const stubs = {
 
 const setPendingUploadMock = vi.fn()
 const routerPushMock = vi.fn()
+const runOverrideMocks = vi.hoisted(() => ({
+  set: vi.fn(),
+  clear: vi.fn(),
+}))
 
 vi.mock('@/api/simulation', () => ({
   getAvailableModels: vi.fn().mockResolvedValue({
@@ -64,13 +67,10 @@ vi.mock('@/api/simulation', () => ({
 vi.mock('../store/pendingUpload', () => ({ setPendingUpload: setPendingUploadMock }))
 vi.mock('../composables/useEnvForm', () => ({ STORAGE_LANG: 'agora.lang', STORAGE_MODEL: 'agora.lastModel' }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPushMock }) }))
-
-const adapterMock = {
-  toLlmRoute: vi.fn(),
-  toAiModelRef: vi.fn(),
-  toStoredModelString: vi.fn((aiRef: { model_id: string } | null) => aiRef?.model_id ?? 'default'),
-}
-vi.mock('@/composables/useAiModelRefAdapter', () => ({ useAiModelRefAdapter: () => adapterMock }))
+vi.mock('@/store/runModelOverride', () => ({
+  setRunModelOverride: runOverrideMocks.set,
+  clearRunModelOverride: runOverrideMocks.clear,
+}))
 
 // ---- Kanon-Composable-Mock (steuerbar, Kanon-First). ----
 // effectiveRef/effectiveRoute als Plain-Ref-Objekte (.value wird von Home
@@ -163,7 +163,9 @@ function resetEffMock(opts: { deferEnsureLoaded?: boolean } = {}) {
 
 async function mountHome() {
   localStorageMock.clear()
-  for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, adapterMock.toStoredModelString]) m.mockClear()
+  for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem]) m.mockClear()
+  runOverrideMocks.set.mockClear()
+  runOverrideMocks.clear.mockClear()
   vi.stubGlobal('localStorage', localStorageMock)
   const pinia = createPinia(); setActivePinia(pinia)
   return mount(Home, { global: { plugins: [makeI18n()], stubs } })
@@ -183,7 +185,7 @@ describe('Home (Kanon-First, Phase-1)', () => {
     expect(w.findComponent(legacyModelPickerStub).exists()).toBe(false)
   })
 
-  it('onPickModel: transienter Override — STORAGE_MODEL-Spiegel + agora.home.route-Entfernung, KEIN setGlobalSelection, KEIN aiModelRef-Storage', async () => {
+  it('onPickModel berührt die Legacy-Modell-Keys nicht und speichert den Override noch nicht', async () => {
     const w = await mountHome()
     await flushPromises()
     const picker = w.findComponent(aiPickerStub)
@@ -194,9 +196,11 @@ describe('Home (Kanon-First, Phase-1)', () => {
     })
     await flushPromises()
 
-    // (a) STORAGE_MODEL-Spiegel via Adapter geschrieben.
-    const modelCall = localStorageMock.setItem.mock.calls.find((c) => c[0] === 'agora.lastModel')
-    expect(modelCall?.[1]).toBe('gpt-4o-mini')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
+    expect(runOverrideMocks.set).not.toHaveBeenCalled()
 
     // (b) Legacy-Route-Key defensiv entfernt (mindestens beim Pick).
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.home.route')
@@ -213,7 +217,7 @@ describe('Home (Kanon-First, Phase-1)', () => {
     expect(effMock.setGlobalSelection).not.toHaveBeenCalled()
   })
 
-  it('onPickModel: bei null — agora.home.route entfernt + STORAGE_MODEL="default", modelOverridden===false', async () => {
+  it('onPickModel(null) schreibt oder cleart keine Legacy-Modell-Keys', async () => {
     const w = await mountHome()
     await flushPromises()
     const picker = w.findComponent(aiPickerStub)
@@ -222,9 +226,10 @@ describe('Home (Kanon-First, Phase-1)', () => {
 
     // Legacy-Route-Key entfernt (onMounted + beim null-Pick).
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.home.route')
-    // STORAGE_MODEL auf 'default' zurueckgesetzt.
-    const modelCall = localStorageMock.setItem.mock.calls.find((c) => c[0] === 'agora.lastModel')
-    expect(modelCall?.[1]).toBe('default')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     // Entfernter aiModelRef-Sink wird NICHT angeruehrt.
     expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.home.aiModelRef')
     expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.home.aiModelRef', expect.anything())
@@ -232,6 +237,30 @@ describe('Home (Kanon-First, Phase-1)', () => {
     // modelOverridden===false: workspaceDefaultHint wird wieder gerendert
     // (v-if="!modelOverridden && !loadingModels", loadingModels=false nach flush).
     expect(w.html()).toContain('WORKSPACE_DEFAULT_HINT')
+  })
+
+  it('speichert einen expliziten Picker-Pick erst beim Start als vollständigen Run-Override', async () => {
+    const w = await mountHome()
+    await flushPromises()
+    const picker = w.findComponent(aiPickerStub)
+    await picker.trigger('click')
+    expect(runOverrideMocks.set).not.toHaveBeenCalled()
+
+    const file = new File(['briefing'], 'briefing.md', { type: 'text/markdown' })
+    const input = w.find<HTMLInputElement>('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await w.find<HTMLTextAreaElement>('textarea.prompt').setValue('Analyse')
+    await w.findAll('button').find(button => button.text() === 'Start')!.trigger('click')
+    await flushPromises()
+
+    expect(runOverrideMocks.set).toHaveBeenCalledWith({
+      provider_connection_id: 'conn-openai-1',
+      model_id: 'gpt-4o-mini',
+      source: 'explicit',
+    })
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
   })
 
   it('Kanon-First-Init: selectedModel wird aus effectiveRef vorbelegt, wenn User nichts waehlt; ensureLoaded in onMounted aufgerufen, setGlobalSelection NICHT', async () => {

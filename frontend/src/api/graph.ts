@@ -1,11 +1,13 @@
 import service, { requestWithRetry } from './index'
 import type { ApiResponse } from '../types/run'
+import type { AiModelRefPayload } from './report'
 
 // --- Local types --------------------------------------------------------
 
 export interface BuildGraphData {
   project_id: string
   graph_name?: string
+  ai_model_ref?: AiModelRefPayload
   [key: string]: unknown
 }
 
@@ -42,6 +44,7 @@ export interface ProjectResponse {
   status?: string
   graph_id?: string
   graph_build_task_id?: string
+  llm_profile_id?: string | null
   [key: string]: unknown
 }
 

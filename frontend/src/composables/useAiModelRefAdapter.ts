@@ -7,8 +7,7 @@
  * - AiModelRef.provider_connection_id (Connection-ID, z. B. "conn-uuid-xyz")
  * - LlmRoute.provider_id            (Provider-Connection-ID, identisch seit 7.3.3)
  *
- * Tests: Die pure-Helper (`toLlmRoutePure`, `toAiModelRefPure`,
- * `toStoredModelStringPure`) sind ohne Store testbar.
+ * Tests: Die pure-Helper (`toLlmRoutePure`, `toAiModelRefPure`) sind ohne Store testbar.
  *
  * Slice 7.6c: Body-Type heißt `LlmRoute` (siehe `frontend/src/contracts/llmRoute.ts`).
  * Das Backend bleibt Pydantic-SSoT, der Frontend-Type ist nur die
@@ -29,8 +28,6 @@ export interface AiModelRefAdapter {
   /** Konvertiert LlmRoute → AiModelRef (Picker-Anzeige). `null`, wenn
    *  die Route keine gültige Provider-Connection-ID + Modell trägt. */
   toAiModelRef: (route: LlmRoute) => AiModelRef | null
-  /** STORAGE_MODEL-Spiegel: nur model_id (MainView liest das klassisch). */
-  toStoredModelString: (ref: AiModelRef | null) => string
   /** Lookup-Builder für externe Aufrufer (z. B. Tests). */
   buildLookup: () => ConnectionLookup
 }
@@ -82,10 +79,6 @@ export function firstConnectionId(
   return lookup?.get(providerKind)?.[0]?.id
 }
 
-export function toStoredModelStringPure(ref: AiModelRef | null): string {
-  return ref?.model_id ?? 'default'
-}
-
 export function useAiModelRefAdapter(): AiModelRefAdapter {
   const store = useLlmProvidersStore()
   const buildLookup = (): ConnectionLookup => {
@@ -101,9 +94,7 @@ export function useAiModelRefAdapter(): AiModelRefAdapter {
     const kindLookup = buildProviderKindLookup(buildLookup())
     return toAiModelRefPure(route, firstConnectionIdByKind(kindLookup))
   }
-  const toStoredModelString = (ref: AiModelRef | null): string =>
-    toStoredModelStringPure(ref)
-  return { toLlmRoute, toAiModelRef, toStoredModelString, buildLookup }
+  return { toLlmRoute, toAiModelRef, buildLookup }
 }
 
 function firstConnectionIdByKind(

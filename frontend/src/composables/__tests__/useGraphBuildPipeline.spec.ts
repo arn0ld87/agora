@@ -11,6 +11,27 @@ const pendingUpload = vi.hoisted(() => ({
   getPendingUpload: vi.fn(),
   clearPendingUpload: vi.fn(),
 }))
+const modelSelection = vi.hoisted(() => ({
+  effectiveRef: null as {
+    provider_connection_id: string
+    model_id: string
+    source: string
+  } | null,
+  runOverride: null as {
+    provider_connection_id: string
+    model_id: string
+    source: string
+  } | null,
+  ensureLoaded: vi.fn(),
+  getRunModelOverride: vi.fn(),
+}))
+const legacyStorageValues = new Map<string, string>()
+const localStorageMock = {
+  getItem: (key: string) => legacyStorageValues.get(key) ?? null,
+  setItem: (key: string, value: string) => { legacyStorageValues.set(key, value) },
+  removeItem: (key: string) => { legacyStorageValues.delete(key) },
+  clear: () => { legacyStorageValues.clear() },
+}
 const polling = vi.hoisted(() => ({
   calls: 0,
   taskStart: vi.fn(),
@@ -38,9 +59,18 @@ vi.mock('../usePolling', () => ({
 vi.mock('../useSystemLog', () => ({
   useSystemLog: () => ({ systemLogs: { value: [] }, addLog: vi.fn(), clearLog: vi.fn() }),
 }))
-vi.mock('../useEnvForm', () => ({ storedEffectiveModel: vi.fn(() => 'fallback-model') }))
-vi.mock('../useRuntimeLlmOptions', () => ({
-  runtimeLlmPayloadFromStorage: vi.fn(() => ({ provider: 'fallback-provider' })),
+vi.mock('../useEffectiveModelSelection', () => ({
+  useEffectiveModelSelection: () => ({
+    effectiveRef: { get value() { return modelSelection.effectiveRef } },
+    effectiveRoute: { value: null },
+    loading: { value: false },
+    error: { value: null },
+    ensureLoaded: modelSelection.ensureLoaded,
+    setGlobalSelection: vi.fn(),
+  }),
+}))
+vi.mock('../../store/runModelOverride', () => ({
+  getRunModelOverride: modelSelection.getRunModelOverride,
 }))
 
 import { useGraphBuildPipeline } from '../useGraphBuildPipeline'
@@ -62,6 +92,12 @@ describe('useGraphBuildPipeline', () => {
     vi.clearAllMocks()
     polling.calls = 0
     polling.taskTick = null
+    vi.stubGlobal('localStorage', localStorageMock)
+    localStorageMock.clear()
+    modelSelection.effectiveRef = null
+    modelSelection.runOverride = null
+    modelSelection.ensureLoaded.mockResolvedValue(undefined)
+    modelSelection.getRunModelOverride.mockImplementation(() => modelSelection.runOverride)
     pendingUpload.getPendingUpload.mockReturnValue({
       isPending: true,
       files: [new File(['source'], 'source.txt', { type: 'text/plain' })],
@@ -98,7 +134,7 @@ describe('useGraphBuildPipeline', () => {
       params: { projectId: 'project_42' },
     })
     expect(graphApi.buildGraph).toHaveBeenCalledTimes(1)
-    expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42', llm_model: 'fallback-model', llm_provider: { provider: 'fallback-provider' } })
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
     expect(pipeline.currentProjectId.value).toBe('project_42')
   })
 
@@ -112,7 +148,7 @@ describe('useGraphBuildPipeline', () => {
     expect(pipeline.error.value).toBe('errors.pendingUploadMissing')
   })
 
-  it('verwendet ohne Profil das Fallback-Modell und den Fallback-Provider im Ontology-FormData', async () => {
+  it('verwendet ohne Profil den Run-Override als vollständige ai_model_ref vor dem Kanon und behält die Connection', async () => {
     pendingUpload.getPendingUpload.mockReturnValue({
       isPending: true,
       files: [new File(['source'], 'source.txt', { type: 'text/plain' })],
@@ -121,14 +157,87 @@ describe('useGraphBuildPipeline', () => {
       numAgents: 30,
       numRounds: 10,
     })
+    // Gleiche model_id auf zwei Connections: Nur der vollständige Ref kann
+    // die explizit gewählte Connection zuverlässig erhalten.
+    modelSelection.effectiveRef = {
+      provider_connection_id: 'conn-workspace',
+      model_id: 'shared-model',
+      source: 'workspace-default',
+    }
+    modelSelection.runOverride = {
+      provider_connection_id: 'conn-run',
+      model_id: 'shared-model',
+      source: 'run-override',
+    }
+    localStorageMock.setItem('agora.lastModel', 'custom')
+    localStorageMock.setItem('agora.lastCustomModel', 'legacy-model')
     const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
 
     await pipeline.initialize()
 
     const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
     expect(formData.get('llm_profile_id')).toBeNull()
-    expect(formData.get('llm_model')).toBe('fallback-model')
-    expect(formData.get('llm_provider')).toBe(JSON.stringify({ provider: 'fallback-provider' }))
+    expect(JSON.parse(String(formData.get('ai_model_ref')))).toEqual(modelSelection.runOverride)
+    expect(formData.get('llm_model')).toBeNull()
+    expect(formData.get('llm_provider')).toBeNull()
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({
+      project_id: 'project_42',
+      ai_model_ref: modelSelection.runOverride,
+    })
+    expect(modelSelection.ensureLoaded).not.toHaveBeenCalled()
+    expect(localStorageMock.getItem('agora.lastModel')).toBe('custom')
+    expect(localStorageMock.getItem('agora.lastCustomModel')).toBe('legacy-model')
+  })
+
+  it('verwendet ohne Run-Override den vollständigen effektiven Kanon-Ref für Ontologie und Build', async () => {
+    pendingUpload.getPendingUpload.mockReturnValue({
+      isPending: true,
+      files: [new File(['source'], 'source.txt', { type: 'text/plain' })],
+      simulationRequirement: 'Analyse',
+      llmProfileId: null,
+      numAgents: 30,
+      numRounds: 10,
+    })
+    modelSelection.effectiveRef = {
+      provider_connection_id: 'conn-workspace',
+      model_id: 'shared-model',
+      source: 'workspace-default',
+    }
+
+    const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
+    await pipeline.initialize()
+
+    const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
+    expect(JSON.parse(String(formData.get('ai_model_ref')))).toEqual(modelSelection.effectiveRef)
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({
+      project_id: 'project_42',
+      ai_model_ref: modelSelection.effectiveRef,
+    })
+    expect(modelSelection.ensureLoaded).toHaveBeenCalledTimes(1)
+  })
+
+  it('sendet ohne Override und ohne Kanon keine Routingfelder und ignoriert liegengebliebene Legacy-Werte', async () => {
+    pendingUpload.getPendingUpload.mockReturnValue({
+      isPending: true,
+      files: [new File(['source'], 'source.txt', { type: 'text/plain' })],
+      simulationRequirement: 'Analyse',
+      llmProfileId: null,
+      numAgents: 30,
+      numRounds: 10,
+    })
+    localStorageMock.setItem('agora.lastModel', 'custom')
+    localStorageMock.setItem('agora.lastCustomModel', 'legacy-model')
+
+    const pipeline = useGraphBuildPipeline({ projectId: 'new', router: createRouter(), t })
+    await pipeline.initialize()
+
+    const formData = graphApi.generateOntology.mock.calls[0][0] as FormData
+    expect(formData.get('ai_model_ref')).toBeNull()
+    expect(formData.get('llm_model')).toBeNull()
+    expect(formData.get('llm_provider')).toBeNull()
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_42' })
+    expect(localStorageMock.getItem('agora.lastModel')).toBe('custom')
+    expect(localStorageMock.getItem('agora.lastCustomModel')).toBe('legacy-model')
   })
 
   it('behält Pending Upload bei Ontologiefehler und startet weder Build noch Navigation', async () => {
@@ -184,6 +293,88 @@ describe('useGraphBuildPipeline', () => {
       expect(pipeline.graphData.value).toEqual({ graph_id: 'graph_42', nodes: [], edges: [] })
       expect(pipeline.currentPhase.value).toBe(2)
     }
+  })
+
+  it('restored ontology_generated mit Profil startet den Build ohne ai_model_ref und ohne Resolver', async () => {
+    modelSelection.runOverride = {
+      provider_connection_id: 'conn-run',
+      model_id: 'shared-model',
+      source: 'run-override',
+    }
+    modelSelection.effectiveRef = {
+      provider_connection_id: 'conn-workspace',
+      model_id: 'shared-model',
+      source: 'workspace-default',
+    }
+    graphApi.getProject.mockResolvedValue({
+      success: true,
+      data: {
+        project_id: 'project_profile',
+        status: 'ontology_generated',
+        llm_profile_id: 'profile_42',
+      },
+    })
+    const pipeline = useGraphBuildPipeline({ projectId: 'project_profile', router: createRouter(), t })
+
+    await pipeline.initialize()
+
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({ project_id: 'project_profile' })
+    expect(modelSelection.getRunModelOverride).not.toHaveBeenCalled()
+    expect(modelSelection.ensureLoaded).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: 'Run-Override',
+      override: {
+        provider_connection_id: 'conn-run',
+        model_id: 'shared-model',
+        source: 'run-override',
+      },
+      effective: {
+        provider_connection_id: 'conn-workspace',
+        model_id: 'shared-model',
+        source: 'workspace-default',
+      },
+      expectedConnection: 'conn-run',
+      ensureCalls: 0,
+    },
+    {
+      label: 'Kanon',
+      override: null,
+      effective: {
+        provider_connection_id: 'conn-workspace',
+        model_id: 'shared-model',
+        source: 'workspace-default',
+      },
+      expectedConnection: 'conn-workspace',
+      ensureCalls: 1,
+    },
+  ])('restored ontology_generated ohne Profil verwendet $label als vollständigen Ref', async ({
+    override,
+    effective,
+    expectedConnection,
+    ensureCalls,
+  }) => {
+    modelSelection.runOverride = override
+    modelSelection.effectiveRef = effective
+    graphApi.getProject.mockResolvedValue({
+      success: true,
+      data: { project_id: 'project_restore', status: 'ontology_generated', llm_profile_id: null },
+    })
+    const pipeline = useGraphBuildPipeline({ projectId: 'project_restore', router: createRouter(), t })
+
+    await pipeline.initialize()
+
+    expect(graphApi.buildGraph).toHaveBeenCalledWith({
+      project_id: 'project_restore',
+      ai_model_ref: {
+        provider_connection_id: expectedConnection,
+        model_id: 'shared-model',
+        source: override?.source ?? effective.source,
+      },
+    })
+    expect(modelSelection.ensureLoaded).toHaveBeenCalledTimes(ensureCalls)
   })
 
   it('lädt bei einer echten A→B-Routennavigation das neue konkrete Projekt', async () => {

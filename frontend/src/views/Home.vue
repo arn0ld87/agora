@@ -12,10 +12,10 @@ import AgoraGlyph from '../components/ui/AgoraGlyph.vue'
 import AgoraBrand from '../components/brand/AgoraBrand.vue'
 import AiModelPicker from '@/components/v4/forms/AiModelPicker.vue'
 import { getAvailableModels } from '../api/simulation'
-import { STORAGE_LANG, STORAGE_MODEL } from '../composables/useEnvForm'
+import { STORAGE_LANG } from '../composables/useEnvForm'
 import { setPendingUpload } from '../store/pendingUpload'
-import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
+import { clearRunModelOverride, setRunModelOverride } from '@/store/runModelOverride'
 
 const { t, tm } = useI18n()
 const router = useRouter()
@@ -42,13 +42,11 @@ const language = ref(localStorage.getItem(STORAGE_LANG) || 'de')
 //   Das Default-Modell kommt aus dem Kanon (routing/defaults.global via
 //   useEffectiveModelSelection), NICHT mehr aus einem eigenen
 //   agora.home.aiModelRef-Key — damit Home dieselbe Auswahl wie Settings zeigt.
-//   Ein Picker-Pick ist ein transienter Override nur für diesen Start; er wird
-//   auf STORAGE_MODEL gespiegelt (Step2/MainView-Pipeline, Backend resolved
-//   Provider+Key serverseitig via SecretResolver). Slice 7.6c (Storage-Cut):
-//   Legacy-Key agora.home.route wird defensiv entfernt.
+//   Ein Picker-Pick ist ein transienter Override nur für diesen Start und wird
+//   als vollständiger AiModelRef in der tab-skopierten Run-Senke gespeichert.
+//   Slice 7.6c (Storage-Cut): Legacy-Key agora.home.route wird defensiv entfernt.
 const STORAGE_HOME_ROUTE_LEGACY = 'agora.home.route'
 
-const adapter = useAiModelRefAdapter()
 const effectiveModel = useEffectiveModelSelection()
 
 const selectedModel = ref(null)
@@ -60,11 +58,10 @@ function onPickModel(aiRef) {
   selectedModel.value = aiRef
   modelOverridden.value = aiRef !== null
   if (aiRef) {
-    localStorage.setItem(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
     localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
   } else {
     localStorage.removeItem(STORAGE_HOME_ROUTE_LEGACY)
-    localStorage.setItem(STORAGE_MODEL, 'default')
+    clearRunModelOverride()
   }
 }
 
@@ -142,10 +139,11 @@ async function startSimulation() {
   loading.value = true
   errorMsg.value = ''
   try {
-    // Spiegele die AiModelPicker-Auswahl auf STORAGE_MODEL, damit der bestehende
-    // MainView/Step2-Pfad (storedEffectiveModel → llm_model) sie aufgreift.
-    // Provider+Key resolved das Backend serverseitig via SecretResolver (PR #499).
-    localStorage.setItem(STORAGE_MODEL, adapter.toStoredModelString(selectedModel.value))
+    if (modelOverridden.value && selectedModel.value) {
+      setRunModelOverride(selectedModel.value)
+    } else {
+      clearRunModelOverride()
+    }
     localStorage.setItem(STORAGE_LANG, language.value)
 
     setPendingUpload(files.value, simulationPrompt.value)

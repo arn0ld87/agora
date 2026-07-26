@@ -10,9 +10,8 @@
  * einem eigenen `agora.hero.aiModelRef`-localStorage-Key. Beim Mount wird
  * `effectiveModel.ensureLoaded()` gerufen und `selectedModel` aus
  * `effectiveModel.effectiveRef` initialisiert. Ein Dashboard-Pick ist ein
- * TRANSIENTER Run-Override: nur STORAGE_MODEL-Spiegel fuer MainView + defensive
- * Entfernung des Legacy-Keys `agora.hero.route`. KEINE eigene persistente
- * Modell-Senke mehr.
+ * TRANSIENTER Run-Override: voller AiModelRef beim Start, ohne Schreiben oder
+ * Clearen der Legacy-Modell-Keys. KEINE eigene persistente Modell-Senke mehr.
  *
  * Coverage:
  *  1. mountet ohne Crash
@@ -22,12 +21,11 @@
  *  5. AiModelPicker in Config-Zone sichtbar
  *  6. Kanon-First-Init: selectedModel wird onMounted aus effectiveRef initialisiert
  *  7. Storage-Cut: Legacy-Key `agora.hero.route` wird NICHT mehr gelesen, beim Mount entfernt
- *  8. onPickModel: spiegelt model_id transient nach STORAGE_MODEL (agora.lastModel)
- *  9. onPickModel(null): STORAGE_MODEL auf 'default', Legacy-Route entfernt
+ *  8. onPickModel/onPickModel(null): Legacy-Modell-Keys bleiben unangetastet
  * 10. onPickProfile: persistiert Profile-ID (kein Model-Clear mehr)
  * 11. canSubmit: false ohne Files, false ohne Requirement
- * 12. startSimulation: bei Profile aktiv wird STORAGE_MODEL='default'
- * 13. startSimulation: ohne Profile wird Picker-Wahl als STORAGE_MODEL gespiegelt
+ * 12. startSimulation: Profile cleart den Run-Override
+ * 13. startSimulation: expliziter Pick wird als voller Run-Override gespeichert
  * 14. startSimulation: ruft setPendingUpload + router.push
  * 15. i18n-Key: dashboard.hero.modelPlaceholder
  * 16. Capability-Filter: Picker bekommt mode='chat' (Default)
@@ -180,32 +178,6 @@ vi.mock('@/composables/useEffectiveModelSelection', () => {
 fetchLlmProfilesMock.mockResolvedValue([])
 getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
 
-const adapterMock: {
-  toLlmRoute: ReturnType<typeof vi.fn>
-  toAiModelRef: ReturnType<typeof vi.fn>
-  toStoredModelString: ReturnType<typeof vi.fn>
-} = {
-  toLlmRoute: vi.fn((aiRef: { provider_connection_id: string; model_id: string }) => ({
-    stage: null,
-    provider_id: 'openai',
-    model: aiRef.model_id,
-    temperature: null,
-    max_tokens: null,
-    reasoning_effort: 'none',
-    provider_options: {},
-  })),
-  toAiModelRef: vi.fn((route: { provider_id?: string | null; model?: string | null }) => ({
-    provider_connection_id: route.provider_id ?? 'conn-fallback',
-    model_id: route.model ?? '',
-    source: 'workspace-default' as const,
-  })),
-  toStoredModelString: vi.fn((aiRef: { model_id: string } | null) => aiRef?.model_id ?? 'default'),
-}
-
-vi.mock('@/composables/useAiModelRefAdapter', () => ({
-  useAiModelRefAdapter: () => adapterMock,
-}))
-
 // localStorage Mock pro Test kontrollieren
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
@@ -286,8 +258,6 @@ async function mountHero(seed: Record<string, string> = {}) {
   clearRunModelOverrideMock.mockClear()
   getSystemStatusMock.mockClear()
   getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
-  adapterMock.toLlmRoute.mockClear()
-  adapterMock.toStoredModelString.mockClear()
   // Kanon-Stub: ensureLoaded muss resolven, damit die Komponente beim Mount
   // selectedModel aus effectiveRef initialisiert.
   ensureLoadedMock.mockReset()
@@ -316,7 +286,7 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
   beforeEach(() => {
     // clearAllMocks wuerde auch mockResolvedValue/Mock-Implementierungen loeschen.
     // Wir resetten nur die Call-History, nicht die Mocks selbst.
-    for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, setPendingUploadMock, routerPushMock, getSystemStatusMock, adapterMock.toLlmRoute, adapterMock.toStoredModelString, adapterMock.toAiModelRef]) {
+    for (const m of [localStorageMock.getItem, localStorageMock.setItem, localStorageMock.removeItem, setPendingUploadMock, routerPushMock, getSystemStatusMock]) {
       m.mockClear()
     }
     installLocalStorageMock()
@@ -399,27 +369,31 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     expect(localStorageMock.getItem).not.toHaveBeenCalledWith('agora.hero.route')
   })
 
-  it('onPickModel: spiegelt model_id transient nach STORAGE_MODEL (agora.lastModel)', async () => {
+  it('onPickModel schreibt oder cleart keine Legacy-Modell-Keys', async () => {
     const w = await mountHero()
     const picker = w.findComponent(aiPickerStub)
     await picker.trigger('click')
     await flushPromises()
-    // Transienter Run-Override: nur STORAGE_MODEL-Spiegel, keine eigene Senke.
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'gpt-4o-mini')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     // Legacy-Route wird bei jedem Pick defensiv entfernt.
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
     // Kein Schreiben in die entfernte Senke agora.hero.aiModelRef.
     expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.hero.aiModelRef', expect.anything())
   })
 
-  it('onPickModel(null): STORAGE_MODEL auf default, Legacy-Route entfernt', async () => {
+  it('onPickModel(null) schreibt oder cleart keine Legacy-Modell-Keys', async () => {
     const w = await mountHero()
     const picker = w.findComponent(aiPickerStub)
     // Manuell null emittieren (AiModelRef | null).
     ;(picker.vm as unknown as { $emit: (e: string, v: unknown) => void }).$emit('update:modelValue', null)
     await flushPromises()
-    // STORAGE_MODEL wird auf 'default' zurueckgesetzt (kein stale Override).
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'default')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     // Legacy-Route wird entfernt.
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('agora.hero.route')
     // Kein Schreiben in / kein Entfernen der entfernten Senke agora.hero.aiModelRef.
@@ -467,7 +441,7 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     // Vollstaendige Profil-Selektion wird in onPickProfile-Test dokumentiert.
   })
 
-  it('startSimulation: bei Profile aktiv wird STORAGE_MODEL auf default gesetzt', async () => {
+  it('startSimulation: bei Profile aktiv berührt keine Legacy-Modell-Keys', async () => {
     fetchLlmProfilesMock.mockResolvedValue([
       {
         id: 'abc',
@@ -506,9 +480,10 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     await cta.trigger('click')
     await flushPromises()
 
-    // Bei aktivem Profile gewinnt das Profile — STORAGE_MODEL wird auf
-    // 'default' zurueckgesetzt, damit MainView keinen stale Override mitsendet.
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'default')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     expect(setPendingUploadMock).toHaveBeenCalledWith(
       [file],
       'Wie reagiert die DACH-Region?',
@@ -519,9 +494,9 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })
 
-  it('startSimulation: ohne Profile wird Picker-Wahl als STORAGE_MODEL gespiegelt', async () => {
+  it('startSimulation: ohne Profile lässt Legacy-Modell-Keys unangetastet', async () => {
     const w = await mountHero()
-    // Picker emit aiRef (transienter Run-Override → STORAGE_MODEL-Spiegel)
+    // Picker emit aiRef (transienter Run-Override).
     const picker = w.findComponent(aiPickerStub)
     await picker.trigger('click')
     await flushPromises()
@@ -538,12 +513,15 @@ describe('HeroNewRun (Phase-1, Kanon-First Migration)', () => {
     await textarea.setValue('Wie reagiert die DACH-Region?')
     await flushPromises()
 
-    // Starten (ohne Profil → Picker-Wahl gewinnt, STORAGE_MODEL=model_id)
+    // Starten (ohne Profil → Picker-Wahl gewinnt).
     const cta = w.find('.hero-cta')
     await cta.trigger('click')
     await flushPromises()
 
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('agora.lastModel', 'gpt-4o-mini')
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastModel', expect.anything())
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('agora.lastCustomModel', expect.anything())
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastModel')
+    expect(localStorageMock.removeItem).not.toHaveBeenCalledWith('agora.lastCustomModel')
     expect(setPendingUploadMock).toHaveBeenCalled()
     expect(routerPushMock).toHaveBeenCalledWith({ name: 'Process', params: { projectId: 'new' } })
   })

@@ -81,6 +81,7 @@ def test_generate_ontology_profile_routes_document_ingest_and_ontology_stage(mon
             llm_model_override=None,
             llm_runtime=None,
             llm_profile_id="profile-openai",
+            ai_model_ref=None,
         ),
         call(
             "run_ontology_profile",
@@ -88,6 +89,7 @@ def test_generate_ontology_profile_routes_document_ingest_and_ontology_stage(mon
             llm_model_override=None,
             llm_runtime=None,
             llm_profile_id="profile-openai",
+            ai_model_ref=None,
         ),
     ]
 

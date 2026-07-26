@@ -4,7 +4,7 @@
  * Sichert Roundtrip, Source-Normalisierung auf 'run-override' und das
  * defensive Entsorgen korrupter/invalider sessionStorage-Einträge ab.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   RUN_MODEL_OVERRIDE_KEY,
   clearRunModelOverride,
@@ -26,6 +26,28 @@ describe('runModelOverride (transiente Dashboard-Senke)', () => {
     expect(getRunModelOverride()).toEqual({
       provider_connection_id: 'conn-1',
       model_id: 'm-1',
+      source: 'run-override',
+    })
+  })
+
+  it('überlebt einen Modul-Reload im selben Tab und liefert weiterhin einen Zod-validen Ref', async () => {
+    setRunModelOverride({
+      provider_connection_id: 'conn-reload',
+      model_id: 'shared-model',
+      source: 'explicit',
+    })
+
+    vi.resetModules()
+    const [{ getRunModelOverride: getAfterReload }, { AiModelRefSchema }] = await Promise.all([
+      import('../runModelOverride'),
+      import('@/contracts/aiModelRef'),
+    ])
+    const restored = getAfterReload()
+
+    expect(AiModelRefSchema.safeParse(restored).success).toBe(true)
+    expect(restored).toEqual({
+      provider_connection_id: 'conn-reload',
+      model_id: 'shared-model',
       source: 'run-override',
     })
   })
