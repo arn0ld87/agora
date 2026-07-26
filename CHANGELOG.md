@@ -5,6 +5,48 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (133 reihenfolgenabhängige Test-Failures in `tests/api` — 2026-07-26)
+
+- **`backend/tests/conftest.py`** — neues autouse-Fixture `_clean_auth_token_env`.
+  `tests/api` lief lokal mit **138 Failures**, isoliert waren dieselben Suiten grün.
+- **Ursachenkette:** `app/config.py` ruft beim Import `load_dotenv()` auf und zieht den
+  echten `AGORA_AUTH_TOKEN` aus `.env` bzw. `backend/.env` prozessweit in `os.environ`.
+  Für sich harmlos — kritisch wird es mit den Blueprint-Singletons:
+  `install_blueprint_guard` hängt seinen `before_request`-Hook an das Blueprint-*Objekt*
+  und markiert es über `_agora_guard_installed` dauerhaft. Ruft irgendein Test `create_app()`
+  (`tests/api/test_cors.py`, `tests/test_fork_safety.py`,
+  `tests/observability/test_logging_wiring.py`), ist der Guard danach permanent auf
+  `simulation_bp`, `graph_bp`, `report_bp` & Co. — auch für jede spätere nackte
+  `Flask()`-Testapp. Mit gesetztem Token antwortet er `401 auth_required`. Suiten, deren
+  Client-Fixture `AGORA_AUTH_TOKEN` selbst löschte, waren immun; alle anderen kippten,
+  sobald vorher ein `create_app()`-Test lief.
+- **In CI fiel das nie auf**, weil dort keine `.env` existiert. Betroffen war ausschließlich
+  die lokale Entwicklungsschleife — und das PR-Gate deckt es nicht ab, weil es nur
+  `tests/contracts/` fährt.
+- **Leerer String statt `delenv`.** Der naheliegende `monkeypatch.delenv` funktioniert
+  *nicht*: entfernt man den Key, setzt ihn der nächste `load_dotenv(override=False)` sofort
+  wieder, denn `override=False` überspringt nur Keys, die bereits in `os.environ` stehen.
+  Genau das passierte in Suiten, die `app.config` erst *während* eines Tests importieren
+  (`_global_fernet_env` → `api_keys_store` → `app.config`). `monkeypatch.setenv(..., "")`
+  belegt den Key, ohne den Guard scharf zu machen — `_expected_token()` und der
+  Open-Mode-Check in `scopes.require_scope` prüfen beide auf Truthiness.
+- **`backend/tests/contracts/test_suite_hermeticity.py`** — neue Suite (7 Tests) im
+  PR-Gate: Verhaltensprüfung, dass die leck-anfälligen Variablen im Test leer sind, eine
+  Strukturbremse über `request.fixturenames`, und ein Wirkungsnachweis, der ein pytest im
+  Subprozess mit **vorbelegtem** `AGORA_AUTH_TOKEN` startet. Letzterer ist der einzige der
+  drei, der einen zum No-op ausgehöhlten Fixture-Body auch **ohne** lokale `.env` fängt —
+  die Verhaltensprüfung startet auf CI mit ohnehin abwesendem Token, die Strukturprüfung
+  sieht nur die Registrierung (Codex-Finding P2 auf PR #895). Die Assertions vergleichen
+  bewusst über Truthiness/Länge statt über den Wert, damit kein Token in den pytest-Report
+  gerät.
+- Ergebnis: `tests/api` von 138 auf 5 Failures, **keine neue Regression**. Die 5 Reste sind
+  ein unabhängiges Problem (`OSError: Read-only file system: '/app'` in den
+  `graph_ontology`-Tests, auch isoliert rot). Auth-Suiten (`test_auth`, `test_auth_ticket`,
+  `test_logs_api`, `test_settings_api`, `test_report_export`, `test_config_validate`):
+  79 passed. Verifiziert durch Mutationen in vier Konstellationen: Fixture-Body
+  neutralisiert (mit `.env` 2 Tests rot, **ohne** `.env` 1 Test rot) und `autouse` entfernt
+  (2 Tests rot); mit intaktem Fixture und entfernter `.env` bleiben alle 7 grün.
+
 ### Fixed (`llm_profile_id` in `/prepare` wirkt jetzt aufs Routing — 2026-07-26, Issue #888)
 
 - **`backend/app/api/simulation_prepare.py`** — `llm_profile_id` war ein reiner
