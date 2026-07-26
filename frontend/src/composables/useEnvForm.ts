@@ -37,13 +37,12 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-// Issue #890: STORAGE_MODEL/STORAGE_CUSTOM_MODEL sind reine Legacy-Keys.
-// useEnvForm liest und schreibt sie nicht mehr — die kanonische Modell-Senke
-// ist jetzt Step2EnvSetup.selectedModelRef (AiModelRef via AiModelPicker).
-// Die Konstanten bleiben exportiert (Altwerte in Nutzer-Browsern werden NICHT
-// aktiv geloescht), damit bestehende Referenzen/Tests kompilieren.
-export const STORAGE_MODEL = 'agora.lastModel'
-export const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
+// Issue #890: 'agora.lastModel'/'agora.lastCustomModel' (vormals
+// STORAGE_MODEL/STORAGE_CUSTOM_MODEL) existieren nicht mehr im Code.
+// useEnvForm liest und schreibt sie nicht — die kanonische Modell-Senke ist
+// jetzt Step2EnvSetup.selectedModelRef (AiModelRef via AiModelPicker).
+// Altwerte, die in Nutzer-Browsern noch unter diesen Keys liegen, werden
+// weder gelesen noch aktiv geloescht.
 export const STORAGE_LANG = 'agora.agentLanguage'
 
 // ---------------------------------------------------------------------------

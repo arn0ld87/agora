@@ -83,12 +83,6 @@ vi.mock('../../observability/tracing', () => ({
   traceIdToSigNozUrl: () => null,
 }))
 
-vi.mock('../../composables/useEnvForm', () => ({
-  storedEffectiveModel: () => 'mock',
-  STORAGE_CUSTOM_MODEL: 'k1',
-  STORAGE_MODEL: 'k2',
-}))
-
 vi.mock('../../composables/useRuntimeLlmOptions', () => ({
   runtimeLlmPayloadFromStorage: () => ({}),
   runtimeProviderMissingKeyEverywhere: () => false,

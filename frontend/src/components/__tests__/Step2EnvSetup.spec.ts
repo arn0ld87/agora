@@ -451,7 +451,11 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     await triggerPrepare(wrapper)
 
     const payload = lastPayload()
-    expect(payload.ai_model_ref).toBeTruthy()
+    expect(payload.ai_model_ref).toEqual({
+      provider_connection_id: 'conn-x',
+      model_id: 'model-x',
+      source: 'explicit',
+    })
     expect(payload).not.toHaveProperty('llm_profile_id')
     wrapper.unmount()
   })

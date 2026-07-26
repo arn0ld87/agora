@@ -12,7 +12,14 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { useEnvForm, STORAGE_CUSTOM_MODEL, STORAGE_MODEL, STORAGE_LANG } from '../useEnvForm'
+import { useEnvForm, STORAGE_LANG } from '../useEnvForm'
+
+// Issue #890: STORAGE_MODEL/STORAGE_CUSTOM_MODEL sind aus useEnvForm.ts
+// entfernt worden — die Keys existieren nicht mehr im Produktionscode.
+// Diese Tests beweisen genau das (Produktion ignoriert diese Keys), duerfen
+// also nicht von einem Export dieser Keys abhaengen. Lokale Testkonstanten:
+const STORAGE_MODEL = 'agora.lastModel'
+const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
 import type { RuntimeProvider } from '../useRuntimeLlmOptions'
 
 // ---------------------------------------------------------------------------
