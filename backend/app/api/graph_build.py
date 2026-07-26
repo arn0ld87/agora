@@ -85,6 +85,23 @@ def allowed_file(file_storage) -> bool:
 
     return True
 
+
+def _discard_project_after_upload_failure(project_id: str) -> None:
+    """Verwirft ein halb angelegtes Upload-Projekt.
+
+    Ein Fehler beim Aufräumen darf die ursprüngliche Ursache nicht verdecken:
+    er wird geloggt und geschluckt, damit der Originalfehler die Antwort
+    bestimmt.
+    """
+    try:
+        ProjectManager.delete_project(project_id)
+    except Exception:
+        logger.exception(
+            "Cleanup des Upload-Projekts nach Fehler unvollständig [project_id=%s]",
+            project_id,
+        )
+
+
 def _upload_rate_limit_key() -> str:
     return build_rate_limit_key("graph-ontology-upload")
 
@@ -174,47 +191,51 @@ def generate_ontology():
     document_texts = []
     all_text = ""
 
-    for file in uploaded_files:
-        if file and file.filename:
-            if not allowed_file(file):
-                continue
+    try:
+        for file in uploaded_files:
+            if file and file.filename:
+                if not allowed_file(file):
+                    continue
 
-            # Size check
-            file.seek(0, os.SEEK_END)
-            size = file.tell()
-            file.seek(0)
-            max_upload_bytes = Config.AGORA_MAX_UPLOAD_SIZE_MB * 1024 * 1024
-            if size > max_upload_bytes:
-                ProjectManager.delete_project(project.project_id)
-                return json_error(
-                    ApiErrorCode.UPLOAD_TOO_LARGE,
-                    status=413,
-                    message=f"File {file.filename} exceeds {Config.AGORA_MAX_UPLOAD_SIZE_MB}MB limit",
-                )
+                # Size check
+                file.seek(0, os.SEEK_END)
+                size = file.tell()
+                file.seek(0)
+                max_upload_bytes = Config.AGORA_MAX_UPLOAD_SIZE_MB * 1024 * 1024
+                if size > max_upload_bytes:
+                    _discard_project_after_upload_failure(project.project_id)
+                    return json_error(
+                        ApiErrorCode.UPLOAD_TOO_LARGE,
+                        status=413,
+                        message=f"File {file.filename} exceeds {Config.AGORA_MAX_UPLOAD_SIZE_MB}MB limit",
+                    )
 
-            logger.info("Uploading file: %s (size: %d bytes) [project_id=%s]", file.filename, size, project.project_id)
+                logger.info("Uploading file: %s (size: %d bytes) [project_id=%s]", file.filename, size, project.project_id)
 
-            file_info = ProjectManager.save_file_to_project(project.project_id, file, file.filename)
-            project.files.append({"filename": file_info["original_filename"], "size": file_info["size"]})
+                file_info = ProjectManager.save_file_to_project(project.project_id, file, file.filename)
+                project.files.append({"filename": file_info["original_filename"], "size": file_info["size"]})
 
-            text = FileParser.extract_text(file_info["path"])
-            text = TextProcessor.preprocess_text(text)
-            document_texts.append(text)
-            all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
+                text = FileParser.extract_text(file_info["path"])
+                text = TextProcessor.preprocess_text(text)
+                document_texts.append(text)
+                all_text += f"\n\n=== {file_info['original_filename']} ===\n{text}"
 
-    if not document_texts:
-        ProjectManager.delete_project(project.project_id)
-        return json_error(ApiErrorCode.UNSUPPORTED_FORMAT, status=400, message="No documents successfully processed")
+        if not document_texts:
+            _discard_project_after_upload_failure(project.project_id)
+            return json_error(ApiErrorCode.UNSUPPORTED_FORMAT, status=400, message="No documents successfully processed")
 
-    project.total_text_length = len(all_text)
-    ProjectManager.save_extracted_text(project.project_id, all_text)
+        project.total_text_length = len(all_text)
+        ProjectManager.save_extracted_text(project.project_id, all_text)
 
-    # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —
-    # create_project() hat bereits VOR dem Setzen von simulation_requirement,
-    # files und total_text_length gespeichert. Ohne dieses save_project gehen
-    # die Felder verloren und Report-Generate/Simulation-Prepare lehnen das
-    # Projekt mit "Missing simulation requirement description" (400) ab.
-    ProjectManager.save_project(project)
+        # Persistieren, BEVOR der Service das Projekt frisch von Platte lädt —
+        # create_project() hat bereits VOR dem Setzen von simulation_requirement,
+        # files und total_text_length gespeichert. Ohne dieses save_project gehen
+        # die Felder verloren und Report-Generate/Simulation-Prepare lehnen das
+        # Projekt mit "Missing simulation requirement description" (400) ab.
+        ProjectManager.save_project(project)
+    except Exception:
+        _discard_project_after_upload_failure(project.project_id)
+        raise
 
     try:
         project = GraphBuildService.generate_ontology(
@@ -254,7 +275,7 @@ def generate_ontology():
             code=ApiErrorCode.INTERNAL_ERROR,
         )
     except ValueError as exc:
-        ProjectManager.delete_project(project.project_id)
+        _discard_project_after_upload_failure(project.project_id)
         return json_error_from_exception(exc)
 
     return json_success({
