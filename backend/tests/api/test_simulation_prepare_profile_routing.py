@@ -11,12 +11,18 @@ Server-Default-Modell.
 
 Diese Suite pinnt beide Hälften der Korrektur:
 
-1. **Routing** — ``llm_profile_id`` wird aufgelöst; Request-Profil schlägt
-   Projekt-Profil, eine explizite Modellwahl schlägt beide.
+1. **Routing über den kanonischen Pfad** — die Profil-ID wird an
+   ``seed_run_stage_routing(llm_profile_id=...)`` durchgereicht, nicht lokal zu
+   ``llm_model`` expandiert. Nur dessen Profil-Branch löst die aktivierte
+   ``ProviderConnection`` auf und koppelt sie an deren gebundenes Secret
+   (SSoT, Issue #817). Eine lokale Expansion würde Endpoint und Key aus dem
+   Legacy-Profil einbrennen und nach einer Rotation auf veraltete Credentials
+   zeigen. Präzedenz: explizites Modell → Request-Profil → Projekt-Profil.
 2. **Re-Prepare-Semantik** — der "bereits vorbereitet"-Kurzschluss hängt an der
-   *expliziten* Client-Wahl, nicht mehr an ``llm_model_override``. Sonst würde
-   er für jedes Projekt mit hinterlegtem Profil nie mehr greifen und jedes
-   Betreten von Step 2 eine volle Neu-Vorbereitung auslösen.
+   *expliziten* Client-Wahl, nicht an ``llm_model_override``. Sonst würde er für
+   jedes Projekt mit hinterlegtem Profil nie mehr greifen und jedes Betreten von
+   Step 2 eine volle Neu-Vorbereitung auslösen. Ein Request-Profil, das vom
+   Projekt-Default *abweicht*, zählt dabei sehr wohl als explizite Wahl.
 """
 
 from __future__ import annotations
@@ -54,15 +60,17 @@ def client(monkeypatch):
 def prepare_env(monkeypatch):
     """Verdrahtet ``/prepare`` so, dass nur das Modell-Routing beobachtet wird.
 
-    Liefert ein Dict mit ``resolved`` (das ``llm_model``, mit dem der Endpoint in
-    ``seed_run_stage_routing`` geht — also das Ergebnis der Profil-Auflösung) und
-    ``prepared_checked`` (ob der "bereits vorbereitet"-Kurzschluss lief).
+    ``observed`` hält fest, womit der Endpoint in ``seed_run_stage_routing`` geht:
+    ``profile`` (die durchgereichte ``llm_profile_id``), ``model``
+    (``llm_model_override``) und ``prepared_checked`` (ob der "bereits
+    vorbereitet"-Kurzschluss lief).
 
-    Bewusst wird ``seed_run_stage_routing`` abgegriffen statt
-    ``prepare_simulation``: dort steht ``llm_model_override`` vor der
-    Router-Auflösung, die es im Test-Fixture ohnehin überschreibt.
+    ``seed_run_stage_routing`` wird abgegriffen statt ``prepare_simulation``: dort
+    steht das Routing-Argument vor der Router-Auflösung, die es im Test-Fixture
+    ohnehin überschreibt. Der Profil-Branch selbst ist in
+    ``tests/services/test_llm_routing_seed.py`` abgedeckt.
     """
-    observed: dict = {"resolved": None, "prepared_checked": False}
+    observed: dict = {"profile": None, "model": None, "prepared_checked": False}
 
     project = SimpleNamespace(
         simulation_requirement="Discuss the project",
@@ -118,8 +126,10 @@ def prepare_env(monkeypatch):
         def lock_stage(self, *_args, **_kwargs):
             return None
 
-    def capture_seed(_run_id, _stage, *, llm_model_override=None, llm_runtime=None):
-        observed["resolved"] = llm_model_override
+    def capture_seed(_run_id, _stage, *, llm_model_override=None, llm_runtime=None,
+                     llm_profile_id=None):
+        observed["model"] = llm_model_override
+        observed["profile"] = llm_profile_id
 
     def capture_prepared_check(_simulation_id):
         observed["prepared_checked"] = True
@@ -150,21 +160,6 @@ def prepare_env(monkeypatch):
     return SimpleNamespace(observed=observed, project=project, monkeypatch=monkeypatch)
 
 
-def _stub_profile(prepare_env, profile_id: str, model_name: str) -> None:
-    """Lässt ``expand_profile_in_data`` genau ein Profil auflösen."""
-    profile = SimpleNamespace(
-        model_name=model_name,
-        provider="openai",
-        api_key=None,
-        base_url=None,
-    )
-    store = MagicMock()
-    store.get.side_effect = lambda pid, **_kw: profile if pid == profile_id else None
-    prepare_env.monkeypatch.setattr(
-        "app.utils.llm_profile_resolver.get_llm_profiles_store", lambda: store
-    )
-
-
 def _post(client, **payload):
     body = {"simulation_id": VALID_SIM_ID}
     body.update(payload)
@@ -172,79 +167,111 @@ def _post(client, **payload):
 
 
 # ---------------------------------------------------------------------------
-# 1. Routing
+# 1. Routing über den kanonischen Profil-Pfad
 # ---------------------------------------------------------------------------
 
 
-def test_request_profile_is_resolved_to_its_model(client, prepare_env):
+def test_request_profile_is_forwarded_to_the_canonical_seed_path(client, prepare_env):
     """Der Kern des Defekts: ``llm_profile_id`` allein muss routen.
 
-    Vor #888 blieb ``llm_model`` hier leer und die Vorbereitung lief auf dem
-    Server-Default-Modell.
+    Vor #888 kam hier weder ein Modell noch eine Profil-ID an und die
+    Vorbereitung lief auf dem Server-Default-Modell. Die ID geht bewusst
+    *unexpandiert* durch, damit ``seed_run_stage_routing`` die ProviderConnection
+    auflösen und deren Secret binden kann.
     """
-    _stub_profile(prepare_env, "prof-abc", "claude-sonnet-5")
-
     response = _post(client, llm_profile_id="prof-abc")
 
     assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "claude-sonnet-5"
+    assert prepare_env.observed["profile"] == "prof-abc"
+    assert prepare_env.observed["model"] is None
 
 
-def test_project_profile_is_resolved_when_request_sends_none(client, prepare_env):
+def test_project_profile_is_forwarded_when_request_sends_none(client, prepare_env):
     """P5.3-Fallback bleibt erhalten: Projekt-Profil greift ohne Request-Profil."""
     prepare_env.project.llm_profile_id = "prof-project"
-    _stub_profile(prepare_env, "prof-project", "gemini-2.5-flash")
 
     response = _post(client)
 
     assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "gemini-2.5-flash"
+    assert prepare_env.observed["profile"] == "prof-project"
 
 
 def test_request_profile_beats_project_profile(client, prepare_env):
     """Single-Run-Override: das Request-Profil schlägt den Projekt-Default."""
     prepare_env.project.llm_profile_id = "prof-project"
-    _stub_profile(prepare_env, "prof-request", "claude-sonnet-5")
 
     response = _post(client, llm_profile_id="prof-request")
 
     assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "claude-sonnet-5"
+    assert prepare_env.observed["profile"] == "prof-request"
 
 
 def test_explicit_model_beats_every_profile(client, prepare_env):
-    """Explizite Modellwahl schlägt Request- und Projekt-Profil."""
+    """Explizite Modellwahl schlägt Request- und Projekt-Profil.
+
+    Dann darf auch keine Profil-ID mehr durchgereicht werden, sonst konkurrierten
+    zwei Routing-Anweisungen um dieselbe Stage.
+    """
     prepare_env.project.llm_profile_id = "prof-project"
-    _stub_profile(prepare_env, "prof-request", "claude-sonnet-5")
 
     response = _post(client, llm_profile_id="prof-request", llm_model="gpt-4o-mini")
 
     assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "gpt-4o-mini"
+    assert prepare_env.observed["model"] == "gpt-4o-mini"
+    assert prepare_env.observed["profile"] is None
 
 
 def test_default_placeholder_does_not_count_as_explicit_choice(client, prepare_env):
     """``llm_model="default"`` ist die UI-Platzhalterwahl, keine Modellwahl."""
-    _stub_profile(prepare_env, "prof-abc", "claude-sonnet-5")
-
     response = _post(client, llm_profile_id="prof-abc", llm_model="default")
 
     assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "claude-sonnet-5"
+    assert prepare_env.observed["profile"] == "prof-abc"
 
 
-def test_unresolvable_profile_does_not_break_the_request(client, prepare_env):
-    """Unbekanntes Profil: ``expand_profile_in_data`` ist ein No-op, kein 500.
+def test_legacy_profile_token_in_llm_model_is_still_expanded(client, prepare_env):
+    """Legacy-Pfad: ``llm_model="profile:<id>"`` wird weiterhin lokal expandiert.
 
-    Der ``profile:``-Token bleibt dann als ``llm_model`` stehen — bewusst
-    unverändertes Bestandsverhalten des Resolvers, hier nur festgehalten.
+    ``HeroNewRun.vue`` schickt Profile historisch als Pseudo-Modell im
+    ``llm_model``-Feld; ``seed_run_stage_routing`` kennt nur das separate Feld.
+    Ohne ``expand_profile_in_data`` ginge der Token als Modellname an den
+    LLM-Client.
     """
-    _stub_profile(prepare_env, "prof-known", "claude-sonnet-5")
+    profile = SimpleNamespace(
+        model_name="claude-sonnet-5", provider="openai", api_key=None, base_url=None
+    )
+    store = MagicMock()
+    store.get.side_effect = lambda pid, **_kw: profile if pid == "prof-legacy" else None
+    prepare_env.monkeypatch.setattr(
+        "app.utils.llm_profile_resolver.get_llm_profiles_store", lambda: store
+    )
+
+    response = _post(client, llm_model="profile:prof-legacy")
+
+    assert response.status_code == 200, response.get_json()
+    assert prepare_env.observed["model"] == "claude-sonnet-5"
+
+
+def test_unresolvable_profile_surfaces_as_http_400(client, prepare_env):
+    """Unauflösbares Profil wird abgelehnt, nicht stillschweigend eingereiht.
+
+    ``seed_run_stage_routing`` wirft für ein unbekanntes Profil bzw. eine fehlende
+    aktivierte ProviderConnection ``ValueError`` (siehe
+    ``services/llm_routing_seed.py``, dort auch getestet); ``@handle_api_errors``
+    macht daraus HTTP 400. Vor der Umstellung auf den kanonischen Pfad lief in
+    diesem Fall der literale Modellname ``profile:<id>`` in die Queue.
+    """
+    def raise_unknown_profile(*_args, llm_profile_id=None, **_kwargs):
+        raise ValueError(f"LLM-Profil {llm_profile_id!r} nicht gefunden")
+
+    prepare_env.monkeypatch.setattr(
+        "app.api.simulation_prepare.seed_run_stage_routing", raise_unknown_profile
+    )
 
     response = _post(client, llm_profile_id="prof-missing")
 
-    assert response.status_code == 200, response.get_json()
-    assert prepare_env.observed["resolved"] == "profile:prof-missing"
+    assert response.status_code == 400, response.get_json()
+    assert "nicht gefunden" in str(response.get_json())
 
 
 # ---------------------------------------------------------------------------
@@ -255,23 +282,51 @@ def test_unresolvable_profile_does_not_break_the_request(client, prepare_env):
 class TestAlreadyPreparedShortCircuit:
     """Der Kurzschluss hängt an der expliziten Client-Wahl, nicht am Profil."""
 
-    def test_profile_derived_model_still_checks_prepared_state(self, client, prepare_env):
+    def test_project_profile_still_checks_prepared_state(self, client, prepare_env):
         """Regressionsbremse: sonst kostet jedes Betreten von Step 2 einen vollen Lauf."""
         prepare_env.project.llm_profile_id = "prof-project"
-        _stub_profile(prepare_env, "prof-project", "gemini-2.5-flash")
 
         response = _post(client)
 
         assert response.status_code == 200, response.get_json()
         assert prepare_env.observed["prepared_checked"] is True
 
-    def test_request_profile_still_checks_prepared_state(self, client, prepare_env):
-        _stub_profile(prepare_env, "prof-abc", "claude-sonnet-5")
+    def test_request_profile_equal_to_project_default_still_checks(self, client, prepare_env):
+        """Dasselbe Profil erneut zu schicken bleibt der billige Revisit.
 
-        response = _post(client, llm_profile_id="prof-abc")
+        Genau dieser Fall ist der Frontend-Alltag: ``Step2EnvSetup.vue`` sendet
+        ``props.projectData.llm_profile_id`` mit, also immer den Projekt-Default.
+        """
+        prepare_env.project.llm_profile_id = "prof-project"
+
+        response = _post(client, llm_profile_id="prof-project")
 
         assert response.status_code == 200, response.get_json()
         assert prepare_env.observed["prepared_checked"] is True
+
+    def test_differing_request_profile_skips_prepared_check(self, client, prepare_env):
+        """Ein abweichendes Request-Profil ist eine explizite Wahl.
+
+        Ohne diesen Zweig käme der Endpoint mit ``already_prepared`` zurück und die
+        Personas blieben die des vorherigen Modells — im Widerspruch zur Präzedenz
+        "Request-Profil schlägt Projekt-Profil".
+        """
+        prepare_env.project.llm_profile_id = "prof-project"
+
+        response = _post(client, llm_profile_id="prof-request")
+
+        assert response.status_code == 200, response.get_json()
+        assert prepare_env.observed["prepared_checked"] is False
+        assert prepare_env.observed["profile"] == "prof-request"
+
+    def test_request_profile_without_project_default_skips_prepared_check(
+        self, client, prepare_env
+    ):
+        """Kein Projekt-Default gesetzt: jedes Request-Profil ist eine Abweichung."""
+        response = _post(client, llm_profile_id="prof-request")
+
+        assert response.status_code == 200, response.get_json()
+        assert prepare_env.observed["prepared_checked"] is False
 
     def test_explicit_model_skips_prepared_check(self, client, prepare_env):
         """Unverändert: eine explizite Modellwahl erzwingt die Neu-Vorbereitung."""
@@ -294,24 +349,8 @@ class TestAlreadyPreparedShortCircuit:
         assert response.status_code == 200, response.get_json()
         assert prepare_env.observed["prepared_checked"] is False
 
-    def test_profile_derived_provider_block_is_not_an_override(self, client, prepare_env):
-        """Abgrenzung zum Test darüber: der Provider-Block aus dem Profil zählt nicht.
-
-        ``expand_profile_in_data`` schreibt Provider/Key/Base-URL aus dem Profil in
-        ``data['llm_provider']``. Ohne die Unterscheidung "kam vom Client" wäre das
-        von einem echten Override ununterscheidbar und der Kurzschluss tot.
-        """
-        prepare_env.project.llm_profile_id = "prof-project"
-        _stub_profile(prepare_env, "prof-project", "gemini-2.5-flash")
-
-        response = _post(client)
-
-        assert response.status_code == 200, response.get_json()
-        assert prepare_env.observed["prepared_checked"] is True
-
     def test_force_regenerate_skips_prepared_check(self, client, prepare_env):
         prepare_env.project.llm_profile_id = "prof-project"
-        _stub_profile(prepare_env, "prof-project", "gemini-2.5-flash")
 
         response = _post(client, force_regenerate=True)
 
@@ -323,7 +362,6 @@ class TestAlreadyPreparedShortCircuit:
     ):
         """Ist die Sim vorbereitet, antwortet der Endpoint ohne neuen Lauf."""
         prepare_env.project.llm_profile_id = "prof-project"
-        _stub_profile(prepare_env, "prof-project", "gemini-2.5-flash")
         monkeypatch.setattr(
             "app.api.simulation_prepare._check_simulation_prepared",
             lambda _sim_id: (True, {"profiles": 12}),
@@ -334,4 +372,4 @@ class TestAlreadyPreparedShortCircuit:
         assert response.status_code == 200, response.get_json()
         payload = response.get_json()["data"]
         assert payload["already_prepared"] is True
-        assert prepare_env.observed["resolved"] is None
+        assert prepare_env.observed["profile"] is None

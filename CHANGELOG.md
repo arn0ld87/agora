@@ -17,9 +17,18 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Server-Default-Modell. Hätte das Frontend das Feld *weggelassen*, hätte der Fallback
   korrekt gegriffen.
 - **Neues Verhalten:** `llm_profile_id` ist eine Routing-Anweisung wie in `graph_build.py`
-  und `report.py`. Ohne explizite Modellwahl wird das Profil zu `profile:<id>` expandiert und
-  aufgelöst. Präzedenz: explizites `llm_model` → Request-Profil → Projekt-Profil →
+  und `report.py`. Präzedenz: explizites `llm_model` → Request-Profil → Projekt-Profil →
   Server-Default. `llm_model="default"` zählt als UI-Platzhalter, nicht als Modellwahl.
+- **Über den kanonischen Pfad, nicht über lokale Expansion.** Die Profil-ID wird als
+  `llm_profile_id` an `seed_run_stage_routing` durchgereicht statt hier zu `llm_model`
+  expandiert. Nur dessen Profil-Branch löst die aktivierte `ProviderConnection` auf und
+  koppelt sie an deren gebundenes Secret (SSoT, Issue #817) — eine lokale Expansion trifft den
+  Legacy-Override-Branch davor und brennt Endpoint und Key aus dem Legacy-Profil ein, die nach
+  einer Connection- oder Secret-Rotation veraltet sind. Zudem wird ein unauflösbares Profil
+  jetzt mit HTTP 400 abgelehnt, statt mit dem literalen Modellnamen `profile:<id>` in die
+  Queue zu laufen (Codex-Finding P1 auf PR #894). Der Legacy-Pfad `llm_model="profile:<id>"`
+  aus `HeroNewRun.vue` wird weiterhin lokal expandiert — `seed_run_stage_routing` kennt nur
+  das separate Feld.
 - **Re-Prepare-Semantik entkoppelt.** Der „bereits vorbereitet"-Kurzschluss hing an
   `llm_model_override` bzw. `llm_runtime.enabled`. Beide sind durch das Profil-Routing für
   jedes Projekt mit hinterlegtem Profil gesetzt — `expand_profile_in_data` schreibt zusätzlich
@@ -28,14 +37,23 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   Persona-Neugenerierung ausgelöst. Er hängt jetzt an `client_requested_override`: nur ein
   vom Client *explizit* gesendetes `llm_model` oder `llm_provider` überspringt ihn. Dafür wird
   `explicit_runtime_request` vor der Expansion festgehalten, sonst wäre der profil-abgeleitete
-  Provider-Block von einem echten Override ununterscheidbar.
-- **`backend/tests/api/test_simulation_prepare_profile_routing.py`** — neue Suite, 13 Tests:
+  Provider-Block von einem echten Override ununterscheidbar. Ein Request-Profil, das vom
+  Projekt-Default **abweicht**, zählt dabei sehr wohl als explizite Wahl — sonst käme der
+  Endpoint mit `already_prepared` zurück und die Personas blieben die des vorherigen Modells,
+  im Widerspruch zur Präzedenz „Request-Profil schlägt Projekt-Profil" (Codex-Finding P1 auf
+  PR #894). Dasselbe Profil erneut zu schicken bleibt der billige Revisit — das ist der
+  Frontend-Alltag, weil `Step2EnvSetup.vue` immer den Projekt-Default mitsendet.
+- **`backend/tests/api/test_simulation_prepare_profile_routing.py`** — neue Suite, 15 Tests:
   Präzedenzkette (Request-Profil schlägt Projekt-Profil, explizites Modell schlägt beide,
-  `"default"` ist keine Wahl), unauflösbares Profil bricht den Request nicht, und sechs Tests
-  für die Kurzschluss-Semantik inklusive der Abgrenzung profil-abgeleiteter vs. echter
-  Provider-Override.
-- Verifikation: 7 der 13 Tests sind gegen den alten `simulation_prepare.py` rot (genau die
-  Verhaltensänderungen), 6 sichern unverändertes Verhalten ab. `bash scripts/pre-push-gate.sh
+  `"default"` ist keine Wahl), Legacy-Token-Expansion, unauflösbares Profil → HTTP 400, und
+  acht Tests für die Kurzschluss-Semantik inklusive der Abgrenzungen profil-abgeleiteter vs.
+  echter Provider-Override und identisches vs. abweichendes Request-Profil.
+- **`backend/tests/api/test_simulation_prepare_routing.py`** — die beiden Fixtures mocken
+  jetzt `_check_simulation_prepared`. Der Kurzschluss läuft dort seit der Entkopplung
+  tatsächlich an und bräuchte sonst einen initialisierten `SimulationArtifactStore`; die Suite
+  prüft Key-Routing, nicht den Prepared-State.
+- Verifikation: 8 der 15 Tests sind gegen den alten `simulation_prepare.py` rot (genau die
+  Verhaltensänderungen), 7 sichern unverändertes Verhalten ab. `bash scripts/pre-push-gate.sh
   backend` grün; `tests/api` hat mit und ohne diese Änderung dieselben 138 vorbestehenden
   Failures — ein unabhängiges Bestandsproblem: `AGORA_AUTH_TOKEN` kommt via `load_dotenv()`
   aus der lokalen `.env` und der Blueprint-Guard bleibt nach einem `create_app()`-Test
