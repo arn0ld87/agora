@@ -61,13 +61,18 @@ EXPECTED_OVERRIDE_KEYS: Set[str] = {
     "persona_removals",
 }
 
+# Gegensätzliche Ausgangswerte, damit jeder Plattform-Override den Source-Wert
+# tatsächlich umdrehen muss (siehe Docstring der ``source_id``-Fixture).
+SOURCE_ENABLE_TWITTER = False
+SOURCE_ENABLE_REDDIT = True
+
 BASE_CONFIG: Dict[str, Any] = {
     "llm_model": "source-model",
     "language": "de",
     "max_agents": 10,
     "time_config": {"rounds": 3, "round_minutes": 60},
-    "enable_twitter": False,
-    "enable_reddit": True,
+    "enable_twitter": SOURCE_ENABLE_TWITTER,
+    "enable_reddit": SOURCE_ENABLE_REDDIT,
 }
 
 
@@ -103,8 +108,20 @@ def source_id(manager: SimulationManager) -> str:
     Der FSM-Pfad CREATED → PREPARING → READY wird explizit gefahren, statt
     ``state.status`` zu setzen — ``create_branch`` verlangt einen vorbereiteten
     Status und ``_set_status`` validiert gegen die Transitions-Tabelle.
+
+    ``enable_twitter``/``enable_reddit`` werden explizit gesetzt und decken
+    gegensätzliche Ausgangswerte ab. ``create_simulation`` hat für beide
+    ``True`` als Default; ein Test, der auf ``True`` overridet, würde auch dann
+    bestehen, wenn ``create_branch`` den Override ignoriert und schlicht vom
+    Source erbt. Die Werte spiegeln ``BASE_CONFIG``, damit State und Config
+    nicht auseinanderlaufen.
     """
-    state = manager.create_simulation(project_id="proj-887", graph_id="graph-887")
+    state = manager.create_simulation(
+        project_id="proj-887",
+        graph_id="graph-887",
+        enable_twitter=SOURCE_ENABLE_TWITTER,
+        enable_reddit=SOURCE_ENABLE_REDDIT,
+    )
     manager._set_status(state, SimulationStatus.PREPARING)
     manager._set_status(state, SimulationStatus.READY)
     manager._store.write_json(state.simulation_id, "simulation_config", dict(BASE_CONFIG))
@@ -232,6 +249,7 @@ class TestOverrideTakesEffect:
         assert time_config["round_minutes"] == 60
 
     def test_enable_twitter(self, manager: SimulationManager, source_id: str) -> None:
+        """Override dreht den Source-Wert um (Source: ``False``)."""
         branch = branching_service.create_branch(
             manager, source_id, "b", overrides={"enable_twitter": True}
         )
@@ -239,11 +257,28 @@ class TestOverrideTakesEffect:
         assert branch_config(manager, branch.simulation_id)["enable_twitter"] is True
 
     def test_enable_reddit(self, manager: SimulationManager, source_id: str) -> None:
+        """Override dreht den Source-Wert um (Source: ``True``)."""
         branch = branching_service.create_branch(
             manager, source_id, "b", overrides={"enable_reddit": False}
         )
         assert branch.enable_reddit is False
         assert branch_config(manager, branch.simulation_id)["enable_reddit"] is False
+
+    def test_platform_flags_are_inherited_without_override(
+        self, manager: SimulationManager, source_id: str
+    ) -> None:
+        """Abgrenzung: ohne Override erbt der Branch beide Flags vom Source.
+
+        Zusammen mit den beiden Tests darüber ist damit jede Richtung abgedeckt
+        — Erben und Umdrehen —, sodass weder ein ignorierter Override noch ein
+        fälschlich hartkodierter Wert durchrutscht.
+        """
+        branch = branching_service.create_branch(manager, source_id, "b")
+        config = branch_config(manager, branch.simulation_id)
+        assert branch.enable_twitter is SOURCE_ENABLE_TWITTER
+        assert branch.enable_reddit is SOURCE_ENABLE_REDDIT
+        assert config["enable_twitter"] is SOURCE_ENABLE_TWITTER
+        assert config["enable_reddit"] is SOURCE_ENABLE_REDDIT
 
     def test_persona_removals(self, manager: SimulationManager, source_id: str) -> None:
         manager._store.write_json(

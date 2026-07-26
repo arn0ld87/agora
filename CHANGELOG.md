@@ -8,7 +8,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 ### Added (Branch-Override-Whitelist gegen Regression festgeschrieben — 2026-07-26, Issue #887)
 
 - **`backend/tests/contracts/test_branch_override_contract.py`** — neue Contract-Suite
-  (27 Tests) für `services/branching_service.py::allowed_override_keys`. Die Whitelist ist
+  (28 Tests) für `services/branching_service.py::allowed_override_keys`. Die Whitelist ist
   die einzige Stelle, die entscheidet, welche Branch-Overrides das Backend akzeptiert, und
   war bis hierher komplett ungetestet — die vorhandenen Branch-Tests
   (`tests/api/test_simulation_endpoints.py`, `tests/test_simulation_api_routes.py`) decken
@@ -19,7 +19,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `persona_removals`), der belegt, dass der Override im Branch-Artefakt landet — in der
   `simulation_config`, im `SimulationState` oder in den Reddit-Profilen. Zusätzlich gepinnt:
   `time_config` wird gemerged statt ersetzt, `None`/`""` sind Nicht-Overrides, und die
-  Quell-Simulation bleibt unverändert.
+  Quell-Simulation bleibt unverändert. Die Quell-Simulation setzt `enable_twitter=False`
+  und `enable_reddit=True` explizit, damit jeder Plattform-Override den Ausgangswert
+  umdrehen muss — `create_simulation` hat für beide `True` als Default, ein Override auf
+  `True` wäre also auch bei reinem Erben grün (Codex-Finding P2 auf PR #893). Ein
+  Gegentest hält fest, dass ohne Override tatsächlich geerbt wird.
 - **Ablehnungspfad:** unbekannter Key → `ValueError("Unsupported branch overrides: …")`, die
   Fehlermeldung listet alle unbekannten Keys sortiert, der Guard greift vor jedem
   Seiteneffekt (kein Branch entsteht), und über `utils/api_responses.handle_api_errors`
@@ -40,7 +44,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Verifikation: `uv run pytest tests/contracts/test_branch_override_contract.py -q` → 27 grün.
   Zusätzlich drei Mutationstests gegen den Produktivcode, alle gefangen: `language` aus der
   Wirkungs-Schleife entfernt → `test_language` rot; `ai_model_ref` still zur Whitelist
-  hinzugefügt → 3 Tests rot; `time_config` still entfernt → 3 Tests rot.
+  hinzugefügt → 3 Tests rot; `time_config` still entfernt → 3 Tests rot; Plattform-Overrides
+  auf reines Erben umgestellt → 2 Tests rot; `enable_twitter` hartkodiert → 1 Test rot.
 
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 
