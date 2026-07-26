@@ -14,7 +14,9 @@ Erhebungsmethode: Lovable-MCP-Connector (nur lesend, keine Aktion am Projekt), `
 
 > „Entwurf / Analyse-Ergebnis, noch kein Lovable-Projekt angelegt, keine Umsetzung gestartet."
 
-Diese Zeile ist **überholt**. Sie beschreibt den Stand am 2026-07-16 vor der Projektanlage und wurde danach nie aktualisiert. Tatsächlich existiert ein Lovable-Projekt mit substanzieller Umsetzung. Es ist jedoch **zu keinem Zeitpunkt veröffentlicht** worden und **nicht** mit einem produktiven Agora-Deployment verbunden.
+Diese Zeile ist **überholt**. Sie beschreibt den Stand am 2026-07-16 vor der Projektanlage und wurde danach nie aktualisiert. Tatsächlich existiert ein Lovable-Projekt mit substanzieller Umsetzung. Es ist jedoch **derzeit nicht veröffentlicht** und **nicht** mit einem produktiven Agora-Deployment verbunden.
+
+Zur Genauigkeit dieser Aussage: Der Connector liefert mit `is_published` einen **Momentanwert**, keine Veröffentlichungshistorie. Belegt ist damit der Zustand zum Erhebungszeitpunkt 2026-07-26. Ob ein Projekt zwischenzeitlich veröffentlicht und später wieder zurückgezogen wurde, lässt sich aus den verfügbaren Feldern nicht ausschließen — siehe „Unklar".
 
 ---
 
@@ -27,7 +29,7 @@ Fakten mit Primärquelle, unabhängig von den Handover-Dokumenten bestätigt.
 | Lovable-Workspace „Alexander's Lovable" existiert, Plan `pro`, 5 Projekte | Connector `list_workspaces`, Workspace-ID `ywW2AknvnOdwQW1Yt23P` |
 | Lovable-Projekt „Agora Runs Dashboard" existiert | Connector `list_projects`, Projekt-ID `a061f7f7-294f-4380-935d-a8f0eb4110a3` |
 | Angelegt 2026-07-16T07:55:21Z, letzte Änderung 2026-07-17T19:59:29Z, Status `completed` | Connector `list_projects` |
-| **`is_published: false`** — nie veröffentlicht, kein `url`-Feld | Connector `list_projects` |
+| **`is_published: false`** zum Erhebungszeitpunkt, kein `url`-Feld | Connector `list_projects` |
 | 23 Edits: 9 Lovable-AI-Commits, 14 lokale Developer-Commits | Connector `list_edits` |
 | Codebasis: TanStack-Router-SPA, 12 Routen, 7 API-Module, 7 Contract-Module, shadcn/ui | Connector `list_files` (`src/routes/`, `src/api/`, `src/contracts/`) |
 | Zweites Projekt „Agora Prototype" (`c6e02187-301e-44b5-bddb-d2471befe332`) existiert, hat aber **null Edits** | Connector `list_edits` liefert leeres Array |
@@ -65,7 +67,7 @@ Wichtig für das mentale Modell: Die trotz ihres Namens „frontend-next" heiße
 
 Was der Connector unmittelbar zeigt, ohne Umweg über die Handover-Dokumente:
 
-| Projekt | ID | Edits | Status | Published |
+| Projekt | ID | Edits | Status | Published (Stand 2026-07-26) |
 |---|---|---|---|---|
 | Agora Runs Dashboard | `a061f7f7-294f-4380-935d-a8f0eb4110a3` | 23 | `completed` | **nein** |
 | Agora Prototype | `c6e02187-301e-44b5-bddb-d2471befe332` | 0 | `completed` | **nein** |
@@ -74,7 +76,7 @@ Was der Connector unmittelbar zeigt, ohne Umweg über die Handover-Dokumente:
 
 Die drei weiteren Projekte im Workspace („Delightful Designs", „Grade Overview", „Dify Chat Studio") gehören nicht zu Agora.
 
-Zur Preview-URL: Lovable hält für jedes Projekt eine interne Preview-Adresse bereit. Das ist eine Editor-Vorschau, keine Veröffentlichung — `is_published` bleibt davon unberührt und steht bei beiden Agora-Projekten auf `false`.
+Zur Preview-URL: Lovable hält für jedes Projekt eine interne Preview-Adresse bereit. Das ist eine Editor-Vorschau, keine Veröffentlichung — `is_published` bleibt davon unberührt und stand bei beiden Agora-Projekten am 2026-07-26 auf `false`.
 
 ---
 
@@ -108,6 +110,7 @@ Nicht zuverlässig verifizierbar, ohne den Rahmen von #836 zu verlassen:
 - Der Grad der Divergenz zwischen Lovable-Remote, GitHub-Sync-Repo und lokalem Klon. Belegt ist nur, dass der lokale Klon älter ist und uncommittete Änderungen trägt.
 - Ob der lokale Klon `/Volumes/T7/Projekte/agora-runs-dashboard` noch aktiv bearbeitet wird oder liegen geblieben ist.
 - Warum „Agora Prototype" angelegt und sofort aufgegeben wurde.
+- Ob eines der Projekte **zwischenzeitlich** veröffentlicht und später zurückgezogen wurde. `is_published` ist ein Momentanwert; der Connector liefert keine Veröffentlichungshistorie, und `list_edits` enthält keine Publish-/Unpublish-Ereignisse. Für den Zeitraum vor dem 2026-07-26 ist dazu keine Aussage belegbar.
 
 ---
 
@@ -117,7 +120,7 @@ Nicht zuverlässig verifizierbar, ohne den Rahmen von #836 zu verlassen:
 
 Belege:
 
-- beide Lovable-Projekte tragen `is_published: false` und besitzen keine öffentliche URL,
+- beide Lovable-Projekte tragen zum Erhebungszeitpunkt `is_published: false` und besitzen keine öffentliche URL,
 - das GitHub-Sync-Repo `arn0ld87/agora-runs-dashboard` ist privat,
 - weder `docker-compose*.yml` noch `deploy/` noch `scripts/` noch die GitHub-Workflows referenzieren das Vorhaben; der einzige Treffer auf „react" in `.github/workflows/e2e-smokes.yml` ist der Report-Datenfeldname `generate_section_react` und hat keinen Bezug zum Frontend,
 - das Root-`package.json` definiert weder Workspaces noch einen `frontend-next`-Eintrag,
@@ -127,10 +130,13 @@ Das ausgelieferte Produktfrontend von Agora ist unverändert das Vue-Frontend un
 
 ---
 
-## Empfohlene Folgearbeit
+## Abgrenzung
 
-Nicht Gegenstand dieses Tickets, aber aus dem Befund abgeleitet:
+Dieses Dokument ist ein abgeschlossener Untersuchungsbefund zu #836, keine Planungsdatei und keine konkurrierende Statusquelle. Verbindlich bleiben `README.md`, `docs/STATUS.md`, `ROADMAP.md` und die GitHub Issues in der in [`AGENTS.md`](../../../AGENTS.md) festgelegten Reihenfolge.
 
-1. Die Stand-Zeile in `brief.md` korrigieren oder auf dieses Dokument verweisen — sie ist aktiv irreführend (#837).
-2. `SLICE-5.2-ENVSETUP-KANON-MIGRATION.md` aus diesem Verzeichnis in den Vue-Kontext verschieben oder als externe Abhängigkeit kennzeichnen.
-3. Die Benennung der `feat/frontend-next-*`-Branches als Stolperstein festhalten: sie enthalten Vue-Arbeit.
+Die aus dem Befund abgeleitete Folgearbeit wird ausschließlich über Issues geführt, nicht hier:
+
+- die Release-Einordnung des React-/Lovable-Vorhabens → #837
+- die Doku-Stolpersteine dieses Verzeichnisses (Ablage von `SLICE-5.2`, irreführende Branch-Namen, veraltete `brief.md`-Stand-Zeile) → #910
+
+Sobald #837 die Einordnung in `ROADMAP.md` und `docs/STATUS.md` verankert hat, ist dieses Dokument nur noch Beleg-Archiv für die dort getroffene Aussage.
