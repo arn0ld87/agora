@@ -37,8 +37,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - Verifikation: 7 der 13 Tests sind gegen den alten `simulation_prepare.py` rot (genau die
   Verhaltensänderungen), 6 sichern unverändertes Verhalten ab. `bash scripts/pre-push-gate.sh
   backend` grün; `tests/api` hat mit und ohne diese Änderung dieselben 138 vorbestehenden
-  Failures (`AGORA_AUTH_TOKEN`-Leak zwischen Suites, unabhängiges Bestandsproblem) — die neue
-  Suite ist im Gesamtlauf sauber, weil ihr Client-Fixture den Open-Mode erzwingt.
+  Failures — ein unabhängiges Bestandsproblem: `AGORA_AUTH_TOKEN` kommt via `load_dotenv()`
+  aus der lokalen `.env` und der Blueprint-Guard bleibt nach einem `create_app()`-Test
+  dauerhaft an `simulation_bp` hängen. Die neue Suite ist im Gesamtlauf sauber, weil ihr
+  Client-Fixture den Open-Mode erzwingt.
 
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 

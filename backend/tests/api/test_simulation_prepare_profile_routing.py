@@ -35,10 +35,12 @@ VALID_SIM_ID = "sim_0123456789ab"
 
 @pytest.fixture
 def client(monkeypatch):
-    # @require_scope greift, sobald AGORA_AUTH_TOKEN gesetzt ist — die Variable
-    # leakt aus Nachbar-Suites in den Gesamtlauf. Open-Mode erzwingen (Muster aus
-    # tests/api/test_simulation_endpoints.py); diese Suite prüft Routing, nicht Auth.
-    monkeypatch.delenv("AGORA_AUTH_TOKEN", raising=False)
+    # AGORA_AUTH_TOKEN steht via load_dotenv() in app/config.py prozessweit in
+    # os.environ; sobald irgendein Test create_app() ruft, hängt der
+    # Blueprint-Guard dauerhaft an simulation_bp und diese Suite bekäme 401.
+    # Open-Mode erzwingen (Muster aus tests/api/test_simulation_endpoints.py) —
+    # hier geht es um Routing, nicht um Auth.
+    monkeypatch.setenv("AGORA_AUTH_TOKEN", "")
     app = Flask(__name__)
     app.config["AGORA_AUTH_TOKEN"] = ""
     app.config["AGORA_LLM_TRIGGER_RATE_LIMIT_MAX"] = 1000
