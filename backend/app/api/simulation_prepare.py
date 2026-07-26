@@ -246,6 +246,35 @@ def prepare_simulation():
             message="Invalid simulation_id format",
         )
 
+    ai_model_ref = None
+    raw_ai_model_ref = data.get("ai_model_ref")
+    if raw_ai_model_ref is not None:
+        from ..contracts.ai_provider_contract import AiModelRef
+
+        try:
+            ai_model_ref = AiModelRef.model_validate(raw_ai_model_ref)
+        except ValidationError:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="ai_model_ref ist ungültig",
+            )
+
+        conflicting = [
+            key
+            for key in ("llm_model", "llm_profile_id", "llm_provider", "llm_runtime")
+            if data.get(key)
+        ]
+        if conflicting:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=(
+                    f"ai_model_ref darf nicht mit {', '.join(conflicting)} "
+                    "kombiniert werden"
+                ),
+            )
+
     manager = SimulationManager()
     state = manager.get_simulation(simulation_id)
     if not state:
@@ -304,20 +333,28 @@ def prepare_simulation():
     # Request-Profil schlägt Projekt-Profil (Single-Run-Override), beide schlagen
     # das Server-Default-Modell. Eine explizite Modellwahl schlägt alles.
     routed_profile_id = None if explicit_model_override else (_data_profile or _project_profile)
-    # UI-Profile-Token expandieren: schickt der Client selbst ein
-    # `llm_model="profile:<id>"` (Legacy-Pfad aus `HeroNewRun.vue`), muss es hier
-    # aufgelöst werden — `seed_run_stage_routing` kennt nur das separate Feld.
-    from ..utils.llm_profile_resolver import expand_profile_in_data
-    expand_profile_in_data(data)
-    llm_model_override = (data.get('llm_model') or '').strip() or None
-    try:
-        llm_runtime = parse_runtime_llm_config(data)
-    except ValueError as exc:
-        return json_error(
-            ApiErrorCode.VALIDATION_FAILED,
-            status=400,
-            message=str(exc),
-        )
+    if ai_model_ref is not None:
+        # Eine explizite Ref ist die alleinige Routing-Quelle: kein Legacy-
+        # Profil, kein Runtime-Override und kein Projektprofil-Fallback.
+        routed_profile_id = None
+        llm_model_override = None
+        llm_runtime = parse_runtime_llm_config({})
+    else:
+        # UI-Profile-Token expandieren: schickt der Client selbst ein
+        # `llm_model="profile:<id>"` (Legacy-Pfad aus `HeroNewRun.vue`), muss es hier
+        # aufgelöst werden — `seed_run_stage_routing` kennt nur das separate Feld.
+        from ..utils.llm_profile_resolver import expand_profile_in_data
+
+        expand_profile_in_data(data)
+        llm_model_override = (data.get('llm_model') or '').strip() or None
+        try:
+            llm_runtime = parse_runtime_llm_config(data)
+        except ValueError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            )
     logger.info(
         f"Start processing /prepare Request: simulation_id={simulation_id}, force_regenerate={force_regenerate}",
         extra={'simulation_id': simulation_id},
@@ -339,6 +376,7 @@ def prepare_simulation():
         explicit_model_override
         or explicit_profile_override
         or (llm_runtime.enabled and explicit_runtime_request)
+        or ai_model_ref is not None
     )
     if not force_regenerate and not client_requested_override:
         logger.debug(f"Check simulation {simulation_id} Is preparation complete...")
@@ -410,6 +448,17 @@ def prepare_simulation():
         logger.warning(f"Synchronously get entity countFailed（Will retry in background task）: {exc}")
 
     task_manager = TaskManager()
+    if ai_model_ref is not None:
+        from ..services.llm_routing_seed import prevalidate_ai_model_ref
+
+        try:
+            prevalidate_ai_model_ref(ai_model_ref)
+        except ValueError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            )
     run_record = run_registry.create_run(
         run_type="simulation_prepare",
         entity_id=simulation_id,
@@ -442,13 +491,62 @@ def prepare_simulation():
             "run_id": run_record["run_id"],
         },
     )
-    seed_run_stage_routing(
-        run_record["run_id"],
-        "persona_generation",
-        llm_model_override=llm_model_override,
-        llm_runtime=llm_runtime,
-        llm_profile_id=routed_profile_id,
-    )
+    if ai_model_ref is not None:
+        try:
+            seed_run_stage_routing(
+                run_record["run_id"],
+                "persona_generation",
+                llm_model_override=llm_model_override,
+                llm_runtime=llm_runtime,
+                llm_profile_id=routed_profile_id,
+                ai_model_ref=ai_model_ref,
+            )
+        except ValueError as exc:
+            routing_error = str(exc)
+            task_manager.fail_task(task_id, routing_error)
+
+            persistence_error: Optional[Exception] = None
+            try:
+                updated_run = run_registry.update_run(
+                    run_record["run_id"],
+                    status="failed",
+                    message=routing_error,
+                    error=routing_error,
+                )
+            except Exception as update_exc:  # noqa: BLE001 — Persistenzfehler, unten geloggt
+                updated_run = None
+                persistence_error = update_exc
+
+            if updated_run is None:
+                logger.error(
+                    "Persistenzfehler beim Markieren von run_id=%s (task_id=%s) als "
+                    "failed nach AiModelRef-Routingfehler: %s",
+                    run_record["run_id"],
+                    task_id,
+                    persistence_error
+                    or "update_run() lieferte None (Run-Manifest existiert nicht mehr)",
+                )
+                return json_error(
+                    ApiErrorCode.INTERNAL_ERROR,
+                    status=500,
+                    message=(
+                        "Interner Fehler beim Markieren des Runs als fehlgeschlagen. "
+                        "Bitte erneut versuchen."
+                    ),
+                )
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=routing_error,
+            )
+    else:
+        seed_run_stage_routing(
+            run_record["run_id"],
+            "persona_generation",
+            llm_model_override=llm_model_override,
+            llm_runtime=llm_runtime,
+            llm_profile_id=routed_profile_id,
+        )
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("persona_generation")
     route_router.lock_stage("persona_generation", resolved_route)

@@ -15,11 +15,12 @@
 - **Q1 — Scope:** Phase 1 + Specs werden **zuvor** als eigener PR gemergt. **§5.2 ist ein
   separates Folge-PR/Issue.** Begründung: Atomic Slicing, sauberer Review, der
   Backend-Payload-Vertrag (`triggerPrepare`) bekommt eigenen Fokus.
-- **Q2 — Backend-Payload:** `triggerPrepare.llm_model` **und** `llm_profile_id` **entfallen**
-  (kein Backend-Touch). Reiner FE-Sync via `useEffectiveModelSelection.setGlobalSelection`
-  (schreibt `routing/defaults.global` + `active-config` im Gleichschritt).
-  Profile → optionale Presets (schlagen dem `AiModelPicker` nur einen Wert vor, kein
-  Override, kein eigenes Payload-Feld).
+- **Q2 — Backend-Payload:** Die frühere Annahme „kein Backend-Touch; `llm_model` und
+  `llm_profile_id` entfallen ohne `ai_model_ref`" ist nicht gültig. Issue #896 ist die
+  Voraussetzung: `/prepare` akzeptiert eine kanonische, connection-gebundene `AiModelRef`
+  als autoritative Route und lehnt Mischfälle mit Legacy-Overrides ab. Nach dem Merge kann
+  Step2 den expliziten Pickerwert als `ai_model_ref` senden; Issue #897 bereitet den
+  Storage-Cut vor.
 
 ---
 
@@ -53,7 +54,7 @@
 
 ---
 
-## 3. Migrationsplan (7 Schritte, kein Backend-Touch, reiner FE-Sync)
+## 3. Migrationsplan (7 Schritte)
 
 ### (a) `Step2EnvSetup.vue` — useEnvForm ersetzen für MODELL-Auswahl
 - `const { effectiveRef, effectiveRoute, ensureLoaded, setGlobalSelection, loading } = useEffectiveModelSelection()`
@@ -79,13 +80,10 @@
   Modell-Auswahl).
 
 ### (d) `triggerPrepare` (`Step2EnvSetup.vue:232-264`) — Payload konsolidieren
-- `payload.llm_model = effectiveModel()` **ENTFÄLLT** (Q2). Backend
-  `stage_model_router.py:116` liest `routing/defaults.global_default` direkt, via
-  `setGlobalSelection`-Gleichschritt synchron gehalten → kein doppelter `llm_model`-Payload.
-- `payload.llm_profile_id` **ENTFÄLLT** als Override (Q2). Profile sind nur Presets; kein
-  eigenes Payload-Feld.
-- `runtimePayload()` (Override-Provider) bleibt orthogonal; Override ist kein Profil,
-  sondern connection-basiert.
+- Voraussetzung ist der Merge von Issue #896. Danach kann Step2 den expliziten Pickerwert
+  als `ai_model_ref` an `/prepare` senden.
+- `llm_model` und `llm_profile_id` nicht ohne die in #896 eingeführte Abgrenzung zu
+  Legacy-Overrides entfernen. Issue #897 bereitet den Storage-Cut vor.
 
 ### (e) State/Store-Übersicht
 - Ersetzt wird: `modelOption`/`customModel`/`effectiveModel`-Block aus `useEnvForm.ts` +
@@ -101,10 +99,7 @@
 - `AiModelPicker` ist der kanonische Picker laut AGENTS.md.
 - Zod-Spiegel `AiModelRefSchema` (`frontend/src/contracts/aiModelRef.ts`) validiert
   `effectiveRef` bereits.
-- Kein Backend-Touch — `setGlobalSelection` schreibt bereits
-  `routing/defaults.global_default` + `active-config` im Gleichschritt, sodass beide
-  Runtime-Leser (`llm/client.py::use_active_config`,
-  `stage_model_router.py::routing/defaults.global_default`) konsistent bleiben.
+- Für den `/prepare`-Payload gilt #896 als Voraussetzung; #897 bereitet den Storage-Cut vor.
 
 ### (g) Reihenfolge
 1. `useEffectiveModelSelection` in `Step2EnvSetup` verdrahten.
@@ -121,11 +116,9 @@
 
 ## 4. Risiken (Pflicht-Verifikation vor Edit)
 
-- **A — Backend-Payload:** Vor Streichen von `triggerPrepare.llm_model`/`llm_profile_id`
-  per CRG/Code-Read verifizieren, dass `stage_model_router.py` und ggf. weitere Consumer
-  (`backend/app/api/simulation.py` o.ä.) `routing/defaults.global_default` wirklich
-  direkt lesen und `llm_model` im Payload nicht als zwingenden Fallback brauchen.
-  Cross-Check mit Backend-Contract (`backend/app/contracts/`).
+- **A — Backend-Payload:** `ai_model_ref` erst nach Merge von #896 als expliziten
+  Pickerwert senden. Das Entfernen von Legacy-Feldern folgt dem von #897 vorbereiteten
+  Storage-Cut.
 - **B — OASIS-Runtime-Provider:** `useEnvForm` hat `runtimeProvider`-Override-Logik
   (`defaultRuntimeModelForProvider`, `isRuntimeModelForProvider`,
   `runtimeModelOptionsForProvider` aus `useRuntimeLlmOptions`). Der `AiModelRef`-Kanon ist
@@ -141,7 +134,7 @@
 
 ## 5. Hard Constraints (gelten weiter)
 
-- Kein Backend-Touch ohne separaten Slice + User-Sign-off (Q2 bestätigt: kein Backend-Touch).
+- Änderungen am `/prepare`-Payload setzen #896 voraus; der Storage-Cut folgt #897.
 - Keine Anthropic-Subagents (Workflow/Agent: `model`/`agentType` weglassen).
 - Frontend-Toolchain: `bun` (nicht pnpm/npm).
 - Kein `--no-verify`, keine Edits auf `main`.
