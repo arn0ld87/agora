@@ -5,6 +5,43 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (Branch-Override-Whitelist gegen Regression festgeschrieben — 2026-07-26, Issue #887)
+
+- **`backend/tests/contracts/test_branch_override_contract.py`** — neue Contract-Suite
+  (27 Tests) für `services/branching_service.py::allowed_override_keys`. Die Whitelist ist
+  die einzige Stelle, die entscheidet, welche Branch-Overrides das Backend akzeptiert, und
+  war bis hierher komplett ungetestet — die vorhandenen Branch-Tests
+  (`tests/api/test_simulation_endpoints.py`, `tests/test_simulation_api_routes.py`) decken
+  nur den fehlenden `branch_name` ab. Genau diese Lücke hat den in #886 beschriebenen
+  Defekt unbemerkt bestehen lassen.
+- **Wirkung statt Nicht-Ablehnung:** je ein Test pro erlaubtem Key (`llm_model`, `language`,
+  `max_agents`, `time_config`, `enable_twitter`, `enable_reddit`, `persona_additions`,
+  `persona_removals`), der belegt, dass der Override im Branch-Artefakt landet — in der
+  `simulation_config`, im `SimulationState` oder in den Reddit-Profilen. Zusätzlich gepinnt:
+  `time_config` wird gemerged statt ersetzt, `None`/`""` sind Nicht-Overrides, und die
+  Quell-Simulation bleibt unverändert.
+- **Ablehnungspfad:** unbekannter Key → `ValueError("Unsupported branch overrides: …")`, die
+  Fehlermeldung listet alle unbekannten Keys sortiert, der Guard greift vor jedem
+  Seiteneffekt (kein Branch entsteht), und über `utils/api_responses.handle_api_errors`
+  wird daraus HTTP 400 am Endpoint `POST /api/simulation/<id>/branch`.
+- **Whitelist als Ganzes:** `test_whitelist_matches_pinned_expectation` liest das Set-Literal
+  per AST aus `branching_service.py` und vergleicht es gegen die im Test gepinnte Menge.
+  Nötig, weil die Whitelist eine lokale Variable in `create_branch` und damit nicht
+  importierbar ist — und weil ein *stilles Hinzufügen* eines Keys verhaltensbasiert nicht
+  erkennbar wäre (der Key-Raum ist unendlich). Damit wird sowohl Hinzufügen als auch
+  Entfernen rot.
+- Verortung in `tests/contracts/`, weil dieses Verzeichnis im verpflichtenden PR-Smoke-Gate
+  und im Pre-Push-Gate läuft (`uv run pytest tests/contracts/ -x -q`). Die Whitelist ist ein
+  API-Vertrag gegenüber dem Frontend (`components/step4/ReportBranchControls.vue`); ein Drift
+  soll im Gate auffallen, nicht erst im Full-Run.
+- **Kein Produktivcode-Fix:** die Suite schreibt ausschließlich den Ist-Zustand fest. Ob
+  `ai_model_ref` in die Whitelist gehört, entscheidet #886 — der Key steht hier bewusst in
+  der Negativliste des Ablehnungspfads.
+- Verifikation: `uv run pytest tests/contracts/test_branch_override_contract.py -q` → 27 grün.
+  Zusätzlich drei Mutationstests gegen den Produktivcode, alle gefangen: `language` aus der
+  Wirkungs-Schleife entfernt → `test_language` rot; `ai_model_ref` still zur Whitelist
+  hinzugefügt → 3 Tests rot; `time_config` still entfernt → 3 Tests rot.
+
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 
 - **`.github/scripts/check_legacy_model_picker.py`** — `components/llm/LlmProfilePicker.vue`
