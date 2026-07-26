@@ -22,6 +22,9 @@ in den pytest-Report schreiben.
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -40,6 +43,13 @@ HERMETICITY_FIXTURES = (
     "_clean_auth_token_env",
     "_clean_llm_json_mode_env",
 )
+
+# Im Subprozess von ``test_fixture_actually_scrubs_a_preseeded_token`` gesetzt,
+# damit dieser Test sich dort nicht selbst erneut startet.
+_SUBPROCESS_MARKER = "_AGORA_HERMETICITY_SUBPROCESS"
+
+# Kein echtes Secret — nur ein Wert, dessen Verschwinden beobachtbar ist.
+PROBE_TOKEN = "probe-token-not-a-real-secret"  # noqa: S105
 
 
 @pytest.mark.parametrize("var", SCRUBBED_ENV_VARS)
@@ -79,6 +89,54 @@ def test_hermeticity_fixture_is_autouse(fixture_name: str, request) -> None:
     assert fixture_name in request.fixturenames, (
         f"{fixture_name} ist nicht mehr autouse. Damit greift die Hermetik nur "
         f"noch für Tests, die es explizit anfordern."
+    )
+
+
+@pytest.mark.skipif(
+    os.environ.get(_SUBPROCESS_MARKER) == "1",
+    reason="Läuft im Subprozess dieses Tests — würde sich sonst rekursiv starten.",
+)
+def test_fixture_actually_scrubs_a_preseeded_token() -> None:
+    """Wirkungsnachweis: ein *vorbelegter* Token wird vom Fixture entfernt.
+
+    Die beiden Prüfungen darüber reichen nicht aus (Codex-Finding P2 auf PR #895):
+    auf CI-Runnern ohne ``.env`` startet ``test_leaky_env_var_is_unset_during_tests``
+    mit einem ohnehin abwesenden Token, und die Strukturprüfung sieht nur die
+    Registrierung — ein zum No-op ausgehöhlter Fixture-Body bliebe grün.
+
+    Hier wird ``AGORA_AUTH_TOKEN`` deshalb explizit gesetzt und ein pytest im
+    Subprozess gestartet. Dessen Test kann nur bestehen, wenn das Fixture den
+    vorbelegten Wert tatsächlich überschreibt — unabhängig davon, ob eine ``.env``
+    existiert.
+    """
+    backend_root = Path(root_conftest.__file__).resolve().parent.parent
+    env = {
+        **os.environ,
+        "AGORA_AUTH_TOKEN": PROBE_TOKEN,
+        _SUBPROCESS_MARKER: "1",
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/contracts/test_suite_hermeticity.py::test_leaky_env_var_is_unset_during_tests",
+            "-q",
+            "--no-header",
+            "-p",
+            "no:cacheprovider",
+        ],
+        cwd=backend_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert result.returncode == 0, (
+        "Der Subprozess sah AGORA_AUTH_TOKEN trotz aktivem _clean_auth_token_env. "
+        "Das Fixture scrubbt nicht mehr — genau der Zustand, der lokal die "
+        "401-Fehlschläge in tests/api erzeugt hat.\n"
+        f"--- stdout ---\n{result.stdout[-2000:]}"
     )
 
 

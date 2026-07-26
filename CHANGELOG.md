@@ -30,18 +30,22 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   (`_global_fernet_env` → `api_keys_store` → `app.config`). `monkeypatch.setenv(..., "")`
   belegt den Key, ohne den Guard scharf zu machen — `_expected_token()` und der
   Open-Mode-Check in `scopes.require_scope` prüfen beide auf Truthiness.
-- **`backend/tests/contracts/test_suite_hermeticity.py`** — neue Suite (6 Tests) im
-  PR-Gate: Verhaltensprüfung, dass die leck-anfälligen Variablen im Test leer sind, plus
-  eine Strukturbremse über `request.fixturenames`, die auch **ohne** lokale `.env` rot wird
-  — sonst könnte das Fixture entfernt werden, ohne dass CI etwas merkt. Die Assertions
-  vergleichen bewusst über Truthiness/Länge statt über den Wert, damit kein Token in den
-  pytest-Report gerät.
+- **`backend/tests/contracts/test_suite_hermeticity.py`** — neue Suite (7 Tests) im
+  PR-Gate: Verhaltensprüfung, dass die leck-anfälligen Variablen im Test leer sind, eine
+  Strukturbremse über `request.fixturenames`, und ein Wirkungsnachweis, der ein pytest im
+  Subprozess mit **vorbelegtem** `AGORA_AUTH_TOKEN` startet. Letzterer ist der einzige der
+  drei, der einen zum No-op ausgehöhlten Fixture-Body auch **ohne** lokale `.env` fängt —
+  die Verhaltensprüfung startet auf CI mit ohnehin abwesendem Token, die Strukturprüfung
+  sieht nur die Registrierung (Codex-Finding P2 auf PR #895). Die Assertions vergleichen
+  bewusst über Truthiness/Länge statt über den Wert, damit kein Token in den pytest-Report
+  gerät.
 - Ergebnis: `tests/api` von 138 auf 5 Failures, **keine neue Regression**. Die 5 Reste sind
   ein unabhängiges Problem (`OSError: Read-only file system: '/app'` in den
   `graph_ontology`-Tests, auch isoliert rot). Auth-Suiten (`test_auth`, `test_auth_ticket`,
   `test_logs_api`, `test_settings_api`, `test_report_export`, `test_config_validate`):
-  79 passed. Verifiziert durch zwei Mutationen — Fixture-Body neutralisiert und `autouse`
-  entfernt, beide werden gefangen.
+  79 passed. Verifiziert durch Mutationen in vier Konstellationen: Fixture-Body
+  neutralisiert (mit `.env` 2 Tests rot, **ohne** `.env` 1 Test rot) und `autouse` entfernt
+  (2 Tests rot); mit intaktem Fixture und entfernter `.env` bleiben alle 7 grün.
 
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 
