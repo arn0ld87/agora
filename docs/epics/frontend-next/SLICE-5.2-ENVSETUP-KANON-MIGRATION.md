@@ -1,7 +1,11 @@
 # Slice 5.2 — EnvSetupModelPanel/Step2EnvSetup auf Kanon-AiModelRef (Folge-PR)
 
-**Status:** nicht begonnen · **Vorgänger:** Phase 1 (PR feat/frontend-next-phase12) ·
+**Status:** umgesetzt in Issue #890 (2026-07-26) · **Vorgänger:** Phase 1 (PR feat/frontend-next-phase12) ·
 **Datum:** 2026-07-17 · **Quelle:** Scout-Workflow `frontend-next-scout` (CRG + Spec-Gap-Analyse) + Alex-Entscheidung 2026-07-17.
+
+> **Nachtrag 2026-07-26:** Die Umsetzung weicht in zwei Punkten bewusst von §3(b) und §4
+> ab. Verbindlich ist ab jetzt **§6 (Umsetzungsstand)** am Ende dieses Dokuments; §3 und §4
+> bleiben als Planungsstand von 2026-07-17 erhalten.
 
 > Dieser Slice ist aus Phase 1 ausgegliedert (Alex-Entscheidung: Atomic Slicing, separates
 > PR). Phase 1 (Kanon-First-Root-Cause-Fix der Modellwahl) ist ohne EnvSetupModelPanel
@@ -140,3 +144,67 @@
 - Kein `--no-verify`, keine Edits auf `main`.
 - Pre-Push-Gate: `bash scripts/pre-push-gate.sh frontend`.
 - `useEnvForm.spec.ts`-Assertions nicht abschwächen (AGENTS.md Regel 6).
+
+---
+
+## 6. Umsetzungsstand (Issue #890, 2026-07-26)
+
+Verbindlicher Ist-Stand. Wo dieser Abschnitt §3 oder §4 widerspricht, gilt dieser Abschnitt.
+
+### Abweichung 1 — Selektionssenke ist lokal, nicht `effectiveRef`
+
+§3(b) sah `:model-value="effectiveRef" @update:model-value="setGlobalSelection"` vor. Das ist
+nicht umgesetzt worden. Begründung, am Code belegt:
+
+- `useEffectiveModelSelection.effectiveRef` ist `computed(() => adapter.toAiModelRef(defaultsStore.globalDefault))`
+  und damit vom globalen Workspace-Default abgeleitet. Es ist nie `null`, sobald ein globaler
+  Default existiert. „Nutzer hat nichts gewählt" wäre dadurch nicht ausdrückbar, Step 2 würde
+  immer ein `ai_model_ref` senden, und die Projektprofil-Präzedenz des Backends
+  (`llm_routing_seed.py`) käme nie zum Zug. Das Akzeptanzkriterium „Projektprofil, explizite
+  Auswahl und Default besitzen getestete Präzedenz" wäre unerfüllbar.
+- `setGlobalSelection()` schreibt serverseitig über `replaceGlobalDefault`. Eine Modellwahl im
+  Run-Setup hätte damit den globalen Workspace-Default umgeschrieben — eine
+  Einstellungsmutation als Nebenwirkung einer Run-Konfiguration.
+
+Umgesetzt ist stattdessen `const selectedModelRef = ref(null)` in `Step2EnvSetup.vue` als
+einzige Kanon-Senke: initial `null`, ohne Persistenz, ohne Schreibzugriff auf den globalen
+Default. `useEffectiveModelSelection` wird von Step 2 nicht verwendet.
+
+### Abweichung 2 — `modelOption`/`customModel` bleiben in `useEnvForm`
+
+§2 („was entfällt") sah die vollständige Entfernung vor. Entfernt wurde nur die Persistenz:
+`STORAGE_MODEL`, `STORAGE_CUSTOM_MODEL`, `storedEffectiveModel()` sowie sämtliche Restore- und
+Writer-Logik. `modelOption`, `customModel`, `modelOptions` und `effectiveModel()` bleiben, weil
+sie den Runtime-Provider-Pfad bedienen.
+
+Damit ist das Akzeptanzkriterium „`useEnvForm` enthält keine Modellwahl- oder
+Modellpersistenzlogik mehr" bewusst nur zur Hälfte erfüllt: Persistenz ja, Modellwahl nein.
+Die Restschuld hängt an der Ablösung von `useRuntimeLlmOptions` (bereits `@deprecated`,
+Slice 5.5) und ist als Folge-Issue zu führen.
+
+### Auflösung Risiko B (OASIS-Runtime-Provider)
+
+Geprüft und entschieden: Der Runtime-Provider-Override wird **nicht** auf `AiModelRef`
+abgebildet. Er ist credential-basiert (`runtimePayload()` liefert `{provider, api_key?, base_url?}`
+ohne Modellfeld), der Kanon ist connection-basiert. Beide sind per Backend-Contract unvereinbar:
+`simulation_prepare.py` lehnt `ai_model_ref` zusammen mit einem truthy `llm_provider` mit HTTP 400 ab.
+
+Umgesetzt ist deshalb gegenseitiger Ausschluss in beide Richtungen:
+`modelPickerDisabled` in `Step2EnvSetup.vue` deaktiviert den Picker bei aktivem Runtime-Provider
+und setzt `selectedModelRef` zurück; `runtimeProviderBlockDisabled` in `EnvSetupModelPanel.vue`
+blendet den Runtime-Block aus, sobald eine kanonische Auswahl aktiv ist. Der 400-Guard kann
+dadurch nicht ausgelöst werden.
+
+### Auflösung Risiko C (LlmProfilePicker)
+
+Gegenstandslos: Der `LlmProfilePicker` war bereits in Issue #834 aus `EnvSetupModelPanel.vue`
+entfernt worden. `llmProfileId` bleibt als reiner Lesewert aus `props.projectData` erhalten und
+wird nur im Nicht-Kanon-Zweig als `llm_profile_id` gesendet — es ist keine Selektionsquelle mehr.
+
+### Risiko B — Nachbarbefund #901
+
+Der Verlust von `AiModelRef.source` an der Routing-Grenze (`ai_route_from_stage_route()` setzt
+hart `source="legacy"`) wurde geprüft und ist für #890 **nicht** funktional relevant:
+`resolve_ai_route()` überschreibt `source` ohnehin positional, und der einzige Leser ist das
+Audit-Event in `ai_route_audit.py`. `provider_connection_id` und `model_id` laufen verlustfrei
+bis in die Runtime. Nachverfolgt in Issue #901.

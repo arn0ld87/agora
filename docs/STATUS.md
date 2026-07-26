@@ -28,7 +28,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 | Kategorie | Anzahl | Methode |
 |---|---|---|
 | Backend Tests (collected) | 3678 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 172 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Frontend Test-Files | 173 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
@@ -100,7 +100,7 @@ Strukturelle Lücken liegen vor allem in OASIS-/Neo4j-Integrationspfaden, Canvas
 - Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
 - Provider-Verbindungen: `ProviderConnection`
 - kanonische Route: `AiRoute` / `LlmRoute`
-- kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
+- kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`; seit Issue #890 auch im Step-2-Environment-Setup. Eine Auswahl ist eine `AiModelRef` und wird als `ai_model_ref` an `/prepare` gesendet; ohne Auswahl entscheidet die Backend-Präzedenz (Projektprofil vor Workspace-Default). Modellauswahl wird im Frontend nicht mehr persistiert
 - aktive Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
 - strukturierte LLM-JSON-Outputs: `LLMClient.chat_json` mit Pydantic-Schema (strict-json_schema-Pfad); rohe OpenAI-Clients für strukturierte Outputs vermeiden
 - Subagent-Dispatch: Routing-Matrix in [`docs/runbooks/subagent-routing.md`](runbooks/subagent-routing.md) und [`CLAUDE.md`](../CLAUDE.md); Agentdefinitionen unter `.claude/agents/*-m3.md` (Modell `MiniMax-M3`, ab 20.07.2026)
@@ -113,6 +113,8 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. Die übrigen v4-Views und `/agora-2026` existieren weiterhin parallel
 - ein React-/Lovable-Neubau ist beschrieben, aber nicht als Zielentscheidung freigegeben
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
+- der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`, `@deprecated` Slice 5.5) ist mit der connection-gebundenen `AiModelRef` unvereinbar und in Step 2 daher gegenseitig ausgeschlossen. Solange er existiert, hält `useEnvForm` weiterhin `modelOption`/`customModel` — allerdings ohne Persistenz. Die Ablösung ist offen
+- die Browser-Keys `agora.lastModel` und `agora.lastCustomModel` haben seit Issue #890 keinen produktiven Reader oder Writer mehr; vorhandene Werte werden bewusst nicht gelöscht und bleiben wirkungslose Altlast
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
 - Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
 
