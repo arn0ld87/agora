@@ -5,6 +5,44 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (133 reihenfolgenabhängige Test-Failures in `tests/api` — 2026-07-26)
+
+- **`backend/tests/conftest.py`** — neues autouse-Fixture `_clean_auth_token_env`.
+  `tests/api` lief lokal mit **138 Failures**, isoliert waren dieselben Suiten grün.
+- **Ursachenkette:** `app/config.py` ruft beim Import `load_dotenv()` auf und zieht den
+  echten `AGORA_AUTH_TOKEN` aus `.env` bzw. `backend/.env` prozessweit in `os.environ`.
+  Für sich harmlos — kritisch wird es mit den Blueprint-Singletons:
+  `install_blueprint_guard` hängt seinen `before_request`-Hook an das Blueprint-*Objekt*
+  und markiert es über `_agora_guard_installed` dauerhaft. Ruft irgendein Test `create_app()`
+  (`tests/api/test_cors.py`, `tests/test_fork_safety.py`,
+  `tests/observability/test_logging_wiring.py`), ist der Guard danach permanent auf
+  `simulation_bp`, `graph_bp`, `report_bp` & Co. — auch für jede spätere nackte
+  `Flask()`-Testapp. Mit gesetztem Token antwortet er `401 auth_required`. Suiten, deren
+  Client-Fixture `AGORA_AUTH_TOKEN` selbst löschte, waren immun; alle anderen kippten,
+  sobald vorher ein `create_app()`-Test lief.
+- **In CI fiel das nie auf**, weil dort keine `.env` existiert. Betroffen war ausschließlich
+  die lokale Entwicklungsschleife — und das PR-Gate deckt es nicht ab, weil es nur
+  `tests/contracts/` fährt.
+- **Leerer String statt `delenv`.** Der naheliegende `monkeypatch.delenv` funktioniert
+  *nicht*: entfernt man den Key, setzt ihn der nächste `load_dotenv(override=False)` sofort
+  wieder, denn `override=False` überspringt nur Keys, die bereits in `os.environ` stehen.
+  Genau das passierte in Suiten, die `app.config` erst *während* eines Tests importieren
+  (`_global_fernet_env` → `api_keys_store` → `app.config`). `monkeypatch.setenv(..., "")`
+  belegt den Key, ohne den Guard scharf zu machen — `_expected_token()` und der
+  Open-Mode-Check in `scopes.require_scope` prüfen beide auf Truthiness.
+- **`backend/tests/contracts/test_suite_hermeticity.py`** — neue Suite (6 Tests) im
+  PR-Gate: Verhaltensprüfung, dass die leck-anfälligen Variablen im Test leer sind, plus
+  eine Strukturbremse über `request.fixturenames`, die auch **ohne** lokale `.env` rot wird
+  — sonst könnte das Fixture entfernt werden, ohne dass CI etwas merkt. Die Assertions
+  vergleichen bewusst über Truthiness/Länge statt über den Wert, damit kein Token in den
+  pytest-Report gerät.
+- Ergebnis: `tests/api` von 138 auf 5 Failures, **keine neue Regression**. Die 5 Reste sind
+  ein unabhängiges Problem (`OSError: Read-only file system: '/app'` in den
+  `graph_ontology`-Tests, auch isoliert rot). Auth-Suiten (`test_auth`, `test_auth_ticket`,
+  `test_logs_api`, `test_settings_api`, `test_report_export`, `test_config_validate`):
+  79 passed. Verifiziert durch zwei Mutationen — Fixture-Body neutralisiert und `autouse`
+  entfernt, beide werden gefangen.
+
 ### Changed (CI-Gate: `LlmProfilePicker.vue` gegen Rückkehr gesperrt — 2026-07-26, Issue #889)
 
 - **`.github/scripts/check_legacy_model_picker.py`** — `components/llm/LlmProfilePicker.vue`
