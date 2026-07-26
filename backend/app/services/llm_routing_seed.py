@@ -84,12 +84,17 @@ def _verify_selected_model(connection: ProviderConnection, model_id: str) -> Non
         store=ProviderConnectionStore(),
         secrets_store=get_llm_provider_secrets_store(),
     )
-    result = service.probe(connection)
+    try:
+        result = service.probe(connection)
+    except Exception as exc:  # noqa: BLE001 — Providerfehler dürfen keine Secrets propagieren
+        raise ValueError(
+            f"Modell-Katalog für ProviderConnection {connection.id!r} derzeit "
+            f"nicht abrufbar ({type(exc).__name__})"
+        ) from None
     if result.status != "available":
         raise ValueError(
             f"Modell-Katalog für ProviderConnection {connection.id!r} derzeit "
-            f"nicht abrufbar ({result.status}): "
-            f"{result.status_message or 'keine Detailmeldung'}"
+            f"nicht abrufbar ({result.status})"
         )
     known_model_ids = {model.model_id for model in result.models}
     if model_id not in known_model_ids:
@@ -122,20 +127,24 @@ def _bind_connection_secret(
 
 
 def prevalidate_ai_model_ref(ai_model_ref: AiModelRef) -> ProviderConnection:
-    """Günstige Vorab-Prüfung einer ``ai_model_ref``: löst die Connection auf
-    und verifiziert die Secret-Bindung — ohne teure Live-Model-Discovery.
+    """Günstige Vorab-Prüfung einer ``ai_model_ref`` ohne Live-Discovery.
 
-    Wirft ``ValueError``, wenn die Connection fehlt oder deaktiviert ist oder
-    eine ``api_key``-Connection ohne gebundenes ``secret_ref`` daherkommt.
-    Aufrufer (z. B. ``/api/simulation/start``) nutzen das, um vor der
-    Run-Record-Creation mit 4xx abzubrechen — kein orphaned Run. Die volle
-    Model-Discovery (Issue #819, Connection/Model-Mismatch) läuft später in
-    ``seed_run_stage_routing``; deren ``ValueError`` wird am Endpunkt ebenfalls
-    zu 4xx. Gemeinsame SSoT mit dem Profil-Pfad, kein .env-Fallback.
+    Löst die Connection auf und verifiziert die Secret-Bindung. Prepare- und
+    Simulation-Start-Endpunkte nutzen diese Variante bewusst vor der
+    Run-Erzeugung, ohne einen zusätzlichen Provider-Probe auszulösen.
     """
     connection = _resolve_selected_connection(ai_model_ref.provider_connection_id)
     options: dict[str, object] = {}
     _bind_connection_secret(connection, options)
+    return connection
+
+
+def prevalidate_ai_model_ref_with_discovery(
+    ai_model_ref: AiModelRef,
+) -> ProviderConnection:
+    """Vollständige AiModelRef-Prüfung inklusive bestehender Model-Discovery."""
+    connection = prevalidate_ai_model_ref(ai_model_ref)
+    _verify_selected_model(connection, ai_model_ref.model_id)
     return connection
 
 

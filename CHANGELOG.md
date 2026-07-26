@@ -11,6 +11,31 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   `AiModelRef` als autoritative Route. Mischfälle mit Legacy-Overrides werden abgelehnt;
   eine explizit gesendete Ref löst ein Re-Prepare aus.
 
+### Changed (Graph-Pipeline und Startpfade ohne `agora.lastModel`-Bridge — 2026-07-26, Issue #897)
+
+- **Graph-Ontologie und Graph-Build:** `generate_ontology` und `build_graph` akzeptieren
+  `ai_model_ref` als kanonische, connection-gebundene Route. Die API validiert die Pydantic-
+  Struktur und die referenzierte `ProviderConnection`, bevor Projekt-, Task- oder Run-
+  Seiteneffekte entstehen. Mischfälle mit `llm_model`, `llm_profile_id`, `llm_provider` oder
+  `llm_runtime` werden mit HTTP 400 abgelehnt; bei einer gültigen Ref bleiben alle Legacy-
+  Overrides aus der Route. Sämtliche synchronen Fehler einer `ai_model_ref`-Route nach der
+  Run-Erzeugung bis zum abgeschlossenen Ontologieaufbau beziehungsweise erfolgreichen Enqueue
+  terminalisieren Projekt und Run sowie einen bereits angelegten Graph-Task. Routing- und
+  Eingabefehler bleiben HTTP 400, Betriebsfehler liefern HTTP 500 und Timeouts HTTP 504;
+  Response, persistierte Fehlertexte und Logs bleiben dabei frei von Provider-Details und
+  Secrets.
+- **Home, Hero, Graph-Pipeline und Step 3:** Ein expliziter Pick wird als vollständige
+  `AiModelRef` im tab-skopierten Run-Override gehalten. Die Graph-Pipeline verwendet zuerst
+  diesen Override, danach den Kanon aus `routing/defaults.global_default`, und reicht dieselbe
+  Ref an Ontologie und Build weiter. Ohne beide Quellen entscheidet das Backend-Routing;
+  liegengebliebene `agora.lastModel`-/`agora.lastCustomModel`-Werte werden nicht gelesen,
+  geschrieben oder gelöscht. `Step3Simulation` nutzt für Simulation und Report ebenfalls
+  keine Legacy-Storage-Route mehr.
+- **Adapter-Grenze:** `toStoredModelString` und `toStoredModelStringPure` sind entfernt.
+  `useEnvForm` mit `Step2EnvSetup` bleibt bis zur Migration in
+  [Issue #890](https://github.com/arn0ld87/agora/issues/890) bewusst der letzte produktive
+  Consumer der Legacy-Modell-Keys; Issue #897 entfernt diese Keys daher noch nicht global.
+
 ### Fixed (133 reihenfolgenabhängige Test-Failures in `tests/api` — 2026-07-26)
 
 - **`backend/tests/conftest.py`** — neues autouse-Fixture `_clean_auth_token_env`.

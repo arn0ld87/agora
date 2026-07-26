@@ -4,12 +4,22 @@ Graph API: Ontology and graph building endpoints.
 
 import os
 import json
+from collections.abc import Mapping
+
 from flask import current_app, request
+from pydantic import ValidationError
+
 from . import graph_bp
 from ..config import Config
-from ..models.project import ProjectManager
+from ..contracts.ai_provider_contract import AiModelRef
+from ..models.project import ProjectManager, ProjectStatus
+from ..services.llm_routing_seed import prevalidate_ai_model_ref_with_discovery
 from ..services.llm_runtime import parse_runtime_llm_config
-from ..services.graph_build import GraphBuildService
+from ..services.graph_build import (
+    AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+    AiModelRefPostValidationError,
+    GraphBuildService,
+)
 from ..utils.file_parser import FileParser
 from ..services.text_processor import TextProcessor
 from ..utils.logger import get_logger
@@ -26,6 +36,34 @@ from ..utils.scopes import require_scope
 from ..container import get_container
 
 logger = get_logger('agora.api.graph_build')
+
+
+_LEGACY_ROUTE_FIELDS = ("llm_model", "llm_profile_id", "llm_provider", "llm_runtime")
+
+
+def _validate_ai_model_ref_payload(
+    raw_ref: object, payload: Mapping[str, object]
+) -> AiModelRef:
+    if isinstance(raw_ref, str):
+        try:
+            raw_ref = json.loads(raw_ref)
+        except json.JSONDecodeError as exc:
+            raise ValueError("ai_model_ref ist ungültig") from exc
+
+    try:
+        ai_model_ref = AiModelRef.model_validate(raw_ref)
+    except ValidationError as exc:
+        raise ValueError("ai_model_ref ist ungültig") from exc
+
+    conflicting = [key for key in _LEGACY_ROUTE_FIELDS if key in payload]
+    if conflicting:
+        raise ValueError(
+            f"ai_model_ref darf nicht mit {', '.join(conflicting)} kombiniert werden"
+        )
+
+    prevalidate_ai_model_ref_with_discovery(ai_model_ref)
+    return ai_model_ref
+
 
 def allowed_file(file_storage) -> bool:
     """Check if file extension and content are allowed"""
@@ -92,21 +130,38 @@ def generate_ontology():
     if not simulation_requirement:
         return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="Please provide simulation requirement description")
 
-    llm_model_override = (request.form.get('llm_model') or '').strip() or None
-    llm_provider_raw = request.form.get('llm_provider')
-    llm_provider_payload = None
-    if llm_provider_raw:
+    ai_model_ref = None
+    if "ai_model_ref" in request.form:
         try:
-            llm_provider_payload = json.loads(llm_provider_raw)
-        except json.JSONDecodeError:
-            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="llm_provider must be a valid JSON object")
+            ai_model_ref = _validate_ai_model_ref_payload(
+                request.form.get("ai_model_ref"), request.form
+            )
+        except ValueError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            )
 
-    try:
-        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
-    except ValueError as exc:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+        llm_model_override = None
+        llm_runtime = None
+        llm_profile_id = None
+    else:
+        llm_model_override = (request.form.get('llm_model') or '').strip() or None
+        llm_provider_raw = request.form.get('llm_provider')
+        llm_provider_payload = None
+        if llm_provider_raw:
+            try:
+                llm_provider_payload = json.loads(llm_provider_raw)
+            except json.JSONDecodeError:
+                return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message="llm_provider must be a valid JSON object")
 
-    llm_profile_id = (request.form.get('llm_profile_id') or '').strip() or None
+        try:
+            llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+        except ValueError as exc:
+            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+
+        llm_profile_id = (request.form.get('llm_profile_id') or '').strip() or None
 
     uploaded_files = request.files.getlist('files')
     if not uploaded_files or all(not f.filename for f in uploaded_files):
@@ -161,6 +216,9 @@ def generate_ontology():
     ProjectManager.save_project(project)
 
     try:
+        ai_model_ref_kwargs = (
+            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
+        )
         project = GraphBuildService.generate_ontology(
             project_id=project.project_id,
             simulation_requirement=simulation_requirement,
@@ -168,9 +226,23 @@ def generate_ontology():
             llm_model_override=llm_model_override,
             llm_runtime=llm_runtime,
             llm_profile_id=llm_profile_id,
-            additional_context=additional_context
+            additional_context=additional_context,
+            **ai_model_ref_kwargs,
         )
     except ValueError as exc:
+        if ai_model_ref is not None:
+            if (
+                project.status != ProjectStatus.FAILED
+                or project.error != AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+            ):
+                project.status = ProjectStatus.FAILED
+                project.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+                ProjectManager.save_project(project)
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+            )
         ProjectManager.delete_project(project.project_id)
         return json_error_from_exception(exc)
 
@@ -195,21 +267,37 @@ def build_graph():
     if not validate_project_id(project_id):
         return json_error(ApiErrorCode.INVALID_ID, status=400)
 
+    ai_model_ref = None
+    if "ai_model_ref" in data:
+        try:
+            ai_model_ref = _validate_ai_model_ref_payload(data.get("ai_model_ref"), data)
+        except ValueError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=str(exc),
+            )
+
     project = ProjectManager.get_project(project_id)
     if not project:
         return json_error(ApiErrorCode.NOT_FOUND, status=404, message=f"Project does not exist: {project_id}")
 
-    from ..utils.llm_profile_resolver import expand_profile_in_data
-    expand_profile_in_data(data)
+    if ai_model_ref is not None:
+        llm_model_override = None
+        llm_runtime = None
+        llm_profile_id = None
+    else:
+        from ..utils.llm_profile_resolver import expand_profile_in_data
+        expand_profile_in_data(data)
 
-    llm_model_override = (data.get('llm_model') or '').strip() or project.llm_model or None
-    llm_provider_payload = data.get('llm_provider')
-    try:
-        llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
-    except ValueError as exc:
-        return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
+        llm_model_override = (data.get('llm_model') or '').strip() or project.llm_model or None
+        llm_provider_payload = data.get('llm_provider')
+        try:
+            llm_runtime = parse_runtime_llm_config({"llm_provider": llm_provider_payload})
+        except ValueError as exc:
+            return json_error(ApiErrorCode.VALIDATION_FAILED, status=400, message=str(exc))
 
-    llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
+        llm_profile_id = (data.get('llm_profile_id') or '').strip() or None
     force = data.get('force', False)
     graph_name = data.get('graph_name', project.name or 'Agora Graph')
     chunk_size = data.get('chunk_size')
@@ -220,6 +308,9 @@ def build_graph():
         return json_error(ApiErrorCode.NEO4J_UNAVAILABLE, status=503, message="GraphStorage not initialized")
 
     try:
+        ai_model_ref_kwargs = (
+            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
+        )
         task_id, run_id = GraphBuildService.build_graph(
             project_id=project_id,
             graph_name=graph_name,
@@ -229,7 +320,8 @@ def build_graph():
             force=force,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            container=container
+            container=container,
+            **ai_model_ref_kwargs,
         )
         return json_success({
             "project_id": project_id,
@@ -238,7 +330,19 @@ def build_graph():
             "message": "Graph build task started. Query progress via /task/{task_id}"
         })
     except ValueError as exc:
+        if ai_model_ref is not None:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+            )
         return json_error_from_exception(exc)
+    except AiModelRefPostValidationError:
+        return json_error(
+            "internal server error",
+            status=500,
+            code=ApiErrorCode.INTERNAL_ERROR,
+        )
     except RuntimeError as exc:
         # GRAPH_BUILD_IN_PROGRESS must surface the already-running task_id so
         # the client can poll status instead of starting a parallel run.

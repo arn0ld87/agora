@@ -6,14 +6,13 @@
  *  2. toLlmRoute ohne Lookup (defensiver Fallback + console.warn)
  *  3. toAiModelRef mit Provider-Kind-Lookup (Happy Path)
  *  4. toAiModelRef ohne Lookup (defensiver Fallback)
- *  5. toStoredModelString mit und ohne Ref
- *  6. buildProviderKindLookup gruppiert nach provider_kind
- *  7. firstConnectionId liefert erste Connection-ID pro Kind
- *  8. Zod-Spiegel akzeptiert gueltiges AiModelRef
- *  9. Zod-Spiegel lehnt AiModelRef ohne provider_connection_id ab
- * 10. Zod-Spiegel lehnt unbekannte source ab
- * 11. Zod-Spiegel akzeptiert alle AiModelSource-Werte
- * 12. Round-Trip: toLlmRoute(toAiModelRef(r)) ist verlustfrei
+ *  5. buildProviderKindLookup gruppiert nach provider_kind
+ *  6. firstConnectionId liefert erste Connection-ID pro Kind
+ *  7. Zod-Spiegel akzeptiert gueltiges AiModelRef
+ *  8. Zod-Spiegel lehnt AiModelRef ohne provider_connection_id ab
+ *  9. Zod-Spiegel lehnt unbekannte source ab
+ * 10. Zod-Spiegel akzeptiert alle AiModelSource-Werte
+ * 11. Round-Trip: toLlmRoute(toAiModelRef(r)) ist verlustfrei
  *
  * Slice 7.6c: Der Legacy-Storage-Migrations-Helper (`migrateStoredRoute*`)
  * wurde mit dem Storage-Cut entfernt; die zugehörigen Tests entfallen.
@@ -32,7 +31,6 @@ import {
   toAiModelRefPure,
   buildProviderKindLookup,
   firstConnectionId,
-  toStoredModelStringPure,
   type ConnectionLookup,
 } from '../useAiModelRefAdapter'
 
@@ -184,17 +182,6 @@ describe('useAiModelRefAdapter (Slice 5.4)', () => {
     expect(roundA?.provider_connection_id).toBe('conn-a')
     expect(roundB?.provider_connection_id).toBe('conn-b')
     expect(roundA?.provider_connection_id).not.toBe(roundB?.provider_connection_id)
-  })
-
-  it('toStoredModelString: null → "default", sonst model_id', () => {
-    expect(toStoredModelStringPure(null)).toBe('default')
-    expect(
-      toStoredModelStringPure({
-        provider_connection_id: 'c',
-        model_id: 'qwen3',
-        source: 'explicit',
-      }),
-    ).toBe('qwen3')
   })
 
   it('buildProviderKindLookup: gruppiert Connections nach provider_kind', () => {

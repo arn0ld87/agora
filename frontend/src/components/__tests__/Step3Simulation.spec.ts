@@ -62,8 +62,8 @@ vi.mock('../../api/runs', () => ({
   cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'sim_test_smoke', status: 'cancel_requested' } }),
 }))
 
-// Kanonische Modell-Auswahl: Default ist kein ai_model_ref (Legacy-Pfad bleibt
-// für bestehende Tests intakt). Der ai_model_ref-Test überschreibt effectiveRef.
+// Kanonische Modell-Auswahl: Default ist kein ai_model_ref. Die Routing-Tests
+// überschreiben effectiveRef gezielt.
 let _effectiveRefValue: { provider_connection_id: string; model_id: string; source: string } | null = null
 vi.mock('@/composables/useEffectiveModelSelection', () => ({
   useEffectiveModelSelection: () => ({
@@ -363,7 +363,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     vi.restoreAllMocks()
   })
 
-  it('sendet ein persistiertes Custom-Modell beim Reportstart', async () => {
+  it('sendet beim initialen Reportstart ohne expliziten Report-Pick nur simulation_id', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     ;(generateReport as ReturnType<typeof vi.fn>).mockResolvedValue({
       success: true,
@@ -371,6 +371,8 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     })
     localStorage.setItem('agora.lastModel', 'custom')
     localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
+    localStorage.setItem('agora.reportModel', 'legacy-report-model')
+    localStorage.setItem('agora.reportCustomModel', 'legacy-report-custom')
 
     const wrapper = mountComponent()
     await flushPromises()
@@ -384,10 +386,7 @@ describe('Step3Simulation — phase promotion (Sub-Slice A, #209)', () => {
     await reportBtn!.trigger('click')
     await flushPromises()
 
-    expect(generateReport).toHaveBeenCalledWith({
-      simulation_id: 'sim_test_smoke',
-      llm_model: 'deepseek-v3.2:cloud',
-    })
+    expect(generateReport).toHaveBeenCalledWith({ simulation_id: 'sim_test_smoke' })
   })
 })
 
@@ -522,10 +521,9 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     expect(_clearRunOverrideSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('fällt ohne Kanon-Auswahl auf Legacy llm_model/llm_provider zurück', async () => {
+  it('fällt ohne Override und Kanon-Auswahl nicht auf Legacy-Storage zurück', async () => {
     vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
     vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
-    // Kein ai_model_ref aus dem Kanon → Legacy-Pfad.
     _effectiveRefValue = null
     localStorage.setItem('agora.lastModel', 'custom')
     localStorage.setItem('agora.lastCustomModel', 'deepseek-v3.2:cloud')
@@ -540,6 +538,9 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
 
     const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.ai_model_ref).toBeUndefined()
-    expect(payload.llm_model).toBe('deepseek-v3.2:cloud')
+    expect(payload.llm_model).toBeUndefined()
+    expect(payload.llm_provider).toBeUndefined()
+    expect(localStorage.getItem('agora.lastModel')).toBe('custom')
+    expect(localStorage.getItem('agora.lastCustomModel')).toBe('deepseek-v3.2:cloud')
   })
 })

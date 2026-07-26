@@ -3,8 +3,11 @@ Service for building graphs and generating ontologies.
 """
 
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 from ..config import Config
+from ..contracts.ai_provider_contract import AiModelRef
 from ..services.ontology_generator import OntologyGenerator
 from ..services.llm_routing_seed import resolve_route_api_key, seed_run_stage_routing
 from ..services.stage_model_router import StageModelRouter
@@ -14,13 +17,76 @@ from ..utils.artifact_locator import ArtifactLocator
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
 from ..models.task import TaskManager, TaskStatus
-from ..models.project import ProjectManager, ProjectStatus
+from ..models.project import Project, ProjectManager, ProjectStatus
 from ..services.run_registry import RunRegistry
 from ..services.secret_resolver import SecretResolver
 from ..utils.api_errors import ApiErrorCode
 
 logger = get_logger('agora.graph_build_service')
 run_registry = RunRegistry()
+AI_MODEL_REF_ROUTING_FAILURE_MESSAGE = "ai_model_ref routing could not be finalized"
+
+
+class AiModelRefPostValidationError(RuntimeError):
+    """Safe boundary error for synchronous AiModelRef operational failures."""
+
+
+class _AiModelRefRoutingInputError(ValueError):
+    """Identify ValueErrors raised directly by AiModelRef route seeding."""
+
+
+@contextmanager
+def _classify_ai_model_ref_seed_error(
+    ai_model_ref: AiModelRef | None,
+) -> Iterator[None]:
+    try:
+        yield
+    except ValueError:
+        if ai_model_ref is not None:
+            raise _AiModelRefRoutingInputError from None
+        raise
+
+
+@contextmanager
+def _terminalize_ai_model_ref_sync_failure(
+    *,
+    ai_model_ref: AiModelRef | None,
+    project: Project,
+    run_id: str,
+    phase: str,
+    task_manager: TaskManager | None = None,
+    task_id_getter: Callable[[], str | None] | None = None,
+) -> Iterator[None]:
+    try:
+        yield
+    except Exception as exc:
+        if ai_model_ref is not None:
+            task_id = task_id_getter() if task_id_getter is not None else None
+            logger.warning(
+                "AiModelRef synchronous graph operation failed "
+                "[project_id=%s, run_id=%s, task_id=%s, phase=%s, error_type=%s]",
+                project.project_id,
+                run_id,
+                task_id,
+                phase,
+                type(exc).__name__,
+            )
+            if task_id is not None and task_manager is not None:
+                task_manager.fail_task(task_id, AI_MODEL_REF_ROUTING_FAILURE_MESSAGE)
+            project.status = ProjectStatus.FAILED
+            project.error = AI_MODEL_REF_ROUTING_FAILURE_MESSAGE
+            run_registry.update_run(
+                run_id,
+                status="failed",
+                message=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+                error=AI_MODEL_REF_ROUTING_FAILURE_MESSAGE,
+            )
+            ProjectManager.save_project(project)
+            if isinstance(exc, TimeoutError):
+                raise TimeoutError from None
+            if not isinstance(exc, _AiModelRefRoutingInputError):
+                raise AiModelRefPostValidationError from None
+        raise
 
 
 class GraphBuildService:
@@ -33,7 +99,8 @@ class GraphBuildService:
         llm_model_override=None,
         llm_runtime=None,
         llm_profile_id=None,
-        additional_context=None
+        additional_context=None,
+        ai_model_ref: AiModelRef | None = None,
     ):
         """
         Generate an ontology for a project from its documents and simulation requirements.
@@ -57,6 +124,10 @@ class GraphBuildService:
         if not project:
             raise ValueError(ApiErrorCode.NOT_FOUND)
 
+        effective_model_override = None if ai_model_ref is not None else llm_model_override
+        effective_llm_runtime = None if ai_model_ref is not None else llm_runtime
+        effective_profile_id = None if ai_model_ref is not None else llm_profile_id
+
         run_record = run_registry.create_run(
             run_type="ontology_generate",
             entity_id=project.project_id,
@@ -66,60 +137,71 @@ class GraphBuildService:
             linked_ids={"project_id": project.project_id},
         )
         run_id = run_record["run_id"]
-        for stage_id in ("document_ingest", "ontology_generation"):
-            seed_run_stage_routing(
-                run_id,
-                stage_id,
-                llm_model_override=llm_model_override,
-                llm_runtime=llm_runtime,
-                llm_profile_id=llm_profile_id,
-            )
-        route_router = StageModelRouter(run_id)
-        ingest_route = route_router.resolve("document_ingest")
-        route_router.lock_stage("document_ingest", ingest_route)
-        ontology_route = route_router.resolve("ontology_generation")
-        route_router.lock_stage("ontology_generation", ontology_route)
-
-        # The locked ontology route is authoritative; profile IDs are metadata only.
-        llm_client = LLMClient.from_route(
-            ontology_route,
-            secret_resolver=SecretResolver(),
-            api_key_override=resolve_route_api_key(ontology_route, llm_runtime),
+        ai_model_ref_kwargs = (
+            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
+        )
+        with _terminalize_ai_model_ref_sync_failure(
+            ai_model_ref=ai_model_ref,
+            project=project,
             run_id=run_id,
-        )
-        logger.info(
-            "Calling LLM to generate ontology definition (model=%s, provider=%s) [project_id=%s, run_id=%s]",
-            llm_client.model,
-            ontology_route.provider_id,
-            project_id,
-            run_id
-        )
+            phase="ontology_generation",
+        ):
+            for stage_id in ("document_ingest", "ontology_generation"):
+                with _classify_ai_model_ref_seed_error(ai_model_ref):
+                    seed_run_stage_routing(
+                        run_id,
+                        stage_id,
+                        llm_model_override=effective_model_override,
+                        llm_runtime=effective_llm_runtime,
+                        llm_profile_id=effective_profile_id,
+                        **ai_model_ref_kwargs,
+                    )
+            route_router = StageModelRouter(run_id)
+            ingest_route = route_router.resolve("document_ingest")
+            route_router.lock_stage("document_ingest", ingest_route)
+            ontology_route = route_router.resolve("ontology_generation")
+            route_router.lock_stage("ontology_generation", ontology_route)
 
-        generator = OntologyGenerator(llm_client=llm_client)
-        ontology = generator.generate(
-            document_texts=document_texts,
-            simulation_requirement=simulation_requirement,
-            additional_context=additional_context
-        )
+            # The locked ontology route is authoritative; profile IDs are metadata only.
+            llm_client = LLMClient.from_route(
+                ontology_route,
+                secret_resolver=SecretResolver(),
+                api_key_override=resolve_route_api_key(ontology_route, effective_llm_runtime),
+                run_id=run_id,
+            )
+            logger.info(
+                "Calling LLM to generate ontology definition (model=%s, provider=%s) [project_id=%s, run_id=%s]",
+                llm_client.model,
+                ontology_route.provider_id,
+                project_id,
+                run_id
+            )
 
-        project.ontology = {
-            "entity_types": ontology.get("entity_types", []),
-            "edge_types": ontology.get("edge_types", [])
-        }
-        project.analysis_summary = ontology.get("analysis_summary", "")
-        project.status = ProjectStatus.ONTOLOGY_GENERATED
-        project.llm_model = llm_model_override
-        project.llm_provider = llm_runtime.redacted_metadata() if llm_runtime else None
-        project.llm_profile_id = llm_profile_id
-        ProjectManager.save_project(project)
+            generator = OntologyGenerator(llm_client=llm_client)
+            ontology = generator.generate(
+                document_texts=document_texts,
+                simulation_requirement=simulation_requirement,
+                additional_context=additional_context
+            )
 
-        run_registry.update_run(
-            run_id,
-            status="completed",
-            progress=100,
-            message="Ontology generation completed",
-            linked_ids={"project_id": project.project_id},
-        )
+            project.ontology = {
+                "entity_types": ontology.get("entity_types", []),
+                "edge_types": ontology.get("edge_types", [])
+            }
+            project.analysis_summary = ontology.get("analysis_summary", "")
+            project.status = ProjectStatus.ONTOLOGY_GENERATED
+            project.llm_model = effective_model_override
+            project.llm_provider = effective_llm_runtime.redacted_metadata() if effective_llm_runtime else None
+            project.llm_profile_id = effective_profile_id
+            ProjectManager.save_project(project)
+
+            run_registry.update_run(
+                run_id,
+                status="completed",
+                progress=100,
+                message="Ontology generation completed",
+                linked_ids={"project_id": project.project_id},
+            )
         return project
 
     @classmethod
@@ -133,7 +215,8 @@ class GraphBuildService:
         force=False,
         chunk_size=None,
         chunk_overlap=None,
-        container=None
+        container=None,
+        ai_model_ref: AiModelRef | None = None,
     ):
         """
         Queue a graph build for a project using its extracted text and ontology.
@@ -174,8 +257,12 @@ class GraphBuildService:
             project.graph_build_task_id = None
             project.error = None
 
-        effective_profile_id = llm_profile_id or project.llm_profile_id
-        if llm_profile_id is not None:
+        effective_model_override = None if ai_model_ref is not None else llm_model_override
+        effective_llm_runtime = None if ai_model_ref is not None else llm_runtime
+        effective_profile_id = (
+            None if ai_model_ref is not None else llm_profile_id or project.llm_profile_id
+        )
+        if ai_model_ref is None and llm_profile_id is not None:
             project.llm_profile_id = llm_profile_id
 
         # Inputs
@@ -206,113 +293,126 @@ class GraphBuildService:
             resume_capability={"available": True, "action": "restart", "label": "Restart graph build"},
             metadata={"graph_name": graph_name},
         )
-        task_id = task_manager.create_task(
-            f"Build graph: {graph_name}",
-            metadata={"project_id": project_id, "run_id": run_record["run_id"]}
+        task_id: str | None = None
+        ai_model_ref_kwargs = (
+            {"ai_model_ref": ai_model_ref} if ai_model_ref is not None else {}
         )
-
-        project.status = ProjectStatus.GRAPH_BUILDING
-        project.graph_build_task_id = task_id
-        ProjectManager.save_project(project)
-
-        seed_run_stage_routing(
-            run_record["run_id"],
-            "graph_build",
-            llm_model_override=llm_model_override,
-            llm_runtime=llm_runtime,
-            llm_profile_id=effective_profile_id,
-        )
-        route_router = StageModelRouter(run_record["run_id"])
-        resolved_route = route_router.resolve("graph_build")
-        route_router.lock_stage("graph_build", resolved_route)
-
-        # The locked route is authoritative; legacy profile IDs must not replace it.
-        ner_llm_client = LLMClient.from_route(
-            resolved_route,
-            secret_resolver=SecretResolver(),
-            api_key_override=resolve_route_api_key(resolved_route, llm_runtime),
+        with _terminalize_ai_model_ref_sync_failure(
+            ai_model_ref=ai_model_ref,
+            project=project,
             run_id=run_record["run_id"],
-        )
-        logger.info(
-            "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s [project_id=%s, run_id=%s]",
-            ner_llm_client.model,
-            resolved_route.provider_id,
-            project_id,
-            run_record["run_id"]
-        )
-        ner_override = NERExtractor(llm_client=ner_llm_client)
+            phase="graph_build_enqueue",
+            task_manager=task_manager,
+            task_id_getter=lambda: task_id,
+        ):
+            task_id = task_manager.create_task(
+                f"Build graph: {graph_name}",
+                metadata={"project_id": project_id, "run_id": run_record["run_id"]}
+            )
+            project.status = ProjectStatus.GRAPH_BUILDING
+            project.graph_build_task_id = task_id
+            ProjectManager.save_project(project)
 
-        def build_task():
-            """
-            Builds the project's graph and records its completion or failure state.
-            
-            On failure, marks the project, task, and run as failed and attempts to clean up any
-            partially created graph.
-            """
-            build_logger = get_logger('agora.build')
-            graph_id = None
-            try:
-                task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
-                builder = container.graph_builder()
-
-                task_manager.update_task(task_id, message="Chunking text...", progress=5)
-                chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
-
-                task_manager.update_task(task_id, message="Creating graph...", progress=10)
-                graph_id = builder.create_graph(name=graph_name)
-
-                run_registry.update_run(
+            with _classify_ai_model_ref_seed_error(ai_model_ref):
+                seed_run_stage_routing(
                     run_record["run_id"],
-                    entity_id=project_id,
-                    linked_ids={"graph_id": graph_id, "project_id": project_id, "task_id": task_id},
-                    message=f"Graph created: {graph_id}",
+                    "graph_build",
+                    llm_model_override=effective_model_override,
+                    llm_runtime=effective_llm_runtime,
+                    llm_profile_id=effective_profile_id,
+                    **ai_model_ref_kwargs,
                 )
+            route_router = StageModelRouter(run_record["run_id"])
+            resolved_route = route_router.resolve("graph_build")
+            route_router.lock_stage("graph_build", resolved_route)
 
-                task_manager.update_task(task_id, message="Setting ontology definition...", progress=15)
-                builder.set_ontology(graph_id, ontology)
+            # The locked route is authoritative; legacy profile IDs must not replace it.
+            ner_llm_client = LLMClient.from_route(
+                resolved_route,
+                secret_resolver=SecretResolver(),
+                api_key_override=resolve_route_api_key(resolved_route, effective_llm_runtime),
+                run_id=run_record["run_id"],
+            )
+            logger.info(
+                "Build-Pfad nutzt Route-Snapshot: model=%s provider=%s [project_id=%s, run_id=%s]",
+                ner_llm_client.model,
+                resolved_route.provider_id,
+                project_id,
+                run_record["run_id"]
+            )
+            ner_override = NERExtractor(llm_client=ner_llm_client)
 
-                def add_progress_callback(msg, progress_ratio, completed, total):
-                    progress = 15 + int(progress_ratio * 40)
-                    task_manager.update_task(
-                        task_id, message=msg, progress=progress,
-                        progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
+            def build_task():
+                """
+                Builds the project's graph and records its completion or failure state.
+
+                On failure, marks the project, task, and run as failed and attempts to clean up any
+                partially created graph.
+                """
+                build_logger = get_logger('agora.build')
+                graph_id = None
+                try:
+                    task_manager.update_task(task_id, status=TaskStatus.PROCESSING, message="Initializing graph build service...")
+                    builder = container.graph_builder()
+
+                    task_manager.update_task(task_id, message="Chunking text...", progress=5)
+                    chunks = TextProcessor.split_text(text, chunk_size=chunk_size, overlap=chunk_overlap)
+
+                    task_manager.update_task(task_id, message="Creating graph...", progress=10)
+                    graph_id = builder.create_graph(name=graph_name)
+
+                    run_registry.update_run(
+                        run_record["run_id"],
+                        entity_id=project_id,
+                        linked_ids={"graph_id": graph_id, "project_id": project_id, "task_id": task_id},
+                        message=f"Graph created: {graph_id}",
                     )
 
-                builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback, ner_extractor=ner_override)
+                    task_manager.update_task(task_id, message="Setting ontology definition...", progress=15)
+                    builder.set_ontology(graph_id, ontology)
 
-                task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
-                graph_data = builder.get_graph_data(graph_id)
+                    def add_progress_callback(msg, progress_ratio, completed, total):
+                        progress = 15 + int(progress_ratio * 40)
+                        task_manager.update_task(
+                            task_id, message=msg, progress=progress,
+                            progress_detail={"batch_count": completed, "total_batches": total, "batch_at": time.time()}
+                        )
 
-                builder.mark_graph_completed(graph_id)
-                project.graph_id = graph_id
-                project.status = ProjectStatus.GRAPH_COMPLETED
-                ProjectManager.save_project(project)
+                    builder.add_text_batches(graph_id, chunks, batch_size=3, progress_callback=add_progress_callback, ner_extractor=ner_override)
 
-                task_manager.update_task(
-                    task_id, status=TaskStatus.COMPLETED, message="Graph build completed", progress=100,
-                    result={"project_id": project_id, "graph_id": graph_id, "node_count": graph_data.get("node_count", 0), "edge_count": graph_data.get("edge_count", 0)}
-                )
-                run_registry.update_run(run_record["run_id"], status="completed", progress=100, message="Graph build completed")
+                    task_manager.update_task(task_id, message="Retrieving graph data...", progress=95)
+                    graph_data = builder.get_graph_data(graph_id)
 
-            except Exception as exc:
-                build_logger.exception("Graph build failed [project_id=%s, run_id=%s]", project_id, run_record["run_id"])
-                if graph_id is not None:
-                    try:
-                        builder.delete_graph(graph_id)
-                    except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
+                    builder.mark_graph_completed(graph_id)
+                    project.graph_id = graph_id
+                    project.status = ProjectStatus.GRAPH_COMPLETED
+                    ProjectManager.save_project(project)
+
+                    task_manager.update_task(
+                        task_id, status=TaskStatus.COMPLETED, message="Graph build completed", progress=100,
+                        result={"project_id": project_id, "graph_id": graph_id, "node_count": graph_data.get("node_count", 0), "edge_count": graph_data.get("edge_count", 0)}
+                    )
+                    run_registry.update_run(run_record["run_id"], status="completed", progress=100, message="Graph build completed")
+
+                except Exception as exc:
+                    build_logger.exception("Graph build failed [project_id=%s, run_id=%s]", project_id, run_record["run_id"])
+                    if graph_id is not None:
                         try:
-                            builder.mark_graph_failed(graph_id, reason=str(exc))
-                        except Exception as err:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
-                            logger.debug("graph_build: mark_graph_failed also failed, ignoring: %s", err)
+                            builder.delete_graph(graph_id)
+                        except Exception:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
+                            try:
+                                builder.mark_graph_failed(graph_id, reason=str(exc))
+                            except Exception as err:  # noqa: BLE001 — best-effort cleanup; primary exception already propagated
+                                logger.debug("graph_build: mark_graph_failed also failed, ignoring: %s", err)
 
-                project.status = ProjectStatus.FAILED
-                project.error = str(exc)
-                ProjectManager.save_project(project)
+                    project.status = ProjectStatus.FAILED
+                    project.error = str(exc)
+                    ProjectManager.save_project(project)
 
-                import traceback
-                task_manager.update_task(task_id, status=TaskStatus.FAILED, message=f"Build failed: {str(exc)}", error=traceback.format_exc())
-                run_registry.update_run(run_record["run_id"], status="failed", message=str(exc), error=str(exc))
+                    import traceback
+                    task_manager.update_task(task_id, status=TaskStatus.FAILED, message=f"Build failed: {str(exc)}", error=traceback.format_exc())
+                    run_registry.update_run(run_record["run_id"], status="failed", message=str(exc), error=str(exc))
 
-        from ..jobs import enqueue
-        enqueue("graph_build", build_task)
+            from ..jobs import enqueue
+            enqueue("graph_build", build_task)
         return task_id, run_record["run_id"]

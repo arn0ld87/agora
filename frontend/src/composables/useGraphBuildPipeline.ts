@@ -10,11 +10,11 @@ import {
   type ProjectResponse,
   type TaskStatusResponse,
 } from '../api/graph'
+import type { AiModelRefPayload } from '../api/report'
 import { usePolling } from './usePolling'
 import { useSystemLog } from './useSystemLog'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
-import { storedEffectiveModel } from './useEnvForm'
-import { runtimeLlmPayloadFromStorage } from './useRuntimeLlmOptions'
+import { useRunModelResolver } from './useRunModelResolver'
 
 type RouterAdapter = {
   replace: (location: { name: string; params: Record<string, string> }) => Promise<unknown> | void
@@ -43,6 +43,7 @@ export function useGraphBuildPipeline({
   const currentTaskId = ref<string | null>(null)
   let activeGeneration = 0
   const { systemLogs, addLog } = useSystemLog({ cap: 100 })
+  const { resolveRunModel } = useRunModelResolver()
 
   const taskPolling = usePolling(async () => {
     if (currentTaskId.value) await pollTaskStatus(currentTaskId.value)
@@ -116,13 +117,12 @@ export function useGraphBuildPipeline({
       formData.append('num_agents', String(pending.numAgents))
       formData.append('num_rounds', String(pending.numRounds))
 
+      let aiModelRef: AiModelRefPayload | null = null
       if (pending.llmProfileId) {
         formData.append('llm_profile_id', pending.llmProfileId)
       } else {
-        const selectedModel = storedEffectiveModel()
-        if (selectedModel) formData.append('llm_model', selectedModel)
-        const runtimeProvider = runtimeLlmPayloadFromStorage()
-        if (runtimeProvider) formData.append('llm_provider', JSON.stringify(runtimeProvider))
+        aiModelRef = (await resolveRunModel()).ref
+        if (aiModelRef) formData.append('ai_model_ref', JSON.stringify(aiModelRef))
       }
 
       const response = await generateOntology(formData)
@@ -138,7 +138,7 @@ export function useGraphBuildPipeline({
       projectData.value = response.data
       ontologyProgress.value = null
       await router.replace({ name: 'StepGraphBuild', params: { projectId: response.data.project_id } })
-      if (isCurrent(generation)) await startBuildGraph(generation)
+      if (isCurrent(generation)) await startBuildGraph(generation, aiModelRef)
     } catch (caughtError) {
       if (!isCurrent(generation)) return
       error.value = messageFor(caughtError)
@@ -162,7 +162,7 @@ export function useGraphBuildPipeline({
       projectData.value = response.data
       updatePhaseByStatus(response.data.status)
       if (response.data.status === 'ontology_generated' && !response.data.graph_id) {
-        await startBuildGraph(generation)
+        await startBuildGraph(generation, response.data.llm_profile_id ? null : undefined)
       } else if (response.data.status === 'graph_building' && response.data.graph_build_task_id) {
         currentPhase.value = 1
         startPollingTask(response.data.graph_build_task_id)
@@ -180,15 +180,18 @@ export function useGraphBuildPipeline({
     }
   }
 
-  async function startBuildGraph(generation: number): Promise<void> {
+  async function startBuildGraph(
+    generation: number,
+    resolvedAiModelRef?: AiModelRefPayload | null,
+  ): Promise<void> {
     try {
       currentPhase.value = 1
       buildProgress.value = { progress: 0, message: t('step1.build.running') }
       const payload: BuildGraphData = { project_id: currentProjectId.value }
-      const selectedModel = storedEffectiveModel()
-      if (selectedModel) payload.llm_model = selectedModel
-      const runtimeProvider = runtimeLlmPayloadFromStorage()
-      if (runtimeProvider) payload.llm_provider = runtimeProvider
+      const aiModelRef = resolvedAiModelRef === undefined
+        ? (await resolveRunModel()).ref
+        : resolvedAiModelRef
+      if (aiModelRef) payload.ai_model_ref = aiModelRef
 
       const response = await buildGraph(payload)
       if (!isCurrent(generation)) return

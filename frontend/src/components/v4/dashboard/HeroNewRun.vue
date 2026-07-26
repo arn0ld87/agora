@@ -16,8 +16,7 @@ import AiModelPicker from '../forms/AiModelPicker.vue'
 import IconPlus from '../shell/icons/IconPlus.vue'
 import { fetchLlmProfiles } from '../../../api/llmProfiles'
 import { setPendingUpload } from '../../../store/pendingUpload'
-import { STORAGE_LANG, STORAGE_MODEL } from '../../../composables/useEnvForm'
-import { useAiModelRefAdapter } from '@/composables/useAiModelRefAdapter'
+import { STORAGE_LANG } from '../../../composables/useEnvForm'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOverride'
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
@@ -77,23 +76,16 @@ function removeLocal(key: string): void {
  * Default-Modell kommt NICHT mehr aus einem eigenen `agora.hero.aiModelRef`-Key,
  * sondern aus dem Kanon (routing/defaults.global via useEffectiveModelSelection)
  * — damit der Dashboard-Start dieselbe Auswahl wie Settings zeigt. Ein
- * Dashboard-Pick ist ein transienter Run-Override: STORAGE_MODEL-Spiegel für
- * MainView plus voller AiModelRef in der sessionStorage-Senke
+ * Dashboard-Pick ist ein transienter Run-Override als voller AiModelRef in der sessionStorage-Senke
  * `agora.run.aiModelRefOverride` (store/runModelOverride), die Step3Simulation
  * beim Sim-Start vorrangig vor dem Kanon als `ai_model_ref` sendet.
  * Slice 7.6c (Storage-Cut): Der Legacy-Key `agora.hero.route` wird
  * NICHT mehr gelesen und beim Mount defensiv entfernt.
- *
- * MainView.handleNewProject liest weiterhin den klassischen STORAGE_MODEL-Key
- * via `storedEffectiveModel()` — wir spiegeln `aiModelRef.model_id` dorthin,
- * damit der bestehende Sim-Start-Flow (Backend resolved Provider via
- * SecretResolver, vgl. PR #499) ohne Touch in MainView durchgeht.
  */
 const STORAGE_HERO_PROFILE_ID = 'agora.hero.profileId'
 // Slice 7.6c (Storage-Cut): nur noch als Ziel für defensives removeLocal.
 const STORAGE_HERO_ROUTE_LEGACY = 'agora.hero.route'
 
-const adapter = useAiModelRefAdapter()
 // Phase-1 Konsolidierung: Default-Modell kommt aus dem Kanon
 // (routing/defaults.global via useEffectiveModelSelection), nicht mehr aus
 // einem eigenen localStorage-Key.
@@ -207,18 +199,15 @@ function formatBytes(bytes: number): string {
 }
 
 function onPickModel(aiRef: AiModelRef | null) {
-  // Transienter Run-Override: nur STORAGE_MODEL-Spiegel für den Sim-Start
-  // (MainView.handleNewProject). KEINE eigene persistente Modell-Senke mehr —
-  // der Default kommt aus dem Kanon.
+  // Der volle Ref wird erst beim Start gespeichert; eine leere Auswahl räumt
+  // einen möglicherweise älteren tab-skopierten Override sofort auf.
   hasExplicitPick.value = true
   selectedModel.value = aiRef
   if (aiRef) {
-    // STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default' bei leerer model_id).
-    writeLocal(STORAGE_MODEL, adapter.toStoredModelString(aiRef))
     removeLocal(STORAGE_HERO_ROUTE_LEGACY)
   } else {
     removeLocal(STORAGE_HERO_ROUTE_LEGACY)
-    writeLocal(STORAGE_MODEL, 'default')
+    clearRunModelOverride()
   }
 }
 
@@ -237,19 +226,12 @@ async function startSimulation() {
   try {
     writeLocal(STORAGE_LANG, language.value)
     const profileId = selectedProfileId.value || null
-    // Wenn ein Profile aktiv ist, gewinnt es — direct-AiModelRef ignorieren
-    // und den STORAGE_MODEL-Key auf "default" zurücksetzen, damit MainView
-    // nicht versehentlich einen stale Override mitsendet.
+    // Wenn ein Profile aktiv ist, gewinnt es — direct-AiModelRef ignorieren.
     if (profileId) {
-      writeLocal(STORAGE_MODEL, 'default')
       // Profile gewinnt — Run-Override defensiv räumen, damit Step3 nicht
       // einen stale Direkt-Pick vorzieht.
       clearRunModelOverride()
     } else {
-      // Slice 5.4: STORAGE_MODEL-Spiegel via Adapter (defensiv: 'default'
-      // wenn kein Model gewählt — verhindert stale Route).
-      const stored = adapter.toStoredModelString(selectedModel.value)
-      writeLocal(STORAGE_MODEL, stored)
       // Voller AiModelRef (inkl. provider_connection_id) als transienter
       // Run-Override: Step3Simulation sendet ihn beim Sim-Start vorrangig
       // vor dem Kanon als autoritatives ai_model_ref. Nur bei explizitem
