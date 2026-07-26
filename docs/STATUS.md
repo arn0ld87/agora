@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3678 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 3690 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 173 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -127,6 +127,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 - Secrets werden nicht in Report-/Simulation-Artefakte serialisiert
 - Readiness prüft Neo4j, Redis, Upload-Verzeichnis und Embedding-Konfiguration
 - Dependency-Ausnahmen werden im [`dependency-risk-register.md`](dependency-risk-register.md) geführt
+- Ontology-Upload (`/ontology/generate`) räumt bei Datei-I/O-Fehlern zwischen Projektanlage und Service-Übergabe das halb angelegte Projekt zuverlässig auf (Issue #899); ein scheiterndes Aufräumen wird protokolliert, ohne die Fehlerantwort zu verfälschen
 
 Aktuelle Hardstops:
 

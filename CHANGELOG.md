@@ -5,6 +5,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Ontology-Upload bereinigt bei File-I/O-Fehlern atomar — 2026-07-26, Issue #899)
+
+- Schlägt beim Ontology-Upload (`/ontology/generate`) ein Datei-I/O-Schritt zwischen
+  Projektanlage und Übergabe an den Graph-Build-Service fehl (Datei speichern, Text
+  extrahieren, extrahierten Text ablegen, Projekt persistieren), räumt der Endpunkt das
+  halb angelegte Projekt jetzt zuverlässig auf, statt ein verwaistes Projekt mit
+  Teilartefakten zurückzulassen. Die Antwort bleibt eine generische Fehlermeldung ohne
+  Dateipfade oder Provider-Details; scheitert das Aufräumen selbst, wird das protokolliert,
+  ohne die ursprüngliche Fehlerantwort zu überdecken oder fälschlich Erfolg zu melden.
+
 ### Changed (`/prepare` akzeptiert kanonische `AiModelRef` — Issue #896)
 
 - `/prepare` akzeptiert jetzt eine kanonische, an eine `ProviderConnection` gebundene
