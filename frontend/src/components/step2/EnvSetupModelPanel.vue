@@ -2,19 +2,22 @@
 /**
  * EnvSetupModelPanel — Modell-/Sprach-/Runtime-Provider-Auswahl (Step 2).
  *
- * Issue #834: v3-Profil-Legacy-Picker entfernt. Kein AiModelPicker
- * hier als Ersatz — der Profil-Pfad ist backend-seitig live
- * (backend/app/api/simulation_prepare.py expandiert llm_profile_id zu
- * llm_model="profile:<id>"). Eine vollständige Kanon-Migration dieser Stelle
- * (useEffectiveModelSelection, Storage-Cut agora.lastModel, Prepare-Payload-
- * Vertrag) ist ein eigener Slice (siehe
- * docs/epics/frontend-next/SLICE-5.2-ENVSETUP-KANON-MIGRATION.md) und hier
- * out of scope.
+ * Issue #834: v3-Profil-Legacy-Picker entfernt.
+ * Issue #890: kanonischer AiModelPicker (`modelRef` / `update:modelRef`)
+ * als Modell-Kanon-Senke eingebunden. Die bestehenden Props/Emits
+ * `modelOption`/`customModel`/`modelOptions` und
+ * `update:modelOption`/`update:customModel` bleiben bestehen — sie
+ * bedienen weiterhin den Legacy-Runtime-Provider-Pfad (siehe
+ * `Step2EnvSetup.vue`, `useRuntimeLlmOptions`). Beide Pfade sind
+ * gegenseitig exklusiv; die Steuerung (welcher Pfad aktiv ist, disabled-
+ * Zustand) liegt beim Parent, nicht hier.
  */
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Field from '../ui/Field.vue'
 import Select from '../ui/Select.vue'
+import AiModelPicker from '../v4/forms/AiModelPicker.vue'
+import type { AiModelRef } from '@/contracts/aiModelRef'
 
 const { t } = useI18n()
 
@@ -39,17 +42,26 @@ const props = defineProps({
   providerDbKeyChecking: { type: Boolean, default: false },
   showSessionKeyOverride: { type: Boolean, default: false },
   isPreparing: { type: Boolean, default: false },
+  modelRef: { type: Object as () => AiModelRef | null, default: null },
+  modelPickerDisabled: { type: Boolean, default: false },
 })
 
-const emit = defineEmits([
-  'update:modelOption',
-  'update:customModel',
-  'update:language',
-  'update:runtimeProvider',
-  'update:runtimeApiKey',
-  'update:runtimeBaseUrl',
-  'update:showSessionKeyOverride',
-])
+// Issue #890: sobald eine kanonische Modellauswahl aktiv ist, ist der
+// Runtime-Provider-Block deaktiviert (gegenseitiger Ausschluss, siehe
+// Step2EnvSetup.vue). Der Backend-400-Guard (ai_model_ref + llm_provider)
+// kann so nie ausgeloest werden.
+const runtimeProviderBlockDisabled = computed(() => props.modelRef !== null)
+
+const emit = defineEmits<{
+  'update:modelOption': [value: string]
+  'update:customModel': [value: string]
+  'update:language': [value: string]
+  'update:runtimeProvider': [value: string]
+  'update:runtimeApiKey': [value: string]
+  'update:runtimeBaseUrl': [value: string]
+  'update:showSessionKeyOverride': [value: boolean]
+  'update:modelRef': [value: AiModelRef | null]
+}>()
 
 const showRuntimeOptions = ref(false)
 </script>
@@ -61,7 +73,18 @@ const showRuntimeOptions = ref(false)
     </p>
 
     <div class="setup-grid">
-      <!-- Model -->
+      <!-- Kanonische Modell-Auswahl (AiModelRef) -->
+      <div class="setup-cell setup-cell--wide">
+        <label class="field-label">{{ t('step2.model.label') }}</label>
+        <AiModelPicker
+          :model-value="modelRef"
+          mode="chat"
+          :disabled="modelPickerDisabled"
+          @update:model-value="emit('update:modelRef', $event)"
+        />
+      </div>
+
+      <!-- Model (Legacy-Runtime-Provider-Pfad) -->
       <div class="setup-cell">
         <Select
           :model-value="modelOption"
@@ -89,6 +112,7 @@ const showRuntimeOptions = ref(false)
           type="button"
           class="runtime-toggle"
           :aria-expanded="showRuntimeOptions"
+          :disabled="runtimeProviderBlockDisabled"
           @click="showRuntimeOptions = !showRuntimeOptions"
         >
           <span>{{ t('step2.runtimeProvider.toggle') }}</span>
@@ -96,7 +120,7 @@ const showRuntimeOptions = ref(false)
             {{ runtimeProviderEnabled ? t('step2.runtimeProvider.active') : t('step2.runtimeProvider.default') }}
           </span>
         </button>
-        <div v-if="showRuntimeOptions" class="runtime-panel">
+        <div v-if="showRuntimeOptions && !runtimeProviderBlockDisabled" class="runtime-panel">
           <Select
             :model-value="runtimeProvider"
             :label="t('step2.runtimeProvider.label')"
@@ -170,6 +194,13 @@ const showRuntimeOptions = ref(false)
 }
 .setup-cell { display: flex; flex-direction: column; gap: var(--s-2); }
 .setup-cell--wide { grid-column: 1 / -1; }
+.field-label {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: var(--ls-mono);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
 
 .runtime-toggle {
   display: flex;

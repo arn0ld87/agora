@@ -49,6 +49,29 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   [Issue #890](https://github.com/arn0ld87/agora/issues/890) bewusst der letzte produktive
   Consumer der Legacy-Modell-Keys; Issue #897 entfernt diese Keys daher noch nicht global.
 
+### Changed (Step 2 wählt Modelle über die kanonische `AiModelRef` — 2026-07-26, Issue #890)
+
+- **Modellauswahl in Step 2:** Der Environment-Setup nutzt jetzt den kanonischen
+  `AiModelPicker`. Eine Auswahl ist eine vollständige, an eine `ProviderConnection`
+  gebundene `AiModelRef` statt eines Modellstrings; Connection und Modell-ID gehen damit
+  nicht mehr verloren. Ohne ausdrückliche Auswahl sendet Step 2 kein Modellfeld, sodass
+  die Präzedenz des Backends greift: Projektprofil vor Workspace-Default.
+- **Eindeutiger `/prepare`-Payload:** Bei ausdrücklicher Auswahl enthält der Request genau
+  ein `ai_model_ref` und keines der Felder `llm_model`, `llm_profile_id` oder
+  `llm_provider`. Damit kann die Mischfall-Ablehnung aus Issue #896 nicht mehr ausgelöst
+  werden. Eine ausdrückliche Auswahl übersteuert das Projektprofil bewusst.
+- **Runtime-Provider bleibt erhalten, schließt sich aber aus:** Der Override für Google-,
+  OpenAI- und kompatible Runtime-Zugangsdaten ist credential- statt connection-basiert und
+  ist deshalb mit einer kanonischen Ref unvereinbar. Solange er aktiv ist, ist der
+  `AiModelPicker` deaktiviert und der bisherige Legacy-Pfad gilt weiter; umgekehrt
+  deaktiviert eine kanonische Auswahl den Runtime-Block.
+- **Storage-Cut:** `useEnvForm` persistiert keine Modellauswahl mehr. `STORAGE_MODEL`,
+  `STORAGE_CUSTOM_MODEL` und `storedEffectiveModel()` sind entfernt; `STORAGE_LANG` für die
+  Agentensprache bleibt unverändert. Bereits vorhandene `agora.lastModel`- und
+  `agora.lastCustomModel`-Werte in Browsern werden weder gelesen noch aktiv gelöscht — sie
+  bleiben wirkungslose Altlast. Nach einem Reload startet die Modellauswahl bewusst leer,
+  statt eine nicht mehr verbindliche Altauswahl vorzutäuschen.
+
 ### Fixed (133 reihenfolgenabhängige Test-Failures in `tests/api` — 2026-07-26)
 
 - **`backend/tests/conftest.py`** — neues autouse-Fixture `_clean_auth_token_env`.

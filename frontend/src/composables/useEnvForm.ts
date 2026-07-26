@@ -37,25 +37,13 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-export const STORAGE_MODEL = 'agora.lastModel'
-export const STORAGE_CUSTOM_MODEL = 'agora.lastCustomModel'
+// Issue #890: 'agora.lastModel'/'agora.lastCustomModel' (vormals
+// STORAGE_MODEL/STORAGE_CUSTOM_MODEL) existieren nicht mehr im Code.
+// useEnvForm liest und schreibt sie nicht — die kanonische Modell-Senke ist
+// jetzt Step2EnvSetup.selectedModelRef (AiModelRef via AiModelPicker).
+// Altwerte, die in Nutzer-Browsern noch unter diesen Keys liegen, werden
+// weder gelesen noch aktiv geloescht.
 export const STORAGE_LANG = 'agora.agentLanguage'
-
-export function storedEffectiveModel(
-  modelKey = STORAGE_MODEL,
-  customModelKey = STORAGE_CUSTOM_MODEL,
-): string | null {
-  try {
-    const stored = localStorage.getItem(modelKey)
-    if (!stored || stored === 'default') return null
-    if (stored === 'custom') {
-      return (localStorage.getItem(customModelKey) || '').trim() || null
-    }
-    return stored
-  } catch {
-    return null
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,22 +98,6 @@ function _loadStoredLang(): string {
   }
 }
 
-function _loadStoredModel(): string {
-  try {
-    return localStorage.getItem(STORAGE_MODEL) || 'default'
-  } catch {
-    return 'default'
-  }
-}
-
-function _loadStoredCustomModel(): string {
-  try {
-    return localStorage.getItem(STORAGE_CUSTOM_MODEL) || ''
-  } catch {
-    return ''
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
@@ -142,8 +114,9 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
   const agentToolsEnabled = ref<boolean>(false)
   const maxToolCallsPerAction = ref<number>(2)
   const loadingModels = ref<boolean>(true)
-  const modelOption = ref<string>(_loadStoredModel())
-  const customModel = ref<string>(_loadStoredCustomModel())
+  // Issue #890: keine Persistenz mehr fuer Modellauswahl — initial 'default'/''.
+  const modelOption = ref<string>('default')
+  const customModel = ref<string>('')
   const language = ref<string>(_loadStoredLang())
 
   // --- Computed ---
@@ -173,22 +146,8 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
   })
 
   // --- LocalStorage persistence ---
-
-  watch(modelOption, (val) => {
-    try {
-      localStorage.setItem(STORAGE_MODEL, val)
-    } catch {
-      // ignore — storage may be unavailable in some environments
-    }
-  })
-
-  watch(customModel, (val) => {
-    try {
-      localStorage.setItem(STORAGE_CUSTOM_MODEL, val)
-    } catch {
-      // ignore — storage may be unavailable in some environments
-    }
-  })
+  // Issue #890: modelOption/customModel werden NICHT mehr persistiert
+  // (Storage-Cut). STORAGE_LANG bleibt unveraendert bestehen.
 
   watch(language, (val) => {
     try {
@@ -252,29 +211,8 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
             language.value = res.data.default_language
           }
         }
-        // Restore persisted model selection if it still exists in the new list.
-        const stored = (() => {
-          try {
-            return localStorage.getItem(STORAGE_MODEL)
-          } catch {
-            return null
-          }
-        })()
-        const runtimeProviderActive = runtimeProvider?.value && runtimeProvider.value !== 'default'
-        const storedMatchesRuntimeProvider = runtimeProviderActive
-          ? (stored === 'custom' || isRuntimeModelForProvider(runtimeProvider.value, stored || ''))
-          : false
-        if (
-          stored &&
-          (runtimeProviderActive
-            ? storedMatchesRuntimeProvider
-            : (stored === 'default' ||
-              stored === 'custom' ||
-              presetModels.value.some((p) => p.name === stored) ||
-              ollamaModels.value.some((p) => p.name === stored)))
-        ) {
-          modelOption.value = stored
-        }
+        // Issue #890: keine Restore-Logik mehr — modelOption/customModel
+        // werden nicht persistiert und bleiben unveraendert nach loadModels().
       }
     } catch (e) {
       const err = e as { message?: string }

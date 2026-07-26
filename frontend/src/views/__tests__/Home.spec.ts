@@ -65,7 +65,7 @@ vi.mock('@/api/simulation', () => ({
   }),
 }))
 vi.mock('../store/pendingUpload', () => ({ setPendingUpload: setPendingUploadMock }))
-vi.mock('../composables/useEnvForm', () => ({ STORAGE_LANG: 'agora.lang', STORAGE_MODEL: 'agora.lastModel' }))
+vi.mock('../composables/useEnvForm', () => ({ STORAGE_LANG: 'agora.lang' }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPushMock }) }))
 vi.mock('@/store/runModelOverride', () => ({
   setRunModelOverride: runOverrideMocks.set,
