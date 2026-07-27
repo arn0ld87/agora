@@ -320,10 +320,39 @@ export async function checkReducedMotion(page: Page): Promise<void> {
 }
 
 /**
+ * Wartet, bis Stylesheets und Webfonts angewendet sind.
+ *
+ * `goto(..., { waitUntil: 'domcontentloaded' })` kehrt zurück, bevor CSS und
+ * Fonts wirksam sind. Läuft axe-core in diesem Fenster, misst es die
+ * Fallback-Farben des ungestylten Dokuments und meldet massenhaft
+ * color-contrast-Verstöße — inklusive `:root`. Das ist ein reines
+ * Timing-Artefakt und trat bisher nur deshalb nicht auf, weil die CI-Läufe
+ * langsam genug waren; auf einem schnellen Runner kippen dadurch auch
+ * Routen, an denen niemand etwas geändert hat (beobachtet auf /dashboard
+ * und /runs, Issue #838).
+ *
+ * Zusätzlich stabilisiert das den Zustand nach einem Viewport-Wechsel: die
+ * Tastatur- und Fokusprüfungen laufen sonst gegen ein Layout, das noch neu
+ * berechnet wird.
+ */
+async function waitForStyledPaint(page: Page): Promise<void> {
+  await page.waitForLoadState('load');
+  await page.evaluate(async () => {
+    if (document.fonts?.ready) await document.fonts.ready;
+    // Zwei Frames abwarten: der erste committet das Layout, der zweite den
+    // darauf basierenden Paint.
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+}
+
+/**
  * Kombinierte Accessibility-Prüfung für eine Route.
  */
 export async function checkAccessibilityGate(page: Page, route: string, options: AxeCheckOptions = {}): Promise<void> {
   await page.goto(route, { waitUntil: 'domcontentloaded' });
+  await waitForStyledPaint(page);
 
   // axe-core
   const axeResults = await runAxe(page, options);
@@ -332,8 +361,12 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   // 320px
   await check320pxNoHorizontalScroll(page);
 
-  // Reset viewport für weitere Checks
+  // Reset viewport für weitere Checks. Das Layout muss danach neu berechnet
+  // sein, bevor Sichtbarkeit und Tab-Reihenfolge geprüft werden — sonst
+  // zählt checkKeyboardNavigation gegen den 320px-Zustand, in dem Teile der
+  // Navigation ausgeblendet sind.
   await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForStyledPaint(page);
 
   // Keyboard
   await checkKeyboardNavigation(page);
