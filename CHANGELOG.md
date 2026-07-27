@@ -5,6 +5,10 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (README — „Prozess im UI" mit neun realen Screenshots, 2026-07-27)
+
+- Neue Sektion `## 📸 Prozess im UI` zwischen Pipeline und Architektur mit neun nummerierten Screenshots eines realen Laufs (`proj_c12f138aa04e`, SchulKI). Pro Phase (Dashboard, Upload, Personas, Report, Interaktion) kurze Erläuterung plus Bild mit Alt‑Text. Die Assets liegen unter `docs/assets/screenshots/process/01-…09-…jpeg`.
+
 ### Changed (README, AGENTS, CLAUDE und install.sh an ehrlichen Ist-Stand angepasst — 2026-07-27, PR #924)
 
 - **README:** Vollständige Umstrukturierung mit Fokus auf den ehrlichen Ist-Stand: Mermaid-Diagramme für Pipeline und Architektur, neuer Schnellstart mit klarer Trennung von Host- und Docker-Variante, ausführliche Tabellen zu Status, Stack, Sicherheit und Release-Weg. Die zehnte Pipeline-Phase „Re-Embedding & Migration" ist im Diagramm ergänzt; die „Grenzen"-Sektion zu Persona-Aussagen, Confidence-Bewertung und statistischer Aussagekraft ist wiederhergestellt.

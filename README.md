@@ -100,6 +100,54 @@ flowchart LR
 
 ---
 
+## 📸 Prozess im UI
+
+Die Pipeline in der Agora-Weboberfläche folgt fünf aufeinander aufbauenden Schritten — Upload, Personas, Simulation, Report und Interaktion. Die folgenden Screenshots zeigen einen realen Lauf (`proj_c12f138aa04e` zum Thema SchulKI) von der Quelldatei bis zum 1‑zu‑1‑Gespräch mit den generierten Personas:
+
+### 1. Run starten — Quelle wählen, Modell konfigurieren
+
+Im Dashboard wird ein neuer Run angelegt: Quelldatei ablegen, Modellprofil und Sprache auswählen, Anzahl der Personas und Simulationsrunden einstellen, dann starten.
+
+![Dashboard — Neuer Run mit Quelldatei, Profil, Sprache und Personas/Sim-Runden](./docs/assets/screenshots/process/01-dashboard-neuer-run.jpeg)
+
+### 2. Upload — Wissensgraph aus Dokumenten aufbauen
+
+Direkt nach dem Start extrahiert Agora aus den hochgeladenen Dokumenten Entitäten und Beziehungen und zeigt sie als interaktiven Graphen. Beziehungs‑Labels sind ein‑ und ausblendbar, der Graph ist als `.graphml`, `.svg`, `.png`, `.pdf` oder `.html` exportierbar.
+
+| Frisch hochgeladen | Vollständig aufgebaut |
+|---|---|
+| ![Graph direkt nach Upload](./docs/assets/screenshots/process/02-graph-upload-frisch.jpeg) | ![Graph mit allen Entitäten und Beziehungen](./docs/assets/screenshots/process/03-graph-beziehungen.jpeg) |
+
+Über den Relationship‑Inspector lässt sich jeder Knoten anklicken — die Beziehungen und Selbst‑Referenzen werden in einem seitlichen Panel sichtbar.
+
+![Graph-Detail mit Relationship-Panel](./docs/assets/screenshots/process/04-persona-relationship-detail.jpeg)
+
+### 3. Personas — Zielgruppen aus dem Graphen generieren
+
+Aus dem Wissensgraphen werden hunderte Personas abgeleitet. Vor der Generierung werden LLM‑Modell, Agentensprache und die maximale Anzahl Agenten konfiguriert.
+
+![Persona-Generierung: Modell, Sprache, Agentenanzahl](./docs/assets/screenshots/process/05-personas-konfiguration.jpeg)
+
+Während der Generierung füllt sich eine Karten‑Übersicht mit Name, Rolle, Interessen und Tags. Jede Persona lässt sich vor dem Simulationslauf einzeln prüfen, bearbeiten, neu generieren oder freigeben.
+
+| Generierte Personas | Persona-Detailansicht |
+|---|---|
+| ![Persona-Übersicht, 28/30 erzeugt](./docs/assets/screenshots/process/06-personas-generiert.jpeg) | ![Marko Petrović — Profil, Interessen, Biographie](./docs/assets/screenshots/process/07-persona-detail.jpeg) |
+
+### 4. Report — Evidence-Gating & Section-Generierung
+
+Während der Simulation laufen die Agenten‑ und Werkzeug‑Aufrufe parallel. Jede Report‑Section wird mit Evidenzbindung (ADR‑0002), Confidence und Quellenverweisen erzeugt; bei fehlgeschlagenem LLM‑Call liefert die Section stattdessen eine nachvollziehbare Fehlermeldung mit Verweis auf den Server‑Log.
+
+![Report-Generierung mit Agent-Logs und Datenlücken-Section](./docs/assets/screenshots/process/08-report-agent-logs.jpeg)
+
+### 5. Interaktion — gezielte Nachfragen an die Personas
+
+Nach Abschluss des Reports lassen sich einzelne Personas direkt ansprechen — entweder im 1‑zu‑1‑Gespräch oder als Umfrage. So können hypothesengetriebene Nachfragen gestellt und Evidenzlücken gezielt geschlossen werden.
+
+![Interaktion: Agent auswählen, 1-zu-1-Gespräch führen](./docs/assets/screenshots/process/09-interaktion-1-zu-1.jpeg)
+
+---
+
 ## 🏗️ Architektur & Stack
 
 ```mermaid
