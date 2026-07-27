@@ -273,6 +273,34 @@ def test_2c_clean_content_passes_unchanged():
     assert not cleaned.removed_segments
 
 
+def test_2f_min_content_chars_threshold_is_conservative():
+    """MIN_CONTENT_CHARS muss konservativ sein (Handover P2.9).
+
+    Herleitung an realen Läufen: kürzester echter Section-Inhalt 4230
+    Zeichen (report_e2e_trust01), längster Fallback-Text 217 Zeichen
+    (report_e2e_full01/section_03). 40 liegt deutlich unter beiden —
+    es fängt nur leer/fast-leer gerenderte Outputs ab, nicht Fallback-Text
+    (den filtert is_fallback_content semantisch).
+    """
+    from app.services.report_agent.output_contract import (
+        MIN_CONTENT_CHARS,
+        is_fallback_content,
+    )
+
+    # Schwelle ist klein genug für kürzeste reale Section (4230 chars)
+    assert MIN_CONTENT_CHARS < 4230
+    # Schwelle ist groß genug, um leere Outputs abzufangen
+    assert MIN_CONTENT_CHARS >= 10
+    # Fallback-Text wird nicht durch MIN_CONTENT_CHARS gefangen, sondern
+    # durch is_fallback_content — das ist ein separater Guard.
+    fallback = (
+        "Dieser Abschnitt konnte nicht generiert werden: Das Modell "
+        "lieferte ausschließlich interne Arbeitsschritte."
+    )
+    assert len(fallback) > MIN_CONTENT_CHARS
+    assert is_fallback_content(fallback)
+
+
 # ---------------------------------------------------------------------------
 # Test 3 — Ähnlichkeit ist kein Beweis
 # ---------------------------------------------------------------------------

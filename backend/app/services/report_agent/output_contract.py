@@ -103,6 +103,17 @@ FALLBACK_MARKERS: tuple[str, ...] = (
 )
 
 #: Ohne so viele Zeichen ist ein Abschnitt kein Abschnitt.
+#:
+#: Herleitung (Handover P2.9): Messung an den realen Sections der Läufe
+#: ``report_e2e_trust01`` (Opinion, COMPLETED) und ``report_e2e_full01``
+#: (Full, FAILED) — kürzester echter Section-Inhalt 4230 Zeichen, längster
+#: Fallback-Text 217 Zeichen. 40 liegt ~106x unter dem Minimum realer
+#: Sections und ist damit konservativ: die Schwelle fängt nur leer oder
+#: fast-leer gerenderte Outputs ab (z. B. ``## Titel`` ohne Body nach
+#: Protokoll-Strip), nicht den Fallback-Text — den filtert
+#: :func:`is_fallback_content` semantisch. 40 Zeichen entspricht etwa einem
+#: minimalen sinnvollen Satz (6–8 Wörter); darunter ist kein fachlicher
+#: Abschnittsinhalt möglich.
 MIN_CONTENT_CHARS = 40
 
 #: Ab so vielen Wiederholungen desselben Fragments gilt der Output als
