@@ -17,7 +17,10 @@ Fake einsetzen).
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Dict, List, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence
+
+if TYPE_CHECKING:  # pragma: no cover - nur für Typprüfung
+    from .evidence_entailment import EntailmentJudge
 
 EmbedFn = Callable[[str], Sequence[float]]
 
@@ -61,11 +64,24 @@ def bind_evidence_to_claim(
     *,
     threshold: float = 0.65,
     top_k: int = 5,
+    judge: "EntailmentJudge | None" = None,
 ) -> List[Dict[str, Any]]:
-    """Bind ranked evidence to a claim by embedding cosine similarity.
+    """Bindet Evidence an einen Claim — in zwei getrennten Stufen.
 
-    Returns deepcopy-freundliche neue Dicts mit zusätzlichem
-    ``match_score`` (round 3 decimals) und ``supports_claim`` bool.
+    Stufe 1 (Retrieval): Cosine-Similarity findet Kandidaten und schreibt
+    ``retrieval_score``. Sie beantwortet nur, ob beide Texte vom selben
+    Thema handeln.
+
+    Stufe 2 (Entailment): :func:`classify_evidence` entscheidet, ob die
+    Evidence den Claim trägt, und schreibt ``entailment``. Nur das Urteil
+    ``SUPPORTED`` setzt ``supports_claim=True``; ``CONTRADICTED`` setzt
+    zusätzlich ``contradicts_claim=True``.
+
+    ``match_score`` bleibt als Alias von ``retrieval_score`` erhalten, damit
+    bestehende Consumer (confidence_calculator, Contracts, Frontend) ohne
+    Migration weiterlaufen — es ist aber ausdrücklich ein Retrieval-Wert und
+    kein Beleggrad.
+
     Items unter dem Threshold fallen raus, der Rest wird nach Score
     absteigend sortiert und auf ``top_k`` gekürzt.
 
@@ -73,6 +89,8 @@ def bind_evidence_to_claim(
     Embedder-Errors werden hochgereicht; der Caller entscheidet ob er
     fallen lässt (ReportAgent fängt das in seinem Try-Block).
     """
+    from .evidence_entailment import EntailmentVerdict, classify_evidence  # noqa: PLC0415
+
     if not (claim_text or "").strip() or not candidates:
         return []
 
@@ -89,12 +107,21 @@ def bind_evidence_to_claim(
         score = _cosine(claim_vec, cand_vec)
         if score < threshold:
             continue
+
         bound = dict(item)
-        bound["match_score"] = round(float(score), 3)
-        bound["supports_claim"] = True
+        rounded = round(float(score), 3)
+        bound["retrieval_score"] = rounded
+        bound["match_score"] = rounded
+
+        result = classify_evidence(claim_text, item, judge=judge)
+        bound["entailment"] = result.verdict.value
+        bound["entailment_reason"] = result.reason
+        bound["supports_claim"] = result.verdict is EntailmentVerdict.SUPPORTED
+        if result.verdict is EntailmentVerdict.CONTRADICTED:
+            bound["contradicts_claim"] = True
         scored.append(bound)
 
-    scored.sort(key=lambda it: it["match_score"], reverse=True)
+    scored.sort(key=lambda it: it["retrieval_score"], reverse=True)
     return scored[:top_k]
 
 

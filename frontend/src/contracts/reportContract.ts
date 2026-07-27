@@ -35,13 +35,36 @@ export type EvidenceType = z.infer<typeof EvidenceTypeSchema>;
 
 // ADR-0002 Anker 3 (Sub-Slice M11.7b): Quellengattung pro Evidence-Item.
 // Spiegelt EvidenceSourceKind aus backend/app/contracts/report_contract.py.
+// Report-Trust-Slice: um "agent_action" und "web_source" erweitert, damit
+// Seed-Dokument, Simulation und Web-Recherche nicht mehr in einer einzigen
+// Gattung verschmelzen.
 export const EvidenceSourceKindSchema = z.enum([
   "seed_corpus",
   "agent_quote",
+  "agent_action",
   "graph_relation",
+  "web_source",
   "inferred",
 ]);
 export type EvidenceSourceKind = z.infer<typeof EvidenceSourceKindSchema>;
+
+// Quellengattungen aus der Simulation — nie ein Seed-Fakt.
+// Pendant zu SIMULATION_SOURCE_KINDS im Backend.
+export const SIMULATION_SOURCE_KINDS: ReadonlySet<EvidenceSourceKind> = new Set([
+  "agent_quote",
+  "agent_action",
+]);
+
+// Urteil der zweiten Binding-Stufe. Spiegelt EntailmentVerdict aus
+// backend/app/services/evidence_entailment.py. Nur "SUPPORTED" darf
+// supports_claim=true begruenden — Retrieval-Aehnlichkeit allein nicht.
+export const EntailmentVerdictSchema = z.enum([
+  "SUPPORTED",
+  "CONTRADICTED",
+  "RELATED_ONLY",
+  "INSUFFICIENT",
+]);
+export type EntailmentVerdict = z.infer<typeof EntailmentVerdictSchema>;
 
 export const ReportStatusSchema = z.enum([
   "pending", "planning", "generating", "incomplete", "completed", "failed",
@@ -66,7 +89,14 @@ export const EvidenceItemSchema = z.object({
   raw: z.unknown().optional().nullable(),
   agent_log_ref: AgentLogRefSchema.optional().nullable(),
   match_score: z.number().min(0).max(1).optional().nullable(),
+  // Retrieval-Score der ersten Binding-Stufe (Cosine-Similarity). Alias von
+  // match_score — beantwortet "gleiches Thema?", nicht "belegt?".
+  retrieval_score: z.number().min(0).max(1).optional().nullable(),
+  // Urteil der zweiten Stufe. supports_claim ist nur bei "SUPPORTED" true.
+  entailment: EntailmentVerdictSchema.optional().nullable(),
+  entailment_reason: z.string().max(500).optional().nullable(),
   supports_claim: z.boolean().optional().nullable(),
+  contradicts_claim: z.boolean().optional().nullable(),
   // MAI-14 (backend) + Sub-Slice 05.8 (Zod-Spiegel):
   // Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).
   // confidence_calculator._has_contradiction nutzt es, um widersprüchliche
@@ -74,8 +104,9 @@ export const EvidenceItemSchema = z.object({
   sentiment_score: z.number().min(-1).max(1).optional().nullable(),
   quote: z.string().min(1).max(500).optional().nullable(),
   source_id_anchor: z.string().min(1).max(200).optional().nullable(),
-  // ADR-0002 Anker 3 (Sub-Slice M11.7b)
-  source_kind: EvidenceSourceKindSchema.default("seed_corpus"),
+  // ADR-0002 Anker 3 (Sub-Slice M11.7b). Default "inferred": unbekannte
+  // Herkunft ist abgeleitet, nicht belegt. Spiegelt den Backend-Default.
+  source_kind: EvidenceSourceKindSchema.default("inferred"),
   persona_stakeholder_group: z.string().min(1).max(200).optional().nullable(),
   // Slice 8 (2026-05-16) — Provider+Modell, das diese Evidence-Zeile
   // extrahiert hat. Pendant zu EvidenceItemModel.source_model. Format
@@ -195,6 +226,12 @@ export const ReportSectionSchema = z.object({
   // Slice 3 (Issue #495): Überhang nach Cap von 5 — spiegelt backend ReportSectionModel.hypotheses_appendix.
   hypotheses_appendix: z.array(ReportSectionHypothesisSchema).max(50).default([]),
   data_gaps: z.array(ReportSectionDataGapSchema).default([]),
+  // P0-6: Von generate_section_metadata extrahierte ReportV3-Strukturdaten.
+  // Sie sind die kanonische Quelle fuer Personas/Segmente/Reibungspunkte in
+  // ReportV3 — bewusst unstrukturiert, die Einzel-DTOs validiert das Backend.
+  structured_metadata: z.record(z.string(), z.unknown()).default({}),
+  // P0-7: true, wenn dieser Abschnitt nur Fallback-/Fehlertext enthaelt.
+  generation_failed: z.boolean().default(false),
 }).strict();
 export type ReportSection = z.infer<typeof ReportSectionSchema>;
 

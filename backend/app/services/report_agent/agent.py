@@ -520,13 +520,25 @@ class ReportAgent:
 
         for claim in normalize_claims_for_contract(claims):
             evidence = claim.get("evidence") or []
-            score = float(claim.get("confidence_score") or 0.0)
             label = str(claim.get("confidence_label") or "").lower()
 
             # Reviewer-Floor (report_4fe2dacd80ba, Sub-Slice S1):
             # Claim braucht ≥2 unabhängige Evidence-Items, sonst Routing zur Hypothesis.
             # evidence_count==0 fällt durch zum Bestands-Low-Confidence-Branch (mit data_gap).
-            evidence_count = len(evidence) or len(claim.get("evidence_refs") or [])
+            #
+            # P0-5: Gezählt wird nur, was den Claim tatsächlich stützt
+            # (``supports_claim is True``, gesetzt von der Entailment-Stufe).
+            # Vorher zählte jedes thematisch ähnliche Item mit — dadurch
+            # erreichten Interpretationen den Claim-Floor, obwohl kein
+            # einziges Item sie belegte.
+            supporting = [
+                item for item in evidence
+                if isinstance(item, dict) and item.get("supports_claim") is True
+            ]
+            evidence_count = len(supporting) or (
+                len(claim.get("evidence_refs") or []) if not evidence else 0
+            )
+            related_only = len(evidence) - len(supporting)
             if 0 < evidence_count < CLAIM_MIN_EVIDENCE_FOR_CLAIM:
                 index = len(hypotheses) + 1
                 claim_text = (
@@ -534,20 +546,30 @@ class ReportAgent:
                     or "No evidence-bound claim text available."
                 )
                 claim_text = self._truncate(claim_text, 1000)
+                rationale = (
+                    f"Reviewer-Floor: nur {evidence_count} von "
+                    f"{CLAIM_MIN_EVIDENCE_FOR_CLAIM} geforderten stützenden "
+                    "Evidence-Items — als Hypothese geführt."
+                )
+                if related_only:
+                    rationale += (
+                        f" {related_only} weitere Quelle(n) sind thematisch "
+                        "verwandt, belegen die Aussage aber nicht."
+                    )
                 hypotheses.append({
                     "hypothesis_id": f"hypothesis_{index:02d}",
                     "hypothesis_text": claim_text,
-                    "rationale": (
-                        f"Reviewer-Floor: nur {evidence_count} von "
-                        f"{CLAIM_MIN_EVIDENCE_FOR_CLAIM} geforderten Evidence-Items "
-                        "— als Hypothese geführt."
-                    ),
+                    "rationale": rationale,
                     "suggested_evidence": [],
                 })
                 continue
 
-            if not evidence and score < 0.4:
-                # Low-confidence ohne Evidence → hypothesis + data_gap
+            # P0-5: Ohne eine einzige stützende Quelle ist die Aussage eine
+            # Hypothese — auch dann, wenn thematisch verwandte Evidence
+            # anhängt. Vorher griff dieser Zweig nur bei komplett leerer
+            # Evidence-Liste und niedrigem Score; Interpretationen mit
+            # dekorativer Evidence liefen als Claims durch.
+            if not supporting:
                 index = len(hypotheses) + 1
                 claim_text = (
                     str(claim.get("claim_text") or claim.get("claim") or "").strip()
@@ -555,19 +577,29 @@ class ReportAgent:
                 )
                 claim_text = self._truncate(claim_text, 1000)
                 suggestions = self._suggested_evidence_from_claim_audit(claim)
+                if related_only:
+                    rationale = (
+                        f"{related_only} Quelle(n) sind thematisch verwandt, "
+                        "belegen die Aussage aber nicht (kein SUPPORTED-Urteil) "
+                        "— deshalb als Hypothese geführt."
+                    )
+                else:
+                    rationale = (
+                        "Keine direkte Evidence gebunden; deshalb nicht als "
+                        "validierter Claim persistiert."
+                    )
                 hypotheses.append({
                     "hypothesis_id": f"hypothesis_{index:02d}",
                     "hypothesis_text": claim_text,
-                    "rationale": (
-                        "Keine direkte Evidence gebunden; deshalb nicht als "
-                        "validierter Claim persistiert."
-                    ),
+                    "rationale": rationale,
                     "suggested_evidence": suggestions,
                 })
                 data_gaps.append({
                     "gap_id": f"gap_{index:02d}",
                     "claim_text": claim_text,
-                    "gap_reason": "no_evidence_bound",
+                    "gap_reason": (
+                        "related_evidence_only" if related_only else "no_evidence_bound"
+                    ),
                     "suggested_fix": suggestions[0],
                 })
                 continue
@@ -602,16 +634,49 @@ class ReportAgent:
             logger=logger,
         )
 
+    def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
+        """Merkt die Struktur-Metadaten eines Abschnitts für ReportV3 vor.
+
+        Wird von der Section-Schleife aufgerufen, bevor
+        ``_save_evidence_section`` die Section persistiert.
+        """
+        if not metadata:
+            return
+        if not hasattr(self, "_pending_section_metadata") or self._pending_section_metadata is None:
+            self._pending_section_metadata = {}
+        self._pending_section_metadata[section_index] = metadata
+
     def _save_evidence_section(self, report_id: str, section_index: int, section_title: str, content: str) -> None:
+        from .output_contract import is_fallback_content  # noqa: PLC0415
+
         if self.evidence_map is None:
             self._init_evidence_map(report_id)
         self.evidence_map.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
         self.evidence_map.setdefault("global_evidence", self._collect_simulation_evidence_items())
         # schema_version gehört nur auf Map-Ebene, nicht auf Section-Ebene
         # (ReportSectionModel hat das Feld nicht).
-        claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
-            self._build_claims_for_section(content)
-        )
+        #
+        # P0-7: Fehlgeschlagene Sections enthalten Fehlertext, keinen Bericht.
+        # Daraus dürfen weder Claims noch Evidence entstehen — sonst erscheint
+        # eine LLM-Fehlermeldung als Medium-Confidence-Aussage im Report.
+        generation_failed = is_fallback_content(content)
+        if generation_failed:
+            logger.warning(
+                "section %d (%r): Fallback-Inhalt — keine Claim-/Evidence-Extraktion.",
+                section_index,
+                section_title,
+            )
+            claims: List[Dict[str, Any]] = []
+            raw_hypotheses: List[Dict[str, Any]] = []
+            data_gaps: List[Dict[str, Any]] = [{
+                "gap_id": f"gap_section_{section_index:02d}",
+                "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
+                "claim_text": section_title,
+            }]
+        else:
+            claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
+                self._build_claims_for_section(content)
+            )
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)
@@ -623,6 +688,10 @@ class ReportAgent:
             "hypotheses": hypotheses_visible,
             "hypotheses_appendix": hypotheses_appendix,
             "data_gaps": data_gaps,
+            "structured_metadata": (
+                getattr(self, "_pending_section_metadata", {}) or {}
+            ).get(section_index, {}),
+            "generation_failed": generation_failed,
         }
         # schema_version auf Section-Ebene entfernen — Überbleibsel von
         # migrate_v1_to_v2 oder alten Persistierungen; ReportSectionModel

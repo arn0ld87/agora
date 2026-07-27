@@ -17,6 +17,12 @@ from .contract_constants import MIN_PERSONA_TABLE_ROWS
 from .contract_validator import validate_required_sections
 from .evidence import validate_quote_anchors
 from .manager import ReportManager
+from .output_contract import (
+    FinalContentRejected,
+    is_fallback_content,
+    resolve_report_status,
+    sanitize_final_content,
+)
 from .planning import plan_outline as plan_outline_impl
 from .schemas import (
     CURRENT_SCHEMA_VERSION,
@@ -264,6 +270,49 @@ SECTION_FALLBACK_BODY = (
 )
 SECTION_FALLBACK_TITLE = "Section nicht generiert (LLM-Fehler)"
 
+SECTION_EMPTY_RESPONSE_BODY = (
+    "Dieser Abschnitt konnte nicht generiert werden: Das Modell lieferte eine "
+    "leere Antwort. Bitte später erneut versuchen."
+)
+
+SECTION_UNUSABLE_OUTPUT_BODY = (
+    "Dieser Abschnitt konnte nicht generiert werden: Das Modell lieferte "
+    "ausschließlich interne Arbeitsschritte statt Berichtsinhalt ({reason}). "
+    "Bitte später erneut versuchen."
+)
+
+
+def _finalize_content(response: str, *, section_title: str, section_index: int) -> str:
+    """Wendet den Final-Content-Contract auf einen Modelloutput an.
+
+    Ersetzt das frühere ``response.strip()``: interne Arbeitsschritte werden
+    entfernt, und wenn danach kein Berichtsinhalt übrig bleibt, liefert die
+    Funktion einen als solchen erkennbaren Fehlertext statt Modelloutput.
+    Dieser Text wird von :func:`is_fallback_content` erkannt und weder zu
+    Claims noch zu Evidence verarbeitet.
+    """
+    try:
+        sanitized = sanitize_final_content(response)
+    except FinalContentRejected as exc:
+        logger.warning(
+            "section %d (%r): Final-Content-Contract hat den Output abgelehnt (%s). "
+            "%d Arbeitsspur-Segment(e) verworfen.",
+            section_index,
+            section_title,
+            exc.reason,
+            len(exc.removed_segments),
+        )
+        return SECTION_UNUSABLE_OUTPUT_BODY.format(reason=exc.reason)
+
+    if sanitized.removed_segments:
+        logger.info(
+            "section %d (%r): %d Arbeitsspur-Segment(e) aus dem Abschnittsinhalt entfernt.",
+            section_index,
+            section_title,
+            len(sanitized.removed_segments),
+        )
+    return sanitized.content
+
 
 def _safe_generate_section_react(
     agent: Any,
@@ -489,7 +538,11 @@ def generate_section_react(
                 })
                 continue
 
-            final_answer = response.split("Final Answer:")[-1].strip()
+            final_answer = _finalize_content(
+                response,
+                section_title=section.title,
+                section_index=section_index,
+            )
             logger.info(f"Section {section.title} generation completed (tool calls: {tool_calls_count}times)")
             if agent.report_logger:
                 agent.report_logger.log_section_content(
@@ -565,8 +618,15 @@ def generate_section_react(
             })
             continue
 
-        final_answer = response.strip()
-        logger.info(f"Section {section.title} did not detectto 'Final Answer:' prefix, directlyadoptLLM outputas finalcontent（Tool call: {tool_calls_count}times)")
+        # Kein "Final Answer:"-Präfix: der Output geht trotzdem durch den
+        # Final-Content-Contract. Vorher wurde hier jeder Modelloutput
+        # ungeprüft zum Abschnittsinhalt — inklusive "Thought:"-Spuren.
+        final_answer = _finalize_content(
+            response,
+            section_title=section.title,
+            section_index=section_index,
+        )
+        logger.info(f"Section {section.title} did not detectto 'Final Answer:' prefix, sanitized LLM output adopted as final content（Tool call: {tool_calls_count}times)")
         if agent.report_logger:
             agent.report_logger.log_section_content(
                 section_title=section.title,
@@ -592,11 +652,13 @@ def generate_section_react(
     else:
         response = agent.llm.chat(messages=messages, temperature=0.5, max_tokens=4096)
     if response is None:
-        final_answer = "(ThisSectiongeneratefailed: LLM returnedemptyresponse, pleaselaterretry)"
-    elif "Final Answer:" in response:
-        final_answer = response.split("Final Answer:")[-1].strip()
+        final_answer = SECTION_EMPTY_RESPONSE_BODY
     else:
-        final_answer = response
+        final_answer = _finalize_content(
+            response,
+            section_title=section.title,
+            section_index=section_index,
+        )
     if agent.report_logger:
         agent.report_logger.log_section_content(
             section_title=section.title,
@@ -890,6 +952,9 @@ def generate_report(
         report.status = ReportStatus.GENERATING
         total_sections = len(outline.sections)
         generated_sections = []
+        # P0-7: Abschnitte, deren Generierung fehlgeschlagen ist. Eine
+        # fehlgeschlagene Pflichtsection macht den Report INCOMPLETE.
+        failed_section_indices: List[int] = []
         existing_sections = {item["section_index"]: item["content"] for item in ReportManager.get_generated_sections(report_id)}
         for section_info in ReportManager.get_generated_sections(report_id):
             title = outline.sections[section_info["section_index"] - 1].title if outline.sections and section_info["section_index"] <= len(outline.sections) else ""
@@ -1004,18 +1069,38 @@ def generate_report(
             # Fehler blockieren nicht die Hauptgenerierung (generate_section_metadata
             # gibt bei Exception {} zurück). Metadaten werden im Report-Logger
             # für Provenance-Tracking gespeichert.
-            section_meta = generate_section_metadata(
-                agent,
-                section_title=section.title,
-                section_content=section_content,
-                section_index=section_num,
-            )
+            # Fehlgeschlagene Sections liefern Fehlertext, keinen Inhalt: keine
+            # Metadaten-Extraktion, keine Claims, keine Evidence daraus.
+            section_failed = is_fallback_content(section_content)
+            if section_failed:
+                failed_section_indices.append(section_num)
+                logger.warning(
+                    "section %d (%r): Fallback-Inhalt erkannt — Metadaten- und "
+                    "Claim-Extraktion werden übersprungen.",
+                    section_num,
+                    section.title,
+                )
+                section_meta = {}
+            else:
+                section_meta = generate_section_metadata(
+                    agent,
+                    section_title=section.title,
+                    section_content=section_content,
+                    section_index=section_num,
+                )
             if section_meta and agent.report_logger and hasattr(agent.report_logger, "log_section_metadata"):
                 agent.report_logger.log_section_metadata(
                     section_title=section.title,
                     section_index=section_num,
                     metadata=section_meta,
                 )
+            if section_meta:
+                # P0-6: Die extrahierten Struktur-Daten sind ab hier die
+                # kanonische Quelle für ReportV3 — vorher endeten sie im Logger.
+                if not hasattr(section, "metadata") or section.metadata is None:
+                    section.metadata = {}
+                section.metadata["structured_metadata"] = section_meta
+                agent._record_section_metadata(section_num, section_meta)
             section.content = section_content
             generated_sections.append(f"## {section.title}\n\n{section_content}")
             ReportManager.save_section(report_id, section_num, section)
@@ -1033,7 +1118,22 @@ def generate_report(
             progress_callback("generating", 95, "generatingassemblecompletereport...")
         ReportManager.update_progress(report_id, "generating", 95, "generatingassemblecompletereport...", completed_sections=completed_section_titles)
         report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
-        report.status = ReportStatus.COMPLETED
+        # P0-7: Status folgt dem tatsächlichen Erfolg der Abschnitte. Ein
+        # Report mit fehlgeschlagener Pflichtsection ist INCOMPLETE — der Rest
+        # bleibt nutzbar, aber der Nutzer sieht, was fehlt.
+        report.status = resolve_report_status(
+            total_sections=total_sections,
+            failed_section_indices=failed_section_indices,
+            required_section_indices=list(range(1, total_sections + 1)),
+        )
+        if failed_section_indices:
+            failed_note = (
+                f"{total_sections - len(failed_section_indices)}/{total_sections} "
+                f"Sections erfolgreich. Fehlgeschlagen: "
+                f"{', '.join(str(i) for i in sorted(failed_section_indices))}."
+            )
+            logger.warning("report %s: %s", report_id, failed_note)
+            report.error = failed_note if not getattr(report, "error", None) else report.error
         report.completed_at = datetime.now().isoformat()
         total_time_seconds = (datetime.now() - start_time).total_seconds()
         if agent.report_logger:

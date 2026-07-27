@@ -23,12 +23,52 @@ def init_evidence_map(
     return EvidenceMapModel.model_validate(payload).model_dump(mode="json")
 
 
+#: Interner Evidence-`type` → Provenance-`source_kind`.
+#: Ohne diese Abbildung liefen Agentenaktionen, Interviews und Web-Treffer in
+#: den Default und wurden als Seed-Fakt persistiert.
+_TYPE_TO_SOURCE_KIND: Dict[str, str] = {
+    "seed_corpus": "seed_corpus",
+    "seed_document": "seed_corpus",
+    "agent_post": "agent_quote",
+    "agent_quote": "agent_quote",
+    "agent_interview": "agent_quote",
+    "agent_action": "agent_action",
+    "agent_behavior": "agent_action",
+    "relationship_chain": "graph_relation",
+    "entity_summary": "graph_relation",
+    "graph_metric": "graph_relation",
+    "graph_metric_status": "graph_relation",
+    "graph_relation": "graph_relation",
+    "web_search_result": "web_source",
+    "web_fetch": "web_source",
+    "web_source": "web_source",
+}
+
+
+def normalize_source_kind(item: Dict[str, Any]) -> str:
+    """Ermittelt die Provenance eines Evidence-Items.
+
+    Ein explizit gesetztes ``source_kind`` gewinnt. Sonst entscheidet der
+    interne ``type``. Was sich nicht zuordnen lässt, wird ``inferred`` —
+    niemals ``seed_corpus``: ein Simulations-Post ist kein Dokumentfakt, und
+    eine unbekannte Herkunft erst recht nicht.
+    """
+    explicit = str(item.get("source_kind") or "").strip()
+    if explicit in _TYPE_TO_SOURCE_KIND.values():
+        return explicit
+
+    item_type = str(item.get("type") or "").strip().lower()
+    return _TYPE_TO_SOURCE_KIND.get(item_type, "inferred")
+
+
 def record_evidence_item(
     active_section_evidence: Optional[List[Dict[str, Any]]],
     item: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     target = list(active_section_evidence or [])
-    target.append(item)
+    enriched = dict(item)
+    enriched.setdefault("source_kind", normalize_source_kind(item))
+    target.append(enriched)
     return target
 
 

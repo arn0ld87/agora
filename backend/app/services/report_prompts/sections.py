@@ -272,7 +272,7 @@ This section analyzes...
 Each reply you can only do one of two things (cannot do both):
 
 Option A - Call Tool:
-Output your thinking, then call a tool using the following format:
+Emit ONLY the tool call block, nothing else:
 <tool_call>
 {{"name": "Tool Name", "parameters": {{"parameter_name": "parameter_value"}}}}
 </tool_call>
@@ -285,6 +285,22 @@ When you have gathered enough information through tools, start with "Final Answe
 - Forbidden to include both tool calls and Final Answer in one reply
 - Forbidden to fabricate tool return results (Observation), all tool results are injected by the system
 - At most one tool call per reply
+
+[Internal Reasoning Is Never Report Content — MUST FOLLOW]
+Your deliberation about which tool to call, what is missing, or what to do
+next is working material, not report material. Do NOT write it out.
+
+❌ Never emit any of these into a reply:
+   "Thought:", "Action:", "Observation:", "Reasoning:", "Plan:"
+   "Let me …", "I need to …", "I will …", "I should …", "First I will …"
+   any prose describing which tool you are about to use or why a tool failed
+
+✅ A tool call reply contains the <tool_call> block and nothing else.
+✅ A final reply contains "Final Answer:" followed by pure report body text.
+
+If a tool returned nothing usable, do not narrate that in the section body.
+Record the gap as a data gap or an explicitly marked hypothesis instead —
+the reader gets the finding, not your working notes.
 
 ═══════════════════════════════════════════════════════════════
 [Section Content Requirements]
@@ -342,7 +358,20 @@ Every simulated persona statement MUST use the XML tag with BOTH attributes:
 <simulated_quote persona_id="<persona_id>" seed_anchor="<ev_id_or_seed_doc:...>">statement</simulated_quote>
 Plain Markdown quotes (> "...") for persona statements are NOT accepted.
 
+[⚠️ Provenance Reminder — Seed Facts vs. Simulation]
+Keep these apart in every sentence you write:
+- A number or statement from the uploaded seed document describes the
+  DOCUMENT. Attribute it as such: "Im Seed-Dokument bewerteten 72 % der
+  Schülerinnen und Schüler …"
+- A reaction produced by the simulated agents describes the SIMULATION:
+  "In den simulierten Agentenreaktionen konzentrierte sich die Kritik auf …"
+- Never present a seed percentage as if the simulated personas had produced
+  it, and never re-attribute a number to a different group, predicate, or
+  time frame than the source states.
+
 Please start:
-1. First think (Thought) what information this section needs
-2. Then call tools (Action) to get simulation data
-3. After collecting enough information, output Final Answer (pure body text, no titles)"""
+1. Call a tool to retrieve simulation data (the reply contains only the
+   <tool_call> block — no commentary, no "Thought:")
+2. Repeat until you have enough material
+3. Then output "Final Answer:" followed by pure body text (no titles, no
+   working notes)"""

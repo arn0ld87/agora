@@ -1,0 +1,391 @@
+"""Regressionstests für die Vertrauenswürdigkeit der Report-Pipeline.
+
+Referenz-Testlauf: report_d9023bd1f55a / sim_7058c126da03 (30 Agents,
+315 Interaktionen, 5 Cluster, Echo-Chamber-Index 0.4317, Modus balanced).
+
+Jeder Test hier bildet genau einen der P0-Defekte ab, die in diesem Lauf
+sichtbar wurden. Sie sind bewusst eng geschnitten: sie prüfen die
+Pipeline-Invariante, nicht die Formulierung eines konkreten LLM-Outputs.
+"""
+from __future__ import annotations
+
+import pytest
+
+from app.contracts.report_contract import EvidenceSourceKind
+from app.services.evidence_binder import bind_evidence_to_claim
+from app.services.evidence_entailment import (
+    EntailmentVerdict,
+    classify_evidence,
+    extract_numeric_facts,
+)
+from app.services.report_agent.output_contract import (
+    FinalContentRejected,
+    sanitize_final_content,
+)
+from app.services.report_intent import ReportIntent, detect_report_intent, sections_for_intent
+
+
+# ---------------------------------------------------------------------------
+# Seed-Fixture: die Zahlen aus dem echten Testdokument
+# ---------------------------------------------------------------------------
+
+SEED_SENTENCES = [
+    "72 % der Schülerinnen und Schüler bewerteten die zusätzliche Lernhilfe positiv.",
+    "61 % der Lehrkräfte berichteten von Zeitersparnis bei mindestens einer "
+    "wöchentlichen Routineaufgabe.",
+    "48 % der Lehrkräfte berichteten zusätzlichen Aufwand durch Kontrolle von KI-Inhalten.",
+    "37 % der Eltern äußerten Datenschutz- und Abhängigkeitsbedenken.",
+    "70 % der Lehrkräfte sollen vor Einführung eine Basisschulung abgeschlossen haben.",
+]
+
+
+def _seed_item(text: str) -> dict:
+    return {
+        "snippet": text,
+        "source_kind": EvidenceSourceKind.seed_corpus.value,
+        "type": "seed_corpus",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Test 1 — Zahlen dürfen ihre Bezugsgruppe nicht wechseln
+# ---------------------------------------------------------------------------
+
+
+def test_1_percentage_may_not_migrate_to_wrong_stakeholder():
+    """61 % gehört zu Zeitersparnis der Lehrkräfte, nicht zur Lernhilfe-Bewertung."""
+    claim = "61 % der Lehrkräfte bewerten die zusätzliche Lernhilfe positiv."
+    evidence = [_seed_item(s) for s in SEED_SENTENCES]
+
+    results = [classify_evidence(claim, item) for item in evidence]
+
+    assert all(r.verdict is not EntailmentVerdict.SUPPORTED for r in results), (
+        "Ein Claim, der 61 % auf die Lernhilfe-Bewertung umdeutet, darf von "
+        "keinem Seed-Satz gestützt werden — 61 % steht dort für Zeitersparnis."
+    )
+
+
+def test_1b_correct_percentage_attribution_is_supported():
+    """Die korrekte Wiedergabe muss weiterhin als SUPPORTED durchgehen."""
+    claim = "72 % der Schülerinnen und Schüler bewerteten die zusätzliche Lernhilfe positiv."
+    result = classify_evidence(claim, _seed_item(SEED_SENTENCES[0]))
+    assert result.verdict is EntailmentVerdict.SUPPORTED
+
+
+def test_1c_training_target_is_not_approval():
+    """'70 % sollen geschult sein' ist eine Zielvorgabe, keine Zustimmungsquote."""
+    claim = "70 % der Lehrkräfte stimmen der Einführung zu."
+    result = classify_evidence(claim, _seed_item(SEED_SENTENCES[4]))
+    assert result.verdict is not EntailmentVerdict.SUPPORTED
+
+
+def test_1d_numeric_extraction_binds_number_to_group_and_predicate():
+    facts = extract_numeric_facts(SEED_SENTENCES[1])
+    assert facts, "Prozentwert muss erkannt werden"
+    fact = facts[0]
+    assert fact.value == pytest.approx(61.0)
+    assert "lehrkr" in fact.subject.lower()
+    assert "zeitersparnis" in fact.predicate.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
+# ---------------------------------------------------------------------------
+
+LEAK_SAMPLES = [
+    "Thought: The interview tool is unavailable.\nLet me use quick_search instead.",
+    "Action: quick_search\nObservation: nothing found",
+    "I need to ground claims in evidence before writing.",
+    "I will now call the tool_call block again.",
+    '<tool_call>{"name": "quick_search"}</tool_call>',
+]
+
+
+@pytest.mark.parametrize("raw", LEAK_SAMPLES)
+def test_2_thought_and_tool_planning_never_reaches_content(raw):
+    with pytest.raises(FinalContentRejected):
+        sanitize_final_content(raw)
+
+
+def test_2b_mixed_content_keeps_only_the_report_body():
+    raw = (
+        "Thought: I need to check the stakeholder positions first.\n"
+        "Action: quick_search\n"
+        "Final Answer:\n"
+        "**Zustimmung**\n\n"
+        "Die Lehrkräfte im Szenario bewerten die Zeitersparnis überwiegend positiv."
+    )
+    cleaned = sanitize_final_content(raw)
+    assert "Thought:" not in cleaned.content
+    assert "Action:" not in cleaned.content
+    assert "Zeitersparnis" in cleaned.content
+    assert cleaned.removed_segments
+
+
+def test_2c_clean_content_passes_unchanged():
+    raw = "Die simulierten Eltern äußern vor allem Datenschutzbedenken."
+    cleaned = sanitize_final_content(raw)
+    assert cleaned.content == raw
+    assert not cleaned.removed_segments
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — Ähnlichkeit ist kein Beweis
+# ---------------------------------------------------------------------------
+
+
+def test_3_high_retrieval_score_alone_does_not_support_claim():
+    """Themengleiche, aber nicht belegende Evidence: hoher Score, kein Support."""
+
+    def embed(text: str):  # identische Vektoren => cosine 1.0
+        return [1.0, 0.0, 0.0]
+
+    claim = "Die Eltern lehnen die Plattform mehrheitlich ab."
+    candidates = [
+        {
+            "snippet": "37 % der Eltern äußerten Datenschutz- und Abhängigkeitsbedenken.",
+            "source_kind": EvidenceSourceKind.seed_corpus.value,
+        }
+    ]
+
+    bound = bind_evidence_to_claim(claim, candidates, embed, threshold=0.5)
+    assert bound, "Kandidat muss als Retrieval-Treffer erhalten bleiben"
+    item = bound[0]
+    assert item["retrieval_score"] >= 0.5
+    assert item["supports_claim"] is False, (
+        "Cosine-Similarity darf supports_claim nicht setzen — 37 % Bedenken "
+        "belegen keine mehrheitliche Ablehnung."
+    )
+    assert item["entailment"] in {
+        EntailmentVerdict.RELATED_ONLY.value,
+        EntailmentVerdict.INSUFFICIENT.value,
+        EntailmentVerdict.CONTRADICTED.value,
+    }
+
+
+def test_3b_retrieval_score_and_supports_claim_are_separate_fields():
+    def embed(text: str):
+        return [1.0, 0.0]
+
+    bound = bind_evidence_to_claim(
+        "72 % der Schülerinnen und Schüler bewerteten die zusätzliche Lernhilfe positiv.",
+        [_seed_item(SEED_SENTENCES[0])],
+        embed,
+        threshold=0.5,
+    )
+    assert bound
+    assert "retrieval_score" in bound[0]
+    assert "supports_claim" in bound[0]
+    assert bound[0]["supports_claim"] is True
+    assert bound[0]["entailment"] == EntailmentVerdict.SUPPORTED.value
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — Provenance: Simulationsevidence ist kein Seed-Fakt
+# ---------------------------------------------------------------------------
+
+
+def test_4_agent_action_is_a_distinct_source_kind():
+    assert EvidenceSourceKind.agent_action.value == "agent_action"
+    assert EvidenceSourceKind.agent_action is not EvidenceSourceKind.seed_corpus
+
+
+def test_4b_agent_action_is_not_persisted_as_seed_corpus():
+    from app.services.report_agent.evidence import normalize_source_kind
+
+    item = {"type": "agent_action", "snippet": "Agent 12 teilte den Beitrag."}
+    assert normalize_source_kind(item) == EvidenceSourceKind.agent_action.value
+
+
+def test_4c_unknown_evidence_does_not_silently_default_to_seed_corpus():
+    from app.services.report_agent.evidence import normalize_source_kind
+
+    item = {"type": "model_generated_inference", "snippet": "Vermutlich…"}
+    assert normalize_source_kind(item) != EvidenceSourceKind.seed_corpus.value
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Fallback-Fehlertext erzeugt keinen Claim
+# ---------------------------------------------------------------------------
+
+
+def test_5_llm_fallback_error_text_produces_no_claims():
+    from app.services.report_agent.output_contract import is_fallback_content
+
+    fallback = (
+        "(Dieser Abschnitt konnte nicht generiert werden: LLM lieferte eine "
+        "leere Antwort. Report-ID: report_d9023bd1f55a, Abschnitt 7.)"
+    )
+    assert is_fallback_content(fallback) is True
+
+
+def test_5b_claim_extraction_skips_fallback_sections():
+    from app.services.report_agent.output_contract import is_fallback_content
+
+    assert is_fallback_content("Die simulierten Eltern äußern Datenschutzbedenken.") is False
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — fehlgeschlagene Pflichtsection ⇒ INCOMPLETE
+# ---------------------------------------------------------------------------
+
+
+def test_6_failed_required_section_yields_incomplete_status():
+    from app.models.report import ReportStatus
+    from app.services.report_agent.output_contract import resolve_report_status
+
+    status = resolve_report_status(
+        total_sections=11,
+        failed_section_indices=[10],
+        required_section_indices=[10],
+    )
+    assert status == ReportStatus.INCOMPLETE
+
+
+def test_6b_all_sections_ok_yields_completed():
+    from app.models.report import ReportStatus
+    from app.services.report_agent.output_contract import resolve_report_status
+
+    status = resolve_report_status(
+        total_sections=11,
+        failed_section_indices=[],
+        required_section_indices=list(range(1, 12)),
+    )
+    assert status == ReportStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — Section-Metadata landet in ReportV3
+# ---------------------------------------------------------------------------
+
+
+def test_7_section_metadata_reaches_report_v3():
+    from app.services.report_agent.metadata_merge import merge_section_metadata
+
+    sections = [
+        {
+            "section_index": 2,
+            "structured_metadata": {
+                "personas": [
+                    {
+                        "id": "persona_01",
+                        "voice_register": "neutral-de",
+                        "alter_range": "35–50",
+                        "beruf": "Lehrkraft",
+                        "region": "Sachsen-Anhalt",
+                    }
+                ],
+                "segments": [
+                    {
+                        "id": "seg_01",
+                        "name": "Lehrkräfte",
+                        "beschreibung": "Unterrichtende an Sekundarschulen",
+                    }
+                ],
+                "friction_points": [
+                    {
+                        "id": "fp_01",
+                        "beschreibung": "Kontrollaufwand für KI-Inhalte",
+                        "severity": "high",
+                    }
+                ],
+            },
+        }
+    ]
+
+    merged = merge_section_metadata(sections)
+    assert [p.id for p in merged.personas] == ["persona_01"]
+    assert [s.id for s in merged.segments] == ["seg_01"]
+    assert [f.id for f in merged.friction_points] == ["fp_01"]
+
+
+# ---------------------------------------------------------------------------
+# Test 8 — ReportV3 → Markdown/HTML bleibt semantisch identisch
+# ---------------------------------------------------------------------------
+
+
+def test_8_markdown_and_json_render_the_same_structured_items():
+    """ReportV3 ist die kanonische Quelle: was im JSON steht, steht im Markdown.
+
+    HTML wird im Frontend aus genau diesem Markdown/JSON gerendert; der
+    Backend-seitig prüfbare Teil der Invariante ist JSON ≡ Markdown.
+    """
+    from datetime import datetime, timezone
+
+    from app.contracts.report_v3 import FrictionPoint, Persona, ReportV3
+    from app.services.report_agent.markdown_renderer import render_report_v3
+
+    report = ReportV3(
+        report_id="report_d9023bd1f55a",
+        generated_at=datetime.now(timezone.utc),
+        personas=[
+            Persona(
+                id="persona_01",
+                voice_register="neutral-de",
+                alter_range="35–50",
+                beruf="Lehrkraft",
+                region="Sachsen-Anhalt",
+            )
+        ],
+        friction_points=[
+            FrictionPoint(
+                id="fp_01",
+                beschreibung="Kontrollaufwand für KI-Inhalte",
+                severity="high",
+            )
+        ],
+    )
+
+    markdown = render_report_v3(report)
+    payload = report.model_dump(mode="json")
+
+    for needle in ("persona_01", "Kontrollaufwand für KI-Inhalte"):
+        assert needle in markdown, f"{needle} fehlt im Markdown"
+
+    assert [p["id"] for p in payload["personas"]] == ["persona_01"]
+    assert [f["id"] for f in payload["friction_points"]] == ["fp_01"]
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — "Was denken die Leute?" ⇒ kompakter Opinion-Report
+# ---------------------------------------------------------------------------
+
+
+def test_9_opinion_question_selects_compact_preset():
+    assert detect_report_intent("Was denken die Leute?") is ReportIntent.OPINION
+
+    sections = sections_for_intent(ReportIntent.OPINION)
+    assert len(sections) == 6
+    assert len(sections) < len(sections_for_intent(ReportIntent.FULL))
+    joined = " ".join(sections).lower()
+    for absent in ("content-idee", "positionierung", "multiplikator"):
+        assert absent not in joined, f"{absent} gehört nicht in den Opinion-Report"
+
+
+@pytest.mark.parametrize(
+    "question,expected",
+    [
+        ("Was denken die Leute über die Plattform?", ReportIntent.OPINION),
+        ("Wie ist die Stimmung bei den Eltern?", ReportIntent.OPINION),
+        ("Welche Risiken drohen bei der Einführung?", ReportIntent.RISK),
+        ("Vergleiche Variante A und Variante B.", ReportIntent.COMPARISON),
+    ],
+)
+def test_9b_intent_detection_matrix(question, expected):
+    assert detect_report_intent(question) is expected
+
+
+# ---------------------------------------------------------------------------
+# Test 10 — Full-Report bleibt unverändert
+# ---------------------------------------------------------------------------
+
+
+def test_10_full_report_preset_keeps_all_eleven_sections():
+    sections = sections_for_intent(ReportIntent.FULL)
+    assert len(sections) == 11
+
+
+def test_10b_unspecific_question_defaults_to_full():
+    assert detect_report_intent("Erstelle eine umfassende Analyse des Vorhabens.") is (
+        ReportIntent.FULL
+    )

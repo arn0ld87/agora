@@ -41,6 +41,7 @@ def _seed_evidence(*, supports: bool = True, score: float = 0.7) -> EvidenceItem
         snippet="Seed-Korpus-Datenpunkt.",
         match_score=score,
         supports_claim=supports,
+        source_kind=EvidenceSourceKind.seed_corpus,
     )
 
 
@@ -55,14 +56,21 @@ def _inferred(*, supports: bool = True, score: float = 0.6) -> EvidenceItemModel
     )
 
 
-def test_source_kind_default_seed_corpus() -> None:
-    """Default sichert Backward-Compat fuer Fixtures ohne explizites Feld."""
+def test_source_kind_default_is_inferred_not_seed_corpus() -> None:
+    """Ohne explizite Angabe ist die Herkunft unbekannt — also abgeleitet.
+
+    Vorher war der Default ``seed_corpus``: jedes Item ohne Angabe wurde damit
+    zum Dokumentfakt erklaert, auch Agentenaktionen und Web-Treffer. Der
+    konservative Default laesst alte Fixtures weiter laden, verweigert ihnen
+    aber den unverdienten Seed-Status (``reject_inferred_in_high_confidence``
+    greift dann, ADR-0002 Anker 5).
+    """
     item = EvidenceItemModel(
         type=EvidenceType.graph_metric,
         source="x",
         snippet="snippet",
     )
-    assert item.source_kind == EvidenceSourceKind.seed_corpus
+    assert item.source_kind == EvidenceSourceKind.inferred
     assert item.persona_stakeholder_group is None
 
 
@@ -198,8 +206,48 @@ def test_low_and_medium_unaffected() -> None:
 
 
 def test_enum_values_pinned() -> None:
-    """Drift-Guard: genau 4 Werte, exakt diese Strings."""
-    expected = {"seed_corpus", "agent_quote", "graph_relation", "inferred"}
+    """Drift-Guard: genau diese 6 Werte, exakt diese Strings.
+
+    Erweitert um ``agent_action`` und ``web_source`` (Report-Trust-Slice).
+    Additiv — die urspruenglichen vier Werte bleiben unveraendert und die
+    Confidence-Anker werten weiterhin nur ``agent_quote`` als
+    Stakeholder-Stimme und ``seed_corpus`` als Dokumentfakt.
+    """
+    expected = {
+        "seed_corpus",
+        "agent_quote",
+        "agent_action",
+        "graph_relation",
+        "web_source",
+        "inferred",
+    }
     actual = {kind.value for kind in EvidenceSourceKind}
     assert actual == expected
-    assert len(EvidenceSourceKind) == 4
+    assert len(EvidenceSourceKind) == 6
+
+
+def test_agent_action_does_not_count_as_stakeholder_voice() -> None:
+    """agent_action ist Simulationsverhalten, keine Stakeholder-Aussage.
+
+    Zwei Agentenaktionen aus unterschiedlichen Gruppen duerfen ein
+    high-Label nicht rechtfertigen — nur ``agent_quote`` zaehlt (Anker 4).
+    """
+    def _action(group: str) -> EvidenceItemModel:
+        return EvidenceItemModel(
+            type=EvidenceType.agent_action,
+            source="agent-log",
+            snippet=f"Agent aus {group} teilte den Beitrag.",
+            match_score=0.9,
+            supports_claim=True,
+            source_kind=EvidenceSourceKind.agent_action,
+            persona_stakeholder_group=group,
+        )
+
+    with pytest.raises(ValidationError, match="2 unterschiedlichen Stakeholder-Gruppen"):
+        ReportClaimModel(
+            claim_id="claim_80",
+            claim_text="High-Claim, der nur auf Agentenaktionen beruht.",
+            confidence_label=ConfidenceLabel.high,
+            confidence_score=0.78,
+            evidence=[_action("Lehrkraefte"), _action("Eltern")],
+        )

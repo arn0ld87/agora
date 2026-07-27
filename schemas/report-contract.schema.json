@@ -163,7 +163,7 @@
         },
         "source_kind": {
           "$ref": "#/$defs/EvidenceSourceKind",
-          "default": "seed_corpus"
+          "default": "inferred"
         },
         "source_model": {
           "anyOf": [
@@ -279,11 +279,13 @@
       "type": "object"
     },
     "EvidenceSourceKind": {
-      "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Genau diese 4 Werte sind im Prompt-Block\n``backend/app/services/report_prompts.py`` referenziert (Anker 1).",
+      "description": "ADR-0002 Anker 3 \u2014 Quellengattung pro Evidence-Item.\n\nWird von den Cross-Stakeholder-/Inferred-Validators auf\n``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).\nDrift-Guard: Diese Werte sind im Prompt-Block\n``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).\n\nErweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``\nerg\u00e4nzen die urspr\u00fcnglichen vier Werte. Das ist additiv und versch\u00e4rft\nADR-0002, statt es zu schw\u00e4chen \u2014 vorher liefen Agentenaktionen und\nWeb-Treffer \u00fcber den Default ``seed_corpus`` und verschmolzen damit\nSeed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.\nF\u00fcr die Confidence-Anker gilt weiterhin: nur ``agent_quote`` z\u00e4hlt als\nStakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.",
       "enum": [
         "seed_corpus",
         "agent_quote",
+        "agent_action",
         "graph_relation",
+        "web_source",
         "inferred"
       ],
       "title": "EvidenceSourceKind",
@@ -640,6 +642,11 @@
           "title": "Data Gaps",
           "type": "array"
         },
+        "generation_failed": {
+          "default": false,
+          "title": "Generation Failed",
+          "type": "boolean"
+        },
         "hypotheses": {
           "items": {
             "$ref": "#/$defs/ReportSectionHypothesisModel"
@@ -669,6 +676,11 @@
           "minLength": 3,
           "title": "Section Title",
           "type": "string"
+        },
+        "structured_metadata": {
+          "additionalProperties": true,
+          "title": "Structured Metadata",
+          "type": "object"
         }
       },
       "required": [

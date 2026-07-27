@@ -144,12 +144,41 @@ def _component_consistency(evidence: List[Dict]) -> float:
     return 0.0
 
 
+def partition_by_entailment(evidence: List[Dict]) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    """Teilt Evidence in (stützend, widersprechend, nur verwandt).
+
+    Items ohne ``entailment``-Feld stammen aus der Zeit vor der zweiten
+    Binding-Stufe und gelten weiterhin als stützend — sonst würden alte
+    Reports beim Neuberechnen ihre gesamte Confidence verlieren.
+    """
+    supporting: List[Dict] = []
+    contradicting: List[Dict] = []
+    related: List[Dict] = []
+    for item in evidence:
+        verdict = str(item.get("entailment") or "").upper()
+        if verdict == "CONTRADICTED" or item.get("contradicts_claim") is True:
+            contradicting.append(item)
+        elif verdict in {"RELATED_ONLY", "INSUFFICIENT"}:
+            related.append(item)
+        elif verdict == "SUPPORTED" or item.get("supports_claim") is not False:
+            supporting.append(item)
+        else:
+            related.append(item)
+    return supporting, contradicting, related
+
+
 def compute_confidence(
     evidence: List[Dict],
     *,
     contradiction_penalty: float = 0.0,
 ) -> Tuple[float, str]:
     """Liefert (score, label) für eine Evidence-Liste.
+
+    Nur tatsächlich stützende Evidence geht in den Score ein. Thematisch
+    verwandte Treffer (``RELATED_ONLY``/``INSUFFICIENT``) erhöhen die
+    Confidence nicht — vorher floss ihr Retrieval-``match_score`` mit 40 %
+    Gewicht in die Relevanz und machte Ähnlichkeit zu Sicherheit.
+    Widersprechende Evidence senkt den Score zusätzlich.
 
     MAI-14: Wenn sentiment_score-Felder in den Evidence-Items vorhanden sind
     und _has_contradiction() anschlägt, wird automatisch ein Sentiment-
@@ -158,6 +187,15 @@ def compute_confidence(
     """
     if not evidence:
         return 0.15, "speculative"
+
+    supporting, contradicting, _related = partition_by_entailment(evidence)
+    if not supporting:
+        # Kein einziger Beleg — thematische Nähe allein trägt keinen Claim.
+        return 0.15, "speculative"
+    if contradicting:
+        contradiction_penalty += _CONTRADICTION_PENALTY_AMOUNT * min(len(contradicting), 2)
+    evidence = supporting
+
     relevance = _component_relevance(evidence)
     source_quality = _component_source_quality(evidence)
     specificity = _component_specificity(evidence)
@@ -256,6 +294,68 @@ def compute_claim_confidence(
     return score, label, applied_penalties
 
 
+def compute_confidence_breakdown(evidence: List[Dict]) -> Dict[str, float]:
+    """Trennt Quellentreue von Simulationskonsens.
+
+    Ein korrekt wiedergegebener Seed-Fakt ist etwas anderes als eine über
+    mehrere Stakeholder-Gruppen hinweg konsistente Simulationsreaktion. Beides
+    in eine Zahl zu pressen war die Ursache dafür, dass praktisch jeder Claim
+    "medium" wurde.
+
+    ``source_fidelity``
+        Wie zuverlässig gibt der Claim wieder, was in den Quellen steht.
+        Hoch heißt: der Claim ist quellentreu — nicht, dass die Aussage für
+        die reale Bevölkerung gilt.
+    ``simulation_consensus``
+        Wie breit tragen unabhängige simulierte Stakeholder-Gruppen die
+        Aussage. Eine einzelne Persona bleibt hier niedrig.
+    """
+    supporting, contradicting, related = partition_by_entailment(evidence)
+    if not supporting:
+        return {
+            "source_fidelity": 0.0,
+            "simulation_consensus": 0.0,
+            "supporting_count": 0.0,
+            "contradicting_count": float(len(contradicting)),
+            "related_only_count": float(len(related)),
+        }
+
+    seed_items = [e for e in supporting if str(e.get("source_kind")) == "seed_corpus"]
+    quote_items = [e for e in supporting if str(e.get("source_kind")) == "agent_quote"]
+
+    # Quellentreue: getragen von Seed- und Graph-Belegen, gedämpft durch
+    # Widersprüche.
+    fidelity_base = len(seed_items) / max(1, len(supporting))
+    fidelity = min(1.0, 0.5 + 0.5 * fidelity_base)
+    if contradicting:
+        fidelity = max(0.0, fidelity - 0.25 * min(len(contradicting), 2))
+
+    # Simulationskonsens: Anzahl unterschiedlicher Stakeholder-Gruppen unter
+    # den stützenden Agentenzitaten.
+    groups = {
+        str(e.get("persona_stakeholder_group") or "").strip()
+        for e in quote_items
+        if str(e.get("persona_stakeholder_group") or "").strip()
+    }
+    if len(groups) >= 3:
+        consensus = 1.0
+    elif len(groups) == 2:
+        consensus = 0.75
+    elif len(groups) == 1:
+        consensus = 0.4
+    else:
+        consensus = 0.0
+
+    return {
+        "source_fidelity": round(fidelity, 3),
+        "simulation_consensus": round(consensus, 3),
+        "supporting_count": float(len(supporting)),
+        "contradicting_count": float(len(contradicting)),
+        "related_only_count": float(len(related)),
+        "stakeholder_group_count": float(len(groups)),
+    }
+
+
 _ECHO_CAP_THRESHOLD: float = 0.75
 _ECHO_CAP_MAX_SCORE: float = 0.84
 
@@ -289,6 +389,8 @@ def apply_echo_cap(
 __all__ = [
     "apply_echo_cap",
     "compute_confidence",
+    "compute_confidence_breakdown",
     "compute_claim_confidence",
+    "partition_by_entailment",
     "_has_contradiction",
 ]
