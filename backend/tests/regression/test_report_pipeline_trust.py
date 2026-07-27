@@ -322,6 +322,21 @@ def test_4c_unknown_evidence_does_not_silently_default_to_seed_corpus():
     assert normalize_source_kind(item) != EvidenceSourceKind.seed_corpus.value
 
 
+def test_4e_explicit_inferred_source_kind_is_respected():
+    """Ein explizit gesetztes ``source_kind="inferred"`` muss gewonnen werden.
+
+    CodeRabbit PR #929: ``normalize_source_kind`` prüfte explizite Werte gegen
+    ``_TYPE_TO_SOURCE_KIND.values()`` — die Menge schloss ``inferred`` aus.
+    Ein Caller, der ein Modellableitungs-Fakt bewusst als ``inferred``
+    markierte, wurde ignoriert und der interne ``type`` übernahm. Der Docstring
+    sagt aber: „Ein explizit gesetztes source_kind gewinnt."
+    """
+    from app.services.report_agent.evidence import normalize_source_kind
+
+    item = {"type": "seed_corpus", "source_kind": "inferred", "snippet": "Vermutlich…"}
+    assert normalize_source_kind(item) == EvidenceSourceKind.inferred.value
+
+
 def test_4d_every_evidence_type_maps_to_a_real_provenance():
     """Kein produktiver EvidenceType darf als 'inferred' durchfallen.
 

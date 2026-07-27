@@ -50,16 +50,27 @@ _TYPE_TO_SOURCE_KIND: Dict[str, str] = {
 }
 
 
+#: Kanonische ``EvidenceSourceKind``-Werte (ADR-0002 Anker 3). Ein explizit
+#: gesetztes ``source_kind`` muss gegen diese Menge geprüft werden, nicht gegen
+#: ``_TYPE_TO_SOURCE_KIND.values()`` — sonst schließt die Prüfung ``inferred``
+#: aus und ein Caller, der ein Modellableitungs-Fakt bewusst als ``inferred``
+#: markiert, wird ignoriert (CodeRabbit PR #929).
+_VALID_SOURCE_KINDS: frozenset[str] = frozenset(
+    {"seed_corpus", "agent_quote", "agent_action", "graph_relation", "web_source", "inferred"}
+)
+
+
 def normalize_source_kind(item: Dict[str, Any]) -> str:
     """Ermittelt die Provenance eines Evidence-Items.
 
-    Ein explizit gesetztes ``source_kind`` gewinnt. Sonst entscheidet der
-    interne ``type``. Was sich nicht zuordnen lässt, wird ``inferred`` —
-    niemals ``seed_corpus``: ein Simulations-Post ist kein Dokumentfakt, und
-    eine unbekannte Herkunft erst recht nicht.
+    Ein explizit gesetztes ``source_kind`` gewinnt — inklusive ``inferred``,
+    wenn ein Caller einen Modellableitungs-Fakt bewusst so markiert. Sonst
+    entscheidet der interne ``type``. Was sich nicht zuordnen lässt, wird
+    ``inferred`` — niemals ``seed_corpus``: ein Simulations-Post ist kein
+    Dokumentfakt, und eine unbekannte Herkunft erst recht nicht.
     """
     explicit = str(item.get("source_kind") or "").strip()
-    if explicit in _TYPE_TO_SOURCE_KIND.values():
+    if explicit in _VALID_SOURCE_KINDS:
         return explicit
 
     item_type = str(item.get("type") or "").strip().lower()

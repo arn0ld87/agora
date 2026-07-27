@@ -235,6 +235,14 @@ def resolve_report_status(
     Eine fehlgeschlagene Pflichtsection macht den Report ``INCOMPLETE``. Der
     Rest bleibt nutzbar — der Nutzer sieht, was fehlt, statt ein ``COMPLETED``
     zu lesen, das der Report nicht einlöst.
+
+    ``FAILED`` wird bewusst **nicht** hier erzeugt: der Workflow setzt ihn
+    direkt bei.schema-Validierungsfehlern oder Totalausfällen
+    (``workflow.py``), nicht aus der Section-Erfolgsbilanz. Jeder Aufrufer
+    übergibt ``required_section_indices=list(range(1, total+1))`` — damit ist
+    ``required`` nie leer und jede failed Section schlägt als ``INCOMPLETE``
+    durch. Ein früherer ``FAILED``-Zweig (``len(failed) >= total_sections``)
+    war unter dieser Aufruf invariant unreachable (CodeRabbit PR #929).
     """
     from ...models.report import ReportStatus  # noqa: PLC0415 — zyklischer Import
 
@@ -245,10 +253,6 @@ def resolve_report_status(
     required = set(required_section_indices)
     if required and failed & required:
         return ReportStatus.INCOMPLETE
-    if not required:
-        return ReportStatus.INCOMPLETE
-    if len(failed) >= max(1, total_sections):
-        return ReportStatus.FAILED
     return ReportStatus.INCOMPLETE
 
 
