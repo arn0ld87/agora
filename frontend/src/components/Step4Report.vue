@@ -298,7 +298,9 @@ async function pollStatus() {
         // Backend liefert fehlgeschlagene Pflichtsections → INCOMPLETE.
         // Rest des Reports ist nutzbar; der Nutzer sieht, was fehlt.
         const resolvedId = (st.report_id || props.reportId) as string
-        phase.value = 2
+        // INCOMPLETE ist terminal: isComplete verhindert, dass onMounted nach
+        // einem Reload erneut in den Polling-Pfad springt.
+        isComplete.value = true; phase.value = 2
         emit('update-status', 'incomplete')
         addLog(t('step4.status.incomplete') || 'Report unvollständig — einige Abschnitte fehlen.')
         try {

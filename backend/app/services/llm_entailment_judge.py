@@ -103,7 +103,12 @@ def build_llm_judge(
                 max_tokens=256,
             )
         except Exception as exc:  # noqa: BLE001 — Judge-Fehler fallen auf Regelpfad
-            log.debug("Entailment-Judge: chat_json fehlgeschlagen (%r)", exc)
+            # Nur den Exception-Typ loggen: repr(exc) kann Provider-Response-
+            # oder Prompt-Fragmente in die Logs ziehen.
+            log.debug(
+                "Entailment-Judge: chat_json fehlgeschlagen (%s)",
+                type(exc).__name__,
+            )
             raise
 
         # chat_json mit Pydantic-Schema liefert ein validiertes Dict. Je nach
