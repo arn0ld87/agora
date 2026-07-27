@@ -717,6 +717,11 @@ class ReportAgent:
         raw_hypotheses = list(raw_hypotheses) + (
             getattr(self, "_pending_prose_hypotheses", {}) or {}
         ).get(section_index, [])
+        # IDs zentral neu vergeben: Claim-Routing und Fließtext-Prüfung zählen
+        # jeweils ab 1, zusammengeführt kollidieren sie sonst.
+        for _position, _hypothesis in enumerate(raw_hypotheses, start=1):
+            if isinstance(_hypothesis, dict):
+                _hypothesis["hypothesis_id"] = f"hypothesis_{_position:02d}"
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)

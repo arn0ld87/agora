@@ -46,8 +46,11 @@ class RejectedStatement:
     block_index: int = 0
 
     def as_hypothesis(self, index: int) -> Dict[str, Any]:
+        # ReportSectionHypothesisModel.hypothesis_id erzwingt
+        # ^hypothesis_\d{2,}$ — ein sprechendes Präfix ("hypothesis_text_01")
+        # lässt die gesamte EvidenceMap-Validierung scheitern.
         return {
-            "hypothesis_id": f"hypothesis_text_{index:02d}",
+            "hypothesis_id": f"hypothesis_{index:02d}",
             "hypothesis_text": self.text[:1000],
             "rationale": (
                 f"Aus dem Fließtext entfernt: {self.reason} "

@@ -128,6 +128,28 @@ def test_1f_rejected_prose_statement_becomes_a_hypothesis():
     assert "entfernt" in hypothesis["rationale"].lower()
 
 
+def test_1i_prose_hypothesis_ids_satisfy_the_contract():
+    """Die aus dem Fließtext erzeugten Hypothesen müssen valide sein.
+
+    Zweiter Fall desselben Fehlertyps wie bei gap_id: eine sprechende ID
+    ("hypothesis_text_01") verletzt ^hypothesis_\\d{2,}$ und ließ die gesamte
+    EvidenceMap-Validierung — und damit den ganzen Report — scheitern.
+    """
+    from app.contracts.report_contract import ReportSectionHypothesisModel
+    from app.services.report_agent.text_verification import verify_prose
+
+    prose = (
+        "61 Prozent der Lehrkräfte bewerteten die zusätzliche Lernhilfe positiv "
+        "und berichteten von einer Zeitersparnis bei mindestens einer "
+        "wöchentlichen Routineaufgabe."
+    )
+    result = verify_prose(prose, [_seed_item(s) for s in SEED_SENTENCES])
+    assert result.rejected
+
+    for position, statement in enumerate(result.rejected, start=1):
+        ReportSectionHypothesisModel.model_validate(statement.as_hypothesis(position))
+
+
 def test_1g_prose_without_evidence_pool_is_left_untouched():
     """Ohne Vergleichsbasis darf die Prüfung den Bericht nicht leeren."""
     from app.services.report_agent.text_verification import verify_prose
