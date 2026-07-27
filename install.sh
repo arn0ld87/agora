@@ -114,6 +114,23 @@ setup_env() {
   fi
 }
 
+# Pflicht-Secret in .env sicherstellen; fehlt der Wert, wird er per Python
+# erzeugt und inplace in .env geschrieben (GNU- und BSD-sed-kompatibel).
+ensure_secret() {
+  local key="$1"
+  if grep -qE "^${key}=[^[:space:]]+" .env; then
+    return 0
+  fi
+  local val
+  val=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+  if sed --version >/dev/null 2>&1; then
+    sed -i "s|^${key}=\$|${key}=${val}|" .env
+  else
+    sed -i '' "s|^${key}=\$|${key}=${val}|" .env
+  fi
+  info "  $key automatisch erzeugt"
+}
+
 # ---------------------------------------------------------------------------
 # MODUS: check
 # ---------------------------------------------------------------------------
@@ -130,6 +147,11 @@ fi
 if [[ "$MODE" == "docker" ]]; then
   info "Docker-Compose-Modus"
   setup_env ".env.docker.example"
+
+  info "Prüfe Pflicht-Secrets …"
+  ensure_secret SECRET_KEY
+  ensure_secret AGORA_AUTH_TOKEN
+  ensure_secret NEO4J_PASSWORD
 
   BACKEND_PORT="${AGORA_BACKEND_PORT:-5001}"
   FRONTEND_PORT="${AGORA_FRONTEND_PORT:-5173}"
