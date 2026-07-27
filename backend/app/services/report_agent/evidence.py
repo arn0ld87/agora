@@ -26,6 +26,10 @@ def init_evidence_map(
 #: Interner Evidence-`type` → Provenance-`source_kind`.
 #: Ohne diese Abbildung liefen Agentenaktionen, Interviews und Web-Treffer in
 #: den Default und wurden als Seed-Fakt persistiert.
+#: Deckt jeden Wert von ``EvidenceType`` ab (ausser
+#: ``model_generated_inference``, das ohnehin nicht als Evidence zulaessig ist).
+#: Ein fehlender Eintrag laesst echte Graph-Evidence als ``inferred`` gelten —
+#: der E2E-Lauf zeigte genau das fuer ``graph_fact`` (125 von 125 Items).
 _TYPE_TO_SOURCE_KIND: Dict[str, str] = {
     "seed_corpus": "seed_corpus",
     "seed_document": "seed_corpus",
@@ -34,6 +38,7 @@ _TYPE_TO_SOURCE_KIND: Dict[str, str] = {
     "agent_interview": "agent_quote",
     "agent_action": "agent_action",
     "agent_behavior": "agent_action",
+    "graph_fact": "graph_relation",
     "relationship_chain": "graph_relation",
     "entity_summary": "graph_relation",
     "graph_metric": "graph_relation",

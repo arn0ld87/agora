@@ -204,6 +204,26 @@ def test_4c_unknown_evidence_does_not_silently_default_to_seed_corpus():
     assert normalize_source_kind(item) != EvidenceSourceKind.seed_corpus.value
 
 
+def test_4d_every_evidence_type_maps_to_a_real_provenance():
+    """Kein produktiver EvidenceType darf als 'inferred' durchfallen.
+
+    Der E2E-Lauf gegen sim_7058c126da03 lieferte 125 von 125 Evidence-Items
+    mit ``type='graph_fact'``. Weil das Mapping diesen Wert nicht kannte,
+    landeten alle auf ``inferred`` — echte Graph-Evidence sah damit aus wie
+    eine Modellableitung. Dieser Test pinnt die Vollstaendigkeit.
+    """
+    from app.contracts.report_contract import EvidenceType
+    from app.services.report_agent.evidence import normalize_source_kind
+
+    unmapped = [
+        t.value
+        for t in EvidenceType
+        if t is not EvidenceType.model_generated_inference
+        and normalize_source_kind({"type": t.value}) == EvidenceSourceKind.inferred.value
+    ]
+    assert not unmapped, f"EvidenceType(s) ohne Provenance-Zuordnung: {unmapped}"
+
+
 # ---------------------------------------------------------------------------
 # Test 5 — Fallback-Fehlertext erzeugt keinen Claim
 # ---------------------------------------------------------------------------

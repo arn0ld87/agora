@@ -42,6 +42,17 @@
       "title": "ConfidenceLabel",
       "type": "string"
     },
+    "EntailmentVerdict": {
+      "description": "Urteil der zweiten Binding-Stufe.\n\nSpiegelt ``app.services.evidence_entailment.EntailmentVerdict``. Nur\n``SUPPORTED`` rechtfertigt ``supports_claim=True``; ``RELATED_ONLY`` und\n``INSUFFICIENT`` erh\u00f6hen die Confidence nie.",
+      "enum": [
+        "SUPPORTED",
+        "CONTRADICTED",
+        "RELATED_ONLY",
+        "INSUFFICIENT"
+      ],
+      "title": "EntailmentVerdict",
+      "type": "string"
+    },
     "EvidenceItemModel": {
       "additionalProperties": false,
       "description": "Bestehende EvidenceItem-Felder aus report_agent.py, jetzt typsicher.",
@@ -56,6 +67,42 @@
             }
           ],
           "default": null
+        },
+        "contradicts_claim": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contradicts Claim"
+        },
+        "entailment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntailmentVerdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entailment_reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entailment Reason"
         },
         "match_score": {
           "anyOf": [
@@ -120,6 +167,20 @@
           ],
           "default": null,
           "title": "Raw"
+        },
+        "retrieval_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieval Score"
         },
         "sentiment_score": {
           "anyOf": [

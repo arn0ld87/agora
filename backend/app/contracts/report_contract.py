@@ -79,6 +79,19 @@ SIMULATION_SOURCE_KINDS: frozenset[EvidenceSourceKind] = frozenset({
 })
 
 
+class EntailmentVerdict(str, Enum):
+    """Urteil der zweiten Binding-Stufe.
+
+    Spiegelt ``app.services.evidence_entailment.EntailmentVerdict``. Nur
+    ``SUPPORTED`` rechtfertigt ``supports_claim=True``; ``RELATED_ONLY`` und
+    ``INSUFFICIENT`` erhöhen die Confidence nie.
+    """
+    SUPPORTED = "SUPPORTED"
+    CONTRADICTED = "CONTRADICTED"
+    RELATED_ONLY = "RELATED_ONLY"
+    INSUFFICIENT = "INSUFFICIENT"
+
+
 # Diese Typen sind im audit_trail erlaubt, nicht im evidence-Array
 FORBIDDEN_EVIDENCE_TYPES = {"model_generated_inference", "section_synthesis"}
 
@@ -116,7 +129,18 @@ class EvidenceItemModel(BaseModel):
     #   "kg:entity:9b2f-...."
     source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # Stufe 1 des Bindings: Cosine-Similarity. Beantwortet "gleiches Thema?",
+    # nicht "belegt?". Alias von match_score, bewusst eigenes Feld, damit der
+    # Retrieval-Wert nicht länger als Beleggrad gelesen wird.
+    retrieval_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # Stufe 2: Urteil aus evidence_entailment. supports_claim ist genau dann
+    # True, wenn entailment == "SUPPORTED".
+    entailment: Optional[EntailmentVerdict] = None
+    entailment_reason: Optional[str] = Field(default=None, max_length=500)
     supports_claim: Optional[bool] = None
+    # True bei entailment == "CONTRADICTED". Wird von
+    # detect_contradiction_penalty als Widerspruchs-Signal ausgewertet.
+    contradicts_claim: Optional[bool] = None
     # MAI-14: Sentiment des Quellen-Snippets (-1 = negativ, 0 = neutral, +1 = positiv).
     # None = nicht bestimmt. Wird von confidence_calculator._has_contradiction
     # genutzt, um widersprüchliche Sentiment-Vektoren zu erkennen.
@@ -392,11 +416,21 @@ class ReportOutlineModel(BaseModel):
 
     @model_validator(mode="after")
     def require_default_sections(self) -> "ReportOutlineModel":
-        from app.services.report_agent.contract_validator import validate_required_sections
+        from app.services.report_agent.contract_validator import (
+            matches_known_preset,
+            validate_required_sections,
+        )
         from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 
-        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         outline_titles = [section.title for section in self.sections]
+        # Intent-Presets (opinion, risk, comparison, explorative) haben bewusst
+        # nicht die elf Full-Report-Pflichtabschnitte. Eine Outline, die genau
+        # einem bekannten Preset entspricht, ist gültig; alles andere muss den
+        # vollständigen Pflichtsatz tragen.
+        if matches_known_preset(outline_titles):
+            return self
+
+        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         missing = validate_required_sections(outline_titles, required_titles)
         if missing:
             raise ValueError(

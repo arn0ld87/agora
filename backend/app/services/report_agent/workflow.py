@@ -14,7 +14,7 @@ from ...utils.logger import get_logger
 from ..artifact_store import resolve_default_store
 from ..report_prompts import DEFAULT_REPORT_SECTIONS
 from .contract_constants import MIN_PERSONA_TABLE_ROWS
-from .contract_validator import validate_required_sections
+from .contract_validator import matches_known_preset, validate_required_sections
 from .evidence import validate_quote_anchors
 from .manager import ReportManager
 from .output_contract import (
@@ -914,7 +914,14 @@ def generate_report(
 
         required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         outline_titles = [section.title for section in outline.sections]
-        missing = validate_required_sections(outline_titles, required_titles)
+        # Ein Intent-Preset (opinion, risk, …) ist ein vollständiger Report für
+        # seine Fragestellung — nur der Full-Report schuldet die elf
+        # Pflichtabschnitte. Spiegelt ReportOutlineModel.require_default_sections.
+        missing = (
+            []
+            if matches_known_preset(outline_titles)
+            else validate_required_sections(outline_titles, required_titles)
+        )
         if missing:
             report.status = ReportStatus.INCOMPLETE
             report.missing_sections = missing
