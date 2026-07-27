@@ -369,6 +369,11 @@ jobs:
       AGORA_E2E_BASE_URL: http://127.0.0.1:80
       # Embedding-Probe wie im health-smoke überspringen (Issue #276)
       AGORA_SKIP_EMBEDDING_PROBE: 'true'
+      # LLM-Stub wie im upload-graph-smoke: seit Issue #838 baut dieser Job im
+      # beforeAll ein echtes Projekt samt Graph auf, um die v4-Step-Routen mit
+      # gültiger projectId/simulationId gaten zu können. Ohne den Stub
+      # antwortet POST /api/graph/ontology/generate mit 500 (kein Ollama).
+      AGORA_E2E_LLM_MODE: 'stub'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0

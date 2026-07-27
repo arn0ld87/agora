@@ -11,7 +11,7 @@ defineProps({
   showOpenLink: { type: Boolean, default: false }
 })
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const router = useRouter()
 
 const runs = ref([])
@@ -280,20 +280,30 @@ onMounted(loadRuns)
     </div>
 
     <div class="filters">
-      <input v-model="filters.search" class="search" type="search" placeholder="Search run, project, branch" />
-      <select v-model="filters.project">
-        <option value="">All projects</option>
+      <input
+        v-model="filters.search"
+        class="search"
+        type="search"
+        :aria-label="t('history.filters.searchLabel')"
+        :placeholder="t('history.filters.searchPlaceholder')"
+      />
+      <!-- aria-label statt <label>: die Filterleiste ist bewusst kompakt ohne
+           sichtbare Beschriftungen. Ohne accessible name meldet axe-core
+           select-name als critical (Issue #838). Die internen Enum-Werte
+           (graph_build, simulation_run, …) bleiben unübersetzt als `value`. -->
+      <select v-model="filters.project" :aria-label="t('history.filters.projectLabel')">
+        <option value="">{{ t('history.filters.allProjects') }}</option>
         <option v-for="projectId in projects" :key="projectId" :value="projectId">{{ projectId }}</option>
       </select>
-      <select v-model="filters.runType">
-        <option value="">All types</option>
+      <select v-model="filters.runType" :aria-label="t('history.filters.runTypeLabel')">
+        <option value="">{{ t('history.filters.allTypes') }}</option>
         <option value="graph_build">graph_build</option>
         <option value="simulation_prepare">simulation_prepare</option>
         <option value="simulation_run">simulation_run</option>
         <option value="report_generate">report_generate</option>
       </select>
-      <select v-model="filters.status">
-        <option value="">All status</option>
+      <select v-model="filters.status" :aria-label="t('history.filters.statusLabel')">
+        <option value="">{{ t('history.filters.allStatus') }}</option>
         <option value="pending">pending</option>
         <option value="processing">processing</option>
         <option value="paused">paused</option>
@@ -301,8 +311,8 @@ onMounted(loadRuns)
         <option value="failed">failed</option>
         <option value="stopped">stopped</option>
       </select>
-      <select v-model="filters.branch">
-        <option value="">All branches</option>
+      <select v-model="filters.branch" :aria-label="t('history.filters.branchLabel')">
+        <option value="">{{ t('history.filters.allBranches') }}</option>
         <option v-for="branch in branches" :key="branch" :value="branch">{{ branch }}</option>
       </select>
     </div>

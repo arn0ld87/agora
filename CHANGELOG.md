@@ -5,6 +5,38 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Kritische Accessibility-Mängel in Filter-, Graph- und Feed-Oberflächen — 2026-07-27, Issue #838)
+
+- **Filter- und Auswahlfelder ohne Namen:** Die vier Filter-Selects der Lauf-Historie
+  (`HistoryDatabase`), das generische `ui/Select` und die Edge-Labels-Checkbox der
+  Graph-Ansicht (`GraphCanvas`) besaßen keinen für Screenreader lesbaren Namen — in
+  `ui/Select` war das sichtbare Label nicht mit dem Feld verknüpft, in `GraphCanvas`
+  umschloss das Label nur die Checkbox, nicht ihren Text. Alle Felder tragen jetzt einen
+  Namen, der den sichtbaren Text spiegelt. Die Filterleiste der Lauf-Historie ist
+  zusätzlich über `vue-i18n` lokalisiert; interne Enum-Werte bleiben unübersetzt.
+- **Leere Feed-Spalten mit ungültiger ARIA-Struktur:** Die Spalten der Simulations-Feed-
+  Ansicht (`FeedColumn`) meldeten sich unabhängig vom Inhalt als `feed`. Diese Rolle
+  verlangt Beitrags-Kinder; eine leere Spalte hat keine — der Zustand, den jede frische
+  Simulation zeigt. Leere Spalten werden jetzt als benannte `region` ausgezeichnet und
+  wechseln erst mit dem ersten Beitrag auf `feed`.
+
+### Added (Router-, Deep-Link- und Accessibility-Regressionstests — 2026-07-27, Issue #838)
+
+- Die konsolidierte Routenliste (ADR-0010) ist gegen Regressionen abgesichert: jede
+  produktive Route löst nachweislich auf genau eine Komponente auf, jede dokumentierte
+  Redirect-Entscheidung inklusive Parameter-Umbenennung besitzt einen Testfall, und ein
+  Drift-Test schlägt an, sobald Routen hinzukommen oder wegfallen. Bestehende Deep-Links
+  landen deterministisch am dokumentierten Ziel.
+- Die Accessibility-Gates decken statt zehn nun siebzehn produktive Routen ab, darunter
+  erstmals die v4-Step-Routen mit echter Projekt- und Simulations-ID. Vier Routen bleiben
+  begründet ausgenommen und sind in den Issues #920 und #921 sowie im Testkopf
+  dokumentiert.
+- **Verlässlichkeit der Gates:** Die Prüfung lief bisher an, bevor Stylesheets und
+  Schriften angewendet waren, und meldete dadurch auf schnellen CI-Läufen massenhaft
+  Kontrastfehler auf unveränderten Seiten. Die Gates warten jetzt auf einen stabilen
+  Renderzustand; die Tastaturprüfung bewertet außerdem nicht mehr fälschlich als Mangel,
+  dass der Fokus nach dem letzten Element die Seite verlässt.
+
 ### Fixed (Ontology-Upload bereinigt bei File-I/O-Fehlern atomar — 2026-07-26, Issue #899)
 
 - Schlägt beim Ontology-Upload (`/ontology/generate`) ein Datei-I/O-Schritt zwischen

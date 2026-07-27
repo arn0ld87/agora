@@ -209,6 +209,9 @@ export async function check320pxNoHorizontalScroll(page: Page): Promise<void> {
  * Prüft Tastatur-Navigation durch alle fokussierbaren Elemente.
  */
 export async function checkKeyboardNavigation(page: Page, tabCount: number = 10): Promise<void> {
+  // `:visible` MUSS an jedem Einzelselektor hängen, nicht an der Gesamtliste:
+  // `locator(liste).locator(':visible')` würde sichtbare *Nachfahren* der
+  // fokussierbaren Elemente suchen statt diese selbst zu filtern.
   const focusableSelectors = [
     'a[href]',
     'button:not([disabled])',
@@ -216,20 +219,38 @@ export async function checkKeyboardNavigation(page: Page, tabCount: number = 10)
     'select:not([disabled])',
     'textarea:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
-  ].join(', ');
+  ]
+    .map((selector) => `${selector}:visible`)
+    .join(', ');
 
+  // Sichtbarkeit ist zwingend: count() zählt sonst auch Treffer, die im DOM
+  // liegen, aber nicht sichtbar und damit nicht tabbbar sind (z. B. die Links
+  // eines eingeklappten Navigations-Untermenüs). Überzählt man, tabbt die
+  // Schleife über den letzten echten Tab-Stop hinaus und der Fokus verlässt
+  // das Dokument. Gefunden auf /runs/:id (Issue #838); der Fehler lag latent
+  // bereits vorher vor, blieb aber unentdeckt, weil alle zuvor gegateten
+  // Routen deutlich mehr als tabCount sichtbare Tab-Stops haben.
   const focusableCount = await page.locator(focusableSelectors).count();
   expect(focusableCount).toBeGreaterThan(0);
 
-  // Tab durch die ersten N Elemente
+  // Gemessen wird, ob Tab den Fokus tatsächlich auf Elemente der Seite legt.
+  // Bewusst NICHT gemessen wird, wo der Fokus nach dem letzten Tab-Stop
+  // landet: dass er dann in den Browser-Chrome wandert, ist normales
+  // Browserverhalten und kein Mangel der Seite. Die frühere Fassung prüfte
+  // genau das und war deshalb auf jeder Seite mit wenigen Tab-Stops
+  // falsch-negativ.
+  let focusStepCount = 0;
   for (let i = 0; i < Math.min(tabCount, focusableCount); i++) {
     await page.keyboard.press('Tab');
+    const focusedInDocument = await page.evaluate(
+      () => document.activeElement !== null && document.activeElement !== document.body,
+    );
+    if (focusedInDocument) focusStepCount += 1;
   }
 
-  // Prüfe, dass ein Element fokussiert ist
-  const hasFocus = await page.evaluate(() => {
-    return document.activeElement !== null && document.activeElement !== document.body;
-  });
+  // Der erste Tab muss den Fokus in die Seite bringen; sonst ist sie per
+  // Tastatur nicht erreichbar.
+  const hasFocus = focusStepCount > 0;
 
   expect(hasFocus).toBe(true);
 }
@@ -299,10 +320,39 @@ export async function checkReducedMotion(page: Page): Promise<void> {
 }
 
 /**
+ * Wartet, bis Stylesheets und Webfonts angewendet sind.
+ *
+ * `goto(..., { waitUntil: 'domcontentloaded' })` kehrt zurück, bevor CSS und
+ * Fonts wirksam sind. Läuft axe-core in diesem Fenster, misst es die
+ * Fallback-Farben des ungestylten Dokuments und meldet massenhaft
+ * color-contrast-Verstöße — inklusive `:root`. Das ist ein reines
+ * Timing-Artefakt und trat bisher nur deshalb nicht auf, weil die CI-Läufe
+ * langsam genug waren; auf einem schnellen Runner kippen dadurch auch
+ * Routen, an denen niemand etwas geändert hat (beobachtet auf /dashboard
+ * und /runs, Issue #838).
+ *
+ * Zusätzlich stabilisiert das den Zustand nach einem Viewport-Wechsel: die
+ * Tastatur- und Fokusprüfungen laufen sonst gegen ein Layout, das noch neu
+ * berechnet wird.
+ */
+async function waitForStyledPaint(page: Page): Promise<void> {
+  await page.waitForLoadState('load');
+  await page.evaluate(async () => {
+    if (document.fonts?.ready) await document.fonts.ready;
+    // Zwei Frames abwarten: der erste committet das Layout, der zweite den
+    // darauf basierenden Paint.
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+}
+
+/**
  * Kombinierte Accessibility-Prüfung für eine Route.
  */
 export async function checkAccessibilityGate(page: Page, route: string, options: AxeCheckOptions = {}): Promise<void> {
   await page.goto(route, { waitUntil: 'domcontentloaded' });
+  await waitForStyledPaint(page);
 
   // axe-core
   const axeResults = await runAxe(page, options);
@@ -311,8 +361,12 @@ export async function checkAccessibilityGate(page: Page, route: string, options:
   // 320px
   await check320pxNoHorizontalScroll(page);
 
-  // Reset viewport für weitere Checks
+  // Reset viewport für weitere Checks. Das Layout muss danach neu berechnet
+  // sein, bevor Sichtbarkeit und Tab-Reihenfolge geprüft werden — sonst
+  // zählt checkKeyboardNavigation gegen den 320px-Zustand, in dem Teile der
+  // Navigation ausgeblendet sind.
   await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForStyledPaint(page);
 
   // Keyboard
   await checkKeyboardNavigation(page);

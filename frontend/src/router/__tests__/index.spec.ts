@@ -63,6 +63,13 @@ vi.mock('../../views/Settings/SettingsApiKeysView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsAuditLogsView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmRoutingView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/LlmProvidersView.vue', () => VIEW_STUB)
+// Issue #838 — Lücken aus der Routen-Konsolidierung (ADR-0010) schließen.
+vi.mock('../../views/v4/RunDetailAppShellView.vue', () => VIEW_STUB)
+vi.mock('../../views/onboarding/OnboardingView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/SettingsProfileView.vue', () => VIEW_STUB)
+vi.mock('../../views/Settings/EmbeddingConfigurationsView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/steps/StepSimulationFeedView.vue', () => VIEW_STUB)
+vi.mock('../../views/v4/HistoryView.vue', () => VIEW_STUB)
 
 import router from '../index'
 import { getAgoraToken } from '../../api/index'
@@ -88,7 +95,18 @@ describe('Router – Routen-Resolution', () => {
     ['/runs', 'Runs'],
     ['/settings/general', 'SettingsGeneral'],
     ['/settings/integrations', 'SettingsIntegrations'],
+    // Bekannte Restschuld (nicht Scope #838): ADR-0010 sieht für /home in
+    // 0.9.0 einen Redirect auf /dashboard vor. Der Ist-Router routet /home
+    // weiterhin auf Home.vue — dieser Test pinnt den Ist-Zustand, nicht das
+    // ADR-Zielverhalten. Nicht selbst beheben, siehe Issue #838-Auftrag.
     ['/home', 'Home'],
+    ['/onboarding', 'Onboarding'],
+    ['/settings/profile', 'SettingsProfile'],
+    ['/settings/audit-logs', 'SettingsAuditLogs'],
+    ['/settings/llm-routing', 'SettingsLlmRouting'],
+    ['/settings/llm-providers', 'SettingsLlmProviders'],
+    ['/settings/embedding', 'SettingsEmbedding'],
+    ['/v4/history', 'HistoryV4'],
   ])('löst %s → %s auf', async (path, name) => {
     await pushAndSettle(path)
     expect(router.currentRoute.value.name).toBe(name)
@@ -98,6 +116,48 @@ describe('Router – Routen-Resolution', () => {
     await pushAndSettle('/v4/compare/sim_abc')
     expect(router.currentRoute.value.name).toBe('CompareV4')
     expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  it('löst /runs/:id mit param auf', async () => {
+    await pushAndSettle('/runs/run_abc')
+    expect(router.currentRoute.value.name).toBe('RunDetail')
+    expect(router.currentRoute.value.params.id).toBe('run_abc')
+  })
+
+  it('löst /v4/graph-build/:projectId mit param auf', async () => {
+    await pushAndSettle('/v4/graph-build/project_abc')
+    expect(router.currentRoute.value.name).toBe('StepGraphBuild')
+    expect(router.currentRoute.value.params.projectId).toBe('project_abc')
+  })
+
+  it('löst /v4/env-setup/:projectId mit param auf', async () => {
+    await pushAndSettle('/v4/env-setup/project_abc')
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    expect(router.currentRoute.value.params.projectId).toBe('project_abc')
+  })
+
+  it('löst /v4/simulation/:simulationId mit param auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc')
+    expect(router.currentRoute.value.name).toBe('StepSimulation')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  it('löst /v4/simulation/:simulationId/feed mit param auf', async () => {
+    await pushAndSettle('/v4/simulation/sim_abc/feed')
+    expect(router.currentRoute.value.name).toBe('StepSimulationFeed')
+    expect(router.currentRoute.value.params.simulationId).toBe('sim_abc')
+  })
+
+  it('löst /v4/report/:reportId mit param auf', async () => {
+    await pushAndSettle('/v4/report/report_abc')
+    expect(router.currentRoute.value.name).toBe('StepReport')
+    expect(router.currentRoute.value.params.reportId).toBe('report_abc')
+  })
+
+  it('löst /v4/interaction/:reportId mit param auf', async () => {
+    await pushAndSettle('/v4/interaction/report_abc')
+    expect(router.currentRoute.value.name).toBe('StepInteraction')
+    expect(router.currentRoute.value.params.reportId).toBe('report_abc')
   })
 })
 
@@ -111,6 +171,7 @@ describe('Router – Redirects', () => {
     ['/v4/dashboard', 'Dashboard'],
     ['/settings', 'SettingsGeneral'],
     ['/settings-classic', 'SettingsGeneral'],
+    ['/settings/users-teams', 'SettingsProfile'],
   ])('%s → %s', async (from, to) => {
     await pushAndSettle(from)
     expect(router.currentRoute.value.name).toBe(to)
@@ -134,6 +195,162 @@ describe('Router – Redirects', () => {
 
     expect(router.currentRoute.value.name).toBe(to)
     expect(router.currentRoute.value.params).toMatchObject(params)
+  })
+
+  // Issue #838c: Query-Erhalt bei funktionalen Redirects (redirect: (to) => ({...})).
+  // Ist-Zustand, kein Wunschverhalten: die Redirect-Factories in router/index.ts
+  // geben nur { name, params } zurück, ohne query explizit weiterzureichen.
+  // Empirisch (dieser Test) behält vue-router 5 den Query-String des
+  // ursprünglichen `to` dennoch bei — der Original-Location-Query wird beim
+  // Redirect-Resolve gemergt, nicht durch das Redirect-Objekt überschrieben.
+  // Dieser Test pinnt dieses tatsächliche, positive Verhalten.
+  it('funktionaler Redirect /report/:reportId behält die Query (Ist-Zustand, dokumentiert)', async () => {
+    await pushAndSettle('/report/report_42?tab=evidence')
+
+    expect(router.currentRoute.value.name).toBe('StepReport')
+    expect(router.currentRoute.value.query.tab).toBe('evidence')
+  })
+})
+
+describe('Router – Struktur-Integrität', () => {
+  it('kein Pfad ist doppelt registriert', () => {
+    const paths = router.getRoutes().map((route) => route.path)
+    const duplicates = paths.filter((path, index) => paths.indexOf(path) !== index)
+    expect(duplicates, `doppelte Pfade: ${duplicates.join(', ')}`).toEqual([])
+  })
+
+  it('kein Route-Name ist doppelt vergeben', () => {
+    const names = router
+      .getRoutes()
+      .map((route) => route.name)
+      .filter((name): name is string => name != null)
+    const duplicates = names.filter((name, index) => names.indexOf(name) !== index)
+    expect(duplicates, `doppelte Namen: ${duplicates.join(', ')}`).toEqual([])
+  })
+
+  it('jeder Eintrag hat entweder redirect ODER Komponente, nie beides', () => {
+    for (const route of router.getRoutes()) {
+      const hasRedirect = route.redirect !== undefined
+      const hasComponent = Object.values(route.components ?? {}).some((c) => c != null)
+      expect(
+        hasRedirect && hasComponent,
+        `Route ${String(route.name)} (${route.path}) hat sowohl redirect als auch Komponente`,
+      ).toBe(false)
+      expect(
+        hasRedirect || hasComponent,
+        `Route ${String(route.name)} (${route.path}) hat weder redirect noch Komponente`,
+      ).toBe(true)
+    }
+  })
+
+  // Issue #838e: robuste Form gegen "keine toten Legacy-Referenzen" — der Test
+  // läuft gegen den tatsächlichen Router-Code (jede nicht-redirect Route muss
+  // eine auflösbare Komponente liefern), nicht gegen eine handgepflegte
+  // Stringliste gelöschter Views (#831/#832/#833/#835: MainView.vue,
+  // SimulationView.vue, SimulationRunView.vue, ReportView.vue,
+  // InteractionView.vue, SettingsView.vue, SettingsUsersTeamsView.vue,
+  // AppShellDemoView.vue, Agora2026View.vue, ActiveModelBadge.vue,
+  // Workspace*-Familie — alle laut Filesystem-Check nicht mehr vorhanden).
+  it('jede nicht-redirect Route liefert eine auflösbare Komponente (keine toten Legacy-Referenzen)', async () => {
+    for (const route of router.getRoutes()) {
+      if (route.redirect !== undefined) continue
+      const componentEntry = route.components?.default
+      expect(
+        componentEntry,
+        `Route ${String(route.name)} (${route.path}) hat keine components.default`,
+      ).toBeTruthy()
+      // Lazy-Component-Loader auflösen — ein toter Import (gelöschte Datei)
+      // lässt den dynamic import() zur Laufzeit fehlschlagen.
+      if (typeof componentEntry === 'function') {
+        await expect(
+          (componentEntry as () => Promise<unknown>)(),
+          `Route ${String(route.name)} (${route.path}) referenziert eine nicht auflösbare Komponente`,
+        ).resolves.toBeTruthy()
+      }
+    }
+  })
+
+  // Issue #838f: Vollständigkeitstest gegen Drift — explizit gepflegte
+  // SOLL-Liste der produktiven (nicht-redirect) Route-Namen aus der Ist-Matrix
+  // im Auftrag. Fällt auf jede künftig hinzugefügte oder entfernte Route.
+  it('produktive Route-Namen entsprechen exakt der gepflegten SOLL-Liste', () => {
+    const SOLL_PRODUKTIVE_ROUTEN = [
+      'Home',
+      'Dashboard',
+      'Runs',
+      'RunDetail',
+      'Onboarding',
+      'SettingsGeneral',
+      'SettingsIntegrations',
+      'SettingsProfile',
+      'SettingsApiKeys',
+      'SettingsAuditLogs',
+      'SettingsLlmRouting',
+      'SettingsLlmProviders',
+      'SettingsEmbedding',
+      'StepGraphBuild',
+      'StepEnvSetup',
+      'StepSimulation',
+      'StepSimulationFeed',
+      'StepReport',
+      'StepInteraction',
+      'CompareV4',
+      'HistoryV4',
+      'NotFound',
+    ].sort()
+
+    const istProduktiveRouten = router
+      .getRoutes()
+      .filter((route) => route.redirect === undefined)
+      .map((route) => String(route.name))
+      .sort()
+
+    expect(istProduktiveRouten).toEqual(SOLL_PRODUKTIVE_ROUTEN)
+  })
+})
+
+describe('Router – Deep-Links (Legacy-Pfade)', () => {
+  beforeEach(() => {
+    vi.mocked(getAgoraToken).mockReturnValue('tkn')
+  })
+
+  it.each([
+    ['/process/project_42', 'StepGraphBuild'],
+    ['/simulation/simulation_42', 'StepEnvSetup'],
+    ['/simulation/simulation_42/start', 'StepSimulation'],
+    ['/report/report_42', 'StepReport'],
+    ['/interaction/report_42', 'StepInteraction'],
+  ])('Legacy-Deep-Link %s landet deterministisch auf %s, KEIN NotFound', async (path, expected) => {
+    await pushAndSettle(path)
+    expect(router.currentRoute.value.name).toBe(expected)
+    expect(router.currentRoute.value.name).not.toBe('NotFound')
+  })
+
+  it.each(['/settings-classic', '/settings/users-teams'])(
+    '%s landet nicht auf NotFound',
+    async (path) => {
+      await pushAndSettle(path)
+      expect(router.currentRoute.value.name).not.toBe('NotFound')
+    },
+  )
+
+  // Regressionstest Issue #832: /agora-2026 ist die dokumentierte 404-Ausnahme
+  // (ADR-0010) — die einzige entfernte Route, die absichtlich auf NotFound fällt.
+  it('/agora-2026 → NotFound (dokumentierte Ausnahme, ADR-0010 + Issue #832)', async () => {
+    await pushAndSettle('/agora-2026')
+    expect(router.currentRoute.value.name).toBe('NotFound')
+  })
+
+  it('ADR-0010-Seam: /simulation/:simulationId → StepEnvSetup mit Parameter-Umbenennung simulationId→projectId', async () => {
+    // Ungewöhnlicher Mapping-Seam (siehe docs/decisions/0010-vue-v4-route-consolidation.md):
+    // der Legacy-Pfadparameter heisst ":simulationId", landet aber unter dem
+    // Namen "projectId" im Ziel-Routen-Objekt — der WERT bleibt unverändert
+    // die Simulation-ID. ADR-0010 verlangt, dass dieser Seam explizit
+    // benannt und mit einem eigenen Test abgesichert wird.
+    await pushAndSettle('/simulation/sim_seam_check')
+    expect(router.currentRoute.value.name).toBe('StepEnvSetup')
+    expect(router.currentRoute.value.params.projectId).toBe('sim_seam_check')
+    expect(router.currentRoute.value.params.simulationId).toBeUndefined()
   })
 })
 

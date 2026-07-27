@@ -191,7 +191,19 @@
     "createdAt": "Erstellt",
     "documentCount": "{count} Dokument | {count} Dokumente",
     "agentCount": "{count} Agent | {count} Agenten",
-    "search": "Suche…"
+    "search": "Suche…",
+    "filters": {
+      "searchLabel": "Läufe durchsuchen",
+      "searchPlaceholder": "Lauf, Projekt oder Branch suchen",
+      "projectLabel": "Nach Projekt filtern",
+      "allProjects": "Alle Projekte",
+      "runTypeLabel": "Nach Lauftyp filtern",
+      "allTypes": "Alle Typen",
+      "statusLabel": "Nach Status filtern",
+      "allStatus": "Alle Status",
+      "branchLabel": "Nach Branch filtern",
+      "allBranches": "Alle Branches"
+    }
   },
   "process": {
     "title": "Pipeline",

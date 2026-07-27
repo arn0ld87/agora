@@ -44,7 +44,11 @@ onBeforeUnmount(() => {
       :twitter-count="feed.twitterPosts.value.length"
     />
     <div class="sf-columns">
-      <FeedColumn :title="$t('feed.reddit')" channel="reddit">
+      <FeedColumn
+        :title="$t('feed.reddit')"
+        channel="reddit"
+        :has-items="feed.redditPosts.value.length > 0"
+      >
         <TransitionGroup name="slide-in" tag="div" class="sf-thread-list">
           <RedditThread
             v-for="node in feed.redditTree.value"
@@ -57,7 +61,11 @@ onBeforeUnmount(() => {
         </p>
       </FeedColumn>
 
-      <FeedColumn :title="$t('feed.twitter')" channel="twitter">
+      <FeedColumn
+        :title="$t('feed.twitter')"
+        channel="twitter"
+        :has-items="feed.twitterPosts.value.length > 0"
+      >
         <TransitionGroup name="slide-in" tag="div" class="sf-post-list">
           <TwitterPost
             v-for="post in feed.twitterPosts.value"

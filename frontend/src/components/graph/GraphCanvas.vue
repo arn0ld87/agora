@@ -43,8 +43,16 @@
 
     <!-- Show Edge Labels Toggle -->
     <div v-if="graphData" class="edge-labels-toggle">
+      <!-- Das umschliessende <label> enthaelt nur Checkbox und Slider, der
+           sichtbare Text liegt daneben in .toggle-label — die Checkbox hatte
+           dadurch keinen accessible name (axe-core "label", critical,
+           Issue #838). aria-label spiegelt exakt den sichtbaren Text. -->
       <label class="toggle-switch">
-        <input type="checkbox" v-model="showEdgeLabels" />
+        <input
+          type="checkbox"
+          v-model="showEdgeLabels"
+          :aria-label="t('graph.ui.toggleEdgeLabels')"
+        />
         <span class="slider"></span>
       </label>
       <span class="toggle-label">{{ t('graph.ui.toggleEdgeLabels') }}</span>
