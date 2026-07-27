@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (README, AGENTS, CLAUDE und install.sh an ehrlichen Ist-Stand angepasst — 2026-07-27, PR #924)
+
+- **README:** Vollständige Umstrukturierung mit Fokus auf den ehrlichen Ist-Stand: Mermaid-Diagramme für Pipeline und Architektur, neuer Schnellstart mit klarer Trennung von Host- und Docker-Variante, ausführliche Tabellen zu Status, Stack, Sicherheit und Release-Weg. Die zehnte Pipeline-Phase „Re-Embedding & Migration" ist im Diagramm ergänzt; die „Grenzen"-Sektion zu Persona-Aussagen, Confidence-Bewertung und statistischer Aussagekraft ist wiederhergestellt.
+- **install.sh:** Im Docker-Modus werden `SECRET_KEY`, `AGORA_AUTH_TOKEN` und `NEO4J_PASSWORD` jetzt vor `docker compose up` automatisch via `secrets.token_urlsafe(32)` erzeugt, falls die `.env.docker.example` leer gelassen wurde — verhindert Neo4j-/Backend-Aborts bei Erstinstallation.
+- **AGENTS.md / CLAUDE.md:** Token-Efficiency-Regeln präzisiert und an das Section-Format von CLAUDE.md angeglichen.
+
 ### Fixed (Kritische Accessibility-Mängel in Filter-, Graph- und Feed-Oberflächen — 2026-07-27, Issue #838)
 
 - **Filter- und Auswahlfelder ohne Namen:** Die vier Filter-Selects der Lauf-Historie

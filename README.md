@@ -48,6 +48,17 @@ Agora ist eine lokal oder hybrid betreibbare Analyse- und Simulationsplattform. 
 | 🧪 **Produkt & Positionierung** | Vergleich von Landingpages, Pitches, Values & Value Props | Variantenvergleich vor echten Nutzertests oder Go-To-Market |
 | 🔍 **Evidenz & Datenlücken** | Automatische Analyse von Aussagen auf Quellenbelege | Identifikation unbelegter Annahmen & Hypothesen für Research |
 
+### ⚠️ Grenzen
+
+- **Personas sind simuliert:** Persona-Aussagen sind keine echten Kundenmeinungen oder Testergebnisse.
+- **Confidence ≠ Wahrheit:** Der Confidence-Wert bewertet die interne Evidenzbindung im Graph, keine reale Welt-Wahrheit.
+- **Abhängig von Inputs:** Ergebnisse hängen von Eingangsdaten, Modellen, Prompts und Seeds ab — kleine Modell- oder Prompt-Änderungen können Aussagen deutlich verschieben.
+- **Modell-Größe zählt:** Kleine Modelle erzeugen schneller generische oder schlecht belegte Aussagen.
+- **Cloud-Trade-offs:** Externe Provider bringen Datenschutz-, Compliance- und Kostenfragen mit — Hosting und Datenflüsse bewusst wählen.
+- **Ein Run ist kein Sample:** Ein einzelner Lauf zeigt keine statistisch belastbare Verteilung; belastbare Aussagen erfordern mehrere Varianten, Seeds oder Reviews.
+
+Agora ist am stärksten, wenn das Ergebnis anschließend durch echte Interviews, Fachreviews, Nutzertests oder vorhandene Vergleichsdaten geprüft wird.
+
 ---
 
 ## 🔄 Pipeline & Datenfluss
@@ -68,6 +79,7 @@ flowchart LR
     F --> G[📜 7. Report Generation<br/>Claims & Evidence] :::output
     G --> H[⚖️ 8. Compare & Diff<br/>Runs & Varianten] :::output
     H --> I[🔄 9. Replay & Export<br/>Audit & Re-Index] :::output
+    I --> J[🧬 10. Re-Embedding & Migration<br/>Versionierte Re-Indexierung] :::output
 ```
 
 <details>
