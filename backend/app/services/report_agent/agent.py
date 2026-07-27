@@ -669,7 +669,10 @@ class ReportAgent:
             claims: List[Dict[str, Any]] = []
             raw_hypotheses: List[Dict[str, Any]] = []
             data_gaps: List[Dict[str, Any]] = [{
-                "gap_id": f"gap_section_{section_index:02d}",
+                # ReportSectionDataGapModel.gap_id erzwingt ^gap_\d{2,}$ —
+                # ein sprechendes Präfix ("gap_section_03") lässt die gesamte
+                # EvidenceMap-Validierung scheitern (E2E-Lauf, Runde 4).
+                "gap_id": f"gap_{section_index:02d}",
                 "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
                 "claim_text": section_title,
             }]

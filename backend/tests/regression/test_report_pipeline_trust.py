@@ -245,6 +245,23 @@ def test_5b_claim_extraction_skips_fallback_sections():
     assert is_fallback_content("Die simulierten Eltern äußern Datenschutzbedenken.") is False
 
 
+def test_5c_fallback_section_data_gap_satisfies_the_contract():
+    """Die Ersatz-Datenlücke einer fehlgeschlagenen Section muss valide sein.
+
+    Der E2E-Lauf scheiterte an ``gap_id='gap_section_03'``:
+    ReportSectionDataGapModel erzwingt ``^gap_\\d{2,}$``. Ein einziger
+    ungültiger Ersatz-Gap ließ die gesamte EvidenceMap-Validierung und damit
+    den kompletten Report fehlschlagen.
+    """
+    from app.contracts.report_contract import ReportSectionDataGapModel
+
+    ReportSectionDataGapModel.model_validate({
+        "gap_id": f"gap_{3:02d}",
+        "gap_reason": "Abschnitt konnte nicht generiert werden (LLM-Fehler).",
+        "claim_text": "Zentrale Kritikpunkte",
+    })
+
+
 # ---------------------------------------------------------------------------
 # Test 6 — fehlgeschlagene Pflichtsection ⇒ INCOMPLETE
 # ---------------------------------------------------------------------------
