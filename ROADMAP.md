@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 22.07.2026  
+**Stand:** 27.07.2026  
 **Aktuelle Produktversion:** `0.8.0` Technical Preview
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
@@ -48,7 +48,7 @@ Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports
 - Compare-, Export- und Observability-Grundlagen
 
-Der Stand ist trotzdem keine stabile `1.0`, weil Legacy- und v4-Oberflächen parallel existieren und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
+Der Stand ist trotzdem keine stabile `1.0`, weil die Vue-v4-Konsolidierung noch nicht abgeschlossen ist (verbleibend: `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915), Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922)) und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
 
 ## Erreicht
 
@@ -75,7 +75,7 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 - [ ] Vue-v4 ist die einzige produktive Oberfläche
 - [ ] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen
-- [ ] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf
+- [x] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf — als Designreferenz unter `docs/design-reference/agora-2026/` archiviert ([PR #878](https://github.com/arn0ld87/agora/pull/878)), Regressionstest pinnt `/agora-2026` → NotFound
 - [x] kein produktiv verdrahteter React-/Lovable-Rewrite — ein Lovable-Prototyp existiert, liegt aber außerhalb dieses Repos, ist unveröffentlicht und in keinem Auslieferungspfad referenziert, siehe [`docs/epics/frontend-next/2026-STATUS.md`](docs/epics/frontend-next/2026-STATUS.md)
 - [ ] Responsive- und Accessibility-Gates sind grün
 
@@ -97,7 +97,7 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 ### Dokumentation
 
-- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (Stand 22.07.2026 — laufend bei jeder größeren Änderung neu zu verifizieren)
+- [x] README, STATUS, ROADMAP und Issues widersprechen sich nicht (Stand 27.07.2026 — laufend bei jeder größeren Änderung neu zu verifizieren)
 - [ ] `docs/STATUS.md` wird automatisch erzeugt oder CI-geprüft — `scripts/sync-status.sh` regeneriert nur die markierten Versions-/Test-Blöcke, nicht die Fließtext-Abschnitte; die STATUS-Sync-Prüfung läuft ausschließlich lokal über `pre-push-gate.sh schemas`. Der CI-Job dafür wurde am 17.05.2026 entfernt (`.github/workflows/ci.yml`, Kommentar „2026-05-17 entfernt: status-sync (MAI-16)"), `docs/STATUS.md` bleibt laut diesem Kommentar bewusst manuell pflegbar
 - [ ] historische Pläne liegen ausschließlich im Archiv
 - [ ] Installations- und Betriebsanleitung sind gegen einen frischen Host geprüft
