@@ -48,7 +48,7 @@ Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports
 - Compare-, Export- und Observability-Grundlagen
 
-Der Stand ist trotzdem keine stabile `1.0`, weil die Vue-v4-Konsolidierung noch nicht abgeschlossen ist (verbleibend: `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915), Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922)) und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
+Der Stand ist trotzdem keine stabile `1.0`, weil die Vue-v4-Konsolidierung noch nicht abgeschlossen ist (verbleibend: Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922); der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) ist umgesetzt) und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
 
 ## Erreicht
 

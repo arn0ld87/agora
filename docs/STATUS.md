@@ -51,7 +51,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 
-Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird und die verbleibenden Frontend-Altpfade weiter konsolidiert werden: `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) und Migration der v3-Inhaltskomponenten in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922)).
+Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird und die verbleibenden Frontend-Altpfade weiter konsolidiert werden: Migration der v3-Inhaltskomponenten in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922)). Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
 ## E2E-Smokes
 
@@ -110,7 +110,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Bekannte Konsolidierungsschuld
 
-- die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Verbleibend: `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) und Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922))
+- die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Verbleibend: Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922)). Der `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) ist umgesetzt
 - ein React-/Lovable-Neubau ist als Prototyp umgesetzt, aber nicht als Zielentscheidung freigegeben (Details im nächsten Abschnitt)
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
 - der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`, `@deprecated` Slice 5.5) ist mit der connection-gebundenen `AiModelRef` unvereinbar und in Step 2 daher gegenseitig ausgeschlossen. Solange er existiert, hält `useEnvForm` weiterhin `modelOption`/`customModel` — allerdings ohne Persistenz. Die Ablösung wird in [Issue #903](https://github.com/arn0ld87/agora/issues/903) geführt
@@ -120,7 +120,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Frontend-Next-Stand (React/Lovable)
 
-- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. Nicht jede produktive Oberfläche ist bereits v4: `/home` lädt weiterhin die klassische Editorial-View `frontend/src/views/Home.vue`, obwohl ADR-0010 dort einen Redirect auf `/dashboard` vorsieht ([Issue #915](https://github.com/arn0ld87/agora/issues/915)). Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen. Zudem werden die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` noch produktiv über v4-Wrapper geroutet ([Issue #922](https://github.com/arn0ld87/agora/issues/922)).
+- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. `/home` leitet seit [#915](https://github.com/arn0ld87/agora/issues/915) per ADR-0010 auf `/dashboard` um; die klassische Editorial-View `Home.vue` bleibt bis `1.0.0` physisch erhalten. Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen. Zudem werden die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` noch produktiv über v4-Wrapper geroutet ([Issue #922](https://github.com/arn0ld87/agora/issues/922)).
 - **Prototyp:** Ein Lovable-Projekt („Agora Runs Dashboard", angelegt 2026-07-16) existiert und wurde substanziell umgesetzt (23 Edits, TanStack-Router-SPA, 12 Routen, shadcn/ui). Es ist derzeit **nicht veröffentlicht** (`is_published: false`, keine URL) und **nicht** produktiv verdrahtet — weder Docker-Compose, GitHub-Workflows noch das Root-`package.json` referenzieren es. Der React-Code liegt vollständig außerhalb dieses Repositories. Die tatsächliche Funktionsvollständigkeit des Prototyps ist nicht codegeprüft belegt, sondern nur durch Commit-Aussagen behauptet.
 - **Release-Status:** Kein Teil des freigegebenen Produktpfads vor `1.0.0`.
 - **Zukunft:** Über eine spätere Migration ist keine Entscheidung getroffen.

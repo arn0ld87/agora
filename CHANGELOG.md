@@ -5,6 +5,21 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (/home auf kanonisches Dashboard umleiten — 2026-07-27, Issue #915)
+
+- `/home` leitet per ADR-0010 auf `/dashboard` um (benannter Redirect, kein
+  Alias). Die klassische Editorial-View `Home.vue` bleibt bis zum
+  Entfernungsrelease `1.0.0` physisch erhalten. Der Redirect-Test ersetzt die
+  bisherige Routen-Resolution für `/home`; die Golden-Gate-Ausnahme für `/home`
+  entfällt, da die Route nicht mehr produktiv geroutet wird.
+- Der Dashboard-Start (`HeroNewRun.vue`) portiert die drei Fähigkeiten, die
+  Home.vue bisher exklusiv besaß, und stellt damit die vom ADR-0010 geforderte
+  Parität des Upload-Start-Flows her: ein Service-Readiness-Gate blockt den
+  Start, wenn Neo4j (oder Ollama bei Ollama-Default-Provider) nicht erreichbar
+  ist; die Backend-Default-Sprache aus `/api/simulation/available-models`
+  überschreibt die hardcodierte `de`-Vorgabe bei frischem Storage; neue Files
+  werden an bestehende angehängt statt zu ersetzen.
+
 ### Fixed (Kritische Accessibility-Mängel in Filter-, Graph- und Feed-Oberflächen — 2026-07-27, Issue #838)
 
 - **Filter- und Auswahlfelder ohne Namen:** Die vier Filter-Selects der Lauf-Historie
