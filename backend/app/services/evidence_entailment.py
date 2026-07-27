@@ -525,9 +525,20 @@ def classify_evidence(
         try:
             raw_verdict = str(judge(claim, evidence_text)).strip().upper()
             if raw_verdict in EntailmentVerdict.__members__:
-                verdict = EntailmentVerdict[raw_verdict]
+                judge_verdict = EntailmentVerdict[raw_verdict]
+                # ADR-0002: Der LLM-Judge darf ein regelbasiertes SUPPORTED
+                # nur abschwächen, nie erzeugen. Im qualitativen Pfad (Regel 3)
+                # gibt es kein regelbasiertes SUPPORTED — also wäre ein
+                # Judge-SUPPORTED ein ungedeckter Claim, der durch das Tor
+                # geschlüpft wäre. Downgraden auf RELATED_ONLY.
+                if judge_verdict is EntailmentVerdict.SUPPORTED:
+                    return EntailmentResult(
+                        EntailmentVerdict.RELATED_ONLY,
+                        "Judge-Bestätigung darf SUPPORTED nicht erzeugen (ADR-0002)",
+                        checks=checks + ["judge_downgraded"],
+                    )
                 return EntailmentResult(
-                    verdict, "strukturierter Judge", checks=checks + ["judge"]
+                    judge_verdict, "strukturierter Judge", checks=checks + ["judge"]
                 )
         except Exception:  # noqa: BLE001 — Judge ist optional; Regelpfad bleibt gültig
             checks.append("judge_failed")

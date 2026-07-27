@@ -685,3 +685,128 @@ def test_10b_unspecific_question_defaults_to_full():
     assert detect_report_intent("Erstelle eine umfassende Analyse des Vorhabens.") is (
         ReportIntent.FULL
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 11 — LLM-Judge: ADR-0002-Anker und Builder (P2.8)
+# ---------------------------------------------------------------------------
+
+
+def _qualitative_claim_and_evidence():
+    """Claim/Evidence-Paar, das im Regelpfad RELATED_ONLY liefert.
+
+    Ohne Zahl- oder Mengen-Claim fällt es in den qualitativen Pfad
+    (Regel 3 in classify_evidence). Nur hier greift der Judge.
+    """
+    claim = "Die Eltern sind besorgt wegen des Datenschutzes."
+    evidence = {
+        "snippet": (
+            "Eltern äußern in der Befragung Bedenken gegen die Datenverarbeitung "
+            "der neuen Plattform."
+        ),
+        "source_kind": "seed_corpus",
+    }
+    return claim, evidence
+
+
+def test_11a_judge_supported_is_downgraded_to_related_only():
+    """ADR-0002: Der LLM-Judge darf SUPPORTED nie erzeugen.
+
+    Im qualitativen Pfad gibt es kein regelbasiertes SUPPORTED. Ein
+    Judge-SUPPORTED wäre also ein ungedeckter Claim, der durch das Tor
+    geschlüpft wäre. Der Klassifikator muss es auf RELATED_ONLY abschwächen.
+    """
+    claim, evidence = _qualitative_claim_and_evidence()
+
+    def judge(_claim, _evidence):
+        return "SUPPORTED"
+
+    result = classify_evidence(claim, evidence, judge=judge)
+    assert result.verdict is EntailmentVerdict.RELATED_ONLY
+    assert "judge_downgraded" in result.checks
+
+
+def test_11b_judge_contradicted_is_passed_through():
+    """Judge-CONTRADICTED wird durchgereicht — Abschwächung ist erlaubt."""
+    claim, evidence = _qualitative_claim_and_evidence()
+
+    def judge(_claim, _evidence):
+        return "CONTRADICTED"
+
+    result = classify_evidence(claim, evidence, judge=judge)
+    assert result.verdict is EntailmentVerdict.CONTRADICTED
+    assert "judge" in result.checks
+
+
+def test_11c_judge_failure_falls_back_to_rule_path():
+    """Judge-Exception → judge_failed-Check, Regelpfad bleibt gültig."""
+    claim, evidence = _qualitative_claim_and_evidence()
+
+    def judge(_claim, _evidence):
+        raise RuntimeError("LLM nicht erreichbar")
+
+    result = classify_evidence(claim, evidence, judge=judge)
+    assert "judge_failed" in result.checks
+    # Regelpfad liefert RELATED_ONLY oder SUPPORTED für hohe Overlap — niemals
+    # einen Judge-Verdict.
+    assert result.verdict in {EntailmentVerdict.RELATED_ONLY, EntailmentVerdict.SUPPORTED}
+
+
+def test_11d_judge_invalid_verdict_is_ignored():
+    """Ein Judge-Output außerhalb der Enum wird still ignoriert (Regelpfad)."""
+    claim, evidence = _qualitative_claim_and_evidence()
+
+    def judge(_claim, _evidence):
+        return "MAYBE"
+
+    result = classify_evidence(claim, evidence, judge=judge)
+    # Kein judge-Check, weil der Verdict nicht in der Enum war.
+    assert "judge" not in result.checks
+    assert "judge_downgraded" not in result.checks
+
+
+def test_11e_build_llm_judge_uses_chat_json_with_verdict_schema():
+    """build_llm_judge liefert ein Callable, das chat_json mit dem
+    EntailmentJudgeVerdict-Schema aufruft und den verdict-Namen zurückgibt."""
+    from app.services.llm_entailment_judge import (
+        EntailmentJudgeVerdict,
+        build_llm_judge,
+    )
+
+    class _StubClient:
+        def __init__(self):
+            self.last_schema = None
+            self.last_messages = None
+            self.last_context = None
+
+        def chat_json(self, *, messages, schema, schema_name, context, temperature, max_tokens):
+            self.last_schema = schema
+            self.last_messages = messages
+            self.last_context = context
+            # Pydantic-Schema → chat_json liefert validiertes Dict.
+            return EntailmentJudgeVerdict(verdict=EntailmentVerdict.RELATED_ONLY, reason="test").model_dump()
+
+    stub = _StubClient()
+    judge = build_llm_judge(stub)  # type: ignore[arg-type]
+
+    verdict_name = judge("Ein Claim.", "Eine Evidence.")
+    assert verdict_name == "RELATED_ONLY"
+    assert stub.last_schema is EntailmentJudgeVerdict
+    assert stub.last_context == "report"
+    # System-Prompt erwähnt die Verdict-Typen.
+    assert stub.last_messages[0]["role"] == "system"
+    assert "SUPPORTED" in stub.last_messages[0]["content"]
+
+
+def test_11f_build_llm_judge_propagates_chat_json_errors():
+    """chat_json-Fehler propagieren — classify_evidence fängt sie als judge_failed."""
+    from app.services.llm_entailment_judge import build_llm_judge
+
+    class _FailingClient:
+        def chat_json(self, **_kwargs):
+            raise RuntimeError("provider down")
+
+    judge = build_llm_judge(_FailingClient())  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="provider down"):
+        judge("Claim", "Evidence")
