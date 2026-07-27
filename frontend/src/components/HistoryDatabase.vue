@@ -280,19 +280,28 @@ onMounted(loadRuns)
     </div>
 
     <div class="filters">
-      <input v-model="filters.search" class="search" type="search" placeholder="Search run, project, branch" />
-      <select v-model="filters.project">
+      <input
+        v-model="filters.search"
+        class="search"
+        type="search"
+        aria-label="Search runs"
+        placeholder="Search run, project, branch"
+      />
+      <!-- aria-label statt <label>: die Filterleiste ist bewusst kompakt ohne
+           sichtbare Beschriftungen. Ohne accessible name meldet axe-core
+           select-name als critical (Issue #838). -->
+      <select v-model="filters.project" aria-label="Filter by project">
         <option value="">All projects</option>
         <option v-for="projectId in projects" :key="projectId" :value="projectId">{{ projectId }}</option>
       </select>
-      <select v-model="filters.runType">
+      <select v-model="filters.runType" aria-label="Filter by run type">
         <option value="">All types</option>
         <option value="graph_build">graph_build</option>
         <option value="simulation_prepare">simulation_prepare</option>
         <option value="simulation_run">simulation_run</option>
         <option value="report_generate">report_generate</option>
       </select>
-      <select v-model="filters.status">
+      <select v-model="filters.status" aria-label="Filter by status">
         <option value="">All status</option>
         <option value="pending">pending</option>
         <option value="processing">processing</option>
@@ -301,7 +310,7 @@ onMounted(loadRuns)
         <option value="failed">failed</option>
         <option value="stopped">stopped</option>
       </select>
-      <select v-model="filters.branch">
+      <select v-model="filters.branch" aria-label="Filter by branch">
         <option value="">All branches</option>
         <option v-for="branch in branches" :key="branch" :value="branch">{{ branch }}</option>
       </select>

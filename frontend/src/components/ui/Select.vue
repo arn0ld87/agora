@@ -12,8 +12,13 @@ defineEmits(['update:modelValue'])
   <div class="field">
     <label>{{ label }}<span v-if="required" class="req">*</span></label>
     <span class="select-wrap">
+      <!-- Das sichtbare <label> ist nicht per for/id mit dem <select>
+           verknuepft (es liegt ausserhalb von .select-wrap), der Select hatte
+           dadurch keinen accessible name — axe-core select-name, critical
+           (Issue #838). aria-label spiegelt exakt den sichtbaren Labeltext. -->
       <select
         class="select"
+        :aria-label="label"
         :value="modelValue"
         @change="$emit('update:modelValue', $event.target.value)"
       >

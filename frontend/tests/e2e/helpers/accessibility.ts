@@ -218,7 +218,16 @@ export async function checkKeyboardNavigation(page: Page, tabCount: number = 10)
     '[tabindex]:not([tabindex="-1"])',
   ].join(', ');
 
-  const focusableCount = await page.locator(focusableSelectors).count();
+  // `:visible` ist zwingend: count() zählt auch Treffer, die im DOM liegen,
+  // aber nicht sichtbar und damit nicht tabbbar sind (z. B. die Links eines
+  // eingeklappten Navigations-Untermenüs). Ohne den Filter wird focusableCount
+  // überzählt, die Schleife tabbt über den letzten echten Tab-Stop hinaus, der
+  // Fokus verlässt das Dokument und die hasFocus-Assertion schlägt fehl — ein
+  // falsch-negatives Ergebnis auf jeder Seite mit wenigen sichtbaren
+  // Tab-Stops. Gefunden auf /runs/:id (Issue #838); der Fehler lag latent
+  // bereits vorher vor, blieb aber unentdeckt, weil alle zuvor getesteten
+  // Routen deutlich mehr als tabCount sichtbare Tab-Stops haben.
+  const focusableCount = await page.locator(focusableSelectors).locator(':visible').count();
   expect(focusableCount).toBeGreaterThan(0);
 
   // Tab durch die ersten N Elemente
