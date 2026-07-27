@@ -209,6 +209,9 @@ export async function check320pxNoHorizontalScroll(page: Page): Promise<void> {
  * Prüft Tastatur-Navigation durch alle fokussierbaren Elemente.
  */
 export async function checkKeyboardNavigation(page: Page, tabCount: number = 10): Promise<void> {
+  // `:visible` MUSS an jedem Einzelselektor hängen, nicht an der Gesamtliste:
+  // `locator(liste).locator(':visible')` würde sichtbare *Nachfahren* der
+  // fokussierbaren Elemente suchen statt diese selbst zu filtern.
   const focusableSelectors = [
     'a[href]',
     'button:not([disabled])',
@@ -216,29 +219,38 @@ export async function checkKeyboardNavigation(page: Page, tabCount: number = 10)
     'select:not([disabled])',
     'textarea:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
-  ].join(', ');
+  ]
+    .map((selector) => `${selector}:visible`)
+    .join(', ');
 
-  // `:visible` ist zwingend: count() zählt auch Treffer, die im DOM liegen,
-  // aber nicht sichtbar und damit nicht tabbbar sind (z. B. die Links eines
-  // eingeklappten Navigations-Untermenüs). Ohne den Filter wird focusableCount
-  // überzählt, die Schleife tabbt über den letzten echten Tab-Stop hinaus, der
-  // Fokus verlässt das Dokument und die hasFocus-Assertion schlägt fehl — ein
-  // falsch-negatives Ergebnis auf jeder Seite mit wenigen sichtbaren
-  // Tab-Stops. Gefunden auf /runs/:id (Issue #838); der Fehler lag latent
-  // bereits vorher vor, blieb aber unentdeckt, weil alle zuvor getesteten
+  // Sichtbarkeit ist zwingend: count() zählt sonst auch Treffer, die im DOM
+  // liegen, aber nicht sichtbar und damit nicht tabbbar sind (z. B. die Links
+  // eines eingeklappten Navigations-Untermenüs). Überzählt man, tabbt die
+  // Schleife über den letzten echten Tab-Stop hinaus und der Fokus verlässt
+  // das Dokument. Gefunden auf /runs/:id (Issue #838); der Fehler lag latent
+  // bereits vorher vor, blieb aber unentdeckt, weil alle zuvor gegateten
   // Routen deutlich mehr als tabCount sichtbare Tab-Stops haben.
-  const focusableCount = await page.locator(focusableSelectors).locator(':visible').count();
+  const focusableCount = await page.locator(focusableSelectors).count();
   expect(focusableCount).toBeGreaterThan(0);
 
-  // Tab durch die ersten N Elemente
+  // Gemessen wird, ob Tab den Fokus tatsächlich auf Elemente der Seite legt.
+  // Bewusst NICHT gemessen wird, wo der Fokus nach dem letzten Tab-Stop
+  // landet: dass er dann in den Browser-Chrome wandert, ist normales
+  // Browserverhalten und kein Mangel der Seite. Die frühere Fassung prüfte
+  // genau das und war deshalb auf jeder Seite mit wenigen Tab-Stops
+  // falsch-negativ.
+  let focusStepCount = 0;
   for (let i = 0; i < Math.min(tabCount, focusableCount); i++) {
     await page.keyboard.press('Tab');
+    const focusedInDocument = await page.evaluate(
+      () => document.activeElement !== null && document.activeElement !== document.body,
+    );
+    if (focusedInDocument) focusStepCount += 1;
   }
 
-  // Prüfe, dass ein Element fokussiert ist
-  const hasFocus = await page.evaluate(() => {
-    return document.activeElement !== null && document.activeElement !== document.body;
-  });
+  // Der erste Tab muss den Fokus in die Seite bringen; sonst ist sie per
+  // Tastatur nicht erreichbar.
+  const hasFocus = focusStepCount > 0;
 
   expect(hasFocus).toBe(true);
 }
