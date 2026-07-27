@@ -133,14 +133,13 @@ Aktive Konfiguration lebt in Neo4j (`EmbeddingConfiguration`-Knoten, eindeutig p
 **IMPORTANT:** Strukturierte LLM-Calls mit JSON-Output MÜSSEN über [`backend/app/llm/client.py::LLMClient.chat_json`](backend/app/llm/client.py) mit einem Pydantic-Schema laufen. Der rohe `OpenAI`-Client (`client.chat.completions.create`) darf nicht direkt für strukturierte JSON-Outputs verwendet werden — er umgeht Provider-Detection (MiniMax `thinking.type: disabled`), den strict-json_schema-Modus und die zentrale JSON-Repair-Logik. Legacy-Flags wie `LLM_DISABLE_JSON_MODE` nicht neu verwenden (werden vorübergehend noch aus Kompatibilitätsgründen unterstützt); das Pydantic-Schema macht sie obsolet.
 
 ## Token Efficiency
-
 - Never re-read files you just wrote or edited. You know the contents.
-- Never re-run commands unless a frischer Verifikationsnachweis erforderlich ist oder das Ergebnis unsicher war.
-- Don't echo large blocks of code or file contents unless asked.
-- Batch related edits into single operations.
-- Skip confirmations like "I'll continue...".
-- If a task needs one tool call, don't use three.
-- Do not summarize implementation details beyond Commit, Diff, Tests, Gate, Review and Risiken.
+- Never re-run commands to "verify" unless the outcome was uncertain.
+- Don't echo back large blocks of code or file contents unless asked.
+- Batch related edits into single operations. Don't make 5 edits when 1 handles it.
+- Skip confirmations like "I'll continue..." Just do it.
+- If a task needs 1 tool call, don't use 3. Plan before acting.
+- Do not summarize what you just did unless the result is ambiguous or you need additional input.
 
 ## Agent Skills
 
