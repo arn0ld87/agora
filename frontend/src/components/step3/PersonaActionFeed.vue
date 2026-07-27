@@ -70,7 +70,11 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
       <span class="meta">{{ allActionsCount }}</span>
     </div>
     <div class="feed-grid" :data-density="feedDensity">
-      <FeedColumn :title="t('feed.twitter')" channel="twitter">
+      <FeedColumn
+        :title="t('feed.twitter')"
+        channel="twitter"
+        :has-items="twitterPosts.length > 0"
+      >
         <TransitionGroup name="slide-in" tag="div" class="post-list">
           <TwitterPost
             v-for="post in twitterPosts"
@@ -80,7 +84,11 @@ const emit = defineEmits(['set-density', 'toggle-tool-panel'])
         </TransitionGroup>
         <p v-if="!twitterPosts.length" class="meta">{{ t('step3.feed.empty') }}</p>
       </FeedColumn>
-      <FeedColumn :title="t('feed.reddit')" channel="reddit">
+      <FeedColumn
+        :title="t('feed.reddit')"
+        channel="reddit"
+        :has-items="redditPosts.length > 0"
+      >
         <TransitionGroup name="slide-in" tag="div" class="post-list">
           <RedditThread
             v-for="node in redditTree"

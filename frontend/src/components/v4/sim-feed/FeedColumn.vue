@@ -2,10 +2,21 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{
-  title: string
-  channel: 'reddit' | 'twitter'
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    channel: 'reddit' | 'twitter'
+    /**
+     * Ob die Spalte aktuell Beiträge enthält. Steuert die ARIA-Rolle:
+     * `role="feed"` verlangt Kinder mit `role="article"`. Eine leere Spalte
+     * hat keine — axe-core meldet dann `aria-required-children` als critical
+     * (Issue #838). Ein leerer Container ist auch semantisch kein Feed, daher
+     * fällt er auf `region` zurück und bleibt über aria-label benannt.
+     */
+    hasItems?: boolean
+  }>(),
+  { hasItems: false },
+)
 
 const { t } = useI18n()
 
@@ -44,7 +55,7 @@ onBeforeUnmount(() => {
   <section
     class="fc-root"
     :data-channel="channel"
-    role="feed"
+    :role="hasItems ? 'feed' : 'region'"
     :aria-label="title"
     aria-busy="false"
   >
