@@ -523,6 +523,78 @@ def test_7_section_metadata_reaches_report_v3():
     assert [f.id for f in merged.friction_points] == ["fp_01"]
 
 
+def test_7b_persona_table_schema_to_report_v3_chain():
+    """DoD-Punkt 7 Teilbeleg: Personas/Segmente in ReportV3 (Handover P1.3).
+
+    Der echte E2E-Beweis braucht einen Full-Report-Lauf gegen eine lebende
+    Simulation (report_e2e_full01 starb am gap_id-Bug vor Section 3).
+    Dieser Test pinnt die Kette, die im Lauf durchlaufen wird:
+
+      Section-Titel 'Persona-Tabelle'
+        → _section_schema_for wählt PersonaTable-DTO
+        → LLM liefert structured_metadata.personas
+        → merge_section_metadata sammelt sie in MergedMetadata.personas
+        → as_report_v3_kwargs() liefert sie für ReportV3
+
+    Die parametrisierten Schema-Tests in test_report_agent_strict_schema
+    decken Stufe 1 ab; hier wird Stufe 2+3 (Merge → ReportV3-Kwargs) für
+    Personas UND Segmente gepinnt.
+    """
+    from app.services.report_agent.metadata_merge import merge_section_metadata
+    from app.services.report_agent.schemas import _section_schema_for, _make_table_metadata
+    from app.contracts.report_v3 import Persona, Segment
+
+    # Stufe 1: Section-Titel → korrektes DTO
+    assert _section_schema_for("Persona-Tabelle") is _make_table_metadata(Persona)
+    assert _section_schema_for("Segment-Tabelle") is _make_table_metadata(Segment)
+
+    # Stufe 2+3: structured_metadata mit personas/segments → MergedMetadata → ReportV3-Kwargs
+    sections = [
+        {
+            "section_index": 3,
+            "section_title": "Persona-Tabelle",
+            "structured_metadata": {
+                "personas": [
+                    {
+                        "id": "persona_05",
+                        "voice_register": "formal-de",
+                        "alter_range": "45–60",
+                        "beruf": "Schulleitung",
+                        "region": "Sachsen-Anhalt",
+                    },
+                    {
+                        "id": "persona_07",
+                        "voice_register": "neutral-de",
+                        "alter_range": "30–45",
+                        "beruf": "Lehrkraft",
+                        "region": "Bayern",
+                    },
+                ],
+            },
+        },
+        {
+            "section_index": 2,
+            "section_title": "Segment-Tabelle",
+            "structured_metadata": {
+                "segments": [
+                    {"id": "seg_02", "name": "Schulleitungen", "beschreibung": "Administrative Ebene"},
+                ],
+            },
+        },
+    ]
+    merged = merge_section_metadata(sections)
+    assert [p.id for p in merged.personas] == ["persona_05", "persona_07"]
+    assert [s.id for s in merged.segments] == ["seg_02"]
+
+    # Stufe 3: ReportV3-Kwargs enthalten nur befüllte Slots
+    kwargs = merged.as_report_v3_kwargs()
+    assert "personas" in kwargs
+    assert "segments" in kwargs
+    assert "friction_points" not in kwargs  # leer → nicht befüllt
+    assert all(isinstance(p, Persona) for p in kwargs["personas"])
+    assert all(isinstance(s, Segment) for s in kwargs["segments"])
+
+
 # ---------------------------------------------------------------------------
 # Test 8 — ReportV3 → Markdown/HTML bleibt semantisch identisch
 # ---------------------------------------------------------------------------
