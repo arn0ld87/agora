@@ -22,6 +22,7 @@ import { setRunModelOverride, clearRunModelOverride } from '@/store/runModelOver
 import type { LlmProfile } from '../../../contracts/llmProfileContract'
 import type { AiModelRef } from '@/contracts/aiModelRef'
 import { getSystemStatus } from '../../../api/status'
+import { getAvailableModels } from '../../../api/simulation'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -34,6 +35,16 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const errorMsg = ref('')
 
 const llmProfiles = ref<LlmProfile[]>([])
+
+// ---- Service-Readiness (Parität zu Home.vue, Portierung aus #915) ----
+// Liefert die Werte, die Home.vue aus /api/simulation/available-models zieht,
+// damit der Dashboard-Start denselben Service-Readiness-Gate besitzt wie der
+// klassische /home-Flow: Neo4j muss erreichbar sein; Ollama nur, wenn es der
+// Default-Provider ist — außer der User hat explizit ein anderes Modell
+// gewählt (hasExplicitPick), dann übernimmt der gewählte Provider.
+const defaultProvider = ref<string>('unknown')
+const ollamaReachable = ref<boolean>(false)
+const neo4jReachable = ref<boolean>(false)
 
 function readLocal(key: string): string | null {
   try {
@@ -133,8 +144,23 @@ const profileOptions = computed(() => {
   }))
 })
 
+const serverDefaultRequiresOllama = computed(() => defaultProvider.value === 'ollama')
+
+// Service-Readiness-Gate (Parität zu Home.vue, #915): blockt den Start, wenn
+// Neo4j nicht erreichbar ist oder der Default-Provider Ollama ist und Ollama
+// nicht erreichbar ist — außer der User hat explizit ein anderes Modell
+// gewählt (hasExplicitPick), dann übernimmt der gewählte Provider.
+const servicesReady = computed(
+  () =>
+    neo4jReachable.value &&
+    (!serverDefaultRequiresOllama.value || ollamaReachable.value || hasExplicitPick.value),
+)
+
 const canSubmit = computed(
-  () => files.value.length > 0 && simulationRequirement.value.trim() !== '',
+  () =>
+    files.value.length > 0 &&
+    simulationRequirement.value.trim() !== '' &&
+    servicesReady.value,
 )
 
 function filterAllowed(list: FileList | File[]): File[] {
@@ -157,7 +183,10 @@ function onPickKey(e: KeyboardEvent) {
 
 function applyAcceptedFiles(rawFiles: FileList): void {
   const accepted = filterAllowed(rawFiles)
-  files.value = accepted
+  // Append-Verhalten (Parität zu Home.vue, #915): neue gültige Files werden an
+  // bestehende angehängt, nicht ersetzt — mehrfaches Drop/Picker-Interaktion
+  // sammelt statt zu überschreiben.
+  files.value = [...files.value, ...accepted]
   if (accepted.length === 0 && rawFiles.length > 0) {
     errorMsg.value = t('errors.fileTypeNotAllowed')
   } else {
@@ -282,6 +311,27 @@ onMounted(() => {
       }
     })
     .catch(() => { /* Fail-safe: allowSmallSim bleibt false → 30er-Floor aktiv */ })
+  // Service-Readiness + Backend-Default-Language (Parität zu Home.vue, #915).
+  // Liefert default_provider/ollama_reachable/neo4j_reachable/default_language
+  // aus /api/simulation/available-models. Bei Fetch-Fehler bleiben die Refs
+  // pessimistisch auf false → servicesReady blockt den Start (wie Home.vue).
+  getAvailableModels()
+    .then(res => {
+      const data = (res?.data ?? {}) as {
+        default_provider?: string
+        ollama_reachable?: boolean
+        neo4j_reachable?: boolean
+        default_language?: string
+      }
+      if (!res?.success) return
+      defaultProvider.value = data.default_provider || 'unknown'
+      ollamaReachable.value = !!data.ollama_reachable
+      neo4jReachable.value = !!data.neo4j_reachable
+      if (data.default_language && !readLocal(STORAGE_LANG)) {
+        language.value = data.default_language
+      }
+    })
+    .catch(() => { /* Fail-safe: servicesReady bleibt false → Submit blockt */ })
 })
 </script>
 

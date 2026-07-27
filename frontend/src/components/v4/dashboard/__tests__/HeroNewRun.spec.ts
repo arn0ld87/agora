@@ -76,6 +76,7 @@ const iconPlusStub = { name: 'IconPlus', template: '<span />' }
 const {
   fetchLlmProfilesMock,
   getSystemStatusMock,
+  getAvailableModelsMock,
   setPendingUploadMock,
   routerPushMock,
   ensureLoadedMock,
@@ -86,6 +87,7 @@ const {
 } = vi.hoisted(() => ({
   fetchLlmProfilesMock: vi.fn(),
   getSystemStatusMock: vi.fn(),
+  getAvailableModelsMock: vi.fn(),
   setPendingUploadMock: vi.fn(),
   routerPushMock: vi.fn(),
   ensureLoadedMock: vi.fn(),
@@ -113,6 +115,13 @@ vi.mock('@/store/runModelOverride', () => ({
 
 vi.mock('@/api/status', () => ({
   getSystemStatus: getSystemStatusMock,
+}))
+
+// Service-Readiness (Parität zu Home.vue, #915): Mock liefert neo4j_reachable=true
+// und default_provider='openai' (kein Ollama-Zwang) → servicesReady=true →
+// canSubmit nicht blockiert.
+vi.mock('@/api/simulation', () => ({
+  getAvailableModels: getAvailableModelsMock,
 }))
 
 vi.mock('vue-router', () => ({
@@ -177,6 +186,9 @@ vi.mock('@/composables/useEffectiveModelSelection', () => {
 // Initial-Defaults (werden in mountHero() vor jedem Test neu gesetzt).
 fetchLlmProfilesMock.mockResolvedValue([])
 getSystemStatusMock.mockResolvedValue({ data: { backend: { allow_small_sim: false } } })
+// Service-Readiness (Parität zu Home.vue, #915): Default liefert neo4j_reachable=true
+// und default_provider='openai' → servicesReady=true → canSubmit nicht blockiert.
+getAvailableModelsMock.mockResolvedValue({ success: true, data: { default_provider: 'openai', ollama_reachable: true, neo4j_reachable: true, default_language: 'de' } })
 
 // localStorage Mock pro Test kontrollieren
 const localStorageMock = (() => {
