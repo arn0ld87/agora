@@ -135,8 +135,10 @@ Quelle: `backend/app/api/auth.py`, `useApiAuth.ts`, `stream.ts`.
    `download:simulation_config:`, `download:simulation_script:`, `logs:stream`, `llm-stream`.
 3. TTL: Default 60s, Max 300s. Rate-Limit (429 + `Retry-After`).
 4. Response: `{ticket: "v1.<exp>.<scope>.<sig>", exp: <unix>}` — HMAC-signiert mit `SECRET_KEY`.
-5. Client hängt `?ticket=<signed>` an die URL an. Backend prüft Signatur, Scope, Single-Use (Redis,
-   Multi-Worker-safe, In-Memory-Fallback).
+5. Client hängt `?ticket=<signed>` an die URL an. Backend prüft Signatur und Scope. Das Ticket-Verhalten unterscheidet sich nach Scope:
+   - **Download-Endpunkte** (z. B. `download:report:`, `download:simulation_config:`, `download:simulation_script:`) sind Einweg-Tickets (`single_use=True`). Sie werden beim ersten Aufruf konsumiert und sind danach ungültig (Redis-gesichert, Multi-Worker-safe mit In-Memory-Fallback).
+   - **SSE- & Stream-Endpunkte** (z. B. `sse:`, `settings-stream`, `logs:stream`, `llm-stream`) setzen im Backend `single_use=False`. Sie sind TTL-begrenzt, aber innerhalb der TTL mehrfach verwendbar, damit automatische `EventSource`-Reconnects des Clients im Fehlerfall keinen fälschlichen 401-Fehler auslösen. Der Replay-Schutz erfolgt hier primär über die kurze Gültigkeit (TTL).
+     - **Reconnect-Grenzen:** Die Wiederverwendung gilt ausschließlich für Reconnects *innerhalb* der TTL (Default 60s). Sobald das Ticket abgelaufen ist, hält `EventSource` weiter an der ursprünglichen URL mit dem abgelaufenen Ticket fest; das Backend antwortet dann mit `401` (Signaturprüfung an `exp` schlägt fehl). Der React-Data-Layer muss in diesem Fall ein neues Ticket anfordern und die Verbindung mit der aktualisierten URL neu aufbauen — nicht der `EventSource` selbst.
 6. Client-Cache pro Scope, 5s-Vorlauf vor `exp`, In-Flight-Dedup.
 7. 401-Retry: einmaliger Cache-Invalidate + Refetch, zweites 401 propagiert.
 8. `?token=<bearer>` ist deprecated aber noch aktiv (Warning-Log) — im Rewrite nicht neu verwenden.
@@ -190,9 +192,10 @@ nginx hat einen eigenen `location /api/simulation/`-Block vor `location /api/` m
 | `INVALID_ID` | ungültiges `simulation_id`-Format | `simulation_stream.py` |
 | `timeout` / `service_unavailable` (Client-Codes) | Timeout bzw. Network Error ohne Backend-Envelope | `api/index.ts` |
 
-**Retry-Logik** (`requestWithRetry`): nur `timeout`, `service_unavailable`, `5xx` sind retry-fähig
-(3 Versuche, exponentielles Backoff `1000 * 2^i`). 4xx bubbeln sofort (Doppel-Create-Vermeidung bei
-non-idempotenten POSTs) — 1:1 in den React-Data-Layer übernehmen (z. B. React-Query `retry`-Callback).
+**Retry-Logik** (`requestWithRetry`): Nur transporthinweisende oder serverseitige Fehler (`timeout`, `service_unavailable`, `5xx`) sind prinzipiell retry-fähig (3 Versuche, exponentielles Backoff `1000 * 2^i`). Client-Fehler (`4xx`) bubbeln generell sofort hoch.
+- **Wichtig für die Datensicherheit:** Automatische Retries bei Timeouts oder `5xx` dürfen **nur für idempotente Methoden** (`GET`, `PUT`, `DELETE` sowie explizit idempotente `POST`s wie Onboarding-Dismiss/Step) durchgeführt werden.
+- Bei **non-idempotenten `POST`-Anfragen** (z. B. Generierung von Ontologien/Graphen, Persona-Erstellung, Report-Generierung) darf der Client bei einem Timeout/Network Error/5xx **keinen automatischen Retry** initiieren. Andernfalls drohen doppelte Datenbank-Einträge oder unnötige LLM-Kosten, falls das Backend die Anfrage bereits verarbeitet hatte, die Antwort den Client aber nicht mehr erreichte. Fehler bei non-idempotenten POSTs müssen stattdessen sofort dem Benutzer gemeldet werden.
+- Diese idempotenz-bewusste Retry-Logik ist 1:1 in den React-Data-Layer zu übernehmen (z. B. über den `retry`-Callback in React-Query).
 
 **Loading-States:** kein zentrales State-Machine-Contract gefunden. Graph-Build/Ontologie-Generierung
 nutzt Task-Polling (`GET /graph/task/:id`), Runs nutzen `RunStatus`-Enum + SSE-Push, Report nutzt
