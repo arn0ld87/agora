@@ -93,9 +93,24 @@ def test_hedge_snapshot_anchor_vollstaendig():
 
 
 def test_evidence_source_kind_enum_werte():
-    """Anker 3: EvidenceSourceKind enthält genau die vier ADR-0002-Provenance-Stufen."""
+    """Anker 3: EvidenceSourceKind enthält genau diese Provenance-Stufen.
+
+    Report-Trust-Slice: additiv um ``agent_action`` und ``web_source``
+    erweitert. Die vier ursprünglichen ADR-0002-Stufen bleiben unverändert;
+    für die Confidence-Anker zählt weiterhin nur ``agent_quote`` als
+    Stakeholder-Stimme und nur ``seed_corpus`` als Dokumentfakt. Die
+    Erweiterung verschärft die Trennung von Seed, Simulation und Recherche,
+    statt das Gating zu schwächen.
+    """
     werte = {e.value for e in EvidenceSourceKind}
-    erwartet = {"seed_corpus", "agent_quote", "graph_relation", "inferred"}
+    erwartet = {
+        "seed_corpus",
+        "agent_quote",
+        "agent_action",
+        "graph_relation",
+        "web_source",
+        "inferred",
+    }
     assert werte == erwartet, (
         f"EvidenceSourceKind-Enum hat sich verändert — ADR-0002 Anker 3 verletzt. "
         f"Erwartet: {sorted(erwartet)}, Gefunden: {sorted(werte)}"

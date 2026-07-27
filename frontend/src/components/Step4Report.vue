@@ -74,6 +74,11 @@ const emit = defineEmits(['add-log', 'update-status', 'stop'])
 const phase = ref(0)
 const reportPending = ref(false)
 const statusMsg = ref('')
+// Tatsaechlicher Backend-Status: 'pending' | 'planning' | 'generating' |
+// 'incomplete' | 'completed' | 'failed'. Wird im Status-Poll gesetzt und
+// steuert Badge-Text/Variant (P2.6: vorher fiel 'incomplete' durch den
+// else-Zweig und blieb als 'running' sichtbar).
+const reportStatus = ref<string>('')
 const reportOutline = ref<ReportOutline | null>(null)
 const generatedSections = ref<Record<string, unknown>>({})
 const currentSectionIndex = ref<number | null>(null)
@@ -269,10 +274,35 @@ async function pollStatus() {
       if (st.sections) generatedSections.value = st.sections
       currentSectionIndex.value = st.current_section_index ?? currentSectionIndex.value
       if (st.simulation_id && !resolvedSimulationId.value) resolvedSimulationId.value = st.simulation_id
+      // P2.6: Backend-Status separat merken — er treibt das Badge und die
+      // 'incomplete'-Transition. 'completed' und 'incomplete' sind beide
+      // Endzustände mit unterschiedlicher User-Botschaft.
+      reportStatus.value = st.status || ''
       if (st.status === 'completed') {
         const resolvedId = (st.report_id || props.reportId) as string
         isComplete.value = true; phase.value = 2
         emit('update-status', 'completed')
+        try {
+          const full = (await getReport(resolvedId)) as ApiResult
+          if (full?.success) {
+            try {
+              const parsed = ReportSchema.parse(full.data)
+              fullReport.value = parsed
+              syncOutlineFromReport(parsed)
+            } catch (err) { recordSchemaError('report', err); fullReport.value = null }
+            await loadEvidence()
+          }
+        } catch { /* report not yet flushed */ }
+        stopPolling()
+      } else if (st.status === 'incomplete') {
+        // Backend liefert fehlgeschlagene Pflichtsections → INCOMPLETE.
+        // Rest des Reports ist nutzbar; der Nutzer sieht, was fehlt.
+        const resolvedId = (st.report_id || props.reportId) as string
+        // INCOMPLETE ist terminal: isComplete verhindert, dass onMounted nach
+        // einem Reload erneut in den Polling-Pfad springt.
+        isComplete.value = true; phase.value = 2
+        emit('update-status', 'incomplete')
+        addLog(t('step4.status.incomplete') || 'Report unvollständig — einige Abschnitte fehlen.')
         try {
           const full = (await getReport(resolvedId)) as ApiResult
           if (full?.success) {
@@ -299,6 +329,34 @@ function stopPolling() { statusPolling.stop(); agentLogPolling.stop(); consoleLo
 
 const reportMarkdown = computed((): string => fullReport.value?.markdown_content ?? '')
 const reportHtml = computed(() => renderMarkdown(reportMarkdown.value))
+
+// P2.6: Anzahl fehlgeschlagener Sections (generation_failed=true).
+// Backend-Hinweis: jede Section kann generation_failed=true tragen, auch
+// wenn der Gesamt-Report COMPLETED ist. Im INCOMPLETE-Fall zeigen wir
+// die Zahl im Badge, sonst zaehlen wir sie still.
+const failedSectionCount = computed((): number => {
+  let n = 0
+  for (const v of Object.values(generatedSections.value || {})) {
+    if (v && typeof v === 'object' && (v as { generation_failed?: boolean }).generation_failed) {
+      n++
+    }
+  }
+  return n
+})
+
+const reportBadgeLabel = computed((): string => {
+  if (phase.value !== 2) {
+    return phase.value === 1 ? t('common.running') : t('common.ready')
+  }
+  if (reportStatus.value === 'incomplete') return t('common.incomplete')
+  return t('common.completed')
+})
+
+const reportBadgeVariant = computed((): string => {
+  if (phase.value !== 2) return 'accent'
+  if (reportStatus.value === 'incomplete') return 'warning'
+  return 'solid'
+})
 const redTeamFindings = computed((): string[] => fullReport.value?.red_team_findings ?? [])
 
 const sectionHtml = computed((): Record<string, string> => {
@@ -429,8 +487,8 @@ onUnmounted(stopPolling)
         <header class="card-head">
           <Kicker num="01">{{ t('step4.title') }}</Kicker>
           <div class="card-head-actions">
-            <Badge :variant="phase === 2 ? 'solid' : 'accent'" :dot="phase === 1">
-              {{ phase === 2 ? t('common.completed') : phase === 1 ? t('common.running') : t('common.ready') }}
+            <Badge :variant="reportBadgeVariant" :dot="phase === 1">
+              {{ reportBadgeLabel }}
             </Badge>
             <span v-if="!props.cancelEndpointAvailable" :title="t('step4.reportConfirm.stopDisabledTip')" class="stop-btn-wrap">
               <Button variant="ghost" disabled class="stop-btn">{{ t('step4.reportConfirm.stopButton') }}</Button>
@@ -440,6 +498,12 @@ onUnmounted(stopPolling)
         </header>
         <p class="card-desc">{{ t('step4.sub') }}</p>
         <p v-if="statusMsg" class="meta">{{ statusMsg }}</p>
+        <!-- P2.6: Anzahl fehlgeschlagener Sections sichtbar machen. Auch bei
+             status=completed moeglich (z. B. wenn nur optionale Sections
+             fehlschlugen) — dann Hinweis statt harte Warnung. -->
+        <p v-if="failedSectionCount > 0" class="meta meta--warn" data-testid="report-failed-sections">
+          {{ t('step4.status.sectionFailed') }}: {{ failedSectionCount }}
+        </p>
 
         <div v-if="reportPending && phase === 0" class="report-confirm-block" data-testid="report-confirm-block">
           <p class="report-confirm-title">{{ t('step4.reportConfirm.title') }}</p>
@@ -530,6 +594,7 @@ onUnmounted(stopPolling)
 .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3); }
 .card-desc { color: var(--fg-body); margin: 0; }
 .meta { color: var(--fg-muted); font-family: var(--ff-mono); font-size: 11px; }
+.meta--warn { color: var(--status-warning, #b87a00); font-weight: 600; }
 .actions { display: flex; gap: var(--s-3); justify-content: flex-end; }
 .schema-error {
   background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);

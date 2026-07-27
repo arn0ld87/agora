@@ -41,6 +41,7 @@
     "ready": "Bereit",
     "running": "Läuft",
     "completed": "Abgeschlossen",
+    "incomplete": "Unvollständig",
     "failed": "Fehlgeschlagen",
     "error": "Fehler",
     "yes": "Ja",
@@ -581,6 +582,10 @@
       "startButton": "Report starten",
       "stopButton": "Abbrechen",
       "stopDisabledTip": "Abbruch verfügbar nach Backend-Slice 6"
+    },
+    "status": {
+      "incomplete": "Report unvollständig — einige Abschnitte sind fehlgeschlagen.",
+      "sectionFailed": "Abschnitt fehlgeschlagen"
     },
     "next": "Weiter zum Gespräch →"
   },

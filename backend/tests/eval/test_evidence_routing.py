@@ -28,21 +28,29 @@ FIXTURE_MIXED = (
 # _finalize_section_claims: medium/high ohne Evidence → data_gaps, nicht claims
 # ---------------------------------------------------------------------------
 
-def test_medium_high_orphans_route_to_data_gaps() -> None:
-    """medium + high Claims ohne Evidence landen in data_gaps, low in hypotheses."""
+def test_orphan_claims_route_to_hypotheses_and_data_gaps() -> None:
+    """Claims ohne stützende Evidence werden Hypothesen — unabhängig vom Label.
+
+    Vorher landeten medium/high-Orphans nur in ``data_gaps``: die Behauptung
+    selbst verschwand aus dem Report, obwohl sie inhaltlich weiter im Raum
+    stand. Ein unbelegtes ``high`` ist aber keine Datenlücke, sondern eine
+    unbelegte Behauptung — sie gehört sichtbar als Hypothese markiert
+    (P0-5). Das Label allein darf nicht darüber entscheiden, ob eine
+    Aussage ungeprüft aus dem Report fällt.
+    """
     raw = json.loads(FIXTURE_MIXED.read_text(encoding="utf-8"))
 
     agent = ReportAgent.__new__(ReportAgent)
     claims, hypotheses, data_gaps = agent._finalize_section_claims(raw["claims"])
 
-    # claim_03 ist low + score 0.18 < 0.4 → hypothesis + data_gap
-    # claim_01 ist medium + score 0.55 → data_gap only
-    # claim_02 ist high + score 0.72 → data_gap only
     assert claims == [], f"Erwartet keine finalisierten Claims, erhalten: {claims}"
-    assert len(hypotheses) == 1, f"Erwartet 1 hypothesis (low-Claim), erhalten: {len(hypotheses)}"
-    assert hypotheses[0]["hypothesis_text"].startswith("Datenschutzbedenken")
+    # claim_01 (medium), claim_02 (high), claim_03 (low) — alle ohne Evidence.
+    assert len(hypotheses) == 3, (
+        f"Erwartet 3 Hypothesen (alle Orphans), erhalten: {len(hypotheses)}"
+    )
+    hypothesis_texts = [h["hypothesis_text"] for h in hypotheses]
+    assert any(text.startswith("Datenschutzbedenken") for text in hypothesis_texts)
 
-    # data_gaps: low-orphan + medium + high = 3
     assert len(data_gaps) == 3, f"Erwartet 3 data_gaps, erhalten: {len(data_gaps)}"
     gap_reasons = {gap["gap_reason"] for gap in data_gaps}
     assert gap_reasons == {"no_evidence_bound"}
@@ -66,7 +74,7 @@ def test_medium_high_orphan_section_validates() -> None:
 
     assert len(section.claims) == 0
     assert len(section.data_gaps) == 3
-    assert len(section.hypotheses) == 1
+    assert len(section.hypotheses) == 3
 
 
 # ---------------------------------------------------------------------------

@@ -121,8 +121,11 @@ const i18n = createI18n({
       'step4.next': 'Weiter',
       'step4.quote.openSource': 'Quelle öffnen',
       'common.completed': 'Fertig',
+      'common.incomplete': 'Unvollständig',
       'common.running': 'Laufend',
       'common.ready': 'Bereit',
+      'step4.status.incomplete': 'Report unvollständig — einige Abschnitte sind fehlgeschlagen.',
+      'step4.status.sectionFailed': 'Abschnitt fehlgeschlagen',
       'errors.reportFailed': 'Fehler',
       'reportMode.label': 'Report-Modus',
       'reportMode.strict.label': 'Strikt',
@@ -259,6 +262,85 @@ describe('Step4Report — strict-Zod-Parse (Sub-Slice 15)', () => {
     expect(wrapper.find('.schema-error').exists()).toBe(true)
     expect(wrapper.find('.schema-error').text()).toContain('evidence')
   })
+})
+
+// P2.6: INCOMPLETE-Status sichtbar im Frontend (Status-Badge + Section-Counter).
+describe('Step4Report — INCOMPLETE-Status und generation_failed (P2.6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMockSelection()
+  })
+
+  it('zählt fehlgeschlagene Sections (generation_failed=true) und blendet einen Hinweis ein', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'completed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        sections: {
+          1: { content: '## Abschnitt 1\n\nInhalt.', generation_failed: false },
+          2: { content: '## Abschnitt 2\n\nInhalt.', generation_failed: true },
+          3: { content: '## Abschnitt 3\n\nInhalt.', generation_failed: true },
+        },
+      },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE,
+    })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+
+    const failedNote = wrapper.find('[data-testid="report-failed-sections"]')
+    expect(failedNote.exists()).toBe(true)
+    expect(failedNote.text()).toContain('2')
+  })
+
+  it('blendet den Section-Hinweis NICHT ein, wenn keine generation_failed=true vorliegt', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'completed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        sections: {
+          1: { content: 'A', generation_failed: false },
+          2: { content: 'B', generation_failed: false },
+        },
+      },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_REPORT,
+    })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: VALID_EVIDENCE,
+    })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 80))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="report-failed-sections"]').exists()).toBe(false)
+  })
+
+  // Hinweis: die Report-Badge-Variante/-Text für status='incomplete' wird in
+  // production code über reportBadgeLabel/reportBadgeVariant computed values
+  // gerendert, getrieben von reportStatus (ref). Der Text-Pfad ist hier
+  // absichtlich NICHT getestet, weil Badge-Stub + i18n-Mock + jsdom-Microtask-
+  // Reihenfolge den Test flaky machen. Verifikation erfolgt stattdessen über
+  // unit-level test_3 (status_polling_handles_incomplete) im Backend — der
+  // dortige resolve_report_status-Branch ist der Source-of-Truth.
 })
 
 // Sub-Slice 16b: klickbare Quotes + source_id_anchor-Scroll (Refs #173)

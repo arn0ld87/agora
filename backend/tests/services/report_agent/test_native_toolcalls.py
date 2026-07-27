@@ -482,7 +482,12 @@ class TestReactLoopNativeToolCalls:
                 "raw_response": None,
             },
             {
-                "content": "Final Answer: Hier ist die Segment-Analyse.",
+                # Länge realistisch gewählt: der Final-Content-Contract lehnt
+                # Abschnitte unter MIN_CONTENT_CHARS als unbrauchbar ab.
+                "content": (
+                    "Final Answer: Hier ist die Segment-Analyse der simulierten "
+                    "Zielgruppen mit den beobachteten Reaktionsmustern."
+                ),
                 "tool_calls": [],
                 "finish_reason": "stop",
                 "raw_response": None,
@@ -524,7 +529,11 @@ class TestReactLoopNativeToolCalls:
             '<tool_call>{"name": "panorama_search", "parameters": {"query": "q1"}}</tool_call>',
             '<tool_call>{"name": "quick_search", "parameters": {"query": "q2"}}</tool_call>',
             '<tool_call>{"name": "insight_forge", "parameters": {"query": "q3"}}</tool_call>',
-            "Final Answer: Ergebnis der Analyse.",
+            # Siehe oben: MIN_CONTENT_CHARS des Final-Content-Contracts.
+            (
+                "Final Answer: Ergebnis der Analyse mit den zentralen "
+                "Reaktionsmustern der simulierten Gruppen."
+            ),
         ]
         agent.llm.chat.side_effect = chat_responses
 

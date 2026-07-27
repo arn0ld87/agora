@@ -23,12 +23,68 @@ def init_evidence_map(
     return EvidenceMapModel.model_validate(payload).model_dump(mode="json")
 
 
+#: Interner Evidence-`type` → Provenance-`source_kind`.
+#: Ohne diese Abbildung liefen Agentenaktionen, Interviews und Web-Treffer in
+#: den Default und wurden als Seed-Fakt persistiert.
+#: Deckt jeden Wert von ``EvidenceType`` ab (ausser
+#: ``model_generated_inference``, das ohnehin nicht als Evidence zulaessig ist).
+#: Ein fehlender Eintrag laesst echte Graph-Evidence als ``inferred`` gelten —
+#: der E2E-Lauf zeigte genau das fuer ``graph_fact`` (125 von 125 Items).
+_TYPE_TO_SOURCE_KIND: Dict[str, str] = {
+    "seed_corpus": "seed_corpus",
+    "seed_document": "seed_corpus",
+    "agent_post": "agent_quote",
+    "agent_quote": "agent_quote",
+    "agent_interview": "agent_quote",
+    "agent_action": "agent_action",
+    "agent_behavior": "agent_action",
+    "graph_fact": "graph_relation",
+    "relationship_chain": "graph_relation",
+    "entity_summary": "graph_relation",
+    "graph_metric": "graph_relation",
+    "graph_metric_status": "graph_relation",
+    "graph_relation": "graph_relation",
+    "web_search_result": "web_source",
+    "web_fetch": "web_source",
+    "web_source": "web_source",
+}
+
+
+#: Kanonische ``EvidenceSourceKind``-Werte (ADR-0002 Anker 3). Ein explizit
+#: gesetztes ``source_kind`` muss gegen diese Menge geprüft werden, nicht gegen
+#: ``_TYPE_TO_SOURCE_KIND.values()`` — sonst schließt die Prüfung ``inferred``
+#: aus und ein Caller, der ein Modellableitungs-Fakt bewusst als ``inferred``
+#: markiert, wird ignoriert (CodeRabbit PR #929).
+_VALID_SOURCE_KINDS: frozenset[str] = frozenset(
+    {"seed_corpus", "agent_quote", "agent_action", "graph_relation", "web_source", "inferred"}
+)
+
+
+def normalize_source_kind(item: Dict[str, Any]) -> str:
+    """Ermittelt die Provenance eines Evidence-Items.
+
+    Ein explizit gesetztes ``source_kind`` gewinnt — inklusive ``inferred``,
+    wenn ein Caller einen Modellableitungs-Fakt bewusst so markiert. Sonst
+    entscheidet der interne ``type``. Was sich nicht zuordnen lässt, wird
+    ``inferred`` — niemals ``seed_corpus``: ein Simulations-Post ist kein
+    Dokumentfakt, und eine unbekannte Herkunft erst recht nicht.
+    """
+    explicit = str(item.get("source_kind") or "").strip()
+    if explicit in _VALID_SOURCE_KINDS:
+        return explicit
+
+    item_type = str(item.get("type") or "").strip().lower()
+    return _TYPE_TO_SOURCE_KIND.get(item_type, "inferred")
+
+
 def record_evidence_item(
     active_section_evidence: Optional[List[Dict[str, Any]]],
     item: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     target = list(active_section_evidence or [])
-    target.append(item)
+    enriched = dict(item)
+    enriched.setdefault("source_kind", normalize_source_kind(item))
+    target.append(enriched)
     return target
 
 

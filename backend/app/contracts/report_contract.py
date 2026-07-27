@@ -53,13 +53,43 @@ class EvidenceSourceKind(str, Enum):
 
     Wird von den Cross-Stakeholder-/Inferred-Validators auf
     ``ReportClaimModel`` ausgewertet (Sub-Slice M11.7b, Anker 4 + 5).
-    Drift-Guard: Genau diese 4 Werte sind im Prompt-Block
-    ``backend/app/services/report_prompts.py`` referenziert (Anker 1).
+    Drift-Guard: Diese Werte sind im Prompt-Block
+    ``backend/app/services/report_prompts/sections.py`` referenziert (Anker 1).
+
+    Erweiterung (Report-Trust-Slice): ``agent_action`` und ``web_source``
+    ergänzen die ursprünglichen vier Werte. Das ist additiv und verschärft
+    ADR-0002, statt es zu schwächen — vorher liefen Agentenaktionen und
+    Web-Treffer über den Default ``seed_corpus`` und verschmolzen damit
+    Seed-Dokument, Simulation und Recherche zu einer einzigen Quellengattung.
+    Für die Confidence-Anker gilt weiterhin: nur ``agent_quote`` zählt als
+    Stakeholder-Stimme, nur ``seed_corpus`` als Dokumentfakt.
     """
     seed_corpus = "seed_corpus"
     agent_quote = "agent_quote"
+    agent_action = "agent_action"
     graph_relation = "graph_relation"
+    web_source = "web_source"
     inferred = "inferred"
+
+
+#: Quellengattungen, die aus der Simulation stammen — nie ein Seed-Fakt.
+SIMULATION_SOURCE_KINDS: frozenset[EvidenceSourceKind] = frozenset({
+    EvidenceSourceKind.agent_quote,
+    EvidenceSourceKind.agent_action,
+})
+
+
+class EntailmentVerdict(str, Enum):
+    """Urteil der zweiten Binding-Stufe.
+
+    Spiegelt ``app.services.evidence_entailment.EntailmentVerdict``. Nur
+    ``SUPPORTED`` rechtfertigt ``supports_claim=True``; ``RELATED_ONLY`` und
+    ``INSUFFICIENT`` erhöhen die Confidence nie.
+    """
+    SUPPORTED = "SUPPORTED"
+    CONTRADICTED = "CONTRADICTED"
+    RELATED_ONLY = "RELATED_ONLY"
+    INSUFFICIENT = "INSUFFICIENT"
 
 
 # Diese Typen sind im audit_trail erlaubt, nicht im evidence-Array
@@ -99,7 +129,18 @@ class EvidenceItemModel(BaseModel):
     #   "kg:entity:9b2f-...."
     source_id_anchor: Optional[str] = Field(default=None, min_length=1, max_length=200)
     match_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # Stufe 1 des Bindings: Cosine-Similarity. Beantwortet "gleiches Thema?",
+    # nicht "belegt?". Alias von match_score, bewusst eigenes Feld, damit der
+    # Retrieval-Wert nicht länger als Beleggrad gelesen wird.
+    retrieval_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # Stufe 2: Urteil aus evidence_entailment. supports_claim ist genau dann
+    # True, wenn entailment == "SUPPORTED".
+    entailment: Optional[EntailmentVerdict] = None
+    entailment_reason: Optional[str] = Field(default=None, max_length=500)
     supports_claim: Optional[bool] = None
+    # True bei entailment == "CONTRADICTED". Wird von
+    # detect_contradiction_penalty als Widerspruchs-Signal ausgewertet.
+    contradicts_claim: Optional[bool] = None
     # MAI-14: Sentiment des Quellen-Snippets (-1 = negativ, 0 = neutral, +1 = positiv).
     # None = nicht bestimmt. Wird von confidence_calculator._has_contradiction
     # genutzt, um widersprüchliche Sentiment-Vektoren zu erkennen.
@@ -109,9 +150,13 @@ class EvidenceItemModel(BaseModel):
         le=1.0,
         description="Sentiment des Quellen-Snippets (-1 negativ, 0 neutral, +1 positiv).",
     )
-    # ADR-0002 Anker 3 (Sub-Slice M11.7b): Default seed_corpus sichert die
-    # Backward-Compat fuer alte Fixtures, die das Feld nicht mitschicken.
-    source_kind: EvidenceSourceKind = EvidenceSourceKind.seed_corpus
+    # ADR-0002 Anker 3 (Sub-Slice M11.7b): Der Default war seed_corpus und hat
+    # damit jedes Item ohne explizite Angabe zum Dokumentfakt erklärt —
+    # inklusive Agentenaktionen und Web-Treffern. Der Default ist jetzt
+    # `inferred`: unbekannte Herkunft ist abgeleitet, nicht belegt. Alte
+    # Fixtures ohne das Feld laden weiterhin, verlieren aber ihren
+    # unverdienten Seed-Status (reject_inferred_in_high_confidence greift).
+    source_kind: EvidenceSourceKind = EvidenceSourceKind.inferred
     # Slice 8 (User-Bericht 2026-05-16): welches LLM-Modell hat dieses
     # Evidence-Item extrahiert. None = nicht erfasst (Backward-Compat für
     # bestehende evidence.json). Format "<provider>/<model_id>", z. B.
@@ -337,6 +382,15 @@ class ReportSectionModel(BaseModel):
         default_factory=list, max_length=50
     )
     data_gaps: list[ReportSectionDataGapModel] = Field(default_factory=list)
+    # P0-6: Von `generate_section_metadata` extrahierte ReportV3-Strukturdaten
+    # (Personas, Segmente, Reibungspunkte …). Sie landeten bisher nur im
+    # Report-Logger, weshalb ReportV3 leer blieb, während der Prosa-Report die
+    # Inhalte zeigte. Hier persistiert, damit `build_report_v3` sie übernimmt.
+    # Bewusst untypisiert: die Einzel-DTOs werden in `metadata_merge` validiert,
+    # ein einzelner ungültiger Eintrag darf die Section-Persistenz nicht kippen.
+    structured_metadata: dict[str, Any] = Field(default_factory=dict)
+    # P0-7: True, wenn der Abschnitt nur Fallback-/Fehlertext enthält.
+    generation_failed: bool = False
 
 
 class ReportOutlineSectionModel(BaseModel):
@@ -362,11 +416,21 @@ class ReportOutlineModel(BaseModel):
 
     @model_validator(mode="after")
     def require_default_sections(self) -> "ReportOutlineModel":
-        from app.services.report_agent.contract_validator import validate_required_sections
+        from app.services.report_agent.contract_validator import (
+            matches_known_preset,
+            validate_required_sections,
+        )
         from app.services.report_prompts import DEFAULT_REPORT_SECTIONS
 
-        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         outline_titles = [section.title for section in self.sections]
+        # Intent-Presets (opinion, risk, comparison, explorative) haben bewusst
+        # nicht die elf Full-Report-Pflichtabschnitte. Eine Outline, die genau
+        # einem bekannten Preset entspricht, ist gültig; alles andere muss den
+        # vollständigen Pflichtsatz tragen.
+        if matches_known_preset(outline_titles):
+            return self
+
+        required_titles = [title for title, _ in DEFAULT_REPORT_SECTIONS]
         missing = validate_required_sections(outline_titles, required_titles)
         if missing:
             raise ValueError(

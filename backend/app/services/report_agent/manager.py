@@ -11,6 +11,7 @@ from ...contracts.report_v3 import CLAIM_MIN_EVIDENCE_FOR_CLAIM, DEFAULT_REPORT_
 from ...contracts.report_v3 import Claim as ReportV3Claim
 from ...contracts.report_v3 import DataGap as ReportV3DataGap
 from ...contracts.report_v3 import Hypothesis as ReportV3Hypothesis
+from .metadata_merge import merge_section_metadata
 from ...config import Config
 from ...models.report import Report, ReportOutline, ReportSection, ReportStatus
 from ...utils.logger import get_logger
@@ -389,6 +390,17 @@ class ReportManager:
                         origin_section_index=origin_index,
                         confidence_score=max(0.0, min(1.0, confidence_score)),
                     ))
+        # P0-6: Die pro Abschnitt extrahierten Struktur-Daten sind die
+        # kanonische Quelle für Personas, Segmente, Reibungspunkte usw.
+        # Ohne diesen Schritt blieb ReportV3 leer, während der Prosa-Report
+        # dieselben Inhalte anzeigte ("Keine Personas im ReportV3-Artefakt").
+        merged = merge_section_metadata(evidence_map.get("sections") or [])
+        if merged.rejected:
+            logger.warning(
+                "build_report_v3: %d Metadaten-Eintrag/Einträge verworfen: %s",
+                len(merged.rejected),
+                "; ".join(merged.rejected[:5]),
+            )
         return ReportV3(
             report_id=report.report_id,
             generated_at=datetime.now(timezone.utc),
@@ -396,6 +408,7 @@ class ReportManager:
             claims=claims,
             data_gaps=data_gaps,
             hypotheses=hypotheses,
+            **merged.as_report_v3_kwargs(),
         )
     
     @classmethod

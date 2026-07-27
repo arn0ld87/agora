@@ -7,6 +7,7 @@ from ...config import Config
 from ...contracts.report_contract import ReportOutlineModel, ReportOutlineSectionModel
 from ...models.report import ReportOutline, ReportSection
 from ...utils.logger import get_logger
+from ..report_intent import ReportIntent, detect_report_intent, section_specs_for_intent
 from ..report_prompts import DEFAULT_REPORT_SECTIONS, format_required_sections
 from .prompts import PLAN_SYSTEM_PROMPT_TEMPLATE, PLAN_USER_PROMPT_TEMPLATE
 from .schemas import PlanResponse
@@ -32,7 +33,21 @@ def plan_outline(
     if progress_callback:
         progress_callback("planning", 30, "Generating report outline...")
 
-    sections = required_sections if required_sections is not None else DEFAULT_REPORT_SECTIONS
+    if required_sections is not None:
+        sections = required_sections
+    else:
+        # P1: Fragen wie "Was denken die Leute?" bekommen ein passendes,
+        # kompaktes Preset statt zwangsweise elf Marketingabschnitte. Ohne
+        # eindeutiges Intent bleibt es beim vollständigen Report.
+        intent = detect_report_intent(agent.simulation_requirement or "")
+        sections = section_specs_for_intent(intent)
+        if intent is not ReportIntent.FULL:
+            logger.info(
+                "plan_outline: Intent %r erkannt — %d statt %d Abschnitte.",
+                intent.value,
+                len(sections),
+                len(DEFAULT_REPORT_SECTIONS),
+            )
     system_prompt = PLAN_SYSTEM_PROMPT_TEMPLATE.replace("{language}", Config.REPORT_LANGUAGE)
     user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
         simulation_requirement=agent.simulation_requirement,

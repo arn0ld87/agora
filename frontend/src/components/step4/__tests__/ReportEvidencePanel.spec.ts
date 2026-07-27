@@ -45,6 +45,8 @@ const mockSection: ReportSection = {
   hypotheses: [1, 2, 3, 4, 5].map(makeHypothesis),
   hypotheses_appendix: [6, 7, 8].map(makeHypothesis),
   data_gaps: [],
+  structured_metadata: {},
+  generation_failed: false,
 }
 
 describe('ReportEvidencePanel — Hypothesen-Accordion', () => {
