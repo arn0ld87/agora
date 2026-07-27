@@ -120,7 +120,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Frontend-Next-Stand (React/Lovable)
 
-- **Produktiv:** Das produktive Frontend ist ausschließlich Vue-v4. Die Konsolidierung auf genau eine Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen.
+- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. Nicht jede produktive Oberfläche ist bereits v4: `/home` lädt weiterhin die klassische Editorial-View `frontend/src/views/Home.vue`, obwohl ADR-0010 dort einen Redirect auf `/dashboard` vorsieht ([Issue #915](https://github.com/arn0ld87/agora/issues/915)). Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen.
 - **Prototyp:** Ein Lovable-Projekt („Agora Runs Dashboard", angelegt 2026-07-16) existiert und wurde substanziell umgesetzt (23 Edits, TanStack-Router-SPA, 12 Routen, shadcn/ui). Es ist derzeit **nicht veröffentlicht** (`is_published: false`, keine URL) und **nicht** produktiv verdrahtet — weder Docker-Compose, GitHub-Workflows noch das Root-`package.json` referenzieren es. Der React-Code liegt vollständig außerhalb dieses Repositories. Die tatsächliche Funktionsvollständigkeit des Prototyps ist nicht codegeprüft belegt, sondern nur durch Commit-Aussagen behauptet.
 - **Release-Status:** Kein Teil des freigegebenen Produktpfads vor `1.0.0`.
 - **Zukunft:** Über eine spätere Migration ist keine Entscheidung getroffen.
