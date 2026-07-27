@@ -41,6 +41,7 @@
     "ready": "Ready",
     "running": "Running",
     "completed": "Completed",
+    "incomplete": "Incomplete",
     "failed": "Failed",
     "error": "Error",
     "yes": "Yes",
@@ -581,6 +582,10 @@
       "startButton": "Start report",
       "stopButton": "Cancel",
       "stopDisabledTip": "Cancel available after backend slice 6"
+    },
+    "status": {
+      "incomplete": "Report incomplete — some sections failed.",
+      "sectionFailed": "Section failed"
     },
     "next": "Next: conversation →"
   },
