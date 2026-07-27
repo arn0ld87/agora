@@ -127,19 +127,11 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
   // Issue #838 — Golden-Gate-Abgleich gegen die konsolidierte Routenliste
   // (ADR-0010). Ergänzt die bisher fehlenden Routen ohne Parameter-Bedarf.
   test.describe('Zusätzliche Shell-/Settings-Routen (Issue #838)', () => {
-    // DOKUMENTIERTE AUSNAHME — /home ist bewusst NICHT gegatet.
-    //
-    // Das Gate deckte hier einen echten Mangel auf: die klassische
-    // Editorial-View scrollt bei 320px Viewport horizontal
-    // (check320pxNoHorizontalScroll). Der Mangel wird NICHT hier behoben,
-    // weil die Route laut ADR-0010 in 0.9.0 ohnehin zum Redirect auf
-    // /dashboard wird (Restschuld, Issue #915). Home.vue responsive zu
-    // sanieren wäre Arbeit an einer Seite, die planmäßig aus dem
-    // Produktpfad verschwindet — sobald der Redirect steht, ist die Route
-    // nicht mehr gate-fähig und der Mangel gegenstandslos.
-    //
-    // Nachverfolgt in Issue #920. Wird der Redirect aus #915 verworfen,
-    // muss /home saniert und hier wieder aufgenommen werden.
+    // /home ist per #915 (ADR-0010) ein Redirect auf /dashboard und damit
+    // keine eigenständig gate-fähige Route mehr. Das Golden-Gate deckt
+    // die kanonische Route /dashboard (siehe describe-Block oben) ab, die
+    // weiterhin gegatet ist. Issue #920 (320px-Mangel in Home.vue) wird
+    // gegenstandslos, da Home.vue nicht mehr produktiv geroutet wird.
 
     test('Settings Audit Logs passes accessibility gates', async ({ page }) => {
       await checkAccessibilityGate(page, '/settings/audit-logs');

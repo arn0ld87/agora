@@ -55,7 +55,6 @@ vi.mock('../../views/v4/steps/StepEnvSetupView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepSimulationView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepReportView.vue', () => VIEW_STUB)
 vi.mock('../../views/v4/steps/StepInteractionView.vue', () => VIEW_STUB)
-vi.mock('../../views/Home.vue', () => VIEW_STUB)
 vi.mock('../../views/NotFoundView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsGeneralView.vue', () => VIEW_STUB)
 vi.mock('../../views/Settings/SettingsIntegrationsView.vue', () => VIEW_STUB)
@@ -95,11 +94,6 @@ describe('Router – Routen-Resolution', () => {
     ['/runs', 'Runs'],
     ['/settings/general', 'SettingsGeneral'],
     ['/settings/integrations', 'SettingsIntegrations'],
-    // Bekannte Restschuld (nicht Scope #838): ADR-0010 sieht für /home in
-    // 0.9.0 einen Redirect auf /dashboard vor. Der Ist-Router routet /home
-    // weiterhin auf Home.vue — dieser Test pinnt den Ist-Zustand, nicht das
-    // ADR-Zielverhalten. Nicht selbst beheben, siehe Issue #838-Auftrag.
-    ['/home', 'Home'],
     ['/onboarding', 'Onboarding'],
     ['/settings/profile', 'SettingsProfile'],
     ['/settings/audit-logs', 'SettingsAuditLogs'],
@@ -169,6 +163,7 @@ describe('Router – Redirects', () => {
   it.each([
     ['/', 'Dashboard'],
     ['/v4/dashboard', 'Dashboard'],
+    ['/home', 'Dashboard'],
     ['/settings', 'SettingsGeneral'],
     ['/settings-classic', 'SettingsGeneral'],
     ['/settings/users-teams', 'SettingsProfile'],
@@ -275,7 +270,6 @@ describe('Router – Struktur-Integrität', () => {
   // im Auftrag. Fällt auf jede künftig hinzugefügte oder entfernte Route.
   it('produktive Route-Namen entsprechen exakt der gepflegten SOLL-Liste', () => {
     const SOLL_PRODUKTIVE_ROUTEN = [
-      'Home',
       'Dashboard',
       'Runs',
       'RunDetail',
