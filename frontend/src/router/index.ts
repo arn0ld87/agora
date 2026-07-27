@@ -10,11 +10,10 @@ const routes: RouteRecordRaw[] = [
     redirect: { name: 'Dashboard' },
   },
 
-  // Landing (alte Editorial-Home unter /home erreichbar fuer Marketing/Fallback)
+  // ADR-0010: /home → /dashboard (Entfernungsrelease 1.0.0; Home.vue bleibt bis dahin physisch erhalten).
   {
     path: '/home',
-    name: 'Home',
-    component: () => import('../views/Home.vue'),
+    redirect: { name: 'Dashboard' },
   },
 
   // Dashboard — AppShell-Wrapper (Slice F)

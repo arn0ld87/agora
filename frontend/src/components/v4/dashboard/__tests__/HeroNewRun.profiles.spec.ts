@@ -28,6 +28,20 @@ vi.mock('../../../../api/status', () => ({
 }))
 
 // LLM-Profile-API: zwei Profile
+// Service-Readiness (Parität zu Home.vue, #915): Mock liefert neo4j_reachable=true
+// und default_provider='openai' → servicesReady=true → canSubmit nicht blockiert.
+vi.mock('../../../../api/simulation', () => ({
+  getAvailableModels: vi.fn().mockResolvedValue({
+    success: true,
+    data: {
+      default_provider: 'openai',
+      ollama_reachable: true,
+      neo4j_reachable: true,
+      default_language: 'de',
+    },
+  }),
+}))
+
 vi.mock('../../../../api/llmProfiles', () => ({
   fetchLlmProfiles: vi.fn().mockResolvedValue([
     {
