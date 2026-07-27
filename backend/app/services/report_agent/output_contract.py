@@ -79,6 +79,11 @@ _PLANNING_OPENERS: tuple[str, ...] = (
 )
 
 _TOOL_CALL_BLOCK_RE = re.compile(r"<tool_call>.*?</tool_call>", re.DOTALL | re.IGNORECASE)
+#: Ein geöffneter, nie geschlossener Tool-Call. Der E2E-Lauf produzierte genau
+#: das: das Modell lief in eine Endlosschleife und schrieb ein abgeschnittenes
+#: `<tool_call>` mit tausenden Wiederholungen in den Abschnitt. Alles ab dem
+#: offenen Tag ist Arbeitsspur.
+_UNCLOSED_TOOL_CALL_RE = re.compile(r"<tool_call>", re.IGNORECASE)
 _TOOL_CALL_MENTION_RE = re.compile(r"^\s*(?:tool[ _]call|tool-call)\b.*$", re.IGNORECASE)
 _FINAL_ANSWER_RE = re.compile(r"final\s*answer\s*:", re.IGNORECASE)
 
@@ -99,6 +104,24 @@ FALLBACK_MARKERS: tuple[str, ...] = (
 
 #: Ohne so viele Zeichen ist ein Abschnitt kein Abschnitt.
 MIN_CONTENT_CHARS = 40
+
+#: Ab so vielen Wiederholungen desselben Fragments gilt der Output als
+#: degeneriert. Fachsprache wiederholt Begriffe, aber kein Berichtstext
+#: wiederholt dieselbe 20-Zeichen-Sequenz zwanzigmal.
+MAX_FRAGMENT_REPEATS = 20
+_REPEAT_PROBE_LEN = 20
+
+
+def _is_degenerate(text: str) -> bool:
+    """Erkennt LLM-Endlosschleifen an exzessiver Selbstwiederholung."""
+    if len(text) < _REPEAT_PROBE_LEN * MAX_FRAGMENT_REPEATS:
+        return False
+    probe = text[:_REPEAT_PROBE_LEN]
+    if probe.strip() and text.count(probe) >= MAX_FRAGMENT_REPEATS:
+        return True
+    midpoint = len(text) // 2
+    probe = text[midpoint : midpoint + _REPEAT_PROBE_LEN]
+    return bool(probe.strip()) and text.count(probe) >= MAX_FRAGMENT_REPEATS
 
 
 def _is_protocol_line(line: str) -> bool:
@@ -160,10 +183,16 @@ def sanitize_final_content(raw: str) -> SanitizedContent:
             removed.append(prefix)
         text = text[cut:]
 
-    # 2. Tool-Call-Blöcke entfernen.
+    # 2. Tool-Call-Blöcke entfernen — erst die vollständigen, dann alles ab
+    #    einem offen gebliebenen Tag.
     for block in _TOOL_CALL_BLOCK_RE.findall(text):
         removed.append(block.strip())
     text = _TOOL_CALL_BLOCK_RE.sub("", text)
+
+    unclosed = _UNCLOSED_TOOL_CALL_RE.search(text)
+    if unclosed:
+        removed.append(text[unclosed.start():].strip()[:500])
+        text = text[: unclosed.start()]
 
     # 3. Zeilenweise Protokollspuren entfernen.
     text, line_removals = _strip_protocol_lines(text)
@@ -184,6 +213,11 @@ def sanitize_final_content(raw: str) -> SanitizedContent:
     if is_fallback_content(content):
         raise FinalContentRejected(
             "Modelloutput ist ein Fehlertext, kein Abschnittsinhalt",
+            removed_segments=removed,
+        )
+    if _is_degenerate(content):
+        raise FinalContentRejected(
+            "Modelloutput ist degeneriert (Endlosschleife mit Wiederholungen)",
             removed_segments=removed,
         )
 

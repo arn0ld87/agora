@@ -24,6 +24,7 @@ from .output_contract import (
     sanitize_final_content,
 )
 from .planning import plan_outline as plan_outline_impl
+from .text_verification import verify_prose
 from .schemas import (
     CURRENT_SCHEMA_VERSION,
     EvidenceMapModel,
@@ -1076,6 +1077,26 @@ def generate_report(
             # Fehler blockieren nicht die Hauptgenerierung (generate_section_metadata
             # gibt bei Exception {} zurück). Metadaten werden im Report-Logger
             # für Provenance-Tracking gespeichert.
+            # P0: Faktenprüfung des sichtbaren Fließtexts. Quantitative
+            # Aussagen ohne deckende Quelle werden entfernt und als Hypothese
+            # geführt — sonst steht im gelesenen Report weiter, was das
+            # Entailment längst verworfen hat.
+            if not is_fallback_content(section_content):
+                verified = verify_prose(
+                    section_content,
+                    agent._prose_evidence_pool(),
+                )
+                if verified.changed:
+                    logger.warning(
+                        "section %d (%r): %d ungedeckte Faktenaussage(n) aus dem "
+                        "Fließtext entfernt und als Hypothese geführt.",
+                        section_num,
+                        section.title,
+                        len(verified.rejected),
+                    )
+                    agent._record_prose_hypotheses(section_num, verified.rejected)
+                    section_content = verified.content
+
             # Fehlgeschlagene Sections liefern Fehlertext, keinen Inhalt: keine
             # Metadaten-Extraktion, keine Claims, keine Evidence daraus.
             section_failed = is_fallback_content(section_content)

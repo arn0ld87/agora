@@ -634,6 +634,38 @@ class ReportAgent:
             logger=logger,
         )
 
+    def _prose_evidence_pool(self) -> List[Dict[str, Any]]:
+        """Evidence-Basis für die Fließtext-Faktenprüfung.
+
+        Der Abschnitts-Pool zuerst — dort liegen die Treffer, die der Agent für
+        genau diesen Abschnitt geholt hat. Die globale Simulationsevidence
+        ergänzt ihn, damit ein Seed-Fakt auch dann als Beleg zählt, wenn er in
+        diesem Abschnitt nicht erneut abgefragt wurde.
+        """
+        pool: List[Dict[str, Any]] = list(self._active_section_evidence or [])
+        if self.evidence_map:
+            pool.extend(self.evidence_map.get("global_evidence") or [])
+        return pool
+
+    def _record_prose_hypotheses(
+        self,
+        section_index: int,
+        rejected: List[Any],
+    ) -> None:
+        """Merkt aus dem Fließtext entfernte Aussagen als Hypothesen vor.
+
+        Sie werden in ``_save_evidence_section`` in den Hypothesen-Slot der
+        Section übernommen — entfernte Behauptungen verschwinden also nicht,
+        sie verlieren nur ihren Status als belegte Aussage.
+        """
+        if not rejected:
+            return
+        if not hasattr(self, "_pending_prose_hypotheses") or self._pending_prose_hypotheses is None:
+            self._pending_prose_hypotheses = {}
+        bucket = self._pending_prose_hypotheses.setdefault(section_index, [])
+        for offset, statement in enumerate(rejected, start=len(bucket) + 1):
+            bucket.append(statement.as_hypothesis(offset))
+
     def _record_section_metadata(self, section_index: int, metadata: Dict[str, Any]) -> None:
         """Merkt die Struktur-Metadaten eines Abschnitts für ReportV3 vor.
 
@@ -680,6 +712,11 @@ class ReportAgent:
             claims, raw_hypotheses, data_gaps = self._finalize_section_claims(
                 self._build_claims_for_section(content)
             )
+        # Aus dem Fließtext entfernte Faktenaussagen sind Hypothesen, keine
+        # gelöschten Sätze — sie bleiben für den Leser nachvollziehbar.
+        raw_hypotheses = list(raw_hypotheses) + (
+            getattr(self, "_pending_prose_hypotheses", {}) or {}
+        ).get(section_index, [])
         # Slice 3 (Issue #495): Dedup + Cap per Section.
         from .hypothesis_cap import dedup_and_cap_hypotheses  # noqa: PLC0415
         hypotheses_visible, hypotheses_appendix = dedup_and_cap_hypotheses(raw_hypotheses)

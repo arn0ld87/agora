@@ -264,6 +264,31 @@ def _overlap_ratio(left: str, right: str) -> float:
     return len(a & b) / min(len(a), len(b))
 
 
+def coverage_ratio(claim_text: str, evidence_text: str) -> float:
+    """Anteil der Claim-Aussage, der von der Evidence gedeckt ist.
+
+    Bewusst asymmetrisch — und das ist der Punkt. ``_overlap_ratio`` misst
+    Containment und liefert 1.0, sobald die Evidence *Teilmenge* des Claims
+    ist. Genau so rutschte im E2E-Lauf durch:
+
+        Seed:  "61 % der Lehrkräfte berichteten von Zeitersparnis …"
+        Claim: "61 % der Lehrkräfte bewerteten die Lernhilfe positiv
+                und berichteten von Zeitersparnis …"
+
+    Der Seed steckt vollständig im Claim, also Containment 1.0 — obwohl der
+    Claim eine zusätzliche, unbelegte Behauptung trägt. Die Deckungsrichtung
+    muss umgekehrt sein: Was der Claim behauptet, muss in der Evidence stehen.
+    Für obigen Fall ergibt das 0.56 statt 1.0.
+    """
+    claim_tokens = _content_tokens(claim_text)
+    evidence_tokens = _content_tokens(evidence_text)
+    if not claim_tokens:
+        return 0.0
+    if not evidence_tokens:
+        return 0.0
+    return len(claim_tokens & evidence_tokens) / len(claim_tokens)
+
+
 def subjects_match(left: str, right: str) -> bool:
     """Bezugsgruppen-Vergleich mit leichter Stamm-Normalisierung.
 
@@ -296,6 +321,17 @@ def _quantifier_direction(text: str) -> Optional[str]:
 PREDICATE_MATCH_THRESHOLD = 0.5
 #: Darunter besteht nicht einmal thematische Nähe.
 TOPIC_MATCH_THRESHOLD = 0.2
+#: Mindestanteil der Claim-Aussage, der von der Evidence gedeckt sein muss,
+#: damit ein numerischer Fakt als übernommen gilt. Höchstens ein Viertel der
+#: inhaltlichen Aussage darf über die Evidence hinausgehen.
+#:
+#: Am realen Fall kalibriert (E2E gegen sim_7058c126da03):
+#:   0.56 — "61 % … bewerteten die Lernhilfe positiv UND berichteten von
+#:           Zeitersparnis" gegen den Seed, der nur die Zeitersparnis belegt
+#:   1.00 — "72 % der Schülerinnen und Schüler bewerteten die Lernhilfe
+#:           positiv", wörtlich aus dem Seed
+#: Der Schwellwert trennt diese beiden Fälle mit Abstand nach beiden Seiten.
+PREDICATE_COVERAGE_THRESHOLD = 0.75
 
 EntailmentJudge = Callable[[str, str], str]
 """Optionaler strukturierter Judge: (claim, evidence_text) -> Verdict-Name."""
@@ -356,13 +392,29 @@ def classify_evidence(
                             claim_fact=claim_fact,
                             checks=checks + ["modality_mismatch"],
                         )
-                    if predicate_overlap >= PREDICATE_MATCH_THRESHOLD:
+                    # Die Evidence muss die Aussage des Claims decken. Ein
+                    # Claim, der die Zahl korrekt zitiert und ihr zusätzlich
+                    # eine unbelegte Aussage anhängt, ist nicht gestützt.
+                    coverage = coverage_ratio(claim_fact.predicate, ev_fact.predicate)
+                    if (
+                        predicate_overlap >= PREDICATE_MATCH_THRESHOLD
+                        and coverage >= PREDICATE_COVERAGE_THRESHOLD
+                    ):
                         return EntailmentResult(
                             EntailmentVerdict.SUPPORTED,
                             "Zahl, Bezugsgruppe und Aussage stimmen überein",
                             matched_fact=ev_fact,
                             claim_fact=claim_fact,
                             checks=checks + ["value_subject_predicate_match"],
+                        )
+                    if coverage < PREDICATE_COVERAGE_THRESHOLD:
+                        return EntailmentResult(
+                            EntailmentVerdict.CONTRADICTED,
+                            "Zahl und Bezugsgruppe passen, der Claim behauptet "
+                            f"aber mehr als die Quelle deckt (Deckung {coverage:.2f})",
+                            matched_fact=ev_fact,
+                            claim_fact=claim_fact,
+                            checks=checks + ["predicate_overreach"],
                         )
                     return EntailmentResult(
                         EntailmentVerdict.CONTRADICTED,

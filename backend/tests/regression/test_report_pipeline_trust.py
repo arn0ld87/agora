@@ -79,6 +79,78 @@ def test_1c_training_target_is_not_approval():
     assert result.verdict is not EntailmentVerdict.SUPPORTED
 
 
+def test_1e_rendered_prose_must_not_carry_the_wrong_attribution():
+    """Der SICHTBARE Reporttext darf die Falschzuordnung nicht enthalten.
+
+    Der E2E-Lauf gegen sim_7058c126da03 zeigte: Das Entailment verwarf die
+    Aussage korrekt (0 Claims, Routing zur Hypothese) — im gelesenen Report
+    stand sie trotzdem, weil der Abschnitt die rohe LLM-Prosa ist. Dieser
+    Test prüft deshalb den gerenderten Text, nicht ``claims[]``.
+    """
+    from app.services.report_agent.text_verification import verify_prose
+
+    prose = (
+        "Im Zentrum der Lehrkräfte-Reaktionen steht eine positive Bewertung. "
+        "61 Prozent der Lehrkräfte bewerteten die zusätzliche Lernhilfe positiv "
+        "und berichteten von einer Zeitersparnis bei mindestens einer "
+        "wöchentlichen Routineaufgabe.\n"
+        "72 % der Schülerinnen und Schüler bewerteten die zusätzliche Lernhilfe positiv."
+    )
+    pool = [_seed_item(s) for s in SEED_SENTENCES]
+
+    result = verify_prose(prose, pool)
+
+    lowered = result.content.lower()
+    assert not (
+        "61" in lowered and "lernhilfe positiv" in lowered
+    ), (
+        "Der gerenderte Report enthält weiterhin die Falschzuordnung "
+        f"'61 % → Lernhilfe positiv':\n{result.content}"
+    )
+    # Der korrekt belegte Seed-Fakt muss erhalten bleiben.
+    assert "72" in result.content
+    assert result.rejected, "Die verworfene Aussage muss als Hypothese geführt werden"
+    assert result.rejected[0].verdict is not EntailmentVerdict.SUPPORTED
+
+
+def test_1f_rejected_prose_statement_becomes_a_hypothesis():
+    from app.services.report_agent.text_verification import verify_prose
+
+    prose = (
+        "61 Prozent der Lehrkräfte bewerteten die zusätzliche Lernhilfe positiv "
+        "und berichteten von einer Zeitersparnis bei mindestens einer "
+        "wöchentlichen Routineaufgabe."
+    )
+    result = verify_prose(prose, [_seed_item(s) for s in SEED_SENTENCES])
+    assert result.rejected
+    hypothesis = result.rejected[0].as_hypothesis(1)
+    assert hypothesis["hypothesis_text"]
+    assert "entfernt" in hypothesis["rationale"].lower()
+
+
+def test_1g_prose_without_evidence_pool_is_left_untouched():
+    """Ohne Vergleichsbasis darf die Prüfung den Bericht nicht leeren."""
+    from app.services.report_agent.text_verification import verify_prose
+
+    prose = "61 Prozent der Lehrkräfte bewerteten die Lernhilfe positiv."
+    result = verify_prose(prose, [])
+    assert result.content == prose
+    assert not result.rejected
+
+
+def test_1h_analytical_prose_without_numbers_survives():
+    """Nur quantitative Aussagen werden geprüft — Einordnung bleibt stehen."""
+    from app.services.report_agent.text_verification import verify_prose
+
+    prose = (
+        "Die Elternschaft reagiert spürbar zurückhaltender als die Lehrkräfte "
+        "und positioniert sich als Korrektiv gegenüber dem Vorhaben."
+    )
+    result = verify_prose(prose, [_seed_item(s) for s in SEED_SENTENCES])
+    assert result.content == prose
+    assert not result.rejected
+
+
 def test_1d_numeric_extraction_binds_number_to_group_and_predicate():
     facts = extract_numeric_facts(SEED_SENTENCES[1])
     assert facts, "Prozentwert muss erkannt werden"
@@ -120,6 +192,30 @@ def test_2b_mixed_content_keeps_only_the_report_body():
     assert "Action:" not in cleaned.content
     assert "Zeitersparnis" in cleaned.content
     assert cleaned.removed_segments
+
+
+def test_2d_unclosed_tool_call_is_rejected():
+    """Ein geöffneter, nie geschlossener Tool-Call darf nicht durchrutschen.
+
+    Aus dem Full-Report-E2E: das Modell lief in eine Endlosschleife und
+    schrieb ein abgeschnittenes '<tool_call>' in den Abschnitt. Der Sanitizer
+    entfernte nur vollständige Blöcke, das Fragment blieb im Report stehen.
+    """
+    raw = (
+        "Die simulierten Gruppen äußern sich überwiegend zurückhaltend zum Vorhaben.\n"
+        '<tool_call>\n{"name": "quick_search"'
+    )
+    cleaned = sanitize_final_content(raw)
+    assert "<tool_call>" not in cleaned.content
+    assert "quick_search" not in cleaned.content
+    assert "zurückhaltend" in cleaned.content
+
+
+def test_2e_degenerate_repetition_is_rejected():
+    """LLM-Endlosschleifen sind kein Abschnittsinhalt."""
+    raw = "Final Answer:\n" + ('function_calls>quick_search</invoke">' * 60)
+    with pytest.raises(FinalContentRejected):
+        sanitize_final_content(raw)
 
 
 def test_2c_clean_content_passes_unchanged():
