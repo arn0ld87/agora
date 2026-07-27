@@ -102,7 +102,7 @@ flowchart LR
 
 ## 📸 Prozess im UI
 
-Die Pipeline in der Agora-Weboberfläche folgt fünf aufeinander aufbauenden Schritten — Upload, Personas, Simulation, Report und Interaktion. Die folgenden Screenshots zeigen einen realen Lauf (`proj_c12f138aa04e` zum Thema SchulKI) von der Quelldatei bis zum 1‑zu‑1‑Gespräch mit den generierten Personas:
+Die Pipeline in der Agora-Weboberfläche folgt fünf aufeinander aufbauenden Schritten — Run starten, Upload, Personas, Report und Interaktion. Die folgenden Screenshots zeigen einen realen Lauf (`proj_c12f138aa04e` zum Thema SchulKI) von der Quelldatei bis zum 1‑zu‑1‑Gespräch mit den generierten Personas:
 
 ### 1. Run starten — Quelle wählen, Modell konfigurieren
 
