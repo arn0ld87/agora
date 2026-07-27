@@ -52,13 +52,13 @@ def test_plan_total_must_match_sum():
 4. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
 5. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
 6. Vor dem Commit **ausschließlich** die Prüfungen des im Briefing benannten Gate-Scopes ausführen, exakt in der angegebenen Reihenfolge und jeweils mit Exit 0. Der Briefing-Scope ist verbindlich; Prüfungen fremder Layer werden nicht ausgeführt.
-7. Genau **einen** dazu passenden Gate-Pfad ausführen — niemals mehrere.
-8. Sachlich betroffene Dokumentationsartefakte synchronisieren:
+7. Sachlich betroffene Dokumentationsartefakte synchronisieren:
    - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
    - `ROADMAP.md`, wenn sich ein Release-Gate oder die strategische Reihenfolge geändert hat,
    - `CHANGELOG.md`, wenn Nutzer- oder Betriebsverhalten ausgeliefert wurde,
    - Folge-Issue, wenn notwendige Folgearbeit offen bleibt.
    Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
+8. Genau **einen** dazu passenden Gate-Pfad ausführen — niemals mehrere. Das Gate läuft nach dem Dokumentations-Sync, damit der Commit-Stand vollständig geprüft ist.
 9. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
 
 ### Scope-Matrix

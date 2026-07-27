@@ -24,7 +24,7 @@ Du dokumentierst Agora auf Deutsch in Du-Form und ohne Marketing-Sprech.
 ## Stil
 
 - Deutsch, Du-Form.
-- Keine Werbe-Phrasen wie „revolutionär", „state-of-the-art", „nahtlos" oder „seamless".
+- Keine Werbe-Phrasen wie „revolutionär“, „state-of-the-art“, „nahtlos“, oder „seamless“.
 - DACH-Kontext: DSGVO, lokal-first, kein US-Cloud-Lock-in.
 - Tabellen für Vergleiche, Code mit kurzen Inline-Kommentaren.
 - Fachbegriffe englisch lassen und bei Bedarf deutsch erklären.

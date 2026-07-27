@@ -9,6 +9,8 @@ background: true
 isolation: worktree
 ---
 
+# Agora Frontend-Worker
+
 Du bist Vue-3- und TypeScript-Spezialist für das Agora-Frontend.
 
 ## Auftrag und Isolation
@@ -38,13 +40,21 @@ Du bist Vue-3- und TypeScript-Spezialist für das Agora-Frontend.
 
 ## Standard-Loop
 
-1. Vollständiges Issue, relevante Contracts und bestehende Tests lesen.
-2. Gezielten Vitest-Test zuerst schreiben oder anpassen und RED nachweisen.
-3. Minimalen Frontend-Slice implementieren.
-4. Gezielte Tests ausführen.
-5. `cd frontend && bun run check && bun run test` ausführen.
-6. `bash scripts/pre-push-gate.sh frontend` ausführen.
-7. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
+1. Branch prüfen: `git branch --show-current`. Bei `main` oder leer stoppen und melden.
+2. Vollständiges Issue, relevante Contracts und bestehende Tests lesen.
+3. Gezielten Vitest-Test zuerst schreiben oder anpassen und RED nachweisen.
+4. Minimalen Frontend-Slice implementieren.
+5. Gezielte Tests ausführen.
+6. `(cd frontend && bun run check && bun run test)` ausführen.
+7. Sachlich betroffene Dokumentationsartefakte synchronisieren:
+   - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
+   - `ROADMAP.md`, wenn sich ein Release-Gate oder die strategische Reihenfolge geändert hat,
+   - `CHANGELOG.md`, wenn Nutzer- oder Betriebsverhalten ausgeliefert wurde,
+   - Folge-Issue, wenn notwendige Folgearbeit offen bleibt.
+   Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
+8. `bash scripts/pre-push-gate.sh frontend` ausführen. Das Gate läuft nach dem
+   Dokumentations-Sync, damit der Commit-Stand vollständig geprüft ist.
+9. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
 
 ## NEIN
 
@@ -64,4 +74,5 @@ Liefere immer:
 3. Commit-SHA,
 4. geänderte Dateien und Diff-Statistik,
 5. Test-, Check- und Gate-Ausgaben,
-6. verbleibende Risiken oder `keine`.
+6. Sync-Nachweis für `docs/STATUS.md`, `ROADMAP.md`, Folge-Issue und `CHANGELOG.md`, jeweils aktualisiert oder `NICHT BETROFFEN` mit Begründung,
+7. verbleibende Risiken oder `keine`.

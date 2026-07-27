@@ -5,6 +5,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Subagenten-Härtung — Härtung der historischen Subagenten ohne -m3-Suffix, 2026-07-27)
+
+- Die sechs historischen Subagenten ohne Suffix (`agora-doc-worker.md`, `agora-evidence-auditor.md`, `agora-frontend-worker.md`, `agora-opus-reviewer.md`, `agora-refactor-worker.md`, `agora-test-worker.md`) wurden auf dasselbe Härtungsniveau wie ihre `-m3`-Pendants gehoben:
+  - Ergänzung einer H1-Überschrift nach Frontmatter in allen sechs Dateien, falls fehlend.
+  - Integration eines Branch-Checks im Standard-Loop der schreibenden Worker (`agora-doc-worker.md`, `agora-frontend-worker.md`, `agora-refactor-worker.md`, `agora-test-worker.md`).
+  - Dokumentations-Synchronisationsschritt (`docs/STATUS.md`, `ROADMAP.md`, `CHANGELOG.md`, Folge-Issue) im Loop und im Output-Bericht für alle schreibenden Worker.
+  - disallowedTools-Härtung (`Edit, Write, Agent`) in `agora-evidence-auditor.md` und `agora-opus-reviewer.md`.
+  - Erweiterung der Audit-Tabelle des Evidence-Auditors auf acht Checks.
+  - Korrektur der deutschen Anführungszeichen im Doc-Worker.
+  - Subshell-Fix im Frontend-Worker und `git diff -- schemas/`-Fix im Refactor-Worker gespiegelt.
+
 ### Added (README — „Prozess im UI" mit neun realen Screenshots, 2026-07-27)
 
 - Neue Sektion `## 📸 Prozess im UI` zwischen Pipeline und Architektur mit neun nummerierten Screenshots eines realen Laufs (`proj_c12f138aa04e`, SchulKI). Pro Phase (Run starten, Upload, Personas, Report, Interaktion) kurze Erläuterung plus Bild mit Alt‑Text. Die Assets liegen unter `docs/assets/screenshots/process/01-…09-…jpeg`.

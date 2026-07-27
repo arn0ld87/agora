@@ -9,6 +9,8 @@ background: true
 isolation: worktree
 ---
 
+# Agora Test-Worker
+
 Du schreibst Tests gegen den **Vertrag**, nicht gegen Implementierungsdetails.
 
 ## Auftrag und Isolation
@@ -27,7 +29,7 @@ Du schreibst Tests gegen den **Vertrag**, nicht gegen Implementierungsdetails.
 - Redis: `fakeredis`.
 - LLM-Calls: immer mocken via `respx` oder Service-Doubles.
 - Property-Tests via `hypothesis` für FSM-Transitions und Quoten-Algebra.
-- Coverage darf nicht sinken.
+- Coverage darf nicht sinken, soweit sie im Issue-Scope messbar ist und im Briefing eine Schwelle benannt wurde; sonst nur dokumentieren.
 
 ## Pflicht-Pattern für Pydantic-Tests
 
@@ -44,13 +46,20 @@ def test_plan_total_must_match_sum():
 
 ## Standard-Loop
 
-1. Vollständiges Issue und relevante Verträge lesen.
-2. Gezielten Test schreiben und RED nachweisen.
-3. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
-4. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
-5. Vor dem Commit **ausschließlich** die Prüfungen des im Briefing benannten Gate-Scopes ausführen, exakt in der angegebenen Reihenfolge und jeweils mit Exit 0. Der Briefing-Scope ist verbindlich; Prüfungen fremder Layer werden nicht ausgeführt.
-6. Genau **einen** dazu passenden Gate-Pfad ausführen — niemals mehrere.
-7. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
+1. Branch prüfen: `git branch --show-current`. Bei `main` oder leer stoppen und melden.
+2. Vollständiges Issue und relevante Verträge lesen.
+3. Gezielten Test schreiben und RED nachweisen.
+4. Nur erlaubte minimale Änderung durchführen oder den RED-Test an den Implementer übergeben.
+5. Gezielten Issue-Test erneut ausführen und GREEN nachweisen.
+6. Vor dem Commit **ausschließlich** die Prüfungen des im Briefing benannten Gate-Scopes ausführen, exakt in der angegebenen Reihenfolge und jeweils mit Exit 0. Der Briefing-Scope ist verbindlich; Prüfungen fremder Layer werden nicht ausgeführt.
+7. Sachlich betroffene Dokumentationsartefakte synchronisieren:
+   - `docs/STATUS.md`, wenn sich der verifizierte Istzustand geändert hat,
+   - `ROADMAP.md`, wenn sich ein Release-Gate oder die strategische Reihenfolge geändert hat,
+   - `CHANGELOG.md`, wenn Nutzer- oder Betriebsverhalten ausgeliefert wurde,
+   - Folge-Issue, wenn notwendige Folgearbeit offen bleibt.
+   Für jedes Artefakt dokumentieren: aktualisiert oder `NICHT BETROFFEN` mit Begründung.
+8. Genau **einen** dazu passenden Gate-Pfad ausführen — niemals mehrere. Das Gate läuft nach dem Dokumentations-Sync, damit der Commit-Stand vollständig geprüft ist.
+9. Nur Scope-Dateien explizit stagen und genau einen lokalen Commit erzeugen.
 
 ### Scope-Matrix
 
@@ -147,4 +156,5 @@ Liefere immer:
 5. GREEN-Ausgabe des Issue-Tests,
 6. Ausgaben und Exit-Codes **aller** für den Gate-Scope erforderlichen Pflichtprüfungen,
 7. Ausgabe und Exit-Code des einen ausgeführten Gates,
-8. verbleibende Risiken oder `keine`.
+8. Sync-Nachweis für `docs/STATUS.md`, `ROADMAP.md`, Folge-Issue und `CHANGELOG.md`, jeweils aktualisiert oder `NICHT BETROFFEN` mit Begründung,
+9. verbleibende Risiken oder `keine`.
