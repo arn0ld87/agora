@@ -83,8 +83,8 @@ class EntailmentResult:
 # ---------------------------------------------------------------------------
 
 _PERCENT_RE = re.compile(
-    r"(?P<value>\d{1,3}(?:[.,]\d+)?)\s*(?:%|Prozent)\s*"
-    r"(?:der|des|von\s+den|von|aller)?\s*",
+    r"(?P<value>\d{1,3}(?:[.,]\d+)?)\s*(?:%|Prozent|percent)\s*"
+    r"(?:der|des|von\s+den|von|aller|of)?\s*",
     re.IGNORECASE,
 )
 
@@ -162,11 +162,28 @@ def _parse_number(raw: str) -> Optional[float]:
         return None
 
 
+#: Englische Verben, die den Übergang von Bezugsgruppe zu Prädikat markieren.
+#: Ohne NLP-Tagger reicht eine kleine Liste häufiger Report-Verben — ein
+#: fehlendes Verb führt höchstens zu einem längeren Subjekt, nie zu einem
+#: Fehlurteil (die Zahl-Bezugsgruppe-Prüfung greift trotzdem).
+_EN_SUBJECT_VERBS = frozenset({
+    "rated", "reported", "stated", "said", "believed", "indicated",
+    "found", "noted", "mentioned", "claimed", "expressed", "gave",
+    "showed", "saw", "experienced", "felt", "think", "thought",
+    "consider", "considered", "view", "viewed", "judge", "judged",
+})
+
+
 def _split_subject_predicate(tail: str) -> tuple[str, str]:
     """Trennt die Bezugsgruppe vom Prädikat.
 
     Deutsche Nomen sind großgeschrieben: die Nominalphrase läuft bis zum
-    ersten kleingeschriebenen Wort, das kein Bindewort ist.
+    ersten kleingeschriebenen Wort, das kein Bindewort ist. Für englische
+    Seeds (keine Großschreibung-Pflicht) fällt diese Heuristik leer aus —
+    dann übernimmt ein Fallback, der die Bezugsgruppe bis zum ersten
+    bekannten Report-Verb nimmt. Without that, ``extract_numeric_facts``
+    liefert für englische Sätze keine Fakten und die Fließtext-Prüfung
+    überspringt sie still (Handover P2.7).
     """
     words = tail.split()
     subject_parts: List[str] = []
@@ -190,6 +207,21 @@ def _split_subject_predicate(tail: str) -> tuple[str, str]:
 
     subject = " ".join(subject_parts).strip(",.;:() ")
     predicate = " ".join(words[idx:]).strip(",.;:() ")
+
+    # Englischer Fallback: keine Großschreibung → deutscher Pfad leer.
+    if not subject and words:
+        subject_parts = []
+        end_idx = len(words)
+        for en_idx, word in enumerate(words):
+            bare = word.strip(",.;:()").lower()
+            if bare in _EN_SUBJECT_VERBS:
+                end_idx = en_idx
+                break
+            subject_parts.append(word)
+        if subject_parts:
+            subject = " ".join(subject_parts).strip(",.;:() ")
+            predicate = " ".join(words[end_idx:]).strip(",.;:() ")
+
     return subject, predicate
 
 

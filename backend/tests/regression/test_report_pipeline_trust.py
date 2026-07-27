@@ -182,6 +182,32 @@ def test_1d_numeric_extraction_binds_number_to_group_and_predicate():
     assert "zeitersparnis" in fact.predicate.lower()
 
 
+def test_1d_en_english_seeds_yield_numeric_facts():
+    """Englische Seeds müssen ebenfalls Fakten liefern (Handover P2.7).
+
+    _split_subject_predicate war auf deutsche Nomen-Großschreibung
+    zugeschnitten; _PERCENT_RE kannte nur 'Prozent' und '%', nicht das
+    englische 'percent'. Englische Sätze lieferten subject='' → 0 Fakten
+    → die Fließtext-Prüfung übersprang sie still. Fix: Regex um 'percent'
+    und 'of' erweitert, Fallback nimmt Bezugsgruppe bis zum ersten
+    bekannten Report-Verb.
+    """
+    cases = [
+        ("61 percent of teachers rated the learning aid positively.", "teachers"),
+        ("48 percent of parents reported that control caused work.", "parents"),
+        ("61% of teachers reported time savings.", "teachers"),
+        ("70 percent of students stated they liked it.", "students"),
+    ]
+    for sentence, expected_subject in cases:
+        facts = extract_numeric_facts(sentence)
+        assert facts, f"kein Fakt extrahiert: {sentence!r}"
+        fact = facts[0]
+        assert fact.subject.lower() == expected_subject, (
+            f"subject={fact.subject!r} erwartet={expected_subject!r} — {sentence!r}"
+        )
+        assert fact.predicate, f"leeres Prädikat: {sentence!r}"
+
+
 # ---------------------------------------------------------------------------
 # Test 2 — kein Thought-/Tool-Leak im sichtbaren Content
 # ---------------------------------------------------------------------------
