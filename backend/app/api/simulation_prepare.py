@@ -34,38 +34,7 @@ from .simulation_common import (
 )
 
 
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.internal"})
-
-# Lokale OpenAI-kompatible Server (z. B. Ollama) ignorieren den API-Key
-# vollstaendig, das OpenAI-SDK verlangt aber einen nicht-leeren String (#778).
-# Dieser Platzhalter macht die No-Auth-Freigabe fuer lokale Endpoints explizit
-# sichtbar, statt still `None` an die Generatoren durchzureichen — deren
-# Vertrag "Key und Base-URL aus derselben Quelle" (#778) wuerde sonst bei
-# String-Mismatch (z. B. host.docker.internal vs. localhost) faelschlich
-# einen ValueError werfen, obwohl die API-Schicht den Lauf bereits freigegeben hat.
-LOCAL_NO_AUTH_API_KEY = "local-no-auth"
-
-
-def _is_local_endpoint(base_url: Optional[str]) -> bool:
-    """Prüft, ob eine Base-URL auf einen lokalen Endpunkt zeigt.
-
-    Nutzt ``urllib.parse.urlparse`` und vergleicht den Hostnamen explizit gegen
-    eine Whitelist (``localhost``, ``127.0.0.1``, ``::1``, ``0.0.0.0``,
-    ``host.docker.internal``). Das verhindert Subdomain-Smuggling wie
-    ``http://not-localhost.com`` oder ``http://remote-server:11434``, die ein
-    reines Substring-Match fälschlich als lokal akzeptiert hätte
-    (Gemini-Review PR #466).
-    """
-    if not base_url:
-        return False
-    from urllib.parse import urlparse
-
-    try:
-        parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
-    except ValueError:
-        return False
-    host = (parsed.hostname or "").lower()
-    return host in _LOCAL_HOSTS
+from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 
 
 def _parse_quota_plan(data: dict) -> Optional[PersonaQuotaPlan]:
@@ -552,7 +521,7 @@ def prepare_simulation():
     route_router.lock_stage("persona_generation", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
-    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+    if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
         guard_message = (
             f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
             f"für Provider '{resolved_route.provider_id}'. "
@@ -602,7 +571,7 @@ def prepare_simulation():
             message=guard_message,
         )
 
-    if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):
+    if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
         # Lokaler Endpoint ohne Key ist explizit freigegeben (siehe Guard oben) —
         # der Platzhalter ersetzt `None`, damit der Generator-Vertrag aus #778
         # (Key und Base-URL aus derselben Quelle) nicht faelschlich einen

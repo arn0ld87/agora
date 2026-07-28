@@ -211,7 +211,7 @@ def test_prepare_local_route_without_store_key_uses_no_auth_placeholder(client, 
     (`host.docker.internal` vs. `localhost` ist der klassische Container-Fall).
     """
     from app.config import Config
-    from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+    from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
 
     monkeypatch.setattr(Config, "LLM_BASE_URL", "http://localhost:11434/v1")
 
