@@ -70,15 +70,6 @@ vi.mock('@/api/settings', () => ({
 vi.mock('@/composables/useSystemLog', () => ({
   useSystemLog: () => ({ systemLogs: [], addLog: vi.fn() }),
 }))
-vi.mock('@/composables/useWorkspaceMode', () => ({
-  useWorkspaceMode: () => ({
-    viewMode: 'split',
-    workspaceModes: [],
-    leftPanelStyle: {},
-    rightPanelStyle: {},
-    toggleMaximize: vi.fn(),
-  }),
-}))
 vi.mock('@/composables/usePolling', () => ({
   usePolling: () => ({ start: vi.fn().mockResolvedValue(undefined), stop: vi.fn(), tick: vi.fn(), isRunning: { value: false } }),
 }))

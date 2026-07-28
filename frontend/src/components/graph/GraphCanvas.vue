@@ -79,7 +79,7 @@ const props = defineProps({
   currentPhase: { type: Number, default: null },
   isSimulating: { type: Boolean, default: false },
   showFinishedHint: { type: Boolean, default: false },
-  // Issue #137 SUB2 — forwarded from MainView → GraphPanel → here.
+  // Issue #137 SUB2 — forwarded here.
   // Passed into useGraphRender so Auto-Freeze fires per committed batch.
   // Shape: { batch_count, total_batches, batch_at } | null
   batchSignal: { type: Object, default: null },
