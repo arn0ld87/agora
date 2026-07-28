@@ -1,5 +1,5 @@
 {
-  "_comment": "BAD: high-Confidence mit agent_quote aus nur 1 Stakeholder-Gruppe — verletzt cross_stakeholder_for_high (ADR-0002 Anker 4). ValidationError erwartet.",
+  "_comment": "BAD: high-Confidence mit agent_quote aus nur 1 Stakeholder-Gruppe — verletzt cross_stakeholder_for_high (ADR-0002 Anker 4). ValidationError erwartet. Mit seed_corpus ergibt auto_downgrade medium (agent_grounded, Issue #906).",
   "_provenance_stufe": "cross_stakeholder",
   "_violation": "nur eine Stakeholder-Gruppe, confidence=high",
   "claim_id": "claim_02",
@@ -24,6 +24,13 @@
       "persona_stakeholder_group": "mittleres_management",
       "supports_claim": true,
       "quote": "Eine gute Entwicklung für unser Team."
+    },
+    {
+      "type": "graph_fact",
+      "source": "seed_doc:migration_notes",
+      "snippet": "Interne Notiz: Das mittlere Management wurde früh eingebunden.",
+      "source_kind": "seed_corpus",
+      "supports_claim": true
     }
   ]
 }

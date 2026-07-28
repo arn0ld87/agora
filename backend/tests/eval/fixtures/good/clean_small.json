@@ -55,7 +55,7 @@
         {
           "claim_id": "claim_01",
           "claim_text": "Das Unternehmen haelt eine starke Marktposition im KMU-Segment.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.87,
           "evidence": [
             {
@@ -71,7 +71,7 @@
         {
           "claim_id": "claim_02",
           "claim_text": "Der Marktanteil im DACH-Segment ist 2024 gestiegen.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.8,
           "evidence": [
             {
@@ -94,7 +94,7 @@
         {
           "claim_id": "claim_03",
           "claim_text": "Wettbewerber B schneidet bei der Kundenzufriedenheit schlechter ab.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.78,
           "evidence": [
             {
@@ -110,7 +110,7 @@
         {
           "claim_id": "claim_04",
           "claim_text": "Das Unternehmen beschaeftigt 500 Mitarbeiter im DACH-Raum.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.88,
           "evidence": [
             {
@@ -133,7 +133,7 @@
         {
           "claim_id": "claim_05",
           "claim_text": "Die Zielgruppe bewertet das Produkt positiv, bemängelt aber den Preis.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.82,
           "evidence": [
             {
@@ -149,7 +149,7 @@
         {
           "claim_id": "claim_06",
           "claim_text": "Die Branche ist B2B SaaS mit Fokus auf KMU in Deutschland.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.85,
           "evidence": [
             {

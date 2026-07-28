@@ -87,6 +87,17 @@ def _agent_quote_evidence(group: str, score: float = 0.88) -> EvidenceItemModel:
     )
 
 
+def _seed_evidence() -> EvidenceItemModel:
+    """Helfer fuer seed_corpus-Evidence (ADR-0002 Stufe seed_only/agent_grounded)."""
+    return EvidenceItemModel(
+        type=EvidenceType.graph_fact,
+        source="seed-doc",
+        snippet="Seed-Dokument-Auszug mit genug Text.",
+        supports_claim=True,
+        source_kind=EvidenceSourceKind.seed_corpus,
+    )
+
+
 def test_verified_with_strong_match_passes():
     # ADR-0002 Anker 4: verified verlangt zwei Stakeholder-Gruppen via agent_quote.
     claim = ReportClaimModel(
@@ -136,6 +147,83 @@ def test_medium_claim_without_evidence_is_rejected():
             confidence_score=0.45,
             evidence=[],
         )
+
+
+# ---- ADR-0002 agent_grounded: medium-Validator (Issue #906 Defekt 1) ----
+
+
+def test_medium_with_only_seed_corpus_is_rejected():
+    """ADR-0002 Stufe seed_only → max low. medium mit ausschließlich seed_corpus-
+    Evidence ist verboten; das Label muss low lauten. Bisher passierte das
+    unbeanstandet, weil kein Validator medium bewachte (Issue #906)."""
+    with pytest.raises(ValidationError, match="agent_quote"):
+        ReportClaimModel(
+            claim_id="claim_04",
+            claim_text="Test claim text long enough",
+            confidence_label=ConfidenceLabel.medium,
+            confidence_score=0.45,
+            evidence=[_seed_evidence()],
+        )
+
+
+def test_medium_with_only_agent_quote_is_rejected():
+    """ADR-0002 Stufe agent_grounded verlangt mind. 1 agent_quote UND mind. 1
+    seed_corpus. medium mit ausschließlich agent_quote (ohne Korpus-Bezug) ist
+    ebenfalls verboten — beide Quellengattungen müssen vorhanden sein."""
+    with pytest.raises(ValidationError, match="seed_corpus"):
+        ReportClaimModel(
+            claim_id="claim_04",
+            claim_text="Test claim text long enough",
+            confidence_label=ConfidenceLabel.medium,
+            confidence_score=0.45,
+            evidence=[_agent_quote_evidence("Vertrieb")],
+        )
+
+
+def test_medium_with_agent_quote_and_seed_corpus_is_valid():
+    """ADR-0002 Stufe agent_grounded: medium ist gültig, wenn mind. 1 agent_quote
+    UND mind. 1 seed_corpus vorhanden sind. supports_claim ist für medium nicht
+    Pflicht (nur für high/verified)."""
+    claim = ReportClaimModel(
+        claim_id="claim_04",
+        claim_text="Test claim text long enough",
+        confidence_label=ConfidenceLabel.medium,
+        confidence_score=0.45,
+        evidence=[_agent_quote_evidence("Vertrieb"), _seed_evidence()],
+    )
+    assert claim.confidence_label == ConfidenceLabel.medium
+
+
+def test_medium_supports_claim_false_is_valid():
+    """Sichert die Decision aus Issue #906 Punkt 1: ``supports_claim`` ist für
+    ``medium`` NICHT Pflicht (im Gegensatz zu high/verified). Ein agent_grounded-
+    Claim mit ausschließlich widersprechender/opposing Evidence bleibt als
+    medium gültig — die Provenance-Stufe agent_grounded trägt das Label
+    unabhängig von der Stützungsrichtung."""
+    claim = ReportClaimModel(
+        claim_id="claim_04",
+        claim_text="Test claim text long enough",
+        confidence_label=ConfidenceLabel.medium,
+        confidence_score=0.45,
+        evidence=[
+            EvidenceItemModel(
+                type=EvidenceType.agent_interview,
+                source="agent-log",
+                snippet="Aussage aus Vertrieb.",
+                source_kind=EvidenceSourceKind.agent_quote,
+                persona_stakeholder_group="Vertrieb",
+                supports_claim=False,
+            ),
+            EvidenceItemModel(
+                type=EvidenceType.graph_fact,
+                source="seed-doc",
+                snippet="Seed-Dokument-Auszug mit genug Text.",
+                source_kind=EvidenceSourceKind.seed_corpus,
+                supports_claim=False,
+            ),
+        ],
+    )
+    assert claim.confidence_label == ConfidenceLabel.medium
 
 
 def test_low_claim_without_evidence_remains_legacy_readable():

@@ -280,6 +280,32 @@ class ReportClaimModel(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def agent_grounded_for_medium(self) -> "ReportClaimModel":
+        # ADR-0002 Stufe agent_grounded (Issue #906 Defekt 1): medium verlangt
+        # mind. 1 agent_quote- UND mind. 1 seed_corpus-Evidence. Seed-only-Claims
+        # (ausschließlich seed_corpus) müssen low lauten; reine agent_quote ohne
+        # Korpusbezug sind ebenfalls nicht agent_grounded. supports_claim ist
+        # für medium nicht Pflicht (nur für high/verified). Bisher passte ein
+        # seed_only-Claim mit Label medium unbeanstandet — die Regel hing nur
+        # am Modellgehorsam. Der Validator ist das Auffangnetz (ADR-0002 Risiko).
+        if self.confidence_label != ConfidenceLabel.medium:
+            return self
+        has_agent_quote = any(
+            e.source_kind == EvidenceSourceKind.agent_quote for e in self.evidence
+        )
+        has_seed_corpus = any(
+            e.source_kind == EvidenceSourceKind.seed_corpus for e in self.evidence
+        )
+        if not (has_agent_quote and has_seed_corpus):
+            raise ValueError(
+                f"Label 'medium' verlangt Evidence aus mind. 1 agent_quote UND "
+                f"mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). "
+                f"Gefunden: agent_quote={has_agent_quote}, "
+                f"seed_corpus={has_seed_corpus}."
+            )
+        return self
+
 
 def _coerce_text_to_max_1000(value: Any) -> Any:
     """Sub-Slice 05.7 — Pre-Validator-Coercion für hypothesis_text / claim_text.
