@@ -120,6 +120,10 @@ Kein `--no-verify`-Bypass. Runbook: [`docs/runbooks/pre-push-gate.md`](docs/runb
 | [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md) | Dispatch-, Parallelitäts- und Review-Workflow |
 | [`docs/runbooks/architecture-layers.md`](docs/runbooks/architecture-layers.md) | Layer 0–10 |
 
+## Worktree-Pfad
+
+**Pflicht:** Alle Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist für Agora-Worktrees verboten — `git worktree add` ohne T7-Pfad wird vom Lead zurückgewiesen. T7-Mount wird vor dem Anlegen verifiziert (`test -d /Volumes/T7`). Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+
 ## Provider-Detection-SSoT
 
 Bei Provider-Detection-Fragen („welcher Provider für diese URL/Modell", `ollama.com`-Handling, `think`/`num_ctx`-Gate) ist [`backend/app/llm/providers/registry.py`](backend/app/llm/providers/registry.py) → `detect_provider(base_url, model, *, mode="http"|"oasis")` die Single Source of Truth. Keine neuen lokalen Detection-Heuristiken pflegen.

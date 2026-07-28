@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (STATUS.md-Drift: Frontend Test-Files-Zähler 169 → 167 — 2026-07-28)
+
+- `docs/STATUS.md` Abschnitt `## Tests` zeigte `Frontend Test-Files | 169`, die `find`-basierte Messung im Repo liefert jedoch 167. Ursprung: PR #938 (`refactor(0.9): migrate v3 content components to v4 steps`) konsolidierte zwei Spec-Dateien, ohne den Drift-Check nachzuziehen. Fix bringt das Backend-PR-smoke-Gate wieder auf grün.
+- Auto-Generator `scripts/sync-status.sh` und Drift-Check unverändert; manuelle Anpassung ist hier ausreichend, weil die Diskrepanz genau ein Spec-File-Pair betrifft.
+
 ### Removed (Unused Composables `useWorkspaceMode` und `useWorkspaceStatus` entfernt — 2026-07-28, Issue #908)
 
 - `frontend/src/composables/useWorkspaceMode.ts` und `frontend/src/composables/useWorkspaceStatus.ts` mitsamt ihrer Specs unter `frontend/src/composables/__tests__/` entfernt. Beide Composables hatten nach der v4-Routen-Konsolidierung (ADR-0010) keine Importeure mehr.
