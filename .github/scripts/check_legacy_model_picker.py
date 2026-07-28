@@ -16,8 +16,9 @@ folgende Importe einführen:
 
 Seit Slice 7.7 blockiert der Check außerdem die Rückkehr entfernter Dateien
 (``REMOVED_PATHS``): der v3-Picker und die unverdrahteten
-Mock-Routing-Komponenten aus 7.7 sowie ``LlmProfilePicker.vue`` aus Issue
-#834. Hier reicht die bloße Existenz der Datei — ein Import ist nicht nötig.
+Mock-Routing-Komponenten aus 7.7, ``LlmProfilePicker.vue`` aus Issue
+#834, sowie ``ActiveModelBadge.vue`` aus Issue #911. Hier reicht die bloße Existenz
+der Datei — ein Import ist nicht nötig.
 
 Read-Adapter-Freigabe via ``@deprecated``
 =========================================
@@ -25,12 +26,12 @@ Read-Adapter-Freigabe via ``@deprecated``
 Nach 5.5 gibt es keinen Opt-in-Marker mehr. Stattdessen erkennt der Check das
 ``@deprecated``-JSDoc-Tag am **Ziel** des Imports: Trägt die importierte Datei
 selbst ein ``@deprecated``-Tag, gilt sie als sanktionierter Read-Adapter im
-Deprecation-/Read-only-Fenster und der Import ist erlaubt. So dürfen die
-bestehenden v3-Consumer (``WorkspaceHeader`` → ``ActiveModelBadge``,
-``Step2EnvSetup``/``Step3Simulation`` → ``useRuntimeLlmOptions``) die
-deprecateten Picker/Composables weiter lesen, ohne pro-Datei-Marker zu
-tragen — während jeder *neu* eingeführte, nicht-deprecatete v3-Pfad hart
-blockiert wird.
+Deprecation-/Read-only-Fenster und der Import ist erlaubt.
+Da inzwischen alle Komponenten-Ausnahmen (wie ``ModelPicker.vue``, ``LlmProfilePicker.vue``
+und ``ActiveModelBadge.vue``) in ``REMOVED_PATHS`` stehen und allein durch ihre Existenz
+blockiert werden, greift diese Freigabe faktisch nur noch für verbliebene Stores
+und Composables (z. B. ``Step2EnvSetup.vue``/``Step3Simulation.vue`` →
+``useRuntimeLlmOptions.ts``).
 
 Die alten Stores (``llmProviders``/``llmProfiles``/``llmRoutingDefaults``)
 existieren nach 5.5 nicht mehr als Datei (konsolidiert in
@@ -141,6 +142,10 @@ REMOVED_PATHS: tuple[tuple[Path, str], ...] = (
     (
         Path("components/llm/LlmProfilePicker.vue"),
         "v3 LlmProfilePicker.vue wurde in Issue #834 entfernt",
+    ),
+    (
+        Path("components/ActiveModelBadge.vue"),
+        "v3 ActiveModelBadge.vue wurde in Issue #835 entfernt",
     ),
     (
         Path("views/Settings/llmRouting/ActiveSnapshotsCard.vue"),

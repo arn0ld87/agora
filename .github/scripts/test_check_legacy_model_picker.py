@@ -128,29 +128,19 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_deprecated_target_allows_import(self) -> None:
         # Ziel-Datei trägt @deprecated → sanktionierter Read-Adapter.
-        # ActiveModelBadge.vue (nicht in REMOVED_PATHS) statt LlmProfilePicker.vue,
-        # da letzterer Pfad in REMOVED_PATHS steht und schon bei Existenz blockt.
-        _write(
-            self.root / "components/ActiveModelBadge.vue",
-            (
-                "<script setup lang=\"ts\">\n"
-                "/**\n"
-                " * @deprecated Slice 5.5 — v3-Badge, Read-Adapter bis 5.6.\n"
-                " */\n"
-                "</script>\n"
-            ),
-        )
+        # Wir verwenden hier useRuntimeLlmOptions.ts als Testobjekt,
+        # da Komponenten wie ActiveModelBadge.vue in REMOVED_PATHS stehen
+        # und schon bei reiner Existenz blockieren würden.
         _write(
             self.root / "composables/useRuntimeLlmOptions.ts",
             "/** @deprecated Slice 5.5 — Runtime-Credential-Read-Adapter. */\n"
             "export function useRuntimeLlmOptions() {}\n",
         )
-        # Consumer ohne jeden Marker importieren die deprecateten Ziele.
+        # Consumer ohne jeden Marker importiert das deprecatete Ziel.
         _write(
             self.root / "consumer.vue",
             (
                 "<script setup lang=\"ts\">\n"
-                "import ActiveModelBadge from '@/components/ActiveModelBadge.vue'\n"
                 "import { useRuntimeLlmOptions } from '@/composables/useRuntimeLlmOptions'\n"
                 "</script>\n"
             ),
@@ -168,17 +158,18 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_non_deprecated_target_still_flags(self) -> None:
         # Ziel existiert, trägt aber KEIN @deprecated → Verstoß.
-        # ActiveModelBadge.vue statt LlmProfilePicker.vue, damit der Treffer
-        # aus der Import-Regel stammt und nicht aus REMOVED_PATHS.
+        # Wir verwenden useRuntimeLlmOptions.ts als Testobjekt, damit der Treffer
+        # aus der Import-Regel stammt und nicht aus REMOVED_PATHS (wie es bei
+        # ActiveModelBadge.vue der Fall wäre).
         _write(
-            self.root / "components/ActiveModelBadge.vue",
-            "<script setup lang=\"ts\">\n// kein Tag\n</script>\n",
+            self.root / "composables/useRuntimeLlmOptions.ts",
+            "export function useRuntimeLlmOptions() {}\n",
         )
         _write(
             self.root / "consumer.vue",
             (
                 "<script setup lang=\"ts\">\n"
-                "import ActiveModelBadge from '@/components/ActiveModelBadge.vue'\n"
+                "import { useRuntimeLlmOptions } from '@/composables/useRuntimeLlmOptions'\n"
                 "</script>\n"
             ),
         )
@@ -193,7 +184,7 @@ class CheckLegacyModelPickerTests(unittest.TestCase):
             1,
             "nicht-deprecatetes Ziel darf nicht durchgehen",
         )
-        self.assertIn("ActiveModelBadge.vue", proc.stdout)
+        self.assertIn("useRuntimeLlmOptions", proc.stdout)
         self.assertIn("llmProviders", proc.stdout)
 
     # ------------------------------------------------------------------
