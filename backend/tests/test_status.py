@@ -206,3 +206,92 @@ class TestStatusFunctions:
         assert "verify_connectivity'" not in result['error'], (
             f"NoneType-AttributeError leakt durch: {result['error']!r}"
         )
+
+
+class TestOllamaStatusProviderGating:
+    """Regression für den Bug 'MiniMax wird gegen /api/tags geprüft'.
+
+    Die alte Logik hat ``LLM_BASE_URL`` gestrippt und pauschal ``/api/tags``
+    angefragt — bei MiniMax-URLs führt das zu 404 und Log-Spam. Der Status-
+    Endpoint muss den Probe anhand der Provider-Heuristik überspringen.
+    """
+
+    def _set_provider(self, monkeypatch, base_url, model=""):
+        monkeypatch.setattr(Config, "LLM_BASE_URL", base_url)
+        monkeypatch.setattr(Config, "LLM_MODEL_NAME", model)
+        # Kein OLLAMA_BASE_URL-Override — wir wollen nur LLM_BASE_URL testen.
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    def test_minimax_url_skips_api_tags_probe(self, monkeypatch):
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+        assert result['reachable'] is None
+        assert result['skipped'] is True
+        assert 'minimax' in result['reason'].lower()
+        assert result['models_available'] == []
+        assert result['base_url'] is None
+        # KEIN HTTP-Call gegen /api/tags.
+        mock_get.assert_not_called()
+
+    def test_openai_url_skips_api_tags_probe(self, monkeypatch):
+        self._set_provider(monkeypatch, "https://api.openai.com/v1", "gpt-4")
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+        assert result['reachable'] is None
+        assert result['skipped'] is True
+        assert 'openai' in result['reason'].lower()
+        mock_get.assert_not_called()
+
+    def test_google_url_skips_api_tags_probe(self, monkeypatch):
+        self._set_provider(
+            monkeypatch,
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "gemini-3",
+        )
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+        assert result['skipped'] is True
+        mock_get.assert_not_called()
+
+    def test_ollama_url_calls_api_tags(self, monkeypatch):
+        """Echter Ollama-Provider → /api/tags MUSS weiterhin aufgerufen werden."""
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen2.5:32b")
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": [{"name": "qwen2.5:32b"}]}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+        assert result['skipped'] is False
+        assert result['reachable'] is True
+        assert "qwen2.5:32b" in result['models_available']
+        assert result['base_url'] == "http://localhost:11434"
+        mock_get.assert_called_once()
+        called_url = mock_get.call_args[0][0]
+        assert called_url.endswith("/api/tags")
+        assert "/v1/api/tags" not in called_url
+
+    def test_ollama_url_connectivity_error_is_defensive(self, monkeypatch):
+        """Ollama-Verbindungsfehler dürfen KEINEN HTTP-500 verursachen."""
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen2.5:32b")
+        with patch('app.api.status.requests.get', side_effect=Exception("boom")):
+            result = _get_ollama_status()
+        assert result['reachable'] is False
+        assert result['skipped'] is False
+        assert 'boom' in result['error']
+        assert result['models_available'] == []
+
+    def test_ollama_env_url_preferred_over_llm_base_url(self, monkeypatch):
+        """``OLLAMA_BASE_URL`` schlägt ``LLM_BASE_URL``, wenn beide gesetzt sind."""
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen2.5:32b")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama.internal.lan:9999")
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": []}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+        assert result['base_url'] == "http://ollama.internal.lan:9999"
+        called_url = mock_get.call_args[0][0]
+        assert called_url.startswith("http://ollama.internal.lan:9999/api/tags")

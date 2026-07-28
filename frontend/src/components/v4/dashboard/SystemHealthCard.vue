@@ -50,15 +50,27 @@ const rows = computed<HealthRow[]>(() => {
   }
   const ollamaModels = s.ollama.models_available?.length ?? 0
   return [
-    {
-      key: 'ollama',
-      label: t('dashboard.system.ollama'),
-      tone: s.ollama.reachable ? 'green' : 'red',
-      state: s.ollama.reachable ? 'reachable' : 'unreachable',
-      hint: s.ollama.reachable
-        ? t('dashboard.system.ollamaHint', { n: ollamaModels })
-        : (s.ollama.error ?? s.ollama.base_url ?? ''),
-    },
+    // ``reachable === null`` heißt: Probe übersprungen, weil der aktive
+    // Provider kein Ollama ist. Das ist kein Fehlerzustand — deshalb 'idle'
+    // statt 'unreachable', sonst meldet das Dashboard im MiniMax-/OpenAI-
+    // Betrieb dauerhaft rot.
+    s.ollama.reachable === null
+      ? {
+          key: 'ollama',
+          label: t('dashboard.system.ollama'),
+          tone: 'gray',
+          state: 'idle',
+          hint: s.ollama.reason ?? '',
+        }
+      : {
+          key: 'ollama',
+          label: t('dashboard.system.ollama'),
+          tone: s.ollama.reachable ? 'green' : 'red',
+          state: s.ollama.reachable ? 'reachable' : 'unreachable',
+          hint: s.ollama.reachable
+            ? t('dashboard.system.ollamaHint', { n: ollamaModels })
+            : (s.ollama.error ?? s.ollama.base_url ?? ''),
+        },
     {
       key: 'neo4j',
       label: t('dashboard.system.neo4j'),
