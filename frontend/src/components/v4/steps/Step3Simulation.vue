@@ -71,6 +71,9 @@ const isGeneratingReport = ref(false)
 const runStatus = ref({})
 const allActions = ref([])
 const actionIds = ref(new Set())
+// Server-Total-Count aus `actions_total`. Unabhängig von der Polling-Rate
+// und springt nicht, wenn das (begrenzte) Sichtfenster gefüllt wird.
+const totalActions = ref(0)
 const scrollEl = ref(null)
 const startError = ref(null)
 
@@ -208,6 +211,7 @@ function resetState() {
   runStatus.value = {}
   allActions.value = []
   actionIds.value = new Set()
+  totalActions.value = 0
   resetConsoleLogs()
   toolPanelUnreadErrors.value = 0
   _lastSeenConsoleLength = 0
@@ -399,10 +403,17 @@ async function pollDetail() {
       }
       maybeEmitProgress()
     }
-    if (Array.isArray(res.data?.all_actions)) {
+    // Der Endpoint liefert keine vollständige `all_actions`-Liste mehr (das
+    // wurde mit dem Pagination-Fix entfernt) — nur die paginierten `actions`.
+    // Wir deduplizieren deshalb clientseitig über Zeitstempel und Inhalt.
+    // Ohne den Zeitstempel im Schlüssel würden zwei identische Aktionen
+    // desselben Agenten in derselben Runde fälschlich als Duplikat
+    // verworfen. Der Gesamtzähler kommt aus `actions_total`, nicht aus der
+    // Länge des (begrenzten) Sichtfensters.
+    if (Array.isArray(res.data?.actions)) {
       let appended = 0
-      for (const a of res.data.all_actions) {
-        const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
+      for (const a of res.data.actions) {
+        const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}-${a.timestamp}-${(a.action_args?.content || '').length}`
         if (!actionIds.value.has(key)) {
           actionIds.value.add(key)
           if (a.action_args?.content) a._tokens = tokenizeFeedText(a.action_args.content)
@@ -411,6 +422,9 @@ async function pollDetail() {
         }
       }
       if (appended > 0) nextTick(() => feedSticky.markAppended(appended))
+    }
+    if (typeof res.data?.actions_total === 'number') {
+      totalActions.value = res.data.actions_total
     }
   } catch { /* swallow */ }
 }
@@ -435,7 +449,6 @@ const statusKind = computed(() => {
   return 'running'
 })
 
-const totalActions = computed(() => allActions.value.length)
 const twitterActions = computed(() => allActions.value.filter((a) => a.platform === 'twitter').length)
 const redditActions = computed(() => allActions.value.filter((a) => a.platform === 'reddit').length)
 

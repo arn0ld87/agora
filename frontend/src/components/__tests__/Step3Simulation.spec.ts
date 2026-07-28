@@ -617,3 +617,114 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
     expect(payload.max_rounds).toBe(5)
   })
 })
+
+/**
+ * Regression: Aktionen-Zähler zeigte dauerhaft 0.
+ *
+ * Der Endpoint /run-status/detail liefert seit dem Pagination-Fix keine
+ * vollständige `all_actions`-Liste mehr — nur die paginierten `actions`
+ * plus `actions_total` als Server-Count. Das Frontend las weiterhin
+ * `res.data.all_actions`, das damit immer `undefined` war und der Zähler
+ * auf 0 stand, obwohl die Simulation Hunderte Aktionen produzierte.
+ * Zusätzlich enthielt der Dedup-Schlüssel keinen Zeitstempel: zwei
+ * identische Aktionen desselben Agenten in derselben Runde wurden still
+ * als Duplikat verworfen.
+ */
+describe('Step3Simulation — Aktionen-Zähler aus actions/actions_total (Pagination-Shape)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    _capturedStateCallback = null
+    _effectiveRefValue = null
+    _runOverrideValue = null
+    ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
+      (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
+        if (handlers?.state) _capturedStateCallback = handlers.state
+        return {
+          isStreaming: { value: false },
+          error: { value: null },
+          lastEventAt: { value: null },
+          start: vi.fn().mockResolvedValue(undefined),
+          stop: vi.fn(),
+        }
+      }
+    )
+  })
+
+  it('liest Aktionen aus `actions` (nicht `all_actions`) und den Total aus `actions_total`', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    const action = {
+      round_num: 3,
+      platform: 'twitter',
+      agent_id: 5,
+      action_type: 'create_post',
+      timestamp: '2026-07-28T10:48:00',
+      action_args: { content: 'Ein Post' },
+    }
+    vi.mocked(simulationApi.getRunStatusDetail).mockResolvedValue({
+      success: true,
+      data: {
+        runner_status: 'running',
+        current_round: 3,
+        total_rounds: 96,
+        // Keine `all_actions` — die echte Response-Shape nach PR #526.
+        actions: [action],
+        actions_total: 929,
+      },
+    } as never)
+
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    // Polling einmal anstoßen und warten, bis der Detail-Call verarbeitet ist.
+    await flushPromises()
+    await flushPromises()
+
+    const html = wrapper.html()
+    // 929 (Server-Count) statt 0 oder statt der Anzahl sichtbarer Einträge.
+    expect(html).toContain('929')
+    expect(simulationApi.getRunStatusDetail).toHaveBeenCalled()
+  })
+
+  it('Dedup: zwei identische Aktionen mit unterschiedlichem Zeitstempel werden beide gezählt', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    const base = {
+      round_num: 3,
+      platform: 'twitter',
+      agent_id: 5,
+      action_type: 'create_post',
+      action_args: { content: 'gleicher Inhalt' },
+    }
+    vi.mocked(simulationApi.getRunStatusDetail).mockResolvedValue({
+      success: true,
+      data: {
+        runner_status: 'running',
+        current_round: 3,
+        total_rounds: 96,
+        actions: [
+          { ...base, timestamp: '2026-07-28T10:48:00' },
+          { ...base, timestamp: '2026-07-28T10:49:00' },
+        ],
+        actions_total: 2,
+      },
+    } as never)
+
+    const wrapper = mountComponent()
+    await flushPromises()
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    // Ohne Zeitstempel im Schlüssel wäre nur eine Aktion gezählt worden.
+    expect(wrapper.html()).toContain('2')
+  })
+})
