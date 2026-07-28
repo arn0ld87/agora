@@ -636,11 +636,11 @@ class OasisProfileGenerator:
 
         if is_individual:
             prompt = self._build_individual_persona_prompt(
-                entity_name, entity_type, entity_summary, entity_attributes, context
+                entity_name, entity_type, entity_summary, entity_attributes, context, detail_level=detail_level
             )
         else:
             prompt = self._build_group_persona_prompt(
-                entity_name, entity_type, entity_summary, entity_attributes, context
+                entity_name, entity_type, entity_summary, entity_attributes, context, detail_level=detail_level
             )
 
         # Try multiple times until successful or max retry attempts reached
@@ -862,11 +862,12 @@ class OasisProfileGenerator:
         entity_type: str,
         entity_summary: str,
         entity_attributes: Dict[str, Any],
-        context: str
+        context: str,
+        detail_level: Optional[dict] = None
     ) -> str:
         """Build detailed persona prompt for individual entities — language-aware."""
 
-        detail = _resolve_persona_detail_level()
+        detail = detail_level if detail_level is not None else _resolve_persona_detail_level()
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
         context_str = context[:detail['context_limit']] if context else "Keine zusätzlichen Informationen"
 
@@ -981,11 +982,12 @@ Important:
         entity_type: str,
         entity_summary: str,
         entity_attributes: Dict[str, Any],
-        context: str
+        context: str,
+        detail_level: Optional[dict] = None
     ) -> str:
         """Build detailed persona prompt for group/institutional entities — language-aware."""
 
-        detail = _resolve_persona_detail_level()
+        detail = detail_level if detail_level is not None else _resolve_persona_detail_level()
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "Keine"
         context_str = context[:detail['context_limit']] if context else "Keine zusätzlichen Informationen"
 

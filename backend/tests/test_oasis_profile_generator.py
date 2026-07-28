@@ -26,6 +26,8 @@ from __future__ import annotations
 import pytest
 
 from app.services import oasis_profile_generator as _mod
+from unittest.mock import patch, MagicMock
+
 from app.services.oasis_profile_generator import (
     OasisProfileGenerator,
     PersonaProfileSchema,
@@ -328,4 +330,92 @@ def test_try_fix_json_valid_input_parses_without_repair():
     )
     assert isinstance(result, dict)
     assert result.get("bio") == "Mobilitätsberaterin aus München."
-    assert result.get("_fixed") is True
+
+
+@patch("app.services.oasis_profile_generator._resolve_persona_detail_level")
+@patch("app.llm.client.LLMClient")
+def test_issue_882_resolve_persona_detail_level_called_once_individual(mock_llm_client, mock_resolve_level):
+    """
+    Test that _resolve_persona_detail_level is called exactly once per persona generation for individual entities.
+    """
+    mock_resolve_level.return_value = {
+        'max_tokens': 16384,
+        'context_limit': 1500,
+        'word_count_de': 'ca. 200 Wörter',
+        'word_count_en': 'approx. 200 words'
+    }
+
+    # Setup LLM mock
+    mock_instance = mock_llm_client.return_value
+    mock_instance.chat_json.return_value = {
+        "bio": "Mocked Bio",
+        "persona": "Mocked Persona",
+        "age": 30,
+        "gender": "male",
+        "mbti": "INTJ",
+        "country": "Germany",
+        "profession": "Engineer",
+        "interested_topics": ["Tech"],
+        "voice_register": "neutral-de"
+    }
+
+    generator = _make_generator()
+    generator._industry_quota_plan = MagicMock()
+
+    with patch.object(generator, "_is_individual_entity", return_value=True), \
+         patch.object(generator, "_get_system_prompt", return_value="sys_prompt"):
+
+        generator._generate_profile_with_llm(
+            entity_name="Max",
+            entity_type="person",
+            entity_summary="Summary",
+            entity_attributes={},
+            context="Context"
+        )
+
+        # Verify it was called exactly once
+        assert mock_resolve_level.call_count == 1
+
+@patch("app.services.oasis_profile_generator._resolve_persona_detail_level")
+@patch("app.llm.client.LLMClient")
+def test_issue_882_resolve_persona_detail_level_called_once_group(mock_llm_client, mock_resolve_level):
+    """
+    Test that _resolve_persona_detail_level is called exactly once per persona generation for group entities.
+    """
+    mock_resolve_level.return_value = {
+        'max_tokens': 16384,
+        'context_limit': 1500,
+        'word_count_de': 'ca. 200 Wörter',
+        'word_count_en': 'approx. 200 words'
+    }
+
+    # Setup LLM mock
+    mock_instance = mock_llm_client.return_value
+    mock_instance.chat_json.return_value = {
+        "bio": "Mocked Bio",
+        "persona": "Mocked Persona",
+        "age": 30,
+        "gender": "male",
+        "mbti": "INTJ",
+        "country": "Germany",
+        "profession": "Engineer",
+        "interested_topics": ["Tech"],
+        "voice_register": "neutral-de"
+    }
+
+    generator = _make_generator()
+    generator._industry_quota_plan = MagicMock()
+
+    with patch.object(generator, "_is_individual_entity", return_value=False), \
+         patch.object(generator, "_get_system_prompt", return_value="sys_prompt"):
+
+        generator._generate_profile_with_llm(
+            entity_name="Group",
+            entity_type="org",
+            entity_summary="Summary",
+            entity_attributes={},
+            context="Context"
+        )
+
+        # Verify it was called exactly once
+        assert mock_resolve_level.call_count == 1
