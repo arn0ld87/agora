@@ -168,13 +168,29 @@ describe('checkFocusVisible', () => {
     };
 
     const handles = [first, target].map((element) => ({
-      evaluate: async (fn: (node: Element, arg?: unknown) => unknown, arg?: unknown) =>
-        fn(element, arg),
+      evaluate: async (fn: (node: Element, arg?: unknown) => unknown, arg?: unknown) => {
+        // the actual page.evaluate runs `window.getComputedStyle(node)` if arg is FOCUS_STYLE_PROPERTIES
+        // so we need to run it in the context of the document.
+        if (fn.toString().includes('node.blur')) {
+          (element as HTMLElement).blur();
+          element.style.outlineStyle = 'none';
+          element.style.outlineWidth = '0px';
+          element.style.outlineColor = 'rgb(0, 0, 0)';
+          return undefined;
+        }
+        return fn(element, arg);
+      },
       dispose: async () => undefined,
     }));
     const page = {
-      evaluate: async (fn: (arg?: unknown) => unknown, arg?: unknown) => fn(arg),
-      keyboard: { press: async () => target.focus() },
+      evaluate: async (fn: (arg?: unknown) => unknown, arg?: unknown) => {
+        if (fn.toString().includes('requestAnimationFrame')) {
+          return fn();
+        }
+        return fn(arg);
+      },
+      evaluateHandle: async (fn: (arg?: unknown) => unknown, arg?: unknown) => handles[1],
+      keyboard: { press: async () => { target.focus(); return undefined; } },
       locator: () => ({ elementHandles: async () => handles }),
     } as unknown as Page;
 

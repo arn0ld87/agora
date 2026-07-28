@@ -265,26 +265,26 @@ export async function checkFocusVisible(page: Page): Promise<void> {
     }
   });
 
-  const focusableElements = (await page.locator(FOCUSABLE_SELECTOR).elementHandles()) as ElementHandle<HTMLElement>[];
-  try {
-    expect(focusableElements.length).toBeGreaterThan(0);
-    const beforeStyles = await Promise.all(focusableElements.map(captureFocusStyle));
+  await page.keyboard.press('Tab');
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 
-    await page.keyboard.press('Tab');
+  const target = await page.evaluateHandle(() => document.activeElement as HTMLElement | null);
+
+  try {
+    const isElement = await target.evaluate((node) => node !== null && node !== document.body);
+    expect(isElement).toBe(true);
+    if (!isElement) return;
+
+    const afterStyle = await captureFocusStyle(target as ElementHandle<HTMLElement>);
+
+    await target.evaluate((node) => node.blur());
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 
-    let focusedIndex = -1;
-    for (let index = 0; index < focusableElements.length; index += 1) {
-      if (await focusableElements[index].evaluate((element) => element === document.activeElement)) {
-        focusedIndex = index;
-        break;
-      }
-    }
+    const beforeStyle = await captureFocusStyle(target as ElementHandle<HTMLElement>);
 
-    const afterStyle = focusedIndex >= 0 ? await captureFocusStyle(focusableElements[focusedIndex]) : undefined;
-    expect(afterStyle ? diffFocusStyle(beforeStyles[focusedIndex], afterStyle) : false).toBe(true);
+    expect(diffFocusStyle(beforeStyle, afterStyle)).toBe(true);
   } finally {
-    await Promise.all(focusableElements.map((element) => element.dispose()));
+    await target.dispose();
   }
 }
 
