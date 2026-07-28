@@ -24,6 +24,7 @@ describe('StepEnvSetupView — Navigation', () => {
     const wrapper = mount(StepEnvSetupView, {
       props: { projectId: 'project_42' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -55,6 +56,7 @@ describe('StepEnvSetupView — Navigation', () => {
     const wrapper = mount(StepEnvSetupView, {
       props: { projectId: 'project_42' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -81,6 +83,7 @@ describe('StepEnvSetupView — Navigation', () => {
     const wrapper = mount(StepEnvSetupView, {
       props: { projectId: 'project_42' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },

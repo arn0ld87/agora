@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (hartkodierte PageHeader-Texte auf vue-i18n umgestellt — 2026-07-28, Issue #796)
+
+- `title`/`subtitle`/`label`-Literale in `HistoryView.vue`, `CompareView.vue`, `StepEnvSetupView.vue`, `StepReportView.vue`, `StepInteractionView.vue`, `StepGraphBuildView.vue` und `StepSimulationView.vue` laufen jetzt über `$t()` statt hartkodierter deutscher Strings, mit neuen Keys in `de.json` und `en.json`.
+- Betroffene Specs prüfen den i18n-Key gegen befüllte `messages` statt das deutsche Literal gegen leere `messages`.
+
 ### Changed (Legacy-Model-Picker-Guard um ActiveModelBadge.vue erweitert — 2026-07-28, Issue #911)
 
 - `ActiveModelBadge.vue` (entfernt in Issue #835) ist jetzt in `REMOVED_PATHS` von `.github/scripts/check_legacy_model_picker.py` gelistet — eine Wiedereinführung der Datei schlägt künftig schon bei bloßer Existenz fehl, unabhängig von Importen.

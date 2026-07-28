@@ -4,8 +4,8 @@
 <template>
   <AppShell :breadcrumbs="crumbs">
     <PageHeader
-      title="Report"
-      subtitle="Simulationsergebnisse und Quellenbelege einsehen"
+      :title="$t('views.stepReport.title')"
+      :subtitle="$t('views.stepReport.subtitle')"
     >
       <template #right>
         <StepModelOverrideChip stage-id="report_generation" />

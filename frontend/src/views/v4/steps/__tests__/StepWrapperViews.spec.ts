@@ -202,6 +202,7 @@ async function mountView<T extends object>(
   return mount(component as Parameters<typeof mount>[0], {
     props,
     global: {
+        mocks: { $t: (key: any) => key },
       plugins: [router, createPinia()],
       stubs: {
         // Step-Komponenten als Stubs — ihre Inhalte sind Folge-Slice

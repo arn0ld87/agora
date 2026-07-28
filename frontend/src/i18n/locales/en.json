@@ -1534,5 +1534,34 @@
       "submit": "Start download",
       "modelRequired": "Model name is required"
     }
+  },
+  "views": {
+    "history": {
+      "title": "History",
+      "subtitle": "Run and Branch History"
+    },
+    "compare": {
+      "title": "Compare"
+    },
+    "stepEnvSetup": {
+      "title": "Personas",
+      "subtitle": "Configure target group quotas and environment parameters"
+    },
+    "stepReport": {
+      "title": "Report",
+      "subtitle": "View simulation results and source citations"
+    },
+    "stepInteraction": {
+      "title": "Interaction",
+      "subtitle": "Ask targeted questions to the simulated personas"
+    },
+    "stepGraphBuild": {
+      "title": "Graph Build",
+      "subtitle": "Build knowledge graph from uploaded documents"
+    },
+    "stepSimulation": {
+      "title": "Simulation",
+      "subtitle": "Start and observe multi-agent simulation run"
+    }
   }
 }

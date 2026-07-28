@@ -7,7 +7,7 @@
 -->
 <template>
   <AppShell :breadcrumbs="crumbs">
-    <PageHeader title="Compare" />
+    <PageHeader :title="$t('views.compare.title')" />
 
     <div v-if="loadError" class="compare-view-error" role="alert">
       {{ loadError }}

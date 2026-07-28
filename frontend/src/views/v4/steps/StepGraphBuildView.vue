@@ -6,8 +6,8 @@
 <template>
   <AppShell :breadcrumbs="crumbs">
     <PageHeader
-      title="Graph Build"
-      subtitle="Wissensgraph aus hochgeladenen Dokumenten aufbauen"
+      :title="$t('views.stepGraphBuild.title')"
+      :subtitle="$t('views.stepGraphBuild.subtitle')"
     >
       <template #right>
         <StepModelOverrideChip stage-id="graph_build" />
