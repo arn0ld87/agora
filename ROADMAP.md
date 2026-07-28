@@ -1,6 +1,6 @@
 # Agora Roadmap
 
-**Stand:** 27.07.2026  
+**Stand:** 28.07.2026  
 **Aktuelle Produktversion:** `0.8.0` Technical Preview
 
 Diese Datei beschreibt ausschließlich die strategische Reihenfolge der nächsten Releases. Konkrete Arbeitspakete, Akzeptanzkriterien und Fortschritt werden als GitHub Issues gepflegt.
@@ -48,7 +48,7 @@ Der aktuelle Stand besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports
 - Compare-, Export- und Observability-Grundlagen
 
-Der Stand ist trotzdem keine stabile `1.0`, weil die Vue-v4-Konsolidierung noch nicht abgeschlossen ist (verbleibend: Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922); der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) ist umgesetzt) und die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird.
+Der Stand ist trotzdem keine stabile `1.0`, weil die E2E-Pipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Vue-v4-Konsolidierung selbst ist abgeschlossen (Migration der v3-Inhaltskomponenten [#922](https://github.com/arn0ld87/agora/issues/922) und der `/home`-Redirect [#915](https://github.com/arn0ld87/agora/issues/915) sind umgesetzt, siehe [#760](https://github.com/arn0ld87/agora/issues/760)).
 
 ## Erreicht
 
@@ -73,11 +73,11 @@ Agora soll als zusammenhängendes Produkt zuverlässig installierbar, bedienbar 
 
 ### Frontend
 
-- [ ] Vue-v4 ist die einzige produktive Oberfläche
-- [ ] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen
+- [x] Vue-v4 ist die einzige produktive Oberfläche — jede fachliche Hauptfunktion hat genau eine produktive Route (`frontend/src/router/index.ts`), belegt in [Issue #760](https://github.com/arn0ld87/agora/issues/760) via [#829](https://github.com/arn0ld87/agora/issues/829)/[#839](https://github.com/arn0ld87/agora/issues/839)
+- [x] klassische Prozess-Views besitzen Lösch- oder Redirect-Entscheidungen — `/process`, `/simulation`, `/simulation/:id/start`, `/report`, `/interaction` sind reine Redirects auf die v4-Referenzrouten, dokumentiert in [ADR-0010](docs/decisions/0010-vue-v4-route-consolidation.md)
 - [x] `/agora-2026` ist kein produktiv gerouteter Parallelentwurf — als Designreferenz unter `docs/design-reference/agora-2026/` archiviert ([PR #878](https://github.com/arn0ld87/agora/pull/878)), Regressionstest pinnt `/agora-2026` → NotFound
 - [x] kein produktiv verdrahteter React-/Lovable-Rewrite — ein Lovable-Prototyp existiert, liegt aber außerhalb dieses Repos, ist unveröffentlicht und in keinem Auslieferungspfad referenziert, siehe [`docs/epics/frontend-next/2026-STATUS.md`](docs/epics/frontend-next/2026-STATUS.md)
-- [ ] Responsive- und Accessibility-Gates sind grün
+- [x] Responsive- und Accessibility-Gates sind grün — `Playwright Golden-Gate-Accessibility-Smoke` grün auf `main` (zuletzt PR #938); der einzige bekannte Responsive-Mangel ([Issue #920](https://github.com/arn0ld87/agora/issues/920), `/home` bei 320px) ist mit dem `/home → /dashboard`-Redirect gegenstandslos geworden (`Home.vue` ist nicht mehr produktiv geroutet, siehe Kommentar in `frontend/tests/e2e/golden-gate-accessibility.spec.ts:130-134`)
 
 ### Provider und Routing
 

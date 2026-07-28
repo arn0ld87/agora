@@ -269,7 +269,7 @@ bash scripts/pre-push-gate.sh schemas
 | Version | Entwicklungsstufe | Meilensteine & Freigabekriterien | Status |
 |---|---|---|---|
 | **`0.8.0`** | **Technical Preview** | Kern-Pipeline voll funktionsfähig; Provider- & Secret-SSoTs abgeschlossen; E2E-Smokes stabil grün. | 🟢 **Aktuell** |
-| **`0.9.0`** | **Stability Beta** | E2E als Required Check aktiviert; Vue v4 als einziges Frontend abgeschlossen (#760); Coverage-Baseline erneuert. | 🟡 Geplant |
+| **`0.9.0`** | **Stability Beta** | E2E als Required Check aktiviert; Coverage-Baseline erneuert. Vue v4 als einziges Frontend ✅ abgeschlossen ([#760](https://github.com/arn0ld87/agora/issues/760)). | 🟡 Geplant |
 | **`0.10.0`** | **Release Candidate** | Reproduzierbare Runs & Replay; Token-, Kosten- & Zeitbudgets; Backup/Restore-Runbooks. | ⚪ Geplant |
 | **`1.0.0`** | **Stable Single-User** | Stabile Verträge & Migrationen; deterministischer Referenzlauf; nachgewiesener Produktnutzen. | ⚪ Geplant |
 
