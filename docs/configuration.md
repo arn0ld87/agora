@@ -63,7 +63,7 @@ Provider-Erkennung: [`../backend/app/llm/providers/registry.py`](../backend/app/
 
 ## Embedding
 
-Embedding-Konfiguration lebt in Neo4j (`EmbeddingConfiguration`), Lese-/Schreibpfade über `embedding_service.py` / `embedding_migration.py` (ADR-0007).
+Embedding-Konfiguration wird vom [`EmbeddingConfigurationStore`](../backend/app/services/embedding_configuration_store.py) in einer JSON-Datei unter `AGORA_DATA_DIR/embedding_configurations.json` persistiert (Index-Versionen in einer Sibling-JSON). Embedding-Arbeit läuft über `embedding_service.py`, der Migrations-Lifecycle über `embedding_migration.py` (ADR-0007).
 
 | Variable | Zweck |
 |---|---|

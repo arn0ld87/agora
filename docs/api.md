@@ -10,7 +10,7 @@ Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../b
 
 - **Base URL:** Backend lauscht produktiv auf `:5001`, Frontend-Dev auf `:5173`. Alle fachlichen Endpunkte liegen unter `/api/*`.
 - **Authentifizierung:** `Authorization: Bearer <AGORA_AUTH_TOKEN>` für `/api/*`-Aufrufe. SSE-Streams und Datei-Downloads nutzen zeitbegrenzte **signierte Tickets** — keine Plaintext-Tokens in URLs. Details: [`auth.md`](auth.md), [ADR-0001](decisions/0001-auth-model.md).
-- **Response-Envelope:** jedes `/api/*` liefert `{"success": bool, "data"?, "code"?, "error"? …}`. Siehe [`api-contracts.md`](api-contracts.md).
+- **Response-Envelope:** JSON-API-Responses liefern `{"success": bool, "data"?, "code"?, "error"? …}`. Siehe [`api-contracts.md`](api-contracts.md). **Ausnahmen:** SSE-Streams (`text/event-stream`) und Export-/Download-Endpunkte (Markdown, CSV, ZIP, Binär) liefern rohe Responses ohne JSON-Envelope — nicht als Envelope dekodieren.
 - **SSE-Streams:** Endpunkte mit `text/event-stream` sind unten mit **(SSE)** gekennzeichnet.
 - **Fehlercodes:** semantische `ApiErrorCode`-Werte (z. B. `simulation_not_prepared`, `persona_review_required`, `neo4j_unavailable`) statt String-Matching — Katalog in [`api-contracts.md`](api-contracts.md).
 
@@ -108,7 +108,7 @@ Quelle der Wahrheit für die Routen ist der Code in [`../backend/app/api/`](../b
 | Stream | Endpunkt | Zweck |
 |---|---|---|
 | Simulations-Events | `GET /api/simulation/<id>/stream` | Live-Interaktions-/Agenten-Events |
-| Model-Active | `GET /api/llm/…` (#213) | Aktive Modell-/Provider-Selection |
+| Model-Active | `GET /api/llm/model-stream` (#213) | Aktive Modell-/Provider-Selection |
 | Backend-Logs | `GET /api/logs/stream` | Live-Log-Viewer |
 
 SSE-Verbindungen authentifizieren sich über signierte Tickets (siehe [`auth.md`](auth.md)), nicht über Bearer-Header in der URL.

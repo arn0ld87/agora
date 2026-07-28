@@ -29,7 +29,7 @@
 ### Embedding-Dim-Drift
 - **Symptom:** Vektor-Index-Fehler nach Embedding-Modell-Wechsel, Dimensions-Mismatch.
 - **Ursache:** `VECTOR_DIM` passt nicht zum neuen Modell; bestehende Indexe werden nicht automatisch migriert (`IF NOT EXISTS`-Falle).
-- **Behebung:** Indexe **vor** dem Modellwechsel droppen, `EmbeddingConfiguration` über `embedding_service.py` neu anlegen, Migrations-Lifecycle (`pending → running → validating → completed`) beobachten. Gemini-Re-Embedding wird derzeit *nicht* unterstützt.
+- **Behebung:** über den Migrations-Lifecycle (`EmbeddingMigrationService`: `pending → running → validating → completed | failed | rolled_back`) wechseln — der alte Index bleibt bis zur erfolgreichen Validierung erhalten und sichert den Rollback-Pfad. Dimensions-Mismatch und `IF NOT EXISTS`-Falle werden *innerhalb* dieses Pfads gelöst, nicht durch ein vorabiges manuelles `DROP INDEX` (ADR-0007 verbietet das, bis Backup, Validierung und Rollback gesichert sind). Gemini-Re-Embedding wird derzeit *nicht* unterstützt.
 - **Referenz:** [`embedding-provider-switch.md`](embedding-provider-switch.md), [ADR-0007](decisions/0007-embedding-configuration-and-index-migration.md), Issue #263.
 
 ## Simulation & Report (Workflow-Konflikte 409)
@@ -47,7 +47,7 @@
 - **Symptom:** Simulation läuft, aber Agenten erzeugen keine nutzbaren Beiträge.
 - **Ursache:** Provider-/Modell-/Prompt-Konfiguration, zu kleine Modelle, `OLLAMA_THINKING`/`num_ctx`-Gate.
 - **Behebung:** leistungsfähigeres Modell wählen, Provider-Detection via Registry verifizieren, Lessons-Learned-Protokoll beachten.
-- **Referenz:** [`worklogs/2026-07-18-sim-agenten-stumm-arbeitsprotokoll.md`](worklogs/2026-07-18-sim-agenten-stumm-arbeitsprotokoll.md), [`worklogs/2026-07-18-lessons-learned-provider-key-routing.md`](worklogs/2026-07-18-lessons-learned-provider-key-routing.md).
+- **Referenz:** [`2026-07-18-sim-agenten-stumm-arbeitsprotokoll.md`](2026-07-18-sim-agenten-stumm-arbeitsprotokoll.md), [`2026-07-18-lessons-learned-provider-key-routing.md`](2026-07-18-lessons-learned-provider-key-routing.md).
 
 ## Betrieb & Sicherheit
 
