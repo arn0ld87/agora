@@ -40,12 +40,22 @@ jobs:
     # relevanten Pfad-Änderungen (siehe pull_request.paths oben) und auf
     # workflow_dispatch. Kein if:-Guard — Build+Trivy ist blocking für alle
     # Trigger. Smoke-/Push-Gating siehe prod-proxy-smoke/publish weiter unten.
-    runs-on: ubuntu-latest
+    # Fork-PRs laufen immer auf ubuntu-latest (Trigger: pull_request, pfadgefiltert
+    # oben). Nur push (main/release/rc/tags) und workflow_dispatch dürfen auf den
+    # self-hosted arm64-Runner (meinserver) — dort läuft produktiver Traffic, ein
+    # fremder Fork-PR darf diesen Host nie erreichen. Siehe docs/runbooks/
+    # self-hosted-runner-meinserver.md.
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || fromJSON('["self-hosted", "arm64", "meinserver"]') }}
     permissions:
       contents: read
       security-events: write
     steps:
       - name: Harden Runner
+        # Nur auf ubuntu-latest (PR-Läufe): harden-runner setzt maschinenweite
+        # Egress-iptables-Regeln. Auf dem self-hosted meinserver-Runner (push/
+        # workflow_dispatch) läuft produktiver Agora-Traffic auf demselben Host —
+        # der Step würde dessen Netzwerk während des CI-Laufs einschränken.
+        if: github.event_name == 'pull_request'
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: block
