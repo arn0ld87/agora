@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Added (Embedding-Konfiguration auf lokales Ollama gepinnt — 2026-07-27, Issue #934)
+
+- Neuer Helper `activate_ollama_embedding` in `backend/app/services/embedding_configurations/activate_ollama.py` pinnt die aktive `EmbeddingConfiguration` idempotent auf `embeddinggemma:300m` (768-dim) via `EmbeddingConfigurationService.activate`. Vorhandene aktive Konfigurationen des gleichen Scopes werden auf `status='rolled_back'` gesetzt (Audit-Trail; Knoten bleibt erhalten, wird nicht gelöscht).
+- Operator-Tool `backend/scripts/activate_local_ollama_embedding.py` macht die Festschreibung reproduzierbar dokumentierbar (`uv run python -m scripts.activate_local_ollama_embedding`, optionale Overrides per CLI-Flags).
+- Vier Contract-Tests in `backend/tests/contracts/test_embedding_activate_ollama.py` decken Pinning, Vorgänger-Rollback, Idempotenz und Konvergenz nach Gemini→Ollama ab.
+- ADR-0007-konform: alle Schreibpfade laufen ausschließlich über `EmbeddingConfigurationStore` / `ProviderConnectionStore` — keine direkten Cypher- oder Datei-Schreibwege. Gemini-Re-Embedding bleibt explizit außerhalb des Scopes.
+- Hintergrund: nach dem Wechsel des Embedding-Providers von Gemini (429-Quotenfehler am 2026-07-27) auf lokales Ollama via `.env` war die Neo4j-`EmbeddingConfiguration`-SSoT noch nicht nachgezogen; der Helper schließt diese Lücke.
+
 ### Changed (Subagenten-Härtung — Härtung der historischen Subagenten ohne -m3-Suffix, 2026-07-27)
 
 - Die sechs historischen Subagenten ohne Suffix (`agora-doc-worker.md`, `agora-evidence-auditor.md`, `agora-frontend-worker.md`, `agora-opus-reviewer.md`, `agora-refactor-worker.md`, `agora-test-worker.md`) wurden auf dasselbe Härtungsniveau wie ihre `-m3`-Pendants gehoben:
