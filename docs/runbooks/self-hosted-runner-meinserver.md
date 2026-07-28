@@ -26,6 +26,20 @@ Gegenmaßnahmen:
    würde der Step maschinenweite Egress-iptables-Regeln setzen und damit
    den produktiven Traffic auf `meinserver` während des CI-Laufs einschränken.
 
+**Bekannte, noch offene Lücke:** Der Event-Filter (`pull_request` vs. `push`/
+`workflow_dispatch`) steuert nur, *welche* Jobs den Runner erreichen — er
+schafft keine echte Laufzeit-Isolation. Der Runner läuft persistent als
+systemd-Dienst, nicht ephemer und nicht containerisiert. Jeder Job, der ihn
+erreicht (auch ein legitimer `push` auf `main`), hat vollen Zugriff auf den
+Host und auf Zustand, den vorherige Jobs hinterlassen haben. **Mandatory
+Security-Requirement für dieses Setup:** Bevor der Runner für sicherheits-
+kritische oder von mehreren Personen auslösbare Workflows genutzt wird, muss
+er entweder (a) mit `--ephemeral` (Neu-Registrierung nach jedem Job) oder
+(b) containerisiert/als Wegwerf-VM pro Job betrieben werden. Bis dahin gilt
+der aktuelle Event-Filter als Mindestschutz, nicht als vollständige Isolation.
+Tracking: siehe „Erweiterung auf weitere Jobs" unten — kein Job darf ergänzt
+werden, ohne diese Lücke erneut zu bewerten.
+
 ## Runner-Details
 
 - Name: `meinserver-arm64`
@@ -47,7 +61,8 @@ System-Pakete) — solche Steps müssen wie `harden-runner` auf
 
 ```bash
 ssh armserver "cd ~/actions-runner && sudo ./svc.sh stop && sudo ./svc.sh uninstall"
-gh api --method DELETE repos/arn0ld87/agora/actions/runners/<runner-id>
+RUNNER_ID=$(gh api repos/arn0ld87/agora/actions/runners -q '.runners[] | select(.name=="meinserver-arm64") | .id')
+gh api --method DELETE "repos/arn0ld87/agora/actions/runners/${RUNNER_ID}"
 ```
 
 ## Siehe auch
