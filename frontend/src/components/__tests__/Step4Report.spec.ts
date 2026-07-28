@@ -334,6 +334,41 @@ describe('Step4Report — INCOMPLETE-Status und generation_failed (P2.6)', () =>
     expect(wrapper.find('[data-testid="report-failed-sections"]').exists()).toBe(false)
   })
 
+  // CodeRabbit-P2 aus PR #938 Follow-up: status='failed' muss am Direct-Mount
+  // als terminaler Zustand erkannt werden, sonst ersetzt onMounted
+  // phase=2/emitted 'error' durch phase=1/'running' und der Badge springt
+  // auf "Läuft" zurück, bis der nächste Status-Poll feuert.
+  it('markiert status="failed" als terminal — Badge bleibt "Fehlgeschlagen", nicht "Läuft"', async () => {
+    ;(getReportStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      data: {
+        status: 'failed',
+        report_id: 'report_test01',
+        simulation_id: 'sim_test01',
+        error: 'Generator crashed',
+      },
+    })
+    ;(getReport as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false })
+    ;(getReportEvidence as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false })
+
+    const wrapper = mountComponent()
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 120))
+    await wrapper.vm.$nextTick()
+    await new Promise((r) => setTimeout(r, 120))
+    await wrapper.vm.$nextTick()
+
+    const badge = wrapper.find('[data-testid="report-status-badge"]').text()
+    // i18n-Mock liefert den Key-Namen statt den übersetzten String —
+    // das ist robuster als der locale-abhängige Text und prüft die
+    // semantische Property (reportStatus === 'failed' → reportBadgeLabel
+    // resolved zu 'common.failed' statt 'common.running'/'common.completed').
+    expect(badge).toContain('common.failed')
+    expect(badge).not.toContain('common.running')
+    expect(badge).not.toContain('common.completed')
+    expect(badge).not.toContain('common.ready')
+  })
+
   // Hinweis: die Report-Badge-Variante/-Text für status='incomplete' wird in
   // production code über reportBadgeLabel/reportBadgeVariant computed values
   // gerendert, getrieben von reportStatus (ref). Der Text-Pfad ist hier
