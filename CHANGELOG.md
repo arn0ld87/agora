@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Removed (Unused Composables `useWorkspaceMode` und `useWorkspaceStatus` entfernt — 2026-07-28, Issue #908)
+
+- `frontend/src/composables/useWorkspaceMode.ts` und `frontend/src/composables/useWorkspaceStatus.ts` mitsamt ihrer Specs unter `frontend/src/composables/__tests__/` entfernt. Beide Composables hatten nach der v4-Routen-Konsolidierung (ADR-0010) keine Importeure mehr.
+- `StepWrapperViews.spec.ts` von obsoleten Mocks aufgeräumt; `GraphCanvas.vue` und `useRuntimeLlmOptions.ts` von Kommentaren befreit, die auf die gelöschte `MainView`-Komponente verwiesen.
+- Keine Verhaltensänderung am Produktcode; nur Totholz-Bereinigung.
+
 ### Changed (Local-Endpoint-Erkennung in neutrales Modul verschoben — 2026-07-28, Issue #800)
 
 - `_is_local_endpoint` und `LOCAL_NO_AUTH_API_KEY` waren als private Symbole in `backend/app/api/simulation_prepare.py` beheimatet, wurden aber bereits aus `runs.py`, `simulation_history.py` und `simulation_run.py` importiert. Beides zieht jetzt nach `backend/app/utils/endpoints.py` und wird öffentlich (`is_local_endpoint`, `LOCAL_HOSTS`).
