@@ -544,3 +544,76 @@ describe('Step3Simulation — ai_model_ref beim Simulationsstart (#819)', () => 
     expect(localStorage.getItem('agora.lastCustomModel')).toBe('deepseek-v3.2:cloud')
   })
 })
+
+/**
+ * Regression: numRounds-Slider aus HeroNewRun hatte keinerlei Effekt.
+ *
+ * Der Dashboard-Flow legt den Slider-Wert im pendingUpload-Store ab; Step2
+ * (der ihn als Prop durchgereicht hätte) wird dabei übersprungen. Vor dem Fix
+ * landete max_rounds deshalb NIE im Start-Request — die Simulation lief
+ * immer auf die LLM-generierten total_simulation_hours (z. B. 96 Runden
+ * statt der eingestellten 10). Gegenprobe zum Bug-Report: Slider auf 10,
+ * Log zeigte "Runde x/96".
+ */
+describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-Flow)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    localStorage.clear()
+    _capturedStateCallback = null
+    _effectiveRefValue = null
+    _runOverrideValue = null
+    const { setPendingUpload } = await import('../../store/pendingUpload')
+    setPendingUpload([], 'requirement', null, 30, 10)
+    ;(useEventStream as ReturnType<typeof vi.fn>).mockImplementation(
+      (_idFn: unknown, handlers: { state?: (msg: unknown) => void }) => {
+        if (handlers?.state) _capturedStateCallback = handlers.state
+        return {
+          isStreaming: { value: false },
+          error: { value: null },
+          lastEventAt: { value: null },
+          start: vi.fn().mockResolvedValue(undefined),
+          stop: vi.fn(),
+        }
+      }
+    )
+  })
+
+  it('ohne maxRounds-Prop fällt max_rounds auf den Slider-Wert zurück', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    // Dashboard-Flow: KEINE maxRounds-Prop.
+    const wrapper = mount(Step3Simulation, {
+      props: {
+        simulationId: 'sim_test_smoke',
+        projectData: { name: 'dashboard-flow' },
+        graphData: { nodes: [], edges: [] },
+        systemLogs: [],
+      },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.max_rounds).toBe(10)
+  })
+
+  it('maxRounds-Prop (Stepped-Flow) gewinnt vor dem Slider-Wert', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    const wrapper = mountComponent() // maxRounds: 5
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.max_rounds).toBe(5)
+  })
+})

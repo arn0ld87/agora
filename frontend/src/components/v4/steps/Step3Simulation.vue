@@ -27,6 +27,7 @@ import { tokenizeFeedText } from '../../../utils/feedHighlight'
 import { isErrorLine } from '@/utils/errorLinePattern'
 import { useSimFeed, clearSimFeed } from '../../../composables/useSimFeed'
 import { useSimClock, clearSimClock } from '../../../composables/useSimClock'
+import { getPendingUpload } from '../../../store/pendingUpload'
 import SimulationProgressPanel from '../../step3/SimulationProgressPanel.vue'
 import PersonaActionFeed from '../../step3/PersonaActionFeed.vue'
 import SimulationToolPanel from '../../step3/SimulationToolPanel.vue'
@@ -229,7 +230,14 @@ async function doStart() {
       platform: 'parallel',
       enable_graph_memory_update: false
     }
-    if (props.maxRounds) params.max_rounds = props.maxRounds
+    // Der Dashboard-Start (HeroNewRun) hat keinen Step2-Durchlauf — dessen
+    // Slider-Wert liegt im pendingUpload-Store. Der Stepped-Flow übergibt
+    // maxRounds als Prop und gewinnt. Vorher wurde der Slider-Wert nur beim
+    // Ontologie-Upload gesendet, wo das Backend ihn still verwirft — die
+    // eingestellte Rundenzahl hatte keinerlei Effekt (Bug: Slider ohne
+    // Wirkung, Simulation lief immer auf total_simulation_hours).
+    const effectiveMaxRounds = props.maxRounds ?? (getPendingUpload().numRounds || null)
+    if (effectiveMaxRounds) params.max_rounds = effectiveMaxRounds
     if (props.simulationDays) params.simulation_days = props.simulationDays
     // Autoritative (Connection, Modell)-Auswahl: Der transiente Dashboard-
     // Run-Override (HeroNewRun-Pick, store/runModelOverride) gewinnt vor dem
@@ -254,7 +262,7 @@ async function doStart() {
       // im selben Tab den alten Override stillschweigend erbt.
       if (usedRunOverride) clearRunModelOverride()
       phase.value = 1
-      addLog(t('step3.status.running', { current: 0, total: props.maxRounds || '?' }))
+      addLog(t('step3.status.running', { current: 0, total: effectiveMaxRounds || '?' }))
       startPolling()
     } else {
       startError.value = res?.error || 'unknown'
@@ -415,9 +423,9 @@ const statusLabel = computed(() => {
       : t('step3.status.completed', { total: runStatus.value.current_round || '?' })
   }
   if (runStatus.value.paused) {
-    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
+    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
   }
-  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
+  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
 })
 
 const statusKind = computed(() => {
