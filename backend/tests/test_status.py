@@ -5,6 +5,8 @@ Simpler approach: test the functions directly rather than via Flask test client.
 
 from unittest.mock import Mock, patch
 
+import requests
+
 from app import __version__
 from app.config import Config
 from app.api.status import (
@@ -295,3 +297,62 @@ class TestOllamaStatusProviderGating:
         assert result['base_url'] == "http://ollama.internal.lan:9999"
         called_url = mock_get.call_args[0][0]
         assert called_url.startswith("http://ollama.internal.lan:9999/api/tags")
+
+
+class TestOllamaStatusExplicitEnvOverride:
+    """Alex' Setup: MiniMax-M3 als Chat-Provider, Ollama nur für Embeddings.
+
+    Regression: ein Provider-Gate, das vor ``OLLAMA_BASE_URL`` greift, blendet
+    einen real erreichbaren Ollama-Server aus dem Status aus, sobald der
+    Chat-Provider kein Ollama ist. Wer die Env-Variable setzt, benennt den
+    Server ausdrücklich — das muss gewinnen.
+    """
+
+    def _set_provider(self, monkeypatch, base_url, model=""):
+        monkeypatch.setattr(Config, "LLM_BASE_URL", base_url)
+        monkeypatch.setattr(Config, "LLM_MODEL_NAME", model)
+
+    def test_minimax_chat_with_explicit_ollama_env_still_probes(self, monkeypatch):
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {
+                "models": [{"name": "qwen3-embedding:4b"}]
+            }
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+
+        assert result['skipped'] is False
+        assert result['reachable'] is True
+        assert result['base_url'] == "http://localhost:11434"
+        assert mock_get.call_args[0][0].startswith("http://localhost:11434/api/tags")
+        assert "qwen3-embedding:4b" in result['models_available']
+
+    def test_minimax_chat_without_ollama_env_skips(self, monkeypatch):
+        """Ohne explizite Env bleibt der Skip — kein 404 gegen api.minimax.io."""
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+
+        mock_get.assert_not_called()
+        assert result['skipped'] is True
+        assert result['reachable'] is None
+        assert "minimax" in result['reason'].lower()
+
+    def test_explicit_ollama_env_unreachable_stays_defensive(self, monkeypatch):
+        """Ollama down bei MiniMax-Chat: reachable=False, kein HTTP-500."""
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_get.side_effect = requests.ConnectionError("connection refused")
+            result = _get_ollama_status()
+
+        assert result['skipped'] is False
+        assert result['reachable'] is False
+        assert result['error'] is not None

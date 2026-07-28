@@ -307,21 +307,26 @@ def resolve_ollama_tags_url(
     """Bestimmt die Base-URL für ``GET /api/tags`` oder liefert ``None``.
 
     Reihenfolge:
-      1. Aktiver Provider ist nicht Ollama-kompatibel → ``None``
-         (Aufrufer soll den Probe überspringen, statt 404er zu loggen).
-      2. ``explicit_base_url`` (i. d. R. ``OLLAMA_BASE_URL``-Env) bevorzugt,
-         wenn gesetzt — die Env-Variable ist die einzige Quelle, die
-         unabhängig vom aktiven LLM-Provider funktioniert.
-      3. Fallback auf ``base_url`` mit gestripptem ``/v1``-Suffix (für lokales
-         Ollama hinter ``http://localhost:11434/v1``-Setups).
+      1. ``explicit_base_url`` (i. d. R. die ``OLLAMA_BASE_URL``-Env) gewinnt
+         immer, **auch wenn der aktive Chat-Provider kein Ollama ist**. Wer
+         diese Variable setzt, benennt damit ausdrücklich einen Ollama-Server
+         — typischerweise für Embeddings, während der Chat über MiniMax oder
+         OpenAI läuft. Das Provider-Gate darf diesen expliziten Wunsch nicht
+         überstimmen, sonst verschwindet ein real erreichbarer Ollama-Server
+         aus dem Status, sobald der Chat-Provider wechselt.
+      2. Ohne explizite Env: Nur proben, wenn der aktive Provider
+         Ollama-kompatibel ist. Sonst ``None`` — der Aufrufer überspringt den
+         Probe, statt 404er gegen ``/api/tags`` zu loggen (MiniMax-Bug).
+      3. Dann ``base_url`` mit gestripptem ``/v1``-Suffix (lokales Ollama
+         hinter ``http://localhost:11434/v1``).
     """
-    if not is_ollama_compatible_provider(base_url, model):
-        return None
-
     if explicit_base_url:
         stripped = explicit_base_url.strip()
         if stripped:
             return stripped.rstrip("/")
+
+    if not is_ollama_compatible_provider(base_url, model):
+        return None
 
     base = (base_url or "").rstrip("/")
     if base.endswith("/v1"):
