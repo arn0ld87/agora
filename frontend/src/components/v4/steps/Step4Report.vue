@@ -348,12 +348,14 @@ const reportBadgeLabel = computed((): string => {
   if (phase.value !== 2) {
     return phase.value === 1 ? t('common.running') : t('common.ready')
   }
+  if (reportStatus.value === 'failed') return t('common.failed')
   if (reportStatus.value === 'incomplete') return t('common.incomplete')
   return t('common.completed')
 })
 
-const reportBadgeTone = computed((): 'blue' | 'orange' | 'green' | 'gray' => {
+const reportBadgeTone = computed((): 'blue' | 'orange' | 'green' | 'gray' | 'red' => {
   if (phase.value !== 2) return 'blue'
+  if (reportStatus.value === 'failed') return 'red'
   if (reportStatus.value === 'incomplete') return 'orange'
   return 'green'
 })
