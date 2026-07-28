@@ -284,3 +284,46 @@ def get_adapter(
     from app.llm.providers.openai import OpenAIAdapter
 
     return OpenAIAdapter(num_ctx=num_ctx, think=think)
+
+
+def is_ollama_compatible_provider(base_url: Optional[str], model: Optional[str]) -> bool:
+    """True, wenn der aktive HTTP-Provider eine ``/api/tags``-Route bedient.
+
+    Wiederverwendung der zentralen ``detect_provider``-Heuristik
+    (``mode="http"``) — True genau für ``"ollama"`` (lokales Ollama, Port 11434)
+    und ``"cloud"`` (``ollama.com``). MiniMax/OpenAI/Google/unknown liefern
+    False, damit Status-Endpoints nicht fälschlich gegen ``/api/tags``
+    proben (MiniMax-Bug: 404 auf jeder Discovery-Anfrage).
+    """
+    return detect_provider(base_url, model, mode="http") in ("ollama", "cloud")
+
+
+def resolve_ollama_tags_url(
+    base_url: Optional[str],
+    model: Optional[str],
+    *,
+    explicit_base_url: Optional[str] = None,
+) -> Optional[str]:
+    """Bestimmt die Base-URL für ``GET /api/tags`` oder liefert ``None``.
+
+    Reihenfolge:
+      1. Aktiver Provider ist nicht Ollama-kompatibel → ``None``
+         (Aufrufer soll den Probe überspringen, statt 404er zu loggen).
+      2. ``explicit_base_url`` (i. d. R. ``OLLAMA_BASE_URL``-Env) bevorzugt,
+         wenn gesetzt — die Env-Variable ist die einzige Quelle, die
+         unabhängig vom aktiven LLM-Provider funktioniert.
+      3. Fallback auf ``base_url`` mit gestripptem ``/v1``-Suffix (für lokales
+         Ollama hinter ``http://localhost:11434/v1``-Setups).
+    """
+    if not is_ollama_compatible_provider(base_url, model):
+        return None
+
+    if explicit_base_url:
+        stripped = explicit_base_url.strip()
+        if stripped:
+            return stripped.rstrip("/")
+
+    base = (base_url or "").rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return base or None

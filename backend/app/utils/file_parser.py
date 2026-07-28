@@ -354,13 +354,88 @@ class FileParser:
         return "\n\n".join(all_texts)
 
 
+def _snap_to_word_start(text: str, pos: int, *, lower_bound: int, upper_bound: int) -> int:
+    """Schiebt ``pos`` auf einen Wortanfang, ohne Textinhalt zu überspringen.
+
+    Bewusst **rückwärts** gesnappt: liegt ``pos`` mitten in einem Wort, wird
+    an den Anfang genau dieses Wortes zurückgegangen. Dadurch kann der Snap
+    nie Zeichen zwischen dem Ende des vorigen Chunks und dem neuen Start
+    verschlucken — ein Vorwärts-Snap müsste dafür über das Wort hinweg, und
+    bei Wörtern, die länger als der Overlap sind, ginge deren Rest verloren.
+    Der Rückwärts-Snap vergrößert im schlimmsten Fall den Overlap um eine
+    Wortlänge, was fachlich unkritisch ist.
+
+    Args:
+        text: Originaltext.
+        pos: Gewünschter Startindex (i. d. R. ``end - overlap``).
+        lower_bound: Der zurückgegebene Index ist immer ``>= lower_bound``.
+            Der Aufrufer setzt hier ``start + 1``, damit die Schleife
+            garantiert vorankommt und nicht endlos läuft.
+        upper_bound: Obergrenze (das Chunk-Ende ``end``). Wird nur im
+            Pathologie-Fall relevant, siehe unten.
+
+    Returns:
+        Index eines Wortanfangs. Nur wenn ein einzelnes Wort so lang ist,
+        dass weder sein Anfang noch der Anfang des Folgeworts im zulässigen
+        Fenster ``[lower_bound, upper_bound]`` liegt (Wort länger als ein
+        Chunk, z. B. Base64-Blobs), wird ``max(lower_bound, min(pos,
+        upper_bound))`` zurückgegeben. In diesem Pathologie-Fall ist ein
+        Mid-Word-Start unvermeidbar; Vorrang haben Terminierung und
+        Verlustfreiheit.
+    """
+    fallback = max(lower_bound, min(pos, upper_bound))
+
+    if pos >= len(text) or pos <= 0:
+        return fallback
+
+    # Whitespace-Position: bereits eine saubere Grenze, nur die führenden
+    # Leerzeichen überspringen (der Chunk wird ohnehin gestrippt).
+    if text[pos].isspace():
+        return fallback
+
+    # 1. Rückwärts an den Anfang des Wortes, in dem ``pos`` liegt. Das ist
+    #    immer verlustfrei, weil der Start dadurch nur kleiner wird.
+    back = pos
+    while back > 0 and not text[back - 1].isspace():
+        back -= 1
+    if back >= lower_bound:
+        return back
+
+    # 2. Der Wortanfang liegt vor ``lower_bound`` (das Wort ist lang im
+    #    Verhältnis zur Chunk-Größe). Dann vorwärts zum Anfang des
+    #    Folgeworts — verlustfrei, solange dieser nicht hinter
+    #    ``upper_bound`` (dem Ende des vorigen Chunks) liegt, denn alles bis
+    #    dorthin ist bereits ausgeliefert.
+    fwd = pos
+    while fwd < len(text) and not text[fwd].isspace():
+        fwd += 1
+    while fwd < len(text) and text[fwd].isspace():
+        fwd += 1
+    if lower_bound <= fwd <= upper_bound:
+        return fwd
+
+    # 3. Pathologie: Wort länger als das gesamte Fenster.
+    return fallback
+
+
 def split_text_into_chunks(
     text: str,
     chunk_size: int = 500,
     overlap: int = 50
 ) -> List[str]:
     """
-    Split text into chunks
+    Split text into chunks.
+
+    Chunks werden bevorzugt an einer Satzgrenze (``.``, ``?``, ``!``,
+    ``。``, ``！``, ``？``, ``\\n\\n``) beendet, wenn eine solche im hinteren
+    Drittel des Fensters liegt. Der Folgechunk startet an der
+    ``end - overlap``-Position und wird von dort rückwärts auf einen
+    Wortanfang gesnappt, damit kein Chunk mitten in einem Wort beginnt
+    (verhindert Defekt-Truncation in Embedding-/GraphRAG-Pipelines, in denen
+    solche Fragmente unsinnige Embeddings produzieren). Der Rückwärts-Snap
+    ist verlustfrei — siehe :func:`_snap_to_word_start`. Einzige Ausnahme:
+    ein Wort, das länger als ``chunk_size`` ist, muss zwangsläufig
+    aufgetrennt werden.
 
     Args:
         text: Original text
@@ -392,8 +467,31 @@ def split_text_into_chunks(
         if chunk:
             chunks.append(chunk)
 
-        # Next chunk starts at overlap position
-        start = end - overlap if end < len(text) else len(text)
+        if end >= len(text):
+            break
+
+        # Folgechunk startet mit ``overlap`` Zeichen Kontext und wird
+        # rückwärts auf einen Wortanfang gesnappt — so entstehen keine
+        # 'uß-…'/'atische…'-Chunkanfänge mehr, ohne dass Text zwischen
+        # ``end`` und dem neuen Start verloren geht. ``lower_bound`` ist die
+        # Terminierungsgarantie: der neue Start ist immer strikt größer als
+        # der alte, auch wenn die Satzgrenzen-Logik ``end`` so weit nach vorn
+        # zieht, dass ``end - overlap <= start`` gilt (bei
+        # ``overlap > 0.3 * chunk_size`` möglich).
+        #
+        # ``min_progress`` verhindert zusätzlich ein Degenerieren auf
+        # Ein-Zeichen-Schritte: zieht die Satzgrenzen-Logik ``end`` weit nach
+        # vorn und ist der Overlap groß, kann ``end - overlap`` hinter
+        # ``start`` liegen. Ohne Mindestfortschritt entstünden dann tausende
+        # fast identischer Chunks statt einer sinnvollen Aufteilung.
+        min_progress = max(1, (end - start) // 2)
+        next_start = max(end - overlap, start + min_progress)
+        start = _snap_to_word_start(
+            text,
+            next_start,
+            lower_bound=start + 1,
+            upper_bound=end,
+        )
 
     return chunks
 
