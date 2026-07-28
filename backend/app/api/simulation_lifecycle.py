@@ -54,6 +54,7 @@ def get_available_models():
     ollama_models: list = []
     ollama_error: str | None = None
     ollama_skipped = False
+    ollama_skipped_provider: str | None = None
     ollama_skip_reason: str | None = None
 
     base = resolve_ollama_tags_url(
@@ -63,12 +64,15 @@ def get_available_models():
     )
 
     if base is None:
-        # Aktiver Provider ist nicht Ollama — Probe überspringen, kein
-        # 404 im Log provozieren.
+        # Provider kennt ``/api/tags`` garantiert nicht — Probe überspringen,
+        # kein 404 im Log provozieren. ``ollama_skipped_provider`` ist der
+        # maschinenlesbare Schlüssel für den i18n-Lookup im Frontend;
+        # ``ollama_skip_reason`` bleibt reines Debug-Feld.
         provider = detect_provider(
             Config.LLM_BASE_URL, Config.LLM_MODEL_NAME, mode="http"
         )
         ollama_skipped = True
+        ollama_skipped_provider = provider
         ollama_skip_reason = f"Active provider is {provider}"
         logger.debug(
             "Skipping Ollama /api/tags probe: active provider is %s", provider
@@ -119,6 +123,7 @@ def get_available_models():
         "ollama_reachable": ollama_error is None and not ollama_skipped,
         "ollama_error": ollama_error,
         "ollama_skipped": ollama_skipped,
+        "ollama_skipped_provider": ollama_skipped_provider,
         "ollama_skip_reason": ollama_skip_reason,
         "neo4j_reachable": neo4j_reachable,
         "neo4j_error": neo4j_error,

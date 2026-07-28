@@ -12,6 +12,7 @@ import requests
 from . import status_bp
 from .. import __version__
 from ..config import Config
+from ..contracts.system_status_contract import SystemStatusOllama
 from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
@@ -108,11 +109,14 @@ def _get_neo4j_status():
 def _get_ollama_status():
     """Check Ollama availability and list models.
 
-    Probiert nur, wenn der aktive HTTP-Provider laut zentraler
-    ``detect_provider``-Heuristik ein Ollama-kompatibler Server ist
-    (lokal oder ``ollama.com``). Für MiniMax/OpenAI/Google wird der Probe
-    übersprungen — ``/api/tags`` existiert dort nicht und liefert sonst 404er
-    im Log.
+    Übersprungen wird nur bei einem Provider, der ``/api/tags`` garantiert
+    nicht kennt (MiniMax/OpenAI/Google) — dort lieferte die alte, pauschale
+    Abfrage 404er im Log. Selbstgehostete Ollamas auf Nicht-Standard-Ports
+    (``detect_provider`` → ``"unknown"``) werden weiterhin geprobt.
+
+    Rückgabe folgt dem Contract ``SystemStatusOllama``; ``reachable`` ist
+    dreiwertig (True/False/None). ``None`` heißt "übersprungen", nicht
+    "offline".
     """
     base = resolve_ollama_tags_url(
         Config.LLM_BASE_URL,
@@ -121,30 +125,30 @@ def _get_ollama_status():
     )
 
     if base is None:
-        # Aktiver Provider ist nicht Ollama — Probe bewusst überspringen.
-        # ``reachable=None`` (nicht False) signalisiert "nicht ermittelt",
-        # ``skipped=True`` liefert den Grund.
+        # ``reachable=None`` (nicht False) signalisiert "nicht ermittelt".
+        # ``skipped_provider`` ist der maschinenlesbare Schlüssel für den
+        # i18n-Lookup im Frontend; ``reason`` bleibt reines Debug-Feld und
+        # darf nicht in der UI gerendert werden.
         provider = detect_provider(
             Config.LLM_BASE_URL, Config.LLM_MODEL_NAME, mode="http"
         )
-        return {
-            "reachable": None,
-            "skipped": True,
-            "reason": f"Active provider is {provider}",
-            "base_url": None,
-            "models_available": [],
-            "default_model": Config.LLM_MODEL_NAME,
-            "error": None,
-        }
+        return SystemStatusOllama(
+            reachable=None,
+            skipped=True,
+            skipped_provider=provider,
+            reason=f"Active provider is {provider}",
+            base_url=None,
+            models_available=[],
+            default_model=Config.LLM_MODEL_NAME,
+            error=None,
+        ).model_dump(mode="json")
 
-    result = {
-        "reachable": False,
-        "skipped": False,
-        "base_url": base,
-        "models_available": [],
-        "default_model": Config.LLM_MODEL_NAME,
-        "error": None,
-    }
+    status = SystemStatusOllama(
+        reachable=False,
+        skipped=False,
+        base_url=base,
+        default_model=Config.LLM_MODEL_NAME,
+    )
 
     try:
         resp = requests.get(f"{base}/api/tags", timeout=2.5)
@@ -157,13 +161,13 @@ def _get_ollama_status():
             if name:
                 models.append(name)
 
-        result["reachable"] = True
-        result["models_available"] = models
+        status.reachable = True
+        status.models_available = models
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        result["error"] = str(e)
+        status.error = str(e)
         logger.debug(f"Could not reach Ollama at {base}: {e}")
 
-    return result
+    return status.model_dump(mode="json")
 
 
 def _get_disk_status():

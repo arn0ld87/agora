@@ -296,3 +296,62 @@ def test_resolve_ollama_tags_url_returns_none_when_non_ollama_without_env():
         )
         is None
     )
+
+
+# ---------------------------------------------------------------------------
+# Review-Findings PR #955 — /v1-Normalisierung und Custom-Port-Ollama.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("explicit", "expected"),
+    [
+        ("http://localhost:11434", "http://localhost:11434"),
+        ("http://localhost:11434/", "http://localhost:11434"),
+        # CodeRabbit-Finding: OLLAMA_BASE_URL im selben Format wie
+        # LLM_BASE_URL gesetzt. Ohne Normalisierung entsteht
+        # ".../v1/api/tags" → 404, exakt die Fehlerklasse dieses Fixes.
+        ("http://localhost:11434/v1", "http://localhost:11434"),
+        ("http://localhost:11434/v1/", "http://localhost:11434"),
+        ("  http://localhost:11434/v1  ", "http://localhost:11434"),
+    ],
+)
+def test_resolve_ollama_tags_url_normalises_explicit_env(explicit, expected):
+    """Beide Zweige strippen ``/v1`` identisch — kein ``/v1/api/tags``."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    resolved = resolve_ollama_tags_url(
+        "https://api.minimax.io/v1", "MiniMax-M3", explicit_base_url=explicit
+    )
+    assert resolved == expected
+    assert not resolved.endswith("/v1")
+
+
+def test_resolve_ollama_tags_url_probes_unknown_provider():
+    """Codex-Finding: selbstgehostetes Ollama auf Nicht-Standard-Port.
+
+    ``http://ollama.internal:11435/v1`` fällt in ``detect_provider`` auf
+    ``"unknown"`` zurück, bedient ``/api/tags`` aber sehr wohl. Diesen
+    Endpoint zu überspringen wäre eine Regression: die Liste der installierten
+    Modelle verschwände und der Dienst würde als ungeprüft gemeldet.
+    """
+    from app.llm.providers.registry import (
+        detect_provider,
+        resolve_ollama_tags_url,
+    )
+
+    base = "http://ollama.internal:11435/v1"
+    assert detect_provider(base, "llama3", mode="http") == "unknown"
+    assert resolve_ollama_tags_url(base, "llama3") == "http://ollama.internal:11435"
+
+
+@pytest.mark.parametrize("provider_url", [
+    "https://api.minimax.io/v1",
+    "https://api.openai.com/v1",
+    "https://generativelanguage.googleapis.com/v1beta/openai/",
+])
+def test_resolve_ollama_tags_url_still_skips_known_cloud_providers(provider_url):
+    """Der eigentliche Bugfix bleibt scharf: kein /api/tags gegen Cloud-APIs."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    assert resolve_ollama_tags_url(provider_url, "some-model") is None

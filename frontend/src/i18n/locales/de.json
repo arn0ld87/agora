@@ -1301,7 +1301,9 @@
       "statusUnreachable": "offline",
       "statusIdle": "idle",
       "oasisHint": "Wird beim Start eines Runs aktiv.",
-      "ollamaHint": "{n} Modelle verfügbar"
+      "ollamaHint": "{n} Modelle verfügbar",
+      "ollamaSkippedHint": "Prüfung übersprungen — aktiver Provider ist {provider}",
+      "providerUnknown": "ein anderer Anbieter"
     },
     "reports": {
       "title": "Letzte Reports",
