@@ -83,11 +83,6 @@ vi.mock('../../observability/tracing', () => ({
   traceIdToSigNozUrl: () => null,
 }))
 
-vi.mock('../../composables/useRuntimeLlmOptions', () => ({
-  runtimeLlmPayloadFromStorage: () => ({}),
-  runtimeProviderMissingKeyEverywhere: () => false,
-}))
-
 // Kanonische Modell-Auswahl stubben: Step3 ruft useEffectiveModelSelection
 // im Setup auf; ohne Mock läge kein Pinia-/Store-Kontext vor. Default: keine
 // Auswahl → Legacy-Pfad bleibt unberührt (Feed-Test ruft doStart nicht auf).
@@ -105,7 +100,7 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
 // useSimFeed: echtes Modul behalten — wir wollen die Routing- und
 // Dedupe-Logik mittesten.
 import { clearSimFeed } from '../../composables/useSimFeed'
-import Step3Simulation from '../Step3Simulation.vue'
+import Step3Simulation from '@/components/v4/steps/Step3Simulation.vue'
 
 const i18n = createI18n({
   legacy: false,

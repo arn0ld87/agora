@@ -107,9 +107,33 @@ FORBIDDEN_SUBSTRINGS: list[tuple[str, str]] = [
         "/composables/useRuntimeLlmOptions",
         "v3 composable useRuntimeLlmOptions → aiModels.ts / AiModelPicker (Slice 5.5)",
     ),
+    (
+        "/components/Step2EnvSetup.vue",
+        "v3 Step2EnvSetup.vue → v4/steps/Step2EnvSetup.vue (Slice 0.9.0)",
+    ),
+    (
+        "/components/Step3Simulation.vue",
+        "v3 Step3Simulation.vue → v4/steps/Step3Simulation.vue (Slice 0.9.0)",
+    ),
+    (
+        "/components/Step4Report.vue",
+        "v3 Step4Report.vue → v4/steps/Step4Report.vue (Slice 0.9.0)",
+    ),
 ]
 
 REMOVED_PATHS: tuple[tuple[Path, str], ...] = (
+    (
+        Path("components/Step2EnvSetup.vue"),
+        "v3 Step2EnvSetup.vue wurde in Slice 0.9.0 nach v4/steps verschoben",
+    ),
+    (
+        Path("components/Step3Simulation.vue"),
+        "v3 Step3Simulation.vue wurde in Slice 0.9.0 nach v4/steps verschoben",
+    ),
+    (
+        Path("components/Step4Report.vue"),
+        "v3 Step4Report.vue wurde in Slice 0.9.0 nach v4/steps verschoben",
+    ),
     (
         Path("components/ui/ModelPicker.vue"),
         "v3 ModelPicker.vue wurde in Slice 7.7 entfernt",

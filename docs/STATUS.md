@@ -28,7 +28,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 | Kategorie | Anzahl | Methode |
 |---|---|---|
 | Backend Tests (collected) | 3749 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 171 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Frontend Test-Files | 169 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
@@ -51,7 +51,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
 
-Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird und die verbleibenden Frontend-Altpfade weiter konsolidiert werden: Migration der v3-Inhaltskomponenten in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922)). Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
+Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 
 ## E2E-Smokes
 
@@ -110,17 +110,17 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Bekannte Konsolidierungsschuld
 
-- die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Verbleibend: Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ([#922](https://github.com/arn0ld87/agora/issues/922)). Der `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) ist umgesetzt
+- die fünf klassischen Prozess-Wrapper-Views sind entfernt; ihre benannten Deep-Links bleiben als v4-Redirects kompatibel. `/agora-2026` ist als Designreferenz unter `docs/design-reference/agora-2026/` archiviert und nicht produktiv geroutet; v4-Ballast-Views sind entfernt ([PR #877](https://github.com/arn0ld87/agora/pull/877)). Die Migration der v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938). Der `/home`-Redirect auf `/dashboard` ([#915](https://github.com/arn0ld87/agora/issues/915)) ist umgesetzt
 - ein React-/Lovable-Neubau ist als Prototyp umgesetzt, aber nicht als Zielentscheidung freigegeben (Details im nächsten Abschnitt)
 - Legacy-LLM-Profile und Provider-Connections besitzen noch Übergangspfade
-- der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`, `@deprecated` Slice 5.5) ist mit der connection-gebundenen `AiModelRef` unvereinbar und in Step 2 daher gegenseitig ausgeschlossen. Solange er existiert, hält `useEnvForm` weiterhin `modelOption`/`customModel` — allerdings ohne Persistenz. Die Ablösung wird in [Issue #903](https://github.com/arn0ld87/agora/issues/903) geführt
+- der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt (PR #938); `useEnvForm` führt `modelOption`/`customModel` ohne Persistenz weiter, bis [Issue #903](https://github.com/arn0ld87/agora/issues/903) die Ablösung abschließt
 - die Browser-Keys `agora.lastModel` und `agora.lastCustomModel` haben seit Issue #890 keinen produktiven Reader oder Writer mehr; vorhandene Werte werden bewusst nicht gelöscht und bleiben wirkungslose Altlast
 - einzelne Provider-Erkennungen beruhen weiterhin auf URL-/Modell-Heuristiken
 - Frontend- und Backend-Provider-Vokabular sind nicht an jeder SSE-Grenze synchron
 
 ## Frontend-Next-Stand (React/Lovable)
 
-- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. `/home` leitet seit [#915](https://github.com/arn0ld87/agora/issues/915) per ADR-0010 auf `/dashboard` um; die klassische Editorial-View `Home.vue` bleibt bis `1.0.0` physisch erhalten. Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen. Zudem werden die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` noch produktiv über v4-Wrapper geroutet ([Issue #922](https://github.com/arn0ld87/agora/issues/922)).
+- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. `/home` leitet seit [#915](https://github.com/arn0ld87/agora/issues/915) per ADR-0010 auf `/dashboard` um; die klassische Editorial-View `Home.vue` bleibt bis `1.0.0` physisch erhalten. Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen. Die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` sind nach v4 migriert und werden nicht mehr über v4-Wrapper geroutet ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938).
 - **Prototyp:** Ein Lovable-Projekt („Agora Runs Dashboard", angelegt 2026-07-16) existiert und wurde substanziell umgesetzt (23 Edits, TanStack-Router-SPA, 12 Routen, shadcn/ui). Es ist derzeit **nicht veröffentlicht** (`is_published: false`, keine URL) und **nicht** produktiv verdrahtet — weder Docker-Compose, GitHub-Workflows noch das Root-`package.json` referenzieren es. Der React-Code liegt vollständig außerhalb dieses Repositories. Die tatsächliche Funktionsvollständigkeit des Prototyps ist nicht codegeprüft belegt, sondern nur durch Commit-Aussagen behauptet.
 - **Release-Status:** Kein Teil des freigegebenen Produktpfads vor `1.0.0`.
 - **Zukunft:** Über eine spätere Migration ist keine Entscheidung getroffen.

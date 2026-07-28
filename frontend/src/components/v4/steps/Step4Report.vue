@@ -1,27 +1,27 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
-import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
-import { useStickyScroll } from '../composables/useStickyScroll'
-import { usePolling } from '../composables/usePolling'
+import { useIncrementalLogPolling } from '../../../composables/useIncrementalLogPolling'
+import { useStickyScroll } from '../../../composables/useStickyScroll'
+import { usePolling } from '../../../composables/usePolling'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { renderMarkdown } from '../utils/markdown'
-import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../api/report'
-import type { GenerateReportData } from '../api/report'
-import { createSimulationBranch } from '../api/simulation'
+import { renderMarkdown } from '../../../utils/markdown'
+import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../../../api/report'
+import type { GenerateReportData } from '../../../api/report'
+import { createSimulationBranch } from '../../../api/simulation'
 import Button from '@/components/v4/forms/Button.vue'
-import Badge from './ui/Badge.vue'
+import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
-import ReportModelControls from './step4/ReportModelControls.vue'
-import ReportModeControls from './step4/ReportModeControls.vue'
-import ReportOutlinePanel from './step4/ReportOutlinePanel.vue'
-import ReportLiveLogPane from './step4/ReportLiveLogPane.vue'
-import ReportFinalView from './step4/ReportFinalView.vue'
-import { useReportExports } from '../composables/useReportExports'
-import type { AiModelRef } from '../contracts/aiModelRef'
+import ReportModelControls from '../../step4/ReportModelControls.vue'
+import ReportModeControls from '../../step4/ReportModeControls.vue'
+import ReportOutlinePanel from '../../step4/ReportOutlinePanel.vue'
+import ReportLiveLogPane from '../../step4/ReportLiveLogPane.vue'
+import ReportFinalView from '../../step4/ReportFinalView.vue'
+import { useReportExports } from '../../../composables/useReportExports'
+import type { AiModelRef } from '../../../contracts/aiModelRef'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
-import { parseAgentEntry } from '../utils/reportAgentLog'
-import { parseSourceAnchor } from '../utils/sourceAnchor'
+import { parseAgentEntry } from '../../../utils/reportAgentLog'
+import { parseSourceAnchor } from '../../../utils/sourceAnchor'
 import {
   ReportSchema,
   ReportOutlineSchema,
@@ -29,12 +29,12 @@ import {
   type Report,
   type ReportOutline,
   type EvidenceMap,
-} from '../contracts/reportContract'
+} from '../../../contracts/reportContract'
 import {
   ReportModeSchema,
   DEFAULT_REPORT_MODE,
   type ReportMode,
-} from '../contracts/reportV3Contract'
+} from '../../../contracts/reportV3Contract'
 
 interface StatusData {
   message?: string
@@ -352,10 +352,10 @@ const reportBadgeLabel = computed((): string => {
   return t('common.completed')
 })
 
-const reportBadgeVariant = computed((): string => {
-  if (phase.value !== 2) return 'accent'
-  if (reportStatus.value === 'incomplete') return 'warning'
-  return 'solid'
+const reportBadgeTone = computed((): 'blue' | 'orange' | 'green' | 'gray' => {
+  if (phase.value !== 2) return 'blue'
+  if (reportStatus.value === 'incomplete') return 'orange'
+  return 'green'
 })
 const redTeamFindings = computed((): string[] => fullReport.value?.red_team_findings ?? [])
 
@@ -487,7 +487,7 @@ onUnmounted(stopPolling)
         <header class="card-head">
           <Kicker num="01">{{ t('step4.title') }}</Kicker>
           <div class="card-head-actions">
-            <Badge :variant="reportBadgeVariant" :dot="phase === 1">
+            <Badge :tone="reportBadgeTone" :dot="phase === 1">
               {{ reportBadgeLabel }}
             </Badge>
             <span v-if="!props.cancelEndpointAvailable" :title="t('step4.reportConfirm.stopDisabledTip')" class="stop-btn-wrap">

@@ -6,7 +6,6 @@ import i18n from './i18n'
 import { registerI18n } from './i18n/translate'
 import { initFrontendTracing } from './observability/tracing'
 import { useDensity } from './composables/useDensity'
-import { cleanupStaleRuntimeLlmStorage } from './composables/useRuntimeLlmOptions'
 
 import './assets/styles/fonts.css'
 import './assets/styles/tokens-v3.css'
@@ -25,13 +24,6 @@ useDensity().applyOnMount()
 const uiVersion = (import.meta.env.VITE_UI_VERSION as string | undefined) ?? 'v4'
 ;(window as unknown as { __AGORA_UI_VERSION__?: string }).__AGORA_UI_VERSION__ = uiVersion
 document.documentElement.setAttribute('data-ui-version', uiVersion)
-
-// Stale-Storage-Cleanup vor Vue-Mount triggern (fire-and-forget): Callers
-// von runtimeLlmPayloadFromStorage sind user-getriggert (Step3Simulation
-// doStart/goReport), das HTTP-Roundtrip-Race ist damit praktisch geschlossen.
-cleanupStaleRuntimeLlmStorage().catch((err) => {
-  console.error('[main] cleanupStaleRuntimeLlmStorage failed', err)
-})
 
 const app = createApp(App)
 

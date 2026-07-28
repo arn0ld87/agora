@@ -5,6 +5,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (v3-Inhaltskomponenten nach v4 migriert — 2026-07-28, PR #938, Issue #922)
+
+- Die drei verbleibenden v3-Inhaltskomponenten `Step2EnvSetup.vue`, `Step3Simulation.vue` und `Step4Report.vue` sind nach `frontend/src/components/v4/steps/` migriert (RENAMED, Inhalt an v4-Typografie und -Ordnerstruktur angepasst). Die v3-Originale sind entfernt; die v4-Wrapper-Views binden die v4-Komponenten direkt ein.
+- `EnvSetupModelPanel.vue` enthält nur noch den kanonischen `AiModelPicker` und den Sprach-Selector. Legacy-Credential-Override-Forms (Runtime-Provider-Toggle, Session-Key-Feld, Base-URL-Feld, `modelOption`/`customModel`-Select) sind entfernt.
+- `useRuntimeLlmOptions.ts` (credential-basierter Runtime-Provider-Override, `@deprecated` Slice 5.5) ist entfernt; `main.ts` ruft `cleanupStaleRuntimeLlmStorage` nicht mehr auf. `useEnvForm` führt `modelOption`/`customModel` ohne Persistenz weiter, bis [Issue #903](https://github.com/arn0ld87/agora/issues/903) die Ablösung abschließt.
+- `check_legacy_model_picker.py` kennt die drei migrierten v3-Pfade als `REMOVED_PATHS` und meldet ihre Rückkehr als Regression.
+- Step2-`triggerPrepare` serialisiert `ai_model_ref` nur noch aus einer expliziten Nutzer-Auswahl (`selectedModelOverride`), nicht aus dem beim Mount übernommenen Workspace-Default (`selectedModelRef`). Ein bloß akzeptierter Default erzeugt keinen Backend-Override mehr und unterdrückt weder das konfigurierte Projekt-Profil noch den prepared-Shortcut (Codex-Review P1).
+- Persona-Filter "more"-Button setzt `showAllPersonas` statt des nicht existierenden `showAllHomeLayout`, sodass `visiblePersonas` bei >24 Treffern korrekt expandiert (Codex-Review P2).
+- Tests aktualisiert: `Step2EnvSetup.providerOverride.spec.ts` und `useRuntimeLlmOptions.spec.ts` entfernt (Pfade existieren nicht mehr); übrige Step2/3/4-Specs importieren die v4-Komponenten. `main.spec.ts` erwartet keinen `cleanupStaleRuntimeLlmStorage`-Aufruf mehr.
+
 ### Fixed (Bolt-Connection-Errors unter Gunicorn-Gevent-Worker — 2026-07-28, PR #937, Issue #933)
 
 - `OasisProfileGenerator.generate_profiles_from_entities` erkennt, ob `gevent.monkey` das `socket`-Modul gepatcht hat (Gunicorn `-k gevent --preload`). In diesem Fall läuft die parallele Persona-Erzeugung über ein natives `gevent.pool.Pool` mit `imap_unordered` auf demselben OS-Thread, statt OS-Threads mit kooperativ geschedulten Sockets zu mischen. Das behebt die „Failed to write data"-Bolt-Fehler beim initialen Persona-Burst in parallelen Simulationen.

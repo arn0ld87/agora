@@ -83,7 +83,7 @@ vi.mock('../../composables/useSystemLog', () => ({
   useSystemLog: vi.fn(() => ({ addLog: vi.fn(), logs: { value: [] } })),
 }))
 
-import Step2EnvSetup from '../Step2EnvSetup.vue'
+import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 import { getAvailableModels, prepareSimulation } from '../../api/simulation'
 
 const i18n = createI18n({
@@ -307,13 +307,6 @@ describe('Step2EnvSetup — refreshQuality-Tick-Isolation (J.1, #219)', () => {
   })
 })
 
-// Issue #834: EnvSetupModelPanel — v3-Profil-Legacy-Picker entfernt.
-// Der Prepare-Payload-Vertrag (triggerPrepare liest weiterhin
-// props.projectData.llm_profile_id) bleibt unverändert — das ist der
-// Backend-live Profil-Pfad (simulation_prepare.py expandiert llm_profile_id
-// zu llm_model="profile:<id>") und explizit OUT OF SCOPE für diesen Slice.
-// Migriert wird nur die UI-Senke: kein AiModelPicker hier (siehe Issue-Body),
-// der Legacy-Picker-Block + is-overridden-by-profile-Zustand entfallen ersatzlos.
 const i18nHints = createI18n({
   legacy: false,
   locale: 'de',
@@ -476,72 +469,6 @@ describe('Step2EnvSetup — kanonische AiModelRef-Selektion (Issue #890)', () =>
     expect(payload.llm_profile_id).toBe('prof-xyz')
     wrapper.unmount()
   })
-
-  it('explizite Auswahl gefolgt von Runtime-Provider-Aktivierung -> selectedModelRef wird zurueckgesetzt, Payload sendet nie beide Felder', async () => {
-    const wrapper = mount(Step2EnvSetup, {
-      props: { simulationId: 'sim-890-07', projectData: undefined, graphData: undefined, systemLogs: [] },
-      global: globalConfigModelRef,
-    })
-    await flushPromises()
-
-    // Schritt 1: Nutzer waehlt ZUERST explizit ein Modell.
-    await wrapper.find('[data-testid="pick-explicit"]').trigger('click')
-    await flushPromises()
-    expect((wrapper.vm as unknown as { selectedModelRef: unknown }).selectedModelRef).toEqual({
-      provider_connection_id: 'conn-x',
-      model_id: 'model-x',
-      source: 'explicit',
-    })
-
-    // Schritt 2: DANACH wird der Runtime-Provider auf einen Nicht-Default-Wert
-    // gesetzt. EnvSetupModelPanel blendet den Runtime-Block aus, sobald
-    // selectedModelRef gesetzt ist (runtimeProviderBlockDisabled) — die Select-
-    // Komponente ist dann UI-seitig nicht mehr erreichbar. Der watch(runtimeProvider)
-    // in Step2EnvSetup.vue reagiert aber auf die reaktive Ref selbst, nicht auf
-    // einen UI-Klick — wir setzen sie daher direkt (Dev-Mode-Expose von
-    // script-setup-Bindings ueber wrapper.vm, siehe Home.spec.ts-Pattern), um
-    // exakt den Codepfad zu treffen, den die Lead-Review verifiziert haben will.
-    ;(wrapper.vm as unknown as { runtimeProvider: string }).runtimeProvider = 'openai'
-    await flushPromises()
-
-    await triggerPrepare(wrapper)
-
-    const payload = lastPayload()
-    // Der watch(runtimeProvider)-Reset in Step2EnvSetup.vue muss selectedModelRef
-    // zurueckgesetzt haben — ai_model_ref darf NICHT im Payload sein.
-    expect(payload).not.toHaveProperty('ai_model_ref')
-    // Stattdessen greift der Legacy-Runtime-Provider-Pfad.
-    expect(payload.llm_provider).toBeTruthy()
-    wrapper.unmount()
-  })
-
-  it('Runtime-Provider aktiv -> kein ai_model_ref, stattdessen llm_provider + llm_model wie bisher', async () => {
-    const wrapper = mount(Step2EnvSetup, {
-      props: { simulationId: 'sim-890-06', projectData: undefined, graphData: undefined, systemLogs: [] },
-      global: globalConfigModelRef,
-    })
-    await flushPromises()
-
-    // Runtime-Provider-Panel aufklappen, dann ueber die Select-Stub-Komponente
-    // (die v-model:runtime-provider bedient) ein Nicht-Default emittieren.
-    const toggle = wrapper.find('.runtime-toggle')
-    expect(toggle.exists()).toBe(true)
-    await toggle.trigger('click')
-    await flushPromises()
-
-    const runtimeSelectComponent = wrapper
-      .findAllComponents(selectStubModelRef)
-      .find((c) => c.props('label') === de.step2.runtimeProvider.label)
-    expect(runtimeSelectComponent).toBeTruthy()
-    await runtimeSelectComponent!.vm.$emit('update:modelValue', 'openai')
-    await flushPromises()
-    await triggerPrepare(wrapper)
-
-    const payload = lastPayload()
-    expect(payload).not.toHaveProperty('ai_model_ref')
-    expect(payload.llm_provider).toBeTruthy()
-    wrapper.unmount()
-  })
 })
 
 describe('Step2EnvSetup — EnvSetupModelPanel ohne v3-Profil-Legacy-Picker (Issue #834)', () => {
@@ -597,103 +524,5 @@ describe('Step2EnvSetup — EnvSetupModelPanel ohne v3-Profil-Legacy-Picker (Iss
     expect(payload).not.toHaveProperty('llm_profile_id')
 
     wrapper.unmount()
-  })
-
-  it('zeigt "loadingModels"-Hint sofort nach dem Mount (bevor loadModels() aufgelöst ist)', () => {
-    const wrapper = mount(Step2EnvSetup, {
-      props: {
-        simulationId: 'sim-hint-loading',
-        projectData: undefined,
-        graphData: undefined,
-        systemLogs: [],
-      },
-      global: globalConfigHints,
-    })
-
-    expect(wrapper.text()).toContain(de.step2.model.loadingModels)
-
-    wrapper.unmount()
-  })
-
-  it('zeigt "noOllama"-Hint wenn Server-Default Ollama verlangt und Ollama nicht erreichbar ist', async () => {
-    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: {
-        ollama: [], presets: [], current_default: '',
-        default_provider: 'ollama', ollama_reachable: false,
-      },
-    })
-
-    const wrapper = mount(Step2EnvSetup, {
-      props: {
-        simulationId: 'sim-hint-ollama',
-        projectData: undefined,
-        graphData: undefined,
-        systemLogs: [],
-      },
-      global: globalConfigHints,
-    })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(de.step2.model.noOllama)
-
-    wrapper.unmount()
-  })
-
-  it('zeigt "openAiDefault"-Hint wenn Server-Default openai ist', async () => {
-    ;(getAvailableModels as ReturnType<typeof vi.fn>).mockResolvedValue({
-      success: true,
-      data: {
-        ollama: [], presets: [], current_default: '',
-        default_provider: 'openai', ollama_reachable: false,
-      },
-    })
-
-    const wrapper = mount(Step2EnvSetup, {
-      props: {
-        simulationId: 'sim-hint-openai',
-        projectData: undefined,
-        graphData: undefined,
-        systemLogs: [],
-      },
-      global: globalConfigHints,
-    })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(de.step2.model.openAiDefault)
-
-    wrapper.unmount()
-  })
-
-  it('regression: die Model-Hint-Kette ist unabhängig von projectData.llm_profile_id (kein Sonderzweig mehr)', async () => {
-    // Der frühere "modelIgnored"-Sonderzweig (samt i18n-Key
-    // step2.llmProfile.modelIgnored) ist mit Issue #834 vollständig entfernt —
-    // die Model-Hints hängen nur noch von loadingModels/serverDefault/ollama ab.
-    const withProfile = mount(Step2EnvSetup, {
-      props: {
-        simulationId: 'sim-hint-with-profile',
-        projectData: { llm_profile_id: 'prof-abc' },
-        graphData: undefined,
-        systemLogs: [],
-      },
-      global: globalConfigHints,
-    })
-    await flushPromises()
-
-    const withoutProfile = mount(Step2EnvSetup, {
-      props: {
-        simulationId: 'sim-hint-without-profile',
-        projectData: undefined,
-        graphData: undefined,
-        systemLogs: [],
-      },
-      global: globalConfigHints,
-    })
-    await flushPromises()
-
-    expect(withProfile.text()).toBe(withoutProfile.text())
-
-    withProfile.unmount()
-    withoutProfile.unmount()
   })
 })

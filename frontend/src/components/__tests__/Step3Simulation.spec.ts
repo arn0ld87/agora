@@ -108,7 +108,7 @@ vi.mock('../../composables/useEventStream', () => ({
   }),
 }))
 
-import Step3Simulation from '../Step3Simulation.vue'
+import Step3Simulation from '@/components/v4/steps/Step3Simulation.vue'
 import { useEventStream } from '../../composables/useEventStream'
 import { generateReport } from '../../api/report'
 import { cancelRun } from '../../api/runs'
