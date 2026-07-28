@@ -5,6 +5,32 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (v3-Inhaltskomponenten nach v4 migriert — 2026-07-28, PR #938, Issue #922)
+
+- Die drei verbleibenden v3-Inhaltskomponenten `Step2EnvSetup.vue`, `Step3Simulation.vue` und `Step4Report.vue` sind nach `frontend/src/components/v4/steps/` migriert (RENAMED, Inhalt an v4-Typografie und -Ordnerstruktur angepasst). Die v3-Originale sind entfernt; die v4-Wrapper-Views binden die v4-Komponenten direkt ein.
+- `EnvSetupModelPanel.vue` enthält nur noch den kanonischen `AiModelPicker` und den Sprach-Selector. Legacy-Credential-Override-Forms (Runtime-Provider-Toggle, Session-Key-Feld, Base-URL-Feld, `modelOption`/`customModel`-Select) sind entfernt.
+- `useRuntimeLlmOptions.ts` (credential-basierter Runtime-Provider-Override, `@deprecated` Slice 5.5) ist entfernt; `main.ts` ruft `cleanupStaleRuntimeLlmStorage` nicht mehr auf. `useEnvForm` führt `modelOption`/`customModel` ohne Persistenz weiter, bis [Issue #903](https://github.com/arn0ld87/agora/issues/903) die Ablösung abschließt.
+- `check_legacy_model_picker.py` kennt die drei migrierten v3-Pfade als `REMOVED_PATHS` und meldet ihre Rückkehr als Regression.
+- Step2-`triggerPrepare` serialisiert `ai_model_ref` nur noch aus einer expliziten Nutzer-Auswahl (`selectedModelOverride`), nicht aus dem beim Mount übernommenen Workspace-Default (`selectedModelRef`). Ein bloß akzeptierter Default erzeugt keinen Backend-Override mehr und unterdrückt weder das konfigurierte Projekt-Profil noch den prepared-Shortcut (Codex-Review P1).
+- Persona-Filter "more"-Button setzt `showAllPersonas` statt des nicht existierenden `showAllHomeLayout`, sodass `visiblePersonas` bei >24 Treffern korrekt expandiert (Codex-Review P2).
+- Tests aktualisiert: `Step2EnvSetup.providerOverride.spec.ts` und `useRuntimeLlmOptions.spec.ts` entfernt (Pfade existieren nicht mehr); übrige Step2/3/4-Specs importieren die v4-Komponenten. `main.spec.ts` erwartet keinen `cleanupStaleRuntimeLlmStorage`-Aufruf mehr.
+
+### Changed (SimulationConfigGenerator auf schema-validierten LLMClient.chat_json umgestellt — 2026-07-28, PR #936)
+
+- `SimulationConfigGenerator` erzeugt Zeit-, Ereignis- und Agenten-Konfigurationen jetzt ausschließlich über das SSoT `LLMClient.chat_json` mit Pydantic-Response-Modellen aus `simulation_config_schemas`. Der rohe `OpenAI(...)`-Client wurde aus der Klasse entfernt, sodass keine direkten `client.chat.completions.create`-Aufrufe mehr versehentlich wieder eingeführt werden können.
+- Dynamische Schemavalidierung und Sanitization (Grenzwerte für `agents_per_hour`, `response_delay_min/max`, Agenten-Limits) greifen über Pydantic-Modelle; verletzende Werte werden vom Validator korrigiert statt die Konfiguration abzulehnen.
+- Der `LLM_DISABLE_JSON_MODE`/`json_object`-Fallbackpfad bleibt erhalten und ist robuster: Bei Providern ohne `json_schema`-Support oder bei leicht trunkiertem JSON läuft ein Regex-basierter Reparatur-Fallback (`_try_fix_config_json`) auf die rohe `chat()`-Antwort.
+- Retry-Strategie in `_call_llm_with_retry` entschaerft (Codex-Review P2): Die äußere 3-Versuche-Schleife retried nur noch Schema-/JSON-Fehler (`ValueError`, `pydantic.ValidationError`); Transport-Retry (`llm_call_with_retry`, bis zu 4 Versuche) bleibt allein bei `LLMClient.chat`. Zuvor konnten bis zu 24 Requests pro Konfigurationsschritt entstehen und Auth-Fehler wurden dreimal durchlaufen — jetzt steigen 4xx/final 5xx sofort durch.
+- Umfangreiche Tests in `backend/tests/services/test_simulation_config_generator_refactored.py` decken Validierung, Grenzwert-Korrektur, Schema-Verletzung, Fallback-Verhalten und Batch-Aufrufe ab. Schließt #932.
+
+### Added (Embedding-Konfiguration auf lokales Ollama gepinnt — 2026-07-27, Issue #934)
+
+- Neuer Helper `activate_ollama_embedding` in `backend/app/services/embedding_configurations/activate_ollama.py` pinnt die aktive `EmbeddingConfiguration` idempotent auf `embeddinggemma:300m` (768-dim) via `EmbeddingConfigurationService.activate`. Vorhandene aktive Konfigurationen des gleichen Scopes werden auf `status='rolled_back'` gesetzt (Audit-Trail; Knoten bleibt erhalten, wird nicht gelöscht).
+- Operator-Tool `backend/scripts/activate_local_ollama_embedding.py` macht die Festschreibung reproduzierbar dokumentierbar (`uv run python -m scripts.activate_local_ollama_embedding`, optionale Overrides per CLI-Flags).
+- Vier Contract-Tests in `backend/tests/contracts/test_embedding_activate_ollama.py` decken Pinning, Vorgänger-Rollback, Idempotenz und Konvergenz nach Gemini→Ollama ab.
+- ADR-0007-konform: alle Schreibpfade laufen ausschließlich über `EmbeddingConfigurationStore` / `ProviderConnectionStore` — keine direkten Cypher- oder Datei-Schreibwege. Gemini-Re-Embedding bleibt explizit außerhalb des Scopes.
+- Hintergrund: nach dem Wechsel des Embedding-Providers von Gemini (429-Quotenfehler am 2026-07-27) auf lokales Ollama via `.env` war die Neo4j-`EmbeddingConfiguration`-SSoT noch nicht nachgezogen; der Helper schließt diese Lücke.
+
 ### Changed (Subagenten-Härtung — Härtung der historischen Subagenten ohne -m3-Suffix, 2026-07-27)
 
 - Die sechs historischen Subagenten ohne Suffix (`agora-doc-worker.md`, `agora-evidence-auditor.md`, `agora-frontend-worker.md`, `agora-opus-reviewer.md`, `agora-refactor-worker.md`, `agora-test-worker.md`) wurden auf dasselbe Härtungsniveau wie ihre `-m3`-Pendants gehoben:

@@ -41,6 +41,17 @@ const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
 
 const selectedModelRef = ref(null)
+// Expliziter Nutzer-Pick — strikt getrennt vom Anzeige-Default. Der beim Mount
+// aus dem Kanon (routing/defaults.global_default) übernommene Wert befüllt nur
+// selectedModelRef (Anzeige) und darf keinen Request-Override erzeugen —
+// sonst würde ein bloß akzeptierter Workspace-Default das konfigurierte
+// Projekt-Profil unterdrücken und den prepared-Shortcut umgehen.
+const selectedModelOverride = ref(null)
+
+function onModelRefPicked(val) {
+  selectedModelRef.value = val
+  selectedModelOverride.value = val
+}
 
 // ----- Model + language picker (useEnvForm) -----
 const {
@@ -173,8 +184,8 @@ async function triggerPrepare() {
     use_llm_for_profiles: true,
     language: language.value,
   }
-  if (selectedModelRef.value !== null) {
-    payload.ai_model_ref = { ...selectedModelRef.value, source: 'explicit' }
+  if (selectedModelOverride.value !== null) {
+    payload.ai_model_ref = { ...selectedModelOverride.value, source: 'explicit' }
   } else {
     if (props.projectData?.llm_profile_id) {
       payload.llm_profile_id = props.projectData.llm_profile_id
@@ -241,7 +252,8 @@ onMounted(async () => {
 
         <EnvSetupModelPanel
           v-model:language="language"
-          v-model:model-ref="selectedModelRef"
+          :model-value="selectedModelRef"
+          @update:model-ref="onModelRefPicked"
           :loading-models="loadingModels"
           :server-default-requires-ollama="serverDefaultRequiresOllama"
           :ollama-reachable="ollamaReachable"
@@ -339,7 +351,7 @@ onMounted(async () => {
         <button
           v-if="filteredPersonas.length > 24 && !showAllPersonas && !personaSearch.trim()"
           class="persona-more-btn"
-          @click="showAllHomeLayout = true"
+          @click="showAllPersonas = true"
         >
           + {{ filteredPersonas.length - 24 }} {{ t('common.more') }}
         </button>
