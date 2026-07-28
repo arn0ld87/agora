@@ -130,7 +130,7 @@ Bei Provider-Detection-Fragen („welcher Provider für diese URL/Modell", `olla
 
 ## Embedding-Configuration (ADR-0007)
 
-Aktive Konfiguration lebt in Neo4j (`EmbeddingConfiguration`-Knoten, eindeutig pro Provider/Model/Dim). Lese-/Schreibpfade ausschließlich über `backend/app/services/embedding_service.py` und `embedding_migration.py`. Bei Modell-Wechsel: Migrations-Lifecycle `pending → running → validating → completed | failed | rolled_back`. Gemini-Re-Embedding ist explizit „noch nicht unterstützt“ — nicht vortäuschen.
+Aktive Konfiguration wird vom [`EmbeddingConfigurationStore`](backend/app/services/embedding_configuration_store.py) in einer flachen JSON-Datei unter `AGORA_DATA_DIR/embedding_configurations.json` persistiert (`flock`-Sperre, atomares Write via `os.replace`, Datei-Modus 0600) — **nicht** in Neo4j. Index-Versionen liegen in einer Sibling-JSON (`embedding_index_versions.json`). `EmbeddingConfiguration` ist ein Pydantic-Vertrag ([`backend/app/contracts/embedding_contract.py`](backend/app/contracts/embedding_contract.py)), kein Neo4j-Knoten. Lese-/Schreibpfade über `backend/app/services/embedding_service.py` und `embedding_migration.py`; Service-Logik in `backend/app/services/embedding_configurations/service.py`, Legacy-Read-Only-Adapter in `…/legacy.py`. Bei Modell-Wechsel: Migrations-Lifecycle `pending → running → validating → completed | failed | rolled_back`. Gemini-Re-Embedding ist explizit „noch nicht unterstützt“ — nicht vortäuschen.
 
 ## Structured-JSON-LLM-Calls (chat_json-SSoT)
 
