@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 from cryptography.fernet import Fernet
+from pydantic import ValidationError
 
 from app.contracts.embedding_contract import EmbeddingConfiguration
 from app.services.embedding_configuration_store import EmbeddingConfigurationStore
@@ -220,3 +221,22 @@ def test_activate_ollama_converges_after_gemini_then_ollama(
     assert actives[0].model_id == DEFAULT_OLLAMA_MODEL
     assert len(rolled_back) == 1
     assert rolled_back[0].model_id == "gemini-embedding-2"
+
+
+def test_activate_ollama_rejects_non_loopback_base_url(
+    stores, fixed_now: datetime
+) -> None:
+    """Issue #934 Akzeptanzkriterium (Negativ-Test): ein nicht-Loopback
+    ``base_url`` wird fuer ``provider_kind='ollama'`` als ValidationError
+    abgelehnt — Loopback-Pflicht aus ``LocalOllamaBaseUrl`` und
+    ``ProviderConnectionUpsertRequest.model_validator``.
+    """
+    configuration_store, connection_store, secrets_store = stores
+    with pytest.raises(ValidationError):
+        activate_ollama_embedding(
+            base_url="http://example.com:11434",
+            configuration_store=configuration_store,
+            connection_store=connection_store,
+            secrets_store=secrets_store,
+            now=lambda: fixed_now,
+        )
