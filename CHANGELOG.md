@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Legacy-Model-Picker-Guard um ActiveModelBadge.vue erweitert — 2026-07-28, Issue #911)
+
+- `ActiveModelBadge.vue` (entfernt in Issue #835) ist jetzt in `REMOVED_PATHS` von `.github/scripts/check_legacy_model_picker.py` gelistet — eine Wiedereinführung der Datei schlägt künftig schon bei bloßer Existenz fehl, unabhängig von Importen.
+- `test_deprecated_target_allows_import`/`test_non_deprecated_target_still_flags` auf `useRuntimeLlmOptions.ts` als Testobjekt umgestellt, da `ActiveModelBadge.vue` selbst nicht mehr als Positiv-/Negativ-Fixture taugt.
+- Docstring dokumentiert: die `@deprecated`-Read-Adapter-Freigabe greift jetzt faktisch nur noch für Stores/Composables, da alle bisherigen Komponenten-Ausnahmen in `REMOVED_PATHS` stehen.
+
 ### Changed (v3-Inhaltskomponenten nach v4 migriert — 2026-07-28, PR #938, Issue #922)
 
 - Die drei verbleibenden v3-Inhaltskomponenten `Step2EnvSetup.vue`, `Step3Simulation.vue` und `Step4Report.vue` sind nach `frontend/src/components/v4/steps/` migriert (RENAMED, Inhalt an v4-Typografie und -Ordnerstruktur angepasst). Die v3-Originale sind entfernt; die v4-Wrapper-Views binden die v4-Komponenten direkt ein.
