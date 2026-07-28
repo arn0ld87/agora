@@ -5,6 +5,12 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (Local-Endpoint-Erkennung in neutrales Modul verschoben — 2026-07-28, Issue #800)
+
+- `_is_local_endpoint` und `LOCAL_NO_AUTH_API_KEY` waren als private Symbole in `backend/app/api/simulation_prepare.py` beheimatet, wurden aber bereits aus `runs.py`, `simulation_history.py` und `simulation_run.py` importiert. Beides zieht jetzt nach `backend/app/utils/endpoints.py` und wird öffentlich (`is_local_endpoint`, `LOCAL_HOSTS`).
+- Whitelist-Logik (`urlparse`-basierter Hostname-Vergleich gegen `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, `host.docker.internal`) und der Subdomain-Smuggling-Schutz (Gemini-Review PR #466) bleiben unverändert erhalten.
+- Alle Aufrufer und Tests auf den neuen Importpfad umgestellt, kein Verhaltensunterschied.
+
 ### Changed (hartkodierte PageHeader-Texte auf vue-i18n umgestellt — 2026-07-28, Issue #796)
 
 - `title`/`subtitle`/`label`-Literale in `HistoryView.vue`, `CompareView.vue`, `StepEnvSetupView.vue`, `StepReportView.vue`, `StepInteractionView.vue`, `StepGraphBuildView.vue` und `StepSimulationView.vue` laufen jetzt über `$t()` statt hartkodierter deutscher Strings, mit neuen Keys in `de.json` und `en.json`.
