@@ -256,16 +256,43 @@ def test_resolve_ollama_tags_url_explicit_env_strips_trailing_slash():
     assert result == "http://ollama.internal.lan:9999"
 
 
-def test_resolve_ollama_tags_url_returns_none_when_explicit_but_non_ollama():
-    """Auch mit gesetztem ``OLLAMA_BASE_URL`` muss der aktive Provider ollama
-    sein — sonst None (MiniMax darf niemals über OLLAMA_BASE_URL geprüft werden)."""
+def test_resolve_ollama_tags_url_explicit_env_wins_over_non_ollama_chat_provider():
+    """``OLLAMA_BASE_URL`` schlägt das Provider-Gate.
+
+    Reales Setup: Chat läuft über MiniMax-M3, Embeddings über ein lokales
+    Ollama. Würde das Provider-Gate vor der Env greifen, verschwände der
+    erreichbare Ollama-Server aus dem Status, sobald der Chat-Provider
+    wechselt. Der Probe geht dabei an die Ollama-URL, niemals an MiniMax.
+    """
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    resolved = resolve_ollama_tags_url(
+        "https://api.minimax.io/v1",
+        "MiniMax-M3",
+        explicit_base_url="http://localhost:11434",
+    )
+    assert resolved == "http://localhost:11434"
+    assert "minimax" not in resolved
+
+
+def test_resolve_ollama_tags_url_returns_none_when_non_ollama_without_env():
+    """Ohne ``OLLAMA_BASE_URL`` bleibt das Provider-Gate hart — kein
+    ``/api/tags`` gegen MiniMax."""
     from app.llm.providers.registry import resolve_ollama_tags_url
 
     assert (
         resolve_ollama_tags_url(
             "https://api.minimax.io/v1",
             "MiniMax-M3",
-            explicit_base_url="http://localhost:11434",
+            explicit_base_url=None,
+        )
+        is None
+    )
+    assert (
+        resolve_ollama_tags_url(
+            "https://api.minimax.io/v1",
+            "MiniMax-M3",
+            explicit_base_url="   ",
         )
         is None
     )
