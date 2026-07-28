@@ -12,6 +12,7 @@ import requests
 from . import status_bp
 from .. import __version__
 from ..config import Config
+from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..utils.gpu_probe import detect_gpu
 from ..utils.logger import get_logger
 from ..utils.api_responses import handle_api_errors, json_success
@@ -105,17 +106,40 @@ def _get_neo4j_status():
 
 
 def _get_ollama_status():
-    """Check Ollama availability and list models."""
-    # Derive the Ollama base URL from the OpenAI-style LLM_BASE_URL
-    # ("http://host:11434/v1" → "http://host:11434"); fall back to env if odd.
-    base = (Config.LLM_BASE_URL or '').rstrip('/')
-    if base.endswith('/v1'):
-        base = base[:-3]
-    if not base:
-        base = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
+    """Check Ollama availability and list models.
+
+    Probiert nur, wenn der aktive HTTP-Provider laut zentraler
+    ``detect_provider``-Heuristik ein Ollama-kompatibler Server ist
+    (lokal oder ``ollama.com``). Für MiniMax/OpenAI/Google wird der Probe
+    übersprungen — ``/api/tags`` existiert dort nicht und liefert sonst 404er
+    im Log.
+    """
+    base = resolve_ollama_tags_url(
+        Config.LLM_BASE_URL,
+        Config.LLM_MODEL_NAME,
+        explicit_base_url=os.environ.get('OLLAMA_BASE_URL'),
+    )
+
+    if base is None:
+        # Aktiver Provider ist nicht Ollama — Probe bewusst überspringen.
+        # ``reachable=None`` (nicht False) signalisiert "nicht ermittelt",
+        # ``skipped=True`` liefert den Grund.
+        provider = detect_provider(
+            Config.LLM_BASE_URL, Config.LLM_MODEL_NAME, mode="http"
+        )
+        return {
+            "reachable": None,
+            "skipped": True,
+            "reason": f"Active provider is {provider}",
+            "base_url": None,
+            "models_available": [],
+            "default_model": Config.LLM_MODEL_NAME,
+            "error": None,
+        }
 
     result = {
         "reachable": False,
+        "skipped": False,
         "base_url": base,
         "models_available": [],
         "default_model": Config.LLM_MODEL_NAME,

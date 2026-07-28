@@ -167,3 +167,132 @@ EMBEDDING_CASES = [
 @pytest.mark.parametrize(("base_url", "model", "expected"), EMBEDDING_CASES)
 def test_detect_embedding_provider(base_url, model, expected):
     assert detect_embedding_provider(base_url, model) == expected
+
+
+# ---------------------------------------------------------------------------
+# is_ollama_compatible_provider / resolve_ollama_tags_url — Helpers, die
+# entscheiden ob /api/tags probet werden darf. Verhindert 404-Spam im Log,
+# wenn der aktive Provider MiniMax/OpenAI/Google ist (Issues: MiniMax
+# ``/api/tags`` -> 404; OpenAI /api/tags -> 404; Google -> 404).
+# ---------------------------------------------------------------------------
+
+
+def test_is_ollama_compatible_provider_true_for_local_ollama():
+    from app.llm.providers.registry import is_ollama_compatible_provider
+
+    assert is_ollama_compatible_provider("http://localhost:11434/v1", "qwen2.5:32b") is True
+    assert is_ollama_compatible_provider("http://127.0.0.1:11434", "llama3") is True
+
+
+def test_is_ollama_compatible_provider_true_for_ollama_cloud():
+    from app.llm.providers.registry import is_ollama_compatible_provider
+
+    assert is_ollama_compatible_provider("https://ollama.com/v1", "qwen3-coder-next:cloud") is True
+    assert is_ollama_compatible_provider("https://OLLAMA.COM/v1", "x") is True
+
+
+def test_is_ollama_compatible_provider_false_for_cloud_providers():
+    """MiniMax/OpenAI/Google dürfen NICHT als Ollama-kompatibel zählen."""
+    from app.llm.providers.registry import is_ollama_compatible_provider
+
+    # MiniMax
+    assert is_ollama_compatible_provider("https://api.minimax.io/v1", "MiniMax-M3") is False
+    # OpenAI
+    assert is_ollama_compatible_provider("https://api.openai.com/v1", "gpt-4") is False
+    # Google Gemini
+    assert is_ollama_compatible_provider(
+        "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-3"
+    ) is False
+    # Unknown
+    assert is_ollama_compatible_provider("https://example.com/v1", "foo") is False
+
+
+def test_resolve_ollama_tags_url_returns_none_for_minimax():
+    """Regression: MiniMax-Provider darf KEIN Probe auf /api/tags auslösen."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    assert resolve_ollama_tags_url("https://api.minimax.io/v1", "MiniMax-M3") is None
+
+
+def test_resolve_ollama_tags_url_returns_none_for_openai():
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    assert resolve_ollama_tags_url("https://api.openai.com/v1", "gpt-4") is None
+
+
+def test_resolve_ollama_tags_url_returns_base_for_local_ollama():
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    # Default-Setup: LLM_BASE_URL=http://localhost:11434/v1
+    # Erwartet: http://localhost:11434 (ohne /v1-Suffix)
+    assert resolve_ollama_tags_url("http://localhost:11434/v1", "qwen2.5:32b") == "http://localhost:11434"
+    assert resolve_ollama_tags_url("http://localhost:11434/v1/", "qwen2.5:32b") == "http://localhost:11434"
+    assert resolve_ollama_tags_url("http://localhost:11434", "qwen2.5:32b") == "http://localhost:11434"
+
+
+def test_resolve_ollama_tags_url_prefers_explicit_env(monkeypatch):
+    """``OLLAMA_BASE_URL`` schlägt ``LLM_BASE_URL`` — Operator kann den Probe
+    auf einen separaten Ollama-Host umleiten, ohne den aktiven Provider zu
+    ändern."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    # Active provider is Ollama (11434); explicit env points elsewhere
+    result = resolve_ollama_tags_url(
+        "http://localhost:11434/v1",
+        "qwen2.5:32b",
+        explicit_base_url="http://ollama.internal.lan:9999",
+    )
+    assert result == "http://ollama.internal.lan:9999"
+
+
+def test_resolve_ollama_tags_url_explicit_env_strips_trailing_slash():
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    result = resolve_ollama_tags_url(
+        "http://localhost:11434/v1",
+        "qwen2.5:32b",
+        explicit_base_url="http://ollama.internal.lan:9999/",
+    )
+    assert result == "http://ollama.internal.lan:9999"
+
+
+def test_resolve_ollama_tags_url_explicit_env_wins_over_non_ollama_chat_provider():
+    """``OLLAMA_BASE_URL`` schlägt das Provider-Gate.
+
+    Reales Setup: Chat läuft über MiniMax-M3, Embeddings über ein lokales
+    Ollama. Würde das Provider-Gate vor der Env greifen, verschwände der
+    erreichbare Ollama-Server aus dem Status, sobald der Chat-Provider
+    wechselt. Der Probe geht dabei an die Ollama-URL, niemals an MiniMax.
+    """
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    resolved = resolve_ollama_tags_url(
+        "https://api.minimax.io/v1",
+        "MiniMax-M3",
+        explicit_base_url="http://localhost:11434",
+    )
+    assert resolved == "http://localhost:11434"
+    assert "minimax" not in resolved
+
+
+def test_resolve_ollama_tags_url_returns_none_when_non_ollama_without_env():
+    """Ohne ``OLLAMA_BASE_URL`` bleibt das Provider-Gate hart — kein
+    ``/api/tags`` gegen MiniMax."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    assert (
+        resolve_ollama_tags_url(
+            "https://api.minimax.io/v1",
+            "MiniMax-M3",
+            explicit_base_url=None,
+        )
+        is None
+    )
+    assert (
+        resolve_ollama_tags_url(
+            "https://api.minimax.io/v1",
+            "MiniMax-M3",
+            explicit_base_url="   ",
+        )
+        is None
+    )

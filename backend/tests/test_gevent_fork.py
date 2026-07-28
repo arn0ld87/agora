@@ -66,9 +66,10 @@ def test_gevent_pool_execution_fallback(monkeypatch):
         def related_nodes(self):
             return []
 
-    # Mock gevent.monkey.is_patched("socket") to return True
+    # Mock gevent.monkey.is_module_patched("socket") -> True
+    # (``is_patched(name)`` ist seit gevent 23.x entfernt — Regression-Schutz.)
     class MockGeventMonkey:
-        def is_patched(self, name):
+        def is_module_patched(self, name):
             return name == "socket"
 
     monkeypatch.setitem(sys.modules, "gevent", MagicMock())
@@ -103,3 +104,207 @@ def test_gevent_pool_execution_fallback(monkeypatch):
     profiles = gen.generate_profiles_from_entities(entities=entities, use_llm=False)
     assert len(profiles) == 1
     assert profiles[0].name == "Test Name"
+
+
+def _build_mock_monkey(socket_patched: bool):
+    """Erzeugt ein Mock-Modul für ``gevent.monkey`` mit nur der modernen API.
+
+    Stellt sicher, dass die alte ``is_patched``-Funktion NICHT existiert
+    (Realität seit gevent 23.x); Production-Code darf diesen Namen nicht
+    mehr referenzieren.
+    """
+    import sys
+    from unittest.mock import MagicMock
+
+    class MockGeventMonkey:
+        def is_module_patched(self, name):
+            return socket_patched and name == "socket"
+
+    mock_pool_mod = MagicMock()
+    return sys.modules, mock_pool_mod, MockGeventMonkey()
+
+
+def test_is_gevent_detected_when_socket_patched(monkeypatch):
+    """Regression: gevent mit gepatchtem socket → ``is_gevent=True`` → Pool-Pfad."""
+    import sys
+    from unittest.mock import MagicMock
+
+    class MockGeventMonkey:
+        def is_module_patched(self, name):
+            return name == "socket"
+
+    # ``from gevent import monkey`` greift auf ``gevent.monkey`` als Attribut zu
+    # — also muss der gevent-Mock selbst ``monkey`` als vorbereitetes Objekt
+    # haben. Ein blankes MagicMock würde sonst ein Auto-Attribut (truthy)
+    # liefern und den Patch-Status verschleiern.
+    gevent_mock = MagicMock()
+    gevent_mock.monkey = MockGeventMonkey()
+
+    mock_pool_mod = MagicMock()
+    mock_pool_instance = MagicMock()
+    mock_pool_instance.imap_unordered.side_effect = lambda fn, it: [fn(x) for x in it]
+    mock_pool_mod.Pool.return_value = mock_pool_instance
+
+    monkeypatch.setitem(sys.modules, "gevent", gevent_mock)
+    monkeypatch.setitem(sys.modules, "gevent.pool", mock_pool_mod)
+    monkeypatch.setitem(sys.modules, "gevent.monkey", MockGeventMonkey())
+
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+
+    class DummyEntity:
+        def get_entity_type(self):
+            return "TestType"
+        @property
+        def name(self):
+            return "TestEntity"
+        @property
+        def uuid(self):
+            return "test-uuid"
+        @property
+        def summary(self):
+            return "TestSummary"
+        @property
+        def attributes(self):
+            return {}
+        @property
+        def related_edges(self):
+            return []
+        @property
+        def related_nodes(self):
+            return []
+
+    gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
+    def mock_gen_profile(entity, user_id, use_llm=True):
+        from app.services.oasis_profile_generator import OasisAgentProfile
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name="test_user",
+            name="Patched",
+            bio="b",
+            persona="p",
+        )
+    monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
+
+    profiles = gen.generate_profiles_from_entities(entities=[DummyEntity()], use_llm=False)
+    assert profiles[0].name == "Patched"
+    # Pool-Pfad wurde wirklich genutzt, NICHT ThreadPoolExecutor.
+    mock_pool_mod.Pool.assert_called_once()
+
+
+def test_is_gevent_false_when_socket_not_patched(monkeypatch):
+    """Regression: gevent importierbar, aber ``socket`` nicht gepatcht → ThreadPoolExecutor-Fallback."""
+    import sys
+    from unittest.mock import MagicMock
+
+    class MockGeventMonkey:
+        def is_module_patched(self, name):
+            return False  # socket nicht gepatcht
+
+    gevent_mock = MagicMock()
+    gevent_mock.monkey = MockGeventMonkey()
+
+    mock_pool_mod = MagicMock()
+
+    monkeypatch.setitem(sys.modules, "gevent", gevent_mock)
+    monkeypatch.setitem(sys.modules, "gevent.pool", mock_pool_mod)
+    monkeypatch.setitem(sys.modules, "gevent.monkey", MockGeventMonkey())
+
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+
+    class DummyEntity:
+        def get_entity_type(self):
+            return "TestType"
+        @property
+        def name(self):
+            return "TestEntity"
+        @property
+        def uuid(self):
+            return "test-uuid"
+        @property
+        def summary(self):
+            return "TestSummary"
+        @property
+        def attributes(self):
+            return {}
+        @property
+        def related_edges(self):
+            return []
+        @property
+        def related_nodes(self):
+            return []
+
+    gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
+    def mock_gen_profile(entity, user_id, use_llm=True):
+        from app.services.oasis_profile_generator import OasisAgentProfile
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name="test_user",
+            name="Unpatched",
+            bio="b",
+            persona="p",
+        )
+    monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
+
+    profiles = gen.generate_profiles_from_entities(entities=[DummyEntity()], use_llm=False)
+    assert profiles[0].name == "Unpatched"
+    # Thread-Pfad: gevent.pool.Pool darf NICHT instanziert worden sein.
+    mock_pool_mod.Pool.assert_not_called()
+
+
+def test_is_gevent_false_when_gevent_not_importable(monkeypatch):
+    """Regression: kein gevent im Env → ``ImportError`` wird sauber gefangen,
+    ThreadPoolExecutor-Fallback aktiv, kein ``AttributeError``."""
+    import builtins
+    import sys
+
+    real_import = builtins.__import__
+
+    def _import_blocker(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "gevent" or name.startswith("gevent."):
+            raise ImportError(f"blocked: {name}")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _import_blocker)
+    # Sicherheitshalber: gevent aus sys.modules werfen, falls vorhanden.
+    for mod_name in list(sys.modules):
+        if mod_name == "gevent" or mod_name.startswith("gevent."):
+            monkeypatch.delitem(sys.modules, mod_name, raising=False)
+
+    from app.services.oasis_profile_generator import OasisProfileGenerator
+
+    class DummyEntity:
+        def get_entity_type(self):
+            return "TestType"
+        @property
+        def name(self):
+            return "TestEntity"
+        @property
+        def uuid(self):
+            return "test-uuid"
+        @property
+        def summary(self):
+            return "TestSummary"
+        @property
+        def attributes(self):
+            return {}
+        @property
+        def related_edges(self):
+            return []
+        @property
+        def related_nodes(self):
+            return []
+
+    gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
+    def mock_gen_profile(entity, user_id, use_llm=True):
+        from app.services.oasis_profile_generator import OasisAgentProfile
+        return OasisAgentProfile(
+            user_id=user_id,
+            user_name="test_user",
+            name="NoGevent",
+            bio="b",
+            persona="p",
+        )
+    monkeypatch.setattr(gen, "generate_profile_from_entity", mock_gen_profile)
+
+    profiles = gen.generate_profiles_from_entities(entities=[DummyEntity()], use_llm=False)
+    assert profiles[0].name == "NoGevent"

@@ -27,8 +27,13 @@ export const SystemStatusNeo4jSchema = z
 
 export const SystemStatusOllamaSchema = z
   .object({
-    reachable: z.boolean(),
-    base_url: z.string().optional(),
+    // ``null`` = Probe wurde übersprungen (aktiver Provider ist kein
+    // Ollama-kompatibler Server), nicht "nicht erreichbar". Der Grund steht
+    // in ``reason``.
+    reachable: z.boolean().nullable(),
+    skipped: z.boolean().optional(),
+    reason: z.string().nullable().optional(),
+    base_url: z.string().nullable().optional(),
     models_available: z.array(z.string()).default(() => []),
     default_model: z.string().nullable().optional(),
     error: z.string().nullable().optional(),

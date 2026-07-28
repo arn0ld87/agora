@@ -284,3 +284,51 @@ def get_adapter(
     from app.llm.providers.openai import OpenAIAdapter
 
     return OpenAIAdapter(num_ctx=num_ctx, think=think)
+
+
+def is_ollama_compatible_provider(base_url: Optional[str], model: Optional[str]) -> bool:
+    """True, wenn der aktive HTTP-Provider eine ``/api/tags``-Route bedient.
+
+    Wiederverwendung der zentralen ``detect_provider``-Heuristik
+    (``mode="http"``) — True genau für ``"ollama"`` (lokales Ollama, Port 11434)
+    und ``"cloud"`` (``ollama.com``). MiniMax/OpenAI/Google/unknown liefern
+    False, damit Status-Endpoints nicht fälschlich gegen ``/api/tags``
+    proben (MiniMax-Bug: 404 auf jeder Discovery-Anfrage).
+    """
+    return detect_provider(base_url, model, mode="http") in ("ollama", "cloud")
+
+
+def resolve_ollama_tags_url(
+    base_url: Optional[str],
+    model: Optional[str],
+    *,
+    explicit_base_url: Optional[str] = None,
+) -> Optional[str]:
+    """Bestimmt die Base-URL für ``GET /api/tags`` oder liefert ``None``.
+
+    Reihenfolge:
+      1. ``explicit_base_url`` (i. d. R. die ``OLLAMA_BASE_URL``-Env) gewinnt
+         immer, **auch wenn der aktive Chat-Provider kein Ollama ist**. Wer
+         diese Variable setzt, benennt damit ausdrücklich einen Ollama-Server
+         — typischerweise für Embeddings, während der Chat über MiniMax oder
+         OpenAI läuft. Das Provider-Gate darf diesen expliziten Wunsch nicht
+         überstimmen, sonst verschwindet ein real erreichbarer Ollama-Server
+         aus dem Status, sobald der Chat-Provider wechselt.
+      2. Ohne explizite Env: Nur proben, wenn der aktive Provider
+         Ollama-kompatibel ist. Sonst ``None`` — der Aufrufer überspringt den
+         Probe, statt 404er gegen ``/api/tags`` zu loggen (MiniMax-Bug).
+      3. Dann ``base_url`` mit gestripptem ``/v1``-Suffix (lokales Ollama
+         hinter ``http://localhost:11434/v1``).
+    """
+    if explicit_base_url:
+        stripped = explicit_base_url.strip()
+        if stripped:
+            return stripped.rstrip("/")
+
+    if not is_ollama_compatible_provider(base_url, model):
+        return None
+
+    base = (base_url or "").rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return base or None

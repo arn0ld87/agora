@@ -9,7 +9,7 @@ from opentelemetry import trace
 
 from . import simulation_bp
 from ..config import Config
-from ..llm.providers.registry import detect_provider
+from ..llm.providers.registry import detect_provider, resolve_ollama_tags_url
 from ..models.project import ProjectManager
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..utils.api_errors import ApiErrorCode
@@ -42,39 +42,58 @@ def get_available_models():
     den Ollama-Tags steht — sonst landen halluzinierte Einträge (z. B.
     ``qwen2.5:32b`` ohne Install) im UI-Dropdown. Cloud-Presets bleiben, weil
     sie über andere Provider-Discovery-Pfade verifiziert werden.
+
+    Ist der aktive Provider kein Ollama-kompatibler Server (MiniMax/OpenAI/
+    Google), wird der ``/api/tags``-Probe übersprungen — die Route existiert
+    dort nicht. Das Response-Schema erweitert sich additiv um
+    ``ollama_skipped`` und ``ollama_skip_reason``.
     """
     import requests
 
     raw_presets = list(Config.LLM_MODEL_PRESETS or [])
-    ollama_models = []
-    ollama_error = None
+    ollama_models: list = []
+    ollama_error: str | None = None
+    ollama_skipped = False
+    ollama_skip_reason: str | None = None
 
-    base = (Config.LLM_BASE_URL or '').rstrip('/')
-    if base.endswith('/v1'):
-        base = base[:-3]
-    if not base:
-        base = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434')
+    base = resolve_ollama_tags_url(
+        Config.LLM_BASE_URL,
+        Config.LLM_MODEL_NAME,
+        explicit_base_url=os.environ.get('OLLAMA_BASE_URL'),
+    )
 
-    try:
-        resp = requests.get(f"{base}/api/tags", timeout=2.5)
-        resp.raise_for_status()
-        payload = resp.json() or {}
-        for model in payload.get('models', []) or []:
-            name = model.get('name')
-            if not name:
-                continue
-            details = model.get('details') or {}
-            ollama_models.append({
-                "name": name,
-                "label": name,
-                "size": model.get('size'),
-                "family": details.get('family'),
-                "parameter_size": details.get('parameter_size'),
-                "kind": "ollama",
-            })
-    except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
-        ollama_error = str(exc)
-        logger.info(f"Could not reach Ollama at {base}: {exc}")
+    if base is None:
+        # Aktiver Provider ist nicht Ollama — Probe überspringen, kein
+        # 404 im Log provozieren.
+        provider = detect_provider(
+            Config.LLM_BASE_URL, Config.LLM_MODEL_NAME, mode="http"
+        )
+        ollama_skipped = True
+        ollama_skip_reason = f"Active provider is {provider}"
+        logger.debug(
+            "Skipping Ollama /api/tags probe: active provider is %s", provider
+        )
+    else:
+        try:
+            resp = requests.get(f"{base}/api/tags", timeout=2.5)
+            resp.raise_for_status()
+            payload = resp.json() or {}
+            for model in payload.get('models', []) or []:
+                name = model.get('name')
+                if not name:
+                    continue
+                details = model.get('details') or {}
+                ollama_models.append({
+                    "name": name,
+                    "label": name,
+                    "size": model.get('size'),
+                    "family": details.get('family'),
+                    "parameter_size": details.get('parameter_size'),
+                    "kind": "ollama",
+                })
+        except Exception as exc:  # noqa: BLE001 — exception is logged; swallowed intentionally
+            ollama_error = str(exc)
+            logger.info(f"Could not reach Ollama at {base}: {exc}")
 
     ollama_models.sort(key=lambda m: m["name"].lower())
     installed_ollama_names = {m["name"] for m in ollama_models}
@@ -97,8 +116,10 @@ def get_available_models():
         "current_default": Config.LLM_MODEL_NAME,
         "default_provider": _detect_default_provider(),
         "ollama_base_url": base,
-        "ollama_reachable": ollama_error is None,
+        "ollama_reachable": ollama_error is None and not ollama_skipped,
         "ollama_error": ollama_error,
+        "ollama_skipped": ollama_skipped,
+        "ollama_skip_reason": ollama_skip_reason,
         "neo4j_reachable": neo4j_reachable,
         "neo4j_error": neo4j_error,
         "neo4j_uri": Config.NEO4J_URI,

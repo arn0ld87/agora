@@ -1322,13 +1322,18 @@ Important:
             parallel_count,
         )
 
-        # Check if gevent is active and has patched the socket module (prevents multi-threading TCP issues)
+        # Detect active gevent monkey-patching so we can pick the cooperative Pool.
+        # ``gevent.monkey.is_patched()`` (ohne Argument) liefert seit gevent 23.x
+        # keinen "socket"-Status mehr — die öffentliche API ist
+        # ``monkey.is_module_patched(name)``. Wir verwenden genau die, damit
+        # der Import-Fallback eng bleibt und Programmierfehler nicht
+        # verschluckt werden.
         try:
-            import gevent
-            import gevent.monkey
-            is_gevent = gevent.monkey.is_patched("socket")
+            from gevent import monkey
         except ImportError:
             is_gevent = False
+        else:
+            is_gevent = monkey.is_module_patched("socket")
 
         def _process_result(result_idx: int, profile: OasisAgentProfile, error: str | None) -> None:
             """Unified per-result handling: store profile, write realtime file, report progress, log."""

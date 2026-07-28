@@ -112,3 +112,71 @@ def test_model_catalog_ollama_fallback_is_empty():
 
     svc = ModelCatalogService()
     assert svc._get_fallbacks("ollama_cloud") == []
+
+
+class TestOllamaProbeGating:
+    """Regression für 'MiniMax wird gegen /api/tags geprüft' im
+    ``/api/simulation/available-models``-Endpoint.
+
+    Bei aktiven Cloud-Providern (MiniMax, OpenAI, Google) darf KEIN Request
+    gegen ``/api/tags`` gehen — sonst 404-Spam im Log. Die Response trägt
+    in diesem Fall ``ollama_skipped=True`` mit ``ollama_skip_reason``.
+    """
+
+    def _set_provider(self, monkeypatch, base_url, model=""):
+        monkeypatch.setattr(Config, "LLM_BASE_URL", base_url)
+        monkeypatch.setattr(Config, "LLM_MODEL_NAME", model)
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    def test_minimax_does_not_call_api_tags(self, client, monkeypatch):
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        with patch("requests.get") as mock_get:
+            resp = client.get("/api/simulation/available-models")
+        assert resp.status_code == 200
+        data = resp.get_json()["data"]
+        assert data["ollama"] == []
+        assert data["ollama_skipped"] is True
+        assert "minimax" in data["ollama_skip_reason"].lower()
+        # KEIN HTTP-Call.
+        mock_get.assert_not_called()
+
+    def test_openai_does_not_call_api_tags(self, client, monkeypatch):
+        self._set_provider(monkeypatch, "https://api.openai.com/v1", "gpt-4")
+        with patch("requests.get") as mock_get:
+            resp = client.get("/api/simulation/available-models")
+        assert resp.status_code == 200
+        data = resp.get_json()["data"]
+        assert data["ollama"] == []
+        assert data["ollama_skipped"] is True
+        assert "openai" in data["ollama_skip_reason"].lower()
+        mock_get.assert_not_called()
+
+    def test_real_ollama_still_calls_api_tags(self, client, monkeypatch):
+        """Bei aktivem Ollama-Provider MUSS /api/tags weiterhin aufgerufen werden."""
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen2.5:32b")
+        fake_tags = _fake_ollama_tags("qwen2.5:32b")
+        with patch("requests.get") as mock_get:
+            mock_get.return_value.raise_for_status = lambda: None
+            mock_get.return_value.json = lambda: fake_tags
+            resp = client.get("/api/simulation/available-models")
+        assert resp.status_code == 200
+        data = resp.get_json()["data"]
+        assert data["ollama_skipped"] is False
+        assert data["ollama_skip_reason"] is None
+        names = [m["name"] for m in data["ollama"]]
+        assert "qwen2.5:32b" in names
+        called_url = mock_get.call_args[0][0]
+        assert called_url.endswith("/api/tags")
+        assert "/v1/api/tags" not in called_url
+
+    def test_ollama_unreachable_returns_skipped_false(self, client, monkeypatch):
+        """Bei Ollama-Probe-Fehlern bleibt ``ollama_skipped=False`` und der
+        Fehler wird defensiv in ``ollama_error`` abgelegt — kein HTTP-500."""
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen2.5:32b")
+        with patch("requests.get", side_effect=ConnectionError("boom")):
+            resp = client.get("/api/simulation/available-models")
+        assert resp.status_code == 200
+        data = resp.get_json()["data"]
+        assert data["ollama_skipped"] is False
+        assert data["ollama_reachable"] is False
+        assert "boom" in data["ollama_error"]
