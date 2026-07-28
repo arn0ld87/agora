@@ -11,13 +11,8 @@ const { t } = useI18n()
 
 defineProps({
   language: { type: String, required: true },
-  loadingModels: { type: Boolean, default: false },
-  serverDefaultRequiresOllama: { type: Boolean, default: false },
-  ollamaReachable: { type: Boolean, default: false },
-  defaultProvider: { type: String, default: '' },
   agentToolsEnabled: { type: Boolean, default: false },
   maxToolCallsPerAction: { type: Number, default: 0 },
-  isPreparing: { type: Boolean, default: false },
   modelRef: { type: Object as () => AiModelRef | null, default: null },
 })
 

@@ -13,14 +13,14 @@ case "$mode" in
     docker compose restart agora
     ;;
   deps)
-    docker compose exec agora npm install --prefix frontend
+    docker compose exec agora bun install --cwd frontend
     docker compose restart agora
     ;;
   full)
     docker compose down
     docker compose up -d --build
     sleep 3
-    docker compose exec agora npm install --prefix frontend
+    docker compose exec agora bun install --cwd frontend
     docker compose restart agora
     ;;
   *)

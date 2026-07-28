@@ -316,7 +316,12 @@ async function pollStatus() {
         } catch { /* report not yet flushed */ }
         stopPolling()
       } else if (st.status === 'failed') {
-        phase.value = 2; emit('update-status', 'error')
+        // FAILED ist terminal: isComplete verhindert, dass onMounted nach
+        // einem Reload erneut in den Polling-Pfad springt und den
+        // "Failed"-Zustand durch "Running" ersetzt (analog zu
+        // completed/incomplete).
+        isComplete.value = true; phase.value = 2
+        emit('update-status', 'error')
         addLog(`${t('errors.reportFailed')}: ${st.error || ''}`)
         stopPolling()
       } else { phase.value = 1 }
@@ -348,12 +353,14 @@ const reportBadgeLabel = computed((): string => {
   if (phase.value !== 2) {
     return phase.value === 1 ? t('common.running') : t('common.ready')
   }
+  if (reportStatus.value === 'failed') return t('common.failed')
   if (reportStatus.value === 'incomplete') return t('common.incomplete')
   return t('common.completed')
 })
 
-const reportBadgeTone = computed((): 'blue' | 'orange' | 'green' | 'gray' => {
+const reportBadgeTone = computed((): 'blue' | 'orange' | 'green' | 'gray' | 'red' => {
   if (phase.value !== 2) return 'blue'
+  if (reportStatus.value === 'failed') return 'red'
   if (reportStatus.value === 'incomplete') return 'orange'
   return 'green'
 })
@@ -487,7 +494,7 @@ onUnmounted(stopPolling)
         <header class="card-head">
           <Kicker num="01">{{ t('step4.title') }}</Kicker>
           <div class="card-head-actions">
-            <Badge :tone="reportBadgeTone" :dot="phase === 1">
+            <Badge :tone="reportBadgeTone" :dot="phase === 1" data-testid="report-status-badge">
               {{ reportBadgeLabel }}
             </Badge>
             <span v-if="!props.cancelEndpointAvailable" :title="t('step4.reportConfirm.stopDisabledTip')" class="stop-btn-wrap">
