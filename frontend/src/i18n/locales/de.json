@@ -1534,5 +1534,34 @@
       "submit": "Download starten",
       "modelRequired": "Modell-Name ist erforderlich"
     }
+  },
+  "views": {
+    "history": {
+      "title": "Verlauf",
+      "subtitle": "Run- und Branch-Historie"
+    },
+    "compare": {
+      "title": "Compare"
+    },
+    "stepEnvSetup": {
+      "title": "Personas",
+      "subtitle": "Zielgruppenquoten und Umgebungsparameter konfigurieren"
+    },
+    "stepReport": {
+      "title": "Report",
+      "subtitle": "Simulationsergebnisse und Quellenbelege einsehen"
+    },
+    "stepInteraction": {
+      "title": "Interaktion",
+      "subtitle": "Gezielte Nachfragen an die simulierten Personas stellen"
+    },
+    "stepGraphBuild": {
+      "title": "Graph Build",
+      "subtitle": "Wissensgraph aus hochgeladenen Dokumenten aufbauen"
+    },
+    "stepSimulation": {
+      "title": "Simulation",
+      "subtitle": "Multi-Agent-Simulationslauf starten und beobachten"
+    }
   }
 }

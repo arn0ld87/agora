@@ -37,6 +37,7 @@ describe('StepGraphBuildView', () => {
     const wrapper = mount(StepGraphBuildView, {
       props: { projectId: 'project_42' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -68,6 +69,7 @@ describe('StepGraphBuildView', () => {
     const wrapper = mount(StepGraphBuildView, {
       props: { projectId: 'new' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -88,6 +90,7 @@ describe('StepGraphBuildView', () => {
     const wrapper = mount(StepGraphBuildView, {
       props: { projectId: 'project_a' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -110,6 +113,7 @@ describe('StepGraphBuildView', () => {
     const wrapper = mount(StepGraphBuildView, {
       props: { projectId: 'project_42' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
