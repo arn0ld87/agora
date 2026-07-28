@@ -130,6 +130,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
   erstmals die v4-Step-Routen mit echter Projekt- und Simulations-ID. Vier Routen bleiben
   begründet ausgenommen und sind in den Issues #920 und #921 sowie im Testkopf
   dokumentiert.
+
+### Fixed (E2E-Helper `checkFocusVisible` erkennt implizite Tab-Stops — 2026-07-28, PR #947, Issue #921)
+
+- `frontend/tests/e2e/helpers/accessibility.ts::checkFocusVisible` wertet `document.activeElement` jetzt direkt aus und presst bis zu zwanzig Tab-Tokens, bis ein echtes Element (nicht `document.body`) fokussiert ist. Damit greift der Helper auch auf Routen mit impliziten Tab-Stops (scrollbare Container ohne `tabindex`, z. B. `.fc-scroll` in `FeedColumn.vue`), die per CSS-Selektor nicht vorab erfassbar sind.
+- Der Golden-Gate-Test für `/v4/simulation/:simulationId/feed` (Issue #921) ist reaktiviert; die Accessibility-Coverage steigt damit von 17 auf 18 produktive Routen, drei weitere Ausnahmen verbleiben in Issue #920 und im Testkopf.
 - **Verlässlichkeit der Gates:** Die Prüfung lief bisher an, bevor Stylesheets und
   Schriften angewendet waren, und meldete dadurch auf schnellen CI-Läufen massenhaft
   Kontrastfehler auf unveränderten Seiten. Die Gates warten jetzt auf einen stabilen

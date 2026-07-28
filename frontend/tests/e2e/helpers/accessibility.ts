@@ -265,26 +265,43 @@ export async function checkFocusVisible(page: Page): Promise<void> {
     }
   });
 
-  await page.keyboard.press('Tab');
-  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-
-  const target = await page.evaluateHandle(() => document.activeElement as HTMLElement | null);
+  // Issue #921 — Implizite Tab-Stops (scrollbare Container ohne tabindex)
+  // erscheinen erst nach genügend Tab-Presses im Tab-Zyklus. Auf einer Route
+  // ohne echte interaktive Elemente (z. B. /v4/simulation/:id/feed mit
+  // leeren Feed-Spalten) wandert der Fokus nach dem ersten Tab in den
+  // Browser-Chrome und activeElement wird wieder body. Wir probieren daher
+  // bis zu MAX_TAB_ATTEMPTS Tabs, bevor wir aufgeben.
+  const MAX_TAB_ATTEMPTS = 20;
+  let target: ElementHandle<HTMLElement> | null = null;
+  for (let attempt = 0; attempt < MAX_TAB_ATTEMPTS; attempt += 1) {
+    await page.keyboard.press('Tab');
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    const handle = await page.evaluateHandle(() => document.activeElement as HTMLElement | null);
+    const isElement = await handle.evaluate((node) => node !== null && node !== document.body);
+    if (isElement) {
+      target = handle as ElementHandle<HTMLElement>;
+      break;
+    }
+    await handle.dispose();
+  }
 
   try {
-    const isElement = await target.evaluate((node) => node !== null && node !== document.body);
-    expect(isElement).toBe(true);
-    if (!isElement) return;
+    expect(
+      target,
+      'checkFocusVisible: nach bis zu MAX_TAB_ATTEMPTS Tab-Presses landet der Fokus nicht in einem echten Element der Seite (vermutlich Route ohne sichtbare Tab-Stops)',
+    ).not.toBeNull();
+    if (!target) return;
 
-    const afterStyle = await captureFocusStyle(target as ElementHandle<HTMLElement>);
+    const afterStyle = await captureFocusStyle(target);
 
     await target.evaluate((node) => node.blur());
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 
-    const beforeStyle = await captureFocusStyle(target as ElementHandle<HTMLElement>);
+    const beforeStyle = await captureFocusStyle(target);
 
     expect(diffFocusStyle(beforeStyle, afterStyle)).toBe(true);
   } finally {
-    await target.dispose();
+    await target?.dispose();
   }
 }
 
