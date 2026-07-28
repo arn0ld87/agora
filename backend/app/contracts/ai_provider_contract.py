@@ -110,11 +110,27 @@ PublicBaseUrl = Annotated[
 ]
 
 
+# Hostnamen, die einen lokalen Ollama-Server bezeichnen, aber keine
+# IP-Literale sind. ``host.docker.internal`` ist im Container-Betrieb die
+# einzige Adresse, unter der ein auf dem Host laufendes Ollama erreichbar
+# ist — ``localhost`` zeigt dort auf den Container selbst. Ohne diesen
+# Eintrag ist der UI-Pfad zum Konfigurieren eines lokalen Ollama unter
+# Docker vollständig blockiert, während `.env.docker.example` genau diesen
+# Host vorgibt. Bewusst eine engere Menge als ``utils.endpoints.LOCAL_HOSTS``:
+# ``0.0.0.0`` ist eine Bind-, keine Ziel-Adresse und bleibt draußen.
+_LOCAL_OLLAMA_HOSTNAMES = frozenset({"localhost", "host.docker.internal"})
+
+_LOCAL_OLLAMA_URL_ERROR = (
+    "base_url must point at a local Ollama: loopback address, localhost, "
+    "or host.docker.internal"
+)
+
+
 def _validate_local_ollama_base_url(value: str) -> str:
     try:
         parsed = urlsplit(value)
     except ValueError as exc:
-        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama") from exc
+        raise ValueError(_LOCAL_OLLAMA_URL_ERROR) from exc
     if (
         parsed.scheme not in {"http", "https"}
         or not parsed.hostname
@@ -123,14 +139,20 @@ def _validate_local_ollama_base_url(value: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
+        raise ValueError(_LOCAL_OLLAMA_URL_ERROR)
+
+    hostname = parsed.hostname.lower()
+    if hostname in _LOCAL_OLLAMA_HOSTNAMES:
+        return value
+    # Getrennt geprüft, weil ``ip_address`` bei jedem Nicht-IP-Hostnamen
+    # ``ValueError`` wirft — der Name-Check muss davor greifen, nicht im
+    # Except-Zweig hängen.
     try:
-        is_loopback = parsed.hostname == "localhost" or ip_address(parsed.hostname).is_loopback
+        if ip_address(hostname).is_loopback:
+            return value
     except ValueError:
-        is_loopback = False
-    if not is_loopback:
-        raise ValueError("base_url must be a loopback HTTP(S) URL for local Ollama")
-    return value
+        pass
+    raise ValueError(_LOCAL_OLLAMA_URL_ERROR)
 
 
 LocalOllamaBaseUrl = Annotated[

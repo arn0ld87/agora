@@ -356,3 +356,100 @@ class TestOllamaStatusExplicitEnvOverride:
         assert result['skipped'] is False
         assert result['reachable'] is False
         assert result['error'] is not None
+
+
+class TestOllamaStatusContractShape:
+    """Review-Findings PR #955: Contract-SSoT + maschinenlesbarer Skip-Grund."""
+
+    def _set_provider(self, monkeypatch, base_url, model=""):
+        monkeypatch.setattr(Config, "LLM_BASE_URL", base_url)
+        monkeypatch.setattr(Config, "LLM_MODEL_NAME", model)
+
+    def test_skip_payload_validates_against_pydantic_contract(self, monkeypatch):
+        """Die Antwort muss gegen den Backend-Contract validieren.
+
+        Ohne diese Kopplung könnte der Schema-Drift-Gate eine Divergenz
+        zwischen ``/api/status`` und dem Zod-Spiegel nicht erkennen.
+        """
+        from app.contracts.system_status_contract import SystemStatusOllama
+
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        result = _get_ollama_status()
+
+        validated = SystemStatusOllama.model_validate(result)
+        assert validated.reachable is None
+        assert validated.skipped is True
+        # Maschinenlesbar für den i18n-Lookup — nicht die englische Prosa.
+        assert validated.skipped_provider == "minimax"
+
+    def test_reachable_payload_validates_against_pydantic_contract(self, monkeypatch):
+        from app.contracts.system_status_contract import SystemStatusOllama
+
+        self._set_provider(monkeypatch, "http://localhost:11434/v1", "qwen3:8b")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": [{"name": "qwen3:8b"}]}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+
+        validated = SystemStatusOllama.model_validate(result)
+        assert validated.reachable is True
+        assert validated.skipped is False
+        assert validated.skipped_provider is None
+        assert validated.models_available == ["qwen3:8b"]
+
+    def test_custom_port_ollama_on_local_host_is_probed(self, monkeypatch):
+        """Selbstgehostetes Ollama auf Nicht-Standard-Port auf localhost bleibt sichtbar."""
+        self._set_provider(monkeypatch, "http://localhost:11435/v1", "llama3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": [{"name": "llama3"}]}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+
+        assert result['skipped'] is False
+        assert result['reachable'] is True
+        assert mock_get.call_args[0][0] == "http://localhost:11435/api/tags"
+
+    def test_unknown_gateway_on_remote_host_is_not_probed(self, monkeypatch):
+        """Codex-Finding: ein Dritt-Gateway auf fremdem Host nicht pauschal proben.
+
+        ``http://gateway.example:11435/v1`` fällt in ``detect_provider`` auf
+        ``"unknown"`` zurück, bedient ``/api/tags`` aber nicht. Es zu proben
+        würde genau die 404-Klasse reproduzieren, die der Fix beseitigt.
+        Wer solch ein Gateway als Ollama betreibt, setzt ``OLLAMA_BASE_URL``.
+        """
+        self._set_provider(monkeypatch, "http://gateway.example:11435/v1", "llama3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+
+        mock_get.assert_not_called()
+        assert result['skipped'] is True
+        assert result['reachable'] is None
+
+    def test_explicit_env_with_v1_suffix_does_not_hit_v1_api_tags(self, monkeypatch):
+        """CodeRabbit-Finding: ``/v1/api/tags`` wäre wieder ein 404."""
+        self._set_provider(monkeypatch, "https://api.minimax.io/v1", "MiniMax-M3")
+        monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+
+        with patch('app.api.status.requests.get') as mock_get:
+            mock_resp = Mock()
+            mock_resp.json.return_value = {"models": []}
+            mock_resp.raise_for_status = Mock()
+            mock_get.return_value = mock_resp
+            result = _get_ollama_status()
+
+        called = mock_get.call_args[0][0]
+        assert called == "http://localhost:11434/api/tags"
+        assert "/v1/api/tags" not in called
+        assert result['base_url'] == "http://localhost:11434"

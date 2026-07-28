@@ -73,6 +73,16 @@ export const PublicBaseUrlSchema = z.string().regex(PUBLIC_BASE_URL_PATTERN).sup
   }
 })
 
+// Spiegel von backend/app/contracts/ai_provider_contract.py::
+// _LOCAL_OLLAMA_HOSTNAMES. `host.docker.internal` ist im Container-Betrieb
+// die einzige Adresse, unter der ein auf dem Host laufendes Ollama
+// erreichbar ist — `localhost` zeigt dort auf den Container selbst.
+// `0.0.0.0` bleibt bewusst draußen: Bind-, keine Ziel-Adresse.
+const LOCAL_OLLAMA_HOSTNAMES = ['localhost', '::1', 'host.docker.internal']
+
+const LOCAL_OLLAMA_URL_ERROR =
+  'base_url must point at a local Ollama: loopback address, localhost, or host.docker.internal'
+
 export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) => {
   try {
     const parsed = new URL(value)
@@ -86,12 +96,12 @@ export const LocalOllamaBaseUrlSchema = z.string().superRefine((value, context) 
       || parsed.password
       || parsed.search
       || parsed.hash
-      || !(['localhost', '::1'].includes(hostname) || isIpv4Loopback)
+      || !(LOCAL_OLLAMA_HOSTNAMES.includes(hostname) || isIpv4Loopback)
     ) {
-      context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+      context.addIssue({ code: 'custom', message: LOCAL_OLLAMA_URL_ERROR })
     }
   } catch {
-    context.addIssue({ code: 'custom', message: 'base_url must be a loopback HTTP(S) URL for local Ollama' })
+    context.addIssue({ code: 'custom', message: LOCAL_OLLAMA_URL_ERROR })
   }
 })
 

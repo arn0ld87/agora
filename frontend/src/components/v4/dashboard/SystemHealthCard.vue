@@ -31,6 +31,26 @@ interface HealthRow {
   hint: string
 }
 
+/**
+ * Übersetzt den maschinenlesbaren Provider-Schlüssel aus `skipped_provider`
+ * in einen Anzeigenamen. Unbekannte Provider fallen auf den Rohwert zurück,
+ * damit ein neuer Backend-Provider die Anzeige nicht leer lässt. Der
+ * Schlüssel "unknown" (kein Provider konfiguriert) wird auf den i18n-Key
+ * gemappt, nicht als Klartext gerendert.
+ */
+const PROVIDER_LABELS: Record<string, string> = {
+  minimax: 'MiniMax',
+  openai: 'OpenAI',
+  google: 'Google',
+  ollama: 'Ollama',
+  cloud: 'Ollama Cloud',
+}
+
+function providerLabel(kind: string | null | undefined): string {
+  if (!kind || kind === 'unknown') return t('dashboard.system.providerUnknown')
+  return PROVIDER_LABELS[kind] ?? kind
+}
+
 function fmtBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) return '—'
   if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`
@@ -53,14 +73,18 @@ const rows = computed<HealthRow[]>(() => {
     // ``reachable === null`` heißt: Probe übersprungen, weil der aktive
     // Provider kein Ollama ist. Das ist kein Fehlerzustand — deshalb 'idle'
     // statt 'unreachable', sonst meldet das Dashboard im MiniMax-/OpenAI-
-    // Betrieb dauerhaft rot.
+    // Betrieb dauerhaft rot. Der Hinweistext kommt aus vue-i18n; das
+    // Backend-Feld ``reason`` ist englische Prosa und wird bewusst NICHT
+    // gerendert.
     s.ollama.reachable === null
       ? {
           key: 'ollama',
           label: t('dashboard.system.ollama'),
           tone: 'gray',
           state: 'idle',
-          hint: s.ollama.reason ?? '',
+          hint: t('dashboard.system.ollamaSkippedHint', {
+            provider: providerLabel(s.ollama.skipped_provider),
+          }),
         }
       : {
           key: 'ollama',

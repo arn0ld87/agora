@@ -22,6 +22,7 @@ from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
 from app.contracts.report_v3 import ReportV3
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
+from app.contracts.system_status_contract import SystemStatusOllama
 from app.contracts.llm_routing_contract import (
     RuntimeLlmRouting,
     ProviderDescriptor,
@@ -112,6 +113,7 @@ CONTRACTS: dict[str, type] = {
     "onboarding-state.schema.json": OnboardingState,
     "onboarding-step-update-request.schema.json": OnboardingStepUpdateRequest,
     "onboarding-status-response.schema.json": OnboardingStatusResponse,
+    "system-status-ollama.schema.json": SystemStatusOllama,
     # Embedding (Slice 4.1)
     "embedding-configuration.schema.json": EmbeddingConfiguration,
     "embedding-configuration-upsert-request.schema.json": EmbeddingConfigurationUpsertRequest,

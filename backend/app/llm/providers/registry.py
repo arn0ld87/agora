@@ -291,11 +291,69 @@ def is_ollama_compatible_provider(base_url: Optional[str], model: Optional[str])
 
     Wiederverwendung der zentralen ``detect_provider``-Heuristik
     (``mode="http"``) — True genau für ``"ollama"`` (lokales Ollama, Port 11434)
-    und ``"cloud"`` (``ollama.com``). MiniMax/OpenAI/Google/unknown liefern
-    False, damit Status-Endpoints nicht fälschlich gegen ``/api/tags``
-    proben (MiniMax-Bug: 404 auf jeder Discovery-Anfrage).
+    und ``"cloud"`` (``ollama.com``).
+
+    Achtung: ``"unknown"`` liefert hier ``False``, ist aber **kein**
+    Skip-Kriterium für die Discovery — siehe ``_probes_ollama_tags``.
     """
     return detect_provider(base_url, model, mode="http") in ("ollama", "cloud")
+
+
+# Provider, die nachweislich KEINE ``/api/tags``-Route bedienen. Für sie wird
+# die Discovery übersprungen. ``"unknown"`` steht bewusst NICHT hier — aber
+# auch nicht ungeprüft auf der Probe-Seite: nur ein Endpoint, der ein
+# positives Ollama-Signal trägt, wird geprobt. Ein OpenAI-kompatibles
+# Dritt-Gateway (``https://gateway.example/v1``) fällt ebenfalls auf
+# ``"unknown"`` zurück, bedient ``/api/tags`` aber nicht — es pauschal zu
+# proben würde genau die 404-Klasse reproduzieren, die dieser Fix beseitigt.
+_NON_OLLAMA_TAG_PROVIDERS = ("minimax", "openai", "google")
+
+# Lokale/Loopback-Hosts, auf denen ein ``unknown``-Endpoint plausibel ein
+# selbstgehostetes Ollama ist. ``host.docker.internal`` deckt den
+# Docker-Desktop-Fall ab.
+_LOCAL_OLLAMA_PROBE_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
+
+
+def _probes_ollama_tags(base_url: Optional[str], model: Optional[str]) -> bool:
+    """True, wenn der Endpoint ``GET /api/tags`` plausibel beantwortet.
+
+    True genau für:
+      * explizit erkannte Ollama-Provider (``ollama``/``cloud``),
+      * ``"unknown"``-Endpoints auf lokalen/Loopback-Hosts — der übliche
+        selbstgehostete Fall auf einem Nicht-Standard-Port.
+
+    Ein ``"unknown"``-Endpoint auf einem fremden Host (Dritt-Gateway, Proxy)
+    wird NICHT geprobt — das wäre wieder ein pauschaler Request gegen eine
+    Route, die es dort nicht gibt. Wer solch ein Gateway explizit als Ollama
+    betreibt, setzt ``OLLAMA_BASE_URL``.
+    """
+    if detect_provider(base_url, model, mode="http") in _NON_OLLAMA_TAG_PROVIDERS:
+        return False
+
+    # Explizit erkannte Ollama-Provider werden immer geprobt.
+    if detect_provider(base_url, model, mode="http") in ("ollama", "cloud"):
+        return True
+
+    # "unknown": nur lokale/Loopback-Hosts — dort ist ein selbstgehostetes
+    # Ollama auf einem Nicht-Standard-Port der Normalfall. Fremde Hosts
+    # (Gateways) nicht pauschal proben.
+    host = urlparse((base_url or "").lower()).hostname or ""
+    return any(
+        host == h or host.endswith(f".{h}") for h in _LOCAL_OLLAMA_PROBE_HOSTS
+    )
+
+
+def _strip_v1_suffix(url: str) -> str:
+    """Entfernt trailing Slashes und ein ``/v1``-Suffix.
+
+    ``/api/tags`` hängt an der Server-Wurzel, nicht am OpenAI-Compat-Pfad.
+    Ohne diese Normalisierung entsteht ``.../v1/api/tags`` → 404 — exakt die
+    Fehlerklasse, die dieser Fix beseitigt.
+    """
+    base = url.rstrip("/")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return base
 
 
 def resolve_ollama_tags_url(
@@ -314,21 +372,22 @@ def resolve_ollama_tags_url(
          OpenAI läuft. Das Provider-Gate darf diesen expliziten Wunsch nicht
          überstimmen, sonst verschwindet ein real erreichbarer Ollama-Server
          aus dem Status, sobald der Chat-Provider wechselt.
-      2. Ohne explizite Env: Nur proben, wenn der aktive Provider
-         Ollama-kompatibel ist. Sonst ``None`` — der Aufrufer überspringt den
-         Probe, statt 404er gegen ``/api/tags`` zu loggen (MiniMax-Bug).
-      3. Dann ``base_url`` mit gestripptem ``/v1``-Suffix (lokales Ollama
-         hinter ``http://localhost:11434/v1``).
+      2. Ohne explizite Env: Übersprungen wird nur bei einem Provider, der
+         ``/api/tags`` garantiert nicht kennt (MiniMax/OpenAI/Google). Alles
+         andere — inklusive ``"unknown"`` für selbstgehostete Ollamas auf
+         Nicht-Standard-Ports — wird weiterhin geprobt.
+      3. Dann ``base_url``, normalisiert über ``_strip_v1_suffix``.
+
+    Beide Zweige normalisieren identisch: ``OLLAMA_BASE_URL`` im selben Format
+    wie ``LLM_BASE_URL`` (``http://localhost:11434/v1``) darf nicht zu
+    ``/v1/api/tags`` führen.
     """
     if explicit_base_url:
         stripped = explicit_base_url.strip()
         if stripped:
-            return stripped.rstrip("/")
+            return _strip_v1_suffix(stripped) or None
 
-    if not is_ollama_compatible_provider(base_url, model):
+    if not _probes_ollama_tags(base_url, model):
         return None
 
-    base = (base_url or "").rstrip("/")
-    if base.endswith("/v1"):
-        base = base[:-3]
-    return base or None
+    return _strip_v1_suffix(base_url or "") or None

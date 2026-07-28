@@ -1301,7 +1301,9 @@
       "statusUnreachable": "offline",
       "statusIdle": "idle",
       "oasisHint": "Becomes active when a run starts.",
-      "ollamaHint": "{n} models available"
+      "ollamaHint": "{n} models available",
+      "ollamaSkippedHint": "Check skipped — active provider is {provider}",
+      "providerUnknown": "another provider"
     },
     "reports": {
       "title": "Recent reports",

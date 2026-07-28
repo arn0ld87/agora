@@ -27,6 +27,7 @@ import { tokenizeFeedText } from '../../../utils/feedHighlight'
 import { isErrorLine } from '@/utils/errorLinePattern'
 import { useSimFeed, clearSimFeed } from '../../../composables/useSimFeed'
 import { useSimClock, clearSimClock } from '../../../composables/useSimClock'
+import { getPendingUpload } from '../../../store/pendingUpload'
 import SimulationProgressPanel from '../../step3/SimulationProgressPanel.vue'
 import PersonaActionFeed from '../../step3/PersonaActionFeed.vue'
 import SimulationToolPanel from '../../step3/SimulationToolPanel.vue'
@@ -70,6 +71,9 @@ const isGeneratingReport = ref(false)
 const runStatus = ref({})
 const allActions = ref([])
 const actionIds = ref(new Set())
+// Server-Total-Count aus `actions_total`. Unabhängig von der Polling-Rate
+// und springt nicht, wenn das (begrenzte) Sichtfenster gefüllt wird.
+const totalActions = ref(0)
 const scrollEl = ref(null)
 const startError = ref(null)
 
@@ -207,6 +211,7 @@ function resetState() {
   runStatus.value = {}
   allActions.value = []
   actionIds.value = new Set()
+  totalActions.value = 0
   resetConsoleLogs()
   toolPanelUnreadErrors.value = 0
   _lastSeenConsoleLength = 0
@@ -229,7 +234,14 @@ async function doStart() {
       platform: 'parallel',
       enable_graph_memory_update: false
     }
-    if (props.maxRounds) params.max_rounds = props.maxRounds
+    // Der Dashboard-Start (HeroNewRun) hat keinen Step2-Durchlauf — dessen
+    // Slider-Wert liegt im pendingUpload-Store. Der Stepped-Flow übergibt
+    // maxRounds als Prop und gewinnt. Vorher wurde der Slider-Wert nur beim
+    // Ontologie-Upload gesendet, wo das Backend ihn still verwirft — die
+    // eingestellte Rundenzahl hatte keinerlei Effekt (Bug: Slider ohne
+    // Wirkung, Simulation lief immer auf total_simulation_hours).
+    const effectiveMaxRounds = props.maxRounds ?? (getPendingUpload().numRounds || null)
+    if (effectiveMaxRounds) params.max_rounds = effectiveMaxRounds
     if (props.simulationDays) params.simulation_days = props.simulationDays
     // Autoritative (Connection, Modell)-Auswahl: Der transiente Dashboard-
     // Run-Override (HeroNewRun-Pick, store/runModelOverride) gewinnt vor dem
@@ -254,7 +266,7 @@ async function doStart() {
       // im selben Tab den alten Override stillschweigend erbt.
       if (usedRunOverride) clearRunModelOverride()
       phase.value = 1
-      addLog(t('step3.status.running', { current: 0, total: props.maxRounds || '?' }))
+      addLog(t('step3.status.running', { current: 0, total: effectiveMaxRounds || '?' }))
       startPolling()
     } else {
       startError.value = res?.error || 'unknown'
@@ -391,10 +403,17 @@ async function pollDetail() {
       }
       maybeEmitProgress()
     }
-    if (Array.isArray(res.data?.all_actions)) {
+    // Der Endpoint liefert keine vollständige `all_actions`-Liste mehr (das
+    // wurde mit dem Pagination-Fix entfernt) — nur die paginierten `actions`.
+    // Wir deduplizieren deshalb clientseitig über Zeitstempel und Inhalt.
+    // Ohne den Zeitstempel im Schlüssel würden zwei identische Aktionen
+    // desselben Agenten in derselben Runde fälschlich als Duplikat
+    // verworfen. Der Gesamtzähler kommt aus `actions_total`, nicht aus der
+    // Länge des (begrenzten) Sichtfensters.
+    if (Array.isArray(res.data?.actions)) {
       let appended = 0
-      for (const a of res.data.all_actions) {
-        const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}`
+      for (const a of res.data.actions) {
+        const key = `${a.round_num}-${a.platform}-${a.agent_id}-${a.action_type}-${a.timestamp}-${(a.action_args?.content || '').length}`
         if (!actionIds.value.has(key)) {
           actionIds.value.add(key)
           if (a.action_args?.content) a._tokens = tokenizeFeedText(a.action_args.content)
@@ -403,6 +422,9 @@ async function pollDetail() {
         }
       }
       if (appended > 0) nextTick(() => feedSticky.markAppended(appended))
+    }
+    if (typeof res.data?.actions_total === 'number') {
+      totalActions.value = res.data.actions_total
     }
   } catch { /* swallow */ }
 }
@@ -415,9 +437,9 @@ const statusLabel = computed(() => {
       : t('step3.status.completed', { total: runStatus.value.current_round || '?' })
   }
   if (runStatus.value.paused) {
-    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
+    return t('step3.status.paused', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
   }
-  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || '?' })
+  return t('step3.status.running', { current: runStatus.value.current_round || 0, total: runStatus.value.total_rounds || props.maxRounds || getPendingUpload().numRounds || '?' })
 })
 
 const statusKind = computed(() => {
@@ -427,7 +449,6 @@ const statusKind = computed(() => {
   return 'running'
 })
 
-const totalActions = computed(() => allActions.value.length)
 const twitterActions = computed(() => allActions.value.filter((a) => a.platform === 'twitter').length)
 const redditActions = computed(() => allActions.value.filter((a) => a.platform === 'reddit').length)
 

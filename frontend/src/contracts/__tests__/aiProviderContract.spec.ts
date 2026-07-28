@@ -173,8 +173,18 @@ describe('canonical AI provider contracts', () => {
     }).success).toBe(false)
   })
 
-  it.each(['http://127.0.0.1:11434', 'http://[::1]:11434/v1', 'http://localhost:11434'])(
-    'accepts a loopback URL for local Ollama: %s',
+  // Spiegel von backend/tests/contracts/test_ai_provider_contract.py.
+  // `host.docker.internal` ist im Container-Betrieb die einzige Adresse, unter
+  // der ein auf dem Host laufendes Ollama erreichbar ist — `localhost` zeigt
+  // dort auf den Container selbst.
+  it.each([
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434/v1',
+    'http://localhost:11434',
+    'http://host.docker.internal:11434',
+    'http://HOST.DOCKER.INTERNAL:11434',
+  ])(
+    'accepts a local Ollama URL: %s',
     (base_url) => {
       expect(ProviderConnectionUpsertRequestSchema.safeParse({
         display_name: 'Ollama lokal',
@@ -184,8 +194,16 @@ describe('canonical AI provider contracts', () => {
     },
   )
 
-  it.each(['https://ollama.example.test', 'http://192.168.1.10:11434', 'http://0.0.0.0:11434'])(
-    'rejects a non-loopback URL for local Ollama: %s',
+  it.each([
+    'https://ollama.example.test',
+    'http://192.168.1.10:11434',
+    // Bind-, keine Ziel-Adresse.
+    'http://0.0.0.0:11434',
+    // Kein Subdomain-Smuggling über den Docker-Hostnamen.
+    'http://host.docker.internal.attacker.test:11434',
+    'http://not-host.docker.internal:11434',
+  ])(
+    'rejects a non-local URL for local Ollama: %s',
     (base_url) => {
       expect(ProviderConnectionUpsertRequestSchema.safeParse({
         display_name: 'Ollama lokal',
