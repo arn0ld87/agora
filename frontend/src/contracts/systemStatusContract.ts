@@ -25,13 +25,21 @@ export const SystemStatusNeo4jSchema = z
   })
   .passthrough()
 
+/**
+ * Spiegel von `backend/app/contracts/system_status_contract.py::SystemStatusOllama`
+ * (generiert nach `schemas/system-status-ollama.schema.json`).
+ *
+ * `reachable` ist dreiwertig: `true` erreichbar, `false` Probe fehlgeschlagen,
+ * `null` Probe übersprungen — Letzteres ist KEIN Fehlerzustand und darf nicht
+ * als "offline" gerendert werden.
+ */
 export const SystemStatusOllamaSchema = z
   .object({
-    // ``null`` = Probe wurde übersprungen (aktiver Provider ist kein
-    // Ollama-kompatibler Server), nicht "nicht erreichbar". Der Grund steht
-    // in ``reason``.
     reachable: z.boolean().nullable(),
     skipped: z.boolean().optional(),
+    // Maschinenlesbarer i18n-Schlüssel. `reason` ist reines Debug-Feld und
+    // gehört nicht in die UI — es enthält englische Backend-Prosa.
+    skipped_provider: z.string().nullable().optional(),
     reason: z.string().nullable().optional(),
     base_url: z.string().nullable().optional(),
     models_available: z.array(z.string()).default(() => []),

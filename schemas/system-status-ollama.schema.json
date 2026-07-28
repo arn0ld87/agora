@@ -1,0 +1,94 @@
+{
+  "$id": "https://alexle135.de/schemas/system-status-ollama.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ollama-Teilbaum von ``/api/status``.\n\n``reachable`` ist dreiwertig:\n\n* ``True``  \u2014 ``/api/tags`` beantwortet\n* ``False`` \u2014 Probe lief, Server nicht erreichbar (``error`` gesetzt)\n* ``None``  \u2014 Probe bewusst \u00fcbersprungen, weil der aktive Provider keine\n  ``/api/tags``-Route bedient (``skipped=True``, ``skipped_provider``\n  gesetzt). Das ist ausdr\u00fccklich KEIN Fehlerzustand; Consumer d\u00fcrfen\n  ``None`` nicht als \"offline\" rendern.",
+  "properties": {
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url"
+    },
+    "default_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Default Model"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "models_available": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Models Available",
+      "type": "array"
+    },
+    "reachable": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reachable"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "skipped": {
+      "default": false,
+      "title": "Skipped",
+      "type": "boolean"
+    },
+    "skipped_provider": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skipped Provider"
+    }
+  },
+  "title": "SystemStatusOllama",
+  "type": "object"
+}

@@ -89,7 +89,18 @@ def test_provider_connection_rejects_opencode_go_as_unsupported() -> None:
 
 @pytest.mark.parametrize(
     "base_url",
-    ["http://127.0.0.1:11434", "http://[::1]:11434/v1", "http://localhost:11434"],
+    [
+        "http://127.0.0.1:11434",
+        "http://[::1]:11434/v1",
+        "http://localhost:11434",
+        # Container-Betrieb: Agora in Docker, Ollama auf dem Host. Das ist
+        # dort die EINZIGE funktionierende Adresse — `localhost` zeigt im
+        # Container auf den Container selbst. `.env.docker.example` gibt
+        # denselben Host vor; ohne diese Freigabe war der UI-Pfad zum
+        # Konfigurieren eines lokalen Ollama unter Docker blockiert.
+        "http://host.docker.internal:11434",
+        "http://HOST.DOCKER.INTERNAL:11434",  # Hostnamen sind case-insensitive
+    ],
 )
 def test_provider_connection_upsert_request_accepts_only_loopback_ollama_urls(
     base_url: str,
@@ -105,7 +116,16 @@ def test_provider_connection_upsert_request_accepts_only_loopback_ollama_urls(
 
 @pytest.mark.parametrize(
     "base_url",
-    ["https://ollama.example.test", "http://192.168.1.10:11434", "http://0.0.0.0:11434"],
+    [
+        "https://ollama.example.test",
+        "http://192.168.1.10:11434",
+        # Bind-, keine Ziel-Adresse — bleibt trotz Eintrag in
+        # utils.endpoints.LOCAL_HOSTS abgelehnt.
+        "http://0.0.0.0:11434",
+        # Kein Subdomain-Smuggling über den neuen Docker-Hostnamen.
+        "http://host.docker.internal.attacker.test:11434",
+        "http://not-host.docker.internal:11434",
+    ],
 )
 def test_provider_connection_upsert_request_rejects_non_loopback_ollama_urls(
     base_url: str,
