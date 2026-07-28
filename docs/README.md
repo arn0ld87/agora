@@ -19,10 +19,16 @@ Weitere Einstiegspunkte:
 ## Architektur und Verträge
 
 - [`architecture.md`](architecture.md) — Architektur, Domänen und Komponenten
-- [`api-contracts.md`](api-contracts.md) — Pydantic-Verträge und Frontend-Spiegel
+- [`api.md`](api.md) — HTTP-Endpunkte nach Domänen (Übersicht)
+- [`api-contracts.md`](api-contracts.md) — Response-Envelopes, Fehlercodes, Schema-Tests
+- [`configuration.md`](configuration.md) — Umgebungsvariablen-Referenz
 - [`decisions/`](decisions/) — Architekturentscheidungen
 - [`glossary.md`](glossary.md) — verbindliches Produktvokabular
 - [`agent-tools.md`](agent-tools.md) — OASIS-/CAMEL- und Agent-Tool-Integration
+
+## North-Star
+
+- [`../VISION.md`](../VISION.md) — Vision (das *Warum*, nicht-bindend)
 
 ## Entwicklung
 
@@ -40,6 +46,7 @@ Weitere Einstiegspunkte:
 - [`operations.md`](operations.md) — Betrieb
 - [`operator-guide.md`](operator-guide.md) — Operator-Aufgaben
 - [`backup-restore.md`](backup-restore.md) — Backup und Wiederherstellung
+- [`troubleshooting.md`](troubleshooting.md) — bekannte Fehlerbilder und Lösungen
 
 ## Security
 
