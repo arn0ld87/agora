@@ -10,6 +10,17 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 - `title`/`subtitle`/`label`-Literale in `HistoryView.vue`, `CompareView.vue`, `StepEnvSetupView.vue`, `StepReportView.vue`, `StepInteractionView.vue`, `StepGraphBuildView.vue` und `StepSimulationView.vue` laufen jetzt über `$t()` statt hartkodierter deutscher Strings, mit neuen Keys in `de.json` und `en.json`.
 - Betroffene Specs prüfen den i18n-Key gegen befüllte `messages` statt das deutsche Literal gegen leere `messages`.
 
+### Changed (Legacy-Model-Picker-Guard um ActiveModelBadge.vue erweitert — 2026-07-28, Issue #911)
+
+- `ActiveModelBadge.vue` (entfernt in Issue #835) ist jetzt in `REMOVED_PATHS` von `.github/scripts/check_legacy_model_picker.py` gelistet — eine Wiedereinführung der Datei schlägt künftig schon bei bloßer Existenz fehl, unabhängig von Importen.
+- `test_deprecated_target_allows_import`/`test_non_deprecated_target_still_flags` auf `useRuntimeLlmOptions.ts` als Testobjekt umgestellt, da `ActiveModelBadge.vue` selbst nicht mehr als Positiv-/Negativ-Fixture taugt.
+- Docstring dokumentiert: die `@deprecated`-Read-Adapter-Freigabe greift jetzt faktisch nur noch für Stores/Composables, da alle bisherigen Komponenten-Ausnahmen in `REMOVED_PATHS` stehen.
+
+### Fixed (Persona-Detail-Level nur einmal pro Generierung aufgelöst — 2026-07-28, Issue #882)
+
+- `_resolve_persona_detail_level()` wird jetzt einmal in `_generate_profile_with_llm` aufgelöst und als `detail_level`-Parameter an `_build_individual_persona_prompt`/`_build_group_persona_prompt` durchgereicht, statt dort erneut aufgelöst zu werden. Bei unbekanntem `AGORA_PERSONA_DETAIL_LEVEL` erscheint die Warnung dadurch nur noch einmal statt doppelt pro Persona.
+- Zwei neue Regressionstests verifizieren die Aufruf-Anzahl (`test_issue_882_resolve_persona_detail_level_called_once_individual`/`_group`).
+
 ### Changed (v3-Inhaltskomponenten nach v4 migriert — 2026-07-28, PR #938, Issue #922)
 
 - Die drei verbleibenden v3-Inhaltskomponenten `Step2EnvSetup.vue`, `Step3Simulation.vue` und `Step4Report.vue` sind nach `frontend/src/components/v4/steps/` migriert (RENAMED, Inhalt an v4-Typografie und -Ordnerstruktur angepasst). Die v3-Originale sind entfernt; die v4-Wrapper-Views binden die v4-Komponenten direkt ein.

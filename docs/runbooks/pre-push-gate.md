@@ -91,18 +91,20 @@ Exit-Codes: `0` clean · `1` Treffer · `2` Usage-Fehler.
 Opt-in-Marker `legacy-model-picker-allow` ist entfallen. Ein verbotener
 Import ist jetzt genau dann erlaubt, wenn das **importierte Ziel** selbst
 ein `@deprecated`-JSDoc-Tag trägt — also ein sanktionierter Read-Adapter
-im Deprecation-/Read-only-Fenster ist. So dürfen die verbleibenden
-v3-Consumer (`layouts/WorkspaceHeader.vue` → `ActiveModelBadge.vue`,
-`Step2EnvSetup.vue`/`Step3Simulation.vue` → `useRuntimeLlmOptions.ts`) die
-deprecateten Composables/Komponenten weiter lesen, ohne pro-Datei-Marker.
+im Deprecation-/Read-only-Fenster ist.
+Da inzwischen alle Komponenten-Ausnahmen in `REMOVED_PATHS` stehen und
+allein durch ihre Existenz blockiert werden, greift diese Freigabe faktisch
+nur noch für verbliebene Stores und Composables
+(z. B. `Step2EnvSetup.vue`/`Step3Simulation.vue` → `useRuntimeLlmOptions.ts`).
 Jeder *neu* eingeführte, nicht-deprecatete v3-Pfad wird hart blockiert.
 
 **Entfernte Dateien (`REMOVED_PATHS`):** Zusätzlich zur Import-Prüfung
 blockiert der Check die *Rückkehr* gelöschter v3-Dateien — hier reicht die
 bloße Existenz, ein Import ist nicht nötig, und ein `@deprecated`-Tag
 rettet sie nicht. Erfasst sind `components/ui/ModelPicker.vue` und die
-Mock-Routing-UI unter `views/Settings/llmRouting/` (beide Slice 7.7) sowie
-`components/llm/LlmProfilePicker.vue` (in Issue #834 entfernt).
+Mock-Routing-UI unter `views/Settings/llmRouting/` (beide Slice 7.7),
+`components/llm/LlmProfilePicker.vue` (in Issue #834 entfernt), sowie
+`components/ActiveModelBadge.vue` (in Issue #911 entfernt).
 
 Die Alt-Stores (`llmProviders`/`llmProfiles`/`llmRoutingDefaults`)
 existieren nach 5.5 nicht mehr (konsolidiert in `@/store/aiModels`); ihr
