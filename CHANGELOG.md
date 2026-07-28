@@ -5,6 +5,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (Bolt-Connection-Errors unter Gunicorn-Gevent-Worker — 2026-07-28, PR #937, Issue #933)
+
+- `OasisProfileGenerator.generate_profiles_from_entities` erkennt, ob `gevent.monkey` das `socket`-Modul gepatcht hat (Gunicorn `-k gevent --preload`). In diesem Fall läuft die parallele Persona-Erzeugung über ein natives `gevent.pool.Pool` mit `imap_unordered` auf demselben OS-Thread, statt OS-Threads mit kooperativ geschedulten Sockets zu mischen. Das behebt die „Failed to write data"-Bolt-Fehler beim initialen Persona-Burst in parallelen Simulationen.
+- Im Nicht-Gevent-Pfad (lokaler/dev-Betrieb) bleiben `ThreadPoolExecutor` und `as_completed` erhalten. Die Ergebnisverarbeitung läuft jetzt zwingend innerhalb des `with`-Blocks, sodass `shutdown(wait=True)` erst nach dem Konsum greift — der Realtime-Fortschritts-Callback und die inkrementellen `reddit_profiles.json`/`twitter_profiles.csv`-Writes funktionieren wieder wie dokumentiert.
+- Beide Ausführungspfade nutzen eine vereinheitlichte `_process_result`-Behandlung (Profile ablegen, Lock-zähler, Realtime-Write, Progress, Logging), um Code-Duplikation und abweichendes Fallback-Verhalten zu vermeiden.
+- Gevent-Pfad mit `try/finally` + `pool.join()` abgesichert, sodass bei Exceptions keine Greenlets den Pool überleben.
+- `GraphBuilderService.add_text_batches` bleibt bewusst beim Standard-`ThreadPoolExecutor`: CPU-bound PyTorch/Transformers NER & Embedding benötigen echte OS-Threads und sind mit gevent-Greenlets nicht stabil.
+- Neuer Unit-Test `test_gevent_pool_execution_fallback` mockt `gevent.monkey.is_patched("socket")` über `monkeypatch.setitem(sys.modules, ...)` (pytest restauriert die Moduleinträge nach Testende) und verifiziert, dass der Generator den gevent-Pool korrekt ansteuert.
+
 ### Changed (SimulationConfigGenerator auf schema-validierten LLMClient.chat_json umgestellt — 2026-07-28, PR #936)
 
 - `SimulationConfigGenerator` erzeugt Zeit-, Ereignis- und Agenten-Konfigurationen jetzt ausschließlich über das SSoT `LLMClient.chat_json` mit Pydantic-Response-Modellen aus `simulation_config_schemas`. Der rohe `OpenAI(...)`-Client wurde aus der Klasse entfernt, sodass keine direkten `client.chat.completions.create`-Aufrufe mehr versehentlich wieder eingeführt werden können.
