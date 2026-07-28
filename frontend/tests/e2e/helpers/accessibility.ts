@@ -265,26 +265,43 @@ export async function checkFocusVisible(page: Page): Promise<void> {
     }
   });
 
-  const focusableElements = (await page.locator(FOCUSABLE_SELECTOR).elementHandles()) as ElementHandle<HTMLElement>[];
-  try {
-    expect(focusableElements.length).toBeGreaterThan(0);
-    const beforeStyles = await Promise.all(focusableElements.map(captureFocusStyle));
-
+  // Issue #921 — Implizite Tab-Stops (scrollbare Container ohne tabindex)
+  // erscheinen erst nach genügend Tab-Presses im Tab-Zyklus. Auf einer Route
+  // ohne echte interaktive Elemente (z. B. /v4/simulation/:id/feed mit
+  // leeren Feed-Spalten) wandert der Fokus nach dem ersten Tab in den
+  // Browser-Chrome und activeElement wird wieder body. Wir probieren daher
+  // bis zu MAX_TAB_ATTEMPTS Tabs, bevor wir aufgeben.
+  const MAX_TAB_ATTEMPTS = 20;
+  let target: ElementHandle<HTMLElement> | null = null;
+  for (let attempt = 0; attempt < MAX_TAB_ATTEMPTS; attempt += 1) {
     await page.keyboard.press('Tab');
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-
-    let focusedIndex = -1;
-    for (let index = 0; index < focusableElements.length; index += 1) {
-      if (await focusableElements[index].evaluate((element) => element === document.activeElement)) {
-        focusedIndex = index;
-        break;
-      }
+    const handle = await page.evaluateHandle(() => document.activeElement as HTMLElement | null);
+    const isElement = await handle.evaluate((node) => node !== null && node !== document.body);
+    if (isElement) {
+      target = handle as ElementHandle<HTMLElement>;
+      break;
     }
+    await handle.dispose();
+  }
 
-    const afterStyle = focusedIndex >= 0 ? await captureFocusStyle(focusableElements[focusedIndex]) : undefined;
-    expect(afterStyle ? diffFocusStyle(beforeStyles[focusedIndex], afterStyle) : false).toBe(true);
+  try {
+    expect(
+      target,
+      'checkFocusVisible: nach bis zu MAX_TAB_ATTEMPTS Tab-Presses landet der Fokus nicht in einem echten Element der Seite (vermutlich Route ohne sichtbare Tab-Stops)',
+    ).not.toBeNull();
+    if (!target) return;
+
+    const afterStyle = await captureFocusStyle(target);
+
+    await target.evaluate((node) => node.blur());
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+
+    const beforeStyle = await captureFocusStyle(target);
+
+    expect(diffFocusStyle(beforeStyle, afterStyle)).toBe(true);
   } finally {
-    await Promise.all(focusableElements.map((element) => element.dispose()));
+    await target?.dispose();
   }
 }
 

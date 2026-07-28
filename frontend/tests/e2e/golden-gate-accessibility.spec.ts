@@ -236,23 +236,9 @@ test.describe('Slice 7.2 · Golden-Gate Accessibility Gates', () => {
       await checkAccessibilityGate(page, `/v4/simulation/${simulationId}`);
     });
 
-    // DOKUMENTIERTE AUSNAHME — /v4/simulation/:id/feed ist bewusst NICHT
-    // gegatet.
-    //
-    // Ursache ist eine Lücke im geteilten Helper, kein Mangel der Route:
-    // checkFocusVisible erfasst die fokussierbaren Elemente vorab per
-    // Selektor und sucht darin das nach Tab fokussierte Element. Die
-    // Feed-Spalten enthalten scrollbare Container (.fc-scroll in
-    // FeedColumn.vue), denen Chromium automatisch einen Tab-Stop gibt —
-    // ohne tabindex-Attribut und damit per Selektor nicht erfassbar. Der
-    // erste Tab landet dort, focusedIndex bleibt -1, der Check schlägt fehl.
-    // Die Route ist die einzige gegatete ohne AppShell und deshalb die
-    // einzige, bei der ein impliziter Scroll-Stop als erstes drankommt.
-    //
-    // Der Helper müsste dafür document.activeElement direkt auswerten statt
-    // gegen eine Vorab-Liste zu matchen. Das ist eine Änderung an geteilter
-    // Testinfrastruktur mit Wirkung auf alle Routen und gehört nicht in
-    // diesen Slice. Nachverfolgt in Issue #921.
+    test('Step Simulation Feed passes accessibility gates', async ({ page }) => {
+      await checkAccessibilityGate(page, `/v4/simulation/${simulationId}/feed`);
+    });
 
     test('Compare (v4) passes accessibility gates', async ({ page }) => {
       // CompareView.vue:12 zeigt bei fehlenden Branches einen role="alert"-
