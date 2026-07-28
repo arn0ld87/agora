@@ -26,23 +26,11 @@
 
 import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
 import { getAvailableModels } from '../api/simulation'
-import {
-  defaultRuntimeModelForProvider,
-  isRuntimeModelForProvider,
-  runtimeModelOptionsForProvider,
-  type RuntimeProvider,
-} from './useRuntimeLlmOptions'
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-// Issue #890: 'agora.lastModel'/'agora.lastCustomModel' (vormals
-// STORAGE_MODEL/STORAGE_CUSTOM_MODEL) existieren nicht mehr im Code.
-// useEnvForm liest und schreibt sie nicht — die kanonische Modell-Senke ist
-// jetzt Step2EnvSetup.selectedModelRef (AiModelRef via AiModelPicker).
-// Altwerte, die in Nutzer-Browsern noch unter diesen Keys liegen, werden
-// weder gelesen noch aktiv geloescht.
 export const STORAGE_LANG = 'agora.agentLanguage'
 
 // ---------------------------------------------------------------------------
@@ -64,8 +52,6 @@ export interface UseEnvFormOptions {
   t: (key: string, params?: Record<string, unknown>) => string
   /** Called when loadModels() encounters a network/API error. */
   onError?: (msg: string) => void
-  /** Runtime provider override; when active, model options must match that provider. */
-  runtimeProvider?: Ref<RuntimeProvider>
 }
 
 export interface UseEnvFormReturn {
@@ -102,7 +88,7 @@ function _loadStoredLang(): string {
 // Composable
 // ---------------------------------------------------------------------------
 
-export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): UseEnvFormReturn {
+export function useEnvForm({ t, onError }: UseEnvFormOptions): UseEnvFormReturn {
   // --- State ---
 
   const ollamaModels = ref<ModelPreset[]>([])
@@ -114,7 +100,6 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
   const agentToolsEnabled = ref<boolean>(false)
   const maxToolCallsPerAction = ref<number>(2)
   const loadingModels = ref<boolean>(true)
-  // Issue #890: keine Persistenz mehr fuer Modellauswahl — initial 'default'/''.
   const modelOption = ref<string>('default')
   const customModel = ref<string>('')
   const language = ref<string>(_loadStoredLang())
@@ -122,13 +107,6 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
   // --- Computed ---
 
   const modelOptions = computed<ModelOption[]>(() => {
-    if (runtimeProvider?.value && runtimeProvider.value !== 'default') {
-      const providerModels = runtimeModelOptionsForProvider(runtimeProvider.value)
-      return [
-        ...providerModels,
-        { value: 'custom', label: t('step2.model.customGroup') },
-      ]
-    }
     const opts: ModelOption[] = []
     opts.push({
       value: 'default',
@@ -145,10 +123,6 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
     return opts
   })
 
-  // --- LocalStorage persistence ---
-  // Issue #890: modelOption/customModel werden NICHT mehr persistiert
-  // (Storage-Cut). STORAGE_LANG bleibt unveraendert bestehen.
-
   watch(language, (val) => {
     try {
       localStorage.setItem(STORAGE_LANG, val)
@@ -156,24 +130,6 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
       // ignore
     }
   })
-
-  if (runtimeProvider) {
-    watch(runtimeProvider, (provider, previousProvider) => {
-      const providerDefault = defaultRuntimeModelForProvider(provider)
-      if (provider !== 'default') {
-        if (
-          modelOption.value !== 'custom' &&
-          !isRuntimeModelForProvider(provider, modelOption.value)
-        ) {
-          modelOption.value = providerDefault || 'custom'
-        }
-        return
-      }
-      if (previousProvider && isRuntimeModelForProvider(previousProvider, modelOption.value)) {
-        modelOption.value = 'default'
-      }
-    }, { immediate: true })
-  }
 
   // --- Actions ---
 
@@ -211,8 +167,6 @@ export function useEnvForm({ t, onError, runtimeProvider }: UseEnvFormOptions): 
             language.value = res.data.default_language
           }
         }
-        // Issue #890: keine Restore-Logik mehr — modelOption/customModel
-        // werden nicht persistiert und bleiben unveraendert nach loadModels().
       }
     } catch (e) {
       const err = e as { message?: string }

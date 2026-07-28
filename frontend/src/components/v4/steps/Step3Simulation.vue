@@ -1,10 +1,10 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useEventStream } from '../composables/useEventStream'
-import { traceIdToSigNozUrl } from '../observability/tracing'
-import { useIncrementalLogPolling } from '../composables/useIncrementalLogPolling'
-import { usePolling } from '../composables/usePolling'
-import { useStickyScroll } from '../composables/useStickyScroll'
+import { useEventStream } from '../../../composables/useEventStream'
+import { traceIdToSigNozUrl } from '../../../observability/tracing'
+import { useIncrementalLogPolling } from '../../../composables/useIncrementalLogPolling'
+import { usePolling } from '../../../composables/usePolling'
+import { useStickyScroll } from '../../../composables/useStickyScroll'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -15,21 +15,21 @@ import {
   getRunStatus,
   getRunStatusDetail,
   getSimulationConsoleLog
-} from '../api/simulation'
-import { cancelRun } from '../api/runs'
-import { generateReport } from '../api/report'
+} from '../../../api/simulation'
+import { cancelRun } from '../../../api/runs'
+import { generateReport } from '../../../api/report'
 import { useRunModelResolver } from '@/composables/useRunModelResolver'
 import { clearRunModelOverride } from '@/store/runModelOverride'
 import Button from '@/components/v4/forms/Button.vue'
-import Badge from './ui/Badge.vue'
+import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
-import { tokenizeFeedText } from '../utils/feedHighlight'
+import { tokenizeFeedText } from '../../../utils/feedHighlight'
 import { isErrorLine } from '@/utils/errorLinePattern'
-import { useSimFeed, clearSimFeed } from '../composables/useSimFeed'
-import { useSimClock, clearSimClock } from '../composables/useSimClock'
-import SimulationProgressPanel from './step3/SimulationProgressPanel.vue'
-import PersonaActionFeed from './step3/PersonaActionFeed.vue'
-import SimulationToolPanel from './step3/SimulationToolPanel.vue'
+import { useSimFeed, clearSimFeed } from '../../../composables/useSimFeed'
+import { useSimClock, clearSimClock } from '../../../composables/useSimClock'
+import SimulationProgressPanel from '../../step3/SimulationProgressPanel.vue'
+import PersonaActionFeed from '../../step3/PersonaActionFeed.vue'
+import SimulationToolPanel from '../../step3/SimulationToolPanel.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -483,7 +483,7 @@ watch(() => props.simulationId, (newId, oldId) => {
       <article class="card" :class="{ 'is-active': phase === 1 }">
         <header class="card-head">
           <Kicker num="01">{{ t('step3.title') }}</Kicker>
-          <Badge :variant="statusKind === 'running' ? 'accent' : statusKind === 'paused' ? 'outline' : statusKind === 'done' ? 'solid' : 'ghost'" :dot="statusKind === 'running'">
+          <Badge :tone="statusKind === 'running' ? 'blue' : statusKind === 'paused' ? 'orange' : statusKind === 'done' ? 'green' : 'gray'" :dot="statusKind === 'running'">
             {{ statusLabel }}
           </Badge>
         </header>

@@ -106,7 +106,7 @@ vi.mock('@/composables/useEffectiveModelSelection', () => ({
 
 import { generateReport, getReport, getReportStatus, getReportEvidence } from '../../api/report'
 import { useIncrementalLogPolling } from '../../composables/useIncrementalLogPolling'
-import Step4Report from '../Step4Report.vue'
+import Step4Report from '@/components/v4/steps/Step4Report.vue'
 
 // Minimaler i18n-Stub
 const i18n = createI18n({

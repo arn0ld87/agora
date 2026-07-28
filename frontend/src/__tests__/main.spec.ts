@@ -17,10 +17,6 @@ vi.mock('../composables/useDensity', () => ({
   useDensity: vi.fn(() => ({ applyOnMount: vi.fn() })),
 }))
 
-vi.mock('../composables/useRuntimeLlmOptions', () => ({
-  cleanupStaleRuntimeLlmStorage: vi.fn().mockResolvedValue(undefined),
-}))
-
 vi.mock('../router', () => ({
   default: { install: vi.fn() },
 }))
@@ -86,10 +82,5 @@ describe('main.ts Bootstrap', () => {
   it('initFrontendTracing wurde 1× aufgerufen', async () => {
     const { initFrontendTracing } = await import('../observability/tracing')
     expect(initFrontendTracing).toHaveBeenCalledTimes(1)
-  })
-
-  it('cleanupStaleRuntimeLlmStorage wurde 1× aufgerufen', async () => {
-    const { cleanupStaleRuntimeLlmStorage } = await import('../composables/useRuntimeLlmOptions')
-    expect(cleanupStaleRuntimeLlmStorage).toHaveBeenCalledTimes(1)
   })
 })

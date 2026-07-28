@@ -1,28 +1,27 @@
 <script setup>
-import { ref, computed, onMounted, watch, watchEffect } from 'vue'
-import { usePersonaActions } from '../composables/usePersonaActions'
-import { usePersonaFilter } from '../composables/usePersonaFilter'
-import { usePersonaLibrary } from '../composables/usePersonaLibrary'
-import { useSimulationPrepare } from '../composables/useSimulationPrepare'
-import { usePersonaQuota } from '../composables/usePersonaQuota'
+import { ref, computed, onMounted, watch } from 'vue'
+import { usePersonaActions } from '../../../composables/usePersonaActions'
+import { usePersonaFilter } from '../../../composables/usePersonaFilter'
+import { usePersonaLibrary } from '../../../composables/usePersonaLibrary'
+import { useSimulationPrepare } from '../../../composables/useSimulationPrepare'
+import { usePersonaQuota } from '../../../composables/usePersonaQuota'
 import { useI18n } from 'vue-i18n'
-import { useEnvForm } from '../composables/useEnvForm'
-import { useRuntimeLlmOptions, mapRuntimeProviderToBackendId } from '../composables/useRuntimeLlmOptions'
+import { useEnvForm } from '../../../composables/useEnvForm'
 import Button from '@/components/v4/forms/Button.vue'
-import Badge from './ui/Badge.vue'
+import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
-import QuotaPlanEditor from './step2/QuotaPlanEditor.vue'
-import AddPersonaModal from './step2/AddPersonaModal.vue'
-import PersonaDetailModal from './step2/PersonaDetailModal.vue'
-import PersonaCardGrid from './step2/PersonaCardGrid.vue'
-import PersonaLibraryPanel from './step2/PersonaLibraryPanel.vue'
-import EnvSetupModelPanel from './step2/EnvSetupModelPanel.vue'
-import SimulationStartConfig from './step2/SimulationStartConfig.vue'
-import AgentCapControl from './step2/AgentCapControl.vue'
+import QuotaPlanEditor from '../../step2/QuotaPlanEditor.vue'
+import AddPersonaModal from '../../step2/AddPersonaModal.vue'
+import PersonaDetailModal from '../../step2/PersonaDetailModal.vue'
+import PersonaCardGrid from '../../step2/PersonaCardGrid.vue'
+import PersonaLibraryPanel from '../../step2/PersonaLibraryPanel.vue'
+import EnvSetupModelPanel from '../../step2/EnvSetupModelPanel.vue'
+import SimulationStartConfig from '../../step2/SimulationStartConfig.vue'
+import AgentCapControl from '../../step2/AgentCapControl.vue'
 import {
   buildQuotaPlanFromEntries,
-} from '../contracts/personaQuotaContract'
-import { checkLlmProviderHasKey } from '../api/llmProviderKeys'
+} from '../../../contracts/personaQuotaContract'
+import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
 
 const { t } = useI18n()
 
@@ -40,75 +39,8 @@ const customMaxRounds = ref(40)
 const useCustomDays = ref(false)
 const customSimulationDays = ref(3)
 const selectedProfile = ref(null)
-// Issue #834: der v3-Profil-Legacy-Picker wurde aus EnvSetupModelPanel
-// entfernt — es gibt keine UI-Auswahl mehr, die llmProfileId ändern könnte.
-// Der Wert kommt nur noch aus dem Projekt-Default und ist rein lesend; der
-// triggerPrepare-Payload-Vertrag (llm_profile_id, wenn gesetzt) bleibt exakt
-// erhalten (backend-seitig live, siehe simulation_prepare.py).
-const llmProfileId = computed(() => props.projectData?.llm_profile_id ?? null)
-const showSessionKeyOverride = ref(false)
 
-// Issue #890: kanonische AiModelRef-Selektion. Einzige Modell-Kanon-Senke —
-// initial null, keine Persistenz. Gegenseitiger Ausschluss mit dem Runtime-
-// Provider-Pfad (siehe watch(runtimeProvider) unten).
 const selectedModelRef = ref(null)
-
-const {
-  runtimeProvider,
-  runtimeApiKey,
-  runtimeBaseUrl,
-  runtimeProviderOptions,
-  runtimeProviderEnabled,
-  runtimePayload,
-  runtimeApiKeyMissing,
-} = useRuntimeLlmOptions(t)
-
-// --- DB-Key-Status für Override-Provider (Smoke-Fix Slice 04 + Followup) ---
-/** True wenn für den gewählten Override-Provider ein Key in der Settings-DB hinterlegt ist. */
-const providerDbHasKey = ref(false)
-/** True während der has-key-Status abgefragt wird. */
-const providerDbKeyChecking = ref(false)
-/** Race-Guard: nur die Antwort für den zuletzt angefragten Provider zählt. */
-let _checkProviderDbKeySeq = 0
-
-async function _checkProviderDbKey(providerId) {
-  if (!providerId || providerId === 'default') {
-    providerDbHasKey.value = false
-    return
-  }
-  const backendProviderId = mapRuntimeProviderToBackendId(providerId)
-  const mySeq = ++_checkProviderDbKeySeq
-  providerDbKeyChecking.value = true
-  try {
-    const result = await checkLlmProviderHasKey(backendProviderId)
-    if (mySeq !== _checkProviderDbKeySeq) return
-    providerDbHasKey.value = result
-  } finally {
-    if (mySeq === _checkProviderDbKeySeq) {
-      providerDbKeyChecking.value = false
-    }
-  }
-}
-
-watchEffect(() => {
-  if (runtimeProviderEnabled.value) {
-    _checkProviderDbKey(runtimeProvider.value)
-  } else {
-    providerDbHasKey.value = false
-  }
-  showSessionKeyOverride.value = false
-})
-
-// Issue #890: gegenseitiger Ausschluss Runtime-Provider vs. AiModelPicker.
-// Sobald der Runtime-Provider aktiv ist, wird die kanonische Modellauswahl
-// zurückgesetzt — der Legacy-Pfad (llm_provider + llm_model) bleibt aktiv.
-watch(runtimeProvider, (provider) => {
-  if (provider !== 'default') {
-    selectedModelRef.value = null
-  }
-})
-
-const modelPickerDisabled = computed(() => runtimeProvider.value !== 'default')
 
 // ----- Model + language picker (useEnvForm) -----
 const {
@@ -118,13 +50,9 @@ const {
   agentToolsEnabled,
   maxToolCallsPerAction,
   loadingModels,
-  modelOption,
-  customModel,
   language,
-  modelOptions,
   loadModels,
-  effectiveModel,
-} = useEnvForm({ t, onError: (msg) => addLog(msg), runtimeProvider })
+} = useEnvForm({ t, onError: (msg) => addLog(msg) })
 
 // ----- Prepare flow (useSimulationPrepare) -----
 const {
@@ -248,11 +176,9 @@ async function triggerPrepare() {
   if (selectedModelRef.value !== null) {
     payload.ai_model_ref = { ...selectedModelRef.value, source: 'explicit' }
   } else {
-    if (llmProfileId.value) payload.llm_profile_id = llmProfileId.value
-    const m = effectiveModel()
-    if (m) payload.llm_model = m
-    const provider = runtimePayload()
-    if (provider) payload.llm_provider = provider
+    if (props.projectData?.llm_profile_id) {
+      payload.llm_profile_id = props.projectData.llm_profile_id
+    }
   }
   if (useAgentCap.value && maxAgents.value > 0) {
     payload.max_agents = Math.max(10, maxAgents.value)
@@ -280,9 +206,18 @@ function handleStart() {
   emit('next-step', params)
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadModels()
   loadPersonaLibrary()
+  try {
+    const effectiveModelSel = useEffectiveModelSelection()
+    await effectiveModelSel.ensureLoaded()
+    if (!selectedModelRef.value) {
+      selectedModelRef.value = effectiveModelSel.effectiveRef.value
+    }
+  } catch {
+    // Kanon nicht ladbar
+  }
   if (props.simulationId) {
     probeAlreadyPrepared(props.simulationId, {
       onLog: addLog,
@@ -300,32 +235,19 @@ onMounted(() => {
       <article class="card" :class="{ 'is-active': phase < 1 }">
         <header class="card-head">
           <Kicker num="01">{{ t('step2.title') }}</Kicker>
-          <Badge variant="ghost">{{ t('step2.kicker') }}</Badge>
+          <Badge tone="gray" :dot="false">{{ t('step2.kicker') }}</Badge>
         </header>
         <p class="card-desc">{{ t('step2.sub') }}</p>
 
         <EnvSetupModelPanel
-          v-model:model-option="modelOption"
-          v-model:custom-model="customModel"
           v-model:language="language"
-          v-model:runtime-provider="runtimeProvider"
-          v-model:runtime-api-key="runtimeApiKey"
-          v-model:runtime-base-url="runtimeBaseUrl"
-          v-model:show-session-key-override="showSessionKeyOverride"
           v-model:model-ref="selectedModelRef"
-          :model-picker-disabled="modelPickerDisabled"
-          :model-options="modelOptions"
           :loading-models="loadingModels"
-          :runtime-provider-enabled="runtimeProviderEnabled"
           :server-default-requires-ollama="serverDefaultRequiresOllama"
           :ollama-reachable="ollamaReachable"
           :default-provider="defaultProvider"
           :agent-tools-enabled="agentToolsEnabled"
           :max-tool-calls-per-action="maxToolCallsPerAction"
-          :runtime-provider-options="runtimeProviderOptions"
-          :runtime-api-key-missing="runtimeApiKeyMissing"
-          :provider-db-has-key="providerDbHasKey"
-          :provider-db-key-checking="providerDbKeyChecking"
           :is-preparing="isPreparing"
         />
 
@@ -363,7 +285,7 @@ onMounted(() => {
       <article class="card" :class="{ 'is-active': phase === 1 }" v-if="phase >= 1">
         <header class="card-head">
           <Kicker num="02">{{ t('step2.personas.title') }}</Kicker>
-          <Badge :variant="phase > 1 ? 'solid' : 'accent'" :dot="phase === 1">
+          <Badge :tone="phase > 1 ? 'green' : 'blue'" :dot="phase === 1">
             <template v-if="phase > 1">{{ t('common.completed') }}</template>
             <template v-else>{{ profiles.length }} / {{ expectedTotal || '?' }}</template>
           </Badge>
@@ -417,7 +339,7 @@ onMounted(() => {
         <button
           v-if="filteredPersonas.length > 24 && !showAllPersonas && !personaSearch.trim()"
           class="persona-more-btn"
-          @click="showAllPersonas = true"
+          @click="showAllHomeLayout = true"
         >
           + {{ filteredPersonas.length - 24 }} {{ t('common.more') }}
         </button>

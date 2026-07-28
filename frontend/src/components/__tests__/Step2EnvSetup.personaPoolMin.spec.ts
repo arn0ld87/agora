@@ -69,7 +69,7 @@ vi.mock('../../composables/useSystemLog', () => ({
   useSystemLog: vi.fn(() => ({ addLog: vi.fn(), logs: { value: [] } })),
 }))
 
-import Step2EnvSetup from '../Step2EnvSetup.vue'
+import Step2EnvSetup from '@/components/v4/steps/Step2EnvSetup.vue'
 
 const i18n = createI18n({
   legacy: false,

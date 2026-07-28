@@ -93,16 +93,6 @@ vi.mock('@/composables/useRunsPolling', () => ({
     refresh: vi.fn(),
   }),
 }))
-vi.mock('@/composables/useRuntimeLlmOptions', () => ({
-  useRuntimeLlmOptions: () => ({
-    runtimeProvider: { value: '' },
-    runtimeApiKey: { value: '' },
-    runtimeBaseUrl: { value: '' },
-    runtimeProviderOptions: { value: [] },
-    runtimeProviderEnabled: { value: false },
-    runtimePayload: { value: {} },
-  }),
-}))
 vi.mock('@/composables/usePersonaActions', () => ({
   usePersonaActions: () => ({
     regeneratePersona: vi.fn(),
