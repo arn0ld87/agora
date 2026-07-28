@@ -5,6 +5,14 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Fixed (build-only startet jetzt auch bei Docs-PRs — 2026-07-28)
+
+- `.github/workflows/docker-image.yml` `pull_request.paths` um `docs/**` und `**/*.md` erweitert. `build-only` war als Required Check in den Branch-Protection-Settings eingetragen, der paths-Filter schloss aber Doku- und Workflow-Änderungen aus — Docs-PRs hingen dauerhaft in „Expected — Waiting for status to be reported". Pro: jeder PR triggert den Build. Con: ~2 Min Extra-CI pro reiner Doku-PR.
+
+### Changed (Worktree-Pfad auf T7 festgeschrieben — 2026-07-28)
+
+- `CLAUDE.md` und `AGENTS.md` mit expliziter Pflicht-Sektion „Worktree-Pfad" ergänzt: `/Volumes/T7/Worktrees/agora/<slice-id>/`, `/private/tmp` verboten, T7-Mount vor `git worktree add` prüfen. `docs/runbooks/worktree-strategy.md` bleibt SSoT für Details. Globale `~/.claude/CLAUDE.md` analog angepasst.
+
 ### Removed (Unused Composables `useWorkspaceMode` und `useWorkspaceStatus` entfernt — 2026-07-28, Issue #908)
 
 - `frontend/src/composables/useWorkspaceMode.ts` und `frontend/src/composables/useWorkspaceStatus.ts` mitsamt ihrer Specs unter `frontend/src/composables/__tests__/` entfernt. Beide Composables hatten nach der v4-Routen-Konsolidierung (ADR-0010) keine Importeure mehr.

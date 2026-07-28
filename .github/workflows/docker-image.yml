@@ -18,6 +18,8 @@ on:
       - "deploy/**"
       - "backend/**"
       - "frontend/**"
+      - "docs/**"
+      - "**/*.md"
       - ".github/workflows/docker-image.yml"
   workflow_dispatch:
     inputs:

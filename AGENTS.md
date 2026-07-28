@@ -50,6 +50,10 @@ Runbooks:
 - [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md)
 - [`docs/runbooks/subagent-routing.md`](docs/runbooks/subagent-routing.md)
 
+## Worktree-Pfad
+
+**Pflicht:** Alle Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount vor dem Anlegen prüfen (`test -d /Volumes/T7`). Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
+
 ## Tool-Pipeline
 
 Für Architektur-, Delta- und Codebase-Analysen:
