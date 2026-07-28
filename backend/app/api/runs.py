@@ -542,7 +542,7 @@ def _restart_simulation_prepare(run: dict):
     # Config.LLM_API_KEY/LLM_BASE_URL aus der lokalen .env zurückfällt (#798,
     # Opus-Review-Folgebefund zu #778). Exakt derselbe Resolver-Pfad wie
     # simulation_prepare.py::prepare_simulation (Zeilen 401-431).
-    from ..api.simulation_prepare import LOCAL_NO_AUTH_API_KEY, _is_local_endpoint
+    from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 
     seed_run_stage_routing(
         run_id,
@@ -555,7 +555,7 @@ def _restart_simulation_prepare(run: dict):
     route_router.lock_stage("persona_generation", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, None)
 
-    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+    if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
         guard_message = (
             f"provider_override: kein api_key im Payload und kein Key in der Settings-DB "
             f"für Provider '{resolved_route.provider_id}'. "
@@ -592,7 +592,7 @@ def _restart_simulation_prepare(run: dict):
             raise RuntimeError(ApiErrorCode.INTERNAL_ERROR) from persistence_error
         raise ValueError(guard_message)
 
-    if resolved_api_key is None and _is_local_endpoint(resolved_route.base_url_sanitized):
+    if resolved_api_key is None and is_local_endpoint(resolved_route.base_url_sanitized):
         resolved_api_key = LOCAL_NO_AUTH_API_KEY
 
     effective_llm_runtime = build_runtime_llm_config(resolved_route, resolved_api_key)

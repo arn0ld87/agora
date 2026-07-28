@@ -10,7 +10,7 @@ from typing import Optional
 from flask import current_app, request
 
 from . import simulation_bp
-from ..api.simulation_prepare import LOCAL_NO_AUTH_API_KEY, _is_local_endpoint
+from ..utils.endpoints import LOCAL_NO_AUTH_API_KEY, is_local_endpoint
 from ..models.project import ProjectManager
 from ..services.ai_route_resolver import AiRouteResolutionError
 from ..services.entity_reader import EntityReader
@@ -212,7 +212,7 @@ def generate_profiles():
 
     api_key = resolve_route_api_key(resolved_route, llm_runtime)
     base_url = resolved_route.base_url_sanitized
-    if api_key is None and not _is_local_endpoint(base_url):
+    if api_key is None and not is_local_endpoint(base_url):
         return json_error(
             ApiErrorCode.VALIDATION_FAILED,
             status=422,
@@ -223,7 +223,7 @@ def generate_profiles():
                 "oder im Sitzungsfeld eingeben."
             ),
         )
-    if api_key is None and _is_local_endpoint(base_url):
+    if api_key is None and is_local_endpoint(base_url):
         # Lokaler Endpoint ohne Key ist zulaessig (#778) — Platzhalter statt
         # `None`, damit der Generator-Vertrag "Key + Base-URL aus derselben
         # Quelle" hier nicht faelschlich einen ValueError wirft.

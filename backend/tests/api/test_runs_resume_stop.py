@@ -365,7 +365,7 @@ def test_resume_simulation_prepare_falls_back_to_local_no_auth_key(env):
     """Restart gegen einen lokalen No-Auth-Endpoint ohne Store-Key darf keinen
     ValueError werfen und muss den lokalen Platzhalter-Key setzen.
     """
-    from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+    from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
 
     run = _create_run(
         env["registry"],

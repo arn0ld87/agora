@@ -15,7 +15,7 @@ from ..services.llm_routing_seed import (
     resolve_route_api_key,
     seed_run_stage_routing,
 )
-from ..api.simulation_prepare import _is_local_endpoint
+from ..utils.endpoints import is_local_endpoint
 from ..services.llm_runtime import parse_runtime_llm_config
 from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner
@@ -264,7 +264,7 @@ def start_simulation():
             descriptor = next((p for p in registry.get_providers() if p.id == provider_id_preview), None)
             p_type = descriptor.type if descriptor else "openai_compatible"
             stored_key = SecretResolver().get_api_key(provider_id_preview, p_type)
-            if not stored_key and not _is_local_endpoint(
+            if not stored_key and not is_local_endpoint(
                 (descriptor.base_url if descriptor else None) or llm_runtime.base_url
             ):
                 return json_error(
@@ -328,7 +328,7 @@ def start_simulation():
     route_router.lock_stage("simulation_rounds", resolved_route)
     resolved_api_key = resolve_route_api_key(resolved_route, llm_runtime)
 
-    if resolved_api_key is None and not _is_local_endpoint(resolved_route.base_url_sanitized):
+    if resolved_api_key is None and not is_local_endpoint(resolved_route.base_url_sanitized):
         # Fallback-422 bleibt für Workspace-Default-Fälle (kein Frontend-Override) —
         # da kann die Run-Record schon erstellt sein; markiere sie als failed,
         # damit keine Phantom-Runs in der Liste landen.

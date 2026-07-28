@@ -24,7 +24,7 @@ import pytest
 from flask import Flask
 
 from app.api import simulation_bp
-from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
 
 
 @pytest.fixture
@@ -220,7 +220,7 @@ def test_generate_profiles_local_endpoint_without_key_uses_no_auth_placeholder(
     sein — ein evtl. real persistierter Store-Key auf dem Entwicklerrechner
     darf das Ergebnis nicht beeinflussen.
     """
-    from app.api.simulation_prepare import LOCAL_NO_AUTH_API_KEY
+    from app.utils.endpoints import LOCAL_NO_AUTH_API_KEY
 
     monkeypatch.setattr(
         "app.services.llm_routing_seed.SecretResolver.get_api_key",

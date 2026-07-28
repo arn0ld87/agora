@@ -552,34 +552,34 @@ def test_has_key_endpoint_returns_false_when_no_key(llm_client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Gemini-Followup PR #466 — Subdomain-Smuggling-Schutz für _is_local_endpoint
+# Gemini-Followup PR #466 — Subdomain-Smuggling-Schutz für is_local_endpoint
 # ---------------------------------------------------------------------------
 
 
 def test_is_local_endpoint_accepts_real_local_hosts():
-    """``_is_local_endpoint`` erkennt echte lokale Hostnamen unabhängig vom Port."""
-    from app.api.simulation_prepare import _is_local_endpoint
+    """``is_local_endpoint`` erkennt echte lokale Hostnamen unabhängig vom Port."""
+    from app.utils.endpoints import is_local_endpoint
 
-    assert _is_local_endpoint("http://localhost:11434/v1") is True
-    assert _is_local_endpoint("http://127.0.0.1:11434/v1") is True
-    assert _is_local_endpoint("http://host.docker.internal:11434/v1") is True
-    assert _is_local_endpoint("http://localhost") is True
-    assert _is_local_endpoint("http://[::1]:11434/v1") is True
+    assert is_local_endpoint("http://localhost:11434/v1") is True
+    assert is_local_endpoint("http://127.0.0.1:11434/v1") is True
+    assert is_local_endpoint("http://host.docker.internal:11434/v1") is True
+    assert is_local_endpoint("http://localhost") is True
+    assert is_local_endpoint("http://[::1]:11434/v1") is True
 
 
 def test_is_local_endpoint_rejects_subdomain_smuggling():
     """Cloud-URLs, die ``localhost`` oder ``11434`` als Substring enthalten, dürfen
     nicht fälschlich als lokal gelten — Gemini-MEDIUM auf PR #466.
     """
-    from app.api.simulation_prepare import _is_local_endpoint
+    from app.utils.endpoints import is_local_endpoint
 
     # Hostname enthält ``localhost`` als Substring → kein echter Local-Host.
-    assert _is_local_endpoint("http://not-localhost.com/v1") is False
-    assert _is_local_endpoint("https://localhost.evil.example/v1") is False
+    assert is_local_endpoint("http://not-localhost.com/v1") is False
+    assert is_local_endpoint("https://localhost.evil.example/v1") is False
     # Port 11434 auf einem Remote-Host darf nicht reichen.
-    assert _is_local_endpoint("http://remote-server.example:11434/v1") is False
+    assert is_local_endpoint("http://remote-server.example:11434/v1") is False
     # 127-Subdomain-Smuggling.
-    assert _is_local_endpoint("http://127.0.0.1.evil.example/v1") is False
+    assert is_local_endpoint("http://127.0.0.1.evil.example/v1") is False
     # Leerstring / None bleiben False.
-    assert _is_local_endpoint("") is False
-    assert _is_local_endpoint(None) is False
+    assert is_local_endpoint("") is False
+    assert is_local_endpoint(None) is False
