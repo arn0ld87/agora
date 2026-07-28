@@ -71,10 +71,10 @@ def test_gevent_pool_execution_fallback(monkeypatch):
         def is_patched(self, name):
             return name == "socket"
 
-    sys.modules["gevent"] = MagicMock()
+    monkeypatch.setitem(sys.modules, "gevent", MagicMock())
     mock_pool_mod = MagicMock()
-    sys.modules["gevent.pool"] = mock_pool_mod
-    sys.modules["gevent.monkey"] = MockGeventMonkey()
+    monkeypatch.setitem(sys.modules, "gevent.pool", mock_pool_mod)
+    monkeypatch.setitem(sys.modules, "gevent.monkey", MockGeventMonkey())
 
     from app.services.oasis_profile_generator import OasisProfileGenerator
 
