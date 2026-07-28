@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 ## [Unreleased]
 
+### Changed (hartkodierte PageHeader-Texte auf vue-i18n umgestellt — 2026-07-28, Issue #796)
+
+- `title`/`subtitle`/`label`-Literale in `HistoryView.vue`, `CompareView.vue`, `StepEnvSetupView.vue`, `StepReportView.vue`, `StepInteractionView.vue`, `StepGraphBuildView.vue` und `StepSimulationView.vue` laufen jetzt über `$t()` statt hartkodierter deutscher Strings, mit neuen Keys in `de.json` und `en.json`.
+- Betroffene Specs prüfen den i18n-Key gegen befüllte `messages` statt das deutsche Literal gegen leere `messages`.
+
 ### Changed (v3-Inhaltskomponenten nach v4 migriert — 2026-07-28, PR #938, Issue #922)
 
 - Die drei verbleibenden v3-Inhaltskomponenten `Step2EnvSetup.vue`, `Step3Simulation.vue` und `Step4Report.vue` sind nach `frontend/src/components/v4/steps/` migriert (RENAMED, Inhalt an v4-Typografie und -Ordnerstruktur angepasst). Die v3-Originale sind entfernt; die v4-Wrapper-Views binden die v4-Komponenten direkt ein.
