@@ -2,6 +2,8 @@
 
 Guidance für Codex, Claude Code und andere Agent-Runtimes in diesem Repository.
 
+> **Progressive Disclosure:** diese Datei enthält nur die immer verbindlichen Regeln. Detail-Referenzen sind unter [`docs/agents/`](docs/agents/) ausgelagert und bei Bedarf zu laden — siehe [Detaillierte Referenzen](#detaillierte-referenzen).
+
 ## Dokumentationsquellen
 
 Agenten verwenden genau diese Reihenfolge:
@@ -10,6 +12,8 @@ Agenten verwenden genau diese Reihenfolge:
 2. [`docs/STATUS.md`](docs/STATUS.md) — verifizierter Istzustand
 3. [`ROADMAP.md`](ROADMAP.md) — strategische Release-Reihenfolge
 4. [GitHub Issues](https://github.com/arn0ld87/agora/issues) — ausführbare Tasks und Akzeptanzkriterien
+
+[`VISION.md`](VISION.md) — nicht-bindender North-Star (das *Warum* und die Langzeitrichtung), keine Planungsdatei und keine konkurrierende Roadmap.
 
 ADRs, Architektur-, Security- und Runbook-Dateien sind verbindliche Referenzen, aber keine konkurrierenden Roadmaps. Historische Planung liegt unter [`docs/archive/planning/`](docs/archive/planning/).
 
@@ -54,83 +58,6 @@ Runbooks:
 
 **Pflicht:** Alle Agora-Worktrees liegen unter `/Volumes/T7/Worktrees/agora/<slice-id>/`. `/private/tmp` ist verboten. T7-Mount vor dem Anlegen prüfen (`test -d /Volumes/T7`). Volle Strategie in [`docs/runbooks/worktree-strategy.md`](docs/runbooks/worktree-strategy.md).
 
-## Tool-Pipeline
-
-Für Architektur-, Delta- und Codebase-Analysen:
-
-1. `code-review-graph`
-2. `context7` bei Bibliotheks- oder Frameworkfragen
-3. `ctx_batch_execute` für große Read-only-Abfragen
-4. `ctx_execute` beziehungsweise `ctx_execute_file`
-5. direkte Dateiwerkzeuge nur für gezielte Bearbeitung und Verifikation
-
-Globale Konfiguration, Tokens, Browserprofile, Keychain-Inhalte und private Host-Dateien werden niemals ins Repository kopiert.
-
-## Architektur-Single-Sources-of-Truth
-
-- API-Verträge: `backend/app/contracts/` mit Pydantic v2
-- Frontend-Spiegel: `frontend/src/contracts/` und generierte `schemas/`
-- Provider-Erkennung: `backend/app/llm/providers/registry.py::detect_provider`
-- Provider-Verbindung: `ProviderConnection`
-- strukturierte JSON-LLM-Calls: `backend/app/llm/client.py::LLMClient.chat_json` mit Pydantic-Schema — roher `OpenAI`-Client nicht für JSON-Outputs
-- kanonische Modellauswahl: `frontend/src/components/v4/forms/AiModelPicker.vue`
-- kanonische Modellreferenz: `AiModelRef`
-- kanonische Route: `AiRoute` / `LlmRoute`
-- Embedding-Konfiguration: `embedding_service.py` und `embedding_migration.py`
-- Evidence-Gating: ADR-0002-Hartanker
-
-Chat-Routing und Embedding-Konfiguration bleiben strukturell getrennt.
-
-## Aktuelle Release-Priorität
-
-### 0.8.0 → 0.9.0
-
-Erledigt: E2E-Smokes repariert (#739), Provider-/Secret-/Routing-SSoT abgeschlossen (#761), Dependency-SSoT bereinigt (#762), Produkt-/Manifest-Version automatisiert synchronisiert (#759).
-
-Offen:
-
-- E2E als Required Check aktivieren (Läufe sind stabil grün, `main` besitzt aber noch keine Branch-Protection)
-- Vue-v4 als einziges Produktfrontend festlegen (Issue #760; Umsetzungskarte [#829](https://github.com/arn0ld87/agora/issues/829))
-
-### 0.9.0 → 0.10.0
-
-- reproduzierbare Run-Manifeste und Replay
-- Kosten-, Token- und Zeitbudgets
-- Backup, Restore, Upgrade und Rollback
-- Kalibrierungs- und Baseline-Vergleich
-- Feature-Freeze vor `1.0.0`
-
-Details und Freigabekriterien: [`ROADMAP.md`](ROADMAP.md)
-
-## Commands
-
-```bash
-# Setup und Entwicklung
-bun run setup:all
-bun run dev
-bun run backend
-bun run frontend
-
-# Gesamtprüfung
-bun run check
-bash scripts/pre-push-gate.sh
-
-# Backend
-cd backend && uv run pytest -x -q
-cd backend && uv run ruff check .
-cd backend && uv run mypy app
-cd backend && uv run python -m app.contracts.dump_schemas
-
-# Frontend
-cd frontend && bun run check
-cd frontend && bun run test
-
-# Produktionsnaher lokaler Stack
-docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-  -f deploy/compose/docker-compose.prod-with-proxy.yml up -d --build
-curl -fsS http://localhost/healthz
-```
-
 ## Verboten
 
 - direkte Änderungen auf `main`
@@ -146,24 +73,24 @@ curl -fsS http://localhost/healthz
 - neue Planungsdateien neben README, STATUS, ROADMAP und Issues
 - `apt`; auf Debian/Ubuntu `nala` verwenden
 
+## Detaillierte Referenzen
+
+Bei Bedarf laden (nicht verbindlich ständig im Kontext):
+
+- [`docs/agents/tool-pipeline.md`](docs/agents/tool-pipeline.md) — Tool-Pipeline, Knowledge Graph, Token Efficiency
+- [`docs/agents/architecture-ssot.md`](docs/agents/architecture-ssot.md) — Architektur-Single-Sources-of-Truth
+- [`docs/agents/release-priority.md`](docs/agents/release-priority.md) — aktuelle Release-Priorität
+- [`docs/agents/commands.md`](docs/agents/commands.md) — Backend-/Frontend-/Docker-Commands
+
 ## Wichtige Referenzen
 
+- [`VISION.md`](VISION.md) — North-Star (nicht-bindend)
 - [`docs/architecture.md`](docs/architecture.md)
+- [`docs/api.md`](docs/api.md) — HTTP-Endpunkte nach Domänen
+- [`docs/configuration.md`](docs/configuration.md) — Umgebungsvariablen
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — bekannte Fehlerbilder
 - [`docs/decisions/`](docs/decisions/)
 - [`docs/dependency-risk-register.md`](docs/dependency-risk-register.md)
 - [`docs/runbooks/`](docs/runbooks/)
 - [`CHANGELOG.md`](CHANGELOG.md)
 - [`CLAUDE.md`](CLAUDE.md)
-
-## Knowledge Graph
-
-Wenn `graphify-out/graph.json` vorhanden ist, bei Codebase-Fragen zuerst eine gezielte Graph-Abfrage verwenden. Nach strukturellen Codeänderungen `graphify update .` ausführen. Graphresultate ersetzen weder direkte Codeprüfung noch Tests.
-
-## Token Efficiency
-- Never re-read files you just wrote or edited. You know the contents.
-- Never re-run commands to "verify" unless the outcome was uncertain.
-- Don't echo back large blocks of code or file contents unless asked.
-- Batch related edits into single operations. Don't make 5 edits when 1 handles it.
-- Skip confirmations like "I'll continue..." Just do it.
-- If a task needs 1 tool call, don't use 3. Plan before acting.
-- Do not summarize what you just did unless the result is ambiguous or you need additional input.
