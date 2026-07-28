@@ -252,15 +252,10 @@ onMounted(async () => {
 
         <EnvSetupModelPanel
           v-model:language="language"
-          :model-value="selectedModelRef"
+          :model-ref="selectedModelRef"
           @update:model-ref="onModelRefPicked"
-          :loading-models="loadingModels"
-          :server-default-requires-ollama="serverDefaultRequiresOllama"
-          :ollama-reachable="ollamaReachable"
-          :default-provider="defaultProvider"
           :agent-tools-enabled="agentToolsEnabled"
           :max-tool-calls-per-action="maxToolCallsPerAction"
-          :is-preparing="isPreparing"
         />
 
         <!-- Agent cap (optional) -->

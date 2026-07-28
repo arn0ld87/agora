@@ -483,7 +483,7 @@ watch(() => props.simulationId, (newId, oldId) => {
       <article class="card" :class="{ 'is-active': phase === 1 }">
         <header class="card-head">
           <Kicker num="01">{{ t('step3.title') }}</Kicker>
-          <Badge :tone="statusKind === 'running' ? 'blue' : statusKind === 'paused' ? 'orange' : statusKind === 'done' ? 'green' : 'gray'" :dot="statusKind === 'running'">
+          <Badge :tone="statusKind === 'running' ? 'blue' : statusKind === 'paused' ? 'orange' : statusKind === 'done' ? 'green' : statusKind === 'error' ? 'red' : 'gray'" :dot="statusKind === 'running'">
             {{ statusLabel }}
           </Badge>
         </header>
