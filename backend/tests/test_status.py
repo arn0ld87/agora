@@ -403,9 +403,9 @@ class TestOllamaStatusContractShape:
         assert validated.skipped_provider is None
         assert validated.models_available == ["qwen3:8b"]
 
-    def test_custom_port_ollama_is_probed_not_skipped(self, monkeypatch):
-        """Codex-Finding: Ollama auf Nicht-Standard-Port bleibt sichtbar."""
-        self._set_provider(monkeypatch, "http://ollama.internal:11435/v1", "llama3")
+    def test_custom_port_ollama_on_local_host_is_probed(self, monkeypatch):
+        """Selbstgehostetes Ollama auf Nicht-Standard-Port auf localhost bleibt sichtbar."""
+        self._set_provider(monkeypatch, "http://localhost:11435/v1", "llama3")
         monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
 
         with patch('app.api.status.requests.get') as mock_get:
@@ -417,7 +417,25 @@ class TestOllamaStatusContractShape:
 
         assert result['skipped'] is False
         assert result['reachable'] is True
-        assert mock_get.call_args[0][0] == "http://ollama.internal:11435/api/tags"
+        assert mock_get.call_args[0][0] == "http://localhost:11435/api/tags"
+
+    def test_unknown_gateway_on_remote_host_is_not_probed(self, monkeypatch):
+        """Codex-Finding: ein Dritt-Gateway auf fremdem Host nicht pauschal proben.
+
+        ``http://gateway.example:11435/v1`` fällt in ``detect_provider`` auf
+        ``"unknown"`` zurück, bedient ``/api/tags`` aber nicht. Es zu proben
+        würde genau die 404-Klasse reproduzieren, die der Fix beseitigt.
+        Wer solch ein Gateway als Ollama betreibt, setzt ``OLLAMA_BASE_URL``.
+        """
+        self._set_provider(monkeypatch, "http://gateway.example:11435/v1", "llama3")
+        monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+        with patch('app.api.status.requests.get') as mock_get:
+            result = _get_ollama_status()
+
+        mock_get.assert_not_called()
+        assert result['skipped'] is True
+        assert result['reachable'] is None
 
     def test_explicit_env_with_v1_suffix_does_not_hit_v1_api_tags(self, monkeypatch):
         """CodeRabbit-Finding: ``/v1/api/tags`` wäre wieder ein 404."""

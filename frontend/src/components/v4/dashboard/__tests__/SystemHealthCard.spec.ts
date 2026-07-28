@@ -63,3 +63,50 @@ describe('SystemHealthCard', () => {
     expect(w.emitted('refresh')).toBeTruthy()
   })
 })
+
+describe('SystemHealthCard — übersprungener Ollama-Probe', () => {
+  it('rendert "unknown" als i18n-Label statt als Klartext', () => {
+    const status = buildStatus({
+      ollama: {
+        reachable: null,
+        skipped: true,
+        skipped_provider: 'unknown',
+        reason: 'Active provider is unknown',
+        base_url: null,
+        models_available: [],
+        default_model: null,
+        error: null,
+      },
+    })
+    const w = mount(SystemHealthCard, {
+      props: { status, loading: false, error: '' },
+      global: { plugins: [makeI18n()] },
+    })
+    // Der maschinenlesbare Schlüssel darf nicht in der UI stehen.
+    expect(w.text()).not.toContain('Active provider is unknown')
+    expect(w.text()).not.toContain('unknown')
+    // Der i18n-Text erscheint.
+    expect(w.text()).toContain('ein anderer Anbieter')
+  })
+
+  it('rendert einen bekannten Provider über das i18n-Label', () => {
+    const status = buildStatus({
+      ollama: {
+        reachable: null,
+        skipped: true,
+        skipped_provider: 'minimax',
+        reason: 'Active provider is minimax',
+        base_url: null,
+        models_available: [],
+        default_model: 'MiniMax-M3',
+        error: null,
+      },
+    })
+    const w = mount(SystemHealthCard, {
+      props: { status, loading: false, error: '' },
+      global: { plugins: [makeI18n()] },
+    })
+    expect(w.text()).toContain('MiniMax')
+    expect(w.text()).not.toContain('Active provider is minimax')
+  })
+})

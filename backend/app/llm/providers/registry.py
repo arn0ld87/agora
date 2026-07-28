@@ -299,19 +299,48 @@ def is_ollama_compatible_provider(base_url: Optional[str], model: Optional[str])
     return detect_provider(base_url, model, mode="http") in ("ollama", "cloud")
 
 
-# Provider, die nachweislich KEINE ``/api/tags``-Route bedienen. Nur für diese
-# wird die Discovery übersprungen. ``"unknown"`` steht bewusst NICHT hier: ein
-# selbstgehostetes Ollama auf einem Nicht-Standard-Port (z. B.
-# ``http://ollama.internal:11435/v1``) fällt in ``detect_provider`` auf
-# ``"unknown"`` zurück, bedient ``/api/tags`` aber sehr wohl. Solche Endpoints
-# weiter zu proben ist das Verhalten von vor diesem Fix — sie zu überspringen
-# wäre eine Regression, die die installierte Modell-Liste verschwinden ließe.
+# Provider, die nachweislich KEINE ``/api/tags``-Route bedienen. Für sie wird
+# die Discovery übersprungen. ``"unknown"`` steht bewusst NICHT hier — aber
+# auch nicht ungeprüft auf der Probe-Seite: nur ein Endpoint, der ein
+# positives Ollama-Signal trägt, wird geprobt. Ein OpenAI-kompatibles
+# Dritt-Gateway (``https://gateway.example/v1``) fällt ebenfalls auf
+# ``"unknown"`` zurück, bedient ``/api/tags`` aber nicht — es pauschal zu
+# proben würde genau die 404-Klasse reproduzieren, die dieser Fix beseitigt.
 _NON_OLLAMA_TAG_PROVIDERS = ("minimax", "openai", "google")
+
+# Lokale/Loopback-Hosts, auf denen ein ``unknown``-Endpoint plausibel ein
+# selbstgehostetes Ollama ist. ``host.docker.internal`` deckt den
+# Docker-Desktop-Fall ab.
+_LOCAL_OLLAMA_PROBE_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
 
 
 def _probes_ollama_tags(base_url: Optional[str], model: Optional[str]) -> bool:
-    """False nur für Provider, die ``/api/tags`` garantiert nicht kennen."""
-    return detect_provider(base_url, model, mode="http") not in _NON_OLLAMA_TAG_PROVIDERS
+    """True, wenn der Endpoint ``GET /api/tags`` plausibel beantwortet.
+
+    True genau für:
+      * explizit erkannte Ollama-Provider (``ollama``/``cloud``),
+      * ``"unknown"``-Endpoints auf lokalen/Loopback-Hosts — der übliche
+        selbstgehostete Fall auf einem Nicht-Standard-Port.
+
+    Ein ``"unknown"``-Endpoint auf einem fremden Host (Dritt-Gateway, Proxy)
+    wird NICHT geprobt — das wäre wieder ein pauschaler Request gegen eine
+    Route, die es dort nicht gibt. Wer solch ein Gateway explizit als Ollama
+    betreibt, setzt ``OLLAMA_BASE_URL``.
+    """
+    if detect_provider(base_url, model, mode="http") in _NON_OLLAMA_TAG_PROVIDERS:
+        return False
+
+    # Explizit erkannte Ollama-Provider werden immer geprobt.
+    if detect_provider(base_url, model, mode="http") in ("ollama", "cloud"):
+        return True
+
+    # "unknown": nur lokale/Loopback-Hosts — dort ist ein selbstgehostetes
+    # Ollama auf einem Nicht-Standard-Port der Normalfall. Fremde Hosts
+    # (Gateways) nicht pauschal proben.
+    host = urlparse((base_url or "").lower()).hostname or ""
+    return any(
+        host == h or host.endswith(f".{h}") for h in _LOCAL_OLLAMA_PROBE_HOSTS
+    )
 
 
 def _strip_v1_suffix(url: str) -> str:

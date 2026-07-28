@@ -165,7 +165,10 @@ def _get_ollama_status():
         status.models_available = models
     except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
         status.error = str(e)
-        logger.debug(f"Could not reach Ollama at {base}: {e}")
+        logger.debug(
+            "Could not reach Ollama",
+            extra={"ollama_base_url": base, "error": str(e)},
+        )
 
     return status.model_dump(mode="json")
 

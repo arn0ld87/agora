@@ -327,22 +327,54 @@ def test_resolve_ollama_tags_url_normalises_explicit_env(explicit, expected):
     assert not resolved.endswith("/v1")
 
 
-def test_resolve_ollama_tags_url_probes_unknown_provider():
-    """Codex-Finding: selbstgehostetes Ollama auf Nicht-Standard-Port.
+def test_resolve_ollama_tags_url_probes_local_custom_port():
+    """Selbstgehostetes Ollama auf Nicht-Standard-Port auf localhost.
 
-    ``http://ollama.internal:11435/v1`` fällt in ``detect_provider`` auf
-    ``"unknown"`` zurück, bedient ``/api/tags`` aber sehr wohl. Diesen
-    Endpoint zu überspringen wäre eine Regression: die Liste der installierten
-    Modelle verschwände und der Dienst würde als ungeprüft gemeldet.
+    ``http://localhost:11435/v1`` fällt in ``detect_provider`` auf
+    ``"unknown"`` zurück, bedient ``/api/tags`` aber sehr wohl. Lokale/Loopback-
+    Hosts werden weiter geprobt — dort ist ein selbstgehostetes Ollama der
+    Normalfall.
     """
     from app.llm.providers.registry import (
         detect_provider,
         resolve_ollama_tags_url,
     )
 
-    base = "http://ollama.internal:11435/v1"
+    base = "http://localhost:11435/v1"
     assert detect_provider(base, "llama3", mode="http") == "unknown"
-    assert resolve_ollama_tags_url(base, "llama3") == "http://ollama.internal:11435"
+    assert resolve_ollama_tags_url(base, "llama3") == "http://localhost:11435"
+
+
+@pytest.mark.parametrize("local_host", [
+    "http://localhost:11435/v1",
+    "http://127.0.0.1:11435/v1",
+    "http://host.docker.internal:11435/v1",
+])
+def test_resolve_ollama_tags_url_probes_local_unknown_hosts(local_host):
+    """Alle lokalen/Loopback-Hosts mit unknown-Provider werden geprobt."""
+    from app.llm.providers.registry import resolve_ollama_tags_url
+
+    resolved = resolve_ollama_tags_url(local_host, "llama3")
+    assert resolved is not None
+    assert not resolved.endswith("/v1")
+
+
+def test_resolve_ollama_tags_url_skips_remote_unknown_gateway():
+    """Codex-Finding: Dritt-Gateway auf fremdem Host nicht pauschal proben.
+
+    ``http://gateway.example:11435/v1`` ist ``"unknown"`` und bedient
+    ``/api/tags`` nicht. Es zu proben reproduziert die 404-Klasse, die der
+    Fix beseitigt. Explizit als Ollama betriebene Gateways setzen
+    ``OLLAMA_BASE_URL``.
+    """
+    from app.llm.providers.registry import (
+        detect_provider,
+        resolve_ollama_tags_url,
+    )
+
+    base = "http://gateway.example:11435/v1"
+    assert detect_provider(base, "llama3", mode="http") == "unknown"
+    assert resolve_ollama_tags_url(base, "llama3") is None
 
 
 @pytest.mark.parametrize("provider_url", [

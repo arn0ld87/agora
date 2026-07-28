@@ -34,7 +34,9 @@ interface HealthRow {
 /**
  * Übersetzt den maschinenlesbaren Provider-Schlüssel aus `skipped_provider`
  * in einen Anzeigenamen. Unbekannte Provider fallen auf den Rohwert zurück,
- * damit ein neuer Backend-Provider die Anzeige nicht leer lässt.
+ * damit ein neuer Backend-Provider die Anzeige nicht leer lässt. Der
+ * Schlüssel "unknown" (kein Provider konfiguriert) wird auf den i18n-Key
+ * gemappt, nicht als Klartext gerendert.
  */
 const PROVIDER_LABELS: Record<string, string> = {
   minimax: 'MiniMax',
@@ -45,7 +47,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 }
 
 function providerLabel(kind: string | null | undefined): string {
-  if (!kind) return t('dashboard.system.providerUnknown')
+  if (!kind || kind === 'unknown') return t('dashboard.system.providerUnknown')
   return PROVIDER_LABELS[kind] ?? kind
 }
 
