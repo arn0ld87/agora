@@ -13,6 +13,20 @@ Dieses ADR hält die stabile Routen- und Lebenszyklusentscheidung fest. Es ist
 Fortschritt bleiben ausschließlich in GitHub Issues. In #830 wird kein Code
 geändert.
 
+## Ausführungsstatus (2026-07-28)
+
+Die Entscheidungsmatrix unten ist eine Zeitpunktaufnahme vom Erstellungsdatum
+(2026-07-22) und wird als Entscheidungsprotokoll nicht nachträglich
+umgeschrieben. Stand 2026-07-28 sind alle für `0.9.0` vorgesehenen Löschungen
+vollzogen: `MainView.vue`, `SimulationView.vue`, `SimulationRunView.vue`,
+`ReportView.vue`, `InteractionView.vue`, `SettingsView.vue`,
+`SettingsUsersTeamsView.vue` und `AppShellDemoView.vue` existieren nicht mehr;
+die zugehörigen Routen sind reine Redirects ohne Komponente. `Home.vue`
+besteht wie geplant weiter (Entfernungsrelease `1.0.0`). Verifiziert in
+[#760](https://github.com/arn0ld87/agora/issues/760)/[#839](https://github.com/arn0ld87/agora/issues/839)
+gegen `frontend/src/router/index.ts` als Tatsachenquelle — dort nachschlagen
+für den Istzustand, nicht in der Matrix unten.
+
 ## Kontext
 
 Der produktive Router ist die Tatsachenquelle für den Istzustand. Vue-v4 und
@@ -191,10 +205,11 @@ Eigen-Kommentar in der Datei bestätigt: "Wird in Slice F in den Router eingebun
 
 ### Warum Composables und Stores nicht Teil der Löschentscheidung sind
 
-`useRuntimeLlmOptions` bleibt durch
-[`Step2EnvSetup`](../../frontend/src/components/Step2EnvSetup.vue#L10) und
-[`Step3Simulation`](../../frontend/src/components/Step3Simulation.vue#L25)
-produktiv. `useEnvForm` wird zusätzlich von
+`useRuntimeLlmOptions` war zum Zeitpunkt dieser Analyse (2026-07-22) durch
+`Step2EnvSetup` und `Step3Simulation` noch produktiv genutzt; das Composable
+wurde in [#922](https://github.com/arn0ld87/agora/issues/922) entfernt,
+nachdem beide Consumer auf den Kanon-Pfad migriert waren (siehe
+Ausführungsstatus oben). `useEnvForm` wird zusätzlich von
 [`HeroNewRun`](../../frontend/src/components/v4/dashboard/HeroNewRun.vue#L19)
 verwendet. `pendingUpload` verbindet
 [`HeroNewRun`](../../frontend/src/components/v4/dashboard/HeroNewRun.vue#L18)
