@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
-from openai import OpenAI
+from pydantic import BaseModel, ValidationError as PydanticValidationError
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -272,7 +272,6 @@ class SimulationConfigGenerator:
         if not self.api_key:
             raise ValueError("LLM_API_KEY not configured")
 
-        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.llm_client = LLMClient(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -522,14 +521,27 @@ class SimulationConfigGenerator:
         return "\n".join(lines)
 
     def _call_llm_with_retry(self, prompt: str, system_prompt: str, schema: Any) -> Dict[str, Any]:
-        """LLM call with retry using LLMClient.chat_json and Pydantic schema validation, with fallback repair logic."""
+        """LLM call with retry using LLMClient.chat_json and Pydantic schema validation.
+
+        Retry-Strategie (Issue aus PR #936, Codex P2): ``LLMClient.chat_json``
+        und ``LLMClient.chat`` besitzen bereits einen Transport-Retry
+        (``llm_call_with_retry`` mit bis zu 4 Versuchen). Die äußere Schleife
+        hier retried daher **nur Schema-/JSON-Fehler** (``ValueError``,
+        ``pydantic.ValidationError``), die auf inhaltsseitige Probleme
+        hindeuten — nicht auf transiente Transportstörungen. Auth-Fehler (4xx)
+        oder finale 5xx nach internem Retry werden sofort durchgereicht, statt
+        sie hier nochmals zu multiplizieren (sonst bis zu 24 Requests pro
+        Konfigurationsschritt). Der Regex-Reparatur-Fallback bleibt für
+        Provider ohne ``json_schema``-Support erhalten.
+        """
 
         max_attempts = 3
-        last_error = None
+        last_error: Optional[Exception] = None
 
         for attempt in range(max_attempts):
             try:
-                # 1. Primary path: Use LLMClient.chat_json with Pydantic schema
+                # 1. Primary path: Use LLMClient.chat_json with Pydantic schema.
+                # Transport-Retry steckt bereits in LLMClient.chat -> llm_call_with_retry.
                 return self.llm_client.chat_json(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -539,12 +551,23 @@ class SimulationConfigGenerator:
                     schema=schema,
                     context="graph",
                 )
-            except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                logger.warning(f"LLM chat_json/validation failed (attempt {attempt + 1}): {str(e)[:80]}")
+            except (ValueError, PydanticValidationError) as e:
+                # Schema-/JSON-Fehler sind inhaltsseitig: ein erneuter Versuch
+                # mit angepasster Temperatur kann helfen. Transport-Fehler
+                # steigen durch und werden von llm_call_with_retry bereits
+                # final behandelt — hier nicht nochmal retrien.
+                logger.warning(
+                    "LLM chat_json/validation failed (attempt %d): %s",
+                    attempt + 1,
+                    str(e)[:80],
+                )
                 last_error = e
 
-                # 2. Fallback path (e.g. for providers without json_schema or if JSON is slightly truncated):
-                # Request raw response via chat() and then apply regex-based repair fallback.
+                # 2. Fallback path (e.g. for providers without json_schema or if
+                # JSON is slightly truncated): request raw response via chat()
+                # and apply regex-based repair. chat() retried transport errors
+                # bereits intern — der Fallback bekommt hier keinen weiteren
+                # Transport-Loop mehr vom äußeren Wrapper.
                 try:
                     raw_text = self.llm_client.chat(
                         messages=[
@@ -556,12 +579,17 @@ class SimulationConfigGenerator:
                     )
                     fixed = self._try_fix_config_json(raw_text)
                     if fixed:
-                        from pydantic import BaseModel
                         if isinstance(schema, type) and issubclass(schema, BaseModel):
                             return schema.model_validate(fixed).model_dump(mode="json")
                         return fixed
-                except Exception as fallback_err:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                    logger.warning(f"Fallback regex repair/validation failed: {fallback_err}")
+                except (ValueError, PydanticValidationError) as fallback_err:
+                    logger.warning("Fallback regex repair/validation failed: %s", fallback_err)
+                except Exception as fallback_err:  # noqa: BLE001 — transient transport errors from fallback are logged, not retried here
+                    logger.warning(
+                        "Fallback chat() hit transport error (already retried "
+                        "internally by llm_call_with_retry): %s",
+                        fallback_err,
+                    )
 
                 import time
                 time.sleep(2 * (attempt + 1))
