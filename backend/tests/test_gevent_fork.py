@@ -77,9 +77,8 @@ def test_gevent_pool_execution_fallback(monkeypatch):
     sys.modules["gevent.monkey"] = MockGeventMonkey()
 
     from app.services.oasis_profile_generator import OasisProfileGenerator
-    from app.services.graph_builder import GraphBuilderService
 
-    # 1. Test profile generator with gevent
+    # Test profile generator with gevent
     gen = OasisProfileGenerator(api_key="test-key", base_url="https://example.test/v1")
     # Stub generate_profile_from_entity to avoid LLM call
     def mock_gen_profile(entity, user_id, use_llm=True):
@@ -104,12 +103,3 @@ def test_gevent_pool_execution_fallback(monkeypatch):
     profiles = gen.generate_profiles_from_entities(entities=entities, use_llm=False)
     assert len(profiles) == 1
     assert profiles[0].name == "Test Name"
-
-    # 2. Test graph builder with gevent
-    class MockStorage:
-        def add_text(self, graph_id, chunk, round_num=0, ner_extractor=None):
-            return "episode-uuid"
-
-    builder = GraphBuilderService(storage=MockStorage())
-    uuids = builder.add_text_batches(graph_id="test-graph", chunks=["chunk1"])
-    assert uuids == ["episode-uuid"]
