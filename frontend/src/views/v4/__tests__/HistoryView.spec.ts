@@ -39,7 +39,7 @@ const router = makeTestRouter([
   { path: '/v4/history', name: 'HistoryV4', component: stubComponent },
 ])
 
-const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: {}, en: {} } })
+const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: { views: { history: { title: 'Verlauf', subtitle: 'Run- und Branch-Historie' } } }, en: {} } })
 
 describe('HistoryView (v4)', () => {
   beforeEach(() => {

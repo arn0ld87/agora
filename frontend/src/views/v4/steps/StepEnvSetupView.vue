@@ -6,8 +6,8 @@
 <template>
   <AppShell :breadcrumbs="crumbs">
     <PageHeader
-      title="Personas"
-      subtitle="Zielgruppenquoten und Umgebungsparameter konfigurieren"
+      :title="$t('views.stepEnvSetup.title')"
+      :subtitle="$t('views.stepEnvSetup.subtitle')"
     >
       <template #right>
         <StepModelOverrideChip stage-id="persona_generation" />

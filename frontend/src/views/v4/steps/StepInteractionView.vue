@@ -6,8 +6,8 @@
 <template>
   <AppShell :breadcrumbs="crumbs">
     <PageHeader
-      title="Interaktion"
-      subtitle="Gezielte Nachfragen an die simulierten Personas stellen"
+      :title="$t('views.stepInteraction.title')"
+      :subtitle="$t('views.stepInteraction.subtitle')"
     />
     <PipelineStepper :current-step="5" />
     <Step5Interaction :report-id="reportId" />

@@ -37,6 +37,7 @@ describe('StepSimulationView — Navigation', () => {
     const wrapper = mount(StepSimulationView, {
       props: { simulationId: 'sim_x' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },
@@ -81,6 +82,7 @@ describe('StepSimulationView — Navigation', () => {
     const wrapper = mount(StepSimulationView, {
       props: { simulationId: 'sim_x' },
       global: {
+        mocks: { $t: (key: any) => key },
         stubs: {
           AppShell: { template: '<main><slot /></main>' },
           PageHeader: { template: '<header><slot /><slot name="right" /></header>' },

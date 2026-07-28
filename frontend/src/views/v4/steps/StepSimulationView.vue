@@ -12,8 +12,8 @@
 <template>
   <AppShell :breadcrumbs="crumbs">
     <PageHeader
-      title="Simulation"
-      subtitle="Multi-Agent-Simulationslauf starten und beobachten"
+      :title="$t('views.stepSimulation.title')"
+      :subtitle="$t('views.stepSimulation.subtitle')"
     >
       <template #right>
         <StepModelOverrideChip stage-id="simulation_rounds" />

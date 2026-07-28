@@ -45,7 +45,7 @@ const router = makeTestRouter([
   { path: '/v4/compare/:simulationId', name: 'CompareV4', component: stubComponent, props: true },
 ])
 
-const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: {}, en: {} } })
+const i18n = createI18n({ legacy: false, locale: 'de', messages: { de: { views: { compare: { title: 'Compare' } } }, en: {} } })
 
 describe('CompareView (v4)', () => {
   beforeEach(() => {
