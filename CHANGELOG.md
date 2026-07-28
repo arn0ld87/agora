@@ -13,6 +13,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Ve
 
 - `CLAUDE.md` und `AGENTS.md` mit expliziter Pflicht-Sektion „Worktree-Pfad" ergänzt: `/Volumes/T7/Worktrees/agora/<slice-id>/`, `/private/tmp` verboten, T7-Mount vor `git worktree add` prüfen. `docs/runbooks/worktree-strategy.md` bleibt SSoT für Details. Globale `~/.claude/CLAUDE.md` analog angepasst.
 
+### Changed (.gitignore um Tool-Artefakte erweitert — 2026-07-28)
+
+- `.claude/workflows/`, `.code-review-graph` (Symlink-Variante, ohne trailing slash), `.env.bak-*` (alle Pre-Dedupe-Backups), `.envsitter/`, `.runtime/` werden jetzt ignoriert. Pro: keine versehentlichen Commits lokaler Tool-Zustände mehr; Con: bewusste Commits müssen explizit `git add -f` nutzen.
+- Die im Working Tree liegenden Handover-Protokolle (`HANDOVER-2026-07-*.md`) wurden nach `docs/.local/2026-07-sessions/` verschoben. Sie sind Planungs-Artefakte und gehören laut `AGENTS.md` nicht ins Repo.
+
 ### Removed (Unused Composables `useWorkspaceMode` und `useWorkspaceStatus` entfernt — 2026-07-28, Issue #908)
 
 - `frontend/src/composables/useWorkspaceMode.ts` und `frontend/src/composables/useWorkspaceStatus.ts` mitsamt ihrer Specs unter `frontend/src/composables/__tests__/` entfernt. Beide Composables hatten nach der v4-Routen-Konsolidierung (ADR-0010) keine Importeure mehr.
