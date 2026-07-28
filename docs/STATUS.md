@@ -120,7 +120,7 @@ Chat-Routing und Embedding-Konfiguration bleiben getrennte Vertragswelten.
 
 ## Frontend-Next-Stand (React/Lovable)
 
-- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. `/home` leitet seit [#915](https://github.com/arn0ld87/agora/issues/915) per ADR-0010 auf `/dashboard` um; die klassische Editorial-View `Home.vue` bleibt bis `1.0.0` physisch erhalten. Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion läuft weiterhin unter [Issue #760](https://github.com/arn0ld87/agora/issues/760) und ist nicht abgeschlossen. Die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` sind nach v4 migriert und werden nicht mehr über v4-Wrapper geroutet ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938).
+- **Produktiv:** Vue ist die einzige ausgelieferte Frontend-Technologie. `/home` leitet seit [#915](https://github.com/arn0ld87/agora/issues/915) per ADR-0010 auf `/dashboard` um; die klassische Editorial-View `Home.vue` bleibt bis `1.0.0` physisch erhalten. Die Konsolidierung auf genau eine v4-Route je fachlicher Hauptfunktion ist mit [Issue #760](https://github.com/arn0ld87/agora/issues/760) verifiziert abgeschlossen (siehe [#839](https://github.com/arn0ld87/agora/issues/839)). Die v3-Inhaltskomponenten `Step2EnvSetup.vue`/`Step3Simulation.vue`/`Step4Report.vue` sind nach v4 migriert und werden nicht mehr über v4-Wrapper geroutet ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938).
 - **Prototyp:** Ein Lovable-Projekt („Agora Runs Dashboard", angelegt 2026-07-16) existiert und wurde substanziell umgesetzt (23 Edits, TanStack-Router-SPA, 12 Routen, shadcn/ui). Es ist derzeit **nicht veröffentlicht** (`is_published: false`, keine URL) und **nicht** produktiv verdrahtet — weder Docker-Compose, GitHub-Workflows noch das Root-`package.json` referenzieren es. Der React-Code liegt vollständig außerhalb dieses Repositories. Die tatsächliche Funktionsvollständigkeit des Prototyps ist nicht codegeprüft belegt, sondern nur durch Commit-Aussagen behauptet.
 - **Release-Status:** Kein Teil des freigegebenen Produktpfads vor `1.0.0`.
 - **Zukunft:** Über eine spätere Migration ist keine Entscheidung getroffen.
@@ -145,7 +145,6 @@ Aktuelle Hardstops:
 ## Nächste Prioritäten
 
 1. E2E als verpflichtenden Pull-Request-Check aktivieren (Läufe sind stabil grün, Branch-Protection auf `main` fehlt noch).
-2. Vue-v4 als einziges Produktfrontend konsolidieren (Issue #760; Umsetzungskarte [#829](https://github.com/arn0ld87/agora/issues/829)).
-3. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
+2. Reproduzierbarkeit, Kostenbudgets und Kalibrierungsbaseline für `0.10.0` umsetzen.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

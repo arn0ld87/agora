@@ -1,6 +1,6 @@
 # ADR-0010: Vue-v4-Referenzrouten und Deep-Link-Lebenszyklus
 
-- Status: **Proposed**
+- Status: **Accepted** (2026-07-28, im Zuge von #839 — alle referenzierten Umsetzungs-Tickets #830–#838, #890, #922 sind geschlossen, der produktive Router entspricht der hier festgehaltenen Entscheidungsmatrix)
 - Datum: 2026-07-22
 - Basis: `origin/main` @ `35929dbe9205829dbfc42cecff32f5d406c84807`
 - Entscheidung: [Issue #830](https://github.com/arn0ld87/agora/issues/830)
@@ -12,6 +12,20 @@ Dieses ADR hält die stabile Routen- und Lebenszyklusentscheidung fest. Es ist
 **keine Task- oder Scopequelle**: ausführbare Arbeit, Akzeptanzkriterien und
 Fortschritt bleiben ausschließlich in GitHub Issues. In #830 wird kein Code
 geändert.
+
+## Ausführungsstatus (2026-07-28)
+
+Die Entscheidungsmatrix unten ist eine Zeitpunktaufnahme vom Erstellungsdatum
+(2026-07-22) und wird als Entscheidungsprotokoll nicht nachträglich
+umgeschrieben. Stand 2026-07-28 sind alle für `0.9.0` vorgesehenen Löschungen
+vollzogen: `MainView.vue`, `SimulationView.vue`, `SimulationRunView.vue`,
+`ReportView.vue`, `InteractionView.vue`, `SettingsView.vue`,
+`SettingsUsersTeamsView.vue` und `AppShellDemoView.vue` existieren nicht mehr;
+die zugehörigen Routen sind reine Redirects ohne Komponente. `Home.vue`
+besteht wie geplant weiter (Entfernungsrelease `1.0.0`). Verifiziert in
+[#760](https://github.com/arn0ld87/agora/issues/760)/[#839](https://github.com/arn0ld87/agora/issues/839)
+gegen `frontend/src/router/index.ts` als Tatsachenquelle — dort nachschlagen
+für den Istzustand, nicht in der Matrix unten.
 
 ## Kontext
 
@@ -191,10 +205,11 @@ Eigen-Kommentar in der Datei bestätigt: "Wird in Slice F in den Router eingebun
 
 ### Warum Composables und Stores nicht Teil der Löschentscheidung sind
 
-`useRuntimeLlmOptions` bleibt durch
-[`Step2EnvSetup`](../../frontend/src/components/Step2EnvSetup.vue#L10) und
-[`Step3Simulation`](../../frontend/src/components/Step3Simulation.vue#L25)
-produktiv. `useEnvForm` wird zusätzlich von
+`useRuntimeLlmOptions` war zum Zeitpunkt dieser Analyse (2026-07-22) durch
+`Step2EnvSetup` und `Step3Simulation` noch produktiv genutzt; das Composable
+wurde in [#922](https://github.com/arn0ld87/agora/issues/922) entfernt,
+nachdem beide Consumer auf den Kanon-Pfad migriert waren (siehe
+Ausführungsstatus oben). `useEnvForm` wird zusätzlich von
 [`HeroNewRun`](../../frontend/src/components/v4/dashboard/HeroNewRun.vue#L19)
 verwendet. `pendingUpload` verbindet
 [`HeroNewRun`](../../frontend/src/components/v4/dashboard/HeroNewRun.vue#L18)
@@ -225,7 +240,7 @@ Redirect-Test explizit abgesichert werden.
 
 ## Out-of-Scope
 
-- Picker-Migration: `LlmProfilePicker` (`frontend/src/components/llm/LlmProfilePicker.vue`) wird aktuell von `Step4Report`, `EnvSetupModelPanel`, `ReportBranchControls` verwendet — Verstoß gegen #760 Akzeptanzkriterium 3. Behandlung in eigenem Ticket (siehe #829 "Not yet specified").
+- ~~Picker-Migration: `LlmProfilePicker` wird aktuell von `Step4Report`, `EnvSetupModelPanel`, `ReportBranchControls` verwendet — Verstoß gegen #760 Akzeptanzkriterium 3.~~ Erledigt in [#834](https://github.com/arn0ld87/agora/issues/834): `LlmProfilePicker.vue` ist entfernt, keine produktiven Referenzen mehr (Stand 2026-07-28).
 - Workspace-/Store-/Picker-Abhängigkeiten: eigentliche Umsetzung in #831–#839.
 - Lovable/React-Rewrite: bleibt vor 1.0.0 nicht freigegeben (siehe `docs/epics/frontend-next/brief.md`).
 - `store/` vs `stores/`-Verzeichnisdopplung: ohne belegten funktionalen Anlass ausgeschlossen.
@@ -236,8 +251,9 @@ Redirect-Test explizit abgesichert werden.
   konzentrieren Deep-Link-Kompatibilität an diesem Seam.
 - Klassische Wrapper dürfen erst entfallen, wenn ihre zusätzliche
   Orchestrierung migriert oder nachweislich entbehrlich ist.
-- Geteilte Step-Module sowie `useRuntimeLlmOptions`, `useEnvForm` und
-  `pendingUpload` bleiben erhalten.
+- Geteilte Step-Module sowie `useEnvForm` und `pendingUpload` bleiben
+  erhalten. `useRuntimeLlmOptions` wurde in [#922](https://github.com/arn0ld87/agora/issues/922)
+  entfernt, nachdem seine letzten Consumer auf den Kanon-Pfad migriert waren.
 - `/settings-classic` ist konsistent auf 1.0.0 **Deferred**.
 - `/agora-2026` ist die dokumentierte Ausnahme von der Übergangsredirect-Regel
   und muss nach Entfernung über den Catch-all als `NotFound` enden.
