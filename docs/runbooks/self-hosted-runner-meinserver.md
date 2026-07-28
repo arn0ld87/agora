@@ -1,7 +1,8 @@
 # Self-hosted Runner `meinserver-arm64`
 
-Ein GitHub-Actions-Self-hosted-Runner läuft als systemd-Dienst auf `armserver`
-(Tailscale, arm64) und ist im Repo `arn0ld87/agora` registriert.
+Ein GitHub-Actions-Self-hosted-Runner läuft als Docker-Container
+(`myoung34/github-runner`) auf `armserver` (Tailscale, arm64) und ist im Repo
+`arn0ld87/agora` registriert.
 
 ## Sicherheitskontext (public Repo)
 
@@ -26,26 +27,32 @@ Gegenmaßnahmen:
    würde der Step maschinenweite Egress-iptables-Regeln setzen und damit
    den produktiven Traffic auf `meinserver` während des CI-Laufs einschränken.
 
-**Bekannte, noch offene Lücke:** Der Event-Filter (`pull_request` vs. `push`/
-`workflow_dispatch`) steuert nur, *welche* Jobs den Runner erreichen — er
-schafft keine echte Laufzeit-Isolation. Der Runner läuft persistent als
-systemd-Dienst, nicht ephemer und nicht containerisiert. Jeder Job, der ihn
-erreicht (auch ein legitimer `push` auf `main`), hat vollen Zugriff auf den
-Host und auf Zustand, den vorherige Jobs hinterlassen haben. **Mandatory
-Security-Requirement für dieses Setup:** Bevor der Runner für sicherheits-
-kritische oder von mehreren Personen auslösbare Workflows genutzt wird, muss
-er entweder (a) mit `--ephemeral` (Neu-Registrierung nach jedem Job) oder
-(b) containerisiert/als Wegwerf-VM pro Job betrieben werden. Bis dahin gilt
-der aktuelle Event-Filter als Mindestschutz, nicht als vollständige Isolation.
-Tracking: siehe „Erweiterung auf weitere Jobs" unten — kein Job darf ergänzt
-werden, ohne diese Lücke erneut zu bewerten.
+4. Der Runner läuft in einem Docker-Container (`myoung34/github-runner`),
+   nicht direkt auf dem Host-Betriebssystem — Prozess- und Dateisystem-Zugriff
+   eines Jobs sind damit vom restlichen `armserver`-Host (Compose-Stacks,
+   Vaultwarden, n8n u. a.) isoliert.
+
+**Bekannte, noch offene Lücke:** Der Container ist persistent
+(`--restart unless-stopped`), nicht ephemer. Ein Job bekommt zwar ein vom
+Host getrenntes Dateisystem, aber *innerhalb* des Containers bleibt Zustand
+zwischen aufeinanderfolgenden Jobs erhalten (kein Reset pro Job). Für volle
+Job-zu-Job-Isolation müsste der Container mit `EPHEMERAL=true` laufen plus
+einem Wrapper, der ihn nach jedem Job neu erstellt (der Container dereg-
+istriert sich sonst nach einem Job und bleibt dann offline). Das ist noch
+nicht umgesetzt — Tracking: siehe „Erweiterung auf weitere Jobs" unten,
+kein weiterer Job darf ergänzt werden, ohne diese Abwägung erneut zu treffen.
 
 ## Runner-Details
 
 - Name: `meinserver-arm64`
 - Labels: `self-hosted`, `Linux`, `ARM64`, `meinserver`
-- Host: `armserver` (SSH-Alias), Pfad `~/actions-runner`
-- Betrieb: systemd-Dienst `actions.runner.arn0ld87-agora.meinserver-arm64.service`
+- Host: `armserver` (SSH-Alias)
+- Betrieb: Docker-Container `gh-runner-meinserver-arm64`
+  (Image `myoung34/github-runner:latest`), `--restart unless-stopped`
+- Registrierung: kurzlebiges Registrierungstoken (`RUNNER_TOKEN`, 1 Std.
+  gültig) bei Container-Start — bewusst kein dauerhaftes PAT im Container.
+  Bei Neuerstellung des Containers muss ein frisches Token besorgt werden
+  (siehe „Neu erstellen" unten).
 - Zweck: native arm64-Docker-Builds ohne QEMU-Emulation; potenziell künftig
   Tests gegen bereits laufende interne Dienste (Neo4j/Ollama auf meinserver)
 
@@ -57,10 +64,27 @@ Steps enthält, die Host-weite Änderungen vornehmen (Netzwerk, Firewall,
 System-Pakete) — solche Steps müssen wie `harden-runner` auf
 `ubuntu-latest`-Läufe beschränkt bleiben.
 
-## Rollback
+## Neu erstellen (z. B. nach Image-Update oder Registrierungsverlust)
 
 ```bash
-ssh armserver "cd ~/actions-runner && sudo ./svc.sh stop && sudo ./svc.sh uninstall"
+ssh armserver "docker rm -f gh-runner-meinserver-arm64"
+TOKEN=$(gh api --method POST repos/arn0ld87/agora/actions/runners/registration-token -q .token)
+ssh armserver "docker run -d \
+  --name gh-runner-meinserver-arm64 \
+  --restart unless-stopped \
+  -e REPO_URL=https://github.com/arn0ld87/agora \
+  -e RUNNER_NAME=meinserver-arm64 \
+  -e RUNNER_TOKEN='$TOKEN' \
+  -e LABELS=self-hosted,arm64,meinserver \
+  -e RUNNER_WORKDIR=/tmp/gh-runner-work \
+  -v /tmp/gh-runner-work:/tmp/gh-runner-work \
+  myoung34/github-runner:latest"
+```
+
+## Rollback (Runner komplett entfernen)
+
+```bash
+ssh armserver "docker rm -f gh-runner-meinserver-arm64"
 RUNNER_ID=$(gh api repos/arn0ld87/agora/actions/runners -q '.runners[] | select(.name=="meinserver-arm64") | .id')
 gh api --method DELETE "repos/arn0ld87/agora/actions/runners/${RUNNER_ID}"
 ```
