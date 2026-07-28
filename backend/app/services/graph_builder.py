@@ -267,11 +267,26 @@ class GraphBuilderService:
                 raise
 
         completed = 0
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
-            for future in as_completed(futures):
-                idx = futures[future]
-                episode_uuids[idx] = future.result()  # raises on first failed chunk
+
+        # Check if gevent is active and has patched the socket module (prevents multi-threading TCP issues)
+        try:
+            import gevent
+            import gevent.monkey
+            is_gevent = gevent.monkey.is_patched("socket")
+        except ImportError:
+            is_gevent = False
+
+        if is_gevent:
+            logger.info("[graph_build] Gevent detected: using native cooperative Pool for parallel chunk processing")
+            from gevent.pool import Pool
+            pool = Pool(max_workers)
+
+            def worker_wrapper(args):
+                idx, chunk = args
+                return idx, _process(idx, chunk)
+
+            for idx, episode_id in pool.imap_unordered(worker_wrapper, enumerate(chunks)):
+                episode_uuids[idx] = episode_id
                 completed += 1
                 if progress_callback:
                     progress_callback(
@@ -280,6 +295,20 @@ class GraphBuilderService:
                         completed,
                         total_chunks,
                     )
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {pool.submit(_process, idx, chunk): idx for idx, chunk in enumerate(chunks)}
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    episode_uuids[idx] = future.result()  # raises on first failed chunk
+                    completed += 1
+                    if progress_callback:
+                        progress_callback(
+                            f"Processed {completed}/{total_chunks} chunks...",
+                            completed / total_chunks,
+                            completed,
+                            total_chunks,
+                        )
 
         logger.info(f"[graph_build] All {total_chunks} chunks processed successfully")
         return [uuid for uuid in episode_uuids if uuid is not None]

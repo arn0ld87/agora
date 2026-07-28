@@ -1319,48 +1319,28 @@ Important:
             total,
             parallel_count,
         )
-        
-        # Use thread pool for parallel execution
-        with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
-            # Submit all tasks
-            future_to_entity = {
-                executor.submit(generate_single_profile, idx, entity): (idx, entity)
-                for idx, entity in enumerate(entities)
-            }
 
-            # Collect results
-            for future in concurrent.futures.as_completed(future_to_entity):
-                idx, entity = future_to_entity[future]
-                entity_type = entity.get_entity_type() or "Entity"
+        # Check if gevent is active and has patched the socket module (prevents multi-threading TCP issues)
+        try:
+            import gevent
+            import gevent.monkey
+            is_gevent = gevent.monkey.is_patched("socket")
+        except ImportError:
+            is_gevent = False
 
+        if is_gevent:
+            logger.info("Gevent detected: using native cooperative Pool for parallel persona generation")
+            from gevent.pool import Pool
+            pool = Pool(parallel_count)
+
+            def worker_wrapper(args):
+                idx, entity = args
                 try:
-                    result_idx, profile, error = future.result()
-                    profiles[result_idx] = profile
-
-                    with lock:
-                        completed_count[0] += 1
-                        current = completed_count[0]
-
-                    # Real-time file writing
-                    save_profiles_realtime()
-
-                    if progress_callback:
-                        progress_callback(
-                            current,
-                            total,
-                            f"Completed {current}/{total}: {entity.name} ({entity_type})"
-                        )
-
-                    if error:
-                        logger.warning(f"[{current}/{total}] {entity.name} using fallback persona: {error}")
-                    else:
-                        logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
-
-                except Exception as e:  # noqa: BLE001 — exception is logged; swallowed intentionally
-                    logger.error(f"Exception occurred while processing entity {entity.name}: {str(e)}")
-                    with lock:
-                        completed_count[0] += 1
-                    profiles[idx] = OasisAgentProfile(
+                    return generate_single_profile(idx, entity)
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"Cooperative greenlet failed unexpectedly for entity {entity.name}: {str(e)}")
+                    entity_type = entity.get_entity_type() or "Entity"
+                    fallback_profile = OasisAgentProfile(
                         user_id=idx,
                         user_name=self._generate_username(entity.name),
                         name=entity.name,
@@ -1369,8 +1349,63 @@ Important:
                         source_entity_uuid=entity.uuid,
                         source_entity_type=entity_type,
                     )
-                    # Real-time file writing (even for fallback personas)
-                    save_profiles_realtime()
+                    return idx, fallback_profile, str(e)
+
+            results_iter = pool.imap_unordered(worker_wrapper, enumerate(entities))
+        else:
+            # Use thread pool for parallel execution
+            with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
+                # Submit all tasks
+                future_to_entity = {
+                    executor.submit(generate_single_profile, idx, entity): (idx, entity)
+                    for idx, entity in enumerate(entities)
+                }
+
+                def thread_results_generator():
+                    for future in concurrent.futures.as_completed(future_to_entity):
+                        idx, entity = future_to_entity[future]
+                        entity_type = entity.get_entity_type() or "Entity"
+                        try:
+                            yield future.result()
+                        except Exception as e:  # noqa: BLE001
+                            logger.error(f"Thread execution failed unexpectedly for entity {entity.name}: {str(e)}")
+                            fallback_profile = OasisAgentProfile(
+                                user_id=idx,
+                                user_name=self._generate_username(entity.name),
+                                name=entity.name,
+                                bio=f"{entity_type}: {entity.name}",
+                                persona=entity.summary or "A participant in social discussions.",
+                                source_entity_uuid=entity.uuid,
+                                source_entity_type=entity_type,
+                            )
+                            yield idx, fallback_profile, str(e)
+
+                results_iter = thread_results_generator()
+
+        # Unified result processing loop (prevents code duplication, ensures consistent logging & fallback behavior)
+        for result_idx, profile, error in results_iter:
+            entity = entities[result_idx]
+            entity_type = entity.get_entity_type() or "Entity"
+            profiles[result_idx] = profile
+
+            with lock:
+                completed_count[0] += 1
+                current = completed_count[0]
+
+            # Real-time file writing
+            save_profiles_realtime()
+
+            if progress_callback:
+                progress_callback(
+                    current,
+                    total,
+                    f"Completed {current}/{total}: {entity.name} ({entity_type})"
+                )
+
+            if error:
+                logger.warning(f"[{current}/{total}] {entity.name} using fallback persona: {error}")
+            else:
+                logger.info(f"[{current}/{total}] Successfully generated persona: {entity.name} ({entity_type})")
 
         # Dedup display_name und user_name: LLM neigt dazu, dieselbe reale Person
         # mehrfach zu klonen wenn sie im Doc prominent ist. Bei Dubletten neuen
