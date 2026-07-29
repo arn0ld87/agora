@@ -124,15 +124,42 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
     return len(groups)
 
 
+def _has_agent_grounded_evidence(evidence: List[Dict[str, Any]]) -> bool:
+    """True, wenn die Evidence mind. 1 ``agent_quote`` (mit nicht-leerem
+    ``quote``-Feld) UND mind. 1 ``seed_corpus`` enthält (ADR-0002 Stufe
+    agent_grounded → rechtfertigt ``medium``). Spiegelt
+    ``ReportClaimModel.agent_grounded_for_medium`` (Issue #906 Defekt 1).
+    ``supports_claim`` wird hier nicht gefordert — analog zum medium-Validator.
+    Das Quote-Feld ist Pflicht (ADR-0002 Z. 54; Codex PR-Review #961 P2): ein
+    zusammengefasstes Interview ohne Original-Zitat ist nicht agent_grounded.
+    """
+    has_agent_quote = False
+    has_seed_corpus = False
+    for entry in evidence or []:
+        if not isinstance(entry, dict):
+            continue
+        sk = entry.get("source_kind")
+        if sk == "agent_quote" and entry.get("quote"):
+            has_agent_quote = True
+        elif sk == "seed_corpus":
+            has_seed_corpus = True
+    return has_agent_quote and has_seed_corpus
+
+
 def auto_downgrade_unsupported_high_claims(
     claims: List[Dict[str, Any]],
     *,
     logger: Any = None,
 ) -> List[Dict[str, Any]]:
-    """Senkt ``confidence_label`` von ``high``/``verified`` auf ``medium``,
-    wenn die Cross-Stakeholder-Anforderung aus ADR-0002 (Anker 4) nicht
-    erfüllt ist. Vermeidet harten Report-Abbruch durch
-    ``EvidenceMapModel``-Validator bei LLM-Über-Konfidenz.
+    """Senkt ``confidence_label`` von ``high``/``verified`` ab, wenn die
+    Cross-Stakeholder-Anforderung aus ADR-0002 (Anker 4) nicht erfüllt ist.
+
+    Der Zielwert hängt vom Provenance-Mix ab (Issue #906 Defekt 2, ADR-0002
+    Stufe agent_grounded): ``medium``, wenn mind. 1 ``agent_quote`` UND mind.
+    1 ``seed_corpus`` vorliegen; sonst ``low`` (Seed-only bzw. reine
+    agent_quote ohne Korpusbezug). Damit bestünde der downgegradete Claim
+    den nachfolgenden ``medium``-Validator und vermeidet gerade den harten
+    Report-Abbruch, den diese Funktion verhindern soll.
 
     Der Validator selbst bleibt strikt (ADR-0002 verbietet Schwächung);
     diese Funktion liefert ihm nur ehrlich downgrade'te Daten, statt
@@ -148,14 +175,18 @@ def auto_downgrade_unsupported_high_claims(
         if label in ("high", "verified"):
             groups = _count_supporting_stakeholder_groups(item.get("evidence") or [])
             if groups < 2:
+                evidence = item.get("evidence") or []
+                target = "medium" if _has_agent_grounded_evidence(evidence) else "low"
                 claim_id = item.get("claim_id", "<no-id>")
                 if logger is not None:
                     logger.warning(
-                        "auto_downgrade_unsupported_high_claims: %s '%s' → 'medium' "
-                        "(nur %d stützende Stakeholder-Gruppe(n), 2 erforderlich)",
-                        claim_id, label, groups,
+                        "auto_downgrade_unsupported_high_claims: %s '%s' → '%s' "
+                        "(nur %d stützende Stakeholder-Gruppe(n), 2 erforderlich; "
+                        "agent_grounded=%s)",
+                        claim_id, label, target, groups,
+                        target == "medium",
                     )
-                item["confidence_label"] = "medium"
+                item["confidence_label"] = target
         downgraded.append(item)
     return downgraded
 

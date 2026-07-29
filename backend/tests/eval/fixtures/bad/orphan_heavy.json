@@ -48,7 +48,7 @@
         {
           "claim_id": "claim_01",
           "claim_text": "Die Netzwerkdichte liegt bei 0,34 im Kernsegment.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.7,
           "evidence": [
             {
@@ -80,7 +80,7 @@
         {
           "claim_id": "claim_04",
           "claim_text": "Der durchschnittliche Degree betraegt 4,2 Knoten.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.65,
           "evidence": [
             {
@@ -111,7 +111,7 @@
         {
           "claim_id": "claim_06",
           "claim_text": "Der Cluster-Koeffizient liegt bei 0,61.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.68,
           "evidence": [
             {
@@ -135,7 +135,7 @@
         {
           "claim_id": "claim_08",
           "claim_text": "12 Prozent der Knoten sind isoliert im Gesamtgraphen.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.62,
           "evidence": [
             {

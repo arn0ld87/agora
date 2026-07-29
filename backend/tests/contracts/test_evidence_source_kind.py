@@ -27,6 +27,7 @@ def _agent_quote(group: str, *, supports: bool = True, score: float = 0.7) -> Ev
         type=EvidenceType.agent_interview,
         source="agent-log",
         snippet=f"Persona aus {group}: Beispiel-Aussage.",
+        quote=f"Original-Zitat aus {group}.",
         match_score=score,
         supports_claim=supports,
         source_kind=EvidenceSourceKind.agent_quote,
@@ -184,8 +185,9 @@ def test_high_rejects_inferred_evidence() -> None:
         )
 
 
-def test_low_and_medium_unaffected() -> None:
-    """low/medium duerfen single-group oder inferred-Evidence haben."""
+def test_low_unaffected_by_cross_stakeholder_rule() -> None:
+    """low darf single-group oder inferred-Evidence haben — kein
+    Cross-Stakeholder- und kein agent_grounded-Zwang (ADR-0002 seed_only → low)."""
     low_claim = ReportClaimModel(
         claim_id="claim_05",
         claim_text="Low-Claim mit nur einer Stakeholder-Gruppe.",
@@ -195,14 +197,28 @@ def test_low_and_medium_unaffected() -> None:
     )
     assert low_claim.confidence_label == ConfidenceLabel.low
 
+
+def test_medium_needs_agent_grounded_evidence() -> None:
+    """medium verlangt ADR-0002 Stufe agent_grounded: mind. 1 agent_quote
+    UND mind. 1 seed_corpus (Issue #906 Defekt 1). Seed-only oder
+    inferred-only ist unzureichend und wird abgelehnt."""
     medium_claim = ReportClaimModel(
         claim_id="claim_06",
-        claim_text="Medium-Claim mit inferred-Evidence.",
+        claim_text="Medium-Claim mit agent_grounded-Evidence.",
         confidence_label=ConfidenceLabel.medium,
         confidence_score=0.5,
-        evidence=[_seed_evidence(), _inferred()],
+        evidence=[_seed_evidence(), _agent_quote("Vertrieb")],
     )
     assert medium_claim.confidence_label == ConfidenceLabel.medium
+
+    with pytest.raises(ValidationError, match="agent_quote"):
+        ReportClaimModel(
+            claim_id="claim_07",
+            claim_text="Medium-Claim mit nur Seed-Evidence.",
+            confidence_label=ConfidenceLabel.medium,
+            confidence_score=0.5,
+            evidence=[_seed_evidence(), _inferred()],
+        )
 
 
 def test_enum_values_pinned() -> None:

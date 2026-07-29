@@ -69,7 +69,7 @@
         {
           "claim_id": "claim_01",
           "claim_text": "42 Prozent der Befragten bevorzugen den Online-Kauf.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.8,
           "evidence": [
             {
@@ -85,7 +85,7 @@
         {
           "claim_id": "claim_02",
           "claim_text": "Der stationaere Handel verliert seit 2020 Marktanteile.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.65,
           "evidence": [
             {
@@ -108,7 +108,7 @@
         {
           "claim_id": "claim_03",
           "claim_text": "Viele Personen kaufen weiterhin stationaer wegen des haptischen Erlebnisses.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.6,
           "evidence": [
             {
@@ -159,7 +159,7 @@
         {
           "claim_id": "claim_05",
           "claim_text": "E-Commerce ist 2024 um 8,3 Prozent gewachsen.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.72,
           "evidence": [
             {
@@ -175,7 +175,7 @@
         {
           "claim_id": "claim_06",
           "claim_text": "Omnichannel-Strategien gewinnen im Handel an Bedeutung.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.65,
           "evidence": [
             {
@@ -198,7 +198,7 @@
         {
           "claim_id": "claim_07",
           "claim_text": "Die Preisakzeptanz im Premium-Segment ist um 12 Prozent gestiegen.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.76,
           "evidence": [
             {
@@ -214,7 +214,7 @@
         {
           "claim_id": "claim_08",
           "claim_text": "Agenten analysieren das Kaufverhalten der Altersgruppe 35 bis 55.",
-          "confidence_label": "medium",
+          "confidence_label": "low",
           "confidence_score": 0.55,
           "evidence": [
             {

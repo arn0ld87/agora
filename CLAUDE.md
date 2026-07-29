@@ -8,7 +8,7 @@ Allgemeine Tool-Pipeline und Skill-Discovery-Regeln stehen in der globalen `~/.c
 
 **IMPORTANT: Diese Anker dürfen NIE ohne `docs/decisions/0002-supersedes.md` + User-Sign-off geschwächt werden.** Kein stilles Refactor, kein "kleines Aufräumen", keine Wording-Glättung.
 
-1. `<evidence_gating priority="hard">`-Block in `backend/app/services/report_prompts.py`
+1. `<evidence_gating priority="hard">`-Block in `backend/app/services/report_prompts/sections.py`
 2. Hedge-Snapshot `backend/tests/eval/snapshots/evidence-gating-hedge-words.txt`
 3. Enum `EvidenceSourceKind` in `backend/app/contracts/report_contract.py`
 4. Validator `cross_stakeholder_for_high`
