@@ -94,7 +94,7 @@ def test_index_not_found_warning_wording(svc):
     """ClientError mit IndexNotFound-Code liefert [] und das Warning enthält
     'IndexNotFound' aber NICHT den alten Text 'index may not exist yet'.
     """
-    err = ClientError()
+    err = ClientError("mock message")
     err.code = "Neo.ClientError.Schema.IndexNotFound"
 
     session = MagicMock()
@@ -144,7 +144,7 @@ def test_happy_path_single_session_run_call(svc):
 
 def test_procedure_not_found_returns_empty(svc):
     """ClientError with ProcedureNotFound code returns [] and logs a warning."""
-    err = ClientError()
+    err = ClientError("mock message")
     err.code = "Neo.ClientError.Procedure.ProcedureNotFound"
 
     session = MagicMock()
@@ -162,7 +162,7 @@ def test_procedure_not_found_returns_empty(svc):
 
 def test_other_client_error_raises(svc):
     """ClientError with other code is re-raised."""
-    err = ClientError()
+    err = ClientError("mock message")
     err.code = "Neo.ClientError.Statement.SyntaxError"
 
     session = MagicMock()
