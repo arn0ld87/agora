@@ -263,6 +263,7 @@ const enforcementHint = computed(() =>
         <SegmentedControl
           :model-value="enforcement"
           :options="enforcementOptions"
+          :disabled="disabled"
           @update:model-value="onEnforcementChange"
         />
       </Field>
@@ -312,9 +313,9 @@ const enforcementHint = computed(() =>
   color: var(--text-tertiary);
 }
 
-/* SegmentedControl kennt kein disabled — optisch + interaktiv sperren. */
+/* Gesamtes Formular im Disabled-Zustand dimmen. Interaktivität wird an den
+   Steuerelementen selbst gesperrt (Input/SegmentedControl disabled-Prop). */
 .rb-form--disabled {
   opacity: 0.6;
-  pointer-events: none;
 }
 </style>

@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 
 import pytest
 
+from app.services import run_usage_ledger
 from app.services.pricing_registry import PricingRegistry
-from app.services.run_usage_ledger import aggregate_usage, load_call_events
+from app.services.run_usage_ledger import (
+    aggregate_usage,
+    load_call_events,
+    load_call_events_cached,
+    reset_usage_cache,
+)
 
 
 @pytest.fixture()
@@ -226,3 +234,106 @@ class TestLoadCallEvents:
             staticmethod(lambda run_id: str(tmp_path / run_id)),
         )
         assert load_call_events("nope") == []
+
+
+class TestUsageCache:
+    """Issue #764 (Review Punkt 6): bounded LRU-Cache mit
+    (mtime_ns, size)-Invalidierung — robust gegen same-second rewrites."""
+
+    @staticmethod
+    def _patch_run_dir(monkeypatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(
+            "app.services.run_usage_ledger.ArtifactLocator.run_dir",
+            staticmethod(lambda run_id: str(tmp_path / run_id)),
+        )
+
+    def test_cache_hit_returns_same_object(self, tmp_path, monkeypatch):
+        self._patch_run_dir(monkeypatch, tmp_path)
+        reset_usage_cache()
+        run_dir = tmp_path / "run_hit"
+        run_dir.mkdir()
+        (run_dir / "llm_call_events.jsonl").write_text(
+            '{"stage": "a", "success": true}\n', encoding="utf-8"
+        )
+        first = load_call_events_cached("run_hit")
+        second = load_call_events_cached("run_hit")
+        assert first is second  # identisches Listen-Objekt → kein Re-Read
+        assert "run_hit" in run_usage_ledger._cache
+
+    def test_append_invalidates_via_size(self, tmp_path, monkeypatch):
+        self._patch_run_dir(monkeypatch, tmp_path)
+        reset_usage_cache()
+        run_dir = tmp_path / "run_app"
+        run_dir.mkdir()
+        path = run_dir / "llm_call_events.jsonl"
+        path.write_text('{"stage": "a", "success": true}\n', encoding="utf-8")
+        assert len(load_call_events_cached("run_app")) == 1
+        # Append verändert size → Cache-Eintrag veraltet.
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write('{"stage": "b", "success": true}\n')
+        assert len(load_call_events_cached("run_app")) == 2
+
+    def test_mtime_ns_invalidates_within_same_second(self, tmp_path, monkeypatch):
+        # Beweist, dass mtime_ns (nicht nur float-mtime) das Invalidierungs-
+        # merkmal ist: zwei Writes gleicher Größe in derselben Sekunde, deren
+        # mtime_ns sich um 1 ns unterscheidet. Ein float-mtime-Cache würde das
+        # nicht merken; (mtime_ns, size) schon.
+        self._patch_run_dir(monkeypatch, tmp_path)
+        reset_usage_cache()
+        run_dir = tmp_path / "run_ns"
+        run_dir.mkdir()
+        path = run_dir / "llm_call_events.jsonl"
+        base_ns = 1_700_000_000_000_000_000  # beliebige Nanosekunden-Marke
+        # v1 und v2 sind byteweise gleich lang, unterscheiden sich im Wert.
+        path.write_text('{"a":1,"v":1}\n', encoding="utf-8")
+        os.utime(path, ns=(base_ns, base_ns))
+        v1 = load_call_events_cached("run_ns")
+        assert v1[0]["v"] == 1
+        path.write_text('{"a":1,"v":2}\n', encoding="utf-8")  # gleiche Größe
+        os.utime(path, ns=(base_ns + 1, base_ns + 1))  # +1 ns, gleiche Sekunde
+        v2 = load_call_events_cached("run_ns")
+        assert v2[0]["v"] == 2, "mtime_ns-Änderung muss Cache invalidieren"
+
+    def test_size_limit_evicts_oldest(self, tmp_path, monkeypatch):
+        self._patch_run_dir(monkeypatch, tmp_path)
+        reset_usage_cache()
+        monkeypatch.setattr(run_usage_ledger, "_CACHE_MAX", 2)
+        for i in range(3):
+            run_dir = tmp_path / f"run_{i}"
+            run_dir.mkdir()
+            (run_dir / "llm_call_events.jsonl").write_text(
+                f'{{"stage": "s{i}", "success": true}}\n', encoding="utf-8"
+            )
+            load_call_events_cached(f"run_{i}")
+        assert len(run_usage_ledger._cache) == 2
+        assert "run_0" not in run_usage_ledger._cache  # ältester evicted
+        assert "run_2" in run_usage_ledger._cache
+
+    def test_parallel_access_is_safe(self, tmp_path, monkeypatch):
+        self._patch_run_dir(monkeypatch, tmp_path)
+        reset_usage_cache()
+        run_dir = tmp_path / "run_par"
+        run_dir.mkdir()
+        (run_dir / "llm_call_events.jsonl").write_text(
+            '{"stage": "a", "success": true}\n', encoding="utf-8"
+        )
+        results: list[list] = []
+        errors: list[BaseException] = []
+        n = 16
+        barrier = threading.Barrier(n)
+
+        def gated() -> None:
+            try:
+                barrier.wait()
+                results.append(load_call_events_cached("run_par"))
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=gated) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert errors == []
+        assert len(results) == n
+        assert all(r == results[0] for r in results)

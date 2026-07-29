@@ -15,6 +15,7 @@ Ehrlichkeitsregeln:
 """
 from __future__ import annotations
 
+import collections
 import json
 import os
 import threading
@@ -271,26 +272,43 @@ def load_usage_summary(run_id: str) -> Optional[RunUsage]:
         return None
 
 
-# --- Mtime-basierter Read-Cache (Budget-Checks laufen pro LLM-Call) ---------
+# --- Read-Cache (Budget-Checks laufen pro LLM-Call) --------------------------
+#
+# Bounded LRU-Cache pro run_id. Invalidierungsschlüssel ist das Paar
+# (st_mtime_ns, st_size): mtime_ns liefert Nanosekunden-Präzision (unterscheidet
+# auch rewrites innerhalb derselben Sekunde auf feingranularen Dateisystemen),
+# size fängt Änderungen ab, die die mtime allein nicht zuverlässig signalisiert
+# (z. B. same-second appends auf Dateisystemen mit Sekunden-Granularität).
+# Beide Werte kommen aus einem einzigen os.stat-Aufruf. ``OrderedDict`` liefert
+# die LRU-Eviction ohne externe Dependency; alle Lookups + Inserts laufen unter
+# ``_cache_lock``, ``load_call_events`` (IO) bewusst außerhalb des Locks.
 
+_CACHE_MAX = 64
 _cache_lock = threading.Lock()
-_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_cache: "collections.OrderedDict[str, tuple[tuple[int, int], list[dict[str, Any]]]]" = (
+    collections.OrderedDict()
+)
 
 
 def load_call_events_cached(run_id: str) -> list[dict[str, Any]]:
-    """Wie load_call_events, aber mit mtime-Cache pro run_id."""
+    """Wie load_call_events, aber mit bounded (mtime_ns, size)-LRU-Cache pro run_id."""
     path = _events_path(run_id)
     try:
-        mtime = os.path.getmtime(path)
+        stat = os.stat(path)
     except FileNotFoundError:
         return []
+    key = (stat.st_mtime_ns, stat.st_size)
     with _cache_lock:
         cached = _cache.get(run_id)
-        if cached and cached[0] == mtime:
+        if cached is not None and cached[0] == key:
+            _cache.move_to_end(run_id)
             return cached[1]
     events = load_call_events(run_id)
     with _cache_lock:
-        _cache[run_id] = (mtime, events)
+        _cache[run_id] = (key, events)
+        _cache.move_to_end(run_id)
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
     return events
 
 

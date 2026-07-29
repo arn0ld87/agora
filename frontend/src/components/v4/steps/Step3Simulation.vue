@@ -84,8 +84,12 @@ const startError = ref(null)
 // ``run_id`` als optionales Index-Signature-Feld. Ohne diesen Wert
 // stammen Budget-Polls aus ``simulationId`` und schlagen mit 404 fehl,
 // weil ``/api/runs/<run_id>`` die Registry-ID erwartet.
-const runId = ref<string | null>(null)
-const effectiveRunId = computed<string | null>(() => runId.value || props.simulationId || null)
+// Hinweis: <script setup> ist hier absichtlich ohne ``lang="ts"`` deklariert
+// (siehe doStart-Kommentar) — daher keine TS-Generics an ref/computed, sonst
+// parst JS ``ref < string | null > (null)`` als Vergleich und wirft zur
+// Mount-Zeit ``ReferenceError: string is not defined``.
+const runId = ref(null)
+const effectiveRunId = computed(() => runId.value || props.simulationId || null)
 
 const feedSticky = useStickyScroll(scrollEl)
 
