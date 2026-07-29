@@ -50,6 +50,8 @@ export interface StartSimulationData {
    * derselben ProviderConnection an die OASIS-Route — kein .env-Fallback.
    * Darf nicht mit `llm_model`/`llm_provider` kombiniert werden. */
   ai_model_ref?: AiModelRefPayload
+  /** Issue #764: optionale Token-/Kosten-/Zeit-/Aufruflimits (weich/hart). */
+  budget?: import('../contracts/runBudgetContract').RunBudgetConfig
   force?: boolean
 }
 

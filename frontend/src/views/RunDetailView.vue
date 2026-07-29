@@ -6,7 +6,14 @@ import { getRun } from '../api/runs'
 import { ApiError } from '../api/envelope'
 import { RunDetailSchema } from '../contracts/runsContract'
 import type { RunDetail } from '../contracts/runsContract'
+import {
+  RunBudgetStatusSchema,
+  RunUsageSchema,
+  type RunBudgetStatus,
+  type RunUsage,
+} from '../contracts/runBudgetContract'
 import LlmRoutingView from '../components/LlmRouting/LlmRoutingView.vue'
+import RunUsageBreakdown from '../components/v4/run-budget/RunUsageBreakdown.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +24,21 @@ const runId = String(route.params.id)
 const run = ref<RunDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
+
+// Issue #764: Budget/Verbrauch kommen als Read-Path-Anreicherung in
+// GET /api/runs/<id> mit. RunDetailSchema ist passthrough — die Blöcke
+// werden hier gegen den Budget-Contract geparst (Drift → weggelassen statt
+// die Detailansicht zu brechen).
+const runBudget = ref<RunBudgetStatus | null>(null)
+const runUsage = ref<RunUsage | null>(null)
+
+function parseBudgetEnrichment(payload: unknown): void {
+  const raw = (payload ?? {}) as Record<string, unknown>
+  const budget = RunBudgetStatusSchema.nullable().safeParse(raw.budget ?? null)
+  runBudget.value = budget.success ? budget.data : null
+  const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
+  runUsage.value = usage.success ? usage.data : null
+}
 
 async function loadRun(): Promise<void> {
   loading.value = true
@@ -30,6 +52,7 @@ async function loadRun(): Promise<void> {
       return
     }
     run.value = parsed.data
+    parseBudgetEnrichment(payload)
   } catch (e) {
     if (e instanceof ApiError) {
       error.value = e.message
@@ -132,6 +155,11 @@ onMounted(() => void loadRun())
         <LlmRoutingView :run-id="runId" />
       </section>
 
+      <!-- Issue #764: Verbrauchsübersicht (Tokens/Kosten/Laufzeit/Aufrufe) -->
+      <section v-if="runUsage" class="detail-section detail-section--flush">
+        <RunUsageBreakdown :usage="runUsage" :budget="runBudget" />
+      </section>
+
       <!-- Artifacts -->
       <section
         v-if="Object.keys(run.artifacts).length > 0"
@@ -209,6 +237,12 @@ onMounted(() => void loadRun())
 .detail-section {
   border: 1px solid var(--rule, #ddd);
   padding: var(--s-4, 1rem);
+}
+
+/* Die Breakdown-Card bringt eigenen Rahmen/Padding mit (v4-Design). */
+.detail-section--flush {
+  border: 0;
+  padding: 0;
 }
 
 .section-title {

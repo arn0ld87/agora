@@ -21,6 +21,12 @@ from app.contracts.persona_contract import PersonaModel, PersonaQuotaPlan
 from app.contracts.persona_entity_context import PersonaEntityContext
 from app.contracts.report_contract import EvidenceMapModel, ReportContractModel, ReportModel
 from app.contracts.report_v3 import ReportV3
+from app.contracts.run_budget_contract import (
+    PreflightEstimate,
+    RunBudgetConfig,
+    RunBudgetStatus,
+    RunUsage,
+)
 from app.contracts.runs_contract import RunDetail, RunsListResponse, RunSummary
 from app.contracts.system_status_contract import SystemStatusOllama
 from app.contracts.llm_routing_contract import (
@@ -86,6 +92,10 @@ CONTRACTS: dict[str, type] = {
     "run-summary.schema.json": RunSummary,
     "runs-list-response.schema.json": RunsListResponse,
     "run-detail.schema.json": RunDetail,
+    "run-budget-config.schema.json": RunBudgetConfig,
+    "run-budget-status.schema.json": RunBudgetStatus,
+    "run-usage.schema.json": RunUsage,
+    "run-preflight-estimate.schema.json": PreflightEstimate,
     "llm-runtime-routing.schema.json": RuntimeLlmRouting,
     "llm-provider-descriptor.schema.json": ProviderDescriptor,
     "llm-resolved-route.schema.json": ResolvedRoute,

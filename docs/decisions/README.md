@@ -14,6 +14,7 @@ Sammlung der Architektur-Entscheidungen für Agora. Format: [MADR-Light](https:/
 | [0007](0007-embedding-configuration-and-index-migration.md) | Embedding-Konfiguration und Indexmigration | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0008](0008-single-user-profile-and-onboarding.md) | Single-User-Profil und Erst-Onboarding | Proposed | Onboarding/Provider-Unification Slice 0 |
 | [0010](0010-vue-v4-route-consolidation.md) | Vue-v4-Referenzrouten und Deep-Link-Lebenszyklus | Proposed | #830 |
+| [0012](0012-run-budgets.md) | Run-Budgets — Micros-Preise, Termination-Reason, ehrliche Unbekannt-Status | Accepted (2026-07-29) | #764 |
 
 ## Geplante ADRs
 

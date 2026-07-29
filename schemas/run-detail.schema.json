@@ -1,5 +1,194 @@
 {
   "$defs": {
+    "BudgetWarning": {
+      "additionalProperties": false,
+      "description": "Auditierbare Warnung bei (weicher oder harter) Limit\u00fcberschreitung.",
+      "properties": {
+        "dimension": {
+          "enum": [
+            "tokens",
+            "cost",
+            "time",
+            "calls"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "observed": {
+          "minimum": 0,
+          "title": "Observed",
+          "type": "integer"
+        },
+        "severity": {
+          "enum": [
+            "soft",
+            "hard"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "threshold": {
+          "minimum": 0,
+          "title": "Threshold",
+          "type": "integer"
+        },
+        "ts": {
+          "minLength": 1,
+          "title": "Ts",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dimension",
+        "severity",
+        "threshold",
+        "observed",
+        "message",
+        "ts"
+      ],
+      "title": "BudgetWarning",
+      "type": "object"
+    },
+    "RunBudgetConfig": {
+      "additionalProperties": false,
+      "description": "Vom Nutzer gesetzte Budget-Limits f\u00fcr einen Run.\n\nAlle Limits optional; None bedeutet \u201ekein Limit\". `enforcement` gilt\nf\u00fcr alle gesetzten Limits gemeinsam: soft = warnen und weiterlaufen,\nhard = weitere planbare Modellaufrufe deterministisch verhindern.",
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "maxLength": 3,
+          "minLength": 3,
+          "title": "Currency",
+          "type": "string"
+        },
+        "enforcement": {
+          "default": "soft",
+          "enum": [
+            "soft",
+            "hard"
+          ],
+          "title": "Enforcement",
+          "type": "string"
+        },
+        "max_cost_micros": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Cost Micros"
+        },
+        "max_duration_seconds": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Duration Seconds"
+        },
+        "max_llm_calls": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Llm Calls"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        }
+      },
+      "title": "RunBudgetConfig",
+      "type": "object"
+    },
+    "RunBudgetStatus": {
+      "additionalProperties": false,
+      "description": "Aktueller Budget-Zustand eines Runs: Config + Verbrauch + Warnungen.",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/RunBudgetConfig"
+        },
+        "consumed": {
+          "$ref": "#/$defs/UsageMetrics"
+        },
+        "exceeded_dimension": {
+          "anyOf": [
+            {
+              "enum": [
+                "tokens",
+                "cost",
+                "time",
+                "calls"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exceeded Dimension"
+        },
+        "status": {
+          "default": "ok",
+          "enum": [
+            "ok",
+            "warning",
+            "exceeded"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/BudgetWarning"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "config",
+        "consumed"
+      ],
+      "title": "RunBudgetStatus",
+      "type": "object"
+    },
     "RunSummary": {
       "additionalProperties": false,
       "description": "Lesepfad-Anreicherung: Felder aus Projekt + Simulation (N+1-gecacht).",
@@ -79,6 +268,198 @@
       },
       "title": "RunSummary",
       "type": "object"
+    },
+    "RunUsage": {
+      "additionalProperties": false,
+      "description": "Tats\u00e4chlicher Verbrauch eines Runs, aufgeschl\u00fcsselt nach Stage/Provider/Modell.",
+      "properties": {
+        "by_model": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UsageMetrics"
+          },
+          "title": "By Model",
+          "type": "object"
+        },
+        "by_provider": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UsageMetrics"
+          },
+          "title": "By Provider",
+          "type": "object"
+        },
+        "by_stage": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UsageMetrics"
+          },
+          "title": "By Stage",
+          "type": "object"
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ended At"
+        },
+        "measurement_status": {
+          "default": "unknown",
+          "enum": [
+            "complete",
+            "partial",
+            "unknown"
+          ],
+          "title": "Measurement Status",
+          "type": "string"
+        },
+        "pricing_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricing Source"
+        },
+        "pricing_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricing Version"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "totals": {
+          "$ref": "#/$defs/UsageMetrics"
+        }
+      },
+      "required": [
+        "totals"
+      ],
+      "title": "RunUsage",
+      "type": "object"
+    },
+    "UsageMetrics": {
+      "additionalProperties": false,
+      "description": "Gemessener Verbrauch eines Runs oder einer Teilmenge (Stage/Provider/Modell).\n\nOptionale Felder bleiben None, wenn die Datenquelle sie nicht liefert \u2014\nder jeweilige Status macht die Datenqualit\u00e4t explizit.",
+      "properties": {
+        "cost_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Micros"
+        },
+        "cost_status": {
+          "default": "unknown",
+          "enum": [
+            "measured",
+            "estimated",
+            "free",
+            "unknown"
+          ],
+          "title": "Cost Status",
+          "type": "string"
+        },
+        "duration_ms": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "llm_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Llm Calls",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "tokens_status": {
+          "default": "unknown",
+          "enum": [
+            "measured",
+            "partial",
+            "unknown"
+          ],
+          "title": "Tokens Status",
+          "type": "string"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        }
+      },
+      "title": "UsageMetrics",
+      "type": "object"
     }
   },
   "$id": "https://alexle135.de/schemas/run-detail.schema.json",
@@ -102,6 +483,17 @@
       ],
       "default": null,
       "title": "Branch Label"
+    },
+    "budget": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunBudgetStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "completed_at": {
       "anyOf": [
@@ -258,9 +650,42 @@
       ],
       "default": null
     },
+    "termination_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "completed",
+            "error",
+            "user_cancel",
+            "user_stop",
+            "budget_tokens",
+            "budget_cost",
+            "budget_time",
+            "budget_calls"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Termination Reason"
+    },
     "updated_at": {
       "title": "Updated At",
       "type": "string"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunUsage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

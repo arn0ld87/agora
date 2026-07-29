@@ -1,0 +1,84 @@
+{
+  "$id": "https://alexle135.de/schemas/run-budget-config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Vom Nutzer gesetzte Budget-Limits f\u00fcr einen Run.\n\nAlle Limits optional; None bedeutet \u201ekein Limit\". `enforcement` gilt\nf\u00fcr alle gesetzten Limits gemeinsam: soft = warnen und weiterlaufen,\nhard = weitere planbare Modellaufrufe deterministisch verhindern.",
+  "properties": {
+    "currency": {
+      "default": "USD",
+      "maxLength": 3,
+      "minLength": 3,
+      "title": "Currency",
+      "type": "string"
+    },
+    "enforcement": {
+      "default": "soft",
+      "enum": [
+        "soft",
+        "hard"
+      ],
+      "title": "Enforcement",
+      "type": "string"
+    },
+    "max_cost_micros": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Cost Micros"
+    },
+    "max_duration_seconds": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Duration Seconds"
+    },
+    "max_llm_calls": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Llm Calls"
+    },
+    "max_tokens": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Tokens"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "RunBudgetConfig",
+  "type": "object"
+}
