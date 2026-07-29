@@ -191,10 +191,16 @@ class TestCostStatusAggregation:
         assert usage.totals.cost_status == "unknown"
         assert usage.totals.cost_micros is None
 
-    def test_failed_calls_not_counted_as_calls_but_duration_kept(self, pricing):
+    def test_failed_calls_count_as_calls_and_duration_kept(self, pricing):
+        # Issue #764 (Codex P2): ``llm_calls`` zaehlt jeden tatsaechlichen
+        # Providerattempt — auch fehlgeschlagene Requests (Netzwerkfehler,
+        # HTTP-Fehler, Timeout) und Fallback-Versuche. Reine lokale Fehler
+        # (JSON-Parse, Pydantic-Validation) erscheinen NICHT als eigenes
+        # Event im Ledger und erzeugen daher auch keinen zusaetzlichen Call.
+        # Latenz bleibt erfasst, damit Timeout-Diagnose moeglich bleibt.
         events = [_event(success=False, latency_ms=50.0)]
         usage = aggregate_usage("run_x", events=events, pricing=pricing)
-        assert usage.totals.llm_calls == 0
+        assert usage.totals.llm_calls == 1
         assert usage.totals.duration_ms == 50
 
     def test_empty_events_unknown(self, pricing):

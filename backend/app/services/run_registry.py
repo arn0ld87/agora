@@ -239,24 +239,34 @@ class RunRegistry:
             # Preflight-Berechnungen benutzt wird; (b) Snapshot fehlt für Runs,
             # die niemals per GET gelesen werden, aber als Datenbasis für
             # nachfolgende Budget-Schätzungen dienen.
+            # Persistenz hier NUR erfassen — die eigentliche I/O läuft
+            # außerhalb des Locks, damit der Filesystem-Schreibvorgang
+            # nicht andere Run-Manifest-Updates blockiert.
             terminal_statuses = {"completed", "failed", "stopped"}
             new_status = manifest.get("status")
-            if old_status not in terminal_statuses and new_status in terminal_statuses:
-                try:
-                    from .run_usage_ledger import persist_usage_summary
+            snapshot_due = (
+                old_status not in terminal_statuses
+                and new_status in terminal_statuses
+            )
+            snapshot_started_at = manifest.get("started_at") if snapshot_due else None
+            snapshot_ended_at = manifest.get("completed_at") if snapshot_due else None
 
-                    persist_usage_summary(
-                        run_id,
-                        started_at=manifest.get("started_at"),
-                        ended_at=manifest.get("completed_at"),
-                    )
-                except OSError as exc:
-                    logger.warning("usage_snapshot persist failed (non-fatal): %s", exc)
-                except Exception:  # noqa: BLE001 — terminal hook darf write nie brechen
-                    logger.debug(
-                        "usage_snapshot persist raised (non-fatal)", exc_info=True
-                    )
-            return written
+        if snapshot_due:
+            try:
+                from .run_usage_ledger import persist_usage_summary
+
+                persist_usage_summary(
+                    run_id,
+                    started_at=snapshot_started_at,
+                    ended_at=snapshot_ended_at,
+                )
+            except OSError as exc:
+                logger.warning("usage_snapshot persist failed (non-fatal): %s", exc)
+            except Exception:  # noqa: BLE001 — terminal hook darf write nie brechen
+                logger.debug(
+                    "usage_snapshot persist raised (non-fatal)", exc_info=True
+                )
+        return written
 
     def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:

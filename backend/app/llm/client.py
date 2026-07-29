@@ -641,6 +641,12 @@ class LLMClient:
                 error_type=exc.__class__.__name__,
                 http_status=getattr(exc, "status_code", None),
             )
+            # Issue #764 (Codex P2): Fehlgeschlagener OpenAI-kompatibler
+            # Call zaehlt ebenfalls als Providerattempt — record_after_call
+            # muss auch im Failure-Pfad laufen, sonst unterlaeuft der Call
+            # das weiche ``max_llm_calls``-Limit (Fail-open ist hier explizit
+            # erwuenscht — Hard-Limits greifen bereits vor dem Call).
+            self._budget_record()
             raise
         elapsed = _time.monotonic() - _t0
         logger.info(
@@ -850,12 +856,16 @@ class LLMClient:
             pydantic.ValidationError: Parsed JSON does not match *schema*
                 when *schema* is a Pydantic model.
         """
-        # Budget-Gate (Issue #764): harte Limits vor jedem Pfad prüfen —
-        # inkl. E2E-Stub und nativem Ollama-Pfad, der chat() umgeht.
-        self._budget_check()
+        # Budget-Gate (Issue #764, Codex P1): jeder physische Providerrequest
+        # bekommt GENAU EINEN ``_budget_check`` unmittelbar vor dem Call.
+        # Pfade, die an ``chat()`` delegieren (OpenAI-kompatibel), erhalten
+        # dort ihren Check — ``chat_json`` ruft hier KEINEN Check mehr auf.
+        # E2E-Stub und nativer Ollama-Schema-Pfad hingegen umgehen ``chat()``
+        # und brauchen daher einen eigenen Check.
         # E2E-Stub-Pfad — nur aktiv wenn AGORA_E2E_LLM_MODE=stub gesetzt.
         # Muss VOR Cache-Lookup, Token-Counter, Retry und allen LLM-Calls liegen.
         if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
+            self._budget_check()
             from app.utils.llm_e2e_stub import e2e_stub_response
             logger.info(
                 "LLMClient.chat_json: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
@@ -947,12 +957,22 @@ class LLMClient:
             # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit
             # json_object-Fallback (Resilienz, kein Hard-Fail).
             if self._is_ollama() and isinstance(schema, type) and issubclass(schema, BaseModel):
-                # Issue #764 (Codex P1): Token-Tracking + record_after_call
-                # fuer den nativen Ollama-Schema-Pfad. Ohne diesen Pfad
-                # umgeht der LLM-Call den OpenAI-Wrapper und damit
-                # _log_invocation_event, sodass weder Tokens noch Calls im
-                # usage_ledger landen — der Hard-Limit-Pre-Check wuerde
-                # dauerhaft 0 <= limit sehen und nie ausloesen.
+                # Issue #764 (Codex P1, Codex P2): Der native Ollama-Pfad
+                # umgeht ``chat()`` und damit dessen Budget-Gates. Hier daher
+                # der eigene ``_budget_check`` unmittelbar vor dem Transport-
+                # Call, und je genau EIN Invocation-Event + ``_budget_record``
+                # je nach Outcome:
+                #   * Erfolg → success=True Event + record + lokales Parsen
+                #   * LLMOutputTruncatedError → success=False Event + record,
+                #     kein Fallback (gleiches Cap, sonst 2. verschwendeter Call)
+                #   * Sonstiger Provider-/Transportfehler → success=False
+                #     Event + record + Fall-through zum OpenAI-Wrapper (auch
+                #     der hat seinen eigenen Check in chat()).
+                # Rein lokale Fehler (JSON-Parsing, Pydantic-Validation) NACH
+                # erfolgreicher Providerantwort erzeugen KEIN zusaetzliches
+                # Providerevent — der Attempt war erfolgreich, nur die
+                # Weiterverarbeitung ist gescheitert.
+                self._budget_check()
                 _ollama_call_started = _time_mod.monotonic()
                 try:
                     ollama_response, ollama_usage = self._ollama_chat_with_schema(
@@ -962,7 +982,45 @@ class LLMClient:
                         max_tokens=max_tokens,
                         force_no_thinking=force_no_thinking,
                     )
-                    ollama_latency_ms = (_time_mod.monotonic() - _ollama_call_started) * 1000.0
+                except LLMOutputTruncatedError:
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=False,
+                        error_type="LLMOutputTruncatedError",
+                    )
+                    self._budget_record()
+                    # Kein Fallback: dasselbe Cap, zweiter Call waere
+                    # verschwendet. Hart durchreichen.
+                    raise
+                except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
+                    logger.warning(
+                        "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "
+                        "(%s: %s), fallback auf OpenAI-Wrapper",
+                        type(exc).__name__, exc,
+                    )
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=False,
+                        error_type=type(exc).__name__,
+                        http_status=getattr(exc, "status_code", None),
+                    )
+                    # Fehlversuch zaehlt als Providerattempt — der nachfolgende
+                    # OpenAI-Wrapper fuehrt seinen eigenen ``_budget_check``
+                    # in ``chat()`` durch, daher KEIN doppelter Check hier.
+                    self._budget_record()
+                    # Fall through zum bestehenden Strict-OpenAI-Pfad
+                else:
+                    ollama_latency_ms = (
+                        _time_mod.monotonic() - _ollama_call_started
+                    ) * 1000.0
                     self._log_invocation_event(
                         stage=context,
                         latency_ms=ollama_latency_ms,
@@ -974,18 +1032,6 @@ class LLMClient:
                     cleaned_response = _strip_llm_json_envelope(ollama_response)
                     parsed: Dict[str, Any] = json.loads(cleaned_response)
                     return self._maybe_validate(parsed, schema)
-                except LLMOutputTruncatedError:
-                    # Kein Transportfehler: derselbe Request ueber den
-                    # OpenAI-Wrapper wird am selben Limit wieder gekappt und
-                    # kostet nur einen zweiten vollen Call. Durchreichen.
-                    raise
-                except Exception as exc:  # noqa: BLE001 — bewusst breit, Fallback ist sicher
-                    logger.warning(
-                        "LLMClient.chat_json: native Ollama /api/chat-Pfad fehlgeschlagen "
-                        "(%s: %s), fallback auf OpenAI-Wrapper",
-                        type(exc).__name__, exc,
-                    )
-                    # Fall through zum bestehenden Strict-OpenAI-Pfad
             # Strict-schema path: single fallback on unsupported-provider errors.
             try:
                 response = self.chat(

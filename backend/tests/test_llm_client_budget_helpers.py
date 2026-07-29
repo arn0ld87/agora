@@ -220,9 +220,483 @@ class TestNativeOllamaSchemaPath:
 
 
 class TestBudgetEnforcerAbsent:
-    def test_no_enforcer_is_silent_noop(self):
+    def test_no_enforcer_is_silent_noop(self, monkeypatch):
         client = _make_client(enforcer=None)
+
+        # logger.warning darf nicht aufgerufen werden — der No-Op-Pfad
+        # soll still sein, weil weder ein Fehler noch eine Limitaus-
+        # schoepfung vorliegt.
+        logged: list[str] = []
+        monkeypatch.setattr(
+            "app.llm.client.logger.warning", lambda *a, **k: logged.append(a[0] % a[1:])
+        )
 
         # Darf weder raisen noch loggen.
         client._budget_check()
         client._budget_record()
+
+        assert logged == []
+
+
+# ---------------------------------------------------------------------------
+# 7. Regression Issue #764 (Codex P1): Genau EIN ``_budget_check`` pro
+#    tatsaechlichem Providerrequest, auch ueber die Pfadteilung
+#    ``chat_json`` -> ``chat``.
+# ---------------------------------------------------------------------------
+
+
+class _InvocationRecorder:
+    """Zeichnet Aufrufe von ``_log_invocation_event`` auf."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(
+        self,
+        *,
+        stage: str,
+        latency_ms: float,
+        success: bool,
+        error_type: object = None,
+        http_status: object = None,
+        remote_request_id: object = None,
+        prompt_tokens: object = None,
+        completion_tokens: object = None,
+    ) -> None:
+        self.calls.append(
+            {
+                "stage": stage,
+                "latency_ms": latency_ms,
+                "success": success,
+                "error_type": error_type,
+                "http_status": http_status,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+            }
+        )
+
+
+def _wire_invocation_recorder(client: LLMClient) -> _InvocationRecorder:
+    recorder = _InvocationRecorder()
+    object.__setattr__(client, "_log_invocation_event", recorder)
+    return recorder
+
+
+def _make_ollama_client_with_enforcer(enforcer: object) -> LLMClient:
+    client = _make_client(enforcer)
+    object.__setattr__(client, "_is_ollama", lambda: True)
+    return client
+
+
+class TestChatJsonSingleBudgetCheckPerProvider:
+    """Issue #764 (Codex P1): jeder physische Providerrequest erhaelt
+    genau einen ``_budget_check`` und genau ein ``_log_invocation_event``."""
+
+    def test_chat_json_delegates_to_chat_with_exactly_one_check(self, monkeypatch):
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        # Ollama-Flag NICHT gesetzt -> OpenAI-kompatibler Pfad ueber chat().
+        object.__setattr__(client, "_is_ollama", lambda: False)
+
+        def _fake_ollama(*args, **kwargs):
+            raise AssertionError("ollama path must not be entered")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        # chat() stubben, damit kein echter OpenAI-Client noetig ist. Der
+        # Stub bildet den echten chat()-Budget-Pfad nach: jeder Provider-
+        # aufruf erzeugt genau einen check + ein event + ein record.
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            client._budget_check()
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
+            client._budget_record()
+            return '{}'
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        client.chat_json(messages=[{"role": "user", "content": "ping"}])
+
+        # Genau ein Check + ein Record + ein Event — chat() uebernimmt
+        # beides fuer den OpenAI-Pfad, chat_json() macht keinen Pre-Check.
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+
+    def test_e2e_stub_path_has_exactly_one_check_and_one_record(self, monkeypatch):
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.setenv("AGORA_E2E_LLM_MODE", "stub")
+
+        result = client.chat_json(messages=[{"role": "user", "content": "hi"}])
+
+        assert isinstance(result, dict)
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+
+    def test_native_ollama_success_has_exactly_one_check_event_record(self, monkeypatch):
+        from pydantic import BaseModel
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            return '{"ok": true}', {"prompt_eval_count": 4, "eval_count": 2}
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        parsed = client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        assert parsed["ok"] is True
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+        assert recorder.calls[0]["prompt_tokens"] == 4
+        assert recorder.calls[0]["completion_tokens"] == 2
+
+    def test_strict_schema_fallback_makes_two_requests_each_checked(self, monkeypatch):
+        """Zwei reale Requests (Ollama + OpenAI-Fallback) → zwei Checks."""
+        from pydantic import BaseModel
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            raise RuntimeError("network down")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        # Erster ``chat()``-Call schlaegt fehl (strict json_schema unsupported),
+        # zweiter ``chat()``-Call liefert das json_object-Fallback-Ergebnis.
+        chat_calls = {"n": 0}
+
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            chat_calls["n"] += 1
+            client._budget_check()
+            if chat_calls["n"] == 1:
+                # Erstversuch: Provider lehnt strict json_schema ab.
+                client._log_invocation_event(
+                    stage=context, latency_ms=10.0, success=False,
+                    error_type="RuntimeError",
+                )
+                client._budget_record()
+                raise RuntimeError("strict json_schema not supported here")
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
+            client._budget_record()
+            return '{"ok": true}'
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        parsed = client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        assert parsed["ok"] is True
+        # Native Ollama (1) + Chat-Fallback-Versuch (1) + Chat-JSON-Object (1) = 3 Checks
+        # Records: native Ollama fail (1) + erster Chat fail (1) + zweiter Chat OK (1) = 3
+        # Events: native Ollama fail + erster Chat fail + zweiter Chat OK = 3
+        assert enforcer.check_calls == 3
+        assert enforcer.record_calls == 3
+        assert len(recorder.calls) == 3
+        # Erster Event muss der fehlgeschlagene native Ollama-Versuch sein.
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "RuntimeError"
+        # Letzter Event ist der erfolgreiche OpenAI-Fallback.
+        assert recorder.calls[-1]["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# 8. Regression Issue #764 (Codex P2): fehlgeschlagene Providerrequests
+#    zaehlen als ein Call (usage_ledger + Budget), Parsing-Fehler NICHT.
+# ---------------------------------------------------------------------------
+
+
+class TestFailedRequestsCountAsProviderAttempts:
+    def test_native_ollama_transport_fail_with_openai_success_records_two_events(self, monkeypatch):
+        """Native Ollama schlaegt fehl → OpenAI-Fallback gelingt → 2 Events,
+        erstes success=False, zweites success=True. Call-Budget steigt um 2."""
+        from pydantic import BaseModel
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            raise RuntimeError("provider 500")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        # Fake-Chat() bildet den echten chat()-Budget-Pfad nach: jeder
+        # Provideraufruf erzeugt genau einen check + ein event + ein record.
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            client._budget_check()
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
+            client._budget_record()
+            return '{"ok": true}'
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        parsed = client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        assert parsed["ok"] is True
+        # 1 Check (native Ollama) + 1 Check (OpenAI via chat) = 2
+        assert enforcer.check_calls == 2
+        # 1 Record (native Ollama fail) + 1 Record (OpenAI success) = 2
+        assert enforcer.record_calls == 2
+        assert len(recorder.calls) == 2
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "RuntimeError"
+        assert recorder.calls[1]["success"] is True
+
+    def test_native_ollama_failure_without_fallback_counts_one_attempt(self, monkeypatch):
+        """Native Ollama fail + Provider NICHT Ollama → OpenAI-Pfad geht durch,
+        aber wir testen den Pfad, wo OpenAI selbst fehlschlaegt: 1 Event."""
+        from pydantic import BaseModel
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            raise RuntimeError("native fail")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            client._budget_check()
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=False, error_type="RuntimeError")
+            client._budget_record()
+            raise RuntimeError("openai fail too")
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        with pytest.raises(RuntimeError, match="openai fail too"):
+            client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        # Native Ollama (1 check + 1 record + 1 event) + OpenAI (1 check + 1 record + 1 event) = 2/2/2
+        assert enforcer.check_calls == 2
+        assert enforcer.record_calls == 2
+        assert len(recorder.calls) == 2
+        assert all(call["success"] is False for call in recorder.calls)
+
+    def test_native_ollama_truncation_reraises_without_fallback(self, monkeypatch):
+        """LLMOutputTruncatedError: kein Fallback (gleiches Cap, kein
+        zweiter Call), aber ein failed Event + record."""
+        from pydantic import BaseModel
+        from app.llm.client import LLMOutputTruncatedError
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        chat_called = {"n": 0}
+
+        def _fake_chat(*args, **kwargs):
+            chat_called["n"] += 1
+            raise AssertionError("chat() must not be called for truncation")
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            raise LLMOutputTruncatedError("truncated at cap")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        with pytest.raises(LLMOutputTruncatedError):
+            client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        assert chat_called["n"] == 0  # kein Fallback
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "LLMOutputTruncatedError"
+
+    def test_json_parse_error_after_successful_response_counts_one_attempt(self, monkeypatch):
+        """Provider liefert, aber JSON ist kaputt → 1 Event, kein zusaetzliches
+        failed Event."""
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        object.__setattr__(client, "_is_ollama", lambda: False)
+
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            client._budget_check()
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
+            client._budget_record()
+            return "this is not json"
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        with pytest.raises(ValueError, match="Invalid JSON"):
+            client.chat_json(messages=[{"role": "user", "content": "x"}])
+
+        # 1 Check (chat) + 1 Record (chat) + 1 Event (success=True) — der Parse-Fehler
+        # ist ein LOKALES Problem nach erfolgreicher Providerantwort und erzeugt
+        # kein zusaetzliches Providerevent.
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+
+    def test_pydantic_validation_error_counts_one_attempt(self, monkeypatch):
+        """Provider liefert valides JSON, aber Pydantic-Schema schlaegt fehl →
+        1 Event."""
+        from pydantic import BaseModel, ValidationError
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        object.__setattr__(client, "_is_ollama", lambda: False)
+
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            client._budget_check()
+            client._log_invocation_event(stage=context, latency_ms=10.0, success=True)
+            client._budget_record()
+            return '{"not_ok": true}'
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        with pytest.raises(ValidationError):
+            client.chat_json(
+                messages=[{"role": "user", "content": "x"}], schema=_Schema
+            )
+
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+
+    def test_hard_limit_blocks_fallback_after_failed_first_request(self, monkeypatch):
+        """Bei ``max_llm_calls=1`` und fehlgeschlagenem ersten Request darf der
+        zweite Fallback-Request NICHT stattfinden — der Enforcer blockt ihn."""
+        from pydantic import BaseModel
+        from app.services.run_budget import BudgetExceededError
+
+        class _Schema(BaseModel):
+            ok: bool
+
+        # Pre-set-Check raises immer (simuliert max_llm_calls=1 erreicht).
+        # Wir simulieren das Verhalten, indem der Enforcer ab dem zweiten
+        # Aufruf BudgetExceededError wirft.
+        call_count = {"n": 0}
+
+        class _HardLimitEnforcer:
+            def check_before_call(self) -> None:
+                call_count["n"] += 1
+                if call_count["n"] > 1:
+                    raise BudgetExceededError("calls", 2, 1)
+
+            def record_after_call(self) -> None:
+                pass
+
+        enforcer = _HardLimitEnforcer()
+        client = _make_ollama_client_with_enforcer(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+
+        def _fake_ollama(messages, schema, temperature, max_tokens, force_no_thinking=False):
+            raise RuntimeError("native fail")
+
+        object.__setattr__(client, "_ollama_chat_with_schema", _fake_ollama)
+
+        chat_called = {"n": 0}
+
+        def _fake_chat(messages, temperature=0.7, max_tokens=4096, response_format=None,
+                       context="chat", force_no_thinking=False, require_complete=False):
+            # Reihenfolge wie im echten chat(): Budget-Check VOR jedem
+            # anderen Schritt. Wenn der Enforcer blockt, wird der Stub-
+            # Body nie erreicht.
+            client._budget_check()
+            chat_called["n"] += 1
+            return '{"ok": true}'
+
+        object.__setattr__(client, "chat", _fake_chat)
+
+        with pytest.raises(BudgetExceededError):
+            client.chat_json(messages=[{"role": "user", "content": "x"}], schema=_Schema)
+
+        # Native Ollama (Check #1 OK) → schlaegt fehl → record → OpenAI-Fallback
+        # versucht Check #2 → BLOCKIERT durch Hard-Limit. Der Chat-Call wird
+        # nie ausgefuehrt, weil der Hard-Limit bereits in ``check_before_call``
+        # raiset (bevor der eigentliche Provider-Call startet).
+        assert chat_called["n"] == 0
+        assert call_count["n"] == 2  # beide Checks versucht, der zweite blockt
+        # Events: 1 fuer native Ollama fail.
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+
+
+class TestChatExceptionPathRecordsBudget:
+    """Issue #764 (Codex P2): ``chat()``-Exception-Pfad muss den fehlgeschlagenen
+    Call in den weichen Budget-Limits zaehlen (``_budget_record`` aufrufen)."""
+
+    def test_chat_failure_records_budget_and_logs_event(self, monkeypatch):
+        from app.llm.client import LLMClient
+
+        enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        recorder = _wire_invocation_recorder(client)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(LLMClient, "_publish_model_active", lambda self, *a, **k: None)
+
+        # ``self.client.chat.completions.create`` stubben, der mit Exception antwortet.
+        class _BoomClient:
+            class chat:
+                class completions:
+                    @staticmethod
+                    def create(**kwargs):
+                        raise RuntimeError("provider 503")
+
+        object.__setattr__(client, "client", _BoomClient)
+        # Force den OpenAI-kompatiblen Pfad (kein Ollama).
+        object.__setattr__(client, "_is_ollama", lambda: False)
+        # Streaming-Pfad umgehen — wir wollen den nicht-streaming-Zweig.
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get", lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default
+        )
+
+        with pytest.raises(RuntimeError, match="provider 503"):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1  # <-- der Fix: record auch im Failure-Pfad
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "RuntimeError"

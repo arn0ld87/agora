@@ -1,6 +1,7 @@
 """Tests für den Subprozess-Budget-Guard (Issue #764)."""
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -57,6 +58,54 @@ class _FakeModel:
     def run(self, messages, *args, **kwargs):
         self.calls += 1
         return _FakeCompletion(self._usage)
+
+    # CAMEL ruft ModelBackends sowohl synchron als auch async auf.
+    # Die SubprocessBudgetGuard muss ALLE vier Aufrufpunkte (run/_run/
+    # arun/_arun) instrumentieren — daher haben alle dieselbe Semantik.
+    def _run(self, messages, *args, **kwargs):
+        self.calls += 1
+        return _FakeCompletion(self._usage)
+
+    async def arun(self, messages, *args, **kwargs):
+        self.calls += 1
+        return _FakeCompletion(self._usage)
+
+    async def _arun(self, messages, *args, **kwargs):
+        self.calls += 1
+        return _FakeCompletion(self._usage)
+
+
+class _RaiseModel:
+    """Hilfs-Modell, das immer eine Exception wirft."""
+
+    def __init__(self, exc: Exception):
+        self._exc = exc
+
+    def run(self, messages, *args, **kwargs):
+        raise self._exc
+
+    def _run(self, messages, *args, **kwargs):
+        raise self._exc
+
+    async def arun(self, messages, *args, **kwargs):
+        raise self._exc
+
+    async def _arun(self, messages, *args, **kwargs):
+        raise self._exc
+
+
+# CAMEL-Protocol-Methoden, die der Proxy instrumentieren muss. Async-Pfade
+# werden in den parametrisierten Tests via ``asyncio.run`` aufgerufen, damit
+# die Test-Fixtures selbst synchron bleiben.
+_PROTOCOL_METHODS = ("run", "_run", "arun", "_arun")
+
+
+def _invoke(method_name: str, proxy, messages):
+    """Sync bzw. async Protocol-Methode auf dem Proxy aufrufen."""
+    method = getattr(proxy, method_name)
+    if method_name in ("arun", "_arun"):
+        return asyncio.run(method(messages))
+    return method(messages)
 
 
 class TestUsageRecording:
@@ -205,21 +254,24 @@ class TestProxyProtocolSurface:
     def _events(run_dir: Path) -> list[dict]:
         return _read_events(run_dir)
 
-    def test_run_path_records_usage(self, run_ledger):
+    @pytest.mark.parametrize("method_name", _PROTOCOL_METHODS)
+    def test_run_path_records_usage(self, run_ledger, method_name):
         guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
         proxy = guard.wrap_model(_FakeModel(_FakeUsage(7, 11)))
-        result = proxy.run([])
+        result = _invoke(method_name, proxy, [])
         assert result.usage.prompt_tokens == 7
+        assert result.usage.completion_tokens == 11
         events = self._events(run_ledger)
         assert events[-1]["success"] is True
         assert events[-1]["prompt_tokens"] == 7
         assert events[-1]["completion_tokens"] == 11
 
-    def test_run_path_records_failure(self, run_ledger):
+    @pytest.mark.parametrize("method_name", _PROTOCOL_METHODS)
+    def test_run_path_records_failure(self, run_ledger, method_name):
         guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
         proxy = guard.wrap_model(_RaiseModel(RuntimeError("boom")))
         with pytest.raises(RuntimeError):
-            proxy.run([])
+            _invoke(method_name, proxy, [])
         events = self._events(run_ledger)
         assert events[-1]["success"] is False
         assert events[-1]["error_type"] == "RuntimeError"
@@ -285,13 +337,3 @@ class TestProxyProtocolSurface:
         proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
         copy.copy(proxy)
         copy.deepcopy(proxy)
-
-
-class _RaiseModel:
-    """Hilfs-Modell, das immer eine Exception wirft."""
-
-    def __init__(self, exc: Exception):
-        self._exc = exc
-
-    def run(self, messages, *args, **kwargs):
-        raise self._exc

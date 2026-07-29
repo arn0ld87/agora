@@ -506,10 +506,15 @@ async function goReport() {
       // run_id-Query ist nur die Registry-Anschrift für die Budget-
       // Verbrauchsdarstellung.
       const runIdForReport = effectiveRunId.value
+      // Issue #764 (Review P1): runId IMMER als Query-Param weiterreichen,
+      // sobald vorhanden — auch wenn der Wert zufällig mit simulation_id
+      // übereinstimmt. Die Run-Registry-ID ist die autoritative Anschrift
+      // für /api/runs/<id>; eine fehlende Query würde den Step4Report auf
+      // die legacy simulation_id-Auflösung zurückfallen lassen.
       router.push({
         name: 'Report',
         params: { reportId: res.data.report_id },
-        query: runIdForReport && runIdForReport !== props.simulationId ? { runId: runIdForReport } : undefined,
+        query: runIdForReport ? { runId: runIdForReport } : undefined,
       })
     }
   } catch (err) {

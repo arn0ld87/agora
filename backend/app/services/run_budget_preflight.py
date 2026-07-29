@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import statistics
-from typing import Optional
+from typing import Any, Optional
 
 from app.contracts.run_budget_contract import (
     PreflightEstimate,
@@ -186,24 +186,36 @@ def estimate_run(
         share_low = 1.0 / n_models
         share_high = 1.0 / n_models
 
+        def _sum_cost_contribution(
+            priced_quotes: list[Any],
+            share: float,
+            tokens: int,
+        ) -> int:
+            """Summenbildung über die bepreisten Modelle mit gemeinsamem Anteil.
+
+            Annahme: 2/3 Input, 1/3 Output (lange Agent-Kontexte). Defensive
+            Validierung statt ``assert``: ``assert`` wird unter ``python -O``
+            wegoptimiert, und die PricingRegistry-Quotes können theoretisch
+            halbierte Felder liefern. Fehlende Preise fuehren zu ``0`` (kein
+            erfundener Beitrag), was der Aufrufer bereits durch das Filtern
+            auf ``status == "priced"`` ausschliesst — wenn doch, ist das ein
+            Datenmodell-Bug, kein Preflight-Fehler.
+            """
+            total = 0
+            for q in priced_quotes:
+                in_mtok = q.input_per_mtok_micros
+                out_mtok = q.output_per_mtok_micros
+                if not isinstance(in_mtok, (int, float)) or not isinstance(out_mtok, (int, float)):
+                    continue
+                blended = (2 * in_mtok + out_mtok) / 3
+                total += int(round(tokens * share * blended / 1_000_000))
+            return total
+
         if not unknown:
             # Alle Preise bekannt: free-Modelle tragen 0, priced-Modelle
             # tragen ihren Tarif × ihren Anteil.
-            cost_low_sum = 0
-            cost_high_sum = 0
-            for q in priced:
-                # 2/3 Input, 1/3 Output (lange Agent-Kontexte).
-                assert q.input_per_mtok_micros is not None
-                assert q.output_per_mtok_micros is not None
-                blended = (
-                    2 * q.input_per_mtok_micros + q.output_per_mtok_micros
-                ) / 3
-                cost_low_sum += int(round(tokens_low * share_low * blended / 1_000_000))
-                cost_high_sum += int(round(tokens_high * share_high * blended / 1_000_000))
-            # free-Modelle: keine Beiträge (Kosten 0). Keine erfundenen 0 für
-            # unbekannte Preise, da "unknown" bereits oben ausgeschlossen.
-            cost_micros_low = cost_low_sum
-            cost_micros_high = cost_high_sum
+            cost_micros_low = _sum_cost_contribution(priced, share_low, tokens_low)
+            cost_micros_high = _sum_cost_contribution(priced, share_high, tokens_high)
             if free and not priced:
                 cost_status = "free"
             else:
@@ -217,18 +229,8 @@ def estimate_run(
             # Anteil der bepreisten/free Modelle ehrlich ausweisen, aber
             # nicht sagen, wie viel auf die unbekannten Modelle entfällt —
             # daher "estimated" mit der bekannten Teilsumme und Warnung.
-            cost_low_sum = 0
-            cost_high_sum = 0
-            for q in priced:
-                assert q.input_per_mtok_micros is not None
-                assert q.output_per_mtok_micros is not None
-                blended = (
-                    2 * q.input_per_mtok_micros + q.output_per_mtok_micros
-                ) / 3
-                cost_low_sum += int(round(tokens_low * share_low * blended / 1_000_000))
-                cost_high_sum += int(round(tokens_high * share_high * blended / 1_000_000))
-            cost_micros_low = cost_low_sum
-            cost_micros_high = cost_high_sum
+            cost_micros_low = _sum_cost_contribution(priced, share_low, tokens_low)
+            cost_micros_high = _sum_cost_contribution(priced, share_high, tokens_high)
             cost_status = "estimated"
             warnings.append(
                 "Für mindestens ein Modell liegt kein Richtpreis vor — "

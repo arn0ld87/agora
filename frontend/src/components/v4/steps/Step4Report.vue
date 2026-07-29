@@ -13,8 +13,11 @@ import { getRun } from '../../../api/runs'
 import {
   RunBudgetStatusSchema,
   RunUsageSchema,
+  type CostStatus,
   type RunBudgetStatus,
   type RunUsage,
+  type TokensStatus,
+  type UsageMetrics,
 } from '../../../contracts/runBudgetContract'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
@@ -106,9 +109,75 @@ const lastReportStatus = ref<StatusData | null>(null)
 
 // Issue #764: Verbrauchsübersicht zum Sim-Run, einmalig nach Abschluss
 // geladen (die Simulation ist der Run — simulation_id == run_id).
-const runUsage = ref<RunUsage | null>(null)
-const runBudget = ref<RunBudgetStatus | null>(null)
+// Wir halten Sim- und Report-Verbrauch in getrennten Refs, leiten den
+// angezeigten `runUsage` als computed ab und mutieren dabei keine der
+// beiden Quellen — damit eine Regeneration des Reports den Sim-Stand
+// nicht überschreibt und Aggregationsverluste ausbleiben.
+const simUsage = ref<RunUsage | null>(null)
+const reportUsage = ref<RunUsage | null>(null)
 const runUsageLoaded = ref(false)
+const runBudget = ref<RunBudgetStatus | null>(null)
+
+function sumOptInt(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): number | null {
+  const av = typeof a === 'number' ? a : null
+  const bv = typeof b === 'number' ? b : null
+  if (av === null && bv === null) return null
+  return (av ?? 0) + (bv ?? 0)
+}
+
+function combineCostStatus(
+  a: CostStatus | undefined,
+  b: CostStatus | undefined,
+): CostStatus {
+  // 'unknown' ist die konservativste Aussage und dominiert; 'estimated'
+  // dominiert über 'measured'/'free', sobald eine Seite nur eine
+  // Teilsumme liefern kann.
+  if (a === 'unknown' || b === 'unknown') return 'unknown'
+  if (a === 'estimated' || b === 'estimated') return 'estimated'
+  if (a === 'free' || b === 'free') return 'free'
+  return 'measured'
+}
+
+function combineTokensStatus(
+  a: TokensStatus | undefined,
+  b: TokensStatus | undefined,
+): TokensStatus {
+  if (a === 'unknown' || b === 'unknown') return 'unknown'
+  if (a === 'partial' || b === 'partial') return 'partial'
+  return 'measured'
+}
+
+const runUsage = computed<RunUsage | null>(() => {
+  const sim = simUsage.value
+  const rep = reportUsage.value
+  if (!sim && !rep) return null
+  // Baseline-Objekt kopieren (spread), damit by_stage / by_provider /
+  // by_model aus genau einer Quelle stammen, die Totals aber aggregiert
+  // werden. Mutationen der Quellen sind ausgeschlossen.
+  const baseline: RunUsage = sim ?? (rep as RunUsage)
+  const simTotals: UsageMetrics = sim?.totals ?? ({} as UsageMetrics)
+  const repTotals: UsageMetrics = rep?.totals ?? ({} as UsageMetrics)
+  const totals: UsageMetrics = {
+    ...baseline.totals,
+    input_tokens: sumOptInt(simTotals.input_tokens, repTotals.input_tokens),
+    output_tokens: sumOptInt(simTotals.output_tokens, repTotals.output_tokens),
+    total_tokens: sumOptInt(simTotals.total_tokens, repTotals.total_tokens),
+    llm_calls:
+      (simTotals.llm_calls ?? 0) + (repTotals.llm_calls ?? 0),
+    cost_micros: sumOptInt(simTotals.cost_micros, repTotals.cost_micros),
+    duration_ms:
+      (simTotals.duration_ms ?? 0) + (repTotals.duration_ms ?? 0),
+    cost_status: combineCostStatus(simTotals.cost_status, repTotals.cost_status),
+    tokens_status: combineTokensStatus(
+      simTotals.tokens_status,
+      repTotals.tokens_status,
+    ),
+  }
+  return { ...baseline, totals }
+})
 
 async function loadRunUsage(): Promise<void> {
   // Issue #764 (Codex P1): runId (Registry-eindeutig) hat Vorrang vor
@@ -122,7 +191,7 @@ async function loadRunUsage(): Promise<void> {
     if (!envelope?.success) return
     const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
     const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
-    runUsage.value = usage.success ? usage.data : null
+    simUsage.value = usage.success ? usage.data : null
     const budget = RunBudgetStatusSchema.nullable().safeParse(raw.budget ?? null)
     runBudget.value = budget.success ? budget.data : null
   } catch { /* Verbrauchsdaten sind optional — Report bleibt nutzbar */ }
@@ -131,9 +200,8 @@ async function loadRunUsage(): Promise<void> {
 // Issue #764 (Codex P1): der Report-Workflow hat einen eigenen Run
 // (report_generation), der den weichen/harten Budget-Limits unterliegt
 // und ueber getReportStatus geliefert wird. Wir laden seinen Verbrauch
-// nach Abschluss zusaetzlich und mergen calls + totals in die bereits
-// geladenen Sim-Daten, damit Budget-Abbrueche des Report-Runs in der
-// Consumption-View erscheinen.
+// nach Abschluss zusaetzlich in `reportUsage` — das `runUsage`-Computed
+// uebernimmt die ehrliche Aggregation aus beiden Quellen.
 async function loadReportRunUsage(): Promise<void> {
   const st = lastReportStatus.value as StatusData | null
   const reportRunId = st?.run_id
@@ -144,33 +212,18 @@ async function loadReportRunUsage(): Promise<void> {
     const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
     const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
     if (!usage.success || !usage.data) return
-    const reportTotals = usage.data.totals
-    const simTotals = runUsage.value?.totals
-    if (simTotals) {
-      // llm_calls ist die einzige addierbare Zahl — Tokens/Kosten sind
-      // bereits in der Sim konsolidiert. Wir inkrementieren die
-      // Aufruf-Zaehlung fuer die Anzeige, lassen die uebrigen Felder
-      // unveraendert (Sim ist die ehrliche Datenquelle fuer Token/Kosten).
-      runUsage.value = {
-        ...usage.data,
-        totals: {
-          ...reportTotals,
-          llm_calls: (simTotals.llm_calls ?? 0) + (reportTotals.llm_calls ?? 0),
-        },
-      }
-    } else {
-      runUsage.value = usage.data
-    }
+    reportUsage.value = usage.data
   } catch { /* Report-Run ist optional */ }
 }
 
 // Sobald der Report terminal ist (completed/incomplete/failed), einmalig
-// die Abschluss-Verbrauchsdaten ziehen.
-watch(isComplete, (done) => {
-  if (done) {
-    void loadRunUsage()
-    void loadReportRunUsage()
-  }
+// die Abschluss-Verbrauchsdaten ziehen. Sim-Ladevorgang zuerst, damit
+// der Report-Verbrauch nicht in einen leeren Baseline aggregiert wird
+// (sonst wirken spaetere Regenerationen wie sprunghafte Zahlen).
+watch(isComplete, async (done) => {
+  if (!done) return
+  await loadRunUsage()
+  await loadReportRunUsage()
 })
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)

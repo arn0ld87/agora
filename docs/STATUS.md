@@ -27,7 +27,7 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 4042 | `cd backend && uv run pytest --collect-only -q` |
+| Backend Tests (collected) | 4059 | `cd backend && uv run pytest --collect-only -q` |
 | Frontend Test-Files | 173 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
@@ -146,6 +146,6 @@ Aktuelle Hardstops:
 ## Nächste Prioritäten
 
 1. E2E als verpflichtenden Pull-Request-Check aktivieren (Läufe sind stabil grün, Branch-Protection auf `main` fehlt noch).
-2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen".
+2. Reproduzierbarkeit, ehrliche Hardware-Tiers (Benchmarks statt Schätzwerte) und Kalibrierungsbaseline für `0.10.0` umsetzen. Die Kosten- und Ressourcenbudgets selbst stehen via [#764](https://github.com/arn0ld87/agora/issues/764) — siehe ROADMAP „Kosten und Ressourcen“.
 
 Die vollständigen Release-Gates stehen in [`ROADMAP.md`](../ROADMAP.md).

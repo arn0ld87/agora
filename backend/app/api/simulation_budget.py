@@ -130,7 +130,7 @@ def preflight_estimate():
             return json_error(
                 ApiErrorCode.VALIDATION_FAILED,
                 status=400,
-                message="time_config enthaelt ungueltige Werte (total_simulation_hours/minutes_per_round)",
+                message="time_config enthält ungültige Werte (total_simulation_hours/minutes_per_round)",
             )
         max_rounds = (hours * 60) // minutes_per_round
 

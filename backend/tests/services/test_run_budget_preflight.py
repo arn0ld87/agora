@@ -272,10 +272,11 @@ class TestCostDistributionAcrossModels:
         # → all-priced ist exakt 2× mixed (gleicher Tarif).
         assert est_all_priced.estimated_cost_micros_low == 2 * est_mixed.estimated_cost_micros_low
 
-    def test_unknown_model_makes_overall_unknown(self, pricing):
-        # Sobald ein Modell ohne Richtpreis dabei ist, ist die Gesamtschätzung
-        # ehrlich "unknown" — wir wissen nicht, wie sich die Tokens auf das
-        # unbekannte Modell verteilen.
+    def test_unknown_model_yields_partial_estimated(self, pricing):
+        # Sobald ein Modell ohne Richtpreis dabei ist, kennen wir nur die
+        # Teilsumme der bepreisten Modelle — die Schätzung wird ehrlich als
+        # "estimated" (mit Warnung) ausgewiesen, nicht als "unknown" für den
+        # gesamten Run.
         est = estimate_run(
             num_agents=20,
             max_rounds=5,

@@ -83,8 +83,15 @@ class _Bucket:
         self.saw_unknown_price = False
 
     def add(self, event: dict[str, Any], pricing: PricingRegistry) -> None:
-        if event.get("success"):
-            self.llm_calls += 1
+        # ``llm_calls`` zaehlt jeden tatsaechlichen Providerattempt (Issue #764):
+        # Auch fehlgeschlagene Requests, Retries und Fallbacks gehoeren dazu.
+        # Reine lokale Fehler nach erfolgreicher Providerantwort (JSON-Parse,
+        # Pydantic-Validation) werden nicht als zusaetzlicher Providerrequest
+        # geloggt, daher kann jeder Eintrag in ``llm_call_events.jsonl`` als
+        # genau ein Providerattempt gezaehlt werden. Die Datei wird ausschliesslich
+        # via ``LlmInvocationLogger.log_event`` beschrieben — keine fremden
+        # Event-Klassifikationen erreichen diesen Bucket.
+        self.llm_calls += 1
         latency = event.get("latency_ms")
         if isinstance(latency, (int, float)):
             self.duration_ms += int(latency)

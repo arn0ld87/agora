@@ -164,9 +164,12 @@ def chat_with_schema(
 def _coerce_optional_int(value: Any) -> Optional[int]:
     """Robust gegen fehlende oder falsch typisierte Ollama-Usage-Felder.
 
-    Ollama-Versionen vor 0.5 lieferten total_duration als Float (Sekunden);
-    spaetere Versionen liefern Nanoseconds-Integer. Wir akzeptieren beides
-    und normalisieren auf Int.
+    Aktuelle Ollama-Versionen liefern Token-Counts und ``total_duration``
+    als Nanosekunden-Integer. Fehlt das Feld oder ist der Typ nicht
+    ganzzahlig konvertierbar (z.B. String, Liste), wird der Wert verworfen
+    (``None`` zurückgegeben). Es findet keine Einheiten-Normalisierung statt
+    — insbesondere wird ein Float nicht in Sekunden oder Millisekunden
+    umgerechnet; die Aufrufer behandeln den Wert als opake Ganzzahl.
     """
     if value is None:
         return None
