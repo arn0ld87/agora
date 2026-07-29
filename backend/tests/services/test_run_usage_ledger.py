@@ -103,6 +103,86 @@ class TestAggregation:
         assert usage.totals.cost_status == "estimated"
         assert usage.totals.cost_micros is not None  # bekannter Anteil ausgewiesen
 
+
+class TestCostStatusAggregation:
+    """Issue #764 (Review): partial-token Daten dürfen nicht als 'measured'
+    ausgewiesen werden. Kostenaussagen folgen der Token-Messqualität."""
+
+    def test_partial_tokens_demote_priced_cost_to_estimated(self, pricing):
+        # 2 priced Events, eines ohne Tokens → Tokens partial, Cost nur
+        # anteilig bekannt. cost_status MUSS "estimated" sein, NICHT
+        # "measured" (sonst wäre die ausgewiesene Summe irreführend).
+        events = [_event(), _event(prompt_tokens=None, completion_tokens=None)]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "partial"
+        assert usage.totals.cost_status == "estimated"
+        assert usage.totals.cost_micros is not None
+
+    def test_all_priced_full_tokens_is_measured(self, pricing):
+        events = [_event(prompt_tokens=1000, completion_tokens=500)]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "measured"
+        assert usage.totals.cost_status == "measured"
+
+    def test_all_free_full_tokens_is_free(self, pricing):
+        events = [_event(
+            provider_id="ollama",
+            model="qwen3:8b",
+            base_url_sanitized="http://localhost:11434",
+        )]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "measured"
+        assert usage.totals.cost_status == "free"
+        assert usage.totals.cost_micros == 0
+
+    def test_all_free_partial_tokens_is_estimated_not_free(self, pricing):
+        # Free-Modell mit fehlenden Tokens: ein "free"-Label wäre irreführend,
+        # weil wir nicht wissen, wie viele Tokens tatsächlich angefallen sind.
+        events = [_event(
+            provider_id="ollama",
+            model="qwen3:8b",
+            base_url_sanitized="http://localhost:11434",
+            prompt_tokens=None,
+            completion_tokens=None,
+        )]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "unknown"
+        assert usage.totals.cost_status == "estimated"
+        assert usage.totals.cost_micros == 0
+
+    def test_mix_priced_and_unknown_full_tokens_stays_estimated(self, pricing):
+        events = [
+            _event(prompt_tokens=1000, completion_tokens=500),
+            _event(provider_id="minimax", model="MiniMax-M9-ultra"),
+        ]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "measured"
+        # Mindestens ein Event hat unbekannten Preis → "estimated",
+        # auch wenn die Token-Messung vollständig ist.
+        assert usage.totals.cost_status == "estimated"
+
+    def test_mix_priced_and_free_full_tokens_is_measured(self, pricing):
+        # Free + priced mit vollen Tokens → Summe exakt, free trägt 0 bei.
+        events = [
+            _event(prompt_tokens=1000, completion_tokens=500),
+            _event(
+                provider_id="ollama",
+                model="qwen3:8b",
+                base_url_sanitized="http://localhost:11434",
+            ),
+        ]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.tokens_status == "measured"
+        assert usage.totals.cost_status == "measured"
+
+    def test_unknown_price_only_events_stay_unknown_no_phantom_zero(self, pricing):
+        # Wichtige Ehrlichkeitsregel: kein Event hat einen Preis → keine
+        # Summe ausweisen. cost_micros MUSS None bleiben (nie 0).
+        events = [_event(provider_id="minimax", model="MiniMax-M9-ultra")]
+        usage = aggregate_usage("run_x", events=events, pricing=pricing)
+        assert usage.totals.cost_status == "unknown"
+        assert usage.totals.cost_micros is None
+
     def test_failed_calls_not_counted_as_calls_but_duration_kept(self, pricing):
         events = [_event(success=False, latency_ms=50.0)]
         usage = aggregate_usage("run_x", events=events, pricing=pricing)

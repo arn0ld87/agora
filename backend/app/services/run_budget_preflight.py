@@ -160,6 +160,11 @@ def estimate_run(
     duration_high = _round_sig(calls_high * latency_high / _CONCURRENCY)
 
     # --- Kosten ---------------------------------------------------------------
+    # Issue #764 (Review): jedes konfigurierte Modell trägt seinen eigenen
+    # Token-Anteil — free Modelle mit 0, priced mit ihrem jeweiligen Tarif,
+    # unknown mit "wir wissen es nicht" (cost_status="unknown"). Ohne
+    # explizite Per-Modell-Gewichtung verteilen wir die geschätzten Tokens
+    # gleichmäßig über alle Modelle (deterministisch, dokumentiert).
     quotes = [
         pricing.resolve(model.provider_id, model.model_id, model.base_url_sanitized)
         for model in models
@@ -172,33 +177,72 @@ def estimate_run(
             "Kein Modell aufgelöst — Kosten können nicht geschätzt werden."
         )
         cost_status = "unknown"
-    elif all(q.status == "free" for q in quotes):
-        cost_micros_low = 0
-        cost_micros_high = 0
-        cost_status = "free"
-    elif any(q.status == "unknown" for q in quotes):
-        warnings.append(
-            "Für mindestens ein Modell liegt kein Richtpreis vor — "
-            "Kosten unbekannt (nicht 0)."
-        )
-        cost_status = "unknown"
     else:
-        # Alle Modelle bepreist: gewichteter Mittelpreis über Modelle.
-        input_rate = statistics.mean(
-            q.input_per_mtok_micros for q in quotes if q.input_per_mtok_micros is not None
-        )
-        output_rate = statistics.mean(
-            q.output_per_mtok_micros for q in quotes if q.output_per_mtok_micros is not None
-        )
-        # Annahme: 2/3 Input, 1/3 Output (lange Agent-Kontexte).
-        blended = (2 * input_rate + output_rate) / 3
-        cost_micros_low = _round_sig(tokens_low * blended / 1_000_000)
-        cost_micros_high = _round_sig(tokens_high * blended / 1_000_000)
-        cost_status = "estimated"
-        warnings.append(
-            f"Kosten basieren auf statischen Richtpreisen "
-            f"(Version {pricing.pricing_version}) — keine Preisgarantie."
-        )
+        priced = [q for q in quotes if q.status == "priced"]
+        free = [q for q in quotes if q.status == "free"]
+        unknown = [q for q in quotes if q.status == "unknown"]
+        n_models = len(quotes)
+        # Gleichverteilung der geschätzten Tokens: jedes Modell bekommt 1/n.
+        share_low = 1.0 / n_models
+        share_high = 1.0 / n_models
+
+        if not unknown:
+            # Alle Preise bekannt: free-Modelle tragen 0, priced-Modelle
+            # tragen ihren Tarif × ihren Anteil.
+            cost_low_sum = 0
+            cost_high_sum = 0
+            for q in priced:
+                # 2/3 Input, 1/3 Output (lange Agent-Kontexte).
+                assert q.input_per_mtok_micros is not None
+                assert q.output_per_mtok_micros is not None
+                blended = (
+                    2 * q.input_per_mtok_micros + q.output_per_mtok_micros
+                ) / 3
+                cost_low_sum += int(round(tokens_low * share_low * blended / 1_000_000))
+                cost_high_sum += int(round(tokens_high * share_high * blended / 1_000_000))
+            # free-Modelle: keine Beiträge (Kosten 0). Keine erfundenen 0 für
+            # unbekannte Preise, da "unknown" bereits oben ausgeschlossen.
+            cost_micros_low = cost_low_sum
+            cost_micros_high = cost_high_sum
+            if free and not priced:
+                cost_status = "free"
+            else:
+                cost_status = "estimated"
+                warnings.append(
+                    f"Kosten basieren auf statischen Richtpreisen "
+                    f"(Version {pricing.pricing_version}) — keine Preisgarantie."
+                )
+        elif priced or free:
+            # Mindestens ein Modell ohne bekannten Preis. Wir können den
+            # Anteil der bepreisten/free Modelle ehrlich ausweisen, aber
+            # nicht sagen, wie viel auf die unbekannten Modelle entfällt —
+            # daher "estimated" mit der bekannten Teilsumme und Warnung.
+            cost_low_sum = 0
+            cost_high_sum = 0
+            for q in priced:
+                assert q.input_per_mtok_micros is not None
+                assert q.output_per_mtok_micros is not None
+                blended = (
+                    2 * q.input_per_mtok_micros + q.output_per_mtok_micros
+                ) / 3
+                cost_low_sum += int(round(tokens_low * share_low * blended / 1_000_000))
+                cost_high_sum += int(round(tokens_high * share_high * blended / 1_000_000))
+            cost_micros_low = cost_low_sum
+            cost_micros_high = cost_high_sum
+            cost_status = "estimated"
+            warnings.append(
+                "Für mindestens ein Modell liegt kein Richtpreis vor — "
+                "Kosten nur als Teilsumme aus bepreisten Modellen ausgewiesen."
+            )
+        else:
+            # Nur unbekannte Preise — keine Aussage möglich.
+            cost_status = "unknown"
+            cost_micros_low = None
+            cost_micros_high = None
+            warnings.append(
+                "Für mindestens ein Modell liegt kein Richtpreis vor — "
+                "Kosten unbekannt (nicht 0)."
+            )
 
     if has_history:
         data_quality = "medium" if cost_status == "unknown" else "high"

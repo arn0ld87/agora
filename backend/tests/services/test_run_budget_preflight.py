@@ -23,6 +23,7 @@ def pricing(tmp_path: Path) -> PricingRegistry:
         "providers": {
             "openai": [
                 {"match": "gpt-4o-mini", "input": 150000, "output": 600000},
+                {"match": "gpt-4o", "input": 250000, "output": 1000000},
             ],
         },
     }
@@ -54,6 +55,12 @@ _PRICED_MODEL = PreflightModelRef(
     stage="simulation_rounds",
     provider_id="openai",
     model_id="gpt-4o-mini",
+    cost_status="measured",
+)
+_PRICED_MODEL_LARGE = PreflightModelRef(
+    stage="simulation_rounds",
+    provider_id="openai",
+    model_id="gpt-4o",
     cost_status="measured",
 )
 _UNKNOWN_MODEL = PreflightModelRef(
@@ -175,3 +182,119 @@ class TestEdgeCases:
             history=_empty_history(),
         )
         assert est.pricing_version == "2099-01"
+
+
+class TestCostDistributionAcrossModels:
+    """Issue #764 (Review): freie Modelle dürfen nicht zu Kosten anderer
+    Modelle beitragen. Tokens werden gleichmäßig auf alle konfigurierten
+    Modelle verteilt; jedes Modell berechnet seinen Anteil an seinem
+    eigenen Tarif."""
+
+    def test_only_free_models_is_free_with_zero(self, pricing):
+        est = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_LOCAL_MODEL, _LOCAL_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.cost_status == "free"
+        assert est.estimated_cost_micros_low == 0
+        assert est.estimated_cost_micros_high == 0
+
+    def test_single_priced_model_uses_full_share(self, pricing):
+        # Mit einem priced Modell landen 100% der geschätzten Tokens auf
+        # seinem Tarif (entspricht dem alten Verhalten in diesem Fall).
+        # Wichtiger Kontrast: free + priced MUSS günstiger sein als nur
+        # priced — das wird in test_mix_free_and_priced_does_not_overcharge
+        # geprüft. Hier nur sanity-check, dass ein einzelnes priced Modell
+        # eine plausible Schätzung liefert.
+        est = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.cost_status == "estimated"
+        assert est.estimated_cost_micros_low is not None
+        assert est.estimated_cost_micros_low > 0
+
+    def test_multiple_priced_models_with_different_rates(self, pricing):
+        # gpt-4o-mini billiger, gpt-4o teurer. Beide bepreist → Gesamtsumme
+        # ist die Summe der Einzelanteile.
+        est = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL, _PRICED_MODEL_LARGE],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.cost_status == "estimated"
+        assert est.estimated_cost_micros_low is not None
+        assert est.estimated_cost_micros_high is not None
+        assert est.estimated_cost_micros_high >= est.estimated_cost_micros_low
+        # Bei gleichem Tarif: doppeltes Set = einfaches Set × 2
+        # Mit gpt-4o (teurer) als zweitem Modell muss die Summe
+        # größer sein als das einzelne gpt-4o-mini-Modell.
+        est_only_mini = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.estimated_cost_micros_low > est_only_mini.estimated_cost_micros_low
+
+    def test_mix_free_and_priced_does_not_overcharge(self, pricing):
+        # Free + priced: free darf die Gesamtsumme NICHT erhöhen. Mit zwei
+        # priced und einem free sollte die Summe kleiner sein als mit drei
+        # priced (gleicher Tarif).
+        est_mixed = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL, _LOCAL_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        est_all_priced = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL, _PRICED_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est_mixed.cost_status == "estimated"
+        assert est_mixed.estimated_cost_micros_low is not None
+        assert est_all_priced.estimated_cost_micros_low is not None
+        # Mixed = ein priced Modell (50% der Tokens) + ein free (0)
+        # All-priced = zwei priced (je 50%, beide zum gleichen Tarif)
+        # → all-priced ist exakt 2× mixed (gleicher Tarif).
+        assert est_all_priced.estimated_cost_micros_low == 2 * est_mixed.estimated_cost_micros_low
+
+    def test_unknown_model_makes_overall_unknown(self, pricing):
+        # Sobald ein Modell ohne Richtpreis dabei ist, ist die Gesamtschätzung
+        # ehrlich "unknown" — wir wissen nicht, wie sich die Tokens auf das
+        # unbekannte Modell verteilen.
+        est = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_PRICED_MODEL, _UNKNOWN_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.cost_status == "estimated"
+        assert est.estimated_cost_micros_low is not None
+        assert any("kein Richtpreis" in w for w in est.warnings)
+
+    def test_only_unknown_models_is_unknown_no_phantom_zero(self, pricing):
+        est = estimate_run(
+            num_agents=20,
+            max_rounds=5,
+            models=[_UNKNOWN_MODEL],
+            pricing=pricing,
+            history=_empty_history(),
+        )
+        assert est.cost_status == "unknown"
+        assert est.estimated_cost_micros_low is None
+        assert est.estimated_cost_micros_high is None

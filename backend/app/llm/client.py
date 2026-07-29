@@ -400,6 +400,47 @@ class LLMClient:
         self._budget_enforcer_cache = enforcer
         return enforcer
 
+    def _budget_check(self) -> None:
+        """Hard-Limit-Prüfung VOR dem Call.
+
+        :class:`BudgetExceededError` wird absichtlich durchgereicht — harte
+        Limits müssen weiterhin greifen. Alle anderen Fehler (Datei-,
+        Ledger-, Parsing-Probleme etc.) werden geloggt und führen nicht zum
+        Blockieren des eigentlichen LLM-Calls (Budget ist Zusatz, nicht
+        Hotpath-Risiko).
+        """
+        from ..services.run_budget import BudgetExceededError
+
+        enforcer = self._budget_enforcer()
+        if enforcer is None:
+            return
+        try:
+            enforcer.check_before_call()
+        except BudgetExceededError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "budget check_before_call failed (LLM call proceeds): %s", exc
+            )
+
+    def _budget_record(self) -> None:
+        """Weiche-Limit-Prüfung NACH dem Call.
+
+        Darf einen erfolgreich abgeschlossenen LLM-Call NICHT nachträglich
+        in einen Fehler verwandeln — interne Budget-Fehler werden geloggt
+        und geschluckt.
+        """
+        enforcer = self._budget_enforcer()
+        if enforcer is None:
+            return
+        try:
+            enforcer.record_after_call()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "budget record_after_call failed (recorded call stays successful): %s",
+                exc,
+            )
+
     def _log_invocation_event(
         self,
         *,
@@ -476,9 +517,7 @@ class LLMClient:
         # Budget-Gate (Issue #764): harte Limits werden unmittelbar VOR dem
         # kosten-/tokenrelevanten Call geprüft — deterministisch, bevor auch
         # nur ein Request abgesetzt wird (inkl. E2E-Stub-Pfad).
-        _enforcer = self._budget_enforcer()
-        if _enforcer is not None:
-            _enforcer.check_before_call()
+        self._budget_check()
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
         # Liefert deterministischen ReACT-Loop-String (Tool-Call oder Final Answer).
@@ -491,8 +530,7 @@ class LLMClient:
             # Invocation-Event auch im Stub-Modus schreiben, damit Verbrauch
             # und Budget-Monitore im E2E-Test real beobachtbar sind.
             self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
-            if _enforcer is not None:
-                _enforcer.record_after_call()
+            self._budget_record()
             return e2e_stub_chat_response(messages=messages)
         kwargs: Dict[str, Any] = {
             "model": self.model,
@@ -621,8 +659,7 @@ class LLMClient:
             # Issue #764 (Codex P2): record_after_call auch im Truncation-Pfad
             # — sonst zaehlt der fehlgeschlagene Call nicht in den weichen
             # Budget-Limits (calls) und der Enforcer verliert einen Eintrag.
-            if _enforcer is not None:
-                _enforcer.record_after_call()
+            self._budget_record()
             raise LLMOutputTruncatedError(
                 f"LLM output truncated at token cap: model={self.model}, "
                 f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
@@ -637,8 +674,7 @@ class LLMClient:
             completion_tokens=_usage_completion if isinstance(_usage_completion, int) else None,
         )
         # Weiche Budget-Limits nach dem abgeschlossenen Call prüfen (#764).
-        if _enforcer is not None:
-            _enforcer.record_after_call()
+        self._budget_record()
         # Token-Counter — nur bei vorhandenen Integer-Usage-Daten, kein Log-Spam bei fehlendem Usage.
         # isinstance-Check schützt gegen MagicMock-Attribute in Tests (Mock gibt immer
         # einen Sub-Mock zurück, kein None) und gegen nicht-numerische Provider-Antworten.
@@ -816,9 +852,7 @@ class LLMClient:
         """
         # Budget-Gate (Issue #764): harte Limits vor jedem Pfad prüfen —
         # inkl. E2E-Stub und nativem Ollama-Pfad, der chat() umgeht.
-        _enforcer = self._budget_enforcer()
-        if _enforcer is not None:
-            _enforcer.check_before_call()
+        self._budget_check()
         # E2E-Stub-Pfad — nur aktiv wenn AGORA_E2E_LLM_MODE=stub gesetzt.
         # Muss VOR Cache-Lookup, Token-Counter, Retry und allen LLM-Calls liegen.
         if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
@@ -835,8 +869,7 @@ class LLMClient:
                 elif isinstance(schema, dict):
                     schema_for_stub = schema
             self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
-            if _enforcer is not None:
-                _enforcer.record_after_call()
+            self._budget_record()
             return e2e_stub_response(
                 schema=schema_for_stub,
                 messages=list(messages),
@@ -937,8 +970,7 @@ class LLMClient:
                         prompt_tokens=ollama_usage.get("prompt_eval_count"),
                         completion_tokens=ollama_usage.get("eval_count"),
                     )
-                    if _enforcer is not None:
-                        _enforcer.record_after_call()
+                    self._budget_record()
                     cleaned_response = _strip_llm_json_envelope(ollama_response)
                     parsed: Dict[str, Any] = json.loads(cleaned_response)
                     return self._maybe_validate(parsed, schema)

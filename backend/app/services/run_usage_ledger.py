@@ -123,6 +123,10 @@ class _Bucket:
         return completion if isinstance(completion, int) else 0
 
     def to_metrics(self) -> UsageMetrics:
+        # --- tokens_status -----------------------------------------------------
+        # "measured" nur, wenn mindestens ein Event Tokens geliefert hat UND
+        # kein Event ohne Tokens daneben liegt. "partial" = gemischte Daten,
+        # "unknown" = gar keine Token-Daten.
         tokens_status = "unknown"
         input_tokens: Optional[int] = None
         output_tokens: Optional[int] = None
@@ -133,18 +137,43 @@ class _Bucket:
             total_tokens = self.input_tokens + self.output_tokens
             tokens_status = "measured" if self.events_without_tokens == 0 else "partial"
 
+        tokens_complete = tokens_status == "measured"
+
+        # --- cost_status -------------------------------------------------------
+        # Ehrliche Aggregationsregeln (Issue #764):
+        #   * "measured"  → alle relevanten Events haben bekannte Preise UND
+        #                   vollständige Token-Usage. cost_micros ist die
+        #                   belastbare Gesamtsumme.
+        #   * "free"      → alle Events sind kostenfrei UND Token-Usage
+        #                   vollständig (sonst wäre die Aussage irreführend).
+        #   * "estimated" → bekannte Teilsumme aus bepreisten Events, aber
+        #                   entweder Tokenwerte teilweise fehlend oder ein
+        #                   Anteil hat unbekannten Preis.
+        #   * "unknown"   → keine sinnvolle Kostenaussage möglich. cost_micros
+        #                   bleibt None — wir geben nie eine erfundene 0 aus.
         cost_status = "unknown"
         cost_micros: Optional[int] = None
-        if self.saw_priced or self.saw_free:
-            if not self.saw_unknown_price:
-                # Alle Events sind bepreist oder kostenfrei → ehrlich messbar.
-                cost_status = "free" if (self.saw_free and not self.saw_priced) else "measured"
-                cost_micros = self.cost_micros_known
-            else:
-                # Gemischt: bekannte Teilsumme ausweisen, aber als estimated
-                # kennzeichnen, wenn tatsächlich ein bepreister Anteil fehlt.
-                cost_status = "estimated"
-                cost_micros = self.cost_micros_known if (self.saw_priced or self.saw_free) else None
+        if not (self.saw_priced or self.saw_free):
+            # Kein Event hat einen bekannten Preis → keine Aussage möglich.
+            cost_status = "unknown"
+            cost_micros = None
+        elif self.saw_unknown_price:
+            # Mindestens ein Event ohne bekannten Preis: nur die bepreisten/
+            # kostenlosen Anteile können wir ehrlich ausweisen, der Rest ist
+            # eine Annahme → "estimated".
+            cost_status = "estimated"
+            cost_micros = self.cost_micros_known
+        elif tokens_complete:
+            # Alle Events bepreist/free, vollständige Token-Usage — belastbare
+            # Gesamtsumme (free-Events tragen 0 Micros bei).
+            cost_status = "measured" if self.saw_priced else "free"
+            cost_micros = self.cost_micros_known
+        else:
+            # Alle Preise bekannt, aber Token-Daten teilweise unvollständig —
+            # wir wissen nicht, was die fehlenden Tokens gekostet hätten. Die
+            # bekannte Teilsumme ehrlich als "estimated" ausweisen.
+            cost_status = "estimated"
+            cost_micros = self.cost_micros_known
 
         return UsageMetrics(
             input_tokens=input_tokens,
