@@ -211,13 +211,13 @@ function pickCommand(value: unknown): void {
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
 }
 
 .cmdk-input::placeholder {
-  color: var(--text-tertiary, var(--text-secondary));
+  color: var(--text-primary);
 }
 
 /* Liste */
@@ -242,7 +242,7 @@ function pickCommand(value: unknown): void {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary, var(--text-secondary));
+  color: var(--text-primary);
   pointer-events: none;
 }
 
@@ -304,7 +304,7 @@ function pickCommand(value: unknown): void {
   padding: 20px;
   text-align: center;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* Footer / Hint-Leiste */
@@ -322,7 +322,7 @@ function pickCommand(value: unknown): void {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-tertiary, var(--text-secondary));
+  color: var(--text-primary);
 }
 
 .cmdk-key {
@@ -338,7 +338,7 @@ function pickCommand(value: unknown): void {
   font-family: inherit;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* Scrollbar-Styling (WebKit) */

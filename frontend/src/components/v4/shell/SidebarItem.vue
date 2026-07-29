@@ -92,7 +92,7 @@ function handleClick(event: MouseEvent) {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--accent-tint-text);
   background: transparent;
   text-decoration: none;
   cursor: pointer;
@@ -107,7 +107,7 @@ function handleClick(event: MouseEvent) {
 
 .sidebar-item--active {
   background: var(--accent-tint-bg);
-  color: var(--text-secondary);
+  color: var(--accent-tint-text);
   font-weight: 600;
 }
 
@@ -122,7 +122,7 @@ function handleClick(event: MouseEvent) {
 .sidebar-item--disabled {
   opacity: var(--v4-state-disabled-opacity);
   cursor: var(--v4-state-disabled-cursor);
-  color: var(--text-secondary);
+  color: var(--accent-tint-text);
 }
 
 .sidebar-item--disabled:hover {
