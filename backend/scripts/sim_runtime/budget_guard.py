@@ -215,6 +215,18 @@ class _UsageTrackingModelProxy:
     Fängt run/_run/arun/_arun ab, misst Latenz und extrahiert Token-Usage
     aus ChatCompletion-Resultaten (falls der Provider sie liefert — sonst
     bleibt die Messung ehrlich unbekannt).
+
+    Issue #764 (Review) — Protokoll-Audit:
+        CAMEL/OASIS ruft ModelBackends ausschließlich über die vier
+        Methoden ``run`` / ``_run`` / ``arun`` / ``_arun`` auf
+        (siehe ``camel.models.base_model.BaseModelBackend``).
+        Es gibt keine ``__call__``-, ``__deepcopy__``-, ``__reduce__``-
+        oder sonstigen Dunder-Hooks, die CAMEL erwartet. Wir leiten nur
+        die vier Methoden explizit durch und reichen alles andere via
+        ``__getattr__`` / ``__setattr__`` an das Target durch. Copy,
+        Pickle und ``__call__`` werden absichtlich NICHT implementiert —
+        wäre das nötig, würden die Tests ``test_copy_not_required_for_oasis``
+        und ``test_proxy_has_no_dunder_call`` fehlschlagen.
     """
 
     def __init__(self, target: Any, guard: SubprocessBudgetGuard):

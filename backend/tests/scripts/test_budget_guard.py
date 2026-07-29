@@ -193,3 +193,105 @@ class TestFromEnvironment:
         guard = SubprocessBudgetGuard.from_environment(str(tmp_path))
         assert guard is not None
         assert guard.budget_config == {}
+
+
+class TestProxyProtocolSurface:
+    """Issue #764 (Review): CAMEL ruft ModelBackends ausschließlich über
+    run/_run/arun/_arun auf. Der Proxy muss genau diese vier Methoden
+    instrumentieren und alles andere transparent an das Target durchreichen.
+    """
+
+    @staticmethod
+    def _events(run_dir: Path) -> list[dict]:
+        return _read_events(run_dir)
+
+    def test_run_path_records_usage(self, run_ledger):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(7, 11)))
+        result = proxy.run([])
+        assert result.usage.prompt_tokens == 7
+        events = self._events(run_ledger)
+        assert events[-1]["success"] is True
+        assert events[-1]["prompt_tokens"] == 7
+        assert events[-1]["completion_tokens"] == 11
+
+    def test_run_path_records_failure(self, run_ledger):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_RaiseModel(RuntimeError("boom")))
+        with pytest.raises(RuntimeError):
+            proxy.run([])
+        events = self._events(run_ledger)
+        assert events[-1]["success"] is False
+        assert events[-1]["error_type"] == "RuntimeError"
+
+    def test_attribute_forwarding_writes_back(self, run_ledger):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        target = _FakeModel(_FakeUsage(1, 1))
+        proxy = guard.wrap_model(target)
+        # read
+        assert proxy.model_type == "fake-model"
+        # write (z.B. CAMEL setzt gelegentlich Model-Attribute neu)
+        proxy.model_type = "mutated"
+        assert target.model_type == "mutated"
+
+    def test_dict_based_usage_extraction(self, run_ledger):
+        # Manche provider liefern ``usage`` als dict statt pydantic — der
+        # Mapping-Pfad in ``_extract_usage`` muss genauso funktionieren.
+        from sim_runtime.budget_guard import _UsageTrackingModelProxy
+
+        class _DictUsageResult:
+            usage = {"prompt_tokens": 4, "completion_tokens": 9}
+
+        prompt, completion = _UsageTrackingModelProxy._extract_usage(
+            _DictUsageResult()
+        )
+        assert prompt == 4
+        assert completion == 9
+
+    def test_missing_usage_stays_unknown(self, run_ledger):
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(usage=None))
+        proxy.run([])
+        events = self._events(run_ledger)
+        assert events[-1]["success"] is True
+        assert events[-1]["prompt_tokens"] is None
+        assert events[-1]["completion_tokens"] is None
+
+    def test_proxy_does_not_implement_call(self, run_ledger):
+        # Kein ``__call__``: CAMEL ruft das Backend strukturell über
+        # ``run`` auf. Falls CAMEL irgendwann ein Callable-Interface
+        # erwartet, soll dieser Test fehlschlagen und der Reviewer es
+        # merken (Audit-Anker, Issue #764).
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+        with pytest.raises(TypeError):
+            proxy([])  # type: ignore[call-arg]
+
+    def test_proxy_has_no_copy_or_reduce_protocol(self, run_ledger):
+        # Issue #764 (Review): CAMEL/OASIS pickelt/copied ModelBackends
+        # NICHT — der Proxy darf keine eigenen ``__copy__`` / ``__deepcopy__``
+        # / ``__reduce__`` definieren. Würde CAMEL eines Tages eines davon
+        # speziell erwarten, fällt dieser Test als Audit-Anker.
+        import copy
+
+        guard = SubprocessBudgetGuard(str(run_ledger), "run_sim1")
+        proxy_cls = type(guard.wrap_model(_FakeModel(_FakeUsage(1, 1))))
+        # Eigene (d.h. nicht von object geerbte) Implementierungen?
+        assert "__copy__" not in proxy_cls.__dict__
+        assert "__deepcopy__" not in proxy_cls.__dict__
+        assert "__reduce__" not in proxy_cls.__dict__
+        # Default-Semantik reicht: copy.copy/deepcopy funktionieren über
+        # ``object.__reduce_ex__`` und sind für den Runtime-Pfad nicht nötig.
+        proxy = guard.wrap_model(_FakeModel(_FakeUsage(1, 1)))
+        copy.copy(proxy)
+        copy.deepcopy(proxy)
+
+
+class _RaiseModel:
+    """Hilfs-Modell, das immer eine Exception wirft."""
+
+    def __init__(self, exc: Exception):
+        self._exc = exc
+
+    def run(self, messages, *args, **kwargs):
+        raise self._exc
