@@ -12,15 +12,24 @@ on:
     branches: [main, "release/**", "rc/**"]
     tags: ["v*"]
   pull_request:
+    # build-only muss fuer alle Repo-Aenderungen laufen, die das Docker-Image
+    # oder die Workflow-Logik beeinflussen koennen. Eine zu enge paths-Liste
+    # fuehrt dazu, dass der Required Check auf "Expected — Waiting for status
+    # to be reported" stehenbleibt, weil der Workflow gar nicht startet (Issue
+    # aus CHANGELOG-Eintrag 2026-07-28). Die fruehere Luecke wurde fuer
+    # Docs-PRs geschlossen; .gitignore/.dockerignore/aenderungen an anderen
+    # Workflows waren weiter ungetriggert.
     paths:
       - Dockerfile
       - "docker-compose*.yml"
+      - ".dockerignore"
+      - ".gitignore"
       - "deploy/**"
       - "backend/**"
       - "frontend/**"
       - "docs/**"
       - "**/*.md"
-      - ".github/workflows/docker-image.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
     inputs:
       force_publish:
