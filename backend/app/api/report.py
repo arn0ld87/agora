@@ -245,8 +245,11 @@ def get_report_evidence(report_id: str):
     evidence_map = ReportManager.get_evidence_map(report_id)
     if not evidence_map:
         return json_error(f"No evidence map available for report: {report_id}", status=404)
-    from ..services.evidence_migrations import migrate_v1_to_v2
-    migrated = migrate_v1_to_v2(evidence_map)
+    from ..services.evidence_migrations import (
+        migrate_medium_seed_only_claims_to_low,
+        migrate_v1_to_v2,
+    )
+    migrated = migrate_medium_seed_only_claims_to_low(migrate_v1_to_v2(evidence_map))
     return json_success(EvidenceMapModel.model_validate(migrated).model_dump(mode="json"))
 
 

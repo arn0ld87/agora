@@ -1,4 +1,5 @@
-"""Tests für ``evidence_migrations.migrate_v1_to_v2`` (Sub-Slice 02a, Refs #107)."""
+"""Tests für ``evidence_migrations.migrate_v1_to_v2`` (Sub-Slice 02a, Refs #107)
+und ``migrate_medium_seed_only_claims_to_low`` (Issue #963)."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ import copy
 
 from app.services.evidence_migrations import (
     CURRENT_SCHEMA_VERSION,
+    migrate_medium_seed_only_claims_to_low,
     migrate_v1_to_v2,
 )
 
@@ -112,3 +114,125 @@ def test_migrate_round_trip_preserves_claim_payload():
     migrated = migrate_v1_to_v2(raw)
 
     assert migrated["sections"][0]["claims"][0] == expected_claim
+
+
+# ---------------------------------------------------------------------------
+# migrate_medium_seed_only_claims_to_low (Issue #963)
+# ---------------------------------------------------------------------------
+
+
+def _seed_only_map(claims):
+    return {
+        "schema_version": 2,
+        "report_id": "report_abcdef123456",
+        "sections": [
+            {
+                "section_index": 1,
+                "section_title": "Kontext",
+                "claims": claims,
+                "hypotheses": [],
+                "data_gaps": [],
+            }
+        ],
+        "global_evidence": [],
+    }
+
+
+def _claim(label, evidence):
+    return {
+        "claim_id": "claim_01",
+        "claim_text": "Nutzer bevorzugen A.",
+        "confidence_label": label,
+        "evidence": evidence,
+    }
+
+
+_SEED = {"source_kind": "seed_corpus", "source": "seed"}
+_GRAPH = {"source_kind": "graph_relation", "source": "graph"}
+_QUOTE = {"source_kind": "agent_quote", "quote": "Wörtliches Zitat."}
+_QUOTE_EMPTY = {"source_kind": "agent_quote", "quote": ""}
+_QUOTE_MISSING = {"source_kind": "agent_quote"}
+
+
+def test_medium_seed_only_claim_becomes_low():
+    raw = _seed_only_map([_claim("medium", [_SEED])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    assert migrated["sections"][0]["claims"][0]["confidence_label"] == "low"
+
+
+def test_medium_graph_relation_only_claim_becomes_low():
+    raw = _seed_only_map([_claim("medium", [_GRAPH])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    assert migrated["sections"][0]["claims"][0]["confidence_label"] == "low"
+
+
+def test_medium_quote_without_quote_field_becomes_low():
+    for quote_evidence in (_QUOTE_EMPTY, _QUOTE_MISSING):
+        raw = _seed_only_map([_claim("medium", [quote_evidence, _SEED])])
+
+        migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+        assert migrated["sections"][0]["claims"][0]["confidence_label"] == "low"
+
+
+def test_medium_agent_grounded_claim_stays_medium():
+    raw = _seed_only_map([_claim("medium", [_QUOTE, _SEED])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    assert migrated["sections"][0]["claims"][0]["confidence_label"] == "medium"
+
+
+def test_medium_label_matching_is_case_insensitive():
+    raw = _seed_only_map([_claim("Medium", [_SEED]), _claim("MEDIUM", [_QUOTE, _SEED])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    claims = migrated["sections"][0]["claims"]
+    assert claims[0]["confidence_label"] == "low"
+    assert claims[1]["confidence_label"] == "MEDIUM"
+
+
+def test_migrate_medium_seed_only_is_idempotent():
+    raw = _seed_only_map([_claim("medium", [_SEED]), _claim("medium", [_QUOTE, _SEED])])
+    once = migrate_medium_seed_only_claims_to_low(copy.deepcopy(raw))
+
+    twice = migrate_medium_seed_only_claims_to_low(copy.deepcopy(once))
+
+    assert twice == once
+
+
+def test_migrate_medium_seed_only_none_returns_none():
+    assert migrate_medium_seed_only_claims_to_low(None) is None
+
+
+def test_migrate_medium_seed_only_keeps_non_dict_claims_untouched():
+    raw = _seed_only_map(["not-a-dict-claim", _claim("medium", [_SEED])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    claims = migrated["sections"][0]["claims"]
+    assert claims[0] == "not-a-dict-claim"
+    assert claims[1]["confidence_label"] == "low"
+
+
+def test_migrate_medium_seed_only_ignores_high_and_verified_claims():
+    raw = _seed_only_map([_claim("high", [_SEED]), _claim("verified", [_GRAPH])])
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    claims = migrated["sections"][0]["claims"]
+    assert claims[0]["confidence_label"] == "high"
+    assert claims[1]["confidence_label"] == "verified"
+
+
+def test_migrate_medium_seed_only_skips_non_dict_sections():
+    raw = {"schema_version": 2, "sections": ["not-a-dict-section", None]}
+
+    migrated = migrate_medium_seed_only_claims_to_low(raw)
+
+    assert migrated["sections"] == ["not-a-dict-section", None]
