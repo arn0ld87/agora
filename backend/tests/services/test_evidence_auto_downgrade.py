@@ -41,6 +41,7 @@ def _quote_evidence(group: str, supports: bool = True) -> dict:
         "supports_claim": supports,
         "persona_stakeholder_group": group,
         "snippet": "Bla bla",
+        "quote": "Original-Zitat aus der Gruppe.",
     }
 
 

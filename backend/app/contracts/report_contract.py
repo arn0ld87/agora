@@ -286,21 +286,26 @@ class ReportClaimModel(BaseModel):
         # mind. 1 agent_quote- UND mind. 1 seed_corpus-Evidence. Seed-only-Claims
         # (ausschließlich seed_corpus) müssen low lauten; reine agent_quote ohne
         # Korpusbezug sind ebenfalls nicht agent_grounded. supports_claim ist
-        # für medium nicht Pflicht (nur für high/verified). Bisher passte ein
-        # seed_only-Claim mit Label medium unbeanstandet — die Regel hing nur
-        # am Modellgehorsam. Der Validator ist das Auffangnetz (ADR-0002 Risiko).
+        # für medium nicht Pflicht (nur für high/verified). ADR-0002 Z. 54 fordert
+        # zusätzlich ein nicht-leeres Quote-Feld für die agent_quote-Evidence —
+        # ein zusammengefasstes Interview ohne Original-Zitat trägt kein medium
+        # (Codex PR-Review #961 P2). Bisher passte ein seed_only-Claim mit Label
+        # medium unbeanstandet — die Regel hing nur am Modellgehorsam. Der
+        # Validator ist das Auffangnetz (ADR-0002 Risiko).
         if self.confidence_label != ConfidenceLabel.medium:
             return self
         has_agent_quote = any(
-            e.source_kind == EvidenceSourceKind.agent_quote for e in self.evidence
+            e.source_kind == EvidenceSourceKind.agent_quote and e.quote
+            for e in self.evidence
         )
         has_seed_corpus = any(
             e.source_kind == EvidenceSourceKind.seed_corpus for e in self.evidence
         )
         if not (has_agent_quote and has_seed_corpus):
             raise ValueError(
-                f"Label 'medium' verlangt Evidence aus mind. 1 agent_quote UND "
-                f"mind. 1 seed_corpus (ADR-0002 Stufe agent_grounded). "
+                f"Label 'medium' verlangt Evidence aus mind. 1 agent_quote "
+                f"(mit nicht-leerem quote-Feld, ADR-0002 Z. 54) UND mind. 1 "
+                f"seed_corpus (ADR-0002 Stufe agent_grounded). "
                 f"Gefunden: agent_quote={has_agent_quote}, "
                 f"seed_corpus={has_seed_corpus}."
             )

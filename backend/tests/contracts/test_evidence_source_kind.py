@@ -27,6 +27,7 @@ def _agent_quote(group: str, *, supports: bool = True, score: float = 0.7) -> Ev
         type=EvidenceType.agent_interview,
         source="agent-log",
         snippet=f"Persona aus {group}: Beispiel-Aussage.",
+        quote=f"Original-Zitat aus {group}.",
         match_score=score,
         supports_claim=supports,
         source_kind=EvidenceSourceKind.agent_quote,

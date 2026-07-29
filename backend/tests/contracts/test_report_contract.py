@@ -75,11 +75,16 @@ def test_verified_requires_strong_match():
 
 
 def _agent_quote_evidence(group: str, score: float = 0.88) -> EvidenceItemModel:
-    """Helfer fuer high/verified-Tests nach ADR-0002 Anker 4 (Sub-Slice M11.7b)."""
+    """Helfer fuer high/verified-Tests nach ADR-0002 Anker 4 (Sub-Slice M11.7b).
+
+    Enthält ein nicht-leeres ``quote``-Feld, sodass die Evidence auch die
+    agent_grounded-Stufe (medium, ADR-0002 Z. 54) erfuellt.
+    """
     return EvidenceItemModel(
         type=EvidenceType.agent_interview,
         source="agent-log",
         snippet=f"Aussage aus {group}.",
+        quote=f"Original-Zitat aus {group}.",
         match_score=score,
         supports_claim=True,
         source_kind=EvidenceSourceKind.agent_quote,
@@ -210,6 +215,7 @@ def test_medium_supports_claim_false_is_valid():
                 type=EvidenceType.agent_interview,
                 source="agent-log",
                 snippet="Aussage aus Vertrieb.",
+                quote="Original-Zitat aus Vertrieb.",
                 source_kind=EvidenceSourceKind.agent_quote,
                 persona_stakeholder_group="Vertrieb",
                 supports_claim=False,
