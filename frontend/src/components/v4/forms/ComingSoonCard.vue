@@ -70,7 +70,7 @@ withDefaults(defineProps<{
   font-family: var(--font-sans);
   font-size: 17px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .v4-coming-soon__desc {
   margin: 0;

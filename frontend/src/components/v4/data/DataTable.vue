@@ -162,7 +162,7 @@ const hasActions = computed(() => !!useSlots()['actions'])
 /* ── Header ─────────────────────────────────────────────────── */
 
 .dt-head-row {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .dt-th {
@@ -171,7 +171,7 @@ const hasActions = computed(() => !!useSlots()['actions'])
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--table-cell-py, 10px) var(--table-cell-px, 16px);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -222,7 +222,7 @@ const hasActions = computed(() => !!useSlots()['actions'])
 }
 
 .dt-td--secondary {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .dt-td--actions {
@@ -244,7 +244,7 @@ const hasActions = computed(() => !!useSlots()['actions'])
 }
 
 .dt-empty-default {
-  color: var(--text-tertiary);
+  color: var(--text-primary);
   font-size: 13px;
 }
 </style>

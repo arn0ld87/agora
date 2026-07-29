@@ -194,7 +194,7 @@ const navSettings: NavSettingsItem[] = [
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;

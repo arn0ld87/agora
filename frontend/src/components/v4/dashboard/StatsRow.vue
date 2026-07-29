@@ -60,7 +60,7 @@ defineProps<{
   font-size: 26px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   line-height: 1.1;
   white-space: nowrap;
 }

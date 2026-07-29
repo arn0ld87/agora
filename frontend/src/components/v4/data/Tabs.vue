@@ -133,7 +133,7 @@ function isActive(tab: TabItem): boolean {
 }
 
 .tabs-item--active {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-weight: 600;
   border-bottom-color: var(--accent);
 }

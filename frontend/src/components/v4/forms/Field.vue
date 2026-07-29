@@ -24,7 +24,7 @@ defineProps<{
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   line-height: 1;
 }
 

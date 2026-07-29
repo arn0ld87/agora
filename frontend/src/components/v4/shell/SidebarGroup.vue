@@ -81,7 +81,7 @@ watch(hasActiveChild, (active) => {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: transparent;
   cursor: pointer;
   margin-top: 12px;
@@ -95,7 +95,7 @@ watch(hasActiveChild, (active) => {
 
 .sidebar-group__trigger--active {
   background: var(--accent-tint-bg);
-  color: var(--accent);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
@@ -126,7 +126,7 @@ watch(hasActiveChild, (active) => {
   border-radius: 8px;
   font-size: 13.5px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: transparent;
   text-decoration: none;
   cursor: pointer;
@@ -141,8 +141,8 @@ watch(hasActiveChild, (active) => {
 
 .sidebar-group__body :deep(.sidebar-sub-item--active) {
   background: var(--accent-tint-bg);
-  color: var(--accent);
+  color: var(--text-secondary);
   font-weight: 600;
-  border-left-color: var(--accent);
+  border-left-color: var(--text-secondary);
 }
 </style>

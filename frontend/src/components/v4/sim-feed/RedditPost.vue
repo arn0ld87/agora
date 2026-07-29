@@ -137,6 +137,6 @@ const scoreDisplay = computed(() => {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text-primary, #111827);
+  color: var(--text-secondary, #111827);
 }
 </style>

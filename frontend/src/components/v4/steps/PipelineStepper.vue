@@ -160,11 +160,11 @@ const emit = defineEmits<{
 }
 
 .pipeline-stepper__step--active .pipeline-stepper__label {
-  color: var(--text-primary, #1d1d1f);
+  color: var(--text-secondary, #1d1d1f);
   font-weight: 600;
 }
 
 .pipeline-stepper__step--done .pipeline-stepper__label {
-  color: var(--text-secondary, #3c3c43);
+  color: var(--text-primary);
 }
 </style>

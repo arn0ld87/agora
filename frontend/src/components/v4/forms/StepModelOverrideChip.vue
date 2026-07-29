@@ -199,7 +199,7 @@ async function selectRoute(aiRef: AiModelRef | null): Promise<void> {
 .step-model-chip__close {
   background: transparent;
   border: 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   text-decoration: underline;
 }

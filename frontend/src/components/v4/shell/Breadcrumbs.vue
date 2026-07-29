@@ -73,7 +73,7 @@ const resolvedCrumbs = computed<InternalCrumb[]>(() => {
   display: flex;
   align-items: center;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .breadcrumbs__list {
@@ -86,12 +86,12 @@ const resolvedCrumbs = computed<InternalCrumb[]>(() => {
 }
 
 .breadcrumbs__sep {
-  color: var(--text-quaternary);
+  color: var(--text-primary);
   font-weight: 400;
 }
 
 .breadcrumbs__item {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 500;
 }
 

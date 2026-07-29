@@ -92,7 +92,7 @@ function handleClick(event: MouseEvent) {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: transparent;
   text-decoration: none;
   cursor: pointer;
@@ -107,7 +107,7 @@ function handleClick(event: MouseEvent) {
 
 .sidebar-item--active {
   background: var(--accent-tint-bg);
-  color: var(--accent);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 

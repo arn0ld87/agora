@@ -218,6 +218,6 @@ function confidenceTone(c: number | null): 'green' | 'orange' | 'red' | 'gray' {
 .rr-id {
   font-family: var(--font-mono);
   font-size: 12.5px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 </style>

@@ -609,7 +609,7 @@ onUnmounted(stopPolling)
   border-radius: var(--r-6, var(--r-1));
   padding: var(--s-4);
   margin: var(--s-4) var(--s-6) 0;
-  color: var(--text-primary, var(--fg));
+  color: var(--text-secondary, var(--fg));
   font-family: var(--font-sans, var(--ff-sans));
   font-size: var(--fs-14, 13px);
 }

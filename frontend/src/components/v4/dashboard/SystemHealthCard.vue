@@ -232,7 +232,7 @@ const stateLabel = (state: HealthRow['state']) => {
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .sh-row__hint {

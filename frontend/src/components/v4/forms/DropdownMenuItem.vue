@@ -57,7 +57,7 @@ function onSelect(event: Event): void {
   padding: 7px 10px;
   font-size: 13px;
   font-family: var(--font-sans);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--r-2, 4px);

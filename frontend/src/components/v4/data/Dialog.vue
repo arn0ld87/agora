@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 17px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .dlg-desc {
@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
   overflow: auto;
   flex: 1 1 auto;
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .dlg-footer {

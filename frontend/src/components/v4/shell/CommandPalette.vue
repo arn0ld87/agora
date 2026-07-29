@@ -211,7 +211,7 @@ function pickCommand(value: unknown): void {
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--hairline);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   outline: none;
   box-sizing: border-box;
 }

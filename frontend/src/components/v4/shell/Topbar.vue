@@ -120,7 +120,7 @@ withDefaults(
   border-radius: 8px;
   background: transparent;
   border: 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -170,7 +170,7 @@ withDefaults(
   border-radius: 8px;
   background: transparent;
   border: 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   align-items: center;
   justify-content: center;
   cursor: pointer;

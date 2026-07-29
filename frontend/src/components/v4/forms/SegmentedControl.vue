@@ -57,6 +57,6 @@ defineEmits<{
 .v4-segmented__seg--active {
   background: #fff;
   box-shadow: var(--shadow-control, 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04));
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 </style>

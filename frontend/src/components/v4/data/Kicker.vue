@@ -37,7 +37,7 @@ withDefaults(
   line-height: 1.3;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   display: inline-flex;
   gap: 6px;
   align-items: baseline;

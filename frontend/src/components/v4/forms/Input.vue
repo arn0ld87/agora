@@ -39,7 +39,7 @@ defineEmits<{
   background: var(--surface-elevated, #fff);
   font-family: var(--font-sans);
   font-size: var(--fs-callout, 14px);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   outline: none;
   transition: border-color var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease),
     box-shadow var(--v4-state-motion-duration-fast) var(--v4-state-motion-ease);

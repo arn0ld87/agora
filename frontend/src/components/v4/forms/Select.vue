@@ -96,7 +96,7 @@ defineEmits<{
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
 }

@@ -132,7 +132,7 @@ defineSlots<{
   flex-direction: column;
   gap: 14px;
   font-family: var(--font-sans);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .ch-header {
@@ -192,7 +192,7 @@ defineSlots<{
 }
 
 .ch-meta-value {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 

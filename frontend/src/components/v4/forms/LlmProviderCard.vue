@@ -157,7 +157,7 @@ async function save(): Promise<void> {
   --v4-state-hover-bg: var(--surface-elevated, #fff);
 }
 /* Hover-Farb-Override via scoped selector */
-.llm-preset:hover:not(.llm-preset--active) { color: var(--text-primary); }
+.llm-preset:hover:not(.llm-preset--active) { color: var(--text-secondary); }
 .llm-preset--active {
   border-color: var(--accent);
   color: var(--accent);
@@ -182,7 +182,7 @@ async function save(): Promise<void> {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-elevated, #fff);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .llm-input--mono { font-family: var(--font-mono); }
 .llm-input:hover { border-color: var(--hairline-strong); }

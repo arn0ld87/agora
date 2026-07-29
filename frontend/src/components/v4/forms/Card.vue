@@ -73,7 +73,7 @@ withDefaults(defineProps<{
   margin-top: 4px;
   font-family: var(--font-sans);
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   line-height: 1.4;
 }
 

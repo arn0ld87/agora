@@ -47,7 +47,7 @@ const { density, toggle } = useDensity()
 
 .dt-root:hover {
   background: var(--surface-hover);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .dt-root[aria-pressed="true"] {

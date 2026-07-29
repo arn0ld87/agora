@@ -405,7 +405,7 @@ onMounted(async () => {
 .step-panel {
   height: 100%;
   background: var(--surface-canvas, var(--bg));
-  color: var(--text-primary, var(--fg));
+  color: var(--text-secondary, var(--fg));
   font-family: var(--font-sans, var(--ff-sans));
   display: flex;
   flex-direction: column;
@@ -444,11 +444,11 @@ onMounted(async () => {
 .hint {
   font-family: var(--font-sans, var(--ff-sans));
   font-size: 11px;
-  color: var(--text-secondary, var(--fg-muted));
+  color: var(--text-primary);
   margin: 0;
 }
 .hint--warn { color: var(--warn, #c89020); }
-.meta { color: var(--text-secondary, var(--fg-muted)); font-family: var(--font-sans, var(--ff-sans)); }
+.meta { color: var(--text-primary); font-family: var(--font-sans, var(--ff-sans)); }
 .actions {
   display: flex;
   gap: var(--s-3);
@@ -478,7 +478,7 @@ onMounted(async () => {
   padding: 7px 10px;
   font-family: var(--font-sans, var(--ff-sans));
   font-size: var(--fs-16);
-  color: var(--text-primary, var(--fg));
+  color: var(--text-secondary, var(--fg));
   outline: none;
 }
 .persona-search-input:focus {

@@ -109,7 +109,7 @@ onBeforeUnmount(() => {
 .fc-title {
   font-weight: 700;
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--text-secondary, #111827);
   letter-spacing: 0.02em;
 }
 .fc-live-dot {

@@ -572,7 +572,7 @@ onMounted(() => {
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .hero-drop__formats {
@@ -607,7 +607,7 @@ onMounted(() => {
 
 .hero-file__name {
   font-family: var(--font-mono);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -656,7 +656,7 @@ onMounted(() => {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-elevated, #fff);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
                     linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
@@ -814,7 +814,7 @@ onMounted(() => {
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-elevated, #fff);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   resize: vertical;
   min-height: 72px;
   line-height: 1.5;

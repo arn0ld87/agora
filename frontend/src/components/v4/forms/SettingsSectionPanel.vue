@@ -398,7 +398,7 @@ function setDraftValue(key: string, value: unknown) {
 }
 .v4-tab:hover {
   background: var(--surface-hover);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .v4-tab--active {
   background: var(--accent-tint-bg);
@@ -451,7 +451,7 @@ function setDraftValue(key: string, value: unknown) {
 .v4-fields__cell-key code {
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .v4-fields__row--dirty {
   background: var(--accent-tint-bg);
@@ -468,7 +468,7 @@ function setDraftValue(key: string, value: unknown) {
   border: 1px solid var(--hairline-strong);
   border-radius: 8px;
   background: var(--surface-base);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   width: 100%;
   max-width: 320px;
 }

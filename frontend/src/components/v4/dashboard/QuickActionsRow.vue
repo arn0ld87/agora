@@ -51,7 +51,7 @@ const TILES: Tile[] = [
   border-radius: var(--r-6, 12px);
   box-shadow: 0 0 0 1px var(--hairline);
   text-decoration: none;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   min-width: 0;
 }
 
@@ -65,7 +65,7 @@ const TILES: Tile[] = [
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   grid-row: 1;
   grid-column: 1;
 }

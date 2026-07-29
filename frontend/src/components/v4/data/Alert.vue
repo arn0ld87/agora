@@ -155,7 +155,7 @@ defineSlots<{
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.45;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .al-icon {
@@ -177,7 +177,7 @@ defineSlots<{
   margin: 0;
   font-weight: 600;
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .al-text {
@@ -207,7 +207,7 @@ defineSlots<{
 }
 
 .al-dismiss:hover {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: var(--surface-hover);
 }
 

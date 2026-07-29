@@ -45,7 +45,7 @@ defineProps<{ post: PostCreatedEvent }>()
 .tw-handle {
   font-weight: 600;
   font-size: 13px;
-  color: var(--text-primary, #111827);
+  color: var(--text-secondary, #111827);
 }
 .tw-time {
   font-size: 11px;
@@ -58,6 +58,6 @@ defineProps<{ post: PostCreatedEvent }>()
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text-primary, #111827);
+  color: var(--text-secondary, #111827);
 }
 </style>

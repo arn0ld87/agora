@@ -41,7 +41,7 @@ defineProps<{
 
 .page-header__subtitle {
   margin: 4px 0 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 400;
 }

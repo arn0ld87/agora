@@ -432,13 +432,13 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   background: transparent;
   font-family: var(--font-sans);
   font-size: var(--fs-callout, 14px);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   outline: none;
 }
 
 .ai-model-picker__input::placeholder,
 .ai-model-picker__search::placeholder {
-  color: var(--text-tertiary, var(--text-secondary));
+  color: var(--text-primary);
 }
 
 .ai-model-picker__trigger {
@@ -460,7 +460,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
 
 .ai-model-picker__trigger:hover {
   background: var(--surface-hover);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .ai-model-picker__content {
@@ -491,7 +491,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
   border: 1px solid var(--hairline);
   border-radius: var(--r-4, 8px);
   background: var(--surface-inset);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--fs-callout, 14px);
   outline: none;
@@ -624,7 +624,7 @@ defineExpose({ filteredOptions, providerGroups, selectedId, selectedLabel, loadi
 }
 .ai-model-picker__model-name {
   font-size: var(--fs-callout, 14px);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
