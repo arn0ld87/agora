@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 STAGE_ID = "simulation_rounds"
 BUDGET_CONFIG_FILENAME = "budget_config.json"
@@ -232,8 +232,16 @@ class _UsageTrackingModelProxy:
         usage = getattr(result, "usage", None)
         if usage is None:
             return None, None
-        prompt = getattr(usage, "prompt_tokens", None)
-        completion = getattr(usage, "completion_tokens", None)
+        # Issue #764 (Codex P1): provider, die usage als Mapping/dict
+        # liefern (z.B. Roh-OpenAI-kompatible Clients ohne pydantic-Model),
+        # sollen ebenfalls ausgewertet werden. Mapping-Lookup vor
+        # Attribut-Lookup — letzterer ist strenger typisiert und dominiert.
+        if isinstance(usage, Mapping):
+            prompt = usage.get("prompt_tokens")
+            completion = usage.get("completion_tokens")
+        else:
+            prompt = getattr(usage, "prompt_tokens", None)
+            completion = getattr(usage, "completion_tokens", None)
         return (
             prompt if isinstance(prompt, int) else None,
             completion if isinstance(completion, int) else None,

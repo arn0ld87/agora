@@ -86,6 +86,12 @@ class PricingRegistry:
             return json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {}
+        except json.JSONDecodeError:
+            # Issue #764 (Codex P1): korrupte model_pricing.json darf nicht
+            # zum Crash von get_pricing_registry fuehren — wir fallen auf
+            # ein leeres Dict zurueck, damit zumindest free-Modelle noch
+            # ehrlich bepreist werden und der Rest als unknown markiert ist.
+            return {}
 
     def resolve(
         self,

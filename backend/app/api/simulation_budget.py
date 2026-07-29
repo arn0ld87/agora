@@ -97,7 +97,11 @@ def preflight_estimate():
     """
     from pydantic import ValidationError
 
-    data = request.get_json() or {}
+    # Issue #764 (Codex P1): silent=True, damit fehlendes/fehlerhaftes
+    # JSON weiter unten durch die bestehende Validation fliesst (kein 400
+    # aus dem Body-Parser, aber dennoch json_error bei strukturellen
+    # Problemen).
+    data = request.get_json(silent=True) or {}
 
     simulation_id = data.get("simulation_id")
     config = None
@@ -116,8 +120,18 @@ def preflight_estimate():
     max_rounds = data.get("max_rounds")
     if max_rounds is None and config:
         time_config = config.get("time_config") or {}
-        hours = int(time_config.get("total_simulation_hours", 72))
-        minutes_per_round = int(time_config.get("minutes_per_round", 30)) or 30
+        try:
+            hours = int(time_config.get("total_simulation_hours", 72))
+            minutes_per_round = int(time_config.get("minutes_per_round", 30)) or 30
+        except (TypeError, ValueError):
+            # Issue #764 (Codex P1): kaputte time_config-Werte duerfen
+            # nicht in einem 500 enden — bestehende Validation greift
+            # unten und liefert 400 mit klarer Meldung.
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message="time_config enthaelt ungueltige Werte (total_simulation_hours/minutes_per_round)",
+            )
         max_rounds = (hours * 60) // minutes_per_round
 
     try:

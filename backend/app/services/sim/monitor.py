@@ -226,7 +226,23 @@ def monitor_simulation(
             state.runner_status = RunnerStatus.STOPPED
             state.completed_at = datetime.now().isoformat()
             dimension = budget_abort.get("dimension", "unknown")
-            state.error = None
+            # Issue #764 (Codex P1): wenn der Subprozess beim Budget-Stop
+            # trotzdem mit non-zero exit endet (Bug im Guard, race, oder
+            # doppelter Marker), bleibt der RunnerStatus STOPPED und der
+            # termination_reason "budget_*" korrekt — aber wir wollen den
+            # exit_code sichtbar machen, damit die Diagnose nicht verloren
+            # geht. Bei exit 0 verhaelt sich der Pfad exakt wie vorher.
+            if exit_code != 0:
+                state.error = (
+                    f"budget_abort (exit_code={exit_code}): {dimension}"
+                )
+                logger.warning(
+                    f"Simulation budget-aborted with non-zero exit: "
+                    f"{simulation_id}, dimension={dimension}, exit_code={exit_code}",
+                    extra={"simulation_id": simulation_id},
+                )
+            else:
+                state.error = None
             sim_active_gauge().add(-1)
             sim_counter().add(1, {"status": "budget_abort"})
             sim_duration_histogram().record(elapsed_seconds, {"status": "budget_abort"})
