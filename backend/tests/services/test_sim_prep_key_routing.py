@@ -28,7 +28,7 @@ GENERATOR_CLASSES = (SimulationConfigGenerator, OasisProfileGenerator)
 
 def _patch_openai_target(generator_cls: type) -> str:
     if generator_cls is SimulationConfigGenerator:
-        return "app.services.simulation_config_generator.OpenAI"
+        return "app.llm.client.OpenAI"
     return "app.services.oasis_profile_generator.OpenAI"
 
 

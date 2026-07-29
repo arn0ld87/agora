@@ -143,7 +143,7 @@ class TestBatchingMath:
         fake_event = EventConfig()
 
         with (
-            patch("app.services.simulation_config_generator.OpenAI"),
+            patch("app.llm.client.OpenAI"),
             patch.object(
                 SimulationConfigGenerator, "_generate_time_config", return_value={}
             ),
