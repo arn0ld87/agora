@@ -165,6 +165,10 @@ graphify-out/
 # open-mem lokaler Memory-Store (SQLite inkl. WAL/SHM, nur maschinenlokal)
 .open-mem/
 
+# opencode lokaler CLI-State (commands/, skills/, node_modules/, package-lock.json).
+# Persoenliches Maschinen-Setup, nicht repo-weit gueltig.
+.opencode/
+
 # Zeitgestempelte Backup-Kopien, die Tools beim Umschreiben von Configs anlegen
 # (z. B. opencode.jsonc.bak.20260720-080351).
 *.bak.[0-9]*
