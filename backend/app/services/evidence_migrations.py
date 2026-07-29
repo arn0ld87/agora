@@ -125,6 +125,50 @@ def migrate_legacy_claims_to_anchored(raw: Optional[dict]) -> Optional[dict]:
     return raw
 
 
+def migrate_medium_seed_only_claims_to_low(raw: Optional[dict]) -> Optional[dict]:
+    """Issue #963: Stuft medium-Claims ohne agent-grounded Evidence auf low ab.
+
+    Seit PR #961 verlangt ``ReportClaimModel.agent_grounded_for_medium`` für
+    das ``medium``-Label mind. 1 ``agent_quote`` (mit nicht-leerem
+    ``quote``-Feld) UND mind. 1 ``seed_corpus``. Persistierte Maps, die vor
+    dieser Änderung erzeugt wurden und medium-Claims nur auf
+    ``seed_corpus``/``graph_relation``-Evidence stützen, würden sonst beim
+    Laden (``EvidenceMapModel.model_validate``) mit HTTP 422 brechen.
+
+    Regeln:
+    - Claim mit ``confidence_label == "medium"`` (case-insensitive) ohne
+      agent-grounded Evidence (``has_agent_grounded_evidence``) → Label
+      wird ``"low"``.
+    - ``high``/``verified``-Claims werden nicht angefasst (separates Thema).
+    - Idempotent: bereits ``low`` gelabelte Claims bleiben unverändert.
+
+    Gibt ``None`` zurück, wenn ``raw`` None ist. Mutiert das übergebene Dict.
+    """
+    if raw is None:
+        return None
+
+    # Lazy-Import: ``report_agent.schemas`` importiert selbst aus diesem
+    # Modul (``CURRENT_SCHEMA_VERSION``, ``migrate_v1_to_v2``) — ein
+    # Modul-Level-Import von ``report_agent.evidence`` wäre zirkulär.
+    from .report_agent.evidence import has_agent_grounded_evidence
+
+    sections = raw.get("sections") or []
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        for claim in section.get("claims") or []:
+            if not isinstance(claim, dict):
+                continue
+            label = str(claim.get("confidence_label") or "").lower()
+            if label != "medium":
+                continue
+            evidence = claim.get("evidence") or []
+            if not has_agent_grounded_evidence(evidence):
+                claim["confidence_label"] = "low"
+
+    return raw
+
+
 def _resolve_evidence_refs(
     claim: dict[str, Any],
     section_index: int,

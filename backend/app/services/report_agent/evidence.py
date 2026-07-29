@@ -124,7 +124,7 @@ def _count_supporting_stakeholder_groups(evidence: List[Dict[str, Any]]) -> int:
     return len(groups)
 
 
-def _has_agent_grounded_evidence(evidence: List[Dict[str, Any]]) -> bool:
+def has_agent_grounded_evidence(evidence: List[Dict[str, Any]]) -> bool:
     """True, wenn die Evidence mind. 1 ``agent_quote`` (mit nicht-leerem
     ``quote``-Feld) UND mind. 1 ``seed_corpus`` enthält (ADR-0002 Stufe
     agent_grounded → rechtfertigt ``medium``). Spiegelt
@@ -176,7 +176,7 @@ def auto_downgrade_unsupported_high_claims(
             groups = _count_supporting_stakeholder_groups(item.get("evidence") or [])
             if groups < 2:
                 evidence = item.get("evidence") or []
-                target = "medium" if _has_agent_grounded_evidence(evidence) else "low"
+                target = "medium" if has_agent_grounded_evidence(evidence) else "low"
                 claim_id = item.get("claim_id", "<no-id>")
                 if logger is not None:
                     logger.warning(
