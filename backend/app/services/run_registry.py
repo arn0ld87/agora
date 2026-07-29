@@ -230,7 +230,33 @@ class RunRegistry:
                     message=manifest.get("message"),
                     error=manifest.get("error"),
                 )
-            return self._write_run(manifest)
+            written = self._write_run(manifest)
+            # Issue #764 (Codex P2): Persistenz des Verbrauchs-Snapshots am
+            # nicht-terminal → terminal Übergang — nicht erst beim GET-Read.
+            # Vorher lag persist_usage_summary im GET-Pfad der Run-Detail-
+            # Anreicherung, was zu zwei Problemen führte: (a) Doppel-Persist,
+            # weil der gleiche Pfad sowohl für die UI als auch für spätere
+            # Preflight-Berechnungen benutzt wird; (b) Snapshot fehlt für Runs,
+            # die niemals per GET gelesen werden, aber als Datenbasis für
+            # nachfolgende Budget-Schätzungen dienen.
+            terminal_statuses = {"completed", "failed", "stopped"}
+            new_status = manifest.get("status")
+            if old_status not in terminal_statuses and new_status in terminal_statuses:
+                try:
+                    from .run_usage_ledger import persist_usage_summary
+
+                    persist_usage_summary(
+                        run_id,
+                        started_at=manifest.get("started_at"),
+                        ended_at=manifest.get("completed_at"),
+                    )
+                except OSError as exc:
+                    logger.warning("usage_snapshot persist failed (non-fatal): %s", exc)
+                except Exception:  # noqa: BLE001 — terminal hook darf write nie brechen
+                    logger.debug(
+                        "usage_snapshot persist raised (non-fatal)", exc_info=True
+                    )
+            return written
 
     def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:

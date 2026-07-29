@@ -14,7 +14,7 @@ import json
 import os
 import re
 import time as _time_mod
-from typing import Literal, Optional, Dict, Any, List
+from typing import Literal, Optional, Dict, Any, List, Tuple
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -618,6 +618,11 @@ class LLMClient:
                 success=False,
                 error_type="LLMOutputTruncatedError",
             )
+            # Issue #764 (Codex P2): record_after_call auch im Truncation-Pfad
+            # — sonst zaehlt der fehlgeschlagene Call nicht in den weichen
+            # Budget-Limits (calls) und der Enforcer verliert einen Eintrag.
+            if _enforcer is not None:
+                _enforcer.record_after_call()
             raise LLMOutputTruncatedError(
                 f"LLM output truncated at token cap: model={self.model}, "
                 f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
@@ -746,12 +751,14 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
         force_no_thinking: bool = False,
-    ) -> str:
+    ) -> Tuple[str, Dict[str, Optional[int]]]:
         """Direkter Aufruf gegen Ollamas /api/chat mit format=<schema>.
 
         Delegiert an ``app.llm.providers.ollama.chat_with_schema`` (native
         httpx-Call, Schema-Enforcement laut Ollama-Doku — siehe dort für
-        Details/Fehlerverhalten).
+        Details/Fehlerverhalten). Liefert ``(content, usage)`` mit
+        ``usage`` = ``{prompt_eval_count, eval_count, total_duration_ns}``
+        oder None-Werten, wenn Ollama keine Usage mitschickt.
         """
         think_flag = False if force_no_thinking else self._think
         return _provider_ollama.chat_with_schema(
@@ -907,15 +914,32 @@ class LLMClient:
             # Bei Netz-/4xx-Fehler fall-through zum OpenAI-SDK-Pfad mit
             # json_object-Fallback (Resilienz, kein Hard-Fail).
             if self._is_ollama() and isinstance(schema, type) and issubclass(schema, BaseModel):
+                # Issue #764 (Codex P1): Token-Tracking + record_after_call
+                # fuer den nativen Ollama-Schema-Pfad. Ohne diesen Pfad
+                # umgeht der LLM-Call den OpenAI-Wrapper und damit
+                # _log_invocation_event, sodass weder Tokens noch Calls im
+                # usage_ledger landen — der Hard-Limit-Pre-Check wuerde
+                # dauerhaft 0 <= limit sehen und nie ausloesen.
+                _ollama_call_started = _time_mod.monotonic()
                 try:
-                    response = self._ollama_chat_with_schema(
+                    ollama_response, ollama_usage = self._ollama_chat_with_schema(
                         messages=messages,
                         schema=schema,
                         temperature=temperature,
                         max_tokens=max_tokens,
                         force_no_thinking=force_no_thinking,
                     )
-                    cleaned_response = _strip_llm_json_envelope(response)
+                    ollama_latency_ms = (_time_mod.monotonic() - _ollama_call_started) * 1000.0
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=ollama_latency_ms,
+                        success=True,
+                        prompt_tokens=ollama_usage.get("prompt_eval_count"),
+                        completion_tokens=ollama_usage.get("eval_count"),
+                    )
+                    if _enforcer is not None:
+                        _enforcer.record_after_call()
+                    cleaned_response = _strip_llm_json_envelope(ollama_response)
                     parsed: Dict[str, Any] = json.loads(cleaned_response)
                     return self._maybe_validate(parsed, schema)
                 except LLMOutputTruncatedError:

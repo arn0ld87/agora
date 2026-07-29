@@ -303,7 +303,6 @@ def _build_run_detail(run: dict) -> dict:
             aggregate_usage,
             load_call_events_cached,
             load_usage_summary,
-            persist_usage_summary,
         )
 
         budget_status = get_run_budget_status(run["run_id"])
@@ -320,17 +319,12 @@ def _build_run_detail(run: dict) -> dict:
                     started_at=run.get("started_at"),
                     ended_at=run.get("completed_at"),
                 )
-                # Abschluss-Snapshot nachziehen, sobald der Run terminal ist —
-                # Datenbasis für spätere Preflight-Schätzungen.
-                if run.get("status") in {"completed", "failed", "stopped"}:
-                    try:
-                        persist_usage_summary(
-                            run["run_id"],
-                            started_at=run.get("started_at"),
-                            ended_at=run.get("completed_at"),
-                        )
-                    except OSError:
-                        logger.debug("usage snapshot persist failed", exc_info=True)
+                # Snapshot-Persist läuft nicht hier: RunRegistry.update_run
+                # triggert persist_usage_summary am Lifecycle-Übergang
+                # nicht-terminal → terminal (Issue #764 / Codex P2). Ein
+                # zweiter Persist hier würde doppelt schreiben und den
+                # idempotenten Snapshot-Pfad in run_usage_ledger unnötig
+                # aufheizen.
         if usage is not None:
             enriched["usage"] = usage.model_dump(mode="json")
     except Exception:  # noqa: BLE001 — Anreicherung darf den Read nicht brechen

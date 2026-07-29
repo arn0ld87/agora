@@ -14,7 +14,7 @@ Zwei Rollen koexistieren in diesem Modul, klar getrennt:
    ``tests/llm/test_provider_compliance.py`` fixiert das Verhalten.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel
 
@@ -80,15 +80,18 @@ def chat_with_schema(
     schema: type[BaseModel],
     temperature: float,
     max_tokens: int,
-) -> str:
+) -> Tuple[str, Dict[str, Optional[int]]]:
     """Direkter Aufruf gegen Ollamas /api/chat mit format=<schema>.
 
     Garantiert Schema-Enforcement laut Ollama-Doku, im Gegensatz zum
     OpenAI-Kompat-Wrapper, der response_format=type=json_schema
     schweigend droppen kann.
 
-    Returns response message content (str). Raises httpx.HTTPError bei
-    Netz-/4xx-/5xx-Fehlern, ValueError bei Schema-Reject durch Ollama.
+    Returns ``(content, usage)`` mit content (str) und einem Usage-Dict
+    ``{prompt_eval_count, eval_count, total_duration_ns}``. Token-Werte
+    sind ``None`` wenn Ollama keine Usage liefert (z.B. bei Schema-Reject
+    ohne Voll-Call). Raises httpx.HTTPError bei Netz-/4xx-/5xx-Fehlern,
+    ValueError bei Schema-Reject durch Ollama.
     """
     import httpx  # lazy import (httpx ist via openai-SDK ohnehin transitive Dep)
     base_root = (base_url or "").rstrip("/")
@@ -145,7 +148,32 @@ def chat_with_schema(
             f"Ollama output truncated at num_predict: model={model}, "
             f"max_tokens={max_tokens}"
         )
-    return content
+    # Issue #764 (Codex P1): Token-Tracking für die Budget-/Verbrauchsverträge.
+    # Ollama liefert Token-Counts + total_duration auf Top-Level der Response.
+    # None = ehrlich "Provider hat nichts geliefert" — nicht 0 (Lücken würden
+    # sonst den Verbrauch unterschätzen und das Hard-Limit-Bypass-Risiko
+    # verschärfen).
+    usage: Dict[str, Optional[int]] = {
+        "prompt_eval_count": _coerce_optional_int(data.get("prompt_eval_count")),
+        "eval_count": _coerce_optional_int(data.get("eval_count")),
+        "total_duration_ns": _coerce_optional_int(data.get("total_duration")),
+    }
+    return content, usage
+
+
+def _coerce_optional_int(value: Any) -> Optional[int]:
+    """Robust gegen fehlende oder falsch typisierte Ollama-Usage-Felder.
+
+    Ollama-Versionen vor 0.5 lieferten total_duration als Float (Sekunden);
+    spaetere Versionen liefern Nanoseconds-Integer. Wir akzeptieren beides
+    und normalisieren auf Int.
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ----------------------------------------------------------------------
