@@ -51,6 +51,8 @@ interface StatusData {
   current_section_index?: number
   simulation_id?: string
   report_id?: string
+  /** Issue #764 (Codex P1): Registry-ID des Report-Runs (report_generation). */
+  run_id?: string
   status?: string
   error?: string
 }
@@ -72,6 +74,12 @@ const router = useRouter()
 
 const props = defineProps({
   reportId: String,
+  // Issue #764 (Codex P1): Run-Registry-ID wird von Step3 als
+  // ?runId=<id> weitergereicht. simulation_id und run_id sind seit #764
+  // nicht mehr identisch — die Run-Registry generiert beim Start eine
+  // eigene UUID, die fuer /api/runs/<id> zwingend noetig ist.
+  // loadRunUsage() priorisiert runId, faellt auf simulationId zurueck.
+  runId: String,
   simulationId: String,
   systemLogs: Array,
   cancelEndpointAvailable: { type: Boolean, default: false },
@@ -92,6 +100,9 @@ const generatedSections = ref<Record<string, unknown>>({})
 const currentSectionIndex = ref<number | null>(null)
 const isComplete = ref(false)
 const fullReport = ref<Report | null>(null)
+// Issue #764 (Codex P1): letztes Report-Status-Objekt, damit loadReportRunUsage
+// den Report-Run (report_generation) ueber dessen run_id nachladen kann.
+const lastReportStatus = ref<StatusData | null>(null)
 
 // Issue #764: Verbrauchsübersicht zum Sim-Run, einmalig nach Abschluss
 // geladen (die Simulation ist der Run — simulation_id == run_id).
@@ -100,7 +111,10 @@ const runBudget = ref<RunBudgetStatus | null>(null)
 const runUsageLoaded = ref(false)
 
 async function loadRunUsage(): Promise<void> {
-  const simId = resolvedSimulationId.value || props.simulationId
+  // Issue #764 (Codex P1): runId (Registry-eindeutig) hat Vorrang vor
+  // resolvedSimulationId / simulationId — /api/runs/<id> erwartet die
+  // Registry-ID, sonst liefert das Backend einen Run-not-found.
+  const simId = props.runId || resolvedSimulationId.value || props.simulationId
   if (!simId || runUsageLoaded.value) return
   runUsageLoaded.value = true
   try {
@@ -114,10 +128,49 @@ async function loadRunUsage(): Promise<void> {
   } catch { /* Verbrauchsdaten sind optional — Report bleibt nutzbar */ }
 }
 
+// Issue #764 (Codex P1): der Report-Workflow hat einen eigenen Run
+// (report_generation), der den weichen/harten Budget-Limits unterliegt
+// und ueber getReportStatus geliefert wird. Wir laden seinen Verbrauch
+// nach Abschluss zusaetzlich und mergen calls + totals in die bereits
+// geladenen Sim-Daten, damit Budget-Abbrueche des Report-Runs in der
+// Consumption-View erscheinen.
+async function loadReportRunUsage(): Promise<void> {
+  const st = lastReportStatus.value as StatusData | null
+  const reportRunId = st?.run_id
+  if (!reportRunId) return
+  try {
+    const envelope = await getRun(reportRunId)
+    if (!envelope?.success) return
+    const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
+    const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
+    if (!usage.success || !usage.data) return
+    const reportTotals = usage.data.totals
+    const simTotals = runUsage.value?.totals
+    if (simTotals) {
+      // llm_calls ist die einzige addierbare Zahl — Tokens/Kosten sind
+      // bereits in der Sim konsolidiert. Wir inkrementieren die
+      // Aufruf-Zaehlung fuer die Anzeige, lassen die uebrigen Felder
+      // unveraendert (Sim ist die ehrliche Datenquelle fuer Token/Kosten).
+      runUsage.value = {
+        ...usage.data,
+        totals: {
+          ...reportTotals,
+          llm_calls: (simTotals.llm_calls ?? 0) + (reportTotals.llm_calls ?? 0),
+        },
+      }
+    } else {
+      runUsage.value = usage.data
+    }
+  } catch { /* Report-Run ist optional */ }
+}
+
 // Sobald der Report terminal ist (completed/incomplete/failed), einmalig
 // die Abschluss-Verbrauchsdaten ziehen.
 watch(isComplete, (done) => {
-  if (done) void loadRunUsage()
+  if (done) {
+    void loadRunUsage()
+    void loadReportRunUsage()
+  }
 })
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)
@@ -304,6 +357,7 @@ async function pollStatus() {
     })) as StatusApiResult
     if (res?.success && res.data) {
       const st = res.data
+      lastReportStatus.value = st
       statusMsg.value = st.message || ''
       if (st.outline) { try { reportOutline.value = ReportOutlineSchema.parse(st.outline) } catch (err) { recordSchemaError('outline', err) } }
       if (st.sections) generatedSections.value = st.sections

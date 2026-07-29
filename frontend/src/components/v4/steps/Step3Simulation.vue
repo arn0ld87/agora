@@ -78,6 +78,15 @@ const totalActions = ref(0)
 const scrollEl = ref(null)
 const startError = ref(null)
 
+// Issue #764 (Codex P1): echte RunRegistry-run_id aus /api/simulation/start
+// Response. Backend liefert ``run_id`` separat von ``simulation_id``
+// (simulation_run.py:468ff.); der Frontend-Type ``RunStatusResponse`` hat
+// ``run_id`` als optionales Index-Signature-Feld. Ohne diesen Wert
+// stammen Budget-Polls aus ``simulationId`` und schlagen mit 404 fehl,
+// weil ``/api/runs/<run_id>`` die Registry-ID erwartet.
+const runId = ref<string | null>(null)
+const effectiveRunId = computed<string | null>(() => runId.value || props.simulationId || null)
+
 const feedSticky = useStickyScroll(scrollEl)
 
 // Feed density — persisted per browser
@@ -217,6 +226,9 @@ function resetState() {
   toolPanelUnreadErrors.value = 0
   _lastSeenConsoleLength = 0
   startError.value = null
+  // Issue #764 (Codex P1): RunRegistry-ID frisch aufnehmen — ein
+  // re-run derselben simulation_id kann eine neue run_id liefern.
+  runId.value = null
   isStarting.value = false
   isStopping.value = false
   isPausing.value = false
@@ -267,6 +279,15 @@ async function doStart() {
     addLog(t('step3.controls.starting'))
     const res = await startSimulation(params)
     if (res?.success) {
+      // Issue #764 (Codex P1): Backend liefert die echte RunRegistry-ID
+      // unter ``run_id``; Fallback auf simulationId lässt Legacy-Pfade
+      // (z.B. Stub / Run-Bootstrap ohne echte Persist) weiterlaufen.
+      // Cast vermieden, weil Step3Simulation <script setup> ohne
+      // lang="ts" deklariert ist (vue-tsc behandelt den Block sonst
+      // als JS und lehnt TS-Assertions ab).
+      const data = res.data && typeof res.data === 'object' ? res.data : null
+      const backendRunId = data && typeof (data).run_id === 'string' ? (data).run_id : null
+      runId.value = backendRunId && backendRunId.length > 0 ? backendRunId : null
       // Consume-on-success: Der Dashboard-Override gilt genau für diesen
       // Start. Verhindert, dass ein späterer Start einer ANDEREN Simulation
       // im selben Tab den alten Override stillschweigend erbt.
@@ -474,7 +495,18 @@ async function goReport() {
     const payload = { simulation_id: props.simulationId }
     const res = await generateReport(payload)
     if (res?.success && res.data?.report_id) {
-      router.push({ name: 'Report', params: { reportId: res.data.report_id } })
+      // Issue #764 (Codex P1): run_id als Query-Param an die Report-Route
+      // durchreichen, damit Step4Report.loadRunUsage /api/runs/<run_id>
+      // anstelle der simulation_id pollt. Die simulation_id aus
+      // Route-Params bleibt dem Backend als identifier erhalten; der
+      // run_id-Query ist nur die Registry-Anschrift für die Budget-
+      // Verbrauchsdarstellung.
+      const runIdForReport = effectiveRunId.value
+      router.push({
+        name: 'Report',
+        params: { reportId: res.data.report_id },
+        query: runIdForReport && runIdForReport !== props.simulationId ? { runId: runIdForReport } : undefined,
+      })
     }
   } catch (err) {
     addLog(err.message)
@@ -566,8 +598,8 @@ watch(() => props.simulationId, (newId, oldId) => {
 
       <!-- Issue #764: Live-Verbrauch vs. Budget (pollt /api/runs/<id>) -->
       <RunResourceMonitor
-        v-if="phase >= 1 && simulationId"
-        :run-id="simulationId"
+        v-if="phase >= 1 && effectiveRunId"
+        :run-id="effectiveRunId"
         :status="budgetMonitorStatus"
       />
 
