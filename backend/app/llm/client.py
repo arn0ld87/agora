@@ -478,6 +478,83 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm invocation logging failed (LLM call proceeds): %s", exc)
 
+    def _provider_attempt(
+        self,
+        call_kwargs: Dict[str, Any],
+        context: str,
+    ) -> Tuple[Any, float]:
+        """Run a SINGLE physical provider request with budget gate + failure telemetry.
+
+        Pro Aufruf:
+            1. ``_budget_check`` (BudgetExceededError passiert sauber durch, ohne
+               Event/Record — der Hard-Limit ist bereits entschieden).
+            2. ``self.client.chat.completions.create(**call_kwargs)``.
+            3. Bei Exception: log failed Invocation-Event + ``_budget_record``
+               + re-raise.
+            4. Bei Erfolg: return ``(response, latency_ms)``; der Aufrufer
+               loggt das Success-Event und führt ``_budget_record`` aus, sobald
+               Usage-Informationen verfügbar sind (Streaming sammelt Usage
+               erst während der Iteration).
+
+        Wird absichtlich INNERHALB von ``llm_call_with_retry`` aufgerufen, damit
+        jeder Retried-Attempt eine eigene Check/Event/Record-Triplet erhält.
+        """
+        from ..services.run_budget import BudgetExceededError
+
+        self._budget_check()
+        started = _time_mod.monotonic()
+        try:
+            response = self.client.chat.completions.create(**call_kwargs)
+        except BudgetExceededError:
+            # Sollte nicht passieren (Budget-Check liegt VOR dem Call),
+            # aber wenn doch: kein doppelter Event/Record.
+            raise
+        except Exception as exc:  # noqa: BLE001 — Failure-Telemetrie, weiterreichen
+            latency_ms = (_time_mod.monotonic() - started) * 1000.0
+            self._log_invocation_event(
+                stage=context,
+                latency_ms=latency_ms,
+                success=False,
+                error_type=type(exc).__name__,
+                http_status=getattr(exc, "status_code", None),
+            )
+            # Issue #764 (Codex P2): Fehlgeschlagener OpenAI-kompatibler
+            # Call zaehlt ebenfalls als Providerattempt — ``_budget_record``
+            # muss auch im Failure-Pfad laufen, sonst unterlaeuft der Call
+            # das weiche ``max_llm_calls``-Limit (Fail-open ist hier explizit
+            # erwuenscht — Hard-Limits greifen bereits vor dem Call).
+            self._budget_record()
+            raise
+        latency_ms = (_time_mod.monotonic() - started) * 1000.0
+        return response, latency_ms
+
+    def _record_provider_success(
+        self,
+        response: Any,
+        latency_ms: float,
+        context: str,
+        usage: Any = None,
+    ) -> None:
+        """Log Success-Invocation-Event + ``_budget_record`` nach erfolgreichem Provider-Attempt.
+
+        ``usage`` ist optional: bei regulären Responses wird es aus
+        ``response.usage`` abgeleitet, bei Streams wird die Usage des letzten
+        Chunks uebergeben.
+        """
+        if usage is None:
+            usage = getattr(response, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+        completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
+        self._log_invocation_event(
+            stage=context,
+            latency_ms=latency_ms,
+            success=True,
+            prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+            completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+        )
+        # Weiche Budget-Limits nach dem abgeschlossenen Call pruefen (#764).
+        self._budget_record()
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -514,10 +591,6 @@ class LLMClient:
                 reported ``finish_reason == "length"``.
         """
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
-        # Budget-Gate (Issue #764): harte Limits werden unmittelbar VOR dem
-        # kosten-/tokenrelevanten Call geprüft — deterministisch, bevor auch
-        # nur ein Request abgesetzt wird (inkl. E2E-Stub-Pfad).
-        self._budget_check()
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
         # Liefert deterministischen ReACT-Loop-String (Tool-Call oder Final Answer).
@@ -527,8 +600,10 @@ class LLMClient:
                 "LLMClient.chat: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
                 context,
             )
-            # Invocation-Event auch im Stub-Modus schreiben, damit Verbrauch
-            # und Budget-Monitore im E2E-Test real beobachtbar sind.
+            # Budget-Gate fuer den Stub: ein Stub-Aufruf = ein Providerattempt
+            # (Issue #764, Codex P1). Symmetrisch zum OpenAI-Pfad, der seinen
+            # Check in ``_provider_attempt`` erhaelt.
+            self._budget_check()
             self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
             self._budget_record()
             return e2e_stub_chat_response(messages=messages)
@@ -568,24 +643,30 @@ class LLMClient:
             and os.environ.get("LLM_FORCE_STREAM", "true").lower() in ("1", "true", "yes")
         )
 
-        import time as _time
-        _t0 = _time.monotonic()
+        def _create(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
+            """Single-Attempt-Wrapper mit transient-retry. Budget-Check,
+            Failure-Telemetrie und -Record laufen INNERHALB des Wrappers —
+            jeder Retried-Attempt erzeugt damit genau eine
+            Check/Event/Record-Triplet.
 
-        def _create(call_kwargs: Dict[str, Any]):
-            """One-shot call mit transient-retry. KEINE 400-Behandlung — die macht der äußere Wrapper."""
+            KEINE 400-Behandlung — die macht der aeussere Wrapper
+            ``_call_with_token_key_fallback``.
+            """
             return llm_call_with_retry(
-                self.client.chat.completions.create,
+                lambda: self._provider_attempt(call_kwargs, context),
                 max_retries=self._max_retries,
                 initial_delay=self._retry_initial_delay,
                 max_delay=self._retry_max_delay,
-                **call_kwargs,
             )
 
-        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]):
+        def _call_with_token_key_fallback(call_kwargs: Dict[str, Any]) -> Tuple[Any, float]:
             """Fallback-Retry: bei 400 wg. max_tokens/max_completion_tokens-Inkompatibilität
             einmalig den anderen Schlüssel verwenden. Heuristik in
             ``_uses_max_completion_tokens`` deckt die bekannten Familien ab; der
             Fallback schützt vor neuen Modellen/Proxies, die wir noch nicht kennen.
+
+            Jeder Aufruf von ``_create`` zaehlt als separater Providerattempt
+            mit eigener Check/Event/Record-Triplet.
             """
             try:
                 return _create(call_kwargs)
@@ -602,63 +683,76 @@ class LLMClient:
                 )
                 return _create(swapped)
 
+        # Provider-Pfad: jeder physische Request (erster Call, jeder Retry,
+        # Token-Key-Fallback) erhaelt GENAU EINE
+        # _budget_check / _log_invocation_event / _budget_record-Triplet.
+        # ``_provider_attempt`` kuemmert sich um Check + Failure-Telemetrie;
+        # ``_record_provider_success`` finalisiert die Success-Telemetrie
+        # (nach Usage-Extraktion, sodass auch der Streaming-Pfad mit einem
+        # einzigen Event auskommt).
         _usage_for_counter: Optional[Any] = None
+        _response: Any = None
+        _latency_ms: float = 0.0
+        finish_reason: Optional[str] = None
+        completion_tokens: Optional[int] = None
         try:
             if force_stream:
                 kwargs["stream"] = True
-                stream = _call_with_token_key_fallback(kwargs)
+                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
                 chunks: List[str] = []
-                finish_reason = None
-                completion_tokens = None
-                for event in stream:
-                    if not event.choices:
-                        continue
-                    delta = event.choices[0].delta
-                    piece = getattr(delta, "content", None)
-                    if piece:
-                        chunks.append(piece)
-                    if event.choices[0].finish_reason:
-                        finish_reason = event.choices[0].finish_reason
-                    usage = getattr(event, "usage", None)
-                    if usage and getattr(usage, "completion_tokens", None) is not None:
-                        completion_tokens = usage.completion_tokens
-                        _usage_for_counter = usage
+                try:
+                    for event in _response:  # type: ignore[union-attr]
+                        if not event.choices:
+                            continue
+                        delta = event.choices[0].delta
+                        piece = getattr(delta, "content", None)
+                        if piece:
+                            chunks.append(piece)
+                        if event.choices[0].finish_reason:
+                            finish_reason = event.choices[0].finish_reason
+                        usage = getattr(event, "usage", None)
+                        if usage and getattr(usage, "completion_tokens", None) is not None:
+                            completion_tokens = usage.completion_tokens
+                            _usage_for_counter = usage
+                except Exception as exc:  # noqa: BLE001
+                    # Streaming-Iteration-Fehler (Mid-Stream-Network-Reset o.ae.)
+                    # zaehlt als fehlgeschlagener Providerattempt — Telemetrie
+                    # + Record, dann durchreichen. ``_provider_attempt`` hat
+                    # fuer den HTTP-Connect bereits geloggt; hier geht es um
+                    # den Datenempfang nach erfolgreichem 200.
+                    self._log_invocation_event(
+                        stage=context,
+                        latency_ms=_latency_ms,
+                        success=False,
+                        error_type=type(exc).__name__,
+                        http_status=getattr(exc, "status_code", None),
+                    )
+                    self._budget_record()
+                    raise
                 content = "".join(chunks)
             else:
-                response = _call_with_token_key_fallback(kwargs)
-                choice = response.choices[0]
+                _response, _latency_ms = _call_with_token_key_fallback(kwargs)
+                choice = _response.choices[0]
                 finish_reason = getattr(choice, "finish_reason", None)
-                usage = getattr(response, "usage", None)
+                usage = getattr(_response, "usage", None)
                 completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
                 _usage_for_counter = usage
                 content = choice.message.content or ""
-        except Exception as exc:  # noqa: BLE001
-            elapsed = _time.monotonic() - _t0
-            self._log_invocation_event(
-                stage=context,
-                latency_ms=elapsed * 1000,
-                success=False,
-                error_type=exc.__class__.__name__,
-                http_status=getattr(exc, "status_code", None),
-            )
-            # Issue #764 (Codex P2): Fehlgeschlagener OpenAI-kompatibler
-            # Call zaehlt ebenfalls als Providerattempt — record_after_call
-            # muss auch im Failure-Pfad laufen, sonst unterlaeuft der Call
-            # das weiche ``max_llm_calls``-Limit (Fail-open ist hier explizit
-            # erwuenscht — Hard-Limits greifen bereits vor dem Call).
-            self._budget_record()
+        except Exception:
+            # ``_provider_attempt`` hat fuer create()-Fehler bereits geloggt +
+            # recordet. Streaming-Iterationsfehler wurden im inneren try-Block
+            # behandelt. Hier nur sauber durchreichen.
             raise
-        elapsed = _time.monotonic() - _t0
         logger.info(
-            "LLM chat returned model=%s finish=%s tokens_out=%s elapsed=%.1fs max_tokens=%s stream=%s",
-            self.model, finish_reason, completion_tokens, elapsed, max_tokens, force_stream,
+            "LLM chat returned model=%s finish=%s tokens_out=%s max_tokens=%s stream=%s",
+            self.model, finish_reason, completion_tokens, max_tokens, force_stream,
         )
         if require_complete and finish_reason == "length":
             # Nicht als Erfolg verbuchen: der Caller kann mit dem Fragment nichts
             # anfangen, und ein "success" hier verzerrt die Telemetrie.
             self._log_invocation_event(
                 stage=context,
-                latency_ms=elapsed * 1000,
+                latency_ms=_latency_ms,
                 success=False,
                 error_type="LLMOutputTruncatedError",
             )
@@ -670,17 +764,10 @@ class LLMClient:
                 f"LLM output truncated at token cap: model={self.model}, "
                 f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
             )
-        _usage_prompt = getattr(_usage_for_counter, "prompt_tokens", None)
-        _usage_completion = getattr(_usage_for_counter, "completion_tokens", None)
-        self._log_invocation_event(
-            stage=context,
-            latency_ms=elapsed * 1000,
-            success=True,
-            prompt_tokens=_usage_prompt if isinstance(_usage_prompt, int) else None,
-            completion_tokens=_usage_completion if isinstance(_usage_completion, int) else None,
+        # Erfolgreicher Providerattempt: Success-Event + Record (genau einmal).
+        self._record_provider_success(
+            _response, _latency_ms, context, usage=_usage_for_counter
         )
-        # Weiche Budget-Limits nach dem abgeschlossenen Call prüfen (#764).
-        self._budget_record()
         # Token-Counter — nur bei vorhandenen Integer-Usage-Daten, kein Log-Spam bei fehlendem Usage.
         # isinstance-Check schützt gegen MagicMock-Attribute in Tests (Mock gibt immer
         # einen Sub-Mock zurück, kein None) und gegen nicht-numerische Provider-Antworten.

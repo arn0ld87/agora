@@ -700,3 +700,328 @@ class TestChatExceptionPathRecordsBudget:
         assert len(recorder.calls) == 1
         assert recorder.calls[0]["success"] is False
         assert recorder.calls[0]["error_type"] == "RuntimeError"
+
+
+# ---------------------------------------------------------------------------
+# 9. Retry- und Fallback-Tracking (Issue #764, letzter Review-Punkt):
+#    Jeder tatsaechliche Providerrequest (Initial, Retry, Token-Key-Fallback,
+#    Streaming) erhaelt GENAU EINE ``_budget_check`` / ``_log_invocation_event``
+#    / ``_budget_record``-Triplet.
+# ---------------------------------------------------------------------------
+
+
+class TestRetryAndFallbackTracking:
+    """Issue #764 (letzter Review-Punkt): jede echte HTTP-Anfrage beim Provider
+    wird als EIN Providerattempt gezaehlt — unabhaengig davon, ob sie aus
+    dem ersten Call, einem Retry oder dem Token-Key-Fallback stammt."""
+
+    @staticmethod
+    def _make_transient_503() -> Exception:
+        """APIStatusError mit 503 -> retry faehig (transient)."""
+        import httpx
+        from openai import APIStatusError
+
+        req = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
+        resp = httpx.Response(503, request=req)
+        return APIStatusError("upstream 503", response=resp, body=None)
+
+    @staticmethod
+    def _make_token_key_400() -> Exception:
+        """APIStatusError mit 400 + max_tokens-Hinweis -> Token-Key-Fallback."""
+        import httpx
+        from openai import APIStatusError
+
+        req = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
+        resp = httpx.Response(400, request=req)
+        return APIStatusError(
+            "'max_tokens' is not supported with this model. "
+            "Use 'max_completion_tokens' instead.",
+            response=resp,
+            body=None,
+        )
+
+    @staticmethod
+    def _make_response(content: str = "ok", prompt_tokens: int = 10, completion_tokens: int = 5):
+        from types import SimpleNamespace
+
+        usage = SimpleNamespace(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content),
+                    finish_reason="stop",
+                )
+            ],
+            usage=usage,
+        )
+
+    def _setup_client(self, *, max_retries: int = 0, is_ollama: bool = False, enforcer=None):
+        if enforcer is None:
+            enforcer = _RecordingEnforcer()
+        client = _make_client(enforcer)
+        client._max_retries = max_retries
+        object.__setattr__(client, "_is_ollama", lambda: is_ollama)
+        return client, enforcer
+
+    @staticmethod
+    def _install_create(client: LLMClient, create_fn):
+        """Hängt ``create_fn`` als ``self.client.chat.completions.create`` ein."""
+        from types import SimpleNamespace
+
+        object.__setattr__(
+            client,
+            "client",
+            SimpleNamespace(
+                chat=SimpleNamespace(completions=SimpleNamespace(create=create_fn))
+            ),
+        )
+
+    # -- 1. erster Request schlaegt fehl, zweiter Retry erfolgreich ----------
+    def test_first_attempt_fails_retry_succeeds_two_provider_attempts(self, monkeypatch):
+        """Szenario 1: transient-503 beim ersten Versuch, OK beim zweiten.
+        Erwartung: 2 Checks, 2 Events, 2 Records."""
+        monkeypatch.setattr("time.sleep", lambda _s: None)  # Retry-Backoff neutralisieren
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        enforcer = _RecordingEnforcer()
+        client, _ = self._setup_client(max_retries=1, is_ollama=False, enforcer=enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        attempts = {"n": 0}
+        success_response = self._make_response("retry wins")
+
+        def _create(**kwargs):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise self._make_transient_503()
+            return success_response
+
+        self._install_create(client, _create)
+
+        result = client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert result == "retry wins"
+        assert attempts["n"] == 2  # zwei echte Providerrequests
+        assert enforcer.check_calls == 2
+        assert enforcer.record_calls == 2
+        assert len(recorder.calls) == 2
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["error_type"] == "APIStatusError"
+        assert recorder.calls[1]["success"] is True
+        assert recorder.calls[1]["prompt_tokens"] == 10
+        assert recorder.calls[1]["completion_tokens"] == 5
+
+    # -- 2. mehrere Retries schlagen alle fehl ------------------------------
+    def test_multiple_retries_each_count_as_separate_attempt(self, monkeypatch):
+        """Szenario 2: alle Retries werfen transient-503.
+        Erwartung: 1 Event pro tatsaechlichem Request."""
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        enforcer = _RecordingEnforcer()
+        client, _ = self._setup_client(max_retries=2, is_ollama=False, enforcer=enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        attempts = {"n": 0}
+
+        def _create(**kwargs):
+            attempts["n"] += 1
+            raise self._make_transient_503()
+
+        self._install_create(client, _create)
+
+        with pytest.raises(Exception, match="upstream 503"):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        # max_retries=2 -> 3 Versuche (initial + 2 Retries).
+        assert attempts["n"] == 3
+        assert enforcer.check_calls == 3
+        assert enforcer.record_calls == 3
+        assert len(recorder.calls) == 3
+        assert all(call["success"] is False for call in recorder.calls)
+        assert all(call["error_type"] == "APIStatusError" for call in recorder.calls)
+
+    # -- 3. HTTP-400 Token-Key, 2. Request erfolgreich -----------------------
+    def test_http_400_token_key_fallback_two_provider_attempts(self, monkeypatch):
+        """Szenario 3: 400 wegen max_tokens/max_completion_tokens-Inkompatibilitaet,
+        Fallback gelingt. Erwartung: 2 Checks, 2 Events, 2 Records.
+        Zusaetzlich: erst Call hat max_tokens, zweiter max_completion_tokens."""
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        enforcer = _RecordingEnforcer()
+        client, _ = self._setup_client(max_retries=0, is_ollama=False, enforcer=enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        attempts = {"n": 0}
+        attempts_kwargs: list[dict[str, object]] = []
+        success_response = self._make_response("fallback wins")
+
+        def _create(**kwargs):
+            attempts["n"] += 1
+            attempts_kwargs.append(dict(kwargs))
+            if attempts["n"] == 1:
+                raise self._make_token_key_400()
+            return success_response
+
+        self._install_create(client, _create)
+
+        result = client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert result == "fallback wins"
+        assert attempts["n"] == 2
+        # Erst Call verwendet max_tokens, Fallback verwendet max_completion_tokens.
+        assert "max_tokens" in attempts_kwargs[0]
+        assert "max_completion_tokens" not in attempts_kwargs[0]
+        assert "max_completion_tokens" in attempts_kwargs[1]
+        assert "max_tokens" not in attempts_kwargs[1]
+        assert enforcer.check_calls == 2
+        assert enforcer.record_calls == 2
+        assert len(recorder.calls) == 2
+        assert recorder.calls[0]["success"] is False
+        assert recorder.calls[0]["http_status"] == 400
+        assert recorder.calls[1]["success"] is True
+
+    # -- 4. hartes Limit mitten in einer Retry-Serie -------------------------
+    def test_hard_limit_during_retry_blocks_further_provider_requests(self, monkeypatch):
+        """Szenario 4: nach dem ersten fehlgeschlagenen Versuch wirft der
+        Enforcer BudgetExceededError. Es darf KEIN weiterer Providerrequest
+        stattfinden."""
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        check_count = {"n": 0}
+
+        class _HardLimitEnforcer:
+            def check_before_call(self) -> None:
+                check_count["n"] += 1
+                if check_count["n"] > 1:
+                    raise BudgetExceededError("calls", 2, 1)
+
+            def record_after_call(self) -> None:
+                pass
+
+        enforcer = _HardLimitEnforcer()
+        client, _ = self._setup_client(
+            max_retries=3, is_ollama=False, enforcer=enforcer
+        )
+        recorder = _wire_invocation_recorder(client)
+
+        create_calls = {"n": 0}
+
+        def _create(**kwargs):
+            create_calls["n"] += 1
+            raise self._make_transient_503()
+
+        self._install_create(client, _create)
+
+        with pytest.raises(BudgetExceededError):
+            client.chat(messages=[{"role": "user", "content": "x"}])
+
+        # Genau EIN realer Providerrequest — der zweite Check blockt VOR create().
+        assert create_calls["n"] == 1
+        # Beide Checks wurden versucht: 1. OK, 2. blockt mit BudgetExceededError.
+        assert check_count["n"] == 2
+        # Genau ein failed Event + ein Record (vom ersten, tatsaechlich
+        # ausgefuehrten Versuch).
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is False
+
+    # -- 5. normaler erfolgreicher Request -----------------------------------
+    def test_normal_success_counts_exactly_one_provider_attempt(self, monkeypatch):
+        """Szenario 5: einfacher Erfolg ohne Retries/Fallback.
+        Erwartung: genau 1 Check, 1 Event, 1 Record."""
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "false" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        enforcer = _RecordingEnforcer()
+        client, _ = self._setup_client(max_retries=0, is_ollama=False, enforcer=enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        success_response = self._make_response("plain ok")
+
+        def _create(**kwargs):
+            return success_response
+
+        self._install_create(client, _create)
+
+        result = client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert result == "plain ok"
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+        assert recorder.calls[0]["prompt_tokens"] == 10
+        assert recorder.calls[0]["completion_tokens"] == 5
+
+    # -- 6. Streaming-Erfolg -------------------------------------------------
+    def test_streaming_success_counts_exactly_one_provider_attempt(self, monkeypatch):
+        """Szenario 6: Streaming wird vollstaendig durchlaufen, Usage kommt
+        aus dem letzten Chunk. Erwartung: genau ein Providerattempt."""
+        monkeypatch.delenv("AGORA_E2E_LLM_MODE", raising=False)
+        # LLM_FORCE_STREAM per Default "true" fuer Ollama-Pfad.
+        monkeypatch.setattr(
+            "app.llm.client.os.environ.get",
+            lambda k, default=None: "true" if k == "LLM_FORCE_STREAM" else default,
+        )
+
+        enforcer = _RecordingEnforcer()
+        client, _ = self._setup_client(max_retries=0, is_ollama=True, enforcer=enforcer)
+        recorder = _wire_invocation_recorder(client)
+
+        from types import SimpleNamespace
+
+        def _stream_iter():
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="hello "),
+                        finish_reason=None,
+                    )
+                ],
+                usage=None,
+            )
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="world"),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=2, completion_tokens=2),
+            )
+
+        def _create(**kwargs):
+            assert kwargs.get("stream") is True
+            return _stream_iter()
+
+        self._install_create(client, _create)
+
+        result = client.chat(messages=[{"role": "user", "content": "x"}])
+
+        assert result == "hello world"
+        assert enforcer.check_calls == 1
+        assert enforcer.record_calls == 1
+        assert len(recorder.calls) == 1
+        assert recorder.calls[0]["success"] is True
+        assert recorder.calls[0]["prompt_tokens"] == 2
+        assert recorder.calls[0]["completion_tokens"] == 2
