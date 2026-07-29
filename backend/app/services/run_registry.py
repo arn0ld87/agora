@@ -191,6 +191,9 @@ class RunRegistry:
                 manifest["parent_run_id"] = updates["parent_run_id"]
             if "branch_label" in updates:
                 manifest["branch_label"] = updates["branch_label"]
+            if "termination_reason" in updates:
+                # Issue #764: Abbruchgrund (budget_*, user_*, error, completed)
+                manifest["termination_reason"] = updates["termination_reason"]
 
             if updates.get("artifacts"):
                 manifest.setdefault("artifacts", {}).update(updates["artifacts"])

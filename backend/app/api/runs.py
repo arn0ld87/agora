@@ -293,6 +293,48 @@ def _build_run_detail(run: dict) -> dict:
     enriched["eta_seconds"] = eta_seconds
     enriched["log_tail"] = log_tail
     enriched["metrics"] = metrics
+
+    # Budget & Verbrauch (Issue #764): Budget-Status nur wenn ein Budget
+    # gesetzt ist; Verbrauch live aggregiert (Abschluss-Snapshot bevorzugt).
+    # Beides bleibt bei Alt-Runs ohne Daten ehrlich None (= unknown im UI).
+    try:
+        from ..services.run_budget import get_run_budget_status
+        from ..services.run_usage_ledger import (
+            aggregate_usage,
+            load_call_events_cached,
+            load_usage_summary,
+            persist_usage_summary,
+        )
+
+        budget_status = get_run_budget_status(run["run_id"])
+        if budget_status is not None:
+            enriched["budget"] = budget_status.model_dump(mode="json")
+
+        usage = load_usage_summary(run["run_id"])
+        if usage is None:
+            events = load_call_events_cached(run["run_id"])
+            if events:
+                usage = aggregate_usage(
+                    run["run_id"],
+                    events=events,
+                    started_at=run.get("started_at"),
+                    ended_at=run.get("completed_at"),
+                )
+                # Abschluss-Snapshot nachziehen, sobald der Run terminal ist —
+                # Datenbasis für spätere Preflight-Schätzungen.
+                if run.get("status") in {"completed", "failed", "stopped"}:
+                    try:
+                        persist_usage_summary(
+                            run["run_id"],
+                            started_at=run.get("started_at"),
+                            ended_at=run.get("completed_at"),
+                        )
+                    except OSError:
+                        logger.debug("usage snapshot persist failed", exc_info=True)
+        if usage is not None:
+            enriched["usage"] = usage.model_dump(mode="json")
+    except Exception:  # noqa: BLE001 — Anreicherung darf den Read nicht brechen
+        logger.warning("budget/usage enrichment failed for run %s", run.get("run_id"), exc_info=True)
     return enriched
 
 
@@ -311,6 +353,34 @@ def get_run_events(run_id: str):
     if error:
         return error
     return json_success(run.get("events", []))
+
+
+@runs_bp.route("/<run_id>/usage", methods=["GET"])
+def get_run_usage(run_id: str):
+    """GET /api/runs/<run_id>/usage — Verbrauchsaufstellung (Issue #764).
+
+    Liefert den RunUsage-Contract: gesamt + pro Stage/Provider/Modell.
+    Runs ohne Messdaten antworten mit ehrlichem measurement_status=unknown.
+    """
+    from ..services.run_usage_ledger import (
+        aggregate_usage,
+        load_call_events_cached,
+        load_usage_summary,
+    )
+
+    run, error = _get_run_or_404(run_id)
+    if error:
+        return error
+
+    usage = load_usage_summary(run_id)
+    if usage is None:
+        usage = aggregate_usage(
+            run_id,
+            events=load_call_events_cached(run_id),
+            started_at=run.get("started_at"),
+            ended_at=run.get("completed_at"),
+        )
+    return json_success(usage.model_dump(mode="json"))
 
 
 @runs_bp.route("/<run_id>/stop", methods=["POST"])

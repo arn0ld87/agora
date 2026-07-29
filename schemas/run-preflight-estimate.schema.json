@@ -1,0 +1,203 @@
+{
+  "$defs": {
+    "PreflightModelRef": {
+      "additionalProperties": false,
+      "description": "Ein f\u00fcr den Run aufgel\u00f6stes Modell samt Kostenklarheit.",
+      "properties": {
+        "base_url_sanitized": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url Sanitized"
+        },
+        "cost_status": {
+          "default": "unknown",
+          "enum": [
+            "measured",
+            "estimated",
+            "free",
+            "unknown"
+          ],
+          "title": "Cost Status",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        },
+        "provider_id": {
+          "minLength": 1,
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "stage": {
+          "minLength": 1,
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "provider_id",
+        "model_id"
+      ],
+      "title": "PreflightModelRef",
+      "type": "object"
+    }
+  },
+  "$id": "https://alexle135.de/schemas/run-preflight-estimate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ehrlich gekennzeichnete Sch\u00e4tzung vor dem Run-Start.\n\nLiefert Bereiche statt Pseudoexaktheit. Bei unzureichender Datenbasis\nbleiben die jeweiligen Felder None und data_quality/warnings erkl\u00e4ren\nwarum.",
+  "properties": {
+    "cost_status": {
+      "default": "unknown",
+      "enum": [
+        "measured",
+        "estimated",
+        "free",
+        "unknown"
+      ],
+      "title": "Cost Status",
+      "type": "string"
+    },
+    "data_quality": {
+      "default": "unknown",
+      "enum": [
+        "high",
+        "medium",
+        "low",
+        "unknown"
+      ],
+      "title": "Data Quality",
+      "type": "string"
+    },
+    "estimated_cost_micros_high": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Cost Micros High"
+    },
+    "estimated_cost_micros_low": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Cost Micros Low"
+    },
+    "estimated_duration_seconds_high": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Duration Seconds High"
+    },
+    "estimated_duration_seconds_low": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Duration Seconds Low"
+    },
+    "estimated_tokens_high": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Tokens High"
+    },
+    "estimated_tokens_low": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Tokens Low"
+    },
+    "is_estimate": {
+      "const": true,
+      "default": true,
+      "title": "Is Estimate",
+      "type": "boolean"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/PreflightModelRef"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "pricing_source": {
+      "minLength": 1,
+      "title": "Pricing Source",
+      "type": "string"
+    },
+    "pricing_version": {
+      "minLength": 1,
+      "title": "Pricing Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "pricing_version",
+    "pricing_source"
+  ],
+  "title": "PreflightEstimate",
+  "type": "object"
+}

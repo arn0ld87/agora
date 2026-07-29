@@ -378,6 +378,28 @@ class LLMClient:
                 "model_event_bus.publish failed (LLM call proceeds): %s", exc
             )
 
+    def _budget_enforcer(self):
+        """RunBudgetEnforcer für diesen Run (None ohne Budget oder run_id).
+
+        Lazy + gecacht pro Client-Instanz. Fehler beim Aufbau werden geloggt
+        und blockieren den LLM-Call nicht (Budget ist Zusatz, kein Hotpath-
+        Risiko).
+        """
+        cached = getattr(self, "_budget_enforcer_cache", "unset")
+        if cached != "unset":
+            return cached
+        enforcer = None
+        run_id = getattr(self, "run_id", None)
+        if run_id:
+            try:
+                from ..services.run_budget import RunBudgetEnforcer
+
+                enforcer = RunBudgetEnforcer.for_run(run_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("budget enforcer unavailable (LLM call proceeds): %s", exc)
+        self._budget_enforcer_cache = enforcer
+        return enforcer
+
     def _log_invocation_event(
         self,
         *,
@@ -387,6 +409,8 @@ class LLMClient:
         error_type: Optional[str] = None,
         http_status: Optional[int] = None,
         remote_request_id: Optional[str] = None,
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
     ) -> None:
         """Persist LLM call telemetry for routed runs without blocking execution."""
         if not getattr(self, "run_id", None):
@@ -407,6 +431,8 @@ class LLMClient:
                 error_type=error_type,
                 http_status=http_status,
                 remote_request_id=remote_request_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm invocation logging failed (LLM call proceeds): %s", exc)
@@ -447,6 +473,12 @@ class LLMClient:
                 reported ``finish_reason == "length"``.
         """
         self._publish_model_active(context, max_tokens=max_tokens, temperature=temperature)
+        # Budget-Gate (Issue #764): harte Limits werden unmittelbar VOR dem
+        # kosten-/tokenrelevanten Call geprüft — deterministisch, bevor auch
+        # nur ein Request abgesetzt wird (inkl. E2E-Stub-Pfad).
+        _enforcer = self._budget_enforcer()
+        if _enforcer is not None:
+            _enforcer.check_before_call()
         # E2E-Stub-Pfad für chat() — symmetrisch zum Stub-Pfad in chat_json().
         # Aktiviert ausschließlich via AGORA_E2E_LLM_MODE=stub.
         # Liefert deterministischen ReACT-Loop-String (Tool-Call oder Final Answer).
@@ -456,6 +488,11 @@ class LLMClient:
                 "LLMClient.chat: E2E-Stub aktiv — ueberspringe LLM-Call (context=%s)",
                 context,
             )
+            # Invocation-Event auch im Stub-Modus schreiben, damit Verbrauch
+            # und Budget-Monitore im E2E-Test real beobachtbar sind.
+            self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
+            if _enforcer is not None:
+                _enforcer.record_after_call()
             return e2e_stub_chat_response(messages=messages)
         kwargs: Dict[str, Any] = {
             "model": self.model,
@@ -585,11 +622,18 @@ class LLMClient:
                 f"LLM output truncated at token cap: model={self.model}, "
                 f"completion_tokens={completion_tokens}, max_tokens={max_tokens}"
             )
+        _usage_prompt = getattr(_usage_for_counter, "prompt_tokens", None)
+        _usage_completion = getattr(_usage_for_counter, "completion_tokens", None)
         self._log_invocation_event(
             stage=context,
             latency_ms=elapsed * 1000,
             success=True,
+            prompt_tokens=_usage_prompt if isinstance(_usage_prompt, int) else None,
+            completion_tokens=_usage_completion if isinstance(_usage_completion, int) else None,
         )
+        # Weiche Budget-Limits nach dem abgeschlossenen Call prüfen (#764).
+        if _enforcer is not None:
+            _enforcer.record_after_call()
         # Token-Counter — nur bei vorhandenen Integer-Usage-Daten, kein Log-Spam bei fehlendem Usage.
         # isinstance-Check schützt gegen MagicMock-Attribute in Tests (Mock gibt immer
         # einen Sub-Mock zurück, kein None) und gegen nicht-numerische Provider-Antworten.
@@ -763,6 +807,11 @@ class LLMClient:
             pydantic.ValidationError: Parsed JSON does not match *schema*
                 when *schema* is a Pydantic model.
         """
+        # Budget-Gate (Issue #764): harte Limits vor jedem Pfad prüfen —
+        # inkl. E2E-Stub und nativem Ollama-Pfad, der chat() umgeht.
+        _enforcer = self._budget_enforcer()
+        if _enforcer is not None:
+            _enforcer.check_before_call()
         # E2E-Stub-Pfad — nur aktiv wenn AGORA_E2E_LLM_MODE=stub gesetzt.
         # Muss VOR Cache-Lookup, Token-Counter, Retry und allen LLM-Calls liegen.
         if os.environ.get("AGORA_E2E_LLM_MODE") == "stub":
@@ -778,6 +827,9 @@ class LLMClient:
                     schema_for_stub = schema.model_json_schema()
                 elif isinstance(schema, dict):
                     schema_for_stub = schema
+            self._log_invocation_event(stage=context, latency_ms=0.0, success=True)
+            if _enforcer is not None:
+                _enforcer.record_after_call()
             return e2e_stub_response(
                 schema=schema_for_stub,
                 messages=list(messages),

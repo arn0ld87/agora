@@ -1,6 +1,6 @@
 # Agora — Status
 
-**Stand:** 27.07.2026  
+**Stand:** 29.07.2026  
 **Geprüfte Main-Baseline:** `d5bdbada`  
 **Produktversion:** `0.8.0` Technical Preview
 
@@ -27,8 +27,8 @@ Die Produktreife wird ab diesem Dokumentationsumbau über [`VERSION`](../VERSION
 <!-- BEGIN_AUTOGEN_TESTS -->
 | Kategorie | Anzahl | Methode |
 |---|---|---|
-| Backend Tests (collected) | 3891 | `cd backend && uv run pytest --collect-only -q` |
-| Frontend Test-Files | 167 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
+| Backend Tests (collected) | 3997 | `cd backend && uv run pytest --collect-only -q` |
+| Frontend Test-Files | 173 | `find frontend/src \( -name '*.spec.ts' -o -name '*.spec.js' -o -name '*.test.ts' -o -name '*.test.js' \)` |
 <!-- END_AUTOGEN_TESTS -->
 
 Hinweise:
@@ -50,6 +50,7 @@ Agora besitzt eine vollständige fachliche Grundpipeline:
 - Evidence-orientierte Reports und Exporte
 - Compare-, Graph-Diff- und Observability-Grundlagen
 - fortsetzbare Embedding-Migration für Entity- und Fact-Vektoren
+- Kosten-, Token- und Zeitbudgets für Runs ([#764](https://github.com/arn0ld87/agora/issues/764), ADR-0012): Preflight-Schätzung mit ehrlichen Bereichen, weiche/harte Limits pro Run, Live-Verbrauchsmonitor, Abschlussanalyse nach Stage/Provider/Modell, Budgetabbruch über `termination_reason` von Fehler/Nutzerabbruch unterscheidbar, Verbrauch im Report-Export
 
 Der Stand ist dennoch Technical Preview, weil die E2E-Kernpipeline noch nicht als verpflichtender Pull-Request-Check erzwungen wird. Die Migration der v3-Inhaltskomponenten (`Step2EnvSetup`/`Step3Simulation`/`Step4Report`) in v4-Wrapper ist abgeschlossen ([#922](https://github.com/arn0ld87/agora/issues/922), PR #938); der credential-basierte Runtime-Provider-Override (`useRuntimeLlmOptions`) ist entfernt. Der `/home`-Redirect auf `/dashboard` ist umgesetzt ([#915](https://github.com/arn0ld87/agora/issues/915), ADR-0010); `Home.vue` bleibt bis `1.0.0` physisch erhalten.
 

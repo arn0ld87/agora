@@ -62,6 +62,40 @@ def _simulation_dir(simulation_id: str) -> str:
     return ArtifactLocator.simulation_dir(simulation_id)
 
 
+def _apply_budget_to_simulation(simulation_id, run_id, budget_config, set_config_fn) -> None:
+    """Budget-Config am Run verankern und Subprozess-Artefakte pflegen (#764).
+
+    - Mit Budget: metadata.budget im Manifest + budget_config.json im Sim-Dir
+      (vom Subprozess-Guard gelesen).
+    - Ohne Budget: Alt-Artefakte entfernen (budget_config.json /
+      budget_abort.json eines früheren Runs darf nicht weiterwirken).
+    Keine Secrets: die Config enthält nur Limits, Enforcement und Währung.
+    """
+    import os as _os
+
+    sim_dir = _simulation_dir(simulation_id)
+    config_path = _os.path.join(sim_dir, "budget_config.json")
+    abort_path = _os.path.join(sim_dir, "budget_abort.json")
+
+    if budget_config is not None:
+        set_config_fn(run_id, budget_config)
+        _os.makedirs(sim_dir, exist_ok=True)
+        tmp_path = f"{config_path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            handle.write(budget_config.model_dump_json(indent=2))
+            handle.write("\n")
+        _os.replace(tmp_path, config_path)
+        if _os.path.exists(abort_path):
+            _os.remove(abort_path)
+    else:
+        for stale in (config_path, abort_path):
+            if _os.path.exists(stale):
+                try:
+                    _os.remove(stale)
+                except OSError:
+                    logger.warning("Konnte veraltetes Budget-Artefakt nicht löschen: %s", stale)
+
+
 @simulation_bp.route('/start', methods=['POST'])
 @require_scope("simulation:control")
 @handle_api_errors(logger=logger, log_prefix="Failed to start simulation")
@@ -139,6 +173,22 @@ def start_simulation():
         llm_runtime = parse_runtime_llm_config({})
     enable_graph_memory_update = data.get('enable_graph_memory_update', False)
     force = data.get('force', False)
+
+    # Run-Budget (Issue #764): optionale Token-/Kosten-/Zeit-/Aufruflimits.
+    budget_config = None
+    raw_budget = data.get('budget')
+    if raw_budget is not None:
+        from pydantic import ValidationError as _BudgetValidationError
+
+        from ..contracts.run_budget_contract import RunBudgetConfig as _RunBudgetConfig
+        try:
+            budget_config = _RunBudgetConfig.model_validate(raw_budget)
+        except _BudgetValidationError as exc:
+            return json_error(
+                ApiErrorCode.VALIDATION_FAILED,
+                status=400,
+                message=f"budget ist ungültig: {exc.errors()[0].get('msg', 'validation error')}",
+            )
 
     if max_rounds is not None:
         try:
@@ -322,6 +372,13 @@ def start_simulation():
         llm_model_override=llm_model_override,
         llm_runtime=llm_runtime,
         ai_model_ref=ai_model_ref,
+    )
+    # Budget am Run verankern + Subprozess-Config schreiben (Issue #764).
+    # Alt-Artefakte (budget_abort.json eines früheren Runs) werden entfernt,
+    # damit ein Neustart nicht sofort wieder abbricht.
+    from ..services.run_budget import set_run_budget_config as _set_run_budget_config
+    _apply_budget_to_simulation(
+        simulation_id, run_record["run_id"], budget_config, _set_run_budget_config
     )
     route_router = StageModelRouter(run_record["run_id"])
     resolved_route = route_router.resolve("simulation_rounds")

@@ -60,6 +60,9 @@ vi.mock('../../api/report', () => ({
 }))
 vi.mock('../../api/runs', () => ({
   cancelRun: vi.fn().mockResolvedValue({ success: true, data: { run_id: 'sim_test_smoke', status: 'cancel_requested' } }),
+  // Issue #764: RunResourceMonitor (eingebunden in Step3Simulation) pollt
+  // GET /api/runs/<id> für budget/usage — Default: keine Budget-Anreicherung.
+  getRun: vi.fn().mockResolvedValue({ success: true, data: {} }),
 }))
 
 // Kanonische Modell-Auswahl: Default ist kein ai_model_ref. Die Routing-Tests
@@ -600,6 +603,61 @@ describe('Step3Simulation — max_rounds aus dem pendingUpload-Store (Dashboard-
 
     const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.max_rounds).toBe(10)
+  })
+
+  it('Budget aus dem pendingUpload-Store wird als budget durchgereicht (Issue #764)', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    const budget = {
+      schema_version: 1 as const,
+      enforcement: 'hard' as const,
+      currency: 'USD',
+      max_tokens: 5000,
+    }
+    const { setPendingUpload } = await import('../../store/pendingUpload')
+    setPendingUpload([], 'requirement', null, 30, 10, budget)
+
+    const wrapper = mount(Step3Simulation, {
+      props: {
+        simulationId: 'sim_test_smoke',
+        projectData: { name: 'dashboard-flow' },
+        graphData: { nodes: [], edges: [] },
+        systemLogs: [],
+      },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect(payload.budget).toEqual(budget)
+  })
+
+  it('ohne Budget im Store bleibt das budget-Feld weg (kein null-Payload)', async () => {
+    vi.mocked(simulationApi.getRunStatus).mockResolvedValue({ success: true, data: {} } as never)
+    vi.mocked(simulationApi.startSimulation).mockResolvedValue({ success: true, data: { simulation_id: 'sim_test_smoke' } } as never)
+
+    const wrapper = mount(Step3Simulation, {
+      props: {
+        simulationId: 'sim_test_smoke',
+        projectData: { name: 'dashboard-flow' },
+        graphData: { nodes: [], edges: [] },
+        systemLogs: [],
+      },
+      global: { plugins: [router, i18n], stubs: globalStubs },
+    })
+    await flushPromises()
+
+    const startBtn = wrapper.findAll('button').find(b => b.text().includes('step3.controls.start'))
+    await startBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(simulationApi.startSimulation).mock.calls[0][0] as unknown as Record<string, unknown>
+    expect('budget' in payload).toBe(false)
   })
 
   it('maxRounds-Prop (Stepped-Flow) gewinnt vor dem Slider-Wert', async () => {

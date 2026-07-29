@@ -31,6 +31,7 @@ import { getPendingUpload } from '../../../store/pendingUpload'
 import SimulationProgressPanel from '../../step3/SimulationProgressPanel.vue'
 import PersonaActionFeed from '../../step3/PersonaActionFeed.vue'
 import SimulationToolPanel from '../../step3/SimulationToolPanel.vue'
+import RunResourceMonitor from '../run-budget/RunResourceMonitor.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -242,6 +243,11 @@ async function doStart() {
     // Wirkung, Simulation lief immer auf total_simulation_hours).
     const effectiveMaxRounds = props.maxRounds ?? (getPendingUpload().numRounds || null)
     if (effectiveMaxRounds) params.max_rounds = effectiveMaxRounds
+    // Issue #764: Optionale Run-Budgets aus dem Dashboard-Start (HeroNewRun)
+    // werden unverändert an /api/simulation/start durchgereicht. Ohne Budget
+    // bleibt das Feld weg — das Backend läuft dann ohne Limit.
+    const pendingBudget = getPendingUpload().budget
+    if (pendingBudget) params.budget = pendingBudget
     if (props.simulationDays) params.simulation_days = props.simulationDays
     // Autoritative (Connection, Modell)-Auswahl: Der transiente Dashboard-
     // Run-Override (HeroNewRun-Pick, store/runModelOverride) gewinnt vor dem
@@ -449,6 +455,15 @@ const statusKind = computed(() => {
   return 'running'
 })
 
+// Issue #764: Der RunResourceMonitor erwartet kanonische Run-Statuswerte
+// (pending/processing/…). Step3 denkt in Phasen — Mapping: laufend →
+// processing, abgeschlossen → completed, vor dem Start → pending.
+const budgetMonitorStatus = computed(() => {
+  if (phase.value === 1) return 'processing'
+  if (phase.value === 2) return 'completed'
+  return 'pending'
+})
+
 const twitterActions = computed(() => allActions.value.filter((a) => a.platform === 'twitter').length)
 const redditActions = computed(() => allActions.value.filter((a) => a.platform === 'reddit').length)
 
@@ -547,6 +562,13 @@ watch(() => props.simulationId, (newId, oldId) => {
         :reddit-actions="redditActions"
         :current-sim-time="currentSimTime"
         :sim-elapsed-sec="simElapsedSec"
+      />
+
+      <!-- Issue #764: Live-Verbrauch vs. Budget (pollt /api/runs/<id>) -->
+      <RunResourceMonitor
+        v-if="phase >= 1 && simulationId"
+        :run-id="simulationId"
+        :status="budgetMonitorStatus"
       />
 
       <!-- Card 3: Live feed (extracted to PersonaActionFeed) -->

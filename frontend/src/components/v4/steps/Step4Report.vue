@@ -9,6 +9,13 @@ import { renderMarkdown } from '../../../utils/markdown'
 import { generateReport, getAgentLog, getConsoleLog, getReport, getReportStatus, getReportEvidence } from '../../../api/report'
 import type { GenerateReportData } from '../../../api/report'
 import { createSimulationBranch } from '../../../api/simulation'
+import { getRun } from '../../../api/runs'
+import {
+  RunBudgetStatusSchema,
+  RunUsageSchema,
+  type RunBudgetStatus,
+  type RunUsage,
+} from '../../../contracts/runBudgetContract'
 import Button from '@/components/v4/forms/Button.vue'
 import Badge from '@/components/v4/forms/Badge.vue'
 import Kicker from '@/components/v4/data/Kicker.vue'
@@ -17,6 +24,7 @@ import ReportModeControls from '../../step4/ReportModeControls.vue'
 import ReportOutlinePanel from '../../step4/ReportOutlinePanel.vue'
 import ReportLiveLogPane from '../../step4/ReportLiveLogPane.vue'
 import ReportFinalView from '../../step4/ReportFinalView.vue'
+import RunUsageBreakdown from '@/components/v4/run-budget/RunUsageBreakdown.vue'
 import { useReportExports } from '../../../composables/useReportExports'
 import type { AiModelRef } from '../../../contracts/aiModelRef'
 import { useEffectiveModelSelection } from '@/composables/useEffectiveModelSelection'
@@ -84,6 +92,33 @@ const generatedSections = ref<Record<string, unknown>>({})
 const currentSectionIndex = ref<number | null>(null)
 const isComplete = ref(false)
 const fullReport = ref<Report | null>(null)
+
+// Issue #764: Verbrauchsübersicht zum Sim-Run, einmalig nach Abschluss
+// geladen (die Simulation ist der Run — simulation_id == run_id).
+const runUsage = ref<RunUsage | null>(null)
+const runBudget = ref<RunBudgetStatus | null>(null)
+const runUsageLoaded = ref(false)
+
+async function loadRunUsage(): Promise<void> {
+  const simId = resolvedSimulationId.value || props.simulationId
+  if (!simId || runUsageLoaded.value) return
+  runUsageLoaded.value = true
+  try {
+    const envelope = await getRun(simId)
+    if (!envelope?.success) return
+    const raw = (envelope.data ?? {}) as unknown as Record<string, unknown>
+    const usage = RunUsageSchema.nullable().safeParse(raw.usage ?? null)
+    runUsage.value = usage.success ? usage.data : null
+    const budget = RunBudgetStatusSchema.nullable().safeParse(raw.budget ?? null)
+    runBudget.value = budget.success ? budget.data : null
+  } catch { /* Verbrauchsdaten sind optional — Report bleibt nutzbar */ }
+}
+
+// Sobald der Report terminal ist (completed/incomplete/failed), einmalig
+// die Abschluss-Verbrauchsdaten ziehen.
+watch(isComplete, (done) => {
+  if (done) void loadRunUsage()
+})
 const evidenceMap = ref<EvidenceMap | null>(null)
 const selectedEvidenceSection = ref<number | null>(null)
 const branchBusy = ref(false)
@@ -578,6 +613,13 @@ onUnmounted(stopPolling)
         @download-html="downloadHtml"
         @print-report="printReport"
         @download-evidence="downloadEvidence"
+      />
+
+      <!-- Issue #764: Abschluss-Verbrauchsübersicht (Tokens/Kosten/Laufzeit) -->
+      <RunUsageBreakdown
+        v-if="phase === 2 && runUsage"
+        :usage="runUsage"
+        :budget="runBudget"
       />
 
       <!-- Conversation hand-off when no report yet (phase 2, no html) -->
