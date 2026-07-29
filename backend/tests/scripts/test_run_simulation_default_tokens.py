@@ -13,9 +13,11 @@ from pathlib import Path
 
 import pytest
 
+# _create_model ist mit dem SinglePlatformRunner-Refactor in die Basis
+# sim_runtime/platform_runner.py gewandert; der Default lebt jetzt dort als
+# Single Source of Truth (dünne Entry-Points erben unverändert).
 SCRIPTS = (
-    "backend/scripts/run_reddit_simulation.py",
-    "backend/scripts/run_twitter_simulation.py",
+    "backend/scripts/sim_runtime/platform_runner.py",
 )
 
 _PATTERN = re.compile(
