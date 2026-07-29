@@ -178,14 +178,23 @@ test.describe('#764 · Run-Budget-Smoke', () => {
         // Schritt 6: Run pollen — deterministischer Budgetabbruch
         // =============================================================
         let finalRun: Record<string, unknown> | null = null;
+        let lastKnownStatus = 'processing';
         await expect
           .poll(
             async () => {
               const res = await apiCtx.get(`${baseURL}/api/runs/${runId}`, { headers });
-              if (!res.ok()) return 'pending';
+              // Issue #764 (Codex P1): transiente non-OK-Antworten
+              // (5xx/429) duerfen NICHT den Poll beenden, sondern werden
+              // wie ein "noch nicht terminal"-Status behandelt. Sonst
+              // wuerde ein einzelner transienter Fehler den Test vorzeitig
+              // gruen machen, obwohl der Run noch laeuft.
+              if (!res.ok()) return lastKnownStatus;
               const data = (await res.json())?.data;
+              if (!data || typeof data !== 'object') return lastKnownStatus;
               finalRun = data;
-              return data?.status;
+              lastKnownStatus =
+                typeof data.status === 'string' ? data.status : lastKnownStatus;
+              return lastKnownStatus;
             },
             {
               timeout: 240_000,

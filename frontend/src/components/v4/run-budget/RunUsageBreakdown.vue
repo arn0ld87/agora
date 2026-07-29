@@ -44,7 +44,7 @@ const props = withDefaults(
   },
 )
 
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
 
 const COST_STATUS_LABEL: Record<CostStatus, string> = {
   measured: 'runBudget.costStatusMeasured',
@@ -109,10 +109,13 @@ const showMeasurementFlag = computed(
   () => props.usage.measurement_status !== 'complete',
 )
 
-/** Zählerformat für LLM-Aufrufe (kein k/M-Suffix). */
-function formatCount(value: number | null | undefined, locale = 'de-DE'): string {
+/** Zählerformat für LLM-Aufrufe (kein k/M-Suffix).
+ * Locale kommt aus useI18n(); Fallback 'de-DE' nur fuer Nicht-Vue-Aufrufer.
+ */
+function formatCount(value: number | null | undefined, overrideLocale?: string): string {
   if (value === null || value === undefined) return '—'
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)
+  const activeLocale = overrideLocale ?? i18nLocale.value
+  return new Intl.NumberFormat(activeLocale, { maximumFractionDigits: 0 }).format(value)
 }
 
 // --- Schätzung vs. Ist ---

@@ -139,7 +139,18 @@ function recompute(): void {
   if (tokens.kind === 'value') config.max_tokens = tokens.value
   if (cost.kind === 'value') config.max_cost_micros = cost.value
   if (duration.kind === 'value') {
-    config.max_duration_seconds = duration.value * SECONDS_PER_MINUTE
+    // Issue #764 (Codex P1): Number.isSafeInteger verhindert, dass
+    // extreme Minutenwerte (Number.MAX_SAFE_INTEGER / 60) das Budget
+    // in einen unbrauchbaren Float-Bereich kippen. Im Fehlerfall wird
+    // das Eingabefeld geleert, sodass das naechste recompute() es als
+    // 'empty' parsed und kein max_duration_seconds emittiert wird.
+    const seconds = duration.value * SECONDS_PER_MINUTE
+    if (Number.isSafeInteger(seconds) && seconds > 0) {
+      config.max_duration_seconds = seconds
+    } else {
+      durationRaw.value = ''
+      errors.duration = true
+    }
   }
   if (calls.kind === 'value') config.max_llm_calls = calls.value
 
